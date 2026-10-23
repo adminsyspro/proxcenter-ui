@@ -8,7 +8,7 @@
 
 import type { Prisma } from "@prisma/client"
 
-import { getPrincipal } from "@/lib/auth/principal"
+import { getPrincipal, rejectionToResponse } from "@/lib/auth/principal"
 import { prisma } from "@/lib/db/prisma"
 
 import { backgroundTenantId } from "./background"
@@ -380,18 +380,40 @@ export async function verifyConnectionOwnership(connectionId: string): Promise<R
 }
 
 /**
- * Enforce that the current session is operating in the provider tenant.
- * Used to scope provider-level operations (tenant CRUD, vDC admin, provider-bridges).
- * Returns a 403 NextResponse if not in the provider tenant, or null if OK.
+ * Enforce that the current caller is operating in the provider tenant.
+ * Used to scope provider-level operations (tenant CRUD, vDC admin, provider-bridges,
+ * platform-wide settings). Returns a 401/403 NextResponse when refused, or null if OK.
+ *
+ * The verdict is taken from the tenant the principal itself carries, never
+ * from getCurrentTenantId(): that helper answers `default` when the session
+ * tenant is missing, disabled or no longer lists the user as a member, and
+ * role_tenant_admin holds admin.settings, so the fallback used to promote a
+ * customer admin with a stale JWT straight into the provider view. A session
+ * passes only when its tenant is exactly `default` AND the user still belongs
+ * to `default` (or is a super admin, member of every tenant by design). A
+ * token passes on its own tenant alone: it has no user to check, and
+ * getPrincipal already refused a dead or disabled tenant.
  */
 export async function requireProviderTenant(): Promise<Response | null> {
-  const tenantId = await getCurrentTenantId()
-  if (tenantId !== DEFAULT_TENANT_ID) {
-    const { NextResponse } = await import('next/server')
-    return NextResponse.json(
+  const { NextResponse } = await import('next/server')
+  const forbidden = () =>
+    NextResponse.json(
       { error: 'This operation is only available from the provider tenant' },
-      { status: 403 }
+      { status: 403 },
     )
+
+  const result = await getPrincipal()
+  if (!result.ok) return rejectionToResponse(result.rejection)
+  const principal = result.principal
+  if (!principal) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  }
+  if (principal.tenantId !== DEFAULT_TENANT_ID) return forbidden()
+  if (principal.kind === "token") return null
+
+  const userId = principal.userId
+  if (!userId || !(await userHasAccessToTenant(userId, DEFAULT_TENANT_ID))) {
+    return forbidden()
   }
   return null
 }

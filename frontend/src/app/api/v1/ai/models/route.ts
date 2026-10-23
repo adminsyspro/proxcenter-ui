@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { validateAIUrl } from "@/lib/ai/url-guard"
+import { resolveMaskedAiSecrets } from "@/lib/ai/storedSecrets"
 
 const TIMEOUT_MS = 10_000
 
@@ -69,7 +70,8 @@ export async function POST(request: Request) {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
-    const body = await request.json()
+    // The form sends the mask back for a saved key: swap in the stored one.
+    const body = await resolveMaskedAiSecrets(await request.json())
     const { provider, ollamaUrl, openaiKey, openaiBaseUrl, anthropicKey } = body
 
     let models: string[] = []

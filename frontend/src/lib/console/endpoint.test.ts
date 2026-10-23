@@ -7,6 +7,12 @@ import { POST as consolePost, consumeConsoleSession } from '@/app/api/v1/connect
 import { POST as terminalPost, consumeTerminalSession } from '@/app/api/v1/connections/[id]/nodes/[node]/terminal/route'
 
 const state = vi.hoisted(() => ({ conn: {} as any, denied: null as Response | null }))
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('../connections/getConnection', () => ({ getConnectionById: async () => state.conn, invalidateConnectionCache: vi.fn() }))
 vi.mock('@/lib/rbac', () => ({ checkPermission: async () => state.denied, buildVmResourceId: () => 'vm', PERMISSIONS: { VM_CONSOLE: 'vm.console', NODE_CONSOLE: 'node.console' } }))
 let server: Server

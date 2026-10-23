@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { haSidGuest, sessionGuestVisibility } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -24,9 +25,19 @@ async function getHandler(
 
     const conn = await getConnectionById(id)
 
-    const rules = await pveFetch<any[]>(conn, '/cluster/ha/rules')
+    // A vDC session only sees the rules whose guests (`resources`, a sid list) are all in its pools.
+    const scoped = await sessionGuestVisibility({ connectionId: id, conn })
+    if (!scoped.ok) return scoped.response
+    const visible = scoped.visibility
 
-    return NextResponse.json({ data: rules || [] })
+    const rules = await pveFetch<any[]>(conn, '/cluster/ha/rules')
+    const data = (rules || []).filter((rule: any) => visible.all ||
+      String(rule?.resources ?? "").split(",").map(s => s.trim()).filter(Boolean).every(sid => {
+        const guest = haSidGuest(sid)
+        return guest !== null && visible.has(guest.type, guest.vmid)
+      }))
+
+    return NextResponse.json({ data })
   } catch (e: any) {
     // Si l'endpoint n'existe pas (PVE < 9), retourner un tableau vide
     if (e?.message?.includes('404') || e?.message?.includes('not found')) {

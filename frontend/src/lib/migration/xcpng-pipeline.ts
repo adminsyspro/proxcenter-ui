@@ -26,6 +26,8 @@ import { reserveTargetVmid } from "./reserve-target-vmid"
 import { releaseVmids } from "./vmid-reservation"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { assertAbsPath } from "@/lib/ssh/validate"
+import { backgroundBashCommand, parseBackgroundPid } from "./remote-commands"
 import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 import { getNodeSshEndpointForMigration } from "./pve-tasks"
 import { openXcpngSource, type XcpngSource } from "@/lib/xcpng/source"
@@ -417,14 +419,15 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     let userTempStorage = config.tempStorage?.trim() || ''
     while (userTempStorage.endsWith('/')) userTempStorage = userTempStorage.slice(0, -1)
     if (userTempStorage) {
-      storageTempDir = `${userTempStorage}/proxcenter-xcpng-migration/${targetVmid}`
+      // Request data that reaches every scratch-file command below: only a plain absolute path passes.
+      storageTempDir = `${assertAbsPath(userTempStorage)}/proxcenter-xcpng-migration/${targetVmid}`
     } else if (isFileBased) {
       const storagePath = storageConfig?.path || '/var/lib/vz'
       storageTempDir = `${storagePath}/images/${targetVmid}`
     } else {
       storageTempDir = `/var/lib/vz/tmp`
     }
-    await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${storageTempDir}"`)
+    await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p ${shellEscape(storageTempDir)}`)
     await appendLog(jobId, `Temp directory: ${storageTempDir}`)
 
     // The storage's own volume directory, where a converted image must sit to
@@ -477,11 +480,11 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
       const convertResult = await executeSSHWithTimeout(
         prisma, config.targetConnectionId, nodeIp,
-        `qemu-img convert -f vpc -O raw "${tmpFile}.vhd" "${devicePath}" 2>&1 && echo CONVERT_OK`,
+        `qemu-img convert -f vpc -O raw ${shellEscape(`${tmpFile}.vhd`)} ${shellEscape(devicePath)} 2>&1 && echo CONVERT_OK`,
         14400000
       )
       // Clean up VHD regardless of result
-      await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd"`)
+      await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(`${tmpFile}.vhd`)}`)
 
       if (!convertResult.success || !convertResult.output?.includes("CONVERT_OK")) {
         throw new Error(`Conversion to block device failed: ${convertResult.error || convertResult.output}`)
@@ -491,7 +494,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       // Unmap RBD if needed
       const allocVol = allocatedVolumes.find(v => v.devicePath === devicePath)
       if (allocVol?.rbdMapped) {
-        await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap "${devicePath}" 2>/dev/null`).catch(() => {})
+        await executeSSH(config.targetConnectionId, nodeIp, `rbd unmap ${shellEscape(devicePath)} 2>/dev/null`).catch(() => {})
       }
     }
 
@@ -507,7 +510,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       const statsFile = `${tmpFile}.stats`
       const curlrcFile = `${tmpFile}.curlrc`
       const cleanup = () =>
-        executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${pidFile}" "${pidFile}.exit" "${statsFile}" "${curlrcFile}"`).catch(() => {})
+        executeSSH(config.targetConnectionId, nodeIp, `rm -f ${[`${tmpFile}.vhd`, pidFile, `${pidFile}.exit`, statsFile, curlrcFile].map(shellEscape).join(" ")}`).catch(() => {})
 
       // Watch one curl run to completion. An unreadable poll (orchestrator timeout,
       // dropped SSH session) is NOT a curl failure: the remote download keeps going,
@@ -529,7 +532,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
           await new Promise(r => setTimeout(r, 3000))
 
-          const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat "${pidFile}.exit" 2>/dev/null || echo RUNNING`)
+          const exitCheck = await executeSSH(config.targetConnectionId, nodeIp, `cat ${shellEscape(`${pidFile}.exit`)} 2>/dev/null || echo RUNNING`)
           const poll = interpretPollExit(exitCheck)
           if (poll.state === "unknown") {
             pollFailures++
@@ -548,7 +551,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           }
           pollFailures = 0
 
-          const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
+          const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s ${shellEscape(`${tmpFile}.vhd`)} 2>/dev/null || echo 0`)
           const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
 
           const elapsed = (Date.now() - startTime) / 1000
@@ -568,7 +571,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           const exitCode = poll.exitCode
 
           // Parse curl stats before checking exit code (for http_code in error messages)
-          const statsContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${statsFile}" 2>/dev/null`)
+          const statsContent = await executeSSH(config.targetConnectionId, nodeIp, `cat ${shellEscape(statsFile)} 2>/dev/null`)
           const curlStats = statsContent.output?.match(/\{[^{}]+\}/)
           let httpCode = 0
           if (curlStats) {
@@ -591,7 +594,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           }
 
           // Validate that the downloaded file is not empty
-          const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s "${tmpFile}.vhd" 2>/dev/null || echo 0`)
+          const fileSizeCheck = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s ${shellEscape(`${tmpFile}.vhd`)} 2>/dev/null || echo 0`)
           const actualFileSize = Number.parseInt(fileSizeCheck.output?.trim() || "0", 10) || 0
           if (actualFileSize === 0) {
             return { state: "failed", message: `Downloaded VHD is empty (0 bytes)${httpInfo}; the XO REST API may have returned an error or the VDI is not accessible` }
@@ -613,19 +616,27 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         // The leading rm is not cosmetic: a cleanup() whose SSH call failed would leave the
         // previous attempt's exit file behind, and this attempt's first poll would read that
         // stale code, declare failure and delete the .vhd from under a running curl.
+        // Every path is one word for the node's shell, and the curl line is one
+        // argument to the inner bash: a temp directory with shell characters in
+        // its name must stay a directory name at both levels.
+        const curlInner =
+          `curl -sS --fail -K ${shellEscape(curlrcFile)} -o ${shellEscape(`${tmpFile}.vhd`)} ` +
+          `-w ${shellEscape('{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}')} ` +
+          `> ${shellEscape(statsFile)} 2>&1; echo $? > ${shellEscape(`${pidFile}.exit`)}`
         const startDl = await executeSSH(
           config.targetConnectionId, nodeIp,
-          `rm -f "${pidFile}.exit" "${statsFile}"; (umask 077; printf '%s\\n' ${shellEscape(dl.curlConfig)} > "${curlrcFile}"); nohup bash -c 'curl -sS --fail -K "${curlrcFile}" -o "${tmpFile}.vhd" -w '"'"'{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}'"'"' > "${statsFile}" 2>&1; echo $? > "${pidFile}.exit"' > /dev/null 2>&1 & echo $!`
+          `rm -f ${shellEscape(`${pidFile}.exit`)} ${shellEscape(statsFile)}; (umask 077; printf '%s\\n' ${shellEscape(dl.curlConfig)} > ${shellEscape(curlrcFile)}); ${backgroundBashCommand(curlInner)}`
         )
-        if (!startDl.success || !startDl.output?.trim()) {
-          throw new Error(`Failed to start download: ${startDl.error}`)
+        // The pid lands in `kill ${curlPid}`: anything but digits is a failed launch, not a pid.
+        const curlPid = parseBackgroundPid(startDl.output)
+        if (!startDl.success || !curlPid) {
+          throw new Error(`Failed to start download: ${startDl.error || startDl.output}`)
         }
-        const curlPid = startDl.output.trim()
-        await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > "${pidFile}"`)
+        await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > ${shellEscape(pidFile)}`)
 
         const outcome = await monitorDownload(curlPid)
         if (outcome.state === "done") {
-          await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${pidFile}" "${pidFile}.exit" "${statsFile}" "${curlrcFile}"`)
+          await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${[pidFile, `${pidFile}.exit`, statsFile, curlrcFile].map(shellEscape).join(" ")}`)
           await updateJob(jobId, "transferring", {
             bytesTransferred: BigInt(outcome.bytes),
             transferSpeed: outcome.speed,
@@ -655,15 +666,15 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
       const convertResult = await executeSSHWithTimeout(
         prisma, config.targetConnectionId, nodeIp,
-        `qemu-img convert -f vpc -O ${importFormat} "${tmpFile}.vhd" "${tmpFile}.${importFormat}" 2>&1 && echo CONVERT_OK`,
+        `qemu-img convert -f vpc -O ${importFormat} ${shellEscape(`${tmpFile}.vhd`)} ${shellEscape(`${tmpFile}.${importFormat}`)} 2>&1 && echo CONVERT_OK`,
         14400000
       )
       if (!convertResult.success || !convertResult.output?.includes("CONVERT_OK")) {
-        await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd" "${tmpFile}.${importFormat}"`)
+        await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(`${tmpFile}.vhd`)} ${shellEscape(`${tmpFile}.${importFormat}`)}`)
         throw new Error(`Conversion failed: ${convertResult.error || convertResult.output}`)
       }
       await appendLog(jobId, `Conversion to ${importFormat} complete`, "success")
-      await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${tmpFile}.vhd"`)
+      await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(`${tmpFile}.vhd`)}`)
 
       if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
@@ -792,7 +803,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         (await getConnectionById(config.targetConnectionId)).baseUrl)
       if (storageTempDir) {
         await executeSSH(config.targetConnectionId, nodeIp,
-          `rm -f "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.vhd "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.qcow2 "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.raw "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.curlrc`)
+          // The directory is one quoted word, the glob stays outside the quotes.
+          "rm -f " + ["vhd", "qcow2", "raw", "curlrc"].map(ext => `${shellEscape(storageTempDir)}/proxcenter-mig-${jobId}-disk*.${ext}`).join(" "))
       }
     } catch {
       // Best effort cleanup

@@ -3,6 +3,9 @@ import { NBD_RELEASE_HOLDERS_FN, nbdReleaseHoldersCall } from "../nbd-holders"
 import { buildNbdkitVddkCmd, type VddkOpts } from "./vddk-cmd"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
+/** The only shape a kernel NBD device parsed from remote output may take before it reaches a command. */
+export const NBD_DEVICE_RE = /^\/dev\/nbd\d{1,4}$/
+
 /** A running nbdkit-vddk reader: the kernel device it is attached to plus the
  *  node-side resources (socket, password file, log) that must be cleaned up. */
 export interface VddkReaderHandle {
@@ -35,8 +38,8 @@ export interface VddkReaderHandle {
  * attach, our `nbd-client -unix` simply fails (the device is in use) and we move
  * on to the next candidate — detaching it here would disconnect the other job's
  * live reader and corrupt its copy. So no node-wide lock is needed.
- * `sock` is a system-generated path (no spaces/metacharacters), so it is
- * interpolated unescaped to match the validated spike command.
+ * `sock` is a system-generated path, escaped all the same so the builder does
+ * not depend on its callers for safety.
  */
 export function buildNbdConnectCmd(sock: string): string {
   return [
@@ -44,7 +47,7 @@ export function buildNbdConnectCmd(sock: string): string {
     "ATTACHED=",
     "for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do",
     "  [ -s /sys/block/nbd$i/pid ] && continue",
-    `  if err=$(nbd-client -unix ${sock} /dev/nbd$i 2>&1); then ATTACHED=/dev/nbd$i; echo "NBD_DEV=$ATTACHED"; break; fi`,
+    `  if err=$(nbd-client -unix ${shellEscape(sock)} /dev/nbd$i 2>&1); then ATTACHED=/dev/nbd$i; echo "NBD_DEV=$ATTACHED"; break; fi`,
     "done",
     '[ -n "$ATTACHED" ] || { echo "NBD_ALLOC_FAILED: ${err}"; exit 1; }',
   ].join("\n")
@@ -59,11 +62,12 @@ export function buildNbdConnectCmd(sock: string): string {
  * an already-gone resource.
  */
 export function buildReaderTeardownCmd(h: VddkReaderHandle): string {
-  const files = [h.sock, h.pwFile, h.logFile].filter(Boolean).join(" ")
+  const files = [h.sock, h.pwFile, h.logFile].filter((f): f is string => !!f).map(shellEscape).join(" ")
   // Only detach a device we actually own. When attach failed before any device
   // was chosen (h.nbdDev === ""), a bare `nbd-client -d` would error and could
-  // target an unintended device — so skip it entirely in that case.
-  const detach = h.nbdDev
+  // target an unintended device — so skip it entirely in that case. The device
+  // name was parsed from remote output, so only a real /dev/nbdN is detached.
+  const detach = NBD_DEVICE_RE.test(h.nbdDev)
     ? `${NBD_RELEASE_HOLDERS_FN}\n${nbdReleaseHoldersCall(h.nbdDev)}; nbd-client -d ${h.nbdDev} 2>/dev/null; `
     : ""
   // The pkill pattern is "[n]bdkit" (a one-character class), not "nbdkit":
@@ -73,7 +77,7 @@ export function buildReaderTeardownCmd(h: VddkReaderHandle): string {
   // the teardown shell itself (exit 143, and the rm cleanup never runs, leaking the
   // temp files). "[n]bdkit" still matches the real `nbdkit …` process but no longer
   // matches this shell's own "[n]bdkit" literal.
-  return `${detach}pkill -f "[n]bdkit.*${h.sock}" 2>/dev/null; rm -f ${files}`
+  return `${detach}pkill -f ${shellEscape(`[n]bdkit.*${h.sock}`)} 2>/dev/null; rm -f ${files}`
 }
 
 export interface PollOpts { intervalMs?: number; maxAttempts?: number }
@@ -157,9 +161,11 @@ export async function startVddkReader(
   // Attach the socket to the first free kernel NBD device; the command echoes
   // the device it chose as "NBD_DEV=/dev/nbdN".
   const connect = await executeSSH(connectionId, nodeIp, buildNbdConnectCmd(opts.sock))
-  const nbdDev = (connect.output ?? "")
+  const reported = (connect.output ?? "")
     .split("\n").map(l => l.trim())
     .find(l => l.startsWith("NBD_DEV="))?.slice("NBD_DEV=".length).trim() ?? ""
+  // Remote output: only a real /dev/nbdN may reach the dd and teardown commands.
+  const nbdDev = NBD_DEVICE_RE.test(reported) ? reported : ""
   if (!connect.success || !nbdDev) {
     // The VDDK failure detail lands in the nbdkit log (and the nbd-client output
     // via the command's NBD_ALLOC_FAILED echo), not in the orchestrator's generic

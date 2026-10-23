@@ -69,6 +69,10 @@ export async function GET(
         { status: 400 }
       )
     }
+    // The vmid is a path segment of the orchestrator call: digits only.
+    if (!/^\d+$/.test(vmid)) {
+      return NextResponse.json({ error: 'Invalid vmid' }, { status: 400 })
+    }
 
     // Verify connection belongs to tenant
     const tenantConnectionIds = await getTenantConnectionIds()
@@ -79,7 +83,7 @@ export async function GET(
     const client = getOrchestratorClient()
     
     // Construire le path avec les query params (inclure target_node si fourni)
-    let path = `/drs/check-migration/${vmid}?connection_id=${encodeURIComponent(connectionId)}&node=${encodeURIComponent(node)}&type=${encodeURIComponent(type)}`
+    let path = `/drs/check-migration/${encodeURIComponent(vmid)}?connection_id=${encodeURIComponent(connectionId)}&node=${encodeURIComponent(node)}&type=${encodeURIComponent(type)}`
     
     if (targetNode) {
       path += `&target_node=${encodeURIComponent(targetNode)}`

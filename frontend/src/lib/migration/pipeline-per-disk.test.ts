@@ -297,10 +297,10 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     // disk 1: one raw volume on the block storage, dd'd from the SSHFS mount
     const allocs = commands.filter(c => c.startsWith("pvesm alloc "))
     expect(allocs).toEqual([`pvesm alloc 'local-lvm' ${VMID} 'vm-${VMID}-disk-0' ${10 * GIB / 1024} --format raw 2>&1`])
-    expect(commands.some(c => c.includes(`dd if="/tmp/proxcenter-sshfs-${jobId}/web-01/web-01-flat.vmdk" of="/dev/pve/vm-${VMID}-disk-0"`))).toBe(true)
+    expect(commands.some(c => c.includes(`dd if='/tmp/proxcenter-sshfs-${jobId}/web-01/web-01-flat.vmdk' of='/dev/pve/vm-${VMID}-disk-0'`))).toBe(true)
     // disk 2: qemu-img convert to qcow2 straight into ISO's images dir, adopted by rename
     const tmp1 = `/var/lib/vz/images/${VMID}/proxcenter-mig-${jobId}-disk1`
-    expect(commands.some(c => c.includes(`qemu-img convert -p -f raw -O qcow2 "/tmp/proxcenter-sshfs-${jobId}/web-01/web-01_1-flat.vmdk" "${tmp1}.qcow2"`))).toBe(true)
+    expect(commands.some(c => c.includes(`qemu-img convert -p -f raw -O qcow2 '/tmp/proxcenter-sshfs-${jobId}/web-01/web-01_1-flat.vmdk' '${tmp1}.qcow2'`))).toBe(true)
     const adopt = commands.find(c => c.includes("echo ADOPT_OK")) || ""
     expect(adopt).toContain(`mv -n '${tmp1}.qcow2' '/var/lib/vz/images/${VMID}/vm-${VMID}-disk-1.qcow2'`)
     expect(logs).toContain('Adding disk to storage "ISO"...')
@@ -352,16 +352,17 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     expect(soapCreateSnapshot).toHaveBeenCalledTimes(1)
     expect(soapRemoveAllSnapshots).toHaveBeenCalledTimes(1)
     const commands = sshCommands()
-    expect(commands.filter(c => c.includes("vmkfstools -i '/vmfs/volumes/ds1/web-01/web-01.vmdk'"))).toHaveLength(1)
-    expect(commands.filter(c => c.includes("vmkfstools -i '/vmfs/volumes/ds1/web-01/web-01_1.vmdk'"))).toHaveLength(1)
+    // The remote vmkfstools command is one single-quoted argument to ssh, so its own quotes are escaped.
+    expect(commands.filter(c => c.includes("vmkfstools -i '\\''/vmfs/volumes/ds1/web-01/web-01.vmdk'\\''"))).toHaveLength(1)
+    expect(commands.filter(c => c.includes("vmkfstools -i '\\''/vmfs/volumes/ds1/web-01/web-01_1.vmdk'\\''"))).toHaveLength(1)
     // disk 1: streamed from the clone into the block volume while the source ran
     expect(commands.filter(c => c.startsWith("pvesm alloc "))).toEqual([
       `pvesm alloc 'local-lvm' ${VMID} 'vm-${VMID}-disk-0' ${10 * GIB / 1024} --format raw 2>&1`,
     ])
-    expect(commands.some(c => c.includes(`.proxcenter-clone-${jobId}-disk0-flat.vmdk' bs=4M" | dd of="/dev/pve/vm-${VMID}-disk-0"`))).toBe(true)
+    expect(commands.some(c => c.includes(`.proxcenter-clone-${jobId}-disk0-flat.vmdk'\\'' bs=4M' | dd of='/dev/pve/vm-${VMID}-disk-0'`))).toBe(true)
     // disk 2: downloaded onto ISO, converted and adopted in phase 3
     const tmp1 = `/var/lib/vz/images/${VMID}/proxcenter-mig-${jobId}-disk1`
-    expect(commands.some(c => c.includes(`.proxcenter-clone-${jobId}-disk1-flat.vmdk' bs=4M" > "${tmp1}.vmdk"`))).toBe(true)
+    expect(commands.some(c => c.includes(`.proxcenter-clone-${jobId}-disk1-flat.vmdk'\\'' bs=4M' > '${tmp1}.vmdk'`))).toBe(true)
     expect(ssh2Commands).toEqual([`qemu-img convert -f raw -O qcow2 "${tmp1}.vmdk" "${tmp1}.qcow2" 2>&1 && echo CONVERT_OK`])
     const logs = messages()
     expect(logs).toContain("Attaching pre-streamed volumes to VM...")
@@ -462,8 +463,8 @@ describe("runMigrationPipeline without per-disk choices (unchanged behaviour)", 
     expect(commands.some(c => c.startsWith("pvesm alloc "))).toBe(false)
     expect(commands.filter(c => c === `mkdir -p "/var/lib/vz/images/${VMID}"`)).toHaveLength(1)
     const dir = `/var/lib/vz/images/${VMID}`
-    expect(commands.some(c => c.includes(`-O qcow2 "/tmp/proxcenter-sshfs-${jobId}/web-01/web-01-flat.vmdk" "${dir}/proxcenter-mig-${jobId}-disk0.qcow2"`))).toBe(true)
-    expect(commands.some(c => c.includes(`-O qcow2 "/tmp/proxcenter-sshfs-${jobId}/web-01/web-01_1-flat.vmdk" "${dir}/proxcenter-mig-${jobId}-disk1.qcow2"`))).toBe(true)
+    expect(commands.some(c => c.includes(`-O qcow2 '/tmp/proxcenter-sshfs-${jobId}/web-01/web-01-flat.vmdk' '${dir}/proxcenter-mig-${jobId}-disk0.qcow2'`))).toBe(true)
+    expect(commands.some(c => c.includes(`-O qcow2 '/tmp/proxcenter-sshfs-${jobId}/web-01/web-01_1-flat.vmdk' '${dir}/proxcenter-mig-${jobId}-disk1.qcow2'`))).toBe(true)
     expect(logs.filter(m => m === 'Adding disk to storage "ISO"...')).toHaveLength(2)
     expect(slotValue("scsi0")).toBe(`ISO:${VMID}/vm-${VMID}-disk-0.qcow2,discard=on`)
     expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on`)

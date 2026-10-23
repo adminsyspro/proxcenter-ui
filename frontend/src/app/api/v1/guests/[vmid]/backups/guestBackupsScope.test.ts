@@ -22,6 +22,12 @@ const {
 }))
 
 // Keep REAL inventoryConnectionPlan; only mock getTenantInfrastructureScope
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock("@/lib/vdc/guestGuard", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/vdc/guestGuard")>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock("@/lib/tenant/infraScope", async (orig) => ({
   ...(await orig<typeof import("@/lib/tenant/infraScope")>()),
   getTenantInfrastructureScope: (...a: any[]) => getInfraMock(...a),

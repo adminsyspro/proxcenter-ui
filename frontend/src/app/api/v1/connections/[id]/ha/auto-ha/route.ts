@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { getSetting, setSetting } from "@/lib/db/settings"
+import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -26,8 +27,18 @@ async function loadSettings(connId: string): Promise<AutoHaSettings> {
 async function getHandler(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params
-    const denied = await checkPermission(PERMISSIONS.NODE_VIEW)
+    // Scoped to the connection like the PUT below, then resolved through the
+    // tenant-checked lookup so another tenant's connection reads as absent.
+    const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
     if (denied) return denied
+    try {
+      await getConnectionById(id)
+    } catch (e: any) {
+      if (/connection not found/i.test(e?.message || "")) {
+        return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+      }
+      throw e
+    }
 
     return NextResponse.json({ data: await loadSettings(id) })
   } catch (e: any) {

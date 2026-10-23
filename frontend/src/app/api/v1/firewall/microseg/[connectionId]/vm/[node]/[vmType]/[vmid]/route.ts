@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 
 type Params = { connectionId: string; node: string; vmType: string; vmid: string }
 
@@ -20,6 +22,10 @@ export async function GET(
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
     if (denied) return denied
+
+    // node.view is connection-wide: the guest itself must be inside the vDC.
+    const scopeDenied = await guardSessionGuest({ connectionId, conn: () => getConnectionById(connectionId), type: vmType, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     const orchestrator = getOrchestratorClient()
     const response = await orchestrator.get(`/firewall/microseg/${connectionId}/vm/${node}/${vmType}/${vmid}`)

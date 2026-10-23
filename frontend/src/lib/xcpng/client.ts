@@ -178,5 +178,8 @@ export async function xoGetVmConfig(xo: XoConnectionInfo, vmUuid: string): Promi
  * Build the download URL for a VDI (raw format for direct import)
  */
 export function buildVdiDownloadUrl(baseUrl: string, vdiUuid: string, format: "vhd" | "raw" = "raw"): string {
+  // The id comes from the XO API and lands in a URL that a root curl on the
+  // node reads from a config file: only an identifier's own characters pass.
+  if (!/^[A-Za-z0-9-]{1,128}$/.test(vdiUuid)) throw new Error(`Invalid VDI id: ${JSON.stringify(vdiUuid)}`)
   return `${baseUrl.replace(/\/$/, "")}/rest/v0/vdis/${vdiUuid}.${format}`
 }

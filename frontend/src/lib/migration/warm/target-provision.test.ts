@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import { spawnSync } from "node:child_process"
+import { existsSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 // provisionBlockTargets composes the allocation helper, the node SSH channel
 // and the job row; each is replaced so the test can read which disk went to
@@ -19,7 +23,7 @@ vi.mock("./job-control", () => ({ updateJob: vi.fn(async () => {}), updateJobLiv
 import { executeSSH, type SSHExecOpts } from "@/lib/ssh/exec"
 import { allocateAndMapBlockVolume, type AllocateAndMapArgs, type AllocatedVolume } from "../pvesm-alloc"
 import { appendLog, updateJob, updateJobLive } from "./job-control"
-import { provisionBlockTargets, ZERO_MODE_OFFLOAD_MARKER, type ProvisionDisk } from "./target-provision"
+import { buildThickZeroScript, provisionBlockTargets, ZERO_MODE_OFFLOAD_MARKER, type ProvisionDisk } from "./target-provision"
 
 const GiB = 1024 ** 3
 const MiB = 1024 * 1024
@@ -135,5 +139,19 @@ describe("provisionBlockTargets with one storage per disk (#317 lot 2)", () => {
     })
     await expect(run([{ key: 0, capacityBytes: 10 * GiB, storage: "vg-thick", storageType: "lvm" }]))
       .rejects.toThrow(/Failed to zero thick target \/dev\/vg-thick\/vm-250-disk-0 .*Input\/output error/)
+  })
+})
+
+describe("buildThickZeroScript quoting", () => {
+  it("keeps a device path with shell characters one literal word, in and out of the error messages", () => {
+    const canary = join(tmpdir(), `zero-script-canary-${process.pid}`)
+    const dev = `/dev/vg thick/vm $(touch ${canary}) \`id\``
+    const script = buildThickZeroScript(dev, 2)
+    // blockdev fails: the script must report the raw device name and exit 1 without expanding it.
+    const out = spawnSync("bash", ["-c", `blockdev() { printf '%s\\n' "$@" >&2; return 1; }\n${script}`], { encoding: "utf8", env: { PATH: "/usr/bin:/bin", NODE_ENV: "test" } })
+    expect(out.status).toBe(1)
+    expect(out.stdout.trim()).toBe(`zero-error: cannot read the size of ${dev}`)
+    expect(out.stderr.trim()).toBe(`--getsize64\n${dev}`)
+    expect(existsSync(canary)).toBe(false)
   })
 })

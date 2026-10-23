@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
+import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
+import { tenantBaseUrlRefusal } from "@/lib/net/base-url-guard"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { encryptSecret, decryptSecret } from "@/lib/crypto/secret"
@@ -104,6 +106,14 @@ async function handlePatch(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const body = parseResult.data
     const data: any = {}
+
+    // The server itself opens this URL: a customer tenant may not point it at
+    // this host, the metadata range or the unspecified address. The provider
+    // keeps today's freedom (its admins point at internal hosts on purpose).
+    if (body.baseUrl !== undefined && (await getCurrentTenantId()) !== DEFAULT_TENANT_ID) {
+      const refusal = await tenantBaseUrlRefusal(body.baseUrl)
+      if (refusal) return NextResponse.json({ error: refusal }, { status: 400 })
+    }
 
     // v1.5: Connection.type is immutable post-create (changing pve<->pbs would
     // invalidate the provider-pool invariant). The DB trigger is the backstop;

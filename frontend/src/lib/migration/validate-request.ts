@@ -10,7 +10,7 @@
  */
 import { NextResponse } from "next/server"
 
-import { assertStorageName } from "@/lib/ssh/validate"
+import { assertAbsPath, assertStorageName } from "@/lib/ssh/validate"
 import { sanitizeV2vRoot } from "@/lib/migration/v2v-root-select"
 import { persistedV2vInputs } from "@/lib/migration/retry-dispatch"
 import { parseNfcConcurrency, NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from "@/lib/migration/nfc-progress"
@@ -88,6 +88,17 @@ export async function validateMigrationRequest(
     assertStorageName(targetStorage)
   } catch {
     return bad("Invalid targetStorage")
+  }
+
+  // The temporary storage path is interpolated into dozens of node-side commands
+  // by every pipeline (mount points, scratch files, curl configs): only a plain
+  // absolute path passes, and it is checked again where the pipelines read it.
+  if (isSet(body.tempStorage)) {
+    try {
+      assertAbsPath(String(body.tempStorage).trim())
+    } catch {
+      return bad("Invalid tempStorage: expected an absolute path without spaces or shell characters")
+    }
   }
 
   // Optional caller-supplied target VMID. When omitted, the pipeline falls

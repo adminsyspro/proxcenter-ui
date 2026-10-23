@@ -6,6 +6,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { mapClusterResource } from "@/lib/proxmox/mappers"
 import { attachGuestDiskTotals, onlineNodeSet } from "@/lib/inventory/guestDiskTotals"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission } from "@/lib/rbac"
+import { sessionGuestVisibility } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -26,9 +27,14 @@ export async function GET(
     const conn = await getConnectionById(id)
     const raw = await pveFetch<any[]>(conn, "/cluster/resources")
 
+    // A vDC session only lists the guests of its pools, as /api/v1/vms does;
+    // the listing just read carries each guest's pool, so nothing is re-read.
+    const scoped = await sessionGuestVisibility({ connectionId: id, conn, resources: raw })
+    if (!scoped.ok) return scoped.response
+
     // Filtrer uniquement les VMs/CTs (pas les nodes, storage, etc.)
     let guests = raw
-      .filter((r) => r?.type === "qemu" || r?.type === "lxc")
+      .filter((r) => (r?.type === "qemu" || r?.type === "lxc") && scoped.visibility.has(r.type, r.vmid))
       .map(mapClusterResource)
 
     // #938: `diskTotal` (sum of every disk) for the cluster and node panels.

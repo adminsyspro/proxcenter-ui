@@ -9,6 +9,12 @@ import { callRoute } from '@/__tests__/setup/route-test'
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   buildVmResourceId: (id: string, node: string, type: string, vmid: string) => `${id}/${node}/${type}/${vmid}`,

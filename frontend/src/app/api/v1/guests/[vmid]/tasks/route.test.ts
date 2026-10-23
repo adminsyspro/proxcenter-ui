@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
 // pass-through so this file keeps testing the handler, as for a session caller.
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('@/lib/api-tokens/routeGuard', () => ({
   withPublicApiGuard: (_entryId: string, handler: any) => handler,
 }))
@@ -134,14 +140,10 @@ describe('GET /api/v1/guests/[vmid]/tasks', () => {
     expect(body.data.count).toBe(0)
   })
 
-  it('uses url-encoded node name in the api path', async () => {
-    pveFetchMock.mockResolvedValue([])
+  it('refuses a node name that is not a hostname before any PVE call', async () => {
     const res = await GET(new Request('http://test.local/_'), { params: Promise.resolve({ vmid: 'conn-1:qemu:pve node/01:101' }) })
-    expect(res.status).toBe(200)
-    expect(pveFetchMock).toHaveBeenCalledWith(
-      { id: 'conn-1' },
-      '/nodes/pve%20node%2F01/tasks?vmid=101&limit=50',
-    )
+    expect(res.status).toBe(400)
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 
   it('works for LXC guests', async () => {
@@ -162,9 +164,9 @@ describe('GET /api/v1/guests/[vmid]/tasks', () => {
     expect(body.error).toMatch(/not found/i)
   })
 
-  it('500 on a malformed vmKey', async () => {
+  it('400 on a malformed vmKey', async () => {
     const res = await GET(new Request('http://test.local/_'), { params: Promise.resolve({ vmid: 'bad-key' }) })
-    expect(res.status).toBe(500)
+    expect(res.status).toBe(400)
     const body = await readJson<any>(res)
     expect(body.error).toMatch(/vmKey|Invalid/i)
   })

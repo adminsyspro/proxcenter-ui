@@ -7,15 +7,19 @@ import { callRoute } from '@/__tests__/setup/route-test'
 import { haOperation, haOperationWithBody, haWriteGuard } from './haRoute'
 
 const requireFeature = vi.fn()
-const checkPermission = vi.fn()
+const requireProviderAdmin = vi.fn()
 
 vi.mock('@/lib/auth/requireEnterprise', () => ({
   requireFeature: (...args: unknown[]) => requireFeature(...args),
 }))
 
 vi.mock('@/lib/rbac', () => ({
-  checkPermission: (...args: unknown[]) => checkPermission(...args),
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
+}))
+
+// Provider tenant + admin.settings in one guard: HA is platform-wide.
+vi.mock('@/lib/tenant/providerGuard', () => ({
+  requireProviderAdmin: (...args: unknown[]) => requireProviderAdmin(...args),
 }))
 
 vi.mock('./headers', () => ({
@@ -28,7 +32,7 @@ vi.stubGlobal('fetch', fetchMock)
 beforeEach(() => {
   vi.clearAllMocks()
   requireFeature.mockResolvedValue(null)
-  checkPermission.mockResolvedValue(null)
+  requireProviderAdmin.mockResolvedValue(null)
   fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true }) })
 })
 
@@ -36,7 +40,7 @@ describe('haWriteGuard', () => {
   it('lets a licensed admin through', async () => {
     await expect(haWriteGuard()).resolves.toBeNull()
     expect(requireFeature).toHaveBeenCalledWith('control_plane_ha')
-    expect(checkPermission).toHaveBeenCalledWith('admin.settings')
+    expect(requireProviderAdmin).toHaveBeenCalledWith('admin.settings')
   })
 
   it('returns the licence rejection without asking for the permission', async () => {
@@ -44,12 +48,12 @@ describe('haWriteGuard', () => {
     requireFeature.mockResolvedValue(rejection)
 
     await expect(haWriteGuard()).resolves.toBe(rejection)
-    expect(checkPermission).not.toHaveBeenCalled()
+    expect(requireProviderAdmin).not.toHaveBeenCalled()
   })
 
-  it('returns the permission rejection', async () => {
+  it('returns the provider guard rejection (customer tenant admin, or missing permission)', async () => {
     const rejection = NextResponse.json({ error: 'Permission denied' }, { status: 403 })
-    checkPermission.mockResolvedValue(rejection)
+    requireProviderAdmin.mockResolvedValue(rejection)
 
     await expect(haWriteGuard()).resolves.toBe(rejection)
   })
@@ -67,7 +71,7 @@ describe('haOperation', () => {
   })
 
   it('stops at a failed guard without reaching the orchestrator', async () => {
-    checkPermission.mockResolvedValue(NextResponse.json({ error: 'nope' }, { status: 403 }))
+    requireProviderAdmin.mockResolvedValue(NextResponse.json({ error: 'nope' }, { status: 403 }))
 
     const res = await haOperation('/ha/pause', 'POST')()
 

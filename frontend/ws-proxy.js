@@ -44,10 +44,102 @@ const INTERNAL_HEADERS = {
 }
 
 /**
+ * Largest frame a browser may send to the proxy (ws `maxPayload`; a bigger
+ * frame closes the socket with 1009). Only the browser-to-proxy direction is
+ * capped: the upstream sockets we open to Proxmox keep ws's default, since a
+ * VNC framebuffer update can weigh several MiB. Client-to-server console
+ * traffic is small: noVNC sends key, pointer and clipboard events, xterm.js
+ * keystrokes and pastes, spice-html5 input events and agent messages of at
+ * most VD_AGENT_MAX_DATA_SIZE (2 KiB) even for file transfers. Before this cap
+ * an unauthenticated client could push a 60 MiB frame through the upgrade.
+ */
+const WS_MAX_PAYLOAD_BYTES = 1024 * 1024
+
+/**
+ * Bytes a SPICE client may send before the upstream tunnel is ready. Those
+ * frames are queued in memory while the session is resolved and the CONNECT +
+ * TLS handshake completes; spice-html5 only sends its SpiceLinkMess (a few
+ * dozen bytes) and then waits, so a client that keeps pushing is not a
+ * console, and the queue is closed instead of growing with it.
+ */
+const SPICE_PREAUTH_BUFFER_MAX_BYTES = 64 * 1024
+
+// Session fields that are credentials (PVE API token, VNC/termproxy ticket,
+// spiceproxy ticket) or bulky (CA bundle). Logged sessions go through
+// redactSession so a malformed consume answer never prints them.
+const SENSITIVE_SESSION_KEYS = new Set([
+  'apitoken', 'ticket', 'proxyticket', 'password', 'secret', 'token', 'authorization', 'ca',
+])
+
+/**
+ * Copy of a session object safe for the log: credential fields replaced by
+ * '***', other values kept so the shape of a bad answer stays diagnosable.
+ * Non-object inputs are described, not printed.
+ */
+function redactSession(session) {
+  if (session === null || typeof session !== 'object') return `<${session === null ? 'null' : typeof session}>`
+  const out = Array.isArray(session) ? [] : {}
+  for (const [key, value] of Object.entries(session)) {
+    if (SENSITIVE_SESSION_KEYS.has(key.toLowerCase())) {
+      out[key] = value === null || value === undefined ? value : '***'
+    } else if (value !== null && typeof value === 'object') {
+      out[key] = redactSession(value)
+    } else {
+      out[key] = value
+    }
+  }
+  return out
+}
+
+/** Byte length of a ws 'message' payload, whatever binaryType produced. */
+function frameByteLength(data) {
+  if (Buffer.isBuffer(data)) return data.length
+  if (data instanceof ArrayBuffer) return data.byteLength
+  if (Array.isArray(data)) return data.reduce((n, chunk) => n + frameByteLength(chunk), 0)
+  return Buffer.byteLength(String(data))
+}
+
+/**
+ * Queue of frames bounded by their total byte size. push() returns false, and
+ * drops everything, once a frame would take the queue past `maxBytes`; the
+ * caller then closes the connection.
+ */
+function createBoundedQueue(maxBytes) {
+  const frames = []
+  let bytes = 0
+  return {
+    push(data) {
+      bytes += frameByteLength(data)
+      if (bytes > maxBytes) {
+        frames.length = 0
+        return false
+      }
+      frames.push(data)
+      return true
+    },
+    drain(write) {
+      for (const frame of frames) write(frame)
+      frames.length = 0
+      bytes = 0
+    },
+    get length() { return frames.length },
+    get bytes() { return bytes },
+  }
+}
+
+/**
  * Handle an incoming WebSocket connection.
  * Called by the unified server (start.js) or standalone wss.
  */
 async function handleWsConnection(clientWs, req) {
+  // ws emits 'error' on the client socket when a frame exceeds maxPayload (or
+  // the peer misbehaves), and an EventEmitter with no 'error' listener turns
+  // that into an uncaught exception. The route handlers below only attach
+  // theirs after the session lookup has resolved, so this one covers the gap.
+  clientWs.on('error', (err) => {
+    console.error('[WS] Client socket error:', err && err.message ? err.message : err)
+  })
+
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
 
   // Normalize path: strip /api/internal prefix if present (for direct access without nginx)
@@ -91,7 +183,7 @@ async function handleWsConnection(clientWs, req) {
 
     const { host, pvePort, port, ticket, node, user, apiToken, insecure } = session
     if (!host || !port || !ticket || !node) {
-      console.error('[WS] Invalid shell session data:', session)
+      console.error('[WS] Invalid shell session data:', redactSession(session))
       clientWs.close(4002, 'Invalid session data')
       return
     }
@@ -217,7 +309,7 @@ async function handleWsConnection(clientWs, req) {
     let upstream = null
     let upstreamReady = false
     let tcp = null
-    const clientBuf = []
+    const clientBuf = createBoundedQueue(SPICE_PREAUTH_BUFFER_MAX_BYTES)
 
     const closeAll = (code, reason) => {
       try { if (clientWs.readyState === WebSocket.OPEN) clientWs.close(code || 1000, reason || '') } catch {}
@@ -226,8 +318,15 @@ async function handleWsConnection(clientWs, req) {
     }
 
     clientWs.on('message', (data) => {
-      if (upstreamReady && upstream && upstream.writable) upstream.write(data)
-      else clientBuf.push(data)
+      if (upstreamReady && upstream && upstream.writable) {
+        upstream.write(data)
+      } else if (!clientBuf.push(data)) {
+        // Nothing has been authenticated yet (the session may not even have
+        // resolved): a client flooding the queue at this point is not a
+        // SPICE link handshake. 1009 is ws's own "message too big".
+        console.error(`[WS] SPICE client sent more than ${SPICE_PREAUTH_BUFFER_MAX_BYTES} bytes before the upstream was ready; closing ${sessionId}`)
+        closeAll(1009, 'Pre-auth buffer exceeded')
+      }
     })
     clientWs.on('close', () => closeAll(1000, ''))
     clientWs.on('error', () => closeAll(1011, 'client error'))
@@ -254,7 +353,7 @@ async function handleWsConnection(clientWs, req) {
 
     const { proxyticket, proxyHost, proxyPort, tlsPort, ca, hostSubject, insecure } = session
     if (!proxyticket || !proxyHost || !tlsPort) {
-      console.error('[WS] Invalid SPICE session data:', session)
+      console.error('[WS] Invalid SPICE session data:', redactSession(session))
       clientWs.close(4002, 'Invalid session data')
       return
     }
@@ -323,8 +422,7 @@ async function handleWsConnection(clientWs, req) {
         // handshake; spice-html5 sends its link message the instant the WS
         // opens, so dropping these would stall the link and fail the console.
         console.log(`[WS] SPICE upstream TLS established for ${sessionId}, flushing ${clientBuf.length} queued frame(s)`)
-        for (const m of clientBuf) { try { upstream.write(m) } catch {} }
-        clientBuf.length = 0
+        clientBuf.drain((m) => { try { upstream.write(m) } catch {} })
       })
       if (leftover.length) upstream.write(leftover)
 
@@ -371,7 +469,7 @@ async function handleWsConnection(clientWs, req) {
       const { baseUrl, port, ticket, node, apiToken, insecure } = session
 
       if (!baseUrl || !port || !ticket) {
-        console.error('[WS] Invalid session data:', session)
+        console.error('[WS] Invalid session data:', redactSession(session))
         clientWs.close(4002, 'Invalid session data')
         return
       }
@@ -464,8 +562,15 @@ async function handleWsConnection(clientWs, req) {
   clientWs.close(4000, 'Invalid path')
 }
 
-// Export for use by start.js
-module.exports = { handleWsConnection }
+// Export for use by start.js; the guards are exported for their unit tests.
+module.exports = {
+  handleWsConnection,
+  WS_MAX_PAYLOAD_BYTES,
+  SPICE_PREAUTH_BUFFER_MAX_BYTES,
+  redactSession,
+  frameByteLength,
+  createBoundedQueue,
+}
 
 // Standalone mode (for debugging): node ws-proxy.js
 if (require.main === module) {
@@ -479,7 +584,7 @@ if (require.main === module) {
     res.end('WebSocket Proxy for noVNC/xterm.js (standalone debug mode)\n')
   })
 
-  const wss = new WebSocketServer({ server })
+  const wss = new WebSocketServer({ server, maxPayload: WS_MAX_PAYLOAD_BYTES })
   wss.on('connection', handleWsConnection)
 
   server.listen(PORT, () => {

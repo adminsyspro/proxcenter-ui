@@ -10,9 +10,14 @@ import {
 
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 
+type ActiveLockKind = 'account' | 'ip' | 'totp'
+
 interface ActiveLock {
-  kind: 'account' | 'ip'
+  kind: ActiveLockKind
+  /** What the unlock route takes; for a second factor lock this is the user id. */
   key: string
+  /** What to show; the account email behind a second factor lock. Absent from an older API. */
+  label?: string
   failedCount: number
   lastFailedAt: string
   lockedUntil: string
@@ -20,7 +25,20 @@ interface ActiveLock {
 
 const ROWS_PER_PAGE = 10
 
-// Accounts and client IPs locked by the login policy, with the admin unlock.
+const KIND_ICON: Record<ActiveLockKind, string> = {
+  account: 'ri-user-line',
+  ip: 'ri-global-line',
+  totp: 'ri-shield-keyhole-line',
+}
+
+const KIND_LABEL_KEY: Record<ActiveLockKind, string> = {
+  account: 'compliance.loginLockouts.kindAccount',
+  ip: 'compliance.loginLockouts.kindIp',
+  totp: 'compliance.loginLockouts.kindTotp',
+}
+
+// Accounts and client IPs locked by the login policy, plus accounts whose
+// second factor is throttled by the always-on floor, with the admin unlock.
 export default function LoginLockoutsCard() {
   const t = useTranslations()
   const { data, isLoading, mutate } = useSWRFetch('/api/v1/compliance/login-lockouts', { refreshInterval: 30_000 })
@@ -94,11 +112,11 @@ export default function LoginLockoutsCard() {
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <i
-                            className={lock.kind === 'account' ? 'ri-user-line' : 'ri-global-line'}
+                            className={KIND_ICON[lock.kind] ?? 'ri-lock-line'}
                             style={{ fontSize: 16, opacity: 0.8 }}
                           />
                           <Typography variant="body2" sx={{ fontFamily: lock.kind === 'ip' ? 'monospace' : undefined }}>
-                            {lock.key}
+                            {lock.label ?? lock.key}
                           </Typography>
                         </Box>
                       </TableCell>
@@ -106,7 +124,7 @@ export default function LoginLockoutsCard() {
                         <Chip
                           size="small"
                           variant="outlined"
-                          label={t(lock.kind === 'account' ? 'compliance.loginLockouts.kindAccount' : 'compliance.loginLockouts.kindIp')}
+                          label={t(KIND_LABEL_KEY[lock.kind] ?? 'compliance.loginLockouts.type')}
                         />
                       </TableCell>
                       <TableCell align="right">{lock.failedCount}</TableCell>

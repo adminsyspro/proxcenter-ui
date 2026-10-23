@@ -89,6 +89,45 @@ export function isLdapGroupAllowed(
   })
 }
 
+// ---------------------------------------------------------------------------
+// Roles an SSO config may hand out
+// ---------------------------------------------------------------------------
+
+/**
+ * Role ids that grant wildcard, provider-level access. Same list as
+ * PROTECTED_ROLE_IDS in lib/rbac (a test keeps the two in step); repeated here
+ * because lib/rbac pulls Prisma in and this module must stay client-safe.
+ */
+export const PROTECTED_SSO_ROLE_IDS: readonly string[] = ["role_super_admin", "role_provider_admin"]
+
+/**
+ * Normalise a role value from the SSO forms into a `role_`-prefixed id. The
+ * OIDC default role is stored bare ("viewer"), the LDAP one prefixed
+ * ("role_viewer"), and the group mappings accept either, so a protected role
+ * has to be recognised whichever way it was typed.
+ */
+export function normalizeRoleId(role: unknown): string {
+  const value = role == null ? "" : String(role).trim()
+  if (!value) return ""
+  return value.startsWith("role_") ? value : `role_${value}`
+}
+
+/**
+ * The protected role ids among `roles` (default role and mapping targets of
+ * an SSO config), deduplicated, in first-seen order. An empty list means the
+ * config hands out nothing a tenant admin could not grant themselves; any
+ * entry means only a super admin may save it, since a mapped IdP group or the
+ * default role would otherwise mint super admins at the next login.
+ */
+export function protectedRoleTargets(roles: readonly unknown[]): string[] {
+  const out: string[] = []
+  for (const role of roles) {
+    const id = normalizeRoleId(role)
+    if (PROTECTED_SSO_ROLE_IDS.includes(id) && !out.includes(id)) out.push(id)
+  }
+  return out
+}
+
 export function normalizeGroupRoleMapping(input: unknown): Record<string, string> {
   let raw: Record<string, string> = {}
   if (typeof input === 'string') {

@@ -22,6 +22,7 @@
  * keep-alive to vCenter (a lease dies after about 5 min of silence).
  */
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { backgroundBashCommand, curlConfigQuoted, parseBackgroundPid } from "./remote-commands"
 import {
   soapExportVm,
   soapExportSnapshot,
@@ -257,8 +258,10 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
   // vSphere's Set-Cookie usually returns the session id WITH surrounding double
   // quotes (vmware_soap_session="abc"). Unescaped in a curl config file, the
   // inner quotes stop curl's parser at the first one and drop the session id,
-  // which lands as a 401 from vCenter.
-  const cookieEsc = (session.cookie || "").replaceAll("\\", "\\\\").replaceAll('"', '\\"')
+  // which lands as a 401 from vCenter. The lease URL and the output path are
+  // quoted the same way: a quote or line break in a value vCenter hands out must
+  // not add a directive (an `output` elsewhere is a root file write on the node).
+  const cookieEsc = curlConfigQuoted(`Cookie: ${session.cookie || ""}`)
 
   const ctrlPrefix = `${localPath}.ctrl`
   const pidFile = `${ctrlPrefix}.pid`
@@ -272,9 +275,9 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
   // silently truncated stream (HTTP 200 with a tiny chunked body) can be
   // diagnosed from the job log.
   const cfgContent = [
-    `header = "Cookie: ${cookieEsc}"`,
-    `output = "${localPath}"`,
-    `url = "${device.url}"`,
+    `header = ${cookieEsc}`,
+    `output = ${curlConfigQuoted(localPath)}`,
+    `url = ${curlConfigQuoted(device.url)}`,
     `write-out = "http_code=%{http_code}\\nresponse_code=%{response_code}\\nsize_download=%{size_download}\\ntime_total=%{time_total}\\ncontent_type=%{content_type}\\nnum_connects=%{num_connects}\\nspeed_download=%{speed_download}\\n"`,
     "silent",
     "show-error",
@@ -287,18 +290,20 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
     throw new Error(`Failed to write NFC curl config: ${writeCfg.error}`)
   }
 
-  const launchCmd =
-    `nohup bash -c ` +
-    `"curl -K ${shellEscape(curlCfg)} >${shellEscape(statsFile)} 2>${shellEscape(errFile)}; ` +
-    `echo \\$? > ${shellEscape(exitFile)}; ` +
-    `rm -f ${shellEscape(curlCfg)}" ` +
-    `> /dev/null 2>&1 & echo $!`
+  // The inner command is one argument to bash: inside "..." the node's shell would
+  // still expand `$(...)` found in the (request-supplied) temp path.
+  const launchCmd = backgroundBashCommand(
+    `curl -K ${shellEscape(curlCfg)} >${shellEscape(statsFile)} 2>${shellEscape(errFile)}; ` +
+    `echo $? > ${shellEscape(exitFile)}; ` +
+    `rm -f ${shellEscape(curlCfg)}`,
+  )
   const launch = await ssh(launchCmd)
-  if (!launch.success || !launch.output?.trim()) {
+  // The pid lands in `kill ${pid}` below: anything but digits is a failed launch.
+  const pid = parseBackgroundPid(launch.output)
+  if (!launch.success || !pid) {
     await ssh(`rm -f ${shellEscape(curlCfg)}`).catch(() => {})
-    throw new Error(`Failed to start NFC download: ${launch.error}`)
+    throw new Error(`Failed to start NFC download: ${launch.error || launch.output}`)
   }
-  const pid = launch.output.trim()
   await ssh(`echo ${pid} > ${shellEscape(pidFile)}`)
 
   // The pid nohup echoed is the `bash -c` wrapper's. Killing it alone leaves

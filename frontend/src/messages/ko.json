@@ -9512,6 +9512,7 @@
       "type": "유형",
       "kindAccount": "계정",
       "kindIp": "IP 주소",
+      "kindTotp": "2단계 인증",
       "failedAttempts": "실패 횟수",
       "lockedUntil": "잠금 종료",
       "unlock": "잠금 해제",

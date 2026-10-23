@@ -38,8 +38,8 @@ process.env.__NEXT_PRIVATE_STANDALONE_CONFIG = JSON.stringify(nextConfig)
 require('next')
 const { getRequestHandlers } = require('next/dist/server/lib/start-server')
 
-// Import ws-proxy handler
-const { handleWsConnection } = require('./ws-proxy')
+// Import ws-proxy handler and its frame size cap
+const { handleWsConnection, WS_MAX_PAYLOAD_BYTES } = require('./ws-proxy')
 
 async function main() {
   // Get Next.js request & upgrade handlers
@@ -72,8 +72,9 @@ async function main() {
     server.keepAliveTimeout = keepAliveTimeout
   }
 
-  // WebSocket server (noServer mode — we handle upgrade routing ourselves)
-  const wss = new WebSocketServer({ noServer: true })
+  // WebSocket server (noServer mode — we handle upgrade routing ourselves).
+  // maxPayload bounds what a browser may send per frame; see ws-proxy.js.
+  const wss = new WebSocketServer({ noServer: true, maxPayload: WS_MAX_PAYLOAD_BYTES })
 
   wss.on('connection', (clientWs, req) => {
     handleWsConnection(clientWs, req)

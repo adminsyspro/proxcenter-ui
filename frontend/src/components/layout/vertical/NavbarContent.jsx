@@ -256,7 +256,9 @@ const NavbarContent = ({ targetLayout } = {}) => {
   // hourly round-trip for tenants instead of fetching and then hiding.
   const { data: updateInfoData } = useVersionCheck(3600000, isProviderTenant)
   const { data: healthData } = useOrchestratorHealth(isEnterprise)
-  const { data: haConfigData } = useHaConfig(isEnterprise)
+  // The ProxCenter HA cluster is provider infrastructure (/api/v1/ha/* is
+  // provider-only): tenants never get its maintenance notices.
+  const { data: haConfigData } = useHaConfig(isEnterprise && isProviderTenant)
   const haDeployed = haConfigData?.deploymentState === 'deployed'
   const { data: haClusterData } = useHaClusterHealth(isEnterprise && haDeployed)
 

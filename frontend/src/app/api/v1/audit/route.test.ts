@@ -29,6 +29,28 @@ describe('GET /api/v1/audit', () => {
     expect(getAuditLogsMock).toHaveBeenCalledWith({ tenantId: 'default', limit: 10, offset: 0, category: 'auth', action: null, status: null })
   })
 
+  it('keeps the page sizes the audit page asks for', async () => {
+    for (const size of [25, 50, 100]) {
+      await callRoute(GET, { searchParams: { limit: String(size), offset: String(size * 3) } })
+      expect(getAuditLogsMock).toHaveBeenLastCalledWith(expect.objectContaining({ limit: size, offset: size * 3 }))
+    }
+  })
+
+  it('clamps an oversized limit to 500 rows', async () => {
+    await callRoute(GET, { searchParams: { limit: '1000000' } })
+    expect(getAuditLogsMock).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 500 }))
+  })
+
+  it('falls back to 100 rows and offset 0 on absent, zero, negative or unparseable paging', async () => {
+    await callRoute(GET)
+    expect(getAuditLogsMock).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 100, offset: 0 }))
+
+    for (const bad of ['0', '-5', 'abc', 'Infinity']) {
+      await callRoute(GET, { searchParams: { limit: bad, offset: bad } })
+      expect(getAuditLogsMock).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 100, offset: 0 }))
+    }
+  })
+
   it('answers "Server error" when the read throws without a message', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     getAuditLogsMock.mockRejectedValue({})

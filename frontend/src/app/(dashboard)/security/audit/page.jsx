@@ -28,6 +28,8 @@ import { getDateLocale } from '@/lib/i18n/date'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import AuditActorCell, { auditActorText, auditActorValueGetter } from '@/components/security/AuditActorCell'
 
+import { toCsv } from './csv'
+
 /* --------------------------------
    Constants
 -------------------------------- */
@@ -405,7 +407,9 @@ return () => clearTimeout(timer)
       l.ip_address || '—',
     ])
     
-    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n')
+    // Every cell quoted and formula-safe: the actor column carries what a
+    // failed login typed, which may start with "=" (see ./csv.ts).
+    const csv = toCsv([headers, ...rows])
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

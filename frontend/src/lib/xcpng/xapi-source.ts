@@ -5,6 +5,7 @@ import {
 } from "./xapi-client"
 import type { XcpngSource, XcpngCredentials, XcpngHostInfo, XcpngDiskDownload } from "./source"
 import type { XoDiskInfo, XoVmConfig } from "./client"
+import { curlConfigQuoted } from "@/lib/migration/remote-commands"
 
 export class XapiSource implements XcpngSource {
   readonly kind = "xapi" as const
@@ -29,7 +30,8 @@ export class XapiSource implements XcpngSource {
   diskDownload(disk: XoDiskInfo, format: "vhd" | "raw"): Promise<XcpngDiskDownload> {
     if (!disk.vdiRef) return Promise.reject(new Error(`disk ${disk.label} has no XAPI reference`))
     const url = xapiVdiExportUrl(this.session, disk.vdiRef, format)
-    const lines = [`url = "${url}"`, `header = "Accept: application/octet-stream"`]
+    // Quoted for curl's config syntax: the file is executed as root on the node.
+    const lines = [`url = ${curlConfigQuoted(url)}`, `header = "Accept: application/octet-stream"`]
     if (this.c.insecureTLS) lines.push("insecure")
     return Promise.resolve({ url, curlConfig: lines.join("\n") })
   }

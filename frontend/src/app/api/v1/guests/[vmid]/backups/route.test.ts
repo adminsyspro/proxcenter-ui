@@ -10,6 +10,12 @@ const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const findManyMock = vi.fn<(args: any) => Promise<any[]>>()
 const listVzdumpMock = vi.fn<(...args: any[]) => Promise<any>>()
 
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({ connection: { findMany: findManyMock } }),
   getCurrentTenantId: async () => 'default',

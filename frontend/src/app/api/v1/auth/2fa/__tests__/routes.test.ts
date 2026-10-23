@@ -149,7 +149,11 @@ describe("GET /api/v1/auth/2fa/status", () => {
 // ─── POST /api/v1/auth/2fa/enroll/start ───────────────────────────────────
 
 describe("POST /api/v1/auth/2fa/enroll/start", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // A first enrolment: 2FA is off, so no re-authentication is asked.
+    userFindUniqueMock.mockResolvedValue({ password: "hashedpw", totpEnabled: false })
+  })
 
   async function importPOST() {
     const mod = await import("../enroll/start/route")
@@ -168,6 +172,61 @@ describe("POST /api/v1/auth/2fa/enroll/start", () => {
     const POST = await importPOST()
     const res = await callRoute(POST as any)
     expect(res.status).toBe(401)
+  })
+
+  it("returns 401 when the session's user no longer exists", async () => {
+    getServerSessionMock.mockResolvedValue(makeSession())
+    userFindUniqueMock.mockResolvedValue(null)
+    const POST = await importPOST()
+    const res = await callRoute(POST as any)
+    expect(res.status).toBe(401)
+    expect(signEnrollTokenMock).not.toHaveBeenCalled()
+  })
+
+  // Re-enrolment ends with the current secret being replaced, so a stolen
+  // session must not be enough to start it: the same re-auth as disable.
+  it("requires re-authentication when 2FA is already enabled, failing closed on an empty body", async () => {
+    getServerSessionMock.mockResolvedValue(makeSession())
+    userFindUniqueMock.mockResolvedValue({ password: "hashedpw", totpEnabled: true })
+    verifyReauthCredentialsMock.mockResolvedValue(false)
+
+    const POST = await importPOST()
+    const res = await callRoute(POST as any)
+    expect(res.status).toBe(401)
+    expect((await readJson<any>(res)).error).toBe("Re-authentication failed")
+    expect(verifyReauthCredentialsMock).toHaveBeenCalledWith("user-1", "hashedpw", {})
+    expect(signEnrollTokenMock).not.toHaveBeenCalled()
+  })
+
+  it("starts a re-enrolment once the caller re-authenticated", async () => {
+    getServerSessionMock.mockResolvedValue(makeSession())
+    userFindUniqueMock.mockResolvedValue({ password: "hashedpw", totpEnabled: true })
+    verifyReauthCredentialsMock.mockResolvedValue(true)
+    generateTotpSecretMock.mockReturnValue("NEWSECRET")
+    buildOtpauthUrlMock.mockReturnValue("otpauth://totp/x?secret=NEWSECRET")
+    encryptTotpSecretMock.mockReturnValue("enc:NEWSECRET")
+    qrToDataURLMock.mockResolvedValue("data:image/png;base64,abc")
+    signEnrollTokenMock.mockResolvedValue("jwt-enroll-token")
+
+    const POST = await importPOST()
+    const res = await callRoute(POST as any, { body: { password: "correctpw" } })
+    expect(res.status).toBe(200)
+    expect(verifyReauthCredentialsMock).toHaveBeenCalledWith("user-1", "hashedpw", { password: "correctpw" })
+    expect((await readJson<any>(res)).data.enrollToken).toBe("jwt-enroll-token")
+  })
+
+  it("does not ask for re-authentication on a first enrolment", async () => {
+    getServerSessionMock.mockResolvedValue(makeSession())
+    generateTotpSecretMock.mockReturnValue("RAWSECRET")
+    buildOtpauthUrlMock.mockReturnValue("otpauth://totp/x?secret=RAWSECRET")
+    encryptTotpSecretMock.mockReturnValue("enc:RAWSECRET")
+    qrToDataURLMock.mockResolvedValue("data:image/png;base64,abc123")
+    signEnrollTokenMock.mockResolvedValue("jwt-enroll-token")
+
+    const POST = await importPOST()
+    const res = await callRoute(POST as any)
+    expect(res.status).toBe(200)
+    expect(verifyReauthCredentialsMock).not.toHaveBeenCalled()
   })
 
   it("returns 200 with secret, otpauthUrl, qrDataUrl, enrollToken on success", async () => {
@@ -197,12 +256,80 @@ describe("POST /api/v1/auth/2fa/enroll/start", () => {
 // ─── POST /api/v1/auth/2fa/enroll/verify ──────────────────────────────────
 
 describe("POST /api/v1/auth/2fa/enroll/verify", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // A first enrolment: 2FA is off, so no re-authentication is asked.
+    userFindUniqueMock.mockResolvedValue({ password: "hashedpw", totpEnabled: false })
+  })
 
   async function importPOST() {
     const mod = await import("../enroll/verify/route")
     return mod.POST
   }
+
+  function stubTransaction() {
+    transactionMock.mockImplementation((cb: (tx: any) => Promise<any>) =>
+      cb({
+        user: { update: vi.fn().mockResolvedValue({}) },
+        userTotpRecoveryCode: {
+          deleteMany: vi.fn().mockResolvedValue({}),
+          createMany: vi.fn().mockResolvedValue({}),
+        },
+      }),
+    )
+  }
+
+  // The secret is overwritten here. The enrol token only proves enroll/start
+  // was called, so when 2FA is already on this step re-authenticates too.
+  it("refuses to replace an enabled secret without re-authentication", async () => {
+    getServerSessionMock.mockResolvedValue(makeSession({ id: "user-1" }))
+    verifyEnrollTokenMock.mockResolvedValue({ userId: "user-1", secretEnc: "enc:NEW" })
+    userFindUniqueMock.mockResolvedValue({ password: "hashedpw", totpEnabled: true })
+    verifyReauthCredentialsMock.mockResolvedValue(false)
+    decryptSecretMock.mockReturnValue("NEW")
+    checkTotpCodeMock.mockReturnValue(true)
+
+    const POST = await importPOST()
+    const res = await callRoute(POST as any, { body: { enrollToken: "tok", code: "123456" } })
+    expect(res.status).toBe(401)
+    expect((await readJson<any>(res)).error).toBe("Re-authentication failed")
+    expect(transactionMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalledWith(expect.objectContaining({ action: "2fa_enrolled" }))
+  })
+
+  it("replaces an enabled secret once the caller re-authenticated with the current factor", async () => {
+    getServerSessionMock.mockResolvedValue(makeSession({ id: "user-1" }))
+    verifyEnrollTokenMock.mockResolvedValue({ userId: "user-1", secretEnc: "enc:NEW" })
+    userFindUniqueMock.mockResolvedValue({ password: "hashedpw", totpEnabled: true })
+    verifyReauthCredentialsMock.mockResolvedValue(true)
+    decryptSecretMock.mockReturnValue("NEW")
+    checkTotpCodeMock.mockReturnValue(true)
+    generateRecoveryCodesMock.mockReturnValue(["CODE1-AAAAA"])
+    stubTransaction()
+    getTokenMock.mockResolvedValue(null)
+
+    const POST = await importPOST()
+    const body = { enrollToken: "tok", code: "123456", totpCode: "654321" }
+    const res = await callRoute(POST as any, { body })
+    expect(res.status).toBe(200)
+    expect(verifyReauthCredentialsMock).toHaveBeenCalledWith("user-1", "hashedpw", body)
+    expect(transactionMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not ask for re-authentication on a first enrolment", async () => {
+    getServerSessionMock.mockResolvedValue(makeSession({ id: "user-1" }))
+    verifyEnrollTokenMock.mockResolvedValue({ userId: "user-1", secretEnc: "enc:SECRET" })
+    decryptSecretMock.mockReturnValue("SECRET")
+    checkTotpCodeMock.mockReturnValue(true)
+    generateRecoveryCodesMock.mockReturnValue(["CODE1-AAAAA"])
+    stubTransaction()
+    getTokenMock.mockResolvedValue(null)
+
+    const POST = await importPOST()
+    const res = await callRoute(POST as any, { body: { enrollToken: "tok", code: "123456" } })
+    expect(res.status).toBe(200)
+    expect(verifyReauthCredentialsMock).not.toHaveBeenCalled()
+  })
 
   it("returns 401 when no session", async () => {
     getServerSessionMock.mockResolvedValue(null)

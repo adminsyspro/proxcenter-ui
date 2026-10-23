@@ -2,6 +2,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import { prisma } from "@/lib/db/prisma"
 import { isPrivateIp, extractHostname } from "@/lib/net/ip"
+import { assertNodeName } from "@/lib/ssh/validate"
 
 /**
  * Resolve the SSH-reachable address of a Proxmox node.
@@ -70,10 +71,12 @@ export async function getNodeIp(conn: any, nodeName: string, opts: { skipOverrid
     }
   } catch {}
 
-  // 3. DNS resolution of the node name.
+  // 3. DNS resolution of the node name. Only a name in the PVE node grammar is
+  //    looked up: a caller that did not constrain its input must not turn this
+  //    into a resolver for arbitrary strings (and then an SSH or TLS target).
   try {
     const dns = await import("dns")
-    const resolved = await dns.promises.resolve4(nodeName)
+    const resolved = await dns.promises.resolve4(assertNodeName(nodeName))
     if (resolved?.[0]) {
       if (mayUseConnHost && isPrivateIp(resolved[0])) return connHost
       return resolved[0]
@@ -83,6 +86,6 @@ export async function getNodeIp(conn: any, nodeName: string, opts: { skipOverrid
   // 4. Fallback to connection host (skip if behind proxy/LB).
   if (!conn.behindProxy && connHost) return connHost
 
-  // 5. Node name as-is.
-  return nodeName
+  // 5. Node name as-is, when it is a node name: it becomes an SSH or TLS host.
+  return assertNodeName(nodeName)
 }

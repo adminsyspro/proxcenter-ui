@@ -372,3 +372,42 @@ describe("/api/v1/users English error messages", () => {
     await expectError(await createUser(), 500, "Server error")
   })
 })
+
+describe("GET /api/v1/users, the tenants field", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    checkPermissionMock.mockResolvedValue(null)
+    isUserSuperAdminMock.mockResolvedValue(true)
+    rbacUserRoleFindManyMock.mockResolvedValue([])
+    sessionGroupByMock.mockResolvedValue([])
+  })
+
+  it("lists every membership of a user in the provider view", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    userFindManyMock.mockResolvedValue([userRow("u1")])
+    userTenantFindManyMock.mockResolvedValue([
+      { userId: "u1", tenantId: "default", isDefault: true, tenant: { id: "default", name: "Provider" } },
+      { userId: "u1", tenantId: "t2", isDefault: false, tenant: { id: "t2", name: "Globex" } },
+    ])
+
+    const GET = await importGET()
+    const body = await readJson<any>(await callRoute(GET as any, { method: "GET" }))
+    expect(body.data[0].tenants.map((t: any) => t.id)).toEqual(["default", "t2"])
+    expect(userTenantFindManyMock.mock.calls[0][0].where).toEqual({ userId: { in: ["u1"] } })
+  })
+
+  it("names only the caller's own tenant outside the provider view, never the other customers", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("t1")
+    // First call lists the tenant's members, second one their memberships.
+    userTenantFindManyMock
+      .mockResolvedValueOnce([{ userId: "u1", user: userRow("u1") }])
+      .mockResolvedValueOnce([{ userId: "u1", tenantId: "t1", isDefault: false, tenant: { id: "t1", name: "Acme" } }])
+
+    const GET = await importGET()
+    const res = await callRoute(GET as any, { method: "GET" })
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body.data[0].tenants).toEqual([{ id: "t1", name: "Acme", isDefault: false }])
+    expect(userTenantFindManyMock.mock.calls[1][0].where).toEqual({ userId: { in: ["u1"] }, tenantId: "t1" })
+  })
+})

@@ -27,7 +27,13 @@ describe("buildUefiInjectScript", () => {
     const s = buildUefiInjectScript(BOOT_DISK_PATH)
     expect(s.split("\n")[0]).toBe("set +e")
     expect(s).toContain("modprobe nbd max_part=16")
-    expect(s).toContain('qemu-nbd --connect="$NBD" --format=raw "/mnt/pve/local/images/100/vm-100-disk-0.raw"')
+    expect(s).toContain(`qemu-nbd --connect="$NBD" --format=raw '/mnt/pve/local/images/100/vm-100-disk-0.raw'`)
+  })
+
+  it("keeps a boot disk path holding shell characters a single literal argument", () => {
+    const hostile = "/mnt/pve/my store/images/100/vm $(touch /tmp/pwned) `id` \"x\" 'y'.raw"
+    const s = buildUefiInjectScript(hostile)
+    expect(s).toContain(`qemu-nbd --connect="$NBD" --format=raw '/mnt/pve/my store/images/100/vm $(touch /tmp/pwned) \`id\` "x" '\\''y'\\''.raw' 2>/dev/null`)
   })
 
   it("preserves all result markers for the caller", () => {

@@ -8,6 +8,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
 import { assertVmid } from "@/lib/ssh/validate"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -88,18 +89,24 @@ export async function GET(
 
   if (denied) return denied
 
+  const conn = await getConnectionById(id)
+
+  if (!conn) {
+    return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+  }
+
+  // Before the cache lookup: a frame another operator captured seconds ago
+  // must not be served to a vDC session whose guest this is not. The guest
+  // may sit on another vDC node than the URL says (moved-node retry below).
+  const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid, allowMovedNode: true })
+  if (scopeDenied) return scopeDenied
+
   // Check cache first
   const cacheKey = `${id}:${node}:${vmid}`
   const cached = screenshotCache.get(cacheKey)
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return jpegResponse(cached.jpeg, { "X-Screenshot-Cache": "hit" })
-  }
-
-  const conn = await getConnectionById(id)
-
-  if (!conn) {
-    return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
 
   // Serial-only / headless VMs (vga: serial0, none, or GPU passthrough) have

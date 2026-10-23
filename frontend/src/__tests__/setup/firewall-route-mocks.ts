@@ -87,6 +87,13 @@ export function installFirewallRouteMocks(): void {
   vi.doMock('@/lib/orchestrator/client', () => ({
     getOrchestratorClient: () => orchestrator,
   }))
+
+  // The per-VM routes confine the guest to the caller's vDC (guestGuard.ts,
+  // covered by its own tests): pass-through here, as for a provider session.
+  vi.doMock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+    guardSessionGuest: async () => null,
+  }))
 }
 
 /**

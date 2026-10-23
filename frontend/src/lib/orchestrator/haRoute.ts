@@ -10,28 +10,32 @@ import { NextRequest, NextResponse } from 'next/server'
 import { proxyHaJson } from './haProxy'
 import { requireFeature } from '@/lib/auth/requireEnterprise'
 import { Features } from '@/lib/license/features'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { PERMISSIONS } from '@/lib/rbac'
+import { requireProviderAdmin } from '@/lib/tenant/providerGuard'
 
 /**
- * The two guards every HA write shares: the HA capability, then
- * admin.settings. Returns the rejection to hand back, or null to proceed.
+ * The two guards every HA write shares: the HA capability, then provider
+ * tenant + admin.settings. Returns the rejection to hand back, or null to
+ * proceed. The ProxCenter control plane is one per installation, so its HA is
+ * platform-wide: a customer tenant's admin holds admin.settings too and must
+ * not reach it.
  *
  * The read-only routes (GET /ha/cluster, GET /ha/config) deliberately skip the
- * capability gate and call checkPermission on their own: a lapsed option must
- * never blind the operator of a running cluster (spec v5 D2).
+ * capability gate and call requireProviderAdmin on their own: a lapsed option
+ * must never blind the operator of a running cluster (spec v5 D2).
  */
-export async function haWriteGuard(): Promise<NextResponse | null> {
+export async function haWriteGuard(): Promise<Response | null> {
   const guard = await requireFeature(Features.HA)
   if (guard) return guard
 
-  return checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+  return requireProviderAdmin(PERMISSIONS.ADMIN_SETTINGS)
 }
 
 type WriteMethod = 'POST' | 'PUT' | 'DELETE'
 
 /** Handler for a guarded HA operation that carries no request body. */
 export function haOperation(path: string, method: WriteMethod) {
-  return async function handler(): Promise<NextResponse> {
+  return async function handler(): Promise<Response> {
     const guard = await haWriteGuard()
     if (guard) return guard
 
@@ -45,7 +49,7 @@ export function haOperation(path: string, method: WriteMethod) {
  * blind catch used to blame the orchestrator with a 503.
  */
 export function haOperationWithBody(path: string, method: WriteMethod) {
-  return async function handler(request: NextRequest): Promise<NextResponse> {
+  return async function handler(request: NextRequest): Promise<Response> {
     const guard = await haWriteGuard()
     if (guard) return guard
 

@@ -26,6 +26,8 @@ import { reserveTargetVmid } from "./reserve-target-vmid"
 import { releaseVmids } from "./vmid-reservation"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
+import { assertAbsPath } from "@/lib/ssh/validate"
+import { authorizedKeysDeployCommand, authorizedKeysRevokeCommand, curlConfigQuoted, esxiKeyLoginProbeCommand, parseBackgroundPid, sshpassEsxiCommand } from "./remote-commands"
 import { HyperVClient } from "@/lib/hyperv/client"
 import { resolveHypervDiskPaths } from "./hyperv-disks"
 import { applySourceSizing, hypervSourceSizing, nutanixSourceSizing, type SourceSizing } from "./source-sizing"
@@ -502,7 +504,8 @@ async function runVirtV2vWithProgress(
    */
   outputDirOverride?: string,
 ): Promise<{ success: boolean; output: string; error?: string }> {
-  const tempBase = config.tempStorage || '/tmp'
+  // Request data that reaches node-side commands: only a plain absolute path passes.
+  const tempBase = assertAbsPath(config.tempStorage || '/tmp')
   const outputDir = outputDirOverride || `${tempBase}/v2v-${jobId}`
   const logFile = `${outputDir}/v2v.log`
   const exitFile = `${outputDir}/v2v.exit`
@@ -538,10 +541,11 @@ async function runVirtV2vWithProgress(
   const innerCmd = `stdbuf -oL ${v2vCommand} < /dev/null > ${shellEscape(logFile)} 2>&1; echo $? > ${shellEscape(exitFile)}`
   const launchCmd = `nohup bash -c ${shellEscape(innerCmd)} > /dev/null 2>&1 & echo $!`
   const launch = await executeSSH(config.targetConnectionId, nodeIp, launchCmd)
-  if (!launch.success || !launch.output?.trim()) {
-    return { success: false, output: "", error: `Failed to launch virt-v2v: ${launch.error}` }
+  // The pid lands in `kill ${pid}` below: anything but digits is a failed launch.
+  const pid = parseBackgroundPid(launch.output)
+  if (!launch.success || !pid) {
+    return { success: false, output: "", error: `Failed to launch virt-v2v: ${launch.error || launch.output}` }
   }
-  const pid = launch.output.trim()
   await appendLog(jobId, `virt-v2v launched in background (PID ${pid}), streaming progress...`, "info")
 
   // 3. Poll loop: tail log for progress + check exit marker. We tail a small
@@ -747,7 +751,8 @@ function buildV2vCommand(
    */
   outputDirOverride?: string,
 ): string {
-  const tempBase = config.tempStorage || '/tmp'
+  // Request data that reaches node-side commands: only a plain absolute path passes.
+  const tempBase = assertAbsPath(config.tempStorage || '/tmp')
   const outputDir = outputDirOverride || `${tempBase}/v2v-${jobId}`
   const pwFile = `${tempBase}/v2v-pwfile-${jobId}`
   const vmNameEsc = shellEscape(config.sourceVmName)
@@ -1001,7 +1006,8 @@ export async function runV2vMigrationPipeline(
    * we told the user to run `qm destroy` on a VMID that holds nothing (#738).
    */
   let vmCreated = false
-  const tempBase = config.tempStorage || '/tmp'
+  // Request data that reaches node-side commands: only a plain absolute path passes.
+  const tempBase = assertAbsPath(config.tempStorage || '/tmp')
   /**
    * Working directory on the temp storage: the NFC source downloads and the
    * synthesized libvirt XML always live here, whatever the target storage is.
@@ -1466,17 +1472,17 @@ export async function runV2vMigrationPipeline(
         if (!pubKey) throw new Error("Failed to read generated public key")
 
         const esxiPass = decryptSecret(sourceConn.sshPassEnc!)
-        const safeEsxiPass = esxiPass.replaceAll("'", "'\\''")
         const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=15 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
 
         // ESXi keeps per-user authorized_keys under /etc/ssh/keys-<user>/ by default.
         // Some setups (nested ESXi, lab images) drop that dir and use ~/.ssh instead —
-        // try both so we don't fail on non-default layouts.
-        const deployCmd = `export SSHPASS='${safeEsxiPass}' && sshpass -e ssh ${esxiSshOpts} -p ${esxiSshPort} ${username}@${host} "mkdir -p /etc/ssh/keys-${username} 2>/dev/null; echo '${pubKey}' >> /etc/ssh/keys-${username}/authorized_keys; echo DEPLOYED" 2>&1`
+        // try both so we don't fail on non-default layouts. The login and the remote
+        // command are escaped for both shells (the user and host come from the record).
+        const deployCmd = sshpassEsxiCommand(esxiPass, esxiSshOpts, esxiSshPort, username, host, authorizedKeysDeployCommand(username, pubKey, "etc"))
         const deployResult = await executeSSH(config.targetConnectionId, nodeIp, deployCmd)
         let deployed = !!deployResult.output?.includes("DEPLOYED")
         if (!deployed) {
-          const deployCmd2 = `export SSHPASS='${safeEsxiPass}' && sshpass -e ssh ${esxiSshOpts} -p ${esxiSshPort} ${username}@${host} "mkdir -p ~/.ssh 2>/dev/null; chmod 700 ~/.ssh; echo '${pubKey}' >> ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys; echo DEPLOYED" 2>&1`
+          const deployCmd2 = sshpassEsxiCommand(esxiPass, esxiSshOpts, esxiSshPort, username, host, authorizedKeysDeployCommand(username, pubKey, "home"))
           const deployResult2 = await executeSSH(config.targetConnectionId, nodeIp, deployCmd2)
           deployed = !!deployResult2.output?.includes("DEPLOYED")
         }
@@ -1486,7 +1492,7 @@ export async function runV2vMigrationPipeline(
 
         // Verify the new key actually logs in before we hand off to virt-v2v.
         const verifyResult = await executeSSH(config.targetConnectionId, nodeIp,
-          `ssh -i ${shellEscape(keyPath)} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PubkeyAcceptedAlgorithms=+ssh-rsa,ssh-ed25519 -p ${esxiSshPort} ${username}@${host} 'echo KEYOK' 2>&1`)
+          esxiKeyLoginProbeCommand(keyPath, "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PubkeyAcceptedAlgorithms=+ssh-rsa,ssh-ed25519", esxiSshPort, username, host))
         if (!verifyResult.output?.includes("KEYOK")) {
           throw new Error(`Deployed temp SSH key did not authenticate: ${verifyResult.output?.substring(0, 200) || verifyResult.error}`)
         }
@@ -1644,7 +1650,9 @@ export async function runV2vMigrationPipeline(
         await appendLog(jobId, `Downloading disk ${i + 1} to ${diskPath} (${(disk.sizeBytes / 1073741824).toFixed(1)} GB)...`)
 
         // Write curl config file with auth header (restricted permissions)
-        const cfgContent = `header = "Authorization: ${authHeader}"\noutput = "${diskPath}"\nurl = "${downloadUrl}"\nsilent\n${insecureTLS ? "insecure" : ""}`
+        // Quoted for curl's own config syntax: a quote or line break in a value from
+        // Prism must not add a directive (an `output` elsewhere is a root file write).
+        const cfgContent = `header = ${curlConfigQuoted(`Authorization: ${authHeader}`)}\noutput = ${curlConfigQuoted(diskPath)}\nurl = ${curlConfigQuoted(downloadUrl)}\nsilent\n${insecureTLS ? "insecure" : ""}`
         const writeCfg = await executeSSH(config.targetConnectionId, nodeIp,
           `printf '%s' ${shellEscape(cfgContent)} > ${shellEscape(curlCfg)} && chmod 600 ${shellEscape(curlCfg)}`)
         if (!writeCfg.success) {
@@ -1652,8 +1660,11 @@ export async function runV2vMigrationPipeline(
         }
 
         // Launch curl in background, delete config file after completion
+        // The inner command is one argument to bash: inside "..." the outer shell
+        // would still expand `$(...)` found in the (request-supplied) temp path.
+        const downloadInner = `curl -K ${shellEscape(curlCfg)} && rm -f ${shellEscape(curlCfg)} && echo done > ${shellEscape(`${diskPath}.complete`)}`
         const launchResult = await executeSSH(config.targetConnectionId, nodeIp,
-          `nohup bash -c "curl -K ${shellEscape(curlCfg)} && rm -f ${shellEscape(curlCfg)} && echo done > ${shellEscape(diskPath)}.complete" > /dev/null 2>&1 & echo $! > ${shellEscape(pidFile)}`)
+          `nohup bash -c ${shellEscape(downloadInner)} > /dev/null 2>&1 & echo $! > ${shellEscape(pidFile)}`)
         if (!launchResult.success) {
           throw new Error(`Failed to start disk ${i + 1} download: ${launchResult.error}`)
         }
@@ -3039,10 +3050,8 @@ export async function runV2vMigrationPipeline(
         // enough to not collide with other keys but short enough to escape safely.
         const pubFingerprint = pubKey.split(/\s+/)[1]?.substring(0, 40) || ""
         if (pubFingerprint) {
-          const safePub = pubFingerprint.replaceAll(/[/\\&.]/g, '\\$&')
-          const safeEsxiPass = esxiPass.replaceAll("'", "'\\''")
           const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
-          const revokeCmd = `export SSHPASS='${safeEsxiPass}' && sshpass -e ssh ${esxiSshOpts} -p ${eport} ${euser}@${ehost} "sed -i '/${safePub}/d' /etc/ssh/keys-${euser}/authorized_keys ~/.ssh/authorized_keys 2>/dev/null; echo REVOKED" 2>&1`
+          const revokeCmd = sshpassEsxiCommand(esxiPass, esxiSshOpts, eport, euser, ehost, authorizedKeysRevokeCommand(euser, pubFingerprint, "REVOKED"))
           const revokeResult = await executeSSH(config.targetConnectionId, nodeIp, revokeCmd, CLEANUP_TIMEOUT_MS)
           if (!revokeResult.output?.includes("REVOKED")) {
             failedCleanups.push(`esxi-authorized-keys revoke: ${revokeResult.error || revokeResult.output?.substring(0, 150) || "unknown"}`)

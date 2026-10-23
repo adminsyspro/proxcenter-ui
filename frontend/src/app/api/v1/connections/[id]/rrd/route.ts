@@ -6,6 +6,8 @@ import { checkPermission } from "@/lib/rbac"
 import { resolveRrdScope } from "@/lib/rbac/rrdScope"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { applyRrdWindow, presetRangeMeta, resolveRrdRequest } from "@/lib/metrics/rrdRange"
+import { canonicalRrdPath } from "@/lib/metrics/rrdPath"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -45,10 +47,22 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     const denied = await checkPermission(scope.permission, scope.resourceType, scope.resourceId)
     if (denied) return denied
 
+    // The PVE URL is rebuilt from validated segments, never from the raw query value.
+    const target = canonicalRrdPath(path)
+    if (!target) return NextResponse.json({ error: "Invalid path" }, { status: 400 })
+
     const { timeframe: tf, window, truncated } = resolveRrdRequest(timeframe, from, to)
 
     const conn = await getConnectionById(id)
-    const rrdPath = `${path.replace(/\/$/, "")}/rrddata?timeframe=${encodeURIComponent(tf)}&cf=AVERAGE`
+
+    // A guest graph stays inside the vDC; the guest may have moved to another
+    // vDC node since the inventory handed out this path.
+    if (target.guest) {
+      const scopeDenied = await guardSessionGuest({ connectionId: id, conn, ...target.guest, allowMovedNode: true })
+      if (scopeDenied) return scopeDenied
+    }
+
+    const rrdPath = `${target.path}/rrddata?timeframe=${encodeURIComponent(tf)}&cf=AVERAGE`
 
     const data = await pveFetch<any[]>(conn, rrdPath)
 

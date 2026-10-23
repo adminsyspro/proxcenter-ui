@@ -2,13 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
-const checkPermissionMock = vi.fn().mockResolvedValue(null)
+const requireProviderAdminMock = vi.fn().mockResolvedValue(null)
 const requireFeatureMock = vi.fn().mockResolvedValue(null)
 
 vi.mock('@/lib/rbac', () => ({
-  checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
+
+// Provider-only route: requireProviderAdmin stands for the tenant gate AND
+// admin.settings, so one mock covers both.
+vi.mock('@/lib/tenant/providerGuard', () => ({ requireProviderAdmin: requireProviderAdminMock }))
 
 vi.mock('@/lib/auth/requireEnterprise', () => ({
   requireFeature: requireFeatureMock,
@@ -28,7 +31,7 @@ vi.stubGlobal('fetch', fetchMock)
 
 beforeEach(() => {
   vi.clearAllMocks()
-  checkPermissionMock.mockResolvedValue(null)
+  requireProviderAdminMock.mockResolvedValue(null)
   requireFeatureMock.mockResolvedValue(null)
   auditMock.mockResolvedValue('audit-id')
 })
@@ -83,7 +86,7 @@ describe('POST /api/v1/ha/deploy', () => {
 
     expect(res.status).toBe(403)
     expect(data).toEqual({ error: 'Feature not licensed', feature: 'control_plane_ha' })
-    expect(checkPermissionMock).not.toHaveBeenCalled()
+    expect(requireProviderAdminMock).not.toHaveBeenCalled()
     // The refusal still leaves a row, from withAudit(): the route never audits itself.
     expect(auditMock).toHaveBeenCalledTimes(1)
     expect(auditMock.mock.calls[0][0]).toMatchObject({

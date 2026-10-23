@@ -5,6 +5,7 @@ import { licenseExcludedResponse } from "@/lib/api/response"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { putSingleUse, takeSingleUse } from "@/lib/console/session"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { audit } from "@/lib/audit"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -42,6 +43,14 @@ async function handlePost(
     await auditConsole("failure", {}, "Connection not found")
 
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+  }
+
+  // A vDC session must not open a console on a guest outside its pools.
+  const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+  if (scopeDenied) {
+    await auditConsole("failure", { connectionName: conn.name }, "Guest outside your vDC scope")
+
+    return scopeDenied
   }
 
   // Proxmox: POST .../vncproxy (option websocket=1)

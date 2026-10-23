@@ -1,3 +1,4 @@
+import { shellEscape } from "@/lib/ssh/exec"
 import { NBD_RELEASE_HOLDERS_FN, nbdReleaseHoldersCall } from "./nbd-holders"
 
 /**
@@ -22,7 +23,8 @@ export function buildUefiInjectScript(bootDiskPath: string): string {
     '  if [ ! -s /sys/block/nbd$i/pid ] 2>/dev/null; then NBD=/dev/nbd$i; break; fi',
     'done',
     '[ -z "$NBD" ] && { echo "INJECT_RESULT=NO_FREE_NBD"; exit 0; }',
-    `qemu-nbd --connect="$NBD" --format=raw "${bootDiskPath}" 2>/dev/null || { echo "INJECT_RESULT=NBD_FAIL"; exit 0; }`,
+    // The image path is single quoted: inside "..." the shell would expand `$(...)` in it.
+    `qemu-nbd --connect="$NBD" --format=raw ${shellEscape(bootDiskPath)} 2>/dev/null || { echo "INJECT_RESULT=NBD_FAIL"; exit 0; }`,
     'sleep 1',
     'partprobe "$NBD" 2>/dev/null',
     'sleep 1',

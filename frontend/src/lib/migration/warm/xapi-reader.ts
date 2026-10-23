@@ -1,5 +1,5 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
-import { buildNbdConnectCmd, buildReaderTeardownCmd, type PollOpts } from "./vddk-reader"
+import { buildNbdConnectCmd, buildReaderTeardownCmd, NBD_DEVICE_RE, type PollOpts } from "./vddk-reader"
 import type { Extent } from "./extents"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
@@ -102,7 +102,9 @@ export async function startXapiReader(connectionId: string, nodeIp: SshTarget, t
     throw new Error(`nbdkit nbd socket never appeared. nbdkit log: ${redactLogTail(log.output)}`)
   }
   const connect = await executeSSH(connectionId, nodeIp, buildNbdConnectCmd(t.sock))
-  const nbdDev = (connect.output ?? "").split("\n").map(l => l.trim()).find(l => l.startsWith("NBD_DEV="))?.slice("NBD_DEV=".length).trim() ?? ""
+  const reported = (connect.output ?? "").split("\n").map(l => l.trim()).find(l => l.startsWith("NBD_DEV="))?.slice("NBD_DEV=".length).trim() ?? ""
+  // Remote output: only a real /dev/nbdN may reach the dd and teardown commands.
+  const nbdDev = NBD_DEVICE_RE.test(reported) ? reported : ""
   if (!connect.success || !nbdDev) {
     const log = await executeSSH(connectionId, nodeIp, `cat ${shellEscape(logFile)} 2>/dev/null | tail -n 40`)
     await stopXapiReader(connectionId, nodeIp, { nbdDev, sock: t.sock, logFile, caDir }).catch(() => {})

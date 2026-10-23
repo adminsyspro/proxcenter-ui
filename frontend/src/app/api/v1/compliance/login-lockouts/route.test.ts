@@ -59,6 +59,17 @@ describe('/api/v1/compliance/login-lockouts', () => {
     expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ action: 'login_unlocked', resourceId: 'a@b.com' }))
   })
 
+  it('DELETE lifts a second factor lock by user id and audits it under login_totp', async () => {
+    unlockLoginMock.mockResolvedValue(true)
+    const res = await callRoute(DELETE, { method: 'DELETE', searchParams: { kind: 'totp', key: 'user-9' } })
+    expect(res.status).toBe(200)
+    expect(await readJson(res)).toEqual({ data: { kind: 'totp', key: 'user-9' } })
+    expect(unlockLoginMock).toHaveBeenCalledWith('totp', 'user-9')
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'login_unlocked', resourceType: 'login_totp', resourceId: 'user-9', details: { kind: 'totp', key: 'user-9' },
+    }))
+  })
+
   it('DELETE answers 404 when nothing was locked', async () => {
     unlockLoginMock.mockResolvedValue(false)
     const res = await callRoute(DELETE, { method: 'DELETE', searchParams: { kind: 'ip', key: '203.0.113.1' } })

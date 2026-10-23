@@ -2,18 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { callRoute } from '@/__tests__/setup/route-test'
 
-const { checkPermissionMock, tenantMock, orchestratorFetchMock } = vi.hoisted(() => ({
-  checkPermissionMock: vi.fn(),
-  tenantMock: vi.fn(),
+const { requireProviderAdminMock, orchestratorFetchMock } = vi.hoisted(() => ({
+  requireProviderAdminMock: vi.fn(),
   orchestratorFetchMock: vi.fn(),
 }))
 
 vi.mock('@/lib/demo/demo-api', () => ({ demoResponse: () => null }))
 vi.mock('@/lib/rbac', () => ({
-  checkPermission: (...a: any[]) => checkPermissionMock(...a),
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
-vi.mock('@/lib/tenant', () => ({ DEFAULT_TENANT_ID: 'default', getCurrentTenantId: () => tenantMock() }))
+// Provider tenant + admin.settings in one guard, judged on the principal's own
+// tenant rather than getCurrentTenantId() and its fallback to `default`.
+vi.mock('@/lib/tenant/providerGuard', () => ({ requireProviderAdmin: (...a: any[]) => requireProviderAdminMock(...a) }))
 vi.mock('@/lib/orchestrator/client', () => ({ orchestratorFetch: (...a: any[]) => orchestratorFetchMock(...a) }))
 
 import { POST } from './route'
@@ -22,8 +22,7 @@ const originalUrl = process.env.ORCHESTRATOR_URL
 
 beforeEach(() => {
   vi.clearAllMocks()
-  checkPermissionMock.mockResolvedValue(null)
-  tenantMock.mockResolvedValue('default')
+  requireProviderAdminMock.mockResolvedValue(null)
   orchestratorFetchMock.mockResolvedValue({})
   process.env.ORCHESTRATOR_URL = 'http://orchestrator.test'
 })
@@ -59,10 +58,9 @@ describe('POST /api/v1/orchestrator/sflow/health/check (roadmap#52)', () => {
   })
 
   it('needs the settings permission and the provider tenant', async () => {
-    checkPermissionMock.mockResolvedValueOnce(new Response('{}', { status: 403 }))
+    requireProviderAdminMock.mockResolvedValueOnce(new Response('{}', { status: 403 }))
     expect((await post()).status).toBe(403)
-    tenantMock.mockResolvedValueOnce('tenant-a')
-    expect((await post()).status).toBe(403)
+    expect(requireProviderAdminMock).toHaveBeenCalledWith('admin.settings')
     expect(orchestratorFetchMock).not.toHaveBeenCalled()
   })
 })

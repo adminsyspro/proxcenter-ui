@@ -5,6 +5,8 @@ import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission } from "@/lib/rbac"
 import { resolveRrdScope } from "@/lib/rbac/rrdScope"
 import { getTenantConnectionIds } from "@/lib/tenant"
+import { getConnectionById } from "@/lib/connections/getConnection"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -42,6 +44,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!tenantConnectionIds.has(connectionId)) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
+
+    // The series is keyed on connection + vmid, so the guest is confined to
+    // the vDC pools on any of its nodes; the connection is only loaded for a
+    // vDC tenant, everyone else keeps the orchestrator-only path.
+    const scopeDenied = await guardSessionGuest({
+      connectionId,
+      conn: () => getConnectionById(connectionId),
+      type: "qemu",
+      node: null,
+      vmid,
+    })
+    if (scopeDenied) return scopeDenied
 
     const client = getOrchestratorClient()
     const response = await client.getVMDiskLatencySeries(connectionId, vmid, { from, to, step })

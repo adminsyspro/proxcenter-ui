@@ -9512,6 +9512,7 @@
       "type": "Tipo",
       "kindAccount": "Cuenta",
       "kindIp": "Dirección IP",
+      "kindTotp": "Segundo factor",
       "failedAttempts": "Intentos fallidos",
       "lockedUntil": "Bloqueado hasta",
       "unlock": "Desbloquear",

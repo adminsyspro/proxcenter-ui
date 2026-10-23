@@ -46,6 +46,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
+          persist-credentials: false
           # Sonar needs full history for blame / SCM info / new-code detection.
           fetch-depth: 0
 
@@ -102,7 +103,7 @@ jobs:
           fi
 
       - name: SonarCloud scan
-        uses: SonarSource/sonarqube-scan-action@v8
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io

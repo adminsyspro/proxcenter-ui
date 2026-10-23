@@ -14,6 +14,7 @@ import { isOpticalDrive } from "@/lib/proxmox/cdrom"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
+import { parseGuestTarget } from "@/lib/vdc/guestGuard"
 import { validateCpuAgainstPolicy, parseCpuProperty, loadCpuCapabilitiesIfNeeded } from "@/lib/vdc/computePolicy"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
 import { getAllowedNetworksForTenant, validateNetAgainstScope } from "@/lib/vdc/vnets"
@@ -112,6 +113,9 @@ async function getHandler(
     if (!ALLOWED_TYPES.has(type)) {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 })
     }
+    // node and vmid are interpolated into the PVE path below: hostname and digits only.
+    const target = parseGuestTarget({ type, node, vmid })
+    if (!target.ok) return target.response
 
     // RBAC: Check vm.view permission
     const resourceId = buildVmResourceId(id, node, type, vmid)
@@ -197,6 +201,8 @@ async function putHandler(
     if (!ALLOWED_TYPES.has(type)) {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 })
     }
+    const target = parseGuestTarget({ type, node, vmid })
+    if (!target.ok) return target.response
 
     // Gate on vm.view before any PVE traffic so an unauthorized caller
     // cannot probe guest existence through error responses.

@@ -11,6 +11,7 @@ import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
 import { writableStoragesFor } from '@/lib/vdc/scope'
 import { resolveVdcForTenant, checkVdcQuota } from '@/lib/vdc/quota'
 import { parseDriveString } from '@/lib/vdc/drives'
+import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -54,6 +55,11 @@ async function handler(
     const { disk, size } = parseResult.data
 
     const conn = await getConnectionById(id)
+
+    // The guest itself must be inside the tenant's pools before its storage
+    // and quota are judged.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     const tenantId = await getCurrentTenantId()
     try {

@@ -7,14 +7,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
-const checkPermissionMock = vi.fn()
+const requireProviderAdminMock = vi.fn()
 const findUniqueMock = vi.fn()
 const auditMock = vi.fn()
 
 vi.mock("@/lib/rbac", () => ({
-  checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_SETTINGS: "admin.settings" },
 }))
+
+// Provider-only route: requireProviderAdmin stands for the tenant gate AND
+// admin.settings, so one mock covers both.
+vi.mock("@/lib/tenant/providerGuard", () => ({ requireProviderAdmin: requireProviderAdminMock }))
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: { ldapConfig: { findUnique: findUniqueMock } },
@@ -39,7 +42,7 @@ async function importPOST() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  checkPermissionMock.mockResolvedValue(null)
+  requireProviderAdminMock.mockResolvedValue(null)
   findUniqueMock.mockResolvedValue(null)
   fetchMock = vi.fn().mockResolvedValue({
     json: async () => ({ success: true, message: "LDAP connection successful" }),
@@ -106,5 +109,17 @@ describe("POST /api/v1/auth/ldap/test", () => {
     const POST = await importPOST()
     await callRoute(POST as any, { body: { url: "ldap://dc", bind_dn: "cn=svc" } })
     expect(orchestratorPayload().bind_password).toBe("saved")
+  })
+})
+
+describe("POST /api/v1/auth/ldap/test provider tenant", () => {
+  it("refuses a customer tenant admin before the saved bind password or the orchestrator is touched", async () => {
+    requireProviderAdminMock.mockResolvedValue(new Response("forbidden", { status: 403 }))
+    const POST = await importPOST()
+    const res = await callRoute(POST as any, { method: "POST", body: { url: "ldap://evil.example.org", bind_dn: "cn=admin" } })
+    expect(res.status).toBe(403)
+    expect(requireProviderAdminMock).toHaveBeenCalledWith("admin.settings")
+    expect(findUniqueMock).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

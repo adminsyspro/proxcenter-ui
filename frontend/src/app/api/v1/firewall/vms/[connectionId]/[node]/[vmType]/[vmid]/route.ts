@@ -9,6 +9,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
+import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 import { withAudit } from '@/lib/audit/withAudit'
 
 type RouteContext = {
@@ -25,6 +26,10 @@ async function getHandler(req: NextRequest, ctx: RouteContext) {
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
     if (denied) return denied
+
+    // node.view is connection-wide: the guest itself must be inside the vDC.
+    const scopeDenied = await guardSessionGuest({ connectionId, conn: () => getConnectionById(connectionId), type: vmType, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     const url = new URL(req.url)
     const type = url.searchParams.get('type') || 'options'
@@ -65,6 +70,9 @@ async function postHandler(req: NextRequest, ctx: RouteContext) {
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
     if (denied) return denied
 
+    const scopeDenied = await guardSessionGuest({ connectionId, conn: () => getConnectionById(connectionId), type: vmType, node, vmid })
+    if (scopeDenied) return scopeDenied
+
     const body = await req.json()
 
     const orchestrator = getOrchestratorClient()
@@ -92,6 +100,9 @@ async function putHandler(req: NextRequest, ctx: RouteContext) {
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
     if (denied) return denied
+
+    const scopeDenied = await guardSessionGuest({ connectionId, conn: () => getConnectionById(connectionId), type: vmType, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     const body = await req.json()
 

@@ -2,13 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
-const checkPermissionMock = vi.fn().mockResolvedValue(null)
+const requireProviderAdminMock = vi.fn().mockResolvedValue(null)
 const requireFeatureMock = vi.fn().mockResolvedValue(null)
 
 vi.mock('@/lib/rbac', () => ({
-  checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
+
+// Provider-only route: requireProviderAdmin stands for the tenant gate AND
+// admin.settings, so one mock covers both.
+vi.mock('@/lib/tenant/providerGuard', () => ({ requireProviderAdmin: requireProviderAdminMock }))
 
 // cluster/route.ts intentionally does not import the license guard (spec v5
 // D2: status stays readable when the option expired). Kept mocked here so
@@ -27,7 +30,7 @@ vi.stubGlobal('fetch', fetchMock)
 
 beforeEach(() => {
   vi.clearAllMocks()
-  checkPermissionMock.mockResolvedValue(null)
+  requireProviderAdminMock.mockResolvedValue(null)
   requireFeatureMock.mockResolvedValue(null)
 })
 
@@ -83,6 +86,6 @@ describe('GET /api/v1/ha/cluster', () => {
     await callRoute(GET as any)
 
     expect(requireFeatureMock).not.toHaveBeenCalled()
-    expect(checkPermissionMock).toHaveBeenCalled()
+    expect(requireProviderAdminMock).toHaveBeenCalledWith('admin.settings')
   })
 })

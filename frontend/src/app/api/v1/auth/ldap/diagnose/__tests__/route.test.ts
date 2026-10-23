@@ -6,16 +6,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
-const checkPermissionMock = vi.fn()
+const requireProviderAdminMock = vi.fn()
 const ldapFindUniqueMock = vi.fn()
 const userFindUniqueMock = vi.fn()
 const roleFindFirstMock = vi.fn()
 const auditMock = vi.fn()
 
 vi.mock("@/lib/rbac", () => ({
-  checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_SETTINGS: "admin.settings" },
 }))
+
+// Provider-only route: requireProviderAdmin stands for the tenant gate AND
+// admin.settings, so one mock covers both.
+vi.mock("@/lib/tenant/providerGuard", () => ({ requireProviderAdmin: requireProviderAdminMock }))
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
@@ -63,7 +66,7 @@ async function post(body: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  checkPermissionMock.mockResolvedValue(null)
+  requireProviderAdminMock.mockResolvedValue(null)
   ldapFindUniqueMock.mockResolvedValue({ bindPasswordEnc: "enc:saved-secret" })
   userFindUniqueMock.mockResolvedValue(null)
   roleFindFirstMock.mockResolvedValue(null)
@@ -78,7 +81,7 @@ beforeEach(() => {
 
 describe("POST /api/v1/auth/ldap/diagnose", () => {
   it("is refused without the settings permission, before any lookup", async () => {
-    checkPermissionMock.mockResolvedValue(new Response("forbidden", { status: 403 }))
+    requireProviderAdminMock.mockResolvedValue(new Response("forbidden", { status: 403 }))
     const res = await post(FORM)
     expect(res.status).toBe(403)
     expect(fetchMock).not.toHaveBeenCalled()
@@ -162,9 +165,20 @@ describe("POST /api/v1/auth/ldap/diagnose English messages", () => {
 
   it("answers 'LDAP diagnosis failed' when an unexpected error has no message", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
-    checkPermissionMock.mockRejectedValue({})
+    requireProviderAdminMock.mockRejectedValue({})
     const res = await post(FORM)
     expect(res.status).toBe(500)
     expect((await readJson<any>(res)).error).toBe("LDAP diagnosis failed")
+  })
+})
+
+describe("POST /api/v1/auth/ldap/diagnose provider tenant", () => {
+  it("asks the guard for admin.settings in the provider tenant", async () => {
+    requireProviderAdminMock.mockResolvedValue(new Response("forbidden", { status: 403 }))
+    const { POST } = await import("../route")
+    const res = await callRoute(POST as any, { method: "POST", body: FORM })
+    expect(res.status).toBe(403)
+    expect(requireProviderAdminMock).toHaveBeenCalledWith("admin.settings")
+    expect(ldapFindUniqueMock).not.toHaveBeenCalled()
   })
 })

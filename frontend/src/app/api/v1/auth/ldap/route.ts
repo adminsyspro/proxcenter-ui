@@ -1,10 +1,11 @@
 // src/app/api/v1/auth/ldap/route.ts
 import { NextResponse } from "next/server"
 
-import { normalizeGroupRoleEntries } from "@/lib/auth/groupMapping"
+import { normalizeGroupRoleEntries, protectedRoleTargets } from "@/lib/auth/groupMapping"
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getRBACContext, PERMISSIONS } from "@/lib/rbac"
+import { requireProviderAdmin } from "@/lib/tenant/providerGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -12,7 +13,9 @@ export const runtime = "nodejs"
 // GET /api/v1/auth/ldap — fetch the singleton LDAP config
 export async function GET() {
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    // Platform-wide row (id "default"): provider tenant only, not just
+    // admin.settings, which every tenant admin holds.
+    const denied = await requireProviderAdmin(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
     const config = await prisma.ldapConfig.findUnique({ where: { id: "default" } })
@@ -81,7 +84,7 @@ export async function GET() {
 // PUT /api/v1/auth/ldap — save the singleton LDAP config (insert or update)
 async function handlePut(req: Request) {
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await requireProviderAdmin(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
     const body = await req.json()
@@ -124,6 +127,21 @@ async function handlePut(req: Request) {
     }
 
     const mappingEntries = normalizeGroupRoleEntries(group_role_mapping)
+
+    // Same rule as POST /rbac/assignments: only a super admin hands out the
+    // wildcard roles. Through LDAP the grant lands on whoever the directory
+    // sends next, so a provider admin saving such a mapping would mint super
+    // admins.
+    const protectedRoles = protectedRoleTargets([default_role, ...mappingEntries.map(e => e.role)])
+    if (protectedRoles.length > 0) {
+      const ctx = await getRBACContext()
+      if (!ctx?.isAdmin) {
+        return NextResponse.json(
+          { error: `Only a super admin can set ${protectedRoles.join(", ")} as the LDAP default role or a group mapping target` },
+          { status: 403 },
+        )
+      }
+    }
 
     const allowedGroupsArr: string[] = Array.isArray(allowed_groups)
       ? allowed_groups.map((g: unknown) => String(g).trim()).filter(Boolean)

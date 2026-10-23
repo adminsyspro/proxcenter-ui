@@ -7,6 +7,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
+import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 
 type RouteContext = {
   params: Promise<{ connectionId: string; node: string; vmType: string; vmid: string }>
@@ -20,6 +21,10 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
     if (denied) return denied
+
+    // node.view is connection-wide: the guest itself must be inside the vDC.
+    const scopeDenied = await guardSessionGuest({ connectionId, conn: () => getConnectionById(connectionId), type: vmType, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     const url = new URL(req.url)
     const limit = url.searchParams.get('limit') || '50'

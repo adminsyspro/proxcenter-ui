@@ -7,6 +7,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute } from '@/__tests__/setup/route-test'
 
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+  sessionGuestVisibility: async () => ({ ok: true, visibility: { all: true, has: () => true } }),
+}))
 vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn<(...a: any[]) => Promise<any>>(),
   PERMISSIONS: { NODE_VIEW: 'node.view', NODE_MANAGE: 'node.manage' },

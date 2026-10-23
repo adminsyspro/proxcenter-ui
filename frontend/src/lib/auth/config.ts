@@ -14,6 +14,7 @@ import { loadJwtContext } from "./jwtContext"
 import { createSession, evaluateSession, touchSession } from "./sessions"
 import { sessionDurations } from "./durations"
 import { beginLoginAttempt } from "./loginLockout"
+import { withTotpThrottle } from "./totpThrottle"
 
 export type UserRole = "super_admin" | "admin" | "operator" | "viewer"
 
@@ -246,9 +247,14 @@ export const authOptions: NextAuthOptions = {
             throw new Error("TOTP_REQUIRED")
           }
           const { verifyTotpOrRecovery } = await import("@/lib/auth/verify-second-factor")
-          const ok = await verifyTotpOrRecovery(user.id, credentials.totpCode, null)
-          if (!ok) {
-            await logFailure("Invalid TOTP")
+          // The floor in totpThrottle refuses the code outright after too many
+          // wrong ones, whatever the (default off) lockout policy says. Both
+          // outcomes get the wrong-code answer and count against the policy.
+          const outcome = await withTotpThrottle(user.id, "login", () =>
+            verifyTotpOrRecovery(user.id, credentials.totpCode, null),
+          )
+          if (outcome !== "ok") {
+            await logFailure(outcome === "throttled" ? "2FA throttled" : "Invalid TOTP")
             throw new Error("Invalid credentials")
           }
         }
@@ -461,8 +467,11 @@ export const authOptions: NextAuthOptions = {
             throw new Error("TOTP_REQUIRED")
           }
           const { verifyTotpOrRecovery } = await import("@/lib/auth/verify-second-factor")
-          const ok = await verifyTotpOrRecovery(user.id, credentials.totpCode, null)
-          if (!ok) {
+          // Same always-on floor as the credentials provider above.
+          const outcome = await withTotpThrottle(user.id, "login", () =>
+            verifyTotpOrRecovery(user.id, credentials.totpCode, null),
+          )
+          if (outcome !== "ok") {
             await attempt.fail(true)
             throw new Error("Invalid LDAP credentials")
           }

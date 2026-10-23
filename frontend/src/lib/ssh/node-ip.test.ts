@@ -160,6 +160,16 @@ describe('getNodeIp - priority order', () => {
 
     expect(ip).toBe('pve-mystery')
   })
+
+  it('never resolves nor returns a string that is not a PVE node name (it would become an SSH or TLS host)', async () => {
+    findUniqueMock.mockResolvedValueOnce(null)
+    pveFetchMock.mockRejectedValueOnce(new Error('boom'))
+
+    const { getNodeIp } = await import('./node-ip')
+    await expect(getNodeIp({ id: 'conn-1', baseUrl: '', behindProxy: false }, 'evil.example.net$(id)')).rejects.toThrow(/Invalid node name/)
+
+    expect(resolve4Mock).not.toHaveBeenCalled()
+  })
 })
 
 describe('getNodeIp - resilience', () => {

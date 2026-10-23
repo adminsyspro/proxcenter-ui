@@ -30,6 +30,9 @@ vi.mock('@/lib/db/prisma', () => ({ prisma: m.prisma }))
 vi.mock('@/lib/db/vdcPbsBindings', () => ({
   listPveStoragesForBinding: (...a: unknown[]) => m.listPveStoragesForBinding(...a),
   insertPveStorage: (...a: unknown[]) => m.insertPveStorage(...a),
+  // The real one decrypts an encrypted column value and passes a legacy
+  // plaintext through; this stand-in marks what it was given.
+  revealPbsTokenSecret: (s: string | null) => (s === null ? null : s.replace(/^enc:/, '')),
 }))
 vi.mock('@/lib/proxmox/pvePbsStorage', () => ({
   createPbsStorage: (...a: unknown[]) => m.createPbsStorage(...a),
@@ -46,7 +49,9 @@ vi.mock('@/lib/vdc/scope', () => ({ clearVdcScopeCache: (...a: unknown[]) => m.c
 
 import { POST } from './route'
 
-const BINDING = { id: 'b1', vdcId: 'v1', pbsConnectionId: 'pbs1', datastore: 'ds', namespace: 'tenant-acme/vdc-acme', pbsTokenId: 'tok@pbs!x', pbsTokenSecret: 's3cr3t' }
+// The column holds the secret encrypted (see lib/db/vdcPbsBindings); the
+// route must hand Proxmox the clear value, not the ciphertext.
+const BINDING = { id: 'b1', vdcId: 'v1', pbsConnectionId: 'pbs1', datastore: 'ds', namespace: 'tenant-acme/vdc-acme', pbsTokenId: 'tok@pbs!x', pbsTokenSecret: 'enc:s3cr3t' }
 const call = () => callRoute(POST as any, { method: 'POST', params: { id: 'v1', bindingId: 'b1' } })
 
 beforeEach(() => {
@@ -92,7 +97,7 @@ describe('POST .../retry-pve-storage', () => {
     expect(m.createPbsStorage).not.toHaveBeenCalled()
   })
 
-  it('creates the storage on the vDC nodes with the binding token, records it, exposes it to the vDC and clears the scope cache', async () => {
+  it('creates the storage on the vDC nodes with the binding token in clear, records it, exposes it to the vDC and clears the scope cache', async () => {
     const res = await call()
     expect(res.status).toBe(200)
     expect(m.createPbsStorage).toHaveBeenCalledWith({ id: 'c1' }, {

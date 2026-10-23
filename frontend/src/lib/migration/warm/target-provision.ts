@@ -76,9 +76,11 @@ export function buildThickZeroScript(dev: string, opts: ThickZeroOptions | numbe
   const lines = [
     // Fail closed: without a size the loop below would not run and the script
     // would exit 0 on a target it never zeroed, exposing stale data.
-    `sz=$(blockdev --getsize64 ${d}) || { echo "zero-error: cannot read the size of ${d}"; exit 1; }`,
-    `case "$sz" in ''|*[!0-9]*) echo "zero-error: unexpected size '$sz' for ${d}"; exit 1;; esac`,
-    `[ "$sz" -gt 0 ] || { echo "zero-error: ${d} reports a size of 0"; exit 1; }`,
+    // The device path stays outside the double quotes: ${d} is already single
+    // quoted, and inside "..." its quotes would turn literal and `$(...)` live.
+    `sz=$(blockdev --getsize64 ${d}) || { echo "zero-error: cannot read the size of "${d}; exit 1; }`,
+    `case "$sz" in ''|*[!0-9]*) echo "zero-error: unexpected size '$sz' for "${d}; exit 1;; esac`,
+    `[ "$sz" -gt 0 ] || { echo "zero-error: "${d}" reports a size of 0"; exit 1; }`,
     `t=$(mktemp -d)`,
     `trap 'rm -rf "$t"' EXIT`,
     `start=$(($(date +%s%N) / 1000000))`,

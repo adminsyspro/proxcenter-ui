@@ -3,28 +3,13 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { guardSessionGuest, parseGuestKey } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 type Params = {
   vmid: string // Format: connId:type:node:vmid
-}
-
-function parseVmKey(vmKey: string) {
-  const parts = vmKey.split(':')
-
-  if (parts.length !== 4) {
-    throw new Error('Invalid vmKey format. Expected connId:type:node:vmid')
-  }
-
-  
-return {
-    connId: parts[0],
-    type: parts[1],
-    node: parts[2],
-    vmid: parts[3],
-  }
 }
 
 async function getConnection(id: string) {
@@ -65,7 +50,9 @@ async function handler(
 ) {
   try {
     const params = await ctx.params
-    const { connId, type, node, vmid } = parseVmKey(params.vmid)
+    const key = parseGuestKey(params.vmid)
+    if (!key.ok) return key.response
+    const { connId, type, node, vmid } = key
 
     // RBAC: vm.view, checked BEFORE the connection is resolved. That
     // resolution decrypts the Proxmox API token, so it must never run for a
@@ -83,6 +70,10 @@ async function handler(
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
+
+    // The task log of a guest outside the vDC (UPIDs, users, timings) stays hidden.
+    const scopeDenied = await guardSessionGuest({ connectionId: connId, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     const apiPath = `/nodes/${encodeURIComponent(node)}/tasks`
 

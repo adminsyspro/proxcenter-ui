@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { sessionGuestVisibility } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -156,8 +157,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     | { items?: TrendRequestItem[]; timeframe?: string }
     | null
 
-  const items = Array.isArray(body?.items) ? body!.items! : []
   const timeframe = body?.timeframe ?? "hour"
+
+  // A vDC session gets the trends of its own guests only; the others are
+  // dropped from the batch, as the RBAC-filtered RRD batch drops its paths.
+  const scoped = await sessionGuestVisibility({ connectionId: id, conn })
+  if (!scoped.ok) return scoped.response
+  const items = (Array.isArray(body?.items) ? body!.items! : [])
+    .filter((it) => scoped.visibility.has(normType(it.type) || null, normVmid(it.vmid)))
 
   if (items.length === 0) return NextResponse.json({ data: {} })
 

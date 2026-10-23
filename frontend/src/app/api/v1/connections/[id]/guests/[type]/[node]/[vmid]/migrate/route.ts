@@ -8,6 +8,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { migrateVmSchema } from "@/lib/schemas"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { migrationTenantDenied } from "@/lib/tenant/migrationGuard"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -44,7 +45,12 @@ async function handler(
     const { target, online, targetstorage, withLocalDisks } = parseResult.data
 
     const conn = await getConnectionById(id)
-    
+
+    // migrationTenantDenied already refuses every vDC tenant; this keeps the
+    // path segments strict and the guest confined should that ever loosen.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
     // Déterminer le type de ressource pour l'API Proxmox
     const resourceType = type === 'lxc' ? 'lxc' : 'qemu'
 

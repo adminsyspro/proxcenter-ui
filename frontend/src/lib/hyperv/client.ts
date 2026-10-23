@@ -40,9 +40,14 @@ export interface HyperVVmReadiness {
   checkpointCount: number
 }
 
-/** Single-quote a value for interpolation inside a PowerShell string literal. */
+/**
+ * Single-quote a value for interpolation inside a PowerShell string literal.
+ * PowerShell also accepts the typographic single quotes U+2018 to U+201B as
+ * string delimiters, so they are doubled too or a share name could end the
+ * literal early.
+ */
 function psQuote(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`
+  return `'${value.replaceAll(/['‘-‛]/g, "''")}'`
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +149,7 @@ export class HyperVClient {
 
     const ps = `
       ${this.sharePathSnippet(options.shareName)}
-      $vm = Get-VM -Id '${vmId}'
+      $vm = Get-VM -Id ${psQuote(vmId)}
       if (-not $vm) { throw "VM not found: ${vmId}" }
 
       $disks = @()

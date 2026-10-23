@@ -1,7 +1,8 @@
 // src/app/api/v1/auth/ldap/diagnose/route.ts
 import { NextResponse } from "next/server"
 
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { PERMISSIONS } from "@/lib/rbac"
+import { requireProviderAdmin } from "@/lib/tenant/providerGuard"
 import { prisma } from "@/lib/db/prisma"
 import { bindPasswordOrSaved } from "@/lib/auth/ldap"
 import { normalizeGroupRoleEntries } from "@/lib/auth/groupMapping"
@@ -26,7 +27,9 @@ const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ""
  */
 export async function POST(req: Request) {
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    // Companion of the platform-wide LDAP config, replays the saved bind
+    // password and reads any account by email: provider tenant only.
+    const denied = await requireProviderAdmin(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
     const body = await req.json().catch(() => ({}))

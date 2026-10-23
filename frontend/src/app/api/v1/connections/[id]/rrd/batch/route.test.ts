@@ -8,6 +8,12 @@ const hasPermissionMock = vi.fn<(check: any) => Promise<boolean>>()
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('@/lib/rbac', () => ({
   getRBACContext: getRBACContextMock,
   hasPermission: hasPermissionMock,

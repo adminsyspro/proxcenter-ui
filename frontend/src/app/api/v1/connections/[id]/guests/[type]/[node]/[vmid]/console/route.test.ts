@@ -13,8 +13,14 @@ const m = vi.hoisted(() => ({
   getConnectionById: vi.fn(),
   checkPermission: vi.fn(),
   audit: vi.fn(),
+  getTenantInfrastructureScope: vi.fn(),
 }))
 
+vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1' }))
+vi.mock('@/lib/tenant/infraScope', async io => ({
+  ...await io<typeof import('@/lib/tenant/infraScope')>(),
+  getTenantInfrastructureScope: (...a: unknown[]) => m.getTenantInfrastructureScope(...a),
+}))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: (...a: unknown[]) => m.pveFetch(...a) }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: (...a: unknown[]) => m.getConnectionById(...a) }))
 vi.mock('@/lib/rbac', () => ({
@@ -39,6 +45,7 @@ const UPID = 'UPID:pve1:00001234:00ABCDEF:65000000:vncproxy:100:proxcenter@pve!a
 beforeEach(() => {
   vi.clearAllMocks()
   m.checkPermission.mockResolvedValue(null)
+  m.getTenantInfrastructureScope.mockResolvedValue({ kind: 'provider' })
   m.audit.mockResolvedValue('a1')
   m.getConnectionById.mockResolvedValue({ id: 'c1', name: 'ml5-cl01', baseUrl: 'https://pve1:8006', apiToken: 'secret-token', insecureDev: false })
   m.pveFetch.mockResolvedValue({ port: '5900', ticket: 'PVEVNC:SECRET', cert: 'CERT', upid: UPID, user: 'proxcenter@pve!api' })
@@ -103,6 +110,48 @@ describe('POST .../console audit', () => {
   it('still opens the console when the journal write fails', async () => {
     m.audit.mockRejectedValueOnce(new Error('db down'))
     expect((await call()).status).toBe(200)
+  })
+
+  describe('vDC session confinement', () => {
+    const iaas = () => ({
+      kind: 'iaas',
+      vdcScope: {
+        connectionIds: new Set(['c1']),
+        nodesByConnection: new Map([['c1', new Set(['pve1'])]]),
+        poolsByConnection: new Map([['c1', new Set(['pool-1'])]]),
+      },
+    })
+    const VNC = { port: '5900', ticket: 'PVEVNC:SECRET', cert: 'CERT', upid: UPID }
+    const cluster = (pool: string) =>
+      m.pveFetch.mockImplementation(async (_conn: unknown, path: string) =>
+        path === '/cluster/resources?type=vm' ? [{ vmid: 100, type: 'qemu', node: 'pve1', pool }] : VNC)
+
+    it('opens the console of a guest inside the tenant pools', async () => {
+      m.getTenantInfrastructureScope.mockResolvedValue(iaas())
+      cluster('pool-1')
+      expect((await call()).status).toBe(200)
+      expect(m.pveFetch.mock.calls.map(c => c[1])).toEqual(['/cluster/resources?type=vm', '/nodes/pve1/qemu/100/vncproxy'])
+    })
+
+    it('refuses a guest outside the tenant pools, journals the refusal and asks Proxmox for no ticket', async () => {
+      m.getTenantInfrastructureScope.mockResolvedValue(iaas())
+      cluster('provider')
+      const res = await call()
+      expect(res.status).toBe(403)
+      expect(await res.json()).toEqual({ error: 'Guest outside your vDC scope' })
+      expect(m.pveFetch.mock.calls.map(c => c[1])).toEqual(['/cluster/resources?type=vm'])
+      expect(m.audit).toHaveBeenCalledTimes(1)
+      expect(m.audit.mock.calls[0][0]).toMatchObject({
+        action: 'console.open', status: 'failure', errorMessage: 'Guest outside your vDC scope',
+        details: { connectionId: 'c1', connectionName: 'ml5-cl01', node: 'pve1' },
+      })
+    })
+
+    it('refuses when the vDC scope cannot be verified', async () => {
+      m.getTenantInfrastructureScope.mockRejectedValue(new Error('db down'))
+      expect((await call()).status).toBe(503)
+      expect(m.pveFetch).not.toHaveBeenCalled()
+    })
   })
 
   it('leaves an RBAC refusal to checkPermission without opening anything', async () => {

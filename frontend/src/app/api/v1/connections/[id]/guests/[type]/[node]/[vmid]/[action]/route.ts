@@ -5,6 +5,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -64,6 +65,10 @@ async function handler(_req: Request, ctx: RouteContext) {
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
+
+    // vDC confinement and strict path segments (a session has no token guard).
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     // Execute action via Proxmox API
     const endpoint = `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/status/${action}`

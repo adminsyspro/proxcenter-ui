@@ -7,6 +7,7 @@ import { resolveGreenConfigForNode } from "@/lib/green/resolve"
 import { computeGreenMetricsForVms, type GreenConfig } from "@/lib/green/compute"
 import { detectInsight } from "@/lib/green/insights"
 import { demoResponse } from "@/lib/demo/demo-api"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -44,6 +45,10 @@ export async function GET(req: Request, ctx: RouteContext) {
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
+    // Consumption figures of a guest outside the vDC are not the tenant's to read.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid, allowMovedNode: true })
+    if (scopeDenied) return scopeDenied
 
     const rrdPath = `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/rrddata?timeframe=month&cf=AVERAGE`
     let raw: any[] = []

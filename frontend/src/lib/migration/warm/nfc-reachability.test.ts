@@ -35,6 +35,12 @@ describe("buildPortProbeCmd", () => {
     expect(buildPortProbeCmd("h", [0, 70000, 902])).not.toContain("port-0")
     expect(buildPortProbeCmd("h", [0, 70000, 902])).toContain("port-902")
   })
+  it("refuses an address the inner bash -c would interpret", () => {
+    // The address sits inside the `bash -c '...'` argument, where the outer escape no longer protects it.
+    expect(() => buildPortProbeCmd("10.0.0.1/902; touch /tmp/pwned", [902])).toThrow(/Invalid copy address/)
+    expect(() => buildPortProbeCmd("$(id)", [902])).toThrow(/Invalid copy address/)
+    expect(() => buildPortProbeCmd("", [902])).toThrow(/Invalid copy address/)
+  })
 })
 
 describe("parsePortProbe", () => {

@@ -8,11 +8,9 @@ import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
  * Whether the caller may read storage across every tenant, which backs the
  * tenant selector of /storage/overview (issue #609).
  *
- * The session tenant is read RAW, on purpose. getCurrentTenantId()
- * (lib/tenant/index.ts:64-85) silently falls back to DEFAULT_TENANT_ID when the
- * tenant is unknown, disabled, or the user is not a member, so it would PROMOTE
- * a tenant admin with a stale JWT into the provider scope. requireProviderTenant()
- * is built on that helper and is unusable here for the same reason.
+ * The session tenant is read RAW: a session outside the provider tenant never
+ * reads the fleet, whatever getCurrentTenantId() resolves (it used to fall
+ * back to DEFAULT_TENANT_ID on an unknown or disabled tenant, roadmap#79).
  *
  * Super admin is required on top of the provider tenant, because role_super_admin
  * is the grant that already governs seeing every tenant elsewhere in the product.

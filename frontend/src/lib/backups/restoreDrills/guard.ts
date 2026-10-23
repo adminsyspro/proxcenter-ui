@@ -5,9 +5,9 @@
 // feature does not exist for it in this lot), then the licence. RBAC comes
 // after, per route, because it depends on the resource.
 //
-// The tenant is judged on the raw session claim AND on getCurrentTenantId():
-// the latter falls back to the provider tenant for a disabled tenant, which
-// must never open a provider-only feature (same reasoning as lib/syslog/guard).
+// The tenant is judged on the raw session claim AND on getCurrentTenantId(),
+// which refuses a disabled or stale tenant: a provider-only feature never
+// opens to anything but a real provider session (same as lib/syslog/guard).
 
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'

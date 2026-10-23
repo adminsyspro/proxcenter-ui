@@ -30,6 +30,7 @@ describe('authOptions.logger.error', () => {
     'Session not valid: idle',
     'Session not valid: absolute',
     'Account disabled',
+    'Tenant disabled',
   ]
 
   it.each(ourRefusalMessages)('reports our own refusal "%s" as a quiet info line, no stack', message => {

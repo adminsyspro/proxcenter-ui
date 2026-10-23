@@ -128,6 +128,17 @@ describe('orchestratorFetch', () => {
     expect(init.headers['X-Tenant-ID']).toBeUndefined()
   })
 
+  it('propagates TenantAccessError without issuing a provider-mode request', async () => {
+    const denied = new Error('Tenant not available for this session')
+    denied.name = 'TenantAccessError'
+    getCurrentTenantIdMock.mockRejectedValueOnce(denied)
+
+    const { orchestratorFetch } = await import('./client')
+
+    await expect(orchestratorFetch('/health')).rejects.toBe(denied)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('raises Error with status and body when the response is not ok', async () => {
     fetchMock.mockResolvedValueOnce(textErrorResponse(404, 'rule not found'))
 

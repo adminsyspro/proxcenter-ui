@@ -68,15 +68,15 @@ describe('getCurrentTenantId, session regression', () => {
     expect(await getCurrentTenantId()).toBe('default')
   })
 
-  it('falls back to default when the JWT claims a missing tenant', async () => {
+  it('refuses a session whose JWT claims a missing tenant', async () => {
     getServerSessionMock.mockResolvedValue({ user: { id: 'u1', tenantId: 'ghost-tenant' } })
-    expect(await getCurrentTenantId()).toBe('default')
+    await expect(getCurrentTenantId()).rejects.toMatchObject({ name: 'TenantAccessError' })
   })
 
-  it('falls back to default when the claimed tenant is disabled', async () => {
+  it('refuses a session whose claimed tenant is disabled', async () => {
     await prismaTest.tenant.create({ data: tenantRow('off', { name: 'Off', enabled: false }) })
     getServerSessionMock.mockResolvedValue({ user: { id: 'u1', tenantId: 'off' } })
-    expect(await getCurrentTenantId()).toBe('default')
+    await expect(getCurrentTenantId()).rejects.toMatchObject({ name: 'TenantAccessError' })
   })
 
   it('tenant/index.ts no longer references getServerSession', async () => {

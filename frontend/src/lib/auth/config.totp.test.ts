@@ -21,6 +21,10 @@ vi.mock("./totpThrottle", () => ({
     (await verify()) ? "ok" : "invalid"),
 }))
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
+vi.mock("./jwtContext", () => ({
+  loadJwtContext: vi.fn(),
+  isSessionTenantDisabled: vi.fn().mockResolvedValue(false),
+}))
 
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
@@ -34,7 +38,9 @@ function credsAuthorize() {
 }
 
 describe("credentials authorize step-up", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
   it("throws TOTP_REQUIRED when password OK but totpCode missing", async () => {
     ;(prisma.user.findUnique as any).mockResolvedValue({

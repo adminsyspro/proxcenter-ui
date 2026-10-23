@@ -1,18 +1,26 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
-const { loadJwtContextMock, createSessionMock, touchSessionMock } = vi.hoisted(() => ({
+const { loadJwtContextMock, createSessionMock, revokeSessionMock, touchSessionMock, auditMock } = vi.hoisted(() => ({
   loadJwtContextMock: vi.fn(),
   createSessionMock: vi.fn(),
+  revokeSessionMock: vi.fn(),
   touchSessionMock: vi.fn(),
+  auditMock: vi.fn(),
 }))
 
 vi.mock('@/lib/db/prisma', () => ({ prisma: { user: { findUnique: vi.fn(async () => null) } } }))
 vi.mock('@/lib/auth/oidc', () => ({ getOidcConfig: async () => null, isOidcEnabled: async () => false }))
-vi.mock('./jwtContext', () => ({ loadJwtContext: loadJwtContextMock }))
+vi.mock('./jwtContext', () => ({ loadJwtContext: loadJwtContextMock, isSessionTenantDisabled: vi.fn() }))
 vi.mock('./sessions', async (orig) => {
   const actual = await orig<typeof import('./sessions')>()
-  return { ...actual, createSession: createSessionMock, touchSession: touchSessionMock }
+  return {
+    ...actual,
+    createSession: createSessionMock,
+    revokeSession: revokeSessionMock,
+    touchSession: touchSessionMock,
+  }
 })
+vi.mock('@/lib/audit', () => ({ audit: auditMock }))
 vi.mock('next/headers', () => ({
   // A forged first hop, then the address the bundled nginx (1 trusted proxy) appended.
   headers: async () => new Headers({ 'x-forwarded-for': '6.6.6.6, 10.0.0.9', 'user-agent': 'UA/1' }),
@@ -36,7 +44,7 @@ describe('sign-in path (user present) — MUST NEVER THROW', () => {
     // Group claims can exceed the HTTP/1.1 WebSocket handshake header limit.
     const idToken = 'header.' + 'x'.repeat(8000) + '.signature'
     createSessionMock.mockResolvedValue('oidc-sid')
-    loadJwtContextMock.mockResolvedValue({ tenantId: 'default', mustEnroll2fa: false })
+    loadJwtContextMock.mockResolvedValue({ tenantId: 'default', tenantEnabled: true, mustEnroll2fa: false })
     const token = await jwtCb({
       token: {},
       user: { id: 'u1', email: 'a@b', name: 'A', role: 'admin' },
@@ -97,6 +105,7 @@ describe('read path (no user) — refuses by throwing', () => {
   it('passes a live session through and touches it', async () => {
     loadJwtContextMock.mockResolvedValue({
       enabled: true, tenantId: 'tenant-a', mustEnroll2fa: false, session: liveSession,
+      tenantEnabled: true,
     })
     const token = await jwtCb({ token: { id: 'u1', sid: 'sid1', authAt: Date.now() } })
     expect(token.tenantId).toBe('tenant-a')
@@ -106,6 +115,7 @@ describe('read path (no user) — refuses by throwing', () => {
   it('throws when the session row is gone', async () => {
     loadJwtContextMock.mockResolvedValue({
       enabled: true, tenantId: 'default', mustEnroll2fa: false, session: null,
+      tenantEnabled: true,
     })
     await expect(jwtCb({ token: { id: 'u1', sid: 'sid1' } })).rejects.toThrow(/session/i)
   })
@@ -113,6 +123,7 @@ describe('read path (no user) — refuses by throwing', () => {
   it('throws when the session was revoked', async () => {
     loadJwtContextMock.mockResolvedValue({
       enabled: true, tenantId: 'default', mustEnroll2fa: false,
+      tenantEnabled: true,
       session: { ...liveSession, revokedAt: new Date() },
     })
     await expect(jwtCb({ token: { id: 'u1', sid: 'sid1' } })).rejects.toThrow(/session/i)
@@ -121,6 +132,7 @@ describe('read path (no user) — refuses by throwing', () => {
   it('throws when the account has been disabled since sign-in', async () => {
     loadJwtContextMock.mockResolvedValue({
       enabled: false, tenantId: 'default', mustEnroll2fa: false, session: liveSession,
+      tenantEnabled: true,
     })
     await expect(jwtCb({ token: { id: 'u1', sid: 'sid1' } })).rejects.toThrow(/disabled/i)
   })
@@ -129,12 +141,60 @@ describe('read path (no user) — refuses by throwing', () => {
     await expect(jwtCb({ token: { id: 'u1' } })).rejects.toThrow(/session/i)
   })
 
+  it('throws when every tenant membership is disabled', async () => {
+    loadJwtContextMock.mockResolvedValue({
+      enabled: true, tenantId: 'tenant-off', tenantEnabled: false,
+      mustEnroll2fa: false, session: liveSession,
+    })
+
+    await expect(jwtCb({ token: { id: 'u1', sid: 'sid1' } })).rejects.toThrow(/^Tenant disabled$/)
+    expect(touchSessionMock).not.toHaveBeenCalled()
+  })
+
   it('FAILS OPEN when the database is unreachable', async () => {
     // A Postgres outage already makes the app unusable, so refusing adds no
     // security and only causes a reconnection storm when the DB returns.
     loadJwtContextMock.mockRejectedValue(new Error('ECONNREFUSED'))
     const token = await jwtCb({ token: { id: 'u1', sid: 'sid1', tenantId: 'kept' } })
     expect(token.tenantId).toBe('kept')
+  })
+})
+
+describe('events.signOut', () => {
+  const signOut = (authOptions.events as any).signOut
+
+  it('revokes the server-side session before auditing the logout', async () => {
+    const order: string[] = []
+    revokeSessionMock.mockImplementation(async () => { order.push('revoke') })
+    auditMock.mockImplementation(async () => { order.push('audit') })
+
+    await signOut({ token: { sid: 'sid1', id: 'u1', email: 'a@b.test' } })
+
+    expect(revokeSessionMock).toHaveBeenCalledExactlyOnceWith('sid1', 'u1')
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'logout', userId: 'u1', userEmail: 'a@b.test', status: 'success',
+    }))
+    expect(order).toEqual(['revoke', 'audit'])
+  })
+
+  it('does not try to revoke a token without a sid but still audits logout', async () => {
+    await signOut({ token: { id: 'u1', email: 'a@b.test' } })
+
+    expect(revokeSessionMock).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledOnce()
+  })
+
+  it('keeps sign-out best-effort when revocation fails and still audits logout', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    revokeSessionMock.mockRejectedValue(new Error('db down'))
+
+    await expect(signOut({ token: { sid: 'sid1', id: 'u1', email: 'a@b.test' } })).resolves.toBeUndefined()
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ action: 'logout', userId: 'u1' }))
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[auth-session] could not revoke the session at sign-out:',
+      'db down',
+    )
+    errorSpy.mockRestore()
   })
 })
 

@@ -39,9 +39,9 @@ const VDC_UNAVAILABLE = 'This vDC does not exist or is disabled.'
 /**
  * Authorise a provider caller to act on `vdcId` and resolve its tenant.
  *
- * Judged on the RAW session tenant, never on getCurrentTenantId(): the latter
- * falls back to the provider tenant on a stale JWT or a disabled tenant, which
- * would let a tenant admin pass a provider gate. The caller also needs
+ * Judged on the RAW session tenant: a provider gate must not depend on how
+ * getCurrentTenantId() resolves a stale or disabled tenant (it used to answer
+ * the provider tenant, roadmap#79). The caller also needs
  * admin.settings, the right that already lets it manage the vDC itself.
  */
 export async function resolveProviderVdcTarget(vdcId: string): Promise<ProviderVdcTargetResult> {

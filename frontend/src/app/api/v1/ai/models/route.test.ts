@@ -6,10 +6,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
   validateAIUrl: vi.fn(async (u: string) => u),
+  // Passes the body through unless a test swaps in a stored key for the mask.
+  resolveMaskedAiSecrets: vi.fn(async (b: Record<string, unknown>) => b),
 }))
 
 vi.mock('@/lib/rbac', () => ({ checkPermission: vi.fn(async () => null), PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' } }))
 vi.mock('@/lib/ai/url-guard', () => ({ validateAIUrl: h.validateAIUrl }))
+vi.mock('@/lib/ai/storedSecrets', () => ({ resolveMaskedAiSecrets: h.resolveMaskedAiSecrets }))
 
 import { POST } from './route'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
@@ -18,6 +21,7 @@ const fetchMock = vi.fn()
 
 beforeEach(() => {
   h.validateAIUrl.mockClear()
+  h.resolveMaskedAiSecrets.mockClear()
   fetchMock.mockReset().mockResolvedValue(new Response(JSON.stringify({
     data: [{ id: 'gpt-4o' }, { id: 'text-embedding-3-small' }, { id: 'gpt-4.1-mini' }, { id: 'whisper-1' }],
   }), { status: 200 }))
@@ -48,5 +52,15 @@ describe('POST /api/v1/ai/models (openai)', () => {
     await callRoute(POST, { body: { provider: 'openai', openaiKey: 'k' } })
     expect(h.validateAIUrl).toHaveBeenCalledWith('https://api.openai.com/v1')
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.openai.com/v1/models')
+  })
+})
+
+describe('POST /api/v1/ai/models (stored key)', () => {
+  it('queries the provider with the stored key when the form sends the mask back', async () => {
+    h.resolveMaskedAiSecrets.mockImplementationOnce(async (b: Record<string, unknown>) => ({ ...b, openaiKey: 'sk-stored' }))
+    const res = await callRoute(POST, { body: { provider: 'openai', openaiKey: '••••••••' } })
+    expect(res.status).toBe(200)
+    expect(h.resolveMaskedAiSecrets).toHaveBeenCalledWith({ provider: 'openai', openaiKey: '••••••••' })
+    expect(fetchMock.mock.calls[0][1].headers).toEqual({ Authorization: 'Bearer sk-stored' })
   })
 })

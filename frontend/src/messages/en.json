@@ -9512,6 +9512,7 @@
       "type": "Type",
       "kindAccount": "Account",
       "kindIp": "IP address",
+      "kindTotp": "Second factor",
       "failedAttempts": "Failed attempts",
       "lockedUntil": "Locked until",
       "unlock": "Unlock",

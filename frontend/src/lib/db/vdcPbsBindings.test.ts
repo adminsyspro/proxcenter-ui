@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto'
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+
+import { decryptSecret, encryptSecret } from '@/lib/crypto/secret'
 
 import { prismaTest, truncate } from '../../__tests__/setup/prisma-test'
 
@@ -10,10 +12,20 @@ import {
   findBindingByTuple,
   insertBinding,
   insertPveStorage,
+  isEncryptedPbsTokenSecret,
+  listBindingsForTenant,
   listBindingsForVdc,
   listPveStoragesForBinding,
+  protectPbsTokenSecret,
+  revealPbsTokenSecret,
   updateBindingToken,
 } from './vdcPbsBindings'
+
+// The token secret column is encrypted under APP_SECRET, like every other
+// credential; vitest does not load .env, so the key is pinned here.
+beforeAll(() => {
+  process.env.APP_SECRET = 'vdc-pbs-bindings-test-secret'
+})
 
 const TABLES = [
   'vdc_pbs_pve_storages',
@@ -119,13 +131,54 @@ describe('vdcPbsBindings', () => {
       vdcId: 'v1', pbsConnectionId: 'pbs-conn', datastore: 'd2', namespace: 'n2',
       mode: 'auto', pbsTokenId: null, pbsTokenSecret: null,
     })
+    expect(row.pbsTokenSecret).toBeNull()
 
     await updateBindingToken(row.id, 'root@pam!vdc-abc', 'sek')
     const found = await findBindingByTuple('pbs-conn', 'd2', 'n2')
     expect(found?.pbsTokenId).toBe('root@pam!vdc-abc')
+    expect(found?.pbsTokenSecret).toBe('sek')
+
+    // The minted secret lands encrypted, never in clear.
+    const raw = await prismaTest.vdcPbsNamespace.findUniqueOrThrow({ where: { id: row.id } })
+    expect(raw.pbsTokenSecret).not.toBe('sek')
+    expect(isEncryptedPbsTokenSecret(raw.pbsTokenSecret as string)).toBe(true)
+    expect(decryptSecret(raw.pbsTokenSecret as string)).toBe('sek')
 
     await deleteBinding(row.id)
     await expect(updateBindingToken(row.id, 'x', 'y')).rejects.toThrow()
+  })
+
+  it('stores the token secret encrypted at rest and reveals it on every read path', async () => {
+    const row = await insertBinding({
+      vdcId: 'v1', pbsConnectionId: 'pbs-conn', datastore: 'd3', namespace: 'n3',
+      mode: 'auto', pbsTokenId: 'root@pam!vdc-abc', pbsTokenSecret: 'f2b1c0de-0000-4000-8000-00000000abcd',
+    })
+    expect(row.pbsTokenSecret).toBe('f2b1c0de-0000-4000-8000-00000000abcd')
+
+    const raw = await prismaTest.vdcPbsNamespace.findUniqueOrThrow({ where: { id: row.id } })
+    expect(raw.pbsTokenSecret).not.toContain('f2b1c0de')
+    expect(decryptSecret(raw.pbsTokenSecret as string)).toBe('f2b1c0de-0000-4000-8000-00000000abcd')
+
+    expect((await findBindingByTuple('pbs-conn', 'd3', 'n3'))?.pbsTokenSecret).toBe('f2b1c0de-0000-4000-8000-00000000abcd')
+    expect((await listBindingsForVdc('v1'))[0].pbsTokenSecret).toBe('f2b1c0de-0000-4000-8000-00000000abcd')
+    expect((await listBindingsForTenant('tenant-1'))[0].pbsTokenSecret).toBe('f2b1c0de-0000-4000-8000-00000000abcd')
+  })
+
+  it('keeps reading a legacy row whose secret was stored in clear', async () => {
+    await prismaTest.vdcPbsNamespace.create({
+      data: {
+        id: randomUUID(), vdcId: 'v1', pbsConnectionId: 'pbs-conn', datastore: 'd4', namespace: 'n4',
+        mode: 'auto', pbsTokenId: 'root@pam!legacy', pbsTokenSecret: 'legacy-plain-secret',
+      },
+    })
+    const found = await findBindingByTuple('pbs-conn', 'd4', 'n4')
+    expect(found?.pbsTokenSecret).toBe('legacy-plain-secret')
+
+    // Its next token write re-encrypts it.
+    await updateBindingToken(found!.id, 'root@pam!legacy', 'rotated')
+    const raw = await prismaTest.vdcPbsNamespace.findUniqueOrThrow({ where: { id: found!.id } })
+    expect(isEncryptedPbsTokenSecret(raw.pbsTokenSecret as string)).toBe(true)
+    expect((await findBindingByTuple('pbs-conn', 'd4', 'n4'))?.pbsTokenSecret).toBe('rotated')
   })
 
   it('deleteBindingIfExists is a no-op on a missing row', async () => {
@@ -197,6 +250,30 @@ describe('vdcPbsBindings', () => {
     expect(row.pbsConnectionId).toBe('pbs-conn')
     const rows = await prismaTest.vdcPbsNamespace.findMany({ where: { pbsConnectionId: 'pbs-conn' } })
     expect(rows).toHaveLength(1)
+  })
+})
+
+describe('token secret at rest', () => {
+  it('recognises the encryptSecret shape and nothing else', () => {
+    expect(isEncryptedPbsTokenSecret(encryptSecret('x'))).toBe(true)
+    // A PBS token secret is a UUID: no dots, never mistaken for ciphertext.
+    expect(isEncryptedPbsTokenSecret('f2b1c0de-0000-4000-8000-00000000abcd')).toBe(false)
+    expect(isEncryptedPbsTokenSecret('a.b.c')).toBe(false)
+    expect(isEncryptedPbsTokenSecret('')).toBe(false)
+    // Three base64 parts, but not a 12-byte IV and a 16-byte tag.
+    expect(isEncryptedPbsTokenSecret('YWJj.YWJj.YWJj')).toBe(false)
+  })
+
+  it('protect and reveal round-trip, keep null, and pass a plaintext through', () => {
+    expect(protectPbsTokenSecret(null)).toBeNull()
+    expect(protectPbsTokenSecret(undefined)).toBeNull()
+    expect(revealPbsTokenSecret(null)).toBeNull()
+    expect(revealPbsTokenSecret(undefined)).toBeNull()
+
+    const stored = protectPbsTokenSecret('s3cr3t') as string
+    expect(stored).not.toBe('s3cr3t')
+    expect(revealPbsTokenSecret(stored)).toBe('s3cr3t')
+    expect(revealPbsTokenSecret('legacy-plain')).toBe('legacy-plain')
   })
 })
 

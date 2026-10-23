@@ -8,6 +8,12 @@ const checkPermissionMock = vi.fn()
 const executeSSHMock = vi.fn()
 const getNodeIpMock = vi.fn()
 
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('@/lib/connections/getConnection', () => ({
   getConnectionById: (...args: unknown[]) => getConnectionByIdMock(...args),
 }))

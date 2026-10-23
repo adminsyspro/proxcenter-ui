@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { isVmConfigNotFoundError, locateVmInCluster, type GuestType } from "@/lib/proxmox/locateVm"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -31,6 +32,11 @@ export async function GET(_req: Request, ctx: RouteContext) {
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
+    // vDC confinement; the guest may already sit on another vDC node than
+    // the URL says (the moved-node fallback below), hence allowMovedNode.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid, allowMovedNode: true })
+    if (scopeDenied) return scopeDenied
 
     // Resolve via the original node first; on "config does not exist"
     // (typical post-intra-cluster-migration when callers still hold a

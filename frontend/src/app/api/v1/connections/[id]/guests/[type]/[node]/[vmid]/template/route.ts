@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -33,6 +34,10 @@ async function handler(
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
+    // A vDC session may only convert a guest of its own pools.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     // Proxmox endpoint: POST /nodes/{node}/{qemu|lxc}/{vmid}/template
     const endpoint = `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/template`

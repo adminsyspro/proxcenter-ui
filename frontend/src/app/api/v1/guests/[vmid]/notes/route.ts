@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { guardSessionGuest, parseGuestKey, type GuestTarget } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -12,21 +13,9 @@ type Params = {
   vmid: string // Format: connId:type:node:vmid
 }
 
-function parseVmKey(vmKey: string) {
-  const parts = vmKey.split(':')
-
-  if (parts.length !== 4) {
-    throw new Error('Invalid vmKey format. Expected connId:type:node:vmid')
-  }
-
-
-return {
-    connId: parts[0],
-    type: parts[1],
-    node: parts[2],
-    vmid: parts[3],
-  }
-}
+/** Every segment encoded: the validated key cannot reshape the PVE path. */
+const configPath = ({ type, node, vmid }: GuestTarget) =>
+  `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/config`
 
 /**
  * GET /api/v1/guests/[vmid]/notes
@@ -38,7 +27,9 @@ async function getHandler(
 ) {
   try {
     const params = await ctx.params
-    const { connId, type, node, vmid } = parseVmKey(params.vmid)
+    const key = parseGuestKey(params.vmid)
+    if (!key.ok) return key.response
+    const { connId, type, node, vmid } = key
 
     // RBAC: vm.view, checked BEFORE the connection is resolved. That
     // resolution decrypts the Proxmox API token, so it must never run for a
@@ -60,8 +51,10 @@ async function getHandler(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/config`
-    const config = await pveFetch<any>(conn, apiPath)
+    const scopeDenied = await guardSessionGuest({ connectionId: connId, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
+    const config = await pveFetch<any>(conn, configPath(key))
 
     const description = config?.description || ''
 
@@ -88,7 +81,9 @@ async function putHandler(
 ) {
   try {
     const params = await ctx.params
-    const { connId, type, node, vmid } = parseVmKey(params.vmid)
+    const key = parseGuestKey(params.vmid)
+    if (!key.ok) return key.response
+    const { connId, type, node, vmid } = key
 
     // RBAC: vm.config. This writes the guest's description on Proxmox.
     // Checked before the body is read and before the connection is resolved.
@@ -117,13 +112,14 @@ async function putHandler(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/config`
-    
+    const scopeDenied = await guardSessionGuest({ connectionId: connId, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
     const formData = new URLSearchParams()
 
     formData.append('description', content)
-    
-    await pveFetch<any>(conn, apiPath, {
+
+    await pveFetch<any>(conn, configPath(key), {
       method: 'PUT',
       body: formData.toString(),
       headers: {

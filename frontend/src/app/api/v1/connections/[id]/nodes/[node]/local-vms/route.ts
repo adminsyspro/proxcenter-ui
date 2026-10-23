@@ -3,6 +3,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { isSharedStorage } from "@/lib/proxmox/storage"
+import { sessionGuestVisibility } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -47,6 +48,11 @@ export async function GET(
       `/nodes/${encodeURIComponent(node)}/lxc`
     ) || []
 
+    // A vDC session only sees, and only has inspected, the guests of its pools.
+    const scoped = await sessionGuestVisibility({ connectionId: id, conn })
+    if (!scoped.ok) return scoped.response
+    const visible = scoped.visibility
+
     const localVms: Array<{
       vmid: number
       name: string
@@ -59,6 +65,7 @@ export async function GET(
     // Vérifier chaque VM QEMU
     for (const vm of qemuVms) {
       if (vm.template === 1) continue // Ignorer les templates
+      if (!visible.has('qemu', vm.vmid)) continue
       
       try {
         const config = await pveFetch<any>(
@@ -112,6 +119,7 @@ export async function GET(
     // Vérifier chaque conteneur LXC
     for (const ct of lxcContainers) {
       if (ct.template === 1) continue // Ignorer les templates
+      if (!visible.has('lxc', ct.vmid)) continue
       
       try {
         const config = await pveFetch<any>(

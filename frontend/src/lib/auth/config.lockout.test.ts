@@ -22,6 +22,12 @@ vi.mock("./ldap", () => ({
   syncLdapRoleAssignment: vi.fn(),
 }))
 vi.mock("./loginLockout", () => ({ beginLoginAttempt: vi.fn() }))
+// The always-on second factor floor is proven in totpThrottle.db.test.ts;
+// here it passes the verifier's answer through.
+vi.mock("./totpThrottle", () => ({
+  withTotpThrottle: vi.fn(async (_userId: string, _context: string, verify: () => Promise<boolean>) =>
+    (await verify()) ? "ok" : "invalid"),
+}))
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
 
 import { prisma } from "@/lib/db/prisma"
@@ -30,6 +36,7 @@ import { verifyPassword } from "@/lib/auth/password"
 import { verifyTotpOrRecovery } from "@/lib/auth/verify-second-factor"
 import { authenticateLdapDetailed, getLdapConfig } from "./ldap"
 import { beginLoginAttempt } from "./loginLockout"
+import { withTotpThrottle } from "./totpThrottle"
 import { authOptions } from "./config"
 
 function authorizeOf(id: string) {
@@ -191,6 +198,24 @@ describe("LDAP authorize with the lockout policy", () => {
     ).rejects.toThrow(/Invalid LDAP credentials/)
     expect(fail).toHaveBeenCalledTimes(1)
     expect(succeed).not.toHaveBeenCalled()
+  })
+
+  it("a throttled second factor counts against the policy too, with the same message", async () => {
+    ;(authenticateLdapDetailed as any).mockResolvedValue({
+      user: { email: "j@d.io", name: "J", avatar: null, dn: "cn=j", groups: [] },
+      failure: null,
+    })
+    ;(prisma.user.findUnique as any)
+      .mockResolvedValueOnce({ id: "u2", email: "j@d.io", name: "J", role: "viewer", enabled: true })
+      .mockResolvedValueOnce({ totpEnabled: true })
+    ;(withTotpThrottle as any).mockResolvedValueOnce("throttled")
+
+    await expect(
+      authorizeOf("ldap")({ username: "jdoe", password: "right", totpCode: "123456" }, REQ),
+    ).rejects.toThrow(/^Invalid LDAP credentials$/)
+    expect(withTotpThrottle).toHaveBeenCalledWith("u2", "login", expect.any(Function))
+    expect(verifyTotpOrRecovery).not.toHaveBeenCalled()
+    expect(fail).toHaveBeenCalledExactlyOnceWith(true)
   })
 
   it("resets the account counter on success", async () => {

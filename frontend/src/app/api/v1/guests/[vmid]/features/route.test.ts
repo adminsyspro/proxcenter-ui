@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('@/lib/connections/getConnection', () => ({
   // The not-found vs real-error mapping now lives in getConnectionByIdOrNull
   // (unit-tested in getConnection.test.ts); the route just consumes its result.

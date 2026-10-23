@@ -4,26 +4,12 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionByIdOrNull } from "@/lib/connections/getConnection"
 import { safeLog } from "@/lib/log/sanitize"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { guardSessionGuest, parseGuestKey } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
 type Params = {
   vmid: string // Format: connId:type:node:vmid
-}
-
-function parseVmKey(vmKey: string) {
-  const parts = vmKey.split(':')
-
-  if (parts.length !== 4) {
-    throw new Error('Invalid vmKey format. Expected connId:type:node:vmid')
-  }
-
-  return {
-    connId: parts[0],
-    type: parts[1],
-    node: parts[2],
-    vmid: parts[3],
-  }
 }
 
 /**
@@ -37,7 +23,9 @@ export async function GET(
 ) {
   try {
     const params = await ctx.params
-    const { connId, type, node, vmid } = parseVmKey(params.vmid)
+    const key = parseGuestKey(params.vmid)
+    if (!key.ok) return key.response
+    const { connId, type, node, vmid } = key
 
     // RBAC: vm.view, checked first, before the constant-answer shortcut
     // below, so this route cannot be used as an unauthenticated oracle either.
@@ -67,7 +55,11 @@ export async function GET(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    const apiPath = `/nodes/${encodeURIComponent(node)}/lxc/${vmid}/feature`
+    // The qemu shortcut above answers a constant, so only this PVE read is confined.
+    const scopeDenied = await guardSessionGuest({ connectionId: connId, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
+    const apiPath = `/nodes/${encodeURIComponent(node)}/lxc/${encodeURIComponent(vmid)}/feature`
     const result = await pveFetch<any>(conn, `${apiPath}?feature=${encodeURIComponent(feature)}`)
 
     return NextResponse.json({
@@ -75,7 +67,6 @@ export async function GET(
     })
   } catch (e: any) {
     console.error("Feature check error:", safeLog(e?.message))
-    const status = /invalid vmkey/i.test(e?.message || "") ? 400 : 500
-    return NextResponse.json({ error: e?.message || "Feature check failed" }, { status })
+    return NextResponse.json({ error: e?.message || "Feature check failed" }, { status: 500 })
   }
 }

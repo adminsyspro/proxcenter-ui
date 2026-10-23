@@ -20,6 +20,7 @@ import {
   DATA_DISK_KEY_RE, LXC_DISK_KEY_RE, parseDriveString, parsePveSizeToMb,
 } from "@/lib/vdc/drives"
 import { restampGuestDrives } from "@/lib/vdc/driveGuard"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { safeLog } from "@/lib/log/sanitize"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -51,6 +52,12 @@ async function handler(
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
+    // The clone SOURCE must be a guest of the tenant's pools: cloning a
+    // provider template this way is what the catalog grants are for.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
     const rawBody = await req.json()
 
     const parseResult = cloneVmSchema.safeParse(rawBody)

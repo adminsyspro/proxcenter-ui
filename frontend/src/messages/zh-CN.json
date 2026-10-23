@@ -9518,6 +9518,7 @@
       "type": "类型",
       "kindAccount": "账户",
       "kindIp": "IP 地址",
+      "kindTotp": "第二因素",
       "failedAttempts": "失败次数",
       "lockedUntil": "锁定至",
       "unlock": "解锁",

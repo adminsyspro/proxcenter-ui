@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from "next/server"
-import { checkPermission, PERMISSIONS, isUserSuperAdmin } from "@/lib/rbac"
-import { getTenantUsers, addUserToTenant, removeUserFromTenant, TenantMembershipError, requireProviderTenant } from "@/lib/tenant"
+import { checkPermission, PERMISSIONS, isUserSuperAdmin, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
+import { DEFAULT_TENANT_ID, getTenantUsers, addUserToTenant, removeUserFromTenant, TenantMembershipError, requireProviderTenant } from "@/lib/tenant"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { getServerSession } from "next-auth"
@@ -37,13 +37,37 @@ async function handlePost(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "userId is required" }, { status: 400 })
   }
 
+  // The role granted below comes straight from the body, so it obeys the same
+  // rules as POST /rbac/assignments, and before the membership is written so a
+  // refusal leaves nothing behind: provider-only and protected roles never
+  // land in a customer tenant, protected roles come from a super admin only
+  // (and read as unknown to anyone else), and the role has to exist.
+  // No role named (TenantsTab sends none): the viewer role of the tenant's
+  // kind, role_viewer being provider-only.
+  const defaultRoleId = id === DEFAULT_TENANT_ID ? "role_viewer" : "role_tenant_viewer"
+  const roleId = typeof body.roleId === "string" && body.roleId ? body.roleId : defaultRoleId
+  const tenantForbiddenRoles = [...PROVIDER_ONLY_ROLE_IDS, ...PROTECTED_ROLE_IDS] as readonly string[]
+  if (id !== DEFAULT_TENANT_ID && tenantForbiddenRoles.includes(roleId)) {
+    return NextResponse.json(
+      { error: "This role can only be assigned in the provider tenant (default)" },
+      { status: 400 },
+    )
+  }
+  const callerIsSuperAdmin = session?.user?.id ? await isUserSuperAdmin(session.user.id) : false
+  if (!callerIsSuperAdmin && (PROTECTED_ROLE_IDS as readonly string[]).includes(roleId)) {
+    return NextResponse.json({ error: "Role not found" }, { status: 404 })
+  }
+  const role = await prisma.rbacRole.findUnique({ where: { id: roleId }, select: { id: true } })
+  if (!role) {
+    return NextResponse.json({ error: "Role not found" }, { status: 404 })
+  }
+
   await addUserToTenant(body.userId, id, body.isDefault || false)
 
   // Grant a default role in this tenant (role from body, or viewer).
   // Super-admins are excluded: their global role_super_admin already grants
   // wildcard access in every tenant, so a per-tenant role would either be
   // misleading (role_viewer chip on a super-admin) or redundant.
-  const roleId = body.roleId || 'role_viewer'
   const roleAssignId = `tenant_add_${id}_${body.userId}_${Date.now()}`
 
   const targetIsSuperAdmin = await isUserSuperAdmin(body.userId)

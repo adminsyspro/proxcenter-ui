@@ -7,6 +7,26 @@ import { getCurrentTenantId } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
+// The audit page asks for 25, 50 or 100 rows per page. A larger page is a
+// mistake or a probe, and an unbounded one would hand the whole journal to a
+// single query; absent or unparseable values fall back to the page default.
+const DEFAULT_LIMIT = 100
+const MAX_LIMIT = 500
+
+function pageLimit(raw: string | null): number {
+  const n = Number.parseInt(raw ?? "", 10)
+
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_LIMIT
+
+  return Math.min(n, MAX_LIMIT)
+}
+
+function pageOffset(raw: string | null): number {
+  const n = Number.parseInt(raw ?? "", 10)
+
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
 export async function GET(req: Request) {
   try {
     // RBAC: Check admin.audit permission
@@ -19,8 +39,8 @@ export async function GET(req: Request) {
 
     const options = {
       tenantId,
-      limit: Number.parseInt(searchParams.get("limit") || "100"),
-      offset: Number.parseInt(searchParams.get("offset") || "0"),
+      limit: pageLimit(searchParams.get("limit")),
+      offset: pageOffset(searchParams.get("offset")),
       category: searchParams.get("category") as AuditCategory | undefined,
       action: searchParams.get("action") as AuditAction | undefined,
       userId: searchParams.get("userId") || undefined,

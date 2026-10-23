@@ -41,6 +41,13 @@ vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: vi.fn<() => Promise<string>>(),
 }))
 
+const getTenantInfrastructureScopeMock = vi.hoisted(() => vi.fn<(...args: any[]) => Promise<any>>())
+
+vi.mock('@/lib/tenant/infraScope', async io => ({
+  ...await io<typeof import('@/lib/tenant/infraScope')>(),
+  getTenantInfrastructureScope: (...a: unknown[]) => getTenantInfrastructureScopeMock(...a),
+}))
+
 vi.mock('@/lib/vdc/quota', () => ({
   resolveVdcForTenant: vi.fn<(...args: any[]) => Promise<any>>(),
   checkVdcQuota: vi.fn<(...args: any[]) => Promise<any>>(),
@@ -83,6 +90,7 @@ beforeEach(() => {
   getConnectionByIdOrNullMock.mockResolvedValue({ id: CONN_ID })
   pveFetchMock.mockResolvedValue([])
   getCurrentTenantIdMock.mockResolvedValue('default')
+  getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
   resolveVdcForTenantMock.mockResolvedValue(null)
   checkVdcQuotaMock.mockResolvedValue({ allowed: true })
   auditMock.mockResolvedValue(undefined)
@@ -148,11 +156,21 @@ describe('GET /api/v1/guests/[vmid]/snapshots', () => {
     expect(res.status).toBe(403)
   })
 
-  it('500 on malformed vmKey', async () => {
+  it('400 on malformed vmKey', async () => {
     const res = await GET(new Request('http://test.local/_'), {
       params: Promise.resolve({ vmid: 'bad' }),
     })
-    expect(res.status).toBe(500)
+    expect(res.status).toBe(400)
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+  })
+
+  it('400 when a key segment would reshape the PVE path, before any lookup', async () => {
+    for (const vmid of ['conn-1:qemu:pve-node-01:101/config', 'conn-1:qemu:pve node:101', 'conn-1:vm:pve-node-01:101']) {
+      const res = await GET(new Request('http://test.local/_'), { params: Promise.resolve({ vmid }) })
+      expect(res.status).toBe(400)
+    }
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 
   it('calls pveFetch with correct snapshot path', async () => {
@@ -400,6 +418,63 @@ describe('DELETE /api/v1/guests/[vmid]/snapshots', () => {
     expect(res.status).toBe(500)
     const body = await readJson<any>(res)
     expect(body.error).toMatch(/task failed/i)
+  })
+})
+
+describe('snapshots of a guest outside the tenant vDC pools (session)', () => {
+  const iaas = () => ({
+    kind: 'iaas',
+    vdcScope: {
+      connectionIds: new Set([CONN_ID]),
+      nodesByConnection: new Map([[CONN_ID, new Set([NODE])]]),
+      poolsByConnection: new Map([[CONN_ID, new Set(['pool-1'])]]),
+    },
+  })
+  const cluster = (pool: string) =>
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string) =>
+      path === '/cluster/resources?type=vm' ? [{ vmid: Number(VMID), type: 'qemu', node: NODE, pool }] : [])
+
+  beforeEach(() => {
+    getCurrentTenantIdMock.mockResolvedValue('tenant-1')
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaas())
+  })
+
+  it('GET lists the snapshots of a guest inside the pools', async () => {
+    cluster('pool-1')
+    const res = await GET(new Request('http://test.local/_'), { params: Promise.resolve({ vmid: VM_KEY }) })
+    expect(res.status).toBe(200)
+    expect(pveFetchMock.mock.calls.map(c => c[1])).toEqual(['/cluster/resources?type=vm', `/nodes/${NODE}/qemu/${VMID}/snapshot`])
+  })
+
+  it('GET refuses a guest outside the pools and reads no snapshot', async () => {
+    cluster('provider')
+    const res = await GET(new Request('http://test.local/_'), { params: Promise.resolve({ vmid: VM_KEY }) })
+    expect(res.status).toBe(403)
+    expect(await readJson<any>(res)).toEqual({ error: 'Guest outside your vDC scope' })
+    expect(pveFetchMock.mock.calls.map(c => c[1])).toEqual(['/cluster/resources?type=vm'])
+  })
+
+  it('POST refuses before the quota is even consulted', async () => {
+    cluster('provider')
+    const res = await callRoute(POST as any, { method: 'POST', params: { vmid: VM_KEY }, body: { name: 'snap1' } })
+    expect(res.status).toBe(403)
+    expect(resolveVdcForTenantMock).not.toHaveBeenCalled()
+    // The route never reached its own audit(): the refusal row is withAudit()'s.
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({ status: 'failure', errorMessage: 'Guest outside your vDC scope' })
+  })
+
+  it('DELETE refuses and sends Proxmox no delete', async () => {
+    cluster('provider')
+    const res = await callRoute(DELETE as any, { method: 'DELETE', params: { vmid: VM_KEY }, searchParams: { name: 'snap1' } })
+    expect(res.status).toBe(403)
+    expect(pveFetchMock.mock.calls.map(c => c[1])).toEqual(['/cluster/resources?type=vm'])
+  })
+
+  it('refuses with 503 when the cluster listing fails, never passing', async () => {
+    pveFetchMock.mockRejectedValue(new Error('pve down'))
+    const res = await GET(new Request('http://test.local/_'), { params: Promise.resolve({ vmid: VM_KEY }) })
+    expect(res.status).toBe(503)
   })
 })
 

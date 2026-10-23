@@ -8,6 +8,7 @@ import { audit } from "@/lib/audit"
 import { hashRecoveryCode } from "./recovery"
 import { verifyPassword } from "./password"
 import { verifyTotp } from "./totp"
+import { withTotpThrottle } from "./totpThrottle"
 
 type Tx = Prisma.TransactionClient
 
@@ -67,12 +68,17 @@ export async function replaceRecoveryCodes(
 }
 
 /**
- * Re-auth helper used by self-disable and regenerate-recovery routes.
- * Always invokes both verifiers regardless of the request payload shape
- * (verifyPassword on empty input + null hash falls through to false;
- * verifyTotp on empty input returns false via otplib). The only
- * conditional uses server-loaded state (user.password). No user-input
- * value gates a security check.
+ * Re-auth helper used by the self-disable, regenerate-recovery and re-enrol
+ * routes. Always invokes both verifiers regardless of the request payload
+ * shape (verifyPassword on empty input + null hash falls through to false;
+ * verifyTotp on empty input returns false via otplib). The only conditional
+ * uses server-loaded state (user.password). No user-input value gates a
+ * security check.
+ *
+ * Rate limited by the same always-on floor as the sign-in second factor: a
+ * stolen session could otherwise guess the password or the code through
+ * these routes without limit. After too many failed re-authentications the
+ * helper answers false without verifying anything, until the floor lifts.
  */
 export async function verifyReauthCredentials(
   userId: string,
@@ -81,11 +87,14 @@ export async function verifyReauthCredentials(
 ): Promise<boolean> {
   const passwordInput = typeof body.password === "string" ? body.password : ""
   const totpInput = typeof body.totpCode === "string" ? body.totpCode : ""
-  const passwordOk = passwordHash
-    ? await verifyPassword(passwordInput, passwordHash)
-    : false
-  const totpOk = await verifyTotp(userId, totpInput)
-  return passwordOk || totpOk
+  const outcome = await withTotpThrottle(userId, "reauth", async () => {
+    const passwordOk = passwordHash
+      ? await verifyPassword(passwordInput, passwordHash)
+      : false
+    const totpOk = await verifyTotp(userId, totpInput)
+    return passwordOk || totpOk
+  })
+  return outcome === "ok"
 }
 
 /**

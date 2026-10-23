@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session. The job id grammar check stays the real one.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
+
 vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn<(...args: any[]) => Promise<Response | null>>(),
   PERMISSIONS: {
@@ -28,7 +35,8 @@ const getConnectionByIdMock = getConnectionById as any
 const pveFetchMock = pveFetch as any
 
 const CONN = { id: 'conn-1' }
-const BASE_PARAMS = { id: 'conn-1', node: 'pve-node-01', jobId: '1-pve-node-02' }
+// A Proxmox replication job id is <vmid>-<n>.
+const BASE_PARAMS = { id: 'conn-1', node: 'pve-node-01', jobId: '100-0' }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -98,7 +106,7 @@ describe('GET /api/v1/connections/[id]/nodes/[node]/replication/[jobId]', () => 
     })
 
     const [, path] = pveFetchMock.mock.calls[0]
-    expect(path).toBe('/nodes/pve-node-01/replication/1-pve-node-02/log?limit=100')
+    expect(path).toBe('/nodes/pve-node-01/replication/100-0/log?limit=100')
   })
 
   it('defaults to limit=50 when no query param', async () => {
@@ -109,18 +117,28 @@ describe('GET /api/v1/connections/[id]/nodes/[node]/replication/[jobId]', () => 
     })
 
     const [, path] = pveFetchMock.mock.calls[0]
-    expect(path).toBe('/nodes/pve-node-01/replication/1-pve-node-02/log?limit=50')
+    expect(path).toBe('/nodes/pve-node-01/replication/100-0/log?limit=50')
   })
 
-  it('encodes node and jobId in the pveFetch path', async () => {
+  it('encodes the node in the pveFetch path', async () => {
     pveFetchMock.mockResolvedValue([])
 
     await GET(new Request('http://test.local/_'), {
-      params: Promise.resolve({ id: 'conn-1', node: 'node/with/slash', jobId: 'job:id' }),
+      params: Promise.resolve({ id: 'conn-1', node: 'node/with/slash', jobId: '100-1' }),
     })
 
     const [, path] = pveFetchMock.mock.calls[0]
-    expect(path).toBe('/nodes/node%2Fwith%2Fslash/replication/job%3Aid/log?limit=50')
+    expect(path).toBe('/nodes/node%2Fwith%2Fslash/replication/100-1/log?limit=50')
+  })
+
+  it('400 on a job id that is not <vmid>-<n>, before any lookup', async () => {
+    const res = await GET(new Request('http://test.local/_'), {
+      params: Promise.resolve({ ...BASE_PARAMS, jobId: 'job:id' }),
+    })
+
+    expect(res.status).toBe(400)
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 
   it('404 when connection not found', async () => {
@@ -182,21 +200,28 @@ describe('POST /api/v1/connections/[id]/nodes/[node]/replication/[jobId]', () =>
 
     expect(pveFetchMock).toHaveBeenCalledWith(
       CONN,
-      '/nodes/pve-node-01/replication/1-pve-node-02/schedule_now',
+      '/nodes/pve-node-01/replication/100-0/schedule_now',
       { method: 'POST' },
     )
   })
 
-  it('encodes node and jobId in the schedule_now path', async () => {
+  it('encodes the node in the schedule_now path', async () => {
     pveFetchMock.mockResolvedValue(null)
 
     await callRoute(POST as any, {
       method: 'POST',
-      params: { id: 'conn-1', node: 'node/x', jobId: 'job:1' },
+      params: { id: 'conn-1', node: 'node/x', jobId: '100-1' },
     })
 
     const [, path] = pveFetchMock.mock.calls[0]
-    expect(path).toBe('/nodes/node%2Fx/replication/job%3A1/schedule_now')
+    expect(path).toBe('/nodes/node%2Fx/replication/100-1/schedule_now')
+  })
+
+  it('400 on a job id that is not <vmid>-<n>', async () => {
+    const res = await callRoute(POST as any, { method: 'POST', params: { ...BASE_PARAMS, jobId: 'job:1' } })
+
+    expect(res.status).toBe(400)
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 
   it('404 when connection not found', async () => {
@@ -258,21 +283,28 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/replication/[jobId]', () 
 
     expect(pveFetchMock).toHaveBeenCalledWith(
       CONN,
-      '/cluster/replication/1-pve-node-02',
+      '/cluster/replication/100-0',
       { method: 'DELETE' },
     )
   })
 
-  it('encodes jobId in the cluster DELETE path', async () => {
+  it('addresses the job on the cluster DELETE path', async () => {
     pveFetchMock.mockResolvedValue(null)
 
     await callRoute(DELETE as any, {
       method: 'DELETE',
-      params: { id: 'conn-1', node: 'pve-node-01', jobId: 'job:special' },
+      params: { id: 'conn-1', node: 'pve-node-01', jobId: '100-7' },
     })
 
     const [, path] = pveFetchMock.mock.calls[0]
-    expect(path).toBe('/cluster/replication/job%3Aspecial')
+    expect(path).toBe('/cluster/replication/100-7')
+  })
+
+  it('400 on a job id that is not <vmid>-<n>', async () => {
+    const res = await callRoute(DELETE as any, { method: 'DELETE', params: { ...BASE_PARAMS, jobId: 'job:special' } })
+
+    expect(res.status).toBe(400)
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 
   it('404 when connection not found', async () => {

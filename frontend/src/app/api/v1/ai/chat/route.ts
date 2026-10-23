@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic"
 import { NextResponse } from 'next/server'
 
 import { getSetting } from '@/lib/db/settings'
+import { openAiSecrets } from '@/lib/ai/settingsSecrets'
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { pveFetch } from '@/lib/proxmox/client'
 import { decryptSecret } from '@/lib/crypto/secret'
@@ -13,7 +14,8 @@ async function getAISettings() {
   try {
     const tenantId = await getCurrentTenantId()
     const stored = await getSetting<any>('ai', tenantId)
-    if (stored) return stored
+    // Keys are sealed at rest (lib/ai/settingsSecrets); open them for the call.
+    if (stored) return openAiSecrets(stored)
   } catch (e) {
     console.error('Failed to get AI settings:', e)
   }

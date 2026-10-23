@@ -213,6 +213,11 @@ export async function xapiGetVmConfig(s: XapiSession, vmUuid: string): Promise<X
  * so they go in raw: that is the form the lab verified against xapi.
  */
 export function xapiVdiExportUrl(s: XapiSession, vdiRef: string, format: "vhd" | "raw"): string {
+  // Both references come from xapi and land in a URL a root curl on the node
+  // reads from a config file: only a reference's own characters pass.
+  for (const ref of [s.ref, vdiRef]) {
+    if (!/^OpaqueRef:[A-Za-z0-9-]{1,128}$/.test(ref)) throw new Error(`Invalid XAPI reference: ${JSON.stringify(ref)}`)
+  }
   return `${s.baseUrl}/export_raw_vdi?session_id=${s.ref}&vdi=${vdiRef}&format=${format}`
 }
 

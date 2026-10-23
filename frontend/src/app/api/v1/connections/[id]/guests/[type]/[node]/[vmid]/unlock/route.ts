@@ -7,6 +7,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { executeSSH } from "@/lib/ssh/exec"
 import { assertVmid } from "@/lib/ssh/validate"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -49,6 +50,10 @@ async function postHandler(
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
+
+    // A vDC session may only unlock a guest of its own pools.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     // Check if the VM is locked
     const configEndpoint = `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config`
@@ -121,7 +126,10 @@ async function getHandler(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    const configEndpoint = `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config`
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
+    const configEndpoint = `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/config`
     const config = await pveFetch<any>(conn, configEndpoint)
 
     return NextResponse.json({

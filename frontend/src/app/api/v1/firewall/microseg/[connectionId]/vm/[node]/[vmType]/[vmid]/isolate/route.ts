@@ -8,6 +8,8 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import type { Principal } from '@/lib/auth/principal'
 import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { getConnectionById } from '@/lib/connections/getConnection'
+import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 import { withAudit } from '@/lib/audit/withAudit'
 
 type Params = { connectionId: string; node: string; vmType: string; vmid: string }
@@ -70,6 +72,10 @@ async function postHandler(
 
     const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
     if (denied) return denied
+
+    // node.manage is connection-wide: the guest itself must be inside the vDC.
+    const scopeDenied = await guardSessionGuest({ connectionId, conn: () => getConnectionById(connectionId), type: vmType, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     let body = await request.json()
 

@@ -2,9 +2,12 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { guardSessionGuest, replicationJobVmid } from "@/lib/vdc/guestGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
+
+const invalidJobId = () => NextResponse.json({ error: "Invalid jobId" }, { status: 400 })
 
 // GET - Récupérer les logs d'un job de réplication
 export async function GET(
@@ -12,6 +15,9 @@ export async function GET(
   ctx: { params: Promise<{ id: string; node: string; jobId: string }> }
 ) {
   const { id, node, jobId } = await ctx.params
+  // PVE job ids are <vmid>-<n>: the guest whose job this is comes from the id itself.
+  const vmid = replicationJobVmid(jobId)
+  if (!vmid) return invalidJobId()
 
   const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
   if (denied) return denied
@@ -22,6 +28,9 @@ export async function GET(
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
+
+  const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type: null, node: null, vmid })
+  if (scopeDenied) return scopeDenied
 
   try {
     // Proxmox: GET /nodes/{node}/replication/{id}/log
@@ -54,6 +63,8 @@ async function handlePost(
   ctx: { params: Promise<{ id: string; node: string; jobId: string }> }
 ) {
   const { id, node, jobId } = await ctx.params
+  const vmid = replicationJobVmid(jobId)
+  if (!vmid) return invalidJobId()
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
   if (denied) return denied
@@ -62,6 +73,9 @@ async function handlePost(
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
+
+  const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type: null, node: null, vmid })
+  if (scopeDenied) return scopeDenied
 
   try {
     // Proxmox: POST /nodes/{node}/replication/{id}/schedule_now
@@ -85,7 +99,9 @@ async function handleDelete(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string; jobId: string }> }
 ) {
-  const { id, node, jobId } = await ctx.params
+  const { id, jobId } = await ctx.params
+  const vmid = replicationJobVmid(jobId)
+  if (!vmid) return invalidJobId()
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
   if (denied) return denied
@@ -94,6 +110,9 @@ async function handleDelete(
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
+
+  const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type: null, node: null, vmid })
+  if (scopeDenied) return scopeDenied
 
   try {
     // Supprimer le job de réplication via l'API cluster

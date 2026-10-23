@@ -14,7 +14,7 @@ vi.mock('@/lib/tenant/infraScope', async io => ({
   getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
 }))
 
-import { checkTenantGuestScope, checkTenantGuestsScope } from './guestScope'
+import { checkTenantGuestScope, checkTenantGuestsScope, tenantGuestVisibility } from './guestScope'
 
 const conn = { id: 'conn-1' } as any
 
@@ -118,5 +118,71 @@ describe('checkTenantGuestsScope (a vmid list)', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
     expect(await checkTenantGuestsScope('tenant-1', conn, 'conn-1', null, null, ['200'])).toBeNull()
     expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('reuses a pre-resolved infrastructure scope instead of looking it up', async () => {
+    expect(await checkTenantGuestsScope('tenant-1', conn, 'conn-1', 'qemu', 'pve3', ['100'], false, iaasInfra() as any)).toBeNull()
+    expect(getTenantInfrastructureScopeMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('tenantGuestVisibility (masking of cluster-wide lists)', () => {
+  const visibilityOf = async (opts?: Parameters<typeof tenantGuestVisibility>[3]) => {
+    const result = await tenantGuestVisibility('tenant-1', conn, 'conn-1', opts)
+    if (result instanceof Response) throw new Error(`unexpected response ${result.status}`)
+    return result
+  }
+
+  it('a provider or MSP tenant sees every guest, without any PVE call', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    const visible = await visibilityOf()
+    expect(visible.all).toBe(true)
+    expect(visible.has('qemu', '200')).toBe(true)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('an iaas tenant sees the guests of its pools on its nodes, from one cluster listing', async () => {
+    const visible = await visibilityOf()
+    expect(visible.all).toBe(false)
+    expect(visible.has('qemu', '100')).toBe(true)
+    expect(visible.has('lxc', 101)).toBe(true)
+    expect(visible.has('qemu', '200')).toBe(false)
+    expect(visible.has('lxc', '100')).toBe(false)
+    expect(visible.has(null, '101')).toBe(true)
+    expect(visible.has(null, '200')).toBe(false)
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    expect(pveFetchMock).toHaveBeenCalledWith(conn, '/cluster/resources?type=vm')
+  })
+
+  it('a guest of a vDC pool running on a node outside the vDC is hidden', async () => {
+    pveFetchMock.mockResolvedValue([{ vmid: 100, type: 'qemu', node: 'pve9', pool: 'pool-1' }])
+    expect((await visibilityOf()).has('qemu', '100')).toBe(false)
+  })
+
+  it('reads nothing when the caller hands over its own cluster listing', async () => {
+    const resources = [...RESOURCES, { type: 'node', node: 'pve3' }, { type: 'storage', storage: 'local' }]
+    const visible = await visibilityOf({ resources })
+    expect(visible.has('qemu', '100')).toBe(true)
+    expect(visible.has('qemu', '200')).toBe(false)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a connection outside the vDC shows no guest at all, before any PVE call', async () => {
+    const result = await tenantGuestVisibility('tenant-1', conn, 'conn-9')
+    if (result instanceof Response) throw new Error('unexpected response')
+    expect(result.all).toBe(false)
+    expect(result.has('qemu', '100')).toBe(false)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('503 when PVE cannot list the guests, never an unmasked view', async () => {
+    pveFetchMock.mockRejectedValue(new Error('down'))
+    const result = await tenantGuestVisibility('tenant-1', conn, 'conn-1')
+    expect(result instanceof Response && result.status).toBe(503)
+  })
+
+  it('503 when the listing is not a list', async () => {
+    const result = await tenantGuestVisibility('tenant-1', conn, 'conn-1', { resources: { data: 'nope' } })
+    expect(result instanceof Response && result.status).toBe(503)
   })
 })

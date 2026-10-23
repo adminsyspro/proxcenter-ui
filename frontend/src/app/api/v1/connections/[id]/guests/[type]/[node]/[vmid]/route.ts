@@ -6,6 +6,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { deleteGuestIpEntry, guestKey } from "@/lib/cache/guestIpCache"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -34,6 +35,10 @@ async function handler(
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
+    // A vDC session may only destroy a guest of its own pools.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     // Vérifier que la VM est arrêtée et non verrouillée
     const status = await pveFetch<any>(

@@ -23,8 +23,9 @@ const xapi = vi.hoisted(() => ({
 }))
 vi.mock("@/lib/xcpng/xapi-client", () => xapi)
 const node = vi.hoisted(() => ({ status: "status: stopped", mapped: "[]" as string }))
-vi.mock("@/lib/ssh/exec", () => ({
-  executeSSH: vi.fn(async (_c: string, _n: string, cmd: string) => ({ success: true, output: cmd.startsWith("qm status") ? node.status : node.mapped })),
+vi.mock("@/lib/ssh/exec", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ssh/exec")>()),
+  executeSSH:vi.fn(async (_c: string, _n: string, cmd: string) => ({ success: true, output: cmd.startsWith("qm status") ? node.status : node.mapped })),
 }))
 vi.mock("./finish", () => ({
   unmapTargetVolumes: vi.fn(async (_c: string, _n: string, vols: any[]) => { for (const v of vols) v.rbdMapped = false }),

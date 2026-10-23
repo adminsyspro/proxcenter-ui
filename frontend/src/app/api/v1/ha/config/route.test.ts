@@ -2,13 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
-const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
+const requireProviderAdminMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const requireFeatureMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 
 vi.mock('@/lib/rbac', () => ({
-  checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
+
+// Provider-only route: requireProviderAdmin stands for the tenant gate AND
+// admin.settings, so one mock covers both.
+vi.mock('@/lib/tenant/providerGuard', () => ({ requireProviderAdmin: requireProviderAdminMock }))
 
 vi.mock('@/lib/auth/requireEnterprise', () => ({
   requireFeature: requireFeatureMock,
@@ -28,7 +31,7 @@ vi.stubGlobal('fetch', fetchMock)
 
 beforeEach(() => {
   vi.clearAllMocks()
-  checkPermissionMock.mockResolvedValue(null)
+  requireProviderAdminMock.mockResolvedValue(null)
   requireFeatureMock.mockResolvedValue(null)
   auditMock.mockResolvedValue('audit-id')
 })
@@ -58,9 +61,9 @@ describe('GET /api/v1/ha/config', () => {
     expect(body).toEqual(mockConfig)
   })
 
-  it('returns 403 when permission denied', async () => {
+  it('returns 403 when the provider guard refuses (customer tenant admin)', async () => {
     const { NextResponse } = await import('next/server')
-    checkPermissionMock.mockResolvedValue(
+    requireProviderAdminMock.mockResolvedValue(
       NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     )
 
@@ -90,7 +93,7 @@ describe('GET /api/v1/ha/config', () => {
     await callRoute(GET as any)
 
     expect(requireFeatureMock).not.toHaveBeenCalled()
-    expect(checkPermissionMock).toHaveBeenCalled()
+    expect(requireProviderAdminMock).toHaveBeenCalledWith('admin.settings')
   })
 })
 

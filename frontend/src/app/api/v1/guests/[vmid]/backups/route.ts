@@ -12,8 +12,12 @@ import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { formatBytes } from "@/utils/format"
 import { getDateLocale } from "@/lib/i18n/date"
+import { guardSessionGuest, isVmid } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
+
+// The `type` query filter ('vm' | 'ct') as a PVE guest type; anything else names none.
+const GUEST_TYPE_BY_FILTER: Record<string, "qemu" | "lxc"> = { vm: "qemu", ct: "lxc" }
 
 /**
  * Strip scheme, path and port so a PBS connection baseUrl (e.g.
@@ -48,6 +52,9 @@ export async function GET(
     if (!vmid) {
       return NextResponse.json({ error: "Missing vmid parameter" }, { status: 400 })
     }
+    if (!isVmid(vmid)) {
+      return NextResponse.json({ error: "Invalid vmid" }, { status: 400 })
+    }
 
     // RBAC: Check backup.view permission
     const denied = await checkPermission(PERMISSIONS.BACKUP_VIEW)
@@ -61,6 +68,20 @@ export async function GET(
     const typeFilter = url.searchParams.get('type') // 'vm' | 'ct'
     const connectionId = url.searchParams.get('connectionId') // the guest's PVE connection
     const currentNode = url.searchParams.get('node') // the node the guest runs on
+
+    // With the guest's cluster named, a vDC session only lists the backups of
+    // a guest inside its pools; the connection is resolved for that check only
+    // when the tenant is a vDC one, the lookup below keeps its own warning path.
+    if (connectionId) {
+      const scopeDenied = await guardSessionGuest({
+        connectionId,
+        conn: () => getConnectionById(connectionId),
+        type: GUEST_TYPE_BY_FILTER[typeFilter ?? ''] ?? null,
+        node: null,
+        vmid,
+      })
+      if (scopeDenied) return scopeDenied
+    }
 
     // Le balayage vzdump coûte 1 (/storage) + 1 (/cluster/resources) + N nœuds
     // x M stockages appels de contenu. Le préchargement déclenché à chaque

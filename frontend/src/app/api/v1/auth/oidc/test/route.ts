@@ -1,7 +1,8 @@
 // src/app/api/v1/auth/oidc/test/route.ts
 import { NextResponse } from "next/server"
 
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { PERMISSIONS } from "@/lib/rbac"
+import { requireProviderAdmin } from "@/lib/tenant/providerGuard"
 
 export const runtime = "nodejs"
 
@@ -11,7 +12,8 @@ export const runtime = "nodejs"
  */
 export async function POST(req: Request) {
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    // Companion of the platform-wide OIDC config: provider tenant only.
+    const denied = await requireProviderAdmin(PERMISSIONS.ADMIN_SETTINGS)
 
     if (denied) return denied
 

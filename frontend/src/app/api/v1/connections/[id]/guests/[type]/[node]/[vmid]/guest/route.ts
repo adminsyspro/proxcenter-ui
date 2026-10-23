@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getOsType } from "@/lib/proxmox/guestOs"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -39,7 +40,11 @@ export async function GET(_req: Request, ctx: RouteContext) {
     if (denied) return denied
 
     const conn = await getConnectionById(id)
-    
+
+    // Agent data (IPs, OS, filesystems) of a guest outside the vDC stays hidden.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
     // Récupérer le status actuel (contient uptime, pid)
     let uptime: number | undefined
     let status: string | undefined

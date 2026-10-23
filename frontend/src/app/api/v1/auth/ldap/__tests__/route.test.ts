@@ -6,15 +6,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
-const checkPermissionMock = vi.fn()
+const requireProviderAdminMock = vi.fn()
+const getRBACContextMock = vi.fn()
 const findUniqueMock = vi.fn()
 const upsertMock = vi.fn()
 const auditMock = vi.fn()
 
 vi.mock("@/lib/rbac", () => ({
-  checkPermission: checkPermissionMock,
+  getRBACContext: getRBACContextMock,
   PERMISSIONS: { ADMIN_SETTINGS: "admin.settings" },
 }))
+
+// Provider-only route: requireProviderAdmin stands for the tenant gate AND
+// admin.settings, so one mock covers both.
+vi.mock("@/lib/tenant/providerGuard", () => ({ requireProviderAdmin: requireProviderAdminMock }))
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: { ldapConfig: { findUnique: findUniqueMock, upsert: upsertMock } },
@@ -57,7 +62,8 @@ async function routes() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  checkPermissionMock.mockResolvedValue(null)
+  requireProviderAdminMock.mockResolvedValue(null)
+  getRBACContextMock.mockResolvedValue({ userId: "u1", isAdmin: true, tenantId: "default" })
   findUniqueMock.mockResolvedValue(null)
   upsertMock.mockResolvedValue({})
 })
@@ -170,5 +176,59 @@ describe("/api/v1/auth/ldap English messages", () => {
     const res = await callRoute(PUT as any, { method: "PUT", body: body() })
     expect(res.status).toBe(500)
     expect((await readJson<any>(res)).error).toBe("Server error")
+  })
+})
+
+describe("/api/v1/auth/ldap provider tenant and protected roles", () => {
+  it("never reads or writes the row when the provider guard refuses (customer tenant admin)", async () => {
+    requireProviderAdminMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "This operation is only available from the provider tenant" }), { status: 403 }),
+    )
+    const { GET, PUT } = await routes()
+    expect((await callRoute(GET as any, { method: "GET" })).status).toBe(403)
+    expect((await callRoute(PUT as any, { method: "PUT", body: body() })).status).toBe(403)
+    expect(requireProviderAdminMock).toHaveBeenCalledWith("admin.settings")
+    expect(findUniqueMock).not.toHaveBeenCalled()
+    expect(upsertMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses a protected default role or mapping target from a provider admin who is not super admin", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "default" })
+    const { PUT } = await routes()
+
+    const res = await callRoute(PUT as any, { method: "PUT", body: body({ default_role: "role_super_admin" }) })
+    expect(res.status).toBe(403)
+    expect((await readJson<any>(res)).error).toBe(
+      "Only a super admin can set role_super_admin as the LDAP default role or a group mapping target",
+    )
+
+    const mapped = await callRoute(PUT as any, {
+      method: "PUT",
+      body: body({ group_role_mapping: [{ group: "CN=Admins", role: "provider_admin" }] }),
+    })
+    expect(mapped.status).toBe(403)
+    expect((await readJson<any>(mapped)).error).toContain("role_provider_admin")
+    expect(upsertMock).not.toHaveBeenCalled()
+  })
+
+  it("lets a super admin map a group to role_super_admin", async () => {
+    const { PUT } = await routes()
+    const res = await callRoute(PUT as any, {
+      method: "PUT",
+      body: body({ group_role_mapping: [{ group: "CN=Admins", role: "role_super_admin" }] }),
+    })
+    expect(res.status).toBe(200)
+    expect(upsertMock.mock.calls[0][0].update.groupRoleMapping).toEqual([{ group: "CN=Admins", role: "role_super_admin" }])
+  })
+
+  it("does not consult the caller's roles for an ordinary mapping", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "default" })
+    const { PUT } = await routes()
+    const res = await callRoute(PUT as any, {
+      method: "PUT",
+      body: body({ default_role: "role_viewer", group_role_mapping: [{ group: "ops", role: "role_operator" }] }),
+    })
+    expect(res.status).toBe(200)
+    expect(getRBACContextMock).not.toHaveBeenCalled()
   })
 })

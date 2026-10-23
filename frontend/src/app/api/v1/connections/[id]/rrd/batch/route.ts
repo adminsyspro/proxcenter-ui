@@ -6,6 +6,8 @@ import { getRBACContext, hasPermission } from "@/lib/rbac"
 import { resolveRrdScope } from "@/lib/rbac/rrdScope"
 import { applyRrdWindow, presetRangeMeta, resolveRrdRequest } from "@/lib/metrics/rrdRange"
 import { RRD_BATCH_MAX_PATHS } from "@/lib/metrics/rrdBatchLimit"
+import { canonicalRrdPath } from "@/lib/metrics/rrdPath"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -49,11 +51,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // vm.view for a VM path). Paths the caller can't see are dropped from the
     // batch rather than failing the whole request, so a scoped user still gets
     // graphs for the nodes they can see. See resolveRrdScope (issue #378).
+    // A path that is not one of the known RRD shapes is dropped the same way:
+    // the PVE URL is only ever built from validated segments.
     const allowedPaths = (
       await Promise.all(
         paths.map(async (path) => {
           const scope = resolveRrdScope(id, path)
-          if (!scope) return null
+          const target = canonicalRrdPath(path)
+          if (!scope || !target) return null
           const ok = await hasPermission({
             userId: rbac.userId,
             permission: scope.permission,
@@ -61,10 +66,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
             resourceId: scope.resourceId,
             tenantId: rbac.tenantId,
           })
-          return ok ? path : null
+          return ok ? { path, target } : null
         }),
       )
-    ).filter((p): p is string => p !== null)
+    ).filter((p) => p !== null)
 
     if (allowedPaths.length === 0) {
       return NextResponse.json({ data: {} })
@@ -72,10 +77,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const conn = await getConnectionById(id)
 
+    // Guest paths outside the vDC are dropped like paths without the permission.
+    const scopedPaths = (
+      await Promise.all(
+        allowedPaths.map(async (entry) => {
+          if (!entry.target.guest) return entry
+          const refused = await guardSessionGuest({ connectionId: id, conn, ...entry.target.guest, allowMovedNode: true })
+          return refused ? null : entry
+        }),
+      )
+    ).filter((p) => p !== null)
+
     // Fetch all RRD data in parallel
     const results = await Promise.allSettled(
-      allowedPaths.map(async (path) => {
-        const rrdPath = `${path.replace(/\/$/, "")}/rrddata?timeframe=${encodeURIComponent(tf)}&cf=AVERAGE`
+      scopedPaths.map(async ({ path, target }) => {
+        const rrdPath = `${target.path}/rrddata?timeframe=${encodeURIComponent(tf)}&cf=AVERAGE`
         const data = await pveFetch<any[]>(conn, rrdPath)
         return { path, data }
       })

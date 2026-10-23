@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { isDiskKey, volidOfDrive, snapshotsReferencingVolume } from "@/lib/proxmox/snapshotRefs"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -30,6 +31,10 @@ export async function GET(
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
     const base = `/nodes/${encodeURIComponent(node)}/${type === 'lxc' ? 'lxc' : 'qemu'}/${encodeURIComponent(vmid)}`
 
     const cfg = await pveFetch<Record<string, unknown>>(conn, `${base}/config`)

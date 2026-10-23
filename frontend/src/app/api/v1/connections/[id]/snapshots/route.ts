@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { sessionGuestVisibility } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -32,6 +33,12 @@ export async function GET(
       (r) => r?.type === "qemu" || r?.type === "lxc"
     )
 
+    // A vDC session only sees the snapshots of the guests in its pools. The
+    // listing above already carries each guest's pool, so nothing is re-read.
+    const scoped = await sessionGuestVisibility({ connectionId: id, conn, resources })
+    if (!scoped.ok) return scoped.response
+    guests = guests.filter((g) => scoped.visibility.has(g.type, g.vmid))
+
     if (nodeFilter) {
       guests = guests.filter((g) => g.node === nodeFilter)
     }
@@ -39,7 +46,7 @@ export async function GET(
     // 2. Fetch snapshots in parallel for each guest
     const results = await Promise.allSettled(
       guests.map(async (guest) => {
-        const apiPath = `/nodes/${encodeURIComponent(guest.node)}/${guest.type}/${guest.vmid}/snapshot`
+        const apiPath = `/nodes/${encodeURIComponent(guest.node)}/${encodeURIComponent(guest.type)}/${encodeURIComponent(String(guest.vmid))}/snapshot`
         try {
           const snaps = await pveFetch<any[]>(conn, apiPath)
           return (snaps || [])

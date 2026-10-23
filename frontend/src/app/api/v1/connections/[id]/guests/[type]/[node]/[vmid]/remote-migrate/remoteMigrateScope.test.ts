@@ -9,13 +9,17 @@ vi.mock("@/lib/api-tokens/routeGuard", () => ({
 import { callRoute } from "../../../../../../../../../../__tests__/setup/route-test"
 
 // Hoist mocks so they are available in vi.mock factories
-const { getInfraMock, checkPermissionMock, getConnectionByIdMock, pveFetchMock, getNodeIpMock, watchMigrationMock } = vi.hoisted(() => ({
+const { getInfraMock, checkPermissionMock, getConnectionByIdMock, pveFetchMock, getNodeIpMock, watchMigrationMock, TARGET_FP, tlsState } = vi.hoisted(() => ({
   getInfraMock: vi.fn(),
   checkPermissionMock: vi.fn(),
   getConnectionByIdMock: vi.fn(),
   pveFetchMock: vi.fn(),
   getNodeIpMock: vi.fn(),
   watchMigrationMock: vi.fn(),
+  /** SHA-256 fingerprint the target cluster reports for pve2 (32 colon-separated bytes). */
+  TARGET_FP: Array.from({ length: 32 }, (_, i) => ((i * 7 + 3) % 256).toString(16).padStart(2, "0").toUpperCase()).join(":"),
+  /** What the fake TLS handshake with the resolved host presents. */
+  tlsState: { fingerprint: "" },
 }))
 
 vi.mock("@/lib/tenant/infraScope", async (orig) => ({
@@ -51,13 +55,13 @@ vi.mock("@/lib/migration/cross-cluster-watcher", () => ({
 
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
 
-// The route tries a real TLS connection to fetch the target fingerprint before
-// reaching the execution logic. Stub it out so the "passes the gate" tests
-// reach body execution without a network timeout.
+// The route opens a real TLS connection to the resolved host to cross-check the
+// fingerprint the target API reports. Stub it out so the tests reach body
+// execution without a network timeout; `tlsState` says what the host presents.
 vi.mock("tls", () => ({
   connect: (_opts: any, cb?: () => void) => {
     const emitter: any = {
-      getPeerCertificate: () => ({ fingerprint256: "AA:BB:CC:DD" }),
+      getPeerCertificate: () => ({ fingerprint256: tlsState.fingerprint }),
       end: () => {},
       on: (_event: string, _handler: () => void) => emitter,
     }
@@ -65,7 +69,19 @@ vi.mock("tls", () => ({
     return emitter
   },
 }))
-vi.mock("net", () => ({}))
+
+/** Target cluster API: pve2 is a member, and its pveproxy certificate is TARGET_FP. */
+function targetClusterAnswers(path: string): unknown {
+  if (path === "/nodes") return [{ node: "pve1" }, { node: "pve2" }]
+  if (path === "/nodes/pve2/certificates/info") return [{ filename: "pve-ssl.pem", fingerprint: "11:".repeat(31) + "11" }, { filename: "pveproxy-ssl.pem", fingerprint: TARGET_FP }]
+  return []
+}
+
+/** The target-endpoint of the latest remote_migrate call, decoded from its form body. */
+function sentTargetEndpoint(): string {
+  const call = pveFetchMock.mock.calls.filter(([, path]: any[]) => path.includes("remote_migrate")).at(-1)
+  return new URLSearchParams(call![2].body).get("target-endpoint") ?? ""
+}
 
 const STUB_SOURCE_CONN = { id: "conn-src", name: "Source", baseUrl: "https://src-pve:8006", apiToken: "tok-src" }
 const STUB_TARGET_CONN = { id: "conn-tgt", name: "Target", baseUrl: "https://tgt-pve:8006", apiToken: "tok-tgt" }
@@ -92,6 +108,7 @@ beforeEach(() => {
   getNodeIpMock.mockReset().mockResolvedValue("10.0.0.2")
   watchMigrationMock.mockReset().mockResolvedValue(undefined)
   getInfraMock.mockReset()
+  tlsState.fingerprint = TARGET_FP
 })
 
 describe("POST .../remote-migrate — MSP ownership gate", () => {
@@ -196,7 +213,7 @@ describe("POST .../remote-migrate — vm.migrate on the target connection", () =
   beforeEach(() => {
     getInfraMock.mockResolvedValue({ kind: "provider" })
     pveFetchMock.mockImplementation((_conn: any, path: string) =>
-      Promise.resolve(path.includes("remote_migrate") ? "UPID:pve1:0000A:qmigrate:100:root@pam:" : []))
+      Promise.resolve(path.includes("remote_migrate") ? "UPID:pve1:0000A:qmigrate:100:root@pam:" : targetClusterAnswers(path)))
   })
 
   it("403 without vm.migrate on the target connection, before any cluster is contacted", async () => {
@@ -308,7 +325,7 @@ describe("POST .../remote-migrate — restore plan", () => {
       if (path === "/cluster/replication") return Promise.resolve(replicationJobs)
       if (path.includes("remote_migrate")) return Promise.resolve("UPID:pve1:0000A:qmigrate:100:root@pam:")
 
-      return Promise.resolve([])
+      return Promise.resolve(targetClusterAnswers(path))
     })
   }
 
@@ -410,5 +427,108 @@ describe("POST .../remote-migrate — restore plan", () => {
 
     expect(res.status).toBe(200)
     expect(pveFetchMock.mock.calls.some(([, path]: any[]) => path === "/cluster/replication")).toBe(false)
+  })
+})
+
+// The target node name is resolved to an address (DNS as a last resort) and the
+// target cluster's API token is sent there, so the name must be a PVE node name
+// AND a member of the target cluster, and the certificate pinned must be the one
+// the cluster reports for that node, not whatever the resolved host presents.
+describe("POST .../remote-migrate — target node and fingerprint", () => {
+  const post = async (body: any) => {
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+
+    return callRoute(POST, { method: "POST", params: PARAMS, body })
+  }
+  const targetCalls = () => pveFetchMock.mock.calls.filter(([conn]: any[]) => conn === STUB_TARGET_CONN).map(([, path]: any[]) => path)
+
+  beforeEach(() => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    pveFetchMock.mockImplementation((_conn: any, path: string) =>
+      Promise.resolve(path.includes("remote_migrate") ? "UPID:pve1:0000A:qmigrate:100:root@pam:" : targetClusterAnswers(path)))
+  })
+
+  it("400 on a targetNode with shell metacharacters, before the target cluster is contacted", async () => {
+    const res = await post({ ...VALID_BODY, targetNode: "pve2$(id)" })
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/invalid targetNode/i)
+    expect(targetCalls()).toEqual([])
+    expect(getNodeIpMock).not.toHaveBeenCalled()
+    expect(watchMigrationMock).not.toHaveBeenCalled()
+  })
+
+  it("400 when the node is not in the target cluster's node list, before any resolution", async () => {
+    const res = await post({ ...VALID_BODY, targetNode: "pve9.attacker.example" })
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/not a node of the target cluster/)
+    expect(targetCalls()).toEqual(["/nodes"])
+    expect(getNodeIpMock).not.toHaveBeenCalled()
+    expect(watchMigrationMock).not.toHaveBeenCalled()
+  })
+
+  it("400 when the target cluster's node list cannot be read", async () => {
+    pveFetchMock.mockImplementation((_conn: any, path: string) =>
+      path === "/nodes" ? Promise.reject(new Error("401 permission denied")) : Promise.resolve([]))
+
+    const res = await post(VALID_BODY)
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/Could not list the nodes of the target cluster/)
+    expect(getNodeIpMock).not.toHaveBeenCalled()
+  })
+
+  it("pins the fingerprint the target API reports for the node's pveproxy certificate", async () => {
+    const res = await post(VALID_BODY)
+
+    expect(res.status).toBe(200)
+    expect(targetCalls()).toEqual(["/nodes", "/nodes/pve2/certificates/info"])
+    expect(sentTargetEndpoint()).toContain(`fingerprint=${TARGET_FP}`)
+    expect(sentTargetEndpoint()).toContain("host=10.0.0.2")
+  })
+
+  it("refuses when the resolved host presents another certificate than the one the cluster reports", async () => {
+    tlsState.fingerprint = "EE:".repeat(31) + "EE"
+
+    const res = await post(VALID_BODY)
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/does not present the certificate the target cluster reports/)
+    expect(pveFetchMock.mock.calls.some(([, path]: any[]) => path.includes("remote_migrate"))).toBe(false)
+    expect(watchMigrationMock).not.toHaveBeenCalled()
+  })
+
+  it("falls back to the cluster's pve_fp, then to the TLS capture, when the node's certificate list is unreadable", async () => {
+    const clusterFp = "22:".repeat(31) + "22"
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (path.includes("remote_migrate")) return Promise.resolve("UPID:pve1:0000A:qmigrate:100:root@pam:")
+      if (path === "/nodes/pve2/certificates/info") return Promise.reject(new Error("403"))
+      if (path === "/cluster/config/nodes") return Promise.resolve([{ name: "pve1", pve_fp: "33:".repeat(31) + "33" }, { name: "pve2", pve_fp: clusterFp }])
+      return Promise.resolve(targetClusterAnswers(path))
+    })
+    tlsState.fingerprint = clusterFp
+    expect((await post(VALID_BODY)).status).toBe(200)
+    expect(sentTargetEndpoint()).toContain(`fingerprint=${clusterFp}`)
+
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (path.includes("remote_migrate")) return Promise.resolve("UPID:pve1:0000A:qmigrate:100:root@pam:")
+      if (path === "/nodes") return Promise.resolve([{ node: "pve2" }])
+      return Promise.reject(new Error("403"))
+    })
+    tlsState.fingerprint = "44:".repeat(31) + "44"
+    expect((await post(VALID_BODY)).status).toBe(200)
+    expect(sentTargetEndpoint()).toContain(`fingerprint=${"44:".repeat(31)}44`)
+  })
+
+  it("400 when neither the API nor the handshake yields a fingerprint", async () => {
+    pveFetchMock.mockImplementation((_conn: any, path: string) =>
+      path === "/nodes" ? Promise.resolve([{ node: "pve2" }]) : Promise.reject(new Error("403")))
+    tlsState.fingerprint = ""
+
+    const res = await post(VALID_BODY)
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/Could not retrieve TLS fingerprint/)
   })
 })

@@ -3,11 +3,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
+// Passes the body through unless a test swaps in a stored key for the mask.
+const resolveMaskedAiSecretsMock = vi.fn(async (b: Record<string, unknown>) => b)
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
+vi.mock('@/lib/ai/storedSecrets', () => ({ resolveMaskedAiSecrets: resolveMaskedAiSecretsMock }))
 
 // The route derives the probe language from the NEXT_LOCALE cookie that
 // middleware sets. `cookieLocale` lets each test pretend to be a different
@@ -30,6 +33,7 @@ let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  resolveMaskedAiSecretsMock.mockClear()
   cookieLocale = 'en'
   acceptLanguage = undefined
   fetchMock = vi.fn()
@@ -303,5 +307,20 @@ describe('POST /api/v1/ai/test', () => {
         expect(sentPrompt(fetchMock.mock.calls.length - 1)).toContain('written in English')
       }
     })
+  })
+})
+
+describe('POST /api/v1/ai/test (stored key)', () => {
+  it('probes the provider with the stored key when the form sends the mask back', async () => {
+    resolveMaskedAiSecretsMock.mockImplementationOnce(async (b: Record<string, unknown>) => ({ ...b, anthropicKey: 'sk-ant-stored' }))
+    fetchMock.mockResolvedValueOnce(jsonOk({ content: [{ text: 'ok' }] }))
+
+    const handler = await importHandler()
+    const res = await callRoute(handler, {
+      body: { provider: 'anthropic', anthropicKey: '••••••••', anthropicModel: 'claude-opus-4-7' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(fetchMock.mock.calls[0][1].headers['x-api-key']).toBe('sk-ant-stored')
   })
 })

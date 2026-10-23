@@ -90,10 +90,13 @@ function byCtrl(path: string): FakeDownload | undefined {
 
 async function sshRouter(_connId: string, _host: string, command: string) {
   if (command.startsWith("nohup bash -c ")) {
-    const cfg = unq(/curl -K ('[^']*(?:'\\''[^']*)*')/.exec(command)![1])
+    // The inner command is one single-quoted argument to bash; unwrap it before reading the curl config path.
+    const inner = unq(command.slice("nohup bash -c ".length, command.lastIndexOf(" > /dev/null 2>&1 & echo $!")))
+    const cfg = unq(/curl -K ('[^']*(?:'\\''[^']*)*')/.exec(inner)![1])
     const localPath = cfg.replace(/\.ctrl\.curlcfg$/, "")
     const capacity = capacities.get(localPath) ?? 100 * GiB
-    const pid = `pid-${downloads.size + 1}`
+    // Digits only, as `echo $!` prints: the pipeline refuses anything else as a failed launch.
+    const pid = String(4000 + downloads.size + 1)
     downloads.set(localPath, {
       pid, steps: [...(plans.get(localPath) ?? defaultPlan(capacity))],
       size: 0, position: 0, exit: null, eos: false, killed: false,

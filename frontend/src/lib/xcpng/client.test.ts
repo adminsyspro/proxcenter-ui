@@ -39,6 +39,12 @@ describe("xcpng/client", () => {
         "https://xo.test/rest/v0/vdis/vdi-1.raw"
       )
     })
+
+    it("refuses a VDI id that is not an identifier (it lands in a root curl config on the node)", () => {
+      expect(() => buildVdiDownloadUrl("https://xo.test", 'x"\noutput = "/root/.ssh/authorized_keys')).toThrow(/Invalid VDI id/)
+      expect(() => buildVdiDownloadUrl("https://xo.test", "../vms")).toThrow(/Invalid VDI id/)
+      expect(() => buildVdiDownloadUrl("https://xo.test", "")).toThrow(/Invalid VDI id/)
+    })
   })
 
   describe("xoFetch", () => {

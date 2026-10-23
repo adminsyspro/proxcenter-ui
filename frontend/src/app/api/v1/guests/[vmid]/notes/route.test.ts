@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
 // pass-through so this file keeps testing the handler, as for a session caller.
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('@/lib/api-tokens/routeGuard', () => ({
   withPublicApiGuard: (_entryId: string, handler: any) => handler,
 }))
@@ -65,9 +71,9 @@ describe('GET /api/v1/guests/[vmid]/notes', () => {
     expect(res.status).toBe(404)
   })
 
-  it('500 on a malformed vmKey', async () => {
+  it('400 on a malformed vmKey', async () => {
     const res = await GET(new Request('http://test.local/_'), { params: Promise.resolve({ vmid: 'bad-key' }) })
-    expect(res.status).toBe(500)
+    expect(res.status).toBe(400)
   })
 })
 

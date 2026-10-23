@@ -8,6 +8,7 @@ import { executeSSH } from "@/lib/ssh/exec"
 import {
   allocateBlockVolumeAndResolvePath,
   allocateAndMapBlockVolume,
+  DEVICE_PATH_RE,
   nextFreeDiskName,
   reserveVolumeSlot,
   volumesToFree,
@@ -512,5 +513,24 @@ describe("keepTargetVm (roadmap#57)", () => {
 
   it("keeps a VM whose disks are attached already: it is the migrated guest", () => {
     expect(keepTargetVm([{ volumeId: "s:vm-1-disk-0", devicePath: "/dev/x", copied: true, attached: true }])).toBe(true)
+  })
+})
+
+describe("device path shape", () => {
+  it("accepts the device paths PVE plugins hand out and refuses shell characters", () => {
+    for (const dev of ["/dev/pve/vm-100-disk-0", "/dev/rbd3", "/dev/zvol/rpool/data/vm-100-disk-0", "/dev/rbd-pve/9f3a-1/pool/vm-100-disk-0", "/dev/mapper/vg--x-vm--100--disk--0"]) {
+      expect(DEVICE_PATH_RE.test(dev)).toBe(true)
+    }
+    for (const dev of ["/dev/x $(id)", "/dev/x;reboot", "/dev/x`id`", "/dev/x'y", 'rbd:pool/img', "", "/dev/x\n/dev/y"]) {
+      expect(DEVICE_PATH_RE.test(dev)).toBe(false)
+    }
+  })
+
+  it("refuses to hand the pipeline a mapped device whose path holds shell characters", async () => {
+    mockSSH
+      .mockResolvedValueOnce(created("FC-HDC-01:vm-250-disk-1"))
+      .mockResolvedValueOnce(path("/dev/FC-HDC-01/vm-250-disk-1 $(reboot)"))
+    await expect(allocateAndMapBlockVolume({ connectionId: "conn-1", nodeIp: "10.0.0.1", targetStorage: "FC-HDC-01", targetVmid: 250, volName: "vm-250-disk-1", sizeKB: 20480 }))
+      .rejects.toThrow(/Invalid device path/)
   })
 })

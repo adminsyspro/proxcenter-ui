@@ -9,6 +9,7 @@ import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { waitForTask } from "@/lib/proxmox/tasks"
 import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import type { DriveQosCaps } from "@/lib/vdc/drives"
+import { guardSessionGuest, parseGuestKey, type GuestTarget } from "@/lib/vdc/guestGuard"
 import { safeLog } from "@/lib/log/sanitize"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -20,20 +21,12 @@ type Params = {
   snapname: string
 }
 
-function parseVmKey(vmKey: string) {
-  const parts = vmKey.split(':')
+// Same grammar as the creation route accepts, so the segment is a snapshot name.
+const SNAPNAME_RE = /^[a-zA-Z0-9_-]+$/
 
-  if (parts.length !== 4) {
-    throw new Error('Invalid vmKey format. Expected connId:type:node:vmid')
-  }
-
-  
-return {
-    connId: parts[0],
-    type: parts[1],
-    node: parts[2],
-    vmid: parts[3],
-  }
+/** Every segment of the PVE snapshot path is encoded, so no identifier can reshape the URL. */
+function snapshotPath({ type, node, vmid }: GuestTarget, snapname: string, suffix: string) {
+  return `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/snapshot/${encodeURIComponent(snapname)}/${suffix}`
 }
 
 async function getConnection(id: string) {
@@ -56,8 +49,13 @@ async function postHandler(
 ) {
   try {
     const params = await ctx.params
-    const { connId, type, node, vmid } = parseVmKey(params.vmid)
+    const key = parseGuestKey(params.vmid)
+    if (!key.ok) return key.response
+    const { connId, type, node, vmid } = key
     const snapname = params.snapname
+    if (!SNAPNAME_RE.test(snapname)) {
+      return NextResponse.json({ error: "Invalid snapshot name" }, { status: 400 })
+    }
 
     // RBAC: Check vm.snapshot permission for rollback
     const resourceId = buildVmResourceId(connId, node, type, vmid)
@@ -70,6 +68,9 @@ async function postHandler(
     if (!conn) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
+
+    const scopeDenied = await guardSessionGuest({ connectionId: connId, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
 
     // Storage-tier QoS policies (Finding I1): a snapshot taken before a
     // storage policy existed re-applies its own drive lines verbatim on
@@ -91,9 +92,7 @@ async function postHandler(
       console.warn(`[rollback-qos-stamp] scope resolution failed for vmid=${safeLog(vmid)}, restamp skipped: ${safeLog(err?.message ?? err)}`)
     }
 
-    const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/snapshot/${encodeURIComponent(snapname)}/rollback`
-
-    const result = await pveFetch<string>(conn, apiPath, {
+    const result = await pveFetch<string>(conn, snapshotPath(key, snapname, 'rollback'), {
       method: 'POST',
     })
 
@@ -154,8 +153,13 @@ async function putHandler(
 ) {
   try {
     const params = await ctx.params
-    const { connId, type, node, vmid } = parseVmKey(params.vmid)
+    const key = parseGuestKey(params.vmid)
+    if (!key.ok) return key.response
+    const { connId, type, node, vmid } = key
     const snapname = params.snapname
+    if (!SNAPNAME_RE.test(snapname)) {
+      return NextResponse.json({ error: "Invalid snapshot name" }, { status: 400 })
+    }
 
     // RBAC: Check vm.snapshot permission
     const resourceId = buildVmResourceId(connId, node, type, vmid)
@@ -173,13 +177,14 @@ async function putHandler(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/snapshot/${encodeURIComponent(snapname)}/config`
-    
+    const scopeDenied = await guardSessionGuest({ connectionId: connId, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
     const formData = new URLSearchParams()
 
     formData.append('description', description || '')
-    
-    await pveFetch<any>(conn, apiPath, {
+
+    await pveFetch<any>(conn, snapshotPath(key, snapname, 'config'), {
       method: 'PUT',
       body: formData.toString(),
       headers: {

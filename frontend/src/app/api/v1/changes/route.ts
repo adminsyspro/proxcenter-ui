@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { requireProviderAdmin } from '@/lib/tenant/providerGuard'
 import { buildChangeVisibilityCtx, isChangeVisibleToTenant } from '@/lib/changes/visibility'
 import { withAudit } from '@/lib/audit/withAudit'
 
@@ -48,7 +49,9 @@ export async function GET(req: Request) {
 
 async function handleDelete() {
   try {
-    const permError = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    // Purges the change journal of EVERY tenant on the orchestrator: a
+    // provider operation, whatever permission the caller holds in its tenant.
+    const permError = await requireProviderAdmin(PERMISSIONS.ADMIN_SETTINGS)
     if (permError) return permError
 
     const data = await orchestratorFetch<any>('/changes', { method: 'DELETE' })

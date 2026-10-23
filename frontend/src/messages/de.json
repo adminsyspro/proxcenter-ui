@@ -9453,6 +9453,7 @@
       "type": "Typ",
       "kindAccount": "Konto",
       "kindIp": "IP-Adresse",
+      "kindTotp": "Zweiter Faktor",
       "failedAttempts": "Fehlversuche",
       "lockedUntil": "Gesperrt bis",
       "unlock": "Entsperren",

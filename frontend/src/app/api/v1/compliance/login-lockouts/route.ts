@@ -1,15 +1,26 @@
 // GET/DELETE /api/v1/compliance/login-lockouts
-// Accounts and client IPs currently locked by the login policy, and the
-// admin unlock (DELETE ?kind=account|ip&key=...).
+// Accounts and client IPs currently locked by the login policy, accounts whose
+// second factor is throttled, and the admin unlock
+// (DELETE ?kind=account|ip|totp&key=...; a totp key is the user id).
 import { NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { demoResponse } from '@/lib/demo/demo-api'
-import { listActiveLocks, unlockLogin, type LockoutKind } from '@/lib/auth/loginLockout'
+import { listActiveLocks, unlockLogin, type ActiveLockKind } from '@/lib/auth/loginLockout'
 import { audit } from '@/lib/audit'
 import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
+
+const LOCK_KINDS: Record<ActiveLockKind, string> = {
+  account: 'login_account',
+  ip: 'login_ip',
+  totp: 'login_totp',
+}
+
+function isLockKind(kind: string | null): kind is ActiveLockKind {
+  return kind !== null && Object.hasOwn(LOCK_KINDS, kind)
+}
 
 export async function GET(req: Request) {
   const demo = demoResponse(req)
@@ -37,11 +48,11 @@ async function handleDelete(req: Request) {
     const params = new URL(req.url).searchParams
     const kind = params.get('kind')
     const key = params.get('key')
-    if ((kind !== 'account' && kind !== 'ip') || !key) {
-      return NextResponse.json({ error: 'kind (account|ip) and key are required' }, { status: 400 })
+    if (!isLockKind(kind) || !key) {
+      return NextResponse.json({ error: 'kind (account|ip|totp) and key are required' }, { status: 400 })
     }
 
-    const removed = await unlockLogin(kind as LockoutKind, key)
+    const removed = await unlockLogin(kind, key)
     if (!removed) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
@@ -49,7 +60,7 @@ async function handleDelete(req: Request) {
     await audit({
       action: 'login_unlocked',
       category: 'security',
-      resourceType: kind === 'account' ? 'login_account' : 'login_ip',
+      resourceType: LOCK_KINDS[kind],
       resourceId: key,
       resourceName: key,
       details: { kind, key },

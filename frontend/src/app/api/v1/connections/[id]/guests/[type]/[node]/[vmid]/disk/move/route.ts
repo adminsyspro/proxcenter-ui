@@ -11,6 +11,7 @@ import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { parseDriveString, parsePveSizeToMb, stampDriveQos, type DriveQosCaps } from "@/lib/vdc/drives"
 import { waitForTask } from "@/lib/proxmox/tasks"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -43,6 +44,12 @@ async function handler(
     const { disk, storage, deleteSource, format } = parseResult.data
 
     const conn = await getConnectionById(id)
+
+    // The guest itself must be inside the tenant's pools before its storage
+    // and quota are judged.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
     const resourceTypePve = type === 'lxc' ? 'lxc' : 'qemu'
 
     // vDC guard (spec §5.3 / §6): target storage must be in scope, the node

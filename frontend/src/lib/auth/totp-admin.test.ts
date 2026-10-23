@@ -14,6 +14,11 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
 vi.mock("./recovery", () => ({ hashRecoveryCode: vi.fn() }))
 vi.mock("./password", () => ({ verifyPassword: vi.fn() }))
 vi.mock("./totp", () => ({ verifyTotp: vi.fn() }))
+// Pass-through by default: the floor itself is proven in totpThrottle.db.test.ts.
+vi.mock("./totpThrottle", () => ({
+  withTotpThrottle: vi.fn(async (_userId: string, _context: string, verify: () => Promise<boolean>) =>
+    (await verify()) ? "ok" : "invalid"),
+}))
 
 // ─── Imports after mocks ───────────────────────────────────────────────────
 
@@ -23,6 +28,7 @@ import { audit } from "@/lib/audit"
 import { hashRecoveryCode } from "./recovery"
 import { verifyPassword } from "./password"
 import { verifyTotp } from "./totp"
+import { withTotpThrottle } from "./totpThrottle"
 
 import {
   requireSuperAdminCaller,
@@ -175,6 +181,20 @@ describe("verifyReauthCredentials", () => {
     expect(ok).toBe(false)
     // verifyPassword should NOT be called when hash is null
     expect(verifyPassword).not.toHaveBeenCalled()
+  })
+
+  it("runs under the always-on floor in the re-auth context", async () => {
+    ;(verifyPassword as any).mockResolvedValue(true)
+    ;(verifyTotp as any).mockResolvedValue(false)
+    expect(await verifyReauthCredentials("u1", "hashedpw", { password: "correctpw" })).toBe(true)
+    expect(withTotpThrottle).toHaveBeenCalledWith("u1", "reauth", expect.any(Function))
+  })
+
+  it("throttled: refuses even a correct password without consulting either verifier", async () => {
+    ;(withTotpThrottle as any).mockResolvedValueOnce("throttled")
+    expect(await verifyReauthCredentials("u1", "hashedpw", { password: "correctpw", totpCode: "123456" })).toBe(false)
+    expect(verifyPassword).not.toHaveBeenCalled()
+    expect(verifyTotp).not.toHaveBeenCalled()
   })
 })
 

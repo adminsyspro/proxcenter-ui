@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth'
 import { prisma } from '@/lib/db/prisma'
 import { isUserSuperAdmin } from '@/lib/rbac'
 import { authOptions } from '@/lib/auth/config'
-import { insertPveStorage, listPveStoragesForBinding } from '@/lib/db/vdcPbsBindings'
+import { insertPveStorage, listPveStoragesForBinding, revealPbsTokenSecret } from '@/lib/db/vdcPbsBindings'
 import { createPbsStorage, sanitizeStorageName } from '@/lib/proxmox/pvePbsStorage'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { resolvePbsMeta } from '@/lib/proxmox/pbsConnMeta'
@@ -47,7 +47,9 @@ async function handlePost(_req: Request, ctx: { params: Promise<{ id: string; bi
       datastore: binding.datastore,
       namespace: binding.namespace,
       username: binding.pbsTokenId,
-      password: binding.pbsTokenSecret,
+      // The row is read straight from Prisma here, so the stored secret
+      // (encrypted, or plaintext on a legacy row) is revealed explicitly.
+      password: revealPbsTokenSecret(binding.pbsTokenSecret),
       fingerprint: pbs.fingerprint,
       nodes,
     })

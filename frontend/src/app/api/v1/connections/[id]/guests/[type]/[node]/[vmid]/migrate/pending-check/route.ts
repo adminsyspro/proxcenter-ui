@@ -6,6 +6,7 @@ import { pendingChangesFromPve } from "@/lib/migration/pendingChanges"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { migrationTenantDenied } from "@/lib/tenant/migrationGuard"
 import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
@@ -35,6 +36,10 @@ export async function GET(
     if (tenantDenied) return tenantDenied
 
     const conn = await getConnectionById(id)
+
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node: safeNode, vmid: safeVmid })
+    if (scopeDenied) return scopeDenied
+
     const guestType = type === 'lxc' ? 'lxc' : 'qemu'
     const rows = await pveFetch<unknown>(conn, `/nodes/${encodeURIComponent(safeNode)}/${guestType}/${encodeURIComponent(safeVmid)}/pending`)
 

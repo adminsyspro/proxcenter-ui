@@ -12,9 +12,10 @@ const mutate = vi.fn(async () => undefined)
 let swrState: { data: any; isLoading: boolean } = { data: undefined, isLoading: false }
 vi.mock('@/hooks/useSWRFetch', () => ({ useSWRFetch: () => ({ ...swrState, mutate }) }))
 
-const lock = (kind: 'account' | 'ip', key: string, failedCount = 3) => ({
+const lock = (kind: 'account' | 'ip' | 'totp', key: string, failedCount = 3, label?: string) => ({
   kind,
   key,
+  ...(label === undefined ? {} : { label }),
   failedCount,
   lastFailedAt: '2026-10-10T06:00:00.000Z',
   lockedUntil: '2026-10-10T06:02:00.000Z',
@@ -56,6 +57,27 @@ describe('LoginLockoutsCard', () => {
     expect(screen.getByText('compliance.loginLockouts.kindIp')).toBeTruthy()
     expect(screen.getByText('5')).toBeTruthy()
     expect(screen.getByText('2')).toBeTruthy() // count chip in the header
+  })
+
+  // A second factor lock is keyed by user id; the card shows the email the
+  // API resolved and lifts the lock by its key.
+  it('shows a second factor lock under the account email and lifts it by user id', async () => {
+    swrState = { data: { data: [lock('totp', 'user-9', 5, 'nine@example.com')] }, isLoading: false }
+    fetchMock.mockResolvedValue({ ok: true, status: 200 })
+    render(<LoginLockoutsCard />)
+    expect(screen.getByText('nine@example.com')).toBeTruthy()
+    expect(screen.queryByText('user-9')).toBeNull()
+    expect(screen.getByText('compliance.loginLockouts.kindTotp')).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: /compliance.loginLockouts.unlock/ }))
+    await waitFor(() => expect(mutate).toHaveBeenCalled())
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/compliance/login-lockouts?kind=totp&key=user-9', { method: 'DELETE' })
+  })
+
+  it('falls back to the key when the API sent no label', async () => {
+    swrState = { data: { data: [lock('totp', 'user-9')] }, isLoading: false }
+    render(<LoginLockoutsCard />)
+    expect(screen.getByText('user-9')).toBeTruthy()
   })
 
   it('unlocks a row through the DELETE route and refreshes', async () => {

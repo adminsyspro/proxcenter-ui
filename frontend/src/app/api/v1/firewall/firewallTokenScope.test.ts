@@ -20,6 +20,12 @@ const h = vi.hoisted(() => ({
   orchDelete: vi.fn<(...a: any[]) => Promise<any>>(),
 }))
 
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('next/headers', () => ({ headers: h.headers }))
 vi.mock('@/lib/auth/principal', async io => ({
   ...await io<typeof import('@/lib/auth/principal')>(),

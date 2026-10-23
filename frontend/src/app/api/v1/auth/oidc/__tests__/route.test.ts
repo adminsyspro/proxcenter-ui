@@ -6,7 +6,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { callRoute, readJson, deniedPermissionResponse } from "@/__tests__/setup/route-test"
 
-const checkPermissionMock = vi.fn()
+const requireProviderAdminMock = vi.fn()
+const getRBACContextMock = vi.fn()
 const findUniqueMock = vi.fn()
 const upsertMock = vi.fn()
 const encryptSecretMock = vi.fn()
@@ -16,9 +17,13 @@ const vdcFindManyMock = vi.fn()
 const auditMock = vi.fn()
 
 vi.mock("@/lib/rbac", () => ({
-  checkPermission: checkPermissionMock,
+  getRBACContext: getRBACContextMock,
   PERMISSIONS: { ADMIN_SETTINGS: "admin.settings" },
 }))
+
+// Provider-only route: requireProviderAdmin stands for the tenant gate AND
+// admin.settings, so one mock covers both.
+vi.mock("@/lib/tenant/providerGuard", () => ({ requireProviderAdmin: requireProviderAdminMock }))
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
@@ -46,7 +51,9 @@ async function importRoute() {
 beforeEach(() => {
   vi.clearAllMocks()
   // Allowed by default; individual tests override to test the denied path.
-  checkPermissionMock.mockResolvedValue(null)
+  requireProviderAdminMock.mockResolvedValue(null)
+  // A super admin by default: the protected-role rule is tested on its own.
+  getRBACContextMock.mockResolvedValue({ userId: "u1", isAdmin: true, tenantId: "default" })
   normalizeGroupGrantMappingMock.mockReturnValue([])
   tenantFindManyMock.mockResolvedValue([])
   vdcFindManyMock.mockResolvedValue([])
@@ -57,8 +64,8 @@ beforeEach(() => {
 // ─── GET ────────────────────────────────────────────────────────────────────
 
 describe("GET /api/v1/auth/oidc", () => {
-  it("returns the denied response when permission is missing", async () => {
-    checkPermissionMock.mockResolvedValue(deniedPermissionResponse())
+  it("returns the denied response when the provider guard refuses (customer tenant admin)", async () => {
+    requireProviderAdminMock.mockResolvedValue(deniedPermissionResponse())
     const { GET } = await importRoute()
     const res = await callRoute(GET as any, { method: "GET" })
     expect(res.status).toBe(403)
@@ -160,8 +167,8 @@ describe("GET /api/v1/auth/oidc", () => {
 // ─── PUT ────────────────────────────────────────────────────────────────────
 
 describe("PUT /api/v1/auth/oidc", () => {
-  it("returns the denied response when permission is missing", async () => {
-    checkPermissionMock.mockResolvedValue(deniedPermissionResponse())
+  it("returns the denied response when the provider guard refuses (customer tenant admin)", async () => {
+    requireProviderAdminMock.mockResolvedValue(deniedPermissionResponse())
     const { PUT } = await importRoute()
     const res = await callRoute(PUT as any, { method: "PUT", body: { enabled: true } })
     expect(res.status).toBe(403)
@@ -399,5 +406,62 @@ describe("/api/v1/auth/oidc — group mapping strategy", () => {
     const { GET } = await importRoute()
     const res = await callRoute(GET as any, { method: "GET" })
     expect(await readJson<any>(res).then(b => b.data.group_mapping_strategy)).toBe("first_match")
+  })
+})
+
+// ─── Provider-only gate and protected roles ─────────────────────────────────
+
+describe("/api/v1/auth/oidc — provider tenant and protected roles", () => {
+  const validBody = {
+    enabled: true,
+    issuer_url: "https://idp.example.com",
+    client_id: "cid",
+  }
+
+  it("asks the guard for admin.settings in the provider tenant and never reads the row when refused", async () => {
+    requireProviderAdminMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "This operation is only available from the provider tenant" }), { status: 403 }),
+    )
+    const { GET, PUT } = await importRoute()
+    expect((await callRoute(GET as any, { method: "GET" })).status).toBe(403)
+    expect((await callRoute(PUT as any, { method: "PUT", body: validBody })).status).toBe(403)
+    expect(requireProviderAdminMock).toHaveBeenCalledWith("admin.settings")
+    expect(findUniqueMock).not.toHaveBeenCalled()
+    expect(tenantFindManyMock).not.toHaveBeenCalled()
+    expect(upsertMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses role_super_admin as the default role unless the caller is a super admin", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "default" })
+    const { PUT } = await importRoute()
+    const res = await callRoute(PUT as any, { method: "PUT", body: { ...validBody, default_role: "role_super_admin" } })
+    expect(res.status).toBe(403)
+    expect((await readJson<any>(res)).error).toBe(
+      "Only a super admin can set role_super_admin as the SSO default role or a group mapping target",
+    )
+    expect(upsertMock).not.toHaveBeenCalled()
+  })
+
+  it("recognises the bare OIDC spelling and a protected group mapping target", async () => {
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "default" })
+    normalizeGroupGrantMappingMock.mockReturnValue([
+      { group: "ops", tenantId: "default", vdcId: null, role: "role_provider_admin" },
+    ])
+    const { PUT } = await importRoute()
+    const res = await callRoute(PUT as any, { method: "PUT", body: { ...validBody, default_role: "super_admin" } })
+    expect(res.status).toBe(403)
+    expect((await readJson<any>(res)).error).toContain("role_super_admin, role_provider_admin")
+    expect(upsertMock).not.toHaveBeenCalled()
+  })
+
+  it("lets a super admin save a protected default role, and anyone save an ordinary one without the lookup", async () => {
+    const { PUT } = await importRoute()
+    expect((await callRoute(PUT as any, { method: "PUT", body: { ...validBody, default_role: "role_super_admin" } })).status).toBe(200)
+    expect(upsertMock.mock.calls[0][0].update.defaultRole).toBe("role_super_admin")
+
+    getRBACContextMock.mockClear()
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "default" })
+    expect((await callRoute(PUT as any, { method: "PUT", body: { ...validBody, default_role: "viewer" } })).status).toBe(200)
+    expect(getRBACContextMock).not.toHaveBeenCalled()
   })
 })

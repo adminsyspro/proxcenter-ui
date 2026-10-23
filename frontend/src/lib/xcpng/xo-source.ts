@@ -5,6 +5,7 @@ import {
 } from "./client"
 import type { XcpngSource, XcpngCredentials, XcpngHostInfo, XcpngDiskDownload } from "./source"
 import type { XcpngVmListItem } from "./xapi-client"
+import { curlConfigQuoted } from "@/lib/migration/remote-commands"
 
 export class XoSource implements XcpngSource {
   readonly kind = "xo" as const
@@ -45,8 +46,10 @@ export class XoSource implements XcpngSource {
 
   diskDownload(disk: XoDiskInfo, format: "vhd" | "raw"): Promise<XcpngDiskDownload> {
     const url = buildVdiDownloadUrl(this.xo.baseUrl, disk.vdiUuid, format)
+    // Quoted for curl's config syntax: the file is executed as root on the node,
+    // and a quote or line break in a value from XO must not add a directive.
     const lines = [
-      `url = "${url}"`,
+      `url = ${curlConfigQuoted(url)}`,
       `header = "Authorization: Basic ${this.authB64}"`,
       `header = "Accept: application/octet-stream"`,
     ]

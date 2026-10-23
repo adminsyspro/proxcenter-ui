@@ -22,8 +22,13 @@ export function isValidCopyAddress(address: unknown): address is string {
   return typeof address === "string" && address.length > 0 && address.length <= 253 && /^[A-Za-z0-9.:_-]+$/.test(address)
 }
 
-/** One `port-N=open|closed` line per port, each probe bounded to a few seconds. */
+/**
+ * One `port-N=open|closed` line per port, each probe bounded to a few seconds.
+ * The address is read by the inner `bash -c`, so the outer shellEscape alone
+ * would not protect it: the builder refuses anything but a host name or IP.
+ */
 export function buildPortProbeCmd(address: string, ports: number[]): string {
+  if (!isValidCopyAddress(address)) throw new Error(`Invalid copy address: ${JSON.stringify(address)}`)
   return ports
     .filter(p => Number.isInteger(p) && p > 0 && p < 65536)
     .map(p => `if timeout ${PROBE_TIMEOUT_SEC} bash -c ${shellEscape(`exec 3<>/dev/tcp/${address}/${p}`)} 2>/dev/null; then echo "port-${p}=open"; else echo "port-${p}=closed"; fi`)

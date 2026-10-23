@@ -3,8 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 vi.mock('@/lib/rbac', () => ({
-  checkPermission: vi.fn().mockResolvedValue(null),
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
+}))
+
+// Every HA write is provider-only (haWriteGuard); the guard is not under test here.
+vi.mock('@/lib/tenant/providerGuard', () => ({
+  requireProviderAdmin: vi.fn().mockResolvedValue(null),
 }))
 
 vi.mock('@/lib/auth/requireEnterprise', () => ({

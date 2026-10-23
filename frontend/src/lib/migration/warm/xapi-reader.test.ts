@@ -141,7 +141,7 @@ describe("startXapiReader", () => {
     })).rejects.toThrow(/socket never appeared/i)
 
     const teardownCmd = mockSSH.mock.calls[4][2] as string
-    expect(teardownCmd).toContain('pkill -f "[n]bdkit.*/tmp/xapi.sock"')
+    expect(teardownCmd).toContain("pkill -f '[n]bdkit.*/tmp/xapi.sock'")
   })
 
   it("redacts the session id when the nbdkit log tail is embedded in the error", async () => {
@@ -191,7 +191,7 @@ describe("stopXapiReader", () => {
     expect(cmd).toContain("nbd_release_holders /dev/nbd3")
     expect(cmd).toContain("nbd-client -d /dev/nbd3")
     expect(cmd.indexOf("nbd_release_holders /dev/nbd3")).toBeLessThan(cmd.indexOf("nbd-client -d /dev/nbd3"))
-    expect(cmd).toContain('pkill -f "[n]bdkit.*/tmp/xapi.sock"')
+    expect(cmd).toContain("pkill -f '[n]bdkit.*/tmp/xapi.sock'")
     expect(cmd.endsWith("; rm -rf '/tmp/xapi.sock.ca'")).toBe(true)
   })
 })

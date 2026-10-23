@@ -10,7 +10,7 @@ import { decryptSecret } from "@/lib/crypto/secret"
 import { verifyEnrollToken } from "@/lib/auth/enroll-token"
 import { generateRecoveryCodes } from "@/lib/auth/recovery"
 import { checkTotpCode } from "@/lib/auth/totp"
-import { replaceRecoveryCodes } from "@/lib/auth/totp-admin"
+import { replaceRecoveryCodes, verifyReauthCredentials } from "@/lib/auth/totp-admin"
 import { audit } from "@/lib/audit"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -23,7 +23,8 @@ async function handlePost(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { enrollToken, code } = await req.json()
+  const body = await req.json()
+  const { enrollToken, code } = body
 
   let payload
   try {
@@ -34,6 +35,26 @@ async function handlePost(req: Request) {
 
   if (payload.userId !== session.user.id) {
     return NextResponse.json({ error: "user_mismatch" }, { status: 400 })
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { password: true, totpEnabled: true },
+  })
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  // This is the step that overwrites the secret. When 2FA is already on, the
+  // caller re-authenticates here as well (password, or a code from the
+  // CURRENT authenticator in `totpCode`; `code` is for the new one): the
+  // enrol token only proves enroll/start was called, and nothing in it says
+  // that call re-authenticated.
+  if (user.totpEnabled) {
+    const reauthOk = await verifyReauthCredentials(session.user.id, user.password, body)
+    if (!reauthOk) {
+      return NextResponse.json({ error: "Re-authentication failed" }, { status: 401 })
+    }
   }
 
   const secret = decryptSecret(payload.secretEnc)

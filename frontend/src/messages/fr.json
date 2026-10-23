@@ -9513,6 +9513,7 @@
       "type": "Type",
       "kindAccount": "Compte",
       "kindIp": "Adresse IP",
+      "kindTotp": "Second facteur",
       "failedAttempts": "Tentatives échouées",
       "lockedUntil": "Verrouillé jusqu'à",
       "unlock": "Déverrouiller",

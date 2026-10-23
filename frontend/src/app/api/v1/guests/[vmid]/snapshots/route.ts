@@ -7,6 +7,7 @@ import { getConnectionByIdOrNull } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { guardSessionGuest, parseGuestKey, type GuestTarget } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -16,20 +17,10 @@ type Params = {
   vmid: string // Format: connId:type:node:vmid
 }
 
-function parseVmKey(vmKey: string) {
-  const parts = vmKey.split(':')
-
-  if (parts.length !== 4) {
-    throw new Error('Invalid vmKey format. Expected connId:type:node:vmid')
-  }
-
-  
-return {
-    connId: parts[0],
-    type: parts[1],
-    node: parts[2],
-    vmid: parts[3],
-  }
+/** Every segment of the PVE snapshot path is encoded: validated or not, nothing reshapes the URL. */
+function snapshotPath({ type, node, vmid }: GuestTarget, snapname?: string) {
+  const base = `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/snapshot`
+  return snapname === undefined ? base : `${base}/${encodeURIComponent(snapname)}`
 }
 
 /**
@@ -43,7 +34,9 @@ async function getHandler(
 ) {
   try {
     const params = await ctx.params
-    const { connId, type, node, vmid } = parseVmKey(params.vmid)
+    const key = parseGuestKey(params.vmid)
+    if (!key.ok) return key.response
+    const { connId, type, node, vmid } = key
 
     // RBAC: Check vm.view permission
     const resourceId = buildVmResourceId(connId, node, type, vmid)
@@ -57,8 +50,10 @@ async function getHandler(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/snapshot`
-    const snapshots = await pveFetch<any[]>(conn, apiPath)
+    const scopeDenied = await guardSessionGuest({ connectionId: connId, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
+    const snapshots = await pveFetch<any[]>(conn, snapshotPath(key))
 
     // Filtrer "current" et formater
     const formatted = (snapshots || [])
@@ -99,7 +94,9 @@ async function postHandler(
 ) {
   try {
     const params = await ctx.params
-    const { connId, type, node, vmid } = parseVmKey(params.vmid)
+    const key = parseGuestKey(params.vmid)
+    if (!key.ok) return key.response
+    const { connId, type, node, vmid } = key
 
     // RBAC: Check vm.snapshot permission
     const resourceId = buildVmResourceId(connId, node, type, vmid)
@@ -127,6 +124,9 @@ async function postHandler(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
+    const scopeDenied = await guardSessionGuest({ connectionId: connId, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
+
     // ── vDC quota: enforce maxSnapshots across the tenant's pool ──
     const tenantId = await getCurrentTenantId()
     try {
@@ -150,15 +150,13 @@ async function postHandler(
       throw e
     }
 
-    const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/snapshot`
-    
     const formData = new URLSearchParams()
 
     formData.append('snapname', name)
     if (description) formData.append('description', description)
     if (vmstate !== undefined && type !== 'lxc') formData.append('vmstate', vmstate ? '1' : '0')
 
-    const result = await pveFetch<string>(conn, apiPath, {
+    const result = await pveFetch<string>(conn, snapshotPath(key), {
       method: 'POST',
       body: formData.toString(),
       headers: {
@@ -204,7 +202,9 @@ async function deleteHandler(
 ) {
   try {
     const params = await ctx.params
-    const { connId, type, node, vmid } = parseVmKey(params.vmid)
+    const key = parseGuestKey(params.vmid)
+    if (!key.ok) return key.response
+    const { connId, type, node, vmid } = key
 
     // RBAC: Check vm.snapshot permission
     const resourceId = buildVmResourceId(connId, node, type, vmid)
@@ -225,9 +225,10 @@ async function deleteHandler(
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
 
-    const apiPath = `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/snapshot/${encodeURIComponent(snapname)}`
+    const scopeDenied = await guardSessionGuest({ connectionId: connId, conn, type, node, vmid })
+    if (scopeDenied) return scopeDenied
 
-    const result = await pveFetch<string>(conn, apiPath, {
+    const result = await pveFetch<string>(conn, snapshotPath(key, snapname), {
       method: 'DELETE',
     })
 

@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { requireProviderTenant } from "@/lib/tenant"
+import { guardSessionGuest, haSidGuest } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -17,11 +18,17 @@ async function getHandler(
 ) {
   try {
     const { id, sid } = await ctx.params
+    const guest = haSidGuest(sid)
+    if (!guest) return NextResponse.json({ error: "Invalid HA service id" }, { status: 400 })
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
     if (denied) return denied
 
     const conn = await getConnectionById(id)
+
+    // node.view is connection-wide: the guest the sid names must be inside the vDC.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type: guest.type, node: null, vmid: guest.vmid })
+    if (scopeDenied) return scopeDenied
 
     const resource = await pveFetch<any>(conn, `/cluster/ha/resources/${encodeURIComponent(sid)}`)
 

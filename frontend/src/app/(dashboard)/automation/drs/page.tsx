@@ -1380,7 +1380,11 @@ const StorageWarningPanel = ({
       {/* Message si pas d'info stockage cible (backend pas encore mis à jour) */}
       {!targetStorage && hasLocalDisks && (
         <Alert severity="info" icon={<StorageIcon />}>
-          <Typography variant="caption" dangerouslySetInnerHTML={{ __html: t('drsPage.checkStorageManually', { node: targetNode }) }} />
+          {/* t.rich renders the catalogue's <strong> tag as an element and the
+              node name as text, so a hostile node name is never parsed as HTML. */}
+          <Typography variant="caption">
+            {t.rich('drsPage.checkStorageManually', { node: targetNode, strong: (chunks) => <strong>{chunks}</strong> })}
+          </Typography>
         </Alert>
       )}
     </Stack>

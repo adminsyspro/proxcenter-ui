@@ -1,6 +1,9 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import type { SshTarget } from "@/lib/ssh/node-endpoint-core"
 
+/** `/dev/pve/vm-100-disk-0`, `/dev/rbd3`, `/dev/zvol/rpool/data/vm-100-disk-0`, `/dev/rbd-pve/<fsid>/<pool>/<image>`. */
+export const DEVICE_PATH_RE = /^\/[A-Za-z0-9._:@+/-]{1,1023}$/
+
 export interface AllocateAndResolveResult {
   volumeId: string
   devicePath: string
@@ -226,8 +229,10 @@ export async function allocateAndMapBlockVolume(args: AllocateAndMapArgs): Promi
 
   // Every plugin must land on an absolute device path. Anything else means the
   // pipeline would stream guest data into something that is not the target volume.
-  if (!devicePath.startsWith("/")) {
-    throw new Error(`Invalid device path for ${alloc.volumeId}: "${devicePath}" (expected an absolute path)`)
+  // The path is remote output that the pipelines put into dd, qemu-img and rbd
+  // commands, so only the characters a device node or ZFS/LVM path uses pass.
+  if (!DEVICE_PATH_RE.test(devicePath)) {
+    throw new Error(`Invalid device path for ${alloc.volumeId}: "${devicePath}" (expected an absolute path to a device)`)
   }
 
   // The volume ID from pvesm's own output is authoritative: a name collision may

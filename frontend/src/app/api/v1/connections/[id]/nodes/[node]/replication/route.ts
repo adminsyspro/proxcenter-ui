@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { guardSessionGuest, isVmid, replicationJobVmid, sessionGuestVisibility } from "@/lib/vdc/guestGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -23,15 +24,20 @@ export async function GET(
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
 
+  // A vDC session only sees the jobs, and the guest selector entries, of its own guests.
+  const scoped = await sessionGuestVisibility({ connectionId: id, conn })
+  if (!scoped.ok) return scoped.response
+  const visible = scoped.visibility
+
   try {
     // Récupérer tous les jobs de réplication du nœud
-    const jobs = await pveFetch<any[]>(
+    const jobs = (await pveFetch<any[]>(
       conn,
       `/nodes/${encodeURIComponent(node)}/replication`
-    ) || []
+    ) || []).filter((j: any) => visible.has(null, j.guest))
 
     // Filtrer par guest si spécifié
-    const filteredJobs = guest 
+    const filteredJobs = guest
       ? jobs.filter((j: any) => String(j.guest) === String(guest))
       : jobs
 
@@ -80,15 +86,15 @@ export async function GET(
           online: n.status === 'online'
         })).filter((n: any) => n.node !== node) : [],
         guests: [
-          ...((Array.isArray(vms) ? vms : []).map((vm: any) => ({ 
-            vmid: vm.vmid, 
-            name: vm.name, 
+          ...((Array.isArray(vms) ? vms : []).filter((vm: any) => visible.has('qemu', vm.vmid)).map((vm: any) => ({
+            vmid: vm.vmid,
+            name: vm.name,
             type: 'qemu',
             status: vm.status
           }))),
-          ...((Array.isArray(cts) ? cts : []).map((ct: any) => ({ 
-            vmid: ct.vmid, 
-            name: ct.name, 
+          ...((Array.isArray(cts) ? cts : []).filter((ct: any) => visible.has('lxc', ct.vmid)).map((ct: any) => ({
+            vmid: ct.vmid,
+            name: ct.name,
             type: 'lxc',
             status: ct.status
           })))
@@ -126,6 +132,14 @@ async function handlePost(
     if (!guest || !target) {
       return NextResponse.json({ error: "guest and target are required" }, { status: 400 })
     }
+    const guestVmid = String(guest)
+    if (!isVmid(guestVmid)) {
+      return NextResponse.json({ error: "Invalid guest vmid" }, { status: 400 })
+    }
+
+    // A vDC session only replicates guests of its own pools (any type, any vDC node).
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type: null, node: null, vmid: guestVmid })
+    if (scopeDenied) return scopeDenied
 
     // Trouver un numéro de job disponible pour ce guest
     // Format de l'ID: vmid-jobnum (ex: 100-0, 100-1, etc.)
@@ -195,6 +209,13 @@ async function handlePut(
     if (!jobId) {
       return NextResponse.json({ error: "jobId is required" }, { status: 400 })
     }
+    // PVE job ids are <vmid>-<n>: the guest the job replicates is right there.
+    const jobVmid = replicationJobVmid(jobId)
+    if (!jobVmid) {
+      return NextResponse.json({ error: "Invalid jobId" }, { status: 400 })
+    }
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type: null, node: null, vmid: jobVmid })
+    if (scopeDenied) return scopeDenied
 
     // Construire les paramètres
     // Une valeur vide efface l'option côté Proxmox (paramètre `delete`).
@@ -247,11 +268,18 @@ async function handleDelete(
   if (!jobId) {
     return NextResponse.json({ error: "jobId is required" }, { status: 400 })
   }
+  const jobVmid = replicationJobVmid(jobId)
+  if (!jobVmid) {
+    return NextResponse.json({ error: "Invalid jobId" }, { status: 400 })
+  }
 
   const conn = await getConnectionById(id)
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
+
+  const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type: null, node: null, vmid: jobVmid })
+  if (scopeDenied) return scopeDenied
 
   try {
     await pveFetch(

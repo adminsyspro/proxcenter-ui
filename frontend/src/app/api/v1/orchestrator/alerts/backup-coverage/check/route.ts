@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
-import { DEFAULT_TENANT_ID, getCurrentTenantId } from '@/lib/tenant'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { PERMISSIONS } from '@/lib/rbac'
+import { requireProviderAdmin } from '@/lib/tenant/providerGuard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -22,12 +22,10 @@ export async function POST(req: Request) {
   if (demo) return demo
 
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    // Judged on the principal's own tenant, not getCurrentTenantId(), whose
+    // fallback to `default` would let a stale tenant session through.
+    const denied = await requireProviderAdmin(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
-
-    if ((await getCurrentTenantId()) !== DEFAULT_TENANT_ID) {
-      return NextResponse.json({ error: 'Provider only' }, { status: 403 })
-    }
 
     if (!process.env.ORCHESTRATOR_URL) {
       // Community: no orchestrator, hence no alert to refresh.

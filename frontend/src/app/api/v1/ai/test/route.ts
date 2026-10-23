@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { validateAIUrl } from "@/lib/ai/url-guard"
+import { resolveMaskedAiSecrets } from "@/lib/ai/storedSecrets"
 import { getRequestLocale, languageInstruction } from "@/lib/ai/locale"
 
 /** Sanitize a string for safe logging (strip newlines/control chars) */
@@ -16,7 +17,8 @@ export async function POST(request) {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
-    const settings = await request.json()
+    // The form sends the mask back for a saved key: swap in the stored one.
+    const settings = await resolveMaskedAiSecrets(await request.json())
 
     // #686: this probe used to be hardcoded in French for Ollama and
     // Anthropic and in English for OpenAI, so the reply language depended

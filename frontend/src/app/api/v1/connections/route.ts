@@ -8,6 +8,7 @@ import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { encryptSecret, decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS, getRBACContext, getRbacInfraScope, filterVisibleConnections, getGuestVisibleConnectionIds } from "@/lib/rbac"
 import { createConnectionSchema } from "@/lib/schemas"
+import { tenantBaseUrlRefusal } from "@/lib/net/base-url-guard"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { pveFetch } from "@/lib/proxmox/client"
 import { orchestratorFetch } from "@/lib/orchestrator/client"
@@ -285,6 +286,14 @@ async function handlePost(req: Request) {
         )
       }
       ownerTenant = ownerTenantId
+    }
+
+    // The server itself opens this URL: a customer tenant may not point it at
+    // this host, the metadata range or the unspecified address. The provider
+    // keeps today's freedom (its admins point at internal hosts on purpose).
+    if (sessionTenantId !== DEFAULT_TENANT_ID) {
+      const refusal = await tenantBaseUrlRefusal(baseUrl)
+      if (refusal) return NextResponse.json({ error: refusal }, { status: 400 })
     }
 
     // Préparer les données

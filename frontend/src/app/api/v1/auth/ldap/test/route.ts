@@ -1,7 +1,8 @@
 // src/app/api/v1/auth/ldap/test/route.ts
 import { NextResponse } from "next/server"
 
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { PERMISSIONS } from "@/lib/rbac"
+import { requireProviderAdmin } from "@/lib/tenant/providerGuard"
 import { bindPasswordOrSaved } from "@/lib/auth/ldap"
 
 export const runtime = "nodejs"
@@ -18,7 +19,9 @@ const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
  */
 export async function POST(req: Request) {
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    // Companion of the platform-wide LDAP config, and it can replay the saved
+    // bind password against any URL: provider tenant only.
+    const denied = await requireProviderAdmin(PERMISSIONS.ADMIN_SETTINGS)
 
     if (denied) return denied
 

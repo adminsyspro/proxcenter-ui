@@ -25,7 +25,7 @@ describe("pure builders", () => {
     expect(c).toContain("for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15")
     expect(c).toContain("[ -s /sys/block/nbd$i/pid ] && continue")
     // Attach to the candidate device and, on success, report which one we took.
-    expect(c).toContain("nbd-client -unix /tmp/v.sock /dev/nbd$i")
+    expect(c).toContain("nbd-client -unix '/tmp/v.sock' /dev/nbd$i")
     expect(c).toContain('echo "NBD_DEV=$ATTACHED"')
     // No fixed per-disk device is hardcoded any more (that was the collision cause).
     expect(c).not.toContain("/dev/nbd3")
@@ -48,14 +48,14 @@ describe("pure builders", () => {
     // Guard against the pkill self-match: the pattern must be "[n]bdkit", not
     // "nbdkit", otherwise pkill -f matches this teardown command's own shell
     // (its argv carries the pattern) and SIGTERMs it (exit 143, rm cleanup unrun).
-    expect(c).toContain('pkill -f "[n]bdkit.*/tmp/v.sock"')
+    expect(c).toContain("pkill -f '[n]bdkit.*/tmp/v.sock'")
   })
   it("also removes the log file when present in the handle", () => {
     const c = buildReaderTeardownCmd({ nbdDev: "/dev/nbd3", sock: "/tmp/v.sock", pwFile: "/tmp/pw", logFile: "/tmp/v.log" })
     expect(c).toContain("/tmp/v.log")
     const lastLine = c.split("\n").at(-1)
-    expect(lastLine).toMatch(/rm -f \/tmp\/v\.sock \/tmp\/pw \/tmp\/v\.log$/)
-    expect(lastLine).toContain('pkill -f "[n]bdkit.*/tmp/v.sock"')
+    expect(lastLine).toMatch(/rm -f '\/tmp\/v\.sock' '\/tmp\/pw' '\/tmp\/v\.log'$/)
+    expect(lastLine).toContain("pkill -f '[n]bdkit.*/tmp/v.sock'")
   })
   it("omits the device detach when no device was allocated (attach failed before a device was chosen)", () => {
     const c = buildReaderTeardownCmd({ nbdDev: "", sock: "/tmp/v.sock", pwFile: "/tmp/pw" })
@@ -64,8 +64,18 @@ describe("pure builders", () => {
     expect(c).not.toContain("nbd-client -d")
     expect(c).not.toContain("nbd_release_holders")
     // nbdkit and temp files are still cleaned up.
-    expect(c).toContain('pkill -f "[n]bdkit.*/tmp/v.sock"')
-    expect(c).toContain("rm -f /tmp/v.sock /tmp/pw")
+    expect(c).toContain("pkill -f '[n]bdkit.*/tmp/v.sock'")
+    expect(c).toContain("rm -f '/tmp/v.sock' '/tmp/pw'")
+  })
+  it("quotes a socket path holding shell characters and detaches only a real /dev/nbdN", () => {
+    const sock = "/tmp/v $(touch /tmp/pwned) `id`.sock"
+    const c = buildReaderTeardownCmd({ nbdDev: "/dev/nbd3; reboot", sock, pwFile: "/tmp/pw" })
+    // The device name came from remote output: anything but /dev/nbdN is not detached.
+    expect(c).not.toContain("nbd-client -d")
+    expect(c).not.toContain("reboot")
+    expect(c).toContain(`pkill -f '[n]bdkit.*${sock}'`)
+    expect(c).toContain(`rm -f '${sock}' '/tmp/pw'`)
+    expect(buildNbdConnectCmd(sock)).toContain(`nbd-client -unix '${sock}' /dev/nbd$i`)
   })
 })
 
@@ -93,7 +103,7 @@ describe("startVddkReader", () => {
     expect(launchCmd).not.toContain("\ns3cr3t\n") // password not heredoc'd raw
     // The device-attach call uses the free-device connect builder.
     const connectCmd = mockSSH.mock.calls[3][2] as string
-    expect(connectCmd).toContain("nbd-client -unix /tmp/v.sock /dev/nbd$i")
+    expect(connectCmd).toContain("nbd-client -unix '/tmp/v.sock' /dev/nbd$i")
   })
 
   it("returns the actual device the node picked (not a fixed index)", async () => {
@@ -134,8 +144,8 @@ describe("startVddkReader", () => {
     ).rejects.toThrow("failed to launch nbdkit-vddk: orchestrator SSH timeout (120s)")
     expect(mockSSH.mock.calls[0][3]).toBe(VDDK_LAUNCH_TIMEOUT_MS)
     const teardown = String(mockSSH.mock.calls[1][2])
-    expect(teardown).toContain('pkill -f "[n]bdkit.*/tmp/v.sock"')
-    expect(teardown).toContain("rm -f /tmp/v.sock /tmp/pw /tmp/v.sock.log")
+    expect(teardown).toContain("pkill -f '[n]bdkit.*/tmp/v.sock'")
+    expect(teardown).toContain("rm -f '/tmp/v.sock' '/tmp/pw' '/tmp/v.sock.log'")
     // no device was attached, so none is detached
     expect(teardown).not.toContain("nbd-client -d")
     expect(mockSSH).toHaveBeenCalledTimes(2)

@@ -7,6 +7,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { putMultiUse, readMultiUse } from "@/lib/console/session"
 import { parseSpiceConfig } from "@/lib/console/spiceConfig"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -33,6 +34,10 @@ async function handlePost(
   if (!conn) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
+
+  // A vDC session must not open a console on a guest outside its pools.
+  const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node, vmid })
+  if (scopeDenied) return scopeDenied
 
   try {
     // Proxmox: POST .../spiceproxy -> remote-viewer config. We omit the

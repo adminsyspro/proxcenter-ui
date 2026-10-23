@@ -283,9 +283,19 @@ export async function beginLoginAttempt(
   }
 }
 
+/**
+ * Every kind of lock the table holds: the policy's account and IP locks, and
+ * the always-on second factor floor (totpThrottle.ts, kind "totp", keyed by
+ * user id).
+ */
+export type ActiveLockKind = LockoutKind | "totp"
+
 export interface ActiveLock {
-  kind: LockoutKind
+  kind: ActiveLockKind
+  /** What unlockLogin takes: the typed identifier, the IP key, or the user id of a second factor lock. */
   key: string
+  /** What to show an admin: the key, or the account email behind a second factor lock. */
+  label: string
   failedCount: number
   lastFailedAt: string
   lockedUntil: string
@@ -296,9 +306,20 @@ export async function listActiveLocks(now = new Date()): Promise<ActiveLock[]> {
     where: { lockedUntil: { gt: now } },
     orderBy: { lockedUntil: "desc" },
   })
+
+  // Second factor locks are keyed by user id; the card shows the email. A
+  // deleted user keeps the id as label, and the lock stays liftable by key.
+  const totpUserIds = rows.filter((r) => r.kind === "totp").map((r) => r.key)
+  const emailById = new Map<string, string>()
+  if (totpUserIds.length > 0) {
+    const users = await prisma.user.findMany({ where: { id: { in: totpUserIds } }, select: { id: true, email: true } })
+    for (const u of users) emailById.set(u.id, u.email)
+  }
+
   return rows.map((r) => ({
-    kind: r.kind as LockoutKind,
+    kind: r.kind as ActiveLockKind,
     key: r.key,
+    label: r.kind === "totp" ? emailById.get(r.key) ?? r.key : r.key,
     failedCount: r.failedCount,
     lastFailedAt: r.lastFailedAt.toISOString(),
     lockedUntil: (r.lockedUntil as Date).toISOString(),
@@ -306,7 +327,7 @@ export async function listActiveLocks(now = new Date()): Promise<ActiveLock[]> {
 }
 
 /** Lift a lock and reset its counter. Returns false when there was nothing to unlock. */
-export async function unlockLogin(kind: LockoutKind, key: string): Promise<boolean> {
+export async function unlockLogin(kind: ActiveLockKind, key: string): Promise<boolean> {
   const { count } = await prisma.loginThrottle.deleteMany({ where: { kind, key } })
   return count > 0
 }

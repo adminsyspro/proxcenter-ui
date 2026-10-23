@@ -86,10 +86,14 @@ export async function GET() {
     // Session counts: one grouped query for the whole page, scoped to the
     // users actually being returned. A count() per user would be an N+1 on
     // a list route; users absent from the grouped result get 0 below.
+    //
+    // Outside the provider view only the caller's own tenant is listed: the
+    // other memberships of a shared user would name the provider's other
+    // customers to a tenant admin.
     const [allMemberships, superAdminRows, sessionCounts] = visibleUserIds.length > 0
       ? await Promise.all([
           prisma.userTenant.findMany({
-            where: { userId: { in: visibleUserIds } },
+            where: { userId: { in: visibleUserIds }, ...(isProviderView ? {} : { tenantId }) },
             include: { tenant: { select: { id: true, name: true } } },
           }),
           prisma.rbacUserRole.findMany({

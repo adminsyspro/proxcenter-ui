@@ -10,6 +10,12 @@ const demoResponseMock = vi.fn<(req: Request) => Response | null>()
 // Mock the rbac barrel: checkPermission is the gate under test; the pure
 // PERMISSIONS / build* helpers are reimplemented so the REAL resolveRrdScope
 // (not mocked) produces the resource ids we assert on.
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   PERMISSIONS: { VM_VIEW: 'vm.view', NODE_VIEW: 'node.view', CONNECTION_VIEW: 'connection.view' },

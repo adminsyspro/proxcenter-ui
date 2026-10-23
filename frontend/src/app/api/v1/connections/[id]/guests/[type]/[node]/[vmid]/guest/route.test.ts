@@ -10,6 +10,12 @@ const { checkPermissionMock, connMock, pveFetchMock } = vi.hoisted(() => ({
   pveFetchMock: vi.fn(),
 }))
 
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { VM_VIEW: 'vm.view' },
   buildVmResourceId: (c: string, n: string, t: string, v: string) => `${c}:${n}:${t}:${v}`,

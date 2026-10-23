@@ -4,11 +4,13 @@ import { NextResponse } from "next/server"
 import {
   normalizeGroupGrantMapping,
   normalizeMappingStrategy,
+  protectedRoleTargets,
   type GroupGrant,
 } from "@/lib/auth/groupMapping"
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { getRBACContext, PERMISSIONS } from "@/lib/rbac"
+import { requireProviderAdmin } from "@/lib/tenant/providerGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -37,7 +39,9 @@ function appOrigin(req: Request): string {
 // GET /api/v1/auth/oidc — fetch the singleton OIDC config
 export async function GET(req: Request) {
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    // The row is platform-wide (id "default") and the answer lists every
+    // tenant and vDC: provider tenant only, not just admin.settings.
+    const denied = await requireProviderAdmin(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
     const config = await prisma.oidcConfig.findUnique({ where: { id: "default" } })
@@ -190,7 +194,7 @@ async function validateGrantTargets(grants: readonly GroupGrant[]): Promise<stri
 // PUT /api/v1/auth/oidc — save the singleton OIDC config (insert or update)
 async function handlePut(req: Request) {
   try {
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await requireProviderAdmin(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
     const body = await req.json()
@@ -233,6 +237,22 @@ async function handlePut(req: Request) {
     const persistForceSsoRedirect = enabled ? !!force_sso_redirect : false
 
     const grants = normalizeGroupGrantMapping(group_role_mapping)
+
+    // Same rule as POST /rbac/assignments: only a super admin hands out the
+    // wildcard roles. Through SSO the grant lands on whoever the IdP sends
+    // next, so a provider admin saving such a mapping would mint super admins.
+    // Checked before the target lookup: who may save comes before what is saved.
+    const protectedRoles = protectedRoleTargets([default_role, ...grants.map(g => g.role)])
+    if (protectedRoles.length > 0) {
+      const ctx = await getRBACContext()
+      if (!ctx?.isAdmin) {
+        return NextResponse.json(
+          { error: `Only a super admin can set ${protectedRoles.join(", ")} as the SSO default role or a group mapping target` },
+          { status: 403 },
+        )
+      }
+    }
+
     const targetError = await validateGrantTargets(grants)
     if (targetError) {
       return NextResponse.json({ error: targetError }, { status: 400 })

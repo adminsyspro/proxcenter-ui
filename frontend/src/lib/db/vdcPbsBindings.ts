@@ -1,8 +1,49 @@
 import { randomUUID } from 'crypto'
 
+import { decryptSecret, encryptSecret } from '@/lib/crypto/secret'
+
 import { prisma } from './prisma'
 
 export type PbsBindingMode = 'auto' | 'manual'
+
+// vdc_pbs_namespaces.pbs_token_secret is the PBS sub-token secret minted for
+// the vDC. It used to be stored in clear; it is now written through
+// encryptSecret (AES-256-GCM under APP_SECRET, like every other credential in
+// this database) with no schema change. Rows written before this carry the
+// plaintext, so reads detect the encrypted shape and pass anything else
+// through unchanged; a legacy row is re-encrypted the next time its token is
+// written (updateBindingToken).
+
+const GCM_IV_BYTES = 12
+const GCM_TAG_BYTES = 16
+
+function isBase64(part: string): boolean {
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(part) && part.length % 4 === 0
+}
+
+/**
+ * True when `stored` has the exact shape encryptSecret produces: three base64
+ * parts, a 12-byte IV and a 16-byte GCM tag. A PBS token secret is a UUID, so
+ * a plaintext row can never match this by accident.
+ */
+export function isEncryptedPbsTokenSecret(stored: string): boolean {
+  const parts = stored.split('.')
+  if (parts.length !== 3 || !parts.every(p => p.length > 0 && isBase64(p))) return false
+  return Buffer.from(parts[0], 'base64').length === GCM_IV_BYTES
+    && Buffer.from(parts[1], 'base64').length === GCM_TAG_BYTES
+}
+
+/** What goes into the column: the secret encrypted, null kept as null. */
+export function protectPbsTokenSecret(plain: string | null | undefined): string | null {
+  if (plain === null || plain === undefined) return null
+  return encryptSecret(plain)
+}
+
+/** What comes out of the column, in clear: decrypted, or a legacy plaintext as is. */
+export function revealPbsTokenSecret(stored: string | null | undefined): string | null {
+  if (stored === null || stored === undefined) return null
+  return isEncryptedPbsTokenSecret(stored) ? decryptSecret(stored) : stored
+}
 
 export interface PbsBindingRow {
   id: string
@@ -34,7 +75,7 @@ function rowToBinding(r: any): PbsBindingRow {
     namespace: r.namespace,
     mode: (r.mode ?? 'auto') as PbsBindingMode,
     pbsTokenId: r.pbsTokenId ?? null,
-    pbsTokenSecret: r.pbsTokenSecret ?? null,
+    pbsTokenSecret: revealPbsTokenSecret(r.pbsTokenSecret),
     createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
   }
 }
@@ -76,7 +117,7 @@ export async function insertBinding(args: {
       namespace: args.namespace,
       mode: args.mode,
       pbsTokenId: args.pbsTokenId ?? null,
-      pbsTokenSecret: args.pbsTokenSecret ?? null,
+      pbsTokenSecret: protectPbsTokenSecret(args.pbsTokenSecret),
     },
   })
   return rowToBinding(row)
@@ -118,7 +159,7 @@ export async function deleteBinding(id: string): Promise<void> {
 export async function updateBindingToken(id: string, pbsTokenId: string, pbsTokenSecret: string): Promise<void> {
   await prisma.vdcPbsNamespace.update({
     where: { id },
-    data: { pbsTokenId, pbsTokenSecret },
+    data: { pbsTokenId, pbsTokenSecret: protectPbsTokenSecret(pbsTokenSecret) },
   })
 }
 

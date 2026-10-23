@@ -8,6 +8,12 @@ const getSeriesMock = vi.fn()
 const checkPermissionMock = vi.fn()
 const resolveRrdScopeMock = vi.fn()
 
+// The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through
+// here, as for a provider session.
+vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
+  guardSessionGuest: async () => null,
+}))
 vi.mock('@/lib/orchestrator/client', () => ({
   getOrchestratorClient: () => ({
     getVMDiskLatencySeries: (...args: unknown[]) => getSeriesMock(...args),

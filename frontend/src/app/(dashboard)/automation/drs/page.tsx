@@ -61,10 +61,7 @@ const SwapHorizIcon = (props: any) => <i className="ri-arrow-left-right-line" st
 const WarningAmberIcon = (props: any) => <i className="ri-alert-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const CheckCircleIcon = (props: any) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const BuildIcon = (props: any) => <i className="ri-hammer-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const LocalOfferIcon = (props: any) => <i className="ri-price-tag-3-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const SettingsIcon = (props: any) => <i className="ri-settings-3-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const AccessTimeIcon = (props: any) => <i className="ri-time-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const HistoryIcon = (props: any) => <i className="ri-history-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const HardwareIcon = (props: any) => <i className="ri-cpu-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 
 import { computeDrsHealthScore, type DrsHealthBreakdown } from '@/lib/utils/drs-health'
@@ -309,25 +306,6 @@ return res.json()
 
 const pct = (v: number) => Math.max(0, Math.min(100, Number(v ?? 0)))
 
-/** Returns a color from green → yellow → red based on a 0-100 usage percentage */
-const usageColor = (v: number): string => {
-  const p = Math.max(0, Math.min(100, v))
-  if (p <= 50) {
-    // green (#4caf50) → yellow (#ff9800)
-    const t = p / 50
-    const r = Math.round(76 + t * (255 - 76))
-    const g = Math.round(175 + t * (152 - 175))
-    const b = Math.round(80 + t * (0 - 80))
-    return `rgb(${r},${g},${b})`
-  }
-  // yellow (#ff9800) → red (#f44336)
-  const t = (p - 50) / 50
-  const r = Math.round(255 + t * (244 - 255))
-  const g = Math.round(152 + t * (67 - 152))
-  const b = Math.round(0 + t * (54 - 0))
-  return `rgb(${r},${g},${b})`
-}
-
 const formatDate = (iso: string, locale?: string) => {
   if (!iso) return '—'
 
@@ -373,67 +351,54 @@ return []
 // Sub Components
 // ============================================
 
-// Gauge component pour visualiser CPU/RAM
-const ResourceGauge = ({ 
-  value, 
-  label, 
-  size = 60,
+// Status dot of a node: maintenance first, then online or not
+const nodeDotColor = (node: NodeMetrics): string => {
+  if (node.in_maintenance) return 'warning.main'
+
+  return node.status === 'online' ? 'success.main' : 'error.main'
+}
+
+// Usage meter: label and value on one line, a thin bar underneath. The value
+// sits beside the bar rather than on it, so it stays readable whatever the fill.
+const UsageMeter = ({
+  value,
+  label,
+  width,
+  barHeight = 4,
   thresholds = { warning: 70, critical: 85 }
-}: { 
+}: {
   value: number
   label: string
-  size?: number
+  width?: number
+  barHeight?: number
   thresholds?: { warning: number, critical: number }
 }) => {
   const theme = useTheme()
 
-  const color = value >= thresholds.critical 
-    ? theme.palette.error.main 
-    : value >= thresholds.warning 
-      ? theme.palette.warning.main 
-      : theme.palette.success.main
+  let color = theme.palette.success.main
+
+  if (value >= thresholds.critical) color = theme.palette.error.main
+  else if (value >= thresholds.warning) color = theme.palette.warning.main
 
   return (
-    <Box sx={{ position: 'relative', display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
-      <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-        <CircularProgress
-          variant="determinate"
-          value={100}
-          size={size}
-          thickness={4}
-          sx={{ color: alpha(color, 0.15) }}
-        />
-        <CircularProgress
-          variant="determinate"
-          value={pct(value)}
-          size={size}
-          thickness={4}
-          sx={{ 
-            color,
-            position: 'absolute',
-            left: 0,
-          }}
-        />
-        <Box
-          sx={{
-            top: 0,
-            left: 0,
-            bottom: 0,
-            right: 0,
-            position: 'absolute',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Typography variant="caption" sx={{ fontWeight: 700, fontSize: size * 0.2 }}>
-            {value.toFixed(0)}%
-          </Typography>
-        </Box>
+    <Box sx={{ width: width ?? '100%', minWidth: 0 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 0.5 }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.2 }}>{label}</Typography>
+        <Typography variant="caption" sx={{ fontWeight: 600, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>
+          {value.toFixed(width ? 0 : 1)}%
+        </Typography>
       </Box>
-      <Typography variant="caption" sx={{ mt: 0.5, opacity: 0.7, fontSize: '0.65rem' }}>
-        {label}
-      </Typography>
+      <LinearProgress
+        variant="determinate"
+        value={pct(value)}
+        aria-label={label}
+        sx={{
+          height: barHeight,
+          borderRadius: barHeight,
+          bgcolor: alpha(color, 0.15),
+          '& .MuiLinearProgress-bar': { borderRadius: barHeight, bgcolor: color }
+        }}
+      />
     </Box>
   )
 }
@@ -449,7 +414,8 @@ const ClusterCard = ({
   excludedNodeNames = [],
   isClusterExcluded = false,
   drsMode = 'manual',
-  balancingDomains = []
+  balancingDomains = [],
+  onShowRecommendations
 }: {
   clusterId: string
   clusterName: string
@@ -461,6 +427,7 @@ const ClusterCard = ({
   isClusterExcluded?: boolean
   drsMode?: string
   balancingDomains?: BalancingDomain[]
+  onShowRecommendations?: () => void
 }) => {
   const theme = useTheme()
   const clusterRecs = recommendations.filter(r => r.connection_id === clusterId)
@@ -542,6 +509,21 @@ return max - min
 return 'neutral'
   }
 
+  const roleIcon: Record<string, React.ReactNode> = {
+    excluded: <i className="ri-filter-off-line" style={{ fontSize: 16, color: theme.palette.text.disabled }} />,
+    maintenance: <BuildIcon sx={{ fontSize: 16, color: 'warning.main' }} />,
+    source: <TrendingUpIcon sx={{ fontSize: 16, color: 'error.main' }} />,
+    target: <TrendingDownIcon sx={{ fontSize: 16, color: 'success.main' }} />
+  }
+
+  const roleTint: Record<string, string> = {
+    excluded: alpha(theme.palette.action.disabled, 0.06),
+    maintenance: alpha(theme.palette.warning.main, 0.07),
+    source: alpha(theme.palette.error.main, 0.05),
+    target: alpha(theme.palette.success.main, 0.05),
+    neutral: 'transparent'
+  }
+
   return (
     <Card
       variant="outlined"
@@ -556,22 +538,26 @@ return 'neutral'
       <Box
         onClick={onToggle}
         sx={{
-          p: 2,
+          px: 2,
+          py: 1.5,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: { xs: 'wrap', md: 'nowrap' },
+          rowGap: 1.5,
+          columnGap: 2,
           cursor: 'pointer',
-          bgcolor: isClusterExcluded ? alpha(theme.palette.action.disabled, 0.06) : alpha(theme.palette.primary.main, 0.03),
-          '&:hover': { bgcolor: isClusterExcluded ? alpha(theme.palette.action.disabled, 0.1) : alpha(theme.palette.primary.main, 0.06) },
+          bgcolor: isClusterExcluded ? alpha(theme.palette.action.disabled, 0.06) : 'transparent',
+          '&:hover': { bgcolor: isClusterExcluded ? alpha(theme.palette.action.disabled, 0.1) : alpha(theme.palette.primary.main, 0.04) },
           borderBottom: expanded ? '1px solid' : 'none',
           borderColor: 'divider'
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <DnsIcon sx={{ opacity: 0.7 }} />
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+          <DnsIcon sx={{ color: theme.palette.text.secondary }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.3, color: 'text.primary' }} noWrap>
                 {clusterName || clusterId.slice(0, 12)}
               </Typography>
               {!!metrics.pve_version && (
@@ -584,6 +570,7 @@ return 'neutral'
               )}
               <Chip
                 size="small"
+                variant="outlined"
                 label={drsMode.toUpperCase()}
                 color={drsMode === 'automatic' ? 'success' : drsMode === 'partial' ? 'warning' : 'info'}
                 sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
@@ -616,23 +603,31 @@ return 'neutral'
                 </Tooltip>
               )}
             </Box>
-            <Typography variant="caption" sx={{ opacity: 0.6 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
               {metrics?.summary?.online_nodes ?? 0} {t('drsPage.nodesLabel')} • {metrics?.summary?.running_vms ?? 0} VMs
             </Typography>
           </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {/* Recommendations count */}
-          {clusterRecs.length > 0 && (
-            <Chip
-              size="small"
-              label={`${clusterRecs.length} rec.`}
-              color="warning"
-            />
-          )}
+        {/* Fixed-width slots so the figures line up from one cluster card to the next */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, ml: 'auto' }}>
+          <Box sx={{ width: 72, display: { xs: 'none', sm: 'flex' }, justifyContent: 'flex-end' }}>
+            {clusterRecs.length > 0 && (
+              <Tooltip title={t('drsPage.showRecommendations')} arrow disableInteractive>
+                <Chip
+                  size="small"
+                  label={t('drsPage.recShort', { count: clusterRecs.length })}
+                  color="warning"
+                  variant="outlined"
+                  clickable
+                  onClick={(e) => { e.stopPropagation(); onShowRecommendations?.() }}
+                  sx={{ fontWeight: 600 }}
+                />
+              </Tooltip>
+            )}
+          </Box>
 
-          {/* Health score ring */}
+          {/* Health score */}
           <Tooltip title={
             <Box sx={{ fontSize: '0.75rem' }}>
               <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 0.5 }}>{t('drsPage.healthScore')}: {healthScore}/100</Typography>
@@ -644,20 +639,21 @@ return 'neutral'
               {healthScore === 100 && <Box>{t('drsPage.balanced')}</Box>}
             </Box>
           } arrow disableInteractive>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-                <CircularProgress
-                  variant="determinate"
-                  value={healthScore}
-                  size={36}
-                  thickness={5}
-                  sx={{ color: `${healthColor}.main` }}
-                />
-                <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Typography variant="caption" fontWeight={700} sx={{ fontSize: 10 }}>{healthScore}</Typography>
-                </Box>
-              </Box>
-              <Typography variant="caption" fontWeight={600} color={`${healthColor}.main`} sx={{ display: { xs: 'none', md: 'block' } }}>
+            <Box sx={{
+              width: { xs: 'auto', md: 140 },
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1,
+              py: 0.5,
+              borderRadius: 1,
+              bgcolor: alpha(theme.palette[healthColor].main, 0.1),
+              cursor: 'help'
+            }}>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.875rem', lineHeight: 1.2, color: `${healthColor}.main`, fontVariantNumeric: 'tabular-nums' }}>
+                {healthScore}
+              </Typography>
+              <Typography variant="caption" fontWeight={600} color={`${healthColor}.main`} noWrap sx={{ display: { xs: 'none', md: 'block' } }}>
                 {healthLabel}
               </Typography>
             </Box>
@@ -666,35 +662,37 @@ return 'neutral'
           {/* Spread indicator */}
           <Tooltip title={t('drsPage.memorySpreadBetweenNodes', { pct: memorySpread.toFixed(1) })} disableInteractive>
             <Box sx={{
+              width: 64,
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: 0.5,
-              px: 1,
               py: 0.5,
               borderRadius: 1,
               bgcolor: alpha(theme.palette[spreadColor].main, 0.1),
+              cursor: 'help'
             }}>
               <SwapHorizIcon sx={{ fontSize: 16, color: `${spreadColor}.main` }} />
               <Typography
                 variant="caption"
-                sx={{
-                  fontWeight: 600,
-                  color: `${spreadColor}.main`,
-                  fontSize: '0.7rem'
-                }}
+                sx={{ fontWeight: 600, color: `${spreadColor}.main`, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}
               >
                 {memorySpread.toFixed(0)}%
               </Typography>
             </Box>
           </Tooltip>
 
-          {/* Mini stats - toujours à droite avec largeur fixe */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 120 }}>
-            <ResourceGauge value={metrics?.summary?.avg_cpu_usage ?? 0} label="CPU" size={44} />
-            <ResourceGauge value={metrics?.summary?.avg_memory_usage ?? 0} label="RAM" size={44} />
+          {/* Cluster averages */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <UsageMeter value={metrics?.summary?.avg_cpu_usage ?? 0} label="CPU" width={96} />
+            <UsageMeter value={metrics?.summary?.avg_memory_usage ?? 0} label="RAM" width={96} />
           </Box>
 
-          <IconButton size="small" onClick={(e) => { e.stopPropagation(); onToggle() }}>
+          <IconButton
+            size="small"
+            aria-label={expanded ? t('common.showLess') : t('common.showMore')}
+            onClick={(e) => { e.stopPropagation(); onToggle() }}
+          >
             {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
           </IconButton>
         </Box>
@@ -702,9 +700,9 @@ return 'neutral'
 
       {/* Contenu expandable - Liste des nœuds */}
       <Collapse in={expanded}>
-        <Box sx={{ p: 2 }}>
+        <Box sx={{ px: 2, pt: 1.5, pb: 2 }}>
           {/* Légende */}
-          <Box sx={{ display: 'flex', gap: 2, mb: 2, opacity: 0.7 }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 2.5, rowGap: 0.5, mb: 1.5, color: 'text.secondary' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <TrendingUpIcon sx={{ fontSize: 14, color: 'error.main' }} />
               <Typography variant="caption">{t('drsPage.sourceToUnload')}</Typography>
@@ -724,11 +722,9 @@ return 'neutral'
           </Box>
 
           {/* Liste des nœuds */}
-          <Stack spacing={1}>
+          <Stack spacing={0.5}>
             {sortedNodes.map(node => {
               const role = getNodeRole(node)
-              const isSource = role === 'source'
-              const isTarget = role === 'target'
               const isMaintenance = role === 'maintenance'
               const isExcluded = role === 'excluded'
 
@@ -739,83 +735,45 @@ return 'neutral'
                     display: 'flex',
                     alignItems: 'center',
                     gap: 2,
-                    p: 1.5,
+                    px: 1.5,
+                    py: 1,
                     borderRadius: 1,
                     opacity: isExcluded ? 0.5 : 1,
-                    bgcolor: isExcluded
-                      ? alpha(theme.palette.action.disabled, 0.06)
-                      : isMaintenance
-                        ? alpha(theme.palette.warning.main, 0.08)
-                        : isSource
-                          ? alpha(theme.palette.error.main, 0.06)
-                          : isTarget
-                            ? alpha(theme.palette.success.main, 0.06)
-                            : alpha(theme.palette.action.hover, 0.04),
-
-                    // Bordure gauche épaisse colorée pour les rôles
-                    borderLeft: isExcluded || isMaintenance || isSource || isTarget ? '4px solid' : 'none',
-                    borderLeftColor: isExcluded
-                      ? 'text.disabled'
-                      : isMaintenance
-                        ? 'warning.main'
-                        : isSource
-                          ? 'error.main'
-                          : isTarget
-                            ? 'success.main'
-                            : 'transparent',
-                    borderTop: 'none',
-                    borderRight: 'none',
-                    borderBottom: 'none',
-                    transition: 'all 0.2s ease',
-                    '&:hover': {
-                      bgcolor: isExcluded
-                        ? alpha(theme.palette.action.disabled, 0.1)
-                        : isMaintenance
-                          ? alpha(theme.palette.warning.main, 0.12)
-                          : isSource
-                            ? alpha(theme.palette.error.main, 0.1)
-                            : isTarget
-                              ? alpha(theme.palette.success.main, 0.1)
-                              : alpha(theme.palette.action.hover, 0.08),
-                    }
+                    bgcolor: roleTint[role],
+                    transition: 'background-color 0.15s ease',
+                    '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.08) }
                   }}
                 >
                   {/* Indicateur de rôle */}
-                  <Box sx={{ width: 24 }}>
-                    {isExcluded && <i className="ri-filter-off-line" style={{ fontSize: 18, color: theme.palette.text.disabled }} />}
-                    {isMaintenance && <BuildIcon sx={{ fontSize: 18, color: 'warning.main' }} />}
-                    {isSource && <TrendingUpIcon sx={{ fontSize: 18, color: 'error.main' }} />}
-                    {isTarget && <TrendingDownIcon sx={{ fontSize: 18, color: 'success.main' }} />}
-                  </Box>
+                  <Box sx={{ width: 16, display: 'flex', flexShrink: 0 }}>{roleIcon[role]}</Box>
 
                   {/* Nom du nœud */}
-                  <Box sx={{ minWidth: 180 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
-                        <img
-                          src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
-                          alt=""
-                          width={14}
-                          height={14}
-                          style={{ opacity: isExcluded ? 0.4 : 0.8 }}
-                        />
-                        <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: node.in_maintenance ? 'warning.main' : node.status === 'online' ? 'success.main' : 'error.main', border: '1.5px solid', borderColor: 'background.paper' }} />
-                      </Box>
-                      <Typography
-                        sx={{
-                          fontWeight: 600,
-                          fontSize: '0.875rem',
-                          color: isExcluded ? 'text.disabled' : 'text.primary'
-                        }}
-                      >
-                        {node.node}
-                      </Typography>
+                  <Box sx={{ width: { xs: 120, md: 200 }, flexShrink: 0, minWidth: 0, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: 14, height: 14, flexShrink: 0 }}>
+                      <img
+                        src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'}
+                        alt=""
+                        width={14}
+                        height={14}
+                        style={{ opacity: isExcluded ? 0.4 : 0.8 }}
+                      />
+                      <Box sx={{ position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%', bgcolor: nodeDotColor(node), border: '1.5px solid', borderColor: 'background.paper' }} />
                     </Box>
+                    <Typography
+                      noWrap
+                      sx={{
+                        fontWeight: 600,
+                        fontSize: '0.875rem',
+                        color: isExcluded ? 'text.disabled' : 'text.primary'
+                      }}
+                    >
+                      {node.node}
+                    </Typography>
                     {isExcluded && (
                       <Chip
                         label={t('drsPage.excludedFromDRS')}
                         size="small"
-                        sx={{ height: 18, fontSize: '0.65rem', mt: 0.5, color: 'text.disabled', borderColor: 'text.disabled' }}
+                        sx={{ height: 18, fontSize: '0.65rem', color: 'text.disabled', borderColor: 'text.disabled' }}
                         variant="outlined"
                       />
                     )}
@@ -824,60 +782,23 @@ return 'neutral'
                         label={t('drsPage.inMaintenance')}
                         size="small"
                         color="warning"
-                        sx={{ height: 18, fontSize: '0.65rem', mt: 0.5 }}
+                        sx={{ height: 18, fontSize: '0.65rem' }}
                       />
                     )}
                   </Box>
 
                   {/* Barres CPU & RAM */}
-                  <Box sx={{ flex: 1, display: 'flex', gap: 3 }}>
-                    {/* CPU */}
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="caption" sx={{ opacity: 0.6, mb: 0.5, display: 'block' }}>CPU</Typography>
-                      <Box sx={{ position: 'relative' }}>
-                        <LinearProgress
-                          variant="determinate"
-                          value={pct(node.cpu_usage)}
-                          sx={{
-                            height: 14,
-                            borderRadius: 0,
-                            bgcolor: alpha(usageColor(node.cpu_usage), 0.15),
-                            '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: usageColor(node.cpu_usage) }
-                          }}
-                        />
-                        <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
-                          {node.cpu_usage.toFixed(1)}%
-                        </Typography>
-                      </Box>
-                    </Box>
-
-                    {/* RAM */}
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="caption" sx={{ opacity: 0.6, mb: 0.5, display: 'block' }}>RAM</Typography>
-                      <Box sx={{ position: 'relative' }}>
-                        <LinearProgress
-                          variant="determinate"
-                          value={pct(node.memory_usage)}
-                          sx={{
-                            height: 14,
-                            borderRadius: 0,
-                            bgcolor: alpha(usageColor(node.memory_usage), 0.15),
-                            '& .MuiLinearProgress-bar': { borderRadius: 0, bgcolor: usageColor(node.memory_usage) }
-                          }}
-                        />
-                        <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff', lineHeight: 1, textShadow: '0 0 2px rgba(0,0,0,0.5)' }}>
-                          {node.memory_usage.toFixed(1)}%
-                        </Typography>
-                      </Box>
-                    </Box>
+                  <Box sx={{ flex: 1, minWidth: 0, display: 'flex', gap: 3 }}>
+                    <UsageMeter value={node.cpu_usage} label="CPU" barHeight={6} />
+                    <UsageMeter value={node.memory_usage} label="RAM" barHeight={6} />
                   </Box>
 
                   {/* VMs count */}
-                  <Box sx={{ textAlign: 'right', minWidth: 70 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  <Box sx={{ width: 72, flexShrink: 0, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <Typography component="span" variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                       {node.running_vms}/{node.vm_count}
                     </Typography>
-                    <Typography variant="caption" sx={{ opacity: 0.5 }}>VMs</Typography>
+                    <Typography component="span" variant="caption" sx={{ color: 'text.secondary', ml: 0.5 }}>VMs</Typography>
                   </Box>
                 </Box>
               )
@@ -1026,96 +947,80 @@ const RecommendationRow = React.memo(({
   const priorityLabel = getPriorityLabel(rec.priority)
   const priorityColor = getPriorityColor(rec.priority)
 
+  const nodeChipSx = (color: string) => ({
+    bgcolor: alpha(color, 0.1),
+    color: 'text.primary',
+    fontWeight: 500,
+    fontSize: '0.75rem',
+    maxWidth: 130
+  })
+
   return (
     <Box
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
       sx={{
         display: 'flex',
         alignItems: 'center',
-        gap: 2,
-        py: 1.5,
-        px: 2,
+        flexWrap: { xs: 'wrap', md: 'nowrap' },
+        columnGap: 2,
+        rowGap: 1,
+        py: 1,
+        px: 1.5,
         borderRadius: 1,
         cursor: 'pointer',
         border: '1px solid',
         borderColor: rec.maintenance_evacuation ? alpha(theme.palette.warning.main, 0.5) : 'divider',
         bgcolor: rec.maintenance_evacuation ? alpha(theme.palette.warning.main, 0.03) : 'transparent',
-        '&:hover': {
+        transition: 'border-color 0.15s ease, background-color 0.15s ease',
+        '&:hover, &:focus-visible': {
           borderColor: 'primary.main',
           bgcolor: alpha(theme.palette.primary.main, 0.03)
-        }
+        },
+        '&:focus-visible': { outline: 'none' }
       }}
     >
-      {/* Guest glyph: type icon with its status dot */}
-      <GuestGlyph type={rec.guest_type} status={statuses.guest} dotBorder={dotBorder} />
-
-      {/* VM Name + Reason */}
-      <Box sx={{ minWidth: 160 }}>
+      {/* Guest: type glyph with its status dot, name, vmid */}
+      <Box sx={{ width: { xs: 'auto', md: 220 }, flexShrink: 0, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <GuestGlyph type={rec.guest_type} status={statuses.guest} dotBorder={dotBorder} />
         <Typography sx={{ fontWeight: 600, fontSize: '0.875rem' }} noWrap>
           {rec.vm_name || `VM ${rec.vmid}`}
         </Typography>
-        <Typography variant="caption" sx={{ opacity: 0.6, display: 'block', lineHeight: 1.2 }} noWrap>
-          {drsReasonText(rec, t)}
-        </Typography>
-        {rec.maintenance_evacuation && (
-          <Chip label={t('drsPage.evacuation')} size="small" color="warning" sx={{ height: 16, fontSize: '0.6rem', ml: 0.5 }} />
-        )}
+        <Typography variant="caption" sx={{ color: 'text.secondary', flexShrink: 0 }}>#{rec.vmid}</Typography>
       </Box>
 
       {/* Migration path */}
-      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ width: { xs: 'auto', md: 290 }, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
         <Chip
           size="small"
           icon={<NodeGlyph status={statuses.source} dark={dark} dotBorder={dotBorder} />}
           label={rec.source_node}
-          sx={{ 
-            bgcolor: alpha(theme.palette.error.main, 0.1),
-            color: 'error.main',
-            fontWeight: 500,
-            fontSize: '0.75rem'
-          }} 
+          sx={nodeChipSx(theme.palette.error.main)}
         />
-        <Typography sx={{ opacity: 0.4 }}>→</Typography>
+        <i className="ri-arrow-right-line" style={{ fontSize: 14, color: theme.palette.text.secondary }} />
         <Chip
           size="small"
           icon={<NodeGlyph status={statuses.target} dark={dark} dotBorder={dotBorder} />}
           label={rec.target_node}
-          sx={{ 
-            bgcolor: alpha(theme.palette.success.main, 0.1),
-            color: 'success.main',
-            fontWeight: 500,
-            fontSize: '0.75rem'
-          }} 
+          sx={nodeChipSx(theme.palette.success.main)}
         />
       </Box>
 
+      {/* Reason: the free-text column, takes what is left */}
+      <Typography
+        variant="caption"
+        noWrap
+        sx={{ flex: 1, minWidth: 0, color: 'text.secondary', display: { xs: 'none', lg: 'block' } }}
+      >
+        {drsReasonText(rec, t)}
+      </Typography>
+
       {/* Priority & Score */}
-      <Stack direction="row" spacing={1} alignItems="center">
-        <Chip
-          size="small"
-          label={priorityLabel.toUpperCase()}
-          color={priorityColor}
-          sx={{ minWidth: 70 }}
-        />
-        <Tooltip title={t('drsPage.scoreTooltip', { score: rec.score.toFixed(1) })} arrow>
-          <Chip
-            size="small"
-            variant="outlined"
-            label={`+${rec.score.toFixed(0)}%`}
-            sx={{ minWidth: 55, cursor: 'help' }}
-          />
-        </Tooltip>
-        {(rec.confirmation_count ?? 0) > 1 && (
-          <Tooltip title={t('drsPage.confirmationTooltip', { count: rec.confirmation_count })} arrow>
-            <Chip
-              size="small"
-              variant="outlined"
-              color="info"
-              label={`${rec.confirmation_count}\u00d7`}
-              icon={<CheckCircleIcon fontSize="small" />}
-              sx={{ cursor: 'help' }}
-            />
-          </Tooltip>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 'auto', flexShrink: 0 }}>
+        {rec.maintenance_evacuation && (
+          <Chip label={t('drsPage.evacuation')} size="small" color="warning" variant="outlined" sx={{ height: 22, fontSize: '0.7rem' }} />
         )}
         {haConflict && (
           <Tooltip title={t('drsPage.haWarningVm')} arrow>
@@ -1125,10 +1030,37 @@ const RecommendationRow = React.memo(({
               size="small"
               color="warning"
               variant="outlined"
-              sx={{ height: 22, fontSize: '0.65rem', cursor: 'help' }}
+              sx={{ height: 22, fontSize: '0.7rem', cursor: 'help' }}
             />
           </Tooltip>
         )}
+        {(rec.confirmation_count ?? 0) > 1 && (
+          <Tooltip title={t('drsPage.confirmationTooltip', { count: rec.confirmation_count })} arrow>
+            <Chip
+              size="small"
+              variant="outlined"
+              color="info"
+              label={`${rec.confirmation_count}\u00d7`}
+              icon={<CheckCircleIcon fontSize="small" />}
+              sx={{ height: 22, cursor: 'help' }}
+            />
+          </Tooltip>
+        )}
+        <Chip
+          size="small"
+          label={priorityLabel.toUpperCase()}
+          color={priorityColor}
+          sx={{ minWidth: 76, height: 22, fontSize: '0.7rem', fontWeight: 700 }}
+        />
+        <Tooltip title={t('drsPage.scoreTooltip', { score: rec.score.toFixed(1) })} arrow>
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`+${rec.score.toFixed(0)}%`}
+            sx={{ minWidth: 56, height: 22, fontVariantNumeric: 'tabular-nums', cursor: 'help' }}
+          />
+        </Tooltip>
+        <i className="ri-arrow-right-s-line" style={{ fontSize: 18, color: theme.palette.text.secondary }} />
       </Stack>
     </Box>
   )
@@ -1510,7 +1442,7 @@ return () => setPageInfo('', '', '')
     [allMigrationsRaw]
   )
 
-  const { data: metricsData, mutate: mutateMetrics } = useDRSMetrics(isEnterprise)
+  const { data: metricsData, error: metricsError, mutate: mutateMetrics } = useDRSMetrics(isEnterprise)
 
   const { data: drsSettings, mutate: mutateSettings } = useDRSSettings(isEnterprise)
 
@@ -2136,10 +2068,12 @@ return next
 
   const lineColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6']
 
-  // Bar chart data: per-node RAM from live metrics, grouped by cluster
+  // Bar chart data: per-node RAM and CPU from live metrics, grouped by cluster.
+  // Node names repeat across clusters, so each bar is keyed by cluster and node.
   const nodeBarData = useMemo(() => {
     return clusters.flatMap((c, ci) =>
       (c.metrics?.nodes || []).map((n: NodeMetrics) => ({
+        key: `${c.id}:${n.node}`,
         name: n.node,
         RAM: Math.round(n.memory_usage * 10) / 10,
         CPU: Math.round(n.cpu_usage * 10) / 10,
@@ -2149,36 +2083,83 @@ return next
     )
   }, [clusters])
 
+  // The level DRS balances each cluster towards, shown in the chart tooltip
+  const clusterAverages = useMemo(() => clusters.map(c => ({
+    RAM: c.metrics?.summary?.avg_memory_usage ?? 0,
+    CPU: c.metrics?.summary?.avg_cpu_usage ?? 0
+  })), [clusters])
+
+  const metricsLoading = !metricsData && !metricsError
+
+  // From a cluster card to its own recommendations
+  const showClusterRecommendations = useCallback((clusterId?: string) => {
+    setTab(1)
+
+    if (!clusterId) return
+    setTimeout(() => {
+      document.getElementById(`drs-recs-${clusterId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 150)
+  }, [])
+
   return (
     <ProviderTenantGuard>
     <EnterpriseGuard requiredFeature={Features.DRS} featureName={`${t('drs.title')} (${t('drs.subtitle')})`}>
       <Box sx={{ p: 3 }}>
       {/* Tabs */}
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
-        <Tab icon={<i className="ri-bar-chart-2-line" style={{ fontSize: 20 }} />} iconPosition="start" label={t('drsPage.clustersTab')} sx={{ textTransform: 'none', fontSize: 13 }} />
+      <Tabs
+        value={tab}
+        onChange={(_, v) => setTab(v)}
+        variant="scrollable"
+        scrollButtons="auto"
+        sx={{
+          mb: 3,
+          borderBottom: 1,
+          borderColor: 'divider',
+          '& .MuiTab-root': { textTransform: 'none', fontSize: 13, minHeight: 48 },
+          '& .MuiTab-iconWrapper': { fontSize: 18, mr: 1 }
+        }}
+      >
+        <Tab icon={<i className="ri-bar-chart-2-line" />} iconPosition="start" label={t('drsPage.clustersTab')} />
         <Tab
-          icon={<SwapHorizIcon />}
+          icon={<i className="ri-arrow-left-right-line" />}
           iconPosition="start"
-          sx={{ textTransform: 'none', fontSize: 13 }}
           label={
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {t('drsPage.recommendationsTab')}
               {activeMigrations.length > 0 && (
-                <Chip size="small" label={activeMigrations.length} color="info" sx={{ minWidth: 20 }} />
+                <Chip size="small" label={activeMigrations.length} color="info" sx={{ height: 20, minWidth: 20, fontSize: 11, fontWeight: 700 }} />
               )}
               {pendingRecs.length > 0 && (
-                <Chip size="small" label={pendingRecs.length} color="warning" />
+                <Chip size="small" label={pendingRecs.length} color="warning" sx={{ height: 20, minWidth: 20, fontSize: 11, fontWeight: 700 }} />
               )}
             </Box>
           }
         />
-        <Tab icon={<HistoryIcon />} iconPosition="start" label={t('drsPage.history')} sx={{ textTransform: 'none', fontSize: 13 }} />
-        <Tab icon={<LocalOfferIcon />} iconPosition="start" label={t('drsPage.affinity')} sx={{ textTransform: 'none', fontSize: 13 }} />
-        <Tab icon={<SettingsIcon />} iconPosition="start" label={t('drsPage.configuration')} sx={{ textTransform: 'none', fontSize: 13 }} />
+        <Tab icon={<i className="ri-history-line" />} iconPosition="start" label={t('drsPage.history')} />
+        <Tab icon={<i className="ri-price-tag-3-line" />} iconPosition="start" label={t('drsPage.affinity')} />
+        <Tab icon={<i className="ri-settings-3-line" />} iconPosition="start" label={t('drsPage.configuration')} />
       </Tabs>
 
       {/* Tab: Load Overview */}
-      {tab === 0 && (
+      {/* While the first metrics load, the layout's shape rather than an empty verdict */}
+      {tab === 0 && metricsLoading && (
+        <Stack spacing={2} aria-busy="true">
+          <Card variant="outlined">
+            <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
+              <Skeleton variant="text" width={180} height={28} />
+              <Skeleton variant="text" width={240} height={18} />
+              <Divider sx={{ my: 2 }} />
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'auto 1fr' }, gap: 3, alignItems: 'center' }}>
+                <Skeleton variant="circular" width={80} height={80} sx={{ mx: 'auto' }} />
+                <Skeleton variant="rounded" height={200} />
+              </Box>
+            </CardContent>
+          </Card>
+          {[0, 1].map(i => <Skeleton key={i} variant="rounded" height={66} />)}
+        </Stack>
+      )}
+
+      {tab === 0 && !metricsLoading && (
         <Stack spacing={2}>
           {/* DRS Health Banner */}
           <Card variant="outlined">
@@ -2187,12 +2168,31 @@ return next
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
                 <Box sx={{ minWidth: 0 }}>
                   <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
-                    <Typography variant="h6" fontWeight={600} noWrap>DRS Health</Typography>
+                    <Typography variant="h6" fontWeight={600} noWrap>{t('drsPage.drsHealth')}</Typography>
                     {globalStats.recommendations > 0 && (
-                      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ bgcolor: alpha(theme.palette.warning.main, 0.1), px: 1, py: 0.25, borderRadius: 1 }}>
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        spacing={0.5}
+                        component="button"
+                        type="button"
+                        title={t('drsPage.showRecommendations')}
+                        onClick={() => showClusterRecommendations()}
+                        sx={{
+                          bgcolor: alpha(theme.palette.warning.main, 0.1),
+                          px: 1,
+                          py: 0.25,
+                          borderRadius: 1,
+                          border: 'none',
+                          font: 'inherit',
+                          cursor: 'pointer',
+                          '&:hover': { bgcolor: alpha(theme.palette.warning.main, 0.2) },
+                          '&:focus-visible': { outline: `2px solid ${theme.palette.warning.main}`, outlineOffset: 1 }
+                        }}
+                      >
                         <i className="ri-alarm-warning-line" style={{ fontSize: 13, color: theme.palette.warning.main }} />
                         <Typography variant="caption" fontWeight={600} sx={{ color: 'warning.main', fontSize: 11 }}>
-                          {globalStats.recommendations} rec.
+                          {t('drsPage.recShort', { count: globalStats.recommendations })}
                         </Typography>
                       </Stack>
                     )}
@@ -2200,38 +2200,38 @@ return next
                       <Stack direction="row" alignItems="center" spacing={0.5} sx={{ bgcolor: alpha(theme.palette.info.main, 0.1), px: 1, py: 0.25, borderRadius: 1 }}>
                         <i className="ri-swap-box-line" style={{ fontSize: 13, color: theme.palette.info.main }} />
                         <Typography variant="caption" fontWeight={600} sx={{ color: 'info.main', fontSize: 11 }}>
-                          {globalStats.migrations} mig.
+                          {t('drsPage.migShort', { count: globalStats.migrations })}
                         </Typography>
                       </Stack>
                     )}
                   </Stack>
                   <Stack direction="row" flexWrap="wrap" gap={1.5} sx={{ mt: 0.5 }}>
-                    <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                      <i className="ri-server-line" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle' }} />
-                      {globalStats.clusters} {t('drsPage.clustersTab').toLowerCase()}
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      <i className="ri-server-line" style={{ fontSize: 13, marginRight: 4, verticalAlign: 'middle' }} />
+                      {globalStats.clusters} {t('drsPage.clustersLabel')}
                     </Typography>
-                    <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                      <i className="ri-computer-line" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle' }} />
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={12} height={12} style={{ marginRight: 4, verticalAlign: 'middle', opacity: 0.8 }} />
                       {globalStats.nodes} {t('drsPage.nodesLabel')}
                     </Typography>
-                    <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                      <i className="ri-play-fill" style={{ fontSize: 13, marginRight: 3, verticalAlign: 'middle', color: theme.palette.success.main }} />
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      <i className="ri-play-fill" style={{ fontSize: 13, marginRight: 4, verticalAlign: 'middle', color: theme.palette.success.main }} />
                       {globalStats.vms} VMs
                     </Typography>
                   </Stack>
                 </Box>
                 <Stack direction="row" alignItems="center" spacing={2}>
-                  <Stack spacing={0.75} sx={{ width: 160 }}>
+                  <Stack spacing={0.75} sx={{ width: 200 }}>
                     {clusters.slice(0, 4).map((c, i) => {
                       const avgRam = c.metrics?.summary?.avg_memory_usage ?? 0
                       return (
-                        <Tooltip key={c.id} title={`${c.name} — RAM avg: ${avgRam.toFixed(1)}%`} arrow placement="left">
+                        <Tooltip key={c.id} title={`${c.name} · ${t('drsPage.clusterAverage')} RAM ${avgRam.toFixed(1)}%`} arrow placement="left">
                           <Stack direction="row" alignItems="center" spacing={0.75}>
-                            <Typography variant="caption" sx={{ minWidth: 70, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</Typography>
-                            <Box sx={{ flex: 1, height: 6, borderRadius: 0, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-                              <Box sx={{ width: `${Math.min(100, avgRam)}%`, height: '100%', bgcolor: lineColors[i % lineColors.length], borderRadius: 0 }} />
+                            <Typography variant="caption" sx={{ width: 84, flexShrink: 0, color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</Typography>
+                            <Box sx={{ flex: 1, height: 6, borderRadius: 3, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+                              <Box sx={{ width: `${Math.min(100, avgRam)}%`, height: '100%', bgcolor: lineColors[i % lineColors.length], borderRadius: 3 }} />
                             </Box>
-                            <Typography variant="caption" fontWeight={600} sx={{ minWidth: 28, textAlign: 'right', fontSize: 10 }}>{avgRam.toFixed(0)}%</Typography>
+                            <Typography variant="caption" fontWeight={600} sx={{ minWidth: 32, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{avgRam.toFixed(0)}%</Typography>
                           </Stack>
                         </Tooltip>
                       )
@@ -2290,73 +2290,96 @@ return next
                             <Typography sx={{ fontWeight: 700, fontSize: 20, color: scoreColor }}>{globalStats.healthScore}</Typography>
                           </Box>
                         </Box>
-                        <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.5 }}>Score</Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center', maxWidth: 96 }}>{t('drsPage.healthScore')}</Typography>
                       </Stack>
                     </Tooltip>
                   )
                 })()}
 
                 {/* Bar chart */}
-                <Box>
-                  <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.7, mb: 1, display: 'block' }}>
-                    RAM / node
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="caption" fontWeight={600} sx={{ color: 'text.secondary', mb: 1, display: 'block' }}>
+                    {t('drsPage.cpuRamPerNode')}
                   </Typography>
                   {nodeBarData.length > 0 ? (
                     <>
-                      <Box sx={{ height: 180 }}>
+                      <Box sx={{ height: 200 }}>
                         <ChartContainer>
-                          <BarChart data={nodeBarData} barCategoryGap="20%">
-                            <defs>
-                              {lineColors.map((color, i) => (
-                                <linearGradient key={i} id={`drsBarGrad_${i}`} x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="0%" stopColor={color} stopOpacity={1} />
-                                  <stop offset="100%" stopColor={color} stopOpacity={0.3} />
-                                </linearGradient>
-                              ))}
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} opacity={0.3} vertical={false} />
-                            <XAxis dataKey="name" hide />
-                            <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10 }} axisLine={{ stroke: theme.palette.divider }} tickLine={false} width={40} />
+                          <BarChart data={nodeBarData} barCategoryGap="20%" barGap={2} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} vertical={false} />
+                            <XAxis
+                              dataKey="key"
+                              tickFormatter={(key: string) => key.slice(key.indexOf(':') + 1)}
+                              hide={nodeBarData.length > 24}
+                              interval={0}
+                              tick={{ fontSize: 10, fill: theme.palette.text.secondary }}
+                              tickLine={false}
+                              axisLine={{ stroke: theme.palette.divider }}
+                            />
+                            <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10, fill: theme.palette.text.secondary }} axisLine={false} tickLine={false} width={40} />
                             <RechartsTooltip
                               cursor={false}
                               wrapperStyle={{ backgroundColor: 'transparent', boxShadow: 'none' }}
                               content={({ active, payload }) => {
                                 if (!active || !payload?.[0]) return null
                                 const d = payload[0].payload
+                                const avg = clusterAverages[d.clusterIdx]
                                 return (
                                   <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, px: 1.5, py: 1, fontSize: 11, color: 'text.primary' }}>
-                                    <Typography sx={{ fontSize: 10, fontWeight: 600, opacity: 0.5, mb: 0.5 }}>RAM</Typography>
-                                    <Stack direction="row" alignItems="center" spacing={0.5}>
+                                    <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
                                       <img src={theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'} alt="" width={14} height={14} style={{ opacity: 0.8 }} />
-                                      <span>{d.name}</span>
-                                      <span style={{ fontWeight: 600, paddingLeft: 12 }}>{d.RAM.toFixed(1)}%</span>
+                                      <span style={{ fontWeight: 600 }}>{d.name}</span>
+                                      <span style={{ color: theme.palette.text.secondary }}>· {d.clusterName}</span>
                                     </Stack>
+                                    {(['CPU', 'RAM'] as const).map(m => (
+                                      <Box key={m} sx={{ display: 'grid', gridTemplateColumns: '32px 48px auto', alignItems: 'baseline', fontVariantNumeric: 'tabular-nums' }}>
+                                        <span style={{ color: theme.palette.text.secondary }}>{m}</span>
+                                        <span style={{ fontWeight: 600, textAlign: 'right' }}>{d[m].toFixed(1)}%</span>
+                                        {avg && (
+                                          <span style={{ color: theme.palette.text.secondary, paddingLeft: 8 }}>
+                                            {t('drsPage.clusterAverage')} {avg[m].toFixed(1)}%
+                                          </span>
+                                        )}
+                                      </Box>
+                                    ))}
                                   </Box>
                                 )
                               }}
                             />
-                            <Bar dataKey="RAM" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                            {/* CPU and RAM side by side: same cluster hue, CPU lighter */}
+                            <Bar dataKey="CPU" radius={[3, 3, 0, 0]} maxBarSize={28} isAnimationActive={false}>
                               {nodeBarData.map((entry, idx) => (
-                                <Cell key={idx} fill={`url(#drsBarGrad_${entry.clusterIdx % lineColors.length})`} />
+                                <Cell key={idx} fill={lineColors[entry.clusterIdx % lineColors.length]} fillOpacity={0.4} />
+                              ))}
+                            </Bar>
+                            <Bar dataKey="RAM" radius={[3, 3, 0, 0]} maxBarSize={28} isAnimationActive={false}>
+                              {nodeBarData.map((entry, idx) => (
+                                <Cell key={idx} fill={lineColors[entry.clusterIdx % lineColors.length]} fillOpacity={0.9} />
                               ))}
                             </Bar>
                           </BarChart>
                         </ChartContainer>
                       </Box>
-                      {clusters.length > 1 && (
-                        <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap" sx={{ mt: 1 }}>
-                          {clusters.map((c, i) => (
-                            <Stack key={c.id} direction="row" alignItems="center" spacing={0.5}>
-                              <Box sx={{ width: 10, height: 10, bgcolor: lineColors[i % lineColors.length], borderRadius: 0.5 }} />
-                              <Typography variant="caption" sx={{ fontSize: 10 }}>{c.name}</Typography>
-                            </Stack>
-                          ))}
+                      <Stack direction="row" columnGap={2} rowGap={0.5} justifyContent="center" flexWrap="wrap" sx={{ mt: 1 }}>
+                        {clusters.length > 1 && clusters.map((c, i) => (
+                          <Stack key={c.id} direction="row" alignItems="center" spacing={0.5}>
+                            <Box sx={{ width: 10, height: 10, bgcolor: lineColors[i % lineColors.length], borderRadius: 0.5 }} />
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>{c.name}</Typography>
+                          </Stack>
+                        ))}
+                        <Stack direction="row" alignItems="center" spacing={0.5}>
+                          <Box sx={{ width: 10, height: 10, bgcolor: 'text.secondary', opacity: 0.4, borderRadius: 0.5 }} />
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>CPU</Typography>
                         </Stack>
-                      )}
+                        <Stack direction="row" alignItems="center" spacing={0.5}>
+                          <Box sx={{ width: 10, height: 10, bgcolor: 'text.secondary', borderRadius: 0.5 }} />
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>RAM</Typography>
+                        </Stack>
+                      </Stack>
                     </>
                   ) : (
-                    <Box sx={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('drsPage.noClusterConnected')}</Typography>
+                    <Box sx={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>{t('drsPage.noClusterConnected')}</Typography>
                     </Box>
                   )}
                 </Box>
@@ -2384,6 +2407,7 @@ return next
                 isClusterExcluded={drsSettings?.excluded_clusters?.includes(cluster.id) || false}
                 drsMode={drsSettings?.cluster_modes?.[cluster.id] || status?.mode || 'manual'}
                 balancingDomains={balancingDomains}
+                onShowRecommendations={() => showClusterRecommendations(cluster.id)}
               />
             ))
           )}
@@ -2450,7 +2474,7 @@ return next
               ) : (
                 <>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                    <Typography variant="subtitle2" sx={{ opacity: 0.7 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                       {t('drsPage.pendingRecommendations', { count: pendingRecs.length })}
                     </Typography>
                     <Button
@@ -2466,10 +2490,10 @@ return next
                   </Box>
                   <Stack spacing={2}>
                     {pendingRecsByCluster.map(([clusterId, clusterRecsGroup]) => (
-                      <Box key={clusterId}>
+                      <Box key={clusterId} id={`drs-recs-${clusterId}`} sx={{ scrollMarginTop: 80 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <i className="ri-server-fill" style={{ fontSize: 14, opacity: 0.6 }} />
-                          <Typography variant="caption" fontWeight={700} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>
+                          <i className="ri-server-line" style={{ fontSize: 14, color: theme.palette.text.secondary }} />
+                          <Typography variant="caption" fontWeight={700} sx={{ color: 'text.secondary' }}>
                             {connectionNames[clusterId] || clusterId.slice(0, 12)}
                           </Typography>
                           <Chip size="small" label={clusterRecsGroup.length} sx={{ height: 18, fontSize: 10, fontWeight: 700 }} />

@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     const config = await getOidcConfig()
     if (!config || !config.enabled) return noLogout()
 
-    const endSessionEndpoint = await discoverEndSessionEndpoint(config.issuerUrl)
+    const endSessionEndpoint = await discoverEndSessionEndpoint(config.issuerUrl, fetch, config)
     if (!endSessionEndpoint) return noLogout()
 
     // Back to our own login page. Built from the request so a deployment behind

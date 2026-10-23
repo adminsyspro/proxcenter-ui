@@ -60,14 +60,20 @@ describe('compose files are registry-overridable', () => {
 
   // The installer writes HTTP_PROXY / HTTPS_PROXY / NO_PROXY to .env when it
   // runs behind a proxy. Empty defaults keep direct connections elsewhere.
-  it.each(['docker-compose.enterprise.yml', 'docker-compose.ha.yml'])('%s passes the HTTP proxy to the orchestrator only', file => {
-    const text = read(file)
-    const block = serviceBlock(text, 'orchestrator')
+  // The frontend gets them too since roadmap#78, for the SSO identity provider
+  // calls only (lib/auth/oidcProxy.ts); every other call it makes stays direct.
+  it.each([
+    ['docker-compose.enterprise.yml', 'orchestrator'],
+    ['docker-compose.ha.yml', 'orchestrator'],
+    ['docker-compose.enterprise.yml', 'frontend'],
+    ['docker-compose.ha.yml', 'frontend'],
+    ['docker-compose.community.yml', 'frontend'],
+  ])('%s passes the HTTP proxy to %s', (file, service) => {
+    const block = serviceBlock(read(file), service)
 
     expect(block).toMatch(/HTTP_PROXY[=:]\s*\$\{HTTP_PROXY:-\}/)
     expect(block).toMatch(/HTTPS_PROXY[=:]\s*\$\{HTTPS_PROXY:-\}/)
     expect(block).toMatch(/NO_PROXY[=:]\s*\$\{NO_PROXY:-localhost,127\.0\.0\.1,frontend,postgres,orchestrator,weasyprint\}/)
-    expect(serviceBlock(text, 'frontend')).not.toMatch(/_PROXY[=:]/)
   })
 
   it('every ${VERSION} image also carries the REGISTRY prefix', () => {

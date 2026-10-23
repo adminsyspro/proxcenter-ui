@@ -42,6 +42,11 @@ export interface OidcConfig {
   groupMappingStrategy: MappingStrategy
   showLocalLogin: boolean
   forceSsoRedirect: boolean
+  /** Outbound proxy towards the IdP; null falls back to the environment. */
+  proxyUrl: string | null
+  proxyUsername: string | null
+  proxyPassword: string | null
+  proxyBypass: string | null
 }
 
 /** Cheap "is OIDC turned on" probe — see isLdapEnabled for the rationale. */
@@ -64,6 +69,15 @@ export async function getOidcConfig(): Promise<OidcConfig | null> {
       clientSecret = decryptSecret(row.clientSecretEnc)
     } catch (e) {
       console.error("Error decrypting OIDC client secret:", e)
+    }
+  }
+
+  let proxyPassword: string | null = null
+  if (row.proxyPasswordEnc) {
+    try {
+      proxyPassword = decryptSecret(row.proxyPasswordEnc)
+    } catch (e) {
+      console.error("Error decrypting OIDC proxy password:", e)
     }
   }
 
@@ -93,6 +107,10 @@ export async function getOidcConfig(): Promise<OidcConfig | null> {
     groupMappingStrategy: normalizeMappingStrategy(row.groupMappingStrategy),
     showLocalLogin: row.showLocalLogin,
     forceSsoRedirect: row.forceSsoRedirect,
+    proxyUrl: row.proxyUrl ?? null,
+    proxyUsername: row.proxyUsername ?? null,
+    proxyPassword,
+    proxyBypass: row.proxyBypass ?? null,
   }
 }
 

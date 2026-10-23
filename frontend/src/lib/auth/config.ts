@@ -10,6 +10,7 @@ import { verifyPassword, hashPassword } from "./password"
 import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdapDetailed, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
 import { getOidcConfig, oidcSeedRoleId, syncOidcRoleAssignment } from "./oidc"
+import { oidcOpenidAgent } from "./oidcProxy"
 import { isSessionTenantDisabled, loadJwtContext } from "./jwtContext"
 import { createSession, evaluateSession, revokeSession, touchSession } from "./sessions"
 import { sessionDurations } from "./durations"
@@ -980,6 +981,11 @@ export async function getAuthOptions(req?: Request): Promise<NextAuthOptions> {
     clientSecret: oidcConfig.clientSecret || '',
     idToken: true,
     checks: ['state'],
+    // Discovery, token exchange, JWKS and userinfo are made by this server:
+    // they go through the outbound proxy when one is set (roadmap#78). Always
+    // passed, see oidcOpenidAgent. 10 s instead of openid-client's 3.5 s, a
+    // tunnel through a corporate proxy adds round trips.
+    httpOptions: { agent: oidcOpenidAgent(oidcConfig, issuerBase), timeout: 10000 } as any,
     allowDangerousEmailAccountLinking: true,
     profile(profile) {
       return {

@@ -78,6 +78,25 @@ describe('getAuthOptions OIDC provider', () => {
     expect(p.authorization.url).toBe('https://idp.example.com/auth')
   })
 
+  it('always hands openid-client an agent, false when no proxy is set (roadmap#78)', async () => {
+    vi.stubEnv('HTTPS_PROXY', '')
+    vi.stubEnv('HTTP_PROXY', '')
+    getOidcConfig.mockResolvedValue(baseConfig())
+    const p = await oidcProvider()
+    // false, not undefined: openid-client keeps the options in a module global
+    // that NextAuth only merges into, so a previous proxy agent would survive.
+    expect(p.httpOptions).toEqual({ agent: false, timeout: 10000 })
+    vi.unstubAllEnvs()
+  })
+
+  it('routes discovery, token and keys through the saved proxy (roadmap#78)', async () => {
+    const https = await import('node:https')
+    getOidcConfig.mockResolvedValue(baseConfig({ proxyUrl: 'http://proxy.corp:3128', proxyUsername: 'svc', proxyPassword: 'pw' }))
+    const p = await oidcProvider()
+    expect(p.httpOptions.agent).toBeInstanceOf(https.Agent)
+    expect(p.httpOptions.timeout).toBe(10000)
+  })
+
   it('adds no OIDC provider when OIDC is disabled', async () => {
     getOidcConfig.mockResolvedValue(baseConfig({ enabled: false }))
     expect(await oidcProvider()).toBeUndefined()

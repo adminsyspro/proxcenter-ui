@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
+const { isSessionTenantDisabledMock } = vi.hoisted(() => ({
+  isSessionTenantDisabledMock: vi.fn(),
+}))
+
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     user: { findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
@@ -29,6 +33,10 @@ vi.mock("./totpThrottle", () => ({
     (await verify()) ? "ok" : "invalid"),
 }))
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
+vi.mock("./jwtContext", () => ({
+  loadJwtContext: vi.fn(),
+  isSessionTenantDisabled: isSessionTenantDisabledMock,
+}))
 
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
@@ -61,6 +69,7 @@ const LOCAL_USER = {
 beforeEach(() => {
   vi.clearAllMocks()
   lockoutReturns(false)
+  isSessionTenantDisabledMock.mockResolvedValue(false)
   ;(prisma.userTenant.findFirst as any).mockResolvedValue({ userId: "u1" })
 })
 
@@ -124,6 +133,24 @@ describe("credentials authorize with the lockout policy", () => {
     )
     expect(fail).not.toHaveBeenCalled()
     expect(succeed).not.toHaveBeenCalled()
+  })
+
+  it("refuses a disabled tenant only after the password has been verified", async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue(LOCAL_USER)
+    ;(verifyPassword as any).mockResolvedValue(true)
+    isSessionTenantDisabledMock.mockResolvedValue(true)
+
+    await expect(
+      authorizeOf("credentials")({ email: "a@b.com", password: "right" }, REQ),
+    ).rejects.toThrow(/^Tenant disabled$/)
+
+    expect(verifyPassword).toHaveBeenCalledExactlyOnceWith("right", "h")
+    expect(isSessionTenantDisabledMock).toHaveBeenCalledExactlyOnceWith("u1")
+    expect(fail).not.toHaveBeenCalled()
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "login_failed",
+      details: { reason: "Tenant disabled", provider: "credentials" },
+    }))
   })
 
   it("does not count a refusal that happens after a correct password (no tenant)", async () => {

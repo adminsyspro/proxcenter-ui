@@ -60,7 +60,10 @@ export async function orchestratorFetch<T>(
     if (tid && tid !== DEFAULT_TENANT_ID) {
       headers['X-Tenant-ID'] = tid
     }
-  } catch {
+  } catch (e) {
+    // A session refused its tenant must not reach the orchestrator in
+    // provider mode (roadmap#79).
+    if ((e as Error)?.name === 'TenantAccessError') throw e
     // No session / not in a request: send without tenant header (provider mode)
   }
 

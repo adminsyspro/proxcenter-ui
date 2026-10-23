@@ -39,6 +39,46 @@ export interface SecurityPolicies {
 
 type PrismaRow = Prisma.SecurityPolicyGetPayload<{}>
 
+/**
+ * Shortest audit retention accepted, in days. The API refuses a lower value
+ * and the sweeper (lib/audit/retentionSweeper.ts) clamps whatever the row
+ * holds, so a value saved before this floor existed can never purge faster.
+ */
+export const AUDIT_RETENTION_MIN_DAYS = 30
+export const E_AUDIT_RETENTION_TOO_SHORT = 'E_AUDIT_RETENTION_TOO_SHORT'
+
+/** Retention days the sweeper applies for a stored value. */
+export function effectiveAuditRetentionDays(days: number): number {
+  return Math.max(AUDIT_RETENTION_MIN_DAYS, Math.trunc(days))
+}
+
+export interface AuditRetentionPolicy {
+  autoCleanup: boolean
+  retentionDays: number
+}
+
+/**
+ * The global audit retention policy, as the sweeper applies it: `retentionDays`
+ * is already clamped to the floor. A missing row reads as cleanup off, so a
+ * database that has no policy yet never purges anything.
+ */
+export async function getAuditRetentionPolicy(tenantId: string = 'default'): Promise<AuditRetentionPolicy> {
+  const row = await prisma.securityPolicy.findFirst({
+    where: { id: 'default', tenantId },
+    select: { auditAutoCleanup: true, auditRetentionDays: true },
+  })
+  if (!row) return { autoCleanup: false, retentionDays: effectiveAuditRetentionDays(90) }
+  return { autoCleanup: row.auditAutoCleanup, retentionDays: effectiveAuditRetentionDays(row.auditRetentionDays) }
+}
+
+function assertValidAuditRetention(partial: Partial<Record<string, unknown>>): void {
+  if (!('audit_retention_days' in partial)) return
+  const value = partial.audit_retention_days
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < AUDIT_RETENTION_MIN_DAYS) {
+    throw new Error(E_AUDIT_RETENTION_TOO_SHORT)
+  }
+}
+
 function rowToPolicies(row: PrismaRow): SecurityPolicies {
   return {
     id: row.id,
@@ -128,6 +168,9 @@ export async function updateSecurityPolicies(
   userId: string,
   tenantId: string = 'default',
 ): Promise<SecurityPolicies> {
+  // Refused outright rather than dropped like the other tunables: the sweeper
+  // deletes rows for good, so a too-short value must never be saved silently.
+  assertValidAuditRetention(partial)
   await assertCanEnable2faPolicy(partial, userId, tenantId)
 
   const data: Prisma.SecurityPolicyUpdateInput = {}

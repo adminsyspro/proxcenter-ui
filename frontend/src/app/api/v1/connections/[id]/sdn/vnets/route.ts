@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { keepOwnVnets, sdnOwnVnets } from "@/lib/vdc/sdnReadScope"
 
 export const runtime = "nodejs"
 
@@ -17,7 +18,8 @@ export async function GET(
     const conn = await getConnectionById(id)
     if (!conn) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     const vnets = await pveFetch<any[]>(conn, "/cluster/sdn/vnets?pending=1")
-    return NextResponse.json({ data: { vnets: vnets ?? [] } })
+    // A vDC tenant only sees the VNets of its own vDCs (roadmap#81).
+    return NextResponse.json({ data: { vnets: keepOwnVnets(vnets ?? [], await sdnOwnVnets(id)) } })
   } catch (e: any) {
     console.error("Error fetching SDN vnets:", e)
     return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { keepOwnVnets, keepZonesOf, sdnOwnVnets } from "@/lib/vdc/sdnReadScope"
 
 export const runtime = "nodejs"
 
@@ -39,10 +40,16 @@ export async function GET(
     const versionStr: string = versionRaw?.version || versionRaw?.release || "0.0.0"
     const pveMajor = Number.parseInt(String(versionStr).split(".")[0], 10) || 0
 
-    const pending = (zonesRes.status === "fulfilled" && hasPending(zonesRes.value))
-                 || (vnetsRes.status === "fulfilled" && hasPending(vnetsRes.value))
+    // A vDC tenant is told about its own VNets and their zones only, and
+    // gets no IPAM backend list (roadmap#81).
+    const own = await sdnOwnVnets(id)
+    const vnets = vnetsRes.status === "fulfilled" ? keepOwnVnets(vnetsRes.value ?? [], own) : null
+    let zones = zonesRes.status === "fulfilled" ? (zonesRes.value ?? []) : null
+    if (own && zones) zones = keepZonesOf(zones, vnets ?? [])
 
-    const ipamBackends: string[] = ipamsRes.status === "fulfilled" && Array.isArray(ipamsRes.value)
+    const pending = (zones !== null && hasPending(zones)) || (vnets !== null && hasPending(vnets))
+
+    const ipamBackends: string[] = !own && ipamsRes.status === "fulfilled" && Array.isArray(ipamsRes.value)
       ? ipamsRes.value.map((x) => String(x?.ipam || "")).filter(Boolean)
       : []
 

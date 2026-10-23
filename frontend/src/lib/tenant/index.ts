@@ -64,9 +64,24 @@ function rowToTenant(row: {
 }
 
 /**
+ * Thrown by getCurrentTenantId() when a session names a tenant it may not
+ * operate in. Callers that swallow tenant errors to fall back to the provider
+ * view (outside a request) must let this one through.
+ */
+export class TenantAccessError extends Error {
+  constructor() {
+    super("Tenant not available for this session")
+    this.name = "TenantAccessError"
+  }
+}
+
+/**
  * Get current tenant ID from the resolved principal (session cookie or API
- * token). Session path falls back to 'default' if not set (backwards-
- * compatible); the token path NEVER falls back.
+ * token). No principal (outside a request, public route) means 'default'.
+ * A session whose tenant is missing, disabled, or not one of the user's
+ * fails closed: answering 'default' would hand it the provider fleet view
+ * while its grants are still checked against the original tenant
+ * (roadmap#79). The token path NEVER falls back either.
  */
 export async function getCurrentTenantId(): Promise<string> {
   // A job the batch scheduler started outside any request (roadmap#53).
@@ -84,23 +99,19 @@ export async function getCurrentTenantId(): Promise<string> {
     return result.principal.tenantId
   }
 
-  const tenantId = result.principal?.tenantId || DEFAULT_TENANT_ID
+  if (!result.principal) return DEFAULT_TENANT_ID
+  const tenantId = result.principal.tenantId || DEFAULT_TENANT_ID
 
-  // Verify tenant exists and is enabled (session behavior, unchanged)
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { id: true, enabled: true },
   })
+  if (!tenant?.enabled) throw new TenantAccessError()
 
-  if (!tenant) return DEFAULT_TENANT_ID
-  if (!tenant.enabled) return DEFAULT_TENANT_ID
-
-  // Verify the user actually belongs to this tenant (guards against stale JWTs)
-  const userId = result.principal?.userId
-  if (userId && tenantId !== DEFAULT_TENANT_ID) {
-    const allowed = await userHasAccessToTenant(userId, tenantId)
-    if (!allowed) return DEFAULT_TENANT_ID
-  }
+  // The user must still belong to it (stale JWT), the provider tenant
+  // included: a user with no membership left is no provider.
+  const userId = result.principal.userId
+  if (userId && !(await userHasAccessToTenant(userId, tenantId))) throw new TenantAccessError()
 
   return tenantId
 }
@@ -516,7 +527,25 @@ export async function updateTenant(
       updatedAt: new Date(),
     },
   })
+  if (existing.enabled && !row.enabled) await revokeTenantSessions(id)
   return rowToTenant(row)
+}
+
+/**
+ * Sign out the users working in a tenant that is being disabled or deleted
+ * (roadmap#79): those whose default membership it is, which is the tenant
+ * their session runs in. Re-enabling the tenant must not revive them.
+ */
+async function revokeTenantSessions(tenantId: string): Promise<void> {
+  const members = await prisma.userTenant.findMany({
+    where: { tenantId, isDefault: true },
+    select: { userId: true },
+  })
+  if (members.length === 0) return
+  await prisma.session.updateMany({
+    where: { userId: { in: members.map(m => m.userId) }, revokedAt: null },
+    data: { revokedAt: new Date() },
+  })
 }
 
 /**
@@ -531,6 +560,9 @@ export async function updateTenant(
  */
 export async function deleteTenant(id: string): Promise<boolean> {
   if (id === DEFAULT_TENANT_ID) return false
+
+  // Before the delete: its memberships cascade away with it.
+  await revokeTenantSessions(id)
 
   const deleted = await prisma.$transaction(async tx => {
     await tx.rbacUserRole.deleteMany({ where: { tenantId: id } })

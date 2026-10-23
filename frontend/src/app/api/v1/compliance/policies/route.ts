@@ -5,7 +5,12 @@ import { getServerSession } from 'next-auth'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { authOptions } from '@/lib/auth/config'
 import { demoResponse } from '@/lib/demo/demo-api'
-import { getSecurityPolicies, updateSecurityPolicies } from '@/lib/compliance/policies'
+import {
+  AUDIT_RETENTION_MIN_DAYS,
+  E_AUDIT_RETENTION_TOO_SHORT,
+  getSecurityPolicies,
+  updateSecurityPolicies,
+} from '@/lib/compliance/policies'
 import { audit } from '@/lib/audit'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -57,6 +62,15 @@ async function handlePut(req: Request) {
 
     return NextResponse.json({ data: updated })
   } catch (e: any) {
+    if (e?.message === E_AUDIT_RETENTION_TOO_SHORT) {
+      return NextResponse.json(
+        {
+          error: `Audit retention must be a whole number of days, at least ${AUDIT_RETENTION_MIN_DAYS}.`,
+          code: E_AUDIT_RETENTION_TOO_SHORT,
+        },
+        { status: 400 },
+      )
+    }
     if (e?.message === 'E_NEED_OWN_2FA') {
       return NextResponse.json(
         {

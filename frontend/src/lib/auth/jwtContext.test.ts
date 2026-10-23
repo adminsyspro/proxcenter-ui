@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
-const { userFindUniqueMock, policyFindFirstMock, roleFindFirstMock } = vi.hoisted(() => ({
+const { userFindUniqueMock, userTenantFindManyMock, policyFindFirstMock, roleFindFirstMock } = vi.hoisted(() => ({
   userFindUniqueMock: vi.fn(),
+  userTenantFindManyMock: vi.fn(),
   policyFindFirstMock: vi.fn(),
   roleFindFirstMock: vi.fn(),
 }))
@@ -9,12 +10,13 @@ const { userFindUniqueMock, policyFindFirstMock, roleFindFirstMock } = vi.hoiste
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     user: { findUnique: userFindUniqueMock },
+    userTenant: { findMany: userTenantFindManyMock },
     securityPolicy: { findFirst: policyFindFirstMock },
     rbacUserRole: { findFirst: roleFindFirstMock },
   },
 }))
 
-import { loadJwtContext } from './jwtContext'
+import { isSessionTenantDisabled, loadJwtContext } from './jwtContext'
 import { sessionRowSelect } from './sessions'
 
 afterEach(() => vi.clearAllMocks())
@@ -43,27 +45,34 @@ describe('loadJwtContext', () => {
   it('reads enabled, tenant, 2FA and the session row in ONE query for an enrolled user', async () => {
     userFindUniqueMock.mockResolvedValue({
       enabled: true, totpEnabled: true, require2faEnrollment: false,
-      tenants: [{ tenantId: 'tenant-a' }],
+      tenants: [{ tenantId: 'tenant-a', tenant: { enabled: true } }],
       sessions: [sessionRow],
     })
 
     const ctx = await loadJwtContext('u1', 'sid1')
 
     expect(ctx).toEqual({
-      enabled: true, tenantId: 'tenant-a', mustEnroll2fa: false, session: sessionRow,
+      enabled: true, tenantId: 'tenant-a', tenantEnabled: true, mustEnroll2fa: false, session: sessionRow,
     })
     expect(userFindUniqueMock).toHaveBeenCalledOnce()
     // An enrolled user needs no policy lookup at all.
     expect(policyFindFirstMock).not.toHaveBeenCalled()
     expect(roleFindFirstMock).not.toHaveBeenCalled()
-    // The nested tenant lookup must reproduce getUserDefaultTenantId's predicate exactly.
+    // Read every membership in deterministic preference order: a disabled
+    // default must not hide another active tenant.
     expect(userFindUniqueMock).toHaveBeenCalledWith(
       expect.objectContaining({
         select: expect.objectContaining({
-          tenants: { where: { isDefault: true }, select: { tenantId: true }, take: 1 },
+          tenants: {
+            orderBy: [{ isDefault: 'desc' }, { joinedAt: 'asc' }],
+            select: { tenantId: true, tenant: { select: { enabled: true } } },
+          },
         }),
       }),
     )
+    const tenantQuery = userFindUniqueMock.mock.calls[0][0].select.tenants
+    expect(tenantQuery).not.toHaveProperty('where')
+    expect(tenantQuery).not.toHaveProperty('take')
   })
 
   it('honours the per-user 2FA flag without consulting the policy', async () => {
@@ -111,28 +120,102 @@ describe('loadJwtContext', () => {
     expect(roleFindFirstMock).not.toHaveBeenCalled()
   })
 
-  it('defaults the tenant to "default" when the user has no default membership', async () => {
+  it('uses the active default membership first', async () => {
+    userFindUniqueMock.mockResolvedValue({
+      enabled: true, totpEnabled: true, require2faEnrollment: false,
+      tenants: [
+        { tenantId: 'tenant-default', tenant: { enabled: true } },
+        { tenantId: 'tenant-other', tenant: { enabled: true } },
+      ],
+      sessions: [],
+    })
+    await expect(loadJwtContext('u1', 'sid1')).resolves.toMatchObject({
+      tenantId: 'tenant-default', tenantEnabled: true,
+    })
+  })
+
+  it('skips a disabled default membership in favour of another active tenant', async () => {
+    userFindUniqueMock.mockResolvedValue({
+      enabled: true, totpEnabled: true, require2faEnrollment: false,
+      tenants: [
+        { tenantId: 'tenant-disabled', tenant: { enabled: false } },
+        { tenantId: 'tenant-active', tenant: { enabled: true } },
+      ],
+      sessions: [],
+    })
+    await expect(loadJwtContext('u1', 'sid1')).resolves.toMatchObject({
+      tenantId: 'tenant-active', tenantEnabled: true,
+    })
+  })
+
+  it('keeps the first tenant id but marks the context disabled when every membership is disabled', async () => {
+    userFindUniqueMock.mockResolvedValue({
+      enabled: true, totpEnabled: true, require2faEnrollment: false,
+      tenants: [
+        { tenantId: 'tenant-first', tenant: { enabled: false } },
+        { tenantId: 'tenant-second', tenant: { enabled: false } },
+      ],
+      sessions: [],
+    })
+    await expect(loadJwtContext('u1', 'sid1')).resolves.toMatchObject({
+      tenantId: 'tenant-first', tenantEnabled: false,
+    })
+  })
+
+  it('defaults to an enabled "default" tenant when the user has no membership', async () => {
     userFindUniqueMock.mockResolvedValue({
       enabled: true, totpEnabled: true, require2faEnrollment: false,
       tenants: [], sessions: [],
     })
     const ctx = await loadJwtContext('u1', 'sid1')
     expect(ctx.tenantId).toBe('default')
+    expect(ctx.tenantEnabled).toBe(true)
   })
 
   it('reports a deleted user as disabled with a null session', async () => {
     userFindUniqueMock.mockResolvedValue(null)
     const ctx = await loadJwtContext('u1', 'sid1')
-    expect(ctx).toEqual({ enabled: false, tenantId: 'default', mustEnroll2fa: false, session: null })
+    expect(ctx).toEqual({
+      enabled: false, tenantId: 'default', tenantEnabled: true, mustEnroll2fa: false, session: null,
+    })
   })
 
   it('skips the session sub-select entirely when the token carries no sid', async () => {
     userFindUniqueMock.mockResolvedValue({
       enabled: true, totpEnabled: true, require2faEnrollment: false,
-      tenants: [{ tenantId: 'default' }], sessions: [],
+      tenants: [{ tenantId: 'default', tenant: { enabled: true } }], sessions: [],
     })
     const ctx = await loadJwtContext('u1', null)
     expect(ctx.session).toBeNull()
     expect(userFindUniqueMock.mock.calls[0][0].select.sessions).toBeUndefined()
+  })
+})
+
+describe('isSessionTenantDisabled', () => {
+  it('returns false without memberships and uses the shared membership query', async () => {
+    userTenantFindManyMock.mockResolvedValue([])
+
+    await expect(isSessionTenantDisabled('u1')).resolves.toBe(false)
+    expect(userTenantFindManyMock).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      orderBy: [{ isDefault: 'desc' }, { joinedAt: 'asc' }],
+      select: { tenantId: true, tenant: { select: { enabled: true } } },
+    })
+  })
+
+  it('returns false when at least one membership is active', async () => {
+    userTenantFindManyMock.mockResolvedValue([
+      { tenantId: 'off', tenant: { enabled: false } },
+      { tenantId: 'on', tenant: { enabled: true } },
+    ])
+    await expect(isSessionTenantDisabled('u1')).resolves.toBe(false)
+  })
+
+  it('returns true when every membership is disabled', async () => {
+    userTenantFindManyMock.mockResolvedValue([
+      { tenantId: 'off-1', tenant: { enabled: false } },
+      { tenantId: 'off-2', tenant: { enabled: false } },
+    ])
+    await expect(isSessionTenantDisabled('u1')).resolves.toBe(true)
   })
 })

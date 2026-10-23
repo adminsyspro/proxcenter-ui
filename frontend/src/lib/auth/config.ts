@@ -10,8 +10,8 @@ import { verifyPassword, hashPassword } from "./password"
 import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdapDetailed, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
 import { getOidcConfig, oidcSeedRoleId, syncOidcRoleAssignment } from "./oidc"
-import { loadJwtContext } from "./jwtContext"
-import { createSession, evaluateSession, touchSession } from "./sessions"
+import { isSessionTenantDisabled, loadJwtContext } from "./jwtContext"
+import { createSession, evaluateSession, revokeSession, touchSession } from "./sessions"
 import { sessionDurations } from "./durations"
 import { beginLoginAttempt } from "./loginLockout"
 import { withTotpThrottle } from "./totpThrottle"
@@ -113,10 +113,11 @@ async function requestOrigin(): Promise<{ ipAddress: string | null; userAgent: s
  * Exact messages the `jwt` callback's READ PATH throws below (never the
  * sign-in path, which never throws). Every one is a deliberate, expected
  * refusal — a legacy cookie with no `sid`, one of `evaluateSession`'s
- * `DeadReason`s (missing/revoked/idle/absolute — see ./sessions.ts), or a
- * disabled account — not evidence of a corrupted token or a rotated
- * NEXTAUTH_SECRET. This is an exact-match Set, not a substring test, so an
- * unrelated error that merely mentions "session" cannot be swept in here.
+ * `DeadReason`s (missing/revoked/idle/absolute — see ./sessions.ts), a
+ * disabled account, or a user whose every tenant is disabled — not evidence
+ * of a corrupted token or a rotated NEXTAUTH_SECRET. This is an exact-match
+ * Set, not a substring test, so an unrelated error that merely mentions
+ * "session" cannot be swept in here.
  */
 const OUR_SESSION_REFUSAL_MESSAGES = new Set<string>([
   'Session not valid: no sid on token',
@@ -125,6 +126,7 @@ const OUR_SESSION_REFUSAL_MESSAGES = new Set<string>([
   'Session not valid: idle',
   'Session not valid: absolute',
   'Account disabled',
+  'Tenant disabled',
 ])
 
 function isOurSessionRefusal(code: string, metadata: unknown): metadata is Error {
@@ -240,6 +242,12 @@ export const authOptions: NextAuthOptions = {
         if (!isValid) {
           await logFailure("Incorrect password")
           throw new Error("Invalid credentials")
+        }
+
+        // Before the second factor, so a 2FA user is not told "invalid code".
+        if (await isSessionTenantDisabled(user.id)) {
+          await logFailure("Tenant disabled", "none")
+          throw new Error("Tenant disabled")
         }
 
         if (user.totpEnabled) {
@@ -458,6 +466,12 @@ export const authOptions: NextAuthOptions = {
           })
         }
 
+        // After the group sync (it can move the user between tenants), before
+        // the second factor (see credentials above).
+        if (await isSessionTenantDisabled(user.id)) {
+          throw new Error("Tenant disabled")
+        }
+
         const localUser = await prisma.user.findUnique({
           where: { id: user.id },
           select: { totpEnabled: true },
@@ -656,6 +670,10 @@ export const authOptions: NextAuthOptions = {
             }
           }
         }
+
+        // Same refusal as a disabled account above (the local providers throw
+        // "Tenant disabled" from authorize instead).
+        if (await isSessionTenantDisabled(user.id)) return false
       }
 
       return true
@@ -742,6 +760,13 @@ export const authOptions: NextAuthOptions = {
         throw new Error('Account disabled')
       }
 
+      // Every tenant of the user is disabled (roadmap#79). With one left, the
+      // session moves to it (loadJwtContext). Disabling a tenant also revokes
+      // the sessions running in it (updateTenant); this covers the rest.
+      if (!ctx.tenantEnabled) {
+        throw new Error('Tenant disabled')
+      }
+
       const verdict = evaluateSession(ctx.session)
       if (!verdict.alive) {
         // Cast: tsconfig has strict:false, which disables discriminated-union
@@ -816,6 +841,18 @@ export const authOptions: NextAuthOptions = {
       })
     },
     async signOut({ token }) {
+      // Without this the row stays alive until its idle or absolute timeout,
+      // so a cookie captured before sign-out keeps working (roadmap#80).
+      // Local, LDAP and OIDC sign-outs (federatedSignOut included) all land
+      // here. A failure must not block the sign-out itself.
+      if (token?.sid && token?.id) {
+        try {
+          await revokeSession(token.sid as string, token.id as string)
+        } catch (e: any) {
+          console.error('[auth-session] could not revoke the session at sign-out:', e?.message ?? e)
+        }
+      }
+
       // Audit logout
       const { audit } = await import("@/lib/audit")
 

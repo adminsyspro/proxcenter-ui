@@ -287,23 +287,9 @@ describe('vDC VNets with a session', () => {
     errSpy.mockRestore()
   })
 
-  it('fails closed (503) when the provider membership cannot be verified', async () => {
-    h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...SESSION, tenantId: 'default' } })
-    h.currentTenant.mockResolvedValue('default')
-    h.tenantMember.mockRejectedValue(new Error('db down'))
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    const res = await LIST(new Request('http://test.local/x'), listParams('vdc-b'))
-
-    expect(res.status).toBe(503)
-    expect(h.listVnets).not.toHaveBeenCalled()
-    errSpy.mockRestore()
-  })
-
   it('a provider session keeps its fleet view: lists the VNets of a tenant vDC, no vDC lookup', async () => {
     h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...SESSION, tenantId: 'default' } })
     h.currentTenant.mockResolvedValue('default')
-    h.tenantMember.mockImplementation(async (userId: string, tenantId: string) => userId === 'u-1' && tenantId === 'default')
 
     const res = await LIST(new Request('http://test.local/x'), listParams('vdc-b'))
 
@@ -311,18 +297,22 @@ describe('vDC VNets with a session', () => {
     expect(h.checkPermission).toHaveBeenLastCalledWith('sdn.vnet.view')
     expect(h.listVnets).toHaveBeenCalledWith('vdc-b')
     expect(h.vdcFindUnique).not.toHaveBeenCalled()
+    // getCurrentTenantId only answers 'default' to a real provider member now
+    // (roadmap#79): no second membership lookup here.
+    expect(h.tenantMember).not.toHaveBeenCalled()
   })
 
-  it.each(SESSION_CALLS)('%s of a session that lands on the provider tenant only by fallback (not a member): 404 on a tenant vDC', async (_name, call) => {
-    // getCurrentTenantId answers "default" for a session without a tenant, or with a stale or disabled one.
+  it.each(SESSION_CALLS)('%s of a session whose tenant is refused (disabled, stale): 503, nothing read or written', async (_name, call) => {
+    // getCurrentTenantId fails closed instead of answering 'default' (roadmap#79).
     h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...SESSION, tenantId: 'default' } })
-    h.currentTenant.mockResolvedValue('default')
+    h.currentTenant.mockRejectedValue(Object.assign(new Error('Tenant not available for this session'), { name: 'TenantAccessError' }))
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     const res = await call('vdc-b')
 
-    expect(res.status).toBe(404)
-    expect(await res.json()).toEqual({ error: 'vDC not found' })
-    expect(h.tenantMember).toHaveBeenCalledWith('u-1', 'default')
-    for (const lib of [h.listVnets, h.createVnet, h.updateVnet, h.deleteVnet, h.vnetFindFirst]) expect(lib).not.toHaveBeenCalled()
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'Unable to verify vDC access' })
+    for (const lib of [h.listVnets, h.createVnet, h.updateVnet, h.deleteVnet, h.vnetFindFirst, h.vdcFindUnique]) expect(lib).not.toHaveBeenCalled()
+    errSpy.mockRestore()
   })
 })

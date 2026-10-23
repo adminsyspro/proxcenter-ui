@@ -6,6 +6,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { audit } from "@/lib/audit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
+import { sdnOwnVnets } from "@/lib/vdc/sdnReadScope"
 
 export const runtime = "nodejs"
 
@@ -21,6 +22,11 @@ async function postHandler(
     if (permError) return permError
     const conn = await getConnectionById(id)
     if (!conn) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+    // The apply is cluster-wide: it would push other tenants' pending changes
+    // too. A vDC tenant's own VNets are applied by the vDC routes (roadmap#81).
+    if (await sdnOwnVnets(id)) {
+      return NextResponse.json({ error: "Applying the cluster SDN configuration is reserved to the provider" }, { status: 403 })
+    }
 
     const upid = await pveFetch<string>(conn, "/cluster/sdn", { method: "PUT" })
 

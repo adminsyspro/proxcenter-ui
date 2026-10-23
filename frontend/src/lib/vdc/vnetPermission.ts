@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 
 import { resolveVisibleConnectionIds } from "@/lib/api-tokens/scope"
-import { getPrincipal, type Principal } from "@/lib/auth/principal"
+import type { Principal } from "@/lib/auth/principal"
 import { prisma } from "@/lib/db/prisma"
 import { checkPermission } from "@/lib/rbac"
-import { getCurrentTenantId, userHasAccessToTenant } from "@/lib/tenant"
+import { getCurrentTenantId } from "@/lib/tenant"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 
 /**
@@ -45,13 +45,11 @@ async function checkSessionVnetPermission(vdcId: string, permission: string): Pr
   const denied = await checkPermission(permission)
   if (denied) return denied
   try {
+    // getCurrentTenantId fails closed on a stale or disabled tenant, so
+    // 'default' here is a real member of the provider tenant (roadmap#79).
     const tenantId = await getCurrentTenantId()
-    if (tenantId !== DEFAULT_TENANT_ID) return (await findVisibleVdc(tenantId, vdcId)) ? null : VDC_NOT_FOUND()
-    // getCurrentTenantId falls back to the provider tenant for a session with
-    // no tenant, or a stale or disabled one: the provider view (no lookup, as
-    // today) goes to real members of it only, the others reach no vDC.
-    const userId = (await getPrincipal()).principal?.userId
-    return userId && (await userHasAccessToTenant(userId, DEFAULT_TENANT_ID)) ? null : VDC_NOT_FOUND()
+    if (tenantId === DEFAULT_TENANT_ID) return null
+    return (await findVisibleVdc(tenantId, vdcId)) ? null : VDC_NOT_FOUND()
   } catch (e) {
     console.error("[vnets] vDC tenant lookup failed, denying:", (e as Error)?.message ?? e)
     return NextResponse.json({ error: "Unable to verify vDC access" }, { status: 503 })

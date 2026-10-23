@@ -58,7 +58,7 @@ const PAGE_SIZES = [20, 50, 100]
 // One grid for every row so a long guest or node name never shifts the
 // columns of its neighbours: time, guest, cluster, source, arrow, target,
 // reason (takes what is left), duration, status.
-const ROW_COLUMNS = '76px 240px 120px 120px 20px 120px minmax(0, 1fr) 64px 24px'
+const ROW_COLUMNS = '76px minmax(140px, 240px) minmax(80px, 120px) minmax(90px, 120px) 20px minmax(90px, 120px) minmax(0, 1fr) 64px 24px'
 
 /**
  * The DRS "History" tab: what DRS actually moved, newest first, grouped by
@@ -200,7 +200,7 @@ const MigrationHistoryTab = ({ migrations, connectionNames, vmStatus = {}, nodeS
   return (
     <Stack spacing={2}>
       {/* Summary over the loaded window, the same donuts as the Operations pages */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 2 }}>
         <DonutTotalCard
           title={t('drsPage.historyTotal')}
           value={summary.total}

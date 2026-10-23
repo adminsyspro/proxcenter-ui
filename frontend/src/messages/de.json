@@ -1,5 +1,7 @@
 {
   "common": {
+    "showMore": "Mehr anzeigen",
+    "showLess": "Weniger anzeigen",
     "expandAll": "Alle aufklappen",
     "collapseAll": "Alle zuklappen",
     "delete": "Löschen",
@@ -7796,6 +7798,13 @@
     "recommendationDismissed": "Veraltete Empfehlung verworfen",
     "evaluate": "Auswerten",
     "clustersTab": "Lastübersicht",
+    "drsHealth": "DRS-Zustand",
+    "clustersLabel": "Cluster",
+    "cpuRamPerNode": "CPU und RAM pro Node",
+    "clusterAverage": "Cluster-Durchschnitt",
+    "showRecommendations": "Empfehlungen anzeigen",
+    "recShort": "{count} Empf.",
+    "migShort": "{count} Mig.",
     "recommendationsTab": "Empfehlungen",
     "history": "Verlauf",
     "affinity": "Affinität",

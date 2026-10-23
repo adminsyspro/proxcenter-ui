@@ -87,6 +87,7 @@ const ACTION_KEYS = {
   test: 'audit.actions.test',
   enable: 'audit.actions.enable',
   disable: 'audit.actions.disable',
+  audit_purge: 'audit.actions.auditPurge',
 
   // Route wrapper verbs (#1105)
   upgrade: 'audit.actions.upgrade',
@@ -322,6 +323,7 @@ export default function AuditPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [total, setTotal] = useState(0)
+  const [retention, setRetention] = useState(null)
 
   const { setPageInfo } = usePageTitle()
 
@@ -330,6 +332,22 @@ export default function AuditPage() {
 
 return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
+
+  // Whether the retention sweeper trims this journal, read from a route the
+  // audit permission can see (the policy itself needs the compliance one).
+  // Best-effort: without an answer the page simply shows no notice.
+  useEffect(() => {
+    let cancelled = false
+
+    void fetch('/api/v1/audit/retention')
+      .then(res => (res.ok ? res.json() : null))
+      .then(json => {
+        if (!cancelled && json?.data?.autoCleanup) setRetention(json.data)
+      })
+      .catch(() => {})
+
+    return () => { cancelled = true }
+  }, [])
 
   // Filters
   const [search, setSearch] = useState('')
@@ -521,7 +539,13 @@ return () => clearTimeout(timer)
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minHeight: 0 }}>
       {/* Header Actions */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexShrink: 0 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+        {retention && (
+          <Typography variant='caption' sx={{ mr: 'auto', opacity: 0.6, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <i className='ri-time-line' />
+            {t('audit.retentionNotice', { days: retention.retentionDays })}
+          </Typography>
+        )}
         <Button
           variant='outlined'
           size='small'

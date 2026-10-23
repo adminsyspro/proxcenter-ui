@@ -9,6 +9,7 @@ import path from 'node:path'
 
 import { Agent, setGlobalDispatcher } from 'undici'
 
+import { startAuditRetentionSweeper } from '@/lib/audit/retentionSweeper'
 import { startSessionSweeper } from '@/lib/auth/sessionSweeper'
 import { importDiskAssets } from '@/lib/branding/importDiskAssets'
 import { prisma } from '@/lib/db/prisma'
@@ -66,6 +67,17 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this: the rows stay in place and the next
     // boot retries starting the sweeper.
     console.error('[startup] session sweeper failed to start (non-fatal):', err)
+  }
+
+  try {
+    // Applies the audit retention of the security policy, which used to be
+    // saved and never read. Every replica starts it; a database lease lets
+    // exactly one of them purge.
+    startAuditRetentionSweeper()
+  } catch (err) {
+    // Boot must never depend on this: the rows stay in place and the next
+    // boot retries starting the sweeper.
+    console.error('[startup] audit retention sweeper failed to start (non-fatal):', err)
   }
 
   try {

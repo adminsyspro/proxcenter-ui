@@ -149,6 +149,9 @@ export type AuditAction =
   | "failback"
   | "cancel"
 
+  // Rows past the retention policy deleted by lib/audit/retentionSweeper.ts
+  | "audit_purge"
+
   // Orchestrator rows (issue #1105), written by the Go backend and relayed to syslog
   | "drs.migrate"
   | "rolling.start"

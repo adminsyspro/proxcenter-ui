@@ -979,6 +979,11 @@ function ProfilesTab() {
 // ============================================================================
 // Policies Tab
 // ============================================================================
+
+// Mirrors AUDIT_RETENTION_MIN_DAYS of lib/compliance/policies.ts, which this
+// client component cannot import (the module opens the database).
+const AUDIT_RETENTION_MIN_DAYS = 30
+
 function PoliciesTab() {
   const t = useTranslations()
   const { data, isLoading, mutate } = useSecurityPolicies()
@@ -988,6 +993,7 @@ function PoliciesTab() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [policy2faError, setPolicy2faError] = useState<string | null>(null)
+  const [retentionError, setRetentionError] = useState<string | null>(null)
 
   useEffect(() => {
     if (policies && !form) {
@@ -999,11 +1005,20 @@ function PoliciesTab() {
     setForm((prev: any) => prev ? { ...prev, [field]: value } : prev)
   }, [])
 
+  // Checked as the user types, never corrected for them: snapping 20 up to
+  // the floor on blur saved a value nobody chose and reported success.
+  const retentionTooShort = !!form
+    && (!Number.isInteger(form.audit_retention_days) || form.audit_retention_days < AUDIT_RETENTION_MIN_DAYS)
+  const retentionMessage = retentionTooShort
+    ? t('compliance.retentionTooShort', { min: AUDIT_RETENTION_MIN_DAYS })
+    : retentionError
+
   const handleSave = useCallback(async () => {
-    if (!form) return
+    if (!form || retentionTooShort) return
     setSaving(true)
     setToast(null)
     setPolicy2faError(null)
+    setRetentionError(null)
     try {
       const res = await fetch('/api/v1/compliance/policies', {
         method: 'PUT',
@@ -1016,6 +1031,10 @@ function PoliciesTab() {
           setPolicy2faError(t('twoFactor.policyNeedOwn2fa'))
           return
         }
+        if (err.code === 'E_AUDIT_RETENTION_TOO_SHORT') {
+          setRetentionError(t('compliance.retentionTooShort', { min: AUDIT_RETENTION_MIN_DAYS }))
+          return
+        }
         throw new Error(err.error || 'Failed to save')
       }
       void mutate()
@@ -1026,7 +1045,7 @@ function PoliciesTab() {
     } finally {
       setSaving(false)
     }
-  }, [form, mutate, t])
+  }, [form, retentionTooShort, mutate, t])
 
   if (isLoading || !form) return <CardsSkeleton count={4} columns={2} />
 
@@ -1191,16 +1210,25 @@ function PoliciesTab() {
                   type="number"
                   label={t('compliance.retentionDays')}
                   value={form.audit_retention_days}
-                  onChange={(v) => handleChange('audit_retention_days', v)}
-                  fallback={0}
+                  onChange={(v) => {
+                    setRetentionError(null)
+                    handleChange('audit_retention_days', v)
+                  }}
+                  fallback={AUDIT_RETENTION_MIN_DAYS}
                   size="small"
-                  helperText={t('compliance.retentionHelper')}
-                  inputProps={{ min: 1 }}
+                  error={!!retentionMessage}
+                  helperText={t('compliance.retentionHelper', { min: AUDIT_RETENTION_MIN_DAYS })}
+                  inputProps={{ min: AUDIT_RETENTION_MIN_DAYS }}
                 />
                 <FormControlLabel
                   control={<Switch checked={form.audit_auto_cleanup} onChange={(e) => handleChange('audit_auto_cleanup', e.target.checked)} />}
                   label={t('compliance.autoCleanup')}
                 />
+                {retentionMessage && (
+                  <Alert severity="error">
+                    {retentionMessage}
+                  </Alert>
+                )}
               </Box>
             </CardContent>
           </Card>
@@ -1246,7 +1274,7 @@ function PoliciesTab() {
           variant="contained"
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <i className="ri-save-line" />}
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || retentionTooShort}
         >
           {saving ? t('common.saving') : t('common.save')}
         </Button>

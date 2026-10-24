@@ -1551,6 +1551,8 @@
       "graphicCard": "显卡",
       "scsiController": "SCSI 控制器",
       "machine": "机器类型",
+      "machineVersion": "机器版本",
+      "machineVersionLatest": "最新",
       "qemuAgent": "QEMU 代理",
       "firmware": "固件",
       "addTpm": "添加 TPM",
@@ -1597,6 +1599,12 @@
       "disconnect": "断开连接",
       "rateLimitMbs": "速率限制 (MB/s)",
       "mtu": "MTU",
+      "mtuBridgePlaceholder": "网桥 MTU",
+      "mtuRange": "1（网桥 MTU）或 576 至 65520",
+      "mtuAboveBridge": "超过网桥 MTU（{max}）：虚拟机将无法启动",
+      "mtuAboveDefault": "网桥未声明 MTU（默认 1500）：虚拟机可能无法启动",
+      "multiqueue": "多队列",
+      "virtioOnly": "仅限 VirtIO",
       "reviewSettingsVm": "创建虚拟机前请检查您的设置",
       "vmIdMin": "虚拟机 ID 必须 >= 100",
       "vmIdMax": "虚拟机 ID 必须 <= 999999999",
@@ -1646,10 +1654,20 @@
         "quotaViolation": "配额超出 — {violation}（CPU / 内存 / 磁盘 标签页）。",
         "noBridgeBlocker": "您的 vDC 未授权任何网桥。请在 \"我的数据中心\" 创建 VNet、向提供商申请共享网桥，或勾选 \"无网卡\"。",
         "invalidBridgeBlocker": "{nicDetails} 上的网桥未授权。请在网络标签页中选择允许的网桥。",
-        "nicLabel": "NIC {index}（网桥 \"{bridge}\"）"
+        "nicLabel": "NIC {index}（网桥 \"{bridge}\"）",
+        "invalidMtuBlocker": "{nic}：MTU {mtu} 无法在其网桥上使用"
       },
       "noBlankVmVdc": "您的 vDC 均不允许空白虚拟机。请改为从模板目录部署。",
-      "noVdcNode": "此 vDC 当前没有可用节点。"
+      "noVdcNode": "此 vDC 当前没有可用节点。",
+      "summary": {
+        "vm": "虚拟机",
+        "guestOs": "客户机操作系统",
+        "enabled": "已启用",
+        "cpuTopology": "{sockets} 个插槽 × {cores} 个核心",
+        "balloonMin": "最小 {size}",
+        "onBridge": "{bridge} 上的 {model}",
+        "noNetwork": "无网络设备"
+      }
     },
     "createLxc": {
       "title": "创建：LXC 容器",

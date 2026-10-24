@@ -37,7 +37,7 @@ import {
   vdcs,
 } from '@/__tests__/fixtures/pveProvisioning'
 
-import CreateVmDialog from './CreateVmDialog'
+import CreateVmDialog, { checkNicMtu, guestOsSummaryLabel } from './CreateVmDialog'
 
 // ------------------------------------------------------------------ //
 // Context mocks
@@ -121,8 +121,19 @@ function seedAllHandlers() {
     http.get(`*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/cpu-models`, () =>
       HttpResponse.json({ data: [] }),
     ),
+
+    // 10. Versioned machine types of the node (#1194).
+    http.get(`*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/machines`, () =>
+      HttpResponse.json({ data: machineVersions }),
+    ),
   )
 }
+
+const machineVersions = [
+  { id: 'pc-i440fx-11.0+pve2', type: 'i440fx', version: '11.0+pve2', changes: 'Enable hv_emcs for Windows.' },
+  { id: 'pc-q35-11.0+pve2', type: 'q35', version: '11.0+pve2', changes: 'Enable hv_emcs for Windows.' },
+  { id: 'pc-q35-10.1', type: 'q35', version: '10.1', changes: null },
+]
 
 // ------------------------------------------------------------------ //
 // Helpers
@@ -648,6 +659,32 @@ describe('CreateVmDialog - OS tab', () => {
     expect(stillLinux).toBeUndefined()
   })
 
+  it('the Confirm step names the Windows Server preset and the PVE ostype label, not the raw code', async () => {
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OS' }))
+    fireEvent.click(await screen.findByText('Windows Server'))
+    fireEvent.click(screen.getByRole('tab', { name: 'Confirm' }))
+
+    expect(await screen.findByText('Windows Server · Windows 11/2022/2025')).toBeInTheDocument()
+    expect(screen.queryByText('Windows win11')).not.toBeInTheDocument()
+  })
+
+  it('changing the OS type resets the version to one of that type', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OS' }))
+    const typeCombobox = (await screen.findAllByRole('combobox')).find(cb => cb.textContent === 'Linux')!
+    await user.click(typeCombobox)
+    await user.click(await screen.findByRole('option', { name: 'Windows' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Confirm' }))
+
+    expect(await screen.findByText('Windows 11/2022/2025')).toBeInTheDocument()
+  })
+
   it('toggling installation media off hides the storage/ISO selects', async () => {
     renderWithProviders(<CreateVmDialog {...makeProps()} />)
     await waitForDataLoad()
@@ -775,6 +812,179 @@ describe('CreateVmDialog - System tab', () => {
 })
 
 // ------------------------------------------------------------------ //
+// #1194: Multiqueue, MTU (bridge MTU by default) and machine version
+// ------------------------------------------------------------------ //
+
+describe('CreateVmDialog - NIC tuning and machine version (#1194)', () => {
+  beforeEach(() => {
+    seedAllHandlers()
+  })
+
+  async function pick(label: string, option: RegExp) {
+    const lbl = await screen.findByText(label, { selector: 'label' })
+    fireEvent.mouseDown(within(lbl.closest('.MuiFormControl-root') as HTMLElement).getByRole('combobox'))
+    fireEvent.click(await screen.findByRole('option', { name: option }))
+  }
+
+  async function create(edit: () => Promise<void> = async () => {}) {
+    let body: Record<string, unknown> | null = null
+    server.use(
+      http.post(`*/api/v1/connections/${CONN_ID}/guests/qemu/${NODE_NAME}`, async ({ request }) => {
+        body = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ data: { upid: 'UPID:pve1:test' } })
+      }),
+    )
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+    await edit()
+    fireEvent.click(screen.getByRole('tab', { name: 'Confirm' }))
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /create/i })).not.toBeDisabled()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /create/i }))
+    await waitFor(() => {
+      expect(body).not.toBeNull()
+    })
+
+    return body as unknown as Record<string, unknown>
+  }
+
+  it.each([
+    ['', null], ['1', null], ['575', 'error'], ['65521', 'error'], ['1.5', 'error'],
+    ['1500', null], ['9000', 'warning'],
+  ])('checkNicMtu(%s) on a bridge without declared MTU -> %s', (mtu, level) => {
+    expect(checkNicMtu(mtu, null)?.level ?? null).toBe(level)
+  })
+
+  it('checkNicMtu refuses an MTU above the declared bridge MTU only', () => {
+    expect(checkNicMtu('9000', 9000)).toBeNull()
+    expect(checkNicMtu('9001', 9000)).toEqual({ level: 'error', key: 'mtuAboveBridge', max: 9000 })
+  })
+
+  it('starts with an empty MTU and sends neither mtu nor queues, so the NIC follows the bridge MTU', async () => {
+    const body = await create(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Network' }))
+      expect(await screen.findByLabelText('MTU')).toHaveValue(null)
+    })
+
+    expect(body.net0).toBe('virtio,bridge=vmbr0,firewall=1')
+    expect(body).not.toHaveProperty('machine')
+  })
+
+  it('sends the MTU and the Multiqueue value typed for a VirtIO NIC', async () => {
+    const body = await create(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Network' }))
+      fireEvent.change(await screen.findByLabelText('MTU'), { target: { value: '1' } })
+      fireEvent.change(screen.getByLabelText('Multiqueue'), { target: { value: '4' } })
+    })
+
+    expect(body.net0).toBe('virtio,bridge=vmbr0,firewall=1,mtu=1,queues=4')
+  })
+
+  it('blocks Create when the MTU exceeds the MTU the bridge declares', async () => {
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/network-choices`, () =>
+        HttpResponse.json({ data: [{ name: 'vmbr0', mtu: 1500 }] }),
+      ),
+    )
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+    fireEvent.click(screen.getByRole('tab', { name: 'Network' }))
+    fireEvent.change(await screen.findByLabelText('MTU'), { target: { value: '2000' } })
+    expect(await screen.findByText('Above the bridge MTU (1500): the VM would not start')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Confirm' }))
+    expect(await screen.findByText('net0: MTU 2000 is not usable on its bridge')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^create$/i })).toBeDisabled()
+  })
+
+  it('only warns above 1500 when the bridge declares no MTU', async () => {
+    const body = await create(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Network' }))
+      fireEvent.change(await screen.findByLabelText('MTU'), { target: { value: '9000' } })
+      expect(await screen.findByText(/declares no MTU/)).toBeInTheDocument()
+    })
+
+    expect(body.net0).toBe('virtio,bridge=vmbr0,firewall=1,mtu=9000')
+  })
+
+  it('disables MTU and Multiqueue on a non-VirtIO model and keeps them out of net0', async () => {
+    const body = await create(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Network' }))
+      fireEvent.change(await screen.findByLabelText('MTU'), { target: { value: '1400' } })
+      await pick('Model', /Intel E1000/)
+      expect(screen.getByLabelText('MTU')).toBeDisabled()
+      expect(screen.getByLabelText('Multiqueue')).toBeDisabled()
+    })
+
+    expect(body.net0).toBe('e1000,bridge=vmbr0,firewall=1')
+  })
+
+  it('offers the versions of the picked family and sends the pinned machine id', async () => {
+    const body = await create(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'System' }))
+      await pick('Machine', /^q35$/)
+      const lbl = await screen.findByText('Machine version', { selector: 'label' })
+      fireEvent.mouseDown(within(lbl.closest('.MuiFormControl-root') as HTMLElement).getByRole('combobox'))
+      const names = (await screen.findAllByRole('option')).map(o => o.textContent)
+      expect(names).toEqual(['Latest', '11.0+pve2Enable hv_emcs for Windows.', '10.1'])
+      fireEvent.click(screen.getByRole('option', { name: '10.1' }))
+    })
+
+    expect(body.machine).toBe('pc-q35-10.1')
+  })
+
+  it('lists the settings as a key/value sheet on the Confirm step', async () => {
+    renderWithProviders(<CreateVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+    fireEvent.click(screen.getByRole('tab', { name: 'Network' }))
+    fireEvent.change(await screen.findByLabelText('MTU'), { target: { value: '1400' } })
+    fireEvent.click(screen.getByRole('tab', { name: 'Confirm' }))
+
+    const summary = await screen.findByTestId('create-vm-summary')
+    const row = (label: string) => within(summary).getByText(label).nextElementSibling?.textContent
+    expect(row('Node')).toBe('pve1')
+    expect(row('vCPU')).toBe('1 (1 socket × 1 core)')
+    expect(row('net0')).toBe('VirtIO on vmbr0 · Firewall · MTU 1400')
+    expect(within(summary).queryByText(/^Node: /)).not.toBeInTheDocument()
+  })
+
+  it('drives sockets and cores from their sliders', async () => {
+    const body = await create(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'CPU' }))
+      fireEvent.keyDown(await screen.findByRole('slider', { name: 'Sockets' }), { key: 'ArrowRight' })
+      fireEvent.keyDown(screen.getByRole('slider', { name: 'Cores' }), { key: 'End' })
+      expect(screen.getByLabelText('Cores', { selector: 'input:not([type=range])' })).toHaveValue(128)
+    })
+
+    expect(body.sockets).toBe(2)
+    expect(body.cores).toBe(128)
+  })
+
+  it('sends the extra CPU flags with the CPU type', async () => {
+    const body = await create(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'CPU' }))
+      fireEvent.click(await screen.findByText('Extra CPU Flags'))
+      fireEvent.click(within(screen.getByRole('group', { name: 'aes' })).getByRole('button', { name: '+' }))
+      fireEvent.click(within(screen.getByRole('group', { name: 'pcid' })).getByRole('button', { name: '−' }))
+    })
+
+    expect(body.cpu).toBe('x86-64-v2-AES,flags=+aes;-pcid')
+  })
+
+  it('drops the pin back to Latest when the machine family changes', async () => {
+    const body = await create(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'System' }))
+      await pick('Machine', /^q35$/)
+      await pick('Machine version', /^10\.1$/)
+      await pick('Machine', /i440fx/)
+    })
+
+    expect(body).not.toHaveProperty('machine')
+  })
+})
+
+// ------------------------------------------------------------------ //
 // 9. Numeric fields must be clearable (discussion #634)
 //
 // This dialog used to carry its own private copy of the buffered numeric
@@ -802,7 +1012,7 @@ describe('CreateVmDialog - clearable numeric fields', () => {
     await waitForDataLoad()
     await goToTab('CPU')
 
-    const cores = screen.getByLabelText('Cores') as HTMLInputElement
+    const cores = screen.getByLabelText('Cores', { selector: 'input:not([type=range])' }) as HTMLInputElement
     expect(cores.value).toBe('1')
 
     await userEvent.clear(cores)
@@ -1077,5 +1287,21 @@ describe('CreateVmDialog - default node and cluster selection', () => {
     await waitFor(() => expect(nodeSelect().textContent).toContain('pve2'))
     await waitFor(() => expect(nextidCalls).toBe(2))
     await waitFor(() => expect(bridgeNodes).toContain('pve2'))
+  })
+})
+
+describe('guestOsSummaryLabel', () => {
+  it('gives the PVE label of the ostype', () => {
+    expect(guestOsSummaryLabel('Linux', 'l26', null)).toBe('Linux 6.x - 2.6 Kernel')
+    expect(guestOsSummaryLabel('Windows', 'win10', null)).toBe('Windows 10/2016/2019')
+  })
+
+  it('puts the preset name first while the preset still matches', () => {
+    expect(guestOsSummaryLabel('Windows', 'win11', 'winserver')).toBe('Windows Server · Windows 11/2022/2025')
+    expect(guestOsSummaryLabel('Windows', 'win10', 'winserver')).toBe('Windows 10/2016/2019')
+  })
+
+  it('falls back to type and code for an unknown ostype', () => {
+    expect(guestOsSummaryLabel('Windows', 'w9x', null)).toBe('Windows w9x')
   })
 })

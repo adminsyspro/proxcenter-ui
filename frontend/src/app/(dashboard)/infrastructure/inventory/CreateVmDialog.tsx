@@ -54,6 +54,8 @@ import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { blankVmVdcs } from '@/lib/vdc/blankVms'
 import { formatBytes } from '@/utils/format'
 import { AllVmItem } from './InventoryTree'
+import CpuFlagsSelector, { cpuWithFlags, type CpuFlags } from './components/CpuFlagsSelector'
+import type { QemuMachineVersion } from '@/lib/inventory/qemuMachines'
 
 type DiskConfig = {
   bus: string
@@ -99,7 +101,22 @@ type NicConfig = {
   firewall: boolean
   disconnect: boolean
   rateLimit: string
+  // VirtIO only. Empty MTU = bridge MTU, like PVE when the key is absent (#1194).
   mtu: string
+  queues: string
+}
+
+// PVE starts a VirtIO NIC only with mtu=1 (bridge MTU) or 576..bridge MTU;
+// anything else is accepted at creation and fails at the first start (#1194).
+// A bridge without a declared MTU runs at 1500 unless its ports raise it,
+// so going above that is only a warning.
+export function checkNicMtu(mtu: string, bridgeMtu: number | null): { level: 'error' | 'warning'; key: string; max?: number } | null {
+  if (mtu === '' || mtu === '1') return null
+  const n = Number(mtu)
+  if (!Number.isInteger(n) || n < 576 || n > 65520) return { level: 'error', key: 'mtuRange' }
+  if (bridgeMtu && n > bridgeMtu) return { level: 'error', key: 'mtuAboveBridge', max: bridgeMtu }
+  if (!bridgeMtu && n > 1500) return { level: 'warning', key: 'mtuAboveDefault' }
+  return null
 }
 
 const createDefaultNic = (): NicConfig => ({
@@ -110,8 +127,48 @@ const createDefaultNic = (): NicConfig => ({
   firewall: true,
   disconnect: false,
   rateLimit: '',
-  mtu: '1500',
+  mtu: '',
+  queues: '',
 })
+
+const OS_PRESETS: { id: string; label: string; icon?: string; svgIcon?: string; type: string; version: string }[] = [
+  { id: 'ubuntu', label: 'Ubuntu', svgIcon: '/images/os/ubuntu.svg', type: 'Linux', version: 'l26' },
+  { id: 'debian', label: 'Debian', svgIcon: '/images/os/debian.svg', type: 'Linux', version: 'l26' },
+  { id: 'centos', label: 'CentOS / Rocky', svgIcon: '/images/os/centos.svg', type: 'Linux', version: 'l26' },
+  { id: 'rhel', label: 'RHEL', svgIcon: '/images/os/redhat.svg', type: 'Linux', version: 'l26' },
+  { id: 'fedora', label: 'Fedora', svgIcon: '/images/os/fedora.svg', type: 'Linux', version: 'l26' },
+  { id: 'win11', label: 'Windows 11', icon: 'ri-windows-fill', type: 'Windows', version: 'win11' },
+  { id: 'win10', label: 'Windows 10', icon: 'ri-windows-fill', type: 'Windows', version: 'win10' },
+  { id: 'winserver', label: 'Windows Server', icon: 'ri-windows-fill', type: 'Windows', version: 'win11' },
+]
+
+// PVE ostype values and their PVE labels, per OS type.
+const GUEST_OS_VERSIONS: Record<string, { value: string; label: string }[]> = {
+  Linux: [
+    { value: 'l26', label: 'Linux 6.x - 2.6 Kernel' },
+    { value: 'l24', label: 'Linux 2.4 Kernel' },
+  ],
+  Windows: [
+    { value: 'win11', label: 'Windows 11/2022/2025' },
+    { value: 'win10', label: 'Windows 10/2016/2019' },
+    { value: 'win8', label: 'Windows 8.x/2012/2012r2' },
+    { value: 'win7', label: 'Windows 7/2008r2' },
+    { value: 'wvista', label: 'Windows Vista/2008' },
+    { value: 'wxp', label: 'Windows XP/2003' },
+    { value: 'w2k', label: 'Windows 2000' },
+  ],
+  Solaris: [{ value: 'solaris', label: 'Solaris Kernel' }],
+  Other: [{ value: 'other', label: 'Other' }],
+}
+
+/** Confirm-step label: the PVE label of the ostype, after the preset name while the
+ *  preset still matches ("Windows Server · Windows 11/2022/2025"), never the raw code. */
+export function guestOsSummaryLabel(type: string, version: string, presetId: string | null): string {
+  const versionLabel = GUEST_OS_VERSIONS[type]?.find(v => v.value === version)?.label ?? `${type} ${version}`
+  const preset = OS_PRESETS.find(p => p.id === presetId)
+
+  return preset && preset.type === type && preset.version === version ? `${preset.label} · ${versionLabel}` : versionLabel
+}
 
 // Least-loaded online node. Score = cpuPct + 1.5*memPct, RAM weighted higher
 // because it's the harder constraint at provisioning time. Falls back to the
@@ -247,6 +304,9 @@ function CreateVmDialog({
   // Formulaire - System
   const [graphicCard, setGraphicCard] = useState('default')
   const [machine, setMachine] = useState('i440fx')
+  // 'latest' = no pin; otherwise a versioned id from the node (`pc-q35-10.1`).
+  const [machineVersion, setMachineVersion] = useState('latest')
+  const [machineVersions, setMachineVersions] = useState<QemuMachineVersion[]>([])
   const [bios, setBios] = useState('seabios')
   const [scsiController, setScsiController] = useState('virtio-scsi-single')
   const [qemuAgent, setQemuAgent] = useState(false)
@@ -265,6 +325,7 @@ function CreateVmDialog({
   const [cpuUnits, setCpuUnits] = useState(100)
   const [cpuLimit, setCpuLimit] = useState(0)
   const [enableNuma, setEnableNuma] = useState(false)
+  const [cpuFlags, setCpuFlags] = useState<CpuFlags>({})
   
   // Formulaire - Memory
   const [memorySize, setMemorySize] = useState(2048)
@@ -344,6 +405,7 @@ function CreateVmDialog({
           type: c.kind === 'vnet' ? 'vnet' : c.kind === 'shared' ? 'shared' : (c.type || 'bridge'),
           label: c.kind === 'vnet' ? (c.displayName ?? null) : (c.label ?? null),
           vdc: c.vdc ?? null,
+          mtu: Number(c.mtu) > 0 ? Number(c.mtu) : null,
         }))
         setBridges(bridgeList)
         // Sync nic state with what the server actually authorises: valid
@@ -390,6 +452,26 @@ function CreateVmDialog({
     }
   }
   const cpuAdvancedHidden = cpuPolicy?.advanced === false
+
+  // Versioned machine types of the node's QEMU build, to pin one (#1194)
+  const loadMachineVersions = async (connId: string, node: string) => {
+    try {
+      const res = await fetch(
+        `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/machines`
+      )
+      const json = res.ok ? await res.json() : null
+      setMachineVersions(Array.isArray(json?.data) ? json.data : [])
+    } catch {
+      setMachineVersions([])
+    }
+  }
+  const familyMachineVersions = useMemo(
+    () => machineVersions.filter(m => m.type === machine),
+    [machineVersions, machine]
+  )
+  // A pin the node does not offer (node switched, list failed) reads as
+  // Latest: the Select and the payload both go through pinnedMachine.
+  const pinnedMachine = familyMachineVersions.find(m => m.id === machineVersion)
 
   // A restrictive policy pins the wizard onto an allowed model: the vDC
   // default when it is allowed, else the first allowed one. An explicit user
@@ -549,6 +631,7 @@ function CreateVmDialog({
   useEffect(() => {
     if (selectedConnection && resolvedNode) {
       void loadCustomCpuModels(selectedConnection, resolvedNode)
+      void loadMachineVersions(selectedConnection, resolvedNode)
     }
   }, [selectedConnection, resolvedNode])
 
@@ -994,7 +1077,10 @@ return
       // CPU type (seulement si différent de défaut). Sous une policy
       // restrictive on l'envoie toujours : le défaut PVE n'est pas forcément
       // dans la liste autorisée.
-      if (cpuType && (cpuType !== 'kvm64' || cpuPolicy?.allowed)) payload.cpu = cpuType
+      const flags = cpuAdvancedHidden ? {} : cpuFlags
+      if (cpuType && (cpuType !== 'kvm64' || cpuPolicy?.allowed || Object.keys(flags).length > 0)) {
+        payload.cpu = cpuWithFlags(cpuType, flags)
+      }
 
       // Ballooning
       if (ballooning && minMemory < memorySize) {
@@ -1004,10 +1090,10 @@ return
       // BIOS (seulement si OVMF/UEFI)
       if (bios === 'ovmf') payload.bios = 'ovmf'
 
-      // Machine type - utiliser le format Proxmox correct
-      if (machine === 'q35') payload.machine = 'q35'
-
-      // i440fx est le défaut, pas besoin de l'envoyer
+      // Machine type: a pinned version goes as its versioned id; i440fx
+      // unpinned is the PVE default and needs no key.
+      if (pinnedMachine) payload.machine = pinnedMachine.id
+      else if (machine === 'q35') payload.machine = 'q35'
 
       // Carte graphique : "default" laisse PVE choisir selon l'OS (#1157)
       if (graphicCard !== 'default') payload.vga = graphicCard
@@ -1057,6 +1143,8 @@ return
           if (nic.firewall) netStr += ',firewall=1'
           if (nic.rateLimit) netStr += `,rate=${nic.rateLimit}`
           if (nic.disconnect) netStr += ',link_down=1'
+          if (nic.model === 'virtio' && nic.mtu) netStr += `,mtu=${nic.mtu}`
+          if (nic.model === 'virtio' && nic.queues) netStr += `,queues=${nic.queues}`
           ;(payload as any)[`net${i}`] = netStr
         })
       }
@@ -1363,17 +1451,6 @@ return
 
       case 1: // OS
         {
-          const osPresets: { id: string; label: string; icon?: string; svgIcon?: string; type: string; version: string }[] = [
-            { id: 'ubuntu', label: 'Ubuntu', svgIcon: '/images/os/ubuntu.svg', type: 'Linux', version: 'l26' },
-            { id: 'debian', label: 'Debian', svgIcon: '/images/os/debian.svg', type: 'Linux', version: 'l26' },
-            { id: 'centos', label: 'CentOS / Rocky', svgIcon: '/images/os/centos.svg', type: 'Linux', version: 'l26' },
-            { id: 'rhel', label: 'RHEL', svgIcon: '/images/os/redhat.svg', type: 'Linux', version: 'l26' },
-            { id: 'fedora', label: 'Fedora', svgIcon: '/images/os/fedora.svg', type: 'Linux', version: 'l26' },
-            { id: 'win11', label: 'Windows 11', icon: 'ri-windows-fill', type: 'Windows', version: 'win11' },
-            { id: 'win10', label: 'Windows 10', icon: 'ri-windows-fill', type: 'Windows', version: 'win10' },
-            { id: 'winserver', label: 'Windows Server', icon: 'ri-windows-fill', type: 'Windows', version: 'win11' },
-          ]
-
           return (
             <Stack spacing={2}>
               {/* Quick presets */}
@@ -1382,7 +1459,7 @@ return
                   {t('inventory.createVm.osPresets')}
                 </Typography>
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
-                  {osPresets.map((p) => {
+                  {OS_PRESETS.map((p) => {
                     const isActive = selectedOsPreset === p.id
                     return (
                       <Box
@@ -1487,7 +1564,7 @@ return
                     <InputLabel>{t('inventory.createVm.osType')}</InputLabel>
                     <Select
                       value={guestOsType}
-                      onChange={(e) => setGuestOsType(e.target.value)}
+                      onChange={(e) => { setGuestOsType(e.target.value); setGuestOsVersion(GUEST_OS_VERSIONS[e.target.value]?.[0]?.value ?? 'other') }}
                       label={t('inventory.createVm.osType')}
                       renderValue={(val) => (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1508,21 +1585,7 @@ return
                   <FormControl fullWidth size="small">
                     <InputLabel>{t('inventory.createVm.osVersion')}</InputLabel>
                     <Select value={guestOsVersion} onChange={(e) => setGuestOsVersion(e.target.value)} label={t('inventory.createVm.osVersion')}>
-                      {guestOsType === 'Linux' && [
-                        <MenuItem key="l26" value="l26">Linux 6.x - 2.6 Kernel</MenuItem>,
-                        <MenuItem key="l24" value="l24">Linux 2.4 Kernel</MenuItem>,
-                      ]}
-                      {guestOsType === 'Windows' && [
-                        <MenuItem key="win11" value="win11">Windows 11/2022/2025</MenuItem>,
-                        <MenuItem key="win10" value="win10">Windows 10/2016/2019</MenuItem>,
-                        <MenuItem key="win8" value="win8">Windows 8.x/2012/2012r2</MenuItem>,
-                        <MenuItem key="win7" value="win7">Windows 7/2008r2</MenuItem>,
-                        <MenuItem key="wvista" value="wvista">Windows Vista/2008</MenuItem>,
-                        <MenuItem key="wxp" value="wxp">Windows XP/2003</MenuItem>,
-                        <MenuItem key="w2k" value="w2k">Windows 2000</MenuItem>,
-                      ]}
-                      {guestOsType === 'Solaris' && <MenuItem value="solaris">Solaris Kernel</MenuItem>}
-                      {guestOsType === 'Other' && <MenuItem value="other">Other</MenuItem>}
+                      {(GUEST_OS_VERSIONS[guestOsType] ?? []).map(v => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
                     </Select>
                   </FormControl>
                 </Box>
@@ -1543,9 +1606,29 @@ return
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
                 <FormControl fullWidth size="small">
                   <InputLabel>{t('inventory.createVm.machine')}</InputLabel>
-                  <Select value={machine} onChange={(e) => setMachine(e.target.value)} label={t('inventory.createVm.machine')}>
+                  <Select value={machine} onChange={(e) => { setMachine(e.target.value); setMachineVersion('latest') }} label={t('inventory.createVm.machine')}>
                     <MenuItem value="i440fx">Default (i440fx)</MenuItem>
                     <MenuItem value="q35">q35</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl fullWidth size="small">
+                  <InputLabel>{t('inventory.createVm.machineVersion')}</InputLabel>
+                  <Select
+                    value={pinnedMachine ? machineVersion : 'latest'}
+                    onChange={(e) => setMachineVersion(e.target.value)}
+                    label={t('inventory.createVm.machineVersion')}
+                    renderValue={(v) => familyMachineVersions.find(m => m.id === v)?.version ?? t('inventory.createVm.machineVersionLatest')}
+                    MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
+                  >
+                    <MenuItem value="latest">{t('inventory.createVm.machineVersionLatest')}</MenuItem>
+                    {familyMachineVersions.map(m => (
+                      <MenuItem key={m.id} value={m.id} sx={{ display: 'block' }}>
+                        {m.version}
+                        {m.changes && (
+                          <Typography variant="caption" sx={{ display: 'block', opacity: 0.6, whiteSpace: 'normal', maxWidth: 360 }}>{m.changes}</Typography>
+                        )}
+                      </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
                 <FormControl fullWidth size="small">
@@ -1878,12 +1961,26 @@ return
         {
           const totalVcpus = cpuSockets * cpuCores
           const cpuPresets = [1, 2, 4, 8, 16, 32]
+          // Cores slide on a power-of-two scale, like the memory slider.
+          const coreMarks = [1, 2, 4, 8, 16, 32, 64, 128]
+          const coresToSlider = (n: number) => {
+            for (let i = coreMarks.length - 1; i >= 0; i--) {
+              if (n >= coreMarks[i]) return i + (n - coreMarks[i]) / (coreMarks[Math.min(i + 1, coreMarks.length - 1)] - coreMarks[i] || 1)
+            }
+            return 0
+          }
+          const sliderToCores = (val: number) => {
+            const idx = Math.floor(val)
+            if (idx >= coreMarks.length - 1) return coreMarks[coreMarks.length - 1]
+            return Math.max(1, Math.round(coreMarks[idx] + (val - idx) * (coreMarks[idx + 1] - coreMarks[idx])))
+          }
+          const sliderSx = { '& .MuiSlider-markLabel': { fontSize: '0.65rem' } }
           return (
             <Stack spacing={2}>
-              {/* Quick presets */}
-              <Box>
-                <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>{t('inventory.createVm.totalCores', { count: totalVcpus })}</Typography>
-                <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+              {/* Label + presets on same line */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{t('inventory.createVm.totalCores', { count: totalVcpus })}</Typography>
+                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                   {cpuPresets.map(v => (
                     <Chip
                       key={v}
@@ -1892,14 +1989,41 @@ return
                       variant={totalVcpus === v ? 'filled' : 'outlined'}
                       color={totalVcpus === v ? 'primary' : 'default'}
                       onClick={() => { setCpuSockets(1); setCpuCores(v) }}
-                      sx={{ fontWeight: totalVcpus === v ? 700 : 400, cursor: 'pointer' }}
+                      sx={{ fontWeight: totalVcpus === v ? 700 : 400, cursor: 'pointer', height: 24, fontSize: 11 }}
                     />
                   ))}
                 </Box>
               </Box>
 
-              {/* Sockets × Cores + Type */}
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+              {/* Sockets × Cores sliders + fields, then Type */}
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 4, rowGap: 1.5 }}>
+                <Box sx={{ px: 1 }}>
+                  <Slider
+                    aria-label={t('inventory.createVm.sockets')}
+                    value={Math.min(cpuSockets, 4)}
+                    min={1}
+                    max={4}
+                    step={1}
+                    onChange={(_, val) => setCpuSockets(val as number)}
+                    marks={[1, 2, 3, 4].map(v => ({ value: v, label: String(v) }))}
+                    valueLabelDisplay="auto"
+                    sx={sliderSx}
+                  />
+                </Box>
+                <Box sx={{ px: 1 }}>
+                  <Slider
+                    aria-label={t('inventory.createVm.cores')}
+                    value={coresToSlider(cpuCores)}
+                    min={0}
+                    max={coreMarks.length - 1}
+                    step={0.01}
+                    onChange={(_, val) => setCpuCores(sliderToCores(val as number))}
+                    marks={coreMarks.map((m, i) => ({ value: i, label: String(m) }))}
+                    valueLabelDisplay="auto"
+                    valueLabelFormat={() => String(cpuCores)}
+                    sx={sliderSx}
+                  />
+                </Box>
                 <NumericTextField
                   label={t('inventory.createVm.sockets')}
                   value={cpuSockets}
@@ -1981,6 +2105,11 @@ return
                   </Box>
                 </Collapse>
               </Box>
+
+              {/* Extra CPU flags, hidden like the other advanced controls by the vDC policy */}
+              {!cpuAdvancedHidden && (
+                <CpuFlagsSelector flags={cpuFlags} onChange={setCpuFlags} sx={{ borderRadius: 2 }} />
+              )}
             </Stack>
           )
         }
@@ -2097,6 +2226,10 @@ return
 
             {!noNetwork && nics.map((nic, nicIdx) => {
               const isExpanded = expandedNics.has(nicIdx)
+              const mtuCheck = nicMtuCheck(nic)
+              let mtuHelper: string | undefined
+              if (nic.model !== 'virtio') mtuHelper = t('inventory.createVm.virtioOnly')
+              else if (mtuCheck) mtuHelper = t(`inventory.createVm.${mtuCheck.key}`, { max: mtuCheck.max ?? '' })
               const toggleExpand = () => setExpandedNics(s => { const n = new Set(s); n.has(nicIdx) ? n.delete(nicIdx) : n.add(nicIdx); return n })
               return (
                 <Box key={nicIdx} sx={{ border: '1px solid', borderColor: isExpanded ? 'primary.main' : 'divider', borderRadius: 2, overflow: 'hidden', transition: 'border-color 0.2s' }}>
@@ -2210,20 +2343,42 @@ return
                       <Typography variant="caption" fontWeight={700} sx={{ display: 'block', opacity: 0.5, mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                         {t('inventory.createVm.advancedOptions')}
                       </Typography>
-                      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1.5 }}>
                         <TextField
                           label={t('inventory.createVm.rateLimitMbs')}
                           value={nic.rateLimit}
                           onChange={(e) => updateNic(nicIdx, { rateLimit: e.target.value })}
                           size="small"
                           placeholder="unlimited"
+                          // Shrunk labels keep the defaults (unlimited, bridge MTU) visible at rest.
+                          slotProps={{ inputLabel: { shrink: true } }}
                         />
                         <TextField
                           label={t('inventory.createVm.mtu')}
-                          value={nic.mtu}
+                          value={nic.model === 'virtio' ? nic.mtu : ''}
                           onChange={(e) => updateNic(nicIdx, { mtu: e.target.value })}
                           size="small"
-                          placeholder="1500 (1 = bridge MTU)"
+                          type="number"
+                          inputProps={{ min: 1, max: 65520 }}
+                          placeholder={t('inventory.createVm.mtuBridgePlaceholder')}
+                          slotProps={{
+                            inputLabel: { shrink: true },
+                            formHelperText: mtuCheck?.level === 'warning' ? { sx: { color: 'warning.main' } } : undefined,
+                          }}
+                          disabled={nic.model !== 'virtio'}
+                          error={mtuCheck?.level === 'error'}
+                          helperText={mtuHelper}
+                        />
+                        <TextField
+                          label={t('inventory.createVm.multiqueue')}
+                          value={nic.model === 'virtio' ? nic.queues : ''}
+                          onChange={(e) => updateNic(nicIdx, { queues: e.target.value })}
+                          size="small"
+                          type="number"
+                          inputProps={{ min: 0, max: 64 }}
+                          slotProps={{ inputLabel: { shrink: true } }}
+                          disabled={nic.model !== 'virtio'}
+                          helperText={nic.model !== 'virtio' ? t('inventory.createVm.virtioOnly') : undefined}
                         />
                       </Box>
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
@@ -2253,15 +2408,48 @@ return
       case 7: // Confirm
         {
           const formatGibConfirm = (mib: number) => mib >= 1024 ? `${(mib / 1024).toFixed(mib % 1024 === 0 ? 0 : 1)} GiB` : `${mib} MiB`
-          const confirmCard = (icon: string, title: string, items: React.ReactNode) => (
-            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 1.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-                <i className={icon} style={{ fontSize: 16, opacity: 0.6 }} />
-                <Typography variant="body2" fontWeight={700} fontSize={12} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>{title}</Typography>
-              </Box>
-              {items}
-            </Box>
-          )
+          // One line per section (#1194): its title, then every label/value pair
+          // side by side. Plain text, no badges.
+          let sectionCount = 0
+          const summarySection = (icon: string, title: string, rows: Array<[React.ReactNode, React.ReactNode] | false | null | undefined>) => {
+            const sep = sectionCount++ > 0 ? { borderTop: '1px solid', borderColor: 'divider' } : {}
+            return (
+              <React.Fragment>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1, ...sep }}>
+                  <i className={icon} style={{ fontSize: 15, opacity: 0.6 }} />
+                  <Typography variant="caption" fontWeight={700} sx={{ textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6, whiteSpace: 'nowrap' }}>{title}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 3, rowGap: 0.5, py: 1, minWidth: 0, ...sep }}>
+                  {rows.filter((r): r is [React.ReactNode, React.ReactNode] => !!r).map(([label, value], i) => (
+                    <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>{label}</Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>{value}</Box>
+                    </Box>
+                  ))}
+                </Box>
+              </React.Fragment>
+            )
+          }
+          const S = (key: string, values?: Record<string, string | number>) => t(`inventory.createVm.summary.${key}`, values)
+          const join = (parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' · ')
+          const txt = (v: React.ReactNode) => <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>{v}</Typography>
+          const flagSign = (v: '+' | '-') => (v === '-' ? '−' : '+')
+          const flagsText = cpuAdvancedHidden ? '' : Object.entries(cpuFlags).map(([flag, v]) => `${flagSign(v)}${flag}`).join(' ')
+          const nicModelLabel = (model: string) => (model === 'virtio' ? 'VirtIO' : model)
+          const nicRows = nics.map((nic, i) => [`net${i}`, txt(join([
+            S('onBridge', { model: nicModelLabel(nic.model), bridge: nic.bridge }),
+            canEditVlan && !!nic.vlanTag && `VLAN ${nic.vlanTag}`,
+            nic.firewall && t('inventory.createVm.firewall'),
+            nic.model === 'virtio' && !!nic.mtu && `MTU ${nic.mtu}`,
+            nic.model === 'virtio' && !!nic.queues && `${t('inventory.createVm.multiqueue')} ${nic.queues}`,
+            nic.disconnect && t('inventory.createVm.disconnect'),
+          ]))] as [string, React.ReactNode])
+          const proxmoxLogo = theme.palette.mode === 'dark' ? '/images/proxmox-logo-dark.svg' : '/images/proxmox-logo.svg'
+          const osIconClass = guestOsType === 'Windows' ? 'ri-windows-fill' : 'ri-question-line'
+          const osIcon = guestOsType === 'Linux'
+            ? <img src="/images/os/linux.svg" alt="" width={16} height={16} />
+            : <i className={osIconClass} style={{ fontSize: 16, opacity: 0.8 }} />
+          const vdcName = blankVdcs.find(v => v.id === tenantVdcId)?.name
           const blockers: string[] = []
           if (!vmid) blockers.push(t('inventory.createVm.confirmStep.noVmid'))
           if (vmidError) blockers.push(t('inventory.createVm.confirmStep.invalidVmid', { error: vmidError }))
@@ -2284,9 +2472,12 @@ return
                 : t('inventory.createVm.confirmStep.invalidBridgeBlocker', { nicDetails })
             )
           }
+          for (const i of mtuBlockedNics) {
+            blockers.push(t('inventory.createVm.confirmStep.invalidMtuBlocker', { nic: `net${i}`, mtu: nics[i].mtu }))
+          }
           const canCreate = blockers.length === 0
           return (
-            <Box>
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
               {canCreate ? (
                 <Alert severity="success" icon={<i className="ri-check-line" />} sx={{ mb: 2 }}>
@@ -2304,89 +2495,50 @@ return
                   </ul>
                 </Alert>
               )}
-              <Stack spacing={1.5}>
-                {/* General */}
-                {confirmCard('ri-server-line', 'General', (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                    {/* A vDC tenant never sees the node nor the VMID (#1171): its vDC instead. */}
-                    {hideNodePicker ? (
-                      blankVdcs.find(v => v.id === tenantVdcId)?.name && (
-                        <Chip label={`vDC: ${blankVdcs.find(v => v.id === tenantVdcId)?.name}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
-                      )
-                    ) : (
-                      <>
-                        <Chip label={`Node: ${resolvedNode}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
-                        <Chip label={`ID: ${vmid}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
-                      </>
-                    )}
-                    {vmName && <Chip label={vmName} size="small" color="primary" sx={{ fontSize: 11 }} />}
-                  </Box>
-                ))}
+              <Box
+                data-testid="create-vm-summary"
+                sx={{ flex: 1, border: '1px solid', borderColor: 'divider', borderRadius: 2, px: 2, py: 0.5, display: 'grid', gridTemplateColumns: 'max-content 1fr', gridAutoRows: '1fr', columnGap: 3, alignItems: 'stretch' }}
+              >
+                {summarySection('ri-server-line', t('inventory.createVm.tabs.general'), [
+                  // A vDC tenant never sees the node nor the VMID (#1171): its vDC instead.
+                  hideNodePicker
+                    ? !!vdcName && ['vDC', txt(vdcName)]
+                    : [t('inventory.createVm.node'), <><img src={proxmoxLogo} alt="" width={16} height={16} style={{ opacity: 0.8 }} />{txt(resolvedNode)}</>],
+                  [S('vm'), txt(hideNodePicker ? (vmName || '—') : join([vmid, vmName]))],
+                ])}
 
-                {/* OS */}
-                {confirmCard('ri-disc-line', 'OS', (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                    <Chip icon={guestOsType === 'Linux' ? <img src="/images/os/linux.svg" alt="" width={16} height={16} /> : <i className={guestOsType === 'Windows' ? 'ri-windows-fill' : 'ri-question-line'} />} label={`${guestOsType} ${guestOsVersion}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
-                    {osMediaType === 'iso' && isoImage && <Chip label={isoImage} size="small" variant="outlined" sx={{ fontSize: 11 }} />}
-                  </Box>
-                ))}
+                {summarySection('ri-disc-line', t('inventory.createVm.tabs.os'), [
+                  [S('guestOs'), <>{osIcon}{txt(guestOsSummaryLabel(guestOsType, guestOsVersion, selectedOsPreset))}</>],
+                  osMediaType === 'iso' && !!isoImage && [t('inventory.createVm.isoImage'), txt(isoImage)],
+                ])}
 
-                {/* System */}
-                {confirmCard('ri-settings-3-line', 'System', (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                    <Chip label={`${machine} / ${bios}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
-                    <Chip label={scsiController} size="small" variant="outlined" sx={{ fontSize: 11 }} />
-                    {qemuAgent && <Chip label="QEMU Agent" size="small" color="info" variant="outlined" sx={{ fontSize: 11 }} />}
-                  </Box>
-                ))}
+                {summarySection('ri-settings-3-line', t('inventory.createVm.tabs.system'), [
+                  [t('inventory.createVm.machine'), txt(join([`${machine}${pinnedMachine ? ` ${pinnedMachine.version}` : ''}`, bios === 'ovmf' ? 'OVMF (UEFI)' : 'SeaBIOS', addTpm && 'TPM']))],
+                  [t('inventory.createVm.scsiController'), txt(scsiController)],
+                  graphicCard !== 'default' && [t('inventory.createVm.graphicCard'), txt(graphicCard)],
+                  qemuAgent && [t('inventory.createVm.qemuAgent'), txt(S('enabled'))],
+                ])}
 
-                {/* Disks */}
-                {confirmCard('ri-hard-drive-3-line', `${t('inventory.createVm.tabs.disks')} (${disks.length})`, (
-                  <Stack spacing={0.5}>
-                    {disks.map((disk, i) => (
-                      <Box key={i} sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
-                        <Chip label={`${disk.bus}${disk.index}`} size="small" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, fontWeight: 700, height: 22 }} />
-                        <Typography variant="body2" fontSize={12}>{disk.storage} — {disk.size} GiB — {disk.format}</Typography>
-                      </Box>
-                    ))}
-                  </Stack>
-                ))}
+                {summarySection('ri-hard-drive-3-line', t('inventory.createVm.tabs.disks'),
+                  disks.map(disk => [`${disk.bus}${disk.index}`, txt(join([disk.storage, `${disk.size} GiB`, disk.format]))] as [string, React.ReactNode]),
+                )}
 
-                {/* CPU + Memory side by side */}
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-                  {confirmCard('ri-cpu-line', 'CPU', (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                      <Chip label={`${cpuSockets * cpuCores} vCPU`} size="small" color="primary" sx={{ fontSize: 11, fontWeight: 700 }} />
-                      <Chip label={cpuType} size="small" variant="outlined" sx={{ fontSize: 11 }} />
-                      <Chip label={`${cpuSockets}s × ${cpuCores}c`} size="small" variant="outlined" sx={{ fontSize: 11 }} />
-                    </Box>
-                  ))}
-                  {confirmCard('ri-ram-line', t('inventory.createVm.tabs.memory'), (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                      <Chip label={formatGibConfirm(memorySize)} size="small" color="primary" sx={{ fontSize: 11, fontWeight: 700 }} />
-                      {ballooning && <Chip label={`Balloon: ${formatGibConfirm(minMemory)}`} size="small" variant="outlined" sx={{ fontSize: 11 }} />}
-                    </Box>
-                  ))}
-                </Box>
+                {summarySection('ri-cpu-line', t('inventory.createVm.tabs.cpu'), [
+                  ['vCPU', txt(`${cpuSockets * cpuCores} (${S('cpuTopology', { sockets: cpuSockets, cores: cpuCores })})`)],
+                  [t('inventory.createVm.cpuType'), txt(join([cpuType, flagsText]))],
+                ])}
 
-                {/* Network */}
-                {confirmCard('ri-global-line', `${t('inventory.createVm.tabs.network')} (${noNetwork ? 0 : nics.length})`, (
-                  noNetwork ? (
-                    <Typography variant="body2" fontSize={12} sx={{ opacity: 0.5 }}>No network</Typography>
-                  ) : (
-                    <Stack spacing={0.5}>
-                      {nics.map((nic, i) => (
-                        <Box key={i} sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
-                          <Chip label={`net${i}`} size="small" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, fontWeight: 700, height: 22 }} />
-                          <Typography variant="body2" fontSize={12}>{nic.model === 'virtio' ? 'VirtIO' : nic.model} on {nic.bridge}</Typography>
-                          {canEditVlan && nic.vlanTag && <Chip label={`VLAN ${nic.vlanTag}`} size="small" variant="outlined" sx={{ fontSize: 10, height: 20 }} />}
-                          {nic.firewall && <Chip label="FW" size="small" color="success" variant="outlined" sx={{ fontSize: 10, height: 20 }} />}
-                        </Box>
-                      ))}
-                    </Stack>
-                  )
-                ))}
-              </Stack>
+                {summarySection('ri-ram-line', t('inventory.createVm.tabs.memory'), [
+                  ['RAM', txt(formatGibConfirm(memorySize))],
+                  ballooning && [t('inventory.createVm.ballooningDevice'), txt(S('balloonMin', { size: formatGibConfirm(minMemory) }))],
+                ])}
+
+                {summarySection('ri-global-line', t('inventory.createVm.tabs.network'),
+                  noNetwork
+                    ? [['—', txt(S('noNetwork'))]]
+                    : nicRows,
+                )}
+              </Box>
             </Box>
           )
         }
@@ -2468,6 +2620,9 @@ return
   // (typically the hardcoded vmbr0 fallback) would be rejected by the server's
   // bridge whitelist. Block navigation/submit so the user can't hit a 403.
   const networkBlocked = !noNetwork && nics.some(n => !bridges.some((b: any) => b.iface === n.bridge))
+  const nicMtuCheck = (nic: NicConfig) =>
+    nic.model === 'virtio' ? checkNicMtu(nic.mtu, bridges.find((b: any) => b.iface === nic.bridge)?.mtu ?? null) : null
+  const mtuBlockedNics = noNetwork ? [] : nics.flatMap((n, i) => nicMtuCheck(n)?.level === 'error' ? [i] : [])
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -2504,7 +2659,8 @@ return
         </Tabs>
       </Box>
       
-      <DialogContent sx={{ minHeight: 350, pt: 3 }}>
+      {/* On Confirm the summary stretches to the full height of the content (#1194). */}
+      <DialogContent sx={{ minHeight: 350, pt: 3, ...(activeTab === tabs.length - 1 && { display: 'flex', flexDirection: 'column' }) }}>
         {vdcQuota && (() => {
           // Glassmorphism accent colour follows the quota state so the banner
           // tints success/warning/error consistently with the donuts.
@@ -2672,7 +2828,7 @@ return
             onClick={handleCreate}
             variant="contained"
             color="primary"
-            disabled={creating || isoBusy || !vmid || !resolvedNode || !!vmidError || quotaBlocked || networkBlocked}
+            disabled={creating || isoBusy || !vmid || !resolvedNode || !!vmidError || quotaBlocked || networkBlocked || mtuBlockedNics.length > 0}
             startIcon={creating ? <CircularProgress size={16} /> : null}
           >
             Create

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useSession } from 'next-auth/react'
 
@@ -9,12 +9,14 @@ import {
   Alert, alpha, Autocomplete, Box, Button, Card, CardContent, Checkbox, Chip,
   Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider,
   FormControl, IconButton, InputLabel, List, ListItem, ListItemIcon,
-  ListItemSecondaryAction, ListItemText, MenuItem, Paper, Select, Tab, Tabs,
+  ListItemSecondaryAction, ListItemText, MenuItem, Paper, Select, Tab, Table,
+  TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Tabs,
   TextField, Tooltip, Typography
 } from '@mui/material'
-import { DataGrid } from '@mui/x-data-grid'
 
 import { getDateLocale } from '@/lib/i18n/date'
+import { pageOf } from '@/lib/paging'
+import { PAGE_SIZES, STICKY_PAGER_SX } from '@/components/ui/PagedRows'
 import { usePageTitle } from "@/contexts/PageTitleContext"
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
@@ -420,22 +422,19 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
     return buildScopeOptions(inventoryWithStorages, scopeType, t)
   }, [inventoryWithStorages, scopeType, vdcs, tenantId, t])
 
-  // Conflict detection: the backend already rejects duplicates and second
-  // roles per tenant, but surfacing them client-side lets the operator fix the
-  // selection in one pass instead of clicking through error toasts. Three
-  // shapes to detect:
-  //  - `existingDifferentRole`: same (user, tenant) already holds another
-  //    role_id — backend rule "one role per tenant" would 400 the POST.
+  // Conflict detection: the backend already rejects duplicate grants, but
+  // surfacing them client-side lets the operator fix the selection in one pass
+  // instead of clicking through error toasts. A different role for the same
+  // user is not a conflict (issue #1188). Two shapes to detect:
   //  - `globalAlreadyExists`: same (user, tenant, role) global row exists.
   //  - `duplicateTargets`: per-target list of (scope_type, scope_target) that
   //    are already granted, so we can grey them out in the multi-select.
   const conflict = useMemo(() => {
     if (!user?.id || !roleId || !tenantId) {
-      return { existingDifferentRole: null as any, globalAlreadyExists: false, duplicateTargets: new Set<string>() }
+      return { globalAlreadyExists: false, duplicateTargets: new Set<string>() }
     }
-    const userInTenant = assignments.filter((a: any) => a.user.id === user.id && (a.tenant_id || 'default') === tenantId)
-    const otherRole = userInTenant.find((a: any) => a.role.id !== roleId)
-    const sameRole = userInTenant.filter((a: any) => a.role.id === roleId)
+    const sameRole = assignments.filter((a: any) =>
+      a.user.id === user.id && (a.tenant_id || 'default') === tenantId && a.role.id === roleId)
     const dupTargets = new Set<string>()
     let globalDup = false
     for (const a of sameRole) {
@@ -445,7 +444,7 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
         dupTargets.add(a.scope_target)
       }
     }
-    return { existingDifferentRole: otherRole || null, globalAlreadyExists: globalDup, duplicateTargets: dupTargets }
+    return { globalAlreadyExists: globalDup, duplicateTargets: dupTargets }
   }, [assignments, user, roleId, tenantId, scopeType])
 
   // Toggle sélection d'un élément (les cibles déjà assignées sont neutralisées
@@ -721,14 +720,6 @@ return
         {/* Conflict notices — surface what the backend would refuse before
             the operator clicks Save, so they can fix the selection in one go
             instead of round-tripping through error toasts. */}
-        {user && conflict.existingDifferentRole && (
-          <Alert severity='warning' sx={{ mt: 2 }} icon={<i className='ri-error-warning-line' />}>
-            {t('rbacPage.userAlreadyHasRole', {
-              defaultValue: 'This user already holds the role "{role}" on this tenant. Remove it first or edit the existing assignment.',
-              role: conflict.existingDifferentRole.role?.name || conflict.existingDifferentRole.role?.id,
-            })}
-          </Alert>
-        )}
         {user && conflict.globalAlreadyExists && (
           <Alert severity='warning' sx={{ mt: 2 }} icon={<i className='ri-error-warning-line' />}>
             {t('rbacPage.duplicateGlobalAssignment', {
@@ -860,7 +851,6 @@ return
             saving ||
             !user ||
             !roleId ||
-            !!conflict.existingDifferentRole ||
             (scopeType === 'global' && conflict.globalAlreadyExists) ||
             (scopeType !== 'global' && scopeType !== 'inherit' && selectedTargets.length === 0)
           }
@@ -1067,6 +1057,16 @@ function AssignmentsTab({ assignments, roles, users, tenants = [], enableTenantM
   const [toDelete, setToDelete] = useState<any>(null)
   const [deleting, setDeleting] = useState(false)
   const [filter, setFilter] = useState('')
+  const [page, setPage] = useState(0)
+  const [perPage, setPerPage] = useState(PAGE_SIZES[0])
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const toggleUser = (userId: string) => setExpanded(prev => {
+    const next = new Set(prev)
+    if (next.has(userId)) next.delete(userId)
+    else next.add(userId)
+    return next
+  })
 
   // Regrouper les assignations par user_id + role_id + tenant_id + scope_type.
   // Including tenant_id in the key keeps per-tenant rows separate in provider
@@ -1112,16 +1112,28 @@ function AssignmentsTab({ assignments, roles, users, tenants = [], enableTenantM
     return Array.from(groups.values())
   }, [assignments])
 
+  // One table row per user (issue #1188): a user holding several roles
+  // unfolds into one sub-row per group instead of repeating the user.
+  const userRows = useMemo(() => {
+    const byUser = new Map<string, { id: string; user: any; groups: any[] }>()
+    for (const group of groupedAssignments) {
+      const row = byUser.get(group.user.id)
+      if (row) row.groups.push(group)
+      else byUser.set(group.user.id, { id: group.user.id, user: group.user, groups: [group] })
+    }
+    return Array.from(byUser.values())
+  }, [groupedAssignments])
+
   const filtered = useMemo(() => {
-    if (!filter) return groupedAssignments
+    if (!filter) return userRows
     const f = filter.toLowerCase()
 
-return groupedAssignments.filter(a =>
-      a.user.email.toLowerCase().includes(f) ||
-      a.user.name?.toLowerCase().includes(f) ||
-      (enableTenantMgmt && a.tenant_name?.toLowerCase().includes(f))
+    return userRows.filter(row =>
+      row.user.email.toLowerCase().includes(f) ||
+      row.user.name?.toLowerCase().includes(f) ||
+      (enableTenantMgmt && row.groups.some(g => g.tenant_name?.toLowerCase().includes(f)))
     )
-  }, [groupedAssignments, filter, enableTenantMgmt])
+  }, [userRows, filter, enableTenantMgmt])
 
   // All users are available for assignment (a user can have multiple roles)
   const availableUsers = users
@@ -1231,71 +1243,108 @@ return (
     )
   }
 
-  const columns = useMemo(() => [
-    { field: 'user', headerName: t('navigation.users'), flex: 1, minWidth: 200, renderCell: (p: any) => (
-      <Typography variant='body2' sx={{ fontWeight: 500 }}>
-        {p.row.user.email}
-        {p.row.user.name && <Typography component='span' variant='caption' sx={{ opacity: 0.6, ml: 1 }}>({p.row.user.name})</Typography>}
-      </Typography>
-    )},
-    { field: 'role', headerName: t('rbac.title'), width: 130, renderCell: (p: any) => (
-      <Chip label={p.row.role.is_system ? t(`rbac.roles.${p.row.role.id}`, { defaultValue: p.row.role.name }) : p.row.role.name} size='small' sx={{ bgcolor: alpha(p.row.role.color, 0.15), color: p.row.role.color, fontWeight: 500, height: 24 }} />
-    )},
-    // Tenant column (Enterprise + provider view only). Mirrors the column
-    // added to /security/users so the same operator sees the same per-tenant
-    // breakdown across the two pages without losing the row-per-tenant grain.
-    ...(enableTenantMgmt ? [{
-      field: 'tenant',
-      headerName: t('vdc.tenant'),
-      width: 160,
-      sortable: false,
-      renderCell: (p: any) => {
-        const name = p.row.tenant_name || p.row.tenant_id
-        const isProviderTenant = p.row.tenant_id === 'default'
-        return (
-          <Chip
-            size='small'
-            label={name}
-            color={isProviderTenant ? 'primary' : 'default'}
-            variant={isProviderTenant ? 'filled' : 'outlined'}
-            sx={{ height: 22, fontSize: '0.75rem' }}
-          />
-        )
-      },
-    }] : []),
-    { field: 'scope_type', headerName: t('rbacPage.scope'), width: 140, renderCell: (p: any) => (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        <i className={scopeIcons[p.row.scope_type]} style={{ opacity: 0.6, fontSize: 14 }} />
-        <Typography variant='body2'>{scopeLabels[p.row.scope_type]}</Typography>
+  const roleChip = (role: any) => (
+    <Chip label={role.is_system ? t(`rbac.roles.${role.id}`, { defaultValue: role.name }) : role.name} size='small' sx={{ bgcolor: alpha(role.color, 0.15), color: role.color, fontWeight: 500, height: 24, maxWidth: '100%' }} />
+  )
+
+  const tenantChip = (group: any) => {
+    const isProviderTenant = group.tenant_id === 'default'
+    return (
+      <Chip
+        size='small'
+        label={group.tenant_name || group.tenant_id}
+        color={isProviderTenant ? 'primary' : 'default'}
+        variant={isProviderTenant ? 'filled' : 'outlined'}
+        sx={{ height: 22, fontSize: '0.75rem', maxWidth: '100%' }}
+      />
+    )
+  }
+
+  const scopeCell = (scopeType: string) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+      <i className={scopeIcons[scopeType]} style={{ opacity: 0.6, fontSize: 14 }} />
+      <Typography variant='body2' noWrap>{scopeLabels[scopeType]}</Typography>
+    </Box>
+  )
+
+  const dateCell = (group: any) => (
+    <Typography variant='body2' noWrap sx={{ opacity: 0.7 }}>
+      {timeAgo(group.granted_at, t, dateLocale)}
+      {group.granted_by_email && ` - ${group.granted_by_email.split('@')[0]}`}
+    </Typography>
+  )
+
+  // Hide edit/delete for your own assignment — the backend refuses
+  // self-modification (see /rbac/assignments routes).
+  const actionsCell = (group: any) => group.user.id === currentUserId ? null : (
+    <Box sx={{ display: 'flex', gap: 0, justifyContent: 'flex-end' }}>
+      <Tooltip title={t('common.edit')}>
+        <IconButton size='small' onClick={() => { setToEdit(group); setEditDialogOpen(true) }}>
+          <i className='ri-edit-line' style={{ fontSize: 16 }} />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title={t('common.delete')}>
+        <IconButton size='small' color='error' onClick={() => { setToDelete(group); setDeleteOpen(true) }}>
+          <i className='ri-delete-bin-line' style={{ fontSize: 16 }} />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  )
+
+  // The cells of one grant group, shared by a single-role user row and by
+  // each unfolded sub-row of a multi-role user.
+  const groupCells = (group: any) => (
+    <>
+      <TableCell>{roleChip(group.role)}</TableCell>
+      {enableTenantMgmt && <TableCell>{tenantChip(group)}</TableCell>}
+      <TableCell>{scopeCell(group.scope_type)}</TableCell>
+      <TableCell sx={{ overflow: 'hidden' }}>{formatScopeTargets(group)}</TableCell>
+      <TableCell>{dateCell(group)}</TableCell>
+      <TableCell align='right'>{actionsCell(group)}</TableCell>
+    </>
+  )
+
+  // Summary cells of a multi-role user row: what the groups share, the
+  // per-group detail lives in the sub-rows.
+  const summaryCells = (row: any) => {
+    const tenantIds = new Set(row.groups.map((g: any) => g.tenant_id))
+    const scopeTypes = new Set(row.groups.map((g: any) => g.scope_type))
+    const latest = row.groups.reduce((a: any, b: any) => (new Date(b.granted_at) > new Date(a.granted_at) ? b : a))
+    const roleCount = new Set(row.groups.map((g: any) => g.role.id)).size
+    return (
+      <>
+        <TableCell>
+          <Chip label={t('rbacPage.rolesCount', { count: roleCount })} size='small' variant='outlined' sx={{ height: 24, fontWeight: 500 }} />
+        </TableCell>
+        {enableTenantMgmt && (
+          <TableCell>
+            {tenantIds.size === 1
+              ? tenantChip(row.groups[0])
+              : <Chip size='small' variant='outlined' label={t('rbacPage.tenantsCount', { count: tenantIds.size })} sx={{ height: 22, fontSize: '0.75rem' }} />}
+          </TableCell>
+        )}
+        <TableCell>{scopeTypes.size === 1 ? scopeCell(row.groups[0].scope_type) : null}</TableCell>
+        <TableCell />
+        <TableCell>{dateCell(latest)}</TableCell>
+        <TableCell />
+      </>
+    )
+  }
+
+  const userCell = (user: any) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+      <Box sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: 'action.hover', color: 'text.secondary', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <i className='ri-user-line' style={{ fontSize: 14 }} />
       </Box>
-    )},
-    { field: 'scope_targets', headerName: t('navigation.resources'), flex: 1, minWidth: 150, renderCell: (p: any) => formatScopeTargets(p.row) },
-    { field: 'granted_at', headerName: t('common.date'), width: 150, renderCell: (p: any) => (
-      <Typography variant='body2' sx={{ opacity: 0.7 }}>
-        {timeAgo(p.row.granted_at, t, dateLocale)}
-        {p.row.granted_by_email && ` - ${p.row.granted_by_email.split('@')[0]}`}
+      <Typography variant='body2' noWrap sx={{ fontWeight: 500, minWidth: 0 }}>
+        {user.email}
+        {user.name && <Typography component='span' variant='caption' sx={{ opacity: 0.6, ml: 1 }}>({user.name})</Typography>}
       </Typography>
-    )},
-    { field: 'actions', headerName: '', width: 80, sortable: false, renderCell: (p: any) => {
-      // Hide edit/delete for your own assignment — the backend refuses
-      // self-modification (see /rbac/assignments routes).
-      if (p.row.user.id === currentUserId) return null
-      return (
-        <Box sx={{ display: 'flex', gap: 0 }}>
-          <Tooltip title={t('common.edit')}>
-            <IconButton size='small' onClick={() => { setToEdit(p.row); setEditDialogOpen(true) }}>
-              <i className='ri-edit-line' style={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title={t('common.delete')}>
-            <IconButton size='small' color='error' onClick={() => { setToDelete(p.row); setDeleteOpen(true) }}>
-              <i className='ri-delete-bin-line' style={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      )
-    }}
-  ], [t, scopeLabels, currentUserId, enableTenantMgmt])
+    </Box>
+  )
+
+  const { rows: pageRows, page: currentPage } = pageOf(filtered, page, perPage)
+  const colCount = enableTenantMgmt ? 8 : 7
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
@@ -1305,28 +1354,71 @@ return (
           {t('common.add')}
         </Button>
       </Box>
-      <Box sx={{ flex: 1, minHeight: 300 }}>
-        <DataGrid 
-          rows={filtered} 
-          columns={columns} 
-          pageSizeOptions={[10, 25, 50]} 
-          disableRowSelectionOnClick 
-          rowHeight={44}
-          columnHeaderHeight={40}
-          density='compact'
-          sx={{ 
-            border: 'none',
-            '& .MuiDataGrid-cell': { 
-              display: 'flex', 
-              alignItems: 'center',
-              py: 0.5
-            },
-            '& .MuiDataGrid-columnHeaders': {
-              bgcolor: 'action.hover',
-              borderRadius: 1
-            }
-          }} 
-        />
+      <Box sx={{ flex: 1, minHeight: 300, display: 'flex', flexDirection: 'column' }}>
+        <TableContainer sx={{ flex: 1 }}>
+          <Table size='small' sx={{ tableLayout: 'fixed', '& td, & th': { height: 44, py: 0.5 } }}>
+            <TableHead>
+              <TableRow sx={{ '& th': { bgcolor: 'action.hover', fontWeight: 500, height: 40 } }}>
+                <TableCell padding='none' sx={{ width: 36 }} />
+                <TableCell>{t('navigation.users')}</TableCell>
+                <TableCell sx={{ width: 160 }}>{t('rbac.title')}</TableCell>
+                {enableTenantMgmt && <TableCell sx={{ width: 160 }}>{t('vdc.tenant')}</TableCell>}
+                <TableCell sx={{ width: 160 }}>{t('rbacPage.scope')}</TableCell>
+                <TableCell sx={{ width: '22%' }}>{t('navigation.resources')}</TableCell>
+                <TableCell sx={{ width: 170 }}>{t('common.date')}</TableCell>
+                <TableCell sx={{ width: 90 }} />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {pageRows.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={colCount} align='center' sx={{ opacity: 0.6 }}>
+                    {filter ? t('common.noResults') : t('common.noData')}
+                  </TableCell>
+                </TableRow>
+              )}
+              {pageRows.map((row: any) => {
+                const multi = row.groups.length > 1
+                const isExpanded = multi && expanded.has(row.id)
+                return (
+                  <Fragment key={row.id}>
+                    <TableRow
+                      hover
+                      onClick={multi ? () => toggleUser(row.id) : undefined}
+                      sx={{ cursor: multi ? 'pointer' : undefined }}
+                    >
+                      <TableCell padding='none' align='center'>
+                        {multi && <i className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 18, opacity: 0.7 }} />}
+                      </TableCell>
+                      <TableCell>{userCell(row.user)}</TableCell>
+                      {multi ? summaryCells(row) : groupCells(row.groups[0])}
+                    </TableRow>
+                    {isExpanded && row.groups.map((group: any) => (
+                      <TableRow key={group.id} sx={{ bgcolor: 'action.hover' }}>
+                        <TableCell padding='none' />
+                        <TableCell />
+                        {groupCells(group)}
+                      </TableRow>
+                    ))}
+                  </Fragment>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        {filtered.length > PAGE_SIZES[0] && (
+          <TablePagination
+            component='div'
+            count={filtered.length}
+            page={currentPage}
+            onPageChange={(_e, p) => setPage(p)}
+            rowsPerPage={perPage}
+            onRowsPerPageChange={e => { setPerPage(Number(e.target.value)); setPage(0) }}
+            rowsPerPageOptions={PAGE_SIZES}
+            labelRowsPerPage={t('common.rowsPerPage')}
+            sx={STICKY_PAGER_SX}
+          />
+        )}
       </Box>
       <AssignmentDialog open={dialogOpen} onClose={() => setDialogOpen(false)} roles={roles} users={availableUsers} assignments={assignments} tenants={tenants} enableTenantMgmt={enableTenantMgmt} currentTenantId={currentTenantId} vdcs={vdcs} onSave={onRefresh} t={t} />
       <EditAssignmentDialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} assignmentGroup={toEdit} roles={roles} enableTenantMgmt={enableTenantMgmt} vdcs={vdcs} onSave={onRefresh} t={t} />

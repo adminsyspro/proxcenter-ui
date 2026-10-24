@@ -153,17 +153,18 @@ describe('POST /api/v1/rbac/assignments messages', () => {
     await expectError(await call(VALID), 404, 'Role not found')
   })
 
-  it('400 when the user already holds another role', async () => {
-    userRoleFindFirstMock.mockResolvedValueOnce({ id: 'a0', role: { name: 'Viewer' } })
-    await expectError(
-      await call(VALID),
-      400,
-      'The user already has the role "Viewer". Remove it first or edit the existing assignment.',
-    )
+  it('grants a second, different role to a user who already holds one (#1188)', async () => {
+    userRoleFindFirstMock.mockImplementation(async ({ where }: any) =>
+      where.roleId === 'role_x' ? null : { id: 'a0', role: { name: 'Viewer' } })
+    const res = await call({ ...VALID, scope_type: 'pool', scope_target: 'Ops-Testing' })
+    expect(res.status).toBe(201)
+    expect(userRoleCreateMock).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ roleId: 'role_x', scopeType: 'pool', scopeTarget: 'Ops-Testing' }),
+    }))
   })
 
   it('400 "This assignment already exists"', async () => {
-    userRoleFindFirstMock.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'a1' })
+    userRoleFindFirstMock.mockResolvedValueOnce({ id: 'a1' })
     await expectError(await call(VALID), 400, 'This assignment already exists')
   })
 

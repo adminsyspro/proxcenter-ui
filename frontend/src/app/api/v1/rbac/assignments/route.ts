@@ -351,18 +351,9 @@ async function handlePost(req: NextRequest) {
       return NextResponse.json({ error: 'Only a super admin may grant NIC identity permissions' }, { status: 403 })
     }
 
-    // Vérifier si l'utilisateur a déjà un rôle différent assigné (within target tenant)
-    const existingRole = await prisma.rbacUserRole.findFirst({
-      where: { userId: user_id, tenantId: targetTenantId, NOT: { roleId: role_id } },
-      include: { role: { select: { name: true } } },
-    })
-
-    if (existingRole) {
-      return NextResponse.json({
-        error: `The user already has the role "${existingRole.role.name}". Remove it first or edit the existing assignment.`
-      }, { status: 400 })
-    }
-
+    // A user may hold several roles in the same tenant, each on its own scope
+    // (issue #1188): loadUserGrants attaches every role's permissions to that
+    // grant's scope only. Only the exact same grant is refused below.
     // Vérifier que cette assignation n'existe pas déjà (within target tenant).
     // SQLite traitait NULL via COALESCE pour comparer scope_target — on
     // reproduit ça en filtrant null vs string explicitement.

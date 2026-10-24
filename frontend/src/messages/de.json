@@ -7708,6 +7708,7 @@
     "revokeRoleFrom": "Rolle \"{role}\" von {user} widerrufen?",
     "resourcesCount": "{count} Ressourcen",
     "rolesCount": "{count} Rolle(n)",
+    "tenantsCount": "{count} Mandanten",
     "newRole": "Neue Rolle",
     "userCount": "{count} Benutzer",
     "permissions": "Berechtigungen",

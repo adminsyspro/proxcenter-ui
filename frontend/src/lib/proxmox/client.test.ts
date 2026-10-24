@@ -840,3 +840,35 @@ describe("the license exclusion guard inside pveFetch (roadmap#58)", () => {
     expect(isFailoverWorthy(classifyPveError(err), false, false)).toBe(false)
   })
 })
+
+describe("pveFetch envelope (ui#1190)", () => {
+  let server: Server
+  let baseUrl = ""
+
+  beforeAll(async () => {
+    const { createServer } = await import("node:http")
+    // A paged log read: PVE puts the line count next to `data`.
+    server = createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" })
+      res.end(JSON.stringify({ data: [{ n: 1, t: "line" }], total: 300000 }))
+    })
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", () => resolve()))
+    baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  })
+
+  afterAll(async () => {
+    server.closeAllConnections()
+    await new Promise<void>(resolve => server.close(() => resolve()))
+  })
+
+  it("answers data alone by default, the whole body with envelope", async () => {
+    // A fresh module: the tests above destroy the agent of theirs.
+    vi.resetModules()
+    const { pveFetch, getDefaultAgent } = await import("./client")
+    const conn = { baseUrl, apiToken: "root@pam!vitest=secret" }
+
+    expect(await pveFetch(conn, "/nodes/pve1/firewall/log?start=0&limit=1")).toEqual([{ n: 1, t: "line" }])
+    expect(await pveFetch(conn, "/nodes/pve1/firewall/log?start=0&limit=1", {}, { envelope: true })).toEqual({ data: [{ n: 1, t: "line" }], total: 300000 })
+    await getDefaultAgent().destroy()
+  })
+})

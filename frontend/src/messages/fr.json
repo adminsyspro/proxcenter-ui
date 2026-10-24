@@ -10640,6 +10640,8 @@
     "truncated": "Affichage des {count} entrées les plus récentes.",
     "warnPermission": "Journal du nœud illisible sur {nodes} : le jeton de la connexion n'a pas Sys.Syslog sur /nodes, les passages par un security group y manquent.",
     "warnOffline": "Hors ligne, journal non lu : {nodes}.",
+    "warnPartial": "{node} : les lignes avant {time} ne sont pas affichées, PVE n'a pas lu à temps les journaux pare-feu archivés ({message}).",
+    "warnPartialNoTime": "{node} : les journaux pare-feu archivés n'ont pas été lus à temps ({message}).",
     "ruleLogs": "Logs de cette règle",
     "ruleNoLog": "Cette règle ne journalise pas (nolog) : donnez-lui un niveau de log pour voir ses passages.",
     "ruleUncertain": "Le journal ne permet pas de distinguer cette règle de {rules} : Proxmox n'écrit pas quelle règle a correspondu.",

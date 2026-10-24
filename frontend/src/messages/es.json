@@ -10639,6 +10639,8 @@
     "truncated": "Se muestran las {count} entradas más recientes.",
     "warnPermission": "Registro del nodo ilegible en {nodes}: el token de la conexión no tiene Sys.Syslog en /nodes, faltan ahí los aciertos de security groups.",
     "warnOffline": "Fuera de línea, registro no leído: {nodes}.",
+    "warnPartial": "{node}: las líneas anteriores a {time} no se muestran, PVE no leyó a tiempo los registros de firewall rotados ({message}).",
+    "warnPartialNoTime": "{node}: los registros de firewall rotados no se leyeron a tiempo ({message}).",
     "ruleLogs": "Registros de esta regla",
     "ruleNoLog": "Esta regla no registra (nolog): asígnele un nivel de log para ver sus aciertos.",
     "ruleUncertain": "El registro no permite distinguir esta regla de {rules}: Proxmox no escribe qué regla coincidió.",

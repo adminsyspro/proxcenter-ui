@@ -10645,6 +10645,8 @@
     "truncated": "显示最近的 {count} 条条目。",
     "warnPermission": "无法读取 {nodes} 的节点日志：连接令牌在 /nodes 上缺少 Sys.Syslog 权限，因此缺少这些节点上的安全组命中记录。",
     "warnOffline": "离线，未读取日志：{nodes}。",
+    "warnPartial": "{node}：{time} 之前的行未显示，PVE 未能及时读取轮转的防火墙日志（{message}）。",
+    "warnPartialNoTime": "{node}：未能及时读取轮转的防火墙日志（{message}）。",
     "ruleLogs": "此规则的日志",
     "ruleNoLog": "此规则不记录日志（nolog）：请为其设置日志级别以查看命中记录。",
     "ruleUncertain": "日志无法区分此规则与 {rules}：Proxmox 不会记录匹配的是哪条规则。",

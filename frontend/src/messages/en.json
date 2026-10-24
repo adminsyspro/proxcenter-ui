@@ -10639,6 +10639,8 @@
     "truncated": "Showing the {count} most recent entries.",
     "warnPermission": "Node log not readable on {nodes}: the connection's token lacks Sys.Syslog on /nodes, so security group hits there are missing.",
     "warnOffline": "Offline, log not read: {nodes}.",
+    "warnPartial": "{node}: lines before {time} are not shown, PVE did not read the rotated firewall logs in time ({message}).",
+    "warnPartialNoTime": "{node}: the rotated firewall logs were not read in time ({message}).",
     "ruleLogs": "Logs of this rule",
     "ruleNoLog": "This rule does not log (nolog): give it a log level to see its hits.",
     "ruleUncertain": "The log cannot tell this rule from {rules}: Proxmox does not write which rule matched.",

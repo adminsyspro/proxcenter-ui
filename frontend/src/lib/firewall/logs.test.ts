@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
+import { pveFirewallLog } from '@/__tests__/setup/pveFirewallLog'
+
 import { collectFirewallLog, MAX_LOG_ROWS, MAX_SCAN_LINES } from './logs'
 
 import type { FirewallLogSources } from './logs'
@@ -13,12 +15,14 @@ const LOGGER = '0 5 - 15/Oct/2026:22:59:28 +0200 starting pvefw logger'
 // A cluster rule on pve1's host firewall (TCP 9997 DROP), as logged on the lab.
 const HOST_9997 = '0 6 PVEFW-HOST-IN 15/Oct/2026:22:59:55 +0200 DROP: IN=vmbr0 PHYSIN=nic0 SRC=10.42.0.102 DST=10.42.0.101 PROTO=TCP SPT=52374 DPT=9997 SYN '
 
-const entries = (...lines: string[]) => lines.map((t, i) => ({ n: i + 1, t }))
+// The current file of a node, as PVE pages it.
+const file = (...lines: string[]) => pveFirewallLog([lines])
+const refused = (message: string) => () => { throw new Error(message) }
 
 function sources(over: Partial<FirewallLogSources> = {}): FirewallLogSources {
   return {
-    vmLog: vi.fn(async () => entries(VM_22)),
-    nodeLog: vi.fn(async () => entries(LOGGER, GROUP_9999, VM_22, OTHER_GUEST_GROUP, OTHER_GROUP)),
+    vmLog: vi.fn(() => file(VM_22)),
+    nodeLog: vi.fn(() => file(LOGGER, GROUP_9999, VM_22, OTHER_GUEST_GROUP, OTHER_GROUP)),
     nodes: vi.fn(async () => [{ node: 'pve1', status: 'online' }]),
     groups: vi.fn(async () => [{ group: 'r1114', rules: [
       { pos: 0, type: 'in', action: 'ACCEPT', proto: 'icmp', log: 'info', enable: 1 },
@@ -33,7 +37,8 @@ function sources(over: Partial<FirewallLogSources> = {}): FirewallLogSources {
   }
 }
 
-const WINDOW = { since: 1760558400 }
+// From the logger start on: the current file covers the window.
+const WINDOW = { since: 1792097968 }
 
 describe('collectFirewallLog, guest scope', () => {
   const scope = { kind: 'vm' as const, node: 'pve1', vmType: 'lxc' as const, vmid: 101 }
@@ -53,7 +58,7 @@ describe('collectFirewallLog, guest scope', () => {
 
   it('keeps the guest log and warns when the node log is refused (no Sys.Syslog)', async () => {
     const res = await collectFirewallLog(scope, WINDOW, sources({
-      nodeLog: vi.fn(async () => { throw new Error('Orchestrator 500: {"error":"failed to get firewall log: 403 Permission check failed (/nodes/pve1, Sys.Syslog)"}') }),
+      nodeLog: vi.fn(() => refused('Orchestrator 500: {"error":"failed to get firewall log: 403 Permission check failed (/nodes/pve1, Sys.Syslog)"}')),
     }))
 
     expect(res.rows).toHaveLength(1)
@@ -61,7 +66,7 @@ describe('collectFirewallLog, guest scope', () => {
   })
 
   it('fails when the guest log itself fails', async () => {
-    await expect(collectFirewallLog(scope, WINDOW, sources({ vmLog: vi.fn(async () => { throw new Error('boom') }) }))).rejects.toThrow('boom')
+    await expect(collectFirewallLog(scope, WINDOW, sources({ vmLog: vi.fn(() => refused('boom')) }))).rejects.toThrow('boom')
   })
 
   it('tells which rule wrote each line: the group rule for a group hit, the guest rule otherwise', async () => {
@@ -74,12 +79,48 @@ describe('collectFirewallLog, guest scope', () => {
   })
 
   it('reads the guest rules once, and the group rules only when a group line shows up', async () => {
-    const s = sources({ nodeLog: vi.fn(async () => []) })
+    const s = sources({ nodeLog: vi.fn(() => file(LOGGER)) })
 
     await collectFirewallLog(scope, WINDOW, s)
     expect(s.vmRules).toHaveBeenCalledTimes(1)
     expect(s.vmRules).toHaveBeenCalledWith('pve1', 'lxc', 101)
     expect(s.groups).not.toHaveBeenCalled()
+  })
+})
+
+describe('collectFirewallLog, reading the logs (ui#1190)', () => {
+  const scope = { kind: 'vm' as const, node: 'pve1', vmType: 'lxc' as const, vmid: 101 }
+  // An hour before the logger start: the window reaches into the rotated logs.
+  const EARLIER = { since: WINDOW.since - 3600 }
+  const timeout = () => Promise.reject(new Error('Orchestrator request timeout'))
+
+  it('dates the current file by the node log, so a guest window inside it never scans the rotated logs', async () => {
+    const own = pveFirewallLog([[VM_22]], 101)
+    const node = file(LOGGER, VM_22)
+
+    await collectFirewallLog(scope, WINDOW, sources({ vmLog: vi.fn(() => own), nodeLog: vi.fn(() => node) }))
+    expect([...own.calls, ...node.calls].some(q => q.since !== undefined)).toBe(false)
+    // The node head is read once, for its lines and for the file date.
+    expect(node.calls.filter(q => q.start === 0 && q.limit === 1)).toHaveLength(1)
+  })
+
+  it('dates the file by the guest log when the node log is refused', async () => {
+    const own = pveFirewallLog([[VM_22]], 101)
+    // From the guest's first line on, 17 s after the logger start.
+    const res = await collectFirewallLog(scope, { since: WINDOW.since + 17 }, sources({ vmLog: vi.fn(() => own), nodeLog: vi.fn(() => refused('403 Sys.Syslog')) }))
+
+    expect(own.calls.some(q => q.since !== undefined)).toBe(false)
+    expect(res.rows).toHaveLength(1)
+  })
+
+  it('keeps the current file and warns once per node when its rotated logs time out', async () => {
+    const own = file(VM_22)
+    const node = file(LOGGER, GROUP_9999)
+    const slow = (log: typeof own) => vi.fn(() => (q: { since?: number }) => (q.since ? timeout() : log(q as never)))
+    const res = await collectFirewallLog(scope, EARLIER, sources({ vmLog: slow(own), nodeLog: slow(node) }))
+
+    expect(res.rows.map(r => r.dport)).toEqual([22, 9999])
+    expect(res.warnings).toEqual([{ node: 'pve1', kind: 'partial', message: 'Orchestrator request timeout', missingBefore: WINDOW.since * 1000 }])
   })
 })
 
@@ -89,7 +130,7 @@ describe('collectFirewallLog, group scope', () => {
   it('reads every online node and keeps the group lines only, whichever guest', async () => {
     const s = sources({
       nodes: vi.fn(async () => [{ node: 'pve1', status: 'online' }, { node: 'pve2', status: 'online' }, { node: 'pve3', status: 'offline' }]),
-      nodeLog: vi.fn(async (node: string) => (node === 'pve1' ? entries(GROUP_9999, VM_22, OTHER_GROUP) : entries(OTHER_GUEST_GROUP))),
+      nodeLog: vi.fn((node: string) => (node === 'pve1' ? file(LOGGER, GROUP_9999, VM_22, OTHER_GROUP) : file(LOGGER, OTHER_GUEST_GROUP))),
     })
     const res = await collectFirewallLog(scope, WINDOW, s)
 
@@ -102,7 +143,7 @@ describe('collectFirewallLog, group scope', () => {
 
   it('parses only the newest lines of a long log, and says so', async () => {
     const old = Array.from({ length: MAX_SCAN_LINES }, () => OTHER_GROUP)
-    const res = await collectFirewallLog(scope, WINDOW, sources({ nodeLog: vi.fn(async () => entries(GROUP_9999, ...old)) }))
+    const res = await collectFirewallLog(scope, WINDOW, sources({ nodeLog: vi.fn(() => file(LOGGER, GROUP_9999, ...old)) }))
 
     // The only r1114 line is the oldest one, beyond the scan.
     expect(res.rows).toHaveLength(0)
@@ -111,7 +152,7 @@ describe('collectFirewallLog, group scope', () => {
 
   it('caps the rows and says so', async () => {
     const many = Array.from({ length: MAX_LOG_ROWS + 3 }, () => GROUP_9999)
-    const res = await collectFirewallLog(scope, WINDOW, sources({ nodeLog: vi.fn(async () => entries(...many)) }))
+    const res = await collectFirewallLog(scope, WINDOW, sources({ nodeLog: vi.fn(() => file(LOGGER, ...many)) }))
 
     expect(res.rows).toHaveLength(MAX_LOG_ROWS)
     expect(res.truncated).toBe(true)
@@ -120,7 +161,7 @@ describe('collectFirewallLog, group scope', () => {
 
 describe('collectFirewallLog, node scope', () => {
   it('shows the whole node log: host, guest and group lines', async () => {
-    const s = sources({ nodeLog: vi.fn(async () => entries(LOGGER, GROUP_9999, VM_22, HOST_9997)) })
+    const s = sources({ nodeLog: vi.fn(() => file(LOGGER, GROUP_9999, VM_22, HOST_9997)) })
     const res = await collectFirewallLog({ kind: 'node', node: 'pve2' }, WINDOW, s)
 
     expect(res.rows.map(r => [r.origin, r.action, r.dport, r.vmid])).toEqual([
@@ -129,13 +170,13 @@ describe('collectFirewallLog, node scope', () => {
       ['group', 'DROP', 9999, 101],
     ])
     expect(res.rows.every(r => r.node === 'pve2')).toBe(true)
-    expect(s.nodeLog).toHaveBeenCalledWith('pve2', WINDOW)
+    expect(s.nodeLog).toHaveBeenCalledWith('pve2')
     expect(s.nodes).not.toHaveBeenCalled()
     expect(s.vmRules).not.toHaveBeenCalled()
   })
 
   it('fails when the node log itself is refused', async () => {
-    const s = sources({ nodeLog: vi.fn(async () => { throw new Error('403 Permission check failed (/nodes/pve2, Sys.Syslog)') }) })
+    const s = sources({ nodeLog: vi.fn(() => refused('403 Permission check failed (/nodes/pve2, Sys.Syslog)')) })
 
     await expect(collectFirewallLog({ kind: 'node', node: 'pve2' }, WINDOW, s)).rejects.toThrow('Sys.Syslog')
   })
@@ -145,7 +186,7 @@ describe('collectFirewallLog, cluster scope', () => {
   it('keeps the host chain lines of every online node, never a guest or group line', async () => {
     const s = sources({
       nodes: vi.fn(async () => [{ node: 'pve1', status: 'online' }, { node: 'pve2', status: 'online' }]),
-      nodeLog: vi.fn(async (node: string) => (node === 'pve1' ? entries(LOGGER, GROUP_9999, VM_22, HOST_9997) : [])),
+      nodeLog: vi.fn((node: string) => (node === 'pve1' ? file(LOGGER, GROUP_9999, VM_22, HOST_9997) : file(LOGGER))),
     })
     const res = await collectFirewallLog({ kind: 'cluster' }, WINDOW, s)
 
@@ -157,11 +198,7 @@ describe('collectFirewallLog, cluster scope', () => {
   it('warns per node it could not read', async () => {
     const s = sources({
       nodes: vi.fn(async () => [{ node: 'pve1', status: 'online' }, { node: 'pve2', status: 'online' }]),
-      nodeLog: vi.fn(async (node: string) => {
-        if (node === 'pve2') throw new Error('403 Permission check failed (/nodes/pve2, Sys.Syslog)')
-
-        return entries(HOST_9997)
-      }),
+      nodeLog: vi.fn((node: string) => (node === 'pve2' ? refused('403 Permission check failed (/nodes/pve2, Sys.Syslog)') : file(LOGGER, HOST_9997))),
     })
     const res = await collectFirewallLog({ kind: 'cluster' }, WINDOW, s)
 

@@ -9,12 +9,15 @@
 // interfaces, and a group reads every node's log. A node is its whole log; the
 // cluster is every node's host chain lines, where the datacenter and host rules
 // log (VMID 0, PVEFW-HOST-IN/OUT). A node that cannot be read becomes a
-// warning, never a failure of the whole view.
+// warning, never a failure of the whole view. Each log is read by
+// logWindow.ts, from the end of its current file (ui#1190).
 
 import { errorMessage } from './loadError'
 import { inferGroupAction, parseFirewallLogLine, ruleCandidates } from './logParse'
+import { currentFileStart, memoReader, readLogWindow } from './logWindow'
 
 import type { AddressBook, LogAction, LogDirection, ParsedLogLine as ParsedLine } from './logParse'
+import type { LogPageReader, LogWindowSec } from './logWindow'
 import type { FirewallLogEntry, FirewallRule, SecurityGroup } from '@/lib/api/firewall'
 
 export type FirewallLogScope =
@@ -56,8 +59,11 @@ export interface FirewallLogRow {
 
 export interface FirewallLogWarning {
   node: string
-  kind: 'permission' | 'offline' | 'error'
+  /** 'partial': the current file was read, the rotated logs the window reaches into were not. */
+  kind: 'permission' | 'offline' | 'error' | 'partial'
   message: string
+  /** For 'partial': the lines before this epoch (ms) are missing. */
+  missingBefore?: number
 }
 
 export interface FirewallLogResult {
@@ -69,21 +75,20 @@ export interface FirewallLogResult {
 
 export const MAX_LOG_ROWS = 5000
 /**
- * Lines parsed per log read, the newest kept: a week of a busy node's log is
- * read in full by PVE, and matching every line against the rules would cost
- * far more than the MAX_LOG_ROWS the view shows.
+ * Lines read per log, the newest kept: matching every line of a busy node's
+ * week against the rules would cost far more than the MAX_LOG_ROWS the view
+ * shows, and the end of the current file is read this many lines at a time.
  */
 export const MAX_SCAN_LINES = 20000
 
-export interface LogWindowSec {
-  since: number
-  until?: number
-}
+export type { LogWindowSec } from './logWindow'
 
 /** Where the lines come from; the route wires these to the orchestrator or PVE. */
 export interface FirewallLogSources {
-  vmLog: (node: string, vmType: string, vmid: number, window: LogWindowSec) => Promise<FirewallLogEntry[]>
-  nodeLog: (node: string, window: LogWindowSec) => Promise<FirewallLogEntry[]>
+  /** Pages of the guest's own log (see logWindow.ts). */
+  vmLog: (node: string, vmType: string, vmid: number) => LogPageReader
+  /** Pages of the node's whole log. */
+  nodeLog: (node: string) => LogPageReader
   nodes: () => Promise<{ node: string; status?: string }[]>
   groups: () => Promise<SecurityGroup[]>
   /** The guest's own rules, to tell which one wrote a guest rule line. */
@@ -125,12 +130,21 @@ export async function collectFirewallLog(scope: FirewallLogScope, window: LogWin
 
   let scanCapped = false
 
-  const push = async (node: string, all: FirewallLogEntry[], source: string, keep: (p: ParsedLine) => boolean) => {
-    // PVE returns the window oldest first: the newest lines are the last ones.
-    const entries = all.length > MAX_SCAN_LINES ? all.slice(-MAX_SCAN_LINES) : all
+  // Memoized: the head read that counts the lines also dates the file.
+  const nodeLog = (node: string) => memoReader(sources.nodeLog(node))
 
-    scanCapped ||= entries !== all
+  const read = async (node: string, log: LogPageReader, fileStart = () => currentFileStart(log)) => {
+    const res = await readLogWindow(log, window, MAX_SCAN_LINES, fileStart)
 
+    scanCapped ||= res.capped
+    if (res.olderError && !warnings.some(w => w.node === node && w.kind === 'partial')) {
+      warnings.push({ node, kind: 'partial', message: errorMessage(res.olderError), missingBefore: res.missingBefore })
+    }
+
+    return res.lines
+  }
+
+  const push = async (node: string, entries: FirewallLogEntry[], source: string, keep: (p: ParsedLine) => boolean) => {
     for (const entry of entries) {
       const p = parseFirewallLogLine(entry.t)
 
@@ -188,11 +202,16 @@ export async function collectFirewallLog(scope: FirewallLogScope, window: LogWin
 
   if (scope.kind === 'vm') {
     const { node, vmType, vmid } = scope
+    const guestLog = memoReader(sources.vmLog(node, vmType, vmid))
+    const hostLog = nodeLog(node)
+    // The guest log keeps its own lines only: the node log's first line dates
+    // the file, and without Sys.Syslog the guest's first line is the best guess.
+    const fileStart = () => currentFileStart(hostLog).catch(() => currentFileStart(guestLog))
 
     // The guest log is the view's own data: its failure is the route's failure.
     const [own, nodeLines] = await Promise.all([
-      sources.vmLog(node, vmType, vmid, window),
-      sources.nodeLog(node, window).catch(err => {
+      read(node, guestLog, fileStart),
+      read(node, hostLog).catch(err => {
         warnings.push(toWarning(node, err))
 
         return [] as FirewallLogEntry[]
@@ -203,7 +222,7 @@ export async function collectFirewallLog(scope: FirewallLogScope, window: LogWin
     await push(node, nodeLines, 'node', p => p.vmid === 0 && !!p.group && p.guestVmid === vmid)
   } else if (scope.kind === 'node') {
     // The node's own log is the view's data, as the guest log is a guest's.
-    await push(scope.node, await sources.nodeLog(scope.node, window), 'node', () => true)
+    await push(scope.node, await read(scope.node, nodeLog(scope.node)), 'node', () => true)
   } else {
     const keep = scope.kind === 'group'
       ? (p: ParsedLine) => !!p.group && sameGroup(p.group, scope.group)
@@ -220,7 +239,7 @@ export async function collectFirewallLog(scope: FirewallLogScope, window: LogWin
       let lines: FirewallLogEntry[]
 
       try {
-        lines = await sources.nodeLog(node, window)
+        lines = await read(node, nodeLog(node))
       } catch (err) {
         warnings.push(toWarning(node, err))
 

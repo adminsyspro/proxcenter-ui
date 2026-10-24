@@ -56,6 +56,27 @@ const MONTHS: Record<string, number> = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4,
 
 const num = (v: string | undefined) => (v !== undefined && /^\d+$/.test(v) ? Number(v) : undefined)
 
+/** Epoch milliseconds of a matched line, undefined for an unknown month. */
+function lineTime(m: RegExpExecArray): number | undefined {
+  const [, , , , day, mon, year, hh, mm, ss, sign, tzh, tzm] = m
+
+  if (MONTHS[mon] === undefined) return undefined
+
+  const offsetMin = (sign === '-' ? -1 : 1) * (Number(tzh) * 60 + Number(tzm))
+
+  return Date.UTC(Number(year), MONTHS[mon], Number(day), Number(hh), Number(mm), Number(ss)) - offsetMin * 60_000
+}
+
+/**
+ * Epoch milliseconds of any log line, the logger's own start/stop lines
+ * included; undefined for PVE's "no content" placeholder and garbage.
+ */
+export function logLineTime(raw: string): number | undefined {
+  const m = LINE_RE.exec(raw)
+
+  return m ? lineTime(m) : undefined
+}
+
 /**
  * Parses one log line. Returns null for what is not a packet: the logger's
  * own start/stop lines (chain `-`), PVE's "no content" placeholder, garbage.
@@ -65,12 +86,11 @@ export function parseFirewallLogLine(raw: string): ParsedLogLine | null {
 
   if (!m) return null
 
-  const [, vmid, level, chain, day, mon, year, hh, mm, ss, sign, tzh, tzm, rest] = m
+  const [, vmid, level, chain] = m
+  const rest = m[13]
+  const ts = lineTime(m)
 
-  if (chain === '-' || MONTHS[mon] === undefined) return null
-
-  const offsetMin = (sign === '-' ? -1 : 1) * (Number(tzh) * 60 + Number(tzm))
-  const ts = Date.UTC(Number(year), MONTHS[mon], Number(day), Number(hh), Number(mm), Number(ss)) - offsetMin * 60_000
+  if (chain === '-' || ts === undefined) return null
 
   let body = rest
   let action: LogAction | undefined

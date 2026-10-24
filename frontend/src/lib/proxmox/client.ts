@@ -267,6 +267,8 @@ export async function pveFetch<T>(
     slowRead?: boolean
     /** Server-only endpoint of this response, for ticket-bound WebSockets. */
     onResponse?: (baseUrl: string) => void
+    /** The whole body, `data` and its siblings (`total` of a paged read), not `data` alone. */
+    envelope?: boolean
   } = {}
 ): Promise<T> {
   if (!opts?.baseUrl) throw new Error("pveFetch: missing baseUrl")
@@ -367,7 +369,7 @@ export async function pveFetch<T>(
     }
 
     if (!probe) fetchOpts.onResponse?.(baseUrl)
-    return json.data as T
+    return (fetchOpts.envelope && !probe ? json : json.data) as T
   }
 
   // Circuit breaker: when a failover URL is cached, periodically probe the

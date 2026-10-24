@@ -10639,6 +10639,8 @@
     "truncated": "최근 {count}개 항목을 표시합니다.",
     "warnPermission": "{nodes}의 노드 로그를 읽을 수 없습니다: 연결 토큰에 /nodes에 대한 Sys.Syslog 권한이 없어 보안 그룹 적중이 누락됩니다.",
     "warnOffline": "오프라인, 로그를 읽지 않음: {nodes}.",
+    "warnPartial": "{node}: {time} 이전 줄은 표시되지 않습니다. PVE가 순환된 방화벽 로그를 제때 읽지 못했습니다 ({message}).",
+    "warnPartialNoTime": "{node}: 순환된 방화벽 로그를 제때 읽지 못했습니다 ({message}).",
     "ruleLogs": "이 규칙의 로그",
     "ruleNoLog": "이 규칙은 로그를 남기지 않습니다(nolog). 적중 기록을 보려면 로그 수준을 지정하세요.",
     "ruleUncertain": "로그만으로는 이 규칙과 {rules}을(를) 구분할 수 없습니다. Proxmox는 어떤 규칙이 일치했는지 기록하지 않습니다.",

@@ -16,13 +16,21 @@ import { collectFirewallLog } from '@/lib/firewall/logs'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 
 import type { FirewallLogScope, LogWindowSec } from '@/lib/firewall/logs'
-import type { Alias, FirewallLogEntry, FirewallRule, IPSet, SecurityGroup } from '@/lib/api/firewall'
+import type { LogPage, LogPageQuery } from '@/lib/firewall/logWindow'
+import type { Alias, FirewallRule, IPSet, SecurityGroup } from '@/lib/api/firewall'
 
 type RouteContext = { params: Promise<{ connectionId: string }> }
 
 /** The window the UI offers tops out at 7 days; older reads are refused, not clamped. */
 const MAX_WINDOW_SEC = 7 * 24 * 3600
 const DEFAULT_WINDOW_SEC = 3600
+
+/**
+ * A read over the rotated logs through the orchestrator gives up before its
+ * 30 s write timeout: past it the orchestrator drops the socket, the call
+ * reads as "unavailable" and would be run again on PVE directly (ui#1190).
+ */
+const ORCHESTRATOR_ROTATED_LOG_TIMEOUT_MS = 25_000
 
 const NODE_RE = /^[A-Za-z0-9][A-Za-z0-9.-]*$/
 const GROUP_RE = /^[A-Za-z][A-Za-z0-9_-]*$/
@@ -77,19 +85,27 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     let conn: ReturnType<typeof getConnectionById> | null = null
     // Loaded once, and only when a PVE call needs it (Community fallback, node list).
     const pve = () => (conn ??= getConnectionById(connectionId))
-    // limit=0: PVE counts the limit from the oldest line, the window bounds the read.
-    const q = `limit=0&since=${window.since}`
+    // Pages of a log with PVE's line count (see lib/firewall/logWindow.ts).
+    const page = (path: string, q: LogPageQuery) => {
+      const params = new URLSearchParams({ start: String(q.start ?? 0), limit: String(q.limit), withTotal: '1' })
+
+      if (q.since !== undefined) params.set('since', String(q.since))
+      if (q.until !== undefined) params.set('until', String(q.until))
+      const scansRotated = q.since !== undefined || q.until !== undefined
+
+      return orchestrator.get<LogPage>(`${path}?${params}`, scansRotated ? ORCHESTRATOR_ROTATED_LOG_TIMEOUT_MS : undefined)
+    }
 
     const result = await collectFirewallLog(scope, window, {
-      vmLog: (node, vmType, vmid) => orchestratorOrPve<FirewallLogEntry[]>(
+      vmLog: (node, vmType, vmid) => q => orchestratorOrPve<LogPage>(
         'firewall/logs',
-        () => orchestrator.get(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log?${q}`),
-        async () => pveDirect.getVMFirewallLog(await pve(), node, vmType, vmid, 0, window),
+        () => page(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log`, q),
+        async () => pveDirect.getFirewallLogPage(await pve(), node, q, { vmType, vmid }),
       ),
-      nodeLog: node => orchestratorOrPve<FirewallLogEntry[]>(
+      nodeLog: node => q => orchestratorOrPve<LogPage>(
         'firewall/logs',
-        () => orchestrator.get(`/firewall/nodes/${connectionId}/${node}/log?${q}`),
-        async () => pveDirect.getNodeFirewallLog(await pve(), node, 0, window),
+        () => page(`/firewall/nodes/${connectionId}/${node}/log`, q),
+        async () => pveDirect.getFirewallLogPage(await pve(), node, q),
       ),
       nodes: async () => (await pveFetch<{ node: string; status?: string }[]>(await pve(), '/nodes')) ?? [],
       groups: () => orchestratorOrPve<SecurityGroup[]>(

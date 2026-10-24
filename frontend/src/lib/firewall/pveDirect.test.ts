@@ -49,7 +49,7 @@ import {
   updateVMRule,
   deleteVMRule,
   getVMFirewallLog,
-  getNodeFirewallLog,
+  getFirewallLogPage,
   toggleVMNICFirewall,
   getFirewallStatus,
 } from './pveDirect'
@@ -514,12 +514,21 @@ describe('getVMFirewallLog', () => {
   })
 })
 
-describe('getNodeFirewallLog', () => {
-  it('reads the node log with the window', async () => {
-    mockPve.mockResolvedValue([{ n: 1, t: 'line' }] as any)
+describe('getFirewallLogPage (ui#1190)', () => {
+  it('pages the node log from the end of its current file, with the line count', async () => {
+    mockPve.mockResolvedValue({ data: [{ n: 280001, t: 'line' }], total: 300000 } as any)
 
-    expect(await getNodeFirewallLog(conn, 'pve2', 0, { since: 1760565600 })).toEqual([{ n: 1, t: 'line' }])
-    expect(callAt().path).toBe('/nodes/pve2/firewall/log?limit=0&since=1760565600')
+    expect(await getFirewallLogPage(conn, 'pve2', { start: 280000, limit: 20000 })).toEqual({ total: 300000, lines: [{ n: 280001, t: 'line' }] })
+    expect(callAt().path).toBe('/nodes/pve2/firewall/log?limit=20000&start=280000')
+    expect(mockPve.mock.calls[0][3]).toEqual({ envelope: true, slowRead: true })
+  })
+
+  it('reads a guest log window over the rotated logs', async () => {
+    mockPve.mockResolvedValue({ data: [] } as any)
+
+    expect(await getFirewallLogPage(conn, 'pve1', { limit: 0, since: 1760565600, until: 1760569200 }, { vmType: 'qemu', vmid: 100 })).toEqual({ total: 0, lines: [] })
+    expect(callAt().path).toBe('/nodes/pve1/qemu/100/firewall/log?limit=0&since=1760565600&until=1760569200')
+    expect(mockPve.mock.calls[0][3]).toEqual({ envelope: true, slowRead: true })
   })
 })
 

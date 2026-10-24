@@ -10304,6 +10304,8 @@
     "truncated": "Die {count} neuesten Einträge werden angezeigt.",
     "warnPermission": "Knoten-Log auf {nodes} nicht lesbar: Dem Token der Verbindung fehlt Sys.Syslog auf /nodes, Treffer von Security Groups fehlen dort.",
     "warnOffline": "Offline, Log nicht gelesen: {nodes}.",
+    "warnPartial": "{node}: Zeilen vor {time} werden nicht angezeigt, PVE hat die rotierten Firewall-Logs nicht rechtzeitig gelesen ({message}).",
+    "warnPartialNoTime": "{node}: Die rotierten Firewall-Logs wurden nicht rechtzeitig gelesen ({message}).",
     "ruleLogs": "Logs dieser Regel",
     "ruleNoLog": "Diese Regel protokolliert nicht (nolog): Geben Sie ihr eine Protokollstufe, um ihre Treffer zu sehen.",
     "ruleUncertain": "Das Log kann diese Regel nicht von {rules} unterscheiden: Proxmox schreibt nicht, welche Regel zutraf.",

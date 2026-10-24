@@ -15,6 +15,7 @@
 import { pveFetch } from '@/lib/proxmox/client'
 import { safeLog } from '@/lib/log/sanitize'
 
+import type { LogPage, LogPageQuery } from './logWindow'
 import type { PveConn } from '@/lib/connections/getConnection'
 import type {
   Alias,
@@ -400,9 +401,21 @@ export async function getVMFirewallLog(conn: PveConn, node: string, vmType: stri
   return (await pveFetch<FirewallLogEntry[]>(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/log?${logQuery(limit, window)}`)) ?? []
 }
 
-/** The node's whole firewall log: the only place security group hits land (VMID 0). */
-export async function getNodeFirewallLog(conn: PveConn, node: string, limit = 50, window?: LogWindow): Promise<FirewallLogEntry[]> {
-  return (await pveFetch<FirewallLogEntry[]>(conn, `/nodes/${node}/firewall/log?${logQuery(limit, window)}`)) ?? []
+/**
+ * One page of a guest's log (`guest` given) or of the node's whole log, the
+ * only place security group hits land (VMID 0), with PVE's line count. The
+ * long budget: a `since`/`until` read scans the rotated logs, which pveproxy
+ * itself cuts at 30 s (596).
+ */
+export async function getFirewallLogPage(conn: PveConn, node: string, q: LogPageQuery, guest?: { vmType: string; vmid: number | string }): Promise<LogPage> {
+  const params = new URLSearchParams(logQuery(q.limit, q))
+
+  if (q.start) params.set('start', String(q.start))
+
+  const path = guest ? `/nodes/${node}/${guest.vmType}/${guest.vmid}/firewall/log` : `/nodes/${node}/firewall/log`
+  const body = await pveFetch<{ data?: FirewallLogEntry[]; total?: number } | null>(conn, `${path}?${params}`, {}, { envelope: true, slowRead: true })
+
+  return { total: Number(body?.total) || 0, lines: body?.data ?? [] }
 }
 
 // ================================================================================

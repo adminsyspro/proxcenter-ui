@@ -403,8 +403,8 @@ class OrchestratorClient {
   /**
    * GET request - retourne { data: T }
    */
-  async get<T = any>(path: string): Promise<OrchestratorResponse<T>> {
-    const data = await orchestratorFetch<T>(path, { method: 'GET' })
+  async get<T = any>(path: string, timeout?: number): Promise<OrchestratorResponse<T>> {
+    const data = await orchestratorFetch<T>(path, { method: 'GET', timeout })
 
     
 return { data, status: 200 }

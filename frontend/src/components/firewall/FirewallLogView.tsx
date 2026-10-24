@@ -238,6 +238,7 @@ export default function FirewallLogView({ connectionId, scope: scopeProp, guests
   const permissionNodes = warnings.filter(w => w.kind === 'permission').map(w => w.node)
   const offlineNodes = warnings.filter(w => w.kind === 'offline').map(w => w.node)
   const otherWarnings = warnings.filter(w => w.kind === 'error')
+  const partialWarnings = warnings.filter(w => w.kind === 'partial')
   const colSpan = 7 + Number(showDecidedBy) + Number(showGuest) + Number(showNode)
   const cellSx = { py: 0.5, fontSize: 12, whiteSpace: 'nowrap' } as const
   // A line without a guest: say the host logged it, unless Decided by already does.
@@ -295,7 +296,7 @@ export default function FirewallLogView({ connectionId, scope: scopeProp, guests
         </Tooltip>
       </Box>
 
-      {(error || permissionNodes.length > 0 || offlineNodes.length > 0 || otherWarnings.length > 0) && (
+      {(error || permissionNodes.length > 0 || offlineNodes.length > 0 || otherWarnings.length > 0 || partialWarnings.length > 0) && (
         <Box sx={{ px: 2, pb: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
           {permissionNodes.length > 0 && (
@@ -305,6 +306,13 @@ export default function FirewallLogView({ connectionId, scope: scopeProp, guests
             <Alert severity="info">{t('firewallLog.warnOffline', { nodes: offlineNodes.join(', ') })}</Alert>
           )}
           {otherWarnings.map(w => <Alert key={w.node} severity="warning">{`${w.node}: ${w.message}`}</Alert>)}
+          {partialWarnings.map(w => (
+            <Alert key={`partial:${w.node}`} severity="info">
+              {w.missingBefore === undefined
+                ? t('firewallLog.warnPartialNoTime', { node: w.node, message: w.message })
+                : t('firewallLog.warnPartial', { node: w.node, time: fmtTime(w.missingBefore), message: w.message })}
+            </Alert>
+          ))}
         </Box>
       )}
 

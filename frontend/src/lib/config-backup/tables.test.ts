@@ -40,4 +40,11 @@ describe('BACKUP_TABLES', () => {
       expect(names).not.toContain(excluded)
     }
   })
+
+  it('keeps the HTTPS certificates but not the ACME runtime state', () => {
+    const names = BACKUP_TABLES.map(t => t.name)
+
+    expect(names).toContain('tls_certificates')
+    for (const runtime of ['tls_acme_accounts', 'tls_acme_challenges', 'tls_renew_leases']) expect(names).not.toContain(runtime)
+  })
 })

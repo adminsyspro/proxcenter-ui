@@ -94,8 +94,22 @@ services:
       # Preserved external URL for FQDN / reverse-proxy / OIDC installs;
       # fresh IP-only installs fall back to the VIP.
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://${VIP}:3000}
+      # The same public URL, under the name the rest of the application reads.
+      # Without it the container simply has no APP_URL, and the HTTPS tab's
+      # coherence check could never be satisfied on an HA install however the
+      # host .env was edited.
+      APP_URL: ${APP_URL:-${NEXTAUTH_URL:-http://${VIP}:3000}}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       APP_SECRET: ${APP_SECRET}
+      # Built-in HTTPS. With network_mode: host there is no ports: mapping to
+      # parametrize (unlike docker-compose.community.yml / .enterprise.yml):
+      # whatever the app listens on inside the container is already the port
+      # used on the host, so only the app-facing variables apply here.
+      # TLS_PORT: port the HTTPS listener binds to. TLS_ENABLED: read once, on
+      # the very first boot, to seed the setting; afterwards /settings is the
+      # source of truth.
+      TLS_PORT: ${TLS_PORT:-8443}
+      TLS_ENABLED: ${TLS_ENABLED:-false}
       ORCHESTRATOR_URL: http://127.0.0.1:8080
       # DRS metrics/recommendations go through HAProxy to the leader orchestrator
       # (ui#803, defect 2); everything else stays on the local orchestrator above.

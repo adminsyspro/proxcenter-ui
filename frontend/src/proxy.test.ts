@@ -59,6 +59,67 @@ describe('VIP redirect', () => {
     expect(res.headers.get('location')).toBe('http://192.0.2.100:3000/home')
   })
 
+  // The host must stay the VIP; only the scheme and the port follow APP_URL.
+  // Hard-coded http://VIP:3000 drops an HTTPS session out of TLS, and with
+  // HSTS on the browser rewrites it to https://VIP:3000 where nothing listens.
+  describe('target scheme and port follow what is actually served', () => {
+    async function redirectTargetFor(appUrl: string | undefined) {
+      vi.stubEnv('HA_ENABLED', 'true')
+      vi.stubEnv('VIP', '192.0.2.100')
+      vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
+      vi.stubEnv('APP_URL', appUrl)
+
+      const { proxy } = await import('./proxy')
+      const res = await proxy(makeRequest('http://192.0.2.101/home?a=1', '192.0.2.101') as any)
+
+      expect(res.status).toBe(302)
+
+      return res.headers.get('location')
+    }
+
+    it('keeps the explicit HTTPS port of APP_URL', async () => {
+      expect(await redirectTargetFor('https://pcx.lab:8443')).toBe('https://192.0.2.100:8443/home?a=1')
+    })
+
+    it('omits the port when APP_URL is HTTPS on the default one', async () => {
+      expect(await redirectTargetFor('https://pcx.lab')).toBe('https://192.0.2.100/home?a=1')
+    })
+
+    it('omits the port for an explicit :443 too', async () => {
+      expect(await redirectTargetFor('https://pcx.lab:443')).toBe('https://192.0.2.100/home?a=1')
+    })
+
+    it('keeps the legacy target for a plain-http APP_URL, so a non-TLS HA install is unchanged', async () => {
+      expect(await redirectTargetFor('http://pcx.lab:3000')).toBe('http://192.0.2.100:3000/home?a=1')
+    })
+
+    it('keeps the legacy target when APP_URL is unset', async () => {
+      expect(await redirectTargetFor(undefined)).toBe('http://192.0.2.100:3000/home?a=1')
+    })
+
+    it('keeps the legacy target when APP_URL does not parse', async () => {
+      expect(await redirectTargetFor('not a url')).toBe('http://192.0.2.100:3000/home?a=1')
+    })
+
+    it('control: a request already addressed to the VIP is passed through, never redirected onto itself', async () => {
+      vi.stubEnv('HA_ENABLED', 'true')
+      vi.stubEnv('VIP', '192.0.2.100')
+      vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
+      vi.stubEnv('APP_URL', 'https://pcx.lab:8443')
+
+      const { proxy } = await import('./proxy')
+
+      // Both the bare VIP and the VIP carrying the HTTPS port: the loop guard
+      // strips the port before comparing, and a redirect that can fire on its
+      // own target is an infinite loop in a browser.
+      for (const host of ['192.0.2.100', '192.0.2.100:8443']) {
+        const res = await proxy(makeRequest(`https://${host}/home`, host) as any)
+
+        expect(res.status).not.toBe(302)
+      }
+    })
+  })
+
   it('does not redirect when host matches VIP', async () => {
     vi.stubEnv('HA_ENABLED', 'true')
     vi.stubEnv('VIP', '192.0.2.100')
@@ -105,6 +166,35 @@ describe('VIP redirect', () => {
     const res = await proxy(req as any)
 
     expect(res.status).not.toBe(302)
+  })
+
+  // A certificate for any name other than the NEXTAUTH_URL host arrives on a
+  // host the exempt list does not cover, and the CA fetches it from the public
+  // internet. Redirected to the VIP it never reaches the handler, so the order
+  // fails validation and no certificate is ever issued on an HA install.
+  it('exempts the ACME HTTP-01 challenge from redirect, whatever name it is fetched on', async () => {
+    vi.stubEnv('HA_ENABLED', 'true')
+    vi.stubEnv('VIP', '192.0.2.100')
+    vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
+
+    const { proxy } = await import('./proxy')
+
+    for (const path of ['/.well-known/acme-challenge/tok3n', '/api/acme/challenge/tok3n']) {
+      const res = await proxy(makeRequest(`http://pcx.lab${path}`, 'pcx.lab') as any)
+
+      expect(res.status, path).not.toBe(302)
+    }
+  })
+
+  it('control: another well-known path on the same host is still redirected', async () => {
+    vi.stubEnv('HA_ENABLED', 'true')
+    vi.stubEnv('VIP', '192.0.2.100')
+    vi.stubEnv('NEXTAUTH_SECRET', 'test-secret')
+
+    const { proxy } = await import('./proxy')
+    const res = await proxy(makeRequest('http://pcx.lab/.well-known/security.txt', 'pcx.lab') as any)
+
+    expect(res.status).toBe(302)
   })
 
   it('exempts localhost from redirect', async () => {

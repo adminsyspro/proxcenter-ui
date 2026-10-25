@@ -82,7 +82,7 @@ function truncate(value: string, max: number): string {
  * ours, the SIEM is not. Identifiers, names and prefixes that merely mention a
  * token or a key (`tokenId`, `keyName`, `prefix`) stay, they are the trail.
  */
-const SENSITIVE_KEY = /pass(word|wd|phrase)?|secret|token|api[_-]?key|private[_-]?key|credential|authorization|cookie|otp/i
+const SENSITIVE_KEY = /pass(word|wd|phrase)?|secret|token|api[_-]?key|private[_-]?key|key[_-]?pem|hmac|credential|authorization|cookie|otp/i
 const HARMLESS_SUFFIX = /(id|name|prefix|method|type|enabled|count|ttl|expires?(at)?|scopes?)$/i
 
 export const REDACTED = '[redacted]'

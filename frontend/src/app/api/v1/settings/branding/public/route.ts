@@ -62,6 +62,7 @@ export async function GET() {
       browserTitle: settings.browserTitle,
       poweredByVisible: settings.poweredByVisible,
       showGithubStars: settings.showGithubStars,
+      showDocs: settings.showDocs,
       showWhatsNew: settings.showWhatsNew,
       showSubscription: settings.showSubscription,
       loginTagline: typeof settings.loginTagline === 'string' ? settings.loginTagline : '',

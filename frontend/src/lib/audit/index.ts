@@ -119,6 +119,13 @@ export type AuditAction =
   | "apitoken.denied"
   | "apitoken.write"
 
+  // TLS
+  | "tls.issue"
+  | "tls.import"
+  | "tls.selfsign"
+  | "tls.activate"
+  | "tls.settings"
+
   // 2FA
   | "2fa_enrolled"
   | "2fa_disabled"

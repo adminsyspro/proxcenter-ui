@@ -21,6 +21,8 @@ import { startOrchestratorAuditRelay } from '@/lib/syslog/orchestratorRelay'
 import { startCatalogRefresher } from '@/lib/templates/catalogRefresher'
 import { isCatalogAutoUpdateEnabled } from '@/lib/templates/catalogStore'
 import { startVdcUsageSampler } from '@/lib/vdc/usageHistory/sampler'
+import { startTlsListener } from '@/lib/tls/bootstrap'
+import { startTlsReconciler } from '@/lib/tls/reconciler'
 
 export async function registerNode(): Promise<void> {
   // undici 8 negotiates HTTP/2 through ALPN by default. Every hypervisor API we
@@ -134,5 +136,19 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this: the rows stay in the database and the
     // next boot resumes from the cursor.
     console.error('[startup] orchestrator audit relay failed to start (non-fatal):', err)
+  }
+
+  try {
+    // Opens the built-in HTTPS listener when the operator turned it on, and
+    // forges the first self-signed certificate on a fresh database. A failure
+    // leaves the plain HTTP listener up, which is the way back in.
+    await startTlsListener()
+
+    // Hourly: reload a certificate renewed by another replica, renew an ACME
+    // one before it expires, purge spent challenges. Idempotent, and the
+    // renewal itself is taken under an advisory lock.
+    startTlsReconciler()
+  } catch (err) {
+    console.error('[startup] TLS listener failed to start (non-fatal):', err)
   }
 }

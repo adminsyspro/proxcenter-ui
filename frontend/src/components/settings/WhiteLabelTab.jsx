@@ -35,6 +35,7 @@ export default function WhiteLabelTab() {
     browserTitle: '',
     poweredByVisible: true,
     showGithubStars: true,
+    showDocs: true,
     showWhatsNew: true,
     showSubscription: true,
     loginTagline: '',
@@ -439,6 +440,10 @@ export default function WhiteLabelTab() {
             <FormControlLabel
               control={<Switch checked={config.showGithubStars} onChange={e => setConfig(c => ({ ...c, showGithubStars: e.target.checked }))} />}
               label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className="ri-github-fill" style={{ fontSize: 16, opacity: 0.6 }} /><Typography variant="body2">{t('settings.whiteLabel.showGithubStars')}</Typography></Box>}
+            />
+            <FormControlLabel
+              control={<Switch checked={config.showDocs} onChange={e => setConfig(c => ({ ...c, showDocs: e.target.checked }))} />}
+              label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className="ri-book-open-line" style={{ fontSize: 16, opacity: 0.6 }} /><Typography variant="body2">{t('settings.whiteLabel.showDocs')}</Typography></Box>}
             />
             <FormControlLabel
               control={<Switch checked={config.showWhatsNew} onChange={e => setConfig(c => ({ ...c, showWhatsNew: e.target.checked }))} />}

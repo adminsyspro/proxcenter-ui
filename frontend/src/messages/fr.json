@@ -1547,6 +1547,8 @@
       "graphicCard": "Carte graphique",
       "scsiController": "Contrôleur SCSI",
       "machine": "Machine",
+      "machineVersion": "Version de la machine",
+      "machineVersionLatest": "La plus récente",
       "qemuAgent": "Agent Qemu",
       "firmware": "Firmware",
       "addTpm": "Ajouter TPM",
@@ -1593,6 +1595,12 @@
       "disconnect": "Déconnecter",
       "rateLimitMbs": "Limite de débit (Mo/s)",
       "mtu": "MTU",
+      "mtuBridgePlaceholder": "MTU du bridge",
+      "mtuRange": "1 (MTU du bridge) ou de 576 à 65520",
+      "mtuAboveBridge": "Supérieur au MTU du bridge ({max}) : la VM ne démarrerait pas",
+      "mtuAboveDefault": "Le bridge ne déclare pas de MTU (1500 par défaut) : la VM risque de ne pas démarrer",
+      "multiqueue": "Multiqueue",
+      "virtioOnly": "VirtIO uniquement",
       "reviewSettingsVm": "Vérifiez vos paramètres avant de créer la VM",
       "vmIdMin": "L'ID VM doit être >= 100",
       "vmIdMax": "L'ID VM doit être <= 999999999",
@@ -1642,10 +1650,20 @@
         "quotaViolation": "Quota dépassé — {violation} (onglet CPU / Mémoire / Disques).",
         "noBridgeBlocker": "Aucun bridge autorisé dans votre vDC. Créez un VNet dans « Mon Datacenter » ou demandez au provider un bridge partagé — ou cochez « Pas de carte réseau ».",
         "invalidBridgeBlocker": "Bridge non autorisé sur {nicDetails}. Choisissez un bridge proposé dans l'onglet Réseau.",
-        "nicLabel": "NIC {index} (bridge « {bridge} »)"
+        "nicLabel": "NIC {index} (bridge « {bridge} »)",
+        "invalidMtuBlocker": "{nic} : MTU {mtu} inutilisable sur son bridge"
       },
       "noBlankVmVdc": "Aucun de vos vDC n'autorise les VM vierges. Déployez depuis le catalogue de templates.",
-      "noVdcNode": "Aucun nœud de ce vDC n'est disponible pour le moment."
+      "noVdcNode": "Aucun nœud de ce vDC n'est disponible pour le moment.",
+      "summary": {
+        "vm": "VM",
+        "guestOs": "Système invité",
+        "enabled": "Activé",
+        "cpuTopology": "{sockets, plural, one {# socket} other {# sockets}} × {cores, plural, one {# cœur} other {# cœurs}}",
+        "balloonMin": "minimum {size}",
+        "onBridge": "{model} sur {bridge}",
+        "noNetwork": "Aucune carte réseau"
+      }
     },
     "createLxc": {
       "title": "Créer : Conteneur LXC",

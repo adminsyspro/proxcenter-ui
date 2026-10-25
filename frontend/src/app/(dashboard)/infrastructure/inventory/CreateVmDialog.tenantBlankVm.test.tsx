@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, within } from '@testing-library/react'
 import {
   renderWithProviders,
   screen,
@@ -157,9 +157,11 @@ describe('CreateVmDialog - vDC tenant blank VMs (#1171)', () => {
     await waitFor(() => expect(nextidCalls).toBe(1))
 
     fireEvent.click(screen.getByRole('tab', { name: 'Confirm' }))
-    expect(await screen.findByText('vDC: Alpha')).toBeInTheDocument()
-    expect(screen.queryByText(/^Node: /)).not.toBeInTheDocument()
-    expect(screen.queryByText(/^ID: /)).not.toBeInTheDocument()
+    const summary = await screen.findByTestId('create-vm-summary')
+    expect(within(summary).getByText('vDC')).toBeInTheDocument()
+    expect(within(summary).getByText('Alpha')).toBeInTheDocument()
+    expect(within(summary).queryByText('Node')).not.toBeInTheDocument()
+    expect(summary.textContent).not.toMatch(/pve\d/)
   })
 })
 

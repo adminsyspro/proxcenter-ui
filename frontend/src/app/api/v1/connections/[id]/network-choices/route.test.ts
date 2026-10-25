@@ -102,6 +102,17 @@ describe("GET /api/v1/connections/[id]/network-choices", () => {
     expect(guestPerimeterAllowsMock).not.toHaveBeenCalled()
   })
 
+  // #1194: the wizard checks the NIC MTU against the bridge's declared MTU.
+  it("passes on the MTU a bridge declares", async () => {
+    pveFetchMock.mockImplementation((_conn: any, path: string) =>
+      Promise.resolve(path.endsWith("/network") ? [{ iface: "vmbr0", type: "bridge", mtu: "9000" }] : []))
+
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const json = await (await callRoute(GET, { params: PARAMS, searchParams: QUERY })).json()
+
+    expect(json.data).toEqual([{ kind: "bridge", name: "vmbr0", type: "bridge", mtu: 9000 }])
+  })
+
   it("returns the RBAC denial without calling PVE when no guest opens the perimeter", async () => {
     checkPermissionMock.mockResolvedValue(Response.json({ error: "forbidden" }, { status: 403 }))
 

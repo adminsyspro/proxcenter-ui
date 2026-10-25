@@ -1547,6 +1547,8 @@
       "graphicCard": "Graphic card",
       "scsiController": "SCSI Controller",
       "machine": "Machine",
+      "machineVersion": "Machine version",
+      "machineVersionLatest": "Latest",
       "qemuAgent": "Qemu Agent",
       "firmware": "Firmware",
       "addTpm": "Add TPM",
@@ -1593,6 +1595,12 @@
       "disconnect": "Disconnect",
       "rateLimitMbs": "Rate limit (MB/s)",
       "mtu": "MTU",
+      "mtuBridgePlaceholder": "Bridge MTU",
+      "mtuRange": "1 (bridge MTU) or 576 to 65520",
+      "mtuAboveBridge": "Above the bridge MTU ({max}): the VM would not start",
+      "mtuAboveDefault": "The bridge declares no MTU (1500 by default): the VM may not start",
+      "multiqueue": "Multiqueue",
+      "virtioOnly": "VirtIO only",
       "reviewSettingsVm": "Review your settings before creating the VM",
       "vmIdMin": "VM ID must be >= 100",
       "vmIdMax": "VM ID must be <= 999999999",
@@ -1642,10 +1650,20 @@
         "quotaViolation": "Quota exceeded — {violation} (CPU / Memory / Disks tab).",
         "noBridgeBlocker": "No bridge authorised in your vDC. Create a VNet in \"My Datacenter\" or ask the provider for a shared bridge — or tick \"No network device\".",
         "invalidBridgeBlocker": "Bridge not authorised on {nicDetails}. Pick one of the allowed bridges in the Network tab.",
-        "nicLabel": "NIC {index} (bridge \"{bridge}\")"
+        "nicLabel": "NIC {index} (bridge \"{bridge}\")",
+        "invalidMtuBlocker": "{nic}: MTU {mtu} is not usable on its bridge"
       },
       "noBlankVmVdc": "None of your vDCs allows blank VMs. Deploy from the template catalogue instead.",
-      "noVdcNode": "No node of this vDC is available right now."
+      "noVdcNode": "No node of this vDC is available right now.",
+      "summary": {
+        "vm": "VM",
+        "guestOs": "Guest OS",
+        "enabled": "Enabled",
+        "cpuTopology": "{sockets, plural, one {# socket} other {# sockets}} × {cores, plural, one {# core} other {# cores}}",
+        "balloonMin": "minimum {size}",
+        "onBridge": "{model} on {bridge}",
+        "noNetwork": "No network device"
+      }
     },
     "createLxc": {
       "title": "Create: LXC Container",

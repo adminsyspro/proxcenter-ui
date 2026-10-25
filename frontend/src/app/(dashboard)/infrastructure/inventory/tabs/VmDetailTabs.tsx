@@ -7,6 +7,7 @@ import DOMPurify from 'dompurify'
 import ExpandableChart from '../components/ExpandableChart'
 import ChartSeriesToggles, { useHiddenSeries } from '../components/ChartSeriesToggles'
 import IoPressureChart from '../components/IoPressureChart'
+import CpuFlagsSelector from '../components/CpuFlagsSelector'
 import MetricsRangeSelector from '@/components/metrics/MetricsRangeSelector'
 import useChartDragRange from '@/components/metrics/useChartDragRange'
 
@@ -54,8 +55,6 @@ import {
   TextField,
   Typography,
   Collapse,
-  ToggleButton,
-  ToggleButtonGroup,
   Tooltip as MuiTooltip,
   alpha,
   useTheme,
@@ -204,7 +203,6 @@ export default function VmDetailTabs(props: any) {
     return () => { cancelled = true }
   }, [vmConnId, tenantLoading, isProviderTenant])
   const chartTooltipStyle = { backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 4, color: theme.palette.text.primary }
-  const [cpuFlagsOpen, setCpuFlagsOpen] = useState(false)
   const [hwSections, setHwSections] = useState<Set<string>>(new Set(['cpu', 'memory', 'system', 'disks', 'network', 'other']))
   const toggleHwSection = (section: string) => setHwSections(prev => {
     const next = new Set(prev)
@@ -1192,87 +1190,9 @@ export default function VmDetailTabs(props: any) {
                           )}
 
                           {/* Extra CPU Flags (collapsible) */}
-                          {!cpuAdvancedHidden && (() => {
-                            const activeCount = Object.keys(cpuFlags).length
-                            return (
-                            <Box sx={{ mb: 2, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-                              <Box
-                                onClick={() => setCpuFlagsOpen(!cpuFlagsOpen)}
-                                sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-                              >
-                                {/* component="div": body2 would render a <p>, and the Chip
-                                    below renders a <div> — invalid nesting, hydration error. */}
-                                <Typography variant="body2" component="div" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <i className="ri-flag-line" style={{ fontSize: 16 }} />
-                                  {t('inventory.cpuFlags')}
-                                  {activeCount > 0 && (
-                                    <Chip label={activeCount} size="small" color="primary" sx={{ height: 20, fontSize: '0.7rem', ml: 0.5 }} />
-                                  )}
-                                </Typography>
-                                <i className={cpuFlagsOpen ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 20, opacity: 0.5 }} />
-                              </Box>
-                              <Collapse in={cpuFlagsOpen}>
-                                <Box sx={{ px: 2, pb: 2, pt: 1, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
-                                  {([
-                                    { flag: 'nested-virt', desc: t('inventory.cpuFlagDesc.nestedVirt') },
-                                    { flag: 'md-clear', desc: t('inventory.cpuFlagDesc.mdClear') },
-                                    { flag: 'pcid', desc: t('inventory.cpuFlagDesc.pcid') },
-                                    { flag: 'spec-ctrl', desc: t('inventory.cpuFlagDesc.specCtrl') },
-                                    { flag: 'ssbd', desc: t('inventory.cpuFlagDesc.ssbd') },
-                                    { flag: 'ibpb', desc: t('inventory.cpuFlagDesc.ibpb') },
-                                    { flag: 'virt-ssbd', desc: t('inventory.cpuFlagDesc.virtSsbd') },
-                                    { flag: 'amd-ssbd', desc: t('inventory.cpuFlagDesc.amdSsbd') },
-                                    { flag: 'amd-no-ssb', desc: t('inventory.cpuFlagDesc.amdNoSsb') },
-                                    { flag: 'pdpe1gb', desc: t('inventory.cpuFlagDesc.pdpe1gb') },
-                                    { flag: 'hv-tlbflush', desc: t('inventory.cpuFlagDesc.hvTlbflush') },
-                                    { flag: 'hv-evmcs', desc: t('inventory.cpuFlagDesc.hvEvmcs') },
-                                    { flag: 'aes', desc: t('inventory.cpuFlagDesc.aes') },
-                                  ] as const).map(({ flag, desc }) => {
-                                    const val = cpuFlags[flag] || 'default'
-                                    return (
-                                    <MuiTooltip key={flag} title={desc} placement="top" arrow>
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <ToggleButtonGroup
-                                          disabled={!canConfigHardware}
-                                          size="small"
-                                          exclusive
-                                          value={val}
-                                          onChange={(_, v) => {
-                                            if (!v) return
-                                            setCpuFlags((prev: Record<string, '+' | '-'>) => {
-                                              const next = { ...prev }
-                                              if (v === 'default') {
-                                                delete next[flag]
-                                              } else {
-                                                next[flag] = v
-                                              }
-                                              return next
-                                            })
-                                          }}
-                                          sx={{ height: 28 }}
-                                        >
-                                          <ToggleButton value="-" sx={{
-                                            px: 0.8, fontSize: '0.75rem', fontWeight: 700,
-                                            ...(val === '-' && { bgcolor: 'error.main', color: 'error.contrastText', '&:hover': { bgcolor: 'error.dark' }, '&.Mui-selected': { bgcolor: 'error.main', color: 'error.contrastText', '&:hover': { bgcolor: 'error.dark' } } })
-                                          }}>−</ToggleButton>
-                                          <ToggleButton value="default" sx={{ px: 0.8, fontSize: '0.65rem' }}>off</ToggleButton>
-                                          <ToggleButton value="+" sx={{
-                                            px: 0.8, fontSize: '0.75rem', fontWeight: 700,
-                                            ...(val === '+' && { bgcolor: 'success.main', color: 'success.contrastText', '&:hover': { bgcolor: 'success.dark' }, '&.Mui-selected': { bgcolor: 'success.main', color: 'success.contrastText', '&:hover': { bgcolor: 'success.dark' } } })
-                                          }}>+</ToggleButton>
-                                        </ToggleButtonGroup>
-                                        <Typography variant="caption" sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.7rem' }}>
-                                          {flag}
-                                        </Typography>
-                                      </Box>
-                                    </MuiTooltip>
-                                    )
-                                  })}
-                                </Box>
-                              </Collapse>
-                            </Box>
-                            )
-                          })()}
+                          {!cpuAdvancedHidden && (
+                            <CpuFlagsSelector flags={cpuFlags} onChange={setCpuFlags} disabled={!canConfigHardware} sx={{ mb: 2 }} />
+                          )}
 
                           {/* Résumé */}
                           <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1, mb: 2 }}>

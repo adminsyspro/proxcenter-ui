@@ -1547,6 +1547,8 @@
       "graphicCard": "그래픽 카드",
       "scsiController": "SCSI 컨트롤러",
       "machine": "머신",
+      "machineVersion": "머신 버전",
+      "machineVersionLatest": "최신",
       "qemuAgent": "QEMU 에이전트",
       "firmware": "펌웨어",
       "addTpm": "TPM 추가",
@@ -1593,6 +1595,12 @@
       "disconnect": "연결 해제",
       "rateLimitMbs": "속도 제한 (MB/s)",
       "mtu": "MTU",
+      "mtuBridgePlaceholder": "브리지 MTU",
+      "mtuRange": "1(브리지 MTU) 또는 576~65520",
+      "mtuAboveBridge": "브리지 MTU({max})보다 큼: VM이 시작되지 않습니다",
+      "mtuAboveDefault": "브리지에 MTU가 선언되지 않음(기본 1500): VM이 시작되지 않을 수 있습니다",
+      "multiqueue": "멀티큐",
+      "virtioOnly": "VirtIO 전용",
       "reviewSettingsVm": "VM을 생성하기 전에 설정을 검토하세요",
       "vmIdMin": "VM ID는 100 이상이어야 합니다",
       "vmIdMax": "VM ID는 999999999 이하여야 합니다",
@@ -1642,10 +1650,20 @@
         "quotaViolation": "할당량 초과 — {violation} (CPU / 메모리 / 디스크 탭).",
         "noBridgeBlocker": "vDC에 허용된 브리지가 없습니다. \"내 데이터센터\"에서 VNet을 생성하거나 공급자에게 공유 브리지를 요청하세요. 또는 \"네트워크 장치 없음\"을 선택하세요.",
         "invalidBridgeBlocker": "{nicDetails}에서 브리지가 허용되지 않습니다. 네트워크 탭에서 허용된 브리지 중 하나를 선택하세요.",
-        "nicLabel": "NIC {index} (브리지 \"{bridge}\")"
+        "nicLabel": "NIC {index} (브리지 \"{bridge}\")",
+        "invalidMtuBlocker": "{nic}: MTU {mtu}은(는) 해당 브리지에서 사용할 수 없습니다"
       },
       "noBlankVmVdc": "빈 VM을 허용하는 vDC가 없습니다. 템플릿 카탈로그에서 배포하세요.",
-      "noVdcNode": "현재 이 vDC에서 사용할 수 있는 노드가 없습니다."
+      "noVdcNode": "현재 이 vDC에서 사용할 수 있는 노드가 없습니다.",
+      "summary": {
+        "vm": "VM",
+        "guestOs": "게스트 OS",
+        "enabled": "사용",
+        "cpuTopology": "소켓 {sockets}개 × 코어 {cores}개",
+        "balloonMin": "최소 {size}",
+        "onBridge": "{bridge}의 {model}",
+        "noNetwork": "네트워크 장치 없음"
+      }
     },
     "createLxc": {
       "title": "생성: LXC 컨테이너",

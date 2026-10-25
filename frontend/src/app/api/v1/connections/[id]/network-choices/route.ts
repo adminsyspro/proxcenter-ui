@@ -91,7 +91,7 @@ export async function GET(req: Request, ctx: RouteContext) {
     type Choice =
       | { kind: "vnet"; name: string; displayName: string; vdc: string; vdcId: string | null; zone: string; subnet: SubnetInfo | null }
       | { kind: "shared"; name: string; label: string | null; vlanRanges: [number, number][] }
-      | { kind: "bridge"; name: string; type: string }
+      | { kind: "bridge"; name: string; type: string; mtu?: number }
 
     const choices: Choice[] = []
 
@@ -100,7 +100,9 @@ export async function GET(req: Request, ctx: RouteContext) {
       const ifaces = await pveFetch<any[]>(pveConn, `/nodes/${encodeURIComponent(node)}/network`)
       for (const ifc of ifaces || []) {
         if (ifc.type !== "bridge" && ifc.type !== "OVSBridge") continue
-        choices.push({ kind: "bridge", name: ifc.iface, type: ifc.type })
+        // PVE only reports an MTU declared in /etc/network/interfaces (#1194).
+        const mtu = Number(ifc.mtu)
+        choices.push({ kind: "bridge", name: ifc.iface, type: ifc.type, ...(mtu > 0 ? { mtu } : {}) })
       }
       try {
         const vnets = await pveFetch<any[]>(pveConn, "/cluster/sdn/vnets")

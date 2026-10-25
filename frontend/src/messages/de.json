@@ -1536,6 +1536,8 @@
       "graphicCard": "Grafikkarte",
       "scsiController": "SCSI-Controller",
       "machine": "Maschine",
+      "machineVersion": "Maschinenversion",
+      "machineVersionLatest": "Neueste",
       "qemuAgent": "QEMU-Agent",
       "firmware": "Firmware",
       "addTpm": "hinzufügen TPM",
@@ -1582,6 +1584,12 @@
       "disconnect": "Trennen",
       "rateLimitMbs": "Bandbreitenlimit (MB/s)",
       "mtu": "MTU",
+      "mtuBridgePlaceholder": "Bridge-MTU",
+      "mtuRange": "1 (Bridge-MTU) oder 576 bis 65520",
+      "mtuAboveBridge": "Größer als die Bridge-MTU ({max}): Die VM würde nicht starten",
+      "mtuAboveDefault": "Die Bridge gibt keine MTU an (Standard 1500): Die VM startet möglicherweise nicht",
+      "multiqueue": "Multiqueue",
+      "virtioOnly": "Nur VirtIO",
       "reviewSettingsVm": "Überprüfen Sie Ihre Einstellungen vor dem Erstellen der VM",
       "vmIdMin": "VM-ID muss >= 100 sein",
       "vmIdMax": "VM-ID muss <= 999999999 sein",
@@ -1631,10 +1639,20 @@
         "quotaViolation": "Kontingent überschritten — {violation} (Tab CPU / Speicher / Disks).",
         "noBridgeBlocker": "Keine Bridge in Ihrem vDC autorisiert. Erstellen Sie ein VNet in „Mein Datacenter“ oder bitten Sie den Provider um eine geteilte Bridge — oder aktivieren Sie „Keine Netzwerkkarte“.",
         "invalidBridgeBlocker": "Bridge nicht autorisiert auf {nicDetails}. Wählen Sie eine erlaubte Bridge im Tab Netzwerk.",
-        "nicLabel": "NIC {index} (Bridge „{bridge}“)"
+        "nicLabel": "NIC {index} (Bridge „{bridge}“)",
+        "invalidMtuBlocker": "{nic}: MTU {mtu} ist auf ihrer Bridge nicht nutzbar"
       },
       "noBlankVmVdc": "Keines Ihrer vDCs erlaubt leere VMs. Stellen Sie stattdessen aus dem Vorlagenkatalog bereit.",
-      "noVdcNode": "Derzeit ist kein Knoten dieses vDC verfügbar."
+      "noVdcNode": "Derzeit ist kein Knoten dieses vDC verfügbar.",
+      "summary": {
+        "vm": "VM",
+        "guestOs": "Gastbetriebssystem",
+        "enabled": "Aktiviert",
+        "cpuTopology": "{sockets, plural, one {# Sockel} other {# Sockel}} × {cores, plural, one {# Kern} other {# Kerne}}",
+        "balloonMin": "mindestens {size}",
+        "onBridge": "{model} an {bridge}",
+        "noNetwork": "Keine Netzwerkkarte"
+      }
     },
     "createLxc": {
       "title": "erstellen: LXC Container",

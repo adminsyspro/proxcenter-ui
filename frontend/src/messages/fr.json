@@ -102,7 +102,16 @@
     "moveDown": "Descendre"
   },
   "whatsNew": {
-    "title": "Nouveautés"
+    "title": "Nouveautés",
+    "latest": "Dernière",
+    "installed": "Installée",
+    "previousReleases": "Versions précédentes",
+    "allReleases": "Toutes les versions sur GitHub",
+    "allReleasesCustom": "Toutes les versions",
+    "upgradeTitle": "Mise à jour",
+    "upgradeHint": "À lancer depuis le répertoire d'installation de ProxCenter, /opt/proxcenter par défaut :",
+    "copy": "Copier",
+    "copied": "Copié"
   },
   "license": {
     "enterpriseRequired": "Licence Enterprise requise",
@@ -3856,7 +3865,6 @@
       "uiVisibilityDesc": "Afficher ou masquer certains éléments de l'interface quand le white-labeling est activé",
       "showGithubStars": "Étoiles GitHub (en-tête)",
       "showWhatsNew": "Nouveautés (menu profil)",
-      "showAbout": "À propos (menu profil)",
       "showSubscription": "Abonnement (détails du nœud)"
     },
     "licenseManagement": "Gérez votre licence ProxCenter pour accéder aux fonctionnalités avancées.",
@@ -9179,23 +9187,10 @@
     }
   },
   "about": {
-    "title": "À propos",
-    "description": "Plateforme de gestion multi-cluster Proxmox",
-    "currentVersion": "Version actuelle",
-    "latestVersion": "Derniere version",
     "updateAvailable": "Mise à jour disponible",
-    "upToDate": "À jour",
-    "updateCheckOffline": "La vérification des mises à jour est désactivée sur cette instance isolée du réseau",
     "newVersionAvailable": "Une nouvelle version v{version} est disponible",
-    "newCommitAvailable": "Une mise à jour est disponible ({count} commit(s) de retard)",
-    "commitsBehind": "{count} commit(s) de retard",
     "viewRelease": "Voir la release",
-    "viewChanges": "Voir les changements",
-    "changelog": "Historique des versions",
-    "reportBug": "Signaler un bug",
-    "releaseHistory": "Historique des releases",
-    "current": "actuelle",
-    "copyright": "Tous droits réservés."
+    "updateCheckOffline": "La vérification des mises à jour est désactivée sur cette instance isolée du réseau"
   },
   "snapshotsTab": {
     "title": "Snapshots",

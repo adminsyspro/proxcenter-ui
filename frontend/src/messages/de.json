@@ -106,7 +106,16 @@
     "moveDown": "Nach unten"
   },
   "whatsNew": {
-    "title": "Neuigkeiten"
+    "title": "Neuigkeiten",
+    "latest": "Neueste",
+    "installed": "Installiert",
+    "previousReleases": "Frühere Versionen",
+    "allReleases": "Alle Versionen auf GitHub",
+    "allReleasesCustom": "Alle Versionen",
+    "upgradeTitle": "Aktualisieren",
+    "upgradeHint": "Im Installationsverzeichnis von ProxCenter ausführen, standardmäßig /opt/proxcenter:",
+    "copy": "Kopieren",
+    "copied": "Kopiert"
   },
   "license": {
     "enterpriseRequired": "Enterprise-Lizenz erforderlich",
@@ -3845,7 +3854,6 @@
       "uiVisibilityDesc": "Bestimmte UI-Elemente ein- oder ausblenden wenn White-Labeling aktiviert ist",
       "showGithubStars": "GitHub Stars (Header)",
       "showWhatsNew": "Neuigkeiten (Profilmenü)",
-      "showAbout": "Über (Profilmenü)",
       "showSubscription": "Abonnement-Info (Node-Details)"
     },
     "licenseManagement": "Verwalten Sie Ihre ProxCenter-Lizenz, um auf erweiterte Funktionen zuzugreifen.",
@@ -9125,20 +9133,10 @@
     }
   },
   "about": {
-    "title": "Über",
-    "description": "Multi-Cluster Proxmox-Verwaltungsplattform",
-    "currentVersion": "aktuell version",
-    "latestCommit": "Letzter Commit",
     "updateAvailable": "aktualisieren verfügbar",
-    "upToDate": "Auf dem neuesten Stand",
-    "updateCheckOffline": "Die Update-Prüfung ist auf dieser netzwerkisolierten Instanz deaktiviert",
-    "newCommitAvailable": "Ein neues Update ist verfügbar ({count} Commit(s) hinter dem aktuellen Stand)",
-    "commitsBehind": "{count} Commit(s) im Rückstand",
-    "viewChanges": "Änderungen anzeigen",
-    "changelog": "Version Verlauf",
-    "reportBug": "Fehler melden",
-    "commitHistory": "Commit Verlauf",
-    "copyright": "Alle Rechte vorbehalten."
+    "newVersionAvailable": "Neue Version v{version} verfügbar",
+    "viewRelease": "Version anzeigen",
+    "updateCheckOffline": "Die Update-Prüfung ist auf dieser netzwerkisolierten Instanz deaktiviert"
   },
   "snapshotsTab": {
     "title": "Snapshots",

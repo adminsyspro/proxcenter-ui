@@ -36,7 +36,6 @@ export default function WhiteLabelTab() {
     poweredByVisible: true,
     showGithubStars: true,
     showWhatsNew: true,
-    showAbout: true,
     showSubscription: true,
     loginTagline: '',
     loginHighlights: [
@@ -444,10 +443,6 @@ export default function WhiteLabelTab() {
             <FormControlLabel
               control={<Switch checked={config.showWhatsNew} onChange={e => setConfig(c => ({ ...c, showWhatsNew: e.target.checked }))} />}
               label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className="ri-megaphone-line" style={{ fontSize: 16, opacity: 0.6 }} /><Typography variant="body2">{t('settings.whiteLabel.showWhatsNew')}</Typography></Box>}
-            />
-            <FormControlLabel
-              control={<Switch checked={config.showAbout} onChange={e => setConfig(c => ({ ...c, showAbout: e.target.checked }))} />}
-              label={<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><i className="ri-information-line" style={{ fontSize: 16, opacity: 0.6 }} /><Typography variant="body2">{t('settings.whiteLabel.showAbout')}</Typography></Box>}
             />
             <FormControlLabel
               control={<Switch checked={config.showSubscription} onChange={e => setConfig(c => ({ ...c, showSubscription: e.target.checked }))} />}

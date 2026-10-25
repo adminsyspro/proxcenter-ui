@@ -4846,7 +4846,15 @@
     "integrityRegionCount": "분산 영역:",
     "integrityRegionSize": "영역 크기:",
     "integrityCost": "디스크 크기와 관계없이 이 클러스터로의 각 마이그레이션에 디스크당 약 {seconds}초가 추가됩니다(웜에서는 컷오버 중단 시간에 추가).",
-    "integrityOff": "꺼짐: 디스크가 검증 없이 인계됩니다."
+    "integrityOff": "꺼짐: 디스크가 검증 없이 인계됩니다.",
+    "navGroups": {
+      "infrastructure": "인프라",
+      "access": "액세스 및 보안",
+      "monitoring": "모니터링",
+      "features": "기능",
+      "personalization": "개인 설정"
+    },
+    "navAriaLabel": "설정 섹션"
   },
   "green": {
     "score": {

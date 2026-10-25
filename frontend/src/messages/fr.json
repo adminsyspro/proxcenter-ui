@@ -4846,7 +4846,15 @@
     "integrityRegionCount": "Zones réparties :",
     "integrityRegionSize": "Taille d'une zone :",
     "integrityCost": "Ajoute environ {seconds} s par disque à chaque migration vers ce cluster (à l'interruption du cutover en warm), quelle que soit la taille du disque.",
-    "integrityOff": "Désactivé : les disques sont livrés sans vérification."
+    "integrityOff": "Désactivé : les disques sont livrés sans vérification.",
+    "navGroups": {
+      "infrastructure": "Infrastructure",
+      "access": "Accès et sécurité",
+      "monitoring": "Supervision",
+      "features": "Fonctionnalités",
+      "personalization": "Personnalisation"
+    },
+    "navAriaLabel": "Sections des paramètres"
   },
   "green": {
     "score": {

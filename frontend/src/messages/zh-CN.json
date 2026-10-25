@@ -4850,7 +4850,15 @@
     "integrityRegionCount": "分布区域：",
     "integrityRegionSize": "区域大小：",
     "integrityCost": "每次迁移到此集群时，每个磁盘约增加 {seconds} 秒（热迁移时计入切换停机时间），与磁盘大小无关。",
-    "integrityOff": "关闭：磁盘未经校验即交付。"
+    "integrityOff": "关闭：磁盘未经校验即交付。",
+    "navGroups": {
+      "infrastructure": "基础设施",
+      "access": "访问与安全",
+      "monitoring": "监控",
+      "features": "功能",
+      "personalization": "个性化"
+    },
+    "navAriaLabel": "设置分区"
   },
   "green": {
     "score": {

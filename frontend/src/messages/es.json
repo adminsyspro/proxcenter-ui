@@ -4846,7 +4846,15 @@
     "integrityRegionCount": "Zonas repartidas:",
     "integrityRegionSize": "Tamaño de zona:",
     "integrityCost": "Añade unos {seconds} s por disco a cada migración hacia este clúster (a la interrupción del cutover en warm), sea cual sea el tamaño del disco.",
-    "integrityOff": "Desactivado: los discos se entregan sin verificar."
+    "integrityOff": "Desactivado: los discos se entregan sin verificar.",
+    "navGroups": {
+      "infrastructure": "Infraestructura",
+      "access": "Acceso y seguridad",
+      "monitoring": "Supervisión",
+      "features": "Funciones",
+      "personalization": "Personalización"
+    },
+    "navAriaLabel": "Secciones de configuración"
   },
   "green": {
     "score": {

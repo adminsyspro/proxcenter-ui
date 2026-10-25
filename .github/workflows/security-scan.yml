@@ -51,6 +51,13 @@ jobs:
           output: 'trivy-frontend.sarif'
           severity: 'CRITICAL,HIGH'
           ignore-unfixed: true
+          # Without this flag the SARIF output carries every severity and
+          # the filter above only applies to the table format.
+          limit-severities-for-sarif: true
+          # The image's node_modules come from package-lock.json, which
+          # trivy-fs already scans: reporting them here too doubles every
+          # npm alert. This job only covers the Alpine packages.
+          vuln-type: 'os'
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
@@ -103,6 +110,7 @@ jobs:
           output: 'trivy-orchestrator.sarif'
           severity: 'CRITICAL,HIGH'
           ignore-unfixed: true
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
@@ -135,6 +143,7 @@ jobs:
           output: 'trivy-fs.sarif'
           severity: 'CRITICAL,HIGH'
           scanners: 'vuln,secret'
+          limit-severities-for-sarif: true
 
       - name: Upload results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4

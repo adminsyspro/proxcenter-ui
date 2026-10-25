@@ -4835,7 +4835,15 @@
     "integrityRegionCount": "Verteilte Bereiche:",
     "integrityRegionSize": "Bereichsgröße:",
     "integrityCost": "Fügt jeder Migration in diesen Cluster etwa {seconds} s pro Festplatte hinzu (bei Warm zur Cutover-Unterbrechung), unabhängig von der Festplattengröße.",
-    "integrityOff": "Aus: Festplatten werden ungeprüft übergeben."
+    "integrityOff": "Aus: Festplatten werden ungeprüft übergeben.",
+    "navGroups": {
+      "infrastructure": "Infrastruktur",
+      "access": "Zugriff und Sicherheit",
+      "monitoring": "Überwachung",
+      "features": "Funktionen",
+      "personalization": "Personalisierung"
+    },
+    "navAriaLabel": "Einstellungsbereiche"
   },
   "green": {
     "score": {

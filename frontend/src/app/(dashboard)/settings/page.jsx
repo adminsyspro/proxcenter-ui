@@ -50,6 +50,7 @@ import { findCountry } from '@/lib/utils/countries'
 
 
 import LicenseTab from '@/components/settings/license/LicenseTab'
+import SettingsNav from '@/components/settings/SettingsNav'
 import { useConnectionsManagement } from '@/hooks/useConnectionsManagement'
 import { useAISettings } from '@/hooks/useAISettings'
 import { useGreenSettings } from '@/hooks/useGreenSettings'
@@ -2391,27 +2392,28 @@ export default function SettingsPage() {
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t, isOnboarding])
 
-  const allTabNames = ['connections', 'appearance', 'alert-thresholds', 'notifications', 'syslog', 'guest-file-restore', 'broadcast', 'ldap', 'oidc', 'license', 'ai', 'green', 'white-label', 'vdc', 'tenants', 'ssh-commands', 'ha', 'api']
-
+  // `name` is the ?tab= value, `group` the section of the side navigation
+  // (SETTINGS_NAV_GROUPS). Listed group by group so the mobile tab row runs in
+  // the same order as the side list.
   const allTabs = [
-    { label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab, providerOnly: true },
-    { label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
-    { label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab, providerOnly: true },
-    { label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS, providerOnly: true },
-    { label: t('settings.syslog.tabLabel'), icon: 'ri-broadcast-line', component: SyslogTab, requiredFeature: Features.SYSLOG_FORWARDING, providerOnly: true },
-    { label: t('guestFileRestore.tabLabel'), icon: 'ri-folder-transfer-line', component: GuestFileRestoreTab, providerOnly: true },
-    { label: t('settings.broadcast.tabLabel'), icon: 'ri-megaphone-line', component: BroadcastTab, providerOnly: true },
-    { label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP, providerOnly: true },
-    { label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC, providerOnly: true },
-    { label: t('settings.license'), icon: 'ri-key-2-line', component: LicenseTab, providerOnly: true },
-    { label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS, providerOnly: true },
-    { label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS, providerOnly: true },
-    { label: 'White Label', icon: 'ri-pantone-line', component: WhiteLabelTab, requiredFeature: Features.WHITE_LABEL, superAdminOnly: true },
-    { label: t('vdc.title'), icon: 'ri-cloud-line', component: VdcTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
-    { label: 'Tenants', icon: 'ri-building-line', component: TenantsTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
-    { label: t('settings.sshCommands.tabLabel'), icon: 'ri-terminal-line', component: SshCommandsTab, providerOnly: true },
-    { label: t('ha.tabLabel'), icon: 'ri-shield-check-line', component: HaTab, providerOnly: true },
-    { label: t('settings.apiTokens.tabLabel'), icon: 'ri-key-2-line', component: ApiTokensTab, providerOnly: true },
+    { name: 'connections', group: 'infrastructure', label: t('settings.connections'), icon: 'ri-link', component: ConnectionsTab, providerOnly: true },
+    { name: 'vdc', group: 'infrastructure', label: t('vdc.title'), icon: 'ri-cloud-line', component: VdcTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
+    { name: 'tenants', group: 'infrastructure', label: 'Tenants', icon: 'ri-building-line', component: TenantsTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
+    { name: 'ha', group: 'infrastructure', label: t('ha.tabLabel'), icon: 'ri-shield-check-line', component: HaTab, providerOnly: true },
+    { name: 'ssh-commands', group: 'infrastructure', label: t('settings.sshCommands.tabLabel'), icon: 'ri-terminal-line', component: SshCommandsTab, providerOnly: true },
+    { name: 'ldap', group: 'access', label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP, providerOnly: true },
+    { name: 'oidc', group: 'access', label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC, providerOnly: true },
+    { name: 'api', group: 'access', label: t('settings.apiTokens.tabLabel'), icon: 'ri-key-2-line', component: ApiTokensTab, providerOnly: true },
+    { name: 'license', group: 'access', label: t('settings.license'), icon: 'ri-key-2-line', component: LicenseTab, providerOnly: true },
+    { name: 'alert-thresholds', group: 'monitoring', label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab, providerOnly: true },
+    { name: 'notifications', group: 'monitoring', label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS, providerOnly: true },
+    { name: 'syslog', group: 'monitoring', label: t('settings.syslog.tabLabel'), icon: 'ri-broadcast-line', component: SyslogTab, requiredFeature: Features.SYSLOG_FORWARDING, providerOnly: true },
+    { name: 'broadcast', group: 'monitoring', label: t('settings.broadcast.tabLabel'), icon: 'ri-megaphone-line', component: BroadcastTab, providerOnly: true },
+    { name: 'guest-file-restore', group: 'features', label: t('guestFileRestore.tabLabel'), icon: 'ri-folder-transfer-line', component: GuestFileRestoreTab, providerOnly: true },
+    { name: 'ai', group: 'features', label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS, providerOnly: true },
+    { name: 'green', group: 'features', label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS, providerOnly: true },
+    { name: 'appearance', group: 'personalization', label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
+    { name: 'white-label', group: 'personalization', label: 'White Label', icon: 'ri-pantone-line', component: WhiteLabelTab, requiredFeature: Features.WHITE_LABEL, superAdminOnly: true },
   ]
 
   // Two different gates, deliberately:
@@ -2429,16 +2431,14 @@ export default function SettingsPage() {
   // they can actually use, no greyed-out chips. While the license is still
   // loading we keep gated tabs visible to avoid a visible→hidden flicker
   // once the response lands.
-  const visibleIndices = allTabs.reduce((acc, tab, idx) => {
-    if (tab.providerOnly && !(isSuperAdmin && isProviderTenant)) return acc
-    if (tab.superAdminOnly && !isSuperAdmin) return acc
-    if (!licenseLoading && tab.requiredFeature && !hasFeature(tab.requiredFeature)) return acc
-    acc.push(idx)
-    return acc
-  }, [])
+  const tabs = allTabs.filter(tab => {
+    if (tab.providerOnly && !(isSuperAdmin && isProviderTenant)) return false
+    if (tab.superAdminOnly && !isSuperAdmin) return false
+    if (!licenseLoading && tab.requiredFeature && !hasFeature(tab.requiredFeature)) return false
+    return true
+  })
 
-  const tabs = visibleIndices.map(i => allTabs[i])
-  const tabNames = visibleIndices.map(i => allTabNames[i])
+  const tabNames = tabs.map(tab => tab.name)
 
   // Resolve tab index from URL param
   const resolveTabIndex = () => {
@@ -2489,39 +2489,11 @@ export default function SettingsPage() {
       )}
 
       <Card variant='outlined' sx={{ height: isOnboarding ? 'calc(100vh - 220px)' : 'calc(100vh - 145px)' }}>
-        <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 0 }}>
-          {/* Main Tabs */}
-          <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3, pt: 2 }}>
-            <Tabs
-              value={mainTab}
-              onChange={(_, v) => handleTabChange(v)}
-              variant="scrollable"
-              scrollButtons="auto"
-              allowScrollButtonsMobile
-              sx={{
-                '& .MuiTab-root': {
-                  minHeight: 56,
-                  textTransform: 'none',
-                  fontSize: '0.95rem'
-                }
-              }}
-            >
-              {tabs.map((tab, idx) => (
-                <Tab
-                  key={idx}
-                  label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <i className={tab.icon} style={{ fontSize: 18 }} />
-                      <span>{tab.label}</span>
-                    </Box>
-                  }
-                />
-              ))}
-            </Tabs>
-          </Box>
+        <CardContent sx={{ height: '100%', display: 'flex', flexDirection: { xs: 'column', md: 'row' }, p: 0, '&:last-child': { pb: 0 } }}>
+          <SettingsNav tabs={tabs} value={mainTab} onChange={handleTabChange} />
 
           {/* Tab Content */}
-          <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
+          <Box sx={{ flex: 1, minWidth: 0, overflow: 'auto', p: 3 }}>
             {tabs.map((tab, idx) => {
               if (mainTab !== idx) return null
               const TabComponent = tab.component

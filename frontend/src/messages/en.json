@@ -4846,7 +4846,15 @@
     "integrityRegionCount": "Spread regions:",
     "integrityRegionSize": "Region size:",
     "integrityCost": "Adds about {seconds} s per disk to each migration into this cluster (to the cutover downtime in warm), whatever the disk size.",
-    "integrityOff": "Off: disks are handed over unverified."
+    "integrityOff": "Off: disks are handed over unverified.",
+    "navGroups": {
+      "infrastructure": "Infrastructure",
+      "access": "Access and security",
+      "monitoring": "Monitoring",
+      "features": "Features",
+      "personalization": "Personalization"
+    },
+    "navAriaLabel": "Settings sections"
   },
   "green": {
     "score": {

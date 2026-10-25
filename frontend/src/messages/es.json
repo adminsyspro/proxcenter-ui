@@ -102,7 +102,16 @@
     "moveDown": "Bajar"
   },
   "whatsNew": {
-    "title": "Novedades"
+    "title": "Novedades",
+    "latest": "Última",
+    "installed": "Instalada",
+    "previousReleases": "Versiones anteriores",
+    "allReleases": "Todas las versiones en GitHub",
+    "allReleasesCustom": "Todas las versiones",
+    "upgradeTitle": "Actualizar",
+    "upgradeHint": "Ejecutar desde el directorio de instalación de ProxCenter, /opt/proxcenter por defecto:",
+    "copy": "Copiar",
+    "copied": "Copiado"
   },
   "license": {
     "enterpriseRequired": "Se requiere licencia Enterprise",
@@ -3856,7 +3865,6 @@
       "uiVisibilityDesc": "Muestra u oculta elementos concretos de la UI cuando la marca blanca está habilitada",
       "showGithubStars": "GitHub Stars (cabecera)",
       "showWhatsNew": "Novedades (menú de perfil)",
-      "showAbout": "Acerca de (menú de perfil)",
       "showSubscription": "Suscripción Info (nodo detalles)"
     },
     "licenseManagement": "Gestiona tu licencia de ProxCenter para acceder a funciones avanzadas.",
@@ -9178,23 +9186,10 @@
     }
   },
   "about": {
-    "title": "Acerca de",
-    "description": "Plataforma de gestión Proxmox multi-cluster",
-    "currentVersion": "Versión actual",
-    "latestVersion": "Última versión",
     "updateAvailable": "Actualización disponible",
-    "upToDate": "Actualizado",
-    "updateCheckOffline": "La comprobación de actualizaciones está desactivada en esta instancia aislada de la red",
     "newVersionAvailable": "Hay una nueva versión v{version} disponible",
-    "newCommitAvailable": "Hay una nueva actualización disponible ({count} commit(s) por detrás)",
-    "commitsBehind": "{count} commit(s) por detrás",
     "viewRelease": "Ver versión",
-    "viewChanges": "Ver cambios",
-    "changelog": "Historial de versiones",
-    "reportBug": "Informar de un error",
-    "releaseHistory": "Historial de versiones",
-    "current": "actual",
-    "copyright": "Todos los derechos reservados."
+    "updateCheckOffline": "La comprobación de actualizaciones está desactivada en esta instancia aislada de la red"
   },
   "snapshotsTab": {
     "title": "Instantáneas",

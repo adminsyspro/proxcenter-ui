@@ -1,7 +1,13 @@
 [
   {
     "version": "1.4.12",
+    "date": "2026-10-19",
     "title": "Backup restore drills, alert notifications to Slack, Teams and webhooks, host drain, per VM failover and write access for API tokens",
+    "summary": [
+      "This release is about proving that your recovery works. Backup restore drills test PBS restores in an isolated VM, on demand or on a schedule, guests covered by no backup job are listed and alerted on, and files can be restored straight into a running guest. Site Recovery can now fail over and fail back a single VM of a DR plan.",
+      "Day to day operations get lighter. Drain a host from the inventory through one evacuation plan, send alert notifications to Slack, Teams, ntfy, Discord and webhooks, and give API tokens write access with per creator rights, tenant confinement and audit. Migrations gain a review step with per NIC networks and a target storage per disk, run in parallel from a server side queue, and warm migrations convert the guest at cutover.",
+      "Providers get vDC usage history with CSV export, pure L2 networks for tenants and catalogue grants per tenant or per vDC. Fixes cover replication across the end of daylight saving time, rolling updates that wait for a real evacuation, and disk verification before a VMware VM is handed over."
+    ],
     "items": [
       { "type": "new", "text": "Backup restore drills: test restores of PBS backups in an isolated VM, on demand or on a schedule" },
       { "type": "new", "text": "Send alert notifications to Slack, Teams, ntfy, Discord and webhooks" },
@@ -31,7 +37,12 @@
   },
   {
     "version": "1.4.11",
+    "date": "2026-10-05",
     "title": "Licenses delivered from your proxcenter.io account, a redesigned License tab, air-gapped installs and PVE backup job history",
+    "summary": [
+      "Licenses now come straight from your proxcenter.io account: connect the instance from Settings, License, and the license is delivered within seconds, renewed by a daily sync, and carries the HA and API add-ons. A license follows one install, a partner license shows its reseller, and the License tab is rebuilt around one summary card with its alerts and actions.",
+      "ProxCenter installs and upgrades from an air-gapped bundle. PVE backup jobs gain a run history with the log per guest, guest disk bandwidth and IO pressure reach the VM list and charts, metrics can be read over a custom time range, and the audit log forwards to syslog and SIEM collectors. Fixes cover node updates, console failover, warm delta retries and disk sizes."
+    ],
     "items": [
       { "type": "new", "text": "Connect the instance to your proxcenter.io account from Settings > License: licenses are delivered within seconds and renewed by a daily sync" },
       { "type": "new", "text": "A license follows one install, and a license bound to another install raises an alert instead of a silent drop to Community" },
@@ -60,7 +71,12 @@
   },
   {
     "version": "1.4.10",
+    "date": "2026-09-16",
     "title": "Site Recovery on ZFS with recovery per guest, the vDC tenant model, and a Grafana ready metrics exposition",
+    "summary": [
+      "Site Recovery runs on ZFS as well as Ceph RBD and works per guest: test failover by clone, emergency start from a chosen restore point, a dedicated replication network, and thin disks that sync as sparse diffs. Migrations from vCenter download disks in parallel, and cross-cluster prerequisites such as HA, replication and snapshots are lifted and restored from the dialog.",
+      "The vDC tenant model gains compute policies, read-only ISO libraries, VXLAN transports and provider SDN uplinks, with SSO groups mapped to a role per tenant or per vDC. The Prometheus exposition grows to 53 metric families with five Grafana dashboards, and DRS gets a history tab with the reason behind each migration."
+    ],
     "items": [
       { "type": "new", "text": "Site Recovery runs on ZFS storage as well as Ceph RBD, with test failover by clone and a fixed target node" },
       { "type": "new", "text": "DR replicas can be named apart from production, with a prefix or a suffix editable after creation" },
@@ -115,7 +131,12 @@
   },
   {
     "version": "1.4.9",
+    "date": "2026-08-29",
     "title": "In-app API reference, warm migration from XCP-ng and rolling update enhancements",
+    "summary": [
+      "Rolling updates show live apt progress per node, can require an approval before each node, and stay in the Task Center with their full log. XCP-ng pools connect directly through XAPI and migrate warm with CBT, while Hyper-V, Nutanix and Compact OS Windows guests convert more reliably.",
+      "Consoles gain fullscreen and scaling, SPICE gets power controls with automatic reconnect, and the public API reference is rendered inside the product with Try-it. HA elects a single orchestrator leader on the Postgres primary, and PBS 4.x, Network Flows and Site Recovery receive a round of fixes."
+    ],
     "items": [
       { "type": "new", "text": "Rolling updates show live apt progress per node, with the apt output on screen when a step fails" },
       { "type": "new", "text": "Rolling updates can require an explicit approval before each node, from the wizard or the Task Center" },
@@ -150,7 +171,12 @@
   },
   {
     "version": "1.4.8",
+    "date": "2026-08-24",
     "title": "vDC storage policies, tenant VLAN networks and a complete Task Center",
+    "summary": [
+      "vDC storage policies put IOPS and bandwidth caps plus a quota on a storage tier and stamp them on every disk a tenant creates, and tenants create their own VLAN networks inside the ranges their provider hands them. The Task Center becomes complete, with logs and actions for migrations, rolling updates, replication, DRS and Site Recovery.",
+      "Warm migrations prepare their nodes themselves, let the operator choose the cutover moment and recover from a guest that refuses to shut down. Alerts cover replication RPO drift and Ceph OSD latency and send a recovery notification when they clear, and node views gain SMART disk health, ZFS pool state and temperatures."
+    ],
     "items": [
       { "type": "new", "text": "vDC storage policies: a policy on a connection and one of its storages carries read and write IOPS and bandwidth caps plus a quota for that tier, is assigned to vDCs, and is stamped on the disks a tenant creates, deploys, clones, restores, imports or moves, with per-tier usage bars and a one-click apply to existing disks" },
       { "type": "new", "text": "Tenant VLAN networks: a provider hands each vDC one or more VLAN ranges and a shared SDN zone, and the tenant then creates its own networks inside those ranges, self-service, with the tag allocated from its pool" },
@@ -195,7 +221,12 @@
   },
   {
     "version": "1.4.7",
+    "date": "2026-08-14",
     "title": "Authentication fixes, revocable sessions, disaster recovery failback",
+    "summary": [
+      "This release closes two authentication flaws and adds revocable server-side sessions, read-only API tokens and a rate limited first-run setup. Site Recovery gains failback with a reverse incremental sync and operator-driven cutover, boot screenshots on test failovers, point-in-time recovery and fencing of the source before a real failover.",
+      "Tenants can hold several vDCs and MSP tenants optional VMID ranges. Warm migrations handle large guests and report live progress, migrated Windows guests boot from SATA, and security groups attach to guests. Reports carry the tenant's white label and a CIS Controls v8.1 card joins the compliance frameworks."
+    ],
     "items": [
       { "type": "fix", "text": "Security: an API path containing a dot no longer skips authentication. The middleware treated any dotted path as a static asset and answered before the session check, so a cluster with an FQDN node name exposed guest notes and task data to unauthenticated callers (GHSA-79j6-v2r5-5pw5)" },
       { "type": "fix", "text": "Security: the guest notes, tasks and features routes now carry their own permission checks, evaluated before the Proxmox connection is resolved, so a refused caller never causes the stored API token to be decrypted" },
@@ -239,6 +270,7 @@
   },
   {
     "version": "1.4.6",
+    "date": "2026-07-27",
     "title": "Control-plane HA, warm migration reliability & license add-ons",
     "items": [
       { "type": "new", "text": "ProxCenter HA (required license): turn a standalone installation into a three-node control plane with replicated PostgreSQL, etcd quorum and a virtual IP that fails over" },
@@ -277,6 +309,7 @@
   },
   {
     "version": "1.4.5",
+    "date": "2026-06-27",
     "title": "Compliance frameworks, DRS load balancing & OIDC role fix",
     "items": [
       { "type": "new", "text": "Security compliance frameworks (Enterprise): assess a connection against NIST 800-53, NIST 800-171, CMMC Level 2 and ISO/IEC 27001 from a new Frameworks tab, with a score donut, satisfied / partial / failed breakdown, per-node results and a styled PDF report" },
@@ -302,6 +335,7 @@
   },
   {
     "version": "1.4.4",
+    "date": "2026-06-22",
     "title": "Stability, security & shared migration tasks",
     "items": [
       { "type": "new", "text": "Header tenant switcher with per-tenant dashboards for MSP: switch the active tenant from the navbar and see dashboards scoped to that tenant" },
@@ -321,6 +355,7 @@
   },
   {
     "version": "1.4.3",
+    "date": "2026-06-15",
     "title": "MSP mode, multi-license stacking & connection diagnostics",
     "items": [
       { "type": "new", "text": "MSP mode: an MSP tenant can own entire Proxmox clusters (full-cluster view) alongside vDC / IaaS slicing; the provider / NOC sees the whole fleet for supervision and license aggregation" },
@@ -338,6 +373,7 @@
   },
   {
     "version": "1.4.2",
+    "date": "2026-06-14",
     "title": "Warm migration, SPICE consoles, Ceph topology & security",
     "items": [
       { "type": "new", "text": "Warm migration for VMware with changed-block tracking and a final delta sync: no data loss on large or busy disks, for ESXi-direct and vCenter (including vSAN), single and bulk, with a go/no-go preflight" },
@@ -365,6 +401,7 @@
   },
   {
     "version": "1.4.0",
+    "date": "2026-05-12",
     "title": "MSP / IaaS — vDC, IPAM, PBS multi-tenant & Postgres",
     "items": [
       { "type": "new", "text": "vDC tenant cockpit (My vDC) with live consumption: hosts, VMs metrics, donut quotas (CPU, RAM, Storage, Snapshots, Backups), datacenter map and green KPIs" },
@@ -395,6 +432,7 @@
   },
   {
     "version": "1.3.0",
+    "date": "2026-04-09",
     "title": "Multi-Hypervisor Migration, Dashboard Overhaul & More",
     "items": [
       { "type": "new", "text": "Hyper-V migration — connect to Hyper-V hosts, browse VMs, and migrate to Proxmox via virt-v2v" },
@@ -431,6 +469,7 @@
   },
   {
     "version": "1.2.0",
+    "date": "2026-03-29",
     "title": "Network Flows — sFlow Monitoring",
     "items": [
       { "type": "new", "text": "Real-time network traffic visualization powered by sFlow and Open vSwitch" },
@@ -451,6 +490,7 @@
   },
   {
     "version": "1.1.0",
+    "date": "2026-03-14",
     "title": "Multi-Tenancy",
     "items": [
       { "type": "new", "text": "Multi-tenant support — isolate and manage multiple environments from a single ProxCenter instance" },
@@ -461,6 +501,7 @@
   },
   {
     "version": "1.0.0",
+    "date": "2026-02-06",
     "title": "VMware ESXi & XCP-ng Migration",
     "items": [
       { "type": "new", "text": "Bulk migration — migrate multiple VMs at once from ESXi or XCP-ng to Proxmox" },

@@ -102,7 +102,16 @@
     "moveDown": "아래로 이동"
   },
   "whatsNew": {
-    "title": "새로운 기능"
+    "title": "새로운 기능",
+    "latest": "최신",
+    "installed": "설치됨",
+    "previousReleases": "이전 릴리스",
+    "allReleases": "GitHub에서 모든 릴리스 보기",
+    "allReleasesCustom": "모든 릴리스",
+    "upgradeTitle": "업그레이드",
+    "upgradeHint": "ProxCenter 설치 디렉터리(기본값 /opt/proxcenter)에서 실행하세요:",
+    "copy": "복사",
+    "copied": "복사됨"
   },
   "license": {
     "enterpriseRequired": "Enterprise 라이선스 필요",
@@ -3856,7 +3865,6 @@
       "uiVisibilityDesc": "화이트 라벨링이 활성화된 경우 특정 UI 요소를 표시하거나 숨깁니다",
       "showGithubStars": "GitHub Stars (헤더)",
       "showWhatsNew": "새로운 기능 (프로필 메뉴)",
-      "showAbout": "정보 (프로필 메뉴)",
       "showSubscription": "구독 정보 (노드 상세)"
     },
     "licenseManagement": "고급 기능을 사용하려면 ProxCenter 라이선스를 관리하세요.",
@@ -9178,23 +9186,10 @@
     }
   },
   "about": {
-    "title": "정보",
-    "description": "멀티 클러스터 Proxmox 관리 플랫폼",
-    "currentVersion": "현재 버전",
-    "latestVersion": "최신 버전",
     "updateAvailable": "업데이트 사용 가능",
-    "upToDate": "최신 상태",
-    "updateCheckOffline": "네트워크가 격리된 이 인스턴스에서는 업데이트 확인이 비활성화되어 있습니다",
     "newVersionAvailable": "새 버전 v{version}이(가) 사용 가능합니다",
-    "newCommitAvailable": "새 업데이트가 있습니다 (커밋 {count}개 뒤처짐)",
-    "commitsBehind": "커밋 {count}개 뒤처짐",
     "viewRelease": "릴리스 보기",
-    "viewChanges": "변경 사항 보기",
-    "changelog": "버전 이력",
-    "reportBug": "버그 신고",
-    "releaseHistory": "릴리스 이력",
-    "current": "현재",
-    "copyright": "모든 권리 보유."
+    "updateCheckOffline": "네트워크가 격리된 이 인스턴스에서는 업데이트 확인이 비활성화되어 있습니다"
   },
   "snapshotsTab": {
     "title": "스냅샷",

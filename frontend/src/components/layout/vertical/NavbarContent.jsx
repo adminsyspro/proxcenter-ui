@@ -45,7 +45,6 @@ import AIChatDrawer from '@components/layout/shared/AIChatDrawer'
 import TasksDropdown from '@components/layout/shared/TasksDropdown'
 
 // About Dialog
-import AboutDialog from '@components/dialogs/AboutDialog'
 
 // What's New Dialog
 import WhatsNewDialog, { useWhatsNew } from '@components/dialogs/WhatsNewDialog'
@@ -77,7 +76,6 @@ import { useAlertsSummary } from '@/hooks/useAlerts'
 import { useHaConfig } from '@/components/settings/ha/useHaConfig'
 
 // Version config
-import { APP_VERSION } from '@/config/version'
 
 // GitHub Stars badge
 function GitHubStars() {
@@ -217,7 +215,6 @@ const NavbarContent = ({ targetLayout } = {}) => {
   const [aiChatOpen, setAiChatOpen] = useState(false)
 
   // About Dialog
-  const [aboutOpen, setAboutOpen] = useState(false)
 
   // What's New
   const { open: whatsNewOpen, hasUnseen: hasNewFeatures, handleOpen: openWhatsNew, handleClose: closeWhatsNew } = useWhatsNew()
@@ -914,7 +911,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
                     }}
                     onClick={() => {
                       setNotifAnchor(null)
-                      setAboutOpen(true)
+                      openWhatsNew()
                     }}
                   >
                     <ListItemIcon sx={{ minWidth: 36 }}>
@@ -1436,27 +1433,6 @@ return () => window.removeEventListener('keydown', onKeyDown)
         </MenuItem>
         )}
 
-        {(branding.showAbout !== false) && (
-        <MenuItem
-          onClick={() => {
-            setUserAnchor(null)
-            setAboutOpen(true)
-          }}
-        >
-          <ListItemIcon>
-            <i className='ri-information-line' />
-          </ListItemIcon>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {t('about.title')}
-            <Chip
-              label={APP_VERSION !== 'dev' ? 'v' + APP_VERSION : 'dev'}
-              size='small'
-              sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace' }}
-              color={updateInfo?.updateAvailable ? 'warning' : 'default'}
-            />
-          </Box>
-        </MenuItem>
-        )}
 
         <Divider />
 
@@ -1471,11 +1447,13 @@ return () => window.removeEventListener('keydown', onKeyDown)
       {/* AI Chat Drawer */}
       <AIChatDrawer open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
 
-      {/* About Dialog */}
-      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
-
       {/* What's New Dialog */}
-      <WhatsNewDialog open={whatsNewOpen} onClose={closeWhatsNew} />
+      <WhatsNewDialog
+        open={whatsNewOpen}
+        onClose={closeWhatsNew}
+        updateInfo={isProviderTenant && canViewAdmin ? updateInfo : null}
+        canUpgrade={isProviderTenant && canViewAdmin}
+      />
     </>
   )
 }

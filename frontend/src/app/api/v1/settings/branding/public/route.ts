@@ -63,7 +63,6 @@ export async function GET() {
       poweredByVisible: settings.poweredByVisible,
       showGithubStars: settings.showGithubStars,
       showWhatsNew: settings.showWhatsNew,
-      showAbout: settings.showAbout,
       showSubscription: settings.showSubscription,
       loginTagline: typeof settings.loginTagline === 'string' ? settings.loginTagline : '',
       loginHighlights: sanitizeHighlights(settings.loginHighlights),

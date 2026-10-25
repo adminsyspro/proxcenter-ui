@@ -12,7 +12,19 @@ services:
     container_name: proxcenter-frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"  # Unified HTTP + WebSocket
+      # Published ports. The defaults are deliberately unprivileged so that
+      # upgrading a host that already runs nginx on 80/443 cannot fail to
+      # start. Set HTTP_BIND=80 and HTTPS_BIND=443 in .env to serve the
+      # standard ports directly.
+      - "${HTTP_BIND:-3000}:3000"
+      # HTTPS has NO default host port on purpose. An upgrade pulls this file
+      # without ever having asked for TLS, and a hard-coded 8443 on a host that
+      # already uses that port makes the whole stack fail to start. Empty, the
+      # container's HTTPS port is published on a free host port Docker picks,
+      # so an upgrade always comes up. The install scripts write HTTPS_BIND
+      # themselves: 443 on a fresh install, which is what makes HTTPS work out
+      # of the box, and 8443 on an upgrade when nothing else holds it.
+      - "${HTTPS_BIND:-}:${TLS_PORT:-8443}"
     environment:
       - NODE_ENV=production
       # ProxCenter speaks Postgres only since the SQLite cutover. The
@@ -22,6 +34,12 @@ services:
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - APP_URL=${APP_URL:-http://localhost:3000}
+      # Built-in HTTPS. TLS_PORT is the port INSIDE the container and must stay
+      # in step with the mapping above. TLS_ENABLED is read once, on the very
+      # first boot, to seed the setting; afterwards /settings is the source of
+      # truth.
+      - TLS_PORT=${TLS_PORT:-8443}
+      - TLS_ENABLED=${TLS_ENABLED:-false}
       # Identity this instance stamps on the migration jobs it runs, so a boot
       # can fail the ones its previous incarnation left behind (#608). Fixed on
       # purpose: the container id changes on every image upgrade, which would

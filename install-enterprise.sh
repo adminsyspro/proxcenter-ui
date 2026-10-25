@@ -329,7 +329,8 @@ VERSION=$VERSION
 # Secrets
 APP_SECRET=$APP_SECRET
 NEXTAUTH_SECRET=$NEXTAUTH_SECRET
-NEXTAUTH_URL=http://$SERVER_IP:3000
+NEXTAUTH_URL=https://$SERVER_IP
+APP_URL=https://$SERVER_IP
 
 # License (optional - can be activated via UI)
 LICENSE_KEY=${LICENSE_KEY:-}
@@ -337,6 +338,15 @@ LICENSE_KEY=${LICENSE_KEY:-}
 # Orchestrator
 ORCHESTRATOR_URL=http://orchestrator:8080
 ORCHESTRATOR_API_KEY=$ORCHESTRATOR_API_KEY
+
+# Fresh install: nothing else owns 80/443 on this host, so serve the
+# standard ports and start in HTTPS with a self-signed certificate. An
+# upgrade never reaches this block, so an existing install keeps its
+# unprivileged mapping.
+HTTP_BIND=80
+HTTPS_BIND=443
+TLS_PORT=8443
+TLS_ENABLED=true
 
 # Postgres
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
@@ -444,6 +454,33 @@ refresh_compose() {
         sed -i "s|^ORCHESTRATOR_API_KEY=your-orchestrator-api-key-change-me|ORCHESTRATOR_API_KEY=$orch_key|" .env
         log_info "Replaced placeholder ORCHESTRATOR_API_KEY in .env"
     fi
+
+    # The HTTPS mapping. The compose file deliberately publishes it on no fixed
+    # port when HTTPS_BIND is unset, so that an upgrade of a host already using
+    # 8443 still starts. Pin it to 8443 here when nothing holds that port, so an
+    # upgraded install has a predictable HTTPS port the day its operator turns
+    # HTTPS on; when it IS taken, leave the variable out and let Docker pick a
+    # free one rather than fail to start.
+    if ! grep -q '^HTTPS_BIND=' .env; then
+        local listening=""
+        if command -v ss > /dev/null 2>&1; then
+            listening=$(ss -ltn 2>/dev/null)
+        elif command -v netstat > /dev/null 2>&1; then
+            listening=$(netstat -ltn 2>/dev/null)
+        fi
+
+        if [ -z "$listening" ]; then
+            # No way to tell whether the port is free, so do not gamble the
+            # upgrade on it: an unset HTTPS_BIND always starts.
+            log_info "Could not check port 8443: HTTPS will be published on a free port chosen by Docker"
+        elif echo "$listening" | grep -qE '[:.]8443[[:space:]]'; then
+            log_warning "Port 8443 is in use: HTTPS will be published on a free port chosen by Docker"
+            log_info "Set HTTPS_BIND in $INSTALL_DIR/.env to pin it"
+        else
+            printf '\n# Published HTTPS port (added by upgrade)\nHTTPS_BIND=8443\n' >> .env
+            log_info "Added HTTPS_BIND=8443 to .env"
+        fi
+    fi
 }
 
 # ============================================
@@ -483,6 +520,25 @@ pull_and_init() {
 # Step 6: Start Services
 # ============================================
 
+# The port the stack actually publishes on the host. A fresh install writes
+# HTTP_BIND=80 into its .env; an install made before that variable existed, or
+# upgraded without it, has no such line and the compose default applies, which
+# is 3000. Probing 80 in both cases made a perfectly healthy start on 3000 time
+# out and report a failure it never had.
+served_http_port() {
+    local port=""
+
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        port=$(grep -E '^HTTP_BIND=' "$INSTALL_DIR/.env" | tail -1 | cut -d= -f2- | tr -d "\"' ")
+    fi
+
+    if [ -z "$port" ]; then
+        port=3000
+    fi
+
+    echo "$port"
+}
+
 start_and_wait() {
     step 6 "Starting ProxCenter Enterprise"
 
@@ -492,10 +548,15 @@ start_and_wait() {
 
     # Wait for frontend with spinner
     log_info "Waiting for services to be ready..."
+    local http_port
+    http_port=$(served_http_port)
     (
         local attempt=1
         while [ $attempt -le 60 ]; do
-            if curl -s -f http://localhost:3000/api/health > /dev/null 2>&1; then
+            # The published HTTP port, whichever this install serves.
+            # /api/health stays reachable in plain HTTP even with
+            # TLS_ENABLED=true: it is exempt from the HTTPS redirect.
+            if curl -s -f "http://localhost:${http_port}/api/health" > /dev/null 2>&1; then
                 exit 0
             fi
             sleep 2
@@ -543,10 +604,25 @@ print_summary() {
     echo -e "${GREEN}${BOLD}  │     ProxCenter Enterprise is ready!         │${NC}"
     echo -e "${GREEN}${BOLD}  └─────────────────────────────────────────────┘${NC}"
     echo ""
-    echo -e "    ${BOLD}URL${NC}         ${CYAN}http://$SERVER_IP:3000${NC}"
-    echo -e "    ${BOLD}Install${NC}     $INSTALL_DIR"
-    echo -e "    ${BOLD}Duration${NC}    $(format_duration $duration)"
-    echo ""
+    # A fresh install serves 80/443 with HTTPS on from the first boot; an
+    # upgrade keeps the ports and the scheme it already had, and announcing
+    # https:// there sends the operator to a port nothing answers on.
+    if [ "$UPGRADE_MODE" = "true" ]; then
+        echo -e "    ${BOLD}URL${NC}         ${CYAN}http://$SERVER_IP:$(served_http_port)/${NC}"
+        echo -e "    ${BOLD}Install${NC}     $INSTALL_DIR"
+        echo -e "    ${BOLD}Duration${NC}    $(format_duration $duration)"
+        echo ""
+        echo -e "    ${DIM}HTTPS is available in Settings > HTTPS, and is off until you turn it on.${NC}"
+        echo ""
+    else
+        echo -e "    ${BOLD}URL${NC}         ${CYAN}https://$SERVER_IP/${NC}"
+        echo -e "    ${BOLD}Install${NC}     $INSTALL_DIR"
+        echo -e "    ${BOLD}Duration${NC}    $(format_duration $duration)"
+        echo ""
+        echo -e "    ${YELLOW}!${NC} ${DIM}The certificate is self-signed: your browser will warn until you${NC}"
+        echo -e "      ${DIM}install an ACME or imported certificate from Settings > HTTPS.${NC}"
+        echo ""
+    fi
 
     if [ -z "$LICENSE_KEY" ]; then
         echo -e "    ${YELLOW}${BOLD}!${NC} ${YELLOW}No license key provided${NC}"

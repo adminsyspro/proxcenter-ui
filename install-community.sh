@@ -222,8 +222,18 @@ setup_proxcenter() {
 
 APP_SECRET=$APP_SECRET
 NEXTAUTH_SECRET=$NEXTAUTH_SECRET
-NEXTAUTH_URL=http://$SERVER_IP:3000
+NEXTAUTH_URL=https://$SERVER_IP
+APP_URL=https://$SERVER_IP
 VERSION=latest
+
+# Fresh install: nothing else owns 80/443 on this host, so serve the
+# standard ports and start in HTTPS with a self-signed certificate. An
+# upgrade never reaches this block, so an existing install keeps its
+# unprivileged mapping.
+HTTP_BIND=80
+HTTPS_BIND=443
+TLS_PORT=8443
+TLS_ENABLED=true
 
 # Postgres
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
@@ -266,6 +276,25 @@ pull_and_init() {
 # Step 4: Start Services
 # ============================================
 
+# The port the stack actually publishes on the host. A fresh install writes
+# HTTP_BIND=80 into its .env; an install made before that variable existed, or
+# upgraded without it, has no such line and the compose default applies, which
+# is 3000. Probing 80 in both cases made a perfectly healthy start on 3000 time
+# out and report a failure it never had.
+served_http_port() {
+    local port=""
+
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        port=$(grep -E '^HTTP_BIND=' "$INSTALL_DIR/.env" | tail -1 | cut -d= -f2- | tr -d "\"' ")
+    fi
+
+    if [ -z "$port" ]; then
+        port=3000
+    fi
+
+    echo "$port"
+}
+
 start_and_wait() {
     step 4 "Starting ProxCenter"
 
@@ -275,10 +304,15 @@ start_and_wait() {
 
     # Wait for frontend with spinner
     log_info "Waiting for service to be ready..."
+    local http_port
+    http_port=$(served_http_port)
     (
         local attempt=1
         while [ $attempt -le 60 ]; do
-            if curl -s -f http://localhost:3000/api/health > /dev/null 2>&1; then
+            # The published HTTP port, whichever this install serves.
+            # /api/health stays reachable in plain HTTP even with
+            # TLS_ENABLED=true: it is exempt from the HTTPS redirect.
+            if curl -s -f "http://localhost:${http_port}/api/health" > /dev/null 2>&1; then
                 exit 0
             fi
             sleep 2
@@ -308,9 +342,12 @@ print_summary() {
     echo -e "${GREEN}${BOLD}  │      ProxCenter Community is ready!         │${NC}"
     echo -e "${GREEN}${BOLD}  └─────────────────────────────────────────────┘${NC}"
     echo ""
-    echo -e "    ${BOLD}URL${NC}         ${CYAN}http://$SERVER_IP:3000${NC}"
+    echo -e "    ${BOLD}URL${NC}         ${CYAN}https://$SERVER_IP/${NC}"
     echo -e "    ${BOLD}Install${NC}     $INSTALL_DIR"
     echo -e "    ${BOLD}Duration${NC}    $(format_duration $duration)"
+    echo ""
+    echo -e "    ${YELLOW}!${NC} ${DIM}The certificate is self-signed: your browser will warn until you${NC}"
+    echo -e "      ${DIM}install an ACME or imported certificate from Settings > HTTPS.${NC}"
     echo ""
     echo -e "    ${DIM}Features: Dashboard, Inventory, VM/CT Management, Backups, Storage${NC}"
     echo ""

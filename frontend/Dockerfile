@@ -170,8 +170,9 @@ RUN mkdir -p /app/.next/cache && chown -R nextjs:nodejs /app/.next/cache
 # Switch to non-root user
 USER nextjs
 
-# Expose port (unified HTTP + WebSocket)
+# Expose ports (unified HTTP + WebSocket, and built-in HTTPS)
 EXPOSE 3000
+EXPOSE 8443
 
 # Environment variables (can be overridden)
 ENV PORT=3000

@@ -29,6 +29,44 @@ const HA_REDIRECT_DISABLED = process.env.HA_REDIRECT_DISABLED === 'true'
 // flags above: the values only change with the container env.
 const REDIRECT_EXEMPT_HOSTS = buildRedirectExemptHosts()
 
+// Where the VIP redirect actually sends the browser. The HOST stays the VIP —
+// that is the entire point of this redirect, which exists for IP-only installs
+// — but the scheme and the port have to follow what is being served, and
+// hard-coding http://VIP:3000 stopped being harmless the day this appliance
+// grew its own HTTPS listener:
+//
+//   - the session silently falls out of TLS;
+//   - with the HTTP-to-HTTPS redirect on, it bounces straight back, two extra
+//     round trips on every hit that lands on a node's own address;
+//   - with HSTS on, the browser rewrites http://VIP:3000 to https://VIP:3000,
+//     where nothing listens — HTTPS is on TLS_PORT, not 3000 — and the UI is
+//     unreachable for every browser that has ever seen the header.
+//
+// APP_URL is the source, the same one src/lib/tls/policy.ts reads for the
+// public HTTPS port, so the two stay consistent by construction. Anything else
+// — no APP_URL, an unparseable one, a plain-http one — keeps today's exact
+// target, so a non-TLS HA install behaves as it always has. Parsed ONCE at
+// boot, like the flags above.
+const HA_REDIRECT_ORIGIN = buildHaRedirectOrigin()
+
+function buildHaRedirectOrigin(): string {
+  const legacy = `http://${VIP}:3000`
+
+  try {
+    const appUrl = new URL(process.env.APP_URL || '')
+
+    if (appUrl.protocol !== 'https:') return legacy
+
+    // Omit the port when it is the default for the scheme, so the target reads
+    // as https://VIP rather than https://VIP:443.
+    const port = appUrl.port && appUrl.port !== '443' ? `:${appUrl.port}` : ''
+
+    return `https://${VIP}${port}`
+  } catch {
+    return legacy
+  }
+}
+
 function buildRedirectExemptHosts(): Set<string> {
   const hosts = new Set(['localhost', '127.0.0.1'])
 
@@ -63,6 +101,7 @@ const publicRoutes = [
   "/api/auth",
   "/forgot-password",
   "/reset-password",
+  "/.well-known/acme-challenge", // a certificate authority fetches this unauthenticated, from the public internet, to validate HTTP-01
 ]
 
 // Routes that bypass the 2FA enrollment redirect entirely, even when the
@@ -106,6 +145,7 @@ const publicApiRoutes = [
   "/api/v1/settings/login-background", // Background custom login page
   "/api/v1/settings/login-background/serve", // Serving des images background
   "/api/internal", // API internes (proxy WS, etc.)
+  "/api/acme/challenge", // rewritten target of /.well-known/acme-challenge; same unauthenticated CA fetch, reached directly too
 ]
 
 // Extensions that make a NON-API path a static file (see isAsset). Anchored at
@@ -224,12 +264,22 @@ export async function proxy(request: NextRequest) {
     const host = rawHost.replace(/:\d+$/, '').toLowerCase()
 
     if (host !== VIP && !REDIRECT_EXEMPT_HOSTS.has(host)) {
+      // The ACME HTTP-01 challenge is exempt for a reason the health routes
+      // do not share: the CA fetches it from the public internet, on the name
+      // being certified, which is generally NOT the NEXTAUTH_URL host the
+      // exempt list above covers. Redirected, it lands on the VIP -- private
+      // on most installs, so unreachable from outside, and over HTTPS it would
+      // first have to get past the self-signed certificate this very challenge
+      // exists to replace. Both spellings: the path a CA fetches and the route
+      // next.config.mjs rewrites it onto.
       const isExemptPath = pathname === '/api/health'
         || pathname.startsWith('/api/health/')
         || pathname.startsWith('/api/v1/ha/')
+        || pathname.startsWith('/.well-known/acme-challenge/')
+        || pathname.startsWith('/api/acme/challenge/')
       if (!isExemptPath) {
         const search = request.nextUrl.search || ''
-        return NextResponse.redirect(`http://${VIP}:3000${pathname}${search}`, 302)
+        return NextResponse.redirect(`${HA_REDIRECT_ORIGIN}${pathname}${search}`, 302)
       }
     }
   }

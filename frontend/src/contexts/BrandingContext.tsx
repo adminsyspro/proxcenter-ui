@@ -22,6 +22,7 @@ export interface BrandingConfig {
   browserTitle: string
   poweredByVisible: boolean
   showGithubStars: boolean
+  showDocs: boolean
   showWhatsNew: boolean
   showSubscription: boolean
   loginTagline: string
@@ -43,6 +44,7 @@ const DEFAULT_BRANDING: BrandingConfig = {
   browserTitle: '',
   poweredByVisible: true,
   showGithubStars: true,
+  showDocs: true,
   showWhatsNew: true,
   showSubscription: true,
   loginTagline: '',

@@ -104,6 +104,11 @@ const HaTab = dynamic(() => import('@/components/settings/ha/HaTab'), {
   loading: tabLoading
 })
 
+const TlsTab = dynamic(() => import('@/components/settings/TlsTab'), {
+  ssr: false,
+  loading: tabLoading
+})
+
 const ApiTokensTab = dynamic(() => import('@/components/settings/api-tokens/ApiTokensTab'), {
   ssr: false,
   loading: tabLoading
@@ -2410,6 +2415,7 @@ export default function SettingsPage() {
     { name: 'ldap', group: 'access', label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP, providerOnly: true },
     { name: 'oidc', group: 'access', label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC, providerOnly: true },
     { name: 'api', group: 'access', label: t('settings.apiTokens.tabLabel'), icon: 'ri-code-box-line', component: ApiTokensTab, providerOnly: true },
+    { name: 'tls', group: 'access', label: t('settings.tls.tabLabel'), icon: 'ri-lock-line', component: TlsTab, providerOnly: true },
     { name: 'alert-thresholds', group: 'monitoring', label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab, providerOnly: true },
     { name: 'notifications', group: 'monitoring', label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS, providerOnly: true },
     { name: 'syslog', group: 'monitoring', label: t('settings.syslog.tabLabel'), icon: 'ri-broadcast-line', component: SyslogTab, requiredFeature: Features.SYSLOG_FORWARDING, providerOnly: true },

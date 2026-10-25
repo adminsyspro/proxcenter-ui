@@ -76,7 +76,16 @@ const nextConfig = {
                 locale: false
             }
         ];
-    }
+    },
+    rewrites: async () => [
+        {
+            // The canonical ACME path. A directory literally named
+            // `.well-known` is invisible to the Next router, so the real
+            // handler lives under /api and is rewritten onto here.
+            source: '/.well-known/acme-challenge/:token',
+            destination: '/api/acme/challenge/:token'
+        }
+    ],
 };
 
 export default withNextIntl(nextConfig);

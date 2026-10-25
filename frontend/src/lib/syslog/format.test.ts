@@ -482,7 +482,7 @@ describe('redaction before leaving the box', () => {
   })
 
   it('isSensitiveKey draws the line the tests above rely on', () => {
-    for (const k of ['sshPassEnc', 'passphrase', 'client_secret', 'api-key', 'refreshToken', 'cookie', 'otp']) {
+    for (const k of ['sshPassEnc', 'passphrase', 'client_secret', 'api-key', 'refreshToken', 'cookie', 'otp', 'keyPem', 'hmacKey', 'credentials']) {
       expect(isSensitiveKey(k), k).toBe(true)
     }
     for (const k of ['apiTokenId', 'token_id', 'secretName', 'passwordEnabled', 'tokenCount', 'host', 'port']) {

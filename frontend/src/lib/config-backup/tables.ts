@@ -132,6 +132,10 @@ export const BACKUP_SECTIONS: BackupSection[] = [
         exportWhere: "key NOT IN ('syslog_orchestrator_cursor', 'templates.catalog.status', 'templates.catalog.builds')",
       },
       { name: 'uploaded_assets' },
+      // The HTTPS certificates, uploaded ones included: the `tls` settings row
+      // above points at the active one. ACME accounts, pending challenges and
+      // the renewal lease are runtime state, rebuilt on the next order.
+      { name: 'tls_certificates' },
       { name: 'DashboardLayout' },
       { name: 'user_preferences' },
       { name: 'favorites' },

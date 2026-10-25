@@ -205,6 +205,10 @@ const NavbarContent = ({ targetLayout } = {}) => {
   // i18n hooks
   const t = useTranslations()
   const { branding } = useBranding()
+
+  // A white label points the icon at its own docs when it has some, and can
+  // hide it like the GitHub stars.
+  const docsHref = (branding.enabled && branding.docsUrl) || 'https://docs.proxcenter.io'
   const { locale, locales, localeNames, localeFlags, changeLocale, isPending } = useLocale()
   const timeAgo = createTimeAgo(t)
 
@@ -734,6 +738,18 @@ return () => window.removeEventListener('keydown', onKeyDown)
           </Tooltip>
           )}
 
+
+          {/* Docs */}
+          {(!branding.enabled || branding.showDocs !== false) && (
+            <Tooltip title={t('navbar.documentation')}>
+              <IconButton
+                component='a' href={docsHref} target='_blank' rel='noopener noreferrer'
+                aria-label={t('navbar.documentation')} size='small'
+              >
+                <i className='ri-book-open-line' />
+              </IconButton>
+            </Tooltip>
+          )}
 
           {/* Lang */}
           <Tooltip title={t('navbar.language')}>

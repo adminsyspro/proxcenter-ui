@@ -74,3 +74,14 @@ describe('tenant-specific branding image URLs', () => {
     expect(response.headers.get('Vary')).toMatch(/Cookie/i)
   })
 })
+
+describe('header documentation icon', () => {
+  it('hands the white label its choice to hide the icon, and its own docs URL', async () => {
+    h.getSetting.mockResolvedValue({ enabled: true, showDocs: false, docsUrl: 'https://docs.brand.example' })
+
+    const body = await readJson<any>(await callRoute(GET, { method: 'GET' }))
+
+    expect(body.showDocs).toBe(false)
+    expect(body.docsUrl).toBe('https://docs.brand.example')
+  })
+})

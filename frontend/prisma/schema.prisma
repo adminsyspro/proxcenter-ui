@@ -1680,3 +1680,74 @@ model GuestFileRestoreJob {
   @@index([connectionId, vmid])
   @@map("guest_file_restore_jobs")
 }
+
+/// TLS certificate served by the built-in HTTPS listener (self-signed,
+/// uploaded or ACME-issued). The private key is encrypted with APP_SECRET
+/// through src/lib/crypto/secret.ts, exactly like connection passwords.
+/// Only one row carries isActive = true; the reconciler reloads the running
+/// listener whenever the active fingerprint differs from the loaded one.
+model TlsCertificate {
+  id           String   @id @default(cuid())
+  source       String   // self_signed | uploaded | acme
+  commonName   String   @map("common_name")
+  sanNames     String[] @map("san_names")
+  certPem      String   @map("cert_pem")
+  chainPem     String?  @map("chain_pem")
+  keyEncrypted String   @map("key_encrypted")
+  issuer       String
+  serial       String
+  fingerprint  String
+  notBefore    DateTime @map("not_before")
+  notAfter     DateTime @map("not_after")
+  isActive     Boolean  @default(false) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([isActive])
+  @@map("tls_certificates")
+}
+
+// Prisma cannot express a partial unique index. A hand-written one,
+// `tls_certificates_single_active` (`UNIQUE ("is_active") WHERE "is_active"`),
+// is added in migration 20260917160000_tls_single_active_certificate and
+// enforces "at most one active certificate" at the database level, not just
+// in application code.
+
+/// One ACME account per directory URL. The account key never leaves this row.
+model TlsAcmeAccount {
+  id            String    @id @default(cuid())
+  directoryUrl  String    @unique @map("directory_url")
+  email         String
+  accountUrl    String?   @map("account_url")
+  keyEncrypted  String    @map("key_encrypted")
+  termsAgreedAt DateTime? @map("terms_agreed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@map("tls_acme_accounts")
+}
+
+/// Pending HTTP-01 key authorizations. In the database and not in memory
+/// because in HA the CA can hit any replica to validate.
+model TlsAcmeChallenge {
+  token     String   @id
+  keyAuth   String   @map("key_authorization")
+  domain    String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("tls_acme_challenges")
+}
+
+/// Single-row lease that lets exactly one HA replica place an ACME order at a
+/// time. A Postgres advisory lock cannot do this job here: Prisma's pool hands
+/// the acquire and the release to different backend sessions, and
+/// pg_advisory_unlock returns false silently when the caller does not hold the
+/// lock, so the lock leaks for the life of the connection.
+model TlsRenewLease {
+  id        String   @id
+  holder    String
+  heldUntil DateTime @map("held_until")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("tls_renew_leases")
+}

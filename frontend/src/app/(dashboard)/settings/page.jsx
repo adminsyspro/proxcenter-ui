@@ -147,6 +147,11 @@ const BroadcastTab = dynamic(() => import('@/components/settings/BroadcastTab'),
   loading: tabLoading
 })
 
+const ConfigBackupTab = dynamic(() => import('@/components/settings/ConfigBackupTab'), {
+  ssr: false,
+  loading: tabLoading
+})
+
 const DatacentersSection = dynamic(() => import('@/components/settings/green/DatacentersSection'), {
   ssr: false,
   loading: () => <Box sx={{ p: 2, textAlign: 'center' }}><LinearProgress /></Box>
@@ -2401,19 +2406,20 @@ export default function SettingsPage() {
     { name: 'tenants', group: 'infrastructure', label: 'Tenants', icon: 'ri-building-line', component: TenantsTab, requiredFeature: Features.MULTI_TENANCY, providerOnly: true },
     { name: 'ha', group: 'infrastructure', label: t('ha.tabLabel'), icon: 'ri-shield-check-line', component: HaTab, providerOnly: true },
     { name: 'ssh-commands', group: 'infrastructure', label: t('settings.sshCommands.tabLabel'), icon: 'ri-terminal-line', component: SshCommandsTab, providerOnly: true },
+    { name: 'guest-file-restore', group: 'infrastructure', label: t('guestFileRestore.tabLabel'), icon: 'ri-folder-transfer-line', component: GuestFileRestoreTab, providerOnly: true },
     { name: 'ldap', group: 'access', label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP, providerOnly: true },
     { name: 'oidc', group: 'access', label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC, providerOnly: true },
-    { name: 'api', group: 'access', label: t('settings.apiTokens.tabLabel'), icon: 'ri-key-2-line', component: ApiTokensTab, providerOnly: true },
-    { name: 'license', group: 'access', label: t('settings.license'), icon: 'ri-key-2-line', component: LicenseTab, providerOnly: true },
+    { name: 'api', group: 'access', label: t('settings.apiTokens.tabLabel'), icon: 'ri-code-box-line', component: ApiTokensTab, providerOnly: true },
     { name: 'alert-thresholds', group: 'monitoring', label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab, providerOnly: true },
     { name: 'notifications', group: 'monitoring', label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS, providerOnly: true },
     { name: 'syslog', group: 'monitoring', label: t('settings.syslog.tabLabel'), icon: 'ri-broadcast-line', component: SyslogTab, requiredFeature: Features.SYSLOG_FORWARDING, providerOnly: true },
     { name: 'broadcast', group: 'monitoring', label: t('settings.broadcast.tabLabel'), icon: 'ri-megaphone-line', component: BroadcastTab, providerOnly: true },
-    { name: 'guest-file-restore', group: 'features', label: t('guestFileRestore.tabLabel'), icon: 'ri-folder-transfer-line', component: GuestFileRestoreTab, providerOnly: true },
-    { name: 'ai', group: 'features', label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS, providerOnly: true },
-    { name: 'green', group: 'features', label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS, providerOnly: true },
+    { name: 'ai', group: 'insights', label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS, providerOnly: true },
+    { name: 'green', group: 'insights', label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS, providerOnly: true },
     { name: 'appearance', group: 'personalization', label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
     { name: 'white-label', group: 'personalization', label: 'White Label', icon: 'ri-pantone-line', component: WhiteLabelTab, requiredFeature: Features.WHITE_LABEL, superAdminOnly: true },
+    { name: 'license', group: 'system', label: t('settings.license'), icon: 'ri-award-line', component: LicenseTab, providerOnly: true },
+    { name: 'backup', group: 'system', label: t('settings.configBackup.tabLabel'), icon: 'ri-save-3-line', component: ConfigBackupTab, providerOnly: true },
   ]
 
   // Two different gates, deliberately:

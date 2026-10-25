@@ -54,6 +54,9 @@ function extractSchema(connectionString: string): string {
 
 const schema = extractSchema(dsn)
 
+/** The per-run test schema, for code that pins search_path itself. */
+export const testSchema = schema
+
 // PrismaPg's first arg is the pg pool config (connectionString lives there);
 // the schema goes in the second arg PrismaPgOptions.
 export const prismaTest = new PrismaClient({

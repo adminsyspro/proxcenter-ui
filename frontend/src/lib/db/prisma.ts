@@ -26,6 +26,9 @@ function extractSchema(connectionString: string): string {
 const dsn = getDatabaseUrl()
 const schema = extractSchema(dsn)
 
+/** Schema the client works in; raw SQL must pin it, the adapter only applies it to model queries. */
+export const databaseSchema = schema
+
 function createClient() {
   const pool = new pg.Pool({
     connectionString: dsn,

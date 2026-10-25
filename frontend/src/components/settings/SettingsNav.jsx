@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 
 import {
   Box,
+  Divider,
   List,
   ListItemButton,
   ListItemIcon,
@@ -19,7 +20,7 @@ import {
 
 // Display order of the groups in the side navigation. A tab names its group
 // with `group`; a group with no visible tab is not rendered.
-export const SETTINGS_NAV_GROUPS = ['infrastructure', 'access', 'monitoring', 'features', 'personalization']
+export const SETTINGS_NAV_GROUPS = ['infrastructure', 'access', 'monitoring', 'insights', 'personalization', 'system']
 
 /**
  * Buckets the visible tabs by group, in SETTINGS_NAV_GROUPS order, keeping
@@ -76,14 +77,15 @@ export default function SettingsNav({ tabs, value, onChange }) {
     <Box
       component='nav'
       aria-label={t('settings.navAriaLabel')}
-      sx={{ width: 248, flexShrink: 0, borderRight: 1, borderColor: 'divider', overflowY: 'auto', py: 1 }}
+      sx={{ width: 248, flexShrink: 0, borderRight: 1, borderColor: 'divider', overflowY: 'auto', py: 2 }}
     >
       <List dense disablePadding>
-        {groupSettingsTabs(tabs).map(group => (
+        {groupSettingsTabs(tabs).map((group, i) => (
           <Fragment key={group.key}>
+            {i > 0 && <Divider sx={{ mx: 2, my: 1.5 }} />}
             <ListSubheader
               disableSticky
-              sx={{ bgcolor: 'transparent', lineHeight: '32px', mt: 1, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}
+              sx={{ bgcolor: 'transparent', color: 'text.secondary', lineHeight: '28px', px: 2.5, fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}
             >
               {t(`settings.navGroups.${group.key}`)}
             </ListSubheader>
@@ -94,14 +96,20 @@ export default function SettingsNav({ tabs, value, onChange }) {
                 aria-current={index === value ? 'page' : undefined}
                 title={tab.label}
                 onClick={() => onChange(index)}
-                sx={{ mx: 1, borderRadius: 1, minHeight: 38 }}
+                sx={{
+                  mx: 1,
+                  my: 0.25,
+                  px: 1.5,
+                  borderRadius: 1,
+                  minHeight: 36
+                }}
               >
-                <ListItemIcon sx={{ minWidth: 30, color: index === value ? 'primary.main' : 'inherit' }}>
+                <ListItemIcon sx={{ minWidth: 30, color: index === value ? 'primary.main' : 'text.secondary' }}>
                   <i className={tab.icon} style={{ fontSize: 18 }} />
                 </ListItemIcon>
                 <ListItemText
                   primary={tab.label}
-                  slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.9rem', fontWeight: index === value ? 600 : 400 } } }}
+                  slotProps={{ primary: { noWrap: true, sx: { fontSize: '0.875rem', fontWeight: index === value ? 600 : 400 } } }}
                 />
               </ListItemButton>
             ))}

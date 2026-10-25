@@ -15,6 +15,7 @@ export const READ_ONLY_MUTATION_ROUTES: Readonly<Record<string, string>> = {
   'v1/auth/ldap/diagnose': 'LDAP diagnostics, read-only',
   'v1/auth/ldap/test': 'LDAP connectivity test',
   'v1/auth/oidc/test': 'OIDC discovery test',
+  'v1/admin/config-backup/inspect': 'Opens an uploaded configuration backup and describes it, read-only',
   'v1/admin/tenant-networks/[id]/reachability': 'Ping test between transport peers',
   'v1/backups/restore-drills/preflight': 'Preflight checks, read-only',
   'v1/connections/[id]/check': 'Connection health check, read-only',

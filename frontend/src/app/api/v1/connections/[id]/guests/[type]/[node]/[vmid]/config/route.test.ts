@@ -64,6 +64,8 @@ vi.mock('@/lib/vdc/ipamSync', () => ({
   IpamExhaustedError: class IpamExhaustedError extends Error {},
 }))
 vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
+const enforceGuestTagAccessMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
+vi.mock('@/lib/proxmox/tagAccessServer', () => ({ enforceGuestTagAccess: enforceGuestTagAccessMock }))
 
 async function loadPut() {
   const mod = await import('./route')
@@ -93,6 +95,7 @@ function configWriteMethod() {
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  enforceGuestTagAccessMock.mockReset().mockResolvedValue(null)
   checkPermissionsMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
@@ -627,5 +630,42 @@ describe('PUT config: tenant NIC identity authorization', () => {
     const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { net0: original.replace('tag=100', 'tag=900') } })
     expect(res.status).toBe(403)
     expect(configWriteBody()).toBeNull()
+  })
+})
+
+describe('PUT config: datacenter User Tag Access (#1208)', () => {
+  const withTags = (tags: string) => pveFetchMock.mockImplementation(async (_conn, _path, opts?: any) => {
+    if (opts?.method === 'POST' || opts?.method === 'PUT') return null
+    return { tags }
+  })
+
+  it('checks the change against the current tags and writes it when allowed', async () => {
+    withTags('web')
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { tags: 'web;db' } })
+
+    expect(res.status).toBe(200)
+    expect(enforceGuestTagAccessMock).toHaveBeenCalledWith({ connId: 'conn-1', conn: { id: 'conn-1' }, oldTags: 'web', newTags: 'web;db' })
+    expect(configWriteBody()?.get('tags')).toBe('web;db')
+  })
+
+  it('treats delete=tags as clearing every tag', async () => {
+    withTags('web')
+    await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { delete: 'onboot, tags' } })
+
+    expect(enforceGuestTagAccessMock).toHaveBeenCalledWith(expect.objectContaining({ oldTags: 'web', newTags: '' }))
+  })
+
+  it('answers the refusal and never writes the config', async () => {
+    enforceGuestTagAccessMock.mockResolvedValue(new Response(JSON.stringify({ error: 'no', code: 'TAG_ACCESS_DENIED' }), { status: 403 }))
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { tags: 'nope' } })
+
+    expect(res.status).toBe(403)
+    expect(configWriteBody()).toBeNull()
+  })
+
+  it('does not look at tag access for an edit without tags', async () => {
+    await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { onboot: 1, delete: 'description' } })
+
+    expect(enforceGuestTagAccessMock).not.toHaveBeenCalled()
   })
 })

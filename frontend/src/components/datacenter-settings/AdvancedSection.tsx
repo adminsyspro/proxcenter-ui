@@ -6,6 +6,7 @@ import {
   CardContent,
   Divider,
   FormControl,
+  FormHelperText,
   InputLabel,
   MenuItem,
   Select,
@@ -26,6 +27,7 @@ interface Props {
   nextIdLower: string
   nextIdUpper: string
   userTagAccess: string
+  userTagAllowList: string
   registeredTags: string
   consentText: string
   onChange: (field: string, value: string) => void
@@ -33,9 +35,12 @@ interface Props {
 }
 
 export default function AdvancedSection({
-  nextIdLower, nextIdUpper, userTagAccess, registeredTags, consentText,
+  nextIdLower, nextIdUpper, userTagAccess, userTagAllowList, registeredTags, consentText,
   onChange, t,
 }: Props) {
+  // The allow-list feeds the List and Existing modes; None ignores it and Free makes it moot.
+  const showAllowList = userTagAccess === 'list' || userTagAccess === 'existing'
+
   const theme = useTheme()
 
   return (
@@ -74,16 +79,31 @@ export default function AdvancedSection({
             fullWidth
           />
           <FormControl size="small" fullWidth>
-            <InputLabel>{t('dcSettingsUserTagAccess')}</InputLabel>
+            <InputLabel id="dc-user-tag-access-label">{t('dcSettingsUserTagAccess')}</InputLabel>
             <Select
+              labelId="dc-user-tag-access-label"
               value={userTagAccess}
               label={t('dcSettingsUserTagAccess')}
               onChange={e => onChange('userTagAccess', e.target.value)}
             >
               {USER_TAG_ACCESS_MODES.map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
             </Select>
+            <FormHelperText>{t(`dcSettingsUserTagAccessHelp_${userTagAccess}`)}</FormHelperText>
           </FormControl>
         </Box>
+
+        {showAllowList && (
+          <TextField
+            size="small"
+            label={t('dcSettingsUserTagAllowList')}
+            value={userTagAllowList}
+            onChange={e => onChange('userTagAllowList', e.target.value)}
+            fullWidth
+            placeholder="tag1;tag2;tag3"
+            helperText={t('dcSettingsUserTagAllowListHelp')}
+            sx={{ mb: 2 }}
+          />
+        )}
 
         <TextField
           size="small"
@@ -92,6 +112,7 @@ export default function AdvancedSection({
           onChange={e => onChange('registeredTags', e.target.value)}
           fullWidth
           placeholder="tag1;tag2;tag3"
+          helperText={t('dcSettingsRegisteredTagsHelp')}
           sx={{ mb: 2 }}
         />
 

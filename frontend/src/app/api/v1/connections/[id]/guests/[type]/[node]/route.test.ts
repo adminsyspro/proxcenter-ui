@@ -41,6 +41,8 @@ vi.mock('@/lib/vdc/vnets', async (io) => {
 vi.mock('@/lib/vdc/sdn', () => ({ generatePveMacAddress: () => 'BC:24:11:00:00:01' }))
 vi.mock('@/lib/vdc/ipam', () => ({ allocateIp: vi.fn(), releaseIp: vi.fn(), IpamExhaustedError: class extends Error {} }))
 vi.mock('@/lib/vdc/network', () => ({ parseCidr: () => null }))
+const enforceGuestTagAccessMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
+vi.mock('@/lib/proxmox/tagAccessServer', () => ({ enforceGuestTagAccess: enforceGuestTagAccessMock }))
 const { checkVmidAgainstTenantRangeMock } = vi.hoisted(() => ({ checkVmidAgainstTenantRangeMock: vi.fn() }))
 vi.mock('@/lib/tenant/vmidRange', () => ({ checkVmidAgainstTenantRange: (...a: any[]) => checkVmidAgainstTenantRangeMock(...a) }))
 
@@ -59,6 +61,7 @@ beforeEach(() => {
   checkVmidAgainstTenantRangeMock.mockReset().mockResolvedValue({ ok: true })
   getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
   getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
+  enforceGuestTagAccessMock.mockReset().mockResolvedValue(null)
 })
 
 describe('POST guests create — MSP VMID range enforcement', () => {
@@ -253,5 +256,24 @@ describe('POST guests create — cluster outside the license (roadmap#58)', () =
 
     expect(res.status).toBe(403)
     expect(await res.json()).toMatchObject({ code: 'CONNECTION_LICENSE_EXCLUDED' })
+  })
+})
+
+describe('POST guests create: datacenter User Tag Access (#1208)', () => {
+  const pveCreateCalled = () => pveFetchMock.mock.calls.some(c => c[2]?.method === 'POST')
+
+  it('checks the tags of the new guest against an empty set', async () => {
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { vmid: 190, tags: 'web;db' } })
+
+    expect(res.status).toBe(200)
+    expect(enforceGuestTagAccessMock).toHaveBeenCalledWith({ connId: 'conn-1', conn: { id: 'conn-1' }, oldTags: '', newTags: 'web;db' })
+  })
+
+  it('answers the refusal before PVE creates anything', async () => {
+    enforceGuestTagAccessMock.mockResolvedValue(new Response(JSON.stringify({ error: 'no' }), { status: 403 }))
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { vmid: 190, tags: 'nope' } })
+
+    expect(res.status).toBe(403)
+    expect(pveCreateCalled()).toBe(false)
   })
 })

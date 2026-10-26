@@ -99,7 +99,8 @@
     "created": "Créé",
     "errorWithMessage": "Erreur : {error}",
     "moveUp": "Monter",
-    "moveDown": "Descendre"
+    "moveDown": "Descendre",
+    "jumpToLatest": "Aller aux dernières lignes"
   },
   "whatsNew": {
     "title": "Nouveautés",

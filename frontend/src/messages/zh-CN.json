@@ -99,7 +99,8 @@
     "created": "已创建",
     "errorWithMessage": "错误：{error}",
     "moveUp": "上移",
-    "moveDown": "下移"
+    "moveDown": "下移",
+    "jumpToLatest": "跳到最新"
   },
   "whatsNew": {
     "title": "最新动态",

@@ -103,7 +103,8 @@
     "created": "Erstellt",
     "errorWithMessage": "Fehler: {error}",
     "moveUp": "Nach oben",
-    "moveDown": "Nach unten"
+    "moveDown": "Nach unten",
+    "jumpToLatest": "Zu den neuesten Zeilen"
   },
   "whatsNew": {
     "title": "Neuigkeiten",

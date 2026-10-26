@@ -99,7 +99,8 @@
     "created": "Creado",
     "errorWithMessage": "Error: {error}",
     "moveUp": "Subir",
-    "moveDown": "Bajar"
+    "moveDown": "Bajar",
+    "jumpToLatest": "Ir a lo más reciente"
   },
   "whatsNew": {
     "title": "Novedades",

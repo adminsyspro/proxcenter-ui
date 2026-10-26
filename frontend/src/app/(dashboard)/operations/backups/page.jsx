@@ -1420,7 +1420,7 @@ return () => clearTimeout(timer)
                 )}
                 <List dense>
                   {explorerArchives.map((file, idx) => {
-                    // .blob → direct download via /file-download
+                    // .blob → direct download via /download-decoded
                     // .pxar.didx → browsable
                     // .img.fidx → browsed through a PVE storage bound to this datastore
                     const isBlob = typeof file.name === 'string' && file.name.endsWith('.blob')

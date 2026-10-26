@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 
-import { EXTRA_MOCKS } from '../demo-api'
+import { staleRecommendations } from '@/components/automation/drs/recommendationPruning'
+
+import { EXTRA_MOCKS, demoResponse } from '../demo-api'
 
 /**
  * Guards the shapes whose drift produced a visible defect on the live demo,
@@ -131,6 +133,36 @@ describe('demo mock: shapes the screens actually read', () => {
     expect(sites.map((s: any) => s.role)).toEqual(['primary', 'dr'])
   })
 
+  it('site recovery status lists both engines', () => {
+    // site-recovery/page.tsx falls back to ['rbd'] when engines is missing,
+    // and the create dialog then shows ZFS as "Coming soon".
+    expect(get('GET:/api/v1/orchestrator/replication/status').engines).toEqual(['rbd', 'zfs'])
+  })
+
+  it('drs recommendations agree with the metrics the page prunes them against', () => {
+    // automation/drs/page.tsx rejects a recommendation whose source node is
+    // not above its cluster's average memory; the demo cannot reject, so a
+    // stale one was rejected again on every refresh.
+    const recs = get('GET:/api/v1/orchestrator/drs/recommendations')
+    const metrics = get('GET:/api/v1/orchestrator/metrics')
+    expect(recs.length).toBeGreaterThan(0)
+    expect(staleRecommendations(recs, metrics)).toEqual([])
+    const nodes = metrics['demo-pve-cluster-001'].nodes
+    const avg = nodes.reduce((sum: number, n: any) => sum + n.memory_usage, 0) / nodes.length
+    for (const rec of recs) {
+      expect(nodes.find((n: any) => n.node === rec.target_node).memory_usage, `${rec.id} target`).toBeLessThan(avg)
+      // drsReason.ts translates the code; free text stays English everywhere.
+      expect(['highMemory', 'homogenization'], `${rec.id} reason_code`).toContain(rec.reason_code)
+    }
+  })
+
+  it('drs history rows carry a reason code', () => {
+    // MigrationHistoryTab shows "Reason not recorded" without one.
+    const migrations = get('GET:/api/v1/orchestrator/drs/migrations')
+    expect(migrations.length).toBeGreaterThan(0)
+    for (const m of migrations) expect(m.reason_code, m.id).toBe('homogenization')
+  })
+
   it('ha config is a bare HaConfig, the shape useHaConfig types', () => {
     const cfg = get('GET:/api/v1/ha/config')
     for (const k of ['enabled', 'vip', 'deploymentState', 'deploymentStep', 'nodes']) {
@@ -160,5 +192,32 @@ describe('demo mock: shapes the screens actually read', () => {
         expect(typeof c.earned).toBe('number')
       }
     }
+  })
+})
+
+describe('demo mock: endpoints keyed by an id in the path', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  const fetchDemo = async (path: string) => {
+    vi.stubEnv('DEMO_MODE', 'true')
+    const res = await demoResponse(new Request(`http://localhost${path}`))
+    return res!.json()
+  }
+
+  it('replicable vms are a bare ReplicableVM list', async () => {
+    // CreateJobDialog maps the response straight away: { data: [] } crashed it.
+    const vms = await fetchDemo('/api/v1/connections/demo-pve-cluster-001/replicable-vms?engine=zfs')
+    expect(Array.isArray(vms)).toBe(true)
+    expect(vms.length).toBeGreaterThan(0)
+    for (const k of ['vmid', 'node', 'diskGb', 'mixed', 'unsupported']) expect(vms[0]).toHaveProperty(k)
+  })
+
+  it('drs migration check is a MigrationCheckResult', async () => {
+    const check = await fetchDemo('/api/v1/orchestrator/drs/check-migration/101?connection_id=demo-pve-cluster-001')
+    expect(check.can_migrate).toBe(true)
+    expect(check.local_disks).toEqual([])
+    expect(check.total_shared_size).toBe(check.shared_disks[0].size)
   })
 })

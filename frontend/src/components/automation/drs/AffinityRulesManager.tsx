@@ -353,18 +353,18 @@ export default function AffinityRulesManager({
           {/* Tag-based rules info */}
           {tagRules.length > 0 && (
             <Alert severity="info" sx={{ mb: 2 }} icon={<InfoIcon />}>
-              <Typography variant="body2" dangerouslySetInnerHTML={{
-                __html: t('drsPage.rulesFromTags', { count: tagRules.length })
-              }} />
+              <Typography variant="body2">
+                {t.rich('drsPage.rulesFromTags', { count: tagRules.length, strong: chunks => <strong>{chunks}</strong> })}
+              </Typography>
             </Alert>
           )}
 
           {/* Pool-based rules info */}
           {poolRules.length > 0 && (
             <Alert severity="info" sx={{ mb: 2 }} icon={<InfoIcon />}>
-              <Typography variant="body2" dangerouslySetInnerHTML={{
-                __html: t('drsPage.rulesFromPools', { count: poolRules.length })
-              }} />
+              <Typography variant="body2">
+                {t.rich('drsPage.rulesFromPools', { count: poolRules.length, strong: chunks => <strong>{chunks}</strong> })}
+              </Typography>
             </Alert>
           )}
 

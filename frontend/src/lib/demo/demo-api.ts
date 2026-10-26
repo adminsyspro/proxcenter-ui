@@ -210,6 +210,31 @@ function demoClusterAverages(connId: string): { cpu: number, ram: number, memUse
   }
 }
 
+interface DemoDrsNode { node: string, mem: number, maxmem: number }
+
+// Guests the demo affinity rules name: DRS does not move them for load.
+const DEMO_DRS_RULE_VMIDS = new Set([100, 101, 117, 118, 270, 272, 273])
+
+/**
+ * The DRS view of a cluster's load spread: nodes above the average memory
+ * (the 2 points the DRS page tolerates before it rejects a recommendation as
+ * stale) to move guests off, nodes below it to move them to, hottest and
+ * coolest first, and the running VMs free to move.
+ */
+function demoDrsLoad(connId: string): { hot: DemoDrsNode[], cool: DemoDrsNode[], guests: any[] } {
+  const nodes: DemoDrsNode[] = demoNodes(connId).map(n => ({
+    node: n.node,
+    mem: Math.round(((n.mem || 0) / (n.maxmem || 1)) * 1000) / 10,
+    maxmem: n.maxmem || 1,
+  }))
+  const avg = nodes.length > 0 ? nodes.reduce((sum, n) => sum + n.mem, 0) / nodes.length : 0
+  return {
+    hot: nodes.filter(n => n.mem > avg + 2).sort((a, b) => b.mem - a.mem),
+    cool: nodes.filter(n => n.mem < avg).sort((a, b) => a.mem - b.mem),
+    guests: demoResources(connId).filter(g => g.type === 'qemu' && g.status === 'running' && !DEMO_DRS_RULE_VMIDS.has(g.vmid)),
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Dynamic RRD data generator
 // ---------------------------------------------------------------------------
@@ -2414,6 +2439,9 @@ export const EXTRA_MOCKS: MockDataMap = {
   },
   'GET:/api/v1/templates/custom-images': { data: [] },
 
+  // --- Bulk migrations: none running in the demo ---
+  'GET:/api/v1/migrations/batches': { data: [] },
+
   // --- Reports (raw arrays: see the note on generateReportHistory) ---
   'GET:/api/v1/orchestrator/reports/types': DEMO_REPORT_TYPES,
   'GET:/api/v1/orchestrator/reports/languages': [
@@ -2989,29 +3017,29 @@ export const EXTRA_MOCKS: MockDataMap = {
   },
   get 'GET:/api/v1/orchestrator/drs/recommendations'() {
     const now = Date.now()
-    const nodes = ['pve-node-01','pve-node-02','pve-node-03','pve-node-04','pve-node-05','pve-node-06','pve-node-07','pve-node-08','pve-node-09','pve-node-10','pve-node-11','pve-node-12']
-    const vmNames = ['web-prod-01','db-master','api-gateway','redis-cache','monitoring','mail-server','ci-runner','vault-prod','elastic-node-01','proxy-lb']
-    const reasons = [
-      'Memory imbalance: pve-node-02 at 82.3% vs pve-node-08 at 45.1%',
-      'CPU imbalance: pve-node-03 at 8.2% vs pve-node-10 at 1.1%',
-      'Memory pressure on pve-node-09 (78.1%) — moving VM to pve-node-04 (52.3%)',
-      'Homogenization: spreading VMs more evenly across nodes',
-      'Storage I/O contention on pve-node-07 — relocate to pve-node-11',
-    ]
-    return Array.from({ length: 5 }, (_, i) => {
-      const src = nodes[i * 2 % nodes.length]
-      const tgt = nodes[(i * 2 + 5) % nodes.length]
+    const { hot, cool, guests } = demoDrsLoad('demo-pve-cluster-001')
+    const moves = hot.slice(0, 5).map((src, i) => {
+      const tgt = cool[i % cool.length]
+      const guest = guests.filter(g => g.node === src.node).sort((a, b) => (b.mem || 0) - (a.mem || 0))[0]
+      return guest && tgt ? { src, tgt, guest } : null
+    }).filter(Boolean) as { src: DemoDrsNode, tgt: DemoDrsNode, guest: any }[]
+    return moves.map(({ src, tgt, guest }, i) => {
+      const to = Math.max(0, src.mem - ((guest.mem || 0) / src.maxmem) * 100)
+      const highMemory = i === 0
+      const params = { from: src.mem.toFixed(1), to: to.toFixed(1) }
       return {
         id: `rec-${String(i + 1).padStart(3, '0')}`,
         connection_id: 'demo-pve-cluster-001',
-        vmid: 100 + i * 3,
-        vm_name: vmNames[i],
+        vmid: guest.vmid,
+        vm_name: guest.name,
         guest_type: 'qemu',
-        source_node: src,
-        target_node: tgt,
-        reason: reasons[i],
-        priority: ['medium','high','medium','low','high'][i],
-        score: [78, 85, 72, 65, 81][i],
+        source_node: src.node,
+        target_node: tgt.node,
+        reason: highMemory ? 'High memory usage on source node' : `Homogenization: reduce load from ${params.from}% to ${params.to}%`,
+        reason_code: highMemory ? 'highMemory' : 'homogenization',
+        reason_params: highMemory ? {} : params,
+        priority: ['high', 'high', 'medium', 'medium', 'low'][i],
+        score: [85, 81, 78, 72, 65][i],
         created_at: new Date(now - (i + 1) * 600000).toISOString(),
         status: 'pending',
         confirmation_count: 3,
@@ -3021,37 +3049,34 @@ export const EXTRA_MOCKS: MockDataMap = {
     })
   },
   get 'GET:/api/v1/orchestrator/drs/migrations'() {
+    // Two balancing moves already done: each guest now sits on the cool node
+    // it was moved to, so the history and the inventory agree.
     const now = Date.now()
-    return [
-      {
-        id: 'mig-001',
-        recommendation_id: 'rec-prev-001',
+    const { hot, cool, guests } = demoDrsLoad('demo-pve-cluster-001')
+    return cool.slice(0, 2).map((tgt, i) => {
+      const guest = guests.find(g => g.node === tgt.node)
+      const src = hot[i % hot.length]
+      if (!guest || !src) return null
+      const params = { from: (src.mem + 6).toFixed(1), to: src.mem.toFixed(1) }
+      const startedAt = now - (i + 1) * 3600000
+      return {
+        id: `mig-${String(i + 1).padStart(3, '0')}`,
+        recommendation_id: `rec-prev-${String(i + 1).padStart(3, '0')}`,
         connection_id: 'demo-pve-cluster-001',
-        vmid: 115,
-        vm_name: 'web-prod-02',
+        vmid: guest.vmid,
+        vm_name: guest.name,
         guest_type: 'qemu',
-        source_node: 'pve-node-06',
-        target_node: 'pve-node-01',
-        task_id: 'UPID:pve-node-01:000ABCDE:12345678:67890ABC:qmigrate:115:root@pam:',
-        started_at: new Date(now - 3600000).toISOString(),
-        completed_at: new Date(now - 3300000).toISOString(),
+        source_node: src.node,
+        target_node: tgt.node,
+        reason: `Homogenization: reduce load from ${params.from}% to ${params.to}%`,
+        reason_code: 'homogenization',
+        reason_params: params,
+        task_id: `UPID:${tgt.node}:000ABCD${i}:1234567${i}:67890AB${i}:qmigrate:${guest.vmid}:root@pam:`,
+        started_at: new Date(startedAt).toISOString(),
+        completed_at: new Date(startedAt + 300000).toISOString(),
         status: 'completed',
-      },
-      {
-        id: 'mig-002',
-        recommendation_id: 'rec-prev-002',
-        connection_id: 'demo-pve-cluster-001',
-        vmid: 128,
-        vm_name: 'db-replica-01',
-        guest_type: 'qemu',
-        source_node: 'pve-node-09',
-        target_node: 'pve-node-04',
-        task_id: 'UPID:pve-node-04:000ABCDF:12345679:67890ABD:qmigrate:128:root@pam:',
-        started_at: new Date(now - 7200000).toISOString(),
-        completed_at: new Date(now - 6900000).toISOString(),
-        status: 'completed',
-      },
-    ]
+      }
+    }).filter(Boolean)
   },
   'GET:/api/v1/orchestrator/drs/settings': {
     enabled: true,
@@ -3141,6 +3166,9 @@ export const EXTRA_MOCKS: MockDataMap = {
   get 'GET:/api/v1/orchestrator/replication/status'() {
     const now = Date.now()
     return {
+      // The create dialog offers only the engines listed here: without them
+      // it falls back to RBD and shows ZFS as "Coming soon".
+      engines: ['rbd', 'zfs'],
       // SiteCard (DashboardTab.tsx) reads cluster_id / role / node_count /
       // vm_count. The former id / type / nodes / vms keys left both cards
       // labelled "DR" with an empty "nodes · VMs" line.
@@ -4259,6 +4287,34 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
   // Each of these is reachable by clicking a row the demo just seeded, and
   // lookupMock cannot serve them: it strips the query string and knows nothing
   // of the id in the path.
+  // Site Recovery create dialog: the guests it may replicate, read once the
+  // source cluster is picked. Without it the dialog crashed on { data: [] }.
+  const replicableVMs = cleanPath.match(/^\/api\/v1\/connections\/([^/]+)\/replicable-vms$/)
+  if (replicableVMs) {
+    const guests = demoResources(replicableVMs[1]).filter(g => g.type === 'qemu' && !g.template)
+    return NextResponse.json(
+      guests.map(g => ({ vmid: g.vmid, node: g.node, diskGb: Math.round((g.maxdisk || 0) / 1024 ** 3), mixed: false, unsupported: false })),
+      { headers: demoHeaders },
+    )
+  }
+
+  // DRS recommendation drawer: every demo guest runs on the shared Ceph pool,
+  // so the move needs no local disk copy.
+  const migrationCheck = cleanPath.match(/^\/api\/v1\/orchestrator\/drs\/check-migration\/(\d+)$/)
+  if (migrationCheck) {
+    const vmid = Number(migrationCheck[1])
+    const guest = demoResources(urlObj.searchParams.get('connection_id') || '').find(g => g.vmid === vmid)
+    const size = guest?.maxdisk || 0
+    return NextResponse.json({
+      can_migrate: true,
+      migration_safe: true,
+      local_disks: [],
+      shared_disks: [{ device: 'scsi0', storage: 'CephStoragePool', volume: `CephStoragePool:vm-${vmid}-disk-0`, size, size_str: `${Math.round(size / 1024 ** 3)} GiB`, is_shared: true, storage_type: 'rbd' }],
+      total_local_size: 0,
+      total_shared_size: size,
+    }, { headers: demoHeaders })
+  }
+
   const deploymentDetail = cleanPath.match(/^\/api\/v1\/templates\/deployments\/([^/]+)$/)
   if (deploymentDetail) {
     const found = generateDeployments().find(d => d.id === deploymentDetail[1])

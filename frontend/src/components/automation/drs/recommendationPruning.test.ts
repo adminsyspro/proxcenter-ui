@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   excessRecommendations,
+  firstRejections,
   isMandatoryRecommendation,
   keptRecommendations,
   staleRecommendations,
@@ -75,5 +76,15 @@ describe('staleRecommendations', () => {
     ]
 
     expect(staleRecommendations(recs, metrics)).toEqual([])
+  })
+})
+
+describe('firstRejections', () => {
+  it('returns each recommendation once, however often it comes back', () => {
+    const rejected = new Set<string>()
+
+    expect(ids(firstRejections([rec('a'), rec('b')], rejected))).toEqual(['a', 'b'])
+    expect(ids(firstRejections([rec('a'), rec('b'), rec('c')], rejected))).toEqual(['c'])
+    expect(firstRejections([rec('a')], rejected)).toEqual([])
   })
 })

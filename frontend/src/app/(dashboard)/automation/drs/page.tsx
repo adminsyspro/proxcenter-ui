@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
@@ -86,7 +86,7 @@ import MigrationHistoryTab from '@/components/automation/drs/MigrationHistoryTab
 import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
 import { migrationProgressMessage } from '@/components/automation/drs/migrationProgress'
 import { drsReasonText } from '@/components/automation/drs/drsReason'
-import { excessRecommendations, keptRecommendations, staleRecommendations } from '@/components/automation/drs/recommendationPruning'
+import { excessRecommendations, firstRejections, keptRecommendations, staleRecommendations } from '@/components/automation/drs/recommendationPruning'
 import DrsActionNoticeDialog from '@/components/automation/drs/DrsActionNoticeDialog'
 import AffinityRulesManager, {
   type AffinityRule, 
@@ -1571,14 +1571,21 @@ return allVMsData.data.vms.map(vm => ({
     [recommendations, maintenanceNodeNames]
   )
 
+  // Recommendations the page already rejected on its own, never sent twice
+  const autoRejectedIds = useRef(new Set<string>())
+
+  const autoReject = useCallback((recs: DRSRecommendation[]) => {
+    const fresh = firstRejections(recs, autoRejectedIds.current)
+    fresh.forEach(rec => {
+      fetch(`/api/v1/orchestrator/drs/recommendations/${rec.id}/reject`, { method: 'POST' }).catch(() => {})
+    })
+    return fresh.length
+  }, [])
+
   // Auto-reject excess recommendations per cluster (lowest score first),
   // never an evacuation or a rule violation
   useEffect(() => {
-    const toReject = excessRecommendations(allPendingRecs, maxPending)
-    if (toReject.length === 0) return
-    toReject.forEach(rec => {
-      fetch(`/api/v1/orchestrator/drs/recommendations/${rec.id}/reject`, { method: 'POST' }).catch(() => {})
-    })
+    if (autoReject(excessRecommendations(allPendingRecs, maxPending)) === 0) return
     // Refresh after cleanup
     const timer = setTimeout(() => mutateRecs(), 1000)
     return () => clearTimeout(timer)
@@ -1588,12 +1595,9 @@ return allVMsData.data.vms.map(vm => ({
   // so they stay in sync with live cluster state. An evacuation or a rule violation was not raised by load.
   useEffect(() => {
     if (!metricsData || allPendingRecs.length === 0) return
-    const staleRecs = staleRecommendations(allPendingRecs, metricsData as any)
-    if (staleRecs.length === 0) return
-    console.log(`[DRS] Auto-rejecting ${staleRecs.length} stale recommendation(s) — source node(s) no longer above cluster average`)
-    staleRecs.forEach(rec => {
-      fetch(`/api/v1/orchestrator/drs/recommendations/${rec.id}/reject`, { method: 'POST' }).catch(() => {})
-    })
+    const rejected = autoReject(staleRecommendations(allPendingRecs, metricsData as any))
+    if (rejected === 0) return
+    console.log(`[DRS] Auto-rejecting ${rejected} stale recommendation(s) — source node(s) no longer above cluster average`)
     const timer = setTimeout(() => mutateRecs(), 1000)
     return () => clearTimeout(timer)
   }, [allPendingRecs, metricsData])

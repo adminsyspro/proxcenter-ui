@@ -1,6 +1,7 @@
 import useSWR from 'swr'
 import { useSWRFetch } from './useSWRFetch'
 import { useRefreshInterval } from './useRefreshInterval'
+import { firstRejections } from '@/components/automation/drs/recommendationPruning'
 
 const fetcher = (url: string) => fetch(url).then(res => {
   if (!res.ok) throw new Error('Failed to fetch')
@@ -12,6 +13,9 @@ export function useDRSStatus(isEnterprise: boolean) {
   return useSWR(isEnterprise ? '/api/v1/orchestrator/drs/status' : null, fetcher, { refreshInterval })
 }
 
+// Stale recommendations already dismissed, never sent twice
+const dismissedStaleIds = new Set<string>()
+
 const recsFetcher = async (url: string) => {
   const res = await fetch(url)
   if (!res.ok) throw new Error('Failed to fetch')
@@ -21,7 +25,7 @@ const recsFetcher = async (url: string) => {
   if (Array.isArray(data)) {
     const stale = data.filter((r: any) => r.status === 'stale')
     if (stale.length > 0) {
-      for (const r of stale) {
+      for (const r of firstRejections(stale, dismissedStaleIds)) {
         fetch(`/api/v1/orchestrator/drs/recommendations/${r.id}/reject`, { method: 'POST' }).catch(() => {})
       }
       // Return only non-stale recommendations

@@ -65,3 +65,16 @@ export const staleRecommendations = <T extends PrunableRecommendation>(recs: T[]
 
     return !!source && source.memory_usage <= avgMem + 2
   })
+
+/**
+ * The recommendations not rejected yet, now recorded in `rejected`. A reject
+ * that does not take (a role without DRS management, the demo) leaves the
+ * recommendation pending: sending it again on every refresh looped.
+ */
+export const firstRejections = <T extends { id: string }>(recs: T[], rejected: Set<string>): T[] =>
+  recs.filter(rec => {
+    if (rejected.has(rec.id)) return false
+    rejected.add(rec.id)
+
+    return true
+  })

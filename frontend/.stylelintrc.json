@@ -1,6 +1,6 @@
 {
   "plugins": [
-    "stylelint-use-logical-spec"
+    "stylelint-plugin-logical-css"
   ],
   "overrides": [
     {
@@ -11,6 +11,15 @@
     }
   ],
   "rules": {
-    "liberty/use-logical-spec": "always"
+    "logical-css/require-logical-properties": [
+      true,
+      {
+        "ignore": [
+          "overflow-x",
+          "overflow-y"
+        ]
+      }
+    ],
+    "logical-css/require-logical-keywords": true
   }
 }

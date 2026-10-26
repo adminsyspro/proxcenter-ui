@@ -115,7 +115,7 @@
     "postcss-styled-syntax": "0.7.4",
     "prettier": "3.9.10",
     "stylelint": "17.16.0",
-    "stylelint-use-logical-spec": "5.0.1",
+    "stylelint-plugin-logical-css": "2.1.0",
     "stylis": "4.4.0",
     "stylis-plugin-rtl": "2.1.1",
     "tailwindcss": "4.3.3",

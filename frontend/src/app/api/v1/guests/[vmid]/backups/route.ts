@@ -214,7 +214,9 @@ export async function GET(
               const nsParam = ns ? `?ns=${encodeURIComponent(ns)}` : ''
               const snapshots = await pbsFetch<any[]>(
                 conn,
-                `/admin/datastore/${encodeURIComponent(storeName)}/snapshots${nsParam}`
+                `/admin/datastore/${encodeURIComponent(storeName)}/snapshots${nsParam}`,
+                {},
+                { slowRead: true }
               )
 
               return (snapshots || [])

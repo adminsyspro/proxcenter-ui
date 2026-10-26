@@ -140,8 +140,10 @@ describe('ConfigBackupTab import', () => {
     expect(clicks).toHaveLength(1)
     expect(screen.getByText(/the restored API tokens cannot be verified here/)).toBeInTheDocument()
     expect(screen.getByText(/This backup comes from another instance/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Open License' })).toHaveAttribute('href', '/settings?tab=license')
-    expect(screen.getByRole('button', { name: /Reload the page/ })).toBeInTheDocument()
+    // The page stays aria-hidden until the confirmation dialog has finished
+    // closing, which a slow runner can still be doing here: wait for it.
+    expect(await screen.findByRole('link', { name: 'Open License' })).toHaveAttribute('href', '/settings?tab=license')
+    expect(await screen.findByRole('button', { name: /Reload the page/ })).toBeInTheDocument()
   })
 
   it('restores without the safety export when it is unticked, and keeps the form on a refusal', async () => {

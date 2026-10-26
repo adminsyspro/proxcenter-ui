@@ -90,7 +90,9 @@ export async function GET(
 
       const snapshots = await pbsFetch<any[]>(
         conn,
-        `/admin/datastore/${encodeURIComponent(datastore)}/snapshots?${snapshotParams}`
+        `/admin/datastore/${encodeURIComponent(datastore)}/snapshots?${snapshotParams}`,
+        {},
+        { slowRead: true }
       )
 
       const snapshot = snapshots?.find(s => String(s['backup-time']) === timestamp)
@@ -145,7 +147,7 @@ export async function GET(
 
       if (ns) catalogParams.set('ns', ns)
 
-      const catalog = await pbsFetch<any[]>(conn, `${catalogPath}?${catalogParams}`)
+      const catalog = await pbsFetch<any[]>(conn, `${catalogPath}?${catalogParams}`, {}, { slowRead: true })
 
       // Transformer les entrées du catalogue
       const entries = (catalog || []).map((entry: any) => {

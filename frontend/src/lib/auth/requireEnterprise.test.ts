@@ -173,6 +173,25 @@ describe('resolved marker (issue #633)', () => {
     const { getServerLicense } = await import('./requireEnterprise')
     expect((await getServerLicense()).resolved).toBe(false)
   })
+
+  it('bounds the call and falls back when the orchestrator never answers', async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => AbortSignal.abort(new DOMException('timed out', 'TimeoutError')))
+    const fetchMock = vi.fn((_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        if (init.signal?.aborted) reject(init.signal.reason)
+        init.signal?.addEventListener('abort', () => reject(init.signal!.reason))
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const { getServerLicense } = await import('./requireEnterprise')
+
+    const license = await getServerLicense()
+
+    expect(timeoutSpy).toHaveBeenCalledWith(10_000)
+    expect(license.enterprise).toBe(false)
+    expect(license.resolved).toBe(false)
+    timeoutSpy.mockRestore()
+  })
 })
 
 describe('P1: expired handling', () => {

@@ -6,6 +6,7 @@ import { getNodeIps, setNodeIps, getFailoverLock, setFailoverLock, incrementFail
 import { invalidateConnectionCache } from "../connections/getConnection"
 import { isConnectionLicenseExcluded, licenseExcludedError, PveLicenseExcludedError } from "../license/exclusions"
 import { safeLog } from "../log/sanitize"
+import { readTimeoutEnv } from "../http/timeoutEnv"
 
 export { PveLicenseExcludedError }
 
@@ -16,27 +17,10 @@ export { PveLicenseExcludedError }
 const CONNECT_TIMEOUT = 5_000
 
 /**
- * Reads a positive millisecond budget from the environment, falling back when
- * the variable is absent or not a usable number.
- */
-function readTimeoutEnv(name: string, fallback: number): number {
-  const raw = process.env[name]
-  if (!raw) return fallback
-
-  const parsed = Number(raw)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    console.warn(`[pve] Ignoring invalid ${name}="${raw}", using ${fallback}ms instead`)
-    return fallback
-  }
-
-  return parsed
-}
-
-/**
  * Default per-request budget, sized for the fast endpoints this client polls
  * most often (/cluster/resources, /nodes, /cluster/status).
  */
-export const PVE_DEFAULT_TIMEOUT_MS = readTimeoutEnv("PVE_TIMEOUT_MS", 8_000)
+export const PVE_DEFAULT_TIMEOUT_MS = readTimeoutEnv("PVE_TIMEOUT_MS", 8_000, "pve")
 
 /**
  * Budget for reads that are slow by nature, where PVE enumerates every
@@ -44,7 +28,7 @@ export const PVE_DEFAULT_TIMEOUT_MS = readTimeoutEnv("PVE_TIMEOUT_MS", 8_000)
  * storages, so a datacenter with many PBS targets legitimately needs 20s or
  * more. Callers opt in explicitly, the default stays short for polling.
  */
-export const PVE_SLOW_READ_TIMEOUT_MS = readTimeoutEnv("PVE_SLOW_READ_TIMEOUT_MS", 30_000)
+export const PVE_SLOW_READ_TIMEOUT_MS = readTimeoutEnv("PVE_SLOW_READ_TIMEOUT_MS", 30_000, "pve")
 
 /** Short budget for liveness probes: primary recovery and failover candidates. */
 const PVE_PROBE_TIMEOUT_MS = 5_000

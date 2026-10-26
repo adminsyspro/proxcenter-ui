@@ -31,7 +31,7 @@ import type { Dispatcher } from 'undici'
 import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from '@/lib/connections/getConnection'
 import type { PbsConn, PveConn } from '@/lib/connections/getConnection'
 import { prisma } from '@/lib/db/prisma'
-import { getInsecureAgent } from '@/lib/proxmox/client'
+import { getPbsAgent } from '@/lib/proxmox/pbs-client'
 import { resolveFileRestoreTarget } from '@/lib/proxmox/fileRestoreTarget'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { assertVdcPbsAccess } from '@/lib/vdc/scope'
@@ -196,7 +196,7 @@ export function sourceRequest(src: ResolvedSource, item: Pick<GuestRestoreItem, 
   return {
     url: `${base}/api2/json/admin/datastore/${encodeURIComponent(src.datastore)}/pxar-file-download?${params}`,
     headers: { Authorization: `PBSAPIToken=${src.conn.apiToken}` },
-    dispatcher: src.conn.insecureDev ? getInsecureAgent() : undefined,
+    dispatcher: getPbsAgent(src.conn.insecureDev),
     tar: item.directory,
     proxied: false,
   }

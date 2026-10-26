@@ -83,10 +83,12 @@ function updateGuest(vm: TreeGuest, d: VmUpdate): TreeGuest {
   const newDisk = d.disk ?? vm.disk
   const newMaxdisk = d.maxdisk ?? vm.maxdisk
   const newName = d.name ?? vm.name
+  // null = the lock was released; absent = a sender that does not track locks (demo).
+  const newLock = d.lock === undefined ? vm.lock : (d.lock ?? undefined)
   if (vm.status === newStatus && vm.cpu === newCpu && vm.mem === newMem &&
       vm.maxmem === newMaxmem && vm.disk === newDisk && vm.maxdisk === newMaxdisk &&
-      vm.name === newName) return vm
-  return { ...vm, status: newStatus, cpu: newCpu, mem: newMem, maxmem: newMaxmem, disk: newDisk, maxdisk: newMaxdisk, name: newName }
+      vm.name === newName && vm.lock === newLock) return vm
+  return { ...vm, status: newStatus, cpu: newCpu, mem: newMem, maxmem: newMaxmem, disk: newDisk, maxdisk: newMaxdisk, name: newName, lock: newLock }
 }
 
 /** The guest a vm:added creates, with the defaults the tree expects. */

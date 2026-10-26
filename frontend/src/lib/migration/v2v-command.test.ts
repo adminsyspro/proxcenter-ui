@@ -125,6 +125,22 @@ describe("buildV2vCommand carries --root on every input path", () => {
     expect(cmd).toContain("--root '/dev/sda1'")
   })
 
+  // virt-v2v reads everything after `--` as a positional argument: the options
+  // must come first and the guest name last, or -i libvirt finds no guest name.
+  it.each([
+    ["vCenter", vcenter],
+    ["Hyper-V over the network", { ...base, sourceType: "hyperv" }],
+  ])("%s ends with the option terminator and the guest name", (_label, config) => {
+    const cmd = build(config, { root: "/dev/sda1" })
+    expect(cmd.endsWith(" -- 'NginX'")).toBe(true)
+    expect(cmd.indexOf(" -- ")).toBeGreaterThan(cmd.indexOf("--machine-readable"))
+  })
+
+  it("keeps a guest name that starts with a dash after the terminator", () => {
+    const cmd = build({ ...vcenter, sourceVmName: "-o null" }, { root: "/dev/sda1" })
+    expect(cmd.endsWith(" -- '-o null'")).toBe(true)
+  })
+
   it("Nutanix requires disk paths", () => {
     expect(() => build({ ...base, sourceType: "nutanix" })).toThrow(/diskPaths/)
   })

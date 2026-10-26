@@ -584,11 +584,17 @@ describe('restore drill schedules (roadmap#35)', () => {
   it('reads a 204 as no content instead of failing on an empty body', async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, status: 204, json: async () => { throw new SyntaxError('Unexpected end of JSON input') }, text: async () => '' })
     const { getOrchestratorClient } = await import('./client')
-    const res = await getOrchestratorClient().deleteRestoreDrillSchedule('s/1')
+    const res = await getOrchestratorClient().deleteRestoreDrillSchedule('s-1')
     expect(res.data).toBeUndefined()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe('http://localhost:8080/api/v1/restore-drills/schedules/s%2F1')
+    expect(url).toBe('http://localhost:8080/api/v1/restore-drills/schedules/s-1')
     expect(init.method).toBe('DELETE')
+  })
+
+  it('refuses a schedule id that is not a plain identifier before any request', async () => {
+    const { getOrchestratorClient, OrchestratorPathError } = await import('./client')
+    expect(() => getOrchestratorClient().deleteRestoreDrillSchedule('s/1')).toThrow(OrchestratorPathError)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('maps every schedule call to its orchestrator route', async () => {

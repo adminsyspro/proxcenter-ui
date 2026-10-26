@@ -1,7 +1,7 @@
 // src/app/api/v1/orchestrator/reports/schedules/[id]/run/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
-import { orchestratorFetch } from '@/lib/orchestrator'
+import { orchestratorFetch, orchestratorPath } from '@/lib/orchestrator'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withAudit } from '@/lib/audit/withAudit'
 
@@ -20,7 +20,7 @@ async function handlePost(
 
     const { id } = await params
 
-    const data = await orchestratorFetch(`/reports/schedules/${id}/run`, {
+    const data = await orchestratorFetch(orchestratorPath`/reports/schedules/${id}/run`, {
       method: 'POST'
     })
 

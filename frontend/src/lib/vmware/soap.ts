@@ -199,12 +199,35 @@ export async function soapLogout(session: SoapSession): Promise<void> {
   await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS).catch(() => {})
 }
 
-/** Extract a property value from SOAP XML */
+/** Extract a property value from SOAP XML (raw: a nested value keeps its child elements) */
 export function extractProp(xml: string, propName: string): string {
   const regex = new RegExp(
     `<propSet>\\s*<name>${propName.replaceAll(".", "\\.")}</name>\\s*<val[^>]*>([\\s\\S]*?)</val>\\s*</propSet>`
   )
   return regex.exec(xml)?.[1] || ""
+}
+
+const XML_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" }
+
+/**
+ * The text of an XML text node: the five predefined entities and numeric
+ * character references are decoded. vSphere escapes `'`, `"`, `&`, `<` and
+ * `>` in every name it returns (VM names, datastore paths, labels), so a
+ * value read from the answer and then used as a path or shown to the user
+ * must go through here, once.
+ */
+export function decodeXmlText(value: string): string {
+  if (!value.includes("&")) return value
+  return value.replaceAll(/&(#x[0-9a-fA-F]{1,6}|#\d{1,7}|amp|lt|gt|quot|apos);/g, (match, ref: string) => {
+    if (ref[0] !== "#") return XML_ENTITIES[ref] ?? match
+    const code = ref[1] === "x" || ref[1] === "X" ? Number.parseInt(ref.slice(2), 16) : Number.parseInt(ref.slice(1), 10)
+    return Number.isInteger(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match
+  })
+}
+
+/** A text property of the answer, decoded. For leaf values only, never for a nested one. */
+export function extractTextProp(xml: string, propName: string): string {
+  return decodeXmlText(extractProp(xml, propName))
 }
 
 /** Get full VM config via SOAP PropertyCollector */
@@ -986,10 +1009,10 @@ export function parseNicDevices(devicesXml: string): EsxiNicInfo[] {
     const n = nicMatch[2]
     const slot = Number(n.match(/<pciSlotNumber>(\d+)<\/pciSlotNumber>/)?.[1])
     nics.push({
-      label: n.match(/<label>([^<]*)<\/label>/)?.[1] || "",
+      label: decodeXmlText(n.match(/<label>([^<]*)<\/label>/)?.[1] || ""),
       type: nicMatch[1],
       macAddress: n.match(/<macAddress>([^<]*)<\/macAddress>/)?.[1] || "",
-      network: n.match(/<summary>([^<]*)<\/summary>/)?.[1] || "",
+      network: decodeXmlText(n.match(/<summary>([^<]*)<\/summary>/)?.[1] || ""),
       ...(Number.isInteger(slot) && slot > 0 && { pciSlot: slot }),
     })
   }
@@ -997,16 +1020,16 @@ export function parseNicDevices(devicesXml: string): EsxiNicInfo[] {
 }
 
 export function parseVmConfig(xml: string): EsxiVmConfig {
-  const name = extractProp(xml, "name")
-  const guestOS = extractProp(xml, "config.guestFullName")
-  const guestId = extractProp(xml, "config.guestId")
+  const name = extractTextProp(xml, "name")
+  const guestOS = extractTextProp(xml, "config.guestFullName")
+  const guestId = extractTextProp(xml, "config.guestId")
   const numCPU = Number.parseInt(extractProp(xml, "config.hardware.numCPU"), 10) || 1
   const numCoresPerSocket = Number.parseInt(extractProp(xml, "config.hardware.numCoresPerSocket"), 10) || 1
   const memoryMB = Number.parseInt(extractProp(xml, "config.hardware.memoryMB"), 10) || 512
   const firmware = extractProp(xml, "config.firmware") || "bios"
-  const uuid = extractProp(xml, "config.uuid")
+  const uuid = extractTextProp(xml, "config.uuid")
   const vmxVersion = extractProp(xml, "config.version")
-  const vmPathName = extractProp(xml, "config.files.vmPathName")
+  const vmPathName = extractTextProp(xml, "config.files.vmPathName")
   const powerState = extractProp(xml, "runtime.powerState")
 
   // Storage
@@ -1042,10 +1065,10 @@ export function parseVmConfig(xml: string): EsxiVmConfig {
   let diskMatch
   while ((diskMatch = diskRegex.exec(devicesXml)) !== null) {
     const d = diskMatch[1]
-    const label = d.match(/<label>([^<]*)<\/label>/)?.[1] || ""
+    const label = decodeXmlText(d.match(/<label>([^<]*)<\/label>/)?.[1] || "")
     const capacityBytes = Number.parseInt(d.match(/<capacityInBytes>(\d+)<\/capacityInBytes>/)?.[1] || "0", 10) ||
       (Number.parseInt(d.match(/<capacityInKB>(\d+)<\/capacityInKB>/)?.[1] || "0", 10) * 1024)
-    const fileName = d.match(/<fileName>([^<]*)<\/fileName>/)?.[1] || ""
+    const fileName = decodeXmlText(d.match(/<fileName>([^<]*)<\/fileName>/)?.[1] || "")
     const thinProvisioned = d.includes("<thinProvisioned>true</thinProvisioned>")
 
     // Parse "[datastoreName] relative/path.vmdk"
@@ -1420,10 +1443,10 @@ export async function soapListVMs(
       const propVal = propMatch[2]
 
       switch (propName) {
-        case "name": name = propVal; break
+        case "name": name = decodeXmlText(propVal); break
         case "runtime.powerState": powerState = propVal; break
-        case "config.guestId": guestId = propVal; break
-        case "config.guestFullName": guestOS = propVal; break
+        case "config.guestId": guestId = decodeXmlText(propVal); break
+        case "config.guestFullName": guestOS = decodeXmlText(propVal); break
         case "config.hardware.numCPU": cpu = Number.parseInt(propVal, 10) || 0; break
         case "config.hardware.memoryMB": memoryMB = Number.parseInt(propVal, 10) || 0; break
         case "config.template": template = propVal === "true"; break

@@ -1,7 +1,7 @@
 // src/app/api/v1/orchestrator/reports/schedules/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
-import { orchestratorFetch } from '@/lib/orchestrator'
+import { orchestratorFetch, orchestratorPath } from '@/lib/orchestrator'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { applyReportRequestScope } from '@/lib/reports/connectionScope'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -23,7 +23,7 @@ export async function GET(
     if (denied) return denied
 
     const { id } = await params
-    const data = await orchestratorFetch(`/reports/schedules/${id}`)
+    const data = await orchestratorFetch(orchestratorPath`/reports/schedules/${id}`)
     return NextResponse.json(data)
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
@@ -53,7 +53,7 @@ async function handlePut(
     const scopeDenied = await applyReportRequestScope(body)
     if (scopeDenied) return scopeDenied
 
-    const data = await orchestratorFetch(`/reports/schedules/${id}`, {
+    const data = await orchestratorFetch(orchestratorPath`/reports/schedules/${id}`, {
       method: 'PUT',
       body
     })
@@ -80,7 +80,7 @@ async function handleDelete(
     if (denied) return denied
 
     const { id } = await params
-    const data = await orchestratorFetch(`/reports/schedules/${id}`, {
+    const data = await orchestratorFetch(orchestratorPath`/reports/schedules/${id}`, {
       method: 'DELETE'
     })
 

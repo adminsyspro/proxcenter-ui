@@ -17,11 +17,13 @@ import {
 } from '@mui/material'
 import LoginShell from '@components/login/LoginShell'
 import { useBranding } from '@/contexts/BrandingContext'
+import { safeCallbackUrl } from '@/lib/auth/safeCallbackUrl'
 
 export default function LoginPage({ forceLocal = false }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') || '/'
+  // Only a path inside this application is ever navigated to after sign-in.
+  const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'))
   const errorParam = searchParams.get('error')
   const t = useTranslations()
   const { branding, loading: brandingLoading } = useBranding()

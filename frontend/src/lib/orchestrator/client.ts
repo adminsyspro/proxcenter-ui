@@ -29,6 +29,65 @@ export interface OrchestratorRequestOptions {
 }
 
 /**
+ * A value refused as an orchestrator path segment. Carries the 400 the
+ * proxies answer with: the call is refused here, before anything is sent.
+ */
+export class OrchestratorPathError extends Error {
+  readonly status = 400
+  constructor(message: string) {
+    super(message)
+    this.name = 'OrchestratorPathError'
+  }
+}
+
+// What an identifier may look like once it sits in an orchestrator path: a
+// UUID, a cuid, a number, a slug. Every character here is left as is by
+// encodeURIComponent, so the segment reaches the orchestrator exactly as
+// validated, and `.` or `..` cannot start the segment.
+const PATH_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/
+
+/**
+ * One segment of an orchestrator path, validated and encoded. Throws
+ * OrchestratorPathError for anything that is not a plain identifier.
+ */
+export function orchestratorSegment(value: unknown, name = 'id'): string {
+  const text = typeof value === 'number' && Number.isFinite(value) ? String(value) : value
+  if (typeof text !== 'string' || !PATH_SEGMENT.test(text)) {
+    throw new OrchestratorPathError(`Invalid ${name}`)
+  }
+  return encodeURIComponent(text)
+}
+
+/**
+ * Tagged template building an orchestrator path: every interpolated value is
+ * a path segment and goes through orchestratorSegment(). Query strings are not
+ * values of this template; append them with URLSearchParams.
+ *
+ *   orchestratorPath`/reports/${id}/download`
+ */
+export function orchestratorPath(strings: TemplateStringsArray, ...values: unknown[]): string {
+  let out = ''
+  for (let i = 0; i < strings.length; i++) {
+    out += strings[i]
+    if (i < values.length) out += orchestratorSegment(values[i])
+  }
+  return out
+}
+
+/**
+ * Refuses a path whose segments would be re-interpreted on the way: a dot
+ * segment, an empty segment or an encoded separator. The typed methods below
+ * build their paths through orchestratorPath(); this is the net under them.
+ */
+function assertOrchestratorPath(path: string): void {
+  const pathname = path.split(/[?#]/, 1)[0]
+  if (!pathname.startsWith('/') || /%2f/i.test(pathname)) throw new OrchestratorPathError('Invalid orchestrator path')
+  for (const segment of pathname.slice(1).split('/')) {
+    if (segment === '' || segment === '.' || segment === '..') throw new OrchestratorPathError('Invalid orchestrator path')
+  }
+}
+
+/**
  * Fait une requête vers le backend Go d'orchestration
  */
 export async function orchestratorFetch<T>(
@@ -37,6 +96,7 @@ export async function orchestratorFetch<T>(
 ): Promise<T> {
   const { method = 'GET', body, timeout = 30000 } = options
 
+  assertOrchestratorPath(path)
   const url = `${orchestratorBaseUrlForPath(path)}/api/v1${path}`
 
   const headers: Record<string, string> = {
@@ -125,6 +185,9 @@ export async function orchestratorFetch<T>(
  * failures, etc.) — callers should fall back to a 500 in that case.
  */
 export function parseOrchestratorError(error: unknown): { status: number; message: string; details?: Record<string, unknown> } | null {
+  // A path refused before any call: answered 400 like an upstream validation error.
+  if (error instanceof OrchestratorPathError) return { status: error.status, message: error.message }
+
   const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
   const match = /^Orchestrator (\d+): ([\s\S]*)$/.exec(raw)
 
@@ -467,20 +530,20 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
   }
 
   approveRecommendation(id: string) {
-    return this.post<{ status: string }>(`/drs/recommendations/${id}/approve`)
+    return this.post<{ status: string }>(orchestratorPath`/drs/recommendations/${id}/approve`)
   }
 
   rejectRecommendation(id: string) {
-    return this.post<{ status: string }>(`/drs/recommendations/${id}/reject`)
+    return this.post<{ status: string }>(orchestratorPath`/drs/recommendations/${id}/reject`)
   }
 
   executeRecommendation(id: string) {
-    return this.post<{ status: string }>(`/drs/recommendations/${id}/execute`)
+    return this.post<{ status: string }>(orchestratorPath`/drs/recommendations/${id}/execute`)
   }
 
   // Migrations
   getMigrations(limit?: number) {
-    return this.get<DRSMigration[]>(limit ? `/drs/migrations?limit=${limit}` : '/drs/migrations')
+    return this.get<DRSMigration[]>(limit ? `/drs/migrations?${new URLSearchParams({ limit: String(limit) })}` : '/drs/migrations')
   }
 
   getActiveMigrations() {
@@ -514,11 +577,11 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
   }
 
   updateRule(id: string, rule: Partial<AffinityRule>) {
-    return this.put<AffinityRule>(`/rules/${id}`, rule)
+    return this.put<AffinityRule>(orchestratorPath`/rules/${id}`, rule)
   }
 
   deleteRule(id: string) {
-    return this.delete<{ status: string }>(`/rules/${id}`)
+    return this.delete<{ status: string }>(orchestratorPath`/rules/${id}`)
   }
 
   // Metrics
@@ -527,7 +590,7 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
   }
 
   getMetrics(connectionId: string) {
-    return this.get<ClusterMetrics>(`/metrics/${connectionId}`)
+    return this.get<ClusterMetrics>(orchestratorPath`/metrics/${connectionId}`)
   }
 
   /** Guest disk latency history, per disk and bucket, for the Disk I/O chart (#881). */
@@ -539,7 +602,7 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
     if (opts.step) params.set('step', String(opts.step))
     const query = params.toString()
 
-    return this.get<DiskLatencySeries>(`/metrics/${connectionId}/vms/${vmid}/disk-latency${query ? `?${query}` : ''}`)
+    return this.get<DiskLatencySeries>(`${orchestratorPath`/metrics/${connectionId}/vms/${vmid}/disk-latency`}${query ? `?${query}` : ''}`)
   }
 
   /**
@@ -556,7 +619,7 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
     if (opts.limit !== undefined) params.set('limit', String(opts.limit))
     if (opts.pools) params.set('pools', opts.pools.join(','))
 
-    return this.get<TopGuests>(`/metrics/${connectionId}/top?${params.toString()}`)
+    return this.get<TopGuests>(`${orchestratorPath`/metrics/${connectionId}/top`}?${params.toString()}`)
   }
 
   getMetricsHistory(connectionId: string, from?: string, to?: string) {
@@ -567,7 +630,7 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
     const query = params.toString()
 
     
-return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?${query}` : ''}`)
+return this.get<ClusterMetrics[]>(`${orchestratorPath`/metrics/${connectionId}/history`}${query ? `?${query}` : ''}`)
   }
 
   // Clusters
@@ -576,11 +639,11 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   getClusterNodes(connectionId: string) {
-    return this.get<any[]>(`/clusters/${connectionId}/nodes`)
+    return this.get<any[]>(orchestratorPath`/clusters/${connectionId}/nodes`)
   }
 
   getClusterVMs(connectionId: string) {
-    return this.get<any[]>(`/clusters/${connectionId}/vms`)
+    return this.get<any[]>(orchestratorPath`/clusters/${connectionId}/vms`)
   }
 
   // Health check
@@ -599,7 +662,7 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
         error?: string
       }>
       error?: string
-    }>(`/connections/${connectionId}/test-ssh`)
+    }>(orchestratorPath`/connections/${connectionId}/test-ssh`)
   }
 
   // ============================================
@@ -615,7 +678,7 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   getReplicationJob(id: string) {
-    return this.get<any>(`/replication/jobs/${id}`)
+    return this.get<any>(orchestratorPath`/replication/jobs/${id}`)
   }
 
   createReplicationJob(body: any) {
@@ -623,11 +686,11 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   updateReplicationJob(id: string, body: any) {
-    return this.put<any>(`/replication/jobs/${id}`, body)
+    return this.put<any>(orchestratorPath`/replication/jobs/${id}`, body)
   }
 
   deleteReplicationJob(id: string) {
-    return this.delete<{ status: string; purged_snapshots?: number }>(`/replication/jobs/${id}`)
+    return this.delete<{ status: string; purged_snapshots?: number }>(orchestratorPath`/replication/jobs/${id}`)
   }
 
   // The orchestrator applies these filters before touching any node, so passing
@@ -651,15 +714,15 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   syncReplicationJob(id: string) {
-    return this.post<{ status: string }>(`/replication/jobs/${id}/sync`)
+    return this.post<{ status: string }>(orchestratorPath`/replication/jobs/${id}/sync`)
   }
 
   pauseReplicationJob(id: string) {
-    return this.post<{ status: string }>(`/replication/jobs/${id}/pause`)
+    return this.post<{ status: string }>(orchestratorPath`/replication/jobs/${id}/pause`)
   }
 
   resumeReplicationJob(id: string) {
-    return this.post<{ status: string }>(`/replication/jobs/${id}/resume`)
+    return this.post<{ status: string }>(orchestratorPath`/replication/jobs/${id}/resume`)
   }
 
   /**
@@ -669,7 +732,7 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
    * the call, which in HA can mean another one owns it.
    */
   cancelReplicationJob(id: string) {
-    return this.post<{ status: string }>(`/replication/jobs/${id}/cancel`)
+    return this.post<{ status: string }>(orchestratorPath`/replication/jobs/${id}/cancel`)
   }
 
   /**
@@ -678,23 +741,23 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
    * guest. Answers 409 with the reason otherwise.
    */
   cancelRecoveryExecution(id: string) {
-    return this.post<{ status: string }>(`/replication/executions/${id}/cancel`)
+    return this.post<{ status: string }>(orchestratorPath`/replication/executions/${id}/cancel`)
   }
 
   getReplicationJobLogs(id: string) {
-    return this.get<any[]>(`/replication/jobs/${id}/logs`)
+    return this.get<any[]>(orchestratorPath`/replication/jobs/${id}/logs`)
   }
 
   getReplicationJobVMs(id: string) {
-    return this.get<any[]>(`/replication/jobs/${id}/vms`)
+    return this.get<any[]>(orchestratorPath`/replication/jobs/${id}/vms`)
   }
 
   reseedReplicationJobVM(id: string, vmid: number) {
-    return this.post<{ status: string }>(`/replication/jobs/${encodeURIComponent(id)}/vms/${vmid}/reseed`, { confirm: true })
+    return this.post<{ status: string }>(orchestratorPath`/replication/jobs/${id}/vms/${vmid}/reseed`, { confirm: true })
   }
 
   getReplicationJobThroughput(id: string, window: string) {
-    return this.get<any[]>(`/replication/jobs/${id}/throughput?window=${encodeURIComponent(window)}`)
+    return this.get<any[]>(`${orchestratorPath`/replication/jobs/${id}/throughput`}?${new URLSearchParams({ window })}`)
   }
 
   preflightReplication(body: ReplicationCheckRequest & { target_pool: string; estimated_size_bytes: number; rpo_target?: number; schedule_spec?: ReplicationJob['schedule_spec']; timezone?: string }) {
@@ -714,18 +777,18 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   getRecoveryPlan(id: string) {
-    return this.get<any>(`/replication/plans/${id}`)
+    return this.get<any>(orchestratorPath`/replication/plans/${id}`)
   }
 
   getPlanRestorePoints(planId: string) {
-    return this.get<any>(`/replication/plans/${planId}/restore-points`)
+    return this.get<any>(orchestratorPath`/replication/plans/${planId}/restore-points`)
   }
 
   // Restore points of a single replicated guest, addressed by its job and its
   // SOURCE vmid: the Emergency DR tab starts one replica at a time, and most
   // of the guests it lists belong to no recovery plan.
   getJobVMRestorePoints(jobId: string, vmId: number) {
-    return this.get<any>(`/replication/jobs/${jobId}/vms/${vmId}/restore-points`)
+    return this.get<any>(orchestratorPath`/replication/jobs/${jobId}/vms/${vmId}/restore-points`)
   }
 
   createRecoveryPlan(body: any) {
@@ -733,50 +796,50 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   updateRecoveryPlan(id: string, body: any) {
-    return this.put<any>(`/replication/plans/${id}`, body)
+    return this.put<any>(orchestratorPath`/replication/plans/${id}`, body)
   }
 
   deleteRecoveryPlan(id: string) {
-    return this.delete<{ status: string }>(`/replication/plans/${id}`)
+    return this.delete<{ status: string }>(orchestratorPath`/replication/plans/${id}`)
   }
 
   testFailover(planId: string, body?: { network_isolated?: boolean; restore_points?: Record<number, string>; screenshot_delay_seconds?: number }) {
-    return this.post<any>(`/replication/plans/${planId}/test-failover`, body)
+    return this.post<any>(orchestratorPath`/replication/plans/${planId}/test-failover`, body)
   }
 
   executeFailover(planId: string, body?: { restore_points?: Record<number, string> }) {
-    return this.post<any>(`/replication/plans/${planId}/failover`, body)
+    return this.post<any>(orchestratorPath`/replication/plans/${planId}/failover`, body)
   }
 
   executeFailback(planId: string) {
-    return this.post<any>(`/replication/plans/${planId}/failback`)
+    return this.post<any>(orchestratorPath`/replication/plans/${planId}/failback`)
   }
 
   failbackCutover(planId: string) {
-    return this.post<any>(`/replication/plans/${planId}/failback-cutover`)
+    return this.post<any>(orchestratorPath`/replication/plans/${planId}/failback-cutover`)
   }
 
   failbackCancel(planId: string) {
-    return this.post<any>(`/replication/plans/${planId}/failback-cancel`)
+    return this.post<any>(orchestratorPath`/replication/plans/${planId}/failback-cancel`)
   }
 
   // Per-guest failover and failback (ui#943): one guest of the plan, its
   // siblings keep replicating. Each call only claims the guest and starts
   // the work in the background, so the default budget is ample.
   guestFailover(planId: string, vmid: number, body?: { restore_point?: string }) {
-    return this.post<any>(`/replication/plans/${planId}/guests/${vmid}/failover`, body)
+    return this.post<any>(orchestratorPath`/replication/plans/${planId}/guests/${vmid}/failover`, body)
   }
 
   guestFailback(planId: string, vmid: number) {
-    return this.post<any>(`/replication/plans/${planId}/guests/${vmid}/failback`)
+    return this.post<any>(orchestratorPath`/replication/plans/${planId}/guests/${vmid}/failback`)
   }
 
   guestFailbackCutover(planId: string, vmid: number) {
-    return this.post<any>(`/replication/plans/${planId}/guests/${vmid}/failback-cutover`)
+    return this.post<any>(orchestratorPath`/replication/plans/${planId}/guests/${vmid}/failback-cutover`)
   }
 
   guestFailbackCancel(planId: string, vmid: number) {
-    return this.post<any>(`/replication/plans/${planId}/guests/${vmid}/failback-cancel`)
+    return this.post<any>(orchestratorPath`/replication/plans/${planId}/guests/${vmid}/failback-cancel`)
   }
 
   cleanupTestFailover(planId: string) {
@@ -786,7 +849,7 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
     // ~46s measured at a customer site on terabyte-scale images, so the
     // request was abandoned mid-rollback with guests still up and the partial
     // result thrown away (ui#958). Progress is polled from the execution.
-    return this.post<CleanupStarted>(`/replication/plans/${planId}/cleanup-test`)
+    return this.post<CleanupStarted>(orchestratorPath`/replication/plans/${planId}/cleanup-test`)
   }
 
   startDRVM(body: { vm_id: number; target_cluster: string; replication_job_id: string; restore_point?: string }) {
@@ -806,24 +869,24 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   getRecoveryHistory(planId: string) {
-    return this.get<any[]>(`/replication/plans/${planId}/history`)
+    return this.get<any[]>(orchestratorPath`/replication/plans/${planId}/history`)
   }
 
   clearRecoveryHistory(planId: string) {
-    return this.delete<any>(`/replication/plans/${planId}/history`)
+    return this.delete<any>(orchestratorPath`/replication/plans/${planId}/history`)
   }
 
   getExecution(id: string) {
-    return this.get<any>(`/replication/executions/${id}`)
+    return this.get<any>(orchestratorPath`/replication/executions/${id}`)
   }
 
   // The step log of a failover or failback (ui#943), the lines after `after` when given.
   getExecutionEvents(id: string, after = 0) {
-    return this.get<RecoveryExecutionEvent[]>(`/replication/executions/${id}/events${after > 0 ? `?after=${after}` : ''}`)
+    return this.get<RecoveryExecutionEvent[]>(`${orchestratorPath`/replication/executions/${id}/events`}${after > 0 ? `?after=${Math.trunc(after)}` : ''}`)
   }
 
   getExecutionScreenshots(id: string) {
-    return this.get<{ vm_id: number; target_vmid: number; captured_at: string }[]>(`/replication/executions/${id}/screenshots`)
+    return this.get<{ vm_id: number; target_vmid: number; captured_at: string }[]>(orchestratorPath`/replication/executions/${id}/screenshots`)
   }
 
   // ============================================
@@ -844,15 +907,15 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   getRestoreDrill(id: string) {
-    return this.get<{ drill: Drill; events: DrillEvent[] }>(`/restore-drills/${encodeURIComponent(id)}`)
+    return this.get<{ drill: Drill; events: DrillEvent[] }>(orchestratorPath`/restore-drills/${id}`)
   }
 
   cancelRestoreDrill(id: string) {
-    return this.post<{ drill: Drill }>(`/restore-drills/${encodeURIComponent(id)}/cancel`)
+    return this.post<{ drill: Drill }>(orchestratorPath`/restore-drills/${id}/cancel`)
   }
 
   cleanupRestoreDrill(id: string) {
-    return this.post<{ drill: Drill }>(`/restore-drills/${encodeURIComponent(id)}/cleanup`)
+    return this.post<{ drill: Drill }>(orchestratorPath`/restore-drills/${id}/cleanup`)
   }
 
   getRestoreDrillSettings() {
@@ -872,19 +935,19 @@ return this.get<ClusterMetrics[]>(`/metrics/${connectionId}/history${query ? `?$
   }
 
   getRestoreDrillSchedule(id: string) {
-    return this.get<{ schedule: Schedule; runs: ScheduleRun[]; events: DrillEvent[] }>(`/restore-drills/schedules/${encodeURIComponent(id)}`)
+    return this.get<{ schedule: Schedule; runs: ScheduleRun[]; events: DrillEvent[] }>(orchestratorPath`/restore-drills/schedules/${id}`)
   }
 
   updateRestoreDrillSchedule(id: string, body: ScheduleInput) {
-    return this.put<{ schedule: Schedule }>(`/restore-drills/schedules/${encodeURIComponent(id)}`, body)
+    return this.put<{ schedule: Schedule }>(orchestratorPath`/restore-drills/schedules/${id}`, body)
   }
 
   deleteRestoreDrillSchedule(id: string) {
-    return this.delete<void>(`/restore-drills/schedules/${encodeURIComponent(id)}`)
+    return this.delete<void>(orchestratorPath`/restore-drills/schedules/${id}`)
   }
 
   runRestoreDrillSchedule(id: string) {
-    return this.post<{ run: ScheduleRun }>(`/restore-drills/schedules/${encodeURIComponent(id)}/run`)
+    return this.post<{ run: ScheduleRun }>(orchestratorPath`/restore-drills/schedules/${id}/run`)
   }
 }
 
@@ -1082,45 +1145,45 @@ return orchestratorClient.get<AlertsResponse>(`/alerts${query ? `?${query}` : ''
 
   // Get active alerts only
   async getActiveAlerts(connectionId?: string): Promise<OrchestratorResponse<Alert[]>> {
-    const query = connectionId ? `?connection_id=${connectionId}` : ''
+    const query = connectionId ? `?${new URLSearchParams({ connection_id: connectionId })}` : ''
 
-    
+
 return orchestratorClient.get<Alert[]>(`/alerts/active${query}`)
   },
 
   // Get alert summary
   async getSummary(connectionId?: string): Promise<OrchestratorResponse<AlertSummary>> {
-    const query = connectionId ? `?connection_id=${connectionId}` : ''
+    const query = connectionId ? `?${new URLSearchParams({ connection_id: connectionId })}` : ''
 
-    
+
 return orchestratorClient.get<AlertSummary>(`/alerts/summary${query}`)
   },
 
   // Get single alert
   async getAlert(id: string): Promise<OrchestratorResponse<Alert>> {
-    return orchestratorClient.get<Alert>(`/alerts/${id}`)
+    return orchestratorClient.get<Alert>(orchestratorPath`/alerts/${id}`)
   },
 
   // Acknowledge an alert
   async acknowledge(id: string, acknowledgedBy?: string): Promise<OrchestratorResponse<{ status: string }>> {
-    return orchestratorClient.post<{ status: string }>(`/alerts/${id}/acknowledge`, { acknowledged_by: acknowledgedBy })
+    return orchestratorClient.post<{ status: string }>(orchestratorPath`/alerts/${id}/acknowledge`, { acknowledged_by: acknowledgedBy })
   },
 
   // Resolve an alert manually
   async resolve(id: string): Promise<OrchestratorResponse<{ status: string }>> {
-    return orchestratorClient.post<{ status: string }>(`/alerts/${id}/resolve`)
+    return orchestratorClient.post<{ status: string }>(orchestratorPath`/alerts/${id}/resolve`)
   },
 
   // Delete a single alert by ID
   async deleteAlert(id: string): Promise<OrchestratorResponse<{ status: string }>> {
-    return orchestratorClient.delete<{ status: string }>(`/alerts/${id}`)
+    return orchestratorClient.delete<{ status: string }>(orchestratorPath`/alerts/${id}`)
   },
 
   // Clear all active alerts
   async clearAll(connectionId?: string): Promise<OrchestratorResponse<{ status: string }>> {
-    const query = connectionId ? `?connection_id=${connectionId}` : ''
+    const query = connectionId ? `?${new URLSearchParams({ connection_id: connectionId })}` : ''
 
-    
+
 return orchestratorClient.delete<{ status: string }>(`/alerts${query}`)
   },
 
@@ -1239,7 +1302,7 @@ export const eventRulesApi = {
 
   // Get single rule
   async getRule(id: string): Promise<OrchestratorResponse<EventRule>> {
-    return orchestratorClient.get<EventRule>(`/alerts/rules/${id}`)
+    return orchestratorClient.get<EventRule>(orchestratorPath`/alerts/rules/${id}`)
   },
 
   // Create a new rule
@@ -1249,17 +1312,17 @@ export const eventRulesApi = {
 
   // Update a rule
   async updateRule(id: string, rule: Partial<EventRule>): Promise<OrchestratorResponse<{ status: string }>> {
-    return orchestratorClient.put<{ status: string }>(`/alerts/rules/${id}`, rule)
+    return orchestratorClient.put<{ status: string }>(orchestratorPath`/alerts/rules/${id}`, rule)
   },
 
   // Delete a rule
   async deleteRule(id: string): Promise<OrchestratorResponse<{ status: string }>> {
-    return orchestratorClient.delete<{ status: string }>(`/alerts/rules/${id}`)
+    return orchestratorClient.delete<{ status: string }>(orchestratorPath`/alerts/rules/${id}`)
   },
 
   // Toggle a rule (enable/disable)
   async toggleRule(id: string): Promise<OrchestratorResponse<{ status: string }>> {
-    return orchestratorClient.post<{ status: string }>(`/alerts/rules/${id}/toggle`)
+    return orchestratorClient.post<{ status: string }>(orchestratorPath`/alerts/rules/${id}/toggle`)
   },
 
   // Process events (send events to orchestrator for analysis)

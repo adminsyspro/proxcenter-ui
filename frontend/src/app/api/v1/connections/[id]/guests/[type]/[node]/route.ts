@@ -4,6 +4,7 @@ import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
+import { enforceGuestTagAccess } from "@/lib/proxmox/tagAccessServer"
 import { sensitiveNicPermissions, NicConfigError } from "@/lib/rbac/nicPermissions"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
@@ -79,6 +80,11 @@ async function handler(
     if (!body.vmid) {
       return NextResponse.json({ error: "vmid is required" }, { status: 400 })
     }
+
+    // Datacenter User Tag Access / Registered Tags (#1208), as PVE checks
+    // them on create for its own users.
+    const tagDenied = await enforceGuestTagAccess({ connId: id, conn, oldTags: '', newTags: body.tags })
+    if (tagDenied) return tagDenied
 
     // Pool containment for flat-scoped creators: a guest created outside their
     // pools would be invisible to them the moment it exists. A single

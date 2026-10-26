@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import {
   Box,
@@ -25,6 +25,7 @@ import {
 
 import { extractLogs, jobActions, jobDetailUrl, normalizeLog, syntheticLogs } from '@/lib/tasks/jobActions'
 import { useCopyToClipboard } from '@/lib/clipboard'
+import LiveLogBox from '@/components/ui/LiveLogBox'
 import WarmCutoverButton, { canRequestCutover } from '@/app/(dashboard)/infrastructure/inventory/components/WarmCutoverButton'
 
 import { StatusChip, TypeChip } from './JobChips'
@@ -70,21 +71,8 @@ function getNodeStatusIcon(status) {
   }
 }
 
-/** Distance from the bottom still counted as "parked at the tail", in px. */
-const TAIL_THRESHOLD_PX = 32
-
-/**
- * Is this scroller parked at the tail?
- *
- * Exported so the follow rule can be asserted on a plain object: jsdom has no
- * layout engine, so a rendered log panel reports zero for all three metrics and
- * could never exercise this.
- */
-export function isAtTail(el, threshold = TAIL_THRESHOLD_PX) {
-  if (!el) return true
-
-  return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
-}
+// The follow rule moved to the shared hook (#1201); re-exported for its tests.
+export { isAtTail } from '@/hooks/useFollowTail'
 
 /**
  * The log as text, formatted the way the panel prints it.
@@ -123,11 +111,6 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
   const logError = forThisJob ? logState.error : null
   const [loading, setLoading] = useState(false)
   const logCopy = useCopyToClipboard()
-  const logsRef = useRef(null)
-  // Follow the tail only while the reader is parked at it. A job writes lines
-  // for minutes, so yanking the view back down while they read an earlier line
-  // is worse than not following at all.
-  const followTail = useRef(true)
   // Held per job id rather than as a boolean: a stale confirmation must never
   // carry over to the next job opened in this (permanently mounted) dialog.
   const [confirmCancelFor, setConfirmCancelFor] = useState(null)
@@ -170,21 +153,6 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
       return () => clearInterval(interval)
     }
   }, [open, detailUrl, job?.status, isEnterprise])
-
-  // Reopening the dialog, or opening it on another job, starts at the tail
-  // again: the ref survives, the dialog is never unmounted.
-  useEffect(() => {
-    followTail.current = true
-  }, [open, job?.id])
-
-  // Scroll with the job. Keyed on the line count, which is what the 3 s refresh
-  // above changes while a migration runs.
-  useEffect(() => {
-    if (!open) return
-    const el = logsRef.current
-    if (!el || !followTail.current) return
-    el.scrollTop = el.scrollHeight
-  }, [open, logs.length])
 
   if (!job) return null
 
@@ -472,9 +440,13 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
                   )}
                 </Box>
               </Box>
-              <Box
-                ref={logsRef}
-                onScroll={() => { followTail.current = isAtTail(logsRef.current) }}
+              {/* Follows the job like a terminal, paused while the reader scrolls up.
+                  Reopening the dialog, or opening it on another job, starts at
+                  the tail again: the dialog itself is never unmounted. */}
+              <LiveLogBox
+                lineCount={logs.length}
+                resetKey={`${open}:${job.id}`}
+                jumpButton={false}
                 sx={{
                   maxHeight: 300,
                   overflow: 'auto',
@@ -510,7 +482,7 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
                     </Box>
                   ))
                 )}
-              </Box>
+              </LiveLogBox>
             </CardContent>
           </Card>
         </Stack>

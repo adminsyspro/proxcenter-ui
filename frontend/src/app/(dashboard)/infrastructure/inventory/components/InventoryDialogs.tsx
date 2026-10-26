@@ -106,6 +106,7 @@ import { copyToClipboard } from '@/lib/clipboard'
 import { migrationLogText } from '../migrationLogText'
 import { bulkLoadProjection } from '../bulkLoadProjection'
 import MigrationLiveColumns, { type LiveJob } from './MigrationLiveColumns'
+import LiveLogBox from '@/components/ui/LiveLogBox'
 import BulkLoadProjectionBlock from './BulkLoadProjectionBlock'
 
 /**
@@ -4510,9 +4511,9 @@ return
               {migJob.logs?.length > 0 && (
                 <Box sx={{ position: 'relative' }}>
                 <CopyLogsButton sx={{ position: 'absolute', top: 4, right: 12, zIndex: 1 }} getText={() => migrationLogText(migJob.logs)} />
-                <Box sx={{ p: 1.5, pr: 6, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, maxHeight: 250, overflow: 'auto', borderRadius: 1.5, lineHeight: 1.8 }}>
+                <LiveLogBox lineCount={migJob.logs.length} resetKey={migJob.id} sx={{ p: 1.5, pr: 6, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, maxHeight: 250, overflow: 'auto', borderRadius: 1.5, lineHeight: 1.8 }}>
                   <MigrationLogLines logs={migJob.logs} />
-                </Box>
+                </LiveLogBox>
                 </Box>
               )}
             </Stack>
@@ -5756,7 +5757,12 @@ return
 
                       {/* Log entries */}
                       {/* Grows down to the dialog's bottom edge, like the right-hand panels. */}
-                      <Box sx={{ flex: 1, minHeight: 250, maxHeight: '55vh', overflowY: 'auto', bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', borderRadius: 1, p: 1 }}>
+                      <LiveLogBox
+                        lineCount={allLogs.length}
+                        resetKey={bulkMigLogsFilter}
+                        wrapperSx={{ flex: 1, minHeight: 250, maxHeight: '55vh', display: 'flex', flexDirection: 'column' }}
+                        sx={{ flex: 1, minHeight: 0, overflowY: 'auto', bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', borderRadius: 1, p: 1 }}
+                      >
                         {allLogs.length > 0 ? (
                           <Box sx={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, lineHeight: 1.6 }}>
                             <MigrationLogLines logs={allLogs} showVm={!bulkMigLogsFilter && bulkMigJobs.length > 1} />
@@ -5766,7 +5772,7 @@ return
                             {t('inventoryPage.esxiMigration.logsWillAppear')}
                           </Typography>
                         )}
-                      </Box>
+                      </LiveLogBox>
                     </Box>
                   )}
                 </Stack>

@@ -99,7 +99,8 @@
     "created": "Created",
     "errorWithMessage": "Error: {error}",
     "moveUp": "Move up",
-    "moveDown": "Move down"
+    "moveDown": "Move down",
+    "jumpToLatest": "Jump to latest"
   },
   "whatsNew": {
     "title": "What's New",

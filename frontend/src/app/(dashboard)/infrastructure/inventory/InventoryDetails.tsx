@@ -126,6 +126,7 @@ import VmActions from './components/VmActions'
 import NodeActions from './components/NodeActions'
 import WarmCutoverButton, { canRequestCutover, isAwaitingOperator } from './components/WarmCutoverButton'
 import MigrationLogLines from './components/MigrationLogLines'
+import LiveLogBox from '@/components/ui/LiveLogBox'
 import { migrationLogText } from './migrationLogText'
 import ForcePowerOffButton, { isAwaitingPowerOff } from './components/ForcePowerOffButton'
 import RootChoiceButton, { isAwaitingRootChoice } from './components/RootChoiceButton'
@@ -409,7 +410,6 @@ export default function InventoryDetails({
       setCancelMigBusy(false)
     }
   }
-  const migLogsRef = useRef<HTMLDivElement>(null)
   // Bulk migration state
   const [bulkMigSelected, setBulkMigSelected] = useState<Set<string>>(new Set())
   const [extVmSortCol, setExtVmSortCol] = useState<'name' | 'status' | 'guestOS' | 'usedSpace' | 'cpu' | 'ram'>('name')
@@ -1248,13 +1248,6 @@ export default function InventoryDetails({
     }, 3000)
     return () => clearInterval(interval)
   }, [vmMigJob?.id, vmMigJob?.status])
-
-  // Auto-scroll migration logs to bottom
-  useEffect(() => {
-    if (migLogsRef.current) {
-      migLogsRef.current.scrollTop = migLogsRef.current.scrollHeight
-    }
-  }, [vmMigJob?.logs?.length])
 
   // VMs sans templates (pour affichage dans les modes vms, tree, hosts, pools, tags)
   const displayVms = useMemo(() => allVms.filter(vm => !vm.template), [allVms])
@@ -4569,7 +4562,13 @@ return vm?.isCluster ?? false
                         </MuiTooltip>
                       )}
                     </Box>
-                    <Box ref={migLogsRef} sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, flex: 1, minHeight: 220 }}>
+                    <LiveLogBox
+                      lineCount={vmMigJob?.logs?.length ?? 0}
+                      resetKey={vmMigJob?.id}
+                      jumpButton={false}
+                      wrapperSx={{ flex: 1, minHeight: 220, display: 'flex', flexDirection: 'column' }}
+                      sx={{ p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, overflow: 'auto', borderRadius: '0 0 8px 8px', lineHeight: 1.8, flex: 1, minHeight: 0 }}
+                    >
                       {vmMigJob?.logs?.length > 0 ? (
                         <MigrationLogLines logs={vmMigJob.logs} />
                       ) : (
@@ -4577,7 +4576,7 @@ return vm?.isCluster ?? false
                           {t('inventoryPage.esxiMigration.logsWillAppear')}
                         </Typography>
                       )}
-                    </Box>
+                    </LiveLogBox>
                   </CardContent>
                 </Card>
 

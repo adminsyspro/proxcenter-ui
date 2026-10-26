@@ -99,7 +99,8 @@
     "created": "생성됨",
     "errorWithMessage": "오류: {error}",
     "moveUp": "위로 이동",
-    "moveDown": "아래로 이동"
+    "moveDown": "아래로 이동",
+    "jumpToLatest": "최신 로그로 이동"
   },
   "whatsNew": {
     "title": "새로운 기능",

@@ -5,6 +5,11 @@ import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
+// Every feature gate waits on this call, so an orchestrator that accepts the
+// connection but never answers must not hold the request until undici's 300s
+// default: past this budget the verdict is the fail-closed fallback.
+const LICENSE_STATUS_TIMEOUT_MS = 10_000
+
 const COMMUNITY_FALLBACK = {
   enterprise: false,
   edition: "community",
@@ -42,6 +47,7 @@ export async function getServerLicense(): Promise<ServerLicense> {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/status`, {
       headers: await orchestratorHeaders(),
       cache: "no-store",
+      signal: AbortSignal.timeout(LICENSE_STATUS_TIMEOUT_MS),
     })
 
     if (!res.ok) {

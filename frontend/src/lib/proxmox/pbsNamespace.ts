@@ -189,5 +189,5 @@ export async function listSnapshotsInNamespace(
   namespace: string,
 ): Promise<any[]> {
   const qs = `?ns=${encodeURIComponent(namespace)}&max-depth=0`
-  return (await pbsFetch<any[]>(conn, `/admin/datastore/${encodeURIComponent(datastore)}/snapshots${qs}`)) || []
+  return (await pbsFetch<any[]>(conn, `/admin/datastore/${encodeURIComponent(datastore)}/snapshots${qs}`, {}, { slowRead: true })) || []
 }

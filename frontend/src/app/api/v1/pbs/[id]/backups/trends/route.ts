@@ -93,7 +93,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
         const nsPromises = namespaces.map(async (ns) => {
           const nsParam = ns ? `?ns=${encodeURIComponent(ns)}` : ''
-          const snapshots = await pbsFetch<any[]>(conn, `/admin/datastore/${encodeURIComponent(storeName)}/snapshots${nsParam}`)
+          const snapshots = await pbsFetch<any[]>(conn, `/admin/datastore/${encodeURIComponent(storeName)}/snapshots${nsParam}`, {}, { slowRead: true })
           return (snapshots || []).map(snap => ({
             backupTime: snap['backup-time'] || 0,
             backupType: snap['backup-type'] || 'unknown',

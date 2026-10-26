@@ -13,12 +13,20 @@ import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import { readPools, readStorageResources, type PoolFacts } from "@/lib/inventory/proxmoxProjections"
 import { attachGuestDiskTotals, onlineNodeSet } from "@/lib/inventory/guestDiskTotals"
 import {
+  getInflightFetch,
   getInventoryFromCache,
-  setCachedInventory,
+  type CachedInventory,
 } from "@/lib/cache/inventoryCache"
+import {
+  getSharedInventoryFetch,
+  joinOrStartInventoryFetch,
+  type InventoryFetchEvent,
+  type InventoryProducer,
+  type SharedInventoryFetch,
+} from "@/lib/inventory/sharedInventoryFetch"
 import { applyVdcFilter, type VdcScope } from "@/lib/vdc/scope"
 import { getVdcContext } from "@/lib/vdc/context"
-import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from "@/lib/tenant/infraScope"
+import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope, type InfraScope } from "@/lib/tenant/infraScope"
 
 export const runtime = "nodejs"
 
@@ -40,6 +48,9 @@ export const runtime = "nodejs"
  *
  * Query params:
  *   ?refresh=true  — bypass cache
+ *
+ * On a cache miss, every reader of the same (tenant, vDC context) shares one
+ * fan-out and narrows its events to its own grants (#125, sharedInventoryFetch).
  */
 
 type NodeData = {
@@ -588,6 +599,339 @@ async function scopeClusterForViewer(
   return kept.length > 0 ? kept[0] : null
 }
 
+/** Who reads the stream: everything the narrowing of a raw payload needs. */
+type Viewer = {
+  rbacCtx: any
+  /** null = admin/unrestricted (no pruning) */
+  rbacScope: RbacInfraScope | null
+  mask: VdcScope | null
+}
+
+/**
+ * Storage is host data, not guest data: a guest-derived (tag/pool) perimeter
+ * must never surface it, or the candidate set of the clusters would hand a
+ * tag-scoped user the storage layout of every connection (issue #633). Same
+ * predicate on the cached and the live path, so both answer identically
+ * whatever the cache state.
+ */
+function isStorageVisible(viewer: Viewer, connId: string): boolean {
+  return (!viewer.mask || viewer.mask.connectionIds.has(connId)) &&
+    (!viewer.rbacScope || isConnectionVisible(viewer.rbacScope, connId) || hasStorageGrant(viewer.rbacScope, connId))
+}
+
+/** Tenant mask, then the RBAC storage rule (issue #921): a node grant shows
+ *  that node's storages and the shared ones, a storage grant shows the storage
+ *  it names, nothing else of the cluster. */
+function scopeStorageForViewer(storage: StorageData, viewer: Viewer): StorageData | null {
+  const scoped = scopeStorageDataForTenant(storage, viewer.mask)
+  return scoped ? filterStorageDataForRbac(scoped, viewer.rbacScope) : null
+}
+
+const encoder = new TextEncoder()
+
+function sseResponse(stream: ReadableStream): Response {
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  })
+}
+
+/* ------------------------------------------------------------------ */
+/* Cached entry → quick burst                                          */
+/* ------------------------------------------------------------------ */
+
+function streamCached(cached: CachedInventory, viewer: Viewer): Response {
+  const { rbacCtx, rbacScope, mask } = viewer
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: any) => {
+        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+      }
+
+      try {
+        // Filter clusters by vDC scope then RBAC infra scope (intersection).
+        // Candidate set only: a guest-derived scope is resolved per cluster below.
+        let visibleClusters = mask ? cached.clusters.filter(c => mask.connectionIds.has(c.id)) : cached.clusters
+        visibleClusters = filterCandidateConnections(visibleClusters, rbacScope)
+
+        const visiblePbs = filterVisibleConnections(cached.pbsServers, rbacScope)
+        const visibleExt = filterVisibleConnections(cached.externalHypervisors, rbacScope)
+
+        const scopedClusters: ClusterData[] = []
+        for (const cluster of visibleClusters) {
+          const scoped = await scopeClusterForViewer(cluster, rbacCtx, mask, rbacScope)
+          if (scoped) scopedClusters.push(scoped)
+        }
+
+        send('init', {
+          totalPve: scopedClusters.length,
+          totalPbs: visiblePbs.length,
+          totalExt: visibleExt.length,
+          cached: true,
+        })
+
+        for (const cluster of scopedClusters) {
+          send('cluster', cluster)
+        }
+        for (const pbs of visiblePbs) {
+          const scoped = await scopePbsDataForTenant(pbs, mask)
+          if (scoped) send('pbs', scoped)
+        }
+        // The cache has two producers (#938 recette, #921): fetchRawInventory,
+        // behind /api/v1/inventory and the Prometheus scrape, writes the
+        // entry WITHOUT the tree's `storages`. Serving it as is left the tree
+        // with no STORAGE section until the next cache miss. The two storage
+        // calls per cluster are fetched here instead, and kept on the entry
+        // (same object as the cache's) for the next reader.
+        if (!Array.isArray(cached.storages)) {
+          cached.storages = await fetchStoragesForCachedClusters(cached.clusters)
+        }
+        if (cached.storages) {
+          // Storage is keyed by connId, not id, so the RBAC gate is spelled out here.
+          const visibleStorages = cached.storages.filter((s: any) => isStorageVisible(viewer, s.connId))
+          for (const storage of visibleStorages) {
+            // Shape guard: the tree reads nodes[] and sharedStorages[] and
+            // dies on anything else. A cache written by another producer
+            // under this key must be skipped, not forwarded.
+            if (!Array.isArray(storage?.nodes) || !Array.isArray(storage?.sharedStorages)) continue
+            const visible = scopeStorageForViewer(storage, viewer)
+            if (visible) send('storage', visible)
+          }
+        }
+        if (visibleExt.length > 0) {
+          send('external', visibleExt)
+        }
+        send('done', { stats: cached.stats })
+      } finally {
+        controller.close()
+      }
+    }
+  })
+
+  return sseResponse(stream)
+}
+
+/* ------------------------------------------------------------------ */
+/* Cache miss → one shared fan-out, narrowed per reader                */
+/* ------------------------------------------------------------------ */
+
+type SessionPrisma = Awaited<ReturnType<typeof getSessionPrisma>>
+
+/** The PVE, PBS and external connections the scope of `infra` covers. */
+function findScopeConnections(prisma: SessionPrisma, infra: InfraScope) {
+  const plan = inventoryConnectionPlan(infra)
+
+  // provider → globalPrisma, all connections; msp → session prisma, own connections;
+  // iaas (vDC tenant) → globalPrisma restricted to vDC-bound connection IDs
+  const connSelect = { id: true, name: true, type: true, latitude: true, longitude: true, locationLabel: true, sshEnabled: true, tenantId: true } as const
+  const pveClient = plan.pveClient === 'global' ? globalPrisma : prisma
+  const pveWhere = plan.pveConnectionIds
+    ? { type: 'pve' as const, id: { in: plan.pveConnectionIds } }
+    : { type: 'pve' as const }
+
+  // PBS: iaas surfaces its vDC-bound PBS (global + bound ids); provider
+  // sees all (global); msp sees its own (session).
+  let pbsWhere: { type: 'pbs'; id?: { in: string[] } }
+  let pbsUseGlobal: boolean
+  if (infra.kind === 'iaas') {
+    pbsUseGlobal = true
+    pbsWhere = { type: 'pbs', id: { in: [...infra.vdcScope.pbsNamespacesByConnection.keys()] } }
+  } else {
+    pbsUseGlobal = plan.pbsExtClient === 'global'
+    pbsWhere = { type: 'pbs' }
+  }
+  const extUseGlobal = plan.pbsExtClient === 'global'
+
+  return Promise.all([
+    pveClient.connection.findMany({ where: pveWhere, orderBy: { createdAt: 'desc' }, select: connSelect }),
+    (pbsUseGlobal ? globalPrisma : prisma).connection.findMany({ where: pbsWhere, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, type: true } }),
+    (extUseGlobal ? globalPrisma : prisma).connection.findMany({ where: { type: { in: ['vmware', 'hyperv', 'xcpng', 'nutanix'] } }, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, type: true } }),
+  ])
+}
+
+function inventoryStats(clusters: ClusterData[], pbsServers: PbsServerData[]): CachedInventory['stats'] {
+  let totalNodes = 0, onlineNodes = 0, totalGuests = 0, runningGuests = 0
+  for (const cluster of clusters) {
+    for (const node of cluster.nodes) {
+      totalNodes++
+      if (node.status === 'online') onlineNodes++
+      for (const guest of node.guests) {
+        totalGuests++
+        if (guest.status === 'running') runningGuests++
+      }
+    }
+  }
+
+  let totalDatastores = 0, totalBackups = 0
+  for (const pbs of pbsServers) {
+    totalDatastores += pbs.stats.datastoreCount
+    totalBackups += pbs.stats.backupCount
+  }
+
+  return {
+    totalClusters: clusters.length,
+    totalNodes, totalGuests, onlineNodes, runningGuests,
+    totalPbsServers: pbsServers.length,
+    totalDatastores, totalBackups,
+  }
+}
+
+/**
+ * The fan-out over the whole scope of `infra`, for any viewer: it is shared by
+ * every reader of the scope and its result is cached under the scope's key
+ * (#125). PBS included: narrowing them to the first reader's grants cached a
+ * PBS-less inventory that the tenant's admin was then served for 15 minutes.
+ */
+function inventoryProducer(prisma: SessionPrisma, infra: InfraScope): InventoryProducer {
+  return async emit => {
+    const startTime = Date.now()
+    const [pveConnections, pbsConnections, externalConnections] = await findScopeConnections(prisma, infra)
+
+    emit({ kind: 'connections', pve: pveConnections, pbs: pbsConnections, external: externalConnections })
+
+    // Fire all fetches concurrently — each emits as soon as it is ready
+    const allClusters: ClusterData[] = []
+    const allPbsServers: PbsServerData[] = []
+    const allStorages: StorageData[] = []
+    const allStorageResources: AggregatedStorage[] = []
+
+    const clusterPromises = pveConnections.map(async (conn) => {
+      const cluster = await fetchOneCluster(conn)
+      allClusters.push(cluster)
+      emit({ kind: 'cluster', data: cluster })
+
+      const storageData = await fetchStoragesForCluster(conn, cluster, allStorageResources)
+      allStorages.push(storageData)
+      emit({ kind: 'storage', data: storageData })
+    })
+
+    const pbsPromises = pbsConnections.map(async (conn) => {
+      const pbs = await fetchOnePbs(conn)
+      allPbsServers.push(pbs)
+      emit({ kind: 'pbs', data: pbs })
+    })
+
+    await Promise.allSettled([...clusterPromises, ...pbsPromises])
+
+    console.log(`[inventory-stream] Streamed all data in ${Date.now() - startTime}ms`)
+
+    return {
+      clusters: allClusters,
+      pbsServers: allPbsServers,
+      externalHypervisors: externalConnections,
+      storages: allStorages,
+      storageResources: allStorageResources,
+      stats: inventoryStats(allClusters, allPbsServers),
+    }
+  }
+}
+
+/** One reader of a shared fan-out: its events, narrowed to what this viewer may see. */
+function streamShared(shared: SharedInventoryFetch, viewer: Viewer): Response {
+  const { rbacCtx, rbacScope, mask } = viewer
+  let unsubscribe: (() => void) | null = null
+
+  const stream = new ReadableStream({
+    start(controller) {
+      const send = (event: string, data: any) => {
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+        } catch {
+          // Client disconnected
+        }
+      }
+
+      // Set by the `connections` event, which always comes first.
+      let isVisibleConn: (connId: string) => boolean = () => false
+      let visiblePbsIds = new Set<string>()
+
+      const handle = async (ev: InventoryFetchEvent) => {
+        switch (ev.kind) {
+          case 'connections': {
+            // A PVE connection is streamed only if it passes BOTH the vDC mask
+            // and the RBAC candidate prune. A guest-derived (tag/pool) scope
+            // keeps every connection here and is resolved per cluster.
+            isVisibleConn = (connId: string) =>
+              (!mask || mask.connectionIds.has(connId)) &&
+              (!rbacScope || mayHaveVisibleGuests(rbacScope, connId))
+            const visiblePbs = filterVisibleConnections(ev.pbs, rbacScope)
+            const visibleExt = filterVisibleConnections(ev.external, rbacScope)
+            visiblePbsIds = new Set(visiblePbs.map(c => c.id))
+
+            send('init', {
+              totalPve: ev.pve.filter(c => isVisibleConn(c.id)).length,
+              totalPbs: visiblePbs.length,
+              totalExt: visibleExt.length,
+              cached: false,
+            })
+            // External hypervisors need no fetch
+            if (visibleExt.length > 0) send('external', visibleExt)
+            break
+          }
+          case 'cluster': {
+            if (!isVisibleConn(ev.data.id)) break
+            const scoped = await scopeClusterForViewer(ev.data, rbacCtx, mask, rbacScope)
+            if (scoped) send('cluster', scoped)
+            break
+          }
+          case 'storage': {
+            if (!isStorageVisible(viewer, ev.data.connId)) break
+            const visible = scopeStorageForViewer(ev.data, viewer)
+            if (visible) send('storage', visible)
+            break
+          }
+          case 'pbs': {
+            if (!visiblePbsIds.has(ev.data.id)) break
+            const scoped = await scopePbsDataForTenant(ev.data, mask)
+            if (scoped) send('pbs', scoped)
+            break
+          }
+        }
+      }
+
+      // One event at a time, in order: `done` must follow the last cluster.
+      let queue: Promise<void> = Promise.resolve()
+      unsubscribe = shared.subscribe(ev => {
+        queue = queue.then(() => handle(ev)).catch(e => {
+          console.error('[inventory-stream] Narrowing failed:', e?.message)
+        })
+      })
+
+      shared.result
+        .then(
+          data => queue.then(() => send('done', { stats: data.stats })),
+          e => queue.then(() => {
+            console.error('[inventory-stream] Error:', e?.message)
+            send('error', { message: e?.message || String(e) })
+          }),
+        )
+        .finally(() => {
+          unsubscribe?.()
+          try { controller.close() } catch { /* already closed by the client */ }
+        })
+    },
+    cancel() {
+      // The fan-out keeps running for the other readers and the cache.
+      unsubscribe?.()
+    },
+  })
+
+  return sseResponse(stream)
+}
+
+/**
+ * The blocking read of /api/v1/inventory fetching this scope, if any. Null
+ * when the fetch in flight is our own shared fan-out, which readers join.
+ */
+function pendingBlockingRead(tenantId: string, vdcContext: string | null): Promise<CachedInventory> | null {
+  if (getSharedInventoryFetch(tenantId, vdcContext) !== null) return null
+  return getInflightFetch(tenantId, vdcContext)
+}
+
 /* ------------------------------------------------------------------ */
 /* GET handler — SSE stream                                            */
 /* ------------------------------------------------------------------ */
@@ -607,293 +951,36 @@ export async function GET(request: NextRequest) {
   const vdcContext = await getVdcContext(tenantId)
   const forceRefresh = request.nextUrl.searchParams.get('refresh') === 'true'
 
-  // Check cache first — if fresh, send everything at once (fast path)
-  const cacheResult = forceRefresh ? { status: 'miss' as const } : getInventoryFromCache(tenantId, vdcContext)
-
-  const encoder = new TextEncoder()
-
-  if (cacheResult.status === 'fresh' || cacheResult.status === 'stale') {
-    // Serve cached data as a quick burst of events
-    const cached = cacheResult.data
-    const rbacCtx = await getRBACContext()
-    const mask = maskingScope(await getTenantInfrastructureScope(tenantId))
-    // Resolve RBAC infra scope once; null = admin/unrestricted (no pruning)
-    const rbacScope = rbacCtx && !rbacCtx.isAdmin
-      ? await getRbacInfraScope(rbacCtx.userId, rbacCtx.tenantId)
-      : null
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        const send = (event: string, data: any) => {
-          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
-        }
-
-        try {
-          // Filter clusters by vDC scope then RBAC infra scope (intersection).
-          // Candidate set only: a guest-derived scope is resolved per cluster below.
-          let visibleClusters = mask ? cached.clusters.filter(c => mask.connectionIds.has(c.id)) : cached.clusters
-          visibleClusters = filterCandidateConnections(visibleClusters, rbacScope)
-
-          const visiblePbs = filterVisibleConnections(cached.pbsServers, rbacScope)
-          const visibleExt = filterVisibleConnections(cached.externalHypervisors, rbacScope)
-
-          const scopedClusters: ClusterData[] = []
-          for (const cluster of visibleClusters) {
-            const scoped = await scopeClusterForViewer(cluster, rbacCtx, mask, rbacScope)
-            if (scoped) scopedClusters.push(scoped)
-          }
-
-          send('init', {
-            totalPve: scopedClusters.length,
-            totalPbs: visiblePbs.length,
-            totalExt: visibleExt.length,
-            cached: true,
-          })
-
-          for (const cluster of scopedClusters) {
-            send('cluster', cluster)
-          }
-          for (const pbs of visiblePbs) {
-            const scoped = await scopePbsDataForTenant(pbs, mask)
-            if (scoped) send('pbs', scoped)
-          }
-          // The cache has two producers (#938 recette, #921): fetchRawInventory,
-          // behind /api/v1/inventory and the Prometheus scrape, writes the
-          // entry WITHOUT the tree's `storages`. Serving it as is left the tree
-          // with no STORAGE section until the next cache miss. The two storage
-          // calls per cluster are fetched here instead, and kept on the entry
-          // (same object as the cache's) for the next reader.
-          if (!Array.isArray(cached.storages)) {
-            cached.storages = await fetchStoragesForCachedClusters(cached.clusters)
-          }
-          if (cached.storages) {
-            // Storage is keyed by connId, not id, so the RBAC gate is spelled out
-            // here. Strict on purpose, same predicate as the cache-miss path: a
-            // guest-derived (tag/pool) perimeter grants guests, never host data,
-            // and both paths must answer identically whatever the cache state
-            // (issue #633).
-            const visibleStorages = cached.storages.filter((s: any) =>
-              (!mask || mask.connectionIds.has(s.connId)) &&
-              (!rbacScope || isConnectionVisible(rbacScope, s.connId) || hasStorageGrant(rbacScope, s.connId))
-            )
-            for (const storage of visibleStorages) {
-              // Shape guard: the tree reads nodes[] and sharedStorages[] and
-              // dies on anything else. A cache written by another producer
-              // under this key must be skipped, not forwarded.
-              if (!Array.isArray(storage?.nodes) || !Array.isArray(storage?.sharedStorages)) continue
-              // Tenant mask, then the RBAC storage rule (issue #921): a node
-              // grant shows that node's storages and the shared ones, a storage
-              // grant shows the storage it names, nothing else of the cluster.
-              const scoped = scopeStorageDataForTenant(storage, mask)
-              const visible = scoped ? filterStorageDataForRbac(scoped, rbacScope) : null
-              if (visible) send('storage', visible)
-            }
-          }
-          if (visibleExt.length > 0) {
-            send('external', visibleExt)
-          }
-          send('done', { stats: cached.stats })
-        } finally {
-          controller.close()
-        }
-      }
-    })
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      },
-    })
+  const rbacCtx = await getRBACContext()
+  const infra = await getTenantInfrastructureScope(tenantId)
+  const viewer: Viewer = {
+    rbacCtx,
+    rbacScope: rbacCtx && !rbacCtx.isAdmin ? await getRbacInfraScope(rbacCtx.userId, rbacCtx.tenantId) : null,
+    mask: maskingScope(infra),
   }
 
-  // Cache miss — stream progressively as each connection resolves
-  const rbacCtx = await getRBACContext()
-  // Resolve RBAC infra scope once per request; null = admin/unrestricted (no pruning)
-  const rbacScope = rbacCtx && !rbacCtx.isAdmin
-    ? await getRbacInfraScope(rbacCtx.userId, rbacCtx.tenantId)
-    : null
-  const infra = await getTenantInfrastructureScope(tenantId)
-  const mask = maskingScope(infra)
-  const plan = inventoryConnectionPlan(infra)
+  const cacheResult = forceRefresh ? { status: 'miss' as const } : getInventoryFromCache(tenantId, vdcContext)
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (event: string, data: any) => {
-        try {
-          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
-        } catch {
-          // Client disconnected
-        }
-      }
-
-      try {
-        const startTime = Date.now()
-
-        // Load connections from DB
-        // provider → globalPrisma, all connections; msp → session prisma, own connections;
-        // iaas (vDC tenant) → globalPrisma restricted to vDC-bound connection IDs
-        const connSelect = { id: true, name: true, type: true, latitude: true, longitude: true, locationLabel: true, sshEnabled: true, tenantId: true } as const
-        const pveClient = plan.pveClient === 'global' ? globalPrisma : prisma
-        const pveWhere = plan.pveConnectionIds
-          ? { type: 'pve' as const, id: { in: plan.pveConnectionIds } }
-          : { type: 'pve' as const }
-
-        // PBS: iaas surfaces its vDC-bound PBS (global + bound ids); provider
-        // sees all (global); msp sees its own (session).
-        let pbsWhere: { type: 'pbs'; id?: { in: string[] } }
-        let pbsUseGlobal: boolean
-        if (infra.kind === 'iaas') {
-          pbsUseGlobal = true
-          pbsWhere = { type: 'pbs', id: { in: [...infra.vdcScope.pbsNamespacesByConnection.keys()] } }
-        } else {
-          pbsUseGlobal = plan.pbsExtClient === 'global'
-          pbsWhere = { type: 'pbs' }
-        }
-        const extUseGlobal = plan.pbsExtClient === 'global'
-
-        const [pveConnections, pbsConnections, externalConnections] = await Promise.all([
-          pveClient.connection.findMany({ where: pveWhere, orderBy: { createdAt: 'desc' }, select: connSelect }),
-          (pbsUseGlobal ? globalPrisma : prisma).connection.findMany({ where: pbsWhere, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, type: true } }),
-          (extUseGlobal ? globalPrisma : prisma).connection.findMany({ where: { type: { in: ['vmware', 'hyperv', 'xcpng', 'nutanix'] } }, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, type: true } }),
-        ])
-
-        // Determine which PVE connections are visible under vDC scope AND RBAC infra scope.
-        // We fetch ALL connections (for the cache), but only stream visible ones to the client.
-        const vdcVisibleIds = mask
-          ? new Set(pveConnections.filter(c => mask.connectionIds.has(c.id)).map(c => c.id))
-          : null
-
-        // RBAC infra scope prune: candidate ids only. A guest-derived (tag/pool)
-        // scope keeps every connection here and is resolved per cluster below.
-        const rbacCandidatePveIds = rbacScope
-          ? new Set(pveConnections.filter(c => mayHaveVisibleGuests(rbacScope, c.id)).map(c => c.id))
-          : null
-
-        // A PVE connection is streamed only if it passes BOTH vDC and RBAC filters
-        const isVisibleConn = (connId: string) =>
-          (!vdcVisibleIds || vdcVisibleIds.has(connId)) &&
-          (!rbacCandidatePveIds || rbacCandidatePveIds.has(connId))
-
-        // Storage is host data, not guest data: a guest-derived (tag/pool)
-        // perimeter must never surface it, or the candidate set above would hand
-        // a tag-scoped user the storage layout of every connection (issue #633).
-        const isInfraVisibleConn = (connId: string) =>
-          (!vdcVisibleIds || vdcVisibleIds.has(connId)) &&
-          (!rbacScope || isConnectionVisible(rbacScope, connId) || hasStorageGrant(rbacScope, connId))
-
-        const visiblePveCount = pveConnections.filter(c => isVisibleConn(c.id)).length
-
-        // RBAC prune PBS and external before counting for init
-        const visiblePbsConnections = filterVisibleConnections(pbsConnections, rbacScope)
-        const visibleExtConnections = filterVisibleConnections(externalConnections, rbacScope)
-
-        // Send init event so frontend knows how many items to expect
-        send('init', {
-          totalPve: visiblePveCount,
-          totalPbs: visiblePbsConnections.length,
-          totalExt: visibleExtConnections.length,
-          cached: false,
-        })
-
-        // Send external hypervisors immediately (no fetch needed)
-        if (visibleExtConnections.length > 0) {
-          send('external', visibleExtConnections)
-        }
-
-        // Fire all fetches concurrently — each sends its event as soon as ready
-        const allClusters: ClusterData[] = []
-        const allPbsServers: PbsServerData[] = []
-        const allStorages: StorageData[] = []
-        const allStorageResources: AggregatedStorage[] = []
-
-        const clusterPromises = pveConnections.map(async (conn) => {
-          const cluster = await fetchOneCluster(conn)
-          allClusters.push(cluster)
-
-          // Only stream clusters visible to both vDC and RBAC infra scope
-          if (isVisibleConn(conn.id)) {
-            const scoped = await scopeClusterForViewer(cluster, rbacCtx, mask, rbacScope)
-            if (scoped) send('cluster', scoped)
-          }
-
-          // Fetch storage data for this cluster and emit immediately (only if visible)
-          const storageData = await fetchStoragesForCluster(conn, cluster, allStorageResources)
-          allStorages.push(storageData)
-          if (isInfraVisibleConn(conn.id)) {
-            // Same two-step narrowing as the cached path above (issue #921).
-            const scoped = scopeStorageDataForTenant(storageData, mask)
-            const visible = scoped ? filterStorageDataForRbac(scoped, rbacScope) : null
-            if (visible) send('storage', visible)
-          }
-        })
-
-        // Only fetch PBS servers visible under RBAC infra scope
-        const pbsPromises = visiblePbsConnections.map(async (conn) => {
-          const pbs = await fetchOnePbs(conn)
-          allPbsServers.push(pbs)
-          const scoped = await scopePbsDataForTenant(pbs, mask)
-          if (scoped) send('pbs', scoped)
-        })
-
-        // Wait for all to complete (each already sent its event)
-        await Promise.allSettled([...clusterPromises, ...pbsPromises])
-
-        // Compute stats
-        let totalNodes = 0, onlineNodes = 0, totalGuests = 0, runningGuests = 0
-        for (const cluster of allClusters) {
-          for (const node of cluster.nodes) {
-            totalNodes++
-            if (node.status === 'online') onlineNodes++
-            for (const guest of node.guests) {
-              totalGuests++
-              if (guest.status === 'running') runningGuests++
-            }
-          }
-        }
-
-        let totalDatastores = 0, totalBackups = 0
-        for (const pbs of allPbsServers) {
-          totalDatastores += pbs.stats.datastoreCount
-          totalBackups += pbs.stats.backupCount
-        }
-
-        const stats = {
-          totalClusters: allClusters.length,
-          totalNodes, totalGuests, onlineNodes, runningGuests,
-          totalPbsServers: allPbsServers.length,
-          totalDatastores, totalBackups,
-        }
-
-        // Update the shared cache so the non-stream endpoint benefits too
-        setCachedInventory({
-          clusters: allClusters,
-          pbsServers: allPbsServers,
-          externalHypervisors: externalConnections,
-          storages: allStorages,
-          storageResources: allStorageResources,
-          stats,
-        }, tenantId, vdcContext)
-
-        console.log(`[inventory-stream] Streamed all data in ${Date.now() - startTime}ms`)
-        send('done', { stats })
-      } catch (e: any) {
-        console.error('[inventory-stream] Error:', e?.message)
-        send('error', { message: e?.message || String(e) })
-      } finally {
-        controller.close()
-      }
+  if (cacheResult.status === 'fresh' || cacheResult.status === 'stale') {
+    // Served now, refreshed for the next reader, unless a fetch of this scope
+    // (ours or /api/v1/inventory's) is already running.
+    if (cacheResult.status === 'stale' && getInflightFetch(tenantId, vdcContext) === null) {
+      joinOrStartInventoryFetch(tenantId, vdcContext, inventoryProducer(prisma, infra))
     }
-  })
+    return streamCached(cacheResult.data, viewer)
+  }
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    },
-  })
+  // A blocking read of /api/v1/inventory is already fetching this scope:
+  // wait for it rather than fetch everything a second time.
+  const pending = forceRefresh ? null : pendingBlockingRead(tenantId, vdcContext)
+  if (pending !== null) {
+    try {
+      return streamCached(await pending, viewer)
+    } catch {
+      // It failed: fetch for ourselves below.
+    }
+  }
+
+  const shared = joinOrStartInventoryFetch(tenantId, vdcContext, inventoryProducer(prisma, infra), { force: forceRefresh })
+  return streamShared(shared, viewer)
 }

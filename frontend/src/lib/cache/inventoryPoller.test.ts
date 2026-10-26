@@ -135,6 +135,31 @@ describe("inventoryPoller tag threading", () => {
 })
 
 /**
+ * The guest lock rides on vm:update, so the tree shows a backup or snapshot
+ * lock and clears it without reading the whole inventory again (#125).
+ * Proxmox omits `lock` when there is none: the release goes out as null.
+ */
+describe("inventoryPoller guest lock", () => {
+  const vm = (over: object = {}) => ({ type: "qemu", vmid: 100, node: "n1", status: "running", ...over })
+
+  it("sends the lock a guest takes", async () => {
+    const events = await pollTwice([vm()], [vm({ lock: "backup" })])
+
+    expect(events).toEqual([expect.objectContaining({ event: "vm:update", vmid: 100, lock: "backup" })])
+  })
+
+  it("sends null when the lock is released", async () => {
+    const events = await pollTwice([vm({ lock: "snapshot" })], [vm()])
+
+    expect(events).toEqual([expect.objectContaining({ event: "vm:update", vmid: 100, lock: null })])
+  })
+
+  it("sends nothing while the lock stays the same", async () => {
+    expect(await pollTwice([vm({ lock: "backup" })], [vm({ lock: "backup" })])).toEqual([])
+  })
+})
+
+/**
  * A DR replica lands on its target cluster as a brand new guest, so Auto-HA
  * handed it to the CRM with state "started". That overrides the onboot: 0 the
  * replica config carries on purpose and undoes every `qm stop` a test failover

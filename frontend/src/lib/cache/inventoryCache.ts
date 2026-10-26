@@ -91,8 +91,18 @@ type CacheResult =
 /** Composite cache key: `${tenantId}::${vdcContext ?? 'all'}`. The vDC view
  *  context is part of the identity of a cached payload — a narrowed
  *  inventory must never be served to the union view (or vice-versa). */
-function cacheKey(tenantId: string, vdcContext: string | null = null): string {
+export function inventoryCacheKey(tenantId: string, vdcContext: string | null = null): string {
   return `${tenantId}::${vdcContext ?? 'all'}`
+}
+
+// Bumped by every invalidation. A fetch remembers the epoch it started in and
+// may only write the cache while it is still current: a read begun before a
+// VM action would otherwise land after the invalidation and put the
+// pre-action inventory back for the next 15 minutes.
+const EPOCH_KEY = '__proxcenter_inventory_epoch__' as const
+
+export function inventoryCacheEpoch(): number {
+  return (globalThis as any)[EPOCH_KEY] ?? 0
 }
 
 /**
@@ -103,7 +113,7 @@ function cacheKey(tenantId: string, vdcContext: string | null = null): string {
  */
 export function getInventoryFromCache(tenantId = 'default', vdcContext: string | null = null): CacheResult {
   const store = getCacheStore()
-  const entry = store.get(cacheKey(tenantId, vdcContext))
+  const entry = store.get(inventoryCacheKey(tenantId, vdcContext))
   if (!entry) return { status: 'miss' }
 
   // A payload shape change must never be served to a process that expects the
@@ -124,9 +134,12 @@ export function getInventoryFromCache(tenantId = 'default', vdcContext: string |
   return { status: 'miss' }
 }
 
-export function setCachedInventory(data: CachedInventory, tenantId = 'default', vdcContext: string | null = null): void {
+/** `epoch`: the one the fetch started in; the write is dropped when the cache
+ *  was invalidated since. */
+export function setCachedInventory(data: CachedInventory, tenantId = 'default', vdcContext: string | null = null, epoch?: number): void {
+  if (epoch !== undefined && epoch !== inventoryCacheEpoch()) return
   const store = getCacheStore()
-  store.set(cacheKey(tenantId, vdcContext), { data, timestamp: Date.now(), version: SCHEMA_VERSION })
+  store.set(inventoryCacheKey(tenantId, vdcContext), { data, timestamp: Date.now(), version: SCHEMA_VERSION })
 }
 
 /**
@@ -148,14 +161,18 @@ export function getTenantInventoriesFromCache(tenantId: string): CachedInventory
 }
 
 export function invalidateInventoryCache(tenantId?: string): void {
-  const store = getCacheStore()
-  if (tenantId) {
-    const prefix = `${tenantId}::`
-    for (const key of store.keys()) {
-      if (key.startsWith(prefix)) store.delete(key)
+  ;(globalThis as any)[EPOCH_KEY] = inventoryCacheEpoch() + 1
+  // The fetches in flight keep running for whoever awaits them, but new
+  // readers must not join them: they started before the change.
+  for (const store of [getCacheStore(), getInflightStore()] as Map<string, unknown>[]) {
+    if (tenantId) {
+      const prefix = `${tenantId}::`
+      for (const key of store.keys()) {
+        if (key.startsWith(prefix)) store.delete(key)
+      }
+    } else {
+      store.clear()
     }
-  } else {
-    store.clear()
   }
 }
 
@@ -165,15 +182,23 @@ export function invalidateInventoryCache(tenantId?: string): void {
  * This prevents multiple simultaneous requests from all hitting Proxmox.
  */
 export function getInflightFetch(tenantId = 'default', vdcContext: string | null = null): Promise<CachedInventory> | null {
-  return getInflightStore().get(cacheKey(tenantId, vdcContext)) ?? null
+  return getInflightStore().get(inventoryCacheKey(tenantId, vdcContext)) ?? null
 }
 
 export function setInflightFetch(p: Promise<CachedInventory> | null, tenantId = 'default', vdcContext: string | null = null): void {
   const store = getInflightStore()
-  const key = cacheKey(tenantId, vdcContext)
+  const key = inventoryCacheKey(tenantId, vdcContext)
   if (p !== null) {
     store.set(key, p)
   } else {
     store.delete(key)
   }
+}
+
+/** Frees the slot only if it still holds `p`: a fetch that ends after an
+ *  invalidation or a forced refresh must not drop the newer one. */
+export function clearInflightFetch(p: Promise<CachedInventory>, tenantId = 'default', vdcContext: string | null = null): void {
+  const store = getInflightStore()
+  const key = inventoryCacheKey(tenantId, vdcContext)
+  if (store.get(key) === p) store.delete(key)
 }

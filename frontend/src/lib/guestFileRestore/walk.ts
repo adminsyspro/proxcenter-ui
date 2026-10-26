@@ -91,7 +91,7 @@ export async function listSourceDirectory(src: ResolvedSource, dir: string, sign
       filepath: base64(`/${src.archive}${inner}`),
     })
     if (src.namespace) params.set('ns', src.namespace)
-    raw = await _impl.pbsFetch<any[]>(src.conn, `/admin/datastore/${encodeURIComponent(src.datastore)}/catalog?${params}`, { signal })
+    raw = await _impl.pbsFetch<any[]>(src.conn, `/admin/datastore/${encodeURIComponent(src.datastore)}/catalog?${params}`, { signal }, { slowRead: true })
   }
   const out: SourceTreeEntry[] = []
   for (const r of Array.isArray(raw) ? raw : []) {

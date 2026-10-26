@@ -7,6 +7,10 @@ const { findFirstMock } = vi.hoisted(() => ({ findFirstMock: vi.fn() }))
 vi.mock('@/lib/db/prisma', () => ({ prisma: { managedHost: { findFirst: (...a: any[]) => findFirstMock(...a) } } }))
 vi.mock('@/lib/connections/getConnection', () => ({ getPbsConnectionById: vi.fn(), getPbsConnectionByIdUnscoped: vi.fn() }))
 vi.mock('@/lib/proxmox/client', () => ({ getInsecureAgent: () => 'insecure-agent' }))
+vi.mock('@/lib/proxmox/pbs-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/proxmox/pbs-client')>()),
+  getPbsAgent: (insecure?: boolean) => (insecure ? 'pbs-insecure-agent' : 'pbs-agent'),
+}))
 vi.mock('@/lib/proxmox/fileRestoreTarget', () => ({ resolveFileRestoreTarget: vi.fn() }))
 vi.mock('@/lib/rbac', () => ({ checkPermission: vi.fn(), PERMISSIONS: {} }))
 vi.mock('@/lib/vdc/scope', () => ({ assertVdcPbsAccess: vi.fn() }))
@@ -235,7 +239,7 @@ describe('sourceRequest PBS options', () => {
     const params = new URL(req.url).searchParams
     expect(params.get('ns')).toBe('team')
     expect(params.get('filepath')).toBe(b64('root.pxar.didx/etc/hosts'))
-    expect(req.dispatcher).toBe('insecure-agent')
+    expect(req.dispatcher).toBe('pbs-insecure-agent')
     expect(req.headers.Authorization).toBe('PBSAPIToken=u@pbs!t=s')
   })
 })

@@ -1,8 +1,8 @@
 // Stream a single backup file (e.g. qemu-server.conf.blob, fw.conf.blob)
 // from PBS to the browser. PBS exposes
-//   GET /admin/datastore/{store}/file-download?backup-type=...&backup-id=...&backup-time=...&file-name=...&ns=...
-// which returns the raw bytes of the named .blob (or the index of a
-// .didx/.fidx — useful only for advanced debugging, not for end users).
+//   GET /admin/datastore/{store}/download-decoded?backup-type=...&backup-id=...&backup-time=...&file-name=...&ns=...
+// which returns the decoded content of the named .blob, the same call the
+// PBS web UI makes. There is no `file-download` endpoint.
 //
 // We don't go through pbsFetch because that helper unconditionally parses
 // the body as JSON. Forward the upstream body as-is with a download
@@ -13,7 +13,7 @@ import { cookies } from 'next/headers'
 import { request } from 'undici'
 
 import { getPbsConnectionById, getPbsConnectionByIdUnscoped } from '@/lib/connections/getConnection'
-import { getInsecureAgent } from '@/lib/proxmox/client'
+import { getPbsAgent } from '@/lib/proxmox/pbs-client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { assertVdcPbsAccess } from '@/lib/vdc/scope'
 import { residualEscapeRefusal } from '@/lib/api/pathParam'
@@ -76,7 +76,7 @@ export async function GET(
       ? await getPbsConnectionById(id)
       : await getPbsConnectionByIdUnscoped(id)
 
-    // PBS file-download endpoint. PBS returns the raw bytes (no
+    // PBS download-decoded endpoint. PBS returns the decoded bytes (no
     // Content-Disposition by default), so we add one downstream.
     const qs = new URLSearchParams({
       'backup-type': backupType,
@@ -86,8 +86,8 @@ export async function GET(
     })
     if (ns) qs.set('ns', ns)
 
-    const upstreamUrl = `${conn.baseUrl.replace(/\/$/, '')}/api2/json/admin/datastore/${encodeURIComponent(datastore)}/file-download?${qs.toString()}`
-    const dispatcher = conn.insecureDev ? getInsecureAgent() : undefined
+    const upstreamUrl = `${conn.baseUrl.replace(/\/$/, '')}/api2/json/admin/datastore/${encodeURIComponent(datastore)}/download-decoded?${qs.toString()}`
+    const dispatcher = getPbsAgent(conn.insecureDev)
 
     const upstream = await request(upstreamUrl, {
       method: 'GET',

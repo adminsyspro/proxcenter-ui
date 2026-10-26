@@ -34,7 +34,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     const conn = await getPbsConnectionById(id)
 
     try {
-      const media = await pbsFetch<any[]>(conn, "/tape/media/list")
+      const media = await pbsFetch<any[]>(conn, "/tape/media/list", {}, { slowRead: true })
 
       return NextResponse.json({ data: Array.isArray(media) ? media : [] })
     } catch (inner: any) {

@@ -224,7 +224,7 @@ export async function GET(req: Request) {
 
         await Promise.all(inFlight.map(async (m: any) => {
           try {
-            const progRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/drs/migrations/${m.id}/progress`, {
+            const progRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/drs/migrations/${encodeURIComponent(String(m.id))}/progress`, {
               headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
             })
             if (!progRes.ok) return
@@ -428,7 +428,7 @@ export async function GET(req: Request) {
         for (const plan of plans) {
           if (!plan.last_failover && !plan.last_test) continue
           try {
-            const histRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/plans/${plan.id}/history`, {
+            const histRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/replication/plans/${encodeURIComponent(String(plan.id))}/history`, {
               headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
             })
             if (!histRes.ok) continue

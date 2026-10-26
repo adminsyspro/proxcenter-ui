@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { parseVmConfig } from "./soap"
+import { buildVmdkDownloadUrl, decodeXmlText, parseVmConfig } from "./soap"
 
 /** A property collector answer reduced to what parseVmConfig reads for disks. */
 function answer(devices: string): string {
@@ -83,3 +83,45 @@ describe("parseVmConfig vTPM (roadmap#1)", () => {
   })
 })
 
+
+describe("parseVmConfig decodes the XML text of every name it reads", () => {
+  const escapedAnswer =
+    `<propSet><name>name</name><val>s117a O&apos;Brien &amp; Co &lt;prod&gt;</val></propSet>` +
+    `<propSet><name>config.guestFullName</name><val>Other (32-bit) &quot;legacy&quot;</val></propSet>` +
+    `<propSet><name>config.files.vmPathName</name><val>[Datastore] s117a O&apos;Brien/s117a O&apos;Brien.vmx</val></propSet>` +
+    `<propSet><name>config.hardware.device</name><val>` +
+    ctrl("VirtualLsiLogicController", 1000, 0) +
+    `<VirtualDevice xsi:type="VirtualDisk"><key>2000</key><deviceInfo><label>Hard disk 1 &amp; only</label></deviceInfo>` +
+    `<backing><fileName>[Datastore] s117a O&apos;Brien/s117a O&apos;Brien.vmdk</fileName></backing><controllerKey>1000</controllerKey><unitNumber>0</unitNumber>` +
+    `<capacityInBytes>1048576</capacityInBytes></VirtualDevice>` +
+    `<VirtualDevice xsi:type="VirtualVmxnet3"><key>4000</key><deviceInfo><label>Network adapter 1</label><summary>VM Network &amp; DMZ</summary></deviceInfo><macAddress>00:50:56:aa:bb:cc</macAddress></VirtualDevice>` +
+    `</val></propSet>`
+
+  it("gives back the apostrophe, ampersand, quotes and angle brackets of the source", () => {
+    const cfg = parseVmConfig(escapedAnswer)
+    expect(cfg.name).toBe("s117a O'Brien & Co <prod>")
+    expect(cfg.guestOS).toBe('Other (32-bit) "legacy"')
+    expect(cfg.vmPathName).toBe("[Datastore] s117a O'Brien/s117a O'Brien.vmx")
+    const [d] = cfg.disks
+    expect(d.label).toBe("Hard disk 1 & only")
+    expect(d.fileName).toBe("[Datastore] s117a O'Brien/s117a O'Brien.vmdk")
+    expect(d.datastoreName).toBe("Datastore")
+    expect(d.relativePath).toBe("s117a O'Brien/s117a O'Brien.vmdk")
+    expect(cfg.nics[0].network).toBe("VM Network & DMZ")
+  })
+
+  it("decodes numeric references and leaves unknown entities and plain text alone", () => {
+    expect(decodeXmlText("a&#39;b&#x27;c")).toBe("a'b'c")
+    expect(decodeXmlText("caf&#233;")).toBe("café")
+    expect(decodeXmlText("&unknown; stays &amp; ok")).toBe("&unknown; stays & ok")
+    expect(decodeXmlText("no entity here")).toBe("no entity here")
+    expect(decodeXmlText("&#0; &#1114112;")).toBe("&#0; &#1114112;")
+  })
+
+  it("builds the datastore download URL from the decoded path, with the quote encoded once", () => {
+    const [d] = parseVmConfig(escapedAnswer).disks
+    const url = buildVmdkDownloadUrl("https://10.42.0.21", d)
+    expect(url).toBe("https://10.42.0.21/folder/s117a%20O'Brien/s117a%20O'Brien-flat.vmdk?dcPath=ha-datacenter&dsName=Datastore")
+    expect(url).not.toContain("%26apos")
+  })
+})

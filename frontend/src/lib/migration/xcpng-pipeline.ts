@@ -28,6 +28,7 @@ import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { assertAbsPath } from "@/lib/ssh/validate"
 import { backgroundBashCommand, parseBackgroundPid } from "./remote-commands"
+import { executeSSHWithTimeout } from "./ssh-long-exec"
 import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 import { getNodeSshEndpointForMigration } from "./pve-tasks"
 import { openXcpngSource, type XcpngSource } from "@/lib/xcpng/source"
@@ -154,86 +155,6 @@ async function waitForPveTask(
     await new Promise(r => setTimeout(r, 3000))
   }
   throw new Error(`PVE task timed out after ${timeoutMs / 1000}s`)
-}
-
-/**
- * executeSSH with configurable timeout for long-running operations.
- */
-async function executeSSHWithTimeout(
-  db: any,
-  connectionId: string,
-  target: SshTarget,
-  command: string,
-  timeoutMs: number
-): Promise<{ success: boolean; output?: string; error?: string }> {
-  const connection = await db.connection.findUnique({
-    where: { id: connectionId },
-    select: {
-      sshEnabled: true, sshPort: true, sshUser: true,
-      sshAuthMethod: true, sshKeyEnc: true, sshPassEnc: true, sshUseSudo: true,
-    },
-  })
-
-  if (!connection?.sshEnabled) {
-    return { success: false, error: "SSH not enabled for this connection" }
-  }
-
-  const { Client } = await import("ssh2")
-  const port = await resolveSshTargetPort(db, connectionId, target, connection.sshPort)
-  const user = connection.sshUser || "root"
-
-  let key: string | undefined
-  let password: string | undefined
-  let passphrase: string | undefined
-
-  const authMethod = connection.sshAuthMethod || (connection.sshKeyEnc ? "key" : "password")
-  if (authMethod === "key" && connection.sshKeyEnc) {
-    key = decryptSecret(connection.sshKeyEnc)
-    if (connection.sshPassEnc) try { passphrase = decryptSecret(connection.sshPassEnc) } catch {}
-  } else if (connection.sshPassEnc) {
-    password = decryptSecret(connection.sshPassEnc)
-  }
-
-  const finalCommand = connection.sshUseSudo ? `sudo ${command}` : command
-
-  return new Promise((resolve) => {
-    const conn = new Client()
-    const timeout = setTimeout(() => {
-      conn.end()
-      resolve({ success: false, error: `SSH timeout after ${timeoutMs / 1000}s` })
-    }, timeoutMs)
-
-    conn.on("ready", () => {
-      conn.exec(finalCommand, (err, stream) => {
-        if (err) { clearTimeout(timeout); conn.end(); resolve({ success: false, error: err.message }); return }
-
-        let stdout = ""
-        let stderr = ""
-        stream.on("data", (data: Buffer) => { stdout += data.toString() })
-        stream.stderr.on("data", (data: Buffer) => { stderr += data.toString() })
-        stream.on("close", (code: number) => {
-          clearTimeout(timeout)
-          conn.end()
-          if (code === 0 || code === null) {
-            resolve({ success: true, output: stdout.trim() })
-          } else {
-            resolve({ success: false, error: stderr.trim() || `Exit code ${code}` })
-          }
-        })
-      })
-    })
-
-    conn.on("error", (err) => { clearTimeout(timeout); resolve({ success: false, error: err.message }) })
-
-    const connectConfig: Record<string, unknown> = {
-      host: sshTargetHost(target), port, username: user, readyTimeout: 30_000,
-      keepaliveInterval: 10000, keepaliveCountMax: 999,
-    }
-    if (key) { connectConfig.privateKey = key; if (passphrase) connectConfig.passphrase = passphrase }
-    else if (password) { connectConfig.password = password }
-
-    conn.connect(connectConfig as any)
-  })
 }
 
 /**

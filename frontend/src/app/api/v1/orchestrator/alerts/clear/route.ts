@@ -46,13 +46,13 @@ async function handleDelete(req: Request) {
     if (!connectionId) {
       const results = []
       for (const connId of tenantConnectionIds) {
-        const result = await orchestratorFetch(`/alerts/clear?connection_id=${connId}`, { method: 'DELETE' })
+        const result = await orchestratorFetch(`/alerts/clear?${new URLSearchParams({ connection_id: connId })}`, { method: 'DELETE' })
         results.push(result)
       }
       return NextResponse.json({ cleared: results.length })
     }
 
-    const result = await orchestratorFetch(`/alerts/clear?connection_id=${connectionId}`, { method: 'DELETE' })
+    const result = await orchestratorFetch(`/alerts/clear?${new URLSearchParams({ connection_id: connectionId })}`, { method: 'DELETE' })
 
     return NextResponse.json(result)
   } catch (error: any) {

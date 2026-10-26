@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { orchestratorFetch } from '@/lib/orchestrator/client'
+import { orchestratorFetch, orchestratorPath } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getCurrentTenantId, DEFAULT_TENANT_ID } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
@@ -12,7 +12,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 async function verifyRuleBelongsToTenant(id: string): Promise<{ rule: any; allowed: boolean }> {
-  const rule = await orchestratorFetch(`/alerts/rules/${id}`) as any
+  const rule = await orchestratorFetch(orchestratorPath`/alerts/rules/${id}`) as any
   const tenantId = await getCurrentTenantId()
   // Visibility is derived from alert_rule_owners. A vDC tenant only sees
   // and edits rules they authored; the provider sees everything they own
@@ -88,7 +88,7 @@ async function handlePut(
       await injectVdcNodeScope(body, tenantId)
     }
 
-    const result = await orchestratorFetch(`/alerts/rules/${id}`, {
+    const result = await orchestratorFetch(orchestratorPath`/alerts/rules/${id}`, {
       method: 'PUT',
       body
     })
@@ -127,7 +127,7 @@ async function handleDelete(
     const { allowed } = await verifyRuleBelongsToTenant(id)
     if (!allowed) return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
 
-    const result = await orchestratorFetch(`/alerts/rules/${id}`, {
+    const result = await orchestratorFetch(orchestratorPath`/alerts/rules/${id}`, {
       method: 'DELETE'
     })
 

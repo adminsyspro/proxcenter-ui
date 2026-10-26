@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 
+import { constantTimeStringEqual } from '@/lib/crypto/constantTime'
 import { prisma } from '@/lib/db/prisma'
 import { getSetting } from '@/lib/db/settings'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
@@ -120,7 +121,7 @@ export async function GET(req: Request) {
   const expectedKey = process.env.ORCHESTRATOR_API_KEY
   const providedKey = req.headers.get('X-API-Key')
 
-  if (!expectedKey || !providedKey || providedKey !== expectedKey) {
+  if (!expectedKey || !providedKey || !constantTimeStringEqual(providedKey, expectedKey)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

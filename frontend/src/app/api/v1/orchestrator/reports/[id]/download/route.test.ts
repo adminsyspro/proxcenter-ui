@@ -8,7 +8,10 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@/lib/rbac', () => ({ checkPermission: h.checkPermission, PERMISSIONS: { REPORTS_VIEW: 'reports.view' } }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: h.getCurrentTenantId, DEFAULT_TENANT_ID: 'default' }))
-vi.mock('@/lib/orchestrator', () => ({ orchestratorFetch: vi.fn() }))
+vi.mock('@/lib/orchestrator', async (orig) => {
+  const actual = await orig<typeof import('@/lib/orchestrator')>()
+  return { orchestratorFetch: vi.fn(), orchestratorSegment: actual.orchestratorSegment, OrchestratorPathError: actual.OrchestratorPathError }
+})
 
 import { callRoute } from '@/__tests__/setup/route-test'
 import { GET } from './route'
@@ -89,7 +92,18 @@ describe('GET /orchestrator/reports/[id]/download', () => {
     const res = await callRoute(GET as any, { params: { id: 'rep-1' }, searchParams: { format: 'csv' } })
 
     expect(res.status).toBe(404)
-    expect((await res.json()).error).toContain('no CSV export')
+    // The upstream body stays in the server log: the caller gets the status and a fixed message.
+    const error = (await res.json()).error
+    expect(error).toBe('Report not found')
+    expect(error).not.toContain('no CSV export')
+  })
+
+  it('refuses an id that is not a plain identifier before any upstream call', async () => {
+    for (const id of ['..%2F..%2Fhealth', '../health', 'a/b', 'rep?x=1']) {
+      const res = await callRoute(GET as any, { params: { id } })
+      expect(res.status, id).toBe(400)
+    }
+    expect(h.fetchMock).not.toHaveBeenCalled()
   })
 
   it('returns the permission denial without touching the orchestrator', async () => {

@@ -3,7 +3,6 @@ import { cleanup, within } from '@testing-library/react'
 import { renderWithProviders, screen, waitFor } from '@/__tests__/setup/renderWithProviders'
 import userEvent from '@testing-library/user-event'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
-import { resourcesFixture } from '@/__tests__/fixtures/resources'
 import TagManager from './TagManager'
 
 // TagColorContext is not wrapped by the test harness. Mock it so the component
@@ -17,12 +16,25 @@ vi.mock('@/contexts/TagColorContext', () => ({
   }),
 }))
 
+const toastError = vi.fn()
+
+vi.mock('@/contexts/ToastContext', () => ({
+  useToast: () => ({ success: vi.fn(), error: toastError, info: vi.fn(), warning: vi.fn() }),
+}))
+
 const CONN_ID = 'test-conn-1'
 const NODE = 'pve1'
 const TYPE = 'qemu'
 const VMID = '100'
 const CONFIG_URL = `*/api/v1/connections/${CONN_ID}/guests/${TYPE}/${NODE}/${VMID}/config`
-const RESOURCES_URL = `*/api/v1/connections/${CONN_ID}/resources`
+const TAG_ACCESS_URL = `*/api/v1/connections/${CONN_ID}/tag-access`
+
+// What GET /tag-access answers in free mode: the tags of the visible guests.
+const FREE_ACCESS = { userAllow: 'free', privileged: false, freeform: true, allowedTags: ['db', 'dev', 'prod', 'web'], lockedTags: [] }
+
+function withAccess(data: Record<string, unknown>) {
+  server.use(http.get(TAG_ACCESS_URL, () => HttpResponse.json({ data })))
+}
 
 function makeProps(overrides: Partial<Parameters<typeof TagManager>[0]> = {}) {
   return {
@@ -82,14 +94,14 @@ describe('TagManager - renders existing tags', () => {
 })
 
 // ------------------------------------------------------------------ //
-// 2. Opens popover and loads suggestions from the resources endpoint
+// 2. Opens popover and loads suggestions from the tag-access endpoint
 // ------------------------------------------------------------------ //
 describe('TagManager - popover opens and loads suggestions', () => {
   beforeEach(() => {
     // Ensure a clean DOM between tests in this describe block.
     cleanup()
     server.use(
-      http.get(RESOURCES_URL, () => HttpResponse.json(resourcesFixture)),
+      http.get(TAG_ACCESS_URL, () => HttpResponse.json({ data: FREE_ACCESS })),
     )
   })
 
@@ -139,7 +151,7 @@ describe('TagManager - adding a tag via input calls onTagsChange', () => {
     const user = userEvent.setup()
 
     server.use(
-      http.get(RESOURCES_URL, () => HttpResponse.json(resourcesFixture)),
+      http.get(TAG_ACCESS_URL, () => HttpResponse.json({ data: FREE_ACCESS })),
       http.put(CONFIG_URL, () => HttpResponse.json({ data: null })),
     )
 
@@ -171,7 +183,7 @@ describe('TagManager - adding a tag via input calls onTagsChange', () => {
     const bodies: unknown[] = []
 
     server.use(
-      http.get(RESOURCES_URL, () => HttpResponse.json(resourcesFixture)),
+      http.get(TAG_ACCESS_URL, () => HttpResponse.json({ data: FREE_ACCESS })),
       http.put(CONFIG_URL, async ({ request }) => {
         bodies.push(await request.json())
 
@@ -194,15 +206,13 @@ describe('TagManager - adding a tag via input calls onTagsChange', () => {
     expect(bodies).toEqual([{ tags: 'prod;db' }])
   })
 
-  it('does not call onTagsChange when the PUT returns an error', async () => {
+  it('shows the API refusal in a toast and does not call onTagsChange', async () => {
     const onTagsChange = vi.fn()
     const user = userEvent.setup()
-
-    // Stub window.alert so the error path does not throw in jsdom
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    toastError.mockReset()
 
     server.use(
-      http.get(RESOURCES_URL, () => HttpResponse.json(resourcesFixture)),
+      http.get(TAG_ACCESS_URL, () => HttpResponse.json({ data: FREE_ACCESS })),
       http.put(CONFIG_URL, () => HttpResponse.json({ error: 'Permission denied' }, { status: 403 })),
     )
 
@@ -219,11 +229,9 @@ describe('TagManager - adding a tag via input calls onTagsChange', () => {
     await user.click(within(popover).getByRole('button', { name: 'Add' }))
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalled()
+      expect(toastError).toHaveBeenCalledWith(expect.stringContaining('Permission denied'))
     })
     expect(onTagsChange).not.toHaveBeenCalled()
-
-    alertSpy.mockRestore()
   })
 })
 
@@ -284,5 +292,77 @@ describe('TagManager - removing a tag calls onTagsChange', () => {
     })
     // Proxmox requires `delete: 'tags'` when removing the last tag (empty string ignored)
     expect(capturedBody).toEqual({ delete: 'tags' })
+  })
+})
+
+// ------------------------------------------------------------------ //
+// 5. Datacenter User Tag Access (#1208)
+// ------------------------------------------------------------------ //
+describe('TagManager - datacenter User Tag Access', () => {
+  beforeEach(() => {
+    cleanup()
+  })
+
+  it('list mode: no free-text input, only the allowed tags are offered', async () => {
+    const user = userEvent.setup()
+    withAccess({ userAllow: 'list', privileged: false, freeform: false, allowedTags: ['ok-1', 'ok-2'], lockedTags: [] })
+
+    const { container } = renderWithProviders(<TagManager {...makeProps({ tags: ['ok-1'] })} />)
+    await user.click(findAddBtn(container))
+    const popover = await waitFor(() => findPopover())
+
+    expect(await within(popover).findByText('ok-2')).toBeInTheDocument()
+    expect(within(popover).queryByPlaceholderText('New tag...')).not.toBeInTheDocument()
+    expect(within(popover).getByText('Only the tags below can be added (datacenter User Tag Access)')).toBeInTheDocument()
+  })
+
+  it('list mode: a tag outside the list on the guest cannot be removed', async () => {
+    withAccess({ userAllow: 'list', privileged: false, freeform: false, allowedTags: ['ok-1'], lockedTags: [] })
+
+    const { container } = renderWithProviders(<TagManager {...makeProps({ tags: ['ok-1', 'legacy'] })} />)
+
+    await waitFor(() => {
+      const legacy = within(container).getByText('legacy').closest('.MuiChip-root') as HTMLElement
+      expect(legacy.querySelector('.MuiChip-deleteIcon')).toBeNull()
+    })
+    const ok = within(container).getByText('ok-1').closest('.MuiChip-root') as HTMLElement
+    expect(ok.querySelector('.MuiChip-deleteIcon')).not.toBeNull()
+  })
+
+  it('none mode: the add button is turned off and no chip can be removed', async () => {
+    withAccess({ userAllow: 'none', privileged: false, freeform: false, allowedTags: [], lockedTags: [] })
+
+    const { container } = renderWithProviders(<TagManager {...makeProps({ tags: ['prod'] })} />)
+
+    await waitFor(() => expect(findAddBtn(container)).toBeDisabled())
+    const chip = within(container).getByText('prod').closest('.MuiChip-root') as HTMLElement
+    expect(chip.querySelector('.MuiChip-deleteIcon')).toBeNull()
+  })
+
+  it('free mode: a registered tag on the guest is locked, the others stay removable', async () => {
+    withAccess({ ...FREE_ACCESS, lockedTags: ['reserved'] })
+
+    const { container } = renderWithProviders(<TagManager {...makeProps({ tags: ['reserved', 'web'] })} />)
+
+    await waitFor(() => {
+      const reserved = within(container).getByText('reserved').closest('.MuiChip-root') as HTMLElement
+      expect(reserved.querySelector('.MuiChip-deleteIcon')).toBeNull()
+    })
+    const web = within(container).getByText('web').closest('.MuiChip-root') as HTMLElement
+    expect(web.querySelector('.MuiChip-deleteIcon')).not.toBeNull()
+  })
+
+  it('a user who manages the connection keeps the full editor whatever the mode', async () => {
+    const user = userEvent.setup()
+    withAccess({ userAllow: 'none', privileged: true, freeform: false, allowedTags: ['reserved'], lockedTags: [] })
+
+    const { container } = renderWithProviders(<TagManager {...makeProps({ tags: ['reserved'] })} />)
+    await waitFor(() => expect(findAddBtn(container)).not.toBeDisabled())
+    await user.click(findAddBtn(container))
+    const popover = await waitFor(() => findPopover())
+
+    expect(within(popover).getByPlaceholderText('New tag...')).toBeInTheDocument()
+    const chip = within(container).getByText('reserved').closest('.MuiChip-root') as HTMLElement
+    expect(chip.querySelector('.MuiChip-deleteIcon')).not.toBeNull()
   })
 })

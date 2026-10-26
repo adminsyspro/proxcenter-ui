@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -17,6 +17,7 @@ import {
 } from '@mui/material'
 
 import { useTagColors } from '@/contexts/TagColorContext'
+import { useToast } from '@/contexts/ToastContext'
 
 import { sanitizeTag, filterTagInput } from '../helpers'
 
@@ -32,47 +33,56 @@ type TagManagerProps = {
   onTagsChange: (newTags: string[]) => void
 }
 
+/** GET /api/v1/connections/{id}/tag-access: the datacenter User Tag Access as it applies to this user (#1208). */
+type TagAccess = {
+  userAllow: 'free' | 'list' | 'existing' | 'none'
+  privileged: boolean
+  freeform: boolean
+  allowedTags: string[]
+  lockedTags: string[]
+}
+
 function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManagerProps) {
   const t = useTranslations()
+  const toast = useToast()
   const { getColor } = useTagColors(connId)
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null)
-  const [availableTags, setAvailableTags] = useState<string[]>([])
+  const [access, setAccess] = useState<TagAccess | null>(null)
   const [loadingTags, setLoadingTags] = useState(false)
   const [newTagInput, setNewTagInput] = useState('')
   const [busy, setBusy] = useState(false)
 
   const open = Boolean(anchorEl)
 
-  // Charger les tags existants dans Proxmox quand on ouvre le popover
+  const loadAccess = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/tag-access`, { cache: 'no-store' })
+
+      if (res.ok) setAccess((await res.json())?.data ?? null)
+    } catch (e) {
+      console.error('Failed to load tag access', e)
+    }
+  }, [connId])
+
+  useEffect(() => { void loadAccess() }, [loadAccess])
+
+  // Until the policy is known the editor stays open: the API enforces it anyway.
+  const canChange = (tag: string) => {
+    if (!access || access.privileged) return true
+    if (access.lockedTags.includes(tag)) return false
+
+    return access.freeform || access.allowedTags.includes(tag)
+  }
+
+  const canCreate = !access || access.privileged || access.freeform
+  const readOnly = !!access && !access.privileged && !access.freeform && access.allowedTags.length === 0
+
+  // Recharger les tags autorisés quand on ouvre le popover
   const handleOpenAdd = async (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget)
     setLoadingTags(true)
-
-    try {
-      // Récupérer toutes les resources (VMs/CTs) pour extraire les tags uniques
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' })
-
-      if (res.ok) {
-        const json = await res.json()
-        const guests = Array.isArray(json?.data) ? json.data : []
-        const allTags = new Set<string>()
-
-        guests.forEach((g: any) => {
-          if (g.tags) {
-            String(g.tags).split(/[;,]+/).forEach(t => {
-              const trimmed = t.trim()
-
-              if (trimmed) allTags.add(trimmed)
-            })
-          }
-        })
-        setAvailableTags(Array.from(allTags).sort((a, b) => a.localeCompare(b)))
-      }
-    } catch (e) {
-      console.error('Failed to load tags', e)
-    } finally {
-      setLoadingTags(false)
-    }
+    await loadAccess()
+    setLoadingTags(false)
   }
 
   const handleClose = () => {
@@ -84,7 +94,7 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
   const handleAddTag = async (tagToAdd: string) => {
     const sanitized = sanitizeTag(tagToAdd)
 
-    if (!sanitized || tags.includes(sanitized)) return
+    if (!sanitized || tags.includes(sanitized) || !canChange(sanitized)) return
     
     setBusy(true)
 
@@ -107,10 +117,10 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
       } else {
         const err = await res.json().catch(() => ({}))
 
-        alert(`${t('common.error')}: ${err?.error || res.status}`)
+        toast.error(`${t('common.error')}: ${err?.error || res.status}`)
       }
     } catch (e: any) {
-      alert(`${t('common.error')}: ${e?.message || e}`)
+      toast.error(`${t('common.error')}: ${e?.message || e}`)
     } finally {
       setBusy(false)
     }
@@ -141,39 +151,42 @@ function TagManager({ tags, connId, node, type, vmid, onTagsChange }: TagManager
       } else {
         const err = await res.json().catch(() => ({}))
 
-        alert(`${t('common.error')}: ${err?.error || res.status}`)
+        toast.error(`${t('common.error')}: ${err?.error || res.status}`)
       }
     } catch (e: any) {
-      alert(`${t('common.error')}: ${e?.message || e}`)
+      toast.error(`${t('common.error')}: ${e?.message || e}`)
     } finally {
       setBusy(false)
     }
   }
 
-  // Tags disponibles mais pas encore sur cette VM
-  const suggestedTags = availableTags.filter(t => !tags.includes(t))
+  // Tags autorisés mais pas encore sur cette VM
+  const suggestedTags = (access?.allowedTags ?? []).filter(t => !tags.includes(t))
 
   return (
     <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
       {/* Tags existants avec bouton × */}
-      {tags.map(t => {
-        const c = getColor(t).bg
+      {tags.map(tag => {
+        // Solid PVE colours, as in the tree: a tag colour used as text on its
+        // own 8 % tint vanished on the dark theme for dark tags.
+        const { bg, fg } = getColor(tag)
+        const removable = canChange(tag)
+        const lockedHint = access?.lockedTags.includes(tag) ? t('inventory.tagAccessLocked') : t('inventory.tagAccessReadOnly')
 
-        
-return (
+        const chip = (
           <Chip
-            key={t}
+            key={tag}
             size="small"
-            icon={<i className="ri-price-tag-3-fill" style={{ fontSize: 11, color: c, marginLeft: 6 }} />}
-            label={t.toLowerCase()}
+            icon={<i className="ri-price-tag-3-fill" style={{ fontSize: 11, color: fg, marginLeft: 6 }} />}
+            label={tag.toLowerCase()}
             disabled={busy}
-            onDelete={() => handleRemoveTag(t)}
+            onDelete={removable ? () => handleRemoveTag(tag) : undefined}
             deleteIcon={
               <CloseIcon
                 sx={{
                   fontSize: '12px !important',
-                  color: `${c}88 !important`,
-                  '&:hover': { color: `${c} !important` }
+                  color: `${fg}aa !important`,
+                  '&:hover': { color: `${fg} !important` }
                 }}
               />
             }
@@ -183,32 +196,37 @@ return (
               '& .MuiChip-label': { pl: 0.5, pr: 0.5, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 },
               '& .MuiChip-deleteIcon': { ml: 0, mr: 0.25, fontSize: 12 },
               '& .MuiChip-icon': { mr: -0.25 },
-              bgcolor: `${c}18`,
-              color: c,
+              bgcolor: bg,
+              color: fg,
               border: 'none',
-              transition: 'background 0.15s',
-              '&:hover': { bgcolor: `${c}30` },
+              transition: 'filter 0.15s',
+              '&:hover': { bgcolor: bg, filter: 'brightness(1.12)' },
             }}
           />
         )
+
+        return removable ? chip : <MuiTooltip key={tag} title={lockedHint}>{chip}</MuiTooltip>
       })}
 
       {/* Bouton + pour ajouter */}
-      <MuiTooltip title={t('inventory.addTag')}>
-        <IconButton
-          size="small"
-          onClick={handleOpenAdd}
-          disabled={busy}
-          sx={{
-            width: 22,
-            height: 22,
-            border: '1px dashed',
-            borderColor: 'divider',
-            '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' }
-          }}
-        >
-          <AddIcon sx={{ fontSize: 14 }} />
-        </IconButton>
+      <MuiTooltip title={readOnly ? t('inventory.tagAccessReadOnly') : t('inventory.addTag')}>
+        <span>
+          <IconButton
+            size="small"
+            aria-label={t('inventory.addTag')}
+            onClick={handleOpenAdd}
+            disabled={busy || readOnly}
+            sx={{
+              width: 22,
+              height: 22,
+              border: '1px dashed',
+              borderColor: 'divider',
+              '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' }
+            }}
+          >
+            <AddIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        </span>
       </MuiTooltip>
 
       {/* Popover pour ajouter un tag */}
@@ -225,29 +243,35 @@ return (
           </Typography>
 
           {/* Input pour nouveau tag */}
-          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-            <TextField
-              size="small"
-              placeholder={t('inventoryPage.newTag')}
-              value={newTagInput}
-              onChange={e => setNewTagInput(filterTagInput(e.target.value))}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && newTagInput.trim()) {
-                  void handleAddTag(newTagInput)
-                }
-              }}
-              disabled={busy}
-              sx={{ flex: 1 }}
-            />
-            <Button
-              size="small"
-              variant="contained"
-              disabled={!newTagInput.trim() || busy}
-              onClick={() => handleAddTag(newTagInput)}
-            >
-              {t('common.add')}
-            </Button>
-          </Box>
+          {canCreate ? (
+            <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <TextField
+                size="small"
+                placeholder={t('inventoryPage.newTag')}
+                value={newTagInput}
+                onChange={e => setNewTagInput(filterTagInput(e.target.value))}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newTagInput.trim()) {
+                    void handleAddTag(newTagInput)
+                  }
+                }}
+                disabled={busy}
+                sx={{ flex: 1 }}
+              />
+              <Button
+                size="small"
+                variant="contained"
+                disabled={!newTagInput.trim() || busy}
+                onClick={() => handleAddTag(newTagInput)}
+              >
+                {t('common.add')}
+              </Button>
+            </Box>
+          ) : (
+            <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mb: 1 }}>
+              {t('inventory.tagAccessNoNewTags')}
+            </Typography>
+          )}
 
           <Divider sx={{ my: 1.5 }} />
 
@@ -267,26 +291,24 @@ return (
             </Typography>
           ) : (
             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', maxHeight: 150, overflow: 'auto' }}>
-              {suggestedTags.map(t => {
-                const c = getColor(t).bg
+              {suggestedTags.map(tag => {
+                const { bg, fg } = getColor(tag)
 
-                
-return (
+                return (
                   <Chip
-                    key={t}
+                    key={tag}
                     size="small"
-                    label={t}
-                    onClick={() => handleAddTag(t)}
+                    label={tag}
+                    onClick={() => handleAddTag(tag)}
                     disabled={busy}
                     sx={{
                       height: 22,
                       cursor: 'pointer',
                       '& .MuiChip-label': { px: 1, fontSize: 11, fontWeight: 700 },
-                      bgcolor: `${c}15`,
-                      color: c,
-                      border: '1px solid',
-                      borderColor: `${c}44`,
-                      '&:hover': { bgcolor: `${c}30` }
+                      bgcolor: bg,
+                      color: fg,
+                      transition: 'filter 0.15s',
+                      '&:hover': { bgcolor: bg, filter: 'brightness(1.12)' }
                     }}
                   />
                 )

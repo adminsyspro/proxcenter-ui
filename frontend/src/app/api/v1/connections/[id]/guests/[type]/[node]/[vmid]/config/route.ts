@@ -5,6 +5,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { invalidateGuestDiskTotal } from "@/lib/inventory/guestDiskTotals"
 import { writeGuestConfig, type GuestConfigWriteResult } from "@/lib/proxmox/guestConfigWrite"
 import { mergeMemoryProperty } from "@/lib/proxmox/memoryProperty"
+import { enforceGuestTagAccess } from "@/lib/proxmox/tagAccessServer"
 import { isVmConfigNotFoundError, locateVmInCluster, type GuestType } from "@/lib/proxmox/locateVm"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, checkPermissions, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
@@ -265,6 +266,16 @@ async function putHandler(
       denied = await checkPermissions([...hardwarePerms], "vm", resourceId)
     }
     if (denied) return denied
+
+    // Datacenter User Tag Access / Registered Tags (#1208): PVE never applies
+    // them to the connection's own credentials, so they are checked here.
+    const deletesTags = typeof body.delete === 'string' && body.delete.split(',').some((k: string) => k.trim() === 'tags')
+    if (body.tags !== undefined || deletesTags) {
+      const tagDenied = await enforceGuestTagAccess({
+        connId: id, conn, oldTags: currentConfig?.tags, newTags: deletesTags ? '' : body.tags,
+      })
+      if (tagDenied) return tagDenied
+    }
 
     // Only a slot that carries, or would carry, an optical drive is bound to
     // the PVE digest: the media decision above was taken on that generation.

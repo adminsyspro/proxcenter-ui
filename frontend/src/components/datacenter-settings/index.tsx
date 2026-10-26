@@ -11,6 +11,7 @@ import CrsSection from './CrsSection'
 import SecuritySection from './SecuritySection'
 import BandwidthSection from './BandwidthSection'
 import AdvancedSection from './AdvancedSection'
+import { mergeKV, parseKV, tagListValue } from './optionStrings'
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -94,44 +95,6 @@ function buildTagStyleString(colorMap: TagColorEntry[], shape: string, ordering:
 }
 
 /* ------------------------------------------------------------------ */
-/* Generic option parsers (PVE returns string or object)               */
-/* ------------------------------------------------------------------ */
-
-function parseKV(val: any, keys: string[]): Record<string, string> {
-  const result: Record<string, string> = {}
-  keys.forEach(k => result[k] = '')
-  if (!val) return result
-  if (typeof val === 'object') {
-    keys.forEach(k => { if (val[k] !== undefined) result[k] = String(val[k]) })
-    // webauthn uses 'rp' for name
-    if (val.rp !== undefined && keys.includes('rp')) result.rp = String(val.rp)
-    return result
-  }
-  String(val).split(',').forEach(part => {
-    const [k, ...rest] = part.split('=')
-    const v = rest.join('=')
-    if (keys.includes(k)) result[k] = v || ''
-  })
-  return result
-}
-
-function buildKV(obj: Record<string, string>): string {
-  return Object.entries(obj).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(',')
-}
-
-/* ------------------------------------------------------------------ */
-/* Bandwidth parsing                                                   */
-/* ------------------------------------------------------------------ */
-
-function parseBwLimit(val: any): Record<string, string> {
-  return parseKV(val, ['default', 'restore', 'migration', 'clone', 'move'])
-}
-
-function buildBwLimit(bw: Record<string, string>): string {
-  return buildKV(bw)
-}
-
-/* ------------------------------------------------------------------ */
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -192,6 +155,7 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
   const [nextIdLower, setNextIdLower] = useState('')
   const [nextIdUpper, setNextIdUpper] = useState('')
   const [userTagAccess, setUserTagAccess] = useState('free')
+  const [userTagAllowList, setUserTagAllowList] = useState('')
   const [registeredTags, setRegisteredTags] = useState('')
   const [consentText, setConsentText] = useState('')
 
@@ -217,7 +181,8 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
 
   const advancedSetters: Record<string, (v: string) => void> = {
     nextIdLower: setNextIdLower, nextIdUpper: setNextIdUpper,
-    userTagAccess: setUserTagAccess, registeredTags: setRegisteredTags, consentText: setConsentText,
+    userTagAccess: setUserTagAccess, userTagAllowList: setUserTagAllowList,
+    registeredTags: setRegisteredTags, consentText: setConsentText,
   }
 
   const makeOnChange = (setters: Record<string, (v: string) => void>) =>
@@ -305,7 +270,7 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
       setWebauthnId(wa.id)
 
       // Bandwidth
-      const bw = parseBwLimit(data.bwlimit)
+      const bw = parseKV(data.bwlimit, ['default', 'restore', 'migration', 'clone', 'move'])
       setBwDefault(bw.default)
       setBwRestore(bw.restore)
       setBwMigration(bw.migration)
@@ -317,9 +282,11 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
       setNextIdLower(nid.lower)
       setNextIdUpper(nid.upper)
 
-      const uta = parseKV(data['user-tag-access'], ['user-allow'])
+      const uta = parseKV(data['user-tag-access'], ['user-allow', 'user-allow-list'])
       setUserTagAccess(uta['user-allow'] || 'free')
-      setRegisteredTags(data['registered-tags'] || '')
+      setUserTagAllowList(tagListValue(uta['user-allow-list']))
+      // PVE returns the registered tags as an array: shown and sent as `a;b` (#1207)
+      setRegisteredTags(tagListValue(data['registered-tags']))
       setConsentText(data['consent-text'] || '')
 
       setDirty(false)
@@ -354,61 +321,38 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
         { key: 'email_from', value: emailFrom },
         { key: 'mac_prefix', value: macPrefix },
         { key: 'max_workers', value: maxWorkers },
-        { key: 'registered-tags', value: registeredTags },
+        { key: 'registered-tags', value: tagListValue(registeredTags) },
         { key: 'consent-text', value: consentText },
       ]
-      for (const { key, value } of simpleFields) {
+
+      // Property strings: the form's fields are laid over what PVE returned,
+      // so the sub-keys the form does not show survive the save.
+      const propertyFields: Array<{ key: string; fields: Record<string, string> }> = [
+        { key: 'migration', fields: { type: migrationType, network: migrationNetwork } },
+        { key: 'replication', fields: { type: replicationType, network: replicationNetwork } },
+        { key: 'ha', fields: { shutdown_policy: haShutdownPolicy } },
+        { key: 'crs', fields: {
+          ha: crsHaScheduling === 'basic' ? '' : crsHaScheduling,
+          'ha-rebalance-on-start': crsRebalance ? '1' : '',
+        } },
+        { key: 'u2f', fields: { appid: u2fAppId, origin: u2fOrigin } },
+        { key: 'webauthn', fields: { rp: webauthnName, origin: webauthnOrigin, id: webauthnId } },
+        { key: 'bwlimit', fields: { default: bwDefault, restore: bwRestore, migration: bwMigration, clone: bwClone, move: bwMove } },
+        { key: 'next-id', fields: { lower: nextIdLower, upper: nextIdUpper } },
+        { key: 'user-tag-access', fields: {
+          'user-allow': userTagAccess === 'free' ? '' : userTagAccess,
+          'user-allow-list': tagListValue(userTagAllowList),
+        } },
+      ]
+
+      const values = [
+        ...simpleFields,
+        ...propertyFields.map(({ key, fields }) => ({ key, value: mergeKV(rawOptions[key], fields) })),
+      ]
+      for (const { key, value } of values) {
         if (value) body[key] = value
         else if (rawOptions[key]) deleteKeys.push(key)
       }
-
-      // Migration
-      const migStr = buildKV({ type: migrationType, network: migrationNetwork })
-      if (migStr) body.migration = migStr
-      else if (rawOptions.migration) deleteKeys.push('migration')
-
-      // Replication
-      const repStr = buildKV({ type: replicationType, network: replicationNetwork })
-      if (repStr) body.replication = repStr
-      else if (rawOptions.replication) deleteKeys.push('replication')
-
-      // HA
-      const haStr = buildKV({ shutdown_policy: haShutdownPolicy })
-      if (haStr) body.ha = haStr
-      else if (rawOptions.ha) deleteKeys.push('ha')
-
-      // CRS
-      const crsparts: string[] = []
-      if (crsHaScheduling && crsHaScheduling !== 'basic') crsparts.push(`ha=${crsHaScheduling}`)
-      if (crsRebalance) crsparts.push('ha-rebalance-on-start=1')
-      const crsStr = crsparts.join(',')
-      if (crsStr) body.crs = crsStr
-      else if (rawOptions.crs) deleteKeys.push('crs')
-
-      // U2F
-      const u2fStr = buildKV({ appid: u2fAppId, origin: u2fOrigin })
-      if (u2fStr) body.u2f = u2fStr
-      else if (rawOptions.u2f) deleteKeys.push('u2f')
-
-      // WebAuthn
-      const waStr = buildKV({ rp: webauthnName, origin: webauthnOrigin, id: webauthnId })
-      if (waStr) body.webauthn = waStr
-      else if (rawOptions.webauthn) deleteKeys.push('webauthn')
-
-      // Bandwidth
-      const bwStr = buildBwLimit({ default: bwDefault, restore: bwRestore, migration: bwMigration, clone: bwClone, move: bwMove })
-      if (bwStr) body.bwlimit = bwStr
-      else if (rawOptions.bwlimit) deleteKeys.push('bwlimit')
-
-      // Next ID
-      const nidStr = buildKV({ lower: nextIdLower, upper: nextIdUpper })
-      if (nidStr) body['next-id'] = nidStr
-      else if (rawOptions['next-id']) deleteKeys.push('next-id')
-
-      // User tag access
-      const utaStr = userTagAccess && userTagAccess !== 'free' ? `user-allow=${userTagAccess}` : ''
-      if (utaStr) body['user-tag-access'] = utaStr
-      else if (rawOptions['user-tag-access']) deleteKeys.push('user-tag-access')
 
       if (deleteKeys.length > 0) body.delete = deleteKeys.join(',')
 
@@ -484,7 +428,8 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
 
         <AdvancedSection
           nextIdLower={nextIdLower} nextIdUpper={nextIdUpper}
-          userTagAccess={userTagAccess} registeredTags={registeredTags} consentText={consentText}
+          userTagAccess={userTagAccess} userTagAllowList={userTagAllowList}
+          registeredTags={registeredTags} consentText={consentText}
           onChange={makeOnChange(advancedSetters)} t={t}
         />
 

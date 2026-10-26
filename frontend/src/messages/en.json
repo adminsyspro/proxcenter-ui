@@ -164,6 +164,7 @@
     "synced": "Synced {time}"
   },
   "auth": {
+    "oidcLinkRefused": "Sign-in refused: this identity could not be linked to the existing account. Contact your administrator.",
     "welcomeTitle": "Welcome to {appName}",
     "loginSubtitle": "Sign in to access your infrastructure",
     "loginMethod": "Login method",

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { getOidcConfig, isSessionTenantDisabledMock } = vi.hoisted(() => ({
+const { getOidcConfig, isSessionTenantDisabledMock, auditMock } = vi.hoisted(() => ({
   getOidcConfig: vi.fn(),
   isSessionTenantDisabledMock: vi.fn(),
+  auditMock: vi.fn(),
 }))
 
 vi.mock('@/lib/db/prisma', () => ({
@@ -23,6 +24,7 @@ vi.mock('./jwtContext', () => ({
   isSessionTenantDisabled: isSessionTenantDisabledMock,
 }))
 vi.mock('@/lib/tenant', () => ({ addUserToTenant: vi.fn(), removeUserFromTenant: vi.fn() }))
+vi.mock('@/lib/audit', () => ({ audit: auditMock }))
 
 import { prisma } from '@/lib/db/prisma'
 import { authOptions, getAuthOptions } from './config'
@@ -118,5 +120,69 @@ describe('getAuthOptions OIDC provider', () => {
 
     expect(accepted).toBe(false)
     expect(isSessionTenantDisabledMock).toHaveBeenCalledExactlyOnceWith('u-oidc')
+  })
+})
+
+describe('OIDC sign-in binding a local account found by e-mail (H2)', () => {
+  const localAccount = { id: 'u-local', email: 'admin@example.test', name: 'Admin', role: 'admin', enabled: true }
+
+  function signIn(profile: Record<string, unknown>) {
+    return (authOptions.callbacks as any).signIn({
+      user: { id: 'sub-new' },
+      account: { provider: 'oidc' },
+      profile: { sub: 'sub-new', email: 'admin@example.test', name: 'Admin', ...profile },
+    })
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getOidcConfig.mockReset().mockResolvedValue(baseConfig())
+    isSessionTenantDisabledMock.mockReset().mockResolvedValue(false)
+    ;(prisma.user.findFirst as any).mockResolvedValue(null)
+    ;(prisma.userTenant.findFirst as any).mockResolvedValue({ userId: 'u-local' })
+  })
+
+  it('never re-binds an account already tied to another subject', async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: 'sub-old' })
+
+    expect(await signIn({ email_verified: true })).toBe('/login?error=OidcLinkRefused')
+    expect(prisma.user.update).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'login_failed',
+      userEmail: 'admin@example.test',
+      details: { reason: 'oidc_sub_mismatch', provider: 'oidc' },
+    }))
+  })
+
+  it('refuses an unverified address for a super admin account', async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue({ id: 'grant-1' })
+
+    expect(await signIn({})).toBe('/login?error=OidcLinkRefused')
+    expect(prisma.user.update).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
+      details: { reason: 'email_not_verified', provider: 'oidc' },
+    }))
+  })
+
+  it('still links an unverified address to an ordinary account', async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue(null)
+
+    await signIn({ email_verified: false })
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'u-local' },
+      data: expect.objectContaining({ oidcSub: 'sub-new', authProvider: 'oidc' }),
+    }))
+    expect(auditMock).not.toHaveBeenCalled()
+  })
+
+  it('leaves an account found by its own subject alone', async () => {
+    ;(prisma.user.findFirst as any).mockResolvedValue({ ...localAccount, oidcSub: 'sub-new' })
+
+    await signIn({})
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+    expect(prisma.user.update).toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
   })
 })

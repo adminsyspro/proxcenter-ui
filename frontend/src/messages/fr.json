@@ -164,6 +164,7 @@
     "synced": "Synchronisé {time}"
   },
   "auth": {
+    "oidcLinkRefused": "Connexion refusée : cette identité n'a pas pu être liée au compte existant. Contactez votre administrateur.",
     "welcomeTitle": "Bienvenue sur {appName}",
     "loginSubtitle": "Connectez-vous pour accéder à votre infrastructure",
     "loginMethod": "Méthode de connexion",

@@ -168,6 +168,7 @@
     "synced": "Synchronisiert {time}"
   },
   "auth": {
+    "oidcLinkRefused": "Anmeldung abgelehnt: Diese Identität konnte nicht mit dem bestehenden Konto verknüpft werden. Wenden Sie sich an Ihren Administrator.",
     "welcomeTitle": "Willkommen bei {appName}",
     "loginSubtitle": "Melden Sie sich an, um auf Ihre Infrastruktur zuzugreifen",
     "loginMethod": "Anmeldemethode",

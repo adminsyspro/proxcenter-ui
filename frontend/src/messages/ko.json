@@ -164,6 +164,7 @@
     "synced": "{time} 동기화됨"
   },
   "auth": {
+    "oidcLinkRefused": "로그인이 거부되었습니다. 이 ID를 기존 계정에 연결할 수 없습니다. 관리자에게 문의하세요.",
     "welcomeTitle": "{appName}에 오신 것을 환영합니다",
     "loginSubtitle": "인프라에 액세스하려면 로그인하세요",
     "loginMethod": "로그인 방식",

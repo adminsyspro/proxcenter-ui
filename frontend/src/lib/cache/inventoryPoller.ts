@@ -23,7 +23,9 @@ import { getFailureCount, getNodeIps } from "@/lib/cache/nodeIpCache"
  * normalizeGuestTags in the RBAC layer owns the parsing (issue #633).
  */
 export type InventoryEvent =
-  | { event: 'vm:update'; connId: string; vmid: string | number; node: string; type: string; status: string; cpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; name?: string; pool?: string; tags?: string }
+  // `lock`: null when the guest holds none (Proxmox then omits the field), so
+  // the tree can clear a backup or snapshot lock without a full reload (#125).
+  | { event: 'vm:update'; connId: string; vmid: string | number; node: string; type: string; status: string; cpu?: number; mem?: number; maxmem?: number; disk?: number; maxdisk?: number; uptime?: number; name?: string; pool?: string; tags?: string; lock?: string | null }
   | { event: 'node:update'; connId: string; node: string; status: string; cpu?: number; mem?: number; maxmem?: number }
   | { event: 'vm:added'; connId: string; vmid: string | number; node: string; type: string; status: string; name?: string; cpu?: number; mem?: number; maxmem?: number; template?: number; pool?: string; tags?: string }
   | { event: 'vm:removed'; connId: string; vmid: string | number; node: string; type: string; pool?: string; tags?: string }
@@ -48,6 +50,7 @@ type ResourceSnapshot = {
   template?: number
   pool?: string
   tags?: string
+  lock?: string
 }
 
 type ConnectionPoller = {
@@ -78,7 +81,8 @@ function hasChanged(prev: ResourceSnapshot, curr: ResourceSnapshot): boolean {
     prev.cpu !== curr.cpu ||
     prev.mem !== curr.mem ||
     prev.maxmem !== curr.maxmem ||
-    prev.name !== curr.name
+    prev.name !== curr.name ||
+    prev.lock !== curr.lock
   )
 }
 
@@ -130,6 +134,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
           template: r.template,
           pool: r.pool,
           tags: r.tags,
+          lock: r.lock,
         }
 
         const prev = poller.prevState.get(id)
@@ -199,6 +204,7 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
             name: r.name,
             pool: r.pool,
             tags: r.tags,
+            lock: r.lock ?? null,
           })
         }
 

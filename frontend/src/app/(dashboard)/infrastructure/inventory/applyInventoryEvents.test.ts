@@ -97,6 +97,30 @@ describe('applyInventoryEvents: batches that change nothing', () => {
   })
 })
 
+describe('applyInventoryEvents: guest lock (#125)', () => {
+  it('sets the lock a guest takes', () => {
+    const next = applyInventoryEvents(twoClusters(), [vmUpdate({ vmid: 100, lock: 'backup' })])
+    expect(next[0].nodes[0].vms[0].lock).toBe('backup')
+  })
+
+  it('clears it on null', () => {
+    const prev = [cluster('c1', [node('n1', [guest(100, { lock: 'snapshot' })])])]
+    const next = applyInventoryEvents(prev, [vmUpdate({ vmid: 100, lock: null })])
+    expect(next[0].nodes[0].vms[0].lock).toBeUndefined()
+  })
+
+  it('keeps it when the delta does not carry the field', () => {
+    const prev = [cluster('c1', [node('n1', [guest(100, { lock: 'backup' })])])]
+    const next = applyInventoryEvents(prev, [vmUpdate({ vmid: 100, status: 'stopped' })])
+    expect(next[0].nodes[0].vms[0]).toMatchObject({ status: 'stopped', lock: 'backup' })
+  })
+
+  it('returns the same reference when the lock already matches', () => {
+    const prev = [cluster('c1', [node('n1', [guest(100, { lock: 'backup' })])])]
+    expect(applyInventoryEvents(prev, [vmUpdate({ vmid: 100, status: 'running', lock: 'backup' })])).toBe(prev)
+  })
+})
+
 describe('applyInventoryEvents: vm:update', () => {
   it('merges the delta into the guest and leaves absent fields alone', () => {
     const prev = twoClusters()

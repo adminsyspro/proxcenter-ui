@@ -16,6 +16,8 @@ vi.mock('@/lib/cache/inventoryCache', () => ({
   setCachedInventory: setCachedInventoryMock,
   getInflightFetch: getInflightFetchMock,
   setInflightFetch: setInflightFetchMock,
+  clearInflightFetch: vi.fn(),
+  inventoryCacheEpoch: () => 0,
 }))
 
 vi.mock('@/lib/tenant', () => ({

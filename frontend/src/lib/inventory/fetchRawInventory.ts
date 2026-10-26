@@ -22,6 +22,8 @@ import {
   setCachedInventory,
   getInflightFetch,
   setInflightFetch,
+  clearInflightFetch,
+  inventoryCacheEpoch,
   type CachedInventory,
 } from "@/lib/cache/inventoryCache"
 import { inventoryConnectionPlan, type InfraScope } from "@/lib/tenant/infraScope"
@@ -657,17 +659,19 @@ export async function blockingFetch(tenantId: string, infra: InfraScope, vdcCont
 
   if (inflight === null) {
     const startTime = Date.now()
-    inflight = fetchRawInventory(infra)
+    const epoch = inventoryCacheEpoch()
+    const fetching: Promise<CachedInventory> = fetchRawInventory(infra)
       .then(result => {
         console.log(`[inventory] Fetched from Proxmox in ${Date.now() - startTime}ms`)
-        setCachedInventory(result, tenantId, vdcContext)
-        setInflightFetch(null, tenantId, vdcContext)
+        setCachedInventory(result, tenantId, vdcContext, epoch)
+        clearInflightFetch(fetching, tenantId, vdcContext)
         return result
       })
       .catch(err => {
-        setInflightFetch(null, tenantId, vdcContext)
+        clearInflightFetch(fetching, tenantId, vdcContext)
         throw err
       })
+    inflight = fetching
     setInflightFetch(inflight, tenantId, vdcContext)
   }
 
@@ -687,6 +691,7 @@ export function triggerBackgroundRevalidation(tenantId: string, infra: InfraScop
   if (getInflightFetch(tenantId, vdcContext) !== null) return
 
   const startTime = Date.now()
+  const epoch = inventoryCacheEpoch()
 
   // This promise goes into the SHARED in-flight slot, which blockingFetch
   // hands straight back to its callers. So it must resolve to the inventory
@@ -701,17 +706,17 @@ export function triggerBackgroundRevalidation(tenantId: string, infra: InfraScop
   // Reproduced on the first inventory call after a server start, but the same
   // window opens on EVERY stale revalidation, so under a polling monitor it
   // was an intermittent 500 with no explanation.
-  const revalidation = fetchRawInventory(infra)
+  const revalidation: Promise<CachedInventory> = fetchRawInventory(infra)
     .then(result => {
       console.log(`[inventory] Background revalidation completed in ${Date.now() - startTime}ms`)
-      setCachedInventory(result, tenantId, vdcContext)
-      setInflightFetch(null, tenantId, vdcContext)
+      setCachedInventory(result, tenantId, vdcContext, epoch)
+      clearInflightFetch(revalidation, tenantId, vdcContext)
 
       return result
     })
     .catch(err => {
       console.error('[inventory] Background revalidation failed:', err?.message)
-      setInflightFetch(null, tenantId, vdcContext)
+      clearInflightFetch(revalidation, tenantId, vdcContext)
       // Rethrow so a piggybacking blockingFetch caller learns the fetch
       // failed. Answering it with `undefined` is what produced the bogus
       // TypeError instead of the real cause.

@@ -1079,8 +1079,9 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       if (res.ok) {
         const data = await res.json()
         if (data.data?.unlocked) {
-          // Rafraîchir l'inventaire
-          setReloadTick(x => x + 1)
+          // The lock is all that changed: the live deltas carry it (#125),
+          // no need to read the whole inventory again.
+          fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {})
         }
       } else {
         const err = await res.json().catch(() => ({}))
@@ -1382,7 +1383,9 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
       setSnapshotDialogOpen(false)
       setSnapshotTarget(null)
-      setReloadTick(x => x + 1)
+      // Only the guest's lock moves in the tree, and the live deltas carry it
+      // (#125): poll once the task has taken the lock, no full reload.
+      setTimeout(() => fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {}), 2000)
       setSnackbar({ open: true, message: t('inventory.snapshotCreated'), severity: 'success' })
     } catch (e: any) {
       setVmActionError(`${t('common.error')} (snapshot): ${e?.message || e}`)
@@ -1435,7 +1438,8 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
       setBackupDialogOpen(false)
       setBackupTarget(null)
-      setReloadTick(x => x + 1)
+      // Same as a snapshot: the backup lock reaches the tree through the live deltas.
+      setTimeout(() => fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {}), 2000)
       setSnackbar({ open: true, message: `${t('inventory.backupStarted')} — ${backupTarget.name}`, severity: 'success' })
     } catch (e: any) {
       setVmActionError(`${t('common.error')} (backup): ${e?.message || e}`)

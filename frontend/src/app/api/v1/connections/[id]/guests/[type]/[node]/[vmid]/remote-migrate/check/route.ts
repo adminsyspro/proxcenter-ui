@@ -3,6 +3,10 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
+import { getCurrentTenantId } from "@/lib/tenant"
+import { getTenantInfrastructureScope, canMigrateConnections } from "@/lib/tenant/infraScope"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 import { captureReplicationJobs, findHaRulesForSid, findSiteRecoveryJobsForGuest } from '@/lib/migration/ccm-prereqs'
 import type { SiteRecoveryJobRef } from '@/lib/migration/ccm-prereqs.types'
@@ -68,29 +72,74 @@ async function handler(
       return NextResponse.json({ valid: false, issues })
     }
 
+    // Same guards as the sibling POST routes (../route.ts, ../prepare): the
+    // identifiers are constrained before they reach a Proxmox path, the
+    // caller holds vm.migrate on the source guest AND on the target cluster,
+    // its tenant may migrate both connections, and a vDC session cannot read
+    // a guest outside its pools.
+    let safeVmid: string
+    let safeNode: string
+    try {
+      safeVmid = assertVmid(vmid)
+      safeNode = assertNodeName(node)
+    } catch {
+      return NextResponse.json({ error: "Invalid node name or vmid" }, { status: 400 })
+    }
+
     // RBAC
-    const resourceId = buildVmResourceId(id, node, type, vmid)
+    const resourceId = buildVmResourceId(id, safeNode, type, safeVmid)
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", resourceId)
     if (denied) return denied
 
-    const body = await req.json()
+    const body = await req.json().catch(() => null)
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
     const { targetConnectionId, targetNode, targetStorage, targetBridge } = body
-    const vmSid = 'vm:' + vmid
+    const vmSid = 'vm:' + safeVmid
 
     if (!targetConnectionId || !targetNode || !targetStorage || !targetBridge) {
       return NextResponse.json({ error: "Missing required parameters" }, { status: 400 })
+    }
+    if (typeof targetConnectionId !== 'string' || typeof targetStorage !== 'string' || typeof targetBridge !== 'string') {
+      return NextResponse.json({ error: "Invalid target parameters" }, { status: 400 })
+    }
+    let safeTargetNode: string
+    try {
+      safeTargetNode = assertNodeName(targetNode)
+    } catch {
+      return NextResponse.json({ error: "Invalid target node name" }, { status: 400 })
+    }
+
+    // The guest lands on the TARGET cluster: vm.migrate is checked there too.
+    const targetDenied = await checkPermission(PERMISSIONS.VM_MIGRATE, "connection", targetConnectionId)
+    if (targetDenied) return targetDenied
+
+    // VM placement is a whole-cluster operation: the provider may migrate any
+    // cluster it manages, an MSP tenant within the clusters it owns, and a
+    // vDC tenant cannot migrate at all.
+    const tenantId = await getCurrentTenantId()
+    const infra = await getTenantInfrastructureScope(tenantId)
+    if (!canMigrateConnections(infra, id, targetConnectionId)) {
+      return NextResponse.json(
+        { error: 'Migration is restricted to the provider or the MSP tenant that owns both connections' },
+        { status: 403 },
+      )
     }
 
     // Récupérer les connexions
     const sourceConn = await getConnectionById(id)
     const targetConn = await getConnectionById(targetConnectionId)
 
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn: sourceConn, type, node: safeNode, vmid: safeVmid })
+    if (scopeDenied) return scopeDenied
+
     // ========== VÉRIFICATIONS SOURCE ==========
     
     // 1. Récupérer la config de la VM source
     let vmConfig: any = {}
     try {
-      vmConfig = await pveFetch<any>(sourceConn, `/nodes/${node}/qemu/${vmid}/config`)
+      vmConfig = await pveFetch<any>(sourceConn, `/nodes/${encodeURIComponent(safeNode)}/qemu/${safeVmid}/config`)
     } catch (e: any) {
       issues.push({
         type: 'error',
@@ -141,7 +190,7 @@ async function handler(
     // dès que ReplicationConfig::check_for_existing_jobs trouve UN job pour ce vmid,
     // y compris un job déjà marqué pour suppression.
     try {
-      const replicationJobs = await captureReplicationJobs(sourceConn, vmid)
+      const replicationJobs = await captureReplicationJobs(sourceConn, safeVmid)
       if (replicationJobs.length > 0) {
         issues.push({
           type: 'error',
@@ -171,7 +220,7 @@ async function handler(
     // un job Site Recovery porte une LISTE de VMID ou un jeu de tags. Le
     // supprimer pour débloquer cet invité arrêterait la réplication de tous les
     // autres. L'édition du job reste à un humain.
-    const siteRecoveryJobs = await findSiteRecoveryJobsForGuest(id, vmid)
+    const siteRecoveryJobs = await findSiteRecoveryJobsForGuest(id, safeVmid)
     for (const job of siteRecoveryJobs) {
       const shared = job.otherVmids.length
       issues.push({
@@ -188,7 +237,7 @@ async function handler(
     // 2b. Vérifier les snapshots — bloquant pour remote-migrate (qm remote-migrate
     // ne supporte pas les VMs avec snapshots).
     try {
-      const snaps = await pveFetch<any[]>(sourceConn, `/nodes/${node}/qemu/${vmid}/snapshot`)
+      const snaps = await pveFetch<any[]>(sourceConn, `/nodes/${encodeURIComponent(safeNode)}/qemu/${safeVmid}/snapshot`)
       const realSnaps = (snaps || []).filter((s: any) => s?.name !== 'current')
       if (realSnaps.length > 0) {
         issues.push({
@@ -253,13 +302,13 @@ async function handler(
       let sourceCpuModel: string | undefined
       let targetCpuModel: string | undefined
       try {
-        const srcStatus = await pveFetch<any>(sourceConn, `/nodes/${node}/status`)
+        const srcStatus = await pveFetch<any>(sourceConn, `/nodes/${encodeURIComponent(safeNode)}/status`)
         sourceCpuModel = srcStatus?.cpuinfo?.model?.trim()
       } catch {
         // can't read source status — degrade to a warning below
       }
       try {
-        const tgtStatus = await pveFetch<any>(targetConn, `/nodes/${targetNode}/status`)
+        const tgtStatus = await pveFetch<any>(targetConn, `/nodes/${encodeURIComponent(safeTargetNode)}/status`)
         targetCpuModel = tgtStatus?.cpuinfo?.model?.trim()
       } catch {
         // can't read target status — degrade to a warning below
@@ -293,7 +342,7 @@ async function handler(
     if (cpuTypeRaw && cpuTypeRaw !== 'host' && cpuTypeRaw !== 'max') {
       const cpuTypeName = String(vmConfig.cpu).split(',')[0].trim()
       try {
-        const targetCpus = await pveFetch<any[]>(targetConn, `/nodes/${encodeURIComponent(targetNode)}/capabilities/qemu/cpu`)
+        const targetCpus = await pveFetch<any[]>(targetConn, `/nodes/${encodeURIComponent(safeTargetNode)}/capabilities/qemu/cpu`)
         const available = new Set((Array.isArray(targetCpus) ? targetCpus : []).map((c: any) => String(c?.name || '').toLowerCase()))
         if (available.size > 0 && !available.has(cpuTypeRaw)) {
           issues.push({
@@ -353,7 +402,7 @@ async function handler(
 
     // 7. Vérifier le stockage cible
     try {
-      const targetStorages = await pveFetch<any[]>(targetConn, `/nodes/${targetNode}/storage`)
+      const targetStorages = await pveFetch<any[]>(targetConn, `/nodes/${encodeURIComponent(safeTargetNode)}/storage`)
       const storageInfo = targetStorages?.find((s: any) => s.storage === targetStorage)
       if (!storageInfo) {
         issues.push({
@@ -397,7 +446,7 @@ async function handler(
 
     // 8. Vérifier le bridge cible et son MTU
     try {
-      const targetNetwork = await pveFetch<any[]>(targetConn, `/nodes/${targetNode}/network`)
+      const targetNetwork = await pveFetch<any[]>(targetConn, `/nodes/${encodeURIComponent(safeTargetNode)}/network`)
       const bridgeInfo = targetNetwork?.find((n: any) => n.iface === targetBridge)
       
       if (!bridgeInfo) {
@@ -464,7 +513,7 @@ async function handler(
 
     // 10. Vérifier les ressources du nœud cible (CPU/RAM)
     try {
-      const targetNodeStatus = await pveFetch<any>(targetConn, `/nodes/${targetNode}/status`)
+      const targetNodeStatus = await pveFetch<any>(targetConn, `/nodes/${encodeURIComponent(safeTargetNode)}/status`)
       const vmCores = vmConfig.cores || 1
       const vmSockets = vmConfig.sockets || 1
       const vmMemory = vmConfig.memory || 512

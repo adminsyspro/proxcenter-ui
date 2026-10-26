@@ -539,3 +539,31 @@ describe('normalizeIp', () => {
     expect(formatCef(e, dest({ format: 'cef' }), ctx)).toContain(' src=10.0.0.12 ')
   })
 })
+
+describe('redaction of provider keys and every name ending in key', () => {
+  it('masks the AI provider keys of the settings payload, in the request copy too', () => {
+    const payload = {
+      enabled: true, provider: 'openai', ollamaUrl: 'http://ollama.lab:11434', ollamaModel: 'mistral:7b',
+      openaiKey: 'sk-live-example', openaiModel: 'gpt-4.1-nano', anthropicKey: 'sk-ant-example', anthropicModel: 'claude',
+      openaiKeySet: true, anthropicKeySet: true,
+    }
+    const out = redact({ request: payload, params: {}, route: '/api/v1/settings/ai' })
+    const request = out.request as Record<string, unknown>
+    expect(request.openaiKey).toBe(REDACTED)
+    expect(request.anthropicKey).toBe(REDACTED)
+    expect(request.openaiKeySet).toBe(true)
+    expect(request.ollamaUrl).toBe('http://ollama.lab:11434')
+    expect(request.openaiModel).toBe('gpt-4.1-nano')
+    expect(JSON.stringify(out)).not.toContain('sk-live-example')
+    expect(JSON.stringify(out)).not.toContain('sk-ant-example')
+  })
+
+  it('treats any name ending in key as a credential unless a harmless suffix or name says otherwise', () => {
+    for (const k of ['openaiKey', 'anthropicKey', 'licenseKey', 'license_key', 'sshKeyEnc', 'ssh_key_enc', 'publicKey', 'deployKey', 'apiKey', 'serviceKey']) {
+      expect(isSensitiveKey(k), k).toBe(true)
+    }
+    for (const k of ['key', 'keys', 'settingKey', 'keyName', 'keyType', 'keyPath', 'keyFile', 'keyAlgorithm', 'keyFingerprint', 'keyCheck', 'keySize', 'keyId', 'primaryKey', 'keyboard']) {
+      expect(isSensitiveKey(k), k).toBe(false)
+    }
+  })
+})

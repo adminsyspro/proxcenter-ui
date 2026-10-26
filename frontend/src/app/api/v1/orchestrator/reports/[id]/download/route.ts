@@ -1,7 +1,7 @@
 // src/app/api/v1/orchestrator/reports/[id]/download/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
-import { orchestratorFetch } from '@/lib/orchestrator'
+import { orchestratorFetch, orchestratorSegment, OrchestratorPathError } from '@/lib/orchestrator'
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
@@ -50,7 +50,9 @@ export async function GET(
     }
 
     const suffix = query.toString()
-    const url = `${ORCHESTRATOR_URL}/api/v1/reports/${id}/download${suffix ? `?${suffix}` : ''}`
+    // The id is a path segment of the upstream URL: validated and encoded as
+    // one, so it cannot name another route (lib/orchestrator/client).
+    const url = `${ORCHESTRATOR_URL}/api/v1/reports/${orchestratorSegment(id)}/download${suffix ? `?${suffix}` : ''}`
 
     const headers: Record<string, string> = {}
     if (ORCHESTRATOR_API_KEY) {
@@ -67,9 +69,11 @@ export async function GET(
     })
 
     if (!response.ok) {
+      // The upstream status is enough for the caller; the body stays server-side.
       const text = await response.text().catch(() => '')
+      console.error(`[orchestrator/reports/download] upstream HTTP ${response.status}: ${text.slice(0, 200).replace(/[\r\n]/g, ' ')}`)
       return NextResponse.json(
-        { error: text || 'Failed to download report' },
+        { error: response.status === 404 ? 'Report not found' : 'Failed to download report' },
         { status: response.status }
       )
     }
@@ -95,6 +99,9 @@ export async function GET(
       headers: responseHeaders,
     })
   } catch (error: any) {
+    if (error instanceof OrchestratorPathError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('Failed to download report:', error)
     }

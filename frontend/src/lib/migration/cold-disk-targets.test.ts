@@ -84,3 +84,14 @@ describe("free-space check per storage", () => {
     expect(storageSpaceShortfall("ISO", 21 * GIB, 20 * GIB)).toBe('Insufficient disk space on "ISO": 21.0 GB free, need 20.0 GB')
   })
 })
+
+describe("coldStorageTarget images directory", () => {
+  it("refuses a storage path that is not a plain absolute path, since it lands in node shell commands", () => {
+    expect(() => coldStorageTarget("odd", { type: "dir", path: "/mnt/pve/odd name" }, 120)).toThrow(/Invalid absolute path/)
+    expect(() => coldStorageTarget("odd", { type: "dir", path: "relative/path" }, 120)).toThrow(/Invalid absolute path/)
+    expect(() => coldStorageTarget("odd", { type: "dir", path: "/mnt/pve/$(id)" }, 120)).toThrow(/Invalid absolute path/)
+    expect(coldStorageTarget("ok", { type: "dir", path: "/mnt/pve/ISO/dir-images" }, 120).imagesDir).toBe("/mnt/pve/ISO/dir-images/images/120")
+    // A block storage has no images directory and no path to judge.
+    expect(coldStorageTarget("lvm", { type: "lvm", path: "/not used" }, 120).imagesDir).toBe("")
+  })
+})

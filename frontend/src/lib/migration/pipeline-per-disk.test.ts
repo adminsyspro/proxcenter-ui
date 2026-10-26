@@ -292,7 +292,7 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     expect(pvePaths()).toContain("/storage/local-lvm")
     expect(pvePaths()).toContain("/storage/ISO")
     const commands = sshCommands()
-    expect(commands.filter(c => c === `mkdir -p "/var/lib/vz/images/${VMID}"`)).toHaveLength(1)
+    expect(commands.filter(c => c === `mkdir -p '/var/lib/vz/images/${VMID}'`)).toHaveLength(1)
     expect(logs).toContain(`Temp directory: /var/lib/vz/images/${VMID} (on target storage "ISO")`)
     // disk 1: one raw volume on the block storage, dd'd from the SSHFS mount
     const allocs = commands.filter(c => c.startsWith("pvesm alloc "))
@@ -328,10 +328,10 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
       `pvesm alloc 'local-lvm' ${VMID} 'vm-${VMID}-disk-0' ${10 * GIB / 1024} --format raw 2>&1`,
     ])
     expect(commands.some(c => c.includes("curl -sk --fail -b 'vmware_soap_session=abc' 'https://10.42.0.21/folder/web-01/web-01-flat.vmdk?dcPath=ha-datacenter&dsName=ds1'")
-      && c.includes(`| dd of="/dev/pve/vm-${VMID}-disk-0"`))).toBe(true)
+      && c.includes(`| dd of='/dev/pve/vm-${VMID}-disk-0'`))).toBe(true)
     // disk 2 is downloaded onto ISO's own images dir, not into the temp base
     const tmp1 = `/var/lib/vz/images/${VMID}/proxcenter-mig-${jobId}-disk1`
-    expect(commands.some(c => c.includes(`-o "${tmp1}.vmdk"`) && c.includes("web-01_1-flat.vmdk"))).toBe(true)
+    expect(commands.some(c => c.includes(`-o '${tmp1}.vmdk'`) && c.includes("web-01_1-flat.vmdk"))).toBe(true)
     expect(commands.some(c => c.includes(`/tmp/proxcenter-mig-${jobId}-disk1`))).toBe(false)
     // converted to qcow2 (the format of ISO) over the long-timeout SSH session
     expect(ssh2Commands).toEqual([`qemu-img convert -f raw -O qcow2 "${tmp1}.vmdk" "${tmp1}.qcow2" 2>&1 && echo CONVERT_OK`])
@@ -423,7 +423,7 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     expect(commands.some(c => c.startsWith(`qm disk import ${VMID} '/var/lib/vz/images/${VMID}/proxcenter-mig-${jobId}-disk1.qcow2' 'ISO' --format qcow2`))).toBe(true)
     // and the failure path swept that storage's images dir
     expect(commands).toContain(
-      `rm -f "/var/lib/vz/images/${VMID}"/proxcenter-mig-${jobId}-disk*.vmdk "/var/lib/vz/images/${VMID}"/proxcenter-mig-${jobId}-disk*.qcow2 "/var/lib/vz/images/${VMID}"/proxcenter-mig-${jobId}-disk*.raw`,
+      `rm -f '/var/lib/vz/images/${VMID}'/proxcenter-mig-${jobId}-disk*.vmdk '/var/lib/vz/images/${VMID}'/proxcenter-mig-${jobId}-disk*.qcow2 '/var/lib/vz/images/${VMID}'/proxcenter-mig-${jobId}-disk*.raw`,
     )
     expect(destroyPveVm).toHaveBeenCalledTimes(1)
   })
@@ -461,7 +461,7 @@ describe("runMigrationPipeline without per-disk choices (unchanged behaviour)", 
     expect(logs.filter(m => m.startsWith("Temp directory:"))).toEqual([`Temp directory: /var/lib/vz/images/${VMID} (on target storage "ISO")`])
     const commands = sshCommands()
     expect(commands.some(c => c.startsWith("pvesm alloc "))).toBe(false)
-    expect(commands.filter(c => c === `mkdir -p "/var/lib/vz/images/${VMID}"`)).toHaveLength(1)
+    expect(commands.filter(c => c === `mkdir -p '/var/lib/vz/images/${VMID}'`)).toHaveLength(1)
     const dir = `/var/lib/vz/images/${VMID}`
     expect(commands.some(c => c.includes(`-O qcow2 '/tmp/proxcenter-sshfs-${jobId}/web-01/web-01-flat.vmdk' '${dir}/proxcenter-mig-${jobId}-disk0.qcow2'`))).toBe(true)
     expect(commands.some(c => c.includes(`-O qcow2 '/tmp/proxcenter-sshfs-${jobId}/web-01/web-01_1-flat.vmdk' '${dir}/proxcenter-mig-${jobId}-disk1.qcow2'`))).toBe(true)

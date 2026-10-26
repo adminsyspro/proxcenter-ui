@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-import { orchestratorFetch } from '@/lib/orchestrator/client'
+import { orchestratorFetch, orchestratorPath } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
@@ -35,7 +35,7 @@ async function handlePost(
       return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
     }
 
-    const result = await orchestratorFetch(`/alerts/rules/${id}/toggle`, {
+    const result = await orchestratorFetch(orchestratorPath`/alerts/rules/${id}/toggle`, {
       method: 'POST'
     })
 

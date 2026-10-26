@@ -17,6 +17,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, canMigrateConnections } from "@/lib/tenant/infraScope"
+import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -94,6 +95,11 @@ async function postHandler(
     }
 
     const conn = await getConnectionById(id)
+
+    // A vDC session must not clear the prerequisites of a guest outside its pools.
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node: safeNode, vmid: safeVmid })
+    if (scopeDenied) return scopeDenied
+
     const vmSid = 'vm:' + safeVmid
     const ha = await captureHaResource(conn, vmSid)
     const replication = await captureReplicationJobs(conn, safeVmid)
@@ -209,7 +215,22 @@ async function getHandler(
     )
     if (denied) return denied
 
+    // Same tenant guards as the POST below and the sibling routes: the
+    // tenant may migrate this connection, and a vDC session cannot read a
+    // guest outside its pools.
+    const tenantId = await getCurrentTenantId()
+    const infra = await getTenantInfrastructureScope(tenantId)
+    if (!canMigrateConnections(infra, id)) {
+      return NextResponse.json(
+        { error: 'Migration is restricted to the provider or the MSP tenant that owns this connection' },
+        { status: 403 },
+      )
+    }
+
     const conn = await getConnectionById(id)
+
+    const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node: safeNode, vmid: safeVmid })
+    if (scopeDenied) return scopeDenied
 
     // Each read degrades on its own: a guest with no HA resource must not hide
     // its snapshots, and vice versa.

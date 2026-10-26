@@ -7,7 +7,10 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/rbac', () => ({ checkPermission: mocks.checkPermission, PERMISSIONS: { REPORTS_VIEW: 'reports.view' } }))
 vi.mock('@/lib/reports/connectionScope', () => ({ applyReportRequestScope: mocks.applyReportRequestScope }))
-vi.mock('@/lib/orchestrator', () => ({ orchestratorFetch: mocks.orchestratorFetch }))
+vi.mock('@/lib/orchestrator', async orig => ({
+  ...(await orig<typeof import('@/lib/orchestrator')>()),
+  orchestratorFetch: mocks.orchestratorFetch,
+}))
 
 import { PUT } from './route'
 

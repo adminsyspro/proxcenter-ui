@@ -1,7 +1,7 @@
 // src/app/api/v1/orchestrator/reports/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
-import { orchestratorFetch } from '@/lib/orchestrator'
+import { orchestratorFetch, orchestratorPath } from '@/lib/orchestrator'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withAudit } from '@/lib/audit/withAudit'
 
@@ -21,7 +21,7 @@ export async function GET(
     if (denied) return denied
 
     const { id } = await params
-    const data = await orchestratorFetch(`/reports/${id}`)
+    const data = await orchestratorFetch(orchestratorPath`/reports/${id}`)
     return NextResponse.json(data)
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
@@ -44,7 +44,7 @@ async function handleDelete(
     if (denied) return denied
 
     const { id } = await params
-    const data = await orchestratorFetch(`/reports/${id}`, {
+    const data = await orchestratorFetch(orchestratorPath`/reports/${id}`, {
       method: 'DELETE'
     })
 

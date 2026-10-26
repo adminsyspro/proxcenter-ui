@@ -8,10 +8,12 @@ vi.mock("@/lib/api-tokens/routeGuard", () => ({
 
 import { callRoute } from "@/__tests__/setup/route-test"
 
-const { checkPermissionMock, getConnectionByIdMock, pveFetchMock } = vi.hoisted(() => ({
+const { checkPermissionMock, getConnectionByIdMock, pveFetchMock, getInfraMock, guardSessionGuestMock } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn(),
   getConnectionByIdMock: vi.fn(),
   pveFetchMock: vi.fn(),
+  getInfraMock: vi.fn(),
+  guardSessionGuestMock: vi.fn(),
 }))
 
 vi.mock("@/lib/rbac", () => ({
@@ -25,6 +27,14 @@ vi.mock("@/lib/connections/getConnection", () => ({
 vi.mock("@/lib/proxmox/client", () => ({
   pveFetch: (...a: any[]) => pveFetchMock(...a),
 }))
+// The tenant guards of the sibling POST routes: a provider session by default,
+// so the pre-flight tests below keep exercising the checks themselves.
+vi.mock("@/lib/tenant", () => ({ getCurrentTenantId: async () => "default" }))
+vi.mock("@/lib/tenant/infraScope", async (orig) => ({
+  ...(await orig<typeof import("@/lib/tenant/infraScope")>()),
+  getTenantInfrastructureScope: (...a: any[]) => getInfraMock(...a),
+}))
+vi.mock("@/lib/vdc/guestGuard", () => ({ guardSessionGuest: (...a: any[]) => guardSessionGuestMock(...a) }))
 
 const PARAMS = { id: "conn-src", type: "qemu", node: "pve1", vmid: "100" }
 const BODY = { targetConnectionId: "conn-tgt", targetNode: "pve2", targetStorage: "local-lvm", targetBridge: "vmbr0" }
@@ -60,6 +70,8 @@ beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: "c", baseUrl: "https://x:8006", apiToken: "t" })
   pveFetchMock.mockReset()
+  getInfraMock.mockReset().mockResolvedValue({ kind: "provider" })
+  guardSessionGuestMock.mockReset().mockResolvedValue(null)
 })
 
 describe("POST .../remote-migrate/check — snapshot pre-flight", () => {
@@ -297,5 +309,63 @@ describe("POST .../remote-migrate/check — replication pre-flight", () => {
     expect(json.issues.find((i: any) => i.code === "SNAPSHOTS_PRESENT").remediation).toEqual({
       kind: "snapshots", names: ["before-upgrade", "backup"], reversible: false,
     })
+  })
+})
+
+describe("POST .../remote-migrate/check tenant guards", () => {
+  const post = async (params = PARAMS, body: any = BODY) => {
+    wirePveFetch([], {})
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    return callRoute(POST, { method: "POST", params, body })
+  }
+
+  it("refuses malformed node names and vmids before any permission or Proxmox call", async () => {
+    expect((await post({ ...PARAMS, node: "pve1;x" })).status).toBe(400)
+    expect((await post({ ...PARAMS, vmid: "100 or 1" })).status).toBe(400)
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses a malformed target node name before any Proxmox call", async () => {
+    expect((await post(PARAMS, { ...BODY, targetNode: "pve2/../x" })).status).toBe(400)
+    expect((await post(PARAMS, { ...BODY, targetConnectionId: 42 })).status).toBe(400)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+    expect(getConnectionByIdMock).not.toHaveBeenCalled()
+  })
+
+  it("checks vm.migrate on the target connection too, and stops there when it is denied", async () => {
+    checkPermissionMock.mockImplementation(async (_perm: string, scope: string, target: string) =>
+      scope === "connection" && target === BODY.targetConnectionId ? new Response("{}", { status: 403 }) : null)
+    const res = await post()
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "connection", BODY.targetConnectionId)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it("answers 403 to a vDC (iaas) tenant, whose scope cannot migrate, before reading either cluster", async () => {
+    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope: {} })
+    const res = await post()
+    expect(res.status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+    expect(getConnectionByIdMock).not.toHaveBeenCalled()
+  })
+
+  it("answers 403 to an MSP tenant that owns the source but not the target connection", async () => {
+    getInfraMock.mockResolvedValue({ kind: "msp", connectionIds: new Set([PARAMS.id]) })
+    const res = await post()
+    expect(res.status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+
+    getInfraMock.mockResolvedValue({ kind: "msp", connectionIds: new Set([PARAMS.id, BODY.targetConnectionId]) })
+    expect((await post()).status).toBe(200)
+  })
+
+  it("relays the guest guard refusal for a guest outside the session's pools", async () => {
+    guardSessionGuestMock.mockResolvedValue(new Response(JSON.stringify({ error: "Guest outside your vDC scope" }), { status: 403 }))
+    const res = await post()
+    expect(res.status).toBe(403)
+    expect(guardSessionGuestMock).toHaveBeenCalledWith(expect.objectContaining({ connectionId: PARAMS.id, node: PARAMS.node, vmid: PARAMS.vmid, type: "qemu" }))
+    // The source connection was resolved for the guard, nothing of the guest was read.
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 })

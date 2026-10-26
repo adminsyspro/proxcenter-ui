@@ -31,6 +31,7 @@ import { warnIfEl10OnLowCpu } from "./el10-check"
 import { describeOverrides, planDiskTargets, describeDiskPlan, bytesPerStorage, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from "./target-overrides"
 import { coldStorageTarget, coldStorages, localVolumeKinds, describeStorageSpace, storageSpaceShortfall, type ColdStorageTarget } from "./cold-disk-targets"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
+import { executeSSHWithTimeout } from "./ssh-long-exec"
 import {
   allocateAndMapBlockVolume, nextFreeDiskName, volumesToFree,
   PVESM_FREE_TIMEOUT_MS, type AllocatedVolume,
@@ -516,7 +517,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const target = coldStorageTarget(storage, storageConfig, targetVmid)
       storageTargets.set(storage, target)
       if (target.isFileBased) {
-        await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${target.imagesDir}"`)
+        await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p ${shellEscape(target.imagesDir)}`)
         storageTempDirs.push(target.imagesDir)
         await appendLog(jobId, `Temp directory: ${target.imagesDir} (on target storage "${storage}")`)
       }
@@ -591,6 +592,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Streaming "${disk.label}" to block device (${diskSizeGB} GB)...`)
 
       const soapCookie = soapSession!.cookie
+      // ESXi returns vmware_soap_session="abc123": the quotes are decorative.
       const safeCookie = soapCookie.replaceAll('"', '')
       const vmdkUrl = overrideUrl || buildVmdkDownloadUrl(esxiUrl, disk)
       await appendLog(jobId, `Download URL: ${vmdkUrl.replace(/\?.*/, '?...')}${overrideUrl ? ' (NFC lease)' : ''}`, "info")
@@ -613,19 +615,25 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // expired, RST, ...).
       const stderrFile = `${ctrlPrefix}.stderr`
 
-      // Build streaming script: curl pipes directly to dd on block device
-      // status=progress makes dd write periodic progress to stderr
-      await executeSSH(config.targetConnectionId, nodeIp,
-        `cat > "${dlScript}" << 'DLEOF'\ncurl -sk --fail -b '${safeCookie}' '${vmdkUrl}' 2>"${stderrFile}" | dd of="${devicePath}" bs=4M status=progress 2>"${progressFile}"\n${capturePipelineStatus()}\n${writePipelineExit(pidFile + ".exit")}\nDLEOF`
-      )
+      // Build streaming script: curl pipes directly to dd on block device.
+      // status=progress makes dd write periodic progress to stderr. The cookie
+      // and the URL come from the source (datastore and disk names are part
+      // of the URL) and are one shell word each, like every path here.
+      const streamScript = [
+        `curl -sk --fail -b ${shellEscape(safeCookie)} ${shellEscape(vmdkUrl)} 2>${shellEscape(stderrFile)} | dd of=${shellEscape(devicePath)} bs=4M status=progress 2>${shellEscape(progressFile)}`,
+        capturePipelineStatus(),
+        writePipelineExit(pidFile + ".exit"),
+      ].join("\n")
+      await executeSSH(config.targetConnectionId, nodeIp, writeScriptCommand(dlScript, streamScript, "DLEOF"))
 
       const startDl = await executeSSH(config.targetConnectionId, nodeIp,
-        `nohup bash "${dlScript}" > /dev/null 2>&1 & echo $!`)
-      if (!startDl.success || !startDl.output?.trim()) {
-        throw new Error(`Failed to start streaming: ${startDl.error}`)
+        `nohup bash ${shellEscape(dlScript)} > /dev/null 2>&1 & echo $!`)
+      // The pid lands in `kill ${pid}`: anything but digits is a failed launch, not a pid.
+      const pid = parseBackgroundPid(startDl.output)
+      if (!startDl.success || !pid) {
+        throw new Error(`Failed to start streaming: ${startDl.error || startDl.output}`)
       }
-      const pid = startDl.output.trim()
-      await executeSSH(config.targetConnectionId, nodeIp, `echo ${pid} > "${pidFile}"`)
+      await executeSSH(config.targetConnectionId, nodeIp, `echo ${pid} > ${shellEscape(pidFile)}`)
 
       const totalBytes = disk.capacityBytes
       let transferredBytes = 0
@@ -961,20 +969,25 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const pidFile = `${tmpFile}.pid`
       const statsFile = `${tmpFile}.stats`
       const dlScript = `${tmpFile}.dl.sh`
-      // Write download script to avoid shell quoting issues with cookie/URL values
-      // Note: no -f flag — we check HTTP code and file size after download
-      await executeSSH(config.targetConnectionId, nodeIp,
-        `cat > "${dlScript}" << 'DLEOF'\ncurl -sk -b '${safeCookie}' -o "${tmpFile}.vmdk" -w '{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}' '${vmdkUrl}' > "${statsFile}" 2>&1\necho $? > "${pidFile}.exit"\nDLEOF`
-      )
+      // The download runs from a script written through a quoted heredoc; the
+      // cookie and the URL come from the source (datastore and disk names are
+      // part of the URL) and are one shell word each, like every path here.
+      // Note: no -f flag, the HTTP code and the file size are checked after the download.
+      const downloadScript = [
+        `curl -sk -b ${shellEscape(safeCookie)} -o ${shellEscape(`${tmpFile}.vmdk`)} -w ${shellEscape('{"speed":%{speed_download},"size":%{size_download},"time":%{time_total},"http_code":%{http_code}}')} ${shellEscape(vmdkUrl)} > ${shellEscape(statsFile)} 2>&1`,
+        `echo $? > ${shellEscape(`${pidFile}.exit`)}`,
+      ].join("\n")
+      await executeSSH(config.targetConnectionId, nodeIp, writeScriptCommand(dlScript, downloadScript, "DLEOF"))
       const startDl = await executeSSH(
         config.targetConnectionId, nodeIp,
-        `nohup bash "${dlScript}" > /dev/null 2>&1 & echo $!`
+        `nohup bash ${shellEscape(dlScript)} > /dev/null 2>&1 & echo $!`
       )
-      if (!startDl.success || !startDl.output?.trim()) {
-        throw new Error(`Failed to start download: ${startDl.error}`)
+      // The pid lands in `kill ${curlPid}`: anything but digits is a failed launch, not a pid.
+      const curlPid = parseBackgroundPid(startDl.output)
+      if (!startDl.success || !curlPid) {
+        throw new Error(`Failed to start download: ${startDl.error || startDl.output}`)
       }
-      const curlPid = startDl.output.trim()
-      await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > "${pidFile}"`)
+      await executeSSH(config.targetConnectionId, nodeIp, `echo ${curlPid} > ${shellEscape(pidFile)}`)
 
       const totalBytes = disk.capacityBytes
       let downloadedBytes = 0
@@ -1090,7 +1103,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (esxiConn.sshAuthMethod === "key" && esxiConn.sshKeyEnc) {
         const esxiKey = decryptSecret(esxiConn.sshKeyEnc)
         const keyFile = `${tmpPrefix}.esxi-key`
-        setupCmd = `cat > "${keyFile}" << 'KEYEOF'\n${esxiKey}\nKEYEOF\nchmod 600 "${keyFile}"`
+        setupCmd = `(umask 077; printf '%s\\n' ${shellEscape(esxiKey)} > ${shellEscape(keyFile)}) && chmod 600 ${shellEscape(keyFile)}`
         sshPrefix = `ssh ${esxiSshOpts} -i "${keyFile}"`
         cleanupCmd = `rm -f "${keyFile}"`
       } else if (esxiPass) {
@@ -1229,7 +1242,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // Key-based auth
         const keyFile = `${mountPath}.esxi-key`
         await executeSSH(config.targetConnectionId, nodeIp,
-          `cat > "${keyFile}" << 'KEYEOF'\n${esxiKey}\nKEYEOF\nchmod 600 "${keyFile}"`
+          `(umask 077; printf '%s\\n' ${shellEscape(esxiKey)} > ${shellEscape(keyFile)}) && chmod 600 ${shellEscape(keyFile)}`
         )
         const sshWrapperKey = `#!/bin/sh\nexec ssh -p ${esxiSshPort} -i ${keyFile} -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o Compression=no "$@"`
         await executeSSH(config.targetConnectionId, nodeIp,
@@ -1997,7 +2010,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (esxiKeyRaw) {
         // Already have a key - just write it to PVE node
         await executeSSH(config.targetConnectionId, nodeIp,
-          `cat > "${tmpKeyPath}" << 'KEYEOF'\n${esxiKeyRaw}\nKEYEOF\nchmod 600 "${tmpKeyPath}"`)
+          `(umask 077; printf '%s\\n' ${shellEscape(esxiKeyRaw)} > ${shellEscape(tmpKeyPath)}) && chmod 600 ${shellEscape(tmpKeyPath)}`)
         qemuSshKeyPath = tmpKeyPath
         await appendLog(jobId, "Using existing SSH key for QEMU SSH driver", "info")
       } else if (esxiPass) {
@@ -2201,7 +2214,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           if (target.isFileBased) {
             // File-based storage (dir, NFS, CIFS): create a raw image file for drive-mirror target
             const imgDir = target.imagesDir
-            await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p "${imgDir}"`)
+            await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p ${shellEscape(imgDir)}`)
 
             // Pick next free disk number, skipping slots already taken (efidisk0, tpmstate0, ...).
             let diskNum = 0
@@ -2211,7 +2224,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
             const imgPath = `${imgDir}/vm-${targetVmid}-disk-${diskNum}.raw`
             const sizeGB = Math.ceil(diskSizeBytes / 1073741824)
             const createResult = await executeSSH(config.targetConnectionId, nodeIp,
-              `qemu-img create -f raw "${imgPath}" ${sizeGB}G 2>&1`)
+              `qemu-img create -f raw ${shellEscape(imgPath)} ${sizeGB}G 2>&1`)
             if (!createResult.success) {
               throw new Error(`Failed to create disk image: ${createResult.error || createResult.output}`)
             }
@@ -3022,7 +3035,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Clean temp files on the storage paths (one per file-based target storage)
       for (const storageTempDir of storageTempDirs) {
         await executeSSH(config.targetConnectionId, nodeIp,
-          `rm -f "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.vmdk "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.qcow2 "${storageTempDir}"/proxcenter-mig-${jobId}-disk*.raw`)
+          `rm -f ${shellEscape(storageTempDir)}/proxcenter-mig-${jobId}-disk*.vmdk ${shellEscape(storageTempDir)}/proxcenter-mig-${jobId}-disk*.qcow2 ${shellEscape(storageTempDir)}/proxcenter-mig-${jobId}-disk*.raw`)
       }
       // Clean control files (always in /tmp)
       await executeSSH(config.targetConnectionId, nodeIp,
@@ -3095,86 +3108,4 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     cancelledJobs.delete(jobId)
     jobPrisma.delete(jobId)
   }
-}
-
-/**
- * executeSSH with configurable timeout for long-running operations (disk transfers).
- * The ssh2 library has a 30s default; we need much longer for large disks.
- */
-async function executeSSHWithTimeout(
-  db: any,
-  connectionId: string,
-  target: SshTarget,
-  command: string,
-  timeoutMs: number
-): Promise<{ success: boolean; output?: string; error?: string }> {
-  const connection = await db.connection.findUnique({
-    where: { id: connectionId },
-    select: {
-      sshEnabled: true, sshPort: true, sshUser: true,
-      sshAuthMethod: true, sshKeyEnc: true, sshPassEnc: true, sshUseSudo: true,
-    },
-  })
-
-  if (!connection?.sshEnabled) {
-    return { success: false, error: "SSH not enabled for this connection" }
-  }
-
-  const { Client } = await import("ssh2")
-
-  const port = await resolveSshTargetPort(db, connectionId, target, connection.sshPort)
-  const user = connection.sshUser || "root"
-
-  let key: string | undefined
-  let password: string | undefined
-  let passphrase: string | undefined
-
-  const authMethod = connection.sshAuthMethod || (connection.sshKeyEnc ? "key" : "password")
-  if (authMethod === "key" && connection.sshKeyEnc) {
-    key = decryptSecret(connection.sshKeyEnc)
-    if (connection.sshPassEnc) try { passphrase = decryptSecret(connection.sshPassEnc) } catch {}
-  } else if (connection.sshPassEnc) {
-    password = decryptSecret(connection.sshPassEnc)
-  }
-
-  const finalCommand = connection.sshUseSudo ? `sudo ${command}` : command
-
-  return new Promise((resolve) => {
-    const conn = new Client()
-    const timeout = setTimeout(() => {
-      conn.end()
-      resolve({ success: false, error: `SSH timeout after ${timeoutMs / 1000}s` })
-    }, timeoutMs)
-
-    conn.on("ready", () => {
-      conn.exec(finalCommand, (err, stream) => {
-        if (err) { clearTimeout(timeout); conn.end(); resolve({ success: false, error: err.message }); return }
-
-        let stdout = ""
-        let stderr = ""
-        stream.on("data", (data: Buffer) => { stdout += data.toString() })
-        stream.stderr.on("data", (data: Buffer) => { stderr += data.toString() })
-        stream.on("close", (code: number) => {
-          clearTimeout(timeout)
-          conn.end()
-          if (code === 0 || code === null) {
-            resolve({ success: true, output: stdout.trim() })
-          } else {
-            resolve({ success: false, error: stderr.trim() || `Exit code ${code}` })
-          }
-        })
-      })
-    })
-
-    conn.on("error", (err) => { clearTimeout(timeout); resolve({ success: false, error: err.message }) })
-
-    const connectConfig: Record<string, unknown> = {
-      host: sshTargetHost(target), port, username: user, readyTimeout: 30_000,
-      keepaliveInterval: 10000, keepaliveCountMax: 999,
-    }
-    if (key) { connectConfig.privateKey = key; if (passphrase) connectConfig.passphrase = passphrase }
-    else if (password) { connectConfig.password = password }
-
-    conn.connect(connectConfig as any)
-  })
 }

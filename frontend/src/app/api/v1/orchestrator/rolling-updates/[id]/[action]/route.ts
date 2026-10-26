@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getTenantConnectionIds } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { orchestratorSegment, OrchestratorPathError } from "@/lib/orchestrator/client"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -30,7 +31,7 @@ async function handlePost(
     }
 
     // Verify rolling update belongs to tenant
-    const ruRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${id}`, {
+    const ruRes = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${orchestratorSegment(id)}`, {
       headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
     })
     if (ruRes.ok) {
@@ -44,7 +45,7 @@ async function handlePost(
       }
     }
 
-    const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${id}/${action}`, {
+    const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${orchestratorSegment(id)}/${action}`, {
       method: "POST",
       headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
     })
@@ -60,6 +61,7 @@ async function handlePost(
 
     return NextResponse.json({ data })
   } catch (error: any) {
+    if (error instanceof OrchestratorPathError) return NextResponse.json({ error: error.message }, { status: 400 })
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error(`Error in rolling update action:`, error)
     }

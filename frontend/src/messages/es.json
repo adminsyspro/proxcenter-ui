@@ -164,6 +164,7 @@
     "synced": "Sincronizado {time}"
   },
   "auth": {
+    "oidcLinkRefused": "Inicio de sesión rechazado: esta identidad no se pudo vincular a la cuenta existente. Contacte con su administrador.",
     "welcomeTitle": "Bienvenido a {appName}",
     "loginSubtitle": "Inicia sesión para acceder a tu infraestructura",
     "loginMethod": "Método de inicio de sesión",

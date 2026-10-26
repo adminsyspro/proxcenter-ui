@@ -10,6 +10,7 @@ import { verifyPassword, hashPassword } from "./password"
 import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdapDetailed, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
 import { getOidcConfig, oidcSeedRoleId, syncOidcRoleAssignment } from "./oidc"
+import { holdsProtectedRole, oidcLinkRefusal, OIDC_LINK_REFUSED } from "./oidcLinking"
 import { oidcOpenidAgent } from "./oidcProxy"
 import { isSessionTenantDisabled, loadJwtContext } from "./jwtContext"
 import { createSession, evaluateSession, revokeSession, touchSession } from "./sessions"
@@ -89,6 +90,28 @@ async function logLdapRefusal(username: string, reason: string, detail?: string)
     })
   } catch (e) {
     console.error("[ldap] cannot audit the refused sign-in:", e)
+  }
+}
+
+/**
+ * Record why an OIDC identity was not bound to the local account sharing its
+ * e-mail (server log + `login_failed` audit row). The user only sees a
+ * generic refusal on the login page.
+ */
+async function logOidcLinkRefusal(email: string, reason: string): Promise<void> {
+  console.warn(`[oidc] sign-in refused for "${email}": ${reason}`)
+  try {
+    const { audit } = await import("@/lib/audit")
+    await audit({
+      action: "login_failed",
+      category: "auth",
+      userEmail: email,
+      details: { reason, provider: "oidc" },
+      status: "failure",
+      errorMessage: reason,
+    })
+  } catch (e) {
+    console.error("[oidc] cannot audit the refused sign-in:", e)
   }
 }
 
@@ -530,6 +553,8 @@ export const authOptions: NextAuthOptions = {
           select: { id: true, email: true, name: true, role: true, enabled: true, oidcSub: true },
         })
 
+        const matchedByEmail = !existing
+
         if (!existing) {
           existing = await prisma.user.findUnique({
             where: { email },
@@ -544,6 +569,21 @@ export const authOptions: NextAuthOptions = {
 
         if (existing) {
           if (!existing.enabled) return false
+
+          // Found by e-mail only: binding this identity to the account is a decision, not a given.
+          if (matchedByEmail) {
+            const accountId = existing.id
+            const refusal = await oidcLinkRefusal({
+              storedSub: existing.oidcSub,
+              emailVerified: (profile as any).email_verified,
+              isProtectedAccount: () => holdsProtectedRole(accountId, now),
+            })
+
+            if (refusal) {
+              await logOidcLinkRefusal(email, refusal)
+              return `/login?error=${OIDC_LINK_REFUSED}`
+            }
+          }
 
           // Update existing user. The legacy users.role column is left as-is
           // (mirrors LDAP); the authoritative RBAC assignment is re-synced from

@@ -84,8 +84,15 @@ export default function LoginPage({ forceLocal = false }) {
       // Always mark providers as resolved (even on failure) so the form falls
       // back to visible rather than spinning forever — never lock the admin out.
       .finally(() => setProvidersLoaded(true))
-    if (errorParam) setError(decodeURIComponent(errorParam))
-  }, [errorParam])
+  }, [])
+
+  // A refused OIDC account link comes back as a code; any other error is shown as received.
+  useEffect(() => {
+    if (!errorParam) return
+    const decoded = decodeURIComponent(errorParam)
+
+    setError(decoded === 'OidcLinkRefused' ? t('auth.oidcLinkRefused') : decoded)
+  }, [errorParam, t])
 
   // Auto-redirect to the IdP when forced. Skipped on the /access escape hatch
   // and whenever an OIDC error bounced us back (?error=), to avoid a loop.

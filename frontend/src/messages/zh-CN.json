@@ -164,6 +164,7 @@
     "synced": "已同步 {time}"
   },
   "auth": {
+    "oidcLinkRefused": "登录被拒绝：无法将此身份关联到现有账户。请联系管理员。",
     "welcomeTitle": "欢迎使用 {appName}",
     "loginSubtitle": "登录以访问您的基础设施",
     "loginMethod": "登录方式",

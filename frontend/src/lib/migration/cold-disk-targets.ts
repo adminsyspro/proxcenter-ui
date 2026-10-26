@@ -10,6 +10,7 @@
  * drive end to end, is still decided by tested code.
  */
 
+import { assertAbsPath } from "@/lib/ssh/validate"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 
 import { planStorages, type DiskPlan } from "./target-overrides"
@@ -46,12 +47,15 @@ export function coldStorageTarget(
 ): ColdStorageTarget {
   const type = cfg?.type || "dir"
   const isFileBased = isFileBasedStorage(type)
+  // The storage path comes from the cluster's storage.cfg and lands in node
+  // shell commands: only a plain absolute path passes (assertAbsPath throws).
+  const imagesDir = isFileBased ? assertAbsPath(`${cfg?.path || "/var/lib/vz"}/images/${vmid}`) : ""
   return {
     storage,
     type,
     isFileBased,
     importFormat: isFileBased ? "qcow2" : "raw",
-    imagesDir: isFileBased ? `${cfg?.path || "/var/lib/vz"}/images/${vmid}` : "",
+    imagesDir,
     driveOpts: isFileBased ? ",discard=on" : "",
   }
 }

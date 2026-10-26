@@ -847,7 +847,7 @@ function buildV2vCommand(
         ? `${encodeURIComponent(config.vcenterCluster)}/`
         : ""
       const uri = `vpx://${userEnc}@${hostEnc}/${dcEnc}/host/${clusterSegment}${esxiEnc}?no_verify=1`
-      v2vCmd = `virt-v2v -ic ${shellEscape(uri)} -ip ${shellEscape(pwFile)} ${vmNameEsc} ${v2vOpts}`
+      v2vCmd = `virt-v2v -ic ${shellEscape(uri)} -ip ${shellEscape(pwFile)} ${v2vOpts} -- ${vmNameEsc}`
       break
     }
     case "hyperv": {
@@ -860,7 +860,7 @@ function buildV2vCommand(
         const userEnc = encodeURIComponent(username)
         const hostEnc = encodeURIComponent(host)
         const uri = `hyperv://${userEnc}@${hostEnc}`
-        v2vCmd = `virt-v2v -ic ${shellEscape(uri)} -ip ${shellEscape(pwFile)} ${vmNameEsc} ${v2vOpts}`
+        v2vCmd = `virt-v2v -ic ${shellEscape(uri)} -ip ${shellEscape(pwFile)} ${v2vOpts} -- ${vmNameEsc}`
       }
       break
     }

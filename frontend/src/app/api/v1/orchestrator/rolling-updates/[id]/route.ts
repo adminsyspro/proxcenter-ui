@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getTenantConnectionIds } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { orchestratorSegment, OrchestratorPathError } from "@/lib/orchestrator/client"
 
 export const runtime = "nodejs"
 
@@ -19,7 +20,7 @@ export async function GET(
 
     const { id } = await ctx.params
 
-    const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${id}`, {
+    const response = await fetch(`${ORCHESTRATOR_URL}/api/v1/rolling-updates/${orchestratorSegment(id)}`, {
       headers: await orchestratorHeaders({ "Content-Type": "application/json" }),
     })
 
@@ -43,6 +44,7 @@ export async function GET(
 
     return NextResponse.json({ data })
   } catch (error: any) {
+    if (error instanceof OrchestratorPathError) return NextResponse.json({ error: error.message }, { status: 400 })
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error getting rolling update:", error)
     }

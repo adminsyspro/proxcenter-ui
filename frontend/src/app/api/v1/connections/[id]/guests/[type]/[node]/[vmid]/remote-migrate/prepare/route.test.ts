@@ -33,6 +33,8 @@ vi.mock("@/lib/tenant/infraScope", () => ({
   getTenantInfrastructureScope: (...a: any[]) => getInfraMock(...a),
   canMigrateConnections: (...a: any[]) => canMigrateConnectionsMock(...a),
 }))
+const guardSessionGuestMock = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/vdc/guestGuard", () => ({ guardSessionGuest: (...a: any[]) => guardSessionGuestMock(...a) }))
 vi.mock("@/lib/audit", async () => {
   // audit() flips the request's audit scope so withAudit() adds no row of its
   // own (#1105); the stand-in must do the same or every explicit row doubles.
@@ -40,7 +42,7 @@ vi.mock("@/lib/audit", async () => {
   return { audit: (...a: any[]) => { markAuditExplicit(); return auditMock(...a) } }
 })
 
-import { POST } from "./route"
+import { GET, POST } from "./route"
 
 const PARAMS = { id: "conn-src", type: "qemu", node: "pve1", vmid: "100" }
 const CONN = { id: "conn-src", baseUrl: "https://source:8006", apiToken: "token" }
@@ -104,6 +106,7 @@ function expectWrapperRow(status: "success" | "failure", httpStatus: number, err
 }
 
 beforeEach(() => {
+  guardSessionGuestMock.mockReset().mockResolvedValue(null)
   vi.resetAllMocks()
   checkPermissionMock.mockResolvedValue(null)
   getConnectionByIdMock.mockResolvedValue(CONN)
@@ -280,5 +283,57 @@ describe("POST .../remote-migrate/prepare", () => {
     expect(deletes()).toHaveLength(1)
     expect(auditMock).toHaveBeenCalledOnce()
     expect(checkPermissionMock.mock.calls.map(([permission]) => permission)).toEqual(["vm.migrate", "vm.snapshot"])
+  })
+})
+
+describe("GET .../remote-migrate/prepare tenant guards", () => {
+  const get = async (params = PARAMS) => callRoute(GET, { method: "GET", params })
+
+  beforeEach(() => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-vdc")
+    getInfraMock.mockResolvedValue({ kind: "iaas" })
+    getConnectionByIdMock.mockResolvedValue(CONN)
+    pveFetchMock.mockResolvedValue([])
+  })
+
+  it("answers 403 to a tenant whose scope cannot migrate, before reading the guest", async () => {
+    canMigrateConnectionsMock.mockReturnValue(false)
+    const res = await get()
+    expect(res.status).toBe(403)
+    expect(canMigrateConnectionsMock).toHaveBeenCalledWith({ kind: "iaas" }, PARAMS.id)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+    expect(getConnectionByIdMock).not.toHaveBeenCalled()
+  })
+
+  it("relays the guest guard refusal for a guest outside the session's pools", async () => {
+    canMigrateConnectionsMock.mockReturnValue(true)
+    guardSessionGuestMock.mockResolvedValue(new Response(JSON.stringify({ error: "Guest outside your vDC scope" }), { status: 403 }))
+    const res = await get()
+    expect(res.status).toBe(403)
+    expect(guardSessionGuestMock).toHaveBeenCalledWith(expect.objectContaining({ connectionId: PARAMS.id, node: PARAMS.node, vmid: PARAMS.vmid, type: "qemu" }))
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it("answers the prerequisites when every guard passes", async () => {
+    canMigrateConnectionsMock.mockReturnValue(true)
+    const res = await get()
+    expect(res.status).toBe(200)
+    expect(guardSessionGuestMock).toHaveBeenCalledTimes(1)
+    expect(await res.json()).toMatchObject({ replication: [], snapshots: [], siteRecoveryJobs: [] })
+    // The guest itself was read once the guards passed.
+    expect(pveFetchMock).toHaveBeenCalled()
+  })
+})
+
+describe("POST .../remote-migrate/prepare guest guard", () => {
+  it("relays the guest guard refusal before capturing anything", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-vdc")
+    getInfraMock.mockResolvedValue({ kind: "msp", connectionIds: new Set([PARAMS.id]) })
+    canMigrateConnectionsMock.mockReturnValue(true)
+    getConnectionByIdMock.mockResolvedValue(CONN)
+    guardSessionGuestMock.mockResolvedValue(new Response(JSON.stringify({ error: "Guest outside your vDC scope" }), { status: 403 }))
+    const res = await callRoute(POST, { method: "POST", params: PARAMS, body: { removeHa: true } })
+    expect(res.status).toBe(403)
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 })

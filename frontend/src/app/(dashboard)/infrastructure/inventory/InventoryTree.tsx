@@ -536,6 +536,9 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   const [externalHypervisors, setExternalHypervisors] = useState<{ id: string; name: string; type: string; vms?: { vmid: string; name: string; status: string; cpu?: number; memory_size_MiB?: number; guest_OS?: string; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string; vcenterHostStatus?: 'ok' | 'warn' | 'crit' | 'unknown'; vcenterHostConnectionState?: string; vcenterHostPowerState?: string }[]; vmsLoading?: boolean; vmsLoadError?: string }[]>([])
   const [clusterStorages, setClusterStorages] = useState<TreeClusterStorage[]>([])
   const [reloadTick, setReloadTick] = useState(0)
+  // A forced refresh keeps the current tree until the stream ends, which can
+  // take as long as the slowest server: show that it is still running.
+  const [refreshing, setRefreshing] = useState(false)
 
   // Load PVE tag color overrides for all connections
   useEffect(() => {
@@ -1630,6 +1633,8 @@ return next
       const accPbs: TreePbsServer[] = []
       const accStorages: TreeClusterStorage[] = []
 
+      setRefreshing(isRefresh)
+
       if (!isRefresh) {
         setClusters([])
         setPbsServers([])
@@ -1744,6 +1749,7 @@ return next
 
       eventSource.addEventListener('done', () => {
         if (!alive) return
+        setRefreshing(false)
         if (!gotFirstData) setLoading(false)
         // On refresh, swap all data at once to avoid flicker
         if (isRefresh) {
@@ -1757,6 +1763,7 @@ return next
 
       eventSource.addEventListener('error', (e) => {
         if (!alive) return
+        setRefreshing(false)
         try {
           const err = JSON.parse((e as any).data || '{}')
           setError(err.message || 'Connection error')
@@ -3150,7 +3157,14 @@ return favorites.has(vmKey)
           {onRefresh && (
             <Tooltip title={t('common.refresh')}>
               <span>
-                <IconButton aria-label={t('common.refresh')} size='small' onClick={onRefresh} disabled={refreshLoading}>
+                <IconButton
+                  aria-label={t('common.refresh')}
+                  size='small'
+                  onClick={onRefresh}
+                  disabled={refreshLoading || refreshing}
+                  aria-busy={refreshing}
+                  sx={{ '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } }, ...(refreshing && { '& i': { animation: 'spin 1s linear infinite' } }) }}
+                >
                   <RefreshIcon fontSize='small' />
                 </IconButton>
               </span>
@@ -3290,7 +3304,7 @@ return favorites.has(vmKey)
         </ToggleButtonGroup>
       </Box>
     ),
-    [loading, searchInput, viewMode, displayVms.length, hostsList.length, poolsTree, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, isTreeExpanded, isSectionsAllExpanded, showVmId, onToggleShowVmId, canManagePools, clusters.length, openCreatePool]
+    [loading, searchInput, viewMode, displayVms.length, hostsList.length, poolsTree, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, refreshing, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, isTreeExpanded, isSectionsAllExpanded, showVmId, onToggleShowVmId, canManagePools, clusters.length, openCreatePool]
   )
 
   return (

@@ -719,47 +719,77 @@ function streamCached(cached: CachedInventory, viewer: Viewer): Response {
 /* Cache miss → one shared fan-out, narrowed per reader                */
 /* ------------------------------------------------------------------ */
 
+type SessionPrisma = Awaited<ReturnType<typeof getSessionPrisma>>
+
+/** The PVE, PBS and external connections the scope of `infra` covers. */
+function findScopeConnections(prisma: SessionPrisma, infra: InfraScope) {
+  const plan = inventoryConnectionPlan(infra)
+
+  // provider → globalPrisma, all connections; msp → session prisma, own connections;
+  // iaas (vDC tenant) → globalPrisma restricted to vDC-bound connection IDs
+  const connSelect = { id: true, name: true, type: true, latitude: true, longitude: true, locationLabel: true, sshEnabled: true, tenantId: true } as const
+  const pveClient = plan.pveClient === 'global' ? globalPrisma : prisma
+  const pveWhere = plan.pveConnectionIds
+    ? { type: 'pve' as const, id: { in: plan.pveConnectionIds } }
+    : { type: 'pve' as const }
+
+  // PBS: iaas surfaces its vDC-bound PBS (global + bound ids); provider
+  // sees all (global); msp sees its own (session).
+  let pbsWhere: { type: 'pbs'; id?: { in: string[] } }
+  let pbsUseGlobal: boolean
+  if (infra.kind === 'iaas') {
+    pbsUseGlobal = true
+    pbsWhere = { type: 'pbs', id: { in: [...infra.vdcScope.pbsNamespacesByConnection.keys()] } }
+  } else {
+    pbsUseGlobal = plan.pbsExtClient === 'global'
+    pbsWhere = { type: 'pbs' }
+  }
+  const extUseGlobal = plan.pbsExtClient === 'global'
+
+  return Promise.all([
+    pveClient.connection.findMany({ where: pveWhere, orderBy: { createdAt: 'desc' }, select: connSelect }),
+    (pbsUseGlobal ? globalPrisma : prisma).connection.findMany({ where: pbsWhere, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, type: true } }),
+    (extUseGlobal ? globalPrisma : prisma).connection.findMany({ where: { type: { in: ['vmware', 'hyperv', 'xcpng', 'nutanix'] } }, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, type: true } }),
+  ])
+}
+
+function inventoryStats(clusters: ClusterData[], pbsServers: PbsServerData[]): CachedInventory['stats'] {
+  let totalNodes = 0, onlineNodes = 0, totalGuests = 0, runningGuests = 0
+  for (const cluster of clusters) {
+    for (const node of cluster.nodes) {
+      totalNodes++
+      if (node.status === 'online') onlineNodes++
+      for (const guest of node.guests) {
+        totalGuests++
+        if (guest.status === 'running') runningGuests++
+      }
+    }
+  }
+
+  let totalDatastores = 0, totalBackups = 0
+  for (const pbs of pbsServers) {
+    totalDatastores += pbs.stats.datastoreCount
+    totalBackups += pbs.stats.backupCount
+  }
+
+  return {
+    totalClusters: clusters.length,
+    totalNodes, totalGuests, onlineNodes, runningGuests,
+    totalPbsServers: pbsServers.length,
+    totalDatastores, totalBackups,
+  }
+}
+
 /**
  * The fan-out over the whole scope of `infra`, for any viewer: it is shared by
  * every reader of the scope and its result is cached under the scope's key
  * (#125). PBS included: narrowing them to the first reader's grants cached a
  * PBS-less inventory that the tenant's admin was then served for 15 minutes.
  */
-function inventoryProducer(
-  prisma: Awaited<ReturnType<typeof getSessionPrisma>>,
-  infra: InfraScope,
-): InventoryProducer {
-  const plan = inventoryConnectionPlan(infra)
-
+function inventoryProducer(prisma: SessionPrisma, infra: InfraScope): InventoryProducer {
   return async emit => {
     const startTime = Date.now()
-
-    // provider → globalPrisma, all connections; msp → session prisma, own connections;
-    // iaas (vDC tenant) → globalPrisma restricted to vDC-bound connection IDs
-    const connSelect = { id: true, name: true, type: true, latitude: true, longitude: true, locationLabel: true, sshEnabled: true, tenantId: true } as const
-    const pveClient = plan.pveClient === 'global' ? globalPrisma : prisma
-    const pveWhere = plan.pveConnectionIds
-      ? { type: 'pve' as const, id: { in: plan.pveConnectionIds } }
-      : { type: 'pve' as const }
-
-    // PBS: iaas surfaces its vDC-bound PBS (global + bound ids); provider
-    // sees all (global); msp sees its own (session).
-    let pbsWhere: { type: 'pbs'; id?: { in: string[] } }
-    let pbsUseGlobal: boolean
-    if (infra.kind === 'iaas') {
-      pbsUseGlobal = true
-      pbsWhere = { type: 'pbs', id: { in: [...infra.vdcScope.pbsNamespacesByConnection.keys()] } }
-    } else {
-      pbsUseGlobal = plan.pbsExtClient === 'global'
-      pbsWhere = { type: 'pbs' }
-    }
-    const extUseGlobal = plan.pbsExtClient === 'global'
-
-    const [pveConnections, pbsConnections, externalConnections] = await Promise.all([
-      pveClient.connection.findMany({ where: pveWhere, orderBy: { createdAt: 'desc' }, select: connSelect }),
-      (pbsUseGlobal ? globalPrisma : prisma).connection.findMany({ where: pbsWhere, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, type: true } }),
-      (extUseGlobal ? globalPrisma : prisma).connection.findMany({ where: { type: { in: ['vmware', 'hyperv', 'xcpng', 'nutanix'] } }, orderBy: { createdAt: 'desc' }, select: { id: true, name: true, type: true } }),
-    ])
+    const [pveConnections, pbsConnections, externalConnections] = await findScopeConnections(prisma, infra)
 
     emit({ kind: 'connections', pve: pveConnections, pbs: pbsConnections, external: externalConnections })
 
@@ -787,24 +817,6 @@ function inventoryProducer(
 
     await Promise.allSettled([...clusterPromises, ...pbsPromises])
 
-    let totalNodes = 0, onlineNodes = 0, totalGuests = 0, runningGuests = 0
-    for (const cluster of allClusters) {
-      for (const node of cluster.nodes) {
-        totalNodes++
-        if (node.status === 'online') onlineNodes++
-        for (const guest of node.guests) {
-          totalGuests++
-          if (guest.status === 'running') runningGuests++
-        }
-      }
-    }
-
-    let totalDatastores = 0, totalBackups = 0
-    for (const pbs of allPbsServers) {
-      totalDatastores += pbs.stats.datastoreCount
-      totalBackups += pbs.stats.backupCount
-    }
-
     console.log(`[inventory-stream] Streamed all data in ${Date.now() - startTime}ms`)
 
     return {
@@ -813,12 +825,7 @@ function inventoryProducer(
       externalHypervisors: externalConnections,
       storages: allStorages,
       storageResources: allStorageResources,
-      stats: {
-        totalClusters: allClusters.length,
-        totalNodes, totalGuests, onlineNodes, runningGuests,
-        totalPbsServers: allPbsServers.length,
-        totalDatastores, totalBackups,
-      },
+      stats: inventoryStats(allClusters, allPbsServers),
     }
   }
 }
@@ -916,6 +923,15 @@ function streamShared(shared: SharedInventoryFetch, viewer: Viewer): Response {
   return sseResponse(stream)
 }
 
+/**
+ * The blocking read of /api/v1/inventory fetching this scope, if any. Null
+ * when the fetch in flight is our own shared fan-out, which readers join.
+ */
+function pendingBlockingRead(tenantId: string, vdcContext: string | null): Promise<CachedInventory> | null {
+  if (getSharedInventoryFetch(tenantId, vdcContext) !== null) return null
+  return getInflightFetch(tenantId, vdcContext)
+}
+
 /* ------------------------------------------------------------------ */
 /* GET handler — SSE stream                                            */
 /* ------------------------------------------------------------------ */
@@ -948,7 +964,7 @@ export async function GET(request: NextRequest) {
   if (cacheResult.status === 'fresh' || cacheResult.status === 'stale') {
     // Served now, refreshed for the next reader, unless a fetch of this scope
     // (ours or /api/v1/inventory's) is already running.
-    if (cacheResult.status === 'stale' && !getInflightFetch(tenantId, vdcContext)) {
+    if (cacheResult.status === 'stale' && getInflightFetch(tenantId, vdcContext) === null) {
       joinOrStartInventoryFetch(tenantId, vdcContext, inventoryProducer(prisma, infra))
     }
     return streamCached(cacheResult.data, viewer)
@@ -956,14 +972,12 @@ export async function GET(request: NextRequest) {
 
   // A blocking read of /api/v1/inventory is already fetching this scope:
   // wait for it rather than fetch everything a second time.
-  if (!forceRefresh && !getSharedInventoryFetch(tenantId, vdcContext)) {
-    const pending = getInflightFetch(tenantId, vdcContext)
-    if (pending) {
-      try {
-        return streamCached(await pending, viewer)
-      } catch {
-        // It failed: fetch for ourselves below.
-      }
+  const pending = forceRefresh ? null : pendingBlockingRead(tenantId, vdcContext)
+  if (pending !== null) {
+    try {
+      return streamCached(await pending, viewer)
+    } catch {
+      // It failed: fetch for ourselves below.
     }
   }
 

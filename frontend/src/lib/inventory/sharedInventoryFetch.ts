@@ -55,7 +55,7 @@ function store(): Map<string, Entry> {
 /** The fan-out running for this scope, unless the cache was invalidated since it started. */
 export function getSharedInventoryFetch(tenantId: string, vdcContext: string | null): SharedInventoryFetch | null {
   const entry = store().get(inventoryCacheKey(tenantId, vdcContext))
-  return entry && entry.epoch === inventoryCacheEpoch() ? entry : null
+  return entry?.epoch === inventoryCacheEpoch() ? entry : null
 }
 
 /**

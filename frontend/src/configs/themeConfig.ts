@@ -15,7 +15,38 @@
  *
  * Another way is to clear the cookie from the browser's Application/Storage tab and then reload the page.
  */
-const themeConfig = {
+export type ThemeMode = 'system' | 'light' | 'dark'
+export type Skin = 'default' | 'bordered'
+export type Layout = 'vertical' | 'collapsed' | 'horizontal'
+export type ContentWidth = 'compact' | 'wide'
+
+export interface ThemeConfig {
+  templateName: string
+  homePageUrl: string
+  settingsCookieName: string
+  mode: ThemeMode
+  skin: Skin
+  semiDark: boolean
+  layout: Layout
+  layoutPadding: number
+  compactContentWidth: number
+  navbar: {
+    type: 'fixed' | 'static'
+    contentWidth: ContentWidth
+    floating: boolean
+    detached: boolean
+    blur: boolean
+  }
+  contentWidth: ContentWidth
+  footer: {
+    type: 'fixed' | 'static'
+    contentWidth: ContentWidth
+    detached: boolean
+  }
+  disableRipple: boolean
+}
+
+const themeConfig: ThemeConfig = {
   templateName: 'ProxCenter',
   homePageUrl: '/home',
   settingsCookieName: 'materio-mui-next-demo',

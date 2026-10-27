@@ -58,3 +58,9 @@ jobs:
       - name: Stylelint
         working-directory: frontend
         run: npm run lint:css
+
+      - name: Strict type check
+        # Strict-mode ratchet of the JS -> strict TS migration (roadmap#171):
+        # tsc --strict against the debt in .strict-debt.json, no new JS file.
+        working-directory: frontend
+        run: npm run typecheck:strict

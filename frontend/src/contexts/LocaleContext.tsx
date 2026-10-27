@@ -1,12 +1,25 @@
 'use client'
 
 import { createContext, useContext, useCallback, useTransition } from 'react'
+import type { ReactNode } from 'react'
 
 import { useRouter } from 'next/navigation'
 
 import { locales, localeNames, localeFlags, defaultLocale } from '@/i18n/config'
+import type { Locale } from '@/i18n/config'
 
-const LocaleContext = createContext({
+export interface LocaleContextValue {
+  locale: string
+  locales: readonly Locale[]
+  localeNames: Record<Locale, string>
+  localeFlags: Record<Locale, string>
+  changeLocale: (newLocale: string) => void
+  isPending: boolean
+}
+
+const isLocale = (value: string): value is Locale => (locales as readonly string[]).includes(value)
+
+const LocaleContext = createContext<LocaleContextValue>({
   locale: defaultLocale,
   locales: locales,
   localeNames: localeNames,
@@ -26,12 +39,12 @@ export const useLocale = () => {
 return context
 }
 
-export const LocaleProvider = ({ children, initialLocale }) => {
+export const LocaleProvider = ({ children, initialLocale }: { children: ReactNode; initialLocale?: string }) => {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const changeLocale = useCallback((newLocale) => {
-    if (!locales.includes(newLocale)) {
+  const changeLocale = useCallback((newLocale: string) => {
+    if (!isLocale(newLocale)) {
       console.error(`Invalid locale: ${newLocale}`)
       
 return

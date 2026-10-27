@@ -1,35 +1,67 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import type { ReactNode } from 'react'
 
 import { useSession } from 'next-auth/react'
 
 import { hasGrantOn } from '@/lib/rbac/clientScope'
+import type { ClientResourceType, GrantDetail } from '@/lib/rbac/clientScope'
 
 /**
  * Contexte RBAC pour gérer les permissions de l'utilisateur connecté
  */
 
-const RBACContext = createContext({
+/** A role assignment as /api/v1/rbac/effective returns it. */
+export interface EffectiveRole {
+  id: string
+  name: string
+  color: string | null
+  scope_type: string
+  scope_target?: string | null
+  resolved_scopes?: { scopeType: string; scopeTarget: string | null }[]
+}
+
+/** The `data` payload of /api/v1/rbac/effective. */
+interface EffectiveRbac {
+  permissions?: string[]
+  permission_details?: GrantDetail[]
+  roles?: EffectiveRole[]
+  is_super_admin?: boolean
+  scope_types?: string[]
+  hidden_widgets?: string[]
+}
+
+export interface RBACContextValue {
+  permissions: string[]
+  roles: EffectiveRole[]
+  isAdmin: boolean
+  scopeTypes: string[]
+  hiddenWidgets: string[]
+  loading: boolean
+  hasPermission: (permission: string) => boolean
+  hasAnyPermission: (perms?: readonly string[] | null) => boolean
+  hasAllPermissions: (perms?: readonly string[] | null) => boolean
+  // Resource-aware variant (issue #921): `hasPermissionOn('storage.upload', 'storage', 'connId:local')`.
+  hasPermissionOn: (permission: string, resourceType: ClientResourceType, resourceId: string) => boolean
+  refresh: () => void | Promise<void>
+}
+
+const RBACContext = createContext<RBACContextValue>({
   permissions: [],
   roles: [],
   isAdmin: false,
   scopeTypes: [],
   hiddenWidgets: [],
   loading: true,
-  // Default stubs accept an argument so TypeScript consumers inferring the
-  // context type (e.g. `rbac.hasPermission('connection.manage')`) don't trip
-  // the "Expected 0 arguments" error. The real implementations below use the
-  // permission argument.
-  hasPermission: (_p) => false,
-  hasAnyPermission: (_perms) => false,
-  hasAllPermissions: (_perms) => false,
-  // Resource-aware variant (issue #921): `hasPermissionOn('storage.upload', 'storage', 'connId:local')`.
-  hasPermissionOn: (_p, _type, _id) => false,
+  hasPermission: () => false,
+  hasAnyPermission: () => false,
+  hasAllPermissions: () => false,
+  hasPermissionOn: () => false,
   refresh: () => {},
 })
 
-export function RBACProvider({ children }) {
+export function RBACProvider({ children }: { children: ReactNode }) {
   const { data: session, status } = useSession()
 
   // Reload permissions when the user or tenant changes, not when the session object is
@@ -39,15 +71,15 @@ export function RBACProvider({ children }) {
   const userId = session?.user?.id ?? session?.user?.email ?? null
   const tenantId = session?.user?.tenantId ?? 'default'
   const identityKey = JSON.stringify([userId, tenantId, status])
-  const [loadedKey, setLoadedKey] = useState(null)
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
   const requestSequence = useRef(0)
-  const [permissions, setPermissions] = useState([])
+  const [permissions, setPermissions] = useState<string[]>([])
   // Every (permission, scope) pair the user holds, for resource-aware checks.
-  const [grants, setGrants] = useState([])
-  const [roles, setRoles] = useState([])
+  const [grants, setGrants] = useState<GrantDetail[]>([])
+  const [roles, setRoles] = useState<EffectiveRole[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
-  const [scopeTypes, setScopeTypes] = useState([])
-  const [hiddenWidgets, setHiddenWidgets] = useState([])
+  const [scopeTypes, setScopeTypes] = useState<string[]>([])
+  const [hiddenWidgets, setHiddenWidgets] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
   // Charger les permissions de l'utilisateur
@@ -75,7 +107,7 @@ return
     try {
       const res = await fetch('/api/v1/rbac/effective')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const json = await res.json()
+      const json: { data?: EffectiveRbac } = await res.json()
       if (requestId !== requestSequence.current) return
 
       if (json.data) {
@@ -98,7 +130,7 @@ return
   }, [userId, status, identityKey])
 
   useEffect(() => {
-    loadPermissions()
+    void loadPermissions()
     return () => { requestSequence.current++ }
   }, [loadPermissions])
 
@@ -107,7 +139,7 @@ return
 
 
   // Vérifier si l'utilisateur a une permission spécifique
-  const hasPermission = useCallback((permission) => {
+  const hasPermission = useCallback((permission: string) => {
     if (!accessReady) return false
     if (isAdmin) return true
 
@@ -115,7 +147,7 @@ return permissions.includes(permission)
   }, [permissions, isAdmin, accessReady])
 
   // Vérifier si l'utilisateur a au moins une des permissions
-  const hasAnyPermission = useCallback((perms) => {
+  const hasAnyPermission = useCallback((perms?: readonly string[] | null) => {
     if (!accessReady) return false
     if (isAdmin) return true
     if (!perms || perms.length === 0) return true
@@ -126,7 +158,7 @@ return perms.some(p => permissions.includes(p))
   // Permission on ONE resource (issue #921): a storage-scoped grant only
   // answers for the storage it names, a connection grant for the whole
   // cluster, mirroring the server-side scopeMatches.
-  const hasPermissionOn = useCallback((permission, resourceType, resourceId) => {
+  const hasPermissionOn = useCallback((permission: string, resourceType: ClientResourceType, resourceId: string) => {
     if (!accessReady) return false
     if (isAdmin) return true
 
@@ -134,7 +166,7 @@ return hasGrantOn(grants, permission, resourceType, resourceId)
   }, [grants, isAdmin, accessReady])
 
   // Vérifier si l'utilisateur a toutes les permissions
-  const hasAllPermissions = useCallback((perms) => {
+  const hasAllPermissions = useCallback((perms?: readonly string[] | null) => {
     if (!accessReady) return false
     if (isAdmin) return true
     if (!perms || perms.length === 0) return true
@@ -169,7 +201,7 @@ export function useRBAC() {
  * Hook pour vérifier si un élément de menu doit être affiché
  * @param {string[]} requiredPermissions - Permissions requises (au moins une)
  */
-export function useMenuPermission(requiredPermissions) {
+export function useMenuPermission(requiredPermissions?: readonly string[] | null) {
   const { hasAnyPermission, loading } = useRBAC()
 
   if (loading) return true // Afficher pendant le chargement

@@ -10,7 +10,57 @@
  * - Special effects (glassmorphism, neumorphism, etc.)
  */
 
-const globalThemesConfig = [
+type StyleBlock = Record<string, string | number>
+
+export type ThemeCategoryId = 'standard' | 'design' | 'ide' | 'accessibility'
+export type DensityName = 'compact' | 'comfortable' | 'spacious'
+export type TransitionName = 'none' | 'subtle' | 'normal' | 'playful'
+
+export interface AdjustableSetting {
+  labelKey: string
+  min: number
+  max: number
+  default: number
+  unit: string
+}
+
+export interface GlobalTheme {
+  id: string
+  name: string
+  descriptionKey: string
+  icon: string
+  category: ThemeCategoryId
+  tagKeys?: string[]
+  preview: {
+    cardBg: string
+    accent: string
+  }
+  styles: {
+    card: StyleBlock
+    button: StyleBlock
+    input: StyleBlock
+    density: DensityName
+    transitions: TransitionName
+  }
+  adjustable?: Record<string, AdjustableSetting>
+  fontOverride?: {
+    body: string
+    heading: string
+  }
+  palette?: Record<string, string | Record<string, string>>
+  a11yEnhancements?: {
+    focusRingWidth: number
+    focusRingOffset: number
+    minContrastRatio: number
+    largerText: boolean
+  }
+  cssOverrides?: {
+    dark: Record<string, string>
+    light: Record<string, string>
+  }
+}
+
+const globalThemesConfig: GlobalTheme[] = [
   {
     id: 'default',
     name: 'ProxCenter',
@@ -827,12 +877,12 @@ const globalThemesConfig = [
 export default globalThemesConfig
 
 // Helper to get theme by ID
-export const getGlobalTheme = (themeId) => {
+export const getGlobalTheme = (themeId: string | undefined): GlobalTheme => {
   return globalThemesConfig.find(t => t.id === themeId) || globalThemesConfig[0]
 }
 
 // Get themes by category
-export const getThemesByCategory = (category) => {
+export const getThemesByCategory = (category: ThemeCategoryId | 'all' | undefined): GlobalTheme[] => {
   if (!category || category === 'all') return globalThemesConfig
   
 return globalThemesConfig.filter(t => t.category === category)
@@ -848,14 +898,14 @@ export const themeCategories = [
 ]
 
 // Density spacing multipliers
-export const densityConfig = {
+export const densityConfig: Record<DensityName, { multiplier: number; labelKey: string; descriptionKey: string }> = {
   compact: { multiplier: 0.8, labelKey: 'themes.density.compact', descriptionKey: 'themes.density.compactDesc' },
   comfortable: { multiplier: 1, labelKey: 'themes.density.comfortable', descriptionKey: 'themes.density.comfortableDesc' },
   spacious: { multiplier: 1.2, labelKey: 'themes.density.spacious', descriptionKey: 'themes.density.spaciousDesc' }
 }
 
 // Transition configurations
-export const transitionConfig = {
+export const transitionConfig: Record<TransitionName, { duration: string; easing: string; labelKey: string; descriptionKey: string }> = {
   none: {
     duration: '0ms',
     easing: 'linear',

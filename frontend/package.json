@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:css": "stylelint \"src/**/*.{css,js,jsx,ts,tsx}\"",
+    "typecheck:strict": "node scripts/check-strict-types.mjs",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
     "build:icons": "tsx src/assets/iconify-icons/bundle-icons-css.mjs",
     "postinstall": "npm run build:icons",

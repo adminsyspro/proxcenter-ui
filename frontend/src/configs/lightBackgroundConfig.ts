@@ -11,7 +11,26 @@
  * - hover: Hover states
  */
 
-const lightBackgroundConfig = [
+export interface LightBackground {
+  id: string
+  nameKey: string
+  descriptionKey: string
+  icon: string
+  colors: {
+    body: string
+    paper: string
+    paperAlt: string
+    default: string
+    hover: string
+    border: string
+  }
+  preview: {
+    bg: string
+    card: string
+  }
+}
+
+const lightBackgroundConfig: LightBackground[] = [
   {
     id: 'neutral',
     nameKey: 'themes.lightBackground.neutral',
@@ -161,6 +180,6 @@ const lightBackgroundConfig = [
 export default lightBackgroundConfig
 
 // Helper to get background config by ID
-export const getLightBackground = (id) => {
+export const getLightBackground = (id: string | undefined): LightBackground => {
   return lightBackgroundConfig.find(bg => bg.id === id) || lightBackgroundConfig[0]
 }

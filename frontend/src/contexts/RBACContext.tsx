@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 
 import { useSession } from 'next-auth/react'
@@ -61,7 +61,7 @@ const RBACContext = createContext<RBACContextValue>({
   refresh: () => {},
 })
 
-export function RBACProvider({ children }: { children: ReactNode }) {
+export function RBACProvider({ children }: Readonly<{ children: ReactNode }>) {
   const { data: session, status } = useSession()
 
   // Reload permissions when the user or tenant changes, not when the session object is
@@ -174,20 +174,22 @@ return hasGrantOn(grants, permission, resourceType, resourceId)
 return perms.every(p => permissions.includes(p))
   }, [permissions, isAdmin, accessReady])
 
+  const value = useMemo<RBACContextValue>(() => ({
+    permissions: accessReady ? permissions : [],
+    roles: accessReady ? roles : [],
+    isAdmin: accessReady && isAdmin,
+    scopeTypes: accessReady ? scopeTypes : [],
+    hiddenWidgets: accessReady ? hiddenWidgets : [],
+    loading: pending,
+    hasPermission,
+    hasAnyPermission,
+    hasAllPermissions,
+    hasPermissionOn,
+    refresh: loadPermissions,
+  }), [accessReady, permissions, roles, isAdmin, scopeTypes, hiddenWidgets, pending, hasPermission, hasAnyPermission, hasAllPermissions, hasPermissionOn, loadPermissions])
+
   return (
-    <RBACContext.Provider value={{
-      permissions: accessReady ? permissions : [],
-      roles: accessReady ? roles : [],
-      isAdmin: accessReady && isAdmin,
-      scopeTypes: accessReady ? scopeTypes : [],
-      hiddenWidgets: accessReady ? hiddenWidgets : [],
-      loading: pending,
-      hasPermission,
-      hasAnyPermission,
-      hasAllPermissions,
-      hasPermissionOn,
-      refresh: loadPermissions,
-    }}>
+    <RBACContext.Provider value={value}>
       {children}
     </RBACContext.Provider>
   )

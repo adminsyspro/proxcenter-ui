@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo } from 'react'
 import type { ReactNode } from 'react'
 
 export interface PageTitleContextValue {
@@ -21,7 +21,7 @@ const PageTitleContext = createContext<PageTitleContextValue>({
   setPageInfo: () => {}
 })
 
-export function PageTitleProvider({ children }: { children: ReactNode }) {
+export function PageTitleProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [title, setTitle] = useState('')
   const [subtitle, setSubtitle] = useState('')
   const [icon, setIcon] = useState('')
@@ -40,15 +40,13 @@ export function PageTitleProvider({ children }: { children: ReactNode }) {
     setIcon(newIcon || '')
   }, [])
 
+  const value = useMemo<PageTitleContextValue>(
+    () => ({ title, subtitle, icon, setPageTitle, setPageSubtitle, setPageInfo }),
+    [title, subtitle, icon, setPageTitle, setPageSubtitle, setPageInfo]
+  )
+
   return (
-    <PageTitleContext.Provider value={{
-      title,
-      subtitle,
-      icon,
-      setPageTitle,
-      setPageSubtitle,
-      setPageInfo
-    }}>
+    <PageTitleContext.Provider value={value}>
       {children}
     </PageTitleContext.Provider>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useCallback, useTransition } from 'react'
+import { createContext, useContext, useCallback, useMemo, useTransition } from 'react'
 import type { ReactNode } from 'react'
 
 import { useRouter } from 'next/navigation'
@@ -39,7 +39,7 @@ export const useLocale = () => {
 return context
 }
 
-export const LocaleProvider = ({ children, initialLocale }: { children: ReactNode; initialLocale?: string }) => {
+export const LocaleProvider = ({ children, initialLocale }: Readonly<{ children: ReactNode; initialLocale?: string }>) => {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -59,17 +59,13 @@ return
     })
   }, [router])
 
+  const value = useMemo<LocaleContextValue>(
+    () => ({ locale: initialLocale || defaultLocale, locales, localeNames, localeFlags, changeLocale, isPending }),
+    [initialLocale, changeLocale, isPending]
+  )
+
   return (
-    <LocaleContext.Provider
-      value={{
-        locale: initialLocale || defaultLocale,
-        locales,
-        localeNames,
-        localeFlags,
-        changeLocale,
-        isPending
-      }}
-    >
+    <LocaleContext.Provider value={value}>
       {children}
     </LocaleContext.Provider>
   )

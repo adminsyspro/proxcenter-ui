@@ -27,7 +27,7 @@ const RANGE_MAP: Record<TimeRange, TimeRangeParams> = {
 }
 
 const isTimeRange = (range: unknown): range is TimeRange =>
-  typeof range === 'string' && Object.prototype.hasOwnProperty.call(RANGE_MAP, range)
+  typeof range === 'string' && Object.hasOwn(RANGE_MAP, range)
 
 export function mapTimeRange(range: string | null | undefined): TimeRangeParams {
   return isTimeRange(range) ? RANGE_MAP[range] : RANGE_MAP.hour
@@ -45,7 +45,9 @@ export function formatTime(payload: ReadonlyArray<{ payload?: TimedPoint }> | nu
   const t = payload?.[0]?.payload?.time || payload?.[0]?.payload?.t
 
   if (!t) return null
-  const d = new Date(typeof t === 'number' ? (t > 1e12 ? t : t * 1000) : t)
+  // Numbers are unix seconds or milliseconds; anything above 1e12 is already ms.
+  const ms = typeof t === 'number' && t <= 1e12 ? t * 1000 : t
+  const d = new Date(ms)
 
   if (Number.isNaN(d.getTime())) return t
   const dd = String(d.getDate()).padStart(2, '0')

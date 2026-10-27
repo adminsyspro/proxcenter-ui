@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { cleanup, renderHook, waitFor } from '@testing-library/react'
 
-import { useNodeTrends } from './useNodeTrends'
+import { mergeNodeTrends, useNodeTrends } from './useNodeTrends'
 
 afterEach(cleanup)
 beforeEach(() => {
@@ -225,5 +225,30 @@ describe('useNodeTrends after unmount', () => {
 
     expect(signal?.aborted).toBe(true)
     expect(rejections).toEqual([])
+  })
+})
+
+describe('mergeNodeTrends', () => {
+  it('sorts the slots by time and the node names alphabetically', () => {
+    const { slots, nodeNames } = mergeNodeTrends(
+      [{ 'node:pve-02': [{ ts: 20, cpu: 2 }, { ts: 10, cpu: 1 }] }, { 'node:pve-01': [{ ts: 10, cpu: 5 }] }],
+      ['cpu'],
+      0
+    )
+
+    expect(nodeNames).toEqual(['pve-01', 'pve-02'])
+    expect(slots.map(s => s.ts)).toEqual([10, 20])
+    expect(slots[0]).toMatchObject({ 'pve-01_cpu': 5, 'pve-02_cpu': 1 })
+  })
+
+  it('fills each series forward then backward without touching a real value', () => {
+    const { slots } = mergeNodeTrends(
+      [{ a: [{ ts: 1, cpu: 7 }, { ts: 2, cpu: 0 }, { ts: 3, cpu: 9 }], b: [{ ts: 2, cpu: 4 }] }],
+      ['cpu'],
+      null
+    )
+
+    expect(slots.map(s => s.a_cpu)).toEqual([7, 0, 9])
+    expect(slots.map(s => s.b_cpu)).toEqual([4, 4, 4])
   })
 })

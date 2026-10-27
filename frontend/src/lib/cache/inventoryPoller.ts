@@ -66,6 +66,11 @@ const pollers = new Map<string, ConnectionPoller>()
 const subscribers = new Set<Subscriber>()
 let masterInterval: ReturnType<typeof setInterval> | null = null
 
+// One cycle at a time (#126): overlapping cycles doubled the /cluster/resources
+// load, and the older one could finish last and write a stale prevState back.
+let cycle: Promise<void> | null = null
+let followUpRequested = false
+
 const POLL_INTERVAL_MS = 15_000 // 15 seconds
 const IP_REFRESH_INTERVAL = 20 // every 20 poll cycles = 5 minutes (at 15s/cycle)
 let ipRefreshCounter = IP_REFRESH_INTERVAL - 1 // trigger on first cycle
@@ -274,6 +279,27 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
 
 // ---------- Master poll cycle ----------
 
+function runCycles(): Promise<void> {
+  cycle = pollUntilSettled().finally(() => { cycle = null })
+  return cycle
+}
+
+/**
+ * One cycle, then another while a trigger asked for one during it: that cycle
+ * may have read Proxmox before the action the trigger follows. Any number of
+ * triggers during a cycle yields a single follow-up.
+ */
+async function pollUntilSettled(): Promise<void> {
+  followUpRequested = false
+  await pollAll()
+  if (followUpRequested) return pollUntilSettled()
+}
+
+/** The interval tick: skipped while a cycle runs, which is already fresh. */
+function pollIfIdle() {
+  if (cycle === null) void runCycles()
+}
+
 async function pollAll() {
   if (subscribers.size === 0) return
 
@@ -475,8 +501,8 @@ export function subscribe(fn: Subscriber): () => void {
   if (!masterInterval && subscribers.size === 1) {
     console.log('[inventory-poller] Starting (first subscriber)')
     // Poll immediately on first subscribe, then every POLL_INTERVAL_MS
-    void pollAll()
-    masterInterval = setInterval(pollAll, POLL_INTERVAL_MS)
+    pollIfIdle()
+    masterInterval = setInterval(pollIfIdle, POLL_INTERVAL_MS)
   }
 
   // Return unsubscribe function
@@ -495,5 +521,6 @@ export function subscribe(fn: Subscriber): () => void {
 
 /** Force an immediate poll cycle (e.g., after a user action) */
 export function triggerPoll() {
-  void pollAll()
+  if (cycle === null) void runCycles()
+  else followUpRequested = true
 }

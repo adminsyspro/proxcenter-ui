@@ -55,6 +55,7 @@ const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" st
 import EntityTagManager from './components/EntityTagManager'
 import { resolveVmPowerAction } from './helpers'
 import { applyInventoryEvents } from './applyInventoryEvents'
+import { useExpectedVmStatuses } from './hooks/useExpectedVmStatuses'
 import { networkConnKey } from './networkConnKey'
 import { useRBAC } from '@/contexts/RBACContext'
 import { showsClusterLevel } from '@/lib/rbac/scopeKinds'
@@ -816,25 +817,15 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     }
   }, [onRefreshRef])
 
+  // Optimistic status after a power action, from the tree menu or the details
+  // panel, held against the live stream until Proxmox reports it.
+  const { show: showExpectedVmStatus, hold: holdExpectedStatuses } = useExpectedVmStatuses(setClusters)
+
   useEffect(() => {
     if (onOptimisticVmStatusRef) {
-      onOptimisticVmStatusRef((connId: string, vmid: string, status: string) => {
-        setClusters(prev => prev.map(clu => {
-          if (clu.connId !== connId) return clu
-          let changed = false
-          const nodes = clu.nodes.map(n => {
-            const vms = n.vms.map(vm => {
-              if (String(vm.vmid) !== String(vmid)) return vm
-              changed = true
-              return { ...vm, status }
-            })
-            return changed ? { ...n, vms } : n
-          })
-          return changed ? { ...clu, nodes } : clu
-        }))
-      })
+      onOptimisticVmStatusRef((connId: string, vmid: string, status: string) => showExpectedVmStatus(connId, vmid, status))
     }
-  }, [onOptimisticVmStatusRef])
+  }, [onOptimisticVmStatusRef, showExpectedVmStatus])
 
   // Expose optimistic VM tags update function to parent
   useEffect(() => {
@@ -1325,21 +1316,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
         resume: 'running',
       }
       const newStatus = optimisticStatus[effectiveAction]
-      if (newStatus) {
-        setClusters(prev => prev.map(clu => {
-          if (clu.connId !== connId) return clu
-          let changed = false
-          const nodes = clu.nodes.map(n => {
-            const vms = n.vms.map(vm => {
-              if (String(vm.vmid) !== String(vmid) || vm.type !== type) return vm
-              changed = true
-              return { ...vm, status: newStatus }
-            })
-            return changed ? { ...n, vms } : n
-          })
-          return changed ? { ...clu, nodes } : clu
-        }))
-      }
+      if (newStatus) showExpectedVmStatus(connId, String(vmid), newStatus, type)
 
       // Also trigger SSE poll for full data sync
       fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {})
@@ -1808,8 +1785,9 @@ return next
       es.addEventListener('batch', (e) => {
         if (!alive) return
         try {
-          const events = JSON.parse(e.data)
-          if (!Array.isArray(events) || events.length === 0) return
+          const parsed = JSON.parse(e.data)
+          if (!Array.isArray(parsed) || parsed.length === 0) return
+          const events = holdExpectedStatuses(parsed)
           setClusters(prev => applyInventoryEvents(prev, events))
         } catch { /* ignore */ }
       })
@@ -1849,7 +1827,7 @@ return next
       es?.close()
       es = null
     }
-  }, [])
+  }, [holdExpectedStatuses])
 
   const selectedItemId = selected ? itemKey(selected) : undefined
 

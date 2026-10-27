@@ -146,6 +146,7 @@ import PbsServerPanel, { type PbsServerPanelHandle } from './components/PbsServe
 import InventoryDialogs, { type NodeActionFailedVm } from './components/InventoryDialogs'
 import ExternalHypervisorDashboard from './components/ExternalHypervisorDashboard'
 import { useDetailData } from './hooks/useDetailData'
+import { useLiveVmStatus } from './hooks/useLiveVmStatus'
 import { useVmActions } from './hooks/useVmActions'
 import { useHardwareHandlers } from './hooks/useHardwareHandlers'
 import VmDetailTabs from './tabs/VmDetailTabs'
@@ -2697,14 +2698,7 @@ return (
     return allVms.find(v => v.connId === connId && String(v.vmid) === String(vmid)) || null
   }, [selection, allVms])
 
-  useEffect(() => {
-    if (!selectedVmFromList || !data) return
-    const liveStatus = selectedVmFromList.status
-    if (liveStatus && liveStatus !== data.vmRealStatus) {
-      const mappedStatus = (liveStatus === 'running' ? 'ok' : liveStatus === 'paused' ? 'warn' : 'crit') as any
-      setData({ ...data, status: mappedStatus, vmRealStatus: liveStatus })
-    }
-  }, [selectedVmFromList?.status])
+  useLiveVmStatus(selectedVmFromList?.status, data, setData)
 
   // Status de la VM pour les actions et la console
   const vmStatus = data?.vmRealStatus || data?.status

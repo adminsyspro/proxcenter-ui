@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import type { ReactNode } from 'react'
 
 import { useLocale, useTranslations } from 'next-intl'
 
@@ -13,6 +14,7 @@ import BackupSchedulePicker from './BackupSchedulePicker'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { formatDurationSec, runStatusChip, runsPollIntervalMs } from '@/lib/backups/runDisplay'
 import type { BackupRunsResult } from '@/lib/backups/vzdumpRunsService'
+import BackupPoolSelect from '@/components/backup/BackupPoolSelect'
 import BackupJobRunsDrawer from './BackupJobRunsDrawer'
 
 import {
@@ -49,7 +51,7 @@ import {
   useTheme
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
-import type { GridColDef } from '@mui/x-data-grid'
+import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 
 /* -----------------------------
   Types
@@ -198,7 +200,98 @@ const errorMessage = (e: unknown): string => (e instanceof Error ? e.message : '
 ------------------------------ */
 
 // PBS namespaces as storage.cfg writes them: '' is the root namespace.
-const normNamespace = (ns: unknown): string => (typeof ns === 'string' ? ns.trim().replace(/^\/+|\/+$/g, '') : '')
+const normNamespace = (ns: unknown): string => {
+  if (typeof ns !== 'string') return ''
+  const trimmed = ns.trim()
+  let start = 0
+  let end = trimmed.length
+  while (start < end && trimmed[start] === '/') start++
+  while (end > start && trimmed[end - 1] === '/') end--
+
+  return trimmed.slice(start, end)
+}
+
+const MODE_CHIP_COLOR: Record<string, 'success' | 'warning'> = { snapshot: 'success', suspend: 'warning' }
+
+// Save and delete: sync, verify and tape jobs have their own endpoint, the others are prune jobs.
+const pbsJobEndpoint = (type: string): string => (['sync', 'verify', 'tape'].includes(type) ? type : 'prune')
+
+// Run now: garbage collection runs too.
+const pbsRunEndpoint = (type: string): string => (['sync', 'verify', 'prune', 'tape'].includes(type) ? type : 'gc')
+
+const formatSelection = (job: PveJob, t: Translate): string => {
+  if (job.selectionMode === 'all') {
+    const excluded = job.excludedVmids?.length ?? 0
+
+    return excluded > 0 ? t('backups.allExcept', { count: excluded }) : t('backups.allVms')
+  }
+  if (job.selectionMode === 'include') return t('backups.vmCount', { count: job.vmids?.length || 0 })
+  if (job.selectionMode === 'pool') return t('backups.pool', { name: job.pool ?? '' })
+
+  return '—'
+}
+
+// The vDCs of the tenant on a connection, with the PBS namespace of their binding.
+async function fetchTenantPools(connectionId: string): Promise<TenantPool[] | null> {
+  const res = await fetch('/api/v1/vdcs', { cache: 'no-store' })
+  if (!res.ok) return null
+  const json = await res.json()
+  const list: VdcRow[] = Array.isArray(json?.data) ? json.data : []
+
+  return list
+    .filter(v => (v.connectionId || v.connection_id) === connectionId)
+    .map(v => {
+      const binding = Array.isArray(v.pbsBindings) ? v.pbsBindings[0] : null
+      return {
+        vdcId: v.id,
+        vdcName: v.name,
+        poolName: v.pvePoolName || v.pve_pool_name || '',
+        namespace: binding?.namespace || '',
+        datastore: binding?.datastore || '',
+      }
+    })
+    .filter(p => !!p.poolName)
+}
+
+interface DeleteJobDialogProps {
+  open: boolean
+  deleting: boolean
+  title: string
+  message: string
+  onClose: () => void
+  onConfirm: () => void
+  children?: ReactNode
+}
+
+function DeleteJobDialog({ open, deleting, title, message, onClose, onConfirm, children }: Readonly<DeleteJobDialogProps>) {
+  const theme = useTheme()
+  const t = useTranslations()
+
+  return (
+    <Dialog open={open} onClose={() => !deleting && onClose()} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <i className="ri-error-warning-line" style={{ fontSize: 24, color: theme.palette.error.main }} />
+        {title}
+      </DialogTitle>
+      <DialogContent>
+        <Typography>{message}</Typography>
+        {children && <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>{children}</Box>}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={deleting}>{t('common.cancel')}</Button>
+        <Button
+          variant="contained"
+          color="error"
+          onClick={onConfirm}
+          disabled={deleting}
+          startIcon={deleting ? <CircularProgress size={16} /> : <i className="ri-delete-bin-line" />}
+        >
+          {t('common.delete')}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
 
 const formatDate = (dateStr: string | number | null | undefined, locale: string): string => {
   if (!dateStr) return '—'
@@ -214,7 +307,7 @@ return date.toLocaleString(locale, {
   })
 }
 
-const JobTypeChip = ({ type }: { type: string }) => {
+const JobTypeChip = ({ type }: Readonly<{ type: string }>) => {
   const configs: Record<string, { color: string; label: string; bg: string }> = {
     sync: { color: '#2196F3', label: 'Sync', bg: 'rgba(33, 150, 243, 0.15)' },
     verify: { color: '#4CAF50', label: 'Verify', bg: 'rgba(76, 175, 80, 0.15)' },
@@ -240,7 +333,7 @@ const JobTypeChip = ({ type }: { type: string }) => {
   )
 }
 
-const StatusChip = ({ state, t }: { state?: string; t?: Translate }) => {
+const StatusChip = ({ state, t }: Readonly<{ state?: string; t?: Translate }>) => {
   if (!state) return <Chip size="small" label="N/A" variant="outlined" sx={{ opacity: 0.5 }} />
 
   const stateUpper = String(state).toUpperCase()
@@ -277,8 +370,7 @@ interface PveJobsTabProps {
   onJobsChanged?: () => void
 }
 
-function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = null, onJobsChanged }: PveJobsTabProps) {
-  const theme = useTheme()
+function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = null, onJobsChanged }: Readonly<PveJobsTabProps>) {
   const t = useTranslations()
   const locale = useLocale()
 
@@ -431,9 +523,9 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
 
   useEffect(() => {
     if (selectedConnection) {
-      loadJobs()
-      loadVms()
-      loadPools()
+      void loadJobs()
+      void loadVms()
+      void loadPools()
     }
   }, [selectedConnection, loadJobs, loadVms, loadPools])
 
@@ -452,34 +544,17 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
   useEffect(() => {
     if (!isVdcTenant || !selectedConnection) { setTenantPools([]); return }
     let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch('/api/v1/vdcs', { cache: 'no-store' })
-        if (!res.ok) return
-        const json = await res.json()
-        const list: VdcRow[] = Array.isArray(json?.data) ? json.data : []
-        if (cancelled) return
-        const onConn = list
-          .filter(v => (v.connectionId || v.connection_id) === selectedConnection)
-          .map(v => {
-            const binding = Array.isArray(v.pbsBindings) ? v.pbsBindings[0] : null
-            return {
-              vdcId: v.id,
-              vdcName: v.name,
-              poolName: v.pvePoolName || v.pve_pool_name || '',
-              namespace: binding?.namespace || '',
-              datastore: binding?.datastore || '',
-            }
-          })
-          .filter(p => !!p.poolName)
+    fetchTenantPools(selectedConnection)
+      .then(onConn => {
+        if (cancelled || !onConn) return
         if (onConn.length > 1) {
           // Defensive against legacy rows only — the DB enforces
           // 1 vDC per (tenant, connection). Warn but don't fail — pick [0].
           console.warn(`[BackupJobsTabs] tenant has ${onConn.length} vDCs on connection ${selectedConnection}; using "${onConn[0].vdcName}".`)
         }
         setTenantPools(onConn)
-      } catch { /* ignore */ }
-    })()
+      })
+      .catch(() => { /* ignore */ })
     return () => { cancelled = true }
   }, [isVdcTenant, selectedConnection])
 
@@ -603,7 +678,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
           : json.error)
       } else {
         setDialogOpen(false)
-        loadJobs()
+        void loadJobs()
         onJobsChanged?.()
       }
     } catch (e) {
@@ -634,7 +709,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
       if (json.error) {
         setError(json.error)
       } else {
-        loadJobs()
+        void loadJobs()
       }
     } catch (e) {
       setError(errorMessage(e) || t('backups.deleteError'))
@@ -659,7 +734,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
       const json = await res.json()
       
       if (!json.error) {
-        loadJobs()
+        void loadJobs()
       }
     } catch (e) {
       console.error('Error toggling job:', e)
@@ -679,33 +754,11 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
         setError(json.error)
       } else {
         setRunsDrawer({ key: job.id, focusUpid: json.data?.tasks?.[0]?.upid ?? null })
-        reloadRuns() // the run route invalidated the server cache
+        void reloadRuns() // the run route invalidated the server cache
       }
     } catch (e) {
       setError(errorMessage(e) || t('common.error'))
     }
-  }
-
-  const formatSelection = (job: PveJob, t: Translate) => {
-    if (job.selectionMode === 'all') {
-      if (job.excludedVmids && job.excludedVmids.length > 0) {
-        return t('backups.allExcept', { count: job.excludedVmids.length })
-      }
-
-
-return t('backups.allVms')
-    }
-
-    if (job.selectionMode === 'include') {
-      return t('backups.vmCount', { count: job.vmids?.length || 0 })
-    }
-
-    if (job.selectionMode === 'pool') {
-      return t('backups.pool', { name: job.pool ?? '' })
-    }
-
-
-return '—'
   }
 
   const columns: GridColDef<PveJob>[] = [
@@ -810,7 +863,7 @@ return '—'
         <Chip 
           size="small" 
           label={params.value} 
-          color={params.value === 'snapshot' ? 'success' : params.value === 'suspend' ? 'warning' : 'error'}
+          color={MODE_CHIP_COLOR[params.value] ?? 'error'}
           variant="outlined"
         />
       )
@@ -829,7 +882,7 @@ return '—'
       renderCell: (params) => (
         <Stack direction="row" spacing={0.5}>
           <Tooltip title={t('backups.runNow')}>
-            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleRunNow(params.row) }}>
+            <IconButton size="small" onClick={(e) => { e.stopPropagation(); void handleRunNow(params.row) }}>
               <i className="ri-play-line" style={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
@@ -1159,10 +1212,11 @@ return '—'
                   }))}
                   getOptionLabel={(option) => `${option.vmid} - ${option.name}`}
                   renderInput={(params) => <TextField {...params} label={t('backups.vmsToInclude')} />}
-                  renderTags={(value, getTagProps) =>
-                    value.map((option, index) => (
-                      <Chip size="small" label={option.vmid} {...getTagProps({ index })} key={option.vmid} />
-                    ))
+                  renderValue={(value, getItemProps) =>
+                    value.map((option, index) => {
+                      const { key, ...itemProps } = getItemProps({ index })
+                      return <Chip key={key} size="small" label={option.vmid} {...itemProps} />
+                    })
                   }
                 />
               )}
@@ -1179,32 +1233,23 @@ return '—'
                   }))}
                   getOptionLabel={(option) => `${option.vmid} - ${option.name}`}
                   renderInput={(params) => <TextField {...params} label={t('backups.vmsToExclude')} />}
-                  renderTags={(value, getTagProps) =>
-                    value.map((option, index) => (
-                      <Chip size="small" label={option.vmid} color="error" variant="outlined" {...getTagProps({ index })} key={option.vmid} />
-                    ))
+                  renderValue={(value, getItemProps) =>
+                    value.map((option, index) => {
+                      const { key, ...itemProps } = getItemProps({ index })
+                      return <Chip key={key} size="small" label={option.vmid} color="error" variant="outlined" {...itemProps} />
+                    })
                   }
                 />
               )}
 
               {formData.selectionMode === 'pool' && (
-                <FormControl fullWidth size="small">
-                  <InputLabel>{t('backups.poolToBackup')}</InputLabel>
-                  <Select
-                    value={formData.pool}
-                    onChange={(e) => setFormData(prev => ({ ...prev, pool: e.target.value }))}
-                    label={t('backups.poolToBackup')}
-                  >
-                    {poolOptions.length === 0 && (
-                      <MenuItem value="" disabled>{t('backups.noResourcePool')}</MenuItem>
-                    )}
-                    {poolOptions.map(p => (
-                      <MenuItem key={p.poolid} value={p.poolid}>
-                        {p.comment ? `${p.poolid} (${p.comment})` : p.poolid}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <BackupPoolSelect
+                  label={t('backups.poolToBackup')}
+                  emptyLabel={t('backups.noResourcePool')}
+                  value={formData.pool}
+                  options={poolOptions}
+                  onChange={pool => setFormData(prev => ({ ...prev, pool }))}
+                />
               )}
             </Box>
             )}
@@ -1228,7 +1273,7 @@ return '—'
                 onChange={(v) => setFormData(prev => ({ ...prev, maxfiles: v }))}
                 fallback={1}
                 min={1}
-                inputProps={{ min: 1 }}
+                slotProps={{ htmlInput: { min: 1 } }}
               />
               <TextField
                 size="small"
@@ -1263,38 +1308,25 @@ return '—'
         </DialogActions>
       </Dialog>
 
-      {/* Delete Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => !deleting && setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className="ri-error-warning-line" style={{ fontSize: 24, color: theme.palette.error.main }} />
-          {t('backups.confirmDeleteJob')}
-        </DialogTitle>
-        <DialogContent>
-          <Typography>{t('backups.deleteJobConfirm')}</Typography>
-          {jobToDelete && (
-            <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-              <Typography variant="body2" fontWeight={600}>
-                {jobToDelete.comment || t('backups.noComment')}
-              </Typography>
-              <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                Storage: {jobToDelete.storage} • {t('backups.scheduleTime')}: {jobToDelete.schedule}
-              </Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>{t('common.cancel')}</Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleDeleteConfirm}
-            disabled={deleting}
-            startIcon={deleting ? <CircularProgress size={16} /> : <i className="ri-delete-bin-line" />}
-          >
-            {t('common.delete')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <DeleteJobDialog
+        open={deleteDialogOpen}
+        deleting={deleting}
+        title={t('backups.confirmDeleteJob')}
+        message={t('backups.deleteJobConfirm')}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={() => void handleDeleteConfirm()}
+      >
+        {jobToDelete && (
+          <>
+            <Typography variant="body2" fontWeight={600}>
+              {jobToDelete.comment || t('backups.noComment')}
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.7 }}>
+              Storage: {jobToDelete.storage} • {t('backups.scheduleTime')}: {jobToDelete.schedule}
+            </Typography>
+          </>
+        )}
+      </DeleteJobDialog>
     </Box>
   )
 }
@@ -1308,7 +1340,7 @@ interface PbsJobsTabProps {
   isVdcTenant?: boolean
 }
 
-function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProps) {
+function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: Readonly<PbsJobsTabProps>) {
   const theme = useTheme()
   const t = useTranslations()
   const dateLocale = getDateLocale(useLocale())
@@ -1393,7 +1425,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
 
   useEffect(() => {
     if (selectedPbs) {
-      loadJobs()
+      void loadJobs()
     }
   }, [selectedPbs, loadJobs])
 
@@ -1468,13 +1500,10 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
     setSaving(true)
     
     try {
-      const endpoint = dialogType === 'sync' ? 'sync' 
-        : dialogType === 'verify' ? 'verify' 
-        : dialogType === 'tape' ? 'tape'
-        : 'prune'
+      const endpoint = pbsJobEndpoint(dialogType)
       
       // Pour prune, on a besoin du store dans l'URL
-      let url
+      let url: string
 
       if (dialogMode === 'create') {
         url = `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/jobs/${endpoint}`
@@ -1500,7 +1529,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
         setError(json.error)
       } else {
         setDialogOpen(false)
-        loadJobs()
+        void loadJobs()
       }
     } catch (e) {
       setError(errorMessage(e) || t('backups.saveError'))
@@ -1520,10 +1549,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
     setDeleting(true)
 
     try {
-      const endpoint = jobToDelete.type === 'sync' ? 'sync'
-        : jobToDelete.type === 'verify' ? 'verify'
-        : jobToDelete.type === 'tape' ? 'tape'
-        : 'prune'
+      const endpoint = pbsJobEndpoint(jobToDelete.type)
 
       let url = `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/jobs/${endpoint}/${encodeURIComponent(jobToDelete.id)}`
 
@@ -1541,7 +1567,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
       if (json.error) {
         setError(json.error)
       } else {
-        loadJobs()
+        void loadJobs()
       }
     } catch (e) {
       setError(errorMessage(e) || t('backups.deleteError'))
@@ -1554,11 +1580,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
 
   const handleRunNow = async (job: PbsJob) => {
     try {
-      const endpoint = job.type === 'sync' ? 'sync' 
-        : job.type === 'verify' ? 'verify' 
-        : job.type === 'prune' ? 'prune' 
-        : job.type === 'tape' ? 'tape'
-        : 'gc'
+      const endpoint = pbsRunEndpoint(job.type)
 
       const res = await fetch(
         `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/jobs/${endpoint}/${encodeURIComponent(job.id)}/run`,
@@ -1575,9 +1597,16 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
     }
   }
 
-  const filteredJobs = jobs 
-    ? (selectedType === 'all' ? jobs.all : jobs[selectedType] || [])
-    : []
+  let filteredJobs: PbsJob[] = []
+  if (jobs) filteredJobs = (selectedType === 'all' ? jobs.all : jobs[selectedType]) ?? []
+
+  const renderDateCell = (params: GridRenderCellParams<PbsJob, string | number | undefined>) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+      <Typography variant="body2" sx={{ opacity: params.value ? 1 : 0.4, fontSize: '0.8rem' }}>
+        {formatDate(params.value, dateLocale)}
+      </Typography>
+    </Box>
+  )
 
   const columns: GridColDef<PbsJob>[] = [
     {
@@ -1657,25 +1686,13 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
       field: 'lastRunEndtime',
       headerName: t('backups.lastExecution'),
       width: 140,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-          <Typography variant="body2" sx={{ opacity: params.value ? 1 : 0.4, fontSize: '0.8rem' }}>
-            {formatDate(params.value, dateLocale)}
-          </Typography>
-        </Box>
-      )
+      renderCell: renderDateCell
     },
     {
       field: 'nextRun',
       headerName: t('backups.nextExecution'),
       width: 140,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-          <Typography variant="body2" sx={{ opacity: params.value ? 1 : 0.4, fontSize: '0.8rem' }}>
-            {formatDate(params.value, dateLocale)}
-          </Typography>
-        </Box>
-      )
+      renderCell: renderDateCell
     },
     {
       field: 'comment',
@@ -1697,7 +1714,6 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
       sortable: false,
       renderCell: (params) => {
         const jobType = params.row.type
-        const isEnabled = params.row.enabled !== false
         const isRunning = params.row.lastRunState === 'running' || params.row.lastRunState === 'RUNNING'
         const canEdit = ['sync', 'verify', 'prune', 'tape'].includes(jobType)
         const canDelete = ['sync', 'verify', 'prune', 'tape'].includes(jobType)
@@ -2000,7 +2016,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
                   onChange={(v) => setFormData(prev => ({ ...prev, outdatedAfter: v }))}
                   fallback={30}
                   min={1}
-                  inputProps={{ min: 1 }}
+                  slotProps={{ htmlInput: { min: 1 } }}
                 />
               </>
             )}
@@ -2019,7 +2035,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
                     onChange={(v) => setFormData(prev => ({ ...prev, keepLast: v }))}
                     fallback={0}
                     min={0}
-                    inputProps={{ min: 0 }}
+                    slotProps={{ htmlInput: { min: 0 } }}
                   />
                   <NumericTextField
                     size="small"
@@ -2029,7 +2045,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
                     onChange={(v) => setFormData(prev => ({ ...prev, keepDaily: v }))}
                     fallback={0}
                     min={0}
-                    inputProps={{ min: 0 }}
+                    slotProps={{ htmlInput: { min: 0 } }}
                   />
                   <NumericTextField
                     size="small"
@@ -2039,7 +2055,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
                     onChange={(v) => setFormData(prev => ({ ...prev, keepWeekly: v }))}
                     fallback={0}
                     min={0}
-                    inputProps={{ min: 0 }}
+                    slotProps={{ htmlInput: { min: 0 } }}
                   />
                   <NumericTextField
                     size="small"
@@ -2049,7 +2065,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
                     onChange={(v) => setFormData(prev => ({ ...prev, keepMonthly: v }))}
                     fallback={0}
                     min={0}
-                    inputProps={{ min: 0 }}
+                    slotProps={{ htmlInput: { min: 0 } }}
                   />
                   <NumericTextField
                     size="small"
@@ -2059,7 +2075,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
                     onChange={(v) => setFormData(prev => ({ ...prev, keepYearly: v }))}
                     fallback={0}
                     min={0}
-                    inputProps={{ min: 0 }}
+                    slotProps={{ htmlInput: { min: 0 } }}
                   />
                 </Box>
               </>
@@ -2132,36 +2148,23 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProp
         </DialogActions>
       </Dialog>
 
-      {/* Delete Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => !deleting && setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className="ri-error-warning-line" style={{ fontSize: 24, color: theme.palette.error.main }} />
-          {t('backups.confirmDeleteJobTitle')}
-        </DialogTitle>
-        <DialogContent>
-          <Typography>{t('backups.confirmDeleteJobMessage')}</Typography>
-          {jobToDelete && (
-            <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-              <Typography variant="body2" fontWeight={600}>{jobToDelete.id}</Typography>
-              <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                {t('common.type')}: {jobToDelete.type} • Datastore: {jobToDelete.store || jobToDelete.datastore}
-              </Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>{t('common.cancel')}</Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={handleDeleteConfirm}
-            disabled={deleting}
-            startIcon={deleting ? <CircularProgress size={16} /> : <i className="ri-delete-bin-line" />}
-          >
-            {t('common.delete')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <DeleteJobDialog
+        open={deleteDialogOpen}
+        deleting={deleting}
+        title={t('backups.confirmDeleteJobTitle')}
+        message={t('backups.confirmDeleteJobMessage')}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={() => void handleDeleteConfirm()}
+      >
+        {jobToDelete && (
+          <>
+            <Typography variant="body2" fontWeight={600}>{jobToDelete.id}</Typography>
+            <Typography variant="caption" sx={{ opacity: 0.7 }}>
+              {t('common.type')}: {jobToDelete.type} • Datastore: {jobToDelete.store || jobToDelete.datastore}
+            </Typography>
+          </>
+        )}
+      </DeleteJobDialog>
     </Box>
   )
 }
@@ -2186,7 +2189,7 @@ interface BackupJobsTabsProps {
   drillRequest?: DrillRequest | null
 }
 
-export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [], createRequest = null, onJobsChanged, drillRequest = null }: BackupJobsTabsProps) {
+export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [], createRequest = null, onJobsChanged, drillRequest = null }: Readonly<BackupJobsTabsProps>) {
   const theme = useTheme()
   const t = useTranslations()
   const [activeTab, setActiveTab] = useState(0)

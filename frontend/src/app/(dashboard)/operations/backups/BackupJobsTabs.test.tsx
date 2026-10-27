@@ -196,6 +196,30 @@ describe('BackupJobsTabs, PVE jobs', () => {
     expect(within(screen.getByTestId('row-backup-pool')).getByText('Pool: prod')).toBeTruthy()
   })
 
+  it('moves a pool-based job to another resource pool', async () => {
+    await openPveTab()
+    fireEvent.click(within(screen.getByTestId('row-backup-pool')).getAllByRole('button')[1])
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Resource pool' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'prod (Production)' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(lastCall('PUT', '/backup-jobs/backup-pool')).toBeTruthy())
+    expect(lastCall('PUT', '/backup-jobs/backup-pool')!.body).toMatchObject({ selectionMode: 'pool', pool: 'prod' })
+  })
+
+  it('removes a guest from the included ones', async () => {
+    await openPveTab()
+    fireEvent.click(within(screen.getByTestId('row-backup-some')).getAllByRole('button')[1])
+    const dialog = await screen.findByRole('dialog')
+    const chip = within(dialog).getByRole('button', { name: '100' })
+    fireEvent.keyDown(chip, { key: 'Backspace' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(lastCall('PUT', '/backup-jobs/backup-some')).toBeTruthy())
+    expect(lastCall('PUT', '/backup-jobs/backup-some')!.body).toMatchObject({ selectionMode: 'include', vmids: [] })
+  })
+
   it('saves an edited job with PUT on its id', async () => {
     await openPveTab()
     const row = screen.getByTestId('row-backup-all')

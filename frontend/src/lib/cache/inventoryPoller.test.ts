@@ -195,3 +195,92 @@ describe("inventoryPoller Auto-HA", () => {
     expect(calls).toHaveLength(1)
   })
 })
+
+/**
+ * POST /api/v1/inventory/poll after every VM action and the 15 s tick used to
+ * start cycles on top of each other (#126): one more /cluster/resources read
+ * per trigger, and a cycle that read Proxmox first could finish last and send
+ * the older state.
+ */
+describe("inventoryPoller cycles", () => {
+  const vm = (status: string) => ({ type: "qemu", vmid: 100, node: "n1", status })
+  const resourceReads = () => pveFetchMock.mock.calls.filter(call => call[1] === "/cluster/resources").length
+
+  /** The next /cluster/resources read hangs until the returned function resolves it. */
+  function holdNextRead(): (value: any[]) => void {
+    let release!: (value: any[]) => void
+    pveFetchMock.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    return value => release(value)
+  }
+
+  async function bootstrap(received: InventoryEvent[]) {
+    pveFetchMock.mockResolvedValue([vm("stopped")])
+    const unsubscribe = poller.subscribe(events => received.push(...events))
+    await settle()
+    return unsubscribe
+  }
+
+  it("answers any number of triggers during a cycle with a single follow-up", async () => {
+    const unsubscribe = await bootstrap([])
+    const release = holdNextRead()
+
+    poller.triggerPoll()
+    await settle()
+    for (let i = 0; i < 5; i++) poller.triggerPoll()
+    await settle()
+    expect(resourceReads()).toBe(2)
+
+    release([vm("stopped")])
+    await settle()
+    expect(resourceReads()).toBe(3)
+
+    await settle()
+    expect(resourceReads()).toBe(3)
+    unsubscribe()
+  })
+
+  it("never sends the state a slower, older cycle read", async () => {
+    const received: InventoryEvent[] = []
+    const unsubscribe = await bootstrap(received)
+
+    // A cycle reads the guest stopped, then the user starts it and the action
+    // triggers again while that read is still out.
+    const release = holdNextRead()
+    poller.triggerPoll()
+    await settle()
+    pveFetchMock.mockResolvedValue([vm("running")])
+    poller.triggerPoll()
+    await settle()
+
+    release([vm("stopped")])
+    await settle()
+
+    expect(received).toEqual([expect.objectContaining({ event: "vm:update", vmid: 100, status: "running" })])
+    unsubscribe()
+  })
+
+  it("skips the interval tick while a cycle runs", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval"] })
+    try {
+      const release = holdNextRead()
+      const unsubscribe = poller.subscribe(() => {})
+      await settle()
+
+      vi.advanceTimersByTime(15_000)
+      await settle()
+      expect(resourceReads()).toBe(1)
+
+      release([vm("stopped")])
+      await settle()
+      expect(resourceReads()).toBe(1)
+
+      pveFetchMock.mockResolvedValue([vm("stopped")])
+      vi.advanceTimersByTime(15_000)
+      await settle()
+      expect(resourceReads()).toBe(2)
+      unsubscribe()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

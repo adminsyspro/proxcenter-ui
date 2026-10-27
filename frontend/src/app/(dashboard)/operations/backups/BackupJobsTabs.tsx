@@ -12,6 +12,7 @@ import NumericTextField from '@/components/ui/NumericTextField'
 import BackupSchedulePicker from './BackupSchedulePicker'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { formatDurationSec, runStatusChip, runsPollIntervalMs } from '@/lib/backups/runDisplay'
+import type { BackupRunsResult } from '@/lib/backups/vzdumpRunsService'
 import BackupJobRunsDrawer from './BackupJobRunsDrawer'
 
 import {
@@ -48,15 +49,158 @@ import {
   useTheme
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
+import type { GridColDef } from '@mui/x-data-grid'
+
+/* -----------------------------
+  Types
+------------------------------ */
+
+type Translate = ReturnType<typeof useTranslations>
+
+interface Connection { id: string; name?: string; host?: string }
+
+/** A vzdump job as GET /connections/:id/backup-jobs lists it. */
+interface PveJob {
+  id: string
+  enabled: boolean
+  storage?: string
+  schedule?: string
+  node?: string | null
+  mode?: string
+  compress?: string
+  selectionMode?: string
+  pool?: string | null
+  vmids?: string[]
+  excludedVmids?: string[]
+  comment?: string
+  mailto?: string
+  mailnotification?: string
+  maxfiles?: number
+  namespace?: string | null
+  nextRun?: number | null
+}
+
+/** The PVE job dialog, also the body of its POST and PUT. */
+interface PveJobForm {
+  enabled: boolean
+  storage: string
+  schedule: string
+  node: string
+  mode: string
+  compress: string
+  selectionMode: string
+  pool: string
+  vmids: string[]
+  excludedVmids: string[]
+  comment: string
+  mailto: string
+  mailnotification: string
+  maxfiles: number
+}
+
+interface BackupStorage { id: string; name: string; type: string; isPbs?: boolean; namespace?: string; datastore?: string }
+interface PveNode { node: string }
+interface GuestOption { vmid: number; name: string; type: string; node: string; status: string }
+interface PveResource { vmid: number; name: string; type: string; node: string; status: string }
+interface PvePool { poolid: string; comment?: string | null }
+interface TenantPool { vdcId: string; vdcName: string; poolName: string; namespace: string; datastore: string }
+
+interface VdcRow {
+  id: string
+  name: string
+  connectionId?: string
+  connection_id?: string
+  pvePoolName?: string
+  pve_pool_name?: string
+  pbsBindings?: Array<{ namespace?: string; datastore?: string }>
+}
+
+/** A job creation asked from the coverage card (roadmap#48). */
+export interface CreateJobRequest { connId: string; vmid: number | string; nonce: number }
+
+/** A restore drill started from the backups list. */
+export interface DrillRequest { nonce: number }
+
+interface RunsDrawerState { key: string; focusUpid: string | null }
+
+type PbsJobType = 'sync' | 'verify' | 'prune' | 'gc' | 'tape'
+
+/** A PBS job as GET /pbs/:id/jobs lists it, every type in one shape. */
+interface PbsJob {
+  id: string
+  type: PbsJobType
+  enabled?: boolean
+  store?: string
+  datastore?: string
+  ns?: string
+  schedule?: string
+  comment?: string
+  remote?: string
+  remoteStore?: string
+  remoteNs?: string
+  removeVanished?: boolean
+  ignoreVerified?: boolean
+  outdatedAfter?: number
+  keepLast?: number
+  keepDaily?: number
+  keepWeekly?: number
+  keepMonthly?: number
+  keepYearly?: number
+  pool?: string
+  drive?: string
+  ejectMedia?: boolean
+  exportMediaSet?: boolean
+  latestOnly?: boolean
+  lastRunState?: string
+  lastRunEndtime?: string | number
+  nextRun?: string | number
+}
+
+type PbsJobLists = Record<'all' | PbsJobType, PbsJob[] | undefined>
+
+interface PbsStats {
+  total?: number
+  byType?: Partial<Record<PbsJobType, number>>
+  lastRunStates?: { ok?: number; error?: number; warning?: number }
+}
+
+/** The PBS job dialog, also the body of its POST and PUT. */
+interface PbsJobForm {
+  id: string
+  store: string
+  ns: string
+  schedule: string
+  comment: string
+  remote: string
+  remoteStore: string
+  remoteNs: string
+  removeVanished: boolean
+  ignoreVerified: boolean
+  outdatedAfter: number
+  keepLast: number
+  keepDaily: number
+  keepWeekly: number
+  keepMonthly: number
+  keepYearly: number
+  pool: string
+  drive: string
+  ejectMedia: boolean
+  exportMediaSet: boolean
+  latestOnly: boolean
+}
+
+type PbsDialogType = 'sync' | 'verify' | 'prune' | 'tape'
+
+const errorMessage = (e: unknown): string => (e instanceof Error ? e.message : '')
 
 /* -----------------------------
   Helpers
 ------------------------------ */
 
 // PBS namespaces as storage.cfg writes them: '' is the root namespace.
-const normNamespace = ns => (typeof ns === 'string' ? ns.trim().replace(/^\/+|\/+$/g, '') : '')
+const normNamespace = (ns: unknown): string => (typeof ns === 'string' ? ns.trim().replace(/^\/+|\/+$/g, '') : '')
 
-const formatDate = (dateStr, locale) => {
+const formatDate = (dateStr: string | number | null | undefined, locale: string): string => {
   if (!dateStr) return '—'
   const date = new Date(dateStr)
 
@@ -70,8 +214,8 @@ return date.toLocaleString(locale, {
   })
 }
 
-const JobTypeChip = ({ type }) => {
-  const configs = {
+const JobTypeChip = ({ type }: { type: string }) => {
+  const configs: Record<string, { color: string; label: string; bg: string }> = {
     sync: { color: '#2196F3', label: 'Sync', bg: 'rgba(33, 150, 243, 0.15)' },
     verify: { color: '#4CAF50', label: 'Verify', bg: 'rgba(76, 175, 80, 0.15)' },
     prune: { color: '#FF9800', label: 'Prune', bg: 'rgba(255, 152, 0, 0.15)' },
@@ -96,7 +240,7 @@ const JobTypeChip = ({ type }) => {
   )
 }
 
-const StatusChip = ({ state, t }) => {
+const StatusChip = ({ state, t }: { state?: string; t?: Translate }) => {
   if (!state) return <Chip size="small" label="N/A" variant="outlined" sx={{ opacity: 0.5 }} />
 
   const stateUpper = String(state).toUpperCase()
@@ -126,45 +270,52 @@ const StatusChip = ({ state, t }) => {
 
 const MANUAL_RUNS_KEY = '__manual__'
 
-function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = null, onJobsChanged }) {
+interface PveJobsTabProps {
+  pveConnections?: Connection[]
+  isVdcTenant?: boolean
+  createRequest?: CreateJobRequest | null
+  onJobsChanged?: () => void
+}
+
+function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = null, onJobsChanged }: PveJobsTabProps) {
   const theme = useTheme()
   const t = useTranslations()
   const locale = useLocale()
 
   const [selectedConnection, setSelectedConnection] = useState('')
-  const [jobs, setJobs] = useState([])
-  const [storages, setStorages] = useState([])
-  const [nodes, setNodes] = useState([])
-  const [vms, setVms] = useState([])
+  const [jobs, setJobs] = useState<PveJob[]>([])
+  const [storages, setStorages] = useState<BackupStorage[]>([])
+  const [nodes, setNodes] = useState<PveNode[]>([])
+  const [vms, setVms] = useState<GuestOption[]>([])
   // Tenant mode: list the pools (= one per vDC) the user is allowed to
   // back up. The job-create dialog locks selectionMode='pool' for them
   // and lets them pick from this list.
-  const [tenantPools, setTenantPools] = useState([])
+  const [tenantPools, setTenantPools] = useState<TenantPool[]>([])
   // Provider mode: the cluster's resource pools, so a job can target a
   // pool the way Proxmox does (issue #746).
-  const [pools, setPools] = useState([])
+  const [pools, setPools] = useState<PvePool[]>([])
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   // Connection whose jobs, storages and nodes are the ones in state: a job
   // creation asked from the coverage card waits for it (roadmap#48).
   const [loadedConnection, setLoadedConnection] = useState('')
-  const handledCreateRef = useRef(null)
+  const handledCreateRef = useRef<number | null>(null)
   
   // Dialog
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [dialogMode, setDialogMode] = useState('create')
-  const [editingJob, setEditingJob] = useState(null)
+  const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create')
+  const [editingJob, setEditingJob] = useState<PveJob | null>(null)
   const [saving, setSaving] = useState(false)
   
   // Delete dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [jobToDelete, setJobToDelete] = useState(null)
+  const [jobToDelete, setJobToDelete] = useState<PveJob | null>(null)
   const [deleting, setDeleting] = useState(false)
   
   // Form state. Tenants always run in pool mode (cf. backend guard in
   // lib/vdc/backupJobs.ts) — the dropdown is hidden and `pool` carries
   // the chosen vDC pool name.
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<PveJobForm>({
     enabled: true,
     storage: '',
     schedule: '00:00',
@@ -183,10 +334,10 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
   // vDC tenant: the PBS namespace of its binding when no PBS storage of this
   // connection writes to it (the namespace is a storage property, a job
   // cannot carry one), so the dialog says so instead of saving.
-  const [missingNamespaceStorage, setMissingNamespaceStorage] = useState(null)
+  const [missingNamespaceStorage, setMissingNamespaceStorage] = useState<string | null>(null)
 
   // Run history (#1003): loaded apart from the jobs so the table never waits on it.
-  const [runsDrawer, setRunsDrawer] = useState(null) // { key: jobId | MANUAL_RUNS_KEY, focusUpid }
+  const [runsDrawer, setRunsDrawer] = useState<RunsDrawerState | null>(null) // key: jobId | MANUAL_RUNS_KEY
   const runsUrl = selectedConnection
     ? `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/runs`
     : null
@@ -194,8 +345,8 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
   // The key stays the same across polls (the server cache is short while a
   // task runs), so the table and the drawer stay on screen between them.
   const awaitedUpid = runsDrawer?.focusUpid ?? null
-  const runsRefreshInterval = useCallback(json => runsPollIntervalMs(json?.data, awaitedUpid), [awaitedUpid])
-  const { data: runsJson, isLoading: runsLoading, error: runsError, mutate: reloadRuns } = useSWRFetch(runsUrl, {
+  const runsRefreshInterval = useCallback((json?: { data?: BackupRunsResult }) => runsPollIntervalMs(json?.data, awaitedUpid), [awaitedUpid])
+  const { data: runsJson, isLoading: runsLoading, error: runsError, mutate: reloadRuns } = useSWRFetch<{ data?: BackupRunsResult }>(runsUrl, {
     refreshInterval: runsRefreshInterval,
   })
   const runsData = runsJson?.data
@@ -229,7 +380,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
         setLoadedConnection(selectedConnection)
       }
     } catch (e) {
-      setError(e.message || t('errors.loadingError'))
+      setError(errorMessage(e) || t('errors.loadingError'))
     } finally {
       setLoading(false)
     }
@@ -243,7 +394,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
       const json = await res.json()
       
       if (!json.error) {
-        const allVms = (json.data || []).filter(r => r.type === 'qemu' || r.type === 'lxc')
+        const allVms = ((json.data || []) as PveResource[]).filter(r => r.type === 'qemu' || r.type === 'lxc')
 
         setVms(allVms.map(vm => ({
           vmid: vm.vmid,
@@ -271,7 +422,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
       const json = await res.json()
 
       if (!json.error) {
-        setPools((json.data || []).filter(p => !!p?.poolid))
+        setPools(((json.data || []) as PvePool[]).filter(p => !!p?.poolid))
       }
     } catch (e) {
       console.error('Error loading pools:', e)
@@ -306,7 +457,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
         const res = await fetch('/api/v1/vdcs', { cache: 'no-store' })
         if (!res.ok) return
         const json = await res.json()
-        const list = Array.isArray(json?.data) ? json.data : []
+        const list: VdcRow[] = Array.isArray(json?.data) ? json.data : []
         if (cancelled) return
         const onConn = list
           .filter(v => (v.connectionId || v.connection_id) === selectedConnection)
@@ -315,7 +466,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
             return {
               vdcId: v.id,
               vdcName: v.name,
-              poolName: v.pvePoolName || v.pve_pool_name,
+              poolName: v.pvePoolName || v.pve_pool_name || '',
               namespace: binding?.namespace || '',
               datastore: binding?.datastore || '',
             }
@@ -346,7 +497,9 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
     return options
   }, [pools, formData.pool])
 
-  const handleCreate = (prefill = {}) => {
+  // Called with no argument by the Create Job button: never hand it the click
+  // event, whose fields would be merged into the job and break its JSON body.
+  const handleCreate = (prefill: Partial<PveJobForm> = {}) => {
     // Trouver le premier storage PBS
     const pbsStorages = storages.filter(s => s.isPbs || s.type === 'pbs')
     let storageId = pbsStorages[0]?.id || ''
@@ -392,7 +545,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
   // Job creation asked from the coverage card (roadmap#48): switch to the
   // guest's connection, wait for its storages, then open the create dialog
   // with the guest preselected.
-  const [switchedFor, setSwitchedFor] = useState(null)
+  const [switchedFor, setSwitchedFor] = useState<CreateJobRequest | null>(null)
   if (createRequest && createRequest !== switchedFor) {
     setSwitchedFor(createRequest)
     if (selectedConnection !== createRequest.connId) setSelectedConnection(createRequest.connId)
@@ -405,7 +558,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
   }, [createRequest, selectedConnection, loading, loadedConnection]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
-  const handleEdit = (job) => {
+  const handleEdit = (job: PveJob) => {
     setFormData({
       enabled: job.enabled,
       storage: job.storage || '',
@@ -434,7 +587,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
     try {
       const url = dialogMode === 'create'
         ? `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs`
-        : `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/${encodeURIComponent(editingJob.id)}`
+        : `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/${encodeURIComponent(editingJob?.id ?? '')}`
       
       const res = await fetch(url, {
         method: dialogMode === 'create' ? 'POST' : 'PUT',
@@ -454,13 +607,13 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
         onJobsChanged?.()
       }
     } catch (e) {
-      setError(e.message || t('backups.saveError'))
+      setError(errorMessage(e) || t('backups.saveError'))
     } finally {
       setSaving(false)
     }
   }
 
-  const handleDeleteClick = (job) => {
+  const handleDeleteClick = (job: PveJob) => {
     setJobToDelete(job)
     setDeleteDialogOpen(true)
   }
@@ -484,7 +637,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
         loadJobs()
       }
     } catch (e) {
-      setError(e.message || t('backups.deleteError'))
+      setError(errorMessage(e) || t('backups.deleteError'))
     } finally {
       setDeleting(false)
       setDeleteDialogOpen(false)
@@ -492,7 +645,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
     }
   }
 
-  const handleToggleEnabled = async (job) => {
+  const handleToggleEnabled = async (job: PveJob) => {
     try {
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/${encodeURIComponent(job.id)}`,
@@ -513,7 +666,7 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
     }
   }
 
-  const handleRunNow = async (job) => {
+  const handleRunNow = async (job: PveJob) => {
     try {
       const res = await fetch(
         `/api/v1/connections/${encodeURIComponent(selectedConnection)}/backup-jobs/${encodeURIComponent(job.id)}?action=run`,
@@ -529,13 +682,13 @@ function PveJobsTab({ pveConnections = [], isVdcTenant = false, createRequest = 
         reloadRuns() // the run route invalidated the server cache
       }
     } catch (e) {
-      setError(e.message || t('common.error'))
+      setError(errorMessage(e) || t('common.error'))
     }
   }
 
-  const formatSelection = (job, t) => {
+  const formatSelection = (job: PveJob, t: Translate) => {
     if (job.selectionMode === 'all') {
-      if (job.excludedVmids?.length > 0) {
+      if (job.excludedVmids && job.excludedVmids.length > 0) {
         return t('backups.allExcept', { count: job.excludedVmids.length })
       }
 
@@ -548,14 +701,14 @@ return t('backups.allVms')
     }
 
     if (job.selectionMode === 'pool') {
-      return t('backups.pool', { name: job.pool })
+      return t('backups.pool', { name: job.pool ?? '' })
     }
 
 
 return '—'
   }
 
-  const columns = [
+  const columns: GridColDef<PveJob>[] = [
     {
       field: 'enabled',
       headerName: '',
@@ -734,7 +887,7 @@ return '—'
             size="small"
             sx={TOOLBAR_CONTROL_SX}
             startIcon={<i className="ri-add-line" />}
-            onClick={handleCreate}
+            onClick={() => handleCreate()}
             disabled={!selectedConnection}
           >
             {t('backups.createJob')}
@@ -758,7 +911,7 @@ return '—'
       {loading && <LinearProgress sx={{ mb: 2 }} />}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       
-      {runsData?.unreachableNodes?.length > 0 && (
+      {runsData && runsData.unreachableNodes.length > 0 && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           {t('backups.runs.unreachable', { nodes: runsData.unreachableNodes.join(', ') })}
         </Alert>
@@ -785,7 +938,7 @@ return '—'
         }}
         localeText={{
           noRowsLabel: t('backups.noJobConfigured'),
-          MuiTablePagination: { labelRowsPerPage: t('backups.rowsPerPage') }
+          paginationRowsPerPage: t('backups.rowsPerPage')
         }}
       />
 
@@ -920,7 +1073,7 @@ return '—'
               </Typography>
               <BackupSchedulePicker
                 value={formData.schedule}
-                onChange={(v) => setFormData(prev => ({ ...prev, schedule: v }))}
+                onChange={(v: string) => setFormData(prev => ({ ...prev, schedule: v }))}
               />
             </Box>
 
@@ -1150,34 +1303,39 @@ return '—'
   PBS Jobs Tab
 ------------------------------ */
 
-function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
+interface PbsJobsTabProps {
+  pbsConnections?: Connection[]
+  isVdcTenant?: boolean
+}
+
+function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }: PbsJobsTabProps) {
   const theme = useTheme()
   const t = useTranslations()
   const dateLocale = getDateLocale(useLocale())
 
   const [selectedPbs, setSelectedPbs] = useState('')
-  const [jobs, setJobs] = useState(null)
-  const [datastores, setDatastores] = useState([])
-  const [stats, setStats] = useState(null)
+  const [jobs, setJobs] = useState<PbsJobLists | null>(null)
+  const [datastores, setDatastores] = useState<string[]>([])
+  const [stats, setStats] = useState<PbsStats | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   
-  const [selectedType, setSelectedType] = useState('all')
+  const [selectedType, setSelectedType] = useState<'all' | PbsJobType>('all')
   
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [dialogMode, setDialogMode] = useState('create')
-  const [dialogType, setDialogType] = useState('sync') // sync, verify, prune
-  const [editingJob, setEditingJob] = useState(null)
+  const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create')
+  const [dialogType, setDialogType] = useState<PbsDialogType>('sync')
+  const [editingJob, setEditingJob] = useState<PbsJob | null>(null)
   const [saving, setSaving] = useState(false)
   
   // Delete dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [jobToDelete, setJobToDelete] = useState(null)
+  const [jobToDelete, setJobToDelete] = useState<PbsJob | null>(null)
   const [deleting, setDeleting] = useState(false)
   
   // Form data for different job types
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<PbsJobForm>({
     id: '',
     store: '',
     ns: '',
@@ -1227,7 +1385,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
         setStats(json.data?.stats || null)
       }
     } catch (e) {
-      setError(e.message || t('errors.loadingError'))
+      setError(errorMessage(e) || t('errors.loadingError'))
     } finally {
       setLoading(false)
     }
@@ -1245,7 +1403,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
     }
   }, [pbsConnections, selectedPbs])
 
-  const handleCreate = (type) => {
+  const handleCreate = (type: PbsDialogType) => {
     setDialogType(type)
     setDialogMode('create')
     setEditingJob(null)
@@ -1275,8 +1433,9 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
     setDialogOpen(true)
   }
 
-  const handleEdit = (job) => {
-    setDialogType(job.type)
+  const handleEdit = (job: PbsJob) => {
+    // Only sync, verify, prune and tape jobs offer the edit action.
+    setDialogType(job.type as PbsDialogType)
     setDialogMode('edit')
     setEditingJob(job)
     setFormData({
@@ -1320,7 +1479,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
       if (dialogMode === 'create') {
         url = `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/jobs/${endpoint}`
       } else {
-        url = `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/jobs/${endpoint}/${encodeURIComponent(editingJob.id)}`
+        url = `/api/v1/pbs/${encodeURIComponent(selectedPbs)}/jobs/${endpoint}/${encodeURIComponent(editingJob?.id ?? '')}`
 
 
         // Pour prune, ajouter le store en query param pour le DELETE
@@ -1344,13 +1503,13 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
         loadJobs()
       }
     } catch (e) {
-      setError(e.message || t('backups.saveError'))
+      setError(errorMessage(e) || t('backups.saveError'))
     } finally {
       setSaving(false)
     }
   }
 
-  const handleDeleteClick = (job) => {
+  const handleDeleteClick = (job: PbsJob) => {
     setJobToDelete(job)
     setDeleteDialogOpen(true)
   }
@@ -1370,7 +1529,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
 
       // Pour prune, on a besoin du store en query param
       if (jobToDelete.type === 'prune') {
-        const store = jobToDelete.store || jobToDelete.datastore
+        const store = jobToDelete.store || jobToDelete.datastore || ''
 
         url += `?store=${encodeURIComponent(store)}`
       }
@@ -1385,7 +1544,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
         loadJobs()
       }
     } catch (e) {
-      setError(e.message || t('backups.deleteError'))
+      setError(errorMessage(e) || t('backups.deleteError'))
     } finally {
       setDeleting(false)
       setDeleteDialogOpen(false)
@@ -1393,7 +1552,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
     }
   }
 
-  const handleRunNow = async (job) => {
+  const handleRunNow = async (job: PbsJob) => {
     try {
       const endpoint = job.type === 'sync' ? 'sync' 
         : job.type === 'verify' ? 'verify' 
@@ -1412,7 +1571,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
         setError(json.error)
       }
     } catch (e) {
-      setError(e.message || t('common.error'))
+      setError(errorMessage(e) || t('common.error'))
     }
   }
 
@@ -1420,7 +1579,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
     ? (selectedType === 'all' ? jobs.all : jobs[selectedType] || [])
     : []
 
-  const columns = [
+  const columns: GridColDef<PbsJob>[] = [
     {
       field: 'type',
       headerName: t('backups.jobType'),
@@ -1456,7 +1615,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
       field: 'store',
       headerName: t('backups.datastore'),
       width: 130,
-      valueGetter: (value, row) => row.store || row.datastore || '—'
+      valueGetter: (_value, row) => row.store || row.datastore || '—'
     },
     {
       field: 'ns',
@@ -1722,7 +1881,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
         }}
         localeText={{
           noRowsLabel: t('backups.noJobFound'),
-          MuiTablePagination: { labelRowsPerPage: t('backups.rowsPerPage') }
+          paginationRowsPerPage: t('backups.rowsPerPage')
         }}
       />
 
@@ -1772,7 +1931,7 @@ function PbsJobsTab({ pbsConnections = [], isVdcTenant = false }) {
               </Typography>
               <BackupSchedulePicker
                 value={formData.schedule}
-                onChange={(v) => setFormData(prev => ({ ...prev, schedule: v }))}
+                onChange={(v: string) => setFormData(prev => ({ ...prev, schedule: v }))}
               />
             </Box>
 
@@ -2019,7 +2178,15 @@ const TOOLBAR_CONTROL_SX = { height: 35.86 }
 // Index of the Restore drills tab (roadmap#35), shown after PVE and PBS.
 const DRILLS_TAB = 2
 
-export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [], createRequest = null, onJobsChanged, drillRequest = null }) {
+interface BackupJobsTabsProps {
+  pveConnections?: Connection[]
+  pbsConnections?: Connection[]
+  createRequest?: CreateJobRequest | null
+  onJobsChanged?: () => void
+  drillRequest?: DrillRequest | null
+}
+
+export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [], createRequest = null, onJobsChanged, drillRequest = null }: BackupJobsTabsProps) {
   const theme = useTheme()
   const t = useTranslations()
   const [activeTab, setActiveTab] = useState(0)
@@ -2031,7 +2198,7 @@ export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [
   const isVdcTenant = !tenantLoading && !!currentTenant && currentTenant.id !== 'default'
 
   // A job creation asked from the coverage card opens this section on the PVE tab.
-  const [seenRequest, setSeenRequest] = useState(null)
+  const [seenRequest, setSeenRequest] = useState<CreateJobRequest | null>(null)
   if (createRequest && createRequest !== seenRequest) {
     setSeenRequest(createRequest)
     setExpanded(true)
@@ -2043,7 +2210,7 @@ export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [
   const showDrills = hasFeature(Features.BACKUP_RESTORE_DRILLS) && !isVdcTenant
 
   // A drill started from the backups list opens this section on its tab.
-  const [seenDrillRequest, setSeenDrillRequest] = useState(null)
+  const [seenDrillRequest, setSeenDrillRequest] = useState<DrillRequest | null>(null)
   if (drillRequest && drillRequest !== seenDrillRequest) {
     setSeenDrillRequest(drillRequest)
     setExpanded(true)
@@ -2073,7 +2240,7 @@ export default function BackupJobsTabs({ pveConnections = [], pbsConnections = [
         <Collapse in={expanded}>
           <Tabs
             value={currentTab}
-            onChange={(_, v) => setActiveTab(v)}
+            onChange={(_, v: number) => setActiveTab(v)}
             sx={{ mt: 2, mb: 3, borderBottom: 1, borderColor: 'divider' }}
           >
             <Tab

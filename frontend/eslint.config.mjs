@@ -31,6 +31,8 @@ const STRICT_TS_FILES = [
   'src/components/dashboard/widgets/themeColors.ts',
   'src/components/dashboard/widgets/timeRangeUtils.ts',
   'src/components/dashboard/widgets/useNodeTrends.ts',
+  // Converted with the backup job creation fix.
+  'src/app/(dashboard)/operations/backups/BackupJobsTabs.tsx',
 ]
 
 const config = [

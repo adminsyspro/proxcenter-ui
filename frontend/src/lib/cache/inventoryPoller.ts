@@ -279,28 +279,25 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
 
 // ---------- Master poll cycle ----------
 
-/**
- * Runs cycles back to back while a trigger asked for one during the previous
- * cycle: that cycle may have read Proxmox before the action the trigger
- * follows. Any number of triggers during a cycle yields a single follow-up.
- */
 function runCycles(): Promise<void> {
-  cycle = (async () => {
-    try {
-      do {
-        followUpRequested = false
-        await pollAll()
-      } while (followUpRequested)
-    } finally {
-      cycle = null
-    }
-  })()
+  cycle = pollUntilSettled().finally(() => { cycle = null })
   return cycle
+}
+
+/**
+ * One cycle, then another while a trigger asked for one during it: that cycle
+ * may have read Proxmox before the action the trigger follows. Any number of
+ * triggers during a cycle yields a single follow-up.
+ */
+async function pollUntilSettled(): Promise<void> {
+  followUpRequested = false
+  await pollAll()
+  if (followUpRequested) return pollUntilSettled()
 }
 
 /** The interval tick: skipped while a cycle runs, which is already fresh. */
 function pollIfIdle() {
-  if (!cycle) void runCycles()
+  if (cycle === null) void runCycles()
 }
 
 async function pollAll() {
@@ -524,6 +521,6 @@ export function subscribe(fn: Subscriber): () => void {
 
 /** Force an immediate poll cycle (e.g., after a user action) */
 export function triggerPoll() {
-  if (cycle) followUpRequested = true
-  else void runCycles()
+  if (cycle === null) void runCycles()
+  else followUpRequested = true
 }

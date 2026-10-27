@@ -216,6 +216,7 @@
     "networkSecurity": "Seguridad de red",
     "operations": "Operaciones",
     "events": "Eventos",
+    "availability": "Disponibilidad",
     "alerts": "Alertas",
     "jobs": "Centro de tareas",
     "monitoring": "Monitorización",
@@ -9792,7 +9793,8 @@
       "capacity": "Capacidad",
       "security": "Seguridad",
       "site_recovery": "Recuperación del sitio",
-      "backup": "Copia de seguridad"
+      "backup": "Copia de seguridad",
+      "sla": "SLA"
     },
     "typeDescriptions": {
       "infrastructure": "Resumen de clusters, nodos, VMs y almacenamiento",
@@ -11692,5 +11694,212 @@
     "runsInOrchestrator": "Se ejecuta en el orquestador: puede cerrar esta ventana y seguir cada invitado en el Task Center.",
     "candidates": "Destinos elegibles: {nodes}",
     "noCandidates": "Ningún nodo de destino elegible."
+  },
+  "availability": {
+    "title": "Disponibilidad y SLA",
+    "tabs": {
+      "overview": "Resumen",
+      "policies": "Políticas",
+      "maintenance": "Mantenimiento"
+    },
+    "states": {
+      "up": "Activo",
+      "down": "Caído",
+      "maintenance": "Mantenimiento",
+      "unobserved": "No observado",
+      "absent": "Ausente"
+    },
+    "subtitle": "Disponibilidad de sus nodos y clústeres, medida por el orquestador",
+    "periods": {
+      "label": "Periodo",
+      "1h": "1 h",
+      "24h": "24 h",
+      "7d": "7 d",
+      "30d": "30 d"
+    },
+    "tiles": {
+      "nodesUp": "Nodos activos",
+      "clustersQuorate": "Clústeres con quórum",
+      "nodesDown": "Nodos caídos",
+      "nodesMaintenance": "En mantenimiento",
+      "lowCoverage": "Conexiones con menos de 100 % de cobertura",
+      "coveredGuestsDown": "Invitados cubiertos detenidos",
+      "clearFilter": "Quitar el filtro"
+    },
+    "connection": {
+      "availability": "Disponibilidad de los nodos",
+      "coverage": "Cobertura",
+      "clusterAvailability": "Disponibilidad del clúster",
+      "notMeasured": "No medido",
+      "lastCollected": "Última lectura: {time}",
+      "neverCollected": "Nunca leído",
+      "clusterRow": "Clúster",
+      "perHost": "Disponibilidad por host",
+      "noNodes": "Ningún nodo medido en esta conexión",
+      "noMatch": "Ninguna conexión coincide con este filtro",
+      "empty": "No hay conexiones que mostrar"
+    },
+    "timeline": {
+      "rowSummary": "{label}: {availability} disponible, {incidents, plural, one {# incidente} other {# incidentes}}",
+      "rowSummaryUnmeasured": "{label}: no medido",
+      "run": "{state} · {from} → {to} · {duration}"
+    },
+    "explainer": {
+      "title": "Cómo se calculan estas tasas",
+      "availability": "Disponibilidad = tiempo activo / (tiempo activo + tiempo caído).",
+      "coverage": "Cobertura = (tiempo activo + tiempo caído) / (tiempo activo + tiempo caído + tiempo no observado). Indica qué parte del periodo vio realmente el registro.",
+      "excluded": "Los periodos de mantenimiento y de ausencia quedan fuera de ambas tasas.",
+      "notMeasured": "Una tasa se muestra como no medida cuando no se observó nada, nunca como 0 %."
+    },
+    "error": {
+      "unavailable": "El orquestador no está accesible: ahora mismo no se puede mostrar ninguna cifra de disponibilidad.",
+      "generic": "No se pudo cargar la disponibilidad.",
+      "forbidden": "No tiene acceso a los datos de disponibilidad."
+    },
+    "loading": "Cargando la disponibilidad",
+    "common": {
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "edit": "Editar",
+      "delete": "Eliminar"
+    },
+    "policies": {
+      "new": "Nueva política",
+      "empty": "Aún no hay políticas SLA",
+      "status": {
+        "met": "Cumplida",
+        "atRisk": "En riesgo",
+        "violated": "Incumplida",
+        "unmeasured": "Sin medir"
+      },
+      "disabled": "Desactivada",
+      "guestCount": "{count, plural, one {# invitado} other {# invitados}}",
+      "belowTarget": "{count, plural, one {# invitado bajo el objetivo} other {# invitados bajo el objetivo}}",
+      "showGuests": "Mostrar los invitados de {name}",
+      "hideGuests": "Ocultar los invitados de {name}",
+      "noGuests": "Ningún invitado corresponde a esta política",
+      "guestFallbackVm": "VM {vmid}",
+      "guestFallbackCt": "CT {vmid}",
+      "deleteTitle": "Eliminar política",
+      "deleteMessage": "¿Eliminar la política {name}? Sus ventanas de mantenimiento se eliminan con ella.",
+      "intro": "Cada política fija un objetivo de disponibilidad para un grupo de invitados, medido en los últimos 30 días.",
+      "emptyDescription": "Cree una política para seguir la disponibilidad de un grupo de invitados frente a un objetivo.",
+      "columns": {
+        "policy": "Política",
+        "scope": "Alcance",
+        "status": "Estado",
+        "target": "Objetivo",
+        "availability": "Disponibilidad (30 d)",
+        "budget": "Presupuesto de indisponibilidad",
+        "guests": "Invitados"
+      },
+      "budgetUsage": "{used} de {allowed}",
+      "noScope": "Ningún invitado seleccionado"
+    },
+    "dialog": {
+      "createTitle": "Nueva política SLA",
+      "editTitle": "Editar política SLA",
+      "name": "Nombre",
+      "target": "Objetivo (%)",
+      "targetHelp": "De {min} a {max}",
+      "enabled": "Política activada",
+      "guests": "Invitados",
+      "tags": "Etiquetas",
+      "pools": "Pools",
+      "all": "Todo",
+      "search": "Buscar",
+      "more": "{count} más, afine la búsqueda",
+      "noGuests": "Ningún invitado en el inventario",
+      "noTags": "Ninguna etiqueta en el inventario",
+      "noPools": "Ningún pool en el inventario",
+      "membershipNote": "La pertenencia a etiquetas y pools se evalúa en el momento del cálculo de las cifras, no al guardar la política.",
+      "inventoryError": "No se pudo cargar el inventario: no se pueden listar invitados, etiquetas ni pools.",
+      "scopeTitle": "Invitados cubiertos",
+      "scopeHelp": "Un invitado está cubierto si está marcado, lleva una de las etiquetas o pertenece a uno de los pools.",
+      "tabCount": "{label} ({count})",
+      "selection": "Invitados {guests} · Etiquetas {tags} · Pools {pools}"
+    },
+    "errors": {
+      "guest_out_of_scope": "Un invitado o pool seleccionado está fuera de su perímetro.",
+      "target_out_of_scope": "El destino está fuera de su perímetro.",
+      "name_taken": "Ya existe una política con este nombre.",
+      "invalid_target": "El objetivo debe estar entre 90 y 99,999.",
+      "invalid_window": "La ventana debe terminar después de empezar y durar 31 días como máximo.",
+      "invalid_name": "El nombre es obligatorio y tiene 120 caracteres como máximo.",
+      "invalid_reason": "El motivo es obligatorio y tiene 500 caracteres como máximo.",
+      "feature_required": "Esta función requiere la edición Enterprise.",
+      "orchestrator_unavailable": "El orquestador no es accesible, no se guardó nada.",
+      "generic": "La solicitud falló.",
+      "invalid_body": "La solicitud está mal formada.",
+      "invalid_guests": "La lista de invitados no es válida.",
+      "invalid_selector": "Las etiquetas o los pools no son válidos.",
+      "invalid_scope": "El alcance no es válido.",
+      "invalid_target_ref": "El destino está incompleto o no es válido.",
+      "invalid_fields": "La lista solicitada no está disponible.",
+      "forbidden": "No tiene permiso para modificar las políticas SLA ni las ventanas de mantenimiento.",
+      "not_found": "Este elemento ya no existe."
+    },
+    "maintenance": {
+      "new": "Nueva ventana",
+      "empty": "Ninguna ventana de mantenimiento",
+      "createTitle": "Nueva ventana de mantenimiento",
+      "editTitle": "Editar ventana de mantenimiento",
+      "scope": "Alcance",
+      "scopes": {
+        "connection": "Conexión",
+        "node": "Nodo",
+        "guest": "Invitado",
+        "policy": "Política"
+      },
+      "connection": "Conexión",
+      "node": "Nodo",
+      "guest": "Invitado",
+      "policy": "Política",
+      "startsAt": "Inicio",
+      "endsAt": "Fin",
+      "reason": "Motivo",
+      "limit": "Una ventana dura 31 días como máximo.",
+      "status": {
+        "ongoing": "En curso",
+        "upcoming": "Próxima",
+        "past": "Pasada"
+      },
+      "deleteTitle": "Eliminar ventana de mantenimiento",
+      "deleteMessage": "¿Eliminar esta ventana de mantenimiento? El tiempo que cubría vuelve a contar en las tasas.",
+      "unknownPolicy": "Política desconocida",
+      "intro": "Durante una ventana declarada, la indisponibilidad de los objetos afectados cuenta como mantenimiento, no como una caída.",
+      "emptyDescription": "Declare una ventana antes de una intervención planificada para que no cuente contra los objetivos.",
+      "columns": {
+        "status": "Estado",
+        "target": "Objetivo",
+        "start": "Inicio",
+        "end": "Fin",
+        "duration": "Duración",
+        "reason": "Motivo",
+        "author": "Declarada por"
+      },
+      "quickEnd": "Fin tras",
+      "hours": "{hours} h"
+    },
+    "settings": {
+      "tabLabel": "Disponibilidad y SLA",
+      "title": "Disponibilidad y SLA",
+      "description": "Cuánto tiempo se conserva el historial de disponibilidad y con qué objetivo empiezan las nuevas políticas SLA.",
+      "retentionLabel": "Retención del historial (días)",
+      "retentionHelp": "Días de historial de disponibilidad que conserva el orquestador, de {min} a {max} días. Los registros más antiguos se eliminan.",
+      "targetLabel": "Objetivo SLA por defecto (%)",
+      "targetHelp": "El objetivo con el que empieza una nueva política, de {targetMin} a {targetMax}. Las políticas existentes conservan su propio objetivo.",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saved": "Ajustes guardados",
+      "loadError": "No se pudieron cargar los ajustes.",
+      "errors": {
+        "invalid_retention": "La retención debe ser un número entero de días, de {min} a {max}.",
+        "invalid_target": "El objetivo debe estar entre {targetMin} y {targetMax}.",
+        "invalid_body": "La solicitud es incorrecta.",
+        "orchestrator_unavailable": "El orquestador no está disponible, no se guardó nada.",
+        "generic": "No se pudieron guardar los ajustes."
+      }
+    }
   }
 }

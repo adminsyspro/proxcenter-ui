@@ -89,4 +89,13 @@ describe('registry and edition mapping invariants', () => {
     expect(optionDisplayName('control_plane_ha')).toBe('ProxCenter HA')
     expect(optionDisplayName('mystery_cap')).toBe('mystery_cap')
   })
+
+  it('grants SLA monitoring to both enterprise tiers and not to community', () => {
+    expect(Features.SLA_MONITORING).toBe('sla_monitoring')
+    expect(EDITION_FEATURES.enterprise).toContain('sla_monitoring')
+    expect(EDITION_FEATURES.enterprise_plus).toContain('sla_monitoring')
+    expect(EDITION_FEATURES.community ?? []).not.toContain('sla_monitoring')
+    expect(effectiveHasFeature({ licensed: true, edition: 'community' }, 'sla_monitoring')).toBe(false)
+    expect(effectiveHasFeature(enterprise, 'sla_monitoring')).toBe(true)
+  })
 })

@@ -216,6 +216,7 @@
     "networkSecurity": "Network Security",
     "operations": "Operations",
     "events": "Events",
+    "availability": "Availability",
     "alerts": "Alerts",
     "jobs": "Task Center",
     "monitoring": "Monitoring",
@@ -9792,7 +9793,8 @@
       "capacity": "Capacity",
       "security": "Security",
       "site_recovery": "Site Recovery",
-      "backup": "Backup"
+      "backup": "Backup",
+      "sla": "SLA"
     },
     "typeDescriptions": {
       "infrastructure": "Overview of clusters, nodes, VMs, and storage",
@@ -11692,5 +11694,212 @@
     "runsInOrchestrator": "Runs in the orchestrator: you can close this window and follow each guest in the Task Center.",
     "candidates": "Eligible targets: {nodes}",
     "noCandidates": "No eligible target node."
+  },
+  "availability": {
+    "title": "Availability and SLA",
+    "tabs": {
+      "overview": "Overview",
+      "policies": "Policies",
+      "maintenance": "Maintenance"
+    },
+    "states": {
+      "up": "Up",
+      "down": "Down",
+      "maintenance": "Maintenance",
+      "unobserved": "Not observed",
+      "absent": "Absent"
+    },
+    "subtitle": "Uptime of your nodes and clusters, measured by the orchestrator",
+    "periods": {
+      "label": "Period",
+      "1h": "1h",
+      "24h": "24h",
+      "7d": "7d",
+      "30d": "30d"
+    },
+    "tiles": {
+      "nodesUp": "Nodes up",
+      "clustersQuorate": "Clusters with quorum",
+      "nodesDown": "Nodes down",
+      "nodesMaintenance": "In maintenance",
+      "lowCoverage": "Connections under 100% coverage",
+      "coveredGuestsDown": "Covered guests down",
+      "clearFilter": "Clear filter"
+    },
+    "connection": {
+      "availability": "Node availability",
+      "coverage": "Coverage",
+      "clusterAvailability": "Cluster availability",
+      "notMeasured": "Not measured",
+      "lastCollected": "Last sample: {time}",
+      "neverCollected": "Never sampled",
+      "clusterRow": "Cluster",
+      "perHost": "Availability per host",
+      "noNodes": "No node measured on this connection",
+      "noMatch": "No connection matches this filter",
+      "empty": "No connection to show"
+    },
+    "timeline": {
+      "rowSummary": "{label}: {availability} available, {incidents, plural, one {# incident} other {# incidents}}",
+      "rowSummaryUnmeasured": "{label}: not measured",
+      "run": "{state} · {from} → {to} · {duration}"
+    },
+    "explainer": {
+      "title": "How these rates are calculated",
+      "availability": "Availability = up time / (up time + down time).",
+      "coverage": "Coverage = (up time + down time) / (up time + down time + not observed time). It tells how much of the period the registry actually saw.",
+      "excluded": "Maintenance and absent periods are left out of both rates.",
+      "notMeasured": "A rate is shown as not measured when nothing was observed, never as 0%."
+    },
+    "error": {
+      "unavailable": "The orchestrator is unreachable: no availability figure can be shown right now.",
+      "generic": "Availability could not be loaded.",
+      "forbidden": "You do not have access to the availability data."
+    },
+    "loading": "Loading availability",
+    "common": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "policies": {
+      "new": "New policy",
+      "empty": "No SLA policy yet",
+      "status": {
+        "met": "Met",
+        "atRisk": "At risk",
+        "violated": "Violated",
+        "unmeasured": "Not measured"
+      },
+      "disabled": "Disabled",
+      "guestCount": "{count, plural, one {# guest} other {# guests}}",
+      "belowTarget": "{count, plural, one {# guest below target} other {# guests below target}}",
+      "showGuests": "Show the guests of {name}",
+      "hideGuests": "Hide the guests of {name}",
+      "noGuests": "No guest matches this policy",
+      "guestFallbackVm": "VM {vmid}",
+      "guestFallbackCt": "CT {vmid}",
+      "deleteTitle": "Delete policy",
+      "deleteMessage": "Delete the policy {name}? Its maintenance windows are deleted with it.",
+      "intro": "Each policy sets an availability target for a group of guests, measured over the last 30 days.",
+      "emptyDescription": "Create a policy to follow the availability of a group of guests against a target.",
+      "columns": {
+        "policy": "Policy",
+        "scope": "Scope",
+        "status": "Status",
+        "target": "Target",
+        "availability": "Availability (30 d)",
+        "budget": "Downtime budget",
+        "guests": "Guests"
+      },
+      "budgetUsage": "{used} of {allowed}",
+      "noScope": "No guest selected"
+    },
+    "dialog": {
+      "createTitle": "New SLA policy",
+      "editTitle": "Edit SLA policy",
+      "name": "Name",
+      "target": "Target (%)",
+      "targetHelp": "From {min} to {max}",
+      "enabled": "Policy enabled",
+      "guests": "Guests",
+      "tags": "Tags",
+      "pools": "Pools",
+      "all": "All",
+      "search": "Search",
+      "more": "{count} more, narrow the search",
+      "noGuests": "No guest in the inventory",
+      "noTags": "No tag in the inventory",
+      "noPools": "No pool in the inventory",
+      "membershipNote": "Tag and pool membership is evaluated when the figures are calculated, not when the policy is saved.",
+      "inventoryError": "The inventory could not be loaded: guests, tags and pools cannot be listed.",
+      "scopeTitle": "Covered guests",
+      "scopeHelp": "A guest is covered when it is ticked, carries one of the tags or belongs to one of the pools.",
+      "tabCount": "{label} ({count})",
+      "selection": "Guests {guests} · Tags {tags} · Pools {pools}"
+    },
+    "errors": {
+      "guest_out_of_scope": "A selected guest or pool is outside your perimeter.",
+      "target_out_of_scope": "The target is outside your perimeter.",
+      "name_taken": "A policy with this name already exists.",
+      "invalid_target": "The target must be between 90 and 99.999.",
+      "invalid_window": "The window must end after it starts and last 31 days at most.",
+      "invalid_name": "The name is required and is 120 characters at most.",
+      "invalid_reason": "The reason is required and is 500 characters at most.",
+      "feature_required": "This feature requires the Enterprise edition.",
+      "orchestrator_unavailable": "The orchestrator is unreachable, nothing was saved.",
+      "generic": "The request failed.",
+      "invalid_body": "The request is malformed.",
+      "invalid_guests": "The list of guests is invalid.",
+      "invalid_selector": "The tags or pools are invalid.",
+      "invalid_scope": "The scope is invalid.",
+      "invalid_target_ref": "The target is incomplete or invalid.",
+      "invalid_fields": "The requested list is not available.",
+      "forbidden": "You do not have the right to change SLA policies or maintenance windows.",
+      "not_found": "This item no longer exists."
+    },
+    "maintenance": {
+      "new": "New window",
+      "empty": "No maintenance window",
+      "createTitle": "New maintenance window",
+      "editTitle": "Edit maintenance window",
+      "scope": "Scope",
+      "scopes": {
+        "connection": "Connection",
+        "node": "Node",
+        "guest": "Guest",
+        "policy": "Policy"
+      },
+      "connection": "Connection",
+      "node": "Node",
+      "guest": "Guest",
+      "policy": "Policy",
+      "startsAt": "Start",
+      "endsAt": "End",
+      "reason": "Reason",
+      "limit": "A window lasts 31 days at most.",
+      "status": {
+        "ongoing": "Ongoing",
+        "upcoming": "Upcoming",
+        "past": "Past"
+      },
+      "deleteTitle": "Delete maintenance window",
+      "deleteMessage": "Delete this maintenance window? The time it covered is counted again in the rates.",
+      "unknownPolicy": "Unknown policy",
+      "intro": "During a declared window, the downtime of the targeted objects counts as maintenance, not as an outage.",
+      "emptyDescription": "Declare a window before planned work so that it does not count against the targets.",
+      "columns": {
+        "status": "Status",
+        "target": "Target",
+        "start": "Start",
+        "end": "End",
+        "duration": "Duration",
+        "reason": "Reason",
+        "author": "Declared by"
+      },
+      "quickEnd": "End after",
+      "hours": "{hours} h"
+    },
+    "settings": {
+      "tabLabel": "Availability and SLA",
+      "title": "Availability and SLA",
+      "description": "How long the availability history is kept and which target new SLA policies start with.",
+      "retentionLabel": "History retention (days)",
+      "retentionHelp": "How many days of availability history the orchestrator keeps. From {min} to {max} days. Older records are deleted.",
+      "targetLabel": "Default SLA target (%)",
+      "targetHelp": "The target a new policy starts with. From {targetMin} to {targetMax}. Existing policies keep their own target.",
+      "save": "Save",
+      "saving": "Saving...",
+      "saved": "Settings saved",
+      "loadError": "The settings could not be loaded.",
+      "errors": {
+        "invalid_retention": "The retention must be a whole number of days from {min} to {max}.",
+        "invalid_target": "The target must be between {targetMin} and {targetMax}.",
+        "invalid_body": "The request is malformed.",
+        "orchestrator_unavailable": "The orchestrator is unavailable, nothing was saved.",
+        "generic": "The settings could not be saved."
+      }
+    }
   }
 }

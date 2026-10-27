@@ -78,6 +78,11 @@ const SyslogTab = dynamic(() => import('@/components/settings/SyslogTab'), {
   loading: tabLoading
 })
 
+const AvailabilitySettingsTab = dynamic(() => import('@/components/settings/AvailabilitySettingsTab'), {
+  ssr: false,
+  loading: tabLoading
+})
+
 const GuestFileRestoreTab = dynamic(() => import('@/components/settings/GuestFileRestoreTab'), {
   ssr: false,
   loading: tabLoading
@@ -2540,6 +2545,7 @@ export default function SettingsPage() {
     { name: 'alert-thresholds', group: 'monitoring', label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab, providerOnly: true },
     { name: 'notifications', group: 'monitoring', label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS, providerOnly: true },
     { name: 'syslog', group: 'monitoring', label: t('settings.syslog.tabLabel'), icon: 'ri-broadcast-line', component: SyslogTab, requiredFeature: Features.SYSLOG_FORWARDING, providerOnly: true },
+    { name: 'availability', group: 'monitoring', label: t('availability.settings.tabLabel'), icon: 'ri-heart-pulse-line', component: AvailabilitySettingsTab, requiredFeature: Features.SLA_MONITORING, providerOnly: true },
     { name: 'broadcast', group: 'monitoring', label: t('settings.broadcast.tabLabel'), icon: 'ri-megaphone-line', component: BroadcastTab, providerOnly: true },
     { name: 'ai', group: 'insights', label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS, providerOnly: true },
     { name: 'green', group: 'insights', label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS, providerOnly: true },

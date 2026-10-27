@@ -15,11 +15,12 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8080'
 const ORCHESTRATOR_LEADER_URL = process.env.ORCHESTRATOR_LEADER_URL || ORCHESTRATOR_URL
 const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
 
-// Leader-only endpoints: DRS (/drs/*) and metrics (/metrics/*) read or act on
+// Leader-only endpoints: DRS (/drs/*), metrics (/metrics/*) and availability
+// (/availability/*, which reads the latest metrics sample) read or act on
 // state that only the leader holds. Everything else stays on the local
 // orchestrator (ORCHESTRATOR_URL).
 function orchestratorBaseUrlForPath(path: string): string {
-  return /^\/(metrics|drs)(\/|$|\?)/.test(path) ? ORCHESTRATOR_LEADER_URL : ORCHESTRATOR_URL
+  return /^\/(metrics|drs|availability)(\/|$|\?)/.test(path) ? ORCHESTRATOR_LEADER_URL : ORCHESTRATOR_URL
 }
 
 export interface OrchestratorRequestOptions {

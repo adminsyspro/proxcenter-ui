@@ -216,6 +216,7 @@
     "networkSecurity": "네트워크 보안",
     "operations": "운영",
     "events": "이벤트",
+    "availability": "가용성",
     "alerts": "알림",
     "jobs": "작업 센터",
     "monitoring": "모니터링",
@@ -9792,7 +9793,8 @@
       "capacity": "용량",
       "security": "보안",
       "site_recovery": "사이트 복구",
-      "backup": "백업"
+      "backup": "백업",
+      "sla": "SLA"
     },
     "typeDescriptions": {
       "infrastructure": "클러스터, 노드, VM, 스토리지 개요",
@@ -11692,5 +11694,212 @@
     "runsInOrchestrator": "오케스트레이터에서 실행됩니다. 이 창을 닫고 Task Center에서 각 게스트를 확인할 수 있습니다.",
     "candidates": "가능한 대상: {nodes}",
     "noCandidates": "가능한 대상 노드가 없습니다."
+  },
+  "availability": {
+    "title": "가용성 및 SLA",
+    "tabs": {
+      "overview": "개요",
+      "policies": "정책",
+      "maintenance": "유지보수"
+    },
+    "states": {
+      "up": "정상",
+      "down": "중단",
+      "maintenance": "유지보수",
+      "unobserved": "관찰되지 않음",
+      "absent": "없음"
+    },
+    "subtitle": "오케스트레이터가 측정한 노드와 클러스터의 가용성",
+    "periods": {
+      "label": "기간",
+      "1h": "1시간",
+      "24h": "24시간",
+      "7d": "7일",
+      "30d": "30일"
+    },
+    "tiles": {
+      "nodesUp": "정상 노드",
+      "clustersQuorate": "쿼럼이 있는 클러스터",
+      "nodesDown": "중단된 노드",
+      "nodesMaintenance": "유지보수 중",
+      "lowCoverage": "커버리지 100% 미만 연결",
+      "coveredGuestsDown": "중지된 대상 게스트",
+      "clearFilter": "필터 해제"
+    },
+    "connection": {
+      "availability": "노드 가용성",
+      "coverage": "커버리지",
+      "clusterAvailability": "클러스터 가용성",
+      "notMeasured": "측정되지 않음",
+      "lastCollected": "마지막 수집: {time}",
+      "neverCollected": "수집된 적 없음",
+      "clusterRow": "클러스터",
+      "perHost": "호스트별 가용성",
+      "noNodes": "이 연결에서 측정된 노드가 없습니다",
+      "noMatch": "이 필터와 일치하는 연결이 없습니다",
+      "empty": "표시할 연결이 없습니다"
+    },
+    "timeline": {
+      "rowSummary": "{label}: 가용성 {availability}, {incidents, plural, other {장애 #건}}",
+      "rowSummaryUnmeasured": "{label}: 측정되지 않음",
+      "run": "{state} · {from} → {to} · {duration}"
+    },
+    "explainer": {
+      "title": "비율 계산 방식",
+      "availability": "가용성 = 정상 시간 / (정상 시간 + 중단 시간).",
+      "coverage": "커버리지 = (정상 시간 + 중단 시간) / (정상 시간 + 중단 시간 + 관찰되지 않은 시간). 레지스트리가 기간 중 실제로 관찰한 비율을 나타냅니다.",
+      "excluded": "유지보수 및 부재 기간은 두 비율 모두에서 제외됩니다.",
+      "notMeasured": "아무것도 관찰되지 않으면 비율은 0%가 아니라 측정되지 않음으로 표시됩니다."
+    },
+    "error": {
+      "unavailable": "오케스트레이터에 연결할 수 없어 지금은 가용성 수치를 표시할 수 없습니다.",
+      "generic": "가용성을 불러오지 못했습니다.",
+      "forbidden": "가용성 데이터에 접근할 권한이 없습니다."
+    },
+    "loading": "가용성 불러오는 중",
+    "common": {
+      "save": "저장",
+      "cancel": "취소",
+      "edit": "편집",
+      "delete": "삭제"
+    },
+    "policies": {
+      "new": "새 정책",
+      "empty": "SLA 정책이 아직 없습니다",
+      "status": {
+        "met": "충족",
+        "atRisk": "위험",
+        "violated": "위반",
+        "unmeasured": "측정 안 됨"
+      },
+      "disabled": "비활성",
+      "guestCount": "{count, plural, other {게스트 #개}}",
+      "belowTarget": "{count, plural, other {목표 미달 게스트 #개}}",
+      "showGuests": "{name}의 게스트 표시",
+      "hideGuests": "{name}의 게스트 숨기기",
+      "noGuests": "이 정책에 해당하는 게스트가 없습니다",
+      "guestFallbackVm": "VM {vmid}",
+      "guestFallbackCt": "CT {vmid}",
+      "deleteTitle": "정책 삭제",
+      "deleteMessage": "정책 {name}을(를) 삭제하시겠습니까? 해당 정책의 유지보수 창도 함께 삭제됩니다.",
+      "intro": "각 정책은 게스트 그룹의 가용성 목표를 정하며, 최근 30일 동안 측정됩니다.",
+      "emptyDescription": "정책을 만들어 게스트 그룹의 가용성을 목표와 비교해 추적하세요.",
+      "columns": {
+        "policy": "정책",
+        "scope": "범위",
+        "status": "상태",
+        "target": "목표",
+        "availability": "가용성 (30일)",
+        "budget": "다운타임 예산",
+        "guests": "게스트"
+      },
+      "budgetUsage": "{allowed} 중 {used}",
+      "noScope": "선택된 게스트 없음"
+    },
+    "dialog": {
+      "createTitle": "새 SLA 정책",
+      "editTitle": "SLA 정책 편집",
+      "name": "이름",
+      "target": "목표 (%)",
+      "targetHelp": "{min}에서 {max}까지",
+      "enabled": "정책 활성화",
+      "guests": "게스트",
+      "tags": "태그",
+      "pools": "풀",
+      "all": "전체",
+      "search": "검색",
+      "more": "{count}개 더 있습니다. 검색 범위를 좁히세요",
+      "noGuests": "인벤토리에 게스트가 없습니다",
+      "noTags": "인벤토리에 태그가 없습니다",
+      "noPools": "인벤토리에 풀이 없습니다",
+      "membershipNote": "태그와 풀 소속은 정책을 저장할 때가 아니라 수치를 계산할 때 평가됩니다.",
+      "inventoryError": "인벤토리를 불러오지 못했습니다. 게스트, 태그, 풀을 나열할 수 없습니다.",
+      "scopeTitle": "적용되는 게스트",
+      "scopeHelp": "체크되었거나, 태그 중 하나를 가지고 있거나, 풀 중 하나에 속한 게스트가 적용됩니다.",
+      "tabCount": "{label} ({count})",
+      "selection": "게스트 {guests} · 태그 {tags} · 풀 {pools}"
+    },
+    "errors": {
+      "guest_out_of_scope": "선택한 게스트 또는 풀이 접근 범위를 벗어났습니다.",
+      "target_out_of_scope": "대상이 접근 범위를 벗어났습니다.",
+      "name_taken": "같은 이름의 정책이 이미 있습니다.",
+      "invalid_target": "목표는 90에서 99.999 사이여야 합니다.",
+      "invalid_window": "창은 시작 이후에 끝나야 하며 최대 31일까지 가능합니다.",
+      "invalid_name": "이름은 필수이며 최대 120자입니다.",
+      "invalid_reason": "사유는 필수이며 최대 500자입니다.",
+      "feature_required": "이 기능은 Enterprise 에디션이 필요합니다.",
+      "orchestrator_unavailable": "오케스트레이터에 연결할 수 없어 아무것도 저장되지 않았습니다.",
+      "generic": "요청에 실패했습니다.",
+      "invalid_body": "요청 형식이 올바르지 않습니다.",
+      "invalid_guests": "게스트 목록이 올바르지 않습니다.",
+      "invalid_selector": "태그 또는 풀이 올바르지 않습니다.",
+      "invalid_scope": "범위가 올바르지 않습니다.",
+      "invalid_target_ref": "대상이 불완전하거나 올바르지 않습니다.",
+      "invalid_fields": "요청한 목록을 사용할 수 없습니다.",
+      "forbidden": "SLA 정책 또는 유지보수 창을 변경할 권한이 없습니다.",
+      "not_found": "이 항목은 더 이상 존재하지 않습니다."
+    },
+    "maintenance": {
+      "new": "새 창",
+      "empty": "유지보수 창이 없습니다",
+      "createTitle": "새 유지보수 창",
+      "editTitle": "유지보수 창 편집",
+      "scope": "범위",
+      "scopes": {
+        "connection": "연결",
+        "node": "노드",
+        "guest": "게스트",
+        "policy": "정책"
+      },
+      "connection": "연결",
+      "node": "노드",
+      "guest": "게스트",
+      "policy": "정책",
+      "startsAt": "시작",
+      "endsAt": "종료",
+      "reason": "사유",
+      "limit": "창은 최대 31일까지 가능합니다.",
+      "status": {
+        "ongoing": "진행 중",
+        "upcoming": "예정",
+        "past": "종료"
+      },
+      "deleteTitle": "유지보수 창 삭제",
+      "deleteMessage": "이 유지보수 창을 삭제하시겠습니까? 해당 시간이 다시 가용률에 포함됩니다.",
+      "unknownPolicy": "알 수 없는 정책",
+      "intro": "선언된 창 동안 대상 객체의 다운타임은 장애가 아니라 유지보수로 집계됩니다.",
+      "emptyDescription": "계획된 작업 전에 창을 선언하면 목표에 반영되지 않습니다.",
+      "columns": {
+        "status": "상태",
+        "target": "대상",
+        "start": "시작",
+        "end": "종료",
+        "duration": "기간",
+        "reason": "사유",
+        "author": "선언한 사용자"
+      },
+      "quickEnd": "종료까지",
+      "hours": "{hours}시간"
+    },
+    "settings": {
+      "tabLabel": "가용성 및 SLA",
+      "title": "가용성 및 SLA",
+      "description": "가용성 기록을 보관하는 기간과 새 SLA 정책의 기본 목표를 설정합니다.",
+      "retentionLabel": "기록 보관 기간 (일)",
+      "retentionHelp": "오케스트레이터가 보관하는 가용성 기록의 일수이며 {min}일부터 {max}일까지 설정할 수 있습니다. 이보다 오래된 기록은 삭제됩니다.",
+      "targetLabel": "기본 SLA 목표 (%)",
+      "targetHelp": "새 정책이 시작할 때의 목표이며 {targetMin}부터 {targetMax}까지 설정할 수 있습니다. 기존 정책은 자체 목표를 유지합니다.",
+      "save": "저장",
+      "saving": "저장 중...",
+      "saved": "설정이 저장되었습니다",
+      "loadError": "설정을 불러올 수 없습니다.",
+      "errors": {
+        "invalid_retention": "보관 기간은 {min}일부터 {max}일 사이의 정수여야 합니다.",
+        "invalid_target": "목표는 {targetMin}에서 {targetMax} 사이여야 합니다.",
+        "invalid_body": "요청 형식이 올바르지 않습니다.",
+        "orchestrator_unavailable": "오케스트레이터를 사용할 수 없어 아무것도 저장되지 않았습니다.",
+        "generic": "설정을 저장할 수 없습니다."
+      }
+    }
   }
 }

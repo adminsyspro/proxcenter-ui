@@ -83,7 +83,9 @@ export async function GET(
     const fallbackExt = format === 'csv' ? 'csv' : 'pdf'
     const contentType = response.headers.get('Content-Type') || fallbackType
     const contentDisposition = response.headers.get('Content-Disposition') || `attachment; filename="report-${id}.${fallbackExt}"`
-    const contentLength = response.headers.get('Content-Length')
+    // fetch decodes a compressed body (the orchestrator gzips its CSV): the
+    // upstream length is then the compressed one and would cut the download.
+    const contentLength = response.headers.get('Content-Encoding') ? null : response.headers.get('Content-Length')
 
     // Stream the response
     const responseHeaders = new Headers()

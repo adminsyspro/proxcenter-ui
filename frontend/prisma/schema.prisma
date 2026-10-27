@@ -1756,3 +1756,44 @@ model TlsRenewLease {
 
   @@map("tls_renew_leases")
 }
+
+/// Availability SLA policy: a target over a set of guests (explicit list, tags
+/// or pools). Read by the orchestrator, which computes the SLA.
+model SlaPolicy {
+  id        String   @id @default(cuid())
+  tenantId  String   @default("default") @map("tenant_id")
+  name      String
+  target    Float
+  guests    Json     @default("[]")
+  tags      String[] @default([])
+  pools     String[] @default([])
+  enabled   Boolean  @default(true)
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("sla_policies")
+}
+
+/// Planned maintenance, excluded from the availability denominators. No foreign
+/// key to SlaPolicy: a window scoped to a policy is deleted with it by the
+/// policy DELETE route.
+model SlaMaintenanceWindow {
+  id           String   @id @default(cuid())
+  tenantId     String   @default("default") @map("tenant_id")
+  scope        String
+  connectionId String?  @map("connection_id")
+  node         String?
+  vmid         Int?
+  policyId     String?  @map("policy_id")
+  startsAt     DateTime @map("starts_at")
+  endsAt       DateTime @map("ends_at")
+  reason       String
+  createdBy    String   @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, startsAt])
+  @@map("sla_maintenance_windows")
+}

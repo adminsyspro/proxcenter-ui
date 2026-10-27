@@ -47,4 +47,11 @@ describe('BACKUP_TABLES', () => {
     expect(names).toContain('tls_certificates')
     for (const runtime of ['tls_acme_accounts', 'tls_acme_challenges', 'tls_renew_leases']) expect(names).not.toContain(runtime)
   })
+
+  it('keeps the SLA policies and maintenance windows but not the availability ledger', () => {
+    const names = BACKUP_TABLES.map(t => t.name)
+
+    expect(names).toEqual(expect.arrayContaining(['sla_policies', 'sla_maintenance_windows']))
+    for (const history of ['availability_observations', 'availability_spans']) expect(names).not.toContain(history)
+  })
 })

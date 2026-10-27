@@ -2430,6 +2430,7 @@
       "warmPreflightReady": "대상 노드가 웜 마이그레이션 준비를 마쳤습니다 (nbdkit, nbd-client, VDDK가 있습니다).",
       "warmPreflightReadyNbd": "대상 노드가 웜 마이그레이션 준비를 마쳤습니다 (nbdkit, nbd 플러그인, nbd-client가 있습니다).",
       "warmPreflightFailedTitle": "대상 노드가 웜 마이그레이션 준비가 되지 않았습니다",
+      "bulkWarmNodeNotReady": "{node}은(는) 웜 마이그레이션을 수행할 준비가 되지 않았습니다",
       "warmPreflightMissing": "노드에 없는 항목: {items}.",
       "warmPreflightNbdHint": "Proxmox 노드에 NBD 도구를 설치하세요: apt install nbdkit nbd-client libnbd-bin. 그런 다음 노드를 다시 선택하세요.",
       "warmStorageInsufficient": "{storage}의 여유 공간이 부족합니다: {available} GB 사용 가능, 원본 디스크와 10% 여유분을 위해 {required} GB 필요. 공간을 확보하거나 다른 스토리지를 선택하세요.",

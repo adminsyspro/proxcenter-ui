@@ -108,6 +108,7 @@ import { bulkLoadProjection } from '../bulkLoadProjection'
 import MigrationLiveColumns, { type LiveJob } from './MigrationLiveColumns'
 import LiveLogBox from '@/components/ui/LiveLogBox'
 import BulkLoadProjectionBlock from './BulkLoadProjectionBlock'
+import BulkWarmReadinessAlert, { useBulkWarmReadiness } from './BulkWarmReadiness'
 
 /**
  * Which sources may be migrated warm. VMware (direct ESXi) and vCenter read
@@ -1861,6 +1862,22 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     const placed = bulkCopyRequest?.auto && bulkCopy.status === 'done' ? bulkCopy.assignment[vmid] : undefined
     return placed ?? nodes[idx % nodes.length]
   }, [bulkCopyRequest, bulkCopy])
+  // Warm runtime of the nodes the batch lands on (roadmap#174): the single VM
+  // dialog's warm-check, once per node, so an unprepared node blocks the launch
+  // and offers "Prepare this node" instead of failing every job at planning.
+  const bulkWarmNodes = React.useMemo(() => {
+    if (!bulkMigOpen || bulkMigJobs.length > 0 || !bulkMigHostInfo || !bulkWarmAllowed || migType !== 'warm' || !migTargetConn || !migTargetNode) return []
+    const nodes = bulkTargetNodes(migTargetNode, migTargetConn, migNodeOptions as any[])
+    const selected = (bulkMigHostInfo.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
+    if (nodes.length === 0 || selected.length === 0) return []
+    return [...new Set<string>(selected.map((vm: any, idx: number) => bulkNodeOf(vm.vmid, idx, nodes)))].sort((a, b) => a.localeCompare(b))
+  }, [bulkMigOpen, bulkMigJobs.length, bulkMigHostInfo, bulkWarmAllowed, migType, migTargetConn, migTargetNode, migNodeOptions, bulkMigSelected, bulkNodeOf])
+  const bulkWarm = useBulkWarmReadiness({
+    sourceConnectionId: bulkMigHostInfo?.connectionId ?? '',
+    targetConnectionId: migTargetConn,
+    nodes: bulkWarmNodes,
+    kind: bulkMigHostInfo?.hostType === 'xcpng' ? 'nbd' : 'vddk',
+  })
   const bulkSpaceVms = React.useMemo(() => {
     if (!bulkMigOpen || bulkMigJobs.length > 0 || !bulkMigHostInfo || !migTargetConn || !migTargetNode || !migTargetStorage) return null
     const nodes = bulkTargetNodes(migTargetNode, migTargetConn, migNodeOptions as any[])
@@ -5448,6 +5465,8 @@ return
               </>
             )}
 
+            {bulkMigJobs.length === 0 && migType === 'warm' && <BulkWarmReadinessAlert readiness={bulkWarm} />}
+
             {bulkMigJobs.length === 0 && bulkCopy.problems.length > 0 && (
               <Alert severity="error" data-testid="bulk-copy-error">
                 {bulkCopy.problems.map((p, i) => {
@@ -5827,6 +5846,8 @@ return
                   if (bulkSpace.status === 'blocked') return true
                   // A target node cannot reach a VM's copy network (warm VMware).
                   if (bulkCopy.problems.length > 0) return true
+                  // A target node is being checked for, or lacks, the warm runtime.
+                  if (migType === 'warm' && bulkWarm.blocked) return true
                   return false
                 })()}
                 sx={{ textTransform: 'none' }}

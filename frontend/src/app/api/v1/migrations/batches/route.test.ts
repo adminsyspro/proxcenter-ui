@@ -36,6 +36,8 @@ vi.mock("@/lib/migration/batch-space", async (orig) => ({
 }))
 const copy = vi.hoisted(() => ({ check: vi.fn() }))
 vi.mock("@/lib/migration/batch-copy-reach", () => ({ checkBatchCopyNetwork: copy.check }))
+const runtime = vi.hoisted(() => ({ check: vi.fn() }))
+vi.mock("@/lib/migration/batch-warm-runtime", () => ({ checkBatchWarmRuntime: runtime.check }))
 vi.mock("@/lib/migration/validate-request", () => ({ validateMigrationRequest: h.validate }))
 vi.mock("@/lib/migration/batch-scheduler", () => ({
   OPEN_BATCH_STATUSES: ["running", "paused"],
@@ -86,6 +88,7 @@ beforeEach(() => {
   space.check.mockReset().mockImplementation(async () => space.result)
   space.result = { ok: true, problems: [], warnings: [] } as any
   copy.check.mockReset().mockResolvedValue({ assignment: {}, problems: [], infos: [], unchecked: [] })
+  runtime.check.mockReset().mockResolvedValue([])
   const tx = h.tx = {
     migrationBatch: { create: vi.fn(async ({ data }: any) => ({ id: "b1", ...data })) },
     migrationJob: { create: vi.fn(async ({ data }: any) => { h.created.push(data); return { id: `j${h.created.length}` } }) },
@@ -169,9 +172,28 @@ describe("POST /api/v1/migrations/batches", () => {
     expect(h.prisma.$transaction).not.toHaveBeenCalled()
   })
 
+  it("checks the warm runtime of the batch's nodes with the source type", async () => {
+    await create({ ...shared, vms })
+
+    expect(runtime.check).toHaveBeenCalledWith({ sourceConnectionId: "src", sourceType: "vmware", targetConnectionId: "tgt", nodes: ["pve1", "pve2"] })
+  })
+
+  it("refuses a warm batch whose node lacks the warm runtime, and creates nothing", async () => {
+    runtime.check.mockResolvedValueOnce([{ node: "pve2", missing: ["vddk-lib"], message: "pve2 is not ready for warm migration: missing vddk-lib" }])
+
+    const res = await create({ ...shared, vms })
+
+    expect(res.status).toBe(400)
+    const body = await readJson<any>(res)
+    expect(body.error).toBe("pve2 is not ready for warm migration: missing vddk-lib")
+    expect(body.problems).toEqual([{ node: "pve2", missing: ["vddk-lib"], message: "pve2 is not ready for warm migration: missing vddk-lib" }])
+    expect(h.prisma.$transaction).not.toHaveBeenCalled()
+  })
+
   it("does not probe the copy network of a cold batch", async () => {
     await create({ ...shared, migrationType: "cold", vms })
     expect(copy.check).not.toHaveBeenCalled()
+    expect(runtime.check).not.toHaveBeenCalled()
   })
 
   it("starts a batch whose only shortfall rests on estimated sizes", async () => {

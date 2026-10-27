@@ -2430,6 +2430,7 @@
       "warmPreflightReady": "Le noeud cible est pret pour la migration a chaud (nbdkit, nbd-client et le VDDK sont presents).",
       "warmPreflightReadyNbd": "Le nœud cible est prêt pour la migration à chaud (nbdkit, son plugin nbd et nbd-client sont présents).",
       "warmPreflightFailedTitle": "Le noeud cible n'est pas pret pour la migration a chaud",
+      "bulkWarmNodeNotReady": "{node} n'est pas prêt pour la migration à chaud",
       "warmPreflightMissing": "Manquant sur le noeud : {items}.",
       "warmPreflightNbdHint": "Installez les outils NBD sur le nœud Proxmox : apt install nbdkit nbd-client libnbd-bin, puis sélectionnez à nouveau le nœud.",
       "warmStorageInsufficient": "Espace libre insuffisant sur {storage} : {available} Go disponibles, {required} Go nécessaires pour les disques source plus une marge de 10 %. Libérez de l'espace ou choisissez un autre stockage.",

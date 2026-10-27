@@ -59,7 +59,7 @@ const hexColor: Validator = value =>
 // Domains come from the same configs the settings UI renders from, so adding a
 // theme or a background tint never needs a second edit here.
 const GLOBAL_THEME_IDS = globalThemesConfig.map((theme: { id: string }) => theme.id)
-const LIGHT_BACKGROUND_IDS = lightBackgroundConfig.map((background: { id: string }) => background.id)
+const LIGHT_BACKGROUND_IDS = lightBackgroundConfig.map(background => background.id)
 const DENSITY_IDS = Object.keys(densityConfig)
 
 /**

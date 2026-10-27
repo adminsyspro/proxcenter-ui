@@ -1,6 +1,13 @@
 // Primary color config object
 // Ordered: PROXCENTER first, then grouped by hue (warm → red → purple → blue → green)
-const primaryColorConfig = [
+export interface PrimaryColor {
+  name: string
+  light: string
+  main: string
+  dark: string
+}
+
+const primaryColorConfig: PrimaryColor[] = [
   // ── PROXCENTER (brand) ──
   {
     name: 'primary-1',

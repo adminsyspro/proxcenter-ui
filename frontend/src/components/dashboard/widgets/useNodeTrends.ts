@@ -4,6 +4,89 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { mapTimeRange } from './timeRangeUtils'
 
+/** The slice of the dashboard payload this hook reads. */
+export interface TrendsDashboardData {
+  clusters?: { id: string; name: string }[]
+  nodes?: {
+    name?: string
+    node?: string
+    connectionId?: string
+    connId?: string
+    connection?: string
+  }[]
+}
+
+export interface UseNodeTrendsOptions {
+  data?: TrendsDashboardData | null
+  selectedConnections?: string[]
+  timeRange?: string
+  metrics: string[]
+  defaultValue?: number | null
+}
+
+/** One time slot: `ts`/`t` plus one `${nodeName}_${metric}` key per series. */
+export type TrendSlot = { ts: number; t?: number; [series: string]: number | null | undefined }
+
+/** One point of a node series as /nodes/trends returns it. */
+type TrendPoint = { ts?: number; t?: number; [metric: string]: number | null | undefined }
+
+/** Copies the last known value of each series into the slots that lack one. */
+function fillGaps(slots: readonly TrendSlot[], keys: readonly string[]) {
+  const known: Record<string, number | null | undefined> = {}
+
+  for (const slot of slots) {
+    for (const key of keys) {
+      if (slot[key] == null) slot[key] = known[key] ?? slot[key]
+      else known[key] = slot[key]
+    }
+  }
+}
+
+/**
+ * Merges the per-connection `/nodes/trends` answers into one time-indexed
+ * series per `${nodeName}_${metric}`, sorted by time, with the gaps a node
+ * left filled forward then backward.
+ */
+export function mergeNodeTrends(
+  results: readonly Record<string, unknown>[],
+  metrics: readonly string[],
+  defaultValue: number | null
+): { slots: TrendSlot[]; nodeNames: string[] } {
+  const allNodeNames = new Set<string>()
+  const timeMap = new Map<number | undefined, TrendSlot>()
+
+  const addPoint = (nodeName: string, point: TrendPoint) => {
+    const key = point.ts || point.t
+    let entry = timeMap.get(key)
+
+    if (!entry) {
+      entry = { ts: point.ts || 0, t: point.t }
+      timeMap.set(key, entry)
+    }
+
+    for (const m of metrics) entry[`${nodeName}_${m}`] = point[m] ?? defaultValue
+  }
+
+  for (const connData of results) {
+    for (const [nodeKey, nodePoints] of Object.entries(connData)) {
+      const nodeName = nodeKey.replace(/^node:/, '')
+
+      allNodeNames.add(nodeName)
+      // API boundary: the route returns one TrendPoint array per node.
+      if (Array.isArray(nodePoints)) for (const point of nodePoints as TrendPoint[]) addPoint(nodeName, point)
+    }
+  }
+
+  const slots = Array.from(timeMap.values()).sort((a, b) => a.ts - b.ts)
+  const nodeNames = [...allNodeNames].sort((a, b) => a.localeCompare(b))
+  const keys = nodeNames.flatMap(name => metrics.map(m => `${name}_${m}`))
+
+  fillGaps(slots, keys)
+  fillGaps([...slots].reverse(), keys)
+
+  return { slots, nodeNames }
+}
+
 /**
  * Loads per-node RRD trends for the dashboard chart widgets.
  *
@@ -16,9 +99,9 @@ import { mapTimeRange } from './timeRangeUtils'
  * meaningful at zero, null for metrics whose absence must stay distinguishable
  * from a real zero (ZFS ARC on a node without ZFS).
  */
-export function useNodeTrends({ data, selectedConnections = [], timeRange, metrics, defaultValue = 0 }) {
-  const [trendsData, setTrendsData] = useState(null)
-  const [nodeNames, setNodeNames] = useState([])
+export function useNodeTrends({ data, selectedConnections = [], timeRange, metrics, defaultValue = 0 }: UseNodeTrendsOptions) {
+  const [trendsData, setTrendsData] = useState<TrendSlot[] | null>(null)
+  const [nodeNames, setNodeNames] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
   // All connections for the filter (clusters first, fallback to the unique
@@ -27,9 +110,9 @@ export function useNodeTrends({ data, selectedConnections = [], timeRange, metri
     const clusters = (data?.clusters || []).map(c => ({ id: c.id, name: c.name }))
 
     if (clusters.length > 0) return clusters
-    const seen = new Set()
+    const seen = new Set<string>()
 
-    return (data?.nodes || []).reduce((acc, n) => {
+    return (data?.nodes || []).reduce<{ id: string; name: string }[]>((acc, n) => {
       const id = n.connectionId || n.connId
 
       if (id && !seen.has(id)) { seen.add(id); acc.push({ id, name: n.connection || id }) }
@@ -46,11 +129,11 @@ export function useNodeTrends({ data, selectedConnections = [], timeRange, metri
   // Group nodes by connection, filtered
   const nodesByConnection = useMemo(() => {
     const nodes = data?.nodes || []
-    const grouped = {}
+    const grouped: Record<string, { node: string | undefined }[]> = {}
     const validConnIds = new Set(nodes.map(n => n.connectionId || n.connId).filter(Boolean))
 
     // If selectedConnections references IDs that don't exist, ignore the filter
-    const effectiveFilter = selectedConnections.length > 0 && selectedConnections.some(id => validConnIds.has(id))
+    const effectiveFilter = selectedConnections.some(id => validConnIds.has(id))
       ? selectedConnections : []
 
     nodes.forEach((node) => {
@@ -94,55 +177,14 @@ export function useNodeTrends({ data, selectedConnections = [], timeRange, metri
             })
 
             if (!res.ok) return {}
-            const json = await res.json()
+            const json: { data?: Record<string, unknown> } = await res.json()
 
 
 return json.data || {}
           })
         )
 
-        const allNodeNames = new Set()
-        const timeMap = new Map()
-
-        results.forEach((connData) => {
-          Object.entries(connData).forEach(([nodeKey, nodePoints]) => {
-            const nodeName = nodeKey.replace(/^node:/, '')
-
-            allNodeNames.add(nodeName)
-            if (!Array.isArray(nodePoints)) return
-            nodePoints.forEach((point) => {
-              const key = point.ts || point.t
-
-              if (!timeMap.has(key)) timeMap.set(key, { ts: point.ts || 0, t: point.t })
-              const entry = timeMap.get(key)
-
-              metrics.forEach((m) => { entry[`${nodeName}_${m}`] = point[m] ?? defaultValue })
-            })
-          })
-        })
-
-        const aggregated = Array.from(timeMap.values()).sort((a, b) => a.ts - b.ts)
-        const sortedNames = [...allNodeNames].sort((a, b) => a.localeCompare(b))
-        const keys = sortedNames.flatMap(name => metrics.map(m => `${name}_${m}`))
-        const lastKnown = {}
-
-        for (const slot of aggregated) {
-          for (const key of keys) {
-            if (slot[key] != null) lastKnown[key] = slot[key]
-            else if (lastKnown[key] != null) slot[key] = lastKnown[key]
-          }
-        }
-
-        const firstKnown = {}
-
-        for (let i = aggregated.length - 1; i >= 0; i--) {
-          const slot = aggregated[i]
-
-          for (const key of keys) {
-            if (slot[key] != null) firstKnown[key] = slot[key]
-            else if (firstKnown[key] != null) slot[key] = firstKnown[key]
-          }
-        }
+        const { slots: aggregated, nodeNames: sortedNames } = mergeNodeTrends(results, metrics, defaultValue)
 
         if (cancelled) return
         setNodeNames(sortedNames)

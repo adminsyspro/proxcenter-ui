@@ -13,6 +13,26 @@ import nextCoreWebVitals from 'eslint-config-next/core-web-vitals'
 import importPlugin from 'eslint-plugin-import'
 import prettier from 'eslint-config-prettier/flat'
 
+const STRICT_TS_FILES = [
+  // Lot 1 (roadmap#165): shared modules.
+  'src/configs/globalThemesConfig.ts',
+  'src/configs/lightBackgroundConfig.ts',
+  'src/configs/primaryColorConfig.ts',
+  'src/configs/themeConfig.ts',
+  'src/contexts/LocaleContext.tsx',
+  'src/contexts/PageTitleContext.tsx',
+  'src/contexts/RBACContext.tsx',
+  'src/@core/hooks/useObjectCookie.ts',
+  'src/@core/utils/serverHelpers.ts',
+  'src/@menu/utils/menuClasses.ts',
+  'src/@menu/hooks/useMediaQuery.ts',
+  'src/@layouts/utils/layoutClasses.ts',
+  'src/utils/string.ts',
+  'src/components/dashboard/widgets/themeColors.ts',
+  'src/components/dashboard/widgets/timeRangeUtils.ts',
+  'src/components/dashboard/widgets/useNodeTrends.ts',
+]
+
 const config = [
   // Was `ignorePatterns`. node_modules is ignored by default in flat config.
   // `public/**` holds vendored third-party code (noVNC) that must not be linted.
@@ -79,6 +99,17 @@ const config = [
         node: {},
         typescript: { project: './jsconfig.json' },
       },
+    },
+  },
+
+  // Files converted to strict TypeScript (roadmap#171): no `any` and no
+  // `@ts-*` escape hatch, so the strict ratchet (npm run typecheck:strict)
+  // cannot be bypassed. Each conversion lot appends its files here.
+  {
+    files: STRICT_TS_FILES,
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/ban-ts-comment': 'error',
     },
   },
 ]

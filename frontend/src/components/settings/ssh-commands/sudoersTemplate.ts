@@ -84,3 +84,20 @@ export function buildSudoersTemplate(categories: AllowlistCategoryShape[]): { bo
 export function buildInstallCommand(body: string): string {
   return `cat > /etc/sudoers.d/proxcenter <<'EOF'\n${body}\nEOF\nchmod 440 /etc/sudoers.d/proxcenter\nvisudo -c -f /etc/sudoers.d/proxcenter`
 }
+
+// SETUP_BASH creates the dedicated proxcenter SSH user on a PVE node.
+export const SETUP_BASH = `# Run on every PVE node (adapt the public key to yours)
+# sudo is not part of a stock PVE install
+apt install -y sudo
+# --system alone sets the home to /nonexistent, where sshd would look for the key
+adduser --system --home /home/proxcenter --shell /bin/bash --group proxcenter
+# Also repairs a proxcenter user created earlier without --home
+usermod -d /home/proxcenter proxcenter
+mkdir -p /home/proxcenter/.ssh
+echo "ssh-ed25519 AAAA... proxcenter@your-workstation" >> /home/proxcenter/.ssh/authorized_keys
+chown -R proxcenter:proxcenter /home/proxcenter/.ssh
+chmod 700 /home/proxcenter/.ssh
+chmod 600 /home/proxcenter/.ssh/authorized_keys
+# Needed for the Network Flows feature (direct OVS socket access), only on nodes running Open vSwitch
+getent group openvswitch >/dev/null && usermod -aG openvswitch proxcenter
+# IMPORTANT: reconnect the SSH session after this for the new group to take effect`

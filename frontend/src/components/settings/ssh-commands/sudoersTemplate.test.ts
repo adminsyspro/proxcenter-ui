@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildInstallCommand, buildSudoersTemplate, type AllowlistCategoryShape } from './sudoersTemplate'
+import { buildInstallCommand, buildSudoersTemplate, SETUP_BASH, type AllowlistCategoryShape } from './sudoersTemplate'
 
 const cmd = (prefix: string, executablePath?: string): AllowlistCategoryShape['commands'][number] => ({
   prefix,
@@ -86,5 +86,30 @@ describe('buildInstallCommand', () => {
     expect(out.startsWith("cat > /etc/sudoers.d/proxcenter <<'EOF'\nBODY\nEOF\n")).toBe(true)
     expect(out).toContain('chmod 440 /etc/sudoers.d/proxcenter')
     expect(out.endsWith('visudo -c -f /etc/sudoers.d/proxcenter')).toBe(true)
+  })
+})
+
+describe('SETUP_BASH', () => {
+  const lines = SETUP_BASH.split('\n')
+  const indexOf = (start: string) => lines.findIndex(l => l.startsWith(start))
+
+  it('installs sudo, which a stock PVE node does not ship', () => {
+    expect(lines).toContain('apt install -y sudo')
+  })
+
+  it('gives the system user /home/proxcenter as home, not /nonexistent', () => {
+    expect(lines).toContain('adduser --system --home /home/proxcenter --shell /bin/bash --group proxcenter')
+  })
+
+  it('repairs the home of an existing user before the key is written', () => {
+    const repair = indexOf('usermod -d /home/proxcenter proxcenter')
+
+    expect(repair).toBeGreaterThan(indexOf('adduser '))
+    expect(repair).toBeLessThan(indexOf('mkdir -p /home/proxcenter/.ssh'))
+  })
+
+  it('adds the openvswitch group only on nodes where it exists', () => {
+    expect(lines).toContain('getent group openvswitch >/dev/null && usermod -aG openvswitch proxcenter')
+    expect(lines).not.toContain('usermod -aG openvswitch proxcenter')
   })
 })

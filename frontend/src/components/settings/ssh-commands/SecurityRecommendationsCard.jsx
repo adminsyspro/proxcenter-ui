@@ -16,24 +16,13 @@ import {
   Typography
 } from '@mui/material'
 
-import { buildSudoersTemplate, buildInstallCommand } from './sudoersTemplate'
+import { buildSudoersTemplate, buildInstallCommand, SETUP_BASH } from './sudoersTemplate'
 import { copyToClipboard } from '@/lib/clipboard'
 
 const fetcher = url => fetch(url).then(r => {
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
   return r.json()
 })
-
-const SETUP_BASH = `# Run on every PVE node (adapt the public key to yours)
-adduser --system --shell /bin/bash --group proxcenter
-mkdir -p /home/proxcenter/.ssh
-echo "ssh-ed25519 AAAA... proxcenter@your-workstation" >> /home/proxcenter/.ssh/authorized_keys
-chown -R proxcenter:proxcenter /home/proxcenter/.ssh
-chmod 700 /home/proxcenter/.ssh
-chmod 600 /home/proxcenter/.ssh/authorized_keys
-# Needed for the Network Flows feature (direct OVS socket access)
-usermod -aG openvswitch proxcenter
-# IMPORTANT: reconnect the SSH session after this for the new group to take effect`
 
 function CodeBlock({ text, onCopy }) {
   return (

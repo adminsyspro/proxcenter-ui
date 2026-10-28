@@ -17,6 +17,7 @@ import { NextRequest } from 'next/server'
 // Static instance: module-scope env constants (HA_ENABLED, VIP, ...) are baked
 // at file load, BEFORE any vi.stubEnv from the VIP describes below runs.
 import { proxy } from './proxy'
+import { MAX_REQUEST_BODY_BYTES } from '@/lib/http/requestBodyLimit'
 
 function makeRequest(url: string, host: string) {
   return {
@@ -489,5 +490,24 @@ describe('cookie-authenticated behavior unchanged', () => {
       error: 'ENROLLMENT_REQUIRED',
       redirect: '/profile/2fa/enrollment',
     })
+  })
+})
+
+describe('request body size', () => {
+  it('refuses a body declared past the buffered size before reading the session', async () => {
+    const res = await proxy(apiRequest('/api/v1/settings/branding/logo', {
+      method: 'POST',
+      headers: { 'content-length': String(MAX_REQUEST_BODY_BYTES + 1) },
+    }))
+    expect(res.status).toBe(413)
+    expect(getTokenMock).not.toHaveBeenCalled()
+  })
+
+  it('lets a body within the size through to the usual checks', async () => {
+    const res = await proxy(apiRequest('/api/v1/settings/branding/logo', {
+      method: 'POST',
+      headers: { 'content-length': String(MAX_REQUEST_BODY_BYTES) },
+    }))
+    expect(res.status).toBe(401)
   })
 })

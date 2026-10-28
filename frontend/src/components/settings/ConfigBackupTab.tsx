@@ -65,6 +65,9 @@ interface RestoreResult {
 }
 
 async function errorCode(res: Response): Promise<string> {
+  // A file past the request size is refused before the route, by the proxy or
+  // nginx, without the route's error code.
+  if (res.status === 413) return 'file-too-large'
   const json = await res.json().catch(() => null)
   const code = json?.code
   return typeof code === 'string' && KNOWN_ERRORS.has(code) ? code : 'generic'

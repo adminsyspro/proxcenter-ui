@@ -116,6 +116,7 @@ function parseDisk(value: string): Disk {
 }
 
 type Nic = { model?: string; bridge?: string; tag?: string; mac?: string; ip?: string; firewall: boolean; linkDown: boolean; mtu?: string; rate?: string }
+type NicText = 'bridge' | 'tag' | 'ip' | 'mtu' | 'rate' | 'mac'
 
 function parseNic(value: string): Nic {
   const o = options(value)
@@ -137,27 +138,32 @@ function parseNic(value: string): Nic {
 const label = (key: string): FactLabel => ({ key })
 const raw = (text: string): FactLabel => ({ text })
 
+/** A disk added or removed whole: its ISO, or its size and storage */
+function describeDiskPresence(name: FactLabel, from: string, to: string, fmt: DescribeFormat): DiffFact {
+  const d = parseDisk(from || to)
+  const size = d.size === undefined ? '' : fmt.bytes(d.size)
+  const value = d.cdrom ? d.iso : [size, d.storage].filter(Boolean).join(' · ')
+
+  return from ? { kind: 'removed', label: name, value: value || undefined } : { kind: 'added', label: name, value }
+}
+
+/** A CD drive: the ISO inserted, swapped or ejected */
+function describeCdrom(name: FactLabel, a: Disk, b: Disk): DiffFact {
+  if (a.iso === b.iso) return { kind: 'modified', label: name }
+  if (!b.iso) return { kind: 'removed', label: name, value: a.iso }
+
+  return a.iso ? { kind: 'changed', label: name, from: a.iso, to: b.iso } : { kind: 'added', label: name, value: b.iso }
+}
+
 function describeDisk(field: string, from: string, to: string, fmt: DescribeFormat): DiffFact[] {
   const name = raw(field)
 
-  if (!from || !to) {
-    const d = parseDisk(from || to)
-    const value = d.cdrom
-      ? d.iso
-      : [d.size !== undefined ? fmt.bytes(d.size) : '', d.storage].filter(Boolean).join(' · ')
-
-    return [from ? { kind: 'removed', label: name, value: value || undefined } : { kind: 'added', label: name, value }]
-  }
+  if (!from || !to) return [describeDiskPresence(name, from, to, fmt)]
 
   const a = parseDisk(from)
   const b = parseDisk(to)
 
-  if (a.cdrom || b.cdrom) {
-    if (a.iso === b.iso) return [{ kind: 'modified', label: name }]
-    if (!b.iso) return [{ kind: 'removed', label: name, value: a.iso }]
-
-    return [a.iso ? { kind: 'changed', label: name, from: a.iso, to: b.iso } : { kind: 'added', label: name, value: b.iso }]
-  }
+  if (a.cdrom || b.cdrom) return [describeCdrom(name, a, b)]
 
   const facts: DiffFact[] = []
 
@@ -182,16 +188,20 @@ function describeNic(field: string, from: string, to: string): DiffFact[] {
   const a = parseNic(from)
   const b = parseNic(to)
   const facts: DiffFact[] = []
+  const changed = (prop: NicText, key: string) => {
+    if (a[prop] !== b[prop]) facts.push({ kind: 'changed', label: { key, of: field }, from: a[prop] || '-', to: b[prop] || '-' })
+  }
 
   if (a.model !== b.model && a.model && b.model) facts.push({ kind: 'changed', label: { key: 'model', of: field }, from: a.model, to: b.model })
-  if (a.bridge !== b.bridge) facts.push({ kind: 'changed', label: { key: 'bridge', of: field }, from: a.bridge || '-', to: b.bridge || '-' })
-  if (a.tag !== b.tag) facts.push({ kind: 'changed', label: { key: 'vlan', of: field }, from: a.tag || '-', to: b.tag || '-' })
-  if (a.ip !== b.ip) facts.push({ kind: 'changed', label: { key: 'ip', of: field }, from: a.ip || '-', to: b.ip || '-' })
+  changed('bridge', 'bridge')
+  changed('tag', 'vlan')
+  changed('ip', 'ip')
   if (a.firewall !== b.firewall) facts.push({ kind: 'toggled', label: { key: 'firewall', of: field }, on: b.firewall })
   if (a.linkDown !== b.linkDown) facts.push({ kind: 'toggled', label: { key: 'link', of: field }, on: !b.linkDown })
-  if (a.mtu !== b.mtu) facts.push({ kind: 'changed', label: { key: 'mtu', of: field }, from: a.mtu || '-', to: b.mtu || '-' })
-  if (a.rate !== b.rate) facts.push({ kind: 'changed', label: { key: 'rate', of: field }, from: a.rate || '-', to: b.rate || '-' })
-  if (!facts.length && a.mac !== b.mac) facts.push({ kind: 'changed', label: { key: 'mac', of: field }, from: a.mac || '-', to: b.mac || '-' })
+  changed('mtu', 'mtu')
+  changed('rate', 'rate')
+  // The MAC alone only counts when nothing else moved: a model change rolls it
+  if (!facts.length) changed('mac', 'mac')
 
   return facts.length ? facts : [{ kind: 'modified', label: name }]
 }
@@ -221,28 +231,14 @@ function ctime(meta: string): string | undefined {
   return options(meta).ctime
 }
 
-function describeField(f: ChangeFieldDiff, fmt: DescribeFormat): Ranked[] {
-  const field = f.field || ''
-  const from = f.oldValue ?? ''
-  const to = f.newValue ?? ''
-  const at = (rank: number) => (fact: DiffFact): Ranked => ({ rank, fact })
+type At = (rank: number) => (fact: DiffFact) => Ranked
 
-  if (from === to) return []
-
-  if (field === 'meta') {
-    const a = ctime(from)
-    const b = ctime(to)
-
-    return a && b && a !== b ? [{ rank: ORDER.recreated, fact: { kind: 'recreated' } }] : []
-  }
-
-  if (SILENT.has(field)) return []
-
+/** A field read from a table of known keys, null when it is none of them */
+function describeKnownField(field: string, from: string, to: string, fmt: DescribeFormat, at: At): Ranked[] | null {
   if (MIB_FIELDS[field]) {
     const mib = (v: string) => (v ? fmt.bytes(Number(v) * 1024 ** 2) : '')
-    const fact = describeGeneric(label(MIB_FIELDS[field]), mib(from), mib(to))
 
-    return [at(ORDER[field])(fact)]
+    return [at(ORDER[field])(describeGeneric(label(MIB_FIELDS[field]), mib(from), mib(to)))]
   }
 
   if (PLAIN_FIELDS[field]) {
@@ -255,13 +251,17 @@ function describeField(f: ChangeFieldDiff, fmt: DescribeFormat): Ranked[] {
     const on = isOn(to)
 
     // `agent: 1` and `agent: enabled=1` are the same setting
-    if (isOn(from) === on) return []
-
-    return [at(5)({ kind: 'toggled', label: label(TOGGLE_FIELDS[field]), on })]
+    return isOn(from) === on ? [] : [at(5)({ kind: 'toggled', label: label(TOGGLE_FIELDS[field]), on })]
   }
 
   if (SECRET_FIELDS[field]) return [at(5)({ kind: 'modified', label: label(SECRET_FIELDS[field]) })]
   if (SET_FIELDS[field]) return describeSet(field, from, to).map(at(5))
+
+  return null
+}
+
+/** A field with a shape of its own: a disk, a NIC, the boot order, an IP config */
+function describeShapedField(field: string, from: string, to: string, fmt: DescribeFormat, at: At): Ranked[] {
   if (DISK.test(field)) return describeDisk(field, from, to, fmt).map(at(ORDER.disk))
   if (NET.test(field)) return describeNic(field, from, to).map(at(ORDER.net))
 
@@ -278,6 +278,27 @@ function describeField(f: ChangeFieldDiff, fmt: DescribeFormat): Ranked[] {
   }
 
   return [at(5)(describeGeneric(raw(field), from, to))]
+}
+
+function describeField(f: ChangeFieldDiff, fmt: DescribeFormat): Ranked[] {
+  const field = f.field || ''
+  const from = f.oldValue ?? ''
+  const to = f.newValue ?? ''
+  const at: At = rank => fact => ({ rank, fact })
+
+  if (from === to) return []
+
+  // Silent but for a new creation time, which says another guest took the ID
+  if (field === 'meta') {
+    const a = ctime(from)
+    const b = ctime(to)
+
+    return a && b && a !== b ? [{ rank: ORDER.recreated, fact: { kind: 'recreated' } }] : []
+  }
+
+  if (SILENT.has(field)) return []
+
+  return describeKnownField(field, from, to, fmt, at) ?? describeShapedField(field, from, to, fmt, at)
 }
 
 function ranked(fields: readonly ChangeFieldDiff[] | undefined, fmt: DescribeFormat) {

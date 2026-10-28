@@ -35,17 +35,20 @@ vi.mock('recharts', () => {
     </div>
   )
 
-  const Bar = ({ data, shape, dataKey }: { data: Row[]; shape: (p: unknown) => ReactNode; dataKey: string }) => (
+  // recharts clones an element it is handed with the props it computes
+  const render = (el: ReactElement<any>, props: Row) => cloneElement(el, props)
+
+  const Bar = ({ data, shape, dataKey }: { data: Row[]; shape: ReactElement<any>; dataKey: string }) => (
     <div data-testid={`bar-${dataKey}`}>
-      {data.filter(row => row[dataKey] > 0).map((row, i) => <div key={i}>{shape({ payload: row, x: 0, y: 0, width: 4, height: 4 })}</div>)}
+      {data.filter(row => row[dataKey] > 0).map(row => <div key={row.from}>{render(shape, { payload: row, x: 0, y: 0, width: 4, height: 4 })}</div>)}
     </div>
   )
 
-  const Tooltip = ({ data, content }: { data: Row[]; content: (p: unknown) => ReactNode }) => (
+  const Tooltip = ({ data, content }: { data: Row[]; content: ReactElement<any> }) => (
     <div data-testid='tooltip'>
-      {content({ active: false, payload: [] })}
-      {content({ active: true, payload: [{ payload: data.find(r => r.total > 0) }] })}
-      {content({ active: true, payload: [{ payload: data.find(r => r.total === 0) }] })}
+      {render(content, { active: false, payload: [] })}
+      {render(content, { active: true, payload: [{ payload: data.find(r => r.total > 0) }] })}
+      {render(content, { active: true, payload: [{ payload: data.find(r => r.total === 0) }] })}
     </div>
   )
 

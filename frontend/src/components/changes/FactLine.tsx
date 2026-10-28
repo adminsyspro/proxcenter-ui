@@ -7,6 +7,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { Box, Chip, Typography } from '@mui/material'
 
 import { describeChange, describeGrouped, describeSpec } from '@/lib/changes/describe'
+import { factKey, withKeys } from '@/lib/changes/keys'
 import type { DescribeFormat, DiffFact, FactLabel } from '@/lib/changes/describe'
 import type { ChangeFieldDiff } from '@/lib/changes/csv'
 
@@ -53,8 +54,8 @@ export function useFactText() {
     switch (f.kind) {
       case 'recreated': return t('changes.diff.recreated')
       case 'changed': return `${name(f.label)} ${f.from} → ${f.to}`
-      case 'added': return `+ ${name(f.label)}${f.value ? ` ${f.value}` : ''}`
-      case 'removed': return `− ${name(f.label)}${f.value ? ` ${f.value}` : ''}`
+      case 'added': return ['+', name(f.label), f.value].filter(Boolean).join(' ')
+      case 'removed': return ['−', name(f.label), f.value].filter(Boolean).join(' ')
       case 'modified': return t('changes.diff.modified', { label: name(f.label) })
       case 'toggled': return `${name(f.label)} ${t(f.on ? 'changes.diff.on' : 'changes.diff.off')}`
     }
@@ -68,7 +69,7 @@ interface FactLineProps {
 }
 
 /** A change's diff as one line: `Memory 2 GB → 4 GB · + scsi1 32 GB · net0 e1000 → virtio`. */
-export default function FactLine({ fields, empty }: FactLineProps) {
+export default function FactLine({ fields, empty }: Readonly<FactLineProps>) {
   const t = useTranslations()
   const fmt = useDescribeFormat()
   const text = useFactText()
@@ -125,10 +126,10 @@ export default function FactLine({ fields, empty }: FactLineProps) {
       title={facts.map(text).join('\n')}
       sx={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', minWidth: 0 }}
     >
-      {facts.map((f, i) => (
-        <Fragment key={i}>
+      {withKeys(facts, factKey).map(({ key, item }, i) => (
+        <Fragment key={key}>
           {i > 0 && <Box component='span' sx={{ opacity: 0.35, mx: 0.75 }}>·</Box>}
-          {piece(f)}
+          {piece(item)}
         </Fragment>
       ))}
     </Typography>

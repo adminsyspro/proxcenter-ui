@@ -66,7 +66,7 @@ export default function ChangesPage() {
 
     try {
       await fetch('/api/v1/changes', { method: 'DELETE' })
-      mutate()
+      await mutate()
       setPurgeOpen(false)
     } catch (e) {
       console.error('Purge failed:', e)
@@ -112,7 +112,7 @@ export default function ChangesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ retentionDays })
       })
-      mutateSettings()
+      await mutateSettings()
       setSettingsOpen(false)
     } catch (e) {
       console.error('Settings save failed:', e)

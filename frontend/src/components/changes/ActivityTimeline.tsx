@@ -39,6 +39,61 @@ export function bucketLabel(b: { from: number; to: number }, locale: string): st
   return `${day(b.from)} → ${day(b.to - DAY)}`
 }
 
+type ActivityRow = Record<string, any>
+
+interface ActivityTooltipProps {
+  /** Filled in by recharts */
+  active?: boolean
+  payload?: Array<{ payload?: ActivityRow }>
+  colors: Readonly<Record<Family, string>>
+}
+
+/** A slot's count per family, and what a click on it does */
+function ActivityTooltip({ active, payload, colors }: Readonly<ActivityTooltipProps>) {
+  const t = useTranslations()
+  const locale = useLocale()
+  const row = active && payload?.[0]?.payload
+
+  if (!row) return null
+
+  return (
+    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1.5, py: 1, boxShadow: 2, minWidth: 160 }}>
+      <Typography variant='caption' sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+        {bucketLabel(row as Bucket, locale)}
+      </Typography>
+      {FAMILIES.filter(f => row[f] > 0).map(f => (
+        <Box key={f} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ width: 8, height: 8, borderRadius: '2px', bgcolor: colors[f], flexShrink: 0 }} />
+          <Typography variant='caption' sx={{ flex: 1 }}>{t(FAMILY_LABELS[f])}</Typography>
+          <Typography variant='caption' sx={{ fontWeight: 600 }}>{row[f]}</Typography>
+        </Box>
+      ))}
+      <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.5 }}>
+        {row.total > 0 ? t('changes.activityClick') : t('changes.activityEmpty')}
+      </Typography>
+    </Box>
+  )
+}
+
+interface ActivityBarProps {
+  family: Family
+  selected: number | null
+  /** Filled in by recharts, along with the geometry */
+  payload?: ActivityRow
+  [geometry: string]: unknown
+}
+
+/** One family's segment of a slot: rounded on top, dimmed outside the selection */
+function ActivityBar({ family, selected, ...props }: Readonly<ActivityBarProps>) {
+  return (
+    <Rectangle
+      {...(props as any)}
+      radius={props.payload?.top === family ? [3, 3, 0, 0] : 0}
+      fillOpacity={selected !== null && selected !== props.payload?.from ? 0.3 : 1}
+    />
+  )
+}
+
 /**
  * The journal's activity over a period, one stacked bar per clock slot and one
  * colour per family. A bar narrows the journal to its slot; a legend entry to
@@ -53,12 +108,12 @@ export default function ActivityTimeline({
   onFamily,
   family,
   summary
-}: ActivityTimelineProps) {
+}: Readonly<ActivityTimelineProps>) {
   const t = useTranslations()
   const locale = useLocale()
   const theme = useTheme()
   const mode = theme.palette.mode === 'dark' ? 'dark' : 'light'
-  const color = (f: Family) => FAMILY_COLORS[f][mode]
+  const colors = Object.fromEntries(FAMILIES.map(f => [f, FAMILY_COLORS[f][mode]])) as Record<Family, string>
   const surface = theme.palette.background.paper
   const ink = theme.palette.text.secondary
 
@@ -136,46 +191,18 @@ export default function ActivityTimeline({
           <Tooltip
             cursor={{ fill: theme.palette.action.hover }}
             isAnimationActive={false}
-            content={({ active, payload }) => {
-              const row = active && payload?.[0]?.payload
-
-              if (!row) return null
-
-              return (
-                <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1.5, py: 1, boxShadow: 2, minWidth: 160 }}>
-                  <Typography variant='caption' sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
-                    {bucketLabel(row, locale)}
-                  </Typography>
-                  {FAMILIES.filter(f => row[f] > 0).map(f => (
-                    <Box key={f} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '2px', bgcolor: color(f), flexShrink: 0 }} />
-                      <Typography variant='caption' sx={{ flex: 1 }}>{t(FAMILY_LABELS[f])}</Typography>
-                      <Typography variant='caption' sx={{ fontWeight: 600 }}>{row[f]}</Typography>
-                    </Box>
-                  ))}
-                  <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 0.5 }}>
-                    {row.total > 0 ? t('changes.activityClick') : t('changes.activityEmpty')}
-                  </Typography>
-                </Box>
-              )
-            }}
+            content={<ActivityTooltip colors={colors} />}
           />
           {FAMILIES.map(f => (
             <Bar
               key={f}
               dataKey={f}
               stackId='activity'
-              fill={color(f)}
+              fill={colors[f]}
               stroke={surface}
               strokeWidth={1}
               isAnimationActive={false}
-              shape={(props: any) => (
-                <Rectangle
-                  {...props}
-                  radius={props.payload?.top === f ? [3, 3, 0, 0] : 0}
-                  fillOpacity={selected !== null && selected !== props.payload?.from ? 0.3 : 1}
-                />
-              )}
+              shape={<ActivityBar family={f} selected={selected} />}
             />
           ))}
         </BarChart>
@@ -190,7 +217,7 @@ export default function ActivityTimeline({
               variant={family === f ? 'filled' : 'outlined'}
               onClick={() => onFamily(f)}
               label={t(FAMILY_LABELS[f])}
-              avatar={<Box component='span' sx={{ width: '8px !important', height: '8px !important', borderRadius: '2px', bgcolor: color(f), ml: '8px !important' }} />}
+              avatar={<Box component='span' sx={{ width: '8px !important', height: '8px !important', borderRadius: '2px', bgcolor: colors[f], ml: '8px !important' }} />}
               sx={{ height: 22, fontSize: '0.75rem', borderColor: 'divider' }}
             />
           ))}

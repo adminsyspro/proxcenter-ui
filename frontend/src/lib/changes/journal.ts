@@ -269,7 +269,7 @@ export function backupSummary(change: JournalChange): BackupSummary {
 function snapshotStillPresent(fields: ChangeFieldDiff[] | undefined): boolean {
   const snapshots = (fields || []).filter(f => f.field === 'snapshots')
 
-  return snapshots.length > 0 && !!snapshots[snapshots.length - 1].newValue
+  return !!snapshots.at(-1)?.newValue
 }
 
 /** `5 min 54 s`, `1 h 02 min`, `12 s`: compact and unit-labelled by the caller. */

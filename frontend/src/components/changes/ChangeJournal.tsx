@@ -22,6 +22,7 @@ import { useTheme } from '@mui/material/styles'
 import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
 import ActivityTimeline from '@/components/changes/ActivityTimeline'
 import ChangeDetails, { FieldDiff } from '@/components/changes/ChangeDetails'
+import { fieldKey, withKeys } from '@/lib/changes/keys'
 import { FactSummary } from '@/components/changes/FactLine'
 import { PAGE_SIZES, STICKY_PAGER_SX } from '@/components/ui/PagedRows'
 import { netFields } from '@/lib/changes/describe'
@@ -86,23 +87,23 @@ export default function ChangeJournal({
   toolbar,
   fill = false,
   timeline = false
-}: ChangeJournalProps) {
+}: Readonly<ChangeJournalProps>) {
   const t = useTranslations()
   const locale = useLocale()
   const theme = useTheme()
   const dark = theme.palette.mode === 'dark'
   const dotBorder = theme.palette.background.paper
 
-  const [search, setSearchState] = useState('')
-  const [family, setFamilyState] = useState<Family | ''>('')
-  const [resourceType, setResourceTypeState] = useState('')
-  const [user, setUserState] = useState('')
+  const [search, setSearch] = useState('')
+  const [family, setFamily] = useState<Family | ''>('')
+  const [resourceType, setResourceType] = useState('')
+  const [user, setUser] = useState('')
   const [page, setPage] = useState(0)
   const [perPage, setPerPage] = useState(PAGE_SIZES[0])
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const [rawOpen, setRawOpen] = useState<Record<number, boolean>>({})
-  const [period, setPeriodState] = useState<Period>(timeline ? '30d' : 'all')
-  const [slot, setSlotState] = useState<Bucket | null>(null)
+  const [period, setPeriod] = useState<Period>(timeline ? '30d' : 'all')
+  const [slot, setSlot] = useState<Bucket | null>(null)
 
   // A filter change always goes back to the first page
   const onFilter = <T,>(set: (v: T) => void) => (v: T) => {
@@ -110,14 +111,14 @@ export default function ChangeJournal({
     setPage(0)
   }
 
-  const setSearch = onFilter(setSearchState)
-  const setFamily = onFilter(setFamilyState)
-  const setResourceType = onFilter(setResourceTypeState)
-  const setUser = onFilter(setUserState)
-  const setSlot = onFilter(setSlotState)
-  const setPeriod = onFilter((p: Period) => {
-    setPeriodState(p)
-    setSlotState(null)
+  const filterSearch = onFilter(setSearch)
+  const filterFamily = onFilter(setFamily)
+  const filterResourceType = onFilter(setResourceType)
+  const filterUser = onFilter(setUser)
+  const filterSlot = onFilter(setSlot)
+  const filterPeriod = onFilter((p: Period) => {
+    setPeriod(p)
+    setSlot(null)
   })
 
   const users = useMemo(() => journalUsers(changes), [changes])
@@ -282,7 +283,7 @@ export default function ChangeJournal({
             </Box>
             <Collapse in={!!rawOpen[c.id]}>
               <Box sx={{ pl: 2.5, pt: 0.5 }}>
-                {raw.map((f, i) => <FieldDiff key={i} field={f} />)}
+                {withKeys(raw, fieldKey).map(({ key, item }) => <FieldDiff key={key} field={item} />)}
               </Box>
             </Collapse>
           </>
@@ -493,7 +494,7 @@ export default function ChangeJournal({
           size='small'
           placeholder={t('changes.search')}
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => filterSearch(e.target.value)}
           slotProps={{
             input: {
               startAdornment: (
@@ -510,7 +511,7 @@ export default function ChangeJournal({
             select
             size='small'
             value={family}
-            onChange={e => setFamily(e.target.value as Family | '')}
+            onChange={e => filterFamily(e.target.value as Family | '')}
             slotProps={{ select: { displayEmpty: true } }}
             sx={{ minWidth: 170, ...SMALL_SELECT_SX }}
           >
@@ -523,7 +524,7 @@ export default function ChangeJournal({
             select
             size='small'
             value={resourceType}
-            onChange={e => setResourceType(e.target.value)}
+            onChange={e => filterResourceType(e.target.value)}
             slotProps={{ select: { displayEmpty: true } }}
             sx={{ minWidth: 160, ...SMALL_SELECT_SX }}
           >
@@ -536,7 +537,7 @@ export default function ChangeJournal({
             select
             size='small'
             value={user}
-            onChange={e => setUser(e.target.value)}
+            onChange={e => filterUser(e.target.value)}
             slotProps={{ select: { displayEmpty: true } }}
             sx={{ minWidth: 160, ...SMALL_SELECT_SX }}
           >
@@ -556,11 +557,11 @@ export default function ChangeJournal({
           <ActivityTimeline
             buckets={buckets}
             period={period}
-            onPeriod={setPeriod}
+            onPeriod={filterPeriod}
             selected={slot?.from ?? null}
-            onSelect={setSlot}
+            onSelect={filterSlot}
             family={family}
-            onFamily={f => setFamily(family === f ? '' : f)}
+            onFamily={f => filterFamily(family === f ? '' : f)}
             summary={{ changes: base.length, resources: new Set(base.map(c => `${c.connectionId}|${c.resourceType}|${c.resourceId}`)).size }}
           />
         </Box>
@@ -579,8 +580,8 @@ export default function ChangeJournal({
             whiteSpace: 'nowrap'
           }}
         >
-          {headers.map((h, i) => (
-            <Typography key={i} variant='caption' sx={{ fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase', opacity: 0.6 }}>
+          {headers.map(h => (
+            <Typography key={h || 'expand'} variant='caption' sx={{ fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase', opacity: 0.6 }}>
               {h}
             </Typography>
           ))}

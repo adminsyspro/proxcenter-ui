@@ -9,6 +9,7 @@ import { Box, Collapse, Typography } from '@mui/material'
 
 import { useDescribeFormat, useFactLabel } from '@/components/changes/FactLine'
 import { describeGrouped } from '@/lib/changes/describe'
+import { factKey, fieldKey, withKeys } from '@/lib/changes/keys'
 import type { DiffFact, FactGroup } from '@/lib/changes/describe'
 import type { ChangeFieldDiff } from '@/lib/changes/csv'
 
@@ -23,7 +24,7 @@ const GROUP_ICONS: Record<FactGroup, string> = {
 }
 
 /** One raw Proxmox config line, old struck through above new. */
-export function FieldDiff({ field }: { field: { field?: string; oldValue?: string | null; newValue?: string | null } }) {
+export function FieldDiff({ field }: Readonly<{ field: { field?: string; oldValue?: string | null; newValue?: string | null } }>) {
   return (
     <Box sx={{ py: 0.5 }}>
       <Typography
@@ -78,7 +79,7 @@ interface ChangeDetailsProps {
  * guest (general, CPU and memory, disks, network...), the raw config lines
  * folded underneath.
  */
-export default function ChangeDetails({ fields, showRaw = true, side = 'diff' }: ChangeDetailsProps) {
+export default function ChangeDetails({ fields, showRaw = true, side = 'diff' }: Readonly<ChangeDetailsProps>) {
   const t = useTranslations()
   const fmt = useDescribeFormat()
   const name = useFactLabel()
@@ -238,7 +239,7 @@ export default function ChangeDetails({ fields, showRaw = true, side = 'diff' }:
                   {t(`changes.group.${g.group}`)}
                 </Typography>
               </Box>
-              {g.facts.map((f, i) => <Fragment key={i}>{row(f)}</Fragment>)}
+              {withKeys(g.facts, factKey).map(({ key, item }) => <Fragment key={key}>{row(item)}</Fragment>)}
             </Fragment>
           ))}
         </Box>
@@ -259,7 +260,7 @@ export default function ChangeDetails({ fields, showRaw = true, side = 'diff' }:
           </Box>
           <Collapse in={rawOpen} unmountOnExit>
             <Box sx={{ pl: 2.5, pt: 0.5 }}>
-              {raw.map((f, i) => <FieldDiff key={i} field={f} />)}
+              {withKeys(raw, fieldKey).map(({ key, item }) => <FieldDiff key={key} field={item} />)}
             </Box>
           </Collapse>
         </Box>

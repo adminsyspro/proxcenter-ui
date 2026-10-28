@@ -74,6 +74,13 @@ function RunTaskDetail({ connectionId, task, days }) {
   )
 }
 
+/**
+ * @param {{
+ *   open: boolean, onClose: () => void, connectionId: string, title?: string | null, subtitle?: string | null,
+ *   runs?: import('@/lib/backups/vzdumpRuns').RunSummary[], focusUpid?: string | null, days?: number,
+ *   unreachableNodes?: string[], truncatedNodes?: string[],
+ * }} props
+ */
 export default function BackupJobRunsDrawer({
   open, onClose, connectionId, title, subtitle, runs = [], focusUpid = null, days = 30, unreachableNodes = [],
   truncatedNodes = [],

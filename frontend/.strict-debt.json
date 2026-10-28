@@ -413,7 +413,6 @@
     "src/app/(dashboard)/operations/backups/BackupDetailDialog.jsx",
     "src/app/(dashboard)/operations/backups/BackupGroupsTable.jsx",
     "src/app/(dashboard)/operations/backups/BackupJobRunsDrawer.jsx",
-    "src/app/(dashboard)/operations/backups/BackupJobsTabs.jsx",
     "src/app/(dashboard)/operations/backups/BackupSchedulePicker.jsx",
     "src/app/(dashboard)/operations/backups/BackupTrendsChart.jsx",
     "src/app/(dashboard)/operations/backups/BackupTypeIcon.jsx",

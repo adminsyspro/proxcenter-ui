@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useTranslations, useLocale } from 'next-intl'
 import { getDateLocale } from '@/lib/i18n/date'
 
@@ -9,6 +10,8 @@ import {
   Chip,
   Collapse,
   IconButton,
+  InputAdornment,
+  InputBase,
   LinearProgress,
   Paper,
   Skeleton,
@@ -30,6 +33,7 @@ import { useRefreshInterval } from '@/hooks/useRefreshInterval'
 import { useLicense } from '@/contexts/LicenseContext'
 import { type MergedPCTask } from '@/lib/tasks/mergeSharedTasks'
 import { mergeTaskbarRows } from '@/lib/tasks/orchestratorTaskRows'
+import { formatTaskDuration } from '@/lib/tasks/archive'
 import TaskDetailDialog from './TaskDetailDialog'
 import SharedTaskDetailDialog from '@/components/SharedTaskDetailDialog'
 import JobDetailDialog from '@/components/tasks/JobDetailDialog'
@@ -72,6 +76,7 @@ interface TaskEvent {
   startTime: string
   endTime: string | null
   duration: string
+  durationSec: number | null
   node: string
   user: string
   description: string
@@ -167,6 +172,28 @@ function formatDateTime(value: Date | string | null, dateLocale: string): string
   } catch {
     return String(value)
   }
+}
+
+function pcTaskIcon(task: MergedPCTask): string {
+  if (task.icon) return task.icon
+  if (task.type === 'upload') return 'ri-upload-2-line'
+  if (task.type === 'download') return 'ri-download-2-line'
+
+  return 'ri-settings-3-line'
+}
+
+function pcTaskStatusLabel(task: MergedPCTask, t: (key: string) => string): string {
+  if (task.status === 'running') return t('tasks.status.running')
+  if (task.status === 'cancelled' || task.rawStatus === 'cancelled') return t('tasks.status.cancelled')
+
+  return task.status === 'done' ? 'Done' : 'Error'
+}
+
+function pcTaskStatusColor(task: MergedPCTask): 'primary' | 'success' | 'default' | 'error' {
+  if (task.status === 'running') return 'primary'
+  if (task.status === 'done') return 'success'
+
+  return task.status === 'cancelled' ? 'default' : 'error'
 }
 
 // ============================================
@@ -346,6 +373,7 @@ export default function TasksFooter({
         startTime: e.ts,
         endTime: e.endTs,
         duration: e.duration,
+        durationSec: typeof e.durationSec === 'number' ? e.durationSec : null,
         node: e.node,
         user: e.user,
         description: e.typeLabel || e.message,
@@ -369,6 +397,43 @@ export default function TasksFooter({
       }),
     [tasks]
   )
+
+  // Search over the rows of the open tab (#1225), applied as the operator types.
+  const [taskQuery, setTaskQuery] = useState('')
+  const query = taskQuery.trim().toLowerCase()
+
+  const filteredTasks: TaskEvent[] = useMemo(
+    () =>
+      query
+        ? sortedTasks.filter(task =>
+          [task.description, formatTaskType(task.type), task.type, task.node, task.user, task.entity, task.entityName, task.status, task.connectionName]
+            .some(v => v?.toLowerCase().includes(query)))
+        : sortedTasks,
+    // formatTaskType only depends on the locale's messages, carried by t.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sortedTasks, query, t]
+  )
+
+  const filteredPcTasks: MergedPCTask[] = useMemo(
+    () =>
+      query
+        ? mergedPcTasks.filter(task =>
+          [task.label, task.detail, task.startedByName].some(v => v?.toLowerCase().includes(query)))
+        : mergedPcTasks,
+    [mergedPcTasks, query]
+  )
+
+  const clickPcTask = (task: MergedPCTask) => {
+    // A row backed by a Task Center job opens its dialog on double-click, like
+    // the Proxmox tab: nothing to do on a single click. The others keep their
+    // own behaviour.
+    if (task.jobId && jobsById.has(task.jobId)) return
+    if (task.shared) return void setDetailJobId(task.jobId ?? task.id.replace(/^migration-/, ''))
+    // The migrate dialog that owns this row only exists on the inventory page.
+    // Anywhere else nothing reopens it, so show the job's detail, which carries
+    // the same cutover and cancel controls.
+    if (!restoreTask(task.id) && task.id.startsWith('migration-')) setDetailJobId(task.id.replace(/^migration-/, ''))
+  }
 
   // State - initialize with defaults, then hydrate from localStorage
   const [expanded, setExpanded] = useState(defaultExpanded)
@@ -575,6 +640,20 @@ export default function TasksFooter({
       renderCell: (params) => (
         <Typography variant="caption" noWrap>
           {formatDateTime(params.value, dateLocale)}
+        </Typography>
+      )
+    },
+    {
+      // Same reading as the task archive: "5s", "2m 5s", "1h 3m".
+      field: 'durationSec',
+      headerName: t('tasks.columns.duration'),
+      width: 100,
+      type: 'number',
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: (params) => (
+        <Typography variant="caption" noWrap>
+          {params.value === null || params.value === undefined ? '—' : formatTaskDuration(params.value)}
         </Typography>
       )
     },
@@ -877,11 +956,56 @@ export default function TasksFooter({
                 )}
               </Box>
             </Box>
+            {/* Search: a click or a key in the field must not toggle the panel. */}
+            <InputBase
+              value={taskQuery}
+              onChange={(e) => {
+                setTaskQuery(e.target.value)
+                if (!expanded) setExpanded(true)
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                e.stopPropagation()
+                if (e.key === 'Escape') setTaskQuery('')
+              }}
+              placeholder={t('tasks.search')}
+              inputProps={{ 'aria-label': t('tasks.search') }}
+              startAdornment={
+                <InputAdornment position="start" sx={{ color: 'inherit', mr: 0.5 }}>
+                  <i className="ri-search-line" style={{ fontSize: 14, opacity: 0.6 }} />
+                </InputAdornment>
+              }
+              endAdornment={taskQuery ? (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    aria-label={t('tasks.clearSearch')}
+                    onClick={(e) => { e.stopPropagation(); setTaskQuery('') }}
+                    sx={{ p: 0.25 }}
+                  >
+                    <i className="ri-close-line" style={{ fontSize: 14 }} />
+                  </IconButton>
+                </InputAdornment>
+              ) : null}
+              sx={{
+                width: 260,
+                // Next to the Proxmox | ProxCenter toggle, same height (22px).
+                ml: '-6px',
+                px: 1,
+                height: 22,
+                fontSize: '0.75rem',
+                color: 'inherit',
+                borderRadius: 1,
+                border: '1px solid rgba(231,227,252,0.15)',
+                bgcolor: 'rgba(231,227,252,0.04)',
+                '&.Mui-focused': { borderColor: 'rgba(231,227,252,0.4)' },
+              }}
+            />
             {activeTab === 'proxmox' && (
               <>
                 <Chip
                   size="small"
-                  label={tasks.length}
+                  label={query ? `${filteredTasks.length} / ${tasks.length}` : tasks.length}
                   sx={{
                     height: 18,
                     fontSize: '0.7rem',
@@ -922,7 +1046,7 @@ export default function TasksFooter({
             {activeTab === 'proxcenter' && mergedPcTasks.length > 0 && (
               <Chip
                 size="small"
-                label={mergedPcTasks.length}
+                label={query ? `${filteredPcTasks.length} / ${mergedPcTasks.length}` : mergedPcTasks.length}
                 sx={{
                   height: 18,
                   fontSize: '0.7rem',
@@ -935,6 +1059,20 @@ export default function TasksFooter({
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            {/* This panel shows the latest tasks only; the archive has the node history (#1225). */}
+            {hasPermission('events.view') && (
+              <Tooltip title={t('tasks.openArchive')}>
+                <IconButton
+                  size="small"
+                  component={Link}
+                  href="/operations/events?view=archive"
+                  aria-label={t('tasks.openArchive')}
+                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                >
+                  <i className="ri-history-line" style={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            )}
             <Tooltip title={t('tasks.refresh')}>
               <IconButton
                 size="small"
@@ -967,22 +1105,11 @@ export default function TasksFooter({
                 </Box>
               ) : (
                 <>
-                  {mergedPcTasks.map((task) => (
+                  {filteredPcTasks.map((task) => (
                     <Box
                       key={task.id}
                       onDoubleClick={() => openJobDetail(task)}
-                      onClick={() => {
-                        // A row backed by a Task Center job opens its dialog on
-                        // double-click, like the Proxmox tab: nothing to do on a
-                        // single click. The others keep their own behaviour.
-                        if (task.jobId && jobsById.has(task.jobId)) return
-                        if (task.shared) return void setDetailJobId(task.jobId ?? task.id.replace(/^migration-/, ''))
-                        // The migrate dialog that owns this row only exists on
-                        // the inventory page. Anywhere else nothing reopens it,
-                        // so show the job's detail, which carries the same
-                        // cutover and cancel controls.
-                        if (!restoreTask(task.id) && task.id.startsWith('migration-')) setDetailJobId(task.id.replace(/^migration-/, ''))
-                      }}
+                      onClick={() => clickPcTask(task)}
                       sx={{
                         // Same row height as the compact DataGrid of the
                         // Proxmox tab (36px), so both tabs read as one list.
@@ -994,15 +1121,7 @@ export default function TasksFooter({
                       }}
                     >
                       {/* Icon */}
-                      <i
-                        className={
-                          task.icon ? task.icon :
-                          task.type === 'upload' ? 'ri-upload-2-line' :
-                          task.type === 'download' ? 'ri-download-2-line' :
-                          'ri-settings-3-line'
-                        }
-                        style={{ fontSize: 16, opacity: 0.6, flexShrink: 0 }}
-                      />
+                      <i className={pcTaskIcon(task)} style={{ fontSize: 16, opacity: 0.6, flexShrink: 0 }} />
                       {/* Label, detail and initiator on ONE line: stacked
                           Typographies made every row two or three lines tall. */}
                       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1040,13 +1159,8 @@ export default function TasksFooter({
                       {/* Status */}
                       <Chip
                         size="small"
-                        label={
-                          task.status === 'running' ? t('tasks.status.running')
-                            : task.status === 'cancelled' || task.rawStatus === 'cancelled' ? t('tasks.status.cancelled')
-                            : task.status === 'done' ? 'Done'
-                            : 'Error'
-                        }
-                        color={task.status === 'running' ? 'primary' : task.status === 'done' ? 'success' : task.status === 'cancelled' ? 'default' : 'error'}
+                        label={pcTaskStatusLabel(task, t)}
+                        color={pcTaskStatusColor(task)}
                         variant={task.status === 'running' ? 'outlined' : 'filled'}
                         icon={task.status === 'running' ? (
                           <i className="ri-loader-4-line" style={{ fontSize: 12, animation: 'spin 1s linear infinite' }} />
@@ -1090,7 +1204,7 @@ export default function TasksFooter({
               </Box>
             ) : (
               <DataGrid
-                rows={sortedTasks}
+                rows={filteredTasks}
                 columns={columns}
                 density="compact"
                 disableRowSelectionOnClick

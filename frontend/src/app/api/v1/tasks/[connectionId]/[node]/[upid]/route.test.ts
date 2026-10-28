@@ -712,3 +712,46 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC per
     expect(executeSSHMock).toHaveBeenCalledWith('conn-1', expect.objectContaining({ host: '10.0.0.2' }), 'qm unlock 100')
   })
 })
+
+describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: duration of a finished task (#1225)', () => {
+  // PVE's task status has no end time: the route reads it from the node's task list.
+  function finishedWithoutEndtime(listed: any) {
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (path.includes('/status')) return Promise.resolve({ status: 'stopped', exitstatus: 'OK', type: 'qmigrate', id: '100', starttime: 1000 })
+      if (path.includes('/tasks?source=archive')) return listed
+      if (path.includes('/log')) return Promise.resolve([])
+      if (path.includes('/config')) return Promise.resolve(configResult)
+      return Promise.resolve(undefined)
+    })
+  }
+
+  async function body() {
+    const { req, params } = ctx()
+
+    return readJson<any>(await GET(req, { params }))
+  }
+
+  it('takes the end time from the task list, not now', async () => {
+    finishedWithoutEndtime(Promise.resolve([{ upid: 'UPID:other', endtime: 9999 }, { upid: UPID, endtime: 1005 }]))
+
+    expect(await body()).toMatchObject({ endtime: 1005, durationSec: 5 })
+    expect(pveFetchMock).toHaveBeenCalledWith(CONN, `/nodes/${NODE}/tasks?source=archive&since=1000&until=1000&limit=50`)
+  })
+
+  it('falls back to now when the task list cannot say', async () => {
+    finishedWithoutEndtime(Promise.reject(new Error('down')))
+    const now = Math.floor(Date.now() / 1000)
+
+    const b = await body()
+
+    expect(b.endtime).toBeNull()
+    expect(b.durationSec).toBeGreaterThanOrEqual(now - 1000)
+  })
+
+  it('does not query the list when the status already has an end time', async () => {
+    const { req, params } = ctx()
+
+    expect(await readJson<any>(await GET(req, { params }))).toMatchObject({ durationSec: 50 })
+    expect(pveFetchMock.mock.calls.some((c: any[]) => String(c[1]).includes('source=archive'))).toBe(false)
+  })
+})

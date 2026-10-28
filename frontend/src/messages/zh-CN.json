@@ -5747,7 +5747,8 @@
       "target": "目标",
       "user": "用户",
       "description": "描述",
-      "status": "状态"
+      "status": "状态",
+      "duration": "耗时"
     },
     "status": {
       "running": "进行中",
@@ -5864,7 +5865,10 @@
     "viewLog": "查看日志",
     "bulkMigration": "批量迁移（{count} 台虚拟机）",
     "bulkMigrationPaused": "已暂停",
-    "openBulkMigration": "打开此批量迁移的进度"
+    "openBulkMigration": "打开此批量迁移的进度",
+    "openArchive": "打开任务归档",
+    "search": "搜索任务",
+    "clearSearch": "清除搜索"
   },
   "events": {
     "title": "事件",
@@ -5906,7 +5910,18 @@
       "srvreload": "重载服务",
       "srvrestart": "重启服务",
       "cephcreateosd": "创建 Ceph OSD",
-      "cephdestroyosd": "销毁 Ceph OSD"
+      "cephdestroyosd": "销毁 Ceph OSD",
+      "qmigrate": "虚拟机迁移",
+      "hastart": "HA 启动",
+      "hastop": "HA 停止",
+      "hamigrate": "HA 迁移",
+      "harelocate": "HA 重定位",
+      "qmrestore": "虚拟机恢复",
+      "vzrestore": "容器恢复",
+      "vzsnapshot": "容器快照",
+      "vzdelsnapshot": "删除容器快照",
+      "vzrollback": "容器回滚",
+      "qmreset": "虚拟机重置"
     }
   },
   "monitoring": {
@@ -7935,7 +7950,46 @@
     "tasks": "任务",
     "logs": "日志",
     "allConnections": "所有连接",
-    "eventsCount": "{count} 个事件"
+    "eventsCount": "{count} 个事件",
+    "archive": {
+      "viewRecent": "最近",
+      "viewArchive": "归档",
+      "period": "时间段",
+      "periodHour": "最近 1 小时",
+      "periodDay": "最近 24 小时",
+      "periodWeek": "最近 7 天",
+      "periodMonth": "最近 30 天",
+      "periodCustom": "自定义范围",
+      "from": "从",
+      "to": "至",
+      "cluster": "集群",
+      "node": "节点",
+      "allNodes": "所有节点",
+      "status": "状态",
+      "statusAll": "所有状态",
+      "statusOk": "成功",
+      "statusWarning": "警告",
+      "statusError": "失败",
+      "vmid": "VM ID",
+      "search": "搜索类型、虚拟机、节点、用户",
+      "families": "任务类型",
+      "familyAll": "全部",
+      "familyPower": "启动 / 停止",
+      "familyMigration": "迁移",
+      "familyHa": "HA",
+      "familyBackup": "备份 / 恢复",
+      "familySnapshot": "快照",
+      "familyOther": "其他",
+      "total": "任务",
+      "nodeLevel": "节点任务",
+      "noMatch": "没有符合这些筛选条件的任务",
+      "noMatchDesc": "请扩大时间段或任务类型。",
+      "unavailable": "{nodes} 的归档不可用",
+      "truncated": "此时间段内某个节点的任务超过 {limit} 个，请缩小时间段以查看全部。",
+      "displayedRows": "第 {from}-{to} 条，共 {count} 条",
+      "familyNone": "无",
+      "familiesCount": "{count} 种类型"
+    }
   },
   "rbacPage": {
     "scope": "范围",

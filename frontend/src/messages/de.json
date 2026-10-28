@@ -5724,7 +5724,8 @@
       "target": "Ziel",
       "user": "Benutzer",
       "description": "Beschreibung",
-      "status": "Status"
+      "status": "Status",
+      "duration": "Dauer"
     },
     "status": {
       "running": "In Bearbeitung",
@@ -5841,7 +5842,10 @@
     "viewLog": "Protokoll anzeigen",
     "bulkMigration": "Massenmigration ({count} VMs)",
     "bulkMigrationPaused": "Pausiert",
-    "openBulkMigration": "Verlauf dieser Massenmigration öffnen"
+    "openBulkMigration": "Verlauf dieser Massenmigration öffnen",
+    "openArchive": "Aufgabenarchiv öffnen",
+    "search": "Aufgaben suchen",
+    "clearSearch": "Suche löschen"
   },
   "events": {
     "title": "Ereignisse",
@@ -5883,7 +5887,18 @@
       "srvreload": "Dienst neu laden",
       "srvrestart": "Dienst neustarten",
       "cephcreateosd": "erstellen Ceph OSD",
-      "cephdestroyosd": "Ceph-OSD zerstören"
+      "cephdestroyosd": "Ceph-OSD zerstören",
+      "qmigrate": "VM-Migration",
+      "hastart": "HA-Start",
+      "hastop": "HA-Stopp",
+      "hamigrate": "HA-Migration",
+      "harelocate": "HA-Verlagerung",
+      "qmrestore": "VM-Wiederherstellung",
+      "vzrestore": "CT-Wiederherstellung",
+      "vzsnapshot": "CT-Snapshot",
+      "vzdelsnapshot": "CT-Snapshot löschen",
+      "vzrollback": "CT-Rollback",
+      "qmreset": "VM-Reset"
     }
   },
   "monitoring": {
@@ -7907,7 +7922,46 @@
     "tasks": "Aufgaben",
     "logs": "Protokolle",
     "allConnections": "All Verbindungen",
-    "eventsCount": "{count} Ereignis(se)"
+    "eventsCount": "{count} Ereignis(se)",
+    "archive": {
+      "viewRecent": "Aktuell",
+      "viewArchive": "Archiv",
+      "period": "Zeitraum",
+      "periodHour": "Letzte Stunde",
+      "periodDay": "Letzte 24 Stunden",
+      "periodWeek": "Letzte 7 Tage",
+      "periodMonth": "Letzte 30 Tage",
+      "periodCustom": "Benutzerdefiniert",
+      "from": "Von",
+      "to": "Bis",
+      "cluster": "Cluster",
+      "node": "Knoten",
+      "allNodes": "Alle Knoten",
+      "status": "Status",
+      "statusAll": "Alle Status",
+      "statusOk": "Erfolgreich",
+      "statusWarning": "Warnungen",
+      "statusError": "Fehlgeschlagen",
+      "vmid": "VM-ID",
+      "search": "Typ, Gast, Knoten, Benutzer suchen",
+      "families": "Aufgabentypen",
+      "familyAll": "Alle",
+      "familyPower": "Start / Stopp",
+      "familyMigration": "Migration",
+      "familyHa": "HA",
+      "familyBackup": "Backup / Wiederherstellung",
+      "familySnapshot": "Snapshot",
+      "familyOther": "Sonstige",
+      "total": "Aufgaben",
+      "nodeLevel": "Knotenaufgabe",
+      "noMatch": "Keine Aufgabe entspricht diesen Filtern",
+      "noMatchDesc": "Erweitern Sie den Zeitraum oder die Aufgabentypen.",
+      "unavailable": "Archiv nicht verfügbar für {nodes}",
+      "truncated": "Ein Knoten hat in diesem Zeitraum mehr als {limit} Aufgaben, verkleinern Sie ihn, um alle zu sehen.",
+      "displayedRows": "{from}-{to} von {count}",
+      "familyNone": "Keine",
+      "familiesCount": "{count} Typen"
+    }
   },
   "rbacPage": {
     "scope": "Bereich",

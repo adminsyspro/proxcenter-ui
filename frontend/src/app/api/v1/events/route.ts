@@ -8,7 +8,8 @@ import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rb
 import { filterCandidateConnections, isFlatRecordVisible } from '@/lib/rbac/infraScope'
 import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from '@/lib/tenant/infraScope'
 import { getVdcVmidsByConnection } from "@/lib/alerts/vdcVmids"
-import { extractTaskVmid } from "@/lib/tasks/scope"
+import { scopeConnectionTasks } from "@/lib/tasks/scopeTasks"
+import { formatTaskDuration } from "@/lib/tasks/archive"
 import { findTaskInitiators } from "@/lib/audit/taskInitiators"
 import { getPrincipal } from "@/lib/auth/principal"
 
@@ -36,14 +37,6 @@ type ProxmoxClusterLog = {
   tag: string
   pid?: number
   user?: string
-}
-
-function formatUptime(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
-  
-return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
 }
 
 function getTaskLevel(status?: string): 'info' | 'warning' | 'error' {
@@ -168,31 +161,13 @@ export async function GET(req: Request) {
               }
             } catch {}
 
-            // Tenant vDC scope: drop tasks that ran on a node outside the
-            // tenant's authorised set. Super admin keeps the full list.
-            const allowedNodes = vdcScope?.nodesByConnection.get(conn.id)
-            if (allowedNodes) {
-              tasks = tasks.filter(t => !t.node || allowedNodes.has(t.node))
-            }
-            // Pool-membership filter: on a shared-node cluster the node
-            // filter above is a no-op, so apply vmid → vDC pool isolation.
-            // VM tasks must target a tenant vmid; non-VM tasks (cluster /
-            // node level, e.g. ceph, package updates) are provider-only.
-            const allowedVmids = vdcVmids?.get(conn.id)
-            if (allowedVmids) {
-              tasks = tasks.filter(t => {
-                const vmid = extractTaskVmid(t.id)
-                if (!vmid) return false
-                return allowedVmids.has(vmid)
-              })
-            }
-            // RBAC infra scope: only tasks that ran on a granted node, or that
-            // target a directly granted guest, survive.
-            if (rbacScope) {
-              tasks = tasks.filter(t =>
-                isFlatRecordVisible(rbacScope, { connId: conn.id, node: t.node, vmid: extractTaskVmid(t.id) }),
-              )
-            }
+            // Tenant vDC nodes and pools, then the caller's RBAC infra scope.
+            tasks = scopeConnectionTasks(tasks, {
+              connId: conn.id,
+              allowedNodes: vdcScope?.nodesByConnection.get(conn.id),
+              allowedVmids: vdcVmids?.get(conn.id),
+              rbacScope,
+            })
 
             // Traiter les tâches - trier par date décroissante d'abord
             tasks.sort((a, b) => (b.starttime || 0) - (a.starttime || 0))
@@ -222,7 +197,7 @@ export async function GET(req: Request) {
                 node: task.node,
                 user: task.user,
                 status: task.status || 'running',
-                duration: formatUptime(duration),
+                duration: formatTaskDuration(duration),
                 durationSec: duration,
                 message: `${task.type}${task.id ? ` (${vmName || task.id})` : ''} - ${task.status || 'running'}`,
                 connectionId: conn.id,

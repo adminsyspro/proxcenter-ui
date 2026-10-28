@@ -5743,7 +5743,8 @@
       "target": "Destino",
       "user": "Usuario",
       "description": "Descripción",
-      "status": "Estado"
+      "status": "Estado",
+      "duration": "Duración"
     },
     "status": {
       "running": "En curso",
@@ -5860,7 +5861,10 @@
     "viewLog": "Ver registro",
     "bulkMigration": "Migración masiva ({count} VM)",
     "bulkMigrationPaused": "En pausa",
-    "openBulkMigration": "Abrir el seguimiento de esta migración masiva"
+    "openBulkMigration": "Abrir el seguimiento de esta migración masiva",
+    "openArchive": "Abrir el archivo de tareas",
+    "search": "Buscar tareas",
+    "clearSearch": "Borrar la búsqueda"
   },
   "events": {
     "title": "Eventos",
@@ -5902,7 +5906,18 @@
       "srvreload": "Recargar servicio",
       "srvrestart": "Reiniciar servicio",
       "cephcreateosd": "Crear OSD de Ceph",
-      "cephdestroyosd": "Destruir OSD de Ceph"
+      "cephdestroyosd": "Destruir OSD de Ceph",
+      "qmigrate": "Migración de VM",
+      "hastart": "Inicio HA",
+      "hastop": "Parada HA",
+      "hamigrate": "Migración HA",
+      "harelocate": "Reubicación HA",
+      "qmrestore": "Restauración de VM",
+      "vzrestore": "Restauración de CT",
+      "vzsnapshot": "Snapshot de CT",
+      "vzdelsnapshot": "Eliminar snapshot de CT",
+      "vzrollback": "Rollback de CT",
+      "qmreset": "Reinicio forzado de VM"
     }
   },
   "monitoring": {
@@ -7931,7 +7946,46 @@
     "tasks": "Tareas",
     "logs": "Logs",
     "allConnections": "Todas las conexiones",
-    "eventsCount": "{count} evento(s)"
+    "eventsCount": "{count} evento(s)",
+    "archive": {
+      "viewRecent": "Recientes",
+      "viewArchive": "Archivo",
+      "period": "Periodo",
+      "periodHour": "Última hora",
+      "periodDay": "Últimas 24 horas",
+      "periodWeek": "Últimos 7 días",
+      "periodMonth": "Últimos 30 días",
+      "periodCustom": "Rango personalizado",
+      "from": "Desde",
+      "to": "Hasta",
+      "cluster": "Clúster",
+      "node": "Nodo",
+      "allNodes": "Todos los nodos",
+      "status": "Estado",
+      "statusAll": "Todos los estados",
+      "statusOk": "Correctas",
+      "statusWarning": "Advertencias",
+      "statusError": "Fallidas",
+      "vmid": "ID de VM",
+      "search": "Buscar tipo, invitado, nodo, usuario",
+      "families": "Tipos de tarea",
+      "familyAll": "Todas",
+      "familyPower": "Inicio / parada",
+      "familyMigration": "Migración",
+      "familyHa": "HA",
+      "familyBackup": "Copia / restauración",
+      "familySnapshot": "Snapshot",
+      "familyOther": "Otras",
+      "total": "Tareas",
+      "nodeLevel": "Tarea del nodo",
+      "noMatch": "Ninguna tarea coincide con estos filtros",
+      "noMatchDesc": "Amplíe el periodo o los tipos de tarea.",
+      "unavailable": "Archivo no disponible para {nodes}",
+      "truncated": "Un nodo tiene más de {limit} tareas en este periodo, redúzcalo para verlas todas.",
+      "displayedRows": "{from}-{to} de {count}",
+      "familyNone": "Ninguno",
+      "familiesCount": "{count} tipos"
+    }
   },
   "rbacPage": {
     "scope": "Ámbito",

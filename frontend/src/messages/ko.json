@@ -5743,7 +5743,8 @@
       "target": "대상",
       "user": "사용자",
       "description": "설명",
-      "status": "상태"
+      "status": "상태",
+      "duration": "소요 시간"
     },
     "status": {
       "running": "진행 중",
@@ -5860,7 +5861,10 @@
     "viewLog": "로그 보기",
     "bulkMigration": "일괄 마이그레이션 (VM {count}개)",
     "bulkMigrationPaused": "일시 중지됨",
-    "openBulkMigration": "이 일괄 마이그레이션의 진행 상황 열기"
+    "openBulkMigration": "이 일괄 마이그레이션의 진행 상황 열기",
+    "openArchive": "작업 보관 기록 열기",
+    "search": "작업 검색",
+    "clearSearch": "검색 지우기"
   },
   "events": {
     "title": "이벤트",
@@ -5902,7 +5906,18 @@
       "srvreload": "서비스 다시 로드",
       "srvrestart": "서비스 재시작",
       "cephcreateosd": "Ceph OSD 생성",
-      "cephdestroyosd": "Ceph OSD 삭제"
+      "cephdestroyosd": "Ceph OSD 삭제",
+      "qmigrate": "VM 마이그레이션",
+      "hastart": "HA 시작",
+      "hastop": "HA 중지",
+      "hamigrate": "HA 마이그레이션",
+      "harelocate": "HA 재배치",
+      "qmrestore": "VM 복원",
+      "vzrestore": "CT 복원",
+      "vzsnapshot": "CT 스냅샷",
+      "vzdelsnapshot": "CT 스냅샷 삭제",
+      "vzrollback": "CT 롤백",
+      "qmreset": "VM 리셋"
     }
   },
   "monitoring": {
@@ -7931,7 +7946,46 @@
     "tasks": "작업",
     "logs": "로그",
     "allConnections": "모든 연결",
-    "eventsCount": "이벤트 {count}건"
+    "eventsCount": "이벤트 {count}건",
+    "archive": {
+      "viewRecent": "최근",
+      "viewArchive": "보관",
+      "period": "기간",
+      "periodHour": "최근 1시간",
+      "periodDay": "최근 24시간",
+      "periodWeek": "최근 7일",
+      "periodMonth": "최근 30일",
+      "periodCustom": "사용자 지정 범위",
+      "from": "시작",
+      "to": "종료",
+      "cluster": "클러스터",
+      "node": "노드",
+      "allNodes": "모든 노드",
+      "status": "상태",
+      "statusAll": "모든 상태",
+      "statusOk": "성공",
+      "statusWarning": "경고",
+      "statusError": "실패",
+      "vmid": "VM ID",
+      "search": "유형, 게스트, 노드, 사용자 검색",
+      "families": "작업 유형",
+      "familyAll": "전체",
+      "familyPower": "시작 / 중지",
+      "familyMigration": "마이그레이션",
+      "familyHa": "HA",
+      "familyBackup": "백업 / 복원",
+      "familySnapshot": "스냅샷",
+      "familyOther": "기타",
+      "total": "작업",
+      "nodeLevel": "노드 작업",
+      "noMatch": "이 필터와 일치하는 작업이 없습니다",
+      "noMatchDesc": "기간이나 작업 유형을 넓혀 보세요.",
+      "unavailable": "{nodes}의 보관 기록을 사용할 수 없습니다",
+      "truncated": "이 기간에 한 노드의 작업이 {limit}개를 넘습니다. 모두 보려면 기간을 줄이세요.",
+      "displayedRows": "{count}개 중 {from}-{to}",
+      "familyNone": "없음",
+      "familiesCount": "{count}개 유형"
+    }
   },
   "rbacPage": {
     "scope": "범위",

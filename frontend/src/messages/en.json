@@ -5743,7 +5743,8 @@
       "target": "Target",
       "user": "User",
       "description": "Description",
-      "status": "Status"
+      "status": "Status",
+      "duration": "Duration"
     },
     "status": {
       "running": "In progress",
@@ -5860,7 +5861,10 @@
     "viewLog": "View log",
     "bulkMigration": "Bulk migration ({count} VMs)",
     "bulkMigrationPaused": "Paused",
-    "openBulkMigration": "Open the follow-up of this bulk migration"
+    "openBulkMigration": "Open the follow-up of this bulk migration",
+    "openArchive": "Open the task archive",
+    "search": "Search tasks",
+    "clearSearch": "Clear the search"
   },
   "events": {
     "title": "Events",
@@ -5902,7 +5906,18 @@
       "srvreload": "Reload Service",
       "srvrestart": "Restart Service",
       "cephcreateosd": "Create Ceph OSD",
-      "cephdestroyosd": "Destroy Ceph OSD"
+      "cephdestroyosd": "Destroy Ceph OSD",
+      "qmigrate": "VM Migrate",
+      "hastart": "HA Start",
+      "hastop": "HA Stop",
+      "hamigrate": "HA Migrate",
+      "harelocate": "HA Relocate",
+      "qmrestore": "VM Restore",
+      "vzrestore": "CT Restore",
+      "vzsnapshot": "CT Snapshot",
+      "vzdelsnapshot": "CT Delete Snapshot",
+      "vzrollback": "CT Rollback",
+      "qmreset": "VM Reset"
     }
   },
   "monitoring": {
@@ -7931,7 +7946,46 @@
     "tasks": "Tasks",
     "logs": "Logs",
     "allConnections": "All connections",
-    "eventsCount": "{count} event(s)"
+    "eventsCount": "{count} event(s)",
+    "archive": {
+      "viewRecent": "Recent",
+      "viewArchive": "Archive",
+      "period": "Period",
+      "periodHour": "Last hour",
+      "periodDay": "Last 24 hours",
+      "periodWeek": "Last 7 days",
+      "periodMonth": "Last 30 days",
+      "periodCustom": "Custom range",
+      "from": "From",
+      "to": "To",
+      "cluster": "Cluster",
+      "node": "Node",
+      "allNodes": "All nodes",
+      "status": "Status",
+      "statusAll": "All statuses",
+      "statusOk": "Succeeded",
+      "statusWarning": "Warnings",
+      "statusError": "Failed",
+      "vmid": "VM ID",
+      "search": "Search type, guest, node, user",
+      "families": "Task types",
+      "familyAll": "All",
+      "familyPower": "Start / stop",
+      "familyMigration": "Migration",
+      "familyHa": "HA",
+      "familyBackup": "Backup / restore",
+      "familySnapshot": "Snapshot",
+      "familyOther": "Other",
+      "total": "Tasks",
+      "nodeLevel": "Node task",
+      "noMatch": "No task matches these filters",
+      "noMatchDesc": "Widen the period or the task types.",
+      "unavailable": "Archive unavailable for {nodes}",
+      "truncated": "A node holds more than {limit} tasks in this period, narrow it to see them all.",
+      "displayedRows": "{from}-{to} of {count}",
+      "familyNone": "None",
+      "familiesCount": "{count} types"
+    }
   },
   "rbacPage": {
     "scope": "Scope",

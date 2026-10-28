@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -17,6 +18,8 @@ import {
   Select,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
   alpha,
@@ -30,6 +33,7 @@ import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { useRefreshInterval } from '@/hooks/useRefreshInterval'
 
 import TaskDetailDialog from '@/components/TaskDetailDialog'
+import TaskArchive from '@/components/events/TaskArchive'
 import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
@@ -132,9 +136,28 @@ export default function EventsPage() {
 
   const { setPageInfo } = usePageTitle()
 
+  // Recent = the cluster feed (latest tasks and logs, polled); Archive = the
+  // task history every node keeps (#1225). Kept in the URL so it can be linked.
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const view = searchParams.get('view') === 'archive' ? 'archive' : 'recent'
+  const [archiveRefreshedAt, setArchiveRefreshedAt] = useState(0)
+
+  const setView = next => {
+    if (!next || next === view) return
+    const params = new URLSearchParams(searchParams.toString())
+
+    if (next === 'archive') params.set('view', 'archive')
+    else params.delete('view')
+    const qs = params.toString()
+
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }
+
   // SWR data fetching with configurable polling
   const eventsRefreshInterval = useRefreshInterval(30000)
-  const { data: eventsResponse, error, isLoading, mutate } = useSWRFetch('/api/v1/events?limit=500', {
+  const { data: eventsResponse, error, isLoading, mutate } = useSWRFetch(view === 'recent' ? '/api/v1/events?limit=500' : null, {
     refreshInterval: eventsRefreshInterval,
     onSuccess: (json) => {
       // Envoyer les événements à l'orchestrator pour analyse (alertes sur événements)
@@ -357,20 +380,43 @@ return { total, errors, warnings, running }
     [t]
   )
 
+  // Header Actions, shared by both views
+  const header = (
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+      <ToggleButtonGroup size='small' exclusive value={view} onChange={(_, next) => setView(next)}>
+        <ToggleButton value='recent' sx={{ gap: 0.75, px: 1.5 }}>
+          <i className='ri-pulse-line' style={{ fontSize: 16 }} />
+          {t('eventsPage.archive.viewRecent')}
+        </ToggleButton>
+        <ToggleButton value='archive' sx={{ gap: 0.75, px: 1.5 }}>
+          <i className='ri-history-line' style={{ fontSize: 16 }} />
+          {t('eventsPage.archive.viewArchive')}
+        </ToggleButton>
+      </ToggleButtonGroup>
+      <Button
+        variant='outlined'
+        size='small'
+        startIcon={<i className='ri-refresh-line' />}
+        onClick={() => (view === 'archive' ? setArchiveRefreshedAt(Date.now()) : mutate())}
+        disabled={view === 'recent' && loading}
+      >
+        {t('common.refresh')}
+      </Button>
+    </Box>
+  )
+
+  if (view === 'archive') {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minHeight: 0 }}>
+        {header}
+        <TaskArchive refreshedAt={archiveRefreshedAt} />
+      </Box>
+    )
+  }
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minHeight: 0 }}>
-      {/* Header Actions */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, flexShrink: 0 }}>
-        <Button
-          variant='outlined'
-          size='small'
-          startIcon={<i className='ri-refresh-line' />}
-          onClick={() => mutate()}
-          disabled={loading}
-        >
-          {t('common.refresh')}
-        </Button>
-      </Box>
+      {header}
 
       {/* Stats */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, flexShrink: 0 }}>

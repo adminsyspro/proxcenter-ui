@@ -646,6 +646,24 @@ async function taskOutsideVdcScope(
   }
 }
 
+/**
+ * End of a finished task. PVE's task status carries no end time, so it is
+ * read from the node's task list (filtered on the start second); without it
+ * the duration of a finished task kept growing with "now".
+ */
+async function finishedTaskEndtime(connection: any, node: string, upid: string, starttime: number): Promise<number | undefined> {
+  try {
+    const tasks = await pveFetch<{ upid: string; endtime?: number }[]>(
+      connection,
+      `/nodes/${encodeURIComponent(node)}/tasks?source=archive&since=${starttime}&until=${starttime}&limit=50`
+    )
+
+    return Array.isArray(tasks) ? tasks.find(t => t.upid === upid)?.endtime : undefined
+  } catch {
+    return undefined
+  }
+}
+
 async function handler(
   req: Request,
   { params, principal }: { params: Promise<{ connectionId: string; node: string; upid: string }>; principal?: Principal }
@@ -702,7 +720,10 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
 
     const now = Math.floor(Date.now() / 1000)
     const startTime = status?.starttime || now
-    const endTime = status?.endtime || (status?.status === 'stopped' ? now : undefined)
+    const listedEnd = status?.status === 'stopped' && !status.endtime && status.starttime
+      ? await finishedTaskEndtime(connection, node, decodedUpid, status.starttime)
+      : undefined
+    const endTime = status?.endtime || listedEnd || (status?.status === 'stopped' ? now : undefined)
     const duration = endTime ? endTime - startTime : now - startTime
 
     let progressData: { progress: number; message: string; speed: string; eta: string }
@@ -783,7 +804,7 @@ return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` },
       exitstatus: status?.exitstatus || null,
       failureReason,
       starttime: status?.starttime || null,
-      endtime: status?.endtime || null,
+      endtime: status?.endtime || listedEnd || null,
       duration: formatDuration(duration),
       durationSec: duration,
       progress: progressData.progress,

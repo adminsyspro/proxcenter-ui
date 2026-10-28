@@ -3,12 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { callRoute } from "../../../../../__tests__/setup/route-test"
 import { connectionScope, nodeScope } from "@/__tests__/setup/rbacScope"
 
-const { getInfraMock, orchestratorFetchMock, rbacScopeMock, tenantConnectionIdsMock, vdcVmidsMock } = vi.hoisted(() => ({
+const { getInfraMock, orchestratorFetchMock, rbacScopeMock, tenantConnectionIdsMock } = vi.hoisted(() => ({
   getInfraMock: vi.fn(),
   orchestratorFetchMock: vi.fn(),
   rbacScopeMock: vi.fn(),
   tenantConnectionIdsMock: vi.fn(),
-  vdcVmidsMock: vi.fn(),
 }))
 
 // Keep real maskingScope; only stub getTenantInfrastructureScope
@@ -24,10 +23,6 @@ vi.mock("@/lib/tenant", () => ({
 
 vi.mock("@/lib/orchestrator/client", () => ({
   orchestratorFetch: (...a: any[]) => orchestratorFetchMock(...a),
-}))
-
-vi.mock("@/lib/alerts/vdcVmids", () => ({
-  getVdcVmidsByConnection: (...a: any[]) => vdcVmidsMock(...a),
 }))
 
 vi.mock("@/lib/rbac", () => ({
@@ -56,7 +51,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   rbacScopeMock.mockResolvedValue(null)
   tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))
-  vdcVmidsMock.mockResolvedValue(new Map([["c1", new Set(["100"])]]))
   orchestratorFetchMock.mockResolvedValue({ data: [CLUSTER_LESS, VM_OWNED, VM_NEIGHBOUR, NODE_EVENT] })
 })
 

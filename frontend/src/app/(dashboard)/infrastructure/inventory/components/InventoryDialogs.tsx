@@ -1004,7 +1004,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // is composed from the catalogue so it follows the operator's language.
   type WarmSource = { sourceVersion: string; vddkMajor?: number; minVersion: string; absoluteMin: string; blocked: boolean; warning: boolean }
   // roadmap#53: can the node reach the VMkernel adapter the copy goes through?
-  type WarmCopyReach = { address: string; ports: Record<string, boolean>; ok: boolean; error?: string }
+  type WarmCopyReach = { address: string; ports: Record<string, boolean>; ok: boolean; error?: string; vcenter?: { host: string; resolved: boolean; open: boolean } }
   const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource; copy?: WarmCopyReach; guestConversion?: GuestConversionReadiness } | null>(null)
   // Bumped after a successful automated node setup so this effect re-runs and
   // the go/no-go flips to ready without the user having to reselect the node.
@@ -1640,9 +1640,15 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
         if (copyIfacesLoading) return t('inventoryPage.esxiMigration.copyVmkLoading')
         if (!copyIfaces) return t('inventoryPage.esxiMigration.copyVmkFailed', { error: copyIfaceError || '' })
         if (warmCopyUnreachable) {
-          return warmCopyUnreachable.error
-            ? t('inventoryPage.esxiMigration.copyVmkProbeFailed', { address: warmCopyUnreachable.address, error: warmCopyUnreachable.error })
-            : t('inventoryPage.esxiMigration.copyVmkUnreachable', { address: warmCopyUnreachable.address, ports: Object.entries(warmCopyUnreachable.ports).filter(([, open]) => !open).map(([p]) => p).join(', ') })
+          if (warmCopyUnreachable.error) return t('inventoryPage.esxiMigration.copyVmkProbeFailed', { address: warmCopyUnreachable.address, error: warmCopyUnreachable.error })
+          // roadmap#175: on a vCenter source the node must also reach the vCenter on 443.
+          const vc = warmCopyUnreachable.vcenter && !warmCopyUnreachable.vcenter.open ? warmCopyUnreachable.vcenter : null
+          const vcKey = vc?.resolved ? 'inventoryPage.esxiMigration.copyVcenterUnreachable' : 'inventoryPage.esxiMigration.copyVcenterUnresolved'
+          const closed = Object.entries(warmCopyUnreachable.ports).filter(([, open]) => !open).map(([p]) => p)
+          return [
+            ...(vc ? [t(vcKey, { node: migTargetNode, host: vc.host })] : []),
+            ...(closed.length ? [t('inventoryPage.esxiMigration.copyVmkUnreachable', { address: warmCopyUnreachable.address, ports: closed.join(', ') })] : []),
+          ].join(' ')
         }
         const reach = warmPreflightCurrent?.copy?.ok && copyVnic && warmPreflightCurrent.copy.address === copyVnic.address
           ? ` ${t('inventoryPage.esxiMigration.copyVmkReachable', { node: migTargetNode, ports: Object.keys(warmPreflightCurrent.copy.ports).join(', ') })}`
@@ -1825,7 +1831,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // reach the VMkernel adapter of its source host. On Auto the server places
   // the VMs on the nodes that do; a node named explicitly that does not
   // blocks the launch. Same check as POST /batches.
-  type BulkCopyProblem = { kind: 'unreachable' | 'noNode'; node?: string; vm?: string; host: string; device: string; address: string; ports?: number[]; error?: string }
+  type BulkCopyProblem = { kind: 'unreachable' | 'noNode'; node?: string; vm?: string; host: string; device: string; address: string; ports?: number[]; error?: string; vcenter?: { host: string; resolved: boolean } }
   const [bulkCopy, setBulkCopy] = useState<{ status: 'idle' | 'checking' | 'done'; assignment: Record<string, string | null>; problems: BulkCopyProblem[]; infos: Array<{ vm: string; nodes: string[]; excluded: string[] }> }>({ status: 'idle', assignment: {}, problems: [], infos: [] })
   const bulkCopyRequest = React.useMemo(() => {
     if (!bulkMigOpen || bulkMigJobs.length > 0 || !bulkMigHostInfo || migType !== 'warm' || !migTargetConn || !migTargetNode) return null
@@ -5471,11 +5477,23 @@ return
               <Alert severity="error" data-testid="bulk-copy-error">
                 {bulkCopy.problems.map((p, i) => {
                   const where = { device: p.device, address: p.address, host: p.host }
-                  const text = p.kind === 'noNode'
-                    ? t('inventoryPage.esxiMigration.copyNoNode', { vm: p.vm ?? '', ...where })
-                    : p.error
-                      ? t('inventoryPage.esxiMigration.copyProbeFailed', { node: p.node ?? '', ...where, error: p.error })
-                      : t('inventoryPage.esxiMigration.copyUnreachable', { node: p.node ?? '', ...where, ports: (p.ports ?? []).join(' / ') })
+                  const vc = p.vcenter
+                  let text: string
+                  if (p.kind === 'noNode') {
+                    const noNodeKey = vc?.resolved ? 'inventoryPage.esxiMigration.copyNoNodeVcenterUnreachable' : 'inventoryPage.esxiMigration.copyNoNodeVcenterUnresolved'
+                    text = vc
+                      ? t(noNodeKey, { vm: p.vm ?? '', host: vc.host })
+                      : t('inventoryPage.esxiMigration.copyNoNode', { vm: p.vm ?? '', ...where })
+                  } else if (p.error) {
+                    text = t('inventoryPage.esxiMigration.copyProbeFailed', { node: p.node ?? '', ...where, error: p.error })
+                  } else {
+                    // roadmap#175: the vCenter on 443 and/or the adapter on 902.
+                    const vcKey = vc?.resolved ? 'inventoryPage.esxiMigration.copyVcenterUnreachable' : 'inventoryPage.esxiMigration.copyVcenterUnresolved'
+                    text = [
+                      ...(vc ? [t(vcKey, { node: p.node ?? '', host: vc.host })] : []),
+                      ...(p.ports?.length ? [t('inventoryPage.esxiMigration.copyUnreachable', { node: p.node ?? '', ...where, ports: p.ports.join(' / ') })] : []),
+                    ].join(' ')
+                  }
                   return <Typography key={i} variant="body2">{text}</Typography>
                 })}
               </Alert>

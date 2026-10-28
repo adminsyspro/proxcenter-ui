@@ -466,3 +466,43 @@ describe("runWarmMigration EL10 CPU level (#1000)", () => {
     expect(messages().some(m => m.startsWith("This guest is an EL10"))).toBe(false)
   })
 })
+
+describe("runWarmMigration on a vCenter source the node cannot reach (roadmap#175)", () => {
+  const VC = "vcenter.corp.local"
+  beforeEach(() => {
+    vi.mocked(resolveCopyPath).mockResolvedValue({ server: VC, nfcAddress: "10.42.0.22", device: "vmk0", direct: false, label: "vmk0 10.42.0.22 (management) on esxi22", hostChanges: [] } as any)
+    vi.mocked(checkNfcReachability).mockResolvedValue({ address: "10.42.0.22", ports: { 902: true }, ok: true, vcenter: { host: VC, resolved: true, open: true } })
+  })
+
+  it("probes the vCenter on 443 with the adapter, and reads its certificate from the node", async () => {
+    expect(await runToEnd("warm-vc-1", makeConfig())).toBeNull()
+    expect(checkNfcReachability).toHaveBeenCalledWith("conn-pve", NODE, "10.42.0.22", [902], VC)
+    expect(messages()).toContain(`Copy network: vmk0 10.42.0.22 (management) on esxi22, port 902 reachable from pve1 (VDDK connects through the vCenter ${VC}, reachable on 443)`)
+    expect(sshCommands.find(c => c.includes("openssl s_client"))).toContain(`-connect '${VC}:443' 2>&1`)
+    expect(vi.mocked(startVddkReader).mock.calls[0][2]).toMatchObject({ server: VC, thumbprint: "46:8C:45:3B:1E:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88" })
+  })
+
+  it("stops at planning, before anything is created, when the node cannot reach the vCenter", async () => {
+    vi.mocked(checkNfcReachability).mockResolvedValue({ address: "10.42.0.22", ports: { 902: true }, ok: false, vcenter: { host: VC, resolved: false, open: false } })
+    const err = await runToEnd("warm-vc-2", makeConfig())
+    expect(err?.message).toBe(`The Proxmox node cannot resolve the vCenter name ${VC}, which the VDDK on the node logs in to: add it to the node's DNS or /etc/hosts.`)
+    expect(allocateAndMapBlockVolume).not.toHaveBeenCalled()
+  })
+
+  it("names the cause the node's OpenSSL gives instead of a parse error", async () => {
+    vi.mocked(executeSSH).mockImplementation((async (c: string, h: unknown, command: string, t?: number, o?: SSHExecOpts) => command.includes("openssl s_client")
+      ? { success: true, output: "s_client-exit=1\n802725A7D5720000:error:8000006F:system library:BIO_connect:Connection refused:../crypto/bio/bio_sock2.c:183:calling connect()\n" }
+      : sshRouter(c, h, command, t, o)) as any)
+    const err = await runToEnd("warm-vc-3", makeConfig())
+    expect(err?.message).toBe(`Could not read the TLS certificate of ${VC}:443 from the Proxmox node pve1, which the VDDK needs to connect: ${VC} refused the connection on port 443: open the firewall from the node to ${VC}`)
+    expect(allocateAndMapBlockVolume).not.toHaveBeenCalled()
+  })
+
+  it("reports an SSH failure of the certificate read as such", async () => {
+    vi.mocked(executeSSH).mockImplementation((async (c: string, h: unknown, command: string, t?: number, o?: SSHExecOpts) => command.includes("openssl s_client")
+      ? { success: false, error: "Command timed out" }
+      : sshRouter(c, h, command, t, o)) as any)
+    const err = await runToEnd("warm-vc-4", makeConfig())
+    expect(err?.message).toBe(`Could not read the TLS certificate of ${VC} from the Proxmox node pve1: Command timed out`)
+  })
+})

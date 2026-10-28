@@ -9,7 +9,8 @@
  *
  * Before a batch starts: read each VM's effective adapter in vSphere, probe it
  * once per distinct (node, address) from the node (port 902, plus 443 on a
- * standalone ESXi), then place each VM only on nodes that reach it. A node
+ * standalone ESXi, plus the vCenter on 443 on a vCenter source, roadmap#175),
+ * then place each VM only on nodes that reach it. A node
  * named explicitly that cannot reach a VM's adapter blocks the batch; on
  * "Auto" the VM goes round-robin among the nodes that can, and blocks only
  * when none can. Same probe as the single-VM pre-check (runWarmCopyReachability).
@@ -18,7 +19,7 @@ import { decryptSecret } from "@/lib/crypto/secret"
 import { getTenantPrisma } from "@/lib/tenant"
 import { soapLogin, soapLogout } from "@/lib/vmware/soap"
 import { soapGetVmCopyInterfaces } from "@/lib/vmware/vmkernel"
-import { runWarmCopyReachability, type NfcReachability } from "@/lib/migration/warm/nfc-reachability"
+import { runWarmCopyReachability, type NfcReachability, type VcenterReachability } from "@/lib/migration/warm/nfc-reachability"
 import { mapBounded } from "@/lib/migration/batch-disk-sizes"
 import { isValidSourceVmId } from "@/lib/migration/source-vm-id"
 
@@ -29,14 +30,14 @@ export const COPY_PROBE_DEADLINE_MS = 30_000
 
 /** Effective copy adapter of a VM's source host, or why it could not be read. */
 export type VmCopyTarget =
-  | { ok: true; host: string; device: string; address: string; direct: boolean }
+  | { ok: true; host: string; device: string; address: string; direct: boolean; vcenterHost?: string }
   | { ok: false; error: string }
 
 export interface CopyCheckVm { sourceVmId: string; name: string }
 
 export type CopyProblem =
-  | { kind: "unreachable"; node: string; host: string; device: string; address: string; ports: number[]; vms: string[]; error?: string; message: string }
-  | { kind: "noNode"; vm: string; host: string; device: string; address: string; message: string }
+  | { kind: "unreachable"; node: string; host: string; device: string; address: string; ports: number[]; vms: string[]; error?: string; vcenter?: VcenterReachability; message: string }
+  | { kind: "noNode"; vm: string; host: string; device: string; address: string; vcenter?: VcenterReachability; message: string }
 
 export interface CopyInfo { vm: string; nodes: string[]; excluded: string[] }
 
@@ -56,12 +57,18 @@ function closedPorts(r: NfcReachability | undefined): number[] {
   return Object.entries(r.ports).filter(([, open]) => !open).map(([p]) => Number(p))
 }
 
-export function unreachableMessage(p: { node: string; device: string; address: string; host: string; ports: number[]; error?: string }): string {
+export function unreachableMessage(p: { node: string; device: string; address: string; host: string; ports: number[]; error?: string; vcenter?: VcenterReachability }): string {
   if (p.error) return `${p.node} could not probe ${p.device} ${p.address} (host ${p.host}): ${p.error}`
-  return `${p.node} cannot reach ${p.device} ${p.address} (host ${p.host}) on port ${p.ports.join(" and ")}`
+  const parts = [
+    ...(p.vcenter && !p.vcenter.resolved ? [`${p.node} cannot resolve the vCenter name ${p.vcenter.host}`] : []),
+    ...(p.vcenter && p.vcenter.resolved && !p.vcenter.open ? [`${p.node} cannot reach the vCenter ${p.vcenter.host} on port 443`] : []),
+    ...(p.ports.length ? [`${p.node} cannot reach ${p.device} ${p.address} (host ${p.host}) on port ${p.ports.join(" and ")}`] : []),
+  ]
+  return parts.join("; ")
 }
 
-export function noNodeMessage(p: { vm: string; device: string; address: string; host: string }): string {
+export function noNodeMessage(p: { vm: string; device: string; address: string; host: string; vcenter?: VcenterReachability }): string {
+  if (p.vcenter) return `No target node can ${p.vcenter.resolved ? `reach the vCenter ${p.vcenter.host} on port 443` : `resolve the vCenter name ${p.vcenter.host}`}, needed to copy ${p.vm}`
   return `No target node can reach the copy network of ${p.vm}: ${p.device} ${p.address} (host ${p.host})`
 }
 
@@ -98,7 +105,7 @@ export function planCopyNodes(a: {
       if (!reaches(fixed)) {
         const key = pairKey(fixed, target.address, target.direct)
         const r = a.reach.get(key)
-        const p = unreachable.get(key) ?? { kind: "unreachable" as const, node: fixed, host: target.host, device: target.device, address: target.address, ports: closedPorts(r), vms: [], ...(r?.error && { error: r.error }), message: "" }
+        const p = unreachable.get(key) ?? { kind: "unreachable" as const, node: fixed, host: target.host, device: target.device, address: target.address, ports: closedPorts(r), vms: [], ...(r?.error && { error: r.error }), ...(r?.vcenter && !r.vcenter.open && { vcenter: r.vcenter }), message: "" }
         p.vms.push(vm.name)
         p.message = unreachableMessage({ ...p, error: r?.error })
         unreachable.set(key, p)
@@ -108,7 +115,10 @@ export function planCopyNodes(a: {
     const ok = a.candidates.filter(reaches)
     if (ok.length === 0) {
       plan.assignment[vm.sourceVmId] = null
-      plan.problems.push({ kind: "noNode", vm: vm.name, host: target.host, device: target.device, address: target.address, message: noNodeMessage({ vm: vm.name, ...target }) })
+      // Every node failing on the vCenter is a vCenter problem, not a copy-network one.
+      const vcenterDown = a.candidates.map(n => a.reach.get(pairKey(n, target.address, target.direct))?.vcenter).filter(v => v && !v.open)
+      const vcenter = a.candidates.length > 0 && vcenterDown.length === a.candidates.length ? vcenterDown[0] : undefined
+      plan.problems.push({ kind: "noNode", vm: vm.name, host: target.host, device: target.device, address: target.address, ...(vcenter && { vcenter }), message: noNodeMessage({ vm: vm.name, ...target, vcenter }) })
       continue
     }
     const node = ok.reduce((best, n) => ((load.get(n) ?? 0) < (load.get(best) ?? 0) ? n : best), ok[0])
@@ -141,7 +151,7 @@ export async function readBatchCopyTargets(tenantId: string, sourceConnectionId:
         const device = pinnedDevice || ifaces.defaultDevice
         const vnic = ifaces.vnics.find(v => v.device === device)
         if (!device || !vnic?.address) return { ok: false, error: `no addressed VMkernel adapter ${device ?? ""} on ${ifaces.hostName}`.replace("  ", " ") }
-        return { ok: true, host: ifaces.hostName, device, address: vnic.address, direct: !session.isVcenter }
+        return { ok: true, host: ifaces.hostName, device, address: vnic.address, direct: !session.isVcenter, ...(session.isVcenter && { vcenterHost: fallbackHost }) }
       })
       return new Map(vmIds.map((id, k) => [id, read[k] ?? { ok: false, error: "the source did not answer in time" }]))
     } finally {
@@ -153,10 +163,10 @@ export async function readBatchCopyTargets(tenantId: string, sourceConnectionId:
 }
 
 /** One probe per distinct (node, address), from the node, a few at a time. */
-export async function probeCopyPairs(targetConnectionId: string, pairs: Array<{ node: string; address: string; direct: boolean }>): Promise<Map<string, NfcReachability>> {
+export async function probeCopyPairs(targetConnectionId: string, pairs: Array<{ node: string; address: string; direct: boolean; vcenterHost?: string }>): Promise<Map<string, NfcReachability>> {
   const unique = [...new Map(pairs.map(p => [pairKey(p.node, p.address, p.direct), p])).values()]
   const results = await mapBounded(unique, COPY_PROBE_CONCURRENCY, Date.now() + COPY_PROBE_DEADLINE_MS,
-    p => runWarmCopyReachability(targetConnectionId, p.node, p.address, p.direct))
+    p => runWarmCopyReachability(targetConnectionId, p.node, p.address, p.direct, p.vcenterHost))
   return new Map(unique.map((p, k) => [pairKey(p.node, p.address, p.direct), results[k] ?? { address: p.address, ports: {}, ok: false, error: "probe timed out" }]))
 }
 
@@ -167,10 +177,10 @@ export async function checkBatchCopyNetwork(a: {
 }): Promise<CopyPlan> {
   const targets = await readBatchCopyTargets(a.tenantId, a.sourceConnectionId, a.vms.map(v => v.sourceVmId), a.pinnedDevice)
   const nodesOf = (id: string) => (a.auto ? a.candidates : [a.requested?.[id] ?? a.candidates[0]].filter(Boolean) as string[])
-  const pairs: Array<{ node: string; address: string; direct: boolean }> = []
+  const pairs: Array<{ node: string; address: string; direct: boolean; vcenterHost?: string }> = []
   for (const vm of a.vms) {
     const t = targets.get(vm.sourceVmId)
-    if (t?.ok) for (const node of nodesOf(vm.sourceVmId)) pairs.push({ node, address: t.address, direct: t.direct })
+    if (t?.ok) for (const node of nodesOf(vm.sourceVmId)) pairs.push({ node, address: t.address, direct: t.direct, vcenterHost: t.vcenterHost })
   }
   const reach = await probeCopyPairs(a.targetConnectionId, pairs)
   return planCopyNodes({ vms: a.vms, candidates: a.candidates, auto: a.auto, requested: a.requested, targets, reach })

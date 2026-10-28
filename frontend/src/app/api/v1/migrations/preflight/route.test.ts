@@ -158,7 +158,7 @@ describe("POST /api/v1/migrations/preflight — warm-check action", () => {
   // roadmap#53: reachability of the VMkernel adapter the copy will use. The
   // address comes from vSphere for the adapter named, never from the request.
   const ifaces = (source: "esxi" | "vcenter") => ({
-    hostName: "esxi1", source, defaultDevice: "vmk0",
+    hostName: "esxi1", source, connectionHost: "vcenter.corp.local", defaultDevice: "vmk0",
     vnics: [{ device: "vmk0", address: "10.42.0.21", services: ["management"] }, { device: "vmk2", address: "10.42.53.21", services: [] }],
   })
   const copyBody = { ...warmBody, sourceConnectionId: "src", sourceVmId: "vm-14" }
@@ -171,13 +171,14 @@ describe("POST /api/v1/migrations/preflight — warm-check action", () => {
     expect(res.status).toBe(200)
     expect(readIfaces).toHaveBeenCalledWith(expect.anything(), "src", "vm-14")
     // a copyAddress sent by the browser is ignored: the node probes the host's own adapter
-    expect(mockReach).toHaveBeenCalledExactlyOnceWith("c1", "pve1", "10.42.53.21", true)
+    expect(mockReach).toHaveBeenCalledExactlyOnceWith("c1", "pve1", "10.42.53.21", true, undefined)
     expect((await readJson<{ copy: unknown }>(res))?.copy).toEqual(verdict)
 
     readIfaces.mockResolvedValueOnce(ifaces("vcenter"))
     mockReach.mockResolvedValueOnce({ address: "10.42.0.21", ports: { 902: false }, ok: false })
     const res2 = await callRoute(POST, { body: { ...copyBody, copyVmk: "vmk0" } })
-    expect(mockReach).toHaveBeenLastCalledWith("c1", "pve1", "10.42.0.21", false)
+    // roadmap#175: on a vCenter source the node also probes the vCenter on 443
+    expect(mockReach).toHaveBeenLastCalledWith("c1", "pve1", "10.42.0.21", false, "vcenter.corp.local")
     expect((await readJson<{ copy: { ok: boolean } }>(res2))?.copy.ok).toBe(false)
   })
 

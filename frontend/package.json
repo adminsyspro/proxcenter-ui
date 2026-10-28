@@ -40,7 +40,7 @@
     "@mui/x-data-grid": "^9.15.0",
     "@mui/x-tree-view": "^9.15.0",
     "@novnc/novnc": "^1.7.0",
-    "@peculiar/x509": "^1.14.3",
+    "@peculiar/x509": "^2.2.0",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@scalar/api-reference-react": "^0.9.81",

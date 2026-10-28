@@ -20,18 +20,23 @@ async function bundle() {
     }
 
     await esbuild.build({
-      entryPoints: [path.join(__dirname, 'node_modules/@novnc/novnc/lib/rfb.js')],
+      // Through the package exports (core/rfb.js), not a file path: 1.6
+      // dropped the CommonJS lib/ build this used to name.
+      stdin: {
+        contents: "export { default } from '@novnc/novnc'\n",
+        resolveDir: __dirname,
+        sourcefile: 'novnc-entry.js',
+        loader: 'js',
+      },
       bundle: true,
       outfile: path.join(__dirname, 'public/novnc/rfb.bundle.js'),
-      format: 'iife',
-      globalName: 'noVNC',
+      // An ES module, not an IIFE: since 1.6 noVNC probes the H.264 decoder
+      // with a top-level await. public/novnc/console.html imports it.
+      format: 'esm',
       platform: 'browser',
-      target: ['es2020'],
+      target: ['es2022'],
       minify: false,
       sourcemap: false,
-      footer: {
-        js: 'window.RFB = noVNC.default;'
-      }
     });
     console.log('✅ noVNC bundled successfully to public/novnc/rfb.bundle.js');
   } catch (error) {

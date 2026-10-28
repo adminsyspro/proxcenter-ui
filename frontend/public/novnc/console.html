@@ -145,8 +145,8 @@ node bundle-novnc.js
     </div>
   </div>
 
-  <!-- Charger noVNC bundle (IIFE) -->
-  <script src="/novnc/rfb.bundle.js"></script>
+  <!-- noVNC est un module ES (await de premier niveau), importé par loadNoVNC -->
+  <link rel="modulepreload" href="/novnc/rfb.bundle.js">
   <!-- Helpers partagés avec la console SPICE, testés dans
        src/lib/console/viewport.test.ts et bundlés par bundle-console.js -->
   <script src="/console/console-ui.bundle.js"></script>
@@ -154,22 +154,14 @@ node bundle-novnc.js
   <script>
     let RFB;
     
+    // Le module ne rend RFB qu'une fois son await de premier niveau passé :
+    // la connexion attend la promesse. Un RFB déjà posé sur window (tests) sert tel quel.
     function loadNoVNC() {
-      // RFB est exposé sur window par le bundle IIFE
-      RFB = window.RFB;
-      
-      console.log('RFB:', RFB);
-      console.log('RFB type:', typeof RFB);
-      
-      if (typeof RFB !== 'function') {
-        console.error('RFB not found on window, checking noVNC:', window.noVNC);
-        // Fallback
-        if (window.noVNC && window.noVNC.default) {
-          RFB = window.noVNC.default;
-        }
-      }
-      
-      return typeof RFB === 'function';
+      if (typeof window.RFB === 'function') return Promise.resolve(window.RFB);
+      return import('/novnc/rfb.bundle.js').then(
+        (mod) => mod.default,
+        (err) => { console.error('noVNC failed to load:', err); return undefined; }
+      );
     }
     
     const toolbar = document.getElementById('toolbar');
@@ -652,18 +644,20 @@ node bundle-novnc.js
     
     function init() {
       loadingText.textContent = 'Loading noVNC...';
-      const loaded = loadNoVNC();
       
       // Charger le status de la VM
       fetchVmStatus();
       
-      if (loaded) {
-        connect();
-      } else {
-        loading.style.display = 'none';
-        novncInstructions.style.display = 'block';
-        setStatus('error', 'Error');
-      }
+      loadNoVNC().then((loaded) => {
+        RFB = loaded;
+        if (typeof RFB === 'function') {
+          connect();
+        } else {
+          loading.style.display = 'none';
+          novncInstructions.style.display = 'block';
+          setStatus('error', 'Error');
+        }
+      });
     }
 
     // Start when DOM is ready

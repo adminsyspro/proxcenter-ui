@@ -2419,6 +2419,7 @@
       "warmPreflightReady": "Zielknoten ist bereit fur die Warm-Migration (nbdkit, nbd-client und das VDDK sind vorhanden).",
       "warmPreflightReadyNbd": "Der Zielknoten ist für die Warm-Migration bereit (nbdkit, sein nbd-Plugin und nbd-client sind vorhanden).",
       "warmPreflightFailedTitle": "Zielknoten ist nicht bereit fur die Warm-Migration",
+      "bulkWarmNodeNotReady": "{node} ist nicht für die Warm-Migration bereit",
       "warmPreflightMissing": "Fehlt auf dem Knoten: {items}.",
       "warmPreflightNbdHint": "Installieren Sie die NBD-Werkzeuge auf dem Proxmox-Knoten: apt install nbdkit nbd-client libnbd-bin, und wählen Sie den Knoten anschließend erneut aus.",
       "warmStorageInsufficient": "Nicht genügend freier Speicherplatz auf {storage}: {available} GB verfügbar, {required} GB für die Quell-Festplatten plus 10 % Reserve erforderlich. Geben Sie Speicherplatz frei oder wählen Sie einen anderen Speicher.",

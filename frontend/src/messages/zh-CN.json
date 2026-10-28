@@ -2434,6 +2434,7 @@
       "warmPreflightReady": "目标节点已就绪，可进行温迁移（nbdkit、nbd-client 和 VDDK 均已就位）。",
       "warmPreflightReadyNbd": "目标节点已就绪，可进行温迁移（nbdkit、其 nbd 插件和 nbd-client 均已就位）。",
       "warmPreflightFailedTitle": "目标节点尚未就绪，无法进行温迁移",
+      "bulkWarmNodeNotReady": "{node} 尚未准备好进行热迁移",
       "warmPreflightMissing": "节点上缺少：{items}。",
       "warmPreflightNbdHint": "在 Proxmox 节点上安装 NBD 工具：apt install nbdkit nbd-client libnbd-bin，然后重新选择该节点。",
       "warmStorageInsufficient": "{storage} 上的可用空间不足：可用 {available} GB，源磁盘加 10% 余量需要 {required} GB。请释放空间或选择其他存储。",

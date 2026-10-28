@@ -2430,6 +2430,7 @@
       "warmPreflightReady": "Target node is ready for warm migration (nbdkit, nbd-client and the VDDK are present).",
       "warmPreflightReadyNbd": "Target node is ready for warm migration (nbdkit, its nbd plugin and nbd-client are present).",
       "warmPreflightFailedTitle": "Target node is not ready for warm migration",
+      "bulkWarmNodeNotReady": "{node} is not ready for warm migration",
       "warmPreflightMissing": "Missing on the node: {items}.",
       "warmPreflightNbdHint": "Install the NBD tooling on the Proxmox node: apt install nbdkit nbd-client libnbd-bin, then reselect the node.",
       "warmStorageInsufficient": "Not enough free space on {storage}: {available} GB available, {required} GB needed for the source disks plus a 10% margin. Free up space on it or pick another storage.",

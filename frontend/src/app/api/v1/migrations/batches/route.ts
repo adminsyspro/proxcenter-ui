@@ -12,6 +12,7 @@ import { OPEN_BATCH_STATUSES, QUEUED_STATUS, pumpBatch } from "@/lib/migration/b
 import { batchCounts } from "@/lib/migration/batch-access"
 import { checkBatchSpaceForRequest, requestDiskBytes } from "@/lib/migration/batch-space"
 import { checkBatchCopyNetwork } from "@/lib/migration/batch-copy-reach"
+import { checkBatchWarmRuntime } from "@/lib/migration/batch-warm-runtime"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 import { BULK_MIG_CONCURRENCY_MAX, BULK_MIG_CONCURRENCY_MIN } from "@/app/(dashboard)/infrastructure/inventory/bulkMigrationConfig"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -102,6 +103,17 @@ async function handlePost(req: Request) {
       })
       if (copy.problems.length) {
         return NextResponse.json({ error: copy.problems.map(p => p.message).join("; "), problems: copy.problems }, { status: 400 })
+      }
+    }
+    // Warm: every node must carry the runtime the job reads the source with
+    // (lib/migration/batch-warm-runtime), or each job fails at planning.
+    if (first.config.migrationType === "warm") {
+      const runtime = await checkBatchWarmRuntime({
+        sourceConnectionId: first.sourceConnectionId, sourceType: first.sourceConn.type,
+        targetConnectionId: first.targetConnectionId, nodes: validated.map(v => v.targetNode),
+      })
+      if (runtime.length) {
+        return NextResponse.json({ error: runtime.map(p => p.message).join("; "), problems: runtime }, { status: 400 })
       }
     }
     // The target storage must hold the whole batch, not each VM on its own

@@ -19,6 +19,10 @@ async function bundle() {
   try {
     await esbuild.build({
       entryPoints: [path.join(__dirname, 'src/lib/console/viewport.ts')],
+      // The bundle names each source by its path from here: keep it the
+      // same in CI and in a git worktree whose node_modules is a symlink.
+      absWorkingDir: __dirname,
+      preserveSymlinks: true,
       bundle: true,
       outfile: path.join(__dirname, 'public/console/console-ui.bundle.js'),
       format: 'iife',

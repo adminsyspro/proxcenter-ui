@@ -64,3 +64,18 @@ jobs:
         # tsc --strict against the debt in .strict-debt.json, no new JS file.
         working-directory: frontend
         run: npm run typecheck:strict
+
+      - name: Console bundles match their sources
+        # The console pop-outs are static pages that load committed bundles
+        # (noVNC, xterm, spice-html5, console helpers). Rebuild them from the
+        # lockfile and fail when the committed files differ, so a dependency
+        # bump cannot leave the shipped bundle behind.
+        working-directory: frontend
+        run: |
+          npm run build:bundles
+          drift=$(git status --porcelain -- public/novnc public/xterm public/spice public/console)
+          if [ -n "$drift" ]; then
+            echo "$drift"
+            echo "::error::Committed console bundles differ from a rebuild: run npm run build:bundles and commit the result."
+            exit 1
+          fi

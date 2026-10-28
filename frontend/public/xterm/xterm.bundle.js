@@ -34,9 +34,9 @@ var XtermLib = (() => {
   ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // ../../../../frontend/node_modules/xterm/lib/xterm.js
+  // node_modules/xterm/lib/xterm.js
   var require_xterm = __commonJS({
-    "../../../../frontend/node_modules/xterm/lib/xterm.js"(exports, module) {
+    "node_modules/xterm/lib/xterm.js"(exports, module) {
       !(function(e, t) {
         if ("object" == typeof exports && "object" == typeof module) module.exports = t();
         else if ("function" == typeof define && define.amd) define([], t);
@@ -5990,7 +5990,7 @@ WARNING: This link could potentially be dangerous`)) {
   });
   var import_xterm = __toESM(require_xterm());
 
-  // ../../../../frontend/node_modules/@xterm/addon-fit/lib/addon-fit.mjs
+  // node_modules/@xterm/addon-fit/lib/addon-fit.mjs
   var h = 2;
   var _ = 1;
   var o = class {

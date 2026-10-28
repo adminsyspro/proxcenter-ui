@@ -28,6 +28,10 @@ async function bundle() {
         sourcefile: 'xterm-entry.js',
         loader: 'js',
       },
+      // The bundle names each source by its path from here: keep it the
+      // same in CI and in a git worktree whose node_modules is a symlink.
+      absWorkingDir: __dirname,
+      preserveSymlinks: true,
       bundle: true,
       outfile: path.join(__dirname, 'public/xterm/xterm.bundle.js'),
       format: 'iife',

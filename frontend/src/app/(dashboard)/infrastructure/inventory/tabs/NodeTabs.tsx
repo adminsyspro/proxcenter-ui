@@ -55,6 +55,7 @@ import ChartContainer from '@/components/ChartContainer'
 import { formatBytes } from '@/utils/format'
 import { useCopyToClipboard } from '@/lib/clipboard'
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
+import { useGuestSelection, GuestSelectionBar } from '@/components/GuestSelection'
 import BackupJobsPanel from '../BackupJobsPanel'
 import CveTab from '@/components/CveTab'
 import ChangeTrackingTab from './ChangeTrackingTab'
@@ -480,6 +481,14 @@ export default function NodeTabs(props: any) {
     () => new Map<string, string | undefined>((hosts || []).map((h: any) => [h.key as string, h.status as string | undefined])),
     [hosts]
   )
+
+  // "Migrate selection" (#1218): some guests of this node, each to its own target.
+  const guestSelection = useGuestSelection({
+    vms: (data?.vmsData || []) as VmRow[],
+    nodes: hosts || [],
+    migratingVmIds,
+    resetKey: selection?.id,
+  })
 
   return (
     <>
@@ -1251,8 +1260,10 @@ export default function NodeTabs(props: any) {
                       borderColor: 'divider',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'flex-end'
+                      justifyContent: 'flex-end',
+                      gap: 1
                     }}>
+                      <GuestSelectionBar selection={guestSelection} inline />
                       <Button
                         size="small"
                         variant={expandedVmsTable ? 'contained' : 'outlined'}
@@ -1306,6 +1317,7 @@ export default function NodeTabs(props: any) {
                           favorites={favorites}
                           onToggleFavorite={toggleFavorite}
                           migratingVmIds={migratingVmIds}
+                          {...guestSelection.tableProps}
                         />
                       </Box>
                     ) : (

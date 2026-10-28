@@ -2,19 +2,47 @@ import { buildNodeResourceId, buildVmResourceId, checkPermission, PERMISSIONS } 
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 
+interface DrainRecord {
+  connection_id?: string
+  node?: string
+  guests?: { source_node?: string }[]
+}
+
+/**
+ * The nodes a drain acts on: its node, or for a selection of guests (#1218),
+ * which has none, every node one of its guests leaves.
+ */
+export function drainNodes(d: DrainRecord): string[] {
+  if (d.node) return [d.node]
+
+  return [...new Set((d.guests || []).map(g => g?.source_node).filter((n): n is string => !!n))]
+}
+
+/**
+ * Whether the caller holds `permission` on every node the drain acts on. A
+ * drain with no node at all is refused: there is nothing to check it against.
+ */
+export async function canActOnDrain(d: DrainRecord, permission: string): Promise<boolean> {
+  const nodes = drainNodes(d)
+  if (!d.connection_id || nodes.length === 0) return false
+  const verdicts = await Promise.all(nodes.map(n => checkPermission(permission, "node", buildNodeResourceId(d.connection_id as string, n))))
+
+  return verdicts.every(denied => !denied)
+}
+
 /**
  * The drains whose node the caller may view (#248). A drain names every guest
  * of its node, so listing it needs the same right as reading it on its own:
  * the list routes and the Task Center apply this on top of the cluster check.
+ * A selection needs that right on every node its guests leave.
  */
-export async function filterViewableDrains<T extends { connection_id?: string; node?: string }>(drains: T[]): Promise<T[]> {
+export async function filterViewableDrains<T extends DrainRecord>(drains: T[]): Promise<T[]> {
   const verdicts = await Promise.all(drains.map(async d => {
     // A drain with no node to check was already settled by the cluster
     // check (provider only).
-    if (!d.connection_id || !d.node) return true
-    const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", buildNodeResourceId(d.connection_id, d.node))
+    if (!d.connection_id || drainNodes(d).length === 0) return true
 
-    return !denied
+    return canActOnDrain(d, PERMISSIONS.NODE_VIEW)
   }))
 
   return drains.filter((_, i) => verdicts[i])
@@ -73,6 +101,9 @@ const haManaged = (r: DrainClusterResource) => !!r.hastate && r.hastate !== "ign
  *   when the guests were migrated one by one. The HA guests of a node entering
  *   maintenance are moved by Proxmox HA, under the right to manage the node,
  *   as before; the guests left on the node are not moved.
+ * A selection of guests (#1218) has no source node (`sourceNode` is empty):
+ * its guests are the selected ones wherever they run, and any node may
+ * receive them, under the same two rights.
  * Returns the config with the exclusions merged in.
  */
 export async function restrictDrainTargets<C extends {
@@ -82,6 +113,7 @@ export async function restrictDrainTargets<C extends {
   keep_vmids?: number[]
   include_stopped?: boolean
   enter_maintenance?: boolean
+  vmids?: number[]
 }>(
   cluster: DrainClusterResource[],
   connectionId: string,
@@ -100,16 +132,29 @@ export async function restrictDrainTargets<C extends {
     if (!allowed) throw new DrainTargetDenied(`You cannot manage the target node ${target}`)
   }
 
-  // Every guest the drain itself would migrate.
-  const kept = new Set(config.enter_maintenance ? [] : (config.keep_vmids || []))
-  const moved = cluster.filter(r =>
-    (r.type === "qemu" || r.type === "lxc") && r.node === sourceNode && r.vmid !== undefined && r.template !== 1 &&
-    !kept.has(r.vmid) &&
-    (r.status === "running" || config.include_stopped !== false) &&
-    !(config.enter_maintenance && r.status === "running" && haManaged(r)))
-  const migratable = await Promise.all(moved.map(async r =>
-    !(await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", buildVmResourceId(connectionId, sourceNode, r.type as string, String(r.vmid))))))
-  const refused = moved.filter((_, i) => !migratable[i]).map(r => r.vmid)
+  // Every guest the drain itself would migrate. A selection is checked whole,
+  // templates and stopped guests included: the plan names every selected
+  // guest, so one the caller may not migrate, or that is not in the cluster,
+  // is refused with the same words before anything reaches the orchestrator.
+  const selected = config.vmids?.length ? new Set(config.vmids) : null
+  const isGuest = (r: DrainClusterResource) => (r.type === "qemu" || r.type === "lxc") && !!r.node && r.vmid !== undefined
+  let checked: DrainClusterResource[]
+  let unknown: number[] = []
+  if (selected) {
+    checked = cluster.filter(r => isGuest(r) && selected.has(r.vmid as number))
+    const known = new Set(checked.map(r => r.vmid))
+    unknown = [...selected].filter(vmid => !known.has(vmid))
+  } else {
+    const kept = new Set(config.enter_maintenance ? [] : (config.keep_vmids || []))
+    checked = cluster.filter(r =>
+      isGuest(r) && r.node === sourceNode && r.template !== 1 &&
+      !kept.has(r.vmid as number) &&
+      (r.status === "running" || config.include_stopped !== false) &&
+      !(config.enter_maintenance && r.status === "running" && haManaged(r)))
+  }
+  const migratable = await Promise.all(checked.map(async r =>
+    !(await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", buildVmResourceId(connectionId, r.node as string, r.type as string, String(r.vmid))))))
+  const refused = [...unknown, ...checked.filter((_, i) => !migratable[i]).map(r => r.vmid)]
   if (refused.length > 0) throw new DrainTargetDenied(`You cannot migrate guest(s) ${refused.join(", ")}`)
 
   if (denied.length === 0) return config

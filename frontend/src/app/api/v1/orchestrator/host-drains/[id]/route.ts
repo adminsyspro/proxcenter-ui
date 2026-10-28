@@ -4,7 +4,7 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { buildNodeResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
-import { publicDrain } from "@/lib/hostDrain/access"
+import { drainNodes, publicDrain } from "@/lib/hostDrain/access"
 
 export const runtime = "nodejs"
 
@@ -29,11 +29,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const infra = await getTenantInfrastructureScope(await getCurrentTenantId())
-    if (!data?.connection_id || !data?.node || !canMigrateConnections(infra, data.connection_id)) {
+    // A selection of guests (#1218) has no node: every node it moves guests
+    // from is checked instead.
+    const nodes = drainNodes(data ?? {})
+    if (!data?.connection_id || nodes.length === 0 || !canMigrateConnections(infra, data.connection_id)) {
       return NextResponse.json({ error: "Host drain not found" }, { status: 404 })
     }
-    const nodeDenied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", buildNodeResourceId(data.connection_id, data.node))
-    if (nodeDenied) return nodeDenied
+    for (const node of nodes) {
+      const nodeDenied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", buildNodeResourceId(data.connection_id, node))
+      if (nodeDenied) return nodeDenied
+    }
 
     return NextResponse.json({ data: publicDrain(data) })
   } catch (error: any) {

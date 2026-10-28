@@ -138,3 +138,32 @@ describe("JobDetailDialog cutover", () => {
     expect(screen.queryByRole("button", { name: /cutoverNow/ })).toBeNull()
   })
 })
+
+describe("JobDetailDialog host drain", () => {
+  const t = (key: string) => key
+  // The row the dialog is opened from: the drain had just started.
+  const row = {
+    id: "drain-1", name: "Migrate selection - 2 guest(s)", type: "host_drain", status: "running", progress: 0, target: "PROD",
+    metadata: { connectionId: "c1", node: "", guests: [{ vmid: 101, status: "pending", source_node: "pve1" }, { vmid: 102, status: "pending", source_node: "pve2" }] },
+  }
+  const record = {
+    id: "drain-1", connection_id: "c1", node: "", status: "completed", total_guests: 2, completed_guests: 2,
+    guests: [{ vmid: 101, status: "completed", source_node: "pve1", target_node: "pve3" }, { vmid: 102, status: "completed", source_node: "pve2", target_node: "pve3" }],
+    logs: [{ ts: "2026-10-28T10:00:00Z", msg: "Selection migrated: 2 guest(s) moved", level: "success" }],
+  }
+
+  it("follows the drain record, in Community too: guests, progress and log", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ data: record }) }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<JobDetailDialog open job={row} onClose={() => {}} onAction={() => {}} actionError={null} isEnterprise={false} t={t} />)
+
+    await waitFor(() => expect(screen.getByText(/Selection migrated: 2 guest\(s\) moved/)).toBeTruthy())
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/orchestrator/host-drains/drain-1")
+    expect(screen.getByTestId("drain-guest-route-101").textContent).toBe("pve1→pve3")
+    expect(screen.getByTestId("drain-guest-route-102").textContent).toBe("pve2→pve3")
+    // Both ends carry the Proxmox node logo, as everywhere a node is named.
+    expect(screen.getByTestId("drain-guest-route-101").querySelectorAll('img[src*="proxmox-logo"]')).toHaveLength(2)
+    expect(screen.getByText("100%")).toBeTruthy()
+  })
+})

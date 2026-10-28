@@ -61,3 +61,17 @@ describe("POST /api/v1/orchestrator/host-drains/[id]/cancel", () => {
     expect((await callRoute(POST, { params })).status).toBe(403)
   })
 })
+
+describe("POST /api/v1/orchestrator/host-drains/[id]/cancel, a selection of guests (#1218)", () => {
+  it("needs the right to manage every node the selection moves guests from", async () => {
+    fetchMock.mockImplementation(async (url: string) => url.endsWith("/cancel")
+      ? { ok: true, status: 200, json: async () => ({ id: "d-2", status: "cancelled" }) }
+      : { ok: true, status: 200, json: async () => ({ id: "d-2", connection_id: "c1", node: "", guests: [{ source_node: "pve1" }, { source_node: "pve2" }] }) })
+
+    expect((await callRoute(POST, { params })).status).toBe(200)
+    expect(checkPermissionMock).toHaveBeenCalledWith("node.manage", "node", "c1:pve2")
+
+    checkPermissionMock.mockImplementation(async (_p: string, _t?: string, id?: string) => (id === "c1:pve2" ? new Response(null, { status: 403 }) : null))
+    expect((await callRoute(POST, { params })).status).toBe(403)
+  })
+})

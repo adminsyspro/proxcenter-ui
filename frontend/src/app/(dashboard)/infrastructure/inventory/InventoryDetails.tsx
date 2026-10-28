@@ -105,6 +105,7 @@ import { timeframeForWindow, type RrdRangeMeta, type RrdWindow } from '@/lib/met
 import type { MetricsRangeValue } from '@/components/metrics/MetricsRangeSelector'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
+import { useGuestSelection, GuestSelectionBar } from '@/components/GuestSelection'
 import { useMyVdcs } from '@/hooks/useMyVdcs'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { blankVmVdcs } from '@/lib/vdc/blankVms'
@@ -1256,6 +1257,19 @@ export default function InventoryDetails({
   // #666: node status lookup for the VmsTable node column pastille, keyed
   // like HostItem.key (`${connId}:${node}`).
   const nodeStatuses = useMemo(() => new Map(hosts.map(h => [h.key, h.status])), [hosts])
+
+  // "Migrate selection" (#1218) in the Guests, Nodes, Pools and Tags views:
+  // the rows of every table share the ids built here.
+  const selectableVms = useMemo(
+    () => displayVms.map(vm => ({ id: `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`, connId: vm.connId, vmid: vm.vmid, template: vm.template })),
+    [displayVms],
+  )
+  const rootGuestSelection = useGuestSelection({
+    vms: selectableVms,
+    nodes: hosts,
+    migratingVmIds,
+    resetKey: `${selection?.type}:${selection?.id}:${viewMode}`,
+  })
 
   // Mapping vmid → name pour affichage dans storage content
   const vmNamesMap = useMemo(() => {
@@ -2819,9 +2833,9 @@ return vm?.isCluster ?? false
                     <i className="ri-computer-line" style={{ fontSize: 20, opacity: 0.7 }} />
                     {t('inventory.guests')} ({displayVms.length})
                   </Typography>
-                  {canCreate && (
-                  <Stack direction="row" spacing={1}>
-                    {!allowLxc && (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <GuestSelectionBar selection={rootGuestSelection} inline />
+                    {canCreate && !allowLxc && (
                       <Button
                         size="small"
                         variant="contained"
@@ -2832,7 +2846,7 @@ return vm?.isCluster ?? false
                         {t('inventory.deployFromTemplate')}
                       </Button>
                     )}
-                    {allowBlankVm && (
+                    {canCreate && allowBlankVm && (
                       <Button
                         size="small"
                         variant={allowLxc ? 'contained' : 'outlined'}
@@ -2843,7 +2857,7 @@ return vm?.isCluster ?? false
                         {t('common.create')} VM
                       </Button>
                     )}
-                    {allowLxc && (
+                    {canCreate && allowLxc && (
                       <Button
                         size="small"
                         variant="outlined"
@@ -2855,7 +2869,6 @@ return vm?.isCluster ?? false
                       </Button>
                     )}
                   </Stack>
-                  )}
                 </Box>
                 <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                   <VmsTable
@@ -2909,6 +2922,7 @@ return vm?.isCluster ?? false
                     migratingVmIds={migratingVmIds}
                     defaultHiddenColumns={['node', 'ha']}
                     showVdcColumn={showVdcColumn}
+                    {...rootGuestSelection.tableProps}
                   />
                 </Box>
               </CardContent>
@@ -2942,6 +2956,7 @@ return vm?.isCluster ?? false
             showVdcColumn={showVdcColumn}
             vdcNameByConn={vdcNameByConn}
             nodeStatuses={nodeStatuses}
+            guestSelection={rootGuestSelection}
           />
         ) : viewMode === 'pools' && pools.length > 0 ? (
           <GroupedVmsView
@@ -2965,6 +2980,7 @@ return vm?.isCluster ?? false
             showVdcColumn={showVdcColumn}
             vdcNameByConn={vdcNameByConn}
             nodeStatuses={nodeStatuses}
+            guestSelection={rootGuestSelection}
           />
         ) : viewMode === 'tags' && tags.length > 0 ? (
           <GroupedVmsView
@@ -2988,6 +3004,7 @@ return vm?.isCluster ?? false
             showVdcColumn={showVdcColumn}
             vdcNameByConn={vdcNameByConn}
             nodeStatuses={nodeStatuses}
+            guestSelection={rootGuestSelection}
           />
         ) : viewMode === 'templates' ? (
 

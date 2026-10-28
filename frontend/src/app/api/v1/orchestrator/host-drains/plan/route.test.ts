@@ -150,3 +150,38 @@ describe("POST /api/v1/orchestrator/host-drains/plan", () => {
     expect((await res.json()).error).toBe("Orchestrator unavailable")
   })
 })
+
+describe("POST /api/v1/orchestrator/host-drains/plan, a selection of guests (#1218)", () => {
+  beforeEach(() => {
+    pveFetchMock.mockResolvedValue([
+      { type: "node", node: "pve1" }, { type: "node", node: "pve2" }, { type: "node", node: "pve3" },
+      { type: "qemu", node: "pve1", vmid: 101, status: "running" },
+      { type: "qemu", node: "pve3", vmid: 105, status: "running" },
+    ])
+  })
+
+  it("plans without a node, under the right to migrate each selected guest", async () => {
+    const res = await callRoute(POST, { body: { connection_id: "c1", config: { vmids: [101, 105] } } })
+    expect(res.status).toBe(200)
+    expect(sent()).toMatchObject({ connection_id: "c1", node: "", config: { vmids: [101, 105] } })
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve1:qemu:101")
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve3:qemu:105")
+    expect(checkPermissionMock).not.toHaveBeenCalledWith("node.view", "node", expect.anything())
+  })
+
+  it("refuses a selection that also names a node, and a selected guest the caller may not migrate", async () => {
+    expect((await callRoute(POST, { body: { connection_id: "c1", node: "pve3", config: { vmids: [105] } } })).status).toBe(400)
+
+    checkPermissionMock.mockImplementation(async (perm: string, _t?: string, id?: string) => (perm === "vm.migrate" && id === "c1:pve1:qemu:101" ? new Response(null, { status: 403 }) : null))
+    const res = await callRoute(POST, { body: { connection_id: "c1", config: { vmids: [101, 105] } } })
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toBe("You cannot migrate guest(s) 101")
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("still hides a cluster the tenant does not own", async () => {
+    infraMock.mockResolvedValueOnce({ kind: "iaas", vdcScope: { connectionIds: new Set(["c1"]) } })
+    expect((await callRoute(POST, { body: { connection_id: "c1", config: { vmids: [101] } } })).status).toBe(404)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

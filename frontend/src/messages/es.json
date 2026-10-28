@@ -5715,6 +5715,7 @@
     "typeHostDrain": "Drenaje de host",
     "drainGuests": "Invitados",
     "drainRemaining": "{count} aún en {node}",
+    "drainRemainingSelection": "{count} sin migrar",
     "rollingDetailCurrent": "{node}: {done}/{total} nodos",
     "rollingDetailNodes": "{done}/{total} nodos",
     "drainMaintenanceEnabled": "Nodo en mantenimiento"
@@ -11004,6 +11005,14 @@
     "dialogTitleDeleted": "Historial de uso: {name} (eliminado)"
   },
   "hostDrain": {
+    "titleSelection": "Migrar la selección ({count})",
+    "introSelection": "ProxCenter migra los invitados seleccionados, cada uno desde su propio nodo al nodo que elige el motor de colocación, con las mismas comprobaciones que un drenaje de nodo.",
+    "startedSelection": "Migración de {count} invitado(s) iniciada",
+    "selectionCount": "{count} invitado(s) seleccionado(s)",
+    "clearSelection": "Borrar",
+    "migrateSelection": "Migrar la selección",
+    "startSelection": "Iniciar la migración",
+    "projectionTitleSelection": "Carga prevista tras la migración",
     "introMaintenance": "El nodo entra en mantenimiento HA de Proxmox y sus invitados se evacuan: los gestionados por HA los reubica Proxmox HA, los demás los migra ProxCenter, cada uno al nodo elegido por el motor de ubicación (carga proyectada, techo de memoria, reglas de afinidad, red y almacenamiento).",
     "introMigrateAll": "Todos los invitados de este nodo se migran con ProxCenter, cada uno al nodo elegido por el motor de ubicación. El nodo sigue disponible para nuevos invitados: use Entrar en mantenimiento para excluirlo.",
     "evacuateGuests": "Evacuar los invitados",

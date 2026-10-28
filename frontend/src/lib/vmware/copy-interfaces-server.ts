@@ -11,6 +11,8 @@ import { soapGetVmCopyInterfaces, type HostVmkernelNic } from "@/lib/vmware/vmke
 export interface VmCopyInterfaces {
   hostName: string
   source: "vcenter" | "esxi"
+  /** Host name of the source connection: the vCenter the VDDK logs in to on a vCenter source. */
+  connectionHost: string
   defaultDevice?: string
   vnics: HostVmkernelNic[]
 }
@@ -33,8 +35,9 @@ export async function readVmCopyInterfaces(prisma: ConnectionReader, connectionI
   const password = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
   const session = await soapLogin(conn.baseUrl.replace(/\/$/, ""), username, password, conn.insecureTLS)
   try {
-    const ifaces = await soapGetVmCopyInterfaces(session, vmid, new URL(conn.baseUrl).hostname)
-    return { hostName: ifaces.hostName, source: session.isVcenter ? "vcenter" : "esxi", defaultDevice: ifaces.defaultDevice, vnics: ifaces.vnics }
+    const connectionHost = new URL(conn.baseUrl).hostname
+    const ifaces = await soapGetVmCopyInterfaces(session, vmid, connectionHost)
+    return { hostName: ifaces.hostName, source: session.isVcenter ? "vcenter" : "esxi", connectionHost, defaultDevice: ifaces.defaultDevice, vnics: ifaces.vnics }
   } finally {
     await soapLogout(session).catch(() => {})
   }

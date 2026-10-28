@@ -159,6 +159,8 @@ export async function POST(req: Request) {
       // roadmap#53: can the node reach the VMkernel adapter the copy will use?
       // Probed from the node itself; a vCenter source only needs the NFC data
       // port there, a standalone host also serves the VDDK's API calls at it.
+      // On a vCenter source those API calls go to the vCenter, probed on 443
+      // from the same node (roadmap#175).
       // Independent of the runtime verdict, like `space`, so the dialog shows both.
       // The address is read from vSphere for the adapter named, never taken from
       // the request: the node only ever probes the source host's own adapters.
@@ -232,7 +234,7 @@ async function probeCopyAdapter(prisma: any, sourceConnectionId: string, sourceV
     const ifaces = await readVmCopyInterfaces(prisma, sourceConnectionId, sourceVmId)
     const vnic = ifaces.vnics.find(v => v.device === device)
     if (!vnic?.address) return { address: "", ports: {}, ok: false, error: `VMkernel adapter ${device} has no address on the source host` }
-    return await runWarmCopyReachability(targetConnectionId, targetNode, vnic.address, ifaces.source === "esxi")
+    return await runWarmCopyReachability(targetConnectionId, targetNode, vnic.address, ifaces.source === "esxi", ifaces.source === "vcenter" ? ifaces.connectionHost : undefined)
   } catch (e: any) {
     return { address: "", ports: {}, ok: false, error: String(e?.message || e) }
   }

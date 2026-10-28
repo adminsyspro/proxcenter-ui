@@ -15,6 +15,7 @@
     "typecheck:strict": "node scripts/check-strict-types.mjs",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
     "build:icons": "tsx src/assets/iconify-icons/bundle-icons-css.mjs",
+    "build:bundles": "node bundle-novnc.js && node bundle-xterm.js && node bundle-spice.js && node bundle-console.js",
     "postinstall": "npm run build:icons",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -373,14 +373,14 @@ var SpiceHtml5 = (() => {
     setUint8: function(byteOffset, b) {
       this.u8[byteOffset] = b & 255;
     },
-    setUint16: function(byteOffset, i, littleEndian) {
+    setUint16: function(byteOffset, i2, littleEndian) {
       var low = 1, high = 0;
       if (littleEndian) {
         low = 0;
         high = 1;
       }
-      this.u8[byteOffset + high] = (i & 65535) >> 8;
-      this.u8[byteOffset + low] = i & 255;
+      this.u8[byteOffset + high] = (i2 & 65535) >> 8;
+      this.u8[byteOffset + low] = i2 & 255;
     },
     setUint32: function(byteOffset, w, littleEndian) {
       var low = 2, high = 0;
@@ -415,35 +415,35 @@ var SpiceHtml5 = (() => {
   function nbi() {
     return new BigInteger(null);
   }
-  function am1(i, x, w, j, c, n) {
+  function am1(i2, x, w, j2, c, n) {
     while (--n >= 0) {
-      var v = x * this[i++] + w[j] + c;
+      var v = x * this[i2++] + w[j2] + c;
       c = Math.floor(v / 67108864);
-      w[j++] = v & 67108863;
+      w[j2++] = v & 67108863;
     }
     return c;
   }
-  function am2(i, x, w, j, c, n) {
+  function am2(i2, x, w, j2, c, n) {
     var xl = x & 32767, xh = x >> 15;
     while (--n >= 0) {
-      var l = this[i] & 32767;
-      var h = this[i++] >> 15;
-      var m = xh * l + h * xl;
-      l = xl * l + ((m & 32767) << 15) + w[j] + (c & 1073741823);
-      c = (l >>> 30) + (m >>> 15) + xh * h + (c >>> 30);
-      w[j++] = l & 1073741823;
+      var l2 = this[i2] & 32767;
+      var h = this[i2++] >> 15;
+      var m = xh * l2 + h * xl;
+      l2 = xl * l2 + ((m & 32767) << 15) + w[j2] + (c & 1073741823);
+      c = (l2 >>> 30) + (m >>> 15) + xh * h + (c >>> 30);
+      w[j2++] = l2 & 1073741823;
     }
     return c;
   }
-  function am3(i, x, w, j, c, n) {
+  function am3(i2, x, w, j2, c, n) {
     var xl = x & 16383, xh = x >> 14;
     while (--n >= 0) {
-      var l = this[i] & 16383;
-      var h = this[i++] >> 14;
-      var m = xh * l + h * xl;
-      l = xl * l + ((m & 16383) << 14) + w[j] + c;
-      c = (l >> 28) + (m >> 14) + xh * h;
-      w[j++] = l & 268435455;
+      var l2 = this[i2] & 16383;
+      var h = this[i2++] >> 14;
+      var m = xh * l2 + h * xl;
+      l2 = xl * l2 + ((m & 16383) << 14) + w[j2] + c;
+      c = (l2 >> 28) + (m >> 14) + xh * h;
+      w[j2++] = l2 & 268435455;
     }
     return c;
   }
@@ -477,12 +477,12 @@ var SpiceHtml5 = (() => {
   function int2char(n) {
     return BI_RM.charAt(n);
   }
-  function intAt(s, i) {
-    var c = BI_RC[s.charCodeAt(i)];
+  function intAt(s, i2) {
+    var c = BI_RC[s.charCodeAt(i2)];
     return c == null ? -1 : c;
   }
   function bnpCopyTo(r) {
-    for (var i = this.t - 1; i >= 0; --i) r[i] = this[i];
+    for (var i2 = this.t - 1; i2 >= 0; --i2) r[i2] = this[i2];
     r.t = this.t;
     r.s = this.s;
   }
@@ -493,44 +493,44 @@ var SpiceHtml5 = (() => {
     else if (x < -1) this[0] = x + DV;
     else this.t = 0;
   }
-  function nbv(i) {
+  function nbv(i2) {
     var r = nbi();
-    r.fromInt(i);
+    r.fromInt(i2);
     return r;
   }
   function bnpFromString(s, b) {
-    var k;
-    if (b == 16) k = 4;
-    else if (b == 8) k = 3;
-    else if (b == 256) k = 8;
-    else if (b == 2) k = 1;
-    else if (b == 32) k = 5;
-    else if (b == 4) k = 2;
+    var k2;
+    if (b == 16) k2 = 4;
+    else if (b == 8) k2 = 3;
+    else if (b == 256) k2 = 8;
+    else if (b == 2) k2 = 1;
+    else if (b == 32) k2 = 5;
+    else if (b == 4) k2 = 2;
     else {
       this.fromRadix(s, b);
       return;
     }
     this.t = 0;
     this.s = 0;
-    var i = s.length, mi = false, sh = 0;
-    while (--i >= 0) {
-      var x = k == 8 ? s[i] & 255 : intAt(s, i);
+    var i2 = s.length, mi = false, sh = 0;
+    while (--i2 >= 0) {
+      var x = k2 == 8 ? s[i2] & 255 : intAt(s, i2);
       if (x < 0) {
-        if (s.charAt(i) == "-") mi = true;
+        if (s.charAt(i2) == "-") mi = true;
         continue;
       }
       mi = false;
       if (sh == 0)
         this[this.t++] = x;
-      else if (sh + k > this.DB) {
+      else if (sh + k2 > this.DB) {
         this[this.t - 1] |= (x & (1 << this.DB - sh) - 1) << sh;
         this[this.t++] = x >> this.DB - sh;
       } else
         this[this.t - 1] |= x << sh;
-      sh += k;
+      sh += k2;
       if (sh >= this.DB) sh -= this.DB;
     }
-    if (k == 8 && (s[0] & 128) != 0) {
+    if (k2 == 8 && (s[0] & 128) != 0) {
       this.s = -1;
       if (sh > 0) this[this.t - 1] |= (1 << this.DB - sh) - 1 << sh;
     }
@@ -543,29 +543,29 @@ var SpiceHtml5 = (() => {
   }
   function bnToString(b) {
     if (this.s < 0) return "-" + this.negate().toString(b);
-    var k;
-    if (b == 16) k = 4;
-    else if (b == 8) k = 3;
-    else if (b == 2) k = 1;
-    else if (b == 32) k = 5;
-    else if (b == 4) k = 2;
+    var k2;
+    if (b == 16) k2 = 4;
+    else if (b == 8) k2 = 3;
+    else if (b == 2) k2 = 1;
+    else if (b == 32) k2 = 5;
+    else if (b == 4) k2 = 2;
     else return this.toRadix(b);
-    var km = (1 << k) - 1, d, m = false, r = "", i = this.t;
-    var p = this.DB - i * this.DB % k;
-    if (i-- > 0) {
-      if (p < this.DB && (d = this[i] >> p) > 0) {
+    var km = (1 << k2) - 1, d, m = false, r = "", i2 = this.t;
+    var p = this.DB - i2 * this.DB % k2;
+    if (i2-- > 0) {
+      if (p < this.DB && (d = this[i2] >> p) > 0) {
         m = true;
         r = int2char(d);
       }
-      while (i >= 0) {
-        if (p < k) {
-          d = (this[i] & (1 << p) - 1) << k - p;
-          d |= this[--i] >> (p += this.DB - k);
+      while (i2 >= 0) {
+        if (p < k2) {
+          d = (this[i2] & (1 << p) - 1) << k2 - p;
+          d |= this[--i2] >> (p += this.DB - k2);
         } else {
-          d = this[i] >> (p -= k) & km;
+          d = this[i2] >> (p -= k2) & km;
           if (p <= 0) {
             p += this.DB;
-            --i;
+            --i2;
           }
         }
         if (d > 0) m = true;
@@ -585,32 +585,32 @@ var SpiceHtml5 = (() => {
   function bnCompareTo(a) {
     var r = this.s - a.s;
     if (r != 0) return r;
-    var i = this.t;
-    r = i - a.t;
+    var i2 = this.t;
+    r = i2 - a.t;
     if (r != 0) return r;
-    while (--i >= 0) if ((r = this[i] - a[i]) != 0) return r;
+    while (--i2 >= 0) if ((r = this[i2] - a[i2]) != 0) return r;
     return 0;
   }
   function nbits(x) {
-    var r = 1, t;
-    if ((t = x >>> 16) != 0) {
-      x = t;
+    var r = 1, t2;
+    if ((t2 = x >>> 16) != 0) {
+      x = t2;
       r += 16;
     }
-    if ((t = x >> 8) != 0) {
-      x = t;
+    if ((t2 = x >> 8) != 0) {
+      x = t2;
       r += 8;
     }
-    if ((t = x >> 4) != 0) {
-      x = t;
+    if ((t2 = x >> 4) != 0) {
+      x = t2;
       r += 4;
     }
-    if ((t = x >> 2) != 0) {
-      x = t;
+    if ((t2 = x >> 2) != 0) {
+      x = t2;
       r += 2;
     }
-    if ((t = x >> 1) != 0) {
-      x = t;
+    if ((t2 = x >> 1) != 0) {
+      x = t2;
       r += 1;
     }
     return r;
@@ -620,14 +620,14 @@ var SpiceHtml5 = (() => {
     return this.DB * (this.t - 1) + nbits(this[this.t - 1] ^ this.s & this.DM);
   }
   function bnpDLShiftTo(n, r) {
-    var i;
-    for (i = this.t - 1; i >= 0; --i) r[i + n] = this[i];
-    for (i = n - 1; i >= 0; --i) r[i] = 0;
+    var i2;
+    for (i2 = this.t - 1; i2 >= 0; --i2) r[i2 + n] = this[i2];
+    for (i2 = n - 1; i2 >= 0; --i2) r[i2] = 0;
     r.t = this.t + n;
     r.s = this.s;
   }
   function bnpDRShiftTo(n, r) {
-    for (var i = n; i < this.t; ++i) r[i - n] = this[i];
+    for (var i2 = n; i2 < this.t; ++i2) r[i2 - n] = this[i2];
     r.t = Math.max(this.t - n, 0);
     r.s = this.s;
   }
@@ -635,12 +635,12 @@ var SpiceHtml5 = (() => {
     var bs = n % this.DB;
     var cbs = this.DB - bs;
     var bm = (1 << cbs) - 1;
-    var ds = Math.floor(n / this.DB), c = this.s << bs & this.DM, i;
-    for (i = this.t - 1; i >= 0; --i) {
-      r[i + ds + 1] = this[i] >> cbs | c;
-      c = (this[i] & bm) << bs;
+    var ds = Math.floor(n / this.DB), c = this.s << bs & this.DM, i2;
+    for (i2 = this.t - 1; i2 >= 0; --i2) {
+      r[i2 + ds + 1] = this[i2] >> cbs | c;
+      c = (this[i2] & bm) << bs;
     }
-    for (i = ds - 1; i >= 0; --i) r[i] = 0;
+    for (i2 = ds - 1; i2 >= 0; --i2) r[i2] = 0;
     r[ds] = c;
     r.t = this.t + ds + 1;
     r.s = this.s;
@@ -657,66 +657,66 @@ var SpiceHtml5 = (() => {
     var cbs = this.DB - bs;
     var bm = (1 << bs) - 1;
     r[0] = this[ds] >> bs;
-    for (var i = ds + 1; i < this.t; ++i) {
-      r[i - ds - 1] |= (this[i] & bm) << cbs;
-      r[i - ds] = this[i] >> bs;
+    for (var i2 = ds + 1; i2 < this.t; ++i2) {
+      r[i2 - ds - 1] |= (this[i2] & bm) << cbs;
+      r[i2 - ds] = this[i2] >> bs;
     }
     if (bs > 0) r[this.t - ds - 1] |= (this.s & bm) << cbs;
     r.t = this.t - ds;
     r.clamp();
   }
   function bnpSubTo(a, r) {
-    var i = 0, c = 0, m = Math.min(a.t, this.t);
-    while (i < m) {
-      c += this[i] - a[i];
-      r[i++] = c & this.DM;
+    var i2 = 0, c = 0, m = Math.min(a.t, this.t);
+    while (i2 < m) {
+      c += this[i2] - a[i2];
+      r[i2++] = c & this.DM;
       c >>= this.DB;
     }
     if (a.t < this.t) {
       c -= a.s;
-      while (i < this.t) {
-        c += this[i];
-        r[i++] = c & this.DM;
+      while (i2 < this.t) {
+        c += this[i2];
+        r[i2++] = c & this.DM;
         c >>= this.DB;
       }
       c += this.s;
     } else {
       c += this.s;
-      while (i < a.t) {
-        c -= a[i];
-        r[i++] = c & this.DM;
+      while (i2 < a.t) {
+        c -= a[i2];
+        r[i2++] = c & this.DM;
         c >>= this.DB;
       }
       c -= a.s;
     }
     r.s = c < 0 ? -1 : 0;
-    if (c < -1) r[i++] = this.DV + c;
-    else if (c > 0) r[i++] = c;
-    r.t = i;
+    if (c < -1) r[i2++] = this.DV + c;
+    else if (c > 0) r[i2++] = c;
+    r.t = i2;
     r.clamp();
   }
   function bnpMultiplyTo(a, r) {
     var x = this.abs(), y = a.abs();
-    var i = x.t;
-    r.t = i + y.t;
-    while (--i >= 0) r[i] = 0;
-    for (i = 0; i < y.t; ++i) r[i + x.t] = x.am(0, y[i], r, i, 0, x.t);
+    var i2 = x.t;
+    r.t = i2 + y.t;
+    while (--i2 >= 0) r[i2] = 0;
+    for (i2 = 0; i2 < y.t; ++i2) r[i2 + x.t] = x.am(0, y[i2], r, i2, 0, x.t);
     r.s = 0;
     r.clamp();
     if (this.s != a.s) BigInteger.ZERO.subTo(r, r);
   }
   function bnpSquareTo(r) {
     var x = this.abs();
-    var i = r.t = 2 * x.t;
-    while (--i >= 0) r[i] = 0;
-    for (i = 0; i < x.t - 1; ++i) {
-      var c = x.am(i, x[i], r, 2 * i, 0, 1);
-      if ((r[i + x.t] += x.am(i + 1, 2 * x[i], r, 2 * i + 1, c, x.t - i - 1)) >= x.DV) {
-        r[i + x.t] -= x.DV;
-        r[i + x.t + 1] = 1;
+    var i2 = r.t = 2 * x.t;
+    while (--i2 >= 0) r[i2] = 0;
+    for (i2 = 0; i2 < x.t - 1; ++i2) {
+      var c = x.am(i2, x[i2], r, 2 * i2, 0, 1);
+      if ((r[i2 + x.t] += x.am(i2 + 1, 2 * x[i2], r, 2 * i2 + 1, c, x.t - i2 - 1)) >= x.DV) {
+        r[i2 + x.t] -= x.DV;
+        r[i2 + x.t + 1] = 1;
       }
     }
-    if (r.t > 0) r[r.t - 1] += x.am(i, x[i], r, 2 * i, 0, 1);
+    if (r.t > 0) r[r.t - 1] += x.am(i2, x[i2], r, 2 * i2, 0, 1);
     r.s = 0;
     r.clamp();
   }
@@ -744,21 +744,21 @@ var SpiceHtml5 = (() => {
     if (y0 == 0) return;
     var yt = y0 * (1 << this.F1) + (ys > 1 ? y[ys - 2] >> this.F2 : 0);
     var d1 = this.FV / yt, d2 = (1 << this.F1) / yt, e = 1 << this.F2;
-    var i = r.t, j = i - ys, t = q == null ? nbi() : q;
-    y.dlShiftTo(j, t);
-    if (r.compareTo(t) >= 0) {
+    var i2 = r.t, j2 = i2 - ys, t2 = q == null ? nbi() : q;
+    y.dlShiftTo(j2, t2);
+    if (r.compareTo(t2) >= 0) {
       r[r.t++] = 1;
-      r.subTo(t, r);
+      r.subTo(t2, r);
     }
-    BigInteger.ONE.dlShiftTo(ys, t);
-    t.subTo(y, y);
+    BigInteger.ONE.dlShiftTo(ys, t2);
+    t2.subTo(y, y);
     while (y.t < ys) y[y.t++] = 0;
-    while (--j >= 0) {
-      var qd = r[--i] == y0 ? this.DM : Math.floor(r[i] * d1 + (r[i - 1] + e) * d2);
-      if ((r[i] += y.am(0, qd, r, j, 0, ys)) < qd) {
-        y.dlShiftTo(j, t);
-        r.subTo(t, r);
-        while (r[i] < --qd) r.subTo(t, r);
+    while (--j2 >= 0) {
+      var qd = r[--i2] == y0 ? this.DM : Math.floor(r[i2] * d1 + (r[i2 - 1] + e) * d2);
+      if ((r[i2] += y.am(0, qd, r, j2, 0, ys)) < qd) {
+        y.dlShiftTo(j2, t2);
+        r.subTo(t2, r);
+        while (r[i2] < --qd) r.subTo(t2, r);
       }
     }
     if (q != null) {
@@ -837,14 +837,14 @@ var SpiceHtml5 = (() => {
   function montReduce(x) {
     while (x.t <= this.mt2)
       x[x.t++] = 0;
-    for (var i = 0; i < this.m.t; ++i) {
-      var j = x[i] & 32767;
-      var u0 = j * this.mpl + ((j * this.mph + (x[i] >> 15) * this.mpl & this.um) << 15) & x.DM;
-      j = i + this.m.t;
-      x[j] += this.m.am(0, u0, x, i, 0, this.m.t);
-      while (x[j] >= x.DV) {
-        x[j] -= x.DV;
-        x[++j]++;
+    for (var i2 = 0; i2 < this.m.t; ++i2) {
+      var j2 = x[i2] & 32767;
+      var u0 = j2 * this.mpl + ((j2 * this.mph + (x[i2] >> 15) * this.mpl & this.um) << 15) & x.DM;
+      j2 = i2 + this.m.t;
+      x[j2] += this.m.am(0, u0, x, i2, 0, this.m.t);
+      while (x[j2] >= x.DV) {
+        x[j2] -= x.DV;
+        x[++j2]++;
       }
     }
     x.clamp();
@@ -867,26 +867,26 @@ var SpiceHtml5 = (() => {
   function bnpIsEven() {
     return (this.t > 0 ? this[0] & 1 : this.s) == 0;
   }
-  function bnpExp(e, z) {
+  function bnpExp(e, z2) {
     if (e > 4294967295 || e < 1) return BigInteger.ONE;
-    var r = nbi(), r2 = nbi(), g = z.convert(this), i = nbits(e) - 1;
+    var r = nbi(), r2 = nbi(), g = z2.convert(this), i2 = nbits(e) - 1;
     g.copyTo(r);
-    while (--i >= 0) {
-      z.sqrTo(r, r2);
-      if ((e & 1 << i) > 0) z.mulTo(r2, g, r);
+    while (--i2 >= 0) {
+      z2.sqrTo(r, r2);
+      if ((e & 1 << i2) > 0) z2.mulTo(r2, g, r);
       else {
-        var t = r;
+        var t2 = r;
         r = r2;
-        r2 = t;
+        r2 = t2;
       }
     }
-    return z.revert(r);
+    return z2.revert(r);
   }
   function bnModPowInt(e, m) {
-    var z;
-    if (e < 256 || m.isEven()) z = new Classic(m);
-    else z = new Montgomery(m);
-    return this.exp(e, z);
+    var z2;
+    if (e < 256 || m.isEven()) z2 = new Classic(m);
+    else z2 = new Montgomery(m);
+    return this.exp(e, z2);
   }
   BigInteger.prototype.copyTo = bnpCopyTo;
   BigInteger.prototype.fromInt = bnpFromInt;
@@ -920,27 +920,27 @@ var SpiceHtml5 = (() => {
     this.S = new Array();
   }
   function ARC4init(key) {
-    var i, j, t;
-    for (i = 0; i < 256; ++i)
-      this.S[i] = i;
-    j = 0;
-    for (i = 0; i < 256; ++i) {
-      j = j + this.S[i] + key[i % key.length] & 255;
-      t = this.S[i];
-      this.S[i] = this.S[j];
-      this.S[j] = t;
+    var i2, j2, t2;
+    for (i2 = 0; i2 < 256; ++i2)
+      this.S[i2] = i2;
+    j2 = 0;
+    for (i2 = 0; i2 < 256; ++i2) {
+      j2 = j2 + this.S[i2] + key[i2 % key.length] & 255;
+      t2 = this.S[i2];
+      this.S[i2] = this.S[j2];
+      this.S[j2] = t2;
     }
     this.i = 0;
     this.j = 0;
   }
   function ARC4next() {
-    var t;
+    var t2;
     this.i = this.i + 1 & 255;
     this.j = this.j + this.S[this.i] & 255;
-    t = this.S[this.i];
+    t2 = this.S[this.i];
     this.S[this.i] = this.S[this.j];
-    this.S[this.j] = t;
-    return this.S[t + this.S[this.i] & 255];
+    this.S[this.j] = t2;
+    return this.S[t2 + this.S[this.i] & 255];
   }
   Arcfour.prototype.init = ARC4init;
   Arcfour.prototype.next = ARC4next;
@@ -993,8 +993,8 @@ var SpiceHtml5 = (() => {
     return rng_state.next();
   }
   function rng_get_bytes(ba) {
-    var i;
-    for (i = 0; i < ba.length; ++i) ba[i] = rng_get_byte();
+    var i2;
+    for (i2 = 0; i2 < ba.length; ++i2) ba[i2] = rng_get_byte();
   }
   function SecureRandom() {
   }
@@ -1010,9 +1010,9 @@ var SpiceHtml5 = (() => {
       return null;
     }
     var ba = new Array();
-    var i = s.length - 1;
-    while (i >= 0 && n > 0) {
-      var c = s.charCodeAt(i--);
+    var i2 = s.length - 1;
+    while (i2 >= 0 && n > 0) {
+      var c = s.charCodeAt(i2--);
       if (c < 128) {
         ba[--n] = c;
       } else if (c > 127 && c < 2048) {
@@ -1086,22 +1086,22 @@ var SpiceHtml5 = (() => {
     var hex_tab = hexcase ? "0123456789ABCDEF" : "0123456789abcdef";
     var output = "";
     var x;
-    for (var i = 0; i < input.length; i++) {
-      x = input.charCodeAt(i);
+    for (var i2 = 0; i2 < input.length; i2++) {
+      x = input.charCodeAt(i2);
       output += hex_tab.charAt(x >>> 4 & 15) + hex_tab.charAt(x & 15);
     }
     return output;
   }
   function str2rstr_utf8(input) {
     var output = "";
-    var i = -1;
+    var i2 = -1;
     var x, y;
-    while (++i < input.length) {
-      x = input.charCodeAt(i);
-      y = i + 1 < input.length ? input.charCodeAt(i + 1) : 0;
+    while (++i2 < input.length) {
+      x = input.charCodeAt(i2);
+      y = i2 + 1 < input.length ? input.charCodeAt(i2 + 1) : 0;
       if (55296 <= x && x <= 56319 && 56320 <= y && y <= 57343) {
         x = 65536 + ((x & 1023) << 10) + (y & 1023);
-        i++;
+        i2++;
       }
       if (x <= 127)
         output += String.fromCharCode(x);
@@ -1128,16 +1128,16 @@ var SpiceHtml5 = (() => {
   }
   function rstr2binb(input) {
     var output = Array(input.length >> 2);
-    for (var i = 0; i < output.length; i++)
-      output[i] = 0;
-    for (var i = 0; i < input.length * 8; i += 8)
-      output[i >> 5] |= (input.charCodeAt(i / 8) & 255) << 24 - i % 32;
+    for (var i2 = 0; i2 < output.length; i2++)
+      output[i2] = 0;
+    for (var i2 = 0; i2 < input.length * 8; i2 += 8)
+      output[i2 >> 5] |= (input.charCodeAt(i2 / 8) & 255) << 24 - i2 % 32;
     return output;
   }
   function binb2rstr(input) {
     var output = "";
-    for (var i = 0; i < input.length * 32; i += 8)
-      output += String.fromCharCode(input[i >> 5] >>> 24 - i % 32 & 255);
+    for (var i2 = 0; i2 < input.length * 32; i2 += 8)
+      output += String.fromCharCode(input[i2 >> 5] >>> 24 - i2 % 32 & 255);
     return output;
   }
   function binb_sha1(x, len) {
@@ -1149,24 +1149,24 @@ var SpiceHtml5 = (() => {
     var c = -1732584194;
     var d = 271733878;
     var e = -1009589776;
-    for (var i = 0; i < x.length; i += 16) {
+    for (var i2 = 0; i2 < x.length; i2 += 16) {
       var olda = a;
       var oldb = b;
       var oldc = c;
       var oldd = d;
       var olde = e;
-      for (var j = 0; j < 80; j++) {
-        if (j < 16) w[j] = x[i + j];
-        else w[j] = bit_rol(w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16], 1);
-        var t = safe_add(
-          safe_add(bit_rol(a, 5), sha1_ft(j, b, c, d)),
-          safe_add(safe_add(e, w[j]), sha1_kt(j))
+      for (var j2 = 0; j2 < 80; j2++) {
+        if (j2 < 16) w[j2] = x[i2 + j2];
+        else w[j2] = bit_rol(w[j2 - 3] ^ w[j2 - 8] ^ w[j2 - 14] ^ w[j2 - 16], 1);
+        var t2 = safe_add(
+          safe_add(bit_rol(a, 5), sha1_ft(j2, b, c, d)),
+          safe_add(safe_add(e, w[j2]), sha1_kt(j2))
         );
         e = d;
         d = c;
         c = bit_rol(b, 30);
         b = a;
-        a = t;
+        a = t2;
       }
       a = safe_add(a, olda);
       b = safe_add(b, oldb);
@@ -1176,14 +1176,14 @@ var SpiceHtml5 = (() => {
     }
     return Array(a, b, c, d, e);
   }
-  function sha1_ft(t, b, c, d) {
-    if (t < 20) return b & c | ~b & d;
-    if (t < 40) return b ^ c ^ d;
-    if (t < 60) return b & c | b & d | c & d;
+  function sha1_ft(t2, b, c, d) {
+    if (t2 < 20) return b & c | ~b & d;
+    if (t2 < 40) return b ^ c ^ d;
+    if (t2 < 60) return b & c | b & d | c & d;
     return b ^ c ^ d;
   }
-  function sha1_kt(t) {
-    return t < 20 ? 1518500249 : t < 40 ? 1859775393 : t < 60 ? -1894007588 : -899497514;
+  function sha1_kt(t2) {
+    return t2 < 20 ? 1518500249 : t2 < 40 ? 1859775393 : t2 < 60 ? -1894007588 : -899497514;
   }
   function safe_add(x, y) {
     var lsw = (x & 65535) + (y & 65535);
@@ -1197,18 +1197,18 @@ var SpiceHtml5 = (() => {
   // vendor/spice-html5/ticket.js
   var SHA_DIGEST_LENGTH = 20;
   function MGF1(mask, seed) {
-    var i, j, outlen;
-    for (i = 0, outlen = 0; outlen < mask.length; i++) {
+    var i2, j2, outlen;
+    for (i2 = 0, outlen = 0; outlen < mask.length; i2++) {
       var combo_buf = new String();
-      for (j = 0; j < seed.length; j++)
-        combo_buf += String.fromCharCode(seed[j]);
-      combo_buf += String.fromCharCode(i >> 24 & 255);
-      combo_buf += String.fromCharCode(i >> 16 & 255);
-      combo_buf += String.fromCharCode(i >> 8 & 255);
-      combo_buf += String.fromCharCode(i & 255);
+      for (j2 = 0; j2 < seed.length; j2++)
+        combo_buf += String.fromCharCode(seed[j2]);
+      combo_buf += String.fromCharCode(i2 >> 24 & 255);
+      combo_buf += String.fromCharCode(i2 >> 16 & 255);
+      combo_buf += String.fromCharCode(i2 >> 8 & 255);
+      combo_buf += String.fromCharCode(i2 & 255);
       var combo_hash = rstr_sha1(combo_buf);
-      for (j = 0; j < combo_hash.length && outlen < mask.length; j++, outlen++) {
-        mask[outlen] = combo_hash.charCodeAt(j);
+      for (j2 = 0; j2 < combo_hash.length && outlen < mask.length; j2++, outlen++) {
+        mask[outlen] = combo_hash.charCodeAt(j2);
       }
     }
   }
@@ -1219,37 +1219,37 @@ var SpiceHtml5 = (() => {
     var dblen = tolen - 1 - seed.length;
     var db = new Array(dblen);
     var padlen = dblen - from.length - 1;
-    var i;
+    var i2;
     if (param === void 0)
       param = "";
     if (padlen < SHA_DIGEST_LENGTH) {
       console.log("Error - data too large for key size.");
       return null;
     }
-    for (i = 0; i < padlen; i++)
-      db[i] = 0;
+    for (i2 = 0; i2 < padlen; i2++)
+      db[i2] = 0;
     var param_hash = rstr_sha1(param);
-    for (i = 0; i < param_hash.length; i++)
-      db[i] = param_hash.charCodeAt(i);
+    for (i2 = 0; i2 < param_hash.length; i2++)
+      db[i2] = param_hash.charCodeAt(i2);
     db[padlen] = 1;
-    for (i = 0; i < from.length; i++)
-      db[i + padlen + 1] = from.charCodeAt(i);
+    for (i2 = 0; i2 < from.length; i2++)
+      db[i2 + padlen + 1] = from.charCodeAt(i2);
     var dbmask = new Array(dblen);
     if (MGF1(dbmask, seed) < 0)
       return null;
-    for (i = 0; i < dbmask.length; i++)
-      db[i] ^= dbmask[i];
+    for (i2 = 0; i2 < dbmask.length; i2++)
+      db[i2] ^= dbmask[i2];
     var seedmask = Array(SHA_DIGEST_LENGTH);
     if (MGF1(seedmask, db) < 0)
       return null;
-    for (i = 0; i < seedmask.length; i++)
-      seed[i] ^= seedmask[i];
+    for (i2 = 0; i2 < seedmask.length; i2++)
+      seed[i2] ^= seedmask[i2];
     var ret = new String();
     ret += String.fromCharCode(0);
-    for (i = 0; i < seed.length; i++)
-      ret += String.fromCharCode(seed[i]);
-    for (i = 0; i < db.length; i++)
-      ret += String.fromCharCode(db[i]);
+    for (i2 = 0; i2 < seed.length; i2++)
+      ret += String.fromCharCode(seed[i2]);
+    for (i2 = 0; i2 < db.length; i2++)
+      ret += String.fromCharCode(db[i2]);
     return ret;
   }
   function asn_get_length(u8, at) {
@@ -1280,7 +1280,7 @@ var SpiceHtml5 = (() => {
     var lenblock;
     var seq;
     var ba;
-    var i;
+    var i2;
     var ret;
     seq = find_sequence(u8, at);
     if (!seq)
@@ -1315,8 +1315,8 @@ var SpiceHtml5 = (() => {
       return null;
     at = lenblock[0];
     ba = new Array(lenblock[1]);
-    for (i = 0; i < lenblock[1]; i++)
-      ba[i] = u8[at + i];
+    for (i2 = 0; i2 < lenblock[1]; i2++)
+      ba[i2] = u8[at + i2];
     ret = new RSAKey();
     ret.n = new BigInteger(ba);
     at += lenblock[1];
@@ -1329,28 +1329,28 @@ var SpiceHtml5 = (() => {
       return null;
     at = lenblock[0];
     ret.e = u8[at++];
-    for (i = 1; i < lenblock[1]; i++) {
+    for (i2 = 1; i2 < lenblock[1]; i2++) {
       ret.e <<= 8;
       ret.e |= u8[at++];
     }
     return ret;
   }
   function rsa_encrypt(rsa, str) {
-    var i;
+    var i2;
     var ret = [];
     var oaep = RSA_padding_add_PKCS1_OAEP(rsa.n.bitLength() + 7 >> 3, str);
     if (!oaep)
       return null;
     var ba = new Array(oaep.length);
-    for (i = 0; i < oaep.length; i++)
-      ba[i] = oaep.charCodeAt(i);
+    for (i2 = 0; i2 < oaep.length; i2++)
+      ba[i2] = oaep.charCodeAt(i2);
     var bigint = new BigInteger(ba);
     var enc = rsa.doPublic(bigint);
     var h = enc.toString(16);
     if ((h.length & 1) != 0)
       h = "0" + h;
-    for (i = 0; i < h.length; i += 2)
-      ret[i / 2] = parseInt(h.substring(i, i + 2), 16);
+    for (i2 = 0; i2 < h.length; i2 += 2)
+      ret[i2 / 2] = parseInt(h.substring(i2, i2 + 2), 16);
     return ret;
   }
 
@@ -1994,17 +1994,17 @@ var SpiceHtml5 = (() => {
     return result;
   }
   function family_init(family, bpc, limit) {
-    var l;
-    for (l = 0; l < bpc; l++) {
+    var l2;
+    for (l2 = 0; l2 < bpc; l2++) {
       var altprefixlen, altcodewords;
       altprefixlen = limit - bpc;
-      if (altprefixlen > bppmask[bpc - l])
-        altprefixlen = bppmask[bpc - l];
-      altcodewords = bppmask[bpc] + 1 - (altprefixlen << l);
-      family.nGRcodewords[l] = altprefixlen << l;
-      family.notGRcwlen[l] = altprefixlen + ceil_log_2(altcodewords);
-      family.notGRprefixmask[l] = bppmask[32 - altprefixlen] >>> 0;
-      family.notGRsuffixlen[l] = ceil_log_2(altcodewords);
+      if (altprefixlen > bppmask[bpc - l2])
+        altprefixlen = bppmask[bpc - l2];
+      altcodewords = bppmask[bpc] + 1 - (altprefixlen << l2);
+      family.nGRcodewords[l2] = altprefixlen << l2;
+      family.notGRcwlen[l2] = altprefixlen + ceil_log_2(altcodewords);
+      family.notGRprefixmask[l2] = bppmask[32 - altprefixlen] >>> 0;
+      family.notGRsuffixlen[l2] = ceil_log_2(altcodewords);
     }
     var pixelbitmask = bppmask[bpc];
     var pixelbitmaskshr = pixelbitmask >>> 1;
@@ -2053,24 +2053,24 @@ var SpiceHtml5 = (() => {
       return 24 + lzeroes[bits & 255];
     }
   }
-  function golomb_decoding_8bpc(l, bits) {
+  function golomb_decoding_8bpc(l2, bits) {
     var rc;
     var cwlen;
-    if (bits < 0 || bits > family_8bpc.notGRprefixmask[l]) {
+    if (bits < 0 || bits > family_8bpc.notGRprefixmask[l2]) {
       var zeroprefix = cnt_l_zeroes(bits);
-      cwlen = zeroprefix + 1 + l;
-      rc = zeroprefix << l | bits >> 32 - cwlen & bppmask[l];
+      cwlen = zeroprefix + 1 + l2;
+      rc = zeroprefix << l2 | bits >> 32 - cwlen & bppmask[l2];
     } else {
-      cwlen = family_8bpc.notGRcwlen[l];
-      rc = family_8bpc.nGRcodewords[l] + (bits >> 32 - cwlen & bppmask[family_8bpc.notGRsuffixlen[l]]);
+      cwlen = family_8bpc.notGRcwlen[l2];
+      rc = family_8bpc.nGRcodewords[l2] + (bits >> 32 - cwlen & bppmask[family_8bpc.notGRsuffixlen[l2]]);
     }
     return { "codewordlen": cwlen, "rc": rc };
   }
-  function golomb_code_len_8bpc(n, l) {
-    if (n < family_8bpc.nGRcodewords[l]) {
-      return (n >>> l) + 1 + l;
+  function golomb_code_len_8bpc(n, l2) {
+    if (n < family_8bpc.nGRcodewords[l2]) {
+      return (n >>> l2) + 1 + l2;
     } else {
-      return family_8bpc.notGRcwlen[l];
+      return family_8bpc.notGRcwlen[l2];
     }
   }
   function QuicModel(bpc) {
@@ -2147,20 +2147,20 @@ var SpiceHtml5 = (() => {
       this.counters = [0, 0, 0, 0, 0, 0, 0, 0];
     },
     update_model_8bpc: function(state, curval, bpp) {
-      var i;
+      var i2;
       var bestcode = bpp - 1;
       var bestcodelen = this.counters[bestcode] += golomb_code_len_8bpc(curval, bestcode);
-      for (i = bpp - 2; i >= 0; i--) {
-        var ithcodelen = this.counters[i] += golomb_code_len_8bpc(curval, i);
+      for (i2 = bpp - 2; i2 >= 0; i2--) {
+        var ithcodelen = this.counters[i2] += golomb_code_len_8bpc(curval, i2);
         if (ithcodelen < bestcodelen) {
-          bestcode = i;
+          bestcode = i2;
           bestcodelen = ithcodelen;
         }
       }
       this.bestcode = bestcode;
       if (bestcodelen > state.wm_trigger) {
-        for (i = 0; i < bpp; i++) {
-          this.counters[i] = this.counters[i] >>> 1;
+        for (i2 = 0; i2 < bpp; i2++) {
+          this.counters[i2] = this.counters[i2] >>> 1;
         }
       }
     }
@@ -2191,9 +2191,9 @@ var SpiceHtml5 = (() => {
           bend = model.levels - 1;
         }
         this.buckets_buf[bnumber] = new QuicBucket();
-        var i;
-        for (i = bstart; i <= bend; i++) {
-          this.buckets_ptrs[i] = this.buckets_buf[bnumber];
+        var i2;
+        for (i2 = bstart; i2 <= bend; i2++) {
+          this.buckets_ptrs[i2] = this.buckets_buf[bnumber];
         }
         bnumber++;
       } while (bend < model.levels - 1);
@@ -2215,15 +2215,15 @@ var SpiceHtml5 = (() => {
   }
   QuicChannel.prototype = {
     reste: function(bpc) {
-      var j;
+      var j2;
       this.correlate_row = { zero: 0, row: [] };
       if (bpc == 8) {
-        for (j = 0; j < this.model_8bpc.n_buckets; j++)
-          this.family_stat_8bpc.buckets_buf[j].reste(7);
+        for (j2 = 0; j2 < this.model_8bpc.n_buckets; j2++)
+          this.family_stat_8bpc.buckets_buf[j2].reste(7);
         this.buckets_ptrs = this.family_stat_8bpc.buckets_ptrs;
       } else if (bpc == 5) {
-        for (j = 0; j < this.model_5bpc.n_buckets; j++)
-          this.family_stat_8bpc.buckets_buf[j].reste(4);
+        for (j2 = 0; j2 < this.model_5bpc.n_buckets; j2++)
+          this.family_stat_8bpc.buckets_buf[j2].reste(4);
         this.buckets_ptrs = this.family_stat_5bpc.buckets_ptrs;
       } else {
         console.log("quic: %s: bad bpc %d\n", __FUNCTION__, bpc);
@@ -2271,10 +2271,10 @@ var SpiceHtml5 = (() => {
     this.model_8bpc = new QuicModel(8);
     this.model_5bpc = new QuicModel(5);
     this.channels = [];
-    var i;
-    for (i = 0; i < 4; i++) {
-      this.channels[i] = new QuicChannel(this.model_8bpc, this.model_5bpc);
-      if (!this.channels[i]) {
+    var i2;
+    for (i2 = 0; i2 < 4; i2++) {
+      this.channels[i2] = new QuicChannel(this.model_8bpc, this.model_5bpc);
+      if (!this.channels[i2]) {
         console.log("quic: failed to create channel");
         return void 0;
       }
@@ -2324,9 +2324,9 @@ var SpiceHtml5 = (() => {
     this.decode_eatbits(16);
   };
   QuicEncoder.prototype.reste_channels = function(bpc) {
-    var i;
-    for (i = 0; i < 4; i++)
-      if (!this.channels[i].reste(bpc))
+    var i2;
+    for (i2 = 0; i2 < 4; i2++)
+      if (!this.channels[i2].reste(bpc))
         return false;
     return true;
   };
@@ -2361,12 +2361,12 @@ var SpiceHtml5 = (() => {
       return false;
     return true;
   };
-  QuicEncoder.prototype.quic_rgb32_uncompress_row0_seg = function(i, cur_row, end, waitmask, bpc, bpc_mask) {
+  QuicEncoder.prototype.quic_rgb32_uncompress_row0_seg = function(i2, cur_row, end, waitmask, bpc, bpc_mask) {
     var stopidx;
     var n_channels = 3;
     var c;
     var a;
-    if (!i) {
+    if (!i2) {
       cur_row[rgb32_pixel_pad] = 0;
       c = 0;
       do {
@@ -2384,18 +2384,18 @@ var SpiceHtml5 = (() => {
           this.channels[c].buckets_ptrs[this.channels[c].correlate_row.zero].update_model_8bpc(this.rgb_state, this.channels[c].correlate_row.row[0], bpc);
         } while (++c < n_channels);
       }
-      stopidx = ++i + this.rgb_state.waitcnt;
+      stopidx = ++i2 + this.rgb_state.waitcnt;
     } else {
-      stopidx = i + this.rgb_state.waitcnt;
+      stopidx = i2 + this.rgb_state.waitcnt;
     }
     while (stopidx < end) {
-      for (; i <= stopidx; i++) {
-        cur_row[i * rgb32_pixel_size + rgb32_pixel_pad] = 0;
+      for (; i2 <= stopidx; i2++) {
+        cur_row[i2 * rgb32_pixel_size + rgb32_pixel_pad] = 0;
         c = 0;
         do {
-          a = golomb_decoding_8bpc(this.channels[c].buckets_ptrs[this.channels[c].correlate_row.row[i - 1]].bestcode, this.io_word);
-          this.channels[c].correlate_row.row[i] = a.rc;
-          cur_row[i * rgb32_pixel_size + (2 - c)] = family_8bpc.xlatL2U[a.rc] + cur_row[(i - 1) * rgb32_pixel_size + (2 - c)] & bpc_mask;
+          a = golomb_decoding_8bpc(this.channels[c].buckets_ptrs[this.channels[c].correlate_row.row[i2 - 1]].bestcode, this.io_word);
+          this.channels[c].correlate_row.row[i2] = a.rc;
+          cur_row[i2 * rgb32_pixel_size + (2 - c)] = family_8bpc.xlatL2U[a.rc] + cur_row[(i2 - 1) * rgb32_pixel_size + (2 - c)] & bpc_mask;
           this.decode_eatbits(a.codewordlen);
         } while (++c < n_channels);
       }
@@ -2403,15 +2403,15 @@ var SpiceHtml5 = (() => {
       do {
         this.channels[c].buckets_ptrs[this.channels[c].correlate_row.row[stopidx - 1]].update_model_8bpc(this.rgb_state, this.channels[c].correlate_row.row[stopidx], bpc);
       } while (++c < n_channels);
-      stopidx = i + (this.rgb_state.tabrand() & waitmask);
+      stopidx = i2 + (this.rgb_state.tabrand() & waitmask);
     }
-    for (; i < end; i++) {
-      cur_row[i * rgb32_pixel_size + rgb32_pixel_pad] = 0;
+    for (; i2 < end; i2++) {
+      cur_row[i2 * rgb32_pixel_size + rgb32_pixel_pad] = 0;
       c = 0;
       do {
-        a = golomb_decoding_8bpc(this.channels[c].buckets_ptrs[this.channels[c].correlate_row.row[i - 1]].bestcode, this.io_word);
-        this.channels[c].correlate_row.row[i] = a.rc;
-        cur_row[i * rgb32_pixel_size + (2 - c)] = family_8bpc.xlatL2U[a.rc] + cur_row[(i - 1) * rgb32_pixel_size + (2 - c)] & bpc_mask;
+        a = golomb_decoding_8bpc(this.channels[c].buckets_ptrs[this.channels[c].correlate_row.row[i2 - 1]].bestcode, this.io_word);
+        this.channels[c].correlate_row.row[i2] = a.rc;
+        cur_row[i2 * rgb32_pixel_size + (2 - c)] = family_8bpc.xlatL2U[a.rc] + cur_row[(i2 - 1) * rgb32_pixel_size + (2 - c)] & bpc_mask;
         this.decode_eatbits(a.codewordlen);
       } while (++c < n_channels);
     }
@@ -2453,7 +2453,7 @@ var SpiceHtml5 = (() => {
       }
     }
   };
-  QuicEncoder.prototype.quic_rgb32_uncompress_row_seg = function(prev_row, cur_row, i, end, bpc, bpc_mask) {
+  QuicEncoder.prototype.quic_rgb32_uncompress_row_seg = function(prev_row, cur_row, i2, end, bpc, bpc_mask) {
     var n_channels = 3;
     var waitmask = bppmask[this.rgb_state.wmidx];
     var a;
@@ -2461,7 +2461,7 @@ var SpiceHtml5 = (() => {
     var stopidx = 0;
     var run_end = 0;
     var c;
-    if (!i) {
+    if (!i2) {
       cur_row[rgb32_pixel_pad] = 0;
       c = 0;
       do {
@@ -2479,34 +2479,34 @@ var SpiceHtml5 = (() => {
           this.channels[c].buckets_ptrs[this.channels[c].correlate_row.zero].update_model_8bpc(this.rgb_state, this.channels[c].correlate_row.row[0], bpc);
         } while (++c < n_channels);
       }
-      stopidx = ++i + this.rgb_state.waitcnt;
+      stopidx = ++i2 + this.rgb_state.waitcnt;
     } else {
-      stopidx = i + this.rgb_state.waitcnt;
+      stopidx = i2 + this.rgb_state.waitcnt;
     }
     for (; ; ) {
       var rc = 0;
       while (stopidx < end && !rc) {
-        for (; i <= stopidx && !rc; i++) {
-          var pixel = i * rgb32_pixel_size;
-          var pixelm1 = (i - 1) * rgb32_pixel_size;
-          var pixelm2 = (i - 2) * rgb32_pixel_size;
+        for (; i2 <= stopidx && !rc; i2++) {
+          var pixel = i2 * rgb32_pixel_size;
+          var pixelm1 = (i2 - 1) * rgb32_pixel_size;
+          var pixelm2 = (i2 - 2) * rgb32_pixel_size;
           if (prev_row[pixelm1 + rgb32_pixel_r] == prev_row[pixel + rgb32_pixel_r] && prev_row[pixelm1 + rgb32_pixel_g] == prev_row[pixel + rgb32_pixel_g] && prev_row[pixelm1 + rgb32_pixel_b] == prev_row[pixel + rgb32_pixel_b]) {
-            if (run_index != i && i > 2 && (cur_row[pixelm1 + rgb32_pixel_r] == cur_row[pixelm2 + rgb32_pixel_r] && cur_row[pixelm1 + rgb32_pixel_g] == cur_row[pixelm2 + rgb32_pixel_g] && cur_row[pixelm1 + rgb32_pixel_b] == cur_row[pixelm2 + rgb32_pixel_b])) {
-              this.rgb_state.waitcnt = stopidx - i;
-              run_index = i;
-              run_end = i + this.decode_run(this.rgb_state);
-              for (; i < run_end; i++) {
-                var pixel = i * rgb32_pixel_size;
-                var pixelm1 = (i - 1) * rgb32_pixel_size;
+            if (run_index != i2 && i2 > 2 && (cur_row[pixelm1 + rgb32_pixel_r] == cur_row[pixelm2 + rgb32_pixel_r] && cur_row[pixelm1 + rgb32_pixel_g] == cur_row[pixelm2 + rgb32_pixel_g] && cur_row[pixelm1 + rgb32_pixel_b] == cur_row[pixelm2 + rgb32_pixel_b])) {
+              this.rgb_state.waitcnt = stopidx - i2;
+              run_index = i2;
+              run_end = i2 + this.decode_run(this.rgb_state);
+              for (; i2 < run_end; i2++) {
+                var pixel = i2 * rgb32_pixel_size;
+                var pixelm1 = (i2 - 1) * rgb32_pixel_size;
                 cur_row[pixel + rgb32_pixel_pad] = 0;
                 cur_row[pixel + rgb32_pixel_r] = cur_row[pixelm1 + rgb32_pixel_r];
                 cur_row[pixel + rgb32_pixel_g] = cur_row[pixelm1 + rgb32_pixel_g];
                 cur_row[pixel + rgb32_pixel_b] = cur_row[pixelm1 + rgb32_pixel_b];
               }
-              if (i == end) {
+              if (i2 == end) {
                 return;
               } else {
-                stopidx = i + this.rgb_state.waitcnt;
+                stopidx = i2 + this.rgb_state.waitcnt;
                 rc = 1;
                 break;
               }
@@ -2517,8 +2517,8 @@ var SpiceHtml5 = (() => {
           do {
             var cc = this.channels[c];
             var cr = cc.correlate_row;
-            a = golomb_decoding_8bpc(cc.buckets_ptrs[cr.row[i - 1]].bestcode, this.io_word);
-            cr.row[i] = a.rc;
+            a = golomb_decoding_8bpc(cc.buckets_ptrs[cr.row[i2 - 1]].bestcode, this.io_word);
+            cr.row[i2] = a.rc;
             cur_row[pixel + (2 - c)] = family_8bpc.xlatL2U[a.rc] + (cur_row[pixelm1 + (2 - c)] + prev_row[pixel + (2 - c)] >> 1) & bpc_mask;
             this.decode_eatbits(a.codewordlen);
           } while (++c < n_channels);
@@ -2529,29 +2529,29 @@ var SpiceHtml5 = (() => {
         do {
           this.channels[c].buckets_ptrs[this.channels[c].correlate_row.row[stopidx - 1]].update_model_8bpc(this.rgb_state, this.channels[c].correlate_row.row[stopidx], bpc);
         } while (++c < n_channels);
-        stopidx = i + (this.rgb_state.tabrand() & waitmask);
+        stopidx = i2 + (this.rgb_state.tabrand() & waitmask);
       }
-      for (; i < end && !rc; i++) {
-        var pixel = i * rgb32_pixel_size;
-        var pixelm1 = (i - 1) * rgb32_pixel_size;
-        var pixelm2 = (i - 2) * rgb32_pixel_size;
+      for (; i2 < end && !rc; i2++) {
+        var pixel = i2 * rgb32_pixel_size;
+        var pixelm1 = (i2 - 1) * rgb32_pixel_size;
+        var pixelm2 = (i2 - 2) * rgb32_pixel_size;
         if (prev_row[pixelm1 + rgb32_pixel_r] == prev_row[pixel + rgb32_pixel_r] && prev_row[pixelm1 + rgb32_pixel_g] == prev_row[pixel + rgb32_pixel_g] && prev_row[pixelm1 + rgb32_pixel_b] == prev_row[pixel + rgb32_pixel_b]) {
-          if (run_index != i && i > 2 && (cur_row[pixelm1 + rgb32_pixel_r] == cur_row[pixelm2 + rgb32_pixel_r] && cur_row[pixelm1 + rgb32_pixel_g] == cur_row[pixelm2 + rgb32_pixel_g] && cur_row[pixelm1 + rgb32_pixel_b] == cur_row[pixelm2 + rgb32_pixel_b])) {
-            this.rgb_state.waitcnt = stopidx - i;
-            run_index = i;
-            run_end = i + this.decode_run(this.rgb_state);
-            for (; i < run_end; i++) {
-              var pixel = i * rgb32_pixel_size;
-              var pixelm1 = (i - 1) * rgb32_pixel_size;
+          if (run_index != i2 && i2 > 2 && (cur_row[pixelm1 + rgb32_pixel_r] == cur_row[pixelm2 + rgb32_pixel_r] && cur_row[pixelm1 + rgb32_pixel_g] == cur_row[pixelm2 + rgb32_pixel_g] && cur_row[pixelm1 + rgb32_pixel_b] == cur_row[pixelm2 + rgb32_pixel_b])) {
+            this.rgb_state.waitcnt = stopidx - i2;
+            run_index = i2;
+            run_end = i2 + this.decode_run(this.rgb_state);
+            for (; i2 < run_end; i2++) {
+              var pixel = i2 * rgb32_pixel_size;
+              var pixelm1 = (i2 - 1) * rgb32_pixel_size;
               cur_row[pixel + rgb32_pixel_pad] = 0;
               cur_row[pixel + rgb32_pixel_r] = cur_row[pixelm1 + rgb32_pixel_r];
               cur_row[pixel + rgb32_pixel_g] = cur_row[pixelm1 + rgb32_pixel_g];
               cur_row[pixel + rgb32_pixel_b] = cur_row[pixelm1 + rgb32_pixel_b];
             }
-            if (i == end) {
+            if (i2 == end) {
               return;
             } else {
-              stopidx = i + this.rgb_state.waitcnt;
+              stopidx = i2 + this.rgb_state.waitcnt;
               rc = 1;
               break;
             }
@@ -2560,8 +2560,8 @@ var SpiceHtml5 = (() => {
         cur_row[pixel + rgb32_pixel_pad] = 0;
         c = 0;
         do {
-          a = golomb_decoding_8bpc(this.channels[c].buckets_ptrs[this.channels[c].correlate_row.row[i - 1]].bestcode, this.io_word);
-          this.channels[c].correlate_row.row[i] = a.rc;
+          a = golomb_decoding_8bpc(this.channels[c].buckets_ptrs[this.channels[c].correlate_row.row[i2 - 1]].bestcode, this.io_word);
+          this.channels[c].correlate_row.row[i2] = a.rc;
           cur_row[pixel + (2 - c)] = family_8bpc.xlatL2U[a.rc] + (cur_row[pixelm1 + (2 - c)] + prev_row[pixel + (2 - c)] >> 1) & bpc_mask;
           this.decode_eatbits(a.codewordlen);
         } while (++c < n_channels);
@@ -2637,10 +2637,10 @@ var SpiceHtml5 = (() => {
       }
     }
   };
-  QuicEncoder.prototype.quic_four_uncompress_row0_seg = function(channel, i, correlate_row, cur_row, end, waitmask, bpc, bpc_mask) {
+  QuicEncoder.prototype.quic_four_uncompress_row0_seg = function(channel, i2, correlate_row, cur_row, end, waitmask, bpc, bpc_mask) {
     var stopidx;
     var a;
-    if (i == 0) {
+    if (i2 == 0) {
       a = golomb_decoding_8bpc(channel.buckets_ptrs[correlate_row.zero].bestcode, this.io_word);
       correlate_row.row[0] = a.rc;
       cur_row[rgb32_pixel_pad] = family_8bpc.xlatL2U[a.rc];
@@ -2651,26 +2651,26 @@ var SpiceHtml5 = (() => {
         channel.state.waitcnt = channel.state.tabrand() & waitmask;
         channel.buckets_ptrs[correlate_row.zero].update_model_8bpc(channel.state, correlate_row.row[0], bpc);
       }
-      stopidx = ++i + channel.state.waitcnt;
+      stopidx = ++i2 + channel.state.waitcnt;
     } else {
-      stopidx = i + channel.state.waitcnt;
+      stopidx = i2 + channel.state.waitcnt;
     }
     while (stopidx < end) {
       var pbucket;
-      for (; i <= stopidx; i++) {
-        pbucket = channel.buckets_ptrs[correlate_row.row[i - 1]];
+      for (; i2 <= stopidx; i2++) {
+        pbucket = channel.buckets_ptrs[correlate_row.row[i2 - 1]];
         a = golomb_decoding_8bpc(pbucket.bestcode, this.io_word);
-        correlate_row.row[i] = a.rc;
-        cur_row[i * rgb32_pixel_size + rgb32_pixel_pad] = family_8bpc.xlatL2U[a.rc] + cur_row[(i - 1) * rgb32_pixel_size + rgb32_pixel_pad] & bpc_mask;
+        correlate_row.row[i2] = a.rc;
+        cur_row[i2 * rgb32_pixel_size + rgb32_pixel_pad] = family_8bpc.xlatL2U[a.rc] + cur_row[(i2 - 1) * rgb32_pixel_size + rgb32_pixel_pad] & bpc_mask;
         this.decode_eatbits(a.codewordlen);
       }
       pbucket.update_model_8bpc(channel.state, correlate_row.row[stopidx], bpc);
-      stopidx = i + (channel.state.tabrand() & waitmask);
+      stopidx = i2 + (channel.state.tabrand() & waitmask);
     }
-    for (; i < end; i++) {
-      a = golomb_decoding_8bpc(channel.buckets_ptrs[correlate_row.row[i - 1]].bestcode, this.io_word);
-      correlate_row.row[i] = a.rc;
-      cur_row[i * rgb32_pixel_size + rgb32_pixel_pad] = family_8bpc.xlatL2U[a.rc] + cur_row[(i - 1) * rgb32_pixel_size + rgb32_pixel_pad] & bpc_mask;
+    for (; i2 < end; i2++) {
+      a = golomb_decoding_8bpc(channel.buckets_ptrs[correlate_row.row[i2 - 1]].bestcode, this.io_word);
+      correlate_row.row[i2] = a.rc;
+      cur_row[i2 * rgb32_pixel_size + rgb32_pixel_pad] = family_8bpc.xlatL2U[a.rc] + cur_row[(i2 - 1) * rgb32_pixel_size + rgb32_pixel_pad] & bpc_mask;
       this.decode_eatbits(a.codewordlen);
     }
     channel.state.waitcnt = stopidx - end;
@@ -2716,13 +2716,13 @@ var SpiceHtml5 = (() => {
       }
     }
   };
-  QuicEncoder.prototype.quic_four_uncompress_row_seg = function(channel, correlate_row, prev_row, cur_row, i, end, bpc, bpc_mask) {
+  QuicEncoder.prototype.quic_four_uncompress_row_seg = function(channel, correlate_row, prev_row, cur_row, i2, end, bpc, bpc_mask) {
     var waitmask = bppmask[channel.state.wmidx];
     var stopidx;
     var run_index = 0;
     var run_end;
     var a;
-    if (i == 0) {
+    if (i2 == 0) {
       a = golomb_decoding_8bpc(channel.buckets_ptrs[correlate_row.zero].bestcode, this.io_word);
       correlate_row.row[0] = a.rc;
       cur_row[rgb32_pixel_pad] = family_8bpc.xlatL2U[a.rc] + prev_row[rgb32_pixel_pad] & bpc_mask;
@@ -2733,73 +2733,73 @@ var SpiceHtml5 = (() => {
         channel.state.waitcnt = channel.state.tabrand() & waitmask;
         channel.buckets_ptrs[correlate_row.zero].update_model_8bpc(channel.state, correlate_row.row[0], bpc);
       }
-      stopidx = ++i + channel.state.waitcnt;
+      stopidx = ++i2 + channel.state.waitcnt;
     } else {
-      stopidx = i + channel.state.waitcnt;
+      stopidx = i2 + channel.state.waitcnt;
     }
     for (; ; ) {
       var rc = 0;
       while (stopidx < end && !rc) {
         var pbucket;
-        for (; i <= stopidx && !rc; i++) {
-          var pixel = i * rgb32_pixel_size;
-          var pixelm1 = (i - 1) * rgb32_pixel_size;
-          var pixelm2 = (i - 2) * rgb32_pixel_size;
+        for (; i2 <= stopidx && !rc; i2++) {
+          var pixel = i2 * rgb32_pixel_size;
+          var pixelm1 = (i2 - 1) * rgb32_pixel_size;
+          var pixelm2 = (i2 - 2) * rgb32_pixel_size;
           if (prev_row[pixelm1 + rgb32_pixel_pad] == prev_row[pixel + rgb32_pixel_pad]) {
-            if (run_index != i && i > 2 && cur_row[pixelm1 + rgb32_pixel_pad] == cur_row[pixelm2 + rgb32_pixel_pad]) {
-              channel.state.waitcnt = stopidx - i;
-              run_index = i;
-              run_end = i + this.decode_run(channel.state);
-              for (; i < run_end; i++) {
-                var pixel = i * rgb32_pixel_size;
-                var pixelm1 = (i - 1) * rgb32_pixel_size;
+            if (run_index != i2 && i2 > 2 && cur_row[pixelm1 + rgb32_pixel_pad] == cur_row[pixelm2 + rgb32_pixel_pad]) {
+              channel.state.waitcnt = stopidx - i2;
+              run_index = i2;
+              run_end = i2 + this.decode_run(channel.state);
+              for (; i2 < run_end; i2++) {
+                var pixel = i2 * rgb32_pixel_size;
+                var pixelm1 = (i2 - 1) * rgb32_pixel_size;
                 cur_row[pixel + rgb32_pixel_pad] = cur_row[pixelm1 + rgb32_pixel_pad];
               }
-              if (i == end) {
+              if (i2 == end) {
                 return;
               } else {
-                stopidx = i + channel.state.waitcnt;
+                stopidx = i2 + channel.state.waitcnt;
                 rc = 1;
                 break;
               }
             }
           }
-          pbucket = channel.buckets_ptrs[correlate_row.row[i - 1]];
+          pbucket = channel.buckets_ptrs[correlate_row.row[i2 - 1]];
           a = golomb_decoding_8bpc(pbucket.bestcode, this.io_word);
-          correlate_row.row[i] = a.rc;
+          correlate_row.row[i2] = a.rc;
           cur_row[pixel + rgb32_pixel_pad] = family_8bpc.xlatL2U[a.rc] + (cur_row[pixelm1 + rgb32_pixel_pad] + prev_row[pixel + rgb32_pixel_pad] >> 1) & bpc_mask;
           this.decode_eatbits(a.codewordlen);
         }
         if (rc)
           break;
         pbucket.update_model_8bpc(channel.state, correlate_row.row[stopidx], bpc);
-        stopidx = i + (channel.state.tabrand() & waitmask);
+        stopidx = i2 + (channel.state.tabrand() & waitmask);
       }
-      for (; i < end && !rc; i++) {
-        var pixel = i * rgb32_pixel_size;
-        var pixelm1 = (i - 1) * rgb32_pixel_size;
-        var pixelm2 = (i - 2) * rgb32_pixel_size;
+      for (; i2 < end && !rc; i2++) {
+        var pixel = i2 * rgb32_pixel_size;
+        var pixelm1 = (i2 - 1) * rgb32_pixel_size;
+        var pixelm2 = (i2 - 2) * rgb32_pixel_size;
         if (prev_row[pixelm1 + rgb32_pixel_pad] == prev_row[pixel + rgb32_pixel_pad]) {
-          if (run_index != i && i > 2 && cur_row[pixelm1 + rgb32_pixel_pad] == cur_row[pixelm2 + rgb32_pixel_pad]) {
-            channel.state.waitcnt = stopidx - i;
-            run_index = i;
-            run_end = i + this.decode_run(channel.state);
-            for (; i < run_end; i++) {
-              var pixel = i * rgb32_pixel_size;
-              var pixelm1 = (i - 1) * rgb32_pixel_size;
+          if (run_index != i2 && i2 > 2 && cur_row[pixelm1 + rgb32_pixel_pad] == cur_row[pixelm2 + rgb32_pixel_pad]) {
+            channel.state.waitcnt = stopidx - i2;
+            run_index = i2;
+            run_end = i2 + this.decode_run(channel.state);
+            for (; i2 < run_end; i2++) {
+              var pixel = i2 * rgb32_pixel_size;
+              var pixelm1 = (i2 - 1) * rgb32_pixel_size;
               cur_row[pixel + rgb32_pixel_pad] = cur_row[pixelm1 + rgb32_pixel_pad];
             }
-            if (i == end) {
+            if (i2 == end) {
               return;
             } else {
-              stopidx = i + channel.state.waitcnt;
+              stopidx = i2 + channel.state.waitcnt;
               rc = 1;
               break;
             }
           }
         }
-        a = golomb_decoding_8bpc(channel.buckets_ptrs[correlate_row.row[i - 1]].bestcode, this.io_word);
-        correlate_row.row[i] = a.rc;
+        a = golomb_decoding_8bpc(channel.buckets_ptrs[correlate_row.row[i2 - 1]].bestcode, this.io_word);
+        correlate_row.row[i2] = a.rc;
         cur_row[pixel + rgb32_pixel_pad] = family_8bpc.xlatL2U[a.rc] + (cur_row[pixelm1 + rgb32_pixel_pad] + prev_row[pixel + rgb32_pixel_pad] >> 1) & bpc_mask;
         this.decode_eatbits(a.codewordlen);
       }
@@ -2939,15 +2939,15 @@ var SpiceHtml5 = (() => {
   };
   function convert_spice_quic_to_web(context, spice_quic) {
     var ret = context.createImageData(spice_quic.width, spice_quic.height);
-    var i;
-    for (i = 0; i < ret.width * ret.height * 4; i += 4) {
-      ret.data[i + 0] = spice_quic.outptr[i + 2];
-      ret.data[i + 1] = spice_quic.outptr[i + 1];
-      ret.data[i + 2] = spice_quic.outptr[i + 0];
+    var i2;
+    for (i2 = 0; i2 < ret.width * ret.height * 4; i2 += 4) {
+      ret.data[i2 + 0] = spice_quic.outptr[i2 + 2];
+      ret.data[i2 + 1] = spice_quic.outptr[i2 + 1];
+      ret.data[i2 + 2] = spice_quic.outptr[i2 + 0];
       if (spice_quic.type !== Constants2.QUIC_IMAGE_TYPE_RGBA)
-        ret.data[i + 3] = 255;
+        ret.data[i2 + 3] = 255;
       else
-        ret.data[i + 3] = 255 - spice_quic.outptr[i + 3];
+        ret.data[i2 + 3] = 255 - spice_quic.outptr[i2 + 3];
     }
     return ret;
   }
@@ -3011,14 +3011,14 @@ var SpiceHtml5 = (() => {
   }
   SpiceClipRects.prototype = {
     from_dv: function(dv, at, mb) {
-      var i;
+      var i2;
       this.num_rects = dv.getUint32(at, true);
       at += 4;
       if (this.num_rects > 0)
         this.rects = [];
-      for (i = 0; i < this.num_rects; i++) {
-        this.rects[i] = new SpiceRect();
-        at = this.rects[i].from_dv(dv, at, mb);
+      for (i2 = 0; i2 < this.num_rects; i2++) {
+        this.rects[i2] = new SpiceRect();
+        at = this.rects[i2].from_dv(dv, at, mb);
       }
       return at;
     }
@@ -3057,14 +3057,14 @@ var SpiceHtml5 = (() => {
   }
   SpicePalette.prototype = {
     from_dv: function(dv, at, mb) {
-      var i;
+      var i2;
       this.unique = dv.getUint64(at, true);
       at += 8;
       this.num_ents = dv.getUint16(at, true);
       at += 2;
       this.ents = [];
-      for (i = 0; i < this.num_ents; i++) {
-        this.ents[i] = dv.getUint32(at, true);
+      for (i2 = 0; i2 < this.num_ents; i2++) {
+        this.ents[i2] = dv.getUint32(at, true);
         at += 4;
       }
       return at;
@@ -3114,8 +3114,8 @@ var SpiceHtml5 = (() => {
         at += 4;
         var initial_at = at;
         this.lz_rgb.magic = "";
-        for (var i = 3; i >= 0; i--)
-          this.lz_rgb.magic += String.fromCharCode(dv.getUint8(at + i));
+        for (var i2 = 3; i2 >= 0; i2--)
+          this.lz_rgb.magic += String.fromCharCode(dv.getUint8(at + i2));
         at += 4;
         this.lz_rgb.version = dv.getUint32(at);
         at += 4;
@@ -3162,8 +3162,8 @@ var SpiceHtml5 = (() => {
         this.jpeg_alpha.alpha.length = this.jpeg_alpha.data_size - this.jpeg_alpha.jpeg_size;
         var initial_at = at;
         this.jpeg_alpha.alpha.magic = "";
-        for (var i = 3; i >= 0; i--)
-          this.jpeg_alpha.alpha.magic += String.fromCharCode(dv.getUint8(at + i));
+        for (var i2 = 3; i2 >= 0; i2--)
+          this.jpeg_alpha.alpha.magic += String.fromCharCode(dv.getUint8(at + i2));
         at += 4;
         this.jpeg_alpha.alpha.version = dv.getUint32(at);
         at += 4;
@@ -4026,10 +4026,10 @@ var SpiceHtml5 = (() => {
   function dump_timerange(tr) {
     var ret;
     if (tr) {
-      var i = tr.length;
-      ret = "{len " + i;
-      if (i > 0)
-        ret += "; start " + tr.start(0) + "; end " + tr.end(i - 1);
+      var i2 = tr.length;
+      ret = "{len " + i2;
+      if (i2 > 0)
+        ret += "; start " + tr.start(0) + "; end " + tr.end(i2 - 1);
       ret += "}";
     } else
       ret = "N/A";
@@ -4050,8 +4050,8 @@ var SpiceHtml5 = (() => {
       at = at || 0;
       var dv = new SpiceDataView(a);
       this.magic = "";
-      for (var i = 0; i < 4; i++)
-        this.magic += String.fromCharCode(dv.getUint8(at + i));
+      for (var i2 = 0; i2 < 4; i2++)
+        this.magic += String.fromCharCode(dv.getUint8(at + i2));
       at += 4;
       this.major_version = dv.getUint32(at, true);
       at += 4;
@@ -4063,8 +4063,8 @@ var SpiceHtml5 = (() => {
     to_buffer: function(a, at) {
       at = at || 0;
       var dv = new SpiceDataView(a);
-      for (var i = 0; i < 4; i++)
-        dv.setUint8(at + i, this.magic.charCodeAt(i));
+      for (var i2 = 0; i2 < 4; i2++)
+        dv.setUint8(at + i2, this.magic.charCodeAt(i2));
       at += 4;
       dv.setUint32(at, this.major_version, true);
       at += 4;
@@ -4089,7 +4089,7 @@ var SpiceHtml5 = (() => {
   SpiceLinkMess.prototype = {
     from_buffer: function(a, at) {
       at = at || 0;
-      var i;
+      var i2;
       var orig_at = at;
       var dv = new SpiceDataView(a);
       this.connection_id = dv.getUint32(at, true);
@@ -4106,12 +4106,12 @@ var SpiceHtml5 = (() => {
       at += 4;
       at = orig_at + caps_offset;
       this.common_caps = [];
-      for (i = 0; i < num_common_caps; i++) {
+      for (i2 = 0; i2 < num_common_caps; i2++) {
         this.common_caps.unshift(dv.getUint32(at, true));
         at += 4;
       }
       this.channel_caps = [];
-      for (i = 0; i < num_channel_caps; i++) {
+      for (i2 = 0; i2 < num_channel_caps; i2++) {
         this.channel_caps.unshift(dv.getUint32(at, true));
         at += 4;
       }
@@ -4119,7 +4119,7 @@ var SpiceHtml5 = (() => {
     to_buffer: function(a, at) {
       at = at || 0;
       var orig_at = at;
-      var i;
+      var i2;
       var dv = new SpiceDataView(a);
       dv.setUint32(at, this.connection_id, true);
       at += 4;
@@ -4133,12 +4133,12 @@ var SpiceHtml5 = (() => {
       at += 4;
       dv.setUint32(at, at - orig_at + 4, true);
       at += 4;
-      for (i = 0; i < this.common_caps.length; i++) {
-        dv.setUint32(at, this.common_caps[i], true);
+      for (i2 = 0; i2 < this.common_caps.length; i2++) {
+        dv.setUint32(at, this.common_caps[i2], true);
         at += 4;
       }
-      for (i = 0; i < this.channel_caps.length; i++) {
-        dv.setUint32(at, this.channel_caps[i], true);
+      for (i2 = 0; i2 < this.channel_caps.length; i2++) {
+        dv.setUint32(at, this.channel_caps[i2], true);
         at += 4;
       }
     },
@@ -4157,7 +4157,7 @@ var SpiceHtml5 = (() => {
   SpiceLinkReply.prototype = {
     from_buffer: function(a, at) {
       at = at || 0;
-      var i;
+      var i2;
       var orig_at = at;
       var dv = new SpiceDataView(a);
       this.error = dv.getUint32(at, true);
@@ -4172,12 +4172,12 @@ var SpiceHtml5 = (() => {
       at += 4;
       at = orig_at + caps_offset;
       this.common_caps = [];
-      for (i = 0; i < num_common_caps; i++) {
+      for (i2 = 0; i2 < num_common_caps; i2++) {
         this.common_caps.unshift(dv.getUint32(at, true));
         at += 4;
       }
       this.channel_caps = [];
-      for (i = 0; i < num_channel_caps; i++) {
+      for (i2 = 0; i2 < num_channel_caps; i2++) {
         this.channel_caps.unshift(dv.getUint32(at, true));
         at += 4;
       }
@@ -4190,13 +4190,13 @@ var SpiceHtml5 = (() => {
   SpiceLinkAuthTicket.prototype = {
     to_buffer: function(a, at) {
       at = at || 0;
-      var i;
+      var i2;
       var dv = new SpiceDataView(a);
       dv.setUint32(at, this.auth_mechanism, true);
       at += 4;
-      for (i = 0; i < Constants.SPICE_TICKET_KEY_PAIR_LENGTH / 8; i++) {
-        if (this.encrypted_data && i < this.encrypted_data.length)
-          dv.setUint8(at, this.encrypted_data[i], true);
+      for (i2 = 0; i2 < Constants.SPICE_TICKET_KEY_PAIR_LENGTH / 8; i2++) {
+        if (this.encrypted_data && i2 < this.encrypted_data.length)
+          dv.setUint8(at, this.encrypted_data[i2], true);
         else
           dv.setUint8(at, 0, true);
         at++;
@@ -4232,7 +4232,7 @@ var SpiceHtml5 = (() => {
   SpiceMiniData.prototype = {
     from_buffer: function(a, at) {
       at = at || 0;
-      var i;
+      var i2;
       var dv = new SpiceDataView(a);
       this.type = dv.getUint16(at, true);
       at += 2;
@@ -4245,7 +4245,7 @@ var SpiceHtml5 = (() => {
     },
     to_buffer: function(a, at) {
       at = at || 0;
-      var i;
+      var i2;
       var dv = new SpiceDataView(a);
       dv.setUint16(at, this.type, true);
       at += 2;
@@ -4253,8 +4253,8 @@ var SpiceHtml5 = (() => {
       at += 4;
       if (this.data && this.data.byteLength > 0) {
         var u8arr = new Uint8Array(this.data);
-        for (i = 0; i < u8arr.length; i++, at++)
-          dv.setUint8(at, u8arr[i], true);
+        for (i2 = 0; i2 < u8arr.length; i2++, at++)
+          dv.setUint8(at, u8arr[i2], true);
       }
     },
     build_msg: function(in_type, extra) {
@@ -4279,11 +4279,11 @@ var SpiceHtml5 = (() => {
   SpiceMsgChannels.prototype = {
     from_buffer: function(a, at) {
       at = at || 0;
-      var i;
+      var i2;
       var dv = new SpiceDataView(a);
       this.num_of_channels = dv.getUint32(at, true);
       at += 4;
-      for (i = 0; i < this.num_of_channels; i++) {
+      for (i2 = 0; i2 < this.num_of_channels; i2++) {
         var chan = new SpiceChannelId();
         at = chan.from_dv(dv, at, a);
         this.channels.push(chan);
@@ -4618,8 +4618,8 @@ var SpiceHtml5 = (() => {
       var dv = new SpiceDataView(a);
       dv.setUint32(at, this.id, true);
       at += 4;
-      for (var i = 0; i < this.string.length; i++, at++)
-        dv.setUint8(at, this.string.charCodeAt(i));
+      for (var i2 = 0; i2 < this.string.length; i2++, at++)
+        dv.setUint8(at, this.string.charCodeAt(i2));
     },
     buffer_size: function() {
       return 4 + this.string.length + 1;
@@ -4640,8 +4640,8 @@ var SpiceHtml5 = (() => {
       at += 8;
       if (this.data && this.data.byteLength > 0) {
         var u8arr = new Uint8Array(this.data);
-        for (var i = 0; i < u8arr.length; i++, at++)
-          dv.setUint8(at, u8arr[i]);
+        for (var i2 = 0; i2 < u8arr.length; i2++, at++)
+          dv.setUint8(at, u8arr[i2]);
       }
     },
     buffer_size: function() {
@@ -4654,7 +4654,7 @@ var SpiceHtml5 = (() => {
   SpiceMsgNotify.prototype = {
     from_buffer: function(a, at) {
       at = at || 0;
-      var i;
+      var i2;
       var dv = new SpiceDataView(a);
       this.time_stamp = dv.getUint64(at, true);
       at += 8;
@@ -4667,7 +4667,7 @@ var SpiceHtml5 = (() => {
       this.message_len = dv.getUint32(at, true);
       at += 4;
       this.message = "";
-      for (i = 0; i < this.message_len; i++) {
+      for (i2 = 0; i2 < this.message_len; i2++) {
         var c = dv.getUint8(at, true);
         at++;
         this.message += String.fromCharCode(c);
@@ -5152,16 +5152,16 @@ var SpiceHtml5 = (() => {
   }
   SpiceMsgDisplayInvalList.prototype = {
     from_buffer: function(a, at) {
-      var i;
+      var i2;
       at = at || 0;
       var dv = new SpiceDataView(a);
       this.count = dv.getUint16(at, true);
       at += 2;
-      for (i = 0; i < this.count; i++) {
-        this.resources[i] = {};
-        this.resources[i].type = dv.getUint8(at, true);
+      for (i2 = 0; i2 < this.count; i2++) {
+        this.resources[i2] = {};
+        this.resources[i2].type = dv.getUint8(at, true);
         at++;
-        this.resources[i].id = dv.getUint64(at, true);
+        this.resources[i2].id = dv.getUint64(at, true);
         at += 8;
       }
     }
@@ -5188,10 +5188,10 @@ var SpiceHtml5 = (() => {
   var rfc2083_crc_table_computed = 0;
   function rfc2083_make_crc_table() {
     var c;
-    var n, k;
+    var n, k2;
     for (n = 0; n < 256; n++) {
       c = n;
-      for (k = 0; k < 8; k++) {
+      for (k2 = 0; k2 < 8; k2++) {
         if (c & 1)
           c = (3988292384 ^ c >>> 1) >>> 0 & 4294967295;
         else
@@ -5286,7 +5286,7 @@ var SpiceHtml5 = (() => {
     to_buffer: function(a, at) {
       at = at || 0;
       var orig = at;
-      var x, y, i, j;
+      var x, y, i2, j2;
       var dv = new SpiceDataView(a);
       var zsum = new adler();
       dv.setUint32(at, this.buffer_size() - 12);
@@ -5310,22 +5310,22 @@ var SpiceHtml5 = (() => {
       dv.setUint16(at, ~(this.data.byteLength + this.height));
       at += 2;
       var u8 = new Uint8Array(this.data);
-      for (i = 0, y = 0; y < this.height; y++) {
+      for (i2 = 0, y = 0; y < this.height; y++) {
         dv.setUint8(at, 0);
         at++;
         zsum.update(0);
-        for (x = 0; x < this.width && i < this.data.byteLength; x++) {
-          zsum.update(u8[i]);
-          dv.setUint8(at, u8[i++]);
+        for (x = 0; x < this.width && i2 < this.data.byteLength; x++) {
+          zsum.update(u8[i2]);
+          dv.setUint8(at, u8[i2++]);
           at++;
-          zsum.update(u8[i]);
-          dv.setUint8(at, u8[i++]);
+          zsum.update(u8[i2]);
+          dv.setUint8(at, u8[i2++]);
           at++;
-          zsum.update(u8[i]);
-          dv.setUint8(at, u8[i++]);
+          zsum.update(u8[i2]);
+          dv.setUint8(at, u8[i2++]);
           at++;
-          zsum.update(u8[i]);
-          dv.setUint8(at, u8[i++]);
+          zsum.update(u8[i2]);
+          dv.setUint8(at, u8[i2++]);
           at++;
         }
       }
@@ -5347,7 +5347,7 @@ var SpiceHtml5 = (() => {
     to_buffer: function(a, at) {
       at = at || 0;
       var orig = at;
-      var i;
+      var i2;
       var dv = new SpiceDataView(a);
       dv.setUint32(at, this.buffer_size() - 12);
       at += 4;
@@ -5368,7 +5368,7 @@ var SpiceHtml5 = (() => {
     }
   };
   function create_rgba_png(width, height, bytes) {
-    var i;
+    var i2;
     var ihdr = new PngIHDR(width, height);
     var idat = new PngIDAT(width, height, bytes);
     var iend = new PngIEND();
@@ -5378,11 +5378,11 @@ var SpiceHtml5 = (() => {
     at = iend.to_buffer(mb, at);
     var u8 = new Uint8Array(mb);
     var str = "";
-    for (i = 0; i < at; i++) {
+    for (i2 = 0; i2 < at; i2++) {
       str += "%";
-      if (u8[i] < 16)
+      if (u8[i2] < 16)
         str += "0";
-      str += u8[i].toString(16);
+      str += u8[i2].toString(16);
     }
     return "%89PNG%0D%0A%1A%0A" + str;
   }
@@ -5484,7 +5484,7 @@ var SpiceHtml5 = (() => {
       this.hot_y = hot_y;
     },
     create_icondir: function(width, height, bytes, hot_x, hot_y) {
-      var i;
+      var i2;
       var header = new SpiceSimulateCursor.ICONDIR();
       var entry = new SpiceSimulateCursor.ICONDIRENTRY(width, height, bytes, hot_x, hot_y);
       var mb = new ArrayBuffer(header.buffer_size() + entry.buffer_size());
@@ -5492,11 +5492,11 @@ var SpiceHtml5 = (() => {
       at = entry.to_buffer(mb, at);
       var u8 = new Uint8Array(mb);
       var str = "";
-      for (i = 0; i < at; i++) {
+      for (i2 = 0; i2 < at; i2++) {
         str += "%";
-        if (u8[i] < 16)
+        if (u8[i2] < 16)
           str += "0";
-        str += u8[i].toString(16);
+        str += u8[i2].toString(16);
       }
       return str;
     }
@@ -5717,13 +5717,13 @@ var SpiceHtml5 = (() => {
     return at;
   }
   function EBML_write_array(arr, dv, at) {
-    for (var i = 0; i < arr.length; i++)
-      dv.setUint8(at + i, arr[i]);
+    for (var i2 = 0; i2 < arr.length; i2++)
+      dv.setUint8(at + i2, arr[i2]);
     return at + arr.length;
   }
   function EBML_write_string(str, dv, at) {
-    for (var i = 0; i < str.length; i++)
-      dv.setUint8(at + i, str.charCodeAt(i));
+    for (var i2 = 0; i2 < str.length; i2++)
+      dv.setUint8(at + i2, str.charCodeAt(i2));
     return at + str.length;
   }
   function EBML_write_data(id, data, dv, at) {
@@ -6046,8 +6046,8 @@ var SpiceHtml5 = (() => {
       dv.setUint8(at, this.keyframe ? Constants3.CLUSTER_SIMPLEBLOCK_FLAG_KEYFRAME : 0);
       at += 1;
       var u8 = new Uint8Array(this.data);
-      for (var i = 0; i < this.data.byteLength; i++)
-        dv.setUint8(at++, u8[i]);
+      for (var i2 = 0; i2 < this.data.byteLength; i2++)
+        dv.setUint8(at++, u8[i2]);
       return at;
     },
     buffer_size: function() {
@@ -6541,9 +6541,9 @@ var SpiceHtml5 = (() => {
     var files = e.dataTransfer.files;
     e.stopPropagation();
     e.preventDefault();
-    for (var i = files.length - 1; i >= 0; i--) {
-      if (files[i].type)
-        sc.file_xfer_start(files[i]);
+    for (var i2 = files.length - 1; i2 >= 0; i2--) {
+      if (files[i2].type)
+        sc.file_xfer_start(files[i2]);
     }
   }
 
@@ -6742,7 +6742,7 @@ var SpiceHtml5 = (() => {
     var op = 0;
     var ctrl;
     var ctr = 0;
-    var i = 0;
+    var i2 = 0;
     for (ctrl = in_buf[encoder2++]; op * 4 < out_buf.length; ctrl = in_buf[encoder2++]) {
       var ref = op;
       var len = ctrl >> 5;
@@ -6776,8 +6776,8 @@ var SpiceHtml5 = (() => {
             if (type == Constants.LZ_IMAGE_TYPE_RGBA) {
               out_buf[op * 4 + 3] = out_buf[b * 4 + 3];
             } else {
-              for (i = 0; i < 4; i++)
-                out_buf[op * 4 + i] = out_buf[b * 4 + i];
+              for (i2 = 0; i2 < 4; i2++)
+                out_buf[op * 4 + i2] = out_buf[b * 4 + i2];
             }
             op++;
           }
@@ -6786,8 +6786,8 @@ var SpiceHtml5 = (() => {
             if (type == Constants.LZ_IMAGE_TYPE_RGBA) {
               out_buf[op * 4 + 3] = out_buf[ref * 4 + 3];
             } else {
-              for (i = 0; i < 4; i++)
-                out_buf[op * 4 + i] = out_buf[ref * 4 + i];
+              for (i2 = 0; i2 < 4; i2++)
+                out_buf[op * 4 + i2] = out_buf[ref * 4 + i2];
             }
             op++;
             ref++;
@@ -6880,16 +6880,16 @@ var SpiceHtml5 = (() => {
   // vendor/spice-html5/display.js
   function putImageDataWithAlpha(context, d, x, y) {
     var c = document.createElement("canvas");
-    var t = c.getContext("2d");
+    var t2 = c.getContext("2d");
     c.setAttribute("width", d.width);
     c.setAttribute("height", d.height);
-    t.putImageData(d, 0, 0);
+    t2.putImageData(d, 0, 0);
     context.drawImage(c, x, y, d.width, d.height);
   }
   function stripAlpha(d) {
-    var i;
-    for (i = 0; i < d.width * d.height * 4; i += 4)
-      d.data[i + 3] = 255;
+    var i2;
+    for (i2 = 0; i2 < d.width * d.height * 4; i2 += 4)
+      d.data[i2 + 3] = 255;
   }
   function SpiceDisplayConn() {
     SpiceConn.apply(this, arguments);
@@ -6993,13 +6993,13 @@ var SpiceHtml5 = (() => {
           }
           var tmpstr = "data:image/jpeg,";
           var img = new Image();
-          var i;
+          var i2;
           var qdv = new Uint8Array(draw_copy.data.src_bitmap.jpeg.data);
-          for (i = 0; i < qdv.length; i++) {
+          for (i2 = 0; i2 < qdv.length; i2++) {
             tmpstr += "%";
-            if (qdv[i] < 16)
+            if (qdv[i2] < 16)
               tmpstr += "0";
-            tmpstr += qdv[i].toString(16);
+            tmpstr += qdv[i2].toString(16);
           }
           img.o = {
             base: draw_copy.base,
@@ -7017,13 +7017,13 @@ var SpiceHtml5 = (() => {
           }
           var tmpstr = "data:image/jpeg,";
           var img = new Image();
-          var i;
+          var i2;
           var qdv = new Uint8Array(draw_copy.data.src_bitmap.jpeg_alpha.data);
-          for (i = 0; i < qdv.length; i++) {
+          for (i2 = 0; i2 < qdv.length; i2++) {
             tmpstr += "%";
-            if (qdv[i] < 16)
+            if (qdv[i2] < 16)
               tmpstr += "0";
-            tmpstr += qdv[i].toString(16);
+            tmpstr += qdv[i2].toString(16);
           }
           img.o = {
             base: draw_copy.base,
@@ -7346,11 +7346,11 @@ var SpiceHtml5 = (() => {
     }
     if (msg.type == Constants.SPICE_MSG_DISPLAY_INVAL_LIST) {
       var m = new SpiceMsgDisplayInvalList(msg.data);
-      var i;
+      var i2;
       DEBUG > 1 && console.log(this.type + ": MsgInvalList " + m.count + " items");
-      for (i = 0; i < m.count; i++)
-        if (this.cache[m.resources[i].id] != void 0)
-          delete this.cache[m.resources[i].id];
+      for (i2 = 0; i2 < m.count; i2++)
+        if (this.cache[m.resources[i2].id] != void 0)
+          delete this.cache[m.resources[i2].id];
       return true;
     }
     if (msg.type == Constants.SPICE_MSG_DISPLAY_MONITORS_CONFIG) {
@@ -7517,17 +7517,17 @@ var SpiceHtml5 = (() => {
       context = this.o.sc.surfaces[this.o.base.surface_id].canvas.context;
     if (this.alpha_img) {
       var c = document.createElement("canvas");
-      var t = c.getContext("2d");
+      var t2 = c.getContext("2d");
       c.setAttribute("width", this.alpha_img.width);
       c.setAttribute("height", this.alpha_img.height);
-      t.putImageData(this.alpha_img, 0, 0);
-      t.globalCompositeOperation = "source-in";
-      t.drawImage(this, 0, 0);
+      t2.putImageData(this.alpha_img, 0, 0);
+      t2.globalCompositeOperation = "source-in";
+      t2.drawImage(this, 0, 0);
       context.drawImage(c, this.o.base.box.left, this.o.base.box.top);
       if (this.o.descriptor && this.o.descriptor.flags & Constants.SPICE_IMAGE_FLAGS_CACHE_ME) {
         if (!("cache" in this.o.sc))
           this.o.sc.cache = {};
-        this.o.sc.cache[this.o.descriptor.id] = t.getImageData(
+        this.o.sc.cache[this.o.descriptor.id] = t2.getImageData(
           0,
           0,
           this.alpha_img.width,
@@ -7569,12 +7569,12 @@ var SpiceHtml5 = (() => {
     }
     var tmpstr = "data:image/jpeg,";
     var img = new Image();
-    var i;
-    for (i = 0; i < m.data.length; i++) {
+    var i2;
+    for (i2 = 0; i2 < m.data.length; i2++) {
       tmpstr += "%";
-      if (m.data[i] < 16)
+      if (m.data[i2] < 16)
         tmpstr += "0";
-      tmpstr += m.data[i].toString(16);
+      tmpstr += m.data[i2].toString(16);
     }
     var strm_base = new SpiceMsgDisplayBase();
     strm_base.surface_id = sc.streams[m.base.id].surface_id;
@@ -7623,10 +7623,10 @@ var SpiceHtml5 = (() => {
     listen_for_video_events(stream);
     var h = new webm_Header();
     var te = new webm_VideoTrackEntry(this.stream.stream_width, this.stream.stream_height);
-    var t = new webm_Tracks(te);
-    var mb = new ArrayBuffer(h.buffer_size() + t.buffer_size());
+    var t2 = new webm_Tracks(te);
+    var mb = new ArrayBuffer(h.buffer_size() + t2.buffer_size());
     var b = h.to_buffer(mb);
-    t.to_buffer(mb, b);
+    t2.to_buffer(mb, b);
     s.addEventListener("error", handle_video_buffer_error, false);
     s.addEventListener("updateend", handle_append_video_buffer_done, false);
     append_video_buffer(s, mb);
@@ -7652,8 +7652,8 @@ var SpiceHtml5 = (() => {
     var stream = this.stream;
     if (stream.current_frame && "report" in stream) {
       var sc = this.stream.media.spiceconn;
-      var t = this.stream.current_frame.msg_mmtime;
-      process_stream_data_report(sc, stream.id, t, t - sc.parent.relative_now());
+      var t2 = this.stream.current_frame.msg_mmtime;
+      process_stream_data_report(sc, stream.id, t2, t2 - sc.parent.relative_now());
     }
     if (stream.queue.length > 0) {
       stream.current_frame = stream.queue.shift();
@@ -7876,10 +7876,10 @@ var SpiceHtml5 = (() => {
     this.start_time = data.time;
     var h = new webm_Header();
     var te = new webm_AudioTrackEntry();
-    var t = new webm_Tracks(te);
-    var mb = new ArrayBuffer(h.buffer_size() + t.buffer_size());
+    var t2 = new webm_Tracks(te);
+    var mb = new ArrayBuffer(h.buffer_size() + t2.buffer_size());
     this.bytes_written = h.to_buffer(mb);
-    this.bytes_written = t.to_buffer(mb, this.bytes_written);
+    this.bytes_written = t2.to_buffer(mb, this.bytes_written);
     this.source_buffer.addEventListener("error", handle_sourcebuffer_error, false);
     this.source_buffer.addEventListener("updateend", handle_append_buffer_done, false);
     playback_append_buffer(this, mb);
@@ -7932,15 +7932,15 @@ var SpiceHtml5 = (() => {
     if (queue.length == 1)
       return queue.shift();
     var len = 0;
-    var i = 0;
-    for (i = 0; i < queue.length; i++)
-      len += queue[i].byteLength;
+    var i2 = 0;
+    for (i2 = 0; i2 < queue.length; i2++)
+      len += queue[i2].byteLength;
     var mb = new ArrayBuffer(len);
     var tmp = new Uint8Array(mb);
     len = 0;
-    for (i = 0; i < queue.length; i++) {
-      tmp.set(new Uint8Array(queue[i]), len);
-      len += queue[i].byteLength;
+    for (i2 = 0; i2 < queue.length; i2++) {
+      tmp.set(new Uint8Array(queue[i2]), len);
+      len += queue[i2].byteLength;
     }
     queue.length = 0;
     return mb;
@@ -8152,38 +8152,38 @@ var SpiceHtml5 = (() => {
       return true;
     }
     if (msg.type == Constants.SPICE_MSG_MAIN_CHANNELS_LIST) {
-      var i;
+      var i2;
       var chans;
       DEBUG > 0 && console.log("channels");
       chans = new SpiceMsgChannels(msg.data);
-      for (i = 0; i < chans.channels.length; i++) {
+      for (i2 = 0; i2 < chans.channels.length; i2++) {
         var conn = {
           uri: this.ws.url,
           parent: this,
           connection_id: this.connection_id,
-          type: chans.channels[i].type,
-          chan_id: chans.channels[i].id
+          type: chans.channels[i2].type,
+          chan_id: chans.channels[i2].id
         };
-        if (chans.channels[i].type == Constants.SPICE_CHANNEL_DISPLAY) {
-          if (chans.channels[i].id == 0) {
+        if (chans.channels[i2].type == Constants.SPICE_CHANNEL_DISPLAY) {
+          if (chans.channels[i2].id == 0) {
             this.display = new SpiceDisplayConn(conn);
           } else {
             this.log_warn("The spice-html5 client does not handle multiple heads.");
           }
-        } else if (chans.channels[i].type == Constants.SPICE_CHANNEL_INPUTS) {
+        } else if (chans.channels[i2].type == Constants.SPICE_CHANNEL_INPUTS) {
           this.inputs = new SpiceInputsConn(conn);
           this.inputs.mouse_mode = this.mouse_mode;
-        } else if (chans.channels[i].type == Constants.SPICE_CHANNEL_CURSOR)
+        } else if (chans.channels[i2].type == Constants.SPICE_CHANNEL_CURSOR)
           this.cursor = new SpiceCursorConn(conn);
-        else if (chans.channels[i].type == Constants.SPICE_CHANNEL_PLAYBACK)
+        else if (chans.channels[i2].type == Constants.SPICE_CHANNEL_PLAYBACK)
           this.cursor = new SpicePlaybackConn(conn);
-        else if (chans.channels[i].type == Constants.SPICE_CHANNEL_PORT)
+        else if (chans.channels[i2].type == Constants.SPICE_CHANNEL_PORT)
           this.ports.push(new SpicePortConn(conn));
         else {
           if (!("extra_channels" in this))
             this.extra_channels = [];
-          this.extra_channels[i] = new SpiceConn(conn);
-          this.log_err("Channel type " + this.extra_channels[i].channel_type() + " not implemented");
+          this.extra_channels[i2] = new SpiceConn(conn);
+          this.log_err("Channel type " + this.extra_channels[i2].channel_type() + " not implemented");
         }
       }
       return true;

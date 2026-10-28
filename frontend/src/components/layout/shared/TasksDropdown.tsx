@@ -61,6 +61,7 @@ const changeActionIcons: Record<string, string> = {
   created: 'ri-add-circle-line',
   deleted: 'ri-delete-bin-line',
   migrated: 'ri-swap-box-line',
+  backup: 'ri-archive-line',
 }
 
 const resourceTypeIcons: Record<string, string> = {

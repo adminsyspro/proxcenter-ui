@@ -174,6 +174,28 @@ function formatDateTime(value: Date | string | null, dateLocale: string): string
   }
 }
 
+function pcTaskIcon(task: MergedPCTask): string {
+  if (task.icon) return task.icon
+  if (task.type === 'upload') return 'ri-upload-2-line'
+  if (task.type === 'download') return 'ri-download-2-line'
+
+  return 'ri-settings-3-line'
+}
+
+function pcTaskStatusLabel(task: MergedPCTask, t: (key: string) => string): string {
+  if (task.status === 'running') return t('tasks.status.running')
+  if (task.status === 'cancelled' || task.rawStatus === 'cancelled') return t('tasks.status.cancelled')
+
+  return task.status === 'done' ? 'Done' : 'Error'
+}
+
+function pcTaskStatusColor(task: MergedPCTask): 'primary' | 'success' | 'default' | 'error' {
+  if (task.status === 'running') return 'primary'
+  if (task.status === 'done') return 'success'
+
+  return task.status === 'cancelled' ? 'default' : 'error'
+}
+
 // ============================================
 // Component
 // ============================================
@@ -400,6 +422,18 @@ export default function TasksFooter({
         : mergedPcTasks,
     [mergedPcTasks, query]
   )
+
+  const clickPcTask = (task: MergedPCTask) => {
+    // A row backed by a Task Center job opens its dialog on double-click, like
+    // the Proxmox tab: nothing to do on a single click. The others keep their
+    // own behaviour.
+    if (task.jobId && jobsById.has(task.jobId)) return
+    if (task.shared) return void setDetailJobId(task.jobId ?? task.id.replace(/^migration-/, ''))
+    // The migrate dialog that owns this row only exists on the inventory page.
+    // Anywhere else nothing reopens it, so show the job's detail, which carries
+    // the same cutover and cancel controls.
+    if (!restoreTask(task.id) && task.id.startsWith('migration-')) setDetailJobId(task.id.replace(/^migration-/, ''))
+  }
 
   // State - initialize with defaults, then hydrate from localStorage
   const [expanded, setExpanded] = useState(defaultExpanded)
@@ -1075,18 +1109,7 @@ export default function TasksFooter({
                     <Box
                       key={task.id}
                       onDoubleClick={() => openJobDetail(task)}
-                      onClick={() => {
-                        // A row backed by a Task Center job opens its dialog on
-                        // double-click, like the Proxmox tab: nothing to do on a
-                        // single click. The others keep their own behaviour.
-                        if (task.jobId && jobsById.has(task.jobId)) return
-                        if (task.shared) return void setDetailJobId(task.jobId ?? task.id.replace(/^migration-/, ''))
-                        // The migrate dialog that owns this row only exists on
-                        // the inventory page. Anywhere else nothing reopens it,
-                        // so show the job's detail, which carries the same
-                        // cutover and cancel controls.
-                        if (!restoreTask(task.id) && task.id.startsWith('migration-')) setDetailJobId(task.id.replace(/^migration-/, ''))
-                      }}
+                      onClick={() => clickPcTask(task)}
                       sx={{
                         // Same row height as the compact DataGrid of the
                         // Proxmox tab (36px), so both tabs read as one list.
@@ -1098,15 +1121,7 @@ export default function TasksFooter({
                       }}
                     >
                       {/* Icon */}
-                      <i
-                        className={
-                          task.icon ? task.icon :
-                          task.type === 'upload' ? 'ri-upload-2-line' :
-                          task.type === 'download' ? 'ri-download-2-line' :
-                          'ri-settings-3-line'
-                        }
-                        style={{ fontSize: 16, opacity: 0.6, flexShrink: 0 }}
-                      />
+                      <i className={pcTaskIcon(task)} style={{ fontSize: 16, opacity: 0.6, flexShrink: 0 }} />
                       {/* Label, detail and initiator on ONE line: stacked
                           Typographies made every row two or three lines tall. */}
                       <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1144,13 +1159,8 @@ export default function TasksFooter({
                       {/* Status */}
                       <Chip
                         size="small"
-                        label={
-                          task.status === 'running' ? t('tasks.status.running')
-                            : task.status === 'cancelled' || task.rawStatus === 'cancelled' ? t('tasks.status.cancelled')
-                            : task.status === 'done' ? 'Done'
-                            : 'Error'
-                        }
-                        color={task.status === 'running' ? 'primary' : task.status === 'done' ? 'success' : task.status === 'cancelled' ? 'default' : 'error'}
+                        label={pcTaskStatusLabel(task, t)}
+                        color={pcTaskStatusColor(task)}
                         variant={task.status === 'running' ? 'outlined' : 'filled'}
                         icon={task.status === 'running' ? (
                           <i className="ri-loader-4-line" style={{ fontSize: 12, animation: 'spin 1s linear infinite' }} />

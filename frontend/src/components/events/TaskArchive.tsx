@@ -188,7 +188,7 @@ export default function TaskArchive({ refreshedAt }: Readonly<{ refreshedAt: num
 
   useEffect(() => {
     // A sliding period refetches through its new anchor; a custom range keeps its key.
-    if (refreshedAt > 0 && period === 'custom') mutate()
+    if (refreshedAt > 0 && period === 'custom') void mutate()
   }, [refreshedAt, period, mutate])
 
   const rows = useMemo(() => (url ? data?.data ?? [] : []), [url, data])

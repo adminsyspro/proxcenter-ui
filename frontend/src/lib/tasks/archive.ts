@@ -50,8 +50,10 @@ export function taskFamily(type: string): TaskFamily {
   return 'other'
 }
 
+export type GuestKind = 'qemu' | 'lxc'
+
 /** Guest kind a task targets, read from its type prefix. */
-export function taskGuestType(type: string): 'qemu' | 'lxc' | null {
+export function taskGuestType(type: string): GuestKind | null {
   if (type.startsWith('qm')) return 'qemu'
   if (type.startsWith('vz') && type !== 'vzdump') return 'lxc'
 
@@ -133,7 +135,7 @@ export interface ArchiveTask {
   entity: string | null
   vmid: string | null
   guestName: string | null
-  guestType: 'qemu' | 'lxc' | null
+  guestType: GuestKind | null
   guestStatus: string | null
   node: string
   nodeStatus: string | null
@@ -215,7 +217,7 @@ export function toArchiveTask(
     connectionId: string
     connectionName: string
     nowSec: number
-    guests: Map<string, { name: string | null; type: 'qemu' | 'lxc' | null; status: string | null }>
+    guests: Map<string, { name: string | null; type: GuestKind | null; status: string | null }>
     nodeStatus: Map<string, string>
   },
 ): ArchiveTask {

@@ -166,6 +166,16 @@ describe('ConfigBackupTab import', () => {
     expect(fetchMock.mock.calls.map(c => c[0])).toEqual(['/api/v1/admin/config-backup/inspect', '/api/v1/admin/config-backup/import'])
   })
 
+  it('says the file is too large when it is refused before the route', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('<html>413 Request Entity Too Large</html>', { status: 413 }))
+    renderWithProviders(<ConfigBackupTab />)
+    pickFile()
+    typeIn(/^Passphrase$/, PASSPHRASE, 1)
+    fireEvent.click(screen.getByRole('button', { name: /Check the file/ }))
+
+    expect(await screen.findByText('This file is too large to be a ProxCenter backup.')).toBeInTheDocument()
+  })
+
   it('offers no restore for a backup from a newer version', async () => {
     fetchMock.mockResolvedValueOnce(json({ data: { ...inspection, compatibility: 'newer' } }))
     renderWithProviders(<ConfigBackupTab />)

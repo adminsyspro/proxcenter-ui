@@ -76,7 +76,7 @@ async function readGuests(connection: any): Promise<Map<string, GuestInfo>> {
 async function readConnectionArchive(conn: { id: string; name: string; tenantId: string | null }, ctx: ReadContext): Promise<ConnectionRead> {
   const { query, nowSec, rbacScope } = ctx
   const out: ConnectionRead = { tasks: [], nodes: [], unavailable: [], truncated: false }
-  const connection = await getConnectionById(conn.id, conn.tenantId)
+  const connection = await getConnectionById(conn.id, conn.tenantId ?? undefined)
   const allowedNodes = ctx.vdcScope?.nodesByConnection.get(conn.id)
 
   const [nodes, guests] = await Promise.all([

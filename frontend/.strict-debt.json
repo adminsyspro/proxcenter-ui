@@ -418,7 +418,6 @@
     "src/app/(dashboard)/operations/backups/BackupTypeIcon.jsx",
     "src/app/(dashboard)/operations/backups/VzdumpLogSections.jsx",
     "src/app/(dashboard)/operations/backups/page.jsx",
-    "src/app/(dashboard)/operations/changes/page.jsx",
     "src/app/(dashboard)/operations/events/page.jsx",
     "src/app/(dashboard)/operations/task-center/page.jsx",
     "src/app/(dashboard)/profile/page.jsx",

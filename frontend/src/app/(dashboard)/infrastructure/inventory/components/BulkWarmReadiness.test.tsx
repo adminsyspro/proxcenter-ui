@@ -25,7 +25,7 @@ function Harness({ nodes, kind = 'vddk' }: Readonly<{ nodes: string[]; kind?: 'n
 }
 
 /** Answers warm-check per node from `answers`, and records the bodies it saw. */
-function mockPreflight(answers: Record<string, unknown>, seen: any[] = []) {
+function mockPreflight(answers: Record<string, Record<string, unknown>>, seen: any[] = []) {
   server.use(http.post('*/api/v1/migrations/preflight', async ({ request }) => {
     const body: any = await request.json()
     seen.push(body)

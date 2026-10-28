@@ -15,6 +15,7 @@ import { getToken } from "next-auth/jwt"
 import { allowHeaderForPath, matchPublicApiPath } from "@/lib/api-tokens/allowlist"
 import { sessionCookieName } from "@/lib/auth/cookies"
 import { isPastAbsoluteCap } from "@/lib/auth/durations"
+import { declaresBodyOver } from "@/lib/http/requestBodyLimit"
 
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET || ""
 
@@ -197,6 +198,12 @@ function getLocale(request: NextRequest): string {
 }
 
 export async function proxy(request: NextRequest) {
+  // Past proxyClientMaxBodySize the route would get a truncated body without
+  // an error: refuse a body declared larger than that up front.
+  if (declaresBodyOver(request.headers)) {
+    return NextResponse.json({ error: 'Request body too large' }, { status: 413 })
+  }
+
   const { pathname } = request.nextUrl
   const isDemoMode = process.env.DEMO_MODE === 'true'
 

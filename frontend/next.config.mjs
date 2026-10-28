@@ -48,10 +48,10 @@ const nextConfig = {
     },
     serverExternalPackages: ['ssh2', 'undici'],
     experimental: {
-        serverActions: {
-            bodySizeLimit: '10gb',
-        },
-        proxyClientMaxBodySize: '10gb',
+        // Each request body is held in memory up to this size, before the
+        // proxy authenticates anything: MAX_REQUEST_BODY_BYTES in
+        // src/lib/http/requestBodyLimit.ts, which the proxy enforces.
+        proxyClientMaxBodySize: 100 * 1024 * 1024,
     },
     turbopack: {
         root: resolveTurbopackRoot(),

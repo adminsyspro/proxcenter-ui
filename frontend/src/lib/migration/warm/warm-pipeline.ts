@@ -28,7 +28,7 @@ import type { VddkOpts } from "./vddk-cmd"
 import { detectChangedExtentsByChecksum } from "./checksum-detector"
 import { checkVddkPreflight } from "./vddk-preflight"
 import { checkWarmSourceVersion, warmSourceVersionError, warmSourceVersionWarning } from "./source-version"
-import { parseSha1Thumbprint } from "./thumbprint"
+import { buildThumbprintCmd, parseThumbprintProbe, THUMBPRINT_TIMEOUT_SEC } from "./thumbprint"
 import type { Extent } from "./extents"
 import { startSoapKeepAlive } from "./session-keepalive"
 import { startJobHeartbeat } from "../job-heartbeat"
@@ -370,16 +370,19 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // is tagged on the host so the NFC ticket names it. Then prove, from the
     // node, that the address answers on 902 (and 443 when the VDDK talks to the
     // host directly) before anything is allocated: once the copy leaves the
-    // management network, nothing else says the node has a route to it.
+    // management network, nothing else says the node has a route to it. On a
+    // vCenter source the VDDK logs in to the vCenter, so the node must also
+    // resolve and reach it on 443 (roadmap#175): ProxCenter reaching it says
+    // nothing about the node, which can sit behind another firewall or DNS.
     const copy = await resolveCopyPath({
       session: soapSession, vmid: config.sourceVmId, connectionHost: esxiHost,
       chosen: config.copyVmk ? { device: config.copyVmk } : undefined,
       log: (msg, level) => appendLog(jobId, msg, level),
     })
     for (const change of copy.hostChanges) await appendLog(jobId, `Source host ${copy.label.split(" on ").pop()}: ${change} (host network setting, kept after the migration)`, "warn")
-    const reach = await checkNfcReachability(config.targetConnectionId, nodeIp, copy.nfcAddress, copy.direct ? [NFC_PORT, API_PORT] : [NFC_PORT])
+    const reach = await checkNfcReachability(config.targetConnectionId, nodeIp, copy.nfcAddress, copy.direct ? [NFC_PORT, API_PORT] : [NFC_PORT], copy.direct ? undefined : copy.server)
     if (!reach.ok) throw new Error(describeUnreachable(reach, copy.label))
-    await appendLog(jobId, `Copy network: ${copy.label}, port ${Object.keys(reach.ports).join(" and ")} reachable from ${config.targetNode}${copy.direct ? "" : " (VDDK connects through the vCenter)"}`, "success")
+    await appendLog(jobId, `Copy network: ${copy.label}, port ${Object.keys(reach.ports).join(" and ")} reachable from ${config.targetNode}${reach.vcenter ? ` (VDDK connects through the vCenter ${reach.vcenter.host}, reachable on ${API_PORT})` : ""}`, "success")
 
     // Headroom of the source datastores (roadmap#53): the snapshot this job
     // holds grows for the whole copy, and parallel jobs on one datastore each
@@ -395,10 +398,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // SSL thumbprint for the VDDK connection (fetched from the PVE node), of the
     // address the VDDK will actually dial: by IP when the copy is pinned to an
     // adapter, in which case the certificate's name never matches and the
-    // thumbprint is the only thing the VDDK trusts.
-    const tp = await executeSSH(config.targetConnectionId, nodeIp,
-      `echo | openssl s_client -connect ${shellEscape(copy.server)}:443 2>/dev/null | openssl x509 -fingerprint -sha1 -noout`)
-    const thumbprint = parseSha1Thumbprint(tp.output || "")
+    // thumbprint is the only thing the VDDK trusts. A failure names its cause
+    // from the node's own OpenSSL (roadmap#175) rather than an empty output.
+    const tp = await executeSSH(config.targetConnectionId, nodeIp, buildThumbprintCmd(copy.server), (THUMBPRINT_TIMEOUT_SEC + 15) * 1000)
+    if (!tp.success && !tp.output) throw new Error(`Could not read the TLS certificate of ${copy.server} from the Proxmox node ${config.targetNode}: ${tp.error || "SSH command failed"}`)
+    const thumbprint = parseThumbprintProbe(tp.output, copy.server, config.targetNode)
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 

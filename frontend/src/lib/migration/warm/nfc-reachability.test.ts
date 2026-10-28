@@ -7,7 +7,7 @@ vi.mock("@/lib/ssh/exec", async (io) => {
 })
 
 import {
-  buildPortProbeCmd, checkNfcReachability, describeUnreachable, isValidCopyAddress, parsePortProbe,
+  bareHost, buildPortProbeCmd, buildVcenterProbeCmd, checkNfcReachability, describeUnreachable, isValidCopyAddress, parsePortProbe, parseVcenterProbe,
 } from "./nfc-reachability"
 
 describe("isValidCopyAddress", () => {
@@ -81,6 +81,58 @@ describe("checkNfcReachability", () => {
     const r = await checkNfcReachability("c1", "10.42.0.101", "x; reboot")
     expect(r.ok).toBe(false)
     expect(r.error).toBe("invalid address")
+    expect(h.executeSSH).not.toHaveBeenCalled()
+  })
+})
+
+// roadmap#175: on a vCenter source the VDDK logs in to the vCenter, from the node.
+describe("vCenter probe", () => {
+  beforeEach(() => h.executeSSH.mockReset())
+
+  it("resolves a name before probing 443, and skips the lookup for an IP", () => {
+    const named = buildVcenterProbeCmd("vcenter.corp.local")
+    expect(named).toContain("timeout 5 getent hosts 'vcenter.corp.local'")
+    expect(named).toContain("timeout 5 bash -c 'exec 3<>/dev/tcp/vcenter.corp.local/443'")
+    expect(named).toContain('echo "vcenter-443=open"')
+    expect(buildVcenterProbeCmd("10.42.0.20")).not.toContain("getent")
+    expect(buildVcenterProbeCmd("[fd00::20]")).toContain("/dev/tcp/fd00::20/443")
+    expect(() => buildVcenterProbeCmd("vc/443; reboot")).toThrow(/Invalid vCenter address/)
+  })
+
+  it("strips only the brackets of an IPv6 URL hostname", () => {
+    expect(bareHost("[fd00::20]")).toBe("fd00::20")
+    expect(bareHost("vcenter.corp.local")).toBe("vcenter.corp.local")
+  })
+
+  it("parses resolution and port, a missing line meaning closed", () => {
+    expect(parseVcenterProbe("vcenter-resolve=fail\nvcenter-443=closed\n", "vc.lab")).toEqual({ host: "vc.lab", resolved: false, open: false })
+    expect(parseVcenterProbe("vcenter-443=open\n", "10.42.0.20")).toEqual({ host: "10.42.0.20", resolved: true, open: true })
+    expect(parseVcenterProbe(undefined, "vc.lab")).toEqual({ host: "vc.lab", resolved: true, open: false })
+  })
+
+  it("probes the vCenter in the same SSH call and fails the verdict when 443 is closed there", async () => {
+    h.executeSSH.mockResolvedValue({ success: true, output: "port-902=open\nvcenter-443=closed\n" })
+    const r = await checkNfcReachability("c1", "10.42.0.101", "10.42.0.22", [902], "10.42.0.20")
+    expect(r).toEqual({ address: "10.42.0.22", ports: { 902: true }, ok: false, vcenter: { host: "10.42.0.20", resolved: true, open: false } })
+    expect(h.executeSSH).toHaveBeenCalledTimes(1)
+    expect(h.executeSSH.mock.calls[0][2]).toContain("/dev/tcp/10.42.0.22/902")
+    expect(h.executeSSH.mock.calls[0][2]).toContain("/dev/tcp/10.42.0.20/443")
+    expect(describeUnreachable(r, "vmk0 10.42.0.22 on esxi2")).toBe("The Proxmox node cannot reach the vCenter 10.42.0.20 on port 443, where the VDDK on the node logs in: open the route and the firewall from the node to the vCenter.")
+  })
+
+  it("says the name does not resolve, and adds a closed adapter port after it", async () => {
+    h.executeSSH.mockResolvedValue({ success: true, output: "port-902=closed\nvcenter-resolve=fail\nvcenter-443=closed\n" })
+    const r = await checkNfcReachability("c1", "10.42.0.101", "10.42.0.22", [902], "vcenter.corp.local")
+    expect(describeUnreachable(r, "vmk0")).toBe(
+      "The Proxmox node cannot resolve the vCenter name vcenter.corp.local, which the VDDK on the node logs in to: add it to the node's DNS or /etc/hosts. "
+      + "The Proxmox node cannot reach 10.42.0.22 (vmk0) on port 902. The copy goes through this VMkernel adapter: route the node to that network, open the ESXi firewall for it, or pick another adapter.")
+  })
+
+  it("is ok when both answer, and refuses a vCenter address it cannot interpolate", async () => {
+    h.executeSSH.mockResolvedValue({ success: true, output: "port-902=open\nvcenter-resolve=ok\nvcenter-443=open\n" })
+    expect((await checkNfcReachability("c1", "10.42.0.101", "10.42.0.22", [902], "vc.lab")).ok).toBe(true)
+    h.executeSSH.mockClear()
+    expect(await checkNfcReachability("c1", "10.42.0.101", "10.42.0.22", [902], "$(id)")).toMatchObject({ ok: false, error: "invalid vCenter address" })
     expect(h.executeSSH).not.toHaveBeenCalled()
   })
 })

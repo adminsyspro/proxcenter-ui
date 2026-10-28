@@ -5715,6 +5715,7 @@
     "typeHostDrain": "Host drain",
     "drainGuests": "Guests",
     "drainRemaining": "{count} still on {node}",
+    "drainRemainingSelection": "{count} not migrated",
     "rollingDetailCurrent": "{node}: {done}/{total} nodes",
     "rollingDetailNodes": "{done}/{total} nodes",
     "drainMaintenanceEnabled": "Node in maintenance"
@@ -11117,6 +11118,14 @@
     "dialogTitleDeleted": "Usage history: {name} (deleted)"
   },
   "hostDrain": {
+    "titleSelection": "Migrate selection ({count})",
+    "introSelection": "The selected guests are migrated by ProxCenter, each one from its own node to the node the placement engine picks, under the same checks as a node drain.",
+    "startedSelection": "Migration of {count} guest(s) started",
+    "selectionCount": "{count} guest(s) selected",
+    "clearSelection": "Clear",
+    "migrateSelection": "Migrate selection",
+    "startSelection": "Start the migration",
+    "projectionTitleSelection": "Projected load after the migration",
     "introMaintenance": "The node enters Proxmox HA maintenance and its guests are evacuated: HA-managed guests are relocated by Proxmox HA, the others are migrated by ProxCenter, each one to the node the placement engine picks (projected load, memory ceiling, affinity rules, network and storage).",
     "introMigrateAll": "Every guest of this node is migrated by ProxCenter, each one to the node the placement engine picks. The node stays available for new guests: use Enter maintenance to keep them off it.",
     "evacuateGuests": "Evacuate the guests",

@@ -5696,6 +5696,7 @@
     "typeHostDrain": "Host-Drain",
     "drainGuests": "Gäste",
     "drainRemaining": "{count} noch auf {node}",
+    "drainRemainingSelection": "{count} nicht migriert",
     "rollingDetailCurrent": "{node}: {done}/{total} Knoten",
     "rollingDetailNodes": "{done}/{total} Knoten",
     "drainMaintenanceEnabled": "Knoten im Wartungsmodus"
@@ -10785,6 +10786,14 @@
     "dialogTitleDeleted": "Nutzungsverlauf: {name} (gelöscht)"
   },
   "hostDrain": {
+    "titleSelection": "Auswahl migrieren ({count})",
+    "introSelection": "Die ausgewählten Gäste werden von ProxCenter migriert, jeder von seinem eigenen Knoten auf den Knoten, den die Platzierungs-Engine wählt, mit denselben Prüfungen wie ein Knoten-Drain.",
+    "startedSelection": "Migration von {count} Gast/Gästen gestartet",
+    "selectionCount": "{count} Gast/Gäste ausgewählt",
+    "clearSelection": "Leeren",
+    "migrateSelection": "Auswahl migrieren",
+    "startSelection": "Migration starten",
+    "projectionTitleSelection": "Prognostizierte Last nach der Migration",
     "introMaintenance": "Der Knoten wechselt in den Proxmox-HA-Wartungsmodus und seine Gäste werden evakuiert: HA-verwaltete Gäste verschiebt Proxmox HA, die übrigen migriert ProxCenter, jeden auf den Knoten, den die Platzierungs-Engine wählt (projizierte Last, Speicherobergrenze, Affinitätsregeln, Netzwerk und Storage).",
     "introMigrateAll": "Alle Gäste dieses Knotens werden von ProxCenter migriert, jeder auf den Knoten, den die Platzierungs-Engine wählt. Der Knoten bleibt für neue Gäste verfügbar: nutzen Sie Wartungsmodus aktivieren, um das zu verhindern.",
     "evacuateGuests": "Gäste evakuieren",

@@ -5715,6 +5715,7 @@
     "typeHostDrain": "Drain d'hôte",
     "drainGuests": "Invités",
     "drainRemaining": "{count} encore sur {node}",
+    "drainRemainingSelection": "{count} non migré(s)",
     "rollingDetailCurrent": "{node} : {done}/{total} nœuds",
     "rollingDetailNodes": "{done}/{total} nœuds",
     "drainMaintenanceEnabled": "Nœud en maintenance"
@@ -11118,6 +11119,14 @@
     "dialogTitleDeleted": "Historique d'usage : {name} (supprimé)"
   },
   "hostDrain": {
+    "titleSelection": "Migrer la sélection ({count})",
+    "introSelection": "Les invités sélectionnés sont migrés par ProxCenter, chacun depuis son nœud vers le nœud choisi par le moteur de placement, avec les mêmes contrôles qu'un drain de nœud.",
+    "startedSelection": "Migration de {count} invité(s) lancée",
+    "selectionCount": "{count} invité(s) sélectionné(s)",
+    "clearSelection": "Effacer",
+    "migrateSelection": "Migrer la sélection",
+    "startSelection": "Lancer la migration",
+    "projectionTitleSelection": "Charge projetée après la migration",
     "introMaintenance": "Le nœud entre en maintenance HA Proxmox et ses invités sont évacués : les invités gérés par HA sont déplacés par Proxmox HA, les autres sont migrés par ProxCenter, chacun vers le nœud choisi par le moteur de placement (charge projetée, plafond mémoire, règles d'affinité, réseau et stockage).",
     "introMigrateAll": "Tous les invités de ce nœud sont migrés par ProxCenter, chacun vers le nœud choisi par le moteur de placement. Le nœud reste disponible pour de nouveaux invités : utilisez Entrer en maintenance pour l'en exclure.",
     "evacuateGuests": "Évacuer les invités",

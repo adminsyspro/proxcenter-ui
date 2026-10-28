@@ -43,9 +43,13 @@ import { useCephNoout } from '@/hooks/useCephNoout'
    and storage feasibility) and migrates them in parallel under a cap. The
    dialog previews that plan before the operator confirms, and every setting
    the engine takes is exposed here.
+
+   "Migrate selection" (#1218) runs the same plan on guests picked in the VM
+   list of a cluster, wherever they run: no source node, each guest leaves its
+   own, and every other node of the cluster may receive it.
 */
 
-export type HostDrainMode = 'maintenance' | 'migrate-all'
+export type HostDrainMode = 'maintenance' | 'migrate-all' | 'selection'
 
 export interface HostDrainPlanGuest {
   vmid: number
@@ -55,6 +59,8 @@ export interface HostDrainPlanGuest {
   mode: string
   running: boolean
   ha: boolean
+  /** The node the guest leaves: the drained node, or its own in a selection. */
+  source_node?: string
   target_node?: string
   reason?: string
   /** Left on the node on purpose (stopped guest kept, or the operator's choice). */
@@ -89,10 +95,13 @@ export interface HostDrainDialogProps {
   open: boolean
   onClose: () => void
   connId: string
+  /** The node to empty; empty for a selection. */
   node: string
   mode: HostDrainMode
   /** Online nodes of the cluster other than `node`, for the manual target. */
   otherNodes: string[]
+  /** The guests of a selection (#1218), anywhere in the cluster. */
+  vmids?: number[]
   /** Entering maintenance runs ha-manager over SSH. */
   sshEnabled?: boolean
   onStarted?: (drain: any) => void
@@ -129,7 +138,9 @@ export function buildHostDrainConfig(opts: {
   memCeiling: number
   includeStopped: boolean
   overrides?: Record<number, string>
+  vmids?: number[]
 }) {
+  const selection = opts.mode === 'selection'
   const entries = Object.entries(opts.overrides || {}).filter(([, v]) => !!v)
   const targets = Object.fromEntries(entries.filter(([, v]) => v !== KEEP_ON_NODE))
   const keep = opts.mode === 'migrate-all' ? entries.filter(([, v]) => v === KEEP_ON_NODE).map(([k]) => Number(k)) : []
@@ -137,10 +148,12 @@ export function buildHostDrainConfig(opts: {
   return {
     max_concurrent_migrations: opts.maxParallel,
     mem_ceiling_percent: opts.memCeiling,
-    include_stopped: opts.includeStopped,
+    // A selected stopped guest was picked on purpose: it moves offline.
+    include_stopped: selection || opts.includeStopped,
     enter_maintenance: opts.mode === 'maintenance',
     ...(Object.keys(targets).length > 0 ? { guest_targets: targets } : {}),
     ...(keep.length > 0 ? { keep_vmids: keep } : {}),
+    ...(selection ? { vmids: opts.vmids || [] } : {}),
   }
 }
 
@@ -233,7 +246,7 @@ export function LoadBar({ before, after, limit, testId }: Readonly<{ before: num
 }
 
 /** Each node's memory and CPU once the plan has run, the drained node first. */
-function ProjectionBlock({ plan, memCeiling }: Readonly<{ plan: HostDrainPlan; memCeiling: number }>) {
+function ProjectionBlock({ plan, memCeiling, title }: Readonly<{ plan: HostDrainPlan; memCeiling: number; title: string }>) {
   const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -247,7 +260,7 @@ function ProjectionBlock({ plan, memCeiling }: Readonly<{ plan: HostDrainPlan; m
   return (
     <Box data-testid="drain-projection">
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-        <Typography variant="subtitle2" fontWeight={600}>{t('hostDrain.projectionTitle')}</Typography>
+        <Typography variant="subtitle2" fontWeight={600}>{title}</Typography>
         <Box sx={{ flex: 1 }} />
         <Tooltip title={help}>
           <Box component="i" className="ri-information-line" aria-label={help} data-testid="drain-projection-help" sx={{ fontSize: 15, color: 'text.secondary', cursor: 'help' }} />
@@ -266,7 +279,11 @@ function ProjectionBlock({ plan, memCeiling }: Readonly<{ plan: HostDrainPlan; m
                 {r.source ? (
                   <Typography variant="caption" color="text.secondary" noWrap>{`−${r.guests_out ?? 0}`}</Typography>
                 ) : (
-                  (r.guests_in ?? 0) > 0 && <Typography variant="caption" color="text.secondary" noWrap>{`+${r.guests_in}`}</Typography>
+                  // In a selection a node may both lose and receive guests.
+                  <>
+                    {(r.guests_out ?? 0) > 0 && <Typography variant="caption" color="text.secondary" noWrap>{`−${r.guests_out}`}</Typography>}
+                    {(r.guests_in ?? 0) > 0 && <Typography variant="caption" color="text.secondary" noWrap>{`+${r.guests_in}`}</Typography>}
+                  </>
                 )}
               </Box>
               <LoadBar before={ratio(r.mem_before, r.mem_total)} after={ratio(r.mem_after, r.mem_total)} limit={memCeiling / 100} testId={`drain-projection-mem-${r.node}`} />
@@ -280,7 +297,8 @@ function ProjectionBlock({ plan, memCeiling }: Readonly<{ plan: HostDrainPlan; m
 }
 
 export default function HostDrainDialog(props: HostDrainDialogProps) {
-  const { open, onClose, connId, node, mode, otherNodes, sshEnabled = true, onStarted, onMaintenanceOnly } = props
+  const { open, onClose, connId, node, mode, otherNodes, vmids, sshEnabled = true, onStarted, onMaintenanceOnly } = props
+  const selection = mode === 'selection'
   const t = useTranslations()
   const toast = useToast()
   const theme = useTheme()
@@ -310,13 +328,15 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
   const { active: nooutWanted, setFlag: setNoout, rollback: rollbackNoout } = noout
 
   const config = useMemo(
-    () => buildHostDrainConfig({ mode, maxParallel, memCeiling, includeStopped, overrides }),
-    [mode, maxParallel, memCeiling, includeStopped, overrides],
+    () => buildHostDrainConfig({ mode, maxParallel, memCeiling, includeStopped, overrides, vmids }),
+    [mode, maxParallel, memCeiling, includeStopped, overrides, vmids],
   )
+  // A selection has no node: the request names the guests instead.
+  const scope = useMemo(() => (selection ? { connection_id: connId } : { connection_id: connId, node }), [selection, connId, node])
 
   const needsSsh = mode === 'maintenance'
   const sshBlocked = needsSsh && !sshEnabled
-  const drainWanted = mode === 'migrate-all' || evacuate
+  const drainWanted = mode !== 'maintenance' || evacuate
   const planWanted = open && drainWanted
   const planKey = useMemo(() => JSON.stringify({ connId, node, config }), [connId, node, config])
   // The last plan stays on screen while the next one loads, so the list does
@@ -334,7 +354,7 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
         const res = await fetch('/api/v1/orchestrator/host-drains/plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connection_id: connId, node, config }),
+          body: JSON.stringify({ ...scope, config }),
         })
         const json = await res.json().catch(() => ({}))
         if (cancelled) return
@@ -352,7 +372,7 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
       cancelled = true
       clearTimeout(handle)
     }
-  }, [planWanted, connId, node, config, planKey, t])
+  }, [planWanted, scope, config, planKey, t])
 
   const start = useCallback(async () => {
     setStarting(true)
@@ -369,7 +389,7 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
       const res = await fetch('/api/v1/orchestrator/host-drains', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connection_id: connId, node, config }),
+        body: JSON.stringify({ ...scope, config }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -378,7 +398,7 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
         setError(json?.error || `HTTP ${res.status}`)
         return
       }
-      toast.success(t('hostDrain.started', { node }))
+      toast.success(selection ? t('hostDrain.startedSelection', { count: vmids?.length ?? 0 }) : t('hostDrain.started', { node }))
       onStarted?.(json?.data ?? json)
       onClose()
     } catch (e: any) {
@@ -387,7 +407,7 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
     } finally {
       setStarting(false)
     }
-  }, [nooutWanted, setNoout, rollbackNoout, drainWanted, onMaintenanceOnly, onClose, connId, node, config, toast, t, onStarted])
+  }, [nooutWanted, setNoout, rollbackNoout, drainWanted, onMaintenanceOnly, onClose, scope, selection, vmids, node, config, toast, t, onStarted])
 
   const modeLabel = (m: string) => {
     switch (m) {
@@ -404,6 +424,9 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
   const lastPage = Math.max(0, Math.ceil(sortedGuests.length / rowsPerPage) - 1)
   const currentPage = Math.min(page, lastPage)
   const shownGuests = sortedGuests.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage)
+  let startLabel = t('common.confirm')
+  if (selection) startLabel = t('hostDrain.startSelection')
+  else if (drainWanted) startLabel = t('hostDrain.start')
   const canStart = !starting && !sshBlocked && !noout.blocked && (!drainWanted || (!!plan && !planLoading && !planError))
   const canKeep = mode === 'migrate-all'
   // A guest gets a target selector when it will move, or when the operator
@@ -414,6 +437,9 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
     return g.status !== 'skipped' || overrides[g.vmid] !== undefined
   }
   const choiceOf = (g: HostDrainPlanGuest) => overrides[g.vmid] ?? g.target_node ?? ''
+  const sourceOf = (g: HostDrainPlanGuest) => g.source_node || node
+  // A guest is never offered the node it already runs on.
+  const candidatesOf = (g: HostDrainPlanGuest) => (plan?.candidates || []).filter(n => n !== sourceOf(g))
   const choose = (vmid: number, value: string) => setOverrides(prev => ({ ...prev, [vmid]: value }))
   // What the shortcut shows: automatic while nothing is chosen, the common
   // choice when every line has the same, "per guest" once lines differ.
@@ -428,7 +454,21 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
       setOverrides({})
       return
     }
-    setOverrides(Object.fromEntries(guests.filter(selectable).map(g => [g.vmid, value])))
+    // A guest already on the chosen node keeps its automatic target.
+    setOverrides(Object.fromEntries(guests.filter(g => selectable(g) && sourceOf(g) !== value).map(g => [g.vmid, value])))
+  }
+
+  let title = t('bulkActions.migrateAllVms')
+  let intro = t('hostDrain.introMigrateAll')
+  let titleIcon = 'ri-logout-box-r-line'
+  if (mode === 'maintenance') {
+    title = t('inventory.enterMaintenance')
+    intro = t('hostDrain.introMaintenance')
+    titleIcon = 'ri-tools-fill'
+  } else if (selection) {
+    title = t('hostDrain.titleSelection', { count: vmids?.length ?? 0 })
+    intro = t('hostDrain.introSelection')
+    titleIcon = 'ri-arrow-left-right-line'
   }
 
   return (
@@ -438,14 +478,14 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
           width: 40, height: 40, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center',
           bgcolor: mode === 'maintenance' ? 'rgba(255,152,0,0.12)' : 'rgba(33,150,243,0.12)',
         }}>
-          <i className={mode === 'maintenance' ? 'ri-tools-fill' : 'ri-logout-box-r-line'} style={{ fontSize: 22, color: mode === 'maintenance' ? '#ff9800' : '#2196f3' }} />
+          <i className={titleIcon} style={{ fontSize: 22, color: mode === 'maintenance' ? '#ff9800' : '#2196f3' }} />
         </Box>
-        <Box>{mode === 'maintenance' ? t('inventory.enterMaintenance') : t('bulkActions.migrateAllVms')}</Box>
+        <Box>{title}</Box>
       </DialogTitle>
       {/* MUI drops the top padding after a title: the intro needs air. */}
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, '&&': { pt: 1.5 } }}>
         <Typography variant="body2" color="text.secondary">
-          {mode === 'maintenance' ? t('hostDrain.introMaintenance') : t('hostDrain.introMigrateAll')}
+          {intro}
         </Typography>
 
         {sshBlocked && (
@@ -571,12 +611,12 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
                             {(!skipped || selectable(g)) && (
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, color: 'text.secondary' }} data-testid={`drain-plan-route-${g.vmid}`}>
                                 <NodeGlyph status="online" dark={isDark} dotBorder={dotBorder} />
-                                <Typography variant="caption">{node}</Typography>
+                                <Typography variant="caption">{sourceOf(g)}</Typography>
                                 <Typography variant="caption">→</Typography>
                                 {selectable(g) ? (
                                   <TargetSelect
                                     value={choiceOf(g)}
-                                    candidates={plan?.candidates || []}
+                                    candidates={candidatesOf(g)}
                                     canKeep={canKeep}
                                     onChange={v => choose(g.vmid, v)}
                                     label={t('hostDrain.targetOf', { name: g.name || String(g.vmid) })}
@@ -612,13 +652,16 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
               )}
             </Box>
 
-            <FormControlLabel
-              control={<Switch checked={includeStopped} onChange={e => setIncludeStopped(e.target.checked)} />}
-              label={t('hostDrain.includeStopped')}
-            />
+            {/* A selected stopped guest was picked on purpose: always moved. */}
+            {!selection && (
+              <FormControlLabel
+                control={<Switch checked={includeStopped} onChange={e => setIncludeStopped(e.target.checked)} />}
+                label={t('hostDrain.includeStopped')}
+              />
+            )}
 
             {plan && !planError && (plan.projection?.length ?? 0) > 0 && (
-              <ProjectionBlock plan={plan} memCeiling={memCeiling} />
+              <ProjectionBlock plan={plan} memCeiling={memCeiling} title={selection ? t('hostDrain.projectionTitleSelection') : t('hostDrain.projectionTitle')} />
             )}
 
             <Typography variant="caption" color="text.secondary">{t('hostDrain.runsInOrchestrator')}</Typography>
@@ -636,7 +679,7 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
           disabled={!canStart}
           startIcon={starting ? <CircularProgress size={16} /> : undefined}
         >
-          {drainWanted ? t('hostDrain.start') : t('common.confirm')}
+          {startLabel}
         </Button>
       </DialogActions>
     </Dialog>

@@ -5715,6 +5715,7 @@
     "typeHostDrain": "호스트 드레인",
     "drainGuests": "게스트",
     "drainRemaining": "{node}에 {count}개 남음",
+    "drainRemainingSelection": "{count}개 마이그레이션되지 않음",
     "rollingDetailCurrent": "{node}: {done}/{total} 노드",
     "rollingDetailNodes": "{done}/{total} 노드",
     "drainMaintenanceEnabled": "유지 관리 중인 노드"
@@ -11117,6 +11118,14 @@
     "dialogTitleDeleted": "사용량 기록: {name} (삭제됨)"
   },
   "hostDrain": {
+    "titleSelection": "선택 항목 마이그레이션 ({count})",
+    "introSelection": "선택한 게스트를 ProxCenter가 각자의 노드에서 배치 엔진이 선택한 노드로 마이그레이션하며, 노드 드레인과 동일한 검사를 적용합니다.",
+    "startedSelection": "게스트 {count}개의 마이그레이션이 시작되었습니다",
+    "selectionCount": "게스트 {count}개 선택됨",
+    "clearSelection": "선택 해제",
+    "migrateSelection": "선택 항목 마이그레이션",
+    "startSelection": "마이그레이션 시작",
+    "projectionTitleSelection": "마이그레이션 후 예상 부하",
     "introMaintenance": "노드가 Proxmox HA 유지 관리 모드로 전환되고 게스트가 비워집니다. HA 관리 게스트는 Proxmox HA가 이동하고, 나머지는 ProxCenter가 배치 엔진이 선택한 노드(예상 부하, 메모리 상한, 어피니티 규칙, 네트워크 및 스토리지)로 각각 마이그레이션합니다.",
     "introMigrateAll": "이 노드의 모든 게스트를 ProxCenter가 배치 엔진이 선택한 노드로 각각 마이그레이션합니다. 노드는 새 게스트에 계속 사용 가능합니다. 이를 막으려면 유지 관리 모드 시작을 사용하세요.",
     "evacuateGuests": "게스트 비우기",

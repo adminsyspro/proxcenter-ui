@@ -5715,6 +5715,7 @@
     "typeHostDrain": "主机清空",
     "drainGuests": "客户机",
     "drainRemaining": "{count} 个仍在 {node} 上",
+    "drainRemainingSelection": "{count} 个未迁移",
     "rollingDetailCurrent": "{node}：{done}/{total} 个节点",
     "rollingDetailNodes": "{done}/{total} 个节点",
     "drainMaintenanceEnabled": "节点处于维护模式"
@@ -11117,6 +11118,14 @@
     "dialogTitleDeleted": "使用量历史：{name}（已删除）"
   },
   "hostDrain": {
+    "titleSelection": "迁移所选项 ({count})",
+    "introSelection": "所选客户机由 ProxCenter 迁移，每个客户机从其所在节点迁往放置引擎选择的节点，检查与节点清空相同。",
+    "startedSelection": "已开始迁移 {count} 个客户机",
+    "selectionCount": "已选择 {count} 个客户机",
+    "clearSelection": "清除",
+    "migrateSelection": "迁移所选项",
+    "startSelection": "开始迁移",
+    "projectionTitleSelection": "迁移后的预计负载",
     "introMaintenance": "节点进入 Proxmox HA 维护模式并清空其客户机：HA 管理的客户机由 Proxmox HA 迁移，其余由 ProxCenter 迁移，每个客户机都迁往放置引擎选择的节点（预计负载、内存上限、亲和规则、网络和存储）。",
     "introMigrateAll": "此节点的所有客户机由 ProxCenter 迁移，每个客户机都迁往放置引擎选择的节点。节点仍可接收新客户机：如需排除，请使用进入维护模式。",
     "evacuateGuests": "清空客户机",

@@ -44,7 +44,8 @@ import {
   useTheme,
   useMediaQuery
 } from '@mui/material'
-import { DataGrid, GridColDef } from '@mui/x-data-grid'
+import { DataGrid, GridColDef, type GridRowSelectionModel } from '@mui/x-data-grid'
+import { resolveSelectedRowIds } from '@/utils/gridSelection'
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 // XLSX is dynamically imported in handleExportExcel to reduce bundle size
@@ -521,6 +522,11 @@ type VmsTableProps = {
   defaultHiddenColumns?: string[]
   // vDC — tenant IaaS union view only (see the column block in the columns useMemo)
   showVdcColumn?: boolean
+  // Selection (#1218): checkboxes, controlled by the parent so it can gather
+  // the guests of several tables. Ids are VmRow ids.
+  selectedIds?: ReadonlySet<string>
+  onSelectionChange?: (ids: Set<string>) => void
+  isRowSelectable?: (vm: VmRow) => boolean
 }
 
 /* -----------------------------
@@ -554,7 +560,10 @@ function VmsTable({
   onToggleFavorite,
   migratingVmIds,
   defaultHiddenColumns,
-  showVdcColumn = false
+  showVdcColumn = false,
+  selectedIds,
+  onSelectionChange,
+  isRowSelectable
 }: VmsTableProps) {
   const theme = useTheme()
   const t = useTranslations()
@@ -583,6 +592,29 @@ function VmsTable({
   }, [getColor])
 
   // Helper pour vérifier si une VM est en migration
+  // Checkboxes only when the parent follows the selection (#1218), which may
+  // span several tables: the ids of the other tables are kept as they are,
+  // this table only answers for its own rows. The grid's "select all" may
+  // answer with an exclusion list: resolved against the rows that can be
+  // selected, so templates and migrating guests never slip in.
+  const selectionProps = useMemo(() => {
+    if (!onSelectionChange) return {}
+    const canSelect = (vm: VmRow) => (isRowSelectable ? isRowSelectable(vm) : true)
+    const here = new Set(vms.map(vm => vm.id))
+    const elsewhere = [...(selectedIds ?? [])].filter(id => !here.has(id))
+    return {
+      checkboxSelection: true,
+      // The parent shows the count of the whole selection.
+      hideFooterSelectedRowCount: true,
+      isRowSelectable: (params: { row: VmRow }) => canSelect(params.row),
+      rowSelectionModel: { type: 'include', ids: new Set([...(selectedIds ?? [])].filter(id => here.has(id))) } as GridRowSelectionModel,
+      onRowSelectionModelChange: (model: GridRowSelectionModel) => {
+        const mine = resolveSelectedRowIds(model, vms.filter(canSelect)).filter(id => here.has(id))
+        onSelectionChange(new Set([...elsewhere, ...mine]))
+      },
+    }
+  }, [onSelectionChange, isRowSelectable, selectedIds, vms])
+
   const isVmMigrating = useCallback((connId: string, vmid: string | number) => {
     if (!migratingVmIds) return false
     
@@ -2026,7 +2058,8 @@ return (
         columns={columns}
         loading={loading}
         density={isCompact ? 'compact' : 'standard'}
-        disableRowSelectionOnClick={!onVmClick}
+        {...selectionProps}
+        disableRowSelectionOnClick={!onVmClick || !!onSelectionChange}
         onRowClick={onVmClick ? (params) => {
           const vm = params.row as VmRow
 

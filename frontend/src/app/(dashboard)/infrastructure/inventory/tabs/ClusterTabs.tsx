@@ -53,6 +53,7 @@ import { useCopyToClipboard } from '@/lib/clipboard'
 import ExpandableChart from '../components/ExpandableChart'
 import NodesTable, { NodeRow, BulkAction } from '@/components/NodesTable'
 import VmsTable, { VmRow, TrendPoint, guestDiskBytes } from '@/components/VmsTable'
+import { useGuestSelection, GuestSelectionBar } from '@/components/GuestSelection'
 import ClusterFirewallTab from '@/components/ClusterFirewallTab'
 import ClusterSdnTab from '@/components/cluster-sdn/ClusterSdnTab'
 import BackupJobsPanel from '../BackupJobsPanel'
@@ -374,6 +375,13 @@ export default function ClusterTabs(props: any) {
   // Unsetting an OSD flag is a storage.admin action on the API side (#920).
   const canSetCephFlags = hasPermission('storage.admin')
   const activeRollingUpdateId = hasActiveUpdate(clusterConnId)
+
+  // "Migrate selection" (#1218): guests ticked in the node tables of the Guests tab.
+  const selectionNodes = useMemo(
+    () => ((data?.nodesData || []) as NodeRow[]).map(n => ({ connId: clusterConnId, node: n.name, status: n.status })),
+    [data?.nodesData, clusterConnId],
+  )
+  const guestSelection = useGuestSelection({ vms: (data?.allVms || []) as VmRow[], nodes: selectionNodes, migratingVmIds, resetKey: clusterConnId })
 
   const drsHealth = useMemo(() => {
     if (!isEnterprise || !(drsStatus as any)?.enabled || !metricsData) return null
@@ -1594,6 +1602,7 @@ export default function ClusterTabs(props: any) {
                 {/* Onglet VMs - Liste complète avec collapse par node - Index 2 */}
                 {clusterTab === 2 && (
                   <Box sx={{ p: 0 }}>
+                    <GuestSelectionBar selection={guestSelection} sticky />
                     {data.nodesData && data.nodesData.length > 0 ? (
                       <Box>
                         {(data.nodesData as NodeRow[]).map((node) => {
@@ -1693,6 +1702,7 @@ export default function ClusterTabs(props: any) {
                                     favorites={favorites}
                                     onToggleFavorite={toggleFavorite}
                                     migratingVmIds={migratingVmIds}
+                                    {...guestSelection.tableProps}
                                   />
                                 </Box>
                               )}

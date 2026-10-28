@@ -103,3 +103,31 @@ describe("status mapping and ids", () => {
     expect(hostDrainParentId("d-1")).toBe("d-1")
   })
 })
+
+describe("a selection of guests (#1218)", () => {
+  const selection = drain({
+    node: "",
+    status: "partial",
+    total_guests: 2,
+    completed_guests: 1,
+    failed_guests: 1,
+    skipped_guests: 0,
+    maintenance_enabled: false,
+    guests: [
+      { vmid: 101, name: "a", type: "qemu", status: "completed", mode: "live", source_node: "pve1", target_node: "pve3" },
+      { vmid: 102, name: "b", type: "lxc", status: "failed", mode: "restart", source_node: "pve2", target_node: "pve1", error: "boom" },
+    ],
+  })
+
+  it("is named by its size and routes each guest from its own node", () => {
+    const [parent, a, b] = hostDrainJobRows([selection], resolve)
+
+    expect(parent.name).toBe("Migrate selection - 2 guest(s)")
+    expect(parent.detail).toBe("Selection: 1/2 guest(s) moved, 1 still on their node")
+    expect(a.name).toBe("Migrate selection - VM 101 (a)")
+    expect(a.detail).toBe("pve1 → pve3 (live)")
+    expect(a.metadata.sourceNode).toBe("pve1")
+    expect(b.detail).toBe("pve2 → pve1 (restart) • boom")
+    expect(b.metadata.sourceNode).toBe("pve2")
+  })
+})

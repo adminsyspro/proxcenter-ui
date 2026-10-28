@@ -16,7 +16,12 @@ export interface DrainConfigInput {
   enter_maintenance?: boolean
   guest_targets?: Record<string, string>
   keep_vmids?: number[]
+  /** A selection of guests anywhere in the cluster (#1218): no source node. */
+  vmids?: number[]
 }
+
+/** Whether the request migrates a selection of guests rather than a node. */
+export const isSelectionConfig = (config: DrainConfigInput): boolean => (config.vmids?.length ?? 0) > 0
 
 export class DrainConfigError extends Error {}
 
@@ -78,6 +83,13 @@ export function sanitizeDrainConfig(raw: unknown): DrainConfigInput {
     config.keep_vmids = input.keep_vmids.map(v => vmid(v, "keep_vmids"))
     if (config.keep_vmids.length > 0 && config.enter_maintenance) {
       throw new DrainConfigError("guests cannot be left on a node entering maintenance")
+    }
+  }
+  if (input.vmids !== undefined) {
+    if (!Array.isArray(input.vmids) || input.vmids.length > MAX_GUESTS) throw new DrainConfigError("vmids must be a list of VMIDs")
+    config.vmids = [...new Set(input.vmids.map(v => vmid(v, "vmids")))]
+    if (config.vmids.length > 0 && (config.enter_maintenance || (config.keep_vmids?.length ?? 0) > 0)) {
+      throw new DrainConfigError("a selection of guests neither enters maintenance nor keeps guests")
     }
   }
 

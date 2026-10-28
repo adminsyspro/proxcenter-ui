@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import {
   Box,
@@ -22,19 +22,27 @@ import {
   Tooltip,
   Typography
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 
 import { extractLogs, jobActions, jobDetailUrl, normalizeLog, syntheticLogs } from '@/lib/tasks/jobActions'
+import { HOST_DRAIN_JOB_TYPE, hostDrainJobRows } from '@/lib/tasks/hostDrainRows'
 import { useCopyToClipboard } from '@/lib/clipboard'
 import LiveLogBox from '@/components/ui/LiveLogBox'
+import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
 import WarmCutoverButton, { canRequestCutover } from '@/app/(dashboard)/infrastructure/inventory/components/WarmCutoverButton'
 
 import { StatusChip, TypeChip } from './JobChips'
 
 // RemixIcon replacements for @mui/icons-material
-const CheckCircleIcon = (props) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
-const ErrorIcon = (props) => <i className="ri-error-warning-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
-const WarningIcon = (props) => <i className="ri-alert-line" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
-const InfoIcon = (props) => <i className="ri-information-line" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
+// A state icon takes the palette colour it is given (success, error...), as
+// the MUI icon it replaces did; without it every state rendered black.
+const StateIcon = ({ icon, color, fontSize }) => (
+  <Box component="i" className={icon} sx={{ fontSize: fontSize === 'small' ? 18 : 20, color: color === 'disabled' ? 'text.disabled' : color && `${color}.main` }} />
+)
+const CheckCircleIcon = (props) => <StateIcon icon="ri-checkbox-circle-fill" {...props} />
+const ErrorIcon = (props) => <StateIcon icon="ri-error-warning-fill" {...props} />
+const WarningIcon = (props) => <StateIcon icon="ri-alert-line" {...props} />
+const InfoIcon = (props) => <StateIcon icon="ri-information-line" {...props} />
 const CloseIcon = (props) => <i className="ri-close-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const PauseIcon = (props) => <i className="ri-pause-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
 const PlayArrowIcon = (props) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
@@ -71,6 +79,13 @@ function getNodeStatusIcon(status) {
   }
 }
 
+function drainGuestStateIcon(status) {
+  if (status === 'completed') return <CheckCircleIcon color="success" fontSize="small" />
+  if (status === 'failed' || status === 'skipped') return <ErrorIcon color="error" fontSize="small" />
+  if (status === 'migrating') return <CircularProgress size={16} />
+  return <InfoIcon color="disabled" fontSize="small" />
+}
+
 // The follow rule moved to the shared hook (#1201); re-exported for its tests.
 export { isAtTail } from '@/hooks/useFollowTail'
 
@@ -97,11 +112,25 @@ export function logsAsText(entries) {
    Job Detail Dialog
 -------------------------------- */
 
-export default function JobDetailDialog({ open, onClose, job, onAction, actionError, isEnterprise, t }) {
+export default function JobDetailDialog({ open, onClose, job: openedJob, onAction, actionError, isEnterprise, t }) {
   // Keyed by job id: the dialog is never unmounted, so a plain array kept
   // showing the previous job's logs under the next job opened.
   const [logState, setLogState] = useState({ jobId: null, entries: [], error: null, detail: null })
-  const forThisJob = logState.jobId && logState.jobId === job?.id
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
+  const dotBorder = theme.palette.background.paper
+  const forThisJob = logState.jobId && logState.jobId === openedJob?.id
+  // A host drain (#248) is read again with its log: its guests and progress
+  // follow that record while the dialog stays open, not the row it was opened
+  // from, which never changes.
+  const job = useMemo(() => {
+    const record = openedJob?.type === HOST_DRAIN_JOB_TYPE && forThisJob ? logState.detail : null
+    if (!record) return openedJob
+    return hostDrainJobRows([record], () => openedJob.target).find(r => r.id === openedJob.id) ?? openedJob
+  }, [openedJob, forThisJob, logState.detail])
+  // Host drains are Community, like the drain itself: their record is read
+  // whatever the edition.
+  const canFetch = isEnterprise || openedJob?.type === HOST_DRAIN_JOB_TYPE
   const fetched = forThisJob ? logState.entries : []
   // Site Recovery has nothing to fetch: its record is the per-VM results the
   // row already carries.
@@ -120,13 +149,13 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
 
   // Fetch full job details when dialog opens
   useEffect(() => {
-    if (open && detailUrl && isEnterprise) {
+    if (open && detailUrl && canFetch) {
       fetchJobDetails()
     }
-  }, [open, detailUrl, isEnterprise])
+  }, [open, detailUrl, canFetch])
 
   const fetchJobDetails = async ({ silent = false } = {}) => {
-    if (!detailUrl || !isEnterprise) return
+    if (!detailUrl || !canFetch) return
 
     // A background refresh must not raise the spinner: on a running job it
     // fires every 3 s and the header blinked continuously.
@@ -148,11 +177,11 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
 
   // Auto-refresh if job is running
   useEffect(() => {
-    if (open && detailUrl && job?.status === 'running' && isEnterprise) {
+    if (open && detailUrl && job?.status === 'running' && canFetch) {
       const interval = setInterval(() => fetchJobDetails({ silent: true }), 3000)
       return () => clearInterval(interval)
     }
-  }, [open, detailUrl, job?.status, isEnterprise])
+  }, [open, detailUrl, job?.status, canFetch])
 
   if (!job) return null
 
@@ -353,28 +382,40 @@ export default function JobDetailDialog({ open, onClose, job, onAction, actionEr
                     <Chip size="small" color="warning" variant="outlined" label={t('jobsPage.drainMaintenanceEnabled')} />
                   )}
                   {Array.isArray(job.metadata?.remaining) && job.metadata.remaining.length > 0 && job.status !== 'running' && (
-                    <Chip size="small" color="error" label={t('jobsPage.drainRemaining', { count: job.metadata.remaining.length, node: job.metadata.node })} />
+                    <Chip size="small" color="error" label={job.metadata.node
+                      ? t('jobsPage.drainRemaining', { count: job.metadata.remaining.length, node: job.metadata.node })
+                      : t('jobsPage.drainRemainingSelection', { count: job.metadata.remaining.length })} />
                   )}
                 </Box>
-                <List dense>
+                <List dense disablePadding>
                   {drainGuests.map((g) => {
                     const left = g.status === 'completed'
-                    const stayed = g.status === 'failed' || g.status === 'skipped'
-                    const where = left || g.target_node ? `${job.metadata.node} → ${g.target_node || (g.mode === 'ha' ? 'HA' : '?')}` : job.metadata.node
+                    // A selection (#1218) has no node: each guest names its own.
+                    const from = g.source_node || job.metadata.node
                     const why = g.failure_reason || g.error || (g.status === 'skipped' ? g.reason : '')
+                    const state = drainGuestStateIcon(g.status)
+                    // One line per guest, as in the plan: why it stayed rides on its state icon.
                     return (
-                      <ListItem key={g.vmid} data-testid={`drain-guest-${g.vmid}`}>
-                        <ListItemIcon sx={{ minWidth: 40 }}>
-                          {left ? <CheckCircleIcon color="success" fontSize="small" />
-                            : stayed ? <ErrorIcon color="error" fontSize="small" />
-                            : g.status === 'migrating' ? <CircularProgress size={18} />
-                            : <InfoIcon color="disabled" fontSize="small" />}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={`${g.type === 'lxc' ? 'CT' : 'VM'} ${g.vmid}${g.name ? ` (${g.name})` : ''}`}
-                          secondary={`${where}${g.mode ? ` • ${g.mode}` : ''}${why ? ` • ${why}` : ''}`}
-                        />
-                        {g.ha && <Chip size="small" label="HA" sx={{ ml: 1 }} />}
+                      <ListItem key={g.vmid} divider sx={{ py: 0.5, gap: 1 }} data-testid={`drain-guest-${g.vmid}`}>
+                        <Box sx={{ width: 20, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+                          {why ? <Tooltip title={why} placement="right"><Box component="span" sx={{ display: 'flex', cursor: 'help' }} aria-label={why}>{state}</Box></Tooltip> : state}
+                        </Box>
+                        <GuestGlyph type={g.type} status={g.running ? 'running' : 'stopped'} dotBorder={dotBorder} />
+                        <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>{g.vmid} {g.name}</Typography>
+                        {g.ha && <Chip size="small" label="HA" sx={{ height: 16, fontSize: '0.6rem', flexShrink: 0 }} />}
+                        {g.mode && g.mode !== 'ha' && <Chip size="small" variant="outlined" label={g.mode} sx={{ height: 16, fontSize: '0.6rem', flexShrink: 0 }} />}
+                        <Box sx={{ flex: 1 }} />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, color: 'text.secondary' }} data-testid={`drain-guest-route-${g.vmid}`}>
+                          <NodeGlyph status="online" dark={isDark} dotBorder={dotBorder} />
+                          <Typography variant="caption">{from}</Typography>
+                          {(left || g.target_node) && (
+                            <>
+                              <Typography variant="caption">→</Typography>
+                              {g.target_node && <NodeGlyph status="online" dark={isDark} dotBorder={dotBorder} />}
+                              <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.primary' }}>{g.target_node || (g.mode === 'ha' ? 'HA' : '?')}</Typography>
+                            </>
+                          )}
+                        </Box>
                       </ListItem>
                     )
                   })}

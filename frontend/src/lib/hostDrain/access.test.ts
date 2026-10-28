@@ -128,3 +128,68 @@ describe("drainCluster (#248)", () => {
     await expect(drainCluster("c1")).rejects.toThrow("Could not read the cluster resources")
   })
 })
+
+describe("selection of guests (#1218)", () => {
+  const cluster = [
+    { type: "node", node: "pve1" }, { type: "node", node: "pve2" }, { type: "node", node: "pve3" },
+    { type: "qemu", node: "pve1", vmid: 101, status: "running" },
+    { type: "qemu", node: "pve2", vmid: 102, status: "stopped" },
+    { type: "qemu", node: "pve3", vmid: 103, status: "running" },
+    { type: "qemu", node: "pve2", vmid: 900, status: "stopped", template: 1 },
+  ]
+
+  it("names the nodes a drain acts on: its node, or every node its guests leave", async () => {
+    const { drainNodes } = await import("./access")
+
+    expect(drainNodes({ node: "pve3", guests: [{ source_node: "pve1" }] })).toEqual(["pve3"])
+    expect(drainNodes({ guests: [{ source_node: "pve1" }, { source_node: "pve2" }, { source_node: "pve1" }, {}] })).toEqual(["pve1", "pve2"])
+    expect(drainNodes({})).toEqual([])
+  })
+
+  it("lists a selection only with the right to view every node it moves guests from", async () => {
+    checkPermissionMock.mockImplementation(async (_p: string, _t: string, id: string) => (id === "c1:pve2" ? new Response(null, { status: 403 }) : null))
+    const selection = (id: string, nodes: string[]) => ({ id, connection_id: "c1", node: "", guests: nodes.map(n => ({ source_node: n })) })
+
+    const kept = await filterViewableDrains([selection("a", ["pve1", "pve3"]), selection("b", ["pve1", "pve2"])])
+
+    expect(kept.map(d => d.id)).toEqual(["a"])
+  })
+
+  it("checks the right to migrate each selected guest on the node it runs on, and nothing else", async () => {
+    const { restrictDrainTargets } = await import("./access")
+    checkPermissionMock.mockResolvedValue(null)
+
+    expect(await restrictDrainTargets(cluster, "c1", "", { vmids: [101, 102] })).toEqual({ vmids: [101, 102] })
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve1:qemu:101")
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve2:qemu:102")
+    expect(checkPermissionMock).not.toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve3:qemu:103")
+    // No source node: every node of the cluster is a possible target.
+    for (const n of ["pve1", "pve2", "pve3"]) expect(checkPermissionMock).toHaveBeenCalledWith("node.manage", "node", `c1:${n}`)
+  })
+
+  it("refuses a selected guest the caller may not migrate", async () => {
+    const { restrictDrainTargets } = await import("./access")
+    checkPermissionMock.mockImplementation(async (p: string, _t: string, id: string) => (p === "vm.migrate" && id === "c1:pve3:qemu:103" ? new Response(null, { status: 403 }) : null))
+
+    await expect(restrictDrainTargets(cluster, "c1", "", { vmids: [101, 103] })).rejects.toThrow("You cannot migrate guest(s) 103")
+  })
+
+  it("checks a selection whole: a template or a stopped guest left in place still needs the right, an unknown guest is refused alike", async () => {
+    const { restrictDrainTargets } = await import("./access")
+    checkPermissionMock.mockImplementation(async (p: string) => (p === "vm.migrate" ? new Response(null, { status: 403 }) : null))
+
+    // The plan would name them: no right to migrate them, no plan.
+    await expect(restrictDrainTargets(cluster, "c1", "", { vmids: [900, 102], include_stopped: false })).rejects.toThrow("You cannot migrate guest(s) 102, 900")
+    // A guest outside the cluster gets the same answer, before the orchestrator could say it is unknown.
+    checkPermissionMock.mockResolvedValue(null)
+    await expect(restrictDrainTargets(cluster, "c1", "", { vmids: [101, 4242] })).rejects.toThrow("You cannot migrate guest(s) 4242")
+  })
+
+  it("refuses a drain record with no node at all", async () => {
+    const { canActOnDrain } = await import("./access")
+    checkPermissionMock.mockResolvedValue(null)
+
+    expect(await canActOnDrain({ connection_id: "c1", node: "", guests: [] }, "node.view")).toBe(false)
+    expect(await canActOnDrain({ connection_id: "c1", node: "pve1" }, "node.view")).toBe(true)
+  })
+})

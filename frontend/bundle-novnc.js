@@ -28,6 +28,10 @@ async function bundle() {
         sourcefile: 'novnc-entry.js',
         loader: 'js',
       },
+      // The bundle names each source by its path from here: keep it the
+      // same in CI and in a git worktree whose node_modules is a symlink.
+      absWorkingDir: __dirname,
+      preserveSymlinks: true,
       bundle: true,
       outfile: path.join(__dirname, 'public/novnc/rfb.bundle.js'),
       // An ES module, not an IIFE: since 1.6 noVNC probes the H.264 decoder

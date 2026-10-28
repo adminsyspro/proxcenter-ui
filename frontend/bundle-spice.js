@@ -11,6 +11,10 @@ async function bundle() {
   try {
     await esbuild.build({
       entryPoints: [path.join(__dirname, 'vendor/spice-html5/main.js')],
+      // The bundle names each source by its path from here: keep it the
+      // same in CI and in a git worktree whose node_modules is a symlink.
+      absWorkingDir: __dirname,
+      preserveSymlinks: true,
       bundle: true,
       outfile: path.join(__dirname, 'public/spice/spice.bundle.js'),
       format: 'iife',

@@ -1,4 +1,4 @@
-// ../../../../frontend/node_modules/@novnc/novnc/core/util/int.js
+// node_modules/@novnc/novnc/core/util/int.js
 function toUnsigned32bit(toConvert) {
   return toConvert >>> 0;
 }
@@ -6,7 +6,7 @@ function toSigned32bit(toConvert) {
   return toConvert | 0;
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/util/logging.js
+// node_modules/@novnc/novnc/core/util/logging.js
 var _logLevel = "warn";
 var Debug = () => {
 };
@@ -43,7 +43,7 @@ function initLogging(level) {
 }
 initLogging();
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/util/strings.js
+// node_modules/@novnc/novnc/core/util/strings.js
 function decodeUTF8(utf8string, allowLatin1 = false) {
   try {
     return decodeURIComponent(escape(utf8string));
@@ -60,7 +60,7 @@ function encodeUTF8(DOMString) {
   return unescape(encodeURIComponent(DOMString));
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/base64.js
+// node_modules/@novnc/novnc/core/base64.js
 var base64_default = {
   /* Convert data (an array of integers) to a Base64 string. */
   toBase64Table: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=".split(""),
@@ -258,7 +258,7 @@ var base64_default = {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/util/browser.js
+// node_modules/@novnc/novnc/core/util/browser.js
 var isTouchDevice = "ontouchstart" in document.documentElement || // required for Chrome debugger
 document.ontouchstart !== void 0 || // required for MS Surface
 navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
@@ -355,7 +355,7 @@ function isIOS() {
   return !!/ipad/i.exec(navigator.platform) || !!/iphone/i.exec(navigator.platform) || !!/ipod/i.exec(navigator.platform);
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/util/element.js
+// node_modules/@novnc/novnc/core/util/element.js
 function clientToElement(x, y, elem) {
   const bounds = elem.getBoundingClientRect();
   let pos = { x: 0, y: 0 };
@@ -376,7 +376,7 @@ function clientToElement(x, y, elem) {
   return pos;
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/util/events.js
+// node_modules/@novnc/novnc/core/util/events.js
 function stopEvent(e2) {
   e2.stopPropagation();
   e2.preventDefault();
@@ -455,7 +455,7 @@ function releaseCapture() {
   }
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/util/eventtarget.js
+// node_modules/@novnc/novnc/core/util/eventtarget.js
 var EventTargetMixin = class {
   constructor() {
     this._listeners = /* @__PURE__ */ new Map();
@@ -480,7 +480,7 @@ var EventTargetMixin = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/display.js
+// node_modules/@novnc/novnc/core/display.js
 var Display = class {
   constructor(target) {
     this._drawCtx = null;
@@ -934,7 +934,7 @@ var Display = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/vendor/pako/lib/utils/common.js
+// node_modules/@novnc/novnc/vendor/pako/lib/utils/common.js
 function arraySet(dest, src, src_offs, len, dest_offs) {
   if (src.subarray && dest.subarray) {
     dest.set(src.subarray(src_offs, src_offs + len), dest_offs);
@@ -948,7 +948,7 @@ var Buf8 = Uint8Array;
 var Buf16 = Uint16Array;
 var Buf32 = Int32Array;
 
-// ../../../../frontend/node_modules/@novnc/novnc/vendor/pako/lib/zlib/adler32.js
+// node_modules/@novnc/novnc/vendor/pako/lib/zlib/adler32.js
 function adler32(adler, buf, len, pos) {
   var s1 = adler & 65535 | 0, s2 = adler >>> 16 & 65535 | 0, n = 0;
   while (len !== 0) {
@@ -964,7 +964,7 @@ function adler32(adler, buf, len, pos) {
   return s1 | s2 << 16 | 0;
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/vendor/pako/lib/zlib/crc32.js
+// node_modules/@novnc/novnc/vendor/pako/lib/zlib/crc32.js
 function makeTable() {
   var c2, table = [];
   for (var n = 0; n < 256; n++) {
@@ -978,7 +978,7 @@ function makeTable() {
 }
 var crcTable = makeTable();
 
-// ../../../../frontend/node_modules/@novnc/novnc/vendor/pako/lib/zlib/inffast.js
+// node_modules/@novnc/novnc/vendor/pako/lib/zlib/inffast.js
 var BAD = 30;
 var TYPE = 12;
 function inflate_fast(strm, start) {
@@ -1202,7 +1202,7 @@ function inflate_fast(strm, start) {
   return;
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/vendor/pako/lib/zlib/inftrees.js
+// node_modules/@novnc/novnc/vendor/pako/lib/zlib/inftrees.js
 var MAXBITS = 15;
 var ENOUGH_LENS = 852;
 var ENOUGH_DISTS = 592;
@@ -1512,7 +1512,7 @@ function inflate_table(type, lens, lens_index, codes, table, table_index, work, 
   return 0;
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/vendor/pako/lib/zlib/inflate.js
+// node_modules/@novnc/novnc/vendor/pako/lib/zlib/inflate.js
 var CODES2 = 0;
 var LENS2 = 1;
 var DISTS2 = 2;
@@ -2680,7 +2680,7 @@ function inflate(strm, flush) {
   return ret;
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/vendor/pako/lib/zlib/zstream.js
+// node_modules/@novnc/novnc/vendor/pako/lib/zlib/zstream.js
 function ZStream() {
   this.input = null;
   this.next_in = 0;
@@ -2696,7 +2696,7 @@ function ZStream() {
   this.adler = 0;
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/inflator.js
+// node_modules/@novnc/novnc/core/inflator.js
 var Inflate = class {
   constructor() {
     this.strm = new ZStream();
@@ -2736,7 +2736,7 @@ var Inflate = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/vendor/pako/lib/zlib/trees.js
+// node_modules/@novnc/novnc/vendor/pako/lib/zlib/trees.js
 var Z_FIXED = 4;
 var Z_BINARY = 0;
 var Z_TEXT = 1;
@@ -3367,7 +3367,7 @@ function _tr_tally(s, dist, lc) {
   return s.last_lit === s.lit_bufsize - 1;
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/vendor/pako/lib/zlib/messages.js
+// node_modules/@novnc/novnc/vendor/pako/lib/zlib/messages.js
 var messages_default = {
   2: "need dictionary",
   /* Z_NEED_DICT       2  */
@@ -3389,7 +3389,7 @@ var messages_default = {
   /* Z_VERSION_ERROR (-6) */
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/vendor/pako/lib/zlib/deflate.js
+// node_modules/@novnc/novnc/vendor/pako/lib/zlib/deflate.js
 var Z_NO_FLUSH = 0;
 var Z_PARTIAL_FLUSH = 1;
 var Z_FULL_FLUSH = 3;
@@ -4331,7 +4331,7 @@ function deflate(strm, flush) {
   return s.pending !== 0 ? Z_OK2 : Z_STREAM_END2;
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/deflator.js
+// node_modules/@novnc/novnc/core/deflator.js
 var Deflator = class {
   constructor() {
     this.strm = new ZStream();
@@ -4381,7 +4381,7 @@ var Deflator = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/input/keysym.js
+// node_modules/@novnc/novnc/core/input/keysym.js
 var keysym_default = {
   XK_VoidSymbol: 16777215,
   /* Void symbol */
@@ -5234,7 +5234,7 @@ var keysym_default = {
   XF86XK_LogGrabInfo: 269024805
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/input/keysymdef.js
+// node_modules/@novnc/novnc/core/input/keysymdef.js
 var codepoints = {
   256: 960,
   // XK_Amacron
@@ -6568,7 +6568,7 @@ var keysymdef_default = {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/input/vkeys.js
+// node_modules/@novnc/novnc/core/input/vkeys.js
 var vkeys_default = {
   8: "Backspace",
   9: "Tab",
@@ -6677,7 +6677,7 @@ var vkeys_default = {
   // Only when it is AltGraph
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/input/fixedkeys.js
+// node_modules/@novnc/novnc/core/input/fixedkeys.js
 var fixedkeys_default = {
   // 3.1.1.1. Writing System Keys
   "Backspace": "Backspace",
@@ -6777,7 +6777,7 @@ var fixedkeys_default = {
   "WakeUp": "WakeUp"
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/input/domkeytable.js
+// node_modules/@novnc/novnc/core/input/domkeytable.js
 var DOMKeyTable = {};
 function addStandard(key, standard) {
   if (standard === void 0) throw new Error('Undefined keysym for key "' + key + '"');
@@ -6969,7 +6969,7 @@ addNumpad("8", keysym_default.XK_8, keysym_default.XK_KP_8);
 addNumpad("9", keysym_default.XK_9, keysym_default.XK_KP_9);
 var domkeytable_default = DOMKeyTable;
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/input/util.js
+// node_modules/@novnc/novnc/core/input/util.js
 function getKeycode(evt) {
   if (evt.code) {
     switch (evt.code) {
@@ -7116,7 +7116,7 @@ function getKeysym(evt) {
   return null;
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/input/keyboard.js
+// node_modules/@novnc/novnc/core/input/keyboard.js
 var Keyboard = class {
   constructor(target) {
     this._target = target || null;
@@ -7297,7 +7297,7 @@ var Keyboard = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/input/gesturehandler.js
+// node_modules/@novnc/novnc/core/input/gesturehandler.js
 var GH_NOGESTURE = 0;
 var GH_ONETAP = 1;
 var GH_TWOTAP = 2;
@@ -7722,7 +7722,7 @@ var GestureHandler = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/util/cursor.js
+// node_modules/@novnc/novnc/core/util/cursor.js
 var useFallback = !supportsCursorURIs || isTouchDevice;
 var Cursor = class {
   constructor() {
@@ -7899,7 +7899,7 @@ var Cursor = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/websock.js
+// node_modules/@novnc/novnc/core/websock.js
 var MAX_RQ_GROW_SIZE = 40 * 1024 * 1024;
 var DataChannel = {
   CONNECTING: "connecting",
@@ -8184,7 +8184,7 @@ var Websock = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/input/xtscancodes.js
+// node_modules/@novnc/novnc/core/input/xtscancodes.js
 var xtscancodes_default = {
   "Again": 57349,
   /* html:Again (Again) -> linux:129 (KEY_AGAIN) -> atset1:57349 */
@@ -8518,7 +8518,7 @@ var xtscancodes_default = {
   /* html:WakeUp (WakeUp) -> linux:143 (KEY_WAKEUP) -> atset1:57443 */
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/encodings.js
+// node_modules/@novnc/novnc/core/encodings.js
 var encodings = {
   encodingRaw: 0,
   encodingCopyRect: 1,
@@ -8549,7 +8549,7 @@ var encodings = {
   pseudoEncodingExtendedClipboard: 3231835598
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/crypto/aes.js
+// node_modules/@novnc/novnc/core/crypto/aes.js
 var AESECBCipher = class _AESECBCipher {
   constructor() {
     this._key = null;
@@ -8728,7 +8728,7 @@ var AESEAXCipher = class _AESEAXCipher {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/crypto/des.js
+// node_modules/@novnc/novnc/core/crypto/des.js
 var PC2 = [
   13,
   16,
@@ -9542,7 +9542,7 @@ var DESCBCCipher = class _DESCBCCipher {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/crypto/bigint.js
+// node_modules/@novnc/novnc/core/crypto/bigint.js
 function modPow(b2, e2, m) {
   let r = 1n;
   b2 = b2 % m;
@@ -9576,7 +9576,7 @@ function u8ArrayToBigInt(arr) {
   return BigInt(hex);
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/crypto/rsa.js
+// node_modules/@novnc/novnc/core/crypto/rsa.js
 var RSACipher = class _RSACipher {
   constructor() {
     this._keyLength = 0;
@@ -9699,7 +9699,7 @@ var RSACipher = class _RSACipher {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/crypto/dh.js
+// node_modules/@novnc/novnc/core/crypto/dh.js
 var DHPublicKey = class {
   constructor(key) {
     this._key = key;
@@ -9750,7 +9750,7 @@ var DHCipher = class _DHCipher {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/crypto/md5.js
+// node_modules/@novnc/novnc/core/crypto/md5.js
 async function MD5(d2) {
   let s = "";
   for (let i = 0; i < d2.length; i++) {
@@ -9808,7 +9808,7 @@ function rol(d2, g) {
   return d2 << g | d2 >>> 32 - g;
 }
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/crypto/crypto.js
+// node_modules/@novnc/novnc/core/crypto/crypto.js
 var LegacyCrypto = class {
   constructor() {
     this._algorithms = {
@@ -9884,7 +9884,7 @@ var LegacyCrypto = class {
 };
 var crypto_default = new LegacyCrypto();
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/ra2.js
+// node_modules/@novnc/novnc/core/ra2.js
 var RA2Cipher = class {
   constructor() {
     this._cipher = null;
@@ -10186,7 +10186,7 @@ var RSAAESAuthenticationState = class extends EventTargetMixin {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/decoders/raw.js
+// node_modules/@novnc/novnc/core/decoders/raw.js
 var RawDecoder = class {
   constructor() {
     this._lines = 0;
@@ -10226,7 +10226,7 @@ var RawDecoder = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/decoders/copyrect.js
+// node_modules/@novnc/novnc/core/decoders/copyrect.js
 var CopyRectDecoder = class {
   decodeRect(x, y, width, height, sock, display, depth) {
     if (sock.rQwait("COPYRECT", 4)) {
@@ -10242,7 +10242,7 @@ var CopyRectDecoder = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/decoders/rre.js
+// node_modules/@novnc/novnc/core/decoders/rre.js
 var RREDecoder = class {
   constructor() {
     this._subrects = 0;
@@ -10272,7 +10272,7 @@ var RREDecoder = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/decoders/hextile.js
+// node_modules/@novnc/novnc/core/decoders/hextile.js
 var HextileDecoder = class {
   constructor() {
     this._tiles = 0;
@@ -10423,7 +10423,7 @@ var HextileDecoder = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/decoders/zlib.js
+// node_modules/@novnc/novnc/core/decoders/zlib.js
 var ZlibDecoder = class {
   constructor() {
     this._zlib = new Inflate();
@@ -10455,7 +10455,7 @@ var ZlibDecoder = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/decoders/tight.js
+// node_modules/@novnc/novnc/core/decoders/tight.js
 var TightDecoder = class {
   constructor() {
     this._ctl = null;
@@ -10811,7 +10811,7 @@ var TightDecoder = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/decoders/tightpng.js
+// node_modules/@novnc/novnc/core/decoders/tightpng.js
 var TightPNGDecoder = class extends TightDecoder {
   _pngRect(x, y, width, height, sock, display, depth) {
     let data = this._readData(sock);
@@ -10826,7 +10826,7 @@ var TightPNGDecoder = class extends TightDecoder {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/decoders/zrle.js
+// node_modules/@novnc/novnc/core/decoders/zrle.js
 var ZRLE_TILE_WIDTH = 64;
 var ZRLE_TILE_HEIGHT = 64;
 var ZRLEDecoder = class {
@@ -10979,7 +10979,7 @@ var ZRLEDecoder = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/decoders/jpeg.js
+// node_modules/@novnc/novnc/core/decoders/jpeg.js
 var JPEGDecoder = class {
   constructor() {
     this._cachedQuantTables = [];
@@ -11104,7 +11104,7 @@ var JPEGDecoder = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/decoders/h264.js
+// node_modules/@novnc/novnc/core/decoders/h264.js
 var H264Parser = class {
   constructor(data) {
     this._data = data;
@@ -11366,7 +11366,7 @@ var H264Decoder = class {
   }
 };
 
-// ../../../../frontend/node_modules/@novnc/novnc/core/rfb.js
+// node_modules/@novnc/novnc/core/rfb.js
 var DISCONNECT_TIMEOUT = 3;
 var DEFAULT_BACKGROUND = "rgb(40, 40, 40)";
 var MOUSE_MOVE_DELAY = 17;

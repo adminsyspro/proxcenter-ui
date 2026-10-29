@@ -59,6 +59,9 @@ vi.mock('@/lib/auth/principal', async io => ({
   getPrincipal: async () => ({ ok: true, principal: principalMock.session }),
 }))
 
+const { findStoredTaskMock } = vi.hoisted(() => ({ findStoredTaskMock: vi.fn<(...a: any[]) => Promise<any>>() }))
+vi.mock('@/lib/tasks/history', () => ({ findStoredTask: (...a: any[]) => findStoredTaskMock(...a) }))
+
 import { GET } from './route'
 import { checkPermission } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
@@ -753,5 +756,69 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: duration of a finished
 
     expect(await readJson<any>(await GET(req, { params }))).toMatchObject({ durationSec: 50 })
     expect(pveFetchMock.mock.calls.some((c: any[]) => String(c[1]).includes('source=archive'))).toBe(false)
+  })
+})
+
+describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: node down, ProxCenter\'s copy (#1225)', () => {
+  const stored = {
+    upid: UPID,
+    connectionId: CONN.id,
+    startTime: new Date(1000 * 1000).toISOString(),
+    endTime: new Date(1090 * 1000).toISOString(),
+    node: NODE,
+    type: 'qmigrate',
+    guestId: '100',
+    user: 'root@pam',
+    status: 'migration aborted',
+    logTail: '2026-10-28 12:00:00 start migrate\nERROR: storage CephPool not available on target\nTASK ERROR: migration aborted',
+  }
+
+  async function body() {
+    const { req, params } = ctx()
+    const res = await GET(req, { params })
+
+    return { status: res.status, body: await readJson<any>(res) }
+  }
+
+  beforeEach(() => {
+    findStoredTaskMock.mockReset()
+    pveFetchMock.mockImplementation((_conn: any, path: string) =>
+      path.includes('/status') ? Promise.reject(new Error('595 no route to host')) : Promise.resolve([]))
+  })
+
+  it('answers from the copy, with the end of the log and the failure reason', async () => {
+    findStoredTaskMock.mockResolvedValue(stored)
+
+    const { status, body: b } = await body()
+
+    expect(status).toBe(200)
+    expect(findStoredTaskMock).toHaveBeenCalledWith(CONN.id, NODE, UPID)
+    expect(b).toMatchObject({
+      fromHistory: true,
+      status: 'stopped',
+      exitstatus: 'migration aborted',
+      starttime: 1000,
+      endtime: 1090,
+      durationSec: 90,
+      progress: 100,
+      totalLogLines: 3,
+    })
+    expect(b.failureReason).toContain('CephPool not available')
+    expect(b.message).toContain('Failed:')
+    expect(b.logs[1]).toEqual({ n: 2, t: 'ERROR: storage CephPool not available on target' })
+  })
+
+  it('reads a finished task without log, and a task still running when the node fell', async () => {
+    findStoredTaskMock.mockResolvedValue({ ...stored, status: 'OK', logTail: '-' })
+    expect((await body()).body).toMatchObject({ message: 'Completed successfully', failureReason: null, logs: [], totalLogLines: 0 })
+
+    findStoredTaskMock.mockResolvedValue({ ...stored, status: '', endTime: null, logTail: undefined })
+    expect((await body()).body).toMatchObject({ status: 'unknown', endtime: null, progress: 0, message: '', duration: '' })
+  })
+
+  it('keeps the error when the copy does not hold the task', async () => {
+    findStoredTaskMock.mockResolvedValue(null)
+
+    expect((await body()).status).toBe(500)
   })
 })

@@ -5852,7 +5852,8 @@
       "stop": "停止任务",
       "stopping": "正在停止...",
       "taskStopped": "已请求停止任务",
-      "confirmStop": "您确定要停止此任务吗？"
+      "confirmStop": "您确定要停止此任务吗？",
+      "fromHistory": "该节点未响应：此任务来自 ProxCenter 保存的副本。对于失败的任务，仅保留了日志的末尾部分。"
     },
     "notifications": {
       "enabled": "通知已启用",
@@ -7989,7 +7990,13 @@
       "truncated": "此时间段内某个节点的任务超过 {limit} 个，请缩小时间段以查看全部。",
       "displayedRows": "第 {from}-{to} 条，共 {count} 条",
       "familyNone": "无",
-      "familiesCount": "{count} 种类型"
+      "familiesCount": "{count} 种类型",
+      "unavailableHistory": "{nodes} 的归档不可用：其任务来自 ProxCenter 保存的副本",
+      "fromHistory": "来自 ProxCenter 保存的副本：节点未响应",
+      "retentionTitle": "任务历史保留期",
+      "retentionInfo": "ProxCenter 将任务副本保留 {days} 天",
+      "retentionDescription": "ProxCenter 会保存其看到的每个 Proxmox 任务的副本，因此即使节点宕机或被移除，其历史仍可读取。早于此期限的任务将被删除。",
+      "retentionDays": "保留 {days} 天"
     }
   },
   "rbacPage": {

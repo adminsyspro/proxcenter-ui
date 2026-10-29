@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -311,6 +312,13 @@ export default function TaskDetailDialog({ open, task, onClose }) {
               </Box>
             )}
           </Box>
+
+          {/* The node did not answer: this is ProxCenter's copy (#1225). */}
+          {details?.fromHistory && (
+            <Alert severity="info" icon={<i className="ri-database-2-line" />} sx={{ mx: 3, mt: 2 }}>
+              {t('tasks.detail.fromHistory')}
+            </Alert>
+          )}
 
           {/* Progress section — only shown when the task actually carries
               progress data (message, speed, percent > 0). Most PVE tasks

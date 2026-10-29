@@ -23,6 +23,7 @@ vi.mock('@/components/charts/DonutStatCards', () => ({
   DonutTotalCard: ({ title, value }: any) => <div data-testid='donut-total'>{`${title}:${value}`}</div>,
   DonutStatCard: ({ title, value }: any) => <div data-testid='donut'>{`${title}:${value}`}</div>,
 }))
+vi.mock('@/components/events/TaskHistoryRetention', () => ({ default: () => <div data-testid='retention' /> }))
 vi.mock('@/components/TaskDetailDialog', () => ({
   default: ({ open, task }: any) => (open ? <div data-testid='task-dialog'>{task.typeLabel}</div> : null),
 }))
@@ -246,4 +247,21 @@ describe('TaskArchive', () => {
     expect(screen.queryByText('eventsPage.archive.cluster')).toBeNull()
     expect(screen.queryByText(/eventsPage\.archive\.displayedRows/)).toBeNull()
   })
+
+  it('marks the rows only ProxCenter\'s copy holds and says the copy covers the missing nodes', () => {
+    reply = {
+      ...reply,
+      data: {
+        data: [row({ id: 'UPID:n9:9', node: 'n9', fromHistory: true }), row()],
+        meta: { ...REPLY.meta, history: true }
+      }
+    }
+    render(<TaskArchive refreshedAt={0} />)
+
+    expect(screen.getAllByRole('img', { name: 'eventsPage.archive.fromHistory' })).toHaveLength(1)
+    expect(screen.getByText(/eventsPage\.archive\.unavailableHistory/)).toHaveTextContent('n9 (PVE 2), PVE 3')
+    expect(screen.queryByText(/eventsPage\.archive\.unavailable /)).toBeNull()
+    expect(screen.getByTestId('retention')).toBeInTheDocument()
+  })
 })
+

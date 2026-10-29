@@ -5852,7 +5852,8 @@
       "stop": "Arrêter la tâche",
       "stopping": "Arrêt en cours...",
       "taskStopped": "Arrêt de la tâche demandé",
-      "confirmStop": "Êtes-vous sûr de vouloir arrêter cette tâche ?"
+      "confirmStop": "Êtes-vous sûr de vouloir arrêter cette tâche ?",
+      "fromHistory": "Ce nœud n'a pas répondu : la tâche vient de la copie gardée par ProxCenter. Pour une tâche en échec, seule la fin de son journal a été conservée."
     },
     "notifications": {
       "enabled": "Notifications activées",
@@ -7989,7 +7990,13 @@
       "truncated": "Un nœud compte plus de {limit} tâches sur cette période, réduisez-la pour toutes les voir.",
       "displayedRows": "{from}-{to} sur {count}",
       "familyNone": "Aucun",
-      "familiesCount": "{count} types"
+      "familiesCount": "{count} types",
+      "unavailableHistory": "Archive indisponible pour {nodes} : leurs tâches viennent de la copie gardée par ProxCenter",
+      "fromHistory": "Copie gardée par ProxCenter : le nœud n'a pas répondu",
+      "retentionTitle": "Rétention de l'historique des tâches",
+      "retentionInfo": "ProxCenter garde sa copie des tâches {days} jours",
+      "retentionDescription": "ProxCenter garde une copie de chaque tâche Proxmox qu'il voit, pour que l'historique d'un nœud en panne ou disparu reste lisible. Les tâches plus anciennes sont supprimées.",
+      "retentionDays": "Garder {days} jours"
     }
   },
   "rbacPage": {

@@ -288,7 +288,7 @@ function guestMac(vmid: number): string {
   return `BC:24:11:${hex((vmid * 7) % 256)}:${hex((vmid * 13) % 256)}:${hex(vmid % 256)}`
 }
 
-const isWindows = (name: string) => /^win-|ad-dc|power-bi/.test(name)
+const isWindows = (name: string) => name.startsWith('win-') || name.includes('ad-dc') || name.includes('power-bi')
 
 function guestSnapshots(vmid: number, name: string): any[] {
   if (vmid % 3 === 0 || /^tpl-/.test(name)) return []
@@ -439,7 +439,7 @@ function guestBackups(vmid: number, url: URL): any {
 function guestNotes(connId: string, vmid: number): any {
   const g = findGuest(connId, vmid)
   const name = g?.name || `vm-${vmid}`
-  const owner = /^db-/.test(name) ? 'DBA team' : /^(k8s|rancher)/.test(name) ? 'Platform team' : /^win-|ad-dc/.test(name) ? 'Windows team' : 'Ops team'
+  const owner = /^db-/.test(name) ? 'DBA team' : /^(k8s|rancher)/.test(name) ? 'Platform team' : isWindows(name) ? 'Windows team' : 'Ops team'
 
   return {
     data: {
@@ -787,7 +787,7 @@ function microsegVmSummary(g: any): any {
     firewall_enabled: isFirewalled(vmid),
     is_isolated: isIsolated(vmid),
     missing_base_sgs: isIsolated(vmid) ? [] : [net.base_sg],
-    applied_sgs: isIsolated(vmid) ? [net.base_sg, ...(/^web|nginx|haproxy/.test(g.name) ? ['web-servers'] : /^db-/.test(g.name) ? ['db-servers'] : [])] : [],
+    applied_sgs: isIsolated(vmid) ? [net.base_sg, ...(/^web/.test(g.name) || /nginx|haproxy/.test(g.name) ? ['web-servers'] : /^db-/.test(g.name) ? ['db-servers'] : [])] : [],
   }
 }
 

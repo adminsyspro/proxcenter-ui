@@ -150,6 +150,31 @@ describe("HyperVClient", () => {
     })
   })
 
+  it("reads every network adapter of the VM in the same command", async () => {
+    executeMock.mockResolvedValue(JSON.stringify({
+      VMId: validVmId, Name: "two-nics", State: 3, ProcessorCount: 2, MemoryStartupMB: 4096, Generation: 2,
+      Disks: [], Nics: [{ MacAddress: "00155D63BE02" }, { MacAddress: "00155D63BE99" }],
+    }))
+
+    const vm = await new HyperVClient(conn).getVM(validVmId)
+
+    expect(executeMock).toHaveBeenCalledOnce()
+    expect(executeMock.mock.calls[0][0]).toContain("Get-VMNetworkAdapter -VM $vm")
+    expect(vm.networkAdapters).toEqual([{ macAddress: "00155D63BE02" }, { macAddress: "00155D63BE99" }])
+  })
+
+  it("reads a lone adapter serialized as a bare object, and skips an adapter without a MAC", async () => {
+    executeMock.mockResolvedValue(JSON.stringify({
+      VMId: validVmId, Name: "one-nic", State: 3, Generation: 1, Disks: [], Nics: { MacAddress: "00155D63BE02" },
+    }))
+    await expect(new HyperVClient(conn).getVM(validVmId)).resolves.toMatchObject({ networkAdapters: [{ macAddress: "00155D63BE02" }] })
+
+    executeMock.mockResolvedValue(JSON.stringify({
+      VMId: validVmId, Name: "no-mac", State: 3, Generation: 1, Disks: [], Nics: [{ MacAddress: null }],
+    }))
+    await expect(new HyperVClient(conn).getVM(validVmId)).resolves.toMatchObject({ networkAdapters: [{ macAddress: "" }] })
+  })
+
   it("rejects a malformed readiness VM ID without executing PowerShell", async () => {
     await expect(new HyperVClient(conn).getVmReadiness("not-a-guid")).rejects.toThrow("Invalid VM ID format: not-a-guid")
     expect(executeMock).not.toHaveBeenCalled()

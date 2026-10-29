@@ -663,6 +663,12 @@
       "not-stored": "导入已被接受，但仪表盘未保存。"
     },
     "importedSuffix": "导入",
+    "importConflictTitle": "部分仪表盘已存在",
+    "importConflictIntro": "此文件包含与您现有仪表盘同名的仪表盘。勾选的将被文件中的版本替换，其余的将作为副本导入。",
+    "importConflictAll": "全部替换",
+    "importConflictWarning": "替换会覆盖现有仪表盘的小部件，且无法撤销。",
+    "importConfirm": "导入",
+    "dashboardsReplaced": "已替换 {count} 个仪表盘。",
     "exportDashboards": "导出全部仪表盘",
     "importDashboards": "导入仪表盘…",
     "dashboardsExported": "已将 {count} 个仪表盘导出为一个文件。",

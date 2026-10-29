@@ -659,6 +659,12 @@
       "not-stored": "가져오기는 수락되었지만 대시보드가 저장되지 않았습니다."
     },
     "importedSuffix": "가져옴",
+    "importConflictTitle": "일부 대시보드가 이미 있습니다",
+    "importConflictIntro": "이 파일에 기존 대시보드와 같은 이름의 대시보드가 있습니다. 선택한 대시보드는 파일의 버전으로 교체되고, 나머지는 사본으로 가져옵니다.",
+    "importConflictAll": "모두 교체",
+    "importConflictWarning": "교체하면 기존 대시보드의 위젯을 덮어씁니다. 되돌릴 수 없습니다.",
+    "importConfirm": "가져오기",
+    "dashboardsReplaced": "대시보드 {count}개를 교체했습니다.",
     "exportDashboards": "모든 대시보드 내보내기",
     "importDashboards": "대시보드 가져오기…",
     "dashboardsExported": "대시보드 {count}개를 파일 하나로 내보냈습니다.",

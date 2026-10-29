@@ -650,6 +650,12 @@
       "not-stored": "Der Import wurde angenommen, die Dashboards aber nicht gespeichert."
     },
     "importedSuffix": "importiert",
+    "importConflictTitle": "Einige Dashboards existieren bereits",
+    "importConflictIntro": "Diese Datei enthält Dashboards mit demselben Namen wie Ihre. Markierte werden durch die Version aus der Datei ersetzt, die anderen werden als Kopie importiert.",
+    "importConflictAll": "Alle ersetzen",
+    "importConflictWarning": "Beim Ersetzen werden die Widgets des vorhandenen Dashboards überschrieben. Dies kann nicht rückgängig gemacht werden.",
+    "importConfirm": "Importieren",
+    "dashboardsReplaced": "{count, plural, one {# Dashboard ersetzt.} other {# Dashboards ersetzt.}}",
     "exportDashboards": "Alle Dashboards exportieren",
     "importDashboards": "Dashboards importieren…",
     "dashboardsExported": "{count, plural, one {# Dashboard exportiert.} other {# Dashboards in eine Datei exportiert.}}",

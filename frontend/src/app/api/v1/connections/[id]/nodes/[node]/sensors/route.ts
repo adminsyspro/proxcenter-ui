@@ -94,7 +94,10 @@ export async function GET(
 
     return NextResponse.json({ data: body })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Failed to read sensors" }, { status: 500 })
+    // A failed SSH or connection lookup names hosts and ports: the detail
+    // stays in the server log (roadmap#99).
+    console.error("[sensors] read failed:", e?.message ?? e)
+    return NextResponse.json({ error: "Failed to read sensors" }, { status: 500 })
   }
 }
 

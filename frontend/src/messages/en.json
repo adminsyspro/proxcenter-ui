@@ -4482,6 +4482,7 @@
       "port": "Port",
       "interfaces": "Node interfaces",
       "invalidPort": "1 to 65535",
+      "invalidAddress": "Host name or IP address only",
       "saveFailed": "Could not save: {error}",
       "noNodes": "No node found for this connection.",
       "newConnectionHint": "Save the connection first, then set an SSH address and port per node here.",

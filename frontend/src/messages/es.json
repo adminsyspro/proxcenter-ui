@@ -4482,6 +4482,7 @@
       "port": "Puerto",
       "interfaces": "Interfaces del nodo",
       "invalidPort": "De 1 a 65535",
+      "invalidAddress": "Solo nombre de host o dirección IP",
       "saveFailed": "No se pudo guardar: {error}",
       "noNodes": "No se encontró ningún nodo para esta conexión.",
       "newConnectionHint": "Guarde primero la conexión y luego defina aquí una dirección y un puerto SSH por nodo.",

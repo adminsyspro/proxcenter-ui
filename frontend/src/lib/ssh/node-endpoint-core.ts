@@ -42,6 +42,32 @@ export function normalizeSshAddress(value: unknown): string | null {
   return trimmed || null
 }
 
+// A DNS name: labels of letters, digits and hyphens, dot separated, at most
+// 253 characters. No scheme, path, user or port: the address is handed to
+// the SSH client as the host alone.
+const HOSTNAME_RE = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.?$/
+const IPV4_RE = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/
+const IPV6_CHARS_RE = /^[0-9A-Fa-f:]+(?:\.\d{1,3}){0,3}$/
+
+/**
+ * Whether an SSH override is a bare host: an IPv4 or IPv6 literal, or a DNS
+ * name. Anything else (spaces, a scheme, a path, a user or port suffix) is
+ * refused before it reaches the SSH client.
+ */
+export function isSshAddress(value: unknown): boolean {
+  if (typeof value !== "string") return false
+  const host = value.trim()
+  if (!host || /\s/.test(host)) return false
+  // Four dotted numbers are an IPv4 literal or nothing, never a host name.
+  if (/^\d+(?:\.\d+){3}$/.test(host)) return IPV4_RE.test(host)
+  if (host.includes(":")) {
+    const groups = host.split(":").length
+    const compressions = (host.match(/::/g) ?? []).length
+    return IPV6_CHARS_RE.test(host) && !host.includes(":::") && compressions <= 1 && groups >= 3 && groups <= 8
+  }
+  return HOSTNAME_RE.test(host)
+}
+
 /**
  * Pure resolution rule shared by every SSH consumer.
  * Host: node override address, else the Proxmox-reported address.

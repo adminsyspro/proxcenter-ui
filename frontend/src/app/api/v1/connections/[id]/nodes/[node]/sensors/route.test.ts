@@ -157,3 +157,14 @@ describe('GET .../nodes/[node]/sensors', () => {
     expect((await get()).status).toBe(404)
   })
 })
+
+describe('GET .../nodes/[node]/sensors: failures (roadmap#99)', () => {
+  it('answers a generic 500 without the underlying message', async () => {
+    getConnByIdMock.mockRejectedValueOnce(new Error('connect ECONNREFUSED 10.42.0.250:8006'))
+
+    const res = await get()
+
+    expect(res.status).toBe(500)
+    expect(await readJson<any>(res)).toEqual({ error: 'Failed to read sensors' })
+  })
+})

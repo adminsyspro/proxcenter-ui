@@ -4,6 +4,7 @@ import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { safeLog } from "@/lib/log/sanitize"
 import { executeSSH } from "@/lib/ssh/exec"
 import { assertVmid } from "@/lib/ssh/validate"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
@@ -84,8 +85,11 @@ async function postHandler(
         message: `VM ${vmid} unlocked successfully (was locked: ${lockType})`
       })
     } else {
+      // The SSH error names the host and port the connection reaches: it
+      // stays in the server log (roadmap#99).
+      console.error(`[unlock] SSH failed:`, safeLog(sshResult.error ?? ''))
       return NextResponse.json({
-        error: sshResult.error,
+        error: 'The unlock command could not be run on the node',
         lockType,
         hint: `Run manually on PVE node: ${unlockCmd}`
       }, { status: 500 })

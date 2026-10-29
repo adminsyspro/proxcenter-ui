@@ -472,11 +472,6 @@ function guestAgent(connId: string, type: string, vmid: number): any {
   }
 }
 
-// TenantVnetDetailPanel indexes the guests of a connection by vmid.
-function guestList(connId: string): any {
-  return { data: guestsOf(connId).map(g => ({ vmid: g.vmid, name: g.name, node: g.node, status: g.status, type: g.type })) }
-}
-
 // ---------------------------------------------------------------------------
 // SDN and host networking
 // ---------------------------------------------------------------------------
@@ -1232,7 +1227,6 @@ const GET_ROUTES: [RegExp, Handler][] = [
     data: { enabled: !isDr(m[1]), state: 'started', group: '', max_restart: 1, max_relocate: 1, comment: 'Auto-HA' },
   })],
   [/^\/api\/v1\/connections\/([^/]+)\/snapshots$/, (m, url) => bulkSnapshots(m[1], url.searchParams.get('node'))],
-  [/^\/api\/v1\/connections\/([^/]+)\/guests$/, m => guestList(m[1])],
   [/^\/api\/v1\/connections\/([^/]+)\/guests\/(qemu|lxc)\/[^/]+\/(\d+)\/guest$/, m => guestAgent(m[1], m[2], Number(m[3]))],
   [/^\/api\/v1\/connections\/[^/]+\/guests\/(?:qemu|lxc)\/[^/]+\/\d+\/migrate\/pending-check$/, () => ({ data: { changes: [] } })],
   // Guests sit on shared Ceph: snapshots never block a live or offline migration.

@@ -27,6 +27,8 @@ export interface HyperVVm {
    */
   diskMountPaths: string[]
   generation: number    // 1 or 2
+  /** Get-VMNetworkAdapter, in order, raw MAC (`00155D63BE02`); getVM() only. */
+  networkAdapters?: { macAddress: string }[]
 }
 
 export interface HyperVListOptions {
@@ -163,6 +165,11 @@ export class HyperVClient {
         $disks += @{Path=$hdd.Path; SizeBytes=$size}
       }
 
+      $nics = @()
+      foreach ($nic in @(Get-VMNetworkAdapter -VM $vm)) {
+        $nics += @{MacAddress=$nic.MacAddress}
+      }
+
       @{
         SharePath = $sharePath
         VMId = $vm.VMId.ToString()
@@ -174,6 +181,7 @@ export class HyperVClient {
         DynamicMemoryMaxMB = [math]::Round($vm.MemoryMaximum/1MB)
         Generation = $vm.Generation
         Disks = $disks
+        Nics = $nics
       } | ConvertTo-Json -Compress -Depth 4
     `.trim()
 
@@ -223,7 +231,7 @@ export class HyperVClient {
       ? vm.MemoryMB
       : (vm?.MemoryStartupMB || 0) > 0 ? vm.MemoryStartupMB : (vm?.DynamicMemoryMaxMB || 0)
 
-    return {
+    const vmData: HyperVVm = {
       vmId,
       name: vm?.Name || "Unknown",
       state: this.resolveVmState(vm?.State),
@@ -234,6 +242,14 @@ export class HyperVClient {
       diskMountPaths: diskPaths.map(p => hypervDiskMountPath(p, sharePath)),
       generation: vm?.Generation || 1,
     }
+    // Only getVM() asks for the adapters: the listing stays one cheap command.
+    if (vm && "Nics" in vm) {
+      vmData.networkAdapters = this.normalizeArray(vm.Nics).map((n: any) => ({
+        macAddress: typeof n?.MacAddress === "string" ? n.MacAddress : "",
+      }))
+    }
+
+    return vmData
   }
 
   /**

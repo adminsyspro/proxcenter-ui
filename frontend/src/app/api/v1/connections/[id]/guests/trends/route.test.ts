@@ -21,13 +21,22 @@ const post = (items: any[], headers: Record<string, string> = {}) =>
     body: JSON.stringify({ items }),
   })
 
+// POST is typed as possibly undefined (the RBAC guard's return type).
+async function call(req: Request, id = 'c1'): Promise<Response> {
+  const res = await POST(req, ctx(id))
+
+  if (!res) throw new Error('POST returned no response')
+
+  return res
+}
+
 beforeEach(() => {
   pveFetch.mockReset()
 })
 
 describe('POST /connections/[id]/guests/trends', () => {
   it('answers 404 for an unknown connection', async () => {
-    const res = await POST(post([]), ctx('nope'))
+    const res = await call(post([]), 'nope')
 
     expect(res.status).toBe(404)
   })
@@ -40,12 +49,12 @@ describe('POST /connections/[id]/guests/trends', () => {
       throw new Error('unreachable')
     })
 
-    const res = await POST(post([
+    const res = await call(post([
       { type: 'qemu', node: 'pve1', vmid: 101 },
       { type: 'qemu', node: 'pve1', vmid: 102 },
       { type: 'qemu', node: 'pve1', vmid: 103 },
       { type: 'qemu', node: 'pve1', vmid: 999 },
-    ]), ctx())
+    ]))
     const { data, debug } = await res.json()
 
     expect(data['qemu:pve1:101'][0]).toMatchObject({ cpu: 50, ram: 25 })
@@ -58,7 +67,7 @@ describe('POST /connections/[id]/guests/trends', () => {
   it('returns the steps of each guest under x-debug', async () => {
     pveFetch.mockRejectedValue(new Error('down'))
 
-    const res = await POST(post([{ type: 'lxc', node: 'pve1', vmid: 200 }], { 'x-debug': '1' }), ctx())
+    const res = await call(post([{ type: 'lxc', node: 'pve1', vmid: 200 }], { 'x-debug': '1' }))
     const body = await res.json()
 
     expect(body.data['lxc:pve1:200']).toEqual([])
@@ -66,7 +75,7 @@ describe('POST /connections/[id]/guests/trends', () => {
   })
 
   it('answers an empty map when no requested guest is visible', async () => {
-    const res = await POST(post([{ type: 'qemu', node: 'pve1', vmid: 999 }]), ctx())
+    const res = await call(post([{ type: 'qemu', node: 'pve1', vmid: 999 }]))
 
     expect(await res.json()).toEqual({ data: {} })
     expect(pveFetch).not.toHaveBeenCalled()

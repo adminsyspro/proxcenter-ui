@@ -17,7 +17,7 @@ vi.mock('@/contexts/TenantContext', () => ({
   useTenant: () => ({ currentTenant: { id: tenantState.id, name: tenantState.id, slug: tenantState.id }, loading: tenantState.loading }),
 }))
 vi.mock('@/contexts/RBACContext', () => ({
-  useRBAC: () => ({ hasPermission: () => true, isAdmin: true, permissions: [] }),
+  useRBAC: () => ({ hasPermission: () => true, hasPermissionOn: () => true, isAdmin: true, permissions: [] }),
 }))
 vi.mock('@/contexts/ToastContext', () => ({
   useToast: () => ({ showToast: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),

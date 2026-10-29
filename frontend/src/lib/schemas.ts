@@ -7,6 +7,7 @@ import { INTEGRITY_REGION_COUNT_MAX, INTEGRITY_REGION_SIZE_MIB_MAX } from './mig
 
 import type { BroadcastInput } from '@/lib/broadcast/types'
 import { isValidCidr } from '@/lib/net/cidr'
+import { DEPLOY_BIOS, DEPLOY_DISK_BUSES, DEPLOY_DISPLAYS, DEPLOY_MACHINES } from '@/lib/templates/deployHardware'
 
 // ─── Connections ───────────────────────────────────────────────────────────────
 
@@ -241,6 +242,9 @@ export const cloneVmSchema = z.object({
   format: z.enum(['raw', 'qcow2', 'vmdk']).optional(),
   full: z.union([z.boolean(), z.number()]).optional(),
   target: z.string().optional(),
+  // ProxCenter-only: register the clone as an HA resource once PVE finished
+  // cloning (#181). Never forwarded to the PVE clone call.
+  ha: z.boolean().optional(),
 }).passthrough() // allow extra Proxmox params to pass through
 
 /** POST .../migrate — migrate a VM or container */
@@ -346,6 +350,15 @@ export const updateCustomImageSchema = z.object({
 
 // ─── Templates / Blueprints ──────────────────────────────────────────────────
 
+/** Firmware, machine, TPM, disk bus and display of a deployed VM (#181). */
+const deployFirmwareShape = {
+  bios: z.enum(DEPLOY_BIOS).optional(),
+  machine: z.enum(DEPLOY_MACHINES).optional(),
+  tpm: z.boolean().optional(),
+  diskBus: z.enum(DEPLOY_DISK_BUSES).optional(),
+  vga: z.enum(DEPLOY_DISPLAYS).optional(),
+}
+
 /** POST /api/v1/templates/blueprints — create a blueprint */
 export const createBlueprintSchema = z.object({
   name: z.string().min(1, 'name is required').max(100).transform(s => s.trim()),
@@ -363,6 +376,8 @@ export const createBlueprintSchema = z.object({
     ostype: z.string().default('l26'),
     agent: z.boolean().default(true),
     cpu: z.string().default('host'),
+    // Firmware and bus a deployment from this blueprint reuses (#181).
+    ...deployFirmwareShape,
   }),
   cloudInit: z.object({
     ciuser: z.string().optional(),
@@ -405,11 +420,14 @@ export const deploySchema = z.object({
     ostype: z.string().default('l26'),
     agent: z.boolean().default(true),
     cpu: z.string().default('host'),
-    // ISO-mode toggles. SeaBIOS is fine for everything pre-Win10. UEFI
-    // (ovmf + efidisk0 with pre-enrolled-keys=1) is required for Windows
-    // 10/11/Server 2025 — otherwise Secure Boot fails the installer.
-    bios: z.enum(['seabios', 'ovmf']).default('seabios'),
+    // UEFI (ovmf + efidisk0 with pre-enrolled-keys=1) is required for
+    // Windows 10/11/Server 2025, ISO installs and disk images alike (#181).
+    // Unset fields keep the pipeline defaults (deployHardware.ts).
+    ...deployFirmwareShape,
   }),
+  // Register the new VM as an HA resource once created (#181). Needs
+  // node.manage on the connection and a shared target storage.
+  ha: z.boolean().optional(),
   cloudInit: z.object({
     ciuser: z.string().optional(),
     cipassword: z.string().optional(),

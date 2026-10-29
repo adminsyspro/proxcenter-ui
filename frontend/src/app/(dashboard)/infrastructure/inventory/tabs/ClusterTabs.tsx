@@ -3058,7 +3058,7 @@ export default function ClusterTabs(props: any) {
                           <TableBody>
                             {clusterStorageData.length > 0 ? (
                               clusterStorageData.map((storage: any) => (
-                                <TableRow key={storage.storage} hover>
+                                <TableRow key={storage.id || `${storage.storage}:${storage.node}`} hover>
                                   <TableCell sx={{ fontWeight: 600 }}>{storage.storage}</TableCell>
                                   <TableCell>
                                     <Chip 

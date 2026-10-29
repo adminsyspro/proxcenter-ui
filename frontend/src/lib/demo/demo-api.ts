@@ -15,6 +15,7 @@ import { aggregateStorage, normalizeStorageEntry } from '@/lib/proxmox/storage'
 import { applyRrdWindow, presetRangeMeta, resolveRrdRequest } from '@/lib/metrics/rrdRange'
 
 import mockDataJson from './mock-data.json'
+import { domainMock, resolveDomainMock } from './mocks'
 import cloudImagesJson from '@/data/cloudImages.json'
 
 // ---------------------------------------------------------------------------
@@ -1551,49 +1552,6 @@ function buildCephRrd(ceph: any, nodeName: string, timeframe: string): any {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: generate change entries
-// ---------------------------------------------------------------------------
-
-function generateChangeEntries(): any[] {
-  const now = Date.now()
-  const actions: { action: string, field: string, oldValue: string, newValue: string }[] = [
-    { action: 'config_change', field: 'memory', oldValue: '4096', newValue: '8192' },
-    { action: 'config_change', field: 'cores', oldValue: '2', newValue: '4' },
-    { action: 'config_change', field: 'description', oldValue: '', newValue: 'Production web server' },
-    { action: 'status_change', field: 'status', oldValue: 'stopped', newValue: 'running' },
-    { action: 'status_change', field: 'status', oldValue: 'running', newValue: 'stopped' },
-    { action: 'migration', field: 'node', oldValue: 'pve-node-01', newValue: 'pve-node-03' },
-    { action: 'migration', field: 'node', oldValue: 'pve-node-05', newValue: 'pve-node-02' },
-    { action: 'config_change', field: 'net0', oldValue: 'virtio=AA:BB:CC:DD:EE:01,bridge=vmbr0', newValue: 'virtio=AA:BB:CC:DD:EE:01,bridge=vmbr1' },
-    { action: 'snapshot', field: 'snapshot', oldValue: '', newValue: 'pre-upgrade-2026-03' },
-    { action: 'config_change', field: 'boot', oldValue: 'order=scsi0', newValue: 'order=scsi0;net0' },
-    { action: 'config_change', field: 'balloon', oldValue: '0', newValue: '2048' },
-    { action: 'status_change', field: 'status', oldValue: 'paused', newValue: 'running' },
-    { action: 'config_change', field: 'tags', oldValue: 'prod', newValue: 'prod;critical' },
-    { action: 'config_change', field: 'onboot', oldValue: '0', newValue: '1' },
-    { action: 'config_change', field: 'scsihw', oldValue: 'lsi', newValue: 'virtio-scsi-single' },
-  ]
-  const vmNames = ['web-prod-01','db-master','api-gateway','redis-cache','monitoring','mail-server','dns-primary','ldap-auth','ci-runner','vault-prod','web-prod-02','web-prod-03','db-replica-01','proxy-lb','elastic-node-01']
-  const nodes = ['pve-node-01','pve-node-02','pve-node-03','pve-node-04','pve-node-05','pve-node-06']
-
-  return actions.map((a, i) => ({
-    id: `chg-${String(i + 1).padStart(3, '0')}`,
-    resourceType: 'vm',
-    resourceId: String(100 + i),
-    resourceName: vmNames[i % vmNames.length],
-    action: a.action,
-    field: a.field,
-    oldValue: a.oldValue,
-    newValue: a.newValue,
-    connectionId: 'demo-pve-cluster-001',
-    connectionName: 'Production Cluster',
-    node: nodes[i % nodes.length],
-    timestamp: new Date(now - i * 3600 * 1000).toISOString(),
-    detectedBy: 'polling',
-  }))
-}
-
-// ---------------------------------------------------------------------------
 // Helper: health score history (30 days)
 // ---------------------------------------------------------------------------
 
@@ -1940,16 +1898,20 @@ export const EXTRA_MOCKS: MockDataMap = {
     ],
   },
 
+  // ComplianceProfile rows (lib/compliance/profiles): the Profiles tab reads
+  // is_active and created_at, the camelCase seed showed "Invalid Date".
   'GET:/api/v1/compliance/profiles': {
     data: [
       {
         id: 'prof-001',
         name: 'CIS Proxmox Benchmark',
         description: 'CIS compliance profile',
-        type: 'cis',
-        enabled: true,
-        checkCount: 25,
-        lastScan: '2026-03-10T14:30:00.000Z',
+        framework_id: 'cis-controls-v8-1',
+        is_active: 1,
+        connection_id: null,
+        created_by: 'demo-user-001',
+        created_at: '2026-02-10T10:00:00.000Z',
+        updated_at: '2026-03-10T14:30:00.000Z',
       },
     ],
   },
@@ -2284,10 +2246,6 @@ export const EXTRA_MOCKS: MockDataMap = {
   // No host drain in flight either (#248), same bare-array contract.
   'GET:/api/v1/orchestrator/host-drains': [],
 
-  get 'GET:/api/v1/changes/recent'() {
-    return { data: generateChangeEntries().slice(0, 10) }
-  },
-
   'GET:/api/v1/changes/settings': {
     data: { enabled: true, retention_days: 90, poll_interval_seconds: 60, track_vm_config: true, track_node_config: true, track_storage: true },
   },
@@ -2352,6 +2310,12 @@ export const EXTRA_MOCKS: MockDataMap = {
       'next-id': { lower: 5000, upper: 9999 },
       console: 'xtermjs',
     },
+  },
+  // Shape of /connections/[id]/tag-access (#1208). The { data: [] } fallback
+  // made TagManager read `allowedTags.length` off an array and crash the
+  // guest panel in /infrastructure/inventory and /operations/backups.
+  'GET:/api/v1/connections/demo-pve-cluster-001/tag-access': {
+    data: { userAllow: 'free', privileged: true, freeform: true, allowedTags: ['MASTER', 'ci', 'dr', 'prod'], lockedTags: [] },
   },
   'GET:/api/v1/connections/demo-pve-cluster-001/pools': {
     data: [
@@ -2462,11 +2426,6 @@ export const EXTRA_MOCKS: MockDataMap = {
   },
 
   // --- Changes (populated) ---
-  get 'GET:/api/v1/changes'() {
-    const entries = generateChangeEntries()
-    return { data: entries, pagination: { total: entries.length, page: 1, limit: 50 } }
-  },
-
   // --- Dashboard ---
   get 'GET:/api/v1/dashboard/metrics'() {
     // Derived, not hardcoded: these counters used to contradict the node list
@@ -2969,25 +2928,25 @@ export const EXTRA_MOCKS: MockDataMap = {
     const now = Math.floor(Date.now() / 1000)
     const dayInSec = 86400
     const nextRun2am = now - (now % dayInSec) + dayInSec + 7200
-    const lastRun2am = nextRun2am - dayInSec
     const dayOfWeek = new Date().getDay()
     const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek
     const nextSunday3am = now - (now % dayInSec) + daysUntilSunday * dayInSec + 10800
-    const lastSunday3am = nextSunday3am - 7 * dayInSec
     return {
       data: {
         jobs: [
+          // Formatted job of the /backup-jobs route: PVE calendar events and
+          // `next-run` as nextRun. Exclusions match the coverage mock.
           {
-            id: 'backup-daily-001', type: 'vzdump', enabled: true, schedule: '0 2 * * *',
+            id: 'backup-daily-001', type: 'vzdump', enabled: true, schedule: '02:00',
             mode: 'snapshot', compress: 'zstd', storage: 'PBS_MASTER_RBX', mailnotification: 'always',
-            vmid: 'all', node: null, comment: 'Daily backup - all VMs',
-            next_run: nextRun2am, last_run: lastRun2am, last_status: 'ok',
+            selectionMode: 'all', vmids: [], excludedVmids: ['224', '227', '228', '229'],
+            node: null, comment: 'Daily backup - all VMs', nextRun: nextRun2am,
           },
           {
-            id: 'backup-weekly-001', type: 'vzdump', enabled: true, schedule: '0 3 * * 0',
+            id: 'backup-weekly-001', type: 'vzdump', enabled: true, schedule: 'sun 03:00',
             mode: 'snapshot', compress: 'zstd', storage: 'PBS_MASTER_RBX',
-            vmid: '100,101,102,104', node: null, comment: 'Weekly backup - critical VMs',
-            next_run: nextSunday3am, last_run: lastSunday3am, last_status: 'ok',
+            selectionMode: 'include', vmids: ['100', '101', '102', '104'], excludedVmids: [],
+            node: null, comment: 'Weekly backup - critical VMs', nextRun: nextSunday3am,
           },
         ],
         allBackupStorages: ['PBS_MASTER_RBX', 'local'],
@@ -3425,7 +3384,7 @@ function normaliseNodeName(urlPath: string): string {
 const DEMO_FALLBACK_WARN_LIMIT = 500
 const warnedFallbackPaths = new Set<string>()
 
-function lookupMock(method: string, urlPath: string): any | Response | null {
+function lookupMock(method: string, urlPath: string, url?: URL): any | Response | null {
   const cleanPath = stripQuery(urlPath)
   const methodKey = `${method}:${cleanPath}`
 
@@ -3460,6 +3419,16 @@ function lookupMock(method: string, urlPath: string): any | Response | null {
       if (method === 'GET' && MOCK_DATA[withDemoPbs] !== undefined) return MOCK_DATA[withDemoPbs]
     }
   }
+
+  // --- 4c. Per-domain mocks (lib/demo/mocks), on the same id variants ---
+  const variants = new Set([cleanPath, withDemoConn, withDemoNode])
+  if (cleanPath.includes('/pbs/')) variants.add(normalisePbsId(cleanPath))
+  for (const variant of variants) {
+    const hit = domainMock(`${method}:${variant}`)
+    if (hit !== undefined) return hit
+  }
+  const resolved = resolveDomainMock(method, cleanPath, url ?? new URL(`http://demo${urlPath}`))
+  if (resolved !== null) return resolved
 
   // --- Demo lockout for v1.4 flagship MSP mutations ---
   if (method !== 'GET') {
@@ -3606,7 +3575,8 @@ function buildInventorySSE(): Response {
       nodes: nodesData.map((n: any) => ({
         node: n.node,
         status: n.status || 'online',
-        storages: storageData.filter((st: any) => st.node === n.node).map(mapStorage),
+        // Shared storages live in sharedStorages only, as in inventory/stream.
+        storages: storageData.filter((st: any) => st.node === n.node && !st.shared).map(mapStorage),
       })),
       sharedStorages: sharedStorages.map((st: any) => ({ ...mapStorage(st), shared: 1 })),
     }
@@ -4003,7 +3973,7 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
       return NextResponse.json({ data: result }, { headers: demoHeaders })
     }
 
-    const specificMock = lookupMock(method, pathname)
+    const specificMock = lookupMock(method, pathname, urlObj)
     if (specificMock instanceof Response) return specificMock
     if (specificMock !== null) {
       return NextResponse.json(specificMock, { headers: demoHeaders })
@@ -4468,7 +4438,7 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
   }
 
   // 5. GET request — look up mock data
-  const data = lookupMock(method, pathname)
+  const data = lookupMock(method, pathname, urlObj)
 
   if (data instanceof Response) return data
   if (data !== null) {

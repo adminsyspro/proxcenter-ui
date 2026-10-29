@@ -271,7 +271,7 @@ describe('VmFirewallTab', () => {
   })
 
   it('polls the firewall log every 5 seconds while the log dialog is open', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'], shouldAdvanceTime: true })
 
     try {
       await renderTab()

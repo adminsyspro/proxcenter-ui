@@ -73,7 +73,7 @@ const WINDOWS = [
   { sec: 604800, key: 'last7d' },
 ] as const
 
-/** Above this window a read covers rotated logs: refresh on demand only. */
+/** Above this window most reads reach the rotated logs: refresh on demand only. */
 const LIVE_MAX_WINDOW = 3600
 const REFRESH_MS = 5000
 
@@ -118,25 +118,61 @@ export default function FirewallLogView({ connectionId, scope: scopeProp, guests
   const showGuest = scope.kind === 'group' || scope.kind === 'node'
   const showNode = scope.kind === 'group' || scope.kind === 'cluster'
 
-  const load = useCallback((silent: boolean) => {
-    if (!connectionId) return
+  // One read at a time: a refresh asked during a read joins it, and a read
+  // that a newer window replaced never paints over it (roadmap#179).
+  const reading = useRef<{ key: string; done: Promise<void> } | null>(null)
 
-    void firewallAPI.getFirewallLog(connectionId, scope, windowSec)
+  const load = useCallback((silent: boolean): Promise<void> => {
+    if (!connectionId) return Promise.resolve()
+
+    const key = `${connectionId}:${windowSec}:${JSON.stringify(scope)}`
+    const current = reading.current
+
+    if (current?.key === key) return silent ? current.done : current.done.finally(() => setLoading(false))
+
+    const done: Promise<void> = firewallAPI.getFirewallLog(connectionId, scope, windowSec)
       .then(
-        res => { setData(res); setError(null) },
+        res => {
+          if (reading.current?.done !== done) return
+          setData(res)
+          setError(null)
+        },
         // An auto-refresh failing keeps the last good page on screen.
-        err => { if (!silent) setError(errorMessage(err)) },
+        err => { if (!silent && reading.current?.done === done) setError(errorMessage(err)) },
       )
-      .finally(() => { if (!silent) setLoading(false) })
+      .finally(() => {
+        if (reading.current?.done !== done) return
+        reading.current = null
+        if (!silent) setLoading(false)
+      })
+
+    reading.current = { key, done }
+
+    return done
   }, [connectionId, windowSec, scope])
 
   useEffect(() => {
-    load(false)
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const live = windowSec <= LIVE_MAX_WINDOW
 
-    if (windowSec > LIVE_MAX_WINDOW) return
-    const id = setInterval(() => load(true), REFRESH_MS)
+    // The next read is planned when the previous one ends, never on a fixed
+    // beat: a node slow to answer must not get a new read every 5 s
+    // (roadmap#176), and a hidden tab reads nothing.
+    const next = () => {
+      if (!stopped && live) timer = setTimeout(tick, REFRESH_MS)
+    }
+    const tick = () => {
+      if (document.hidden) return next()
+      void load(true).then(next)
+    }
 
-    return () => clearInterval(id)
+    void load(false).then(next)
+
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+    }
   }, [load, windowSec])
 
   // 'fill': the window height minus what sits above and below the table. The

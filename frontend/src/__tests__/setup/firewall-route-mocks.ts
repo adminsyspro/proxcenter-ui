@@ -51,6 +51,9 @@ export const verifyConnectionOwnershipMock = vi.fn<(id: string) => Promise<Respo
 /** `@/lib/rbac` → checkPermission. Resolves null (granted) by default. */
 export const checkPermissionMock = vi.fn<AsyncMock>()
 
+/** `@/lib/vdc/guestGuard` → guardSessionGuest. Resolves null (guest in scope) by default. */
+export const guardSessionGuestMock = vi.fn<AsyncMock>()
+
 /** `@/lib/connections/getConnection` → getConnectionById. Resolves CONN by default. */
 export const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 
@@ -89,10 +92,10 @@ export function installFirewallRouteMocks(): void {
   }))
 
   // The per-VM routes confine the guest to the caller's vDC (guestGuard.ts,
-  // covered by its own tests): pass-through here, as for a provider session.
+  // covered by its own tests): pass-through by default, as for a provider session.
   vi.doMock('@/lib/vdc/guestGuard', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
-    guardSessionGuest: async () => null,
+    guardSessionGuest: guardSessionGuestMock,
   }))
 }
 
@@ -107,6 +110,7 @@ export function resetFirewallRouteMocks(): void {
   verifyConnectionOwnershipMock.mockResolvedValue(null)
   checkPermissionMock.mockResolvedValue(null)
   getConnectionByIdMock.mockResolvedValue(CONN)
+  guardSessionGuestMock.mockResolvedValue(null)
   vi.spyOn(console, 'log').mockImplementation(() => {})
   vi.spyOn(console, 'error').mockImplementation(() => {})
 }

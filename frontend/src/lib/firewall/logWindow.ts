@@ -6,7 +6,8 @@
 // Without them PVE reads the current file only, `start` and `limit` page it
 // from its oldest line and `total` counts its lines. So the newest lines come
 // from the end of the current file, and the rotated logs are read only when
-// the window starts before the current file does.
+// the window starts before the current file does. rotatedLogGate.ts keeps
+// those reads from piling up on a node (roadmap#179).
 
 import { logLineTime } from './logParse'
 
@@ -112,10 +113,12 @@ export async function readLogWindow(
   const until = beforeFile === undefined ? window.until : Math.min(window.until ?? beforeFile, beforeFile)
 
   try {
-    const older = (await log({ limit: 0, since: window.since, until })).lines.filter(inWindow)
+    const olderPage = await log({ limit: 0, since: window.since, until })
+    const older = olderPage.lines.filter(inWindow)
     const merged = beforeFile === undefined ? older : [...older, ...current]
 
-    return finish(merged, cap, false)
+    // A total above the lines: the read kept only its newest (rotatedLogGate.ts).
+    return finish(merged, cap, olderPage.total > olderPage.lines.length)
   } catch (olderError) {
     return { ...finish(current, cap, false), missingBefore: begins, olderError }
   }

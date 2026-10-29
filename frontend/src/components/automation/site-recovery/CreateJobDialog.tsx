@@ -131,7 +131,15 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
   }
 
   // Results carry their request key so a previous selection can never enable creation.
-  type PreflightCheck = { id: 'target_vmids' | 'target_qemu' | 'source_health' | 'target_health' | 'target_space' | 'target_storage' | 'reverse_ssh'; status: 'ok' | 'warn' | 'error'; label?: string; detail?: string; message?: string }
+  // context carries the values of detail so a check can be rendered in the operator's language.
+  type PreflightCheck = { id: 'target_vmids' | 'target_qemu' | 'source_health' | 'target_health' | 'target_space' | 'target_storage' | 'reverse_ssh' | 'mounted_iso'; status: 'ok' | 'warn' | 'error'; label?: string; detail?: string; message?: string; context?: Record<string, string | number> }
+  const checkDetail = (c: PreflightCheck): string | undefined => {
+    if (c.id === 'mounted_iso' && c.context && typeof c.context.count === 'number') {
+      if (c.context.count > 0) return t('siteRecovery.preflight.detail.mounted_iso_missing', c.context)
+      return c.context.node ? t('siteRecovery.preflight.detail.mounted_iso_present', c.context) : t('siteRecovery.preflight.detail.mounted_iso_none')
+    }
+    return c.detail || c.message
+  }
   const [checkResult, setCheckResult] = useState<{
     key: string
     ssh?: SSHConnectivityResult
@@ -835,15 +843,18 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
                 {(preflight?.checks || []).map(c => {
                   const color = c.status === 'ok' ? 'success.main' : c.status === 'warn' ? 'warning.main' : 'error.main'
                   const icon = c.status === 'ok' ? 'ri-check-line' : c.status === 'warn' ? 'ri-error-warning-line' : 'ri-close-circle-line'
+                  const detail = checkDetail(c)
                   return (
                     <Box key={c.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                       <i className={icon} style={{ color: `var(--mui-palette-${c.status === 'ok' ? 'success' : c.status === 'warn' ? 'warning' : 'error'}-main)`, fontSize: 16, marginTop: 2 }} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant='body2' sx={{ fontWeight: 500 }}>{t(`siteRecovery.preflight.checks.${c.id}`)}</Typography>
-                        {(c.detail || c.message) && (
-                          <Typography variant='caption' sx={{ color, display: 'block', lineHeight: 1.3 }}>
-                            {c.detail || c.message}
-                          </Typography>
+                        {detail && (
+                          <Tooltip title={c.detail && c.detail !== detail ? c.detail : ''} arrow>
+                            <Typography variant='caption' sx={{ color, display: 'block', lineHeight: 1.3 }}>
+                              {detail}
+                            </Typography>
+                          </Tooltip>
                         )}
                       </Box>
                     </Box>

@@ -6116,7 +6116,13 @@
         "target_space": "Capacidad del pool destino",
         "target_storage": "Disponibilidad del almacenamiento de destino",
         "reverse_ssh": "SSH inverso para failback",
-        "backup_schedule": "Programación de copias de seguridad"
+        "backup_schedule": "Programación de copias de seguridad",
+        "mounted_iso": "Imágenes ISO montadas"
+      },
+      "detail": {
+        "mounted_iso_none": "Ninguna imagen ISO montada en los invitados seleccionados",
+        "mounted_iso_present": "Las imágenes ISO montadas están presentes en {node}",
+        "mounted_iso_missing": "{count, plural, one {La VM {vms} tiene montada una ISO que no existe} other {Las VM {vms} tienen montada una ISO que no existe}} en {node}: {count, plural, one {su unidad de CD/DVD quedará vacía} other {sus unidades de CD/DVD quedarán vacías}} en la réplica para que pueda arrancar"
       }
     },
     "bandwidth": {
@@ -6279,7 +6285,9 @@
       "reseedTitle": "¿Reinicializar {guest}?",
       "reseedWarning": "Todos los puntos de restauración DR de este invitado se eliminarán permanentemente y se reemplazará la réplica. Esto se aplica a Ceph RBD y ZFS. Después se pondrá en cola una replicación completa.",
       "reseedQueued": "Replicación completa en cola.",
-      "reseedFailed": "No se pudo poner en cola la replicación completa."
+      "reseedFailed": "No se pudo poner en cola la replicación completa.",
+      "vmSyncDuration": "Duración de la última sincronización",
+      "vmBandwidth": "Ancho de banda de las últimas 24 h, pico {peak}/s"
     },
     "jobs": {
       "failedOver": "Conmutado",

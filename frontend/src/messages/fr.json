@@ -6116,7 +6116,13 @@
         "target_space": "Capacité pool cible",
         "target_storage": "Disponibilité du stockage cible",
         "reverse_ssh": "SSH inverse pour le failback",
-        "backup_schedule": "Planification des sauvegardes"
+        "backup_schedule": "Planification des sauvegardes",
+        "mounted_iso": "Images ISO montées"
+      },
+      "detail": {
+        "mounted_iso_none": "Aucune image ISO montée sur les invités sélectionnés",
+        "mounted_iso_present": "Les images ISO montées sont présentes sur {node}",
+        "mounted_iso_missing": "{count, plural, one {La VM {vms} a un ISO monté qui n'existe pas} other {Les VM {vms} ont un ISO monté qui n'existe pas}} sur {node} : {count, plural, one {son lecteur CD/DVD sera laissé vide} other {leurs lecteurs CD/DVD seront laissés vides}} sur la réplique pour qu'elle puisse démarrer"
       }
     },
     "bandwidth": {
@@ -6279,7 +6285,9 @@
       "reseedTitle": "Réinitialiser {guest} ?",
       "reseedWarning": "Tous les points de restauration DR de cet invité seront définitivement supprimés et la réplique sera remplacée. Cela concerne Ceph RBD et ZFS. Une réplication complète sera ensuite programmée.",
       "reseedQueued": "Réplication complète mise en attente.",
-      "reseedFailed": "Impossible de programmer la réplication complète."
+      "reseedFailed": "Impossible de programmer la réplication complète.",
+      "vmSyncDuration": "Durée de la dernière synchronisation",
+      "vmBandwidth": "Bande passante sur les dernières 24 h, pic {peak}/s"
     },
     "jobs": {
       "failedOver": "Basculé",

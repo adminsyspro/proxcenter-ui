@@ -146,7 +146,7 @@ describe('FirewallLogDialog', () => {
   })
 
   it('polls every 5 seconds on short windows only', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'], shouldAdvanceTime: true })
     api.getFirewallLog.mockResolvedValue({ rows: [], warnings: [], truncated: false })
 
     try {
@@ -163,6 +163,53 @@ describe('FirewallLogDialog', () => {
       vi.advanceTimersByTime(15000)
       expect(api.getFirewallLog).toHaveBeenCalledTimes(calls)
     } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('plans the next read when the previous one answered, and joins it on refresh (roadmap#179)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'], shouldAdvanceTime: true })
+    let answer: (v: unknown) => void = () => {}
+
+    api.getFirewallLog.mockImplementation(() => new Promise(res => { answer = res }))
+
+    try {
+      renderWithProviders(<FirewallLogDialog open onClose={() => {}} connectionId="conn-1" scope={VM_SCOPE} />)
+      await waitFor(() => expect(api.getFirewallLog).toHaveBeenCalledTimes(1))
+
+      vi.advanceTimersByTime(30_000)
+      expect(api.getFirewallLog).toHaveBeenCalledTimes(1)
+
+      answer({ rows: [], warnings: [], truncated: false })
+      await waitFor(() => expect(screen.getByText('No entry over this period.')).toBeInTheDocument())
+      vi.advanceTimersByTime(5000)
+      await waitFor(() => expect(api.getFirewallLog).toHaveBeenCalledTimes(2))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+      expect(api.getFirewallLog).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reads nothing while the tab is hidden', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'], shouldAdvanceTime: true })
+    api.getFirewallLog.mockResolvedValue({ rows: [], warnings: [], truncated: false })
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+
+    try {
+      renderWithProviders(<FirewallLogDialog open onClose={() => {}} connectionId="conn-1" scope={VM_SCOPE} />)
+      await waitFor(() => expect(api.getFirewallLog).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(screen.getByText('No entry over this period.')).toBeInTheDocument())
+
+      vi.advanceTimersByTime(20_000)
+      expect(api.getFirewallLog).toHaveBeenCalledTimes(1)
+
+      hidden.mockReturnValue(false)
+      vi.advanceTimersByTime(5000)
+      await waitFor(() => expect(api.getFirewallLog).toHaveBeenCalledTimes(2))
+    } finally {
+      hidden.mockRestore()
       vi.useRealTimers()
     }
   })

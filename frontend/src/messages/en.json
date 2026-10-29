@@ -10740,6 +10740,23 @@
       "diskRead": "Read",
       "diskWrite": "Write",
       "noData": "No running VM data over the last hour."
+    },
+    "grid": {
+      "summary": "{vdcs, plural, =1 {# virtual datacenter} other {# virtual datacenters}} · {vms, plural, =1 {# VM} other {# VMs}} in total",
+      "vcpus": "vCPUs",
+      "ram": "RAM",
+      "storage": "Storage",
+      "vms": "VMs",
+      "nodes": "{count, plural, =1 {# node} other {# nodes}}",
+      "storages": "{count, plural, =1 {# storage} other {# storages}}",
+      "networks": "{count, plural, =1 {# network} other {# networks}}",
+      "backups": "{count, plural, =1 {# backup} other {# backups}}",
+      "health": {
+        "over": "Over quota",
+        "near": "Near limit",
+        "within": "Within quota",
+        "none": "No quota"
+      }
     }
   },
   "sdn": {

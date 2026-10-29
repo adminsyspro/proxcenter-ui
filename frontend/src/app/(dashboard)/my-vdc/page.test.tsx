@@ -2,8 +2,8 @@
  * Landing behavior of /my-vdc: multi-vDC tenants get cards; a card click
  * mirrors the header VdcSwitcher — it sets the pc_vdc_context cookie and
  * reloads (no in-page overview swap); single-vDC tenants keep the direct
- * overview. MyVdcOverview and QuotaDonut are mocked — this tests the page's
- * routing logic, not the cockpit.
+ * overview. MyVdcOverview is mocked — this tests the page's routing logic,
+ * not the cockpit (VdcSummaryCard has its own test).
  * Run: npx vitest run "src/app/(dashboard)/my-vdc/page.test.tsx"
  */
 import React from 'react'
@@ -19,7 +19,6 @@ vi.mock('next-intl', () => ({
 vi.mock('@/components/mydc/MyVdcOverview', () => ({
   default: ({ vdc }: any) => <div data-testid="overview">{vdc.name}</div>,
 }))
-vi.mock('@/components/mydc/QuotaDonut', () => ({ default: () => <div /> }))
 
 import MyVdcPage from './page'
 

@@ -10740,6 +10740,23 @@
       "diskRead": "읽기",
       "diskWrite": "쓰기",
       "noData": "지난 1시간 동안 실행 중인 VM 데이터가 없습니다."
+    },
+    "grid": {
+      "summary": "가상 데이터센터 {vdcs}개 · 전체 VM {vms}개",
+      "vcpus": "vCPU",
+      "ram": "RAM",
+      "storage": "스토리지",
+      "vms": "VM",
+      "nodes": "노드 {count}개",
+      "storages": "스토리지 {count}개",
+      "networks": "네트워크 {count}개",
+      "backups": "백업 {count}개",
+      "health": {
+        "over": "할당량 초과",
+        "near": "한도 근접",
+        "within": "할당량 이내",
+        "none": "할당량 없음"
+      }
     }
   },
   "sdn": {

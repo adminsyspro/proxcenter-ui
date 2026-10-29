@@ -10741,6 +10741,23 @@
       "diskRead": "Lecture",
       "diskWrite": "Écriture",
       "noData": "Aucune donnée de VM active sur la dernière heure."
+    },
+    "grid": {
+      "summary": "{vdcs, plural, =1 {# datacenter virtuel} other {# datacenters virtuels}} · {vms, plural, =1 {# VM} other {# VM}} au total",
+      "vcpus": "vCPU",
+      "ram": "RAM",
+      "storage": "Stockage",
+      "vms": "VM",
+      "nodes": "{count, plural, =1 {# nœud} other {# nœuds}}",
+      "storages": "{count, plural, =1 {# stockage} other {# stockages}}",
+      "networks": "{count, plural, =1 {# réseau} other {# réseaux}}",
+      "backups": "{count, plural, =1 {# sauvegarde} other {# sauvegardes}}",
+      "health": {
+        "over": "Quota dépassé",
+        "near": "Proche de la limite",
+        "within": "Dans les quotas",
+        "none": "Sans quota"
+      }
     }
   },
   "sdn": {

@@ -10366,6 +10366,23 @@
       "diskRead": "读",
       "diskWrite": "写",
       "noData": "最近一小时内没有运行中的虚拟机数据。"
+    },
+    "grid": {
+      "summary": "{vdcs} 个虚拟数据中心 · 共 {vms} 台虚拟机",
+      "vcpus": "vCPU",
+      "ram": "内存",
+      "storage": "存储",
+      "vms": "虚拟机",
+      "nodes": "{count} 个节点",
+      "storages": "{count} 个存储",
+      "networks": "{count} 个网络",
+      "backups": "{count} 个备份",
+      "health": {
+        "over": "超出配额",
+        "near": "接近上限",
+        "within": "配额内",
+        "none": "无配额"
+      }
     }
   },
   "vdc": {

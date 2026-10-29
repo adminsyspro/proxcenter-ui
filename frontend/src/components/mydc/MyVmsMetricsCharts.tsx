@@ -1,14 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { Box, Paper, Typography, useTheme, Skeleton, Stack } from '@mui/material'
 import { Area, AreaChart, CartesianGrid, Tooltip as RTooltip, XAxis, YAxis } from 'recharts'
 
 import ChartContainer from '@/components/ChartContainer'
+import { useVisibleInterval } from '@/hooks/usePageVisibility'
 
-const RRD_REFRESH_MS = 30_000
+import { RRD_REFRESH_MS, fetchGuestSeries, type RrdGuest, type VmSeries } from './myVmsRrd'
 
 type Metric = 'cpu' | 'ram' | 'net' | 'io'
 
@@ -43,21 +44,7 @@ const VM_COLORS_BY_METRIC: Record<Metric, string[]> = {
   ],
 }
 
-interface Guest {
-  vmid: number
-  name: string
-  type: 'qemu' | 'lxc'
-  status: string
-  node: string
-  template?: boolean
-  connId: string
-}
-
-interface VmSeries { key: string; name: string; raw: any[] }
-
 interface Props { connectionIds: string[] }
-
-const guestKey = (g: Guest) => `${g.connId}:${g.type}:${g.vmid}`
 
 function fmtTime(ts: number): string {
   const d = new Date(ts * 1000)
@@ -264,23 +251,25 @@ function ChartCard({ spec, rows, vmIndex, loading, empty }: ChartCardProps) {
 /**
  * Per-VM consumption charts for the vDC: one line per VM in each of CPU%,
  * RAM%, network (in+out), disk I/O (read+write) over the last hour.
- * Source = same per-guest RRD endpoint MyVmsCard uses for its sparklines.
+ * The guest list comes from the inventory stream; the RRD of every guest is
+ * read once the stream is done, in one batch per connection, and refreshed
+ * while the tab is visible.
  */
 export default function MyVmsMetricsCharts({ connectionIds }: Props) {
   const t = useTranslations()
-  const [guests, setGuests] = useState<Guest[]>([])
+  // null until the inventory stream is done: the RRD is read for the whole list.
+  const [guests, setGuests] = useState<RrdGuest[] | null>(null)
   const [perVm, setPerVm] = useState<VmSeries[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (connectionIds.length === 0) {
       setGuests([])
-      setLoading(false)
       return
     }
     setLoading(true)
     const accepted = new Set(connectionIds)
-    const found: Guest[] = []
+    const found: RrdGuest[] = []
     const src = new EventSource('/api/v1/inventory/stream')
 
     const onCluster = (ev: MessageEvent) => {
@@ -293,76 +282,46 @@ export default function MyVmsMetricsCharts({ connectionIds }: Props) {
               vmid: g.vmid,
               name: g.name ?? String(g.vmid),
               type: g.type ?? 'qemu',
-              status: g.status ?? 'unknown',
               node: n.node,
               template: !!g.template,
               connId: cluster.id,
             })
           }
         }
-        setGuests([...found])
       } catch {}
     }
-    const onDone = () => { src.close() }
-    const onError = () => { src.close() }
+    // An interrupted stream still charts the clusters it sent.
+    const onEnd = () => { src.close(); setGuests([...found]) }
 
     src.addEventListener('cluster', onCluster)
-    src.addEventListener('done', onDone)
-    src.addEventListener('error', onError)
+    src.addEventListener('done', onEnd)
+    src.addEventListener('error', onEnd)
 
     return () => {
       src.removeEventListener('cluster', onCluster)
-      src.removeEventListener('done', onDone)
-      src.removeEventListener('error', onError)
+      src.removeEventListener('done', onEnd)
+      src.removeEventListener('error', onEnd)
       src.close()
     }
   }, [connectionIds])
 
-  useEffect(() => {
-    if (guests.length === 0) {
-      setPerVm([])
-      setLoading(false)
-      return
-    }
+  // A refresh replaces the one still running, so a late answer never lands.
+  const inFlight = useRef<AbortController | null>(null)
+
+  const refresh = useCallback(async () => {
+    if (!guests) return
+    inFlight.current?.abort()
     const controller = new AbortController()
-    let cancelled = false
-
-    const fetchAll = async () => {
-      // Templates have no metrics; everything else (running OR stopped that
-      // ran earlier in the window) gets a fetch — recharts handles null gaps.
-      const targets = guests.filter(g => !g.template)
-      if (targets.length === 0) {
-        if (!cancelled) { setPerVm([]); setLoading(false) }
-        return
-      }
-      const results = await Promise.all(targets.map(async (g): Promise<VmSeries> => {
-        try {
-          const path = `/nodes/${g.node}/${g.type}/${g.vmid}`
-          const url = `/api/v1/connections/${encodeURIComponent(g.connId)}/rrd?path=${encodeURIComponent(path)}&timeframe=hour`
-          const res = await fetch(url, { cache: 'no-store', signal: controller.signal })
-          if (!res.ok) return { key: guestKey(g), name: g.name, raw: [] }
-          const json = await res.json()
-          let raw: any[] = []
-          if (Array.isArray(json)) raw = json
-          else if (Array.isArray(json?.data)) raw = json.data
-          else if (json?.data && typeof json.data === 'object') raw = Object.values(json.data)
-          return { key: guestKey(g), name: g.name, raw }
-        } catch {
-          return { key: guestKey(g), name: g.name, raw: [] }
-        }
-      }))
-      if (cancelled) return
-      // Stable sort by VM name so the color palette stays consistent across
-      // refreshes. Without this, lines change color on every poll cycle.
-      results.sort((a, b) => a.name.localeCompare(b.name))
-      setPerVm(results)
-      setLoading(false)
-    }
-
-    void fetchAll()
-    const interval = setInterval(() => { void fetchAll() }, RRD_REFRESH_MS)
-    return () => { cancelled = true; controller.abort(); clearInterval(interval) }
+    inFlight.current = controller
+    const series = await fetchGuestSeries(guests, controller.signal)
+    if (controller.signal.aborted) return
+    setPerVm(series)
+    setLoading(false)
   }, [guests])
+
+  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => () => inFlight.current?.abort(), [])
+  useVisibleInterval(() => { void refresh() }, RRD_REFRESH_MS)
 
   const { rows, vmIndex } = useMemo(() => reshape(perVm), [perVm])
   const empty = !loading && vmIndex.length === 0

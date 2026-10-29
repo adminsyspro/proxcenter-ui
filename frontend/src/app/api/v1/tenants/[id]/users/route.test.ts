@@ -79,7 +79,7 @@ describe("POST /api/v1/tenants/[id]/users", () => {
   it("adds the member and grants role_tenant_viewer in a customer tenant when no role is named (TenantsTab payload)", async () => {
     const res = await post("t1", { userId: "u1" })
     expect(res.status).toBe(200)
-    expect(roleFindUniqueMock).toHaveBeenCalledWith({ where: { id: "role_tenant_viewer" }, select: { id: true } })
+    expect(roleFindUniqueMock).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "role_tenant_viewer" } }))
     expect(addUserToTenantMock).toHaveBeenCalledWith("u1", "t1", false)
     expect(grantCreateMock.mock.calls[0][0].data).toMatchObject({ userId: "u1", roleId: "role_tenant_viewer", tenantId: "t1", scopeType: "inherit" })
   })
@@ -122,6 +122,23 @@ describe("POST /api/v1/tenants/[id]/users", () => {
     expect(res.status).toBe(404)
     expect((await readJson<any>(res)).error).toBe("Role not found")
     expect(addUserToTenantMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses a custom role of another tenant, before any write (roadmap#97)", async () => {
+    roleFindUniqueMock.mockResolvedValueOnce({ id: "role_custom", tenantId: "t-other", permissions: [] })
+    const res = await post("t1", { userId: "u1", roleId: "role_custom" })
+    expect(res.status).toBe(404)
+    expect((await readJson<any>(res)).error).toBe("Role not found")
+    expect(addUserToTenantMock).not.toHaveBeenCalled()
+  })
+
+  it("keeps NIC identity rights to a super admin (roadmap#97)", async () => {
+    roleFindUniqueMock.mockResolvedValue({ id: "role_nic", tenantId: null, permissions: [{ permissionId: "vm.config.nic.mac" }] })
+    const res = await post("t1", { userId: "u1", roleId: "role_nic" })
+    expect(res.status).toBe(403)
+    expect(addUserToTenantMock).not.toHaveBeenCalled()
+    sessionMock.mockResolvedValue({ user: { id: "sa", email: "sa@x" } })
+    expect((await post("t1", { userId: "u1", roleId: "role_nic" })).status).toBe(200)
   })
 
   it("stays behind the provider tenant gate", async () => {

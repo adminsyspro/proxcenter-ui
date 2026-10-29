@@ -7,7 +7,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
+import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
 import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
 import { scopeBreadth, validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
@@ -242,30 +243,16 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       )
     }
 
-    // Refuse PATCHes that would promote a regular user to any protected
-    // wildcard role (super_admin or provider_admin).
+    // A new role obeys the rules of every grant (lib/rbac/assignmentGuards.ts),
+    // evaluated in the tenant of the assignment being changed.
     const callerIsSuperAdmin = await isUserSuperAdmin(session.user.id)
-    if (
-      !callerIsSuperAdmin &&
-      role_id &&
-      (PROTECTED_ROLE_IDS as readonly string[]).includes(role_id)
-    ) {
-      return NextResponse.json({ error: "Role not found" }, { status: 404 })
-    }
-
-    // Same guard as POST: tenant rows must reject both legacy "global" roles
-    // (operator family — automation.view leakage) and protected wildcards
-    // (super_admin / provider_admin — provider-scoped by design).
-    const tenantForbiddenRoles = [...PROVIDER_ONLY_ROLE_IDS, ...PROTECTED_ROLE_IDS] as readonly string[]
-    if (
-      role_id &&
-      assignment.tenantId !== DEFAULT_TENANT_ID &&
-      tenantForbiddenRoles.includes(role_id)
-    ) {
-      return NextResponse.json(
-        { error: "This role can only be assigned in the provider tenant (default)" },
-        { status: 400 }
-      )
+    if (role_id !== undefined) {
+      const guard = await guardRoleAssignment({
+        callerUserId: session.user.id,
+        roleId: role_id,
+        targetTenantId: assignment.tenantId,
+      })
+      if (!guard.ok) return guard.response!
     }
 
     // A provider admin may still narrow or expire an existing NIC identity
@@ -281,14 +268,6 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     const data: Record<string, unknown> = {}
 
     if (role_id !== undefined) {
-      // Vérifier que le rôle existe
-      const role = await prisma.rbacRole.findUnique({ where: { id: role_id }, select: { id: true, permissions: { select: { permissionId: true } } } })
-      if (!role) {
-        return NextResponse.json({ error: "Role not found" }, { status: 404 })
-      }
-      if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(role)) {
-        return NextResponse.json({ error: 'Only a super admin may grant NIC identity permissions' }, { status: 403 })
-      }
       data.roleId = role_id
     }
 

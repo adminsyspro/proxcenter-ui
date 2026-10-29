@@ -4482,6 +4482,7 @@
       "port": "Port",
       "interfaces": "Interfaces du nœud",
       "invalidPort": "De 1 à 65535",
+      "invalidAddress": "Nom d'hôte ou adresse IP uniquement",
       "saveFailed": "Enregistrement impossible : {error}",
       "noNodes": "Aucun nœud trouvé pour cette connexion.",
       "newConnectionHint": "Enregistrez d'abord la connexion, puis définissez ici une adresse et un port SSH par nœud.",

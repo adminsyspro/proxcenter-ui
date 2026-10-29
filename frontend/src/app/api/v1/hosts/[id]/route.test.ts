@@ -2,13 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
-const { updateMock, checkPermissionMock } = vi.hoisted(() => ({
+const { updateMock, deleteMock, hostFindMock, connFindMock, checkPermissionMock } = vi.hoisted(() => ({
   updateMock: vi.fn(),
+  deleteMock: vi.fn(),
+  hostFindMock: vi.fn(),
+  connFindMock: vi.fn(),
   checkPermissionMock: vi.fn(),
 }))
 
+// The session client: rows of another tenant read as null.
 vi.mock('@/lib/tenant', () => ({
-  getSessionPrisma: async () => ({ managedHost: { update: updateMock, delete: vi.fn() } }),
+  getSessionPrisma: async () => ({
+    managedHost: { update: updateMock, delete: deleteMock, findUnique: hostFindMock },
+    connection: { findUnique: connFindMock },
+  }),
 }))
 
 vi.mock('@/lib/rbac', () => ({
@@ -16,10 +23,13 @@ vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
 }))
 
-import { PATCH } from './route'
+import { DELETE, PATCH } from './route'
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  deleteMock.mockReset().mockResolvedValue({})
+  hostFindMock.mockReset().mockResolvedValue({ connectionId: 'c1' })
+  connFindMock.mockReset().mockResolvedValue({ id: 'c1' })
   updateMock.mockReset().mockImplementation(async ({ data }: any) => ({
     id: 'h1', connectionId: 'c1', connection: { name: 'PVE' }, node: 'pve1', enabled: true,
     sshAddress: null, sshPort: null, ...data,
@@ -74,5 +84,75 @@ describe('PATCH /api/v1/hosts/[id]: SSH address and port override', () => {
     expect(res.status).toBe(403)
     expect(checkPermissionMock).toHaveBeenCalledWith('admin.settings')
     expect(updateMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('PATCH /api/v1/hosts/[id]: SSH address format', () => {
+  it.each([
+    '10.42.0.250 evil',
+    'ssh://10.42.0.250/x',
+    'root@10.42.0.101',
+    '10.42.0.101:22',
+    '-oProxyCommand=x',
+    '300.1.1.1',
+  ])('refuses %s with a 400 and writes nothing', async (address) => {
+    const res = await patch({ sshAddress: address })
+
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res)).error).toMatch(/host name or an IP address/)
+    expect(updateMock).not.toHaveBeenCalled()
+  })
+
+  it.each(['10.42.0.101', 'pve1.lab.local', 'fd00::101', '::1'])('stores %s', async (address) => {
+    const res = await patch({ sshAddress: address })
+
+    expect(res.status).toBe(200)
+    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ data: { sshAddress: address } }))
+  })
+})
+
+describe('/api/v1/hosts/[id]: the row and its connection belong to the caller', () => {
+  it('answers 404 and writes nothing when the row is not visible to the session', async () => {
+    hostFindMock.mockResolvedValueOnce(null)
+
+    const res = await patch({ sshAddress: '10.42.0.250' })
+
+    expect(res.status).toBe(404)
+    expect(updateMock).not.toHaveBeenCalled()
+  })
+
+  it('answers 404 when the connection of the row belongs to another tenant', async () => {
+    connFindMock.mockResolvedValueOnce(null)
+
+    const res = await patch({ sshAddress: '10.42.0.250' })
+
+    expect(res.status).toBe(404)
+    expect(connFindMock).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'c1' } }))
+    expect(updateMock).not.toHaveBeenCalled()
+  })
+
+  it('accepts a row without a connection', async () => {
+    hostFindMock.mockResolvedValueOnce({ connectionId: null })
+
+    const res = await patch({ notes: 'rack 4' })
+
+    expect(res.status).toBe(200)
+    expect(connFindMock).not.toHaveBeenCalled()
+  })
+
+  it('DELETE answers 404 for a row of another connection owner and deletes nothing', async () => {
+    connFindMock.mockResolvedValueOnce(null)
+
+    const res = await callRoute(DELETE as any, { method: 'DELETE', params: { id: 'h1' } })
+
+    expect(res.status).toBe(404)
+    expect(deleteMock).not.toHaveBeenCalled()
+  })
+
+  it('DELETE removes a reachable row', async () => {
+    const res = await callRoute(DELETE as any, { method: 'DELETE', params: { id: 'h1' } })
+
+    expect(res.status).toBe(200)
+    expect(deleteMock).toHaveBeenCalledWith({ where: { id: 'h1' } })
   })
 })

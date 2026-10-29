@@ -4471,6 +4471,7 @@
       "port": "Port",
       "interfaces": "Knotenschnittstellen",
       "invalidPort": "1 bis 65535",
+      "invalidAddress": "Nur Hostname oder IP-Adresse",
       "saveFailed": "Speichern fehlgeschlagen: {error}",
       "noNodes": "Für diese Verbindung wurde kein Knoten gefunden.",
       "newConnectionHint": "Speichern Sie zuerst die Verbindung und legen Sie dann hier SSH-Adresse und Port pro Knoten fest.",

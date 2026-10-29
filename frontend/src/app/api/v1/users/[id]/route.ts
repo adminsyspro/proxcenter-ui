@@ -7,7 +7,8 @@ import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { hashPassword } from "@/lib/auth/password"
 import { safeLog } from "@/lib/log/sanitize"
-import { checkPermission, PERMISSIONS, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
+import { checkPermission, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
 import { denyIfTargetIsProtectedAndCallerIsNot, findUserInTenant } from "@/lib/rbac/userTargetGuards"
 import { nanoid } from "nanoid"
 import { DEFAULT_TENANT_ID, addUserToTenant, removeUserFromTenant, TenantMembershipError, getCurrentTenantId } from "@/lib/tenant"
@@ -129,20 +130,63 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
       data.password = await hashPassword(password)
     }
 
+    const requestedTenantIds = Array.isArray(tenantIds)
+      ? (tenantIds.filter((x: unknown) => typeof x === "string" && x.length > 0) as string[])
+      : null
+
+    // Role checks run before anything is written, membership changes included.
+    if (roleId !== undefined) {
+      if (!isProviderView) {
+        return NextResponse.json(
+          { error: "Cross-tenant role propagation is only available from the provider tenant" },
+          { status: 403 }
+        )
+      }
+      // Same rule as /rbac/assignments: nobody changes their own roles.
+      if (isSelf) {
+        return NextResponse.json({ error: "You cannot change your own roles" }, { status: 400 })
+      }
+      if (typeof roleId === "string" && roleId.length > 0) {
+        if ((PROTECTED_ROLE_IDS as readonly string[]).includes(roleId)) {
+          return NextResponse.json(
+            { error: "Protected roles can't be assigned through this endpoint" },
+            { status: 403 }
+          )
+        }
+        // The role lands in every tenant the user ends up a member of, so it
+        // obeys the rules of every grant (lib/rbac/assignmentGuards.ts) in
+        // each of them (roadmap#97).
+        const targetTenantIds = requestedTenantIds
+          ? [...requestedTenantIds]
+          : (await prisma.userTenant.findMany({ where: { userId: id }, select: { tenantId: true } })).map(m => m.tenantId)
+        // No membership: nothing is granted, the role must still exist.
+        if (targetTenantIds.length === 0) targetTenantIds.push(DEFAULT_TENANT_ID)
+        for (const targetTenantId of new Set(targetTenantIds)) {
+          const guard = await guardRoleAssignment({
+            callerUserId: session?.user?.id ?? "",
+            roleId,
+            targetTenantId,
+            targetUserId: id,
+          })
+          if (!guard.ok) return guard.response!
+        }
+      }
+    }
+
     // Tenant assignments reconciliation. Only honored from the provider
     // view (default tenant) — a tenant-admin scoped to OVH must never be
     // able to grant a user access to a foreign tenant via this endpoint.
     // Uses the shared addUserToTenant / removeUserFromTenant helpers so
     // the SUPER_ADMIN_PROTECTED and LAST_TENANT guards still apply.
     let tenantsChanged: { added: string[]; removed: string[] } | null = null
-    if (Array.isArray(tenantIds)) {
+    if (requestedTenantIds) {
       if (!isProviderView) {
         return NextResponse.json(
           { error: "Tenant assignments can only be edited from the provider tenant" },
           { status: 403 }
         )
       }
-      const requested = new Set(tenantIds.filter((x: unknown) => typeof x === "string" && x.length > 0) as string[])
+      const requested = new Set(requestedTenantIds)
       const current = new Set(
         (await prisma.userTenant.findMany({ where: { userId: id }, select: { tenantId: true } })).map(r => r.tenantId)
       )
@@ -178,49 +222,11 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     //                            /api/v1/rbac/assignments only)
     let rolesChanged: { applied: string | null; tenantCount: number } | null = null
     if (roleId !== undefined) {
-      if (!isProviderView) {
-        return NextResponse.json(
-          { error: "Cross-tenant role propagation is only available from the provider tenant" },
-          { status: 403 }
-        )
-      }
-      if (typeof roleId === "string" && roleId.length > 0 && (PROTECTED_ROLE_IDS as readonly string[]).includes(roleId)) {
-        return NextResponse.json(
-          { error: "Protected roles can't be assigned through this endpoint" },
-          { status: 403 }
-        )
-      }
-      if (typeof roleId === "string" && roleId.length > 0) {
-        const exists = await prisma.rbacRole.findUnique({ where: { id: roleId }, select: { id: true } })
-        if (!exists) {
-          return NextResponse.json({ error: `Unknown role: ${roleId}` }, { status: 400 })
-        }
-      }
-
       const memberships = await prisma.userTenant.findMany({
         where: { userId: id },
         select: { tenantId: true },
       })
 
-      // Tenant-forbidden roles (legacy "global" roles: operator / vm_admin /
-      // viewer / vm_user) grant automation.view, which would unlock DRS /
-      // Site Recovery / Network Security / Resources for a tenant user.
-      // The POST /api/v1/rbac/assignments guard already refuses them on
-      // non-default tenants; this propagation path was the missing
-      // bypass — a direct PATCH with roleId would otherwise propagate
-      // such a role across every membership, including tenant clients.
-      // Mirror the same rule here.
-      if (
-        typeof roleId === "string" &&
-        roleId.length > 0 &&
-        (PROVIDER_ONLY_ROLE_IDS as readonly string[]).includes(roleId) &&
-        memberships.some(m => m.tenantId !== DEFAULT_TENANT_ID)
-      ) {
-        return NextResponse.json(
-          { error: "This role can only be assigned in the provider tenant (default)" },
-          { status: 400 }
-        )
-      }
       const grantedById = session?.user?.id || null
       const now = new Date()
 

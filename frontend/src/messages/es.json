@@ -6917,6 +6917,34 @@
         "regenerateMac": "Generar una nueva MAC",
         "staticGateway": "Gateway",
         "staticDns": "DNS"
+      },
+      "firmware": {
+        "title": "Firmware y pantalla",
+        "firmware": "Firmware",
+        "machine": "Máquina",
+        "machineI440fx": "i440fx",
+        "machineQ35": "q35",
+        "tpm": "TPM 2.0",
+        "diskBus": "Bus del disco",
+        "busScsi": "SCSI (VirtIO SCSI)",
+        "busSata": "SATA",
+        "busVirtio": "VirtIO Block",
+        "busIde": "IDE",
+        "display": "Pantalla",
+        "displayStd": "VGA estándar",
+        "displaySerial": "Consola serie",
+        "displayQxl": "SPICE (qxl)",
+        "displayVirtio": "VirtIO-GPU",
+        "displayVmware": "Compatible con VMware",
+        "fromTemplate": "Leído de la plantilla de la que procede esta imagen.",
+        "windowsHint": "Windows arranca en UEFI y Windows 11 / Server 2022+ necesita un TPM. Sin los controladores VirtIO en la imagen, use SATA.",
+        "serialWarning": "Una pantalla serie deja negra la consola de ProxCenter."
+      },
+      "ha": {
+        "label": "Activar alta disponibilidad",
+        "help": "La VM se añade al gestor HA, que la arranca.",
+        "helpIso": "La VM se añade al gestor HA y queda detenida hasta que inicie la instalación.",
+        "localStorage": "Necesita almacenamiento compartido: el almacenamiento elegido es local a su nodo."
       }
     },
     "deployments": {
@@ -7481,7 +7509,10 @@
         "target": "{volid}: snapshot(s) {snapshots}. Solo pueden enviarse a un almacenamiento del mismo tipo."
       },
       "offlineHint": "Apague la VM y mígrela en frío para conservar sus snapshots, o elimínelos."
-    }
+    },
+    "cloneHa": "Activar alta disponibilidad",
+    "cloneHaHelp": "Se añade al gestor HA y se arranca cuando termina el clon.",
+    "cloneHaLocal": "Necesita almacenamiento compartido: el almacenamiento de destino es local a su nodo."
   },
   "ldap": {
     "description": "Configure la autenticación LDAP/Active Directory para permitir que los usuarios inicien sesión con sus credenciales corporativas.",

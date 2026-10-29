@@ -6917,6 +6917,34 @@
         "regenerateMac": "Generate a new MAC",
         "staticGateway": "Gateway",
         "staticDns": "DNS"
+      },
+      "firmware": {
+        "title": "Firmware and display",
+        "firmware": "Firmware",
+        "machine": "Machine",
+        "machineI440fx": "i440fx",
+        "machineQ35": "q35",
+        "tpm": "TPM 2.0",
+        "diskBus": "Disk bus",
+        "busScsi": "SCSI (VirtIO SCSI)",
+        "busSata": "SATA",
+        "busVirtio": "VirtIO Block",
+        "busIde": "IDE",
+        "display": "Display",
+        "displayStd": "Standard VGA",
+        "displaySerial": "Serial console",
+        "displayQxl": "SPICE (qxl)",
+        "displayVirtio": "VirtIO-GPU",
+        "displayVmware": "VMware compatible",
+        "fromTemplate": "Read from the template this image was taken from.",
+        "windowsHint": "Windows boots in UEFI, and Windows 11 / Server 2022+ needs a TPM. Without the VirtIO drivers in the image, use SATA.",
+        "serialWarning": "A serial display leaves the ProxCenter console black."
+      },
+      "ha": {
+        "label": "Enable high availability",
+        "help": "The VM is added to the HA manager, which starts it.",
+        "helpIso": "The VM is added to the HA manager and stays stopped until you start the installer.",
+        "localStorage": "Needs shared storage: the selected storage is local to its node."
       }
     },
     "deployments": {
@@ -7481,7 +7509,10 @@
         "target": "{volid}: snapshot(s) {snapshots}. They can only be sent to a storage of the same type."
       },
       "offlineHint": "Shut the VM down and migrate it offline to keep its snapshots, or delete them."
-    }
+    },
+    "cloneHa": "Enable high availability",
+    "cloneHaHelp": "Added to the HA manager and started once the clone is done.",
+    "cloneHaLocal": "Needs shared storage: the target storage is local to its node."
   },
   "ldap": {
     "description": "Configure LDAP/Active Directory authentication to allow users to sign in with their corporate credentials.",

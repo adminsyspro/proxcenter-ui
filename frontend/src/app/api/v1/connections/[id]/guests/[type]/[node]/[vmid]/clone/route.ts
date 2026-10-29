@@ -24,6 +24,7 @@ import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { safeLog } from "@/lib/log/sanitize"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
+import { driveStoragesOf, haPermissionDenied, nonSharedStorages, registerHaResource, HA_LOCAL_STORAGE_ERROR } from "@/lib/proxmox/haRegistration"
 
 export const runtime = "nodejs"
 
@@ -194,6 +195,24 @@ async function handler(
       } catch { /* tolerate — fall through, sync will detect drift later */ }
     }
 
+    // HA on the clone (#181): same rights as the HA tab, and every disk of
+    // the clone on shared storage. Without a target storage the clone keeps
+    // the source's storages (always for a linked clone).
+    if (body.ha) {
+      const haDenied = await haPermissionDenied(id)
+      if (haDenied) return haDenied
+      let haStorages: string[]
+      if (body.storage) {
+        haStorages = [body.storage]
+      } else {
+        const sourceConfig = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config`)
+        haStorages = driveStoragesOf(sourceConfig)
+      }
+      if ((await nonSharedStorages(conn, haStorages)).length > 0) {
+        return NextResponse.json({ error: HA_LOCAL_STORAGE_ERROR }, { status: 400 })
+      }
+    }
+
     // Construire l'URL Proxmox pour le clone
     const endpoint = `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/clone`
 
@@ -202,6 +221,7 @@ async function handler(
 
     for (const [key, value] of Object.entries(body)) {
       if (key === 'full') continue // normalized below to a canonical 1/0
+      if (key === 'ha') continue // ProxCenter-only, applied after the clone
       if (value !== undefined && value !== null && value !== '') {
         formData.append(key, String(value))
       }
@@ -339,6 +359,23 @@ async function handler(
       })
     }
 
+    // ── Post-clone HA registration ──
+    // The clone holds a lock until PVE finishes copying: register it only
+    // once the task is done, so HA never tries to start a half-cloned guest.
+    if (body.ha && body.newid) {
+      const haNode = String(body.target || node)
+      const haUpid = String(result || '')
+      const haVmid = Number(body.newid)
+      after(async () => {
+        try {
+          if (haUpid) await waitForTask(conn, haNode, haUpid)
+          await registerHaResource(conn, haVmid, 'started', type as 'qemu' | 'lxc')
+        } catch (err: any) {
+          console.error(`[clone-ha] vmid=${safeLog(haVmid)} HA registration failed: ${safeLog(err?.message ?? err)}`)
+        }
+      })
+    }
+
     // Audit
     const { audit } = await import("@/lib/audit")
 
@@ -347,7 +384,7 @@ async function handler(
       category: type === 'lxc' ? 'containers' : 'vms',
       resourceType: type,
       resourceId: vmid,
-      details: { node, connectionId: id, newVmId: body.newid, newName: body.name },
+      details: { node, connectionId: id, newVmId: body.newid, newName: body.name, ...(body.ha ? { ha: true } : {}) },
     })
 
     return NextResponse.json({

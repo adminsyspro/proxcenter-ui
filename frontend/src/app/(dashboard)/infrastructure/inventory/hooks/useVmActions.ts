@@ -278,7 +278,7 @@ export function useVmActions({
 
   // ── Clone (selected VM panel) ───────────────────────────────────────
 
-  const handleCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean; snapname?: string }) => {
+  const handleCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean; snapname?: string; ha?: boolean }) => {
     if (selection?.type !== 'vm') throw new Error('No VM selected')
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
@@ -296,7 +296,8 @@ export function useVmActions({
           format: params.format || undefined,
           pool: params.pool || undefined,
           full: params.full,
-          snapname: params.snapname || undefined
+          snapname: params.snapname || undefined,
+          ha: params.ha || undefined,
         })
       }
     )
@@ -383,7 +384,7 @@ export function useVmActions({
 
   // ── Table clone ─────────────────────────────────────────────────────
 
-  const handleTableCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean; snapname?: string }) => {
+  const handleTableCloneVm = useCallback(async (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean; snapname?: string; ha?: boolean }) => {
     if (!tableCloneVm) throw new Error('No VM selected for cloning')
 
     const { connId, node, type, vmid } = tableCloneVm
@@ -409,6 +410,10 @@ export function useVmActions({
 
     if (params.snapname) {
       body.snapname = params.snapname
+    }
+
+    if (params.ha) {
+      body.ha = true
     }
 
     const res = await fetch(

@@ -48,6 +48,18 @@ describe('demo change journal', () => {
     expect(demoChangeJournal(now + 60_000).filter(c => Date.parse(c.timestamp) <= now)).toEqual(journal)
   })
 
+  it('attributes every row, with the three levels the AuthorCell badge shows', () => {
+    const levels = new Set(journal.map(c => c.attribution))
+
+    expect([...levels].sort((a, b) => a.localeCompare(b))).toEqual(['inferred', 'unknown', 'verified'])
+    for (const c of journal) {
+      if (c.attribution === 'unknown') expect(c.user).toBe('')
+      else expect(c.actors.some((a: any) => a.name === c.user), String(c.id)).toBe(true)
+      // ProxCenter's token only shows it acting: never the named author.
+      expect(c.user).not.toContain('!')
+    }
+  })
+
   it('backups carry a finished vzdump task the summary can read', () => {
     for (const c of journal.filter(x => x.action === 'backup')) {
       const b = backupSummary(c)

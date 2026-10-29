@@ -10,6 +10,8 @@
  * be expanded, which is what made the old flat seed look dead.
  */
 
+import type { ChangeActor } from '@/lib/changes/attribution'
+
 import mockData from '../mock-data.json'
 
 import type { DemoMockMap, DemoMockResolver } from './index'
@@ -37,6 +39,16 @@ type Draft = {
 }
 
 const USERS = ['root@pam', 'alice@pve', 'admin@pve', 'bob@pve']
+
+// ProxCenter accounts of the demo audit log, and the token ProxCenter acts with.
+const PROXCENTER_USERS = ['alice@demo.proxcenter.io', 'admin@demo.proxcenter.io']
+const PROXCENTER_TOKEN = 'proxcenter@pve!proxcenter'
+
+// The Proxmox task that explains each kind of change (attribution.go tasksByKind).
+const TASK_TYPES: Record<string, string> = {
+  migrated: 'qmigrate', snapshot_created: 'qmsnapshot', snapshot_deleted: 'qmdelsnapshot', snapshot_modified: 'qmsnapshot',
+  created: 'qmcreate', deleted: 'qmdestroy', backup: 'vzdump',
+}
 
 const GUESTS: Guest[] = ((mockData as any)[`/api/v1/connections/${PROD}/resources`]?.data ?? [])
   .filter((r: any) => r.type === 'qemu' && !r.template)
@@ -144,6 +156,37 @@ function backup(g: Guest, day: number, i: number): Draft {
   }
 }
 
+/**
+ * Who made the change and how sure that is, as the orchestrator attributes it:
+ * verified by ProxCenter's audit (or its own migration), inferred from a
+ * Proxmox task or the node journal, unknown when nothing names anyone.
+ */
+function attribute(c: Draft, id: number): { user: string; attribution: string; actors: ChangeActor[] } {
+  const at = new Date(c.at).toISOString()
+  const node = c.node ?? c.guest.node
+  const taskType = TASK_TYPES[c.action] || (c.fields.some(f => f.field.startsWith('scsi') && f.oldValue) ? 'qmresize' : 'qmconfig')
+  const ref = c.task?.upid ?? upid(node, c.at, taskType, c.guest.vmid)
+
+  if (c.action === 'backup') {
+    return { user: 'root@pam', attribution: 'inferred', actors: [{ name: 'root@pam', source: 'task', taskType, node, ref, at }] }
+  }
+
+  const r = rand(id * 7 + 3)
+
+  // Through ProxCenter: its audit names the account, the task only shows its token.
+  if (r < 0.4 || c.action === 'created' || c.action === 'deleted') {
+    const who = pick(PROXCENTER_USERS, id)
+    const evidence: ChangeActor = c.action === 'migrated' ? { name: who, source: 'migration', at } : { name: who, source: 'audit', at }
+
+    return { user: who, attribution: 'verified', actors: [evidence, { name: PROXCENTER_TOKEN, source: 'task', taskType, node, ref, at, token: true }] }
+  }
+
+  if (r < 0.72) return { user: c.user, attribution: 'inferred', actors: [{ name: c.user, source: 'task', taskType, node, ref, at }] }
+  if (r < 0.9) return { user: c.user, attribution: 'inferred', actors: [{ name: c.user, source: 'journal', node, at }] }
+
+  return { user: '', attribution: 'unknown', actors: [] }
+}
+
 /** The journal at a given instant: 30 days, newest first, stable within a day. */
 export function demoChangeJournal(now = Date.now()): any[] {
   if (GUESTS.length === 0) return []
@@ -199,24 +242,28 @@ export function demoChangeJournal(now = Date.now()): any[] {
   return drafts
     .filter(c => c.at <= now)
     .sort((a, b) => b.at - a.at)
-    .map((c, i, all) => ({
-      id: all.length - i,
-      timestamp: new Date(c.at).toISOString(),
-      connectionId: PROD,
-      connectionName: PROD_NAME,
-      resourceType: 'vm',
-      resourceId: String(c.guest.vmid),
-      resourceName: c.guest.name,
-      node: c.node ?? c.guest.node,
-      action: c.action,
-      user: c.user,
-      fields: c.fields,
-      source: c.source ?? 'config_poll',
-      pool: null,
-      ...(c.task
-        ? { taskUpid: c.task.upid, taskStart: new Date(c.task.start).toISOString(), taskEnd: new Date(c.task.end).toISOString(), taskStatus: c.task.status }
-        : {}),
-    }))
+    .map((c, i, all) => {
+      const id = all.length - i
+
+      return {
+        id,
+        timestamp: new Date(c.at).toISOString(),
+        connectionId: PROD,
+        connectionName: PROD_NAME,
+        resourceType: 'vm',
+        resourceId: String(c.guest.vmid),
+        resourceName: c.guest.name,
+        node: c.node ?? c.guest.node,
+        action: c.action,
+        fields: c.fields,
+        source: c.source ?? 'config_poll',
+        pool: null,
+        ...attribute(c, id),
+        ...(c.task
+          ? { taskUpid: c.task.upid, taskStart: new Date(c.task.start).toISOString(), taskEnd: new Date(c.task.end).toISOString(), taskStatus: c.task.status }
+          : {}),
+      }
+    })
 }
 
 /** GET /changes filters and limit, as handler_changes.go and GetChanges apply them. */

@@ -4,6 +4,8 @@
  * See ./index.ts for the contract.
  */
 
+import { parseLogOffset, sliceJobLogs } from '@/lib/migration/jobLogs'
+
 import mockData from '../mock-data.json'
 
 import type { DemoMockMap, DemoMockResolver } from './index'
@@ -1277,12 +1279,23 @@ const GET_ROUTES: [RegExp, Handler][] = [
     .slice(0, Number(url.searchParams.get('limit')) || 50)
     .map((r: any, i: number) => ({ n: i + 1, t: r.raw }))],
   [/^\/api\/v1\/cve\/([^/]+)$/, (m, url) => cveScan(decodeURIComponent(m[1]), url.searchParams.get('node'))],
-  [/^\/api\/v1\/migrations$/, () => ({ data: migrationJobs() })],
+  // The list leaves the logs out and narrows to one source VM; the job read
+  // sends the log lines past ?after= (migrations/route.ts, migrations/[id]/route.ts).
+  [/^\/api\/v1\/migrations$/, (_m, url) => {
+    const vm = url.searchParams.get('sourceVmId')
+    const conn = url.searchParams.get('sourceConnectionId')
+
+    return {
+      data: migrationJobs()
+        .filter(j => (!vm || j.sourceVmId === vm) && (!conn || j.sourceConnectionId === conn))
+        .map(({ logs: _logs, ...job }) => job),
+    }
+  }],
   [/^\/api\/v1\/migrations\/stats$/, () => migrationStats()],
-  [/^\/api\/v1\/migrations\/(demo-mig-\d+)$/, m => {
+  [/^\/api\/v1\/migrations\/(demo-mig-\d+)$/, (m, url) => {
     const job = migrationJobs().find(j => j.id === m[1])
 
-    return job ? { data: job } : null
+    return job ? { data: { ...job, ...sliceJobLogs(job.logs, parseLogOffset(url.searchParams.get('after'))) } } : null
   }],
   [/^\/api\/v1\/vmware\/demo-esxi-001\/vms\/([^/]+)$/, m => vmwareVmDetail(decodeURIComponent(m[1]))],
   [/^\/api\/v1\/vmware\/demo-esxi-001\/vms\/[^/]+\/copy-interfaces$/, () => vmwareCopyInterfaces()],

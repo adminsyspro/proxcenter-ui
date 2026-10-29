@@ -187,6 +187,22 @@ describe('inventory demo mocks: migrations, hosts, tasks', () => {
     expect(stats.data.bySource['demo-esxi-001'].inProgress).toBe(1)
   })
 
+  it('the list leaves logs out and narrows to a source VM; a job read slices its log past ?after=', async () => {
+    // migrations/route.ts omits logs; migrations/[id]/route.ts returns sliceJobLogs (logOffset, logCount).
+    const list = await demoGet('/api/v1/migrations')
+    const job = list.data.find((j: any) => j.status === 'transferring')
+    const one = await demoGet(`/api/v1/migrations?sourceVmId=${job.sourceVmId}&sourceConnectionId=demo-esxi-001`)
+    const full = await demoGet(`/api/v1/migrations/${job.id}`)
+    const tail = await demoGet(`/api/v1/migrations/${job.id}?after=2`)
+
+    expect(list.data.every((j: any) => !('logs' in j))).toBe(true)
+    expect(one.data.map((j: any) => j.id)).toEqual([job.id])
+    expect(full.data.logOffset).toBe(0)
+    expect(full.data.logs).toHaveLength(full.data.logCount)
+    expect(tail.data.logOffset).toBe(2)
+    expect(tail.data.logs).toEqual(full.data.logs.slice(2))
+  })
+
   it('ESXi VM detail and copy interfaces', async () => {
     const vm = await demoGet('/api/v1/vmware/demo-esxi-001/vms/vm-101')
     const ifaces = await demoGet('/api/v1/vmware/demo-esxi-001/vms/vm-101/copy-interfaces')

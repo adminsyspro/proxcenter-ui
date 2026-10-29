@@ -316,6 +316,7 @@ export async function GET(req: Request) {
         where: infra.kind === "provider"
           ? {}
           : { targetConnectionId: { in: Array.from(perimeterConnectionIds) } },
+        omit: { logs: true },
         orderBy: { createdAt: "desc" },
         take: 50,
       })

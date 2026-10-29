@@ -9,7 +9,8 @@ import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import { useHostsByConnection } from '@/hooks/useHosts'
 import { OPEN_BULK_BATCH_EVENT, type OpenBulkBatchDetail } from '@/lib/migration/bulkBatchOpen'
 import { emptyMigrationStats, sumMigrationStats, type MigrationStats } from '@/lib/migration/migration-stats'
-import { bulkBatchFromPayload, bulkRowsFromBatch, bulkSourceTypeLabel, fetchActiveBulkBatch, fetchBulkBatch, isBulkBatchFinished, shouldTrackBulkJob, type BatchPayload, type BulkMigBatch, type BulkMigJobRow } from './bulkJobList'
+import { bulkBatchFromPayload, bulkLogOffsets, bulkRowsFromBatch, bulkSourceTypeLabel, fetchActiveBulkBatch, fetchBulkBatch, isBulkBatchFinished, shouldTrackBulkJob, type BatchPayload, type BulkMigBatch, type BulkMigJobRow } from './bulkJobList'
+import { mergeJobLogs } from '@/lib/migration/jobLogs'
 import { useFavorites } from './hooks/useFavorites'
 import { useMigrationOptions } from './hooks/useMigrationOptions'
 import { useSnapshots } from './hooks/useSnapshots'
@@ -395,6 +396,11 @@ export default function InventoryDetails({
   const [migJobId, setMigJobId] = useState<string | null>(null)
   const [migJob, setMigJob] = useState<any>(null)
   const [vmMigJob, setVmMigJob] = useState<any>(null) // active migration job for current VM panel
+  // The polls below ask only for the log lines past the ones shown (?after=).
+  const migJobRef = useRef(migJob)
+  migJobRef.current = migJob
+  const vmMigJobRef = useRef(vmMigJob)
+  vmMigJobRef.current = vmMigJob
   // Cancel from the VM panel. The migrate dialog owns the same control, but it
   // only exists for a job started from that dialog in the same page session —
   // a job started through the API (or after a reload) could be cut over from
@@ -1043,8 +1049,12 @@ export default function InventoryDetails({
     if (!migJobId) return
     const taskId = `migration-${migJobId}`
     const interval = setInterval(() => {
-      fetch(`/api/v1/migrations/${migJobId}`).then(r => r.json()).then(d => {
-        setMigJob(d.data)
+      // A hidden tab reads nothing; the first tick once it shows again catches up.
+      if (document.hidden) return
+      const shown = migJobRef.current
+      const after = shown?.id === migJobId ? (shown.logs?.length ?? 0) : 0
+      fetch(`/api/v1/migrations/${migJobId}?after=${after}`).then(r => r.json()).then(d => {
+        setMigJob(d.data ? { ...d.data, logs: mergeJobLogs(migJobRef.current, d.data) } : d.data)
         if (d.data) {
           const j = d.data
           const speed = j.transferSpeed ? ` — ${j.transferSpeed}` : ''
@@ -1077,7 +1087,7 @@ export default function InventoryDetails({
   const applyBulkMigSnapshot = (snap: BatchPayload) => {
     const previous = new Map(bulkMigJobsRef.current.map(j => [j.jobId, j]))
     setBulkMigBatch(bulkBatchFromPayload(snap))
-    setBulkMigJobs(bulkRowsFromBatch(snap.jobs))
+    setBulkMigJobs(bulkRowsFromBatch(snap.jobs, bulkMigJobsRef.current))
     const sourceType = bulkSourceTypeLabel(bulkMigHostInfoRef.current?.hostType)
     for (const j of snap.jobs) {
       const prev = previous.get(j.id)
@@ -1096,7 +1106,8 @@ export default function InventoryDetails({
           createdAt: Date.now(),
         })
       }
-      const logsChanged = (j.logs?.length || 0) !== (prev?.logs?.length || 0)
+      // The read may carry only the new lines, from logOffset on.
+      const logsChanged = (j.logOffset ?? 0) + (j.logs?.length ?? 0) !== (prev?.logs?.length || 0)
       if (!added && prev && (j.progress || 0) === prev.progress && j.status === prev.status && !logsChanged) continue
       // Sync to PCTask: prefer j.currentStep (live virt-v2v phase)
       const speed = j.transferSpeed ? ` — ${j.transferSpeed}` : ''
@@ -1132,7 +1143,7 @@ export default function InventoryDetails({
     const batchId = bulkMigBatch.id
     // Resolves true once the batch is over.
     const tick = async (): Promise<boolean> => {
-      const snap = await fetchBulkBatch(batchId)
+      const snap = await fetchBulkBatch(batchId, bulkLogOffsets(bulkMigJobsRef.current))
       if (!snap) return false
       // Closed or replaced while the read was in flight: drop it.
       if (bulkMigBatchRef.current?.id !== batchId) return true
@@ -1140,7 +1151,8 @@ export default function InventoryDetails({
       return isBulkBatchFinished(snap.status, snap.jobs)
     }
     const interval = setInterval(async () => {
-      if (bulkMigTickInFlightRef.current) return
+      // Hidden tab: nothing to follow until it shows again.
+      if (document.hidden || bulkMigTickInFlightRef.current) return
       bulkMigTickInFlightRef.current = true
       try {
         if (await tick()) clearInterval(interval)
@@ -1161,8 +1173,10 @@ export default function InventoryDetails({
   // Fetch active migration job for the currently selected ESXi VM
   useEffect(() => {
     if (selection?.type !== 'extvm') { setVmMigJob(null); return }
-    const vmid = selection.id.split(':')[1]
-    if (!vmid) return
+    const sep = selection.id.indexOf(':')
+    const connId = selection.id.slice(0, sep)
+    const vmid = selection.id.slice(sep + 1)
+    if (sep < 0 || !vmid) return
     let stopped = false
 
     // Resolve the VM's latest job, then keep looking. Resolving once left the
@@ -1170,17 +1184,23 @@ export default function InventoryDetails({
     // started afterwards (from the migrate dialog, or straight through the API)
     // never appeared, so the panel kept showing the previous run's "Completed"
     // chip and no cutover button, and only F5 fixed it.
-    const resolve = () => fetch('/api/v1/migrations').then(r => r.json()).then(d => {
+    // The list leaves the logs out and is filtered on this VM by the server.
+    const query = `sourceConnectionId=${encodeURIComponent(connId)}&sourceVmId=${encodeURIComponent(vmid)}`
+    const resolve = () => fetch(`/api/v1/migrations?${query}`).then(r => r.json()).then(d => {
       if (stopped) return
-      const jobs = d.data || []
-      const match = jobs.find((j: any) => j.sourceVmId === vmid && !['cancelled'].includes(j.status))
-      // Keep the same object while it is the same job, so the detail poller
-      // below is not restarted on every resolution tick.
-      setVmMigJob((prev: any) => (prev?.id === match?.id ? prev : (match || null)))
+      const match = (d.data || []).find((j: any) => j.status !== 'cancelled')
+      // Same job: keep the object, so the detail poller below is not restarted
+      // on every resolution tick.
+      if (match?.id === vmMigJobRef.current?.id) return
+      if (!match) { setVmMigJob(null); return }
+      // A run not shown yet: its full record, logs included.
+      return fetch(`/api/v1/migrations/${match.id}`).then(r => r.json()).then(full => {
+        if (!stopped) setVmMigJob(full.data ?? match)
+      })
     }).catch(() => {})
 
     void resolve()
-    const iv = setInterval(resolve, 10000)
+    const iv = setInterval(() => { if (!document.hidden) void resolve() }, 10000)
     return () => { stopped = true; clearInterval(iv) }
     // migJobId: a migration started from the dialog resolves immediately here
     // instead of waiting for the next tick.
@@ -1240,9 +1260,13 @@ export default function InventoryDetails({
   // Poll active VM migration job
   useEffect(() => {
     if (!vmMigJob || ['completed', 'failed', 'cancelled'].includes(vmMigJob.status)) return
+    const jobId = vmMigJob.id
     const interval = setInterval(() => {
-      fetch(`/api/v1/migrations/${vmMigJob.id}`).then(r => r.json()).then(d => {
-        if (d.data) setVmMigJob(d.data)
+      if (document.hidden) return
+      const shown = vmMigJobRef.current
+      const after = shown?.id === jobId ? (shown.logs?.length ?? 0) : 0
+      fetch(`/api/v1/migrations/${jobId}?after=${after}`).then(r => r.json()).then(d => {
+        if (d.data) setVmMigJob({ ...d.data, logs: mergeJobLogs(vmMigJobRef.current, d.data) })
         if (d.data?.status === 'completed' || d.data?.status === 'failed' || d.data?.status === 'cancelled') {
           clearInterval(interval)
         }

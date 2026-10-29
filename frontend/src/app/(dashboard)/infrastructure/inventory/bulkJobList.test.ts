@@ -114,4 +114,43 @@ describe('bulk batch follow-up helpers (roadmap#53)', () => {
       vi.unstubAllGlobals()
     }
   })
+
+  it('asks only for the log lines past the ones each row shows', async () => {
+    const { fetchBulkBatch } = await import('./bulkJobList')
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: { id: 'b1', jobs: [] } })))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await fetchBulkBatch('b1', [4, 0, 12])
+      await fetchBulkBatch('b1', [])
+      expect(fetchMock.mock.calls.map(c => (c as unknown[])[0])).toEqual([
+        '/api/v1/migrations/batches/b1?logsAfter=4,0,12',
+        '/api/v1/migrations/batches/b1',
+      ])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('extends the log of each row with the new lines a read sent', async () => {
+    const { bulkLogOffsets } = await import('./bulkJobList')
+    const line = (msg: string) => ({ ts: 't', msg, level: 'info' })
+    const shown = bulkRowsFromBatch([
+      { id: 'j1', sourceVmId: 'vm-1', status: 'full_copy', logs: [line('a'), line('b')] },
+      { id: 'j2', sourceVmId: 'vm-2', status: 'queued' },
+    ])
+    expect(bulkLogOffsets(shown)).toEqual([2, 0])
+
+    const next = bulkRowsFromBatch([
+      { id: 'j1', sourceVmId: 'vm-1', status: 'full_copy', logs: [line('c')], logOffset: 2 },
+      { id: 'j2', sourceVmId: 'vm-2', status: 'pending', logs: [line('x')], logOffset: 0 },
+    ], shown)
+
+    expect(next[0].logs?.map(l => l.msg)).toEqual(['a', 'b', 'c'])
+    expect(next[1].logs?.map(l => l.msg)).toEqual(['x'])
+    expect(bulkLogOffsets(next)).toEqual([3, 1])
+
+    // No new line: the row keeps its log.
+    const idle = bulkRowsFromBatch([{ id: 'j1', sourceVmId: 'vm-1', status: 'full_copy', logs: [], logOffset: 3 }], next)
+    expect(idle[0].logs).toHaveLength(3)
+  })
 })

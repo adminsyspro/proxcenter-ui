@@ -38,6 +38,8 @@ export async function GET() {
           ? {}
           : { targetConnectionId: { in: [...scope.reachableConnectionIds] } }),
       },
+      // toSharedTask never reads the log, the detail route sends it.
+      omit: { logs: true },
       orderBy: { updatedAt: "desc" },
       take: 100,
     })

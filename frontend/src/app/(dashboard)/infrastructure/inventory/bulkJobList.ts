@@ -2,6 +2,8 @@
 // count per state and the rows that need attention first, so a batch of
 // dozens of VMs stays readable page by page.
 
+import { mergeJobLogs } from '@/lib/migration/jobLogs'
+
 export interface BulkJobLike {
   vmid: string
   status: string
@@ -110,7 +112,9 @@ export interface BatchJobPayload {
   status: string
   progress?: number | null
   error?: string | null
+  /** From line `logOffset` on, when the read named the lines already shown (logsAfter). */
   logs?: { ts: string; msg: string; level: string }[] | null
+  logOffset?: number
   currentStep?: string | null
   transferSpeed?: string | null
   bytesTransferred?: number | null
@@ -126,19 +130,35 @@ export interface BatchPayload {
   jobs: BatchJobPayload[]
 }
 
-export function bulkRowsFromBatch(jobs: BatchJobPayload[]): BulkMigJobRow[] {
-  return jobs.map(j => ({
-    vmid: j.sourceVmId,
-    name: j.sourceVmName || j.sourceVmId,
-    jobId: j.id,
-    status: j.status,
-    progress: j.progress || 0,
-    ...(j.error ? { error: j.error } : {}),
-    ...(j.logs ? { logs: j.logs } : {}),
-    ...(j.targetNode ? { targetNode: j.targetNode } : {}),
-    ...(j.bytesTransferred != null && Number.isFinite(Number(j.bytesTransferred)) ? { bytesTransferred: Number(j.bytesTransferred) } : {}),
-    ...(j.transferSpeed ? { transferSpeed: j.transferSpeed } : {}),
-  }))
+/**
+ * The dialog rows of a batch read. `previous` (the rows shown so far) carries
+ * the log lines a read that only sent the new ones extends (mergeJobLogs).
+ */
+export function bulkRowsFromBatch(jobs: BatchJobPayload[], previous: BulkMigJobRow[] = []): BulkMigJobRow[] {
+  const shown = new Map(previous.map(r => [r.jobId, r]))
+
+  return jobs.map(j => {
+    const prev = shown.get(j.id)
+    const logs = mergeJobLogs(prev && { id: prev.jobId, logs: prev.logs }, j)
+
+    return {
+      vmid: j.sourceVmId,
+      name: j.sourceVmName || j.sourceVmId,
+      jobId: j.id,
+      status: j.status,
+      progress: j.progress || 0,
+      ...(j.error ? { error: j.error } : {}),
+      ...(logs.length ? { logs } : {}),
+      ...(j.targetNode ? { targetNode: j.targetNode } : {}),
+      ...(j.bytesTransferred != null && Number.isFinite(Number(j.bytesTransferred)) ? { bytesTransferred: Number(j.bytesTransferred) } : {}),
+      ...(j.transferSpeed ? { transferSpeed: j.transferSpeed } : {}),
+    }
+  })
+}
+
+/** The log lines each row already shows, in batch order: the `logsAfter` of the next read. */
+export function bulkLogOffsets(rows: BulkMigJobRow[]): number[] {
+  return rows.map(r => r.logs?.length ?? 0)
 }
 
 /** The batch fields the dialog keeps, from a read of the batch. */
@@ -180,10 +200,14 @@ export function bulkSourceTypeLabel(hostType: string | undefined | null): string
   }
 }
 
-/** One batch with its jobs, or null when it cannot be read right now. */
-export async function fetchBulkBatch(id: string): Promise<BatchPayload | null> {
+/**
+ * One batch with its jobs, or null when it cannot be read right now.
+ * `logsAfter` (bulkLogOffsets of the rows shown) asks only for new log lines.
+ */
+export async function fetchBulkBatch(id: string, logsAfter?: number[]): Promise<BatchPayload | null> {
   try {
-    const res = await fetch(`/api/v1/migrations/batches/${encodeURIComponent(id)}`)
+    const query = logsAfter?.length ? `?logsAfter=${logsAfter.join(',')}` : ''
+    const res = await fetch(`/api/v1/migrations/batches/${encodeURIComponent(id)}${query}`)
     if (!res.ok) return null
     const d = await res.json()
     return d?.data?.id ? d.data as BatchPayload : null

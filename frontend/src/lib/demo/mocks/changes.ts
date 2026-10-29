@@ -7,7 +7,9 @@
  * snapshot_*, scsi/memory/cores hardware, net/ipconfig network, else config),
  * a creation or a deletion carries the whole config, and a backup carries its
  * vzdump task and the snapshot trace it left. Without `fields` a row cannot
- * be expanded, which is what made the old flat seed look dead.
+ * be expanded, which is what made the old flat seed look dead. Infrastructure
+ * rows (firewall, access, storage, node network, failed logins) follow
+ * internal/changes/infra.go and logins.go, one per action.
  */
 
 import type { ChangeActor } from '@/lib/changes/attribution'
@@ -156,6 +158,91 @@ function backup(g: Guest, day: number, i: number): Draft {
   }
 }
 
+type Infra = {
+  ago: number
+  hour: number
+  type: string
+  id: string
+  name: string
+  node?: string
+  action: string
+  fields: Field[]
+  // The ProxCenter account its audit names; Proxmox records no author for these
+  by?: string
+}
+
+const added = (pairs: Record<string, string>): Field[] => Object.entries(pairs).map(([field, v]) => ({ field, oldValue: '', newValue: v }))
+const removed = (pairs: Record<string, string>): Field[] => Object.entries(pairs).map(([field, v]) => ({ field, oldValue: v, newValue: '' }))
+const changed = (field: string, oldValue: string, newValue: string): Field => ({ field, oldValue, newValue })
+
+/** Infrastructure changes as infra.go and logins.go record them, one per action. */
+function infraChanges(): Infra[] {
+  const node = NODES[0] ?? 'pve-node-01'
+  const [alice, admin] = PROXCENTER_USERS
+  const rule = { type: 'in', action: 'ACCEPT', proto: 'tcp' }
+
+  return [
+    { ago: 0, hour: 9, type: 'firewall', id: 'cluster', name: 'Cluster', action: 'firewall_rule_added', by: alice, fields: [changed('pos', '', '0'), ...added({ ...rule, dport: '443', source: '10.20.0.0/16', comment: 'HTTPS from office', enable: '1' })] },
+    { ago: 1, hour: 11, type: 'firewall', id: `node/${node}`, name: node, node, action: 'firewall_rule_changed', fields: [changed('pos', '2', '2'), changed('dport', '22', '2222')] },
+    { ago: 2, hour: 14, type: 'firewall', id: 'group/web', name: 'web', action: 'firewall_rule_removed', by: admin, fields: [changed('pos', '1', ''), ...removed({ ...rule, dport: '8080', comment: 'legacy app' })] },
+    { ago: 3, hour: 10, type: 'firewall', id: 'cluster', name: 'Cluster', action: 'firewall_rules_reordered', fields: [changed('rules', '6', '6')] },
+    { ago: 4, hour: 16, type: 'firewall', id: 'cluster', name: 'Cluster', action: 'firewall_options_changed', by: admin, fields: [changed('policy_in', 'ACCEPT', 'DROP')] },
+    { ago: 5, hour: 9, type: 'firewall', id: 'alias:office', name: 'office', action: 'firewall_alias_added', by: alice, fields: added({ cidr: '10.20.0.0/16', comment: 'Paris office' }) },
+    { ago: 6, hour: 13, type: 'firewall', id: 'alias:office', name: 'office', action: 'firewall_alias_changed', fields: [changed('cidr', '10.20.0.0/16', '10.20.0.0/15')] },
+    { ago: 7, hour: 15, type: 'firewall', id: 'alias:old-dmz', name: 'old-dmz', action: 'firewall_alias_removed', fields: removed({ cidr: '192.168.50.0/24' }) },
+    { ago: 8, hour: 10, type: 'firewall', id: 'group:db', name: 'db', action: 'firewall_group_added', by: admin, fields: added({ comment: 'Database tier' }) },
+    { ago: 9, hour: 11, type: 'firewall', id: 'group:db', name: 'db', action: 'firewall_group_changed', fields: [changed('comment', 'Database tier', 'PostgreSQL and Redis')] },
+    { ago: 10, hour: 17, type: 'firewall', id: 'group:test', name: 'test', action: 'firewall_group_removed', fields: removed({ comment: 'Scratch rules' }) },
+    { ago: 11, hour: 9, type: 'firewall', id: 'ipset:blocklist', name: 'blocklist', action: 'firewall_ipset_added', by: alice, fields: added({ comment: 'Known scanners' }) },
+    { ago: 12, hour: 14, type: 'firewall', id: 'ipset:blocklist', name: 'blocklist', action: 'firewall_ipset_changed', by: alice, fields: [changed('cidr', '', '203.0.113.0/24'), changed('cidr', '198.51.100.7', '')] },
+    { ago: 13, hour: 16, type: 'firewall', id: 'ipset:partners', name: 'partners', action: 'firewall_ipset_removed', fields: removed({ comment: 'Former partner VPN' }) },
+    { ago: 1, hour: 10, type: 'access', id: 'acl:/vms/101 user:bob@pve PVEVMUser', name: '/vms/101', action: 'acl_added', fields: added({ path: '/vms/101', type: 'user', ugid: 'bob@pve', roleid: 'PVEVMUser', propagate: '1' }) },
+    { ago: 4, hour: 12, type: 'access', id: 'acl:/ group:ops PVEAuditor', name: '/', action: 'acl_changed', fields: [changed('propagate', '0', '1')] },
+    { ago: 14, hour: 15, type: 'access', id: 'acl:/storage user:carol@pve PVEDatastoreUser', name: '/storage', action: 'acl_removed', fields: removed({ path: '/storage', type: 'user', ugid: 'carol@pve', roleid: 'PVEDatastoreUser' }) },
+    { ago: 2, hour: 9, type: 'access', id: 'user:dave@pve', name: 'dave@pve', action: 'user_added', fields: added({ email: 'dave@example.com', enable: '1', groups: 'ops' }) },
+    { ago: 15, hour: 11, type: 'access', id: 'user:bob@pve', name: 'bob@pve', action: 'user_changed', fields: [changed('groups', 'dev', 'dev,ops')] },
+    { ago: 16, hour: 18, type: 'access', id: 'user:carol@pve', name: 'carol@pve', action: 'user_removed', fields: removed({ email: 'carol@example.com', enable: '1' }) },
+    { ago: 17, hour: 10, type: 'access', id: 'group:ops', name: 'ops', action: 'group_added', fields: added({ comment: 'Operations' }) },
+    { ago: 18, hour: 13, type: 'access', id: 'group:ops', name: 'ops', action: 'group_changed', fields: [changed('users', 'bob@pve', 'bob@pve,dave@pve')] },
+    { ago: 19, hour: 16, type: 'access', id: 'group:interns', name: 'interns', action: 'group_removed', fields: removed({ comment: 'Summer interns' }) },
+    { ago: 3, hour: 15, type: 'access', id: 'token:root@pam!backup', name: 'root@pam!backup', action: 'token_added', fields: added({ tokenid: 'backup', privsep: '1', comment: 'Offsite backup' }) },
+    { ago: 20, hour: 9, type: 'access', id: 'token:root@pam!backup', name: 'root@pam!backup', action: 'token_changed', fields: [changed('expire', '0', '1798761600')] },
+    { ago: 21, hour: 14, type: 'access', id: 'token:root@pam!ci', name: 'root@pam!ci', action: 'token_removed', fields: removed({ tokenid: 'ci', privsep: '1', comment: 'Old CI runner' }) },
+    { ago: 0, hour: 7, type: 'access', id: 'login:root@pam from 198.51.100.23', name: 'root@pam', node, action: 'login_failed', fields: added({ user: 'root@pam', rhost: '198.51.100.23', count: '4', first: '', last: '' }) },
+    { ago: 22, hour: 10, type: 'storage', id: 'nfs-archive', name: 'nfs-archive', action: 'storage_added', by: admin, fields: added({ type: 'nfs', content: 'backup,iso', server: '10.0.5.20', export: '/srv/archive' }) },
+    { ago: 23, hour: 11, type: 'storage', id: 'local', name: 'local', action: 'storage_changed', fields: [changed('content', 'iso,vztmpl', 'backup,iso,vztmpl')] },
+    { ago: 24, hour: 17, type: 'storage', id: 'old-nas', name: 'old-nas', action: 'storage_removed', by: admin, fields: removed({ type: 'cifs', content: 'backup', server: '10.0.5.9' }) },
+    { ago: 25, hour: 9, type: 'network', id: `${node}:vmbr2`, name: 'vmbr2', node, action: 'iface_added', fields: added({ type: 'bridge', cidr: '10.30.0.2/24', bridge_ports: 'eno3', pending: '1' }) },
+    { ago: 26, hour: 12, type: 'network', id: `${node}:bond0`, name: 'bond0', node, action: 'iface_changed', fields: [changed('bond_mode', 'active-backup', '802.3ad')] },
+    { ago: 27, hour: 15, type: 'network', id: `${node}:vmbr9`, name: 'vmbr9', node, action: 'iface_removed', fields: removed({ type: 'bridge', cidr: '192.168.99.1/24' }) },
+  ]
+}
+
+function infraRow(c: Infra, at: number) {
+  const iso = new Date(at).toISOString()
+  // A failed-login row spans the attempts the node journal holds
+  const fields = c.action === 'login_failed'
+    ? c.fields.map(f => (f.field === 'first' ? { ...f, newValue: new Date(at - 6 * MIN).toISOString() } : f.field === 'last' ? { ...f, newValue: iso } : f))
+    : c.fields
+
+  return {
+    timestamp: iso,
+    connectionId: PROD,
+    connectionName: PROD_NAME,
+    resourceType: c.type,
+    resourceId: c.id,
+    resourceName: c.name,
+    node: c.node ?? '',
+    action: c.action,
+    fields,
+    source: c.action === 'login_failed' ? 'node_journal' : 'config_poll',
+    pool: null,
+    ...(c.by
+      ? { user: c.by, attribution: 'verified', actors: [{ name: c.by, source: 'audit', at: iso }] }
+      : { user: '', attribution: 'unknown', actors: [] }),
+  }
+}
+
 /**
  * Who made the change and how sure that is, as the orchestrator attributes it:
  * verified by ProxCenter's audit (or its own migration), inferred from a
@@ -239,31 +326,40 @@ export function demoChangeJournal(now = Date.now()): any[] {
     }
   }
 
-  return drafts
-    .filter(c => c.at <= now)
-    .sort((a, b) => b.at - a.at)
-    .map((c, i, all) => {
-      const id = all.length - i
+  const entries: { at: number; row: (id: number) => any }[] = [
+    ...drafts.map(c => ({ at: c.at, row: (id: number) => guestRow(c, id) })),
+    ...infraChanges().map(c => {
+      const at = today - c.ago * DAY + c.hour * HOUR + (c.ago * 7 % 50) * MIN
 
-      return {
-        id,
-        timestamp: new Date(c.at).toISOString(),
-        connectionId: PROD,
-        connectionName: PROD_NAME,
-        resourceType: 'vm',
-        resourceId: String(c.guest.vmid),
-        resourceName: c.guest.name,
-        node: c.node ?? c.guest.node,
-        action: c.action,
-        fields: c.fields,
-        source: c.source ?? 'config_poll',
-        pool: null,
-        ...attribute(c, id),
-        ...(c.task
-          ? { taskUpid: c.task.upid, taskStart: new Date(c.task.start).toISOString(), taskEnd: new Date(c.task.end).toISOString(), taskStatus: c.task.status }
-          : {}),
-      }
-    })
+      return { at, row: (id: number) => ({ id, ...infraRow(c, at) }) }
+    }),
+  ]
+
+  return entries
+    .filter(e => e.at <= now)
+    .sort((a, b) => b.at - a.at)
+    .map((e, i, all) => e.row(all.length - i))
+}
+
+function guestRow(c: Draft, id: number) {
+  return {
+    id,
+    timestamp: new Date(c.at).toISOString(),
+    connectionId: PROD,
+    connectionName: PROD_NAME,
+    resourceType: 'vm',
+    resourceId: String(c.guest.vmid),
+    resourceName: c.guest.name,
+    node: c.node ?? c.guest.node,
+    action: c.action,
+    fields: c.fields,
+    source: c.source ?? 'config_poll',
+    pool: null,
+    ...attribute(c, id),
+    ...(c.task
+      ? { taskUpid: c.task.upid, taskStart: new Date(c.task.start).toISOString(), taskEnd: new Date(c.task.end).toISOString(), taskStatus: c.task.status }
+      : {}),
+  }
 }
 
 /** GET /changes filters and limit, as handler_changes.go and GetChanges apply them. */

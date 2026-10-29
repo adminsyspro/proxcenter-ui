@@ -62,12 +62,37 @@ interface BackupJob {
   exclude?: string
   'prune-backups'?: string
   namespace?: string
+  /** PVE `next-run`, unix seconds, as computed by Proxmox from the calendar event. */
+  nextRun?: number | null
   [key: string]: any
 }
 
 interface BackupJobsPanelProps {
   connectionId: string
   onError?: (error: string) => void
+}
+
+/**
+ * Prochain run : celui que Proxmox calcule (`next-run`). Un événement
+ * calendaire (sat 02:00, mon..fri 21:00) ne se réduit pas à HH:MM, donc on ne
+ * recalcule que ce cas et on rend null sinon.
+ */
+export function nextRunDate(job: { schedule?: string; nextRun?: number | null }, now = new Date()): Date | null {
+  let next: Date | null = null
+
+  if (typeof job.nextRun === 'number' && job.nextRun > 0) {
+    next = new Date(job.nextRun * 1000)
+  } else {
+    const m = /^(\d{1,2}):(\d{2})$/.exec((job.schedule || '').trim())
+
+    if (m) {
+      next = new Date(now)
+      next.setHours(Number(m[1]), Number(m[2]), 0, 0)
+      if (next <= now) next.setDate(next.getDate() + 1)
+    }
+  }
+
+  return next && !Number.isNaN(next.getTime()) ? next : null
 }
 
 function parsePruneBackups(raw: string | null | undefined) {
@@ -469,19 +494,11 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
     return '—'
   }
 
-  // Calculer le prochain run
-  const getNextRun = (schedule: string) => {
-    if (!schedule) return '—'
-    
-    const now = new Date()
-    const [hours, minutes] = schedule.split(':').map(Number)
-    const next = new Date(now)
-    next.setHours(hours, minutes, 0, 0)
-    
-    if (next <= now) {
-      next.setDate(next.getDate() + 1)
-    }
-    
+  const getNextRun = (job: Pick<BackupJob, 'schedule' | 'nextRun'>) => {
+    const next = nextRunDate(job)
+
+    if (!next) return '—'
+
     return next.toLocaleString(dateLocale, {
       day: '2-digit', 
       month: '2-digit', 
@@ -539,7 +556,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
       width: 150,
       renderCell: (params) => (
         <Box sx={cellAlign}>
-          <Typography variant="caption">{getNextRun(params.row.schedule)}</Typography>
+          <Typography variant="caption">{getNextRun(params.row)}</Typography>
         </Box>
       )
     },
@@ -1177,7 +1194,7 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
                     [t('inventory.compression'), detailJob.compress || 'zstd'],
                     [t('inventory.scheduleHeader'), detailJob.schedule],
                     [t('inventory.modeLabel'), detailJob.mode],
-                    [t('inventory.nextRun'), getNextRun(detailJob.schedule)],
+                    [t('inventory.nextRun'), getNextRun(detailJob)],
                     [t('common.enabled'), detailJob.enabled ? t('common.yes') : t('common.no')],
                     [t('inventory.selectionMode'), formatSelection(detailJob)],
                   ].map(([label, value], i) => (

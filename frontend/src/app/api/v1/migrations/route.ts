@@ -65,15 +65,26 @@ async function handlePost(req: Request) {
 
 /**
  * GET /api/v1/migrations
- * List migration jobs
+ * The last 50 migration jobs, without their logs (GET /api/v1/migrations/[id]
+ * has them). ?sourceVmId= (and ?sourceConnectionId=) keep the jobs of one
+ * source VM: the inventory looks up the run of the VM it shows.
  */
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
     if (denied) return denied
 
+    const { searchParams } = new URL(req.url)
+    const sourceVmId = searchParams.get("sourceVmId")
+    const sourceConnectionId = searchParams.get("sourceConnectionId")
+
     const jobs = await prisma.migrationJob.findMany({
+      where: {
+        ...(sourceVmId ? { sourceVmId } : {}),
+        ...(sourceConnectionId ? { sourceConnectionId } : {}),
+      },
+      omit: { logs: true },
       orderBy: { createdAt: "desc" },
       take: 50,
     })
@@ -83,7 +94,6 @@ export async function GET() {
         ...j,
         bytesTransferred: j.bytesTransferred ? Number(j.bytesTransferred) : null,
         totalBytes: j.totalBytes ? Number(j.totalBytes) : null,
-        logs: j.logs ?? [],
       })),
     })
   } catch (e: any) {

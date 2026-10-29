@@ -22,6 +22,8 @@ export type ChangeRecord = {
   resourceName?: string
   action?: string
   user?: string
+  /** verified, inferred or unknown; absent on a row from before attribution */
+  attribution?: string
   node?: string
   connectionName?: string
   connectionId?: string
@@ -32,6 +34,8 @@ export type ChangesCsvLabels = {
   headers: readonly string[]
   resourceType: (type: string | undefined) => string
   action: (action: string | undefined) => string
+  /** The attribution's label; empty for a row from before attribution */
+  attribution: (attribution: string | undefined) => string
 }
 
 /** `cores: 2 -> 4; memory: 4096 -> 8192`, in the timeline's own order. */
@@ -58,6 +62,7 @@ export function buildChangesCsvRows(
     change.connectionName || change.connectionId || '',
     Array.isArray(change.fields) ? change.fields.length : 0,
     formatFieldDiffs(change.fields),
+    labels.attribution(change.attribution),
   ])
 }
 

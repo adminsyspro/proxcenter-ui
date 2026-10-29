@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { requireProviderAdmin } from '@/lib/tenant/providerGuard'
-import { buildChangeVisibilityCtx, isChangeVisibleToTenant } from '@/lib/changes/visibility'
+import { buildChangeVisibilityCtx, isChangeVisibleToTenant, redactChangeForTenant } from '@/lib/changes/visibility'
 import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
@@ -22,16 +22,18 @@ export async function GET(req: Request) {
       params.set(key, value)
     }
 
-    // Multi-tenant clusters need more than a connection-level filter: change
-    // records carry no pool field, so guest ownership (vDC pool VMIDs) is the
-    // mask that separates neighbours. Shared logic with /changes/recent.
+    // Multi-tenant clusters need more than a connection-level filter: the pool
+    // a guest record was written under separates neighbours, and an author
+    // from another tenant is masked. Shared logic with /changes/recent.
     const ctx = await buildChangeVisibilityCtx()
 
     const query = params.toString()
     const data = await orchestratorFetch<any>(`/changes${query ? `?${query}` : ''}`)
 
     if (data?.data && Array.isArray(data.data)) {
-      data.data = data.data.filter((c: any) => isChangeVisibleToTenant(c, ctx))
+      data.data = data.data
+        .filter((c: any) => isChangeVisibleToTenant(c, ctx))
+        .map((c: any) => redactChangeForTenant(c, ctx))
     }
 
     return NextResponse.json(data)

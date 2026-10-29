@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { orchestratorFetch } from '@/lib/orchestrator/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
-import { buildChangeVisibilityCtx, isChangeVisibleToTenant } from '@/lib/changes/visibility'
+import { buildChangeVisibilityCtx, isChangeVisibleToTenant, redactChangeForTenant } from '@/lib/changes/visibility'
 
 export const runtime = 'nodejs'
 
@@ -16,10 +16,10 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const limit = Number.parseInt(searchParams.get('limit') || '10')
 
-    // Same multi-tenant tightening as /api/v1/changes — connection-level
-    // filtering alone leaks neighbour activity on shared clusters, and the
-    // change feed carries no pool field, so guest ownership (vDC pool
-    // VMIDs) is the mask. Shared logic with /changes.
+    // Same multi-tenant tightening as /api/v1/changes: connection-level
+    // filtering alone leaks neighbour activity on shared clusters, so the
+    // pool a guest record was written under is the mask, and an author from
+    // another tenant is masked too. Shared logic with /changes.
     const ctx = await buildChangeVisibilityCtx()
 
     const data = await orchestratorFetch<any>(`/changes/recent?limit=100`)
@@ -28,6 +28,7 @@ export async function GET(req: Request) {
       data.data = data.data
         .filter((c: any) => isChangeVisibleToTenant(c, ctx))
         .slice(0, limit)
+        .map((c: any) => redactChangeForTenant(c, ctx))
     }
 
     return NextResponse.json(data)

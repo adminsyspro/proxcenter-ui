@@ -71,6 +71,14 @@ describe('journalUsers', () => {
 
     expect(journalUsers(rows)).toEqual(['root@pam', 'system'])
   })
+
+  it('lists each account of a change naming several, and filters on any of them', () => {
+    const rows = [change({ id: 1, user: 'ops@example.com, alice@pve' }), change({ id: 2, user: 'alice@pve' })]
+
+    expect(journalUsers(rows)).toEqual(['alice@pve', 'ops@example.com'])
+    expect(filterJournal(rows, { user: 'alice@pve' }).map(r => r.id)).toEqual([1, 2])
+    expect(filterJournal(rows, { user: 'ops@example.com' }).map(r => r.id)).toEqual([1])
+  })
 })
 
 describe('backupSummary', () => {

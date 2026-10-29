@@ -21,7 +21,9 @@ import { useTheme } from '@mui/material/styles'
 
 import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
 import ActivityTimeline from '@/components/changes/ActivityTimeline'
+import { AuthorCell, AuthorEvidence } from '@/components/changes/AuthorCell'
 import ChangeDetails, { FieldDiff } from '@/components/changes/ChangeDetails'
+import { attributionOf } from '@/lib/changes/attribution'
 import { fieldKey, withKeys } from '@/lib/changes/keys'
 import { FactSummary } from '@/components/changes/FactLine'
 import { PAGE_SIZES, STICKY_PAGER_SX } from '@/components/ui/PagedRows'
@@ -292,7 +294,8 @@ export default function ChangeJournal({
     )
   }
 
-  const hasDetails = (c: JournalChange) => c.action === 'backup' || (c.fields?.length || 0) > 0
+  const hasDetails = (c: JournalChange) =>
+    c.action === 'backup' || (c.fields?.length || 0) > 0 || attributionOf([c]) !== undefined
 
   const actionIcon = (action: string | undefined, size = 24) => {
     const meta = actionMeta(action)
@@ -407,12 +410,13 @@ export default function ChangeJournal({
               {actionIcon(c.action, 20)}
               <Typography variant='caption' sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t(actionMeta(c.action).label)}</Typography>
               <FactSummary fields={c.fields} side={sideOf(c)} empty={t('changes.noVisibleDiff')} />
-              <Typography variant='caption' sx={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.user}</Typography>
+              <AuthorCell changes={[c]} />
               <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 16, opacity: 0.6 }} />
             </Box>
             <Collapse in={open} unmountOnExit>
-              <Box sx={{ pl: 9, pr: 1, pt: 0.5, pb: 1.5 }}>
+              <Box sx={{ pl: 9, pr: 1, pt: 0.5, pb: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 <ChangeDetails fields={c.fields} side={sideOf(c)} />
+                <AuthorEvidence change={c} />
               </Box>
             </Collapse>
           </Box>
@@ -423,9 +427,16 @@ export default function ChangeJournal({
 
   const entryDetails = (e: JournalEntry, net: JournalChange['fields']) => {
     if (e.changes.length > 1) return burstDetails(e, net)
-    if (e.latest.action === 'backup') return backupDetails(e.latest)
 
-    return <ChangeDetails fields={e.latest.fields} side={sideOf(e.latest)} />
+    const c = e.latest
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {c.action === 'backup' && backupDetails(c)}
+        {c.action !== 'backup' && (c.fields?.length || 0) > 0 && <ChangeDetails fields={c.fields} side={sideOf(c)} />}
+        <AuthorEvidence change={c} />
+      </Box>
+    )
   }
 
   const entryRow = (e: JournalEntry) => {
@@ -435,7 +446,6 @@ export default function ChangeJournal({
     const details = burst || hasDetails(c)
     const toggle = () => details && setExpanded(prev => ({ ...prev, [c.id]: !prev[c.id] }))
     const sameAction = e.changes.every(x => x.action === c.action)
-    const authors = [...new Set(e.changes.map(x => x.user).filter(Boolean))]
     // A burst reads as its net effect, oldest change first
     const net = burst ? netFields([...e.changes].reverse()) : undefined
 
@@ -461,9 +471,7 @@ export default function ChangeJournal({
 
           {burst ? <FactSummary fields={net} empty={t('changes.burstNoNet')} /> : detailCell(c)}
 
-          <Typography variant='caption' title={authors.join(', ')} sx={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {authors.join(', ')}
-          </Typography>
+          <AuthorCell changes={e.changes} />
 
           {locationCell(c)}
 

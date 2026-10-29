@@ -18,6 +18,7 @@ import {
   Typography
 } from '@mui/material'
 
+import { ATTRIBUTION_META, isAttribution } from '@/lib/changes/attribution'
 import { buildChangesCsv } from '@/lib/changes/csv'
 import { actionMeta } from '@/lib/changes/journal'
 import type { JournalChange } from '@/lib/changes/journal'
@@ -89,10 +90,12 @@ export default function ChangesPage() {
         t('changes.csvNode'),
         t('changes.csvConnection'),
         t('changes.csvFieldCount'),
-        t('changes.csvDetails')
+        t('changes.csvDetails'),
+        t('changes.csvAttribution')
       ],
       resourceType: type => RESOURCE_LABELS[type || ''] || type || '',
-      action: action => (action ? t(actionMeta(action).label) : '')
+      action: action => (action ? t(actionMeta(action).label) : ''),
+      attribution: level => (isAttribution(level) ? t(ATTRIBUTION_META[level].label) : '')
     })
 
     downloadCsv(csv, `changes-${dateStamp()}.csv`)

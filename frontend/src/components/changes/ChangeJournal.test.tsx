@@ -253,4 +253,25 @@ describe('ChangeJournal', () => {
     renderWithProviders(<ChangeJournal changes={CHANGES.slice(0, 1)} showResource={false} filters={[]} />)
     expect(screen.queryByText('Resource')).not.toBeInTheDocument()
   })
+
+  it('opens an attributed change on who made it, even without a diff to show', () => {
+    const at = ago(5 * MIN)
+    const attributed: JournalChange[] = [
+      {
+        ...base, id: 400, timestamp: at, resourceId: '400', resourceName: 'audited', action: 'snapshot_created', fields: [],
+        user: 'ops@example.com', attribution: 'verified', actors: [{ name: 'ops@example.com', source: 'audit', at }]
+      },
+      {
+        ...base, id: 401, timestamp: ago(90 * MIN), resourceId: '401', resourceName: 'shared', action: 'config_changed', fields: [f('cores', '1', '2')],
+        user: 'ops@example.com, alice@pve', attribution: 'inferred', actors: [{ name: 'alice@pve', source: 'journal', at, node: 'pve1' }]
+      }
+    ]
+
+    renderWithProviders(<ChangeJournal changes={attributed} />)
+    expect(screen.getByLabelText('Verified')).toBeInTheDocument()
+
+    toggleRow('audited')
+    expect(screen.getByText('Author · Verified')).toBeInTheDocument()
+    expect(screen.getByText('ProxCenter audit log')).toBeInTheDocument()
+  })
 })

@@ -25,17 +25,25 @@
  *  - caller RBAC infra scope   → ANDed on top of all of the above: a
  *                               connection / node scoped user only sees the
  *                               records attributable to their grants (#525).
+ *
+ * A record that survives may still name, as its author, a ProxCenter account
+ * of another tenant (the provider's staff acting on a vDC guest):
+ * redactChangeForTenant shows that account as ProxCenter.
  */
 
 import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getCurrentRbacInfraScope, PERMISSIONS } from "@/lib/rbac"
 import { isFlatRecordVisible, type RbacInfraScope } from "@/lib/rbac/infraScope"
+import type { ChangeActor } from "@/lib/changes/attribution"
+
+export type { ChangeActor } from "@/lib/changes/attribution"
 
 const GUEST_RESOURCE_TYPES = new Set(["vm", "ct"])
 
 export interface ChangeVisibilityCtx {
   infraKind: string
+  tenantId: string
   tenantConnectionIds: Set<string>
   vdcScope: ReturnType<typeof maskingScope>
   /** Caller's RBAC infra scope; absent or null = unrestricted (issue #525). */
@@ -48,6 +56,7 @@ export async function buildChangeVisibilityCtx(): Promise<ChangeVisibilityCtx> {
 
   return {
     infraKind: infra.kind,
+    tenantId,
     tenantConnectionIds: await getTenantConnectionIds(),
     vdcScope: maskingScope(infra),
     rbacScope: await getCurrentRbacInfraScope(PERMISSIONS.CONNECTION_VIEW),
@@ -89,4 +98,30 @@ export function isChangeVisibleToTenant(c: any, ctx: ChangeVisibilityCtx): boole
   if (typeof c.pool !== "string") return false
 
   return Boolean(ctx.vdcScope.poolsByConnection?.get(c.connectionId)?.has(c.pool))
+}
+
+/** What a ProxCenter account of another tenant is shown as. */
+export const MASKED_ACTOR = "ProxCenter"
+
+/**
+ * The record as the caller's tenant may read it. The provider sees every
+ * author. Any other tenant sees the ProxCenter accounts of its own tenant by
+ * their address and those of another as ProxCenter, and no tenant IDs.
+ */
+export function redactChangeForTenant<T extends { user?: string; actors?: ChangeActor[] }>(c: T, ctx: ChangeVisibilityCtx): T {
+  if (ctx.infraKind === "provider" || !Array.isArray(c.actors) || c.actors.length === 0) return c
+
+  const hidden = new Set<string>()
+  const actors = c.actors.map(({ tenantId, ...a }) => {
+    // ProxCenter's own records name its accounts: the audit, a migration job
+    if ((a.source !== "audit" && a.source !== "migration") || tenantId === ctx.tenantId) return a
+    hidden.add(a.name)
+
+    return { ...a, name: MASKED_ACTOR, ref: undefined, masked: true }
+  })
+  if (hidden.size === 0) return { ...c, actors }
+
+  const names = (c.user || "").split(", ").filter(Boolean).map(n => (hidden.has(n) ? MASKED_ACTOR : n))
+
+  return { ...c, actors, user: [...new Set(names)].join(", ") }
 }

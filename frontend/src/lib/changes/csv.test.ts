@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { buildChangesCsv, buildChangesCsvRows, formatFieldDiffs } from './csv'
 
 const labels = {
-  headers: ['Date', 'Type', 'ID', 'Name', 'Action', 'User', 'Node', 'Connection', 'Fields', 'Details'],
+  headers: ['Date', 'Type', 'ID', 'Name', 'Action', 'User', 'Node', 'Connection', 'Fields', 'Details', 'Attribution'],
   resourceType: (type?: string) => (type === 'vm' ? 'VM' : (type ?? '')),
   action: (action?: string) => (action === 'config_changed' ? 'Configuration' : (action ?? '')),
+  attribution: (attribution?: string) => (attribution === 'verified' ? 'Verified' : ''),
 }
 
 const change = (over: Record<string, unknown> = {}) => ({
@@ -15,6 +16,7 @@ const change = (over: Record<string, unknown> = {}) => ({
   resourceName: 'web01',
   action: 'config_changed',
   user: 'root@pam',
+  attribution: 'verified',
   node: 'pve1',
   connectionName: 'PVE-PROD',
   fields: [{ field: 'cores', oldValue: '2', newValue: '4' }],
@@ -57,7 +59,12 @@ describe('buildChangesCsvRows', () => {
       'PVE-PROD',
       1,
       'cores: 2 -> 4',
+      'Verified',
     ])
+  })
+
+  it('leaves the attribution empty on a row from before it', () => {
+    expect(buildChangesCsvRows([change({ attribution: undefined })], labels)[0][10]).toBe('')
   })
 
   it('falls back to the connection id when the name never came back', () => {

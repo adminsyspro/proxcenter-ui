@@ -4,6 +4,8 @@
  * the Changes tab of a guest, node or cluster, so both read the same.
  */
 
+import { authorsOf } from './attribution'
+import type { ChangeActor } from './attribution'
 import type { ChangeFieldDiff, ChangeRecord } from './csv'
 
 export type JournalChange = ChangeRecord & {
@@ -15,6 +17,8 @@ export type JournalChange = ChangeRecord & {
   taskStart?: string
   taskEnd?: string
   taskStatus?: string
+  attribution?: string
+  actors?: ChangeActor[]
 }
 
 export type ActionColor = 'info' | 'success' | 'error' | 'warning'
@@ -87,7 +91,7 @@ export function filterJournal<T extends JournalChange>(changes: readonly T[], fi
   return changes.filter(c => {
     if (filter.family && actionMeta(c.action).family !== filter.family) return false
     if (filter.resourceType && c.resourceType !== filter.resourceType) return false
-    if (filter.user && c.user !== filter.user) return false
+    if (filter.user && !authorsOf(c).includes(filter.user)) return false
     if (filter.from !== undefined || filter.to !== undefined) {
       const at = new Date(c.timestamp).getTime()
 
@@ -102,9 +106,9 @@ export function filterJournal<T extends JournalChange>(changes: readonly T[], fi
   })
 }
 
-/** The authors present in the changes, sorted, for the author filter. */
+/** The authors present in the changes, each account once, sorted, for the author filter. */
 export function journalUsers(changes: readonly JournalChange[]): string[] {
-  return [...new Set(changes.map(c => c.user).filter((u): u is string => !!u))].sort((a, b) => a.localeCompare(b))
+  return [...new Set(changes.flatMap(authorsOf))].sort((a, b) => a.localeCompare(b))
 }
 
 /** Changes on one resource close enough in time to read as one burst. */

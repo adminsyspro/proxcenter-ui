@@ -13,6 +13,7 @@
 //   during ROTATED_COOLDOWN_MS, the time PVE may still spend on it.
 // Reads of the current file (no `since`, no `until`) pass through untouched.
 
+import { errorMessage } from './loadError'
 import { logLineTime } from './logParse'
 
 import type { LogPage, LogPageQuery, LogPageReader } from './logWindow'
@@ -21,7 +22,7 @@ import type { FirewallLogEntry } from '@/lib/api/firewall'
 export const ROTATED_COOLDOWN_MS = 15 * 60_000
 
 /** A rotation is daily; an entry older than this is read again anyway. */
-const CACHE_TTL_MS = 6 * 3600_000
+const CACHE_TTL_MS = 6 * 3_600_000
 const MAX_CACHED_LOGS = 64
 
 /** A 403 costs PVE nothing: it never starts a cooldown. */
@@ -121,9 +122,7 @@ export function gateRotatedReads(read: LogPageReader, key: RotatedLogKey, maxLin
         return covered
       },
       (err: unknown) => {
-        const message = String((err as { message?: string })?.message || err)
-
-        if (!PERMISSION_RE.test(message)) cooling.set(key.node, now() + ROTATED_COOLDOWN_MS)
+        if (!PERMISSION_RE.test(errorMessage(err))) cooling.set(key.node, now() + ROTATED_COOLDOWN_MS)
         throw err
       },
     )

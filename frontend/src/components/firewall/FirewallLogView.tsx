@@ -325,7 +325,7 @@ export default function FirewallLogView({ connectionId, scope: scopeProp, guests
         </TextField>
         <Tooltip title={t('common.refresh')}>
           <span>
-            <IconButton aria-label={t('common.refresh')} size="small" onClick={() => { setLoading(true); load(false) }} disabled={loading}>
+            <IconButton aria-label={t('common.refresh')} size="small" onClick={() => { setLoading(true); void load(false) }} disabled={loading}>
               <i className={`ri-refresh-line ${loading ? 'animate-spin' : ''}`} style={{ fontSize: 18 }} />
             </IconButton>
           </span>

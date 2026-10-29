@@ -12,11 +12,13 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
-import { collectFirewallLog } from '@/lib/firewall/logs'
+import { collectFirewallLog, MAX_SCAN_LINES } from '@/lib/firewall/logs'
+import { gateRotatedReads } from '@/lib/firewall/rotatedLogGate'
 import * as pveDirect from '@/lib/firewall/pveDirect'
+import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 
 import type { FirewallLogScope, LogWindowSec } from '@/lib/firewall/logs'
-import type { LogPage, LogPageQuery } from '@/lib/firewall/logWindow'
+import type { LogPage, LogPageQuery, LogPageReader } from '@/lib/firewall/logWindow'
 import type { Alias, FirewallRule, IPSet, SecurityGroup } from '@/lib/api/firewall'
 
 type RouteContext = { params: Promise<{ connectionId: string }> }
@@ -68,6 +70,12 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       if (!NODE_RE.test(node)) return badRequest('invalid node')
       if (vmType !== 'qemu' && vmType !== 'lxc') return badRequest('invalid vmType')
       if (!Number.isInteger(vmid) || vmid <= 0) return badRequest('invalid vmid')
+
+      // node.view is connection-wide: the guest itself must be inside the vDC,
+      // as on every other per-guest firewall route.
+      const scopeDenied = await guardSessionGuest({ connectionId, conn: () => getConnectionById(connectionId), type: vmType, node, vmid: String(vmid) })
+
+      if (scopeDenied) return scopeDenied
       scope = { kind: 'vm', node, vmType, vmid }
     } else if (params.get('scope') === 'node') {
       const node = params.get('node') || ''
@@ -96,17 +104,29 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       return orchestrator.get<LogPage>(`${path}?${params}`, scansRotated ? ORCHESTRATOR_ROTATED_LOG_TIMEOUT_MS : undefined)
     }
 
+    // One rotated read at a time per node, shared and kept (roadmap#179).
+    const gated = (node: string, path: string, read: LogPageReader) =>
+      gateRotatedReads(read, { node: `${connectionId}/${node}`, log: path }, MAX_SCAN_LINES)
+
     const result = await collectFirewallLog(scope, window, {
-      vmLog: (node, vmType, vmid) => q => orchestratorOrPve<LogPage>(
-        'firewall/logs',
-        () => page(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log`, q),
-        async () => pveDirect.getFirewallLogPage(await pve(), node, q, { vmType, vmid }),
-      ),
-      nodeLog: node => q => orchestratorOrPve<LogPage>(
-        'firewall/logs',
-        () => page(`/firewall/nodes/${connectionId}/${node}/log`, q),
-        async () => pveDirect.getFirewallLogPage(await pve(), node, q),
-      ),
+      vmLog: (node, vmType, vmid) => {
+        const path = `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log`
+
+        return gated(node, path, q => orchestratorOrPve<LogPage>(
+          'firewall/logs',
+          () => page(path, q),
+          async () => pveDirect.getFirewallLogPage(await pve(), node, q, { vmType, vmid }),
+        ))
+      },
+      nodeLog: node => {
+        const path = `/firewall/nodes/${connectionId}/${node}/log`
+
+        return gated(node, path, q => orchestratorOrPve<LogPage>(
+          'firewall/logs',
+          () => page(path, q),
+          async () => pveDirect.getFirewallLogPage(await pve(), node, q),
+        ))
+      },
       nodes: async () => (await pveFetch<{ node: string; status?: string }[]>(await pve(), '/nodes')) ?? [],
       groups: () => orchestratorOrPve<SecurityGroup[]>(
         'firewall/logs',

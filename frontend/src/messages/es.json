@@ -5852,7 +5852,8 @@
       "stop": "Detener tarea",
       "stopping": "Deteniendo...",
       "taskStopped": "Solicitud de detención de tarea enviada",
-      "confirmStop": "¿Seguro que quieres detener esta tarea?"
+      "confirmStop": "¿Seguro que quieres detener esta tarea?",
+      "fromHistory": "Este nodo no respondió: la tarea viene de la copia que guarda ProxCenter. Para una tarea fallida, solo se conservó el final de su registro."
     },
     "notifications": {
       "enabled": "Notificaciones activadas",
@@ -7989,7 +7990,13 @@
       "truncated": "Un nodo tiene más de {limit} tareas en este periodo, redúzcalo para verlas todas.",
       "displayedRows": "{from}-{to} de {count}",
       "familyNone": "Ninguno",
-      "familiesCount": "{count} tipos"
+      "familiesCount": "{count} tipos",
+      "unavailableHistory": "Archivo no disponible para {nodes}: sus tareas vienen de la copia que guarda ProxCenter",
+      "fromHistory": "De la copia que guarda ProxCenter: el nodo no respondió",
+      "retentionTitle": "Retención del historial de tareas",
+      "retentionInfo": "ProxCenter guarda su copia de las tareas durante {days} días",
+      "retentionDescription": "ProxCenter guarda una copia de cada tarea de Proxmox que ve, para que el historial de un nodo caído o eliminado siga siendo legible. Las tareas más antiguas se eliminan.",
+      "retentionDays": "Guardar {days} días"
     }
   },
   "rbacPage": {

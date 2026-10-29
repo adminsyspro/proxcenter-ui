@@ -15,6 +15,7 @@ import { prisma } from '@/lib/db/prisma'
 import { checkTenantGuestScope } from '@/lib/vdc/guestScope'
 import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
 import { withAudit } from '@/lib/audit/withAudit'
+import { findStoredTask, type StoredTask } from '@/lib/tasks/history'
 
 export const runtime = 'nodejs'
 
@@ -664,6 +665,46 @@ async function finishedTaskEndtime(connection: any, node: string, upid: string, 
   }
 }
 
+/**
+ * A task read from ProxCenter's copy (#1225) when its node cannot answer:
+ * the node is down or gone, but the task's row and the end of its log, kept
+ * when it failed, are still known.
+ */
+function storedTaskResponse(t: StoredTask, node: string) {
+  const start = Math.floor(Date.parse(t.startTime) / 1000)
+  const end = t.endTime ? Math.floor(Date.parse(t.endTime) / 1000) : null
+  const lines = t.logTail && t.logTail !== '-' ? t.logTail.split('\n') : []
+  const finished = !!t.status
+  const failed = finished && t.status !== 'OK'
+  const durationSec = end ? end - start : 0
+  const reason = failed ? extractTaskFailureReason(lines.map((line, i) => ({ n: i + 1, t: line }))) || t.status : null
+  let message = ''
+
+  if (finished) message = failed ? `Failed: ${reason}` : 'Completed successfully'
+
+  return {
+    upid: t.upid,
+    node,
+    type: t.type || null,
+    id: t.guestId || null,
+    user: t.user || null,
+    status: finished ? 'stopped' : 'unknown',
+    exitstatus: t.status || null,
+    failureReason: reason,
+    starttime: start,
+    endtime: end,
+    duration: end ? formatDuration(durationSec) : '',
+    durationSec,
+    progress: finished ? 100 : 0,
+    message,
+    speed: '',
+    eta: '',
+    totalLogLines: lines.length,
+    logs: lines.map((line, i) => ({ n: i + 1, t: line })),
+    fromHistory: true,
+  }
+}
+
 async function handler(
   req: Request,
   { params, principal }: { params: Promise<{ connectionId: string; node: string; upid: string }>; principal?: Principal }
@@ -706,8 +747,11 @@ async function handler(
       )
     } catch (e: any) {
       console.error('Failed to fetch task status:', e)
-      
-return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` }, { status: 500 })
+      const stored = await findStoredTask(connectionId, node, decodedUpid)
+
+      if (stored) return NextResponse.json(storedTaskResponse(stored, node))
+
+      return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` }, { status: 500 })
     }
 
     let logs: TaskLogEntry[] = []

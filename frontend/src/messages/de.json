@@ -5833,7 +5833,8 @@
       "stop": "Aufgabe stoppen",
       "stopping": "Stoppen...",
       "taskStopped": "Aufgabenstopp angefordert",
-      "confirmStop": "Möchten Sie diese Aufgabe wirklich stoppen?"
+      "confirmStop": "Möchten Sie diese Aufgabe wirklich stoppen?",
+      "fromHistory": "Dieser Knoten hat nicht geantwortet: Die Aufgabe stammt aus der Kopie von ProxCenter. Bei einer fehlgeschlagenen Aufgabe wurde nur das Ende ihres Protokolls aufbewahrt."
     },
     "notifications": {
       "enabled": "Benachrichtigungen aktiviert",
@@ -7965,7 +7966,13 @@
       "truncated": "Ein Knoten hat in diesem Zeitraum mehr als {limit} Aufgaben, verkleinern Sie ihn, um alle zu sehen.",
       "displayedRows": "{from}-{to} von {count}",
       "familyNone": "Keine",
-      "familiesCount": "{count} Typen"
+      "familiesCount": "{count} Typen",
+      "unavailableHistory": "Archiv nicht verfügbar für {nodes}: ihre Aufgaben stammen aus der Kopie von ProxCenter",
+      "fromHistory": "Aus der Kopie von ProxCenter: der Knoten hat nicht geantwortet",
+      "retentionTitle": "Aufbewahrung des Aufgabenverlaufs",
+      "retentionInfo": "ProxCenter bewahrt seine Kopie der Aufgaben {days} Tage auf",
+      "retentionDescription": "ProxCenter bewahrt eine Kopie jeder Proxmox-Aufgabe auf, die es sieht, damit der Verlauf eines ausgefallenen oder entfernten Knotens lesbar bleibt. Ältere Aufgaben werden gelöscht.",
+      "retentionDays": "{days} Tage aufbewahren"
     }
   },
   "rbacPage": {

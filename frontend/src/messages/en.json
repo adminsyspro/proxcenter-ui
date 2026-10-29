@@ -5852,7 +5852,8 @@
       "stop": "Stop task",
       "stopping": "Stopping...",
       "taskStopped": "Task stop requested",
-      "confirmStop": "Are you sure you want to stop this task?"
+      "confirmStop": "Are you sure you want to stop this task?",
+      "fromHistory": "This node did not answer: the task comes from the copy ProxCenter keeps. For a failed task, only the end of its log was kept."
     },
     "notifications": {
       "enabled": "Notifications enabled",
@@ -7989,7 +7990,13 @@
       "truncated": "A node holds more than {limit} tasks in this period, narrow it to see them all.",
       "displayedRows": "{from}-{to} of {count}",
       "familyNone": "None",
-      "familiesCount": "{count} types"
+      "familiesCount": "{count} types",
+      "unavailableHistory": "Archive unavailable for {nodes}: their tasks come from the copy ProxCenter keeps",
+      "fromHistory": "From the copy ProxCenter keeps: the node did not answer",
+      "retentionTitle": "Task history retention",
+      "retentionInfo": "ProxCenter keeps its copy of the tasks for {days} days",
+      "retentionDescription": "ProxCenter keeps a copy of every Proxmox task it sees, so the history of a node that is down or gone stays readable. Tasks older than this are deleted.",
+      "retentionDays": "Keep for {days} days"
     }
   },
   "rbacPage": {

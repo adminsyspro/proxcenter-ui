@@ -5852,7 +5852,8 @@
       "stop": "작업 중지",
       "stopping": "중지 중...",
       "taskStopped": "작업 중지가 요청되었습니다",
-      "confirmStop": "이 작업을 중지하시겠습니까?"
+      "confirmStop": "이 작업을 중지하시겠습니까?",
+      "fromHistory": "이 노드가 응답하지 않았습니다: 작업은 ProxCenter가 보관한 사본에서 가져왔습니다. 실패한 작업은 로그의 마지막 부분만 보관됩니다."
     },
     "notifications": {
       "enabled": "알림 활성화됨",
@@ -7989,7 +7990,13 @@
       "truncated": "이 기간에 한 노드의 작업이 {limit}개를 넘습니다. 모두 보려면 기간을 줄이세요.",
       "displayedRows": "{count}개 중 {from}-{to}",
       "familyNone": "없음",
-      "familiesCount": "{count}개 유형"
+      "familiesCount": "{count}개 유형",
+      "unavailableHistory": "{nodes}의 아카이브를 사용할 수 없습니다: 해당 작업은 ProxCenter가 보관한 사본에서 가져옵니다",
+      "fromHistory": "ProxCenter가 보관한 사본: 노드가 응답하지 않았습니다",
+      "retentionTitle": "작업 기록 보존",
+      "retentionInfo": "ProxCenter는 작업 사본을 {days}일 동안 보관합니다",
+      "retentionDescription": "ProxCenter는 확인한 모든 Proxmox 작업의 사본을 보관하므로, 다운되었거나 제거된 노드의 기록도 계속 읽을 수 있습니다. 이보다 오래된 작업은 삭제됩니다.",
+      "retentionDays": "{days}일 동안 보관"
     }
   },
   "rbacPage": {

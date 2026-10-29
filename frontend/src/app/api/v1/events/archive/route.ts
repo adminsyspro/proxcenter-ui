@@ -22,6 +22,7 @@ import {
   type PveTaskEntry,
 } from '@/lib/tasks/archive'
 import { scopeConnectionTasks } from '@/lib/tasks/scopeTasks'
+import { fetchStoredTasks, toPveEntry } from '@/lib/tasks/history'
 
 export const runtime = 'nodejs'
 
@@ -58,6 +59,8 @@ interface ReadContext {
   rbacScope: RbacInfraScope | null
   vdcScope: ReturnType<typeof maskingScope>
   vdcVmids: Map<string, Set<string>> | null
+  /** ProxCenter's copy of the tasks, by connection; null when it cannot be read. */
+  stored: Map<string, PveTaskEntry[]> | null
 }
 
 async function readGuests(connection: any): Promise<Map<string, GuestInfo>> {
@@ -76,13 +79,22 @@ async function readGuests(connection: any): Promise<Map<string, GuestInfo>> {
 async function readConnectionArchive(conn: { id: string; name: string; tenantId: string | null }, ctx: ReadContext): Promise<ConnectionRead> {
   const { query, nowSec, rbacScope } = ctx
   const out: ConnectionRead = { tasks: [], nodes: [], unavailable: [], truncated: false }
-  const connection = await getConnectionById(conn.id, conn.tenantId ?? undefined)
   const allowedNodes = ctx.vdcScope?.nodesByConnection.get(conn.id)
+  let connection: Awaited<ReturnType<typeof getConnectionById>> | null = null
+  let nodes: { node: string; status?: string }[] = []
+  let guests = new Map<string, GuestInfo>()
 
-  const [nodes, guests] = await Promise.all([
-    pveFetch<{ node: string; status?: string }[]>(connection, '/nodes'),
-    readGuests(connection),
-  ])
+  // A cluster that cannot be reached at all still has ProxCenter's copy.
+  try {
+    connection = await getConnectionById(conn.id, conn.tenantId ?? undefined)
+    ;[nodes, guests] = await Promise.all([
+      pveFetch<{ node: string; status?: string }[]>(connection, '/nodes'),
+      readGuests(connection),
+    ])
+  } catch (e) {
+    console.error(`Task archive connection error ${conn.name}:`, e)
+    out.unavailable.push({ connectionName: conn.name, node: '' })
+  }
 
   const readableNodes = (Array.isArray(nodes) ? nodes : []).filter(n => !allowedNodes || allowedNodes.has(n.node))
   const nodeStatus = new Map(readableNodes.map(n => [n.node, n.status || 'unknown']))
@@ -107,6 +119,15 @@ async function readConnectionArchive(conn: { id: string; name: string; tenantId:
     if (nodeInTree(rbacScope, conn.id, node)) out.unavailable.push({ connectionName: conn.name, node })
   }
 
+  // ProxCenter's copy first, then what each node still serves on top: the
+  // node's own row is the fresher one. A task only the copy holds belongs to
+  // a node that cannot be read now, or no longer exists.
+  const byUpid = new Map<string, { entry: PveTaskEntry; fromHistory: boolean }>()
+
+  for (const entry of ctx.stored?.get(conn.id) ?? []) {
+    if (!query.node || entry.node === query.node) byUpid.set(entry.upid, { entry, fromHistory: true })
+  }
+
   await Promise.all(
     readableNodes
       .filter(n => !query.node || n.node === query.node)
@@ -114,32 +135,37 @@ async function readConnectionArchive(conn: { id: string; name: string; tenantId:
         if (n.status && n.status !== 'online') return markUnavailable(n.node)
         try {
           const entries = await pveFetch<PveTaskEntry[]>(
-            connection,
+            connection!,
             `/nodes/${encodeURIComponent(n.node)}/tasks?${params}`,
             {},
             { timeoutMs: NODE_TIMEOUT_MS },
           )
           if (!Array.isArray(entries)) return
           if (entries.length >= ARCHIVE_NODE_LIMIT) out.truncated = true
-
-          const scoped = scopeConnectionTasks(entries, {
-            connId: conn.id,
-            allowedNodes,
-            allowedVmids: ctx.vdcVmids?.get(conn.id),
-            rbacScope,
-          })
-          for (const entry of scoped) {
-            const task = toArchiveTask(entry, { connectionId: conn.id, connectionName: conn.name, nowSec, guests, nodeStatus })
-            // Status is filtered after the summary, so its counters keep
-            // showing every status of the window.
-            if (matchesArchiveFilters(task, { ...query, status: 'all' })) out.tasks.push(task)
-          }
+          for (const entry of entries) byUpid.set(entry.upid, { entry, fromHistory: false })
         } catch (e) {
           console.error(`Task archive error for ${conn.name}/${n.node}:`, e)
           markUnavailable(n.node)
         }
       }),
   )
+
+  const fromHistory = new Set([...byUpid.values()].filter(v => v.fromHistory).map(v => v.entry.upid))
+  const scoped = scopeConnectionTasks([...byUpid.values()].map(v => v.entry), {
+    connId: conn.id,
+    allowedNodes,
+    allowedVmids: ctx.vdcVmids?.get(conn.id),
+    rbacScope,
+  })
+
+  for (const entry of scoped) {
+    const task = toArchiveTask(entry, { connectionId: conn.id, connectionName: conn.name, nowSec, guests, nodeStatus })
+
+    if (fromHistory.has(entry.upid)) task.fromHistory = true
+    // Status is filtered after the summary, so its counters keep showing
+    // every status of the window.
+    if (matchesArchiveFilters(task, { ...query, status: 'all' })) out.tasks.push(task)
+  }
 
   return out
 }
@@ -168,10 +194,11 @@ async function attachInitiators(rows: ArchiveTask[], tenantId: string | null): P
 
 /**
  * GET /api/v1/events/archive (#1225): the task history each node keeps,
- * filtered by period, family, status, node and guest, newest first and paged.
- * Same perimeter as the live Events feed: connection.view, vDC nodes and
- * pools, RBAC infra scope. Nothing is stored on our side, the retention is the
- * one Proxmox applies on each node.
+ * merged with the copy ProxCenter keeps of every task it polls, filtered by
+ * period, family, status, node and guest, newest first and paged. The copy
+ * covers a node that is down or gone; the node's own archive covers what
+ * happened before ProxCenter was installed. Same perimeter as the live Events
+ * feed: connection.view, vDC nodes and pools, RBAC infra scope.
  */
 export async function GET(req: Request) {
   try {
@@ -198,10 +225,26 @@ export async function GET(req: Request) {
       rbacScope,
     )
 
-    const ctx: ReadContext = { query, nowSec, rbacScope, vdcScope, vdcVmids }
+    const targets = connections.filter(conn => !query.connectionId || conn.id === query.connectionId)
+    const history = await fetchStoredTasks({
+      connectionIds: targets.map(c => c.id),
+      since: query.since,
+      until: query.until,
+      nodes: query.node ? [query.node] : undefined,
+      vmid: query.vmid,
+    })
+    const stored = history ? new Map<string, PveTaskEntry[]>() : null
+
+    for (const t of history?.tasks ?? []) {
+      const list = stored?.get(t.connectionId) ?? []
+
+      list.push(toPveEntry(t))
+      stored?.set(t.connectionId, list)
+    }
+
+    const ctx: ReadContext = { query, nowSec, rbacScope, vdcScope, vdcVmids, stored }
     const reads = await Promise.all(
-      connections
-        .filter(conn => !query.connectionId || conn.id === query.connectionId)
+      targets
         .map(conn =>
           readConnectionArchive(conn, ctx).catch((e): ConnectionRead => {
             console.error(`Task archive connection error ${conn.name}:`, e)
@@ -232,7 +275,8 @@ export async function GET(req: Request) {
         pageSize: query.pageSize,
         since: query.since,
         until: query.until,
-        truncated: reads.some(r => r.truncated),
+        truncated: reads.some(r => r.truncated) || !!history?.truncated,
+        history: history !== null,
         summary: summarizeArchive(inWindow),
         unavailable,
         connections: connections.map(c => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)),

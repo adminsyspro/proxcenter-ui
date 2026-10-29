@@ -6116,7 +6116,13 @@
         "target_space": "Target pool capacity",
         "target_storage": "Target storage availability",
         "reverse_ssh": "Reverse SSH for failback",
-        "backup_schedule": "Backup schedule"
+        "backup_schedule": "Backup schedule",
+        "mounted_iso": "Mounted ISO images"
+      },
+      "detail": {
+        "mounted_iso_none": "No ISO image mounted on the selected guests",
+        "mounted_iso_present": "The mounted ISO images are present on {node}",
+        "mounted_iso_missing": "{count, plural, one {VM {vms} has an ISO mounted that does not exist} other {VMs {vms} have an ISO mounted that does not exist}} on {node}: {count, plural, one {its CD/DVD drive} other {their CD/DVD drives}} will be left empty on the replica so it can boot"
       }
     },
     "bandwidth": {
@@ -6279,7 +6285,9 @@
       "reseedTitle": "Re-seed {guest}?",
       "reseedWarning": "All DR restore points for this guest will be permanently removed and the replica will be replaced. This applies to both Ceph RBD and ZFS. A full replication will then be queued.",
       "reseedQueued": "Full replication queued.",
-      "reseedFailed": "Failed to queue full replication."
+      "reseedFailed": "Failed to queue full replication.",
+      "vmSyncDuration": "Duration of the last sync",
+      "vmBandwidth": "Bandwidth over the last 24 h, peak {peak}/s"
     },
     "jobs": {
       "failedOver": "Failed over",

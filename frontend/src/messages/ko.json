@@ -6116,7 +6116,13 @@
         "target_space": "대상 풀 용량",
         "target_storage": "대상 스토리지 가용성",
         "reverse_ssh": "장애 복귀를 위한 역방향 SSH",
-        "backup_schedule": "백업 일정"
+        "backup_schedule": "백업 일정",
+        "mounted_iso": "마운트된 ISO 이미지"
+      },
+      "detail": {
+        "mounted_iso_none": "선택한 게스트에 마운트된 ISO 이미지가 없습니다",
+        "mounted_iso_present": "마운트된 ISO 이미지가 {node}에 있습니다",
+        "mounted_iso_missing": "VM {vms}에 {node}에 없는 ISO가 마운트되어 있습니다: 복제본이 부팅될 수 있도록 복제본의 CD/DVD 드라이브를 비워 둡니다"
       }
     },
     "bandwidth": {
@@ -6279,7 +6285,9 @@
       "reseedTitle": "{guest} 재초기화?",
       "reseedWarning": "이 게스트의 모든 DR 복원 지점이 영구적으로 삭제되고 복제본이 교체됩니다. Ceph RBD와 ZFS 모두에 적용됩니다. 이후 전체 복제가 대기열에 추가됩니다.",
       "reseedQueued": "전체 복제가 대기열에 추가되었습니다.",
-      "reseedFailed": "전체 복제를 대기열에 추가하지 못했습니다."
+      "reseedFailed": "전체 복제를 대기열에 추가하지 못했습니다.",
+      "vmSyncDuration": "마지막 동기화 소요 시간",
+      "vmBandwidth": "최근 24시간 대역폭, 최대 {peak}/s"
     },
     "jobs": {
       "failedOver": "페일오버됨",

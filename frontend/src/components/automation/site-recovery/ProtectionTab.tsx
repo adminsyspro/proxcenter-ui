@@ -397,6 +397,8 @@ export default function ProtectionTab({
   selectedJobId, onSelectJob
 }: ProtectionTabProps) {
   const t = useTranslations()
+  // The bandwidth history takes the theme colour, like the job cards' sparklines.
+  const chartColor = useTheme().palette.primary.main
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -415,6 +417,8 @@ export default function ProtectionTab({
     bytes_sent: number
     duration_ms: number
     updated_at: string
+    // The guest's bandwidth over the last day, for the row sparkline.
+    throughput_history?: { timestamp: string; bytes_per_sec: number }[]
   }
   const [vmStatuses, setVmStatuses] = useState<VMStatusRow[] | null>(null)
   const [reseedGuest, setReseedGuest] = useState<{ jobId: string; vmid: number; name: string } | null>(null)
@@ -448,10 +452,32 @@ export default function ProtectionTab({
       setReseedBusy(false)
     }
   }
-  // Five rows a page keeps the block a fixed height, so the dialog itself
-  // never scrolls however many guests a tag-based job ends up carrying.
-  const VM_ROWS_PER_PAGE = 5
+  // The per-VM list fills the left column down to the bottom of the logs and
+  // pages by however many rows that height holds, five at least. It is laid
+  // out out of flow, so its rows never stretch the dialog: the dialog itself
+  // still never scrolls however many guests a tag-based job carries.
+  const VM_MIN_ROWS = 5
+  const VM_PAGINATION_HEIGHT = 40
   const [vmPage, setVmPage] = useState(0)
+  const [vmListHeight, setVmListHeight] = useState(0)
+  const [vmRowHeight, setVmRowHeight] = useState(34)
+  const vmListObserver = useRef<ResizeObserver | null>(null)
+  const vmListRef = useCallback((el: HTMLDivElement | null) => {
+    vmListObserver.current?.disconnect()
+    vmListObserver.current = null
+    if (!el || typeof ResizeObserver === 'undefined') return
+    vmListObserver.current = new ResizeObserver(([entry]) => setVmListHeight(entry.contentRect.height))
+    vmListObserver.current.observe(el)
+  }, [])
+  const vmRowRef = useCallback((el: HTMLDivElement | null) => {
+    if (el?.offsetHeight) setVmRowHeight(el.offsetHeight)
+  }, [])
+  const vmTotal = vmStatuses?.length ?? 0
+  // The list box carries a 1px border top and bottom.
+  const vmRowsFitting = (height: number) => Math.max(VM_MIN_ROWS, Math.floor((height - 2) / vmRowHeight))
+  const vmRowsPerPage = vmTotal > vmRowsFitting(vmListHeight) ? vmRowsFitting(vmListHeight - VM_PAGINATION_HEIGHT) : vmRowsFitting(vmListHeight)
+  // A taller dialog holds more rows a page, which can leave the current page past the end.
+  const vmPageShown = Math.min(vmPage, Math.max(0, Math.ceil(vmTotal / vmRowsPerPage) - 1))
   const [vmStatusesLoading, setVmStatusesLoading] = useState(false)
 
   // Historical throughput from the server
@@ -959,8 +985,8 @@ export default function ProtectionTab({
                   the chart and the log tail on the right. Stacked, the same
                   content forced the dialog to scroll on a laptop; side by
                   side it fits, and each long block is bounded on its own. */}
-              <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, columnGap: 3, alignItems: 'start' }}>
-                <Box sx={{ minWidth: 0 }}>
+              <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, columnGap: 3, alignItems: { xs: 'start', md: 'stretch' } }}>
+                <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                 {/* Six short label/value pairs. One per row spent all the height
                     the wider dialog just gained, so they pair up from sm. */}
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, columnGap: 3 }}>
@@ -986,12 +1012,17 @@ export default function ProtectionTab({
                         {t('siteRecovery.protection.perVmEmpty')}
                       </Typography>
                     ) : vmStatuses && (
+                      <Box ref={vmListRef} data-testid='per-vm-list' sx={{ position: 'relative', flex: 1, minHeight: VM_MIN_ROWS * vmRowHeight + 2 + (vmStatuses.length > VM_MIN_ROWS ? VM_PAGINATION_HEIGHT : 0) }}>
+                      <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
                       <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                        {vmStatuses.slice(vmPage * VM_ROWS_PER_PAGE, vmPage * VM_ROWS_PER_PAGE + VM_ROWS_PER_PAGE).map(row => {
+                        {vmStatuses.slice(vmPageShown * vmRowsPerPage, vmPageShown * vmRowsPerPage + vmRowsPerPage).map((row, index) => {
                           // A suspended guest is not failing, but it is not
                           // being protected right now either, so it reads as a
                           // warning rather than a neutral state.
                           const color = row.status === 'synced' ? 'success' : row.status === 'syncing' ? 'primary' : row.status === 'error' ? 'error' : ['suspended', 'skipped', 'reseed_required', 'source_missing'].includes(row.status) ? 'warning' : 'default'
+                          const history = (row.throughput_history ?? []).map(p => ({ ts: new Date(p.timestamp).getTime(), bps: p.bytes_per_sec }))
+                          let captionColor = 'text.secondary'
+                          if (['error', 'skipped', 'reseed_required', 'source_missing'].includes(row.status) && row.last_error) captionColor = row.status === 'error' ? 'error.main' : 'warning.main'
                           return (
                             /* One line per guest, built like every other list row
                                in the app: type glyph carrying a state dot, then
@@ -999,7 +1030,7 @@ export default function ProtectionTab({
                                The tooltip names the state, which the dot alone
                                cannot, and carries the error when there is one so
                                nothing is lost by folding the row up. */
-                            <Box key={row.vmid} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.75, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 } }}>
+                            <Box key={row.vmid} ref={index === 0 ? vmRowRef : undefined} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.75, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 } }}>
                               <Tooltip title={row.last_error ? `${t(`siteRecovery.status.${row.status}`)} — ${row.last_error}` : t(`siteRecovery.status.${row.status}`)} arrow>
                                 <Box
                                   component='span'
@@ -1028,16 +1059,38 @@ export default function ProtectionTab({
                               </Typography>
                               <Typography
                                 variant='caption'
-                                sx={{ ml: 'auto', pl: 1, color: ['error', 'skipped', 'reseed_required', 'source_missing'].includes(row.status) && row.last_error ? (row.status === 'error' ? 'error.main' : 'warning.main') : 'text.secondary', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                sx={{ flex: 1, px: 1, textAlign: 'center', color: captionColor, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                               >
                                 {['error', 'skipped', 'reseed_required', 'source_missing'].includes(row.status) && row.last_error ? row.last_error : (
                                   <>
                                     {row.last_sync ? new Date(row.last_sync).toLocaleString() : '—'}
                                     {row.bytes_sent > 0 && ` · ${formatBytes(row.bytes_sent)}`}
-                                    {row.duration_ms > 0 && ` · ${formatDuration(Math.round(row.duration_ms / 1000))}`}
                                   </>
                                 )}
                               </Typography>
+                              {/* Fixed widths keep the sparkline and duration
+                                  columns aligned from one row to the next, and
+                                  the sparkline's height is reserved on every row
+                                  so all rows share the height the list pages by. */}
+                              <Box sx={{ width: 80, height: 24, flexShrink: 0, display: 'inline-flex' }}>
+                                {history.length >= 2 && (
+                                  <Tooltip title={t('siteRecovery.protection.vmBandwidth', { peak: formatBytes(Math.max(...history.map(p => p.bps))) })} arrow>
+                                    <Box component='span' data-testid={`vm-sparkline-${row.vmid}`} sx={{ display: 'inline-flex' }}>
+                                      <BandwidthSparkline data={history} size='small' />
+                                    </Box>
+                                  </Tooltip>
+                                )}
+                              </Box>
+                              <Box sx={{ width: 56, flexShrink: 0, display: 'inline-flex', justifyContent: 'flex-end' }}>
+                                {row.duration_ms > 0 && (
+                                  <Tooltip title={t('siteRecovery.protection.vmSyncDuration')} arrow>
+                                    <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+                                      <i className='ri-timer-line' style={{ fontSize: 14 }} />
+                                      <Typography variant='caption'>{formatDuration(Math.round(row.duration_ms / 1000))}</Typography>
+                                    </Box>
+                                  </Tooltip>
+                                )}
+                              </Box>
                               {row.status === 'reseed_required' && (
                                 <Button size='small' color='warning' disabled={selected.status === 'syncing' || selected.status === 'failed_over' || reseedQueuedVmids.has(row.vmid)} onClick={() => {
                                   setReseedError('')
@@ -1065,17 +1118,19 @@ export default function ProtectionTab({
                           )
                         })}
                       </Box>
-                    )}
-                    {vmStatuses && vmStatuses.length > VM_ROWS_PER_PAGE && (
+                    {vmStatuses.length > vmRowsPerPage && (
                       <TablePagination
                         component='div'
                         count={vmStatuses.length}
-                        page={vmPage}
-                        rowsPerPage={VM_ROWS_PER_PAGE}
-                        rowsPerPageOptions={[VM_ROWS_PER_PAGE]}
+                        page={vmPageShown}
+                        rowsPerPage={vmRowsPerPage}
+                        rowsPerPageOptions={[vmRowsPerPage]}
                         onPageChange={(_, value) => setVmPage(value)}
-                        sx={{ '& .MuiTablePagination-toolbar': { minHeight: 40, pl: 1 } }}
+                        sx={{ mt: 'auto', '& .MuiTablePagination-toolbar': { minHeight: 40, pl: 1 } }}
                       />
+                    )}
+                      </Box>
+                      </Box>
                     )}
                   </>
                 )}
@@ -1111,8 +1166,8 @@ export default function ProtectionTab({
                       <AreaChart data={thSamples.map(s => ({ ts: new Date(s.timestamp).getTime(), bps: s.bytes_per_sec }))} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
                         <defs>
                           <linearGradient id='thGrad' x1='0' y1='0' x2='0' y2='1'>
-                            <stop offset='0%' stopColor='currentColor' stopOpacity={0.3} />
-                            <stop offset='100%' stopColor='currentColor' stopOpacity={0.02} />
+                            <stop offset='0%' stopColor={chartColor} stopOpacity={0.3} />
+                            <stop offset='100%' stopColor={chartColor} stopOpacity={0.02} />
                           </linearGradient>
                         </defs>
                         <YAxis hide domain={[0, 'dataMax']} />
@@ -1142,7 +1197,7 @@ export default function ProtectionTab({
                         <Area
                           type='monotone'
                           dataKey='bps'
-                          stroke='currentColor'
+                          stroke={chartColor}
                           strokeWidth={1.5}
                           fill='url(#thGrad)'
                           dot={false}

@@ -6116,7 +6116,13 @@
         "target_space": "目标池容量",
         "target_storage": "目标存储可用性",
         "reverse_ssh": "故障恢复所需的反向 SSH",
-        "backup_schedule": "备份计划"
+        "backup_schedule": "备份计划",
+        "mounted_iso": "已挂载的 ISO 镜像"
+      },
+      "detail": {
+        "mounted_iso_none": "所选虚拟机均未挂载 ISO 镜像",
+        "mounted_iso_present": "已挂载的 ISO 镜像在 {node} 上存在",
+        "mounted_iso_missing": "虚拟机 {vms} 挂载的 ISO 在 {node} 上不存在：副本的 CD/DVD 光驱将保持为空，以便副本能够启动"
       }
     },
     "bandwidth": {
@@ -6279,7 +6285,9 @@
       "reseedTitle": "重新初始化 {guest}？",
       "reseedWarning": "此客户机的所有 DR 还原点将被永久删除，副本将被替换。这适用于 Ceph RBD 和 ZFS。随后将排队执行完整复制。",
       "reseedQueued": "完整复制已加入队列。",
-      "reseedFailed": "无法将完整复制加入队列。"
+      "reseedFailed": "无法将完整复制加入队列。",
+      "vmSyncDuration": "上次同步耗时",
+      "vmBandwidth": "过去 24 小时的带宽，峰值 {peak}/s"
     },
     "jobs": {
       "failedOver": "已故障转移",

@@ -6097,7 +6097,13 @@
         "target_space": "Kapazität Zielpool",
         "target_storage": "Verfügbarkeit des Zielspeichers",
         "reverse_ssh": "Umgekehrte SSH-Verbindung für Failback",
-        "backup_schedule": "Backup-Zeitplan"
+        "backup_schedule": "Backup-Zeitplan",
+        "mounted_iso": "Eingebundene ISO-Images"
+      },
+      "detail": {
+        "mounted_iso_none": "Kein ISO-Image in den ausgewählten Gästen eingebunden",
+        "mounted_iso_present": "Die eingebundenen ISO-Images sind auf {node} vorhanden",
+        "mounted_iso_missing": "{count, plural, one {VM {vms} hat ein eingebundenes ISO, das} other {VMs {vms} haben ein eingebundenes ISO, das}} auf {node} nicht existiert: {count, plural, one {ihr CD/DVD-Laufwerk bleibt} other {ihre CD/DVD-Laufwerke bleiben}} in der Replik leer, damit sie starten kann"
       }
     },
     "bandwidth": {
@@ -6260,7 +6266,9 @@
       "reseedTitle": "{guest} neu initialisieren?",
       "reseedWarning": "Alle DR-Wiederherstellungspunkte dieses Gasts werden dauerhaft gelöscht und das Replikat wird ersetzt. Dies gilt für Ceph RBD und ZFS. Anschließend wird eine vollständige Replikation eingereiht.",
       "reseedQueued": "Vollständige Replikation eingereiht.",
-      "reseedFailed": "Vollständige Replikation konnte nicht eingereiht werden."
+      "reseedFailed": "Vollständige Replikation konnte nicht eingereiht werden.",
+      "vmSyncDuration": "Dauer der letzten Synchronisierung",
+      "vmBandwidth": "Bandbreite der letzten 24 h, Spitze {peak}/s"
     },
     "jobs": {
       "failedOver": "Umgeschaltet",

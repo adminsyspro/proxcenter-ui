@@ -5,6 +5,7 @@ import { ppmToJpeg } from "@/lib/console/ppm"
 import { pveFetch } from "@/lib/proxmox/client"
 import { locateVmInCluster } from "@/lib/proxmox/locateVm"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
+import { safeLog } from "@/lib/log/sanitize"
 import { executeSSH } from "@/lib/ssh/exec"
 import { assertVmid } from "@/lib/ssh/validate"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
@@ -166,7 +167,10 @@ export async function GET(
     }
 
     if (!sshResult.success || !sshResult.output) {
-      return NextResponse.json({ data: null, reason: 'ssh_failed', error: sshResult.error, movedTo })
+      // The SSH error names the host and port the connection reaches: it
+      // stays in the server log, the caller gets the reason code (roadmap#99).
+      if (sshResult.error) console.error(`[screenshot] SSH failed on ${safeLog(resolvedNode)}:`, safeLog(sshResult.error))
+      return NextResponse.json({ data: null, reason: 'ssh_failed', movedTo })
     }
 
     // The node returns the framebuffer as a base64-encoded PPM (raw RGB bitmap).
@@ -189,6 +193,7 @@ export async function GET(
 
     return jpegResponse(jpeg, movedTo ? { "X-Screenshot-Moved-To": movedTo } : undefined)
   } catch (e: any) {
-    return NextResponse.json({ data: null, reason: 'error', error: e?.message || String(e) })
+    console.error('[screenshot] failed:', e?.message ?? e)
+    return NextResponse.json({ data: null, reason: 'error' })
   }
 }

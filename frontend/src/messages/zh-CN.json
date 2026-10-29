@@ -4482,6 +4482,7 @@
       "port": "端口",
       "interfaces": "节点接口",
       "invalidPort": "1 到 65535",
+      "invalidAddress": "仅限主机名或 IP 地址",
       "saveFailed": "无法保存：{error}",
       "noNodes": "未找到此连接的节点。",
       "newConnectionHint": "请先保存连接，然后在此为每个节点设置 SSH 地址和端口。",

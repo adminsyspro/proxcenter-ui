@@ -230,3 +230,24 @@ describe('GET .../screenshot — vmid validation (command injection)', () => {
     })
   }
 })
+
+describe('GET .../screenshot: failures keep the SSH detail server-side (roadmap#99)', () => {
+  it('answers reason=ssh_failed without the raw SSH error', async () => {
+    pveFetchMock.mockResolvedValueOnce({ vga: 'std' })
+    executeSSHMock.mockResolvedValue({ success: false, error: 'connect ECONNREFUSED 10.42.0.250:22' })
+    locateVmInClusterMock.mockResolvedValue(null)
+
+    const body = await (await GET(new Request('http://localhost'), makeCtx())).json()
+
+    expect(body).toMatchObject({ data: null, reason: 'ssh_failed' })
+    expect(body).not.toHaveProperty('error')
+  })
+
+  it('answers reason=error without the exception message', async () => {
+    pveFetchMock.mockRejectedValueOnce(new Error('fetch failed https://10.42.0.101:8006'))
+
+    const body = await (await GET(new Request('http://localhost'), makeCtx())).json()
+
+    expect(body).toEqual({ data: null, reason: 'error' })
+  })
+})

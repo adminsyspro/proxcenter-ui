@@ -7,7 +7,7 @@ import { Autocomplete, Box, CircularProgress, TextField, Tooltip, Typography } f
 
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import { useRBAC } from '@/contexts/RBACContext'
-import { normalizeSshAddress, normalizeSshPort } from '@/lib/ssh/node-endpoint-core'
+import { isSshAddress, normalizeSshAddress, normalizeSshPort } from '@/lib/ssh/node-endpoint-core'
 
 /** A node's SSH override as the editor holds it (null = not overridden). */
 export type NodeSshValue = { address: string | null; port: number | null }
@@ -118,6 +118,10 @@ export default function NodeSshEndpointsEditor({ connectionId, nodeNames, defaul
     const nextPort = normalizeSshPort(portText)
     if (portText.trim() && nextPort === null) {
       patchRow(node, { error: t('settings.sshNodeEndpoints.invalidPort') })
+      return
+    }
+    if (nextAddress !== null && !isSshAddress(nextAddress)) {
+      patchRow(node, { error: t('settings.sshNodeEndpoints.invalidAddress') })
       return
     }
     if (nextAddress === row.saved.address && nextPort === row.saved.port) {

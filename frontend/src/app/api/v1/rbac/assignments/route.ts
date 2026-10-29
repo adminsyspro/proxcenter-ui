@@ -9,8 +9,8 @@ import { nanoid } from "nanoid"
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
-import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
+import { hasPermission, isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
 import { validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
@@ -259,22 +259,6 @@ async function handlePost(req: NextRequest) {
       }
     }
 
-    // Provider-only and protected roles must NEVER land in a non-default tenant:
-    //  - legacy roles (operator / vm_admin / viewer / vm_user) grant
-    //    automation.view, which would unlock DRS / Site Recovery / Network
-    //    Security / Resources for a tenant user — pages Tenant Admin avoids.
-    //  - super_admin / provider_admin are wildcards meant for the provider
-    //    tenant only; binding them under a tenant is either meaningless
-    //    (super_admin is cross-tenant by design) or an escalation surface
-    //    (provider_admin's wildcard on a tenant equals tenant_admin++).
-    const tenantForbiddenRoles = [...PROVIDER_ONLY_ROLE_IDS, ...PROTECTED_ROLE_IDS] as readonly string[]
-    if (targetTenantId !== DEFAULT_TENANT_ID && tenantForbiddenRoles.includes(role_id)) {
-      return NextResponse.json(
-        { error: "This role can only be assigned in the provider tenant (default)" },
-        { status: 400 }
-      )
-    }
-
     // Prevent self-escalation / self-lockout: a user cannot change their own
     // RBAC assignments. Another admin must do it.
     if (user_id === session.user.id) {
@@ -284,19 +268,19 @@ async function handlePost(req: NextRequest) {
       )
     }
 
-    // Only an existing super admin can hand out provider-level wildcard
-    // roles (super_admin + provider_admin). Also refuse to touch a target that
-    // already holds one — prevents a tenant admin from shadowing / reassigning
-    // a provider-level operator.
-    const callerIsSuperAdmin = await isUserSuperAdmin(session.user.id)
-    if (!callerIsSuperAdmin) {
-      if ((PROTECTED_ROLE_IDS as readonly string[]).includes(role_id)) {
-        return NextResponse.json({ error: "Role not found" }, { status: 404 })
-      }
-      if (await isUserProtected(user_id)) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 })
-      }
-    }
+    // The rules every role grant obeys (lib/rbac/assignmentGuards.ts):
+    // provider-only and protected roles stay in the provider tenant, protected
+    // roles and targets are a super admin's business, the role exists and is
+    // reachable from the target tenant, and NIC identity rights come from a
+    // super admin.
+    const guard = await guardRoleAssignment({
+      callerUserId: session.user.id,
+      roleId: role_id,
+      targetTenantId,
+      targetUserId: user_id,
+    })
+    if (!guard.ok) return guard.response!
+    const role = guard.role!
 
     // Default to "inherit" so a manual assignment follows the role's default
     // scope, just like SSO does (issue #383). Explicit scopes still override.
@@ -336,19 +320,6 @@ async function handlePost(req: NextRequest) {
           { status: 400 }
         )
       }
-    }
-
-    // Vérifier que le rôle existe et qu'il est accessible depuis le tenant
-    // cible. Un rôle custom appartenant au tenant B ne doit pas être
-    // assignable depuis le tenant A même en connaissant son id.
-    const role = await prisma.rbacRole.findUnique({ where: { id: role_id }, select: { id: true, name: true, tenantId: true, permissions: { select: { permissionId: true } } } })
-
-    if (!role || (role.tenantId !== null && role.tenantId !== targetTenantId)) {
-      return NextResponse.json({ error: "Role not found" }, { status: 404 })
-    }
-
-    if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(role)) {
-      return NextResponse.json({ error: 'Only a super admin may grant NIC identity permissions' }, { status: 403 })
     }
 
     // A user may hold several roles in the same tenant, each on its own scope

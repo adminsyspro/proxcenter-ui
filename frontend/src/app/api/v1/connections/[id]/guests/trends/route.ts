@@ -113,34 +113,6 @@ async function tryStatusCurrent(conn: any, type: string, node: string, vmid: str
   return { cpuPct, ramPct }
 }
 
-async function tryGuestsFallback(appBaseUrl: string, connId: string, type: string, node: string, vmid: string) {
-  const url = `${appBaseUrl}/api/v1/connections/${encodeURIComponent(connId)}/guests`
-  const res = await fetch(url, { method: "GET", cache: "no-store" })
-  const txt = await res.text()
-  let json: any = null
-
-  try {
-    json = JSON.parse(txt)
-  } catch {
-    // pas JSON
-  }
-
-  const arr = Array.isArray(json?.data) ? json.data : []
-
-  const hit = arr.find(
-    (g: any) => normType(g.type) === type && normNode(g.node) === node && normVmid(g.vmid) === vmid
-  )
-
-  if (!hit) return { ok: false, status: res.status, url, why: "vm_not_found_in_guests", sampleLen: arr.length }
-
-  const cpuPct = Math.round(clampPct(Number(hit.cpu ?? 0) * 100))
-  const mem = Number(hit.mem ?? 0)
-  const maxmem = Number(hit.maxmem ?? 0)
-  const ramPct = maxmem > 0 ? Math.round(clampPct((mem / maxmem) * 100)) : 0
-
-  return { ok: true, status: res.status, url, cpuPct, ramPct }
-}
-
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
 
@@ -167,10 +139,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     .filter((it) => scoped.visibility.has(normType(it.type) || null, normVmid(it.vmid)))
 
   if (items.length === 0) return NextResponse.json({ data: {} })
-
-  const host = req.headers.get("host") || "localhost:3000"
-  const proto = req.headers.get("x-forwarded-proto") || "http"
-  const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL || `${proto}://${host}`
 
   const out: Record<string, any[]> = {}
   const dbg: any[] = []
@@ -236,8 +204,7 @@ return { key, data, entry }
         entry.steps.push({ step: "status_current_error", ok: false, err: String(e?.message ?? e) })
       }
 
-      // 3) fallback /guests (interne) - SKIP this as it's very slow
-      // Just return empty data instead of calling the slow /guests endpoint
+      // No third source: the trend stays empty
       entry.steps.push({ step: "fallback_skipped", ok: false })
       
 return { key, data: [], entry }
@@ -252,7 +219,7 @@ return { key, data: [], entry }
     }
   }
 
-  if (debug) return NextResponse.json({ data: out, debug: { appBaseUrl, items: dbg } })
+  if (debug) return NextResponse.json({ data: out, debug: { items: dbg } })
   
 return NextResponse.json({ data: out })
 }

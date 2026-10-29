@@ -659,6 +659,12 @@
       "not-stored": "L'import a été accepté mais les dashboards n'ont pas été enregistrés."
     },
     "importedSuffix": "importé",
+    "importConflictTitle": "Certains dashboards existent déjà",
+    "importConflictIntro": "Ce fichier contient des dashboards du même nom que les vôtres. Ceux qui sont cochés sont remplacés par la version du fichier, les autres sont importés en copie.",
+    "importConflictAll": "Tout remplacer",
+    "importConflictWarning": "Remplacer écrase les widgets du dashboard existant. Cette action est irréversible.",
+    "importConfirm": "Importer",
+    "dashboardsReplaced": "{count, plural, one {# dashboard remplacé.} other {# dashboards remplacés.}}",
     "exportDashboards": "Exporter tous les dashboards",
     "importDashboards": "Importer des dashboards…",
     "dashboardsExported": "{count, plural, one {# dashboard exporté.} other {# dashboards exportés dans un seul fichier.}}",

@@ -8,7 +8,8 @@ import { ResponsiveGridLayout, getCompactor } from 'react-grid-layout'
 import {
   Box, Card, CardContent, CircularProgress, IconButton, Menu, MenuItem,
   Skeleton, Tooltip, Typography, Dialog, DialogTitle, DialogContent, DialogActions,
-  Button, Chip, Tabs, Tab, Snackbar, Alert, useTheme, TextField, ListItemIcon, ListItemText, Divider
+  Button, Chip, Tabs, Tab, Snackbar, Alert, useTheme, TextField, ListItemIcon, ListItemText, Divider,
+  Checkbox, FormControlLabel
 } from '@mui/material'
 
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES, getWidgetsByCategory, isWidgetVisibleForScope } from './widgetRegistry'
@@ -16,7 +17,7 @@ import { computeReclaimedRows, yShiftFor } from './layoutReclaim'
 import { DEFAULT_LAYOUT, PRESET_LAYOUTS } from './types'
 import { CardsSkeleton } from '@/components/skeletons'
 import { useWidgetVisibility } from '@/hooks/useWidgetVisibility'
-import { parseDashboardFile, serializeDashboards } from '@/lib/dashboard/layoutTransfer'
+import { conflictingNames, parseDashboardFile, planImport, serializeDashboards } from '@/lib/dashboard/layoutTransfer'
 import { dateStamp, downloadJson } from '@/lib/export/download'
 import { INHERIT_ON_PRIMARY_SX } from '@/lib/theme/onPrimary'
 
@@ -226,6 +227,61 @@ function NameDialog({ open, title, label, submitLabel, initialValue = '', onClos
   )
 }
 
+// Asked when an imported file names dashboards that already exist: each one is
+// either overwritten (the only way to refresh Default, which cannot be deleted)
+// or imported next to it as a copy.
+function ImportConflictDialog({ conflicts, onClose, onConfirm, t }) {
+  const [replace, setReplace] = useState(() => new Set(conflicts))
+  const all = replace.size === conflicts.length
+
+  const toggle = (name) => setReplace(prev => {
+    const next = new Set(prev)
+
+    if (next.has(name)) next.delete(name)
+    else next.add(name)
+
+    return next
+  })
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{t('dashboard.importConflictTitle')}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mb: 1 }}>{t('dashboard.importConflictIntro')}</Typography>
+        {conflicts.length > 1 && (
+          <FormControlLabel
+            label={t('dashboard.importConflictAll')}
+            control={
+              <Checkbox
+                size="small"
+                checked={all}
+                indeterminate={replace.size > 0 && !all}
+                onChange={() => setReplace(all ? new Set() : new Set(conflicts))}
+              />
+            }
+          />
+        )}
+        <Box sx={{ display: 'flex', flexDirection: 'column', pl: conflicts.length > 1 ? 3 : 0 }}>
+          {conflicts.map(name => (
+            <FormControlLabel
+              key={name}
+              label={name}
+              control={<Checkbox size="small" checked={replace.has(name)} onChange={() => toggle(name)} />}
+            />
+          ))}
+        </Box>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+          {t('dashboard.importConflictWarning')}
+        </Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+        <Button variant="contained" onClick={() => onConfirm(replace)}>{t('dashboard.importConfirm')}</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 // Dialog pour ajouter un widget
 function AddWidgetDialog({ open, onClose, onAdd, hasInfraScope, hiddenWidgets, t }) {
   const [tab, setTab] = useState(0)
@@ -340,6 +396,7 @@ export default function WidgetGrid({ data, loading, onRefresh, refreshLoading })
   const [deleteDashDialog, setDeleteDashDialog] = useState(false)
   const [dragTabName, setDragTabName] = useState(null)
   const [dragOverName, setDragOverName] = useState(null)
+  const [pendingImport, setPendingImport] = useState(null)
   const importInputRef = useRef(null)
 
   const [timeRange, setTimeRange] = useState(() => {
@@ -751,6 +808,71 @@ return {
     }
   }
 
+  // Multi-dashboard: write a parsed file. `replace` holds the names the user
+  // chose to overwrite; every other dashboard is created under a free name.
+  const runImport = async (result, replace) => {
+    const plan = planImport(result.dashboards, {
+      takenNames: dashList.map(d => d.name),
+      replace,
+      importedSuffix: t('dashboard.importedSuffix'),
+    })
+
+    try {
+      // Sequential on purpose: the route deactivates the other dashboards on
+      // every write, so parallel writes would race over which one ends active.
+      for (const dashboard of plan) {
+        const res = await fetch('/api/v1/dashboard/layout', {
+          method: dashboard.replace ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: dashboard.name, widgets: dashboard.widgets }),
+        })
+
+        const json = await res.json().catch(() => ({}))
+
+        if (!res.ok) throw new Error(json.error || 'import failed')
+
+        // A replaced dashboard was already in the list, so only the write's
+        // own answer proves it landed.
+        if (dashboard.replace && json.data?.name !== dashboard.name) {
+          throw new Error(t('dashboard.importError.not-stored'))
+        }
+      }
+
+      // A 200 is not proof the dashboards exist: an unhandled POST answers
+      // `{"data":[]}` in demo mode. Announce an import only once the list
+      // carries them.
+      const list = await refreshDashboardList()
+      const missing = plan.filter(d => !list.some(l => l.name === d.name))
+
+      if (missing.length > 0) throw new Error(t('dashboard.importError.not-stored'))
+
+      await loadDashboard(plan[0].name)
+
+      const replacedCount = plan.filter(d => d.replace).length
+      const createdCount = plan.length - replacedCount
+
+      // Say what was left behind: a silently thinner dashboard is the failure
+      // this import is built to avoid.
+      const notes = [
+        createdCount > 0 ? t('dashboard.dashboardsImported', { count: createdCount }) : null,
+        replacedCount > 0 ? t('dashboard.dashboardsReplaced', { count: replacedCount }) : null,
+        result.skipped > 0 ? t('dashboard.importSkipped', { count: result.skipped }) : null,
+        result.dropped > 0 ? t('dashboard.importDropped', { count: result.dropped }) : null,
+        result.reset > 0 ? t('dashboard.importReset', { count: result.reset }) : null,
+      ].filter(Boolean)
+
+      const incomplete = result.skipped > 0 || result.dropped > 0 || result.reset > 0
+
+      setSnackbar({
+        open: true,
+        message: notes.join(' '),
+        severity: incomplete ? 'warning' : 'success',
+      })
+    } catch (e) {
+      setSnackbar({ open: true, message: e?.message || t('dashboard.importError.invalid-json'), severity: 'error' })
+    }
+  }
+
   // Multi-dashboard: import from a file
   const handleImportFile = async (event) => {
     const file = event.target.files?.[0]
@@ -773,52 +895,16 @@ return {
       return
     }
 
-    try {
-      // Sequential on purpose: the route deactivates the other dashboards on
-      // every create, so parallel writes would race over which one ends active.
-      for (const dashboard of result.dashboards) {
-        const res = await fetch('/api/v1/dashboard/layout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: dashboard.name, widgets: dashboard.widgets }),
-        })
+    const conflicts = conflictingNames(result.dashboards)
 
-        if (!res.ok) {
-          const json = await res.json().catch(() => ({}))
+    // A name already in use is the user's call: replace it or keep both.
+    if (conflicts.length > 0) {
+      setPendingImport({ result, conflicts })
 
-          throw new Error(json.error || 'import failed')
-        }
-      }
-
-      // A 200 is not proof the dashboards exist: an unhandled POST answers
-      // `{"data":[]}` in demo mode. Announce an import only once the list
-      // carries them.
-      const list = await refreshDashboardList()
-      const missing = result.dashboards.filter(d => !list.some(l => l.name === d.name))
-
-      if (missing.length > 0) throw new Error(t('dashboard.importError.not-stored'))
-
-      await loadDashboard(result.dashboards[0].name)
-
-      // Say what was left behind: a silently thinner dashboard is the failure
-      // this import is built to avoid.
-      const notes = [
-        t('dashboard.dashboardsImported', { count: result.dashboards.length }),
-        result.skipped > 0 ? t('dashboard.importSkipped', { count: result.skipped }) : null,
-        result.dropped > 0 ? t('dashboard.importDropped', { count: result.dropped }) : null,
-        result.reset > 0 ? t('dashboard.importReset', { count: result.reset }) : null,
-      ].filter(Boolean)
-
-      const incomplete = result.skipped > 0 || result.dropped > 0 || result.reset > 0
-
-      setSnackbar({
-        open: true,
-        message: notes.join(' '),
-        severity: incomplete ? 'warning' : 'success',
-      })
-    } catch (e) {
-      setSnackbar({ open: true, message: e?.message || t('dashboard.importError.invalid-json'), severity: 'error' })
+      return
     }
+
+    await runImport(result, new Set())
   }
 
   const dashboardRef = useRef(null)
@@ -1213,6 +1299,14 @@ return () => document.removeEventListener('fullscreenchange', handler)
           <Button variant="contained" color="error" onClick={handleDeleteDashboard}>{t('common.delete')}</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Import conflict Dialog */}
+      {pendingImport && <ImportConflictDialog
+        conflicts={pendingImport.conflicts}
+        onClose={() => setPendingImport(null)}
+        onConfirm={(replace) => { const { result } = pendingImport; setPendingImport(null); runImport(result, replace) }}
+        t={t}
+      />}
 
       {/* Add Widget Dialog */}
       <AddWidgetDialog

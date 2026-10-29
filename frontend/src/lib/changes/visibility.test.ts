@@ -183,6 +183,16 @@ describe("isChangeVisibleToTenant with ctx.rbacScope (issue #525)", () => {
   })
 })
 
+describe("infrastructure changes", () => {
+  it("never reach a vDC tenant; a connection's own tenant sees them", () => {
+    for (const resourceType of ["firewall", "access", "storage", "network"]) {
+      const record = { connectionId: "c1", node: "n1", resourceType, resourceId: "x" }
+      expect(isChangeVisibleToTenant(record, iaasCtx())).toBe(false)
+      expect(isChangeVisibleToTenant(record, iaasCtx({ infraKind: "msp", vdcScope: undefined }))).toBe(true)
+    }
+  })
+})
+
 describe("redactChangeForTenant", () => {
   const own: ChangeActor = { name: "me@a.test", source: "audit", ref: "a1", tenantId: "t-a" }
   const staff: ChangeActor = { name: "ops@provider.test", source: "audit", ref: "a2", tenantId: "default" }

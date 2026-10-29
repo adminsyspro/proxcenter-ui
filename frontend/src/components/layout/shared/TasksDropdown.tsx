@@ -26,6 +26,7 @@ import { useRecentChanges } from '@/hooks/useChanges'
 import { useRollingUpdates } from '@/contexts/RollingUpdateContext'
 import { useBranding } from '@/contexts/BrandingContext'
 import { buildTabAlertTitle, buildTabTitle, undecorateTabTitle } from '@/lib/tasks/tabTitle'
+import { INFRA_TYPES } from '@/lib/changes/infra'
 import { useTenant } from '@/contexts/TenantContext'
 import { useActiveDeployments } from '@/hooks/useNavbarNotifications'
 import { useRouter } from 'next/navigation'
@@ -69,6 +70,9 @@ const resourceTypeIcons: Record<string, string> = {
   ct: 'ri-instance-line',
   node: 'ri-server-line',
   storage: 'ri-database-2-line',
+  firewall: 'ri-shield-line',
+  access: 'ri-key-2-line',
+  network: 'ri-router-line',
 }
 
 function formatDuration(seconds: number): string {
@@ -703,8 +707,9 @@ return () => window.removeEventListener('focus', handleFocus)
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <i className={changeActionIcons[change.action] || 'ri-edit-line'} style={{ fontSize: 12, opacity: 0.6 }} />
                         <Typography variant="caption" fontWeight={500} noWrap>
-                          {change.resourceType.toUpperCase()} {change.resourceId}
-                          {change.resourceName ? ` "${change.resourceName}"` : ''}
+                          {INFRA_TYPES.has(change.resourceType)
+                            ? `${change.resourceType.toUpperCase()} ${change.resourceName || change.resourceId}`
+                            : `${change.resourceType.toUpperCase()} ${change.resourceId}${change.resourceName ? ` "${change.resourceName}"` : ''}`}
                         </Typography>
                       </Box>
                       <Typography variant="caption" sx={{ opacity: 0.5, display: 'block' }} noWrap>

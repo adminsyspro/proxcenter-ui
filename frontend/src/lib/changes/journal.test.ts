@@ -65,6 +65,20 @@ describe('filterJournal', () => {
   })
 })
 
+describe('groupBursts on infrastructure', () => {
+  it('keeps every infrastructure change on its own row', () => {
+    const at = (min: number) => new Date(Date.UTC(2026, 9, 29, 12, min)).toISOString()
+    const rows = [
+      change({ id: 1, timestamp: at(0), resourceType: 'firewall', resourceId: 'cluster', action: 'firewall_rule_added' }),
+      change({ id: 2, timestamp: at(1), resourceType: 'firewall', resourceId: 'cluster', action: 'firewall_rule_removed' }),
+      change({ id: 3, timestamp: at(2), resourceType: 'vm', resourceId: '100', action: 'config_changed' }),
+      change({ id: 4, timestamp: at(3), resourceType: 'vm', resourceId: '100', action: 'hardware_changed' })
+    ]
+
+    expect(groupBursts(rows).map(e => e.changes.map(c => c.id))).toEqual([[4, 3], [2], [1]])
+  })
+})
+
 describe('journalUsers', () => {
   it('lists each author once, sorted, without blanks', () => {
     const rows = [change({ user: 'system' }), change({ user: 'root@pam' }), change({ user: 'system' }), change({ user: '' })]

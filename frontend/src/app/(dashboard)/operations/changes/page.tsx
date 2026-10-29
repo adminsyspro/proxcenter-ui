@@ -20,7 +20,7 @@ import {
 
 import { ATTRIBUTION_META, isAttribution } from '@/lib/changes/attribution'
 import { buildChangesCsv } from '@/lib/changes/csv'
-import { actionMeta } from '@/lib/changes/journal'
+import { RESOURCE_LABELS, actionMeta } from '@/lib/changes/journal'
 import type { JournalChange } from '@/lib/changes/journal'
 import { dateStamp, downloadCsv } from '@/lib/export/download'
 
@@ -35,7 +35,6 @@ import EmptyState from '@/components/EmptyState'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { CardsSkeleton } from '@/components/skeletons'
 
-const RESOURCE_LABELS: Record<string, string> = { vm: 'VM', ct: 'Container', node: 'Node', storage: 'Storage', pool: 'Pool' }
 
 export default function ChangesPage() {
   const t = useTranslations()

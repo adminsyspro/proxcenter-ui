@@ -1055,7 +1055,8 @@ export async function runV2vMigrationPipeline(
   // in Phase 5 to override the sparse defaults virt-v2v would otherwise emit.
   let sourceVmwareConfig: EsxiVmConfig | null = null
   // Same gap for the other -i disk sources: the Hyper-V host (WinRM) or Prism
-  // Central knows the real CPU count and memory, virt-v2v writes 1 vCPU / 2 GB.
+  // Central knows the real CPU count, memory and NICs with their MACs, where
+  // virt-v2v writes 1 vCPU / 2 GB and a single NIC with no MAC.
   let sourceSizing: SourceSizing | null = null
   // Live migration state. When migrationType=="live" and the source VM is
   // powered on, we snapshot before the NFC export so transfer happens while

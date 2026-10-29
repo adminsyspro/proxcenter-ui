@@ -5,6 +5,7 @@
  */
 
 import { authorsOf } from './attribution'
+import { INFRA_TYPES } from './infra'
 import type { ChangeActor } from './attribution'
 import type { ChangeFieldDiff, ChangeRecord } from './csv'
 
@@ -21,9 +22,21 @@ export type JournalChange = ChangeRecord & {
   actors?: ChangeActor[]
 }
 
+/** What each resource type reads as in the journal and its export. */
+export const RESOURCE_LABELS: Record<string, string> = {
+  vm: 'VM',
+  ct: 'Container',
+  node: 'Node',
+  storage: 'Storage',
+  pool: 'Pool',
+  firewall: 'Firewall',
+  access: 'Access',
+  network: 'Network',
+}
+
 export type ActionColor = 'info' | 'success' | 'error' | 'warning'
 
-export const FAMILIES = ['config', 'hardware', 'network', 'snapshot', 'migration', 'backup'] as const
+export const FAMILIES = ['config', 'hardware', 'network', 'snapshot', 'migration', 'backup', 'firewall', 'access'] as const
 
 export type Family = (typeof FAMILIES)[number]
 
@@ -40,6 +53,29 @@ export const ACTIONS: Record<string, ActionMeta> = {
   backup: { icon: 'ri-archive-line', color: 'success', label: 'changes.actionBackup', family: 'backup' },
   created: { icon: 'ri-add-circle-line', color: 'success', label: 'changes.actionCreated', family: 'config' },
   deleted: { icon: 'ri-delete-bin-line', color: 'error', label: 'changes.actionDeleted', family: 'config' },
+  ...lifecycle('firewall_rule', 'FirewallRule', 'ri-shield-flash-line', 'firewall'),
+  firewall_rules_reordered: { icon: 'ri-sort-desc', color: 'info', label: 'changes.actionFirewallRulesReordered', family: 'firewall' },
+  firewall_options_changed: { icon: 'ri-shield-keyhole-line', color: 'warning', label: 'changes.actionFirewallOptionsChanged', family: 'firewall' },
+  ...lifecycle('firewall_alias', 'FirewallAlias', 'ri-price-tag-3-line', 'firewall'),
+  ...lifecycle('firewall_group', 'FirewallGroup', 'ri-stack-line', 'firewall'),
+  ...lifecycle('firewall_ipset', 'FirewallIpset', 'ri-list-check', 'firewall'),
+  ...lifecycle('acl', 'Acl', 'ri-key-2-line', 'access'),
+  ...lifecycle('user', 'User', 'ri-user-line', 'access'),
+  ...lifecycle('group', 'Group', 'ri-team-line', 'access'),
+  ...lifecycle('token', 'Token', 'ri-key-line', 'access'),
+  login_failed: { icon: 'ri-login-box-line', color: 'error', label: 'changes.actionLoginFailed', family: 'access' },
+  // A storage is cluster configuration; a node's interfaces are networking
+  ...lifecycle('storage', 'Storage', 'ri-database-2-line', 'config'),
+  ...lifecycle('iface', 'Iface', 'ri-router-line', 'network'),
+}
+
+/** The added, changed and removed actions of an infrastructure object. */
+function lifecycle(prefix: string, label: string, icon: string, family: Family): Record<string, ActionMeta> {
+  return {
+    [`${prefix}_added`]: { icon, color: 'success', label: `changes.action${label}Added`, family },
+    [`${prefix}_changed`]: { icon, color: 'info', label: `changes.action${label}Changed`, family },
+    [`${prefix}_removed`]: { icon, color: 'error', label: `changes.action${label}Removed`, family },
+  }
 }
 
 /** A guest's creation or deletion: its rows hold its whole config, not a diff. */
@@ -57,6 +93,8 @@ export const FAMILY_LABELS: Record<Family, string> = {
   snapshot: 'changes.familySnapshot',
   migration: 'changes.familyMigration',
   backup: 'changes.familyBackup',
+  firewall: 'changes.familyFirewall',
+  access: 'changes.familyAccess',
 }
 
 /**
@@ -71,6 +109,8 @@ export const FAMILY_COLORS: Record<Family, { light: string; dark: string }> = {
   snapshot: { light: '#eda100', dark: '#c98500' },
   migration: { light: '#e87ba4', dark: '#d55181' },
   backup: { light: '#008300', dark: '#008300' },
+  firewall: { light: '#6250d6', dark: '#9085e9' },
+  access: { light: '#e34948', dark: '#e66767' },
 }
 
 export type JournalFilter = {
@@ -137,7 +177,9 @@ export function groupBursts<T extends JournalChange>(changes: readonly T[], gapM
 
   for (const c of sorted) {
     const resource = `${c.connectionId || c.connectionName}|${c.resourceType}|${c.resourceId}`
-    const alone = c.action === 'backup' || LIFECYCLE.has(c.action || '')
+    // A backup, a creation or a deletion stands alone, and so does every
+    // infrastructure change: each is about its own rule, account or interface
+    const alone = c.action === 'backup' || LIFECYCLE.has(c.action || '') || INFRA_TYPES.has(c.resourceType || '')
     const burst = alone ? undefined : open.get(resource)
 
     if (burst && time(burst.earliest) - time(c) <= gapMs) {

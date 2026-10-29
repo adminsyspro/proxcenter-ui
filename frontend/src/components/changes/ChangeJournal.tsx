@@ -24,6 +24,7 @@ import ActivityTimeline from '@/components/changes/ActivityTimeline'
 import { AuthorCell, AuthorEvidence } from '@/components/changes/AuthorCell'
 import ChangeDetails, { FieldDiff } from '@/components/changes/ChangeDetails'
 import { attributionOf } from '@/lib/changes/attribution'
+import { INFRA_ICONS, INFRA_TYPES, infraSummary } from '@/lib/changes/infra'
 import { fieldKey, withKeys } from '@/lib/changes/keys'
 import { FactSummary } from '@/components/changes/FactLine'
 import { PAGE_SIZES, STICKY_PAGER_SX } from '@/components/ui/PagedRows'
@@ -33,6 +34,7 @@ import {
   FAMILY_COLORS,
   FAMILY_LABELS,
   LIFECYCLE,
+  RESOURCE_LABELS,
   actionMeta,
   backupSummary,
   bucketize,
@@ -49,8 +51,6 @@ import { pageOf } from '@/lib/paging'
 // A small Select is 2 px taller than a small text field; this keeps the
 // filter bar on one baseline.
 const SMALL_SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } }
-
-const RESOURCE_LABELS: Record<string, string> = { vm: 'VM', ct: 'Container', node: 'Node', storage: 'Storage', pool: 'Pool' }
 
 const BACKUP_STATE_COLORS: Record<BackupState, 'success' | 'error' | 'info' | 'default'> = {
   ok: 'success',
@@ -193,7 +193,27 @@ export default function ChangeJournal({
     ''
   ]
 
+  const infraWords = {
+    pending: t('changes.infraPending'),
+    disabled: t('changes.infraDisabled'),
+    from: (host: string) => t('changes.infraFrom', { host }),
+    times: (count: number) => t('changes.infraTimes', { count })
+  }
+
   const resourceCell = (c: JournalChange) => {
+    if (INFRA_TYPES.has(c.resourceType || '')) {
+      const name = String(c.resourceName || c.resourceId || '')
+
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+          <i className={INFRA_ICONS[c.resourceType || '']} style={{ fontSize: 16, opacity: 0.7, flexShrink: 0 }} />
+          <Typography title={name} sx={{ fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {name}
+          </Typography>
+        </Box>
+      )
+    }
+
     const name = c.resourceName || `${RESOURCE_LABELS[c.resourceType || ''] || c.resourceType} ${c.resourceId}`
     const glyph = c.resourceType === 'node'
       ? <NodeGlyph dark={dark} dotBorder={dotBorder} />
@@ -233,6 +253,16 @@ export default function ChangeJournal({
             </Typography>
           )}
         </Box>
+      )
+    }
+
+    if (INFRA_TYPES.has(c.resourceType || '')) {
+      const text = infraSummary(c.action, c.fields, infraWords)
+
+      return (
+        <Typography variant='caption' title={text} sx={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {text}
+        </Typography>
       )
     }
 
@@ -425,10 +455,36 @@ export default function ChangeJournal({
     </Box>
   )
 
+  // A burst of failed logins reads as who was tried, from where, how often
+  const loginDetails = (c: JournalChange) => {
+    const v = Object.fromEntries((c.fields || []).map(f => [f.field, f.newValue || '']))
+    const at = (iso?: string) => (iso ? new Date(iso).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'medium' }) : '')
+    const facts = ([
+      [t('changes.loginAccount'), v.user],
+      [t('changes.loginAddress'), v.rhost],
+      [t('changes.loginAttempts'), v.count],
+      [t('changes.loginFirst'), at(v.first)],
+      [t('changes.loginLast'), at(v.last)]
+    ] as [string, string | undefined][]).filter((pair): pair is [string, string] => !!pair[1])
+
+    return (
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', columnGap: 2, rowGap: 0.5 }}>
+        {facts.map(([label, value]) => (
+          <Fragment key={label}>
+            <Typography variant='caption' sx={{ opacity: 0.6 }}>{label}</Typography>
+            <Typography variant='caption'>{value}</Typography>
+          </Fragment>
+        ))}
+      </Box>
+    )
+  }
+
   const entryDetails = (e: JournalEntry, net: JournalChange['fields']) => {
     if (e.changes.length > 1) return burstDetails(e, net)
 
     const c = e.latest
+
+    if (c.action === 'login_failed') return loginDetails(c)
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

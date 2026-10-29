@@ -274,4 +274,31 @@ describe('ChangeJournal', () => {
     expect(screen.getByText('Author · Verified')).toBeInTheDocument()
     expect(screen.getByText('ProxCenter audit log')).toBeInTheDocument()
   })
+
+  it('reads an infrastructure row by its object, its summary and its family', () => {
+    const at = ago(5 * MIN)
+    const infra: JournalChange[] = [
+      {
+        ...base, id: 500, timestamp: at, resourceType: 'firewall', resourceId: 'cluster', resourceName: 'Cluster', node: '', action: 'firewall_rule_added',
+        fields: [f('type', '', 'in'), f('action', '', 'ACCEPT'), f('proto', '', 'tcp'), f('dport', '', '22')], user: '', attribution: 'unknown'
+      },
+      {
+        ...base, id: 501, timestamp: ago(10 * MIN), resourceType: 'access', resourceId: 'login:root@pam from 203.0.113.7', resourceName: 'root@pam', action: 'login_failed',
+        fields: [f('user', '', 'root@pam'), f('rhost', '', '203.0.113.7'), f('count', '', '12')], user: ''
+      }
+    ]
+
+    renderWithProviders(<ChangeJournal changes={infra} timeline />)
+    expect(screen.getByText('Firewall rule added')).toBeInTheDocument()
+    expect(screen.getByText('Cluster')).toBeInTheDocument()
+    expect(screen.getByText('IN ACCEPT tcp 22')).toBeInTheDocument()
+    expect(screen.getByText('Failed login')).toBeInTheDocument()
+    expect(screen.getByText('×12 · from 203.0.113.7')).toBeInTheDocument()
+    expect(screen.getAllByText('Firewall').length).toBeGreaterThan(0)
+
+    toggleRow('Failed login')
+    expect(screen.getByText('Source address')).toBeInTheDocument()
+    expect(screen.getByText('203.0.113.7')).toBeInTheDocument()
+    expect(screen.getByText('12')).toBeInTheDocument()
+  })
 })

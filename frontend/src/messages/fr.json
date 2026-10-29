@@ -6911,6 +6911,34 @@
         "regenerateMac": "Générer une nouvelle MAC",
         "staticGateway": "Passerelle",
         "staticDns": "DNS"
+      },
+      "firmware": {
+        "title": "Micrologiciel et affichage",
+        "firmware": "Micrologiciel",
+        "machine": "Machine",
+        "machineI440fx": "i440fx",
+        "machineQ35": "q35",
+        "tpm": "TPM 2.0",
+        "diskBus": "Bus du disque",
+        "busScsi": "SCSI (VirtIO SCSI)",
+        "busSata": "SATA",
+        "busVirtio": "VirtIO Block",
+        "busIde": "IDE",
+        "display": "Affichage",
+        "displayStd": "VGA standard",
+        "displaySerial": "Console série",
+        "displayQxl": "SPICE (qxl)",
+        "displayVirtio": "VirtIO-GPU",
+        "displayVmware": "Compatible VMware",
+        "fromTemplate": "Repris du template dont l'image est issue.",
+        "windowsHint": "Windows démarre en UEFI, et Windows 11 / Server 2022+ exige un TPM. Sans les pilotes VirtIO dans l'image, choisissez SATA.",
+        "serialWarning": "Un affichage série laisse la console ProxCenter noire."
+      },
+      "ha": {
+        "label": "Activer la haute disponibilité",
+        "help": "La VM est ajoutée au gestionnaire HA, qui la démarre.",
+        "helpIso": "La VM est ajoutée au gestionnaire HA et reste arrêtée jusqu'au lancement de l'installation.",
+        "localStorage": "Exige un stockage partagé : le stockage choisi est local à son nœud."
       }
     },
     "deployments": {
@@ -7475,7 +7503,10 @@
         "target": "{volid} : snapshot(s) {snapshots}. Ils ne peuvent aller que vers un stockage du même type."
       },
       "offlineHint": "Arrêtez la VM et migrez-la à froid pour garder ses snapshots, ou supprimez-les."
-    }
+    },
+    "cloneHa": "Activer la haute disponibilité",
+    "cloneHaHelp": "Ajouté au gestionnaire HA et démarré une fois le clone terminé.",
+    "cloneHaLocal": "Exige un stockage partagé : le stockage cible est local à son nœud."
   },
   "ldap": {
     "description": "Configurez l'authentification LDAP/Active Directory pour permettre aux utilisateurs de se connecter avec leurs identifiants d'entreprise.",

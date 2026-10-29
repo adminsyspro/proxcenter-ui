@@ -32,6 +32,8 @@ import { DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 import { resolveProviderVdcTarget, type ProviderVdcTarget } from "@/lib/vdc/providerTarget"
 import { withAudit } from "@/lib/audit/withAudit"
+import { dataDiskKey, firmwareCreateParams } from "@/lib/templates/deployHardware"
+import { haPermissionDenied, nonSharedStorages, registerHaResource, HA_LOCAL_STORAGE_ERROR } from "@/lib/proxmox/haRegistration"
 
 export const runtime = "nodejs"
 
@@ -237,7 +239,7 @@ async function handlePost(req: Request) {
     }
 
     // QoS suffix (`,iops_rd=..,iops_wr=..,mbps_rd=..,mbps_wr=..`) stamped onto
-    // the data disk (scsi0) when body.storage carries a storage policy in the
+    // the data disk (scsi0 or the chosen bus) when body.storage carries a storage policy in the
     // tenant's vDC scope. Computed once below, inside the existing
     // `if (isTenant)` scope block: provider deploys never fetch scope, so
     // this stays '' for them by construction.
@@ -317,7 +319,7 @@ async function handlePost(req: Request) {
 
       // Storage-policy QoS: body.storage may carry a tier's IOPS/MBPS caps in
       // this tenant's scope. Resolved once here so both the cloud-image and
-      // ISO createParams branches stamp the identical suffix on scsi0.
+      // ISO createParams branches stamp the identical suffix on the data disk.
       const policiesByStorage = scope.storagePoliciesByConnection?.get(body.connectionId)
       dataDiskQosSuffix = policyQosSuffix(policiesByStorage?.get(body.storage))
 
@@ -354,6 +356,16 @@ async function handlePost(req: Request) {
 
     const conn = await getConnectionById(body.connectionId)
 
+    // HA at creation (#181): same rights as the HA tab, and only on shared
+    // storage, checked before anything is created.
+    if (body.ha) {
+      const haDenied = await haPermissionDenied(body.connectionId)
+      if (haDenied) return haDenied
+      if ((await nonSharedStorages(conn, [body.storage])).length > 0) {
+        return NextResponse.json({ error: HA_LOCAL_STORAGE_ERROR }, { status: 400 })
+      }
+    }
+
     if (volumeSource) {
       await authorizeImageVolume({ tenantId: callerTenantId, source: volumeSource, target: { connectionId: body.connectionId, node: body.node }, publishedImage: volumeSource })
     }
@@ -363,6 +375,7 @@ async function handlePost(req: Request) {
       vmName: body.vmName,
       hardware: body.hardware,
       cloudInit: body.cloudInit,
+      ...(body.ha ? { ha: true } : {}),
       // Kept for the history and for a retry, which must land in the same
       // vDC. The record itself stays the caller's, where its progress is read.
       ...(target ? { targetVdcId: target.vdcId } : {}),
@@ -629,6 +642,10 @@ async function handlePost(req: Request) {
           }
         }
 
+        // Firmware, machine, TPM, bus and display come from the wizard
+        // (#181): a UEFI Windows image needs OVMF + an EFI disk, and one
+        // that boots from SATA must not land on SCSI.
+        const diskKey = dataDiskKey(hw.diskBus)
         const createParams = new URLSearchParams({
           vmid: String(body.vmid),
           name: body.vmName || `${image.slug}-${body.vmid}`,
@@ -638,13 +655,12 @@ async function handlePost(req: Request) {
           memory: String(hw.memory),
           cpu: hw.cpu,
           scsihw: hw.scsihw,
-          scsi0: `${body.storage}:0,import-from=${importVolume}${dataDiskQosSuffix}`,
+          [diskKey]: `${body.storage}:0,import-from=${importVolume}${dataDiskQosSuffix}`,
           net0: netSpec,
           ide2: `${body.storage}:cloudinit`,
-          boot: "order=scsi0",
-          serial0: "socket",
-          vga: "serial0",
+          boot: `order=${diskKey}`,
           agent: hw.agent ? "1" : "0",
+          ...firmwareCreateParams(hw, body.storage),
         })
 
         // Pin the VM to the tenant's vDC pool so it surfaces in their
@@ -717,7 +733,7 @@ async function handlePost(req: Request) {
             `/nodes/${encodeURIComponent(body.node)}/qemu/${body.vmid}/resize`,
             {
               method: "PUT",
-              body: new URLSearchParams({ disk: "scsi0", size: hw.diskSize }),
+              body: new URLSearchParams({ disk: diskKey, size: hw.diskSize }),
             }
           )
         }
@@ -731,8 +747,12 @@ async function handlePost(req: Request) {
           { method: "POST" }
         )
 
+        // The VM exists and runs: an HA registration failure is reported on
+        // the deployment, it does not turn a working VM into a failed one.
+        const haError = body.ha ? await registerHaOrReason(conn, body.vmid, 'started') : null
+
         // Done!
-        await updateDeployment(deployment.id, "completed")
+        await updateDeployment(deployment.id, "completed", haError ? { error: haError } : {})
 
         // Audit
         const { audit } = await import("@/lib/audit")
@@ -742,7 +762,7 @@ async function handlePost(req: Request) {
           resourceType: "vm",
           resourceId: String(body.vmid),
           resourceName: body.vmName || `${image.slug}-${body.vmid}`,
-          details: { imageSlug: body.imageSlug, node: body.node, connectionId: body.connectionId, ...targetAuditDetails(target) },
+          details: { imageSlug: body.imageSlug, node: body.node, connectionId: body.connectionId, diskBus: hw.diskBus ?? 'scsi', bios: hw.bios ?? 'seabios', ...(body.ha ? { ha: !haError } : {}), ...targetAuditDetails(target) },
           status: "success",
         })
       } catch (err: any) {
@@ -793,7 +813,7 @@ async function runIsoDeploy(args: {
   vdcInfo: { poolName?: string | null } | null
   /** Tenant vDC a provider deploys into, recorded in the audit entry. */
   target: ProviderVdcTarget | null
-  /** Storage-policy QoS suffix for the data disk (scsi0), computed once by
+  /** Storage-policy QoS suffix for the data disk (on the chosen bus), computed once by
    *  the caller (empty string when body.storage carries no policy, or the
    *  tenant is the provider). Never applied to ide2 or efidisk0. */
   dataDiskQosSuffix: string
@@ -868,6 +888,9 @@ async function runIsoDeploy(args: {
 
   const diskSizeGb = String(hw.diskSize).replace(/G$/i, '') // "32G" → "32"
   const useUefi = hw.bios === 'ovmf'
+  // Windows setup only sees a SCSI disk once the VirtIO driver is loaded:
+  // the bus is the user's choice, SATA needs no driver (#181).
+  const isoDiskKey = dataDiskKey(hw.diskBus)
 
   // ── IPAM reservation for ISO mode ──
   // PVE auto-generates a MAC unless we pin one. For ISO installs on an
@@ -918,12 +941,12 @@ async function runIsoDeploy(args: {
     scsihw: hw.scsihw,
     // Empty data disk (no import-from). Format defaults to qcow2 on
     // file-based storage; on block-based storage PVE picks raw automatically.
-    scsi0: `${body.storage}:${diskSizeGb}${dataDiskQosSuffix}`,
+    [isoDiskKey]: `${body.storage}:${diskSizeGb}${dataDiskQosSuffix}`,
     net0: isoNetSpec,
     // Boot ISO on the secondary IDE bus (PVE convention for install media).
     ide2: `${isoVolume},media=cdrom`,
     // CD-ROM first, fall back to the empty disk once the OS is installed.
-    boot: 'order=ide2;scsi0',
+    boot: `order=ide2;${isoDiskKey}`,
     // Graphical install — VNC console. Serial0/serial0 (used by cloud-init)
     // would leave Windows install with no usable display.
     vga: 'std',
@@ -932,6 +955,11 @@ async function runIsoDeploy(args: {
     // (PCIe, NVMe, VirtIO 1.x). Forced silently per spec.
     machine: 'q35',
   })
+
+  // Windows 11 setup refuses to install without TPM 2.0 (#181).
+  if (hw.tpm) {
+    createParams.set('tpmstate0', `${body.storage}:1,version=v2.0`)
+  }
 
   if (useUefi) {
     createParams.set('bios', 'ovmf')
@@ -957,7 +985,9 @@ async function runIsoDeploy(args: {
   }
 
   // ── Step 3: Done — VM stays stopped, user installs via console ──
-  await updateDeployment(deploymentId, "completed", { taskUpid: null })
+  // HA keeps it stopped too: the user starts the installer when ready.
+  const haError = body.ha ? await registerHaOrReason(conn, body.vmid, 'stopped') : null
+  await updateDeployment(deploymentId, "completed", { taskUpid: null, ...(haError ? { error: haError } : {}) })
 
   const { audit } = await import("@/lib/audit")
   await audit({
@@ -972,10 +1002,22 @@ async function runIsoDeploy(args: {
       connectionId: body.connectionId,
       mode: 'iso',
       bios: useUefi ? 'ovmf' : 'seabios',
+      tpm: !!hw.tpm,
+      ...(body.ha ? { ha: !haError } : {}),
       ...targetAuditDetails(target),
     },
     status: "success",
   })
+}
+
+/** Register the new VM with the HA manager; the failure message, or null on success. */
+async function registerHaOrReason(conn: any, vmid: number, state: 'started' | 'stopped'): Promise<string | null> {
+  try {
+    await registerHaResource(conn, vmid, state)
+    return null
+  } catch (err: any) {
+    return `VM deployed, but high availability could not be enabled: ${err?.message || String(err)}`
+  }
 }
 
 export const POST = withAudit({ category: "templates", resourceType: "template", action: "create" }, handlePost)

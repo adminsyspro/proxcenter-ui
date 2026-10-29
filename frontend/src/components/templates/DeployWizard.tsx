@@ -36,6 +36,17 @@ import {
 
 import type { CloudImage } from '@/lib/templates/cloudImages'
 import { buildDeployIpconfig0, parseIpconfig0 } from '@/lib/templates/deployIpconfig'
+import {
+  firmwareDefaultsForOstype,
+  isUefiWindowsOstype,
+  type DeployBios,
+  type DeployDiskBus,
+  type DeployDisplay,
+  type DeployMachine,
+  type TemplateHardwareHints,
+} from '@/lib/templates/deployHardware'
+import { isSharedStorage } from '@/lib/proxmox/storage'
+import { useRBAC } from '@/contexts/RBACContext'
 import { supportsVmDisks } from '@/lib/proxmox/storage'
 import type { StoragePolicyCaps } from '@/components/hardware/utils'
 import NumericTextField from '@/components/ui/NumericTextField'
@@ -185,11 +196,23 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // un-glitchy; coerced to number | null at submit.
   const [vlanTag, setVlanTag] = useState<string>('')
   const [cpu, setCpu] = useState('host')
-  // ISO-mode only: BIOS firmware + OS type override. Cloud-images keep
-  // ostype from the catalog and seabios silently; ISO installs need an
-  // explicit choice (ovmf+pre-enrolled-keys for Windows 10/11/Server 2025).
-  const [bios, setBios] = useState<'seabios' | 'ovmf'>('seabios')
+  // Firmware, machine, TPM, disk bus and display (#181). ISO installs and
+  // disk images both expose them: a UEFI Windows image needs OVMF + q35 (+
+  // a TPM for Windows 11 / Server 2022+), and one without VirtIO drivers
+  // must boot from SATA. Defaults follow the image ostype; a volume image
+  // taken from a VM template is then prefilled from that template.
+  const [bios, setBios] = useState<DeployBios>('seabios')
+  const [machine, setMachine] = useState<DeployMachine>('i440fx')
+  const [tpm, setTpm] = useState(false)
+  const [diskBus, setDiskBus] = useState<DeployDiskBus>('scsi')
+  const [vga, setVga] = useState<DeployDisplay>('std')
+  // Set once the hardware hints of the source template were applied.
+  const [hintsApplied, setHintsApplied] = useState(false)
+  const hintsKeyRef = useRef('')
+  // ISO mode only: OS type override. Cloud images keep the catalog ostype.
   const [ostypeOverride, setOstypeOverride] = useState<string | null>(null)
+  // Register the VM with the HA manager once created (#181).
+  const [ha, setHa] = useState(false)
 
   // vDC quota (tenant only — provider has no vDC scope so banner stays hidden)
   const [vdcQuota, setVdcQuota] = useState<{ maxVcpus: number | null; maxRamMb: number | null; maxStorageMb: number | null; maxVms: number | null } | null>(null)
@@ -379,19 +402,25 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       // ISO defaults: pre-set Windows install media to win11 + OVMF
       // (Secure Boot enrolled), other ISOs to ostype='other' + SeaBIOS.
       // Cloud images keep their catalog ostype (no override).
+      // ISO installs always run on q35 (forced server-side). A Windows
+      // installer gets SATA so setup sees the disk without VirtIO drivers.
+      const isoWindows = isIsoMode && windowsHint
+      const fw = firmwareDefaultsForOstype(isoWindows ? 'win11' : image.ostype)
       if (isIsoMode) {
-        if (windowsHint) {
-          setOstypeOverride('win11')
-          setBios('ovmf')
-        } else {
-          setOstypeOverride(image.ostype || 'other')
-          setBios('seabios')
-        }
+        setOstypeOverride(windowsHint ? 'win11' : (image.ostype || 'other'))
+        setDiskBus(windowsHint ? 'sata' : fw.diskBus)
       } else {
         setOstypeOverride(null)
-        setBios('seabios')
+        setDiskBus(fw.diskBus)
       }
+      setBios(fw.bios)
+      setMachine(fw.machine)
+      setTpm(fw.tpm)
+      setVga(fw.vga)
     }
+    setHa(false)
+    setHintsApplied(false)
+    hintsKeyRef.current = ''
 
     // Prefill from blueprint
     if (prefillBlueprint) {
@@ -412,6 +441,15 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         setVlanTag(hw.vlanTag != null && hw.vlanTag !== 0 ? String(hw.vlanTag) : '')
         setCpu(hw.cpu || 'host')
         setAgent(hw.agent !== false)
+        // A blueprint saved before #181 has none of these: keep the
+        // ostype defaults set above.
+        if (hw.bios) setBios(hw.bios)
+        if (hw.machine) setMachine(hw.machine)
+        if (typeof hw.tpm === 'boolean') setTpm(hw.tpm)
+        if (hw.diskBus) setDiskBus(hw.diskBus)
+        if (hw.vga) setVga(hw.vga)
+        // The blueprint is the explicit recipe: no template hints over it.
+        hintsKeyRef.current = 'blueprint'
       } catch { /* ignore */ }
 
       try {
@@ -448,6 +486,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         if (rf.storage) setStorage(rf.storage)
         if (rf.vmName) setVmName(rf.vmName)
         if (rf.targetVdcId) setTargetVdcId(rf.targetVdcId)
+        if (rf.ha) setHa(true)
       }
     }
   }, [open, image, prefillBlueprint, resumeDeploymentId])
@@ -771,6 +810,52 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     return granted.size ? storages.filter(s => granted.has(s.storage)) : storages
   }, [hideInfra, deployVdcId, tenantVdcs, storages])
 
+  // HA at creation (#181): the HA tab's rights (provider, node.manage on the
+  // connection), and only on shared storage. The server checks both again.
+  const { hasPermissionOn } = useRBAC()
+  const canManageHa = isProvider && !!connectionId && hasPermissionOn('node.manage', 'connection', connectionId)
+  const selectedStorageInfo = storages.find(s => s.storage === storage)
+  const haStorageShared = !!selectedStorageInfo && isSharedStorage({
+    shared: selectedStorageInfo.shared === true || Number(selectedStorageInfo.shared) === 1,
+    type: selectedStorageInfo.type,
+  })
+
+  // A volume image taken from a VM template boots with that template's
+  // firmware and bus: read them once per image and cluster, unless a
+  // blueprint already set the recipe.
+  useEffect(() => {
+    if (!open || !image || isIsoMode || !connectionId || resumeDeploymentId) return
+    if (!String(image.slug).startsWith('custom-')) return
+    const key = `${image.slug}|${connectionId}`
+    if (hintsKeyRef.current === 'blueprint' || hintsKeyRef.current === key) return
+    hintsKeyRef.current = key
+    let cancelled = false
+    let settled = false
+    const qs = new URLSearchParams({ imageSlug: image.slug, connectionId })
+    fetch(`/api/v1/templates/hardware-hints?${qs.toString()}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(res => {
+        const hints: TemplateHardwareHints | null = res?.data ?? null
+        if (cancelled) return
+        settled = true
+        if (!hints) return
+        if (hints.bios) setBios(hints.bios)
+        if (hints.machine) setMachine(hints.machine)
+        if (typeof hints.tpm === 'boolean') setTpm(hints.tpm)
+        if (hints.diskBus) setDiskBus(hints.diskBus)
+        if (hints.vga) setVga(hints.vga)
+        if (hints.scsihw) setScsihw(hints.scsihw)
+        setHintsApplied(true)
+      })
+      .catch(() => { /* keep the ostype defaults */ })
+    return () => {
+      cancelled = true
+      // Interrupted before the answer: let the next run ask again. Once
+      // applied, the hints never come back over the user's own choices.
+      if (!settled && hintsKeyRef.current === key) hintsKeyRef.current = ''
+    }
+  }, [open, image, isIsoMode, connectionId, resumeDeploymentId])
+
   // The default picked when the list arrived may sit outside the vDC that
   // resolved afterwards: move it onto a granted storage, shared first.
   useEffect(() => {
@@ -865,8 +950,14 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           ostype: isIsoMode ? (ostypeOverride || image.ostype) : image.ostype,
           agent,
           cpu,
-          bios: isIsoMode ? bios : 'seabios',
+          bios,
+          // ISO installs run on q35 whatever is sent (server-side).
+          machine: isIsoMode ? 'q35' : machine,
+          tpm,
+          diskBus,
+          vga: isIsoMode ? 'std' : vga,
         },
+        ha: canManageHa && ha && haStorageShared ? true : undefined,
         // ISO deployments don't run cloud-init: omit the block entirely so
         // the backend skips the configure step. Cloud-image deployments
         // keep their existing cloud-init payload.
@@ -935,7 +1026,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   }, [
     image, connectionId, node, storage, storageSelectionReady, quotaBlocked, isoStorage, vmid, vmName, cores, sockets, memory,
     diskSize, scsihw, networkModel, networkBridge, vlanTag, fullClusterNet, canEditVlan, cpu, agent,
-    bios, ostypeOverride, isIsoMode, isoNeedsReservation, staticIp, staticMac,
+    bios, machine, tpm, diskBus, vga, ha, canManageHa, haStorageShared, ostypeOverride, isIsoMode, isoNeedsReservation, staticIp, staticMac,
     ciuser, cipassword, sshKeys, ipOverride, nameserver, searchdomain,
     bridges,
     saveAsBlueprint, blueprintName, prefillBlueprint, targetVdcId,
@@ -1714,22 +1805,29 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       />
       </Box>
 
-      {/* ISO-only extras: OS type override, BIOS firmware, disk size hint.
-          Cloud-image deployments don't expose any of these — ostype is
-          fixed by the catalog and SeaBIOS is fine for every supported
-          distro. Machine type stays q35 silently (sent server-side). */}
-      {isIsoMode && (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="overline" sx={{ opacity: 0.6, display: 'block', mb: 1 }}>
-            {t('templates.deploy.iso.installOptions')}
-          </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+      {/* Firmware and display (#181). ISO installs keep their OS type
+          override and the Windows disk-size check; machine stays q35 there
+          (server-side). Disk images expose machine and display too, since
+          a template-derived image must boot with its template's settings. */}
+      <Box sx={{ mt: 2 }}>
+        {/* mb + the grid's pt: the floating label of the first select sits 9px above it. */}
+        <Typography variant="overline" sx={{ opacity: 0.6, display: 'block', mb: 1 }}>
+          {isIsoMode ? t('templates.deploy.iso.installOptions') : t('templates.deploy.firmware.title')}
+        </Typography>
+        {!isIsoMode && hintsApplied && (
+          <Alert severity="info" variant="outlined" sx={{ mb: 2.5 }} icon={<i className="ri-file-copy-2-line" style={{ fontSize: 18 }} />}>
+            {t('templates.deploy.firmware.fromTemplate')}
+          </Alert>
+        )}
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, pt: 2 }}>
+          {isIsoMode && (
             <FormControl size="small">
-              <InputLabel>{t('templates.catalog.ostypeLabel')}</InputLabel>
+              <InputLabel id="deploy-fw-ostype-label">{t('templates.catalog.ostypeLabel')}</InputLabel>
               <Select
                 value={ostypeOverride || image?.ostype || 'other'}
                 onChange={e => setOstypeOverride(String(e.target.value))}
                 label={t('templates.catalog.ostypeLabel')}
+                labelId="deploy-fw-ostype-label"
               >
                 <MenuItem value="l26">Linux 2.6+</MenuItem>
                 <MenuItem value="win10">Windows 10</MenuItem>
@@ -1739,31 +1837,110 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
                 <MenuItem value="other">Other</MenuItem>
               </Select>
             </FormControl>
+          )}
+          <FormControl size="small">
+            <InputLabel id="deploy-fw-bios-label">{t('templates.deploy.iso.bios')}</InputLabel>
+            <Select
+              value={bios}
+              onChange={e => setBios(e.target.value as DeployBios)}
+              label={t('templates.deploy.iso.bios')}
+              labelId="deploy-fw-bios-label"
+            >
+              <MenuItem value="seabios">{t('templates.deploy.iso.biosSeabios')}</MenuItem>
+              <MenuItem value="ovmf">{t('templates.deploy.iso.biosOvmf')}</MenuItem>
+            </Select>
+          </FormControl>
+          {!isIsoMode && (
             <FormControl size="small">
-              <InputLabel>{t('templates.deploy.iso.bios')}</InputLabel>
+              <InputLabel id="deploy-fw-machine-label">{t('templates.deploy.firmware.machine')}</InputLabel>
               <Select
-                value={bios}
-                onChange={e => setBios(e.target.value as 'seabios' | 'ovmf')}
-                label={t('templates.deploy.iso.bios')}
+                value={machine}
+                onChange={e => setMachine(e.target.value as DeployMachine)}
+                label={t('templates.deploy.firmware.machine')}
+                labelId="deploy-fw-machine-label"
               >
-                <MenuItem value="seabios">{t('templates.deploy.iso.biosSeabios')}</MenuItem>
-                <MenuItem value="ovmf">{t('templates.deploy.iso.biosOvmf')}</MenuItem>
+                <MenuItem value="i440fx">{t('templates.deploy.firmware.machineI440fx')}</MenuItem>
+                <MenuItem value="q35">{t('templates.deploy.firmware.machineQ35')}</MenuItem>
               </Select>
             </FormControl>
-          </Box>
-          {/* Windows Server 2025 / Win11 install footprint won't fit in
-              <32 GB — the installer refuses to start, so we block Next
-              and flag this as an error rather than a soft warning. */}
-          {(() => {
-            const sizeNum = Number.parseInt(String(diskSize).replace(/G$/i, ''), 10) || 0
-            const ot = ostypeOverride || image?.ostype || ''
-            const isWin2025OrLater = ot === 'win11'
-            return (isWin2025OrLater && sizeNum > 0 && sizeNum < 32) ? (
-              <Alert severity="error" variant="outlined" sx={{ mt: 1.5 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
-                {t('templates.deploy.iso.diskWarning')}
-              </Alert>
-            ) : null
-          })()}
+          )}
+          <FormControl size="small">
+            <InputLabel id="deploy-fw-bus-label">{t('templates.deploy.firmware.diskBus')}</InputLabel>
+            <Select
+              value={diskBus}
+              onChange={e => setDiskBus(e.target.value as DeployDiskBus)}
+              label={t('templates.deploy.firmware.diskBus')}
+              labelId="deploy-fw-bus-label"
+            >
+              <MenuItem value="scsi">{t('templates.deploy.firmware.busScsi')}</MenuItem>
+              <MenuItem value="sata">{t('templates.deploy.firmware.busSata')}</MenuItem>
+              <MenuItem value="virtio">{t('templates.deploy.firmware.busVirtio')}</MenuItem>
+              <MenuItem value="ide">{t('templates.deploy.firmware.busIde')}</MenuItem>
+            </Select>
+          </FormControl>
+          {!isIsoMode && (
+            <FormControl size="small">
+              <InputLabel id="deploy-fw-display-label">{t('templates.deploy.firmware.display')}</InputLabel>
+              <Select
+                value={vga}
+                onChange={e => setVga(e.target.value as DeployDisplay)}
+                label={t('templates.deploy.firmware.display')}
+                labelId="deploy-fw-display-label"
+              >
+                <MenuItem value="std">{t('templates.deploy.firmware.displayStd')}</MenuItem>
+                <MenuItem value="serial0">{t('templates.deploy.firmware.displaySerial')}</MenuItem>
+                <MenuItem value="qxl">{t('templates.deploy.firmware.displayQxl')}</MenuItem>
+                <MenuItem value="virtio">{t('templates.deploy.firmware.displayVirtio')}</MenuItem>
+                <MenuItem value="vmware">{t('templates.deploy.firmware.displayVmware')}</MenuItem>
+              </Select>
+            </FormControl>
+          )}
+          <FormControlLabel
+            control={<Switch checked={tpm} onChange={(_, v) => setTpm(v)} size="small" />}
+            label={t('templates.deploy.firmware.tpm')}
+          />
+        </Box>
+        {!isIsoMode && vga === 'serial0' && (
+          <Alert severity="warning" variant="outlined" sx={{ mt: 1.5 }} icon={<i className="ri-terminal-box-line" style={{ fontSize: 18 }} />}>
+            {t('templates.deploy.firmware.serialWarning')}
+          </Alert>
+        )}
+        {isUefiWindowsOstype(isIsoMode ? (ostypeOverride || image?.ostype) : image?.ostype) && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+            {t('templates.deploy.firmware.windowsHint')}
+          </Typography>
+        )}
+        {/* Windows Server 2025 / Win11 install footprint won't fit in
+            <32 GB — the installer refuses to start, so we block Next
+            and flag this as an error rather than a soft warning. */}
+        {isIsoMode && (() => {
+          const sizeNum = Number.parseInt(String(diskSize).replace(/G$/i, ''), 10) || 0
+          const ot = ostypeOverride || image?.ostype || ''
+          const isWin2025OrLater = ot === 'win11'
+          return (isWin2025OrLater && sizeNum > 0 && sizeNum < 32) ? (
+            <Alert severity="error" variant="outlined" sx={{ mt: 1.5 }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
+              {t('templates.deploy.iso.diskWarning')}
+            </Alert>
+          ) : null
+        })()}
+      </Box>
+
+      {/* High availability at creation (#181), provider with node.manage. */}
+      {canManageHa && (
+        <Box sx={{ mt: 2 }}>
+          <FormControlLabel
+            control={<Switch checked={ha && haStorageShared} onChange={(_, v) => setHa(v)} size="small" disabled={!haStorageShared} />}
+            label={
+              <Box>
+                <Typography variant="body2">{t('templates.deploy.ha.label')}</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {!haStorageShared
+                    ? t('templates.deploy.ha.localStorage')
+                    : isIsoMode ? t('templates.deploy.ha.helpIso') : t('templates.deploy.ha.help')}
+                </Typography>
+              </Box>
+            }
+          />
         </Box>
       )}
 
@@ -1985,7 +2162,9 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
           <Typography variant="overline" sx={{ opacity: 0.6 }}>{t('templates.deploy.steps.hardware')}</Typography>
           <Typography variant="body2">
             {cores}C &times; {sockets}S / {memory >= 1024 ? `${memory / 1024} GB` : `${memory} MB`} RAM / {diskSize} / {bridges.find(b => b.iface === networkBridge)?.displayName || networkBridge}
-            {isIsoMode && <> &middot; {bios === 'ovmf' ? 'UEFI' : 'BIOS'} &middot; {ostypeOverride || image.ostype}</>}
+            {' '}&middot; {bios === 'ovmf' ? 'UEFI' : 'BIOS'} &middot; {isIsoMode ? 'q35' : machine}{tpm ? ' · TPM' : ''} &middot; {diskBus.toUpperCase()}
+            {isIsoMode && <> &middot; {ostypeOverride || image.ostype}</>}
+            {canManageHa && ha && haStorageShared && <> &middot; HA</>}
           </Typography>
         </Box>
         <Divider />

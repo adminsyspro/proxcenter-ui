@@ -6911,6 +6911,34 @@
         "regenerateMac": "Generate a new MAC",
         "staticGateway": "Gateway",
         "staticDns": "DNS"
+      },
+      "firmware": {
+        "title": "固件和显示",
+        "firmware": "固件",
+        "machine": "机器类型",
+        "machineI440fx": "i440fx",
+        "machineQ35": "q35",
+        "tpm": "TPM 2.0",
+        "diskBus": "磁盘总线",
+        "busScsi": "SCSI (VirtIO SCSI)",
+        "busSata": "SATA",
+        "busVirtio": "VirtIO Block",
+        "busIde": "IDE",
+        "display": "显示",
+        "displayStd": "标准 VGA",
+        "displaySerial": "串行控制台",
+        "displayQxl": "SPICE (qxl)",
+        "displayVirtio": "VirtIO-GPU",
+        "displayVmware": "VMware 兼容",
+        "fromTemplate": "读取自此镜像所来源的模板。",
+        "windowsHint": "Windows 以 UEFI 启动，Windows 11 / Server 2022+ 需要 TPM。如果镜像中没有 VirtIO 驱动，请选择 SATA。",
+        "serialWarning": "串行显示会使 ProxCenter 控制台黑屏。"
+      },
+      "ha": {
+        "label": "启用高可用",
+        "help": "虚拟机将加入 HA 管理器并由其启动。",
+        "helpIso": "虚拟机将加入 HA 管理器，并保持停止状态直到您开始安装。",
+        "localStorage": "需要共享存储：所选存储是节点本地存储。"
       }
     },
     "deployments": {
@@ -7475,7 +7503,10 @@
         "target": "{volid}：快照 {snapshots}。只能发送到相同类型的存储。"
       },
       "offlineHint": "关闭虚拟机并离线迁移以保留快照，或删除这些快照。"
-    }
+    },
+    "cloneHa": "启用高可用",
+    "cloneHaHelp": "克隆完成后加入 HA 管理器并启动。",
+    "cloneHaLocal": "需要共享存储：目标存储是节点本地存储。"
   },
   "ldap": {
     "description": "配置 LDAP/Active Directory 身份验证，允许用户使用企业凭据登录。",

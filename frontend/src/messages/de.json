@@ -6892,6 +6892,34 @@
         "regenerateMac": "Generate a new MAC",
         "staticGateway": "Gateway",
         "staticDns": "DNS"
+      },
+      "firmware": {
+        "title": "Firmware und Anzeige",
+        "firmware": "Firmware",
+        "machine": "Maschine",
+        "machineI440fx": "i440fx",
+        "machineQ35": "q35",
+        "tpm": "TPM 2.0",
+        "diskBus": "Festplattenbus",
+        "busScsi": "SCSI (VirtIO SCSI)",
+        "busSata": "SATA",
+        "busVirtio": "VirtIO Block",
+        "busIde": "IDE",
+        "display": "Anzeige",
+        "displayStd": "Standard-VGA",
+        "displaySerial": "Serielle Konsole",
+        "displayQxl": "SPICE (qxl)",
+        "displayVirtio": "VirtIO-GPU",
+        "displayVmware": "VMware-kompatibel",
+        "fromTemplate": "Aus der Vorlage übernommen, aus der dieses Image stammt.",
+        "windowsHint": "Windows startet per UEFI, Windows 11 / Server 2022+ braucht ein TPM. Ohne VirtIO-Treiber im Image SATA wählen.",
+        "serialWarning": "Eine serielle Anzeige lässt die ProxCenter-Konsole schwarz."
+      },
+      "ha": {
+        "label": "Hochverfügbarkeit aktivieren",
+        "help": "Die VM wird dem HA-Manager hinzugefügt, der sie startet.",
+        "helpIso": "Die VM wird dem HA-Manager hinzugefügt und bleibt gestoppt, bis Sie die Installation starten.",
+        "localStorage": "Benötigt gemeinsamen Speicher: der gewählte Speicher ist lokal auf seinem Knoten."
       }
     },
     "deployments": {
@@ -7451,7 +7479,10 @@
         "target": "{volid}: Snapshot(s) {snapshots}. Sie können nur auf einen Speicher desselben Typs übertragen werden."
       },
       "offlineHint": "Fahren Sie die VM herunter und migrieren Sie sie offline, um ihre Snapshots zu behalten, oder löschen Sie sie."
-    }
+    },
+    "cloneHa": "Hochverfügbarkeit aktivieren",
+    "cloneHaHelp": "Wird dem HA-Manager hinzugefügt und nach dem Klonen gestartet.",
+    "cloneHaLocal": "Benötigt gemeinsamen Speicher: der Zielspeicher ist lokal auf seinem Knoten."
   },
   "ldap": {
     "description": "Konfigurieren Sie LDAP/Active Directory-Authentifizierung, damit Benutzer sich mit ihren Unternehmensanmeldedaten anmelden können.",

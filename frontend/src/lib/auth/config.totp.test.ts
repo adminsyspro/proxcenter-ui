@@ -11,6 +11,8 @@ vi.mock("@/lib/db/prisma", () => ({
 vi.mock("@/lib/auth/password", () => ({
   verifyPassword: vi.fn().mockResolvedValue(true),
   hashPassword: vi.fn(),
+  needsRehash: vi.fn().mockReturnValue(false),
+  burnPasswordCheck: vi.fn(),
 }))
 vi.mock("@/lib/auth/verify-second-factor", () => ({
   verifyTotpOrRecovery: vi.fn(),

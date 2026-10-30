@@ -14,6 +14,8 @@ vi.mock("@/lib/db/prisma", () => ({
 vi.mock("@/lib/auth/password", () => ({
   verifyPassword: vi.fn(),
   hashPassword: vi.fn(),
+  needsRehash: vi.fn().mockReturnValue(false),
+  burnPasswordCheck: vi.fn(),
 }))
 vi.mock("@/lib/auth/verify-second-factor", () => ({
   verifyTotpOrRecovery: vi.fn(),
@@ -40,7 +42,7 @@ vi.mock("./jwtContext", () => ({
 
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { verifyPassword } from "@/lib/auth/password"
+import { verifyPassword, hashPassword, needsRehash, burnPasswordCheck } from "@/lib/auth/password"
 import { verifyTotpOrRecovery } from "@/lib/auth/verify-second-factor"
 import { authenticateLdapDetailed, getLdapConfig } from "./ldap"
 import { beginLoginAttempt } from "./loginLockout"
@@ -171,6 +173,59 @@ describe("credentials authorize with the lockout policy", () => {
     expect(user.id).toBe("u1")
     expect(succeed).toHaveBeenCalledTimes(1)
     expect(fail).not.toHaveBeenCalled()
+  })
+})
+
+describe("credentials authorize password hash upkeep", () => {
+  it("rewrites a legacy hash as argon2id after a successful login", async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue(LOCAL_USER)
+    ;(verifyPassword as any).mockResolvedValue(true)
+    ;(needsRehash as any).mockReturnValueOnce(true)
+    ;(hashPassword as any).mockResolvedValue("$argon2id$new")
+
+    await authorizeOf("credentials")({ email: "a@b.com", password: "right" }, REQ)
+
+    expect(needsRehash).toHaveBeenCalledWith("h")
+    expect(hashPassword).toHaveBeenCalledExactlyOnceWith("right")
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "u1" },
+      data: expect.objectContaining({ password: "$argon2id$new" }),
+    }))
+  })
+
+  it("leaves a current hash untouched", async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue(LOCAL_USER)
+    ;(verifyPassword as any).mockResolvedValue(true)
+
+    await authorizeOf("credentials")({ email: "a@b.com", password: "right" }, REQ)
+
+    expect(hashPassword).not.toHaveBeenCalled()
+    expect((prisma.user.update as any).mock.calls[0][0].data).not.toHaveProperty("password")
+  })
+
+  it("does not rehash when the second factor fails", async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...LOCAL_USER, totpEnabled: true })
+    ;(verifyPassword as any).mockResolvedValue(true)
+    ;(verifyTotpOrRecovery as any).mockResolvedValue(false)
+    ;(needsRehash as any).mockReturnValue(true)
+
+    await expect(
+      authorizeOf("credentials")({ email: "a@b.com", password: "right", totpCode: "000000" }, REQ),
+    ).rejects.toThrow(/Invalid credentials/)
+    expect(hashPassword).not.toHaveBeenCalled()
+    ;(needsRehash as any).mockReturnValue(false)
+  })
+
+  it("spends a password check on an unknown account and on an account without a local password", async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValueOnce(null)
+    await expect(authorizeOf("credentials")({ email: "nobody@b.com", password: "x" }, REQ)).rejects.toThrow()
+
+    ;(prisma.user.findUnique as any).mockResolvedValueOnce({ ...LOCAL_USER, password: null })
+    await expect(authorizeOf("credentials")({ email: "a@b.com", password: "y" }, REQ)).rejects.toThrow()
+
+    expect(burnPasswordCheck).toHaveBeenNthCalledWith(1, "x")
+    expect(burnPasswordCheck).toHaveBeenNthCalledWith(2, "y")
+    expect(verifyPassword).not.toHaveBeenCalled()
   })
 })
 

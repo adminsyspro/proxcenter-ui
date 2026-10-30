@@ -136,6 +136,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout repository
@@ -198,6 +200,7 @@ jobs:
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
       - name: Build and push Frontend
+        id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./frontend
@@ -220,6 +223,46 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/user/packages/container/proxcenter-frontend \
             -d '{"visibility":"public"}'
+
+      # Signed SLSA provenance (Sigstore, public transparency log) bound to the
+      # pushed digest: `gh attestation verify oci://<image>:<tag> --owner adminsyspro`.
+      - name: Attest build provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.FRONTEND_IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+
+      # CycloneDX inventory of the published image (OS and npm packages),
+      # attested against the same digest and attached to the release.
+      - name: Generate the Frontend SBOM
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.FRONTEND_IMAGE }}@${{ steps.push.outputs.digest }}
+          format: cyclonedx
+          output: proxcenter-frontend-${{ steps.resolve.outputs.version }}.cdx.json
+
+      - name: Attest the Frontend SBOM
+        if: github.event_name != 'pull_request'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.FRONTEND_IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: proxcenter-frontend-${{ steps.resolve.outputs.version }}.cdx.json
+          push-to-registry: true
+          create-storage-record: false
+
+      - name: Keep the Frontend SBOM
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-frontend
+          path: proxcenter-frontend-${{ steps.resolve.outputs.version }}.cdx.json
+          if-no-files-found: error
 
   # ========================================
   # Build Demo Image
@@ -278,6 +321,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout repository
@@ -328,6 +373,7 @@ jobs:
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
       - name: Build and push WeasyPrint
+        id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./weasyprint
@@ -338,6 +384,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+
+      # Signed SLSA provenance (Sigstore, public transparency log) bound to the
+      # pushed digest: `gh attestation verify oci://<image>:<tag> --owner adminsyspro`.
+      - name: Attest build provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.WEASYPRINT_IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
 
       # The proxcenter-weasyprint package stays PRIVATE on GHCR (Enterprise
       # only). A previous version of this workflow PATCHed it back to
@@ -560,6 +617,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout repository
@@ -689,6 +748,7 @@ jobs:
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
       - name: Build and push Orchestrator
+        id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./backend
@@ -701,6 +761,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+
+      # Signed SLSA provenance (Sigstore, public transparency log) bound to the
+      # pushed digest: `gh attestation verify oci://<image>:<tag> --owner adminsyspro`.
+      - name: Attest build provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.ORCHESTRATOR_IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
 
   # ========================================
   # Create GitHub Release (on version tags)
@@ -752,11 +823,25 @@ jobs:
             echo "docker pull ghcr.io/adminsyspro/proxcenter-weasyprint:${TAG}"
             echo '```'
             echo ''
+            echo '## Verify the images'
+            echo ''
+            echo '```bash'
+            echo "gh attestation verify oci://ghcr.io/adminsyspro/proxcenter-frontend:${TAG} --owner adminsyspro"
+            echo '```'
+            echo ''
+            echo "The CycloneDX SBOM of the frontend image is attached below."
+            echo ''
             echo '## Air-gapped bundle'
             echo ''
             echo "Community: the \`proxcenter-community-${TAG#v}.tar.gz\` asset below. Enterprise: your account on proxcenter.io, Air-gapped tab. Guide: https://docs.proxcenter.io/getting-started/air-gapped-installation"
           } >> /tmp/release-body.md
           echo "body_path=/tmp/release-body.md" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the Frontend SBOM
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sbom-frontend
+          path: sbom
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
@@ -764,6 +849,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           body_path: ${{ steps.notes.outputs.body_path }}
+          files: sbom/*.cdx.json
           draft: false
           prerelease: false
           make_latest: true

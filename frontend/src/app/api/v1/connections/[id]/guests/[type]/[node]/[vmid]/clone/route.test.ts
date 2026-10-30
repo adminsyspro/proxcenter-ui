@@ -142,6 +142,32 @@ describe('POST clone — full flag normalization', () => {
   })
 })
 
+describe('POST clone: container (#181)', () => {
+  it('names the copy with `hostname` and drops the image format pct clone does not take', async () => {
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: { ...baseParams, type: 'lxc' }, body: { newid: 120, name: 'ct-copy', storage: 'ceph', format: 'qcow2', full: true } })
+
+    expect(res.status).toBe(200)
+    const body = cloneCallBody()
+    expect(body.get('hostname')).toBe('ct-copy')
+    expect(body.has('name')).toBe(false)
+    expect(body.has('format')).toBe(false)
+  })
+
+  it('checks the rootfs and mount points of a container kept on its storages', async () => {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path === '/nodes/pve3/lxc/100/config') return { rootfs: 'ZFS-Pool:subvol-100-disk-0,size=8G' }
+      if (path === '/storage/ZFS-Pool') return { type: 'zfspool' }
+      return {}
+    })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: { ...baseParams, type: 'lxc' }, body: { newid: 120, name: 'ct-copy', full: true, ha: true } })
+
+    expect(res.status).toBe(400)
+    expect(cloneCallBody().get('newid')).toBeNull()
+  })
+})
+
 describe('POST clone — IPAM-managed source', () => {
   it('regenerates the MAC on managed NICs after the clone instead of using `unique`', async () => {
     // Source + clone configs both carry a NIC on the IPAM-managed bridge.
@@ -325,7 +351,7 @@ describe('POST clone — high availability on the clone (#181)', () => {
 
     await runAfterCbs()
 
-    expect(waitForTaskMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve2', 'UPID:clone:1')
+    expect(waitForTaskMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve2', 'UPID:clone:1', { acceptWarnings: true })
     expect(haCalls()).toHaveLength(1)
     expect(Object.fromEntries(new URLSearchParams(haCalls()[0][2].body))).toEqual({ sid: 'vm:150', state: 'started' })
   })

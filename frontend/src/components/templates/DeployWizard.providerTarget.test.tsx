@@ -127,6 +127,19 @@ describe('DeployWizard provider destination (roadmap#65)', () => {
     await waitFor(async () => expect(await toTarget()).toHaveTextContent('Provider infrastructure (no vDC)'))
   })
 
+  it('a retry keeps its node, storage, name and HA (#181)', async () => {
+    seed()
+    const retry = { hardware: null, cloudInit: null, _retryFrom: { connectionId: 'conn-a', node: 'pve2', storage: 'ceph', vmName: 'again', ha: true } }
+    renderWithProviders(<DeployWizard open image={image} prefillBlueprint={retry} onClose={() => {}} />)
+    await toTarget()
+    // The Node and Storage selects have no accessible name: read their values.
+    const shown = () => screen.getAllByRole('combobox').map(c => c.textContent)
+    await waitFor(() => expect(shown()).toEqual(expect.arrayContaining([expect.stringContaining('pve2'), expect.stringContaining('ceph')])))
+    expect(screen.getByLabelText('VM Name')).toHaveValue('again')
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByRole('switch', { name: /Enable high availability/ })).toBeChecked()
+  })
+
   it('hides the picker when the caller cannot list vDCs', async () => {
     seed({ adminVdcs: () => HttpResponse.json({ error: 'Forbidden' }, { status: 403 }) })
     renderWithProviders(<DeployWizard open image={image} onClose={() => {}} />)

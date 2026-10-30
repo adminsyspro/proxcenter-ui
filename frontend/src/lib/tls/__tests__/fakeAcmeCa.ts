@@ -3,6 +3,8 @@
 // url, account) so a client that signs or chains requests wrongly fails here
 // rather than against Let's Encrypt.
 
+import 'reflect-metadata'
+
 import { createHash, createHmac, createPublicKey, verify, type JsonWebKey } from 'node:crypto'
 
 import * as x509 from '@peculiar/x509'

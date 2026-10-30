@@ -29,7 +29,7 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^3.1.1",
+    "@dagrejs/dagre": "^3.1.3",
     "@emotion/cache": "11.14.0",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
@@ -43,8 +43,8 @@
     "@peculiar/x509": "^1.14.3",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
-    "@scalar/api-reference-react": "^0.9.81",
-    "@tanstack/react-virtual": "^3.14.21",
+    "@scalar/api-reference-react": "^0.9.83",
+    "@tanstack/react-virtual": "^3.14.22",
     "@types/leaflet": "^1.9.22",
     "@xterm/addon-attach": "^0.12.0",
     "@xterm/addon-fit": "^0.11.0",
@@ -62,7 +62,7 @@
     "jpeg-js": "^0.4.4",
     "leaflet": "^1.9.4",
     "nanoid": "^6.0.2",
-    "next": "^16.4.2",
+    "next": "^16.4.3",
     "next-auth": "^4.24.15",
     "next-intl": "^4.14.9",
     "otplib": "^13.5.0",
@@ -88,7 +88,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@iconify/json": "2.2.545",
+    "@iconify/json": "2.2.547",
     "@iconify/tools": "5.0.14",
     "@iconify/utils": "3.1.7",
     "@tailwindcss/postcss": "4.3.3",
@@ -108,7 +108,7 @@
     "concurrently": "^10.0.6",
     "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.3",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "2.32.0",
     "jsdom": "^30.1.3",
@@ -123,7 +123,7 @@
     "tailwindcss": "4.3.3",
     "tailwindcss-logical": "5.0.0",
     "tsx": "4.23.15",
-    "vite": "^8.3.4",
+    "vite": "^8.3.5",
     "vitest": "^5.0.3"
   },
   "resolutions": {
@@ -160,7 +160,6 @@
     "mysql2": ">=3.24.3",
     "sharp": ">=0.35.4",
     "svgo": ">=4.1.0",
-    "@ai-sdk/provider-utils": "^4.0.33",
     "js-yaml": "^4.3.2",
     "colord": ">=2.9.4",
     "@scalar/json-magic": {

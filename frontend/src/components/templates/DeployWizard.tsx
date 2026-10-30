@@ -209,6 +209,10 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
   // Set once the hardware hints of the source template were applied.
   const [hintsApplied, setHintsApplied] = useState(false)
   const hintsKeyRef = useRef('')
+  // The node of a retried deployment. Set with the other retry fields, it is
+  // wiped by the node-list effect of that same render (its connection is
+  // still the previous one), so it is applied again once the nodes load.
+  const retryNodeRef = useRef('')
   // ISO mode only: OS type override. Cloud images keep the catalog ostype.
   const [ostypeOverride, setOstypeOverride] = useState<string | null>(null)
   // Register the VM with the HA manager once created (#181).
@@ -421,6 +425,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
     setHa(false)
     setHintsApplied(false)
     hintsKeyRef.current = ''
+    retryNodeRef.current = ''
 
     // Prefill from blueprint
     if (prefillBlueprint) {
@@ -482,7 +487,7 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
       if (prefillBlueprint._retryFrom) {
         const rf = prefillBlueprint._retryFrom
         if (rf.connectionId) setConnectionId(rf.connectionId)
-        if (rf.node) setNode(rf.node)
+        if (rf.node) { setNode(rf.node); retryNodeRef.current = rf.node }
         if (rf.storage) setStorage(rf.storage)
         if (rf.vmName) setVmName(rf.vmName)
         if (rf.targetVdcId) setTargetVdcId(rf.targetVdcId)
@@ -604,6 +609,12 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
         const vdcNodes = targetNodesKey ? new Set(targetNodesKey.split(',')) : null
         const nodeList = (res.data || []).filter((n: any) => n.status === 'online' && (!vdcNodes || vdcNodes.has(n.node)))
         setNodes(nodeList)
+        const retryNode = retryNodeRef.current
+        if (retryNode && nodeList.some((n: NodeInfo) => n.node === retryNode)) {
+          retryNodeRef.current = ''
+          setNode(retryNode)
+          return
+        }
         if (vdcNodes) setNode(current => nodeList.some((n: NodeInfo) => n.node === current) ? current : '')
         if (nodeList.length === 1) {
           setNode(nodeList[0].node)

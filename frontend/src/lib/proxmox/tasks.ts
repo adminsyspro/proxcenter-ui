@@ -17,6 +17,11 @@ export interface WaitForTaskOptions {
   timeoutMs?: number
   /** Polling interval in ms. Default 3 s. */
   intervalMs?: number
+  /**
+   * Treat `WARNINGS: n` as success. PVE ends a task that did its job but
+   * logged warnings (e.g. pct clone on a Systemd 257 guest) this way.
+   */
+  acceptWarnings?: boolean
 }
 
 /**
@@ -45,6 +50,7 @@ export async function waitForTask(
 
     if (status?.status === 'stopped') {
       if (status.exitstatus === 'OK') return
+      if (options.acceptWarnings && String(status.exitstatus).startsWith('WARNINGS')) return
       throw new Error(`PVE task failed: ${status.exitstatus || 'unknown error'}`)
     }
 

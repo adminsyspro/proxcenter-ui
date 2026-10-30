@@ -91,7 +91,7 @@ function RootInventoryView({
   onLoadTrendsBatch?: (vms: VmRow[]) => Promise<Record<string, TrendPoint[]>>
   showIpSnap?: boolean
   ipSnapLoading?: boolean
-  onLoadIpSnap?: () => void
+  onLoadIpSnap?: (vms: VmRow[]) => void
   onCreateVm?: () => void
   onCreateLxc?: () => void
   onBulkAction?: (host: HostItem, action: BulkAction) => void

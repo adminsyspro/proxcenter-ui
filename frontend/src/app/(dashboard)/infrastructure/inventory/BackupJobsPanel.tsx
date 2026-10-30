@@ -687,7 +687,8 @@ export default function BackupJobsPanel({ connectionId, onError }: BackupJobsPan
           }}
           sx={{
             border: 'none',
-            '& .MuiDataGrid-cell': { borderBottom: '1px solid', borderColor: 'divider' },
+            '& .MuiDataGrid-cell': { borderTop: 'none', borderBottom: '1px solid', borderColor: 'divider' },
+            '& .MuiDataGrid-filler > div, & .MuiDataGrid-footerContainer': { borderTop: 'none' },
             '& .MuiDataGrid-columnHeaders': { bgcolor: 'action.hover' }
           }}
         />

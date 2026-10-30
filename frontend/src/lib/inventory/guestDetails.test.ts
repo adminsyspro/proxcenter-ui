@@ -103,6 +103,7 @@ describe('guest detail labels', () => {
     expect(agentStatusLabel(guest(1, { status: 'stopped' }), details())).toBe('Enabled (VM not running)')
     expect(agentStatusLabel(guest(1), details({ agentResponding: true }))).toBe('Running')
     expect(agentStatusLabel(guest(1), details({ agentResponding: false }))).toBe('Not responding')
+    expect(agentStatusLabel(guest(1), details({ agentResponding: undefined }))).toBe('Unknown')
     expect(agentStatusLabel(guest(1, { type: 'lxc' }), details())).toBe('')
     expect(agentStatusLabel(guest(1), undefined)).toBe('')
   })

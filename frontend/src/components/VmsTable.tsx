@@ -44,7 +44,7 @@ import {
   useTheme,
   useMediaQuery
 } from '@mui/material'
-import { DataGrid, GridColDef, type GridRowSelectionModel } from '@mui/x-data-grid'
+import { DataGrid, GridColDef, gridPaginatedVisibleSortedGridRowIdsSelector, useGridApiRef, type GridRowId, type GridRowSelectionModel } from '@mui/x-data-grid'
 import { resolveSelectedRowIds } from '@/utils/gridSelection'
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
@@ -507,7 +507,7 @@ type VmsTableProps = {
   showActions?: boolean
   showIpSnap?: boolean  // Afficher les colonnes IP et Snapshots
   ipSnapLoading?: boolean  // Loading en cours pour IP/Snap
-  onLoadIpSnap?: () => void  // Callback pour charger IP/Snap
+  onLoadIpSnap?: (vms: VmRow[]) => void  // Charge IP/Snap des lignes affichées (roadmap#179)
   onLoadTrends?: (vm: VmRow) => Promise<TrendPoint[]>
   onLoadTrendsBatch?: (vms: VmRow[]) => Promise<Record<string, TrendPoint[]>>  // Batch loading
   autoPageSize?: boolean  // Calculer automatiquement le nombre de lignes
@@ -764,14 +764,41 @@ return Math.max(10, Math.min(rows, 50))
   const [trendsLoading, setTrendsLoading] = useState<Record<string, boolean>>({})
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 })
   
-  // Calculer les VMs visibles sur la page actuelle
-  const visibleVms = useMemo(() => {
-    const start = paginationModel.page * paginationModel.pageSize
-    const end = start + paginationModel.pageSize
+  // Les lignes de la page affichée, dans l'ordre de la grille : elle trie et
+  // pagine elle-même (autoPageSize compris), découper `vms` donnerait d'autres
+  // lignes dès qu'une colonne est triée.
+  const apiRef = useGridApiRef()
+  const [pageRowIds, setPageRowIds] = useState<GridRowId[]>([])
 
-    
-return vms.slice(start, end)
-  }, [vms, paginationModel.page, paginationModel.pageSize])
+  useEffect(() => {
+    const api = apiRef.current
+
+    if (!api) return
+
+    const sync = () => {
+      const ids = gridPaginatedVisibleSortedGridRowIdsSelector(apiRef)
+
+      setPageRowIds(prev => (prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids))
+    }
+
+    const unsubscribe = (['paginationModelChange', 'sortedRowsSet', 'filteredRowsSet', 'rowsSet'] as const).map(event => api.subscribeEvent(event, sync))
+
+    sync()
+
+    return () => unsubscribe.forEach(stop => stop())
+  }, [apiRef])
+
+  const visibleVms = useMemo(() => {
+    const byId = new Map(vms.map(vm => [vm.id, vm]))
+
+    return pageRowIds.map(id => byId.get(String(id))).filter((vm): vm is VmRow => vm !== undefined)
+  }, [vms, pageRowIds])
+
+  // Une fois les détails demandés, chaque page affichée charge les siens, et
+  // seulement les siens : le coût suit la taille de la page, pas celle du parc.
+  useEffect(() => {
+    if (showIpSnap && onLoadIpSnap && visibleVms.length > 0) onLoadIpSnap(visibleVms)
+  }, [showIpSnap, onLoadIpSnap, visibleVms])
   
   // Charger les trends uniquement pour les VMs visibles et running
   useEffect(() => {
@@ -1894,9 +1921,9 @@ return (
           flexShrink: 0
         }}>
           {/* Bouton charger détails (à gauche) */}
-          {onLoadIpSnap && !showIpSnap ? (
+          {onLoadIpSnap && (!showIpSnap || ipSnapLoading) ? (
             <Box
-              onClick={ipSnapLoading ? undefined : onLoadIpSnap}
+              onClick={ipSnapLoading ? undefined : () => onLoadIpSnap(visibleVms)}
               sx={{
                 display: 'flex',
                 alignItems: 'center',
@@ -2054,6 +2081,7 @@ return (
       )}
       
       <DataGrid
+        apiRef={apiRef}
         rows={vms}
         columns={columns}
         loading={loading}
@@ -2157,13 +2185,20 @@ return [
           '& .MuiDataGrid-columnHeaderTitle': {
             fontWeight: 600,
           },
+          // Une seule ligne entre deux rangées et sous la dernière : la grille
+          // trace aussi un trait en haut de chaque cellule, de sa zone de
+          // remplissage et du pied, qui doublaient cette bordure basse.
           '& .MuiDataGrid-cell': {
+            borderTop: 'none',
             borderBottom: '1px solid',
             borderColor: 'divider',
             py: isCompact ? 0.25 : 0.75,
             display: 'flex',
             alignItems: 'center',
             overflow: 'hidden',
+          },
+          '& .MuiDataGrid-filler > div': {
+            borderTop: 'none',
           },
           '& .MuiDataGrid-row.highlighted-row': {
             bgcolor: `${primaryColor}22`,
@@ -2178,8 +2213,7 @@ return [
             '100%': { bgcolor: `${primaryColor}22` },
           },
           '& .MuiDataGrid-footerContainer': {
-            borderTop: '1px solid',
-            borderColor: 'divider',
+            borderTop: 'none',
             minHeight: '40px !important',
             maxHeight: '40px !important',
             overflow: 'hidden',

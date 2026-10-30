@@ -6,7 +6,7 @@ import type { OAuthConfig } from "next-auth/providers/oauth"
 import { nanoid } from "nanoid"
 
 import { prisma } from "@/lib/db/prisma"
-import { verifyPassword, hashPassword } from "./password"
+import { verifyPassword, hashPassword, needsRehash, burnPasswordCheck } from "./password"
 import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdapDetailed, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
 import { getOidcConfig, oidcSeedRoleId, syncOidcRoleAssignment } from "./oidc"
@@ -246,6 +246,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         if (!user) {
+          await burnPasswordCheck(credentials.password)
           await logFailure("User not found", "ip")
           throw new Error("Invalid credentials")
         }
@@ -257,6 +258,7 @@ export const authOptions: NextAuthOptions = {
 
         // Vérifier le mot de passe
         if (!user.password) {
+          await burnPasswordCheck(credentials.password)
           await logFailure("No local password", "ip")
           throw new Error("This account uses another authentication method")
         }
@@ -291,11 +293,15 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        // Mettre à jour last_login_at
+        // Mettre à jour last_login_at, et passer un hash d'ancien format
+        // (PBKDF2) ou d'anciens paramètres en argon2id courant.
         const loginNow = new Date()
         await prisma.user.update({
           where: { id: user.id },
-          data: { lastLoginAt: loginNow },
+          data: {
+            lastLoginAt: loginNow,
+            ...(needsRehash(user.password) ? { password: await hashPassword(credentials.password) } : {}),
+          },
         })
 
         // Safety net: ensure user has at least one tenant membership.

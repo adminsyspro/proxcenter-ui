@@ -217,7 +217,7 @@ export default function InventoryDetails({
   pbsServers?: import('./InventoryTree').TreePbsServer[]
   showIpSnap?: boolean
   ipSnapLoading?: boolean
-  onLoadIpSnap?: () => void
+  onLoadIpSnap?: (vms: VmRow[]) => void
   onRefresh?: () => Promise<void>  // Callback pour rafraîchir les données
   favorites?: Set<string>  // Favoris partagés depuis le parent
   onToggleFavorite?: (vm: { connId: string; node: string; type: string; vmid: string | number; name?: string }) => void

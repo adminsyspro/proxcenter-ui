@@ -1242,7 +1242,11 @@ return ''
                   },
                   '& .MuiDataGrid-cell': {
                     py: 0.5,
+                    borderTop: 'none',
                     borderBottom: '1px solid rgba(231,227,252,0.08)',
+                  },
+                  '& .MuiDataGrid-filler > div': {
+                    borderTop: 'none',
                   },
                   '& .row-running': {
                     bgcolor: alpha(theme.palette.primary.main, 0.05)

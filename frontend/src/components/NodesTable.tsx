@@ -470,12 +470,18 @@ function NodesTable({
           '& .MuiDataGrid-virtualScroller': {
             overflow: 'hidden !important',
           },
+          // Bordure basse seule : sans ça, le trait du haut des cellules, de la
+          // zone de remplissage et du pied de la grille la doublent.
           '& .MuiDataGrid-cell': {
+            borderTop: 'none',
             borderBottom: '1px solid',
             borderColor: 'divider',
             py: compact ? 0.5 : 1,
             display: 'flex',
             alignItems: 'center',
+          },
+          '& .MuiDataGrid-filler > div': {
+            borderTop: 'none',
           },
           '& .MuiDataGrid-columnHeaders': {
             borderBottom: '1px solid',
@@ -489,8 +495,7 @@ function NodesTable({
             }
           },
           '& .MuiDataGrid-footerContainer': {
-            borderTop: '1px solid',
-            borderColor: 'divider',
+            borderTop: 'none',
           }
         }}
         localeText={{

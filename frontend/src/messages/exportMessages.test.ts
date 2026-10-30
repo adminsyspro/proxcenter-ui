@@ -32,6 +32,12 @@ const DASHBOARD_TRANSFER_KEYS = [
   'importReset',
   'exportFailed',
   'importedSuffix',
+  'importConflictTitle',
+  'importConflictIntro',
+  'importConflictAll',
+  'importConflictWarning',
+  'importConfirm',
+  'dashboardsReplaced',
 ] as const
 
 /** Every rejection parseDashboardFile can return needs a sentence in every locale. */
@@ -78,6 +84,7 @@ describe('export i18n parity across the 6 served locales', () => {
       const counted = [
         'dashboardsExported',
         'dashboardsImported',
+        'dashboardsReplaced',
         'importSkipped',
         'importDropped',
         'importReset',

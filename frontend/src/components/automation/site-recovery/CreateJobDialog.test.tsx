@@ -327,7 +327,9 @@ const engineConnections: ComponentProps<typeof CreateJobDialog>['connections'] =
 ]
 const engineVMs = [100, 101, 102, 103].map(vmid => ({ vmid, name: `guest-${vmid}`, node: vmid === 103 ? 'pve2' : 'pve1', connId: 'src', type: 'qemu', status: 'running', tags: ['db'], diskGb: 10 }))
 
-function engineHarness(engines: ComponentProps<typeof CreateJobDialog>['engines'] = ['rbd', 'zfs']) {
+const defaultPreflight = { can_create: true, checks: [{ id: 'target_storage', status: 'ok' }, { id: 'reverse_ssh', status: 'warn', message: 'Reverse key is missing' }] }
+
+function engineHarness(engines: ComponentProps<typeof CreateJobDialog>['engines'] = ['rbd', 'zfs'], preflight: unknown = defaultPreflight) {
   const onSubmit = vi.fn()
   const fetchMock = vi.fn(async (url: string) => {
     let body: unknown = {}
@@ -335,7 +337,7 @@ function engineHarness(engines: ComponentProps<typeof CreateJobDialog>['engines'
     if (url.endsWith('/replication-storages')) body = { engines: ['zfs'], rbd: [], zfs: ['dr1', 'dr2', 'offline'].map(node => ({ storage: 'local-zfs', node, pool: 'rpool/data', availBytes: 512, totalBytes: 1024, availFormatted: '512 B', active: node !== 'offline' })) }
     if (url.endsWith('/ceph')) body = { data: { pools: { list: [{ name: 'rbd', percentUsed: 0.5, bytesUsed: 512, maxAvail: 512 }] } } }
     if (url.endsWith('/check-ssh')) body = { connected: true, source_node: 'pve1', target_ip: '10.0.0.1', checks: [{ source_node: 'pve1', target_node: 'dr1', ok: true }, { source_node: 'pve2', target_node: 'dr1', ok: true }] }
-    if (url.endsWith('/preflight')) body = { can_create: true, checks: [{ id: 'target_storage', status: 'ok' }, { id: 'reverse_ssh', status: 'warn', message: 'Reverse key is missing' }] }
+    if (url.endsWith('/preflight')) body = preflight
     return new Response(JSON.stringify(body))
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -410,6 +412,36 @@ describe('CreateJobDialog storage engines', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Create Job' }))
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ storage_engine: 'zfs', target_node: 'dr1', target_pool: 'local-zfs', vm_ids: [100] }))
+  })
+
+  it('renders the mounted ISO check in the operator language and keeps creation allowed (ui#1228)', async () => {
+    const detail = 'VM 100 (local:iso/debian.iso): the mounted ISO does not exist on dr1, the CD/DVD drive will be left empty on the replica so it can boot'
+    engineHarness(['rbd', 'zfs'], { can_create: true, checks: [
+      { id: 'mounted_iso', status: 'warn', detail, context: { count: 2, vms: '100, 103', node: 'dr1' } },
+      { id: 'target_qemu', status: 'ok', detail: 'source 9.2.7, target 9.2.7' },
+    ] })
+    await chooseEngineSource('zfs')
+    await userEvent.click(screen.getByRole('checkbox', { name: /guest-100/ }))
+    await chooseTarget()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).toBeEnabled())
+    expect(screen.getByText('Mounted ISO images')).toBeInTheDocument()
+    const line = screen.getByText('VMs 100, 103 have an ISO mounted that does not exist on dr1: their CD/DVD drives will be left empty on the replica so it can boot')
+    await userEvent.hover(line)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(detail)
+    // A check without context keeps the orchestrator's own wording.
+    expect(screen.getByText('source 9.2.7, target 9.2.7')).toBeInTheDocument()
+  })
+
+  it.each([
+    [{ count: 0 }, 'No ISO image mounted on the selected guests'],
+    [{ count: 0, node: 'dr1' }, 'The mounted ISO images are present on dr1'],
+  ])('renders a passing mounted ISO check from its context %o', async (context, text) => {
+    engineHarness(['rbd', 'zfs'], { can_create: true, checks: [{ id: 'mounted_iso', status: 'ok', detail: 'english', context }] })
+    await chooseEngineSource('zfs')
+    await userEvent.click(screen.getByRole('checkbox', { name: /guest-100/ }))
+    await chooseTarget()
+    expect(await screen.findByText(text)).toBeInTheDocument()
+    expect(screen.queryByText('english')).not.toBeInTheDocument()
   })
 
   it('reruns both checks when VM selection, node or tags change, even at the same disk size', async () => {

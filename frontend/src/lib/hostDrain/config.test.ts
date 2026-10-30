@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { DrainConfigError, sanitizeDrainConfig } from "./config"
+import { DrainConfigError, isSelectionConfig, sanitizeDrainConfig } from "./config"
 
 describe("sanitizeDrainConfig (#248)", () => {
   it("keeps the known settings with their types, and drops everything else", () => {
@@ -51,6 +51,27 @@ describe("sanitizeDrainConfig, the edited plan (#248)", () => {
     [{ keep_vmids: [0] }, "keep_vmids holds an invalid VMID"],
     [{ enter_maintenance: true, keep_vmids: [105] }, "guests cannot be left on a node entering maintenance"],
   ])("refuses %j", (raw, message) => {
+    expect(() => sanitizeDrainConfig(raw)).toThrow(message)
+  })
+})
+
+describe("sanitizeDrainConfig, a selection of guests (#1218)", () => {
+  it("keeps the selected VMIDs, once each", () => {
+    const config = sanitizeDrainConfig({ vmids: [101, "102", 101], max_concurrent_migrations: 2 })
+
+    expect(config).toEqual({ vmids: [101, 102], max_concurrent_migrations: 2 })
+    expect(isSelectionConfig(config)).toBe(true)
+    expect(isSelectionConfig(sanitizeDrainConfig({ vmids: [] }))).toBe(false)
+  })
+
+  it.each([
+    [{ vmids: "101" }, "vmids must be a list of VMIDs"],
+    [{ vmids: Array.from({ length: 1001 }, (_, i) => i + 1) }, "vmids must be a list of VMIDs"],
+    [{ vmids: [0] }, "vmids holds an invalid VMID"],
+    [{ vmids: [101], enter_maintenance: true }, "a selection of guests neither enters maintenance nor keeps guests"],
+    [{ vmids: [101], keep_vmids: [102] }, "a selection of guests neither enters maintenance nor keeps guests"],
+  ])("refuses %j", (raw, message) => {
+    expect(() => sanitizeDrainConfig(raw)).toThrow(DrainConfigError)
     expect(() => sanitizeDrainConfig(raw)).toThrow(message)
   })
 })

@@ -22,6 +22,7 @@ import { useLocale, useTranslations } from 'next-intl'
 
 import EmptyState from '@/components/EmptyState'
 import TaskDetailDialog from '@/components/TaskDetailDialog'
+import TaskHistoryRetention from '@/components/events/TaskHistoryRetention'
 import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
 import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
@@ -76,6 +77,8 @@ interface ArchiveResponse {
     page: number
     pageSize: number
     truncated: boolean
+    /** ProxCenter's own copy of the tasks was read too. */
+    history?: boolean
     summary: ArchiveSummary
     unavailable: { connectionName: string; node: string }[]
     connections: { id: string; name: string }[]
@@ -471,6 +474,8 @@ export default function TaskArchive({ refreshedAt }: Readonly<{ refreshedAt: num
                 }
               }}
             />
+
+            <TaskHistoryRetention />
           </Box>
 
           {(unavailable.length > 0 || meta?.truncated) && (
@@ -478,7 +483,7 @@ export default function TaskArchive({ refreshedAt }: Readonly<{ refreshedAt: num
               {unavailable.length > 0 && (
                 <Typography variant='caption' sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'warning.main' }}>
                   <i className='ri-error-warning-line' style={{ fontSize: 14 }} />
-                  {t('eventsPage.archive.unavailable', {
+                  {t(meta?.history ? 'eventsPage.archive.unavailableHistory' : 'eventsPage.archive.unavailable', {
                     nodes: unavailable.map(u => (u.node ? `${u.node} (${u.connectionName})` : u.connectionName)).join(', ')
                   })}
                 </Typography>
@@ -569,6 +574,13 @@ export default function TaskArchive({ refreshedAt }: Readonly<{ refreshedAt: num
                               <Typography sx={{ fontSize: '0.8125rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {row.node}
                               </Typography>
+                              {row.fromHistory && (
+                                <Tooltip title={t('eventsPage.archive.fromHistory')} arrow>
+                                  <Box component='span' role='img' aria-label={t('eventsPage.archive.fromHistory')} sx={{ display: 'inline-flex', flexShrink: 0 }}>
+                                    <i className='ri-database-2-line' style={{ fontSize: 14, opacity: 0.6 }} />
+                                  </Box>
+                                </Tooltip>
+                              )}
                             </Box>
 
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>

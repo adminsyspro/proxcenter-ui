@@ -63,6 +63,8 @@ describe("GET /api/v1/tasks/shared", () => {
     const res = await callRoute(GET, { method: "GET" })
     const body = await readJson(res)
     expect(h.global.migrationJob.findMany).toHaveBeenCalled()
+    // The footer polls every 30 s and never shows the log: it is not read.
+    expect((h.global.migrationJob.findMany.mock.calls[0] as any[])[0].omit).toEqual({ logs: true })
     expect(h.sessionClient.migrationJob.findMany).not.toHaveBeenCalled()
     expect(body.data).toHaveLength(2)
     expect(body.data[0]).toMatchObject({ id: "job-1", isMine: true, createdByName: "Alice" })

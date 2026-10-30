@@ -221,3 +221,33 @@ describe("host drains, orchestrator failures", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+describe("POST /api/v1/orchestrator/host-drains, a selection of guests (#1218)", () => {
+  beforeEach(() => {
+    pveFetchMock.mockResolvedValue([
+      { type: "node", node: "pve1" }, { type: "node", node: "pve2" }, { type: "node", node: "pve3" },
+      { type: "qemu", node: "pve1", vmid: 101, status: "running" },
+      { type: "qemu", node: "pve3", vmid: 105, status: "running" },
+    ])
+  })
+
+  it("starts it without a node and without SSH, under the right to migrate each guest", async () => {
+    const res = await callRoute(POST, { body: { connection_id: "c1", config: { vmids: [101, 105], ssh_credentials: { forged: true } } } })
+    expect(res.status).toBe(200)
+    const body = sent()
+    expect(body.node).toBe("")
+    expect(body.config.vmids).toEqual([101, 105])
+    expect(body.config.ssh_credentials).toBeUndefined()
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve1:qemu:101")
+    expect(checkPermissionMock).not.toHaveBeenCalledWith("node.manage", "node", "c1:")
+  })
+
+  it("refuses a selection with a node, with maintenance, or with a guest the caller may not migrate", async () => {
+    expect((await callRoute(POST, { body: { connection_id: "c1", node: "pve1", config: { vmids: [101] } } })).status).toBe(400)
+    expect((await callRoute(POST, { body: { connection_id: "c1", config: { vmids: [101], enter_maintenance: true } } })).status).toBe(400)
+
+    checkPermissionMock.mockImplementation(async (p: string, _t: string, id: string) => (p === "vm.migrate" && id === "c1:pve3:qemu:105" ? new Response(null, { status: 403 }) : null))
+    expect((await callRoute(POST, { body: { connection_id: "c1", config: { vmids: [101, 105] } } })).status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

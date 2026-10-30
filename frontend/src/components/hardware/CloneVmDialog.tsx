@@ -33,12 +33,27 @@ import { VM_DISK_FORMATS, vmDiskFormats } from '@/lib/proxmox/storage'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { type NodeInfo, calculateNodeScore, formatMemory, fetchNextVmid } from './utils'
 import { useTenant } from '@/contexts/TenantContext'
+import { useRBAC } from '@/contexts/RBACContext'
+import { isSharedStorage } from '@/lib/proxmox/storage'
 
 // ==================== CLONE VM DIALOG ====================
+export type CloneVmParams = {
+  targetNode: string
+  newVmid: number
+  name: string
+  targetStorage?: string
+  format?: string
+  pool?: string
+  full: boolean
+  snapname?: string
+  /** Register the clone with the HA manager once PVE finished cloning (#181). */
+  ha?: boolean
+}
+
 type CloneVmDialogProps = {
   open: boolean
   onClose: () => void
-  onClone: (params: { targetNode: string; newVmid: number; name: string; targetStorage?: string; format?: string; pool?: string; full: boolean; snapname?: string }) => Promise<void>
+  onClone: (params: CloneVmParams) => Promise<void>
   connId: string
   currentNode: string
   vmName: string
@@ -118,6 +133,10 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
   }, [targetStorage, selectedTargetStorageObj])
   const [pool, setPool] = useState('')
   const [fullClone, setFullClone] = useState(true)
+  // HA on the clone (#181): the HA tab's rights, provider only.
+  const { hasPermissionOn } = useRBAC()
+  const canManageHa = isProviderTenant && hasPermissionOn('node.manage', 'connection', connId)
+  const [ha, setHa] = useState(false)
 
   // Snapshot source — clone from a snapshot restore point (PDM parity).
   // PVE's clone API accepts an optional `snapname`; empty = current state.
@@ -306,6 +325,7 @@ export function CloneVmDialog({ open, onClose, onClone, connId, currentNode, vmN
       setPool('')
       setFullClone(true)
       setSnapname('')
+      setHa(false)
       setError(null)
     }
   }, [open, currentNode, nextVmid])
@@ -345,6 +365,11 @@ return currentScore > bestScore ? current : best
     }, nodeList[0])
   }
 
+  // A chosen target storage must be shared; "same as source" is checked
+  // server-side against the source disks.
+  const targetStorageInfo = targetStorage ? storages.find(s => s.storage === targetStorage) : null
+  const haTargetLocal = !!targetStorageInfo && !isSharedStorage(targetStorageInfo)
+
   const handleClone = async () => {
     if (newVmid === '' || vmidError) {
       setError(vmidError || t('hardware.vmIdRequired'))
@@ -363,7 +388,8 @@ return currentScore > bestScore ? current : best
         format: targetStorage ? format : undefined,
         pool: pool || undefined,
         full: fullClone,
-        snapname: snapname || undefined
+        snapname: snapname || undefined,
+        ha: canManageHa && ha && !haTargetLocal ? true : undefined,
       })
       onClose()
     } catch (e: any) {
@@ -660,6 +686,30 @@ return currentScore > bestScore ? current : best
                   {fullClone
                     ? t('hardware.fullCopyDescription')
                     : t('hardware.linkedCloneDescription')}
+                </Typography>
+              </Box>
+            }
+          />
+        </Box>
+        )}
+
+        {/* High availability on the clone (#181), provider with node.manage. */}
+        {canManageHa && (
+        <Box sx={{ mt: 1 }}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={ha && !haTargetLocal}
+                onChange={(e) => setHa(e.target.checked)}
+                disabled={haTargetLocal}
+                size="small"
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2">{t('hardware.cloneHa')}</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {haTargetLocal ? t('hardware.cloneHaLocal') : t('hardware.cloneHaHelp')}
                 </Typography>
               </Box>
             }

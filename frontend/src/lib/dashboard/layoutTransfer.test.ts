@@ -4,7 +4,9 @@ import {
   DASHBOARD_FILE_KIND,
   DASHBOARD_FILE_VERSION,
   clampToGrid,
+  conflictingNames,
   parseDashboardFile,
+  planImport,
   portSettings,
   resolveImportName,
   serializeDashboards,
@@ -327,5 +329,110 @@ describe('resolveImportName', () => {
   it('uses the caller’s word, so the name is not English in a French UI', () => {
     expect(resolveImportName('Site A', ['Site A'], 'importé')).toBe('Site A (importé)')
     expect(resolveImportName('Site A', ['Site A', 'Site A (importé)'], 'importé')).toBe('Site A (importé 2)')
+  })
+})
+
+describe('import conflicts', () => {
+  const parsed = (dashboards: unknown[], takenNames: string[]) => {
+    const result = parseDashboardFile(file({ dashboards }), options({ takenNames }))
+
+    if (!result.ok) throw new Error(result.reason)
+
+    return result.dashboards
+  }
+
+  it('flags a dashboard whose name is already in use, trimmed', () => {
+    const dashboards = parsed(
+      [
+        { name: ' Default ', widgets: [{ type: 'kpi-vms' }] },
+        { name: 'Ops', widgets: [{ type: 'kpi-lxc' }] },
+      ],
+      ['Default']
+    )
+
+    expect(dashboards.map(d => [d.sourceName, d.existing])).toEqual([
+      ['Default', true],
+      ['Ops', false],
+    ])
+  })
+
+  it('never flags a dashboard the file left unnamed', () => {
+    const dashboards = parsed([{ name: '  ', widgets: [{ type: 'kpi-vms' }] }], ['', 'imported'])
+
+    expect(dashboards[0].existing).toBe(false)
+  })
+
+  it('lists each live name an import collides with once, in file order', () => {
+    const dashboards = parsed(
+      [
+        { name: 'test', widgets: [{ type: 'kpi-vms' }] },
+        { name: 'New', widgets: [{ type: 'kpi-vms' }] },
+        { name: 'Default', widgets: [{ type: 'kpi-vms' }] },
+        { name: 'test', widgets: [{ type: 'kpi-lxc' }] },
+      ],
+      ['Default', 'test']
+    )
+
+    expect(conflictingNames(dashboards)).toEqual(['test', 'Default'])
+  })
+
+  it('keeps the name of a dashboard chosen for replacement and copies the rest', () => {
+    const dashboards = parsed(
+      [
+        { name: 'Default', widgets: [{ type: 'kpi-vms' }] },
+        { name: 'test', widgets: [{ type: 'kpi-lxc' }] },
+        { name: 'New', widgets: [{ type: 'kpi-alerts' }] },
+      ],
+      ['Default', 'test']
+    )
+
+    const plan = planImport(dashboards, { takenNames: ['Default', 'test'], replace: new Set(['Default']) })
+
+    expect(plan.map(d => [d.name, d.replace])).toEqual([
+      ['Default', true],
+      ['test (imported)', false],
+      ['New', false],
+    ])
+  })
+
+  it('replaces nothing unless asked, which is the import as it always was', () => {
+    const dashboards = parsed([{ name: 'Default', widgets: [{ type: 'kpi-vms' }] }], ['Default'])
+
+    const plan = planImport(dashboards, { takenNames: ['Default'] })
+
+    expect(plan.map(d => [d.name, d.replace])).toEqual([['Default (imported)', false]])
+  })
+
+  it('replaces a name carried twice only once and copies the second', () => {
+    const dashboards = parsed(
+      [
+        { name: 'Default', widgets: [{ type: 'kpi-vms' }] },
+        { name: 'Default', widgets: [{ type: 'kpi-lxc' }] },
+      ],
+      ['Default']
+    )
+
+    const plan = planImport(dashboards, { takenNames: ['Default'], replace: new Set(['Default']) })
+
+    expect(plan.map(d => [d.name, d.replace])).toEqual([
+      ['Default', true],
+      ['Default (imported)', false],
+    ])
+  })
+
+  it('cannot replace a dashboard that does not exist, whatever the caller passes', () => {
+    const dashboards = parsed([{ name: 'New', widgets: [{ type: 'kpi-vms' }] }], ['Default'])
+
+    const plan = planImport(dashboards, { takenNames: ['Default'], replace: new Set(['New']) })
+
+    expect(plan.map(d => [d.name, d.replace])).toEqual([['New', false]])
+  })
+
+  it('names copies in the caller’s word', () => {
+    const dashboards = parsed([{ name: 'Default', widgets: [{ type: 'kpi-vms' }] }], ['Default'])
+
+    const plan = planImport(dashboards, { takenNames: ['Default'], importedSuffix: 'importé' })
+
+    expect(plan[0].name).toBe('Default (importé)')
   })
 })

@@ -15,6 +15,7 @@ import {
 } from '@mui/material'
 
 import VmsTable, { VmRow, TrendPoint } from '@/components/VmsTable'
+import { GuestSelectionBar, type GuestSelection } from '@/components/GuestSelection'
 import { AllVmItem } from '../InventoryTree'
 import type { InventorySelection } from '../types'
 
@@ -43,9 +44,10 @@ type GroupedVmsViewProps = {
   showVdcColumn?: boolean
   vdcNameByConn?: Map<string, string>
   nodeStatuses?: Map<string, string | undefined>  // #666: node column pastille, keyed `${connId}:${node}`
+  guestSelection?: GuestSelection  // #1218: "Migrate selection" across the groups
 }
 
-function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, onMigrate, onLoadTrendsBatch, onSelect, favorites, onToggleFavorite, migratingVmIds, showVdcColumn, vdcNameByConn, nodeStatuses }: GroupedVmsViewProps) {
+function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, onMigrate, onLoadTrendsBatch, onSelect, favorites, onToggleFavorite, migratingVmIds, showVdcColumn, vdcNameByConn, nodeStatuses, guestSelection }: GroupedVmsViewProps) {
   const t = useTranslations()
   // Par défaut, TOUS les groupes sont repliés
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -116,7 +118,8 @@ return next
               <i className={icon} style={{ fontSize: 18, opacity: 0.7 }} />
               {title} ({groups.length} {t('inventoryPage.groups')}, {allVms.length} VMs)
             </Typography>
-            <Stack direction="row" spacing={0.5}>
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              {guestSelection && <GuestSelectionBar selection={guestSelection} inline />}
               <MuiTooltip title={t('inventoryPage.expandAll')}>
                 <IconButton size="small" onClick={expandAll}>
                   <i className="ri-expand-up-down-line" style={{ fontSize: 16 }} />
@@ -206,6 +209,7 @@ return next
                         onToggleFavorite={onToggleFavorite}
                         migratingVmIds={migratingVmIds}
                         showVdcColumn={showVdcColumn}
+                        {...guestSelection?.tableProps}
                       />
                     </Box>
                   )}

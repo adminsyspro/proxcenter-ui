@@ -5,6 +5,7 @@ import {
   checkPermissionMock,
   denied,
   getConnectionByIdMock,
+  guardSessionGuestMock,
   handlersOf,
   installFirewallRouteMocks,
   orchestrator,
@@ -13,6 +14,8 @@ import {
 } from '@/__tests__/setup/firewall-route-mocks'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 import { pveFirewallLog } from '@/__tests__/setup/pveFirewallLog'
+
+import { resetRotatedLogGate } from '@/lib/firewall/rotatedLogGate'
 
 import type { LogPageReader } from '@/lib/firewall/logWindow'
 
@@ -60,6 +63,7 @@ beforeEach(() => {
   resetFirewallRouteMocks()
   pveFetchMock.mockReset()
   getFirewallLogPageMock.mockReset()
+  resetRotatedLogGate()
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(NOW)
 })
@@ -99,6 +103,36 @@ describe('GET /api/v1/firewall/logs/[connectionId]', () => {
       `/firewall/nodes/conn-1/pve2/log?start=0&limit=0&withTotal=1&since=${NOW / 1000 - 86400}&until=${Date.UTC(2026, 9, 15, 18) / 1000 - 1}`,
       25_000,
     )
+  })
+
+  it('reads the rotated logs of a node once for the requests that follow, and not again after a timeout', async () => {
+    const rotated = (path: unknown) => String(path).includes('since=')
+
+    orchestrator.get.mockImplementation(served({ '/firewall/nodes/conn-1/pve2/log': pveFirewallLog([[GROUP_LINE], NODE_FILE]) }))
+    const { GET } = handlersOf(await import('./route'))
+    const read = () => callRoute(GET, { params: { connectionId: 'conn-1' }, searchParams: { scope: 'node', node: 'pve2', window: '86400' } })
+
+    await read()
+    vi.setSystemTime(NOW + 5000)
+    const again = await readJson<any>(await read())
+
+    expect(orchestrator.get.mock.calls.filter(([path]) => rotated(path))).toHaveLength(1)
+    expect(again.rows.map((r: any) => r.dport)).toEqual([22, 9999])
+
+    resetRotatedLogGate()
+    orchestrator.get.mockReset()
+    const serve = served({ '/firewall/nodes/conn-1/pve2/log': pveFirewallLog([[GROUP_LINE], NODE_FILE]) })
+
+    orchestrator.get.mockImplementation(async (path: string) => {
+      if (rotated(path)) throw new Error('Orchestrator request timeout')
+
+      return serve(path)
+    })
+    await read()
+    const cooled = await readJson<any>(await read())
+
+    expect(orchestrator.get.mock.calls.filter(([path]) => rotated(path))).toHaveLength(1)
+    expect(cooled.warnings).toEqual([expect.objectContaining({ node: 'pve2', kind: 'partial', message: expect.stringMatching(/waits 15 min/) })])
   })
 
   it('reads every node for a group, and falls back to PVE without an orchestrator', async () => {
@@ -169,6 +203,17 @@ describe('GET /api/v1/firewall/logs/[connectionId]', () => {
     const res = await callRoute(GET, { params: { connectionId: 'conn-1' }, searchParams })
 
     expect(res.status).toBe(400)
+    expect(orchestrator.get).not.toHaveBeenCalled()
+  })
+
+  it('refuses the log of a guest outside the session vDC, before any read', async () => {
+    guardSessionGuestMock.mockResolvedValue(denied(403, 'Guest outside your vDC'))
+
+    const { GET } = handlersOf(await import('./route'))
+    const res = await callRoute(GET, { params: { connectionId: 'conn-1' }, searchParams: { scope: 'vm', node: 'pve1', vmType: 'qemu', vmid: '205' } })
+
+    expect(res.status).toBe(403)
+    expect(guardSessionGuestMock).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'conn-1', type: 'qemu', node: 'pve1', vmid: '205' }))
     expect(orchestrator.get).not.toHaveBeenCalled()
   })
 

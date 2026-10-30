@@ -52,7 +52,12 @@ export type ParseFailure =
   | 'no-widgets'
 
 export type ImportedDashboard = {
+  /** Free name the dashboard is created under when nothing is replaced. */
   name: string
+  /** The name the file gives it, trimmed. */
+  sourceName: string
+  /** Whether a live dashboard already holds `sourceName`, so it can be replaced. */
+  existing: boolean
   widgets: TransferWidget[]
   /** Widgets the target does not know, or that RBAC hides from this user. */
   dropped: number
@@ -124,6 +129,54 @@ export function resolveImportName(
   }
 
   return `${trimmed} (${importedSuffix} ${Date.now()})`
+}
+
+export type PlannedDashboard = ImportedDashboard & {
+  /** Overwrite the live dashboard named `name` instead of creating one. */
+  replace: boolean
+}
+
+export type PlanOptions = {
+  /** Dashboard names already taken for this user. */
+  takenNames?: Iterable<string>
+  /** Source names the user chose to overwrite rather than import as a copy. */
+  replace?: ReadonlySet<string>
+  importedSuffix?: string
+}
+
+/** The live dashboards an import would collide with, once each, in file order. */
+export function conflictingNames(dashboards: readonly ImportedDashboard[]): string[] {
+  return [...new Set(dashboards.filter(d => d.existing).map(d => d.sourceName))]
+}
+
+/**
+ * Final name and write mode of every dashboard an import carries. A dashboard
+ * the user chose to replace keeps its name and overwrites the live one; every
+ * other one gets a free name, resolved against the live names AND the names
+ * this same file already claimed, so two dashboards in one file cannot
+ * collide. Only the first entry of a given name can replace: a file carrying
+ * the same name twice still yields one replacement and one copy.
+ */
+export function planImport(
+  dashboards: readonly ImportedDashboard[],
+  opts: PlanOptions = {}
+): PlannedDashboard[] {
+  const taken = new Set(opts.takenNames || [])
+  const replaced = new Set<string>()
+
+  return dashboards.map(d => {
+    if (d.existing && opts.replace?.has(d.sourceName) && !replaced.has(d.sourceName)) {
+      replaced.add(d.sourceName)
+
+      return { ...d, name: d.sourceName, replace: true }
+    }
+
+    const name = resolveImportName(d.sourceName, taken, opts.importedSuffix)
+
+    taken.add(name)
+
+    return { ...d, name, replace: false }
+  })
 }
 
 /** Lists of connection ids. `selectedClusters` holds connection ids too. */
@@ -259,9 +312,7 @@ export function parseDashboardFile(raw: string, opts: ParseOptions): ParseResult
   if (file.version !== DASHBOARD_FILE_VERSION) return { ok: false, reason: 'unsupported-version' }
   if (!Array.isArray(file.dashboards)) return { ok: false, reason: 'not-a-dashboard' }
 
-  // Names are resolved against the live ones AND against the names this same
-  // file already claimed, so two dashboards in one file cannot collide.
-  const taken = new Set(opts.takenNames || [])
+  const live = new Set(opts.takenNames || [])
   const dashboards: ImportedDashboard[] = []
   let skipped = 0
   let dropped = 0
@@ -284,17 +335,22 @@ export function parseDashboardFile(raw: string, opts: ParseOptions): ParseResult
       continue
     }
 
-    const name = resolveImportName(
-      typeof entry.name === 'string' ? entry.name : '',
-      taken,
-      opts.importedSuffix
-    )
+    const sourceName = typeof entry.name === 'string' ? entry.name.trim() : ''
 
-    taken.add(name)
-    dashboards.push({ name, widgets: ported.widgets, dropped: ported.dropped, reset: ported.reset })
+    dashboards.push({
+      name: sourceName,
+      sourceName,
+      existing: sourceName !== '' && live.has(sourceName),
+      widgets: ported.widgets,
+      dropped: ported.dropped,
+      reset: ported.reset,
+    })
   }
 
   if (dashboards.length === 0) return { ok: false, reason: 'no-widgets' }
 
-  return { ok: true, dashboards, skipped, dropped, reset }
+  // Until the user says otherwise nothing is replaced, so every name is free.
+  const named = planImport(dashboards, { takenNames: live, importedSuffix: opts.importedSuffix })
+
+  return { ok: true, dashboards: named, skipped, dropped, reset }
 }

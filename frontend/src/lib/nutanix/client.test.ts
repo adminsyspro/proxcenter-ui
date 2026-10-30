@@ -28,3 +28,22 @@ describe("NutanixClient fetch options", () => {
     expect(opts.dispatcher).toBeUndefined()
   })
 })
+
+describe("NutanixClient VM parsing", () => {
+  const parse = (entity: object) => (new NutanixClient(conn) as any).parseVmEntity(entity)
+
+  it("keeps every NIC of nic_list with its MAC, status first", () => {
+    const vm = parse({
+      metadata: { uuid: "u1" },
+      status: { name: "web", resources: { nic_list: [{ mac_address: "50:6b:8d:aa:bb:cc" }, { mac_address: "50:6b:8d:aa:bb:cd" }] } },
+      spec: { resources: { nic_list: [{ mac_address: "50:6b:8d:00:00:01" }] } },
+    })
+    expect(vm.nics).toEqual([{ macAddress: "50:6b:8d:aa:bb:cc" }, { macAddress: "50:6b:8d:aa:bb:cd" }])
+  })
+
+  it("falls back to the spec, and keeps a NIC without a MAC", () => {
+    const vm = parse({ metadata: { uuid: "u2" }, status: { resources: {} }, spec: { resources: { nic_list: [{}] } } })
+    expect(vm.nics).toEqual([{ macAddress: "" }])
+    expect(parse({ metadata: { uuid: "u3" }, status: {} }).nics).toEqual([])
+  })
+})

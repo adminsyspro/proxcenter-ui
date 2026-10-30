@@ -1,16 +1,15 @@
 /**
- * Codex QA-delta review finding 1: the changes routes masked on (node, pool)
- * but orchestrator change records carry NO pool field, so on a shared
- * cluster a neighbour's VM events passed the connection+node checks. The
- * mask is now guest ownership: a vDC tenant only sees "vm"/"ct" records
- * whose VMID resolves inside their vDC pools (deny-by-default).
+ * A vDC tenant only sees the "vm"/"ct" records written while the guest sat in
+ * one of its vDC pools (deny-by-default). The current owner of the VMID is no
+ * mask: a reused ID would hand a tenant the history of the guest it replaced.
  */
 import { describe, expect, it } from "vitest"
 
-import { isChangeVisibleToTenant, type ChangeVisibilityCtx } from "./visibility"
+import { isChangeVisibleToTenant, MASKED_ACTOR, redactChangeForTenant, type ChangeActor, type ChangeVisibilityCtx } from "./visibility"
 
 const iaasCtx = (over: Partial<ChangeVisibilityCtx> = {}): ChangeVisibilityCtx => ({
   infraKind: "iaas",
+  tenantId: "t-a",
   tenantConnectionIds: new Set(["c1", "c2"]),
   vdcScope: {
     connectionIds: new Set(["c1"]),
@@ -18,11 +17,10 @@ const iaasCtx = (over: Partial<ChangeVisibilityCtx> = {}): ChangeVisibilityCtx =
     nodesByConnection: new Map([["c1", new Set(["n1"])]]),
     poolsByConnection: new Map([["c1", new Set(["pool-a"])]]),
   } as any,
-  vdcVmids: new Map([["c1", new Set(["100"])]]),
   ...over,
 })
 
-const VM_OWNED = { connectionId: "c1", node: "n1", resourceType: "vm", resourceId: "100" }
+const VM_OWNED = { connectionId: "c1", node: "n1", resourceType: "vm", resourceId: "100", pool: "pool-a" }
 
 describe("isChangeVisibleToTenant", () => {
   it("cluster-less record: provider only", () => {
@@ -33,18 +31,18 @@ describe("isChangeVisibleToTenant", () => {
   })
 
   it("no vDC scope (provider/msp): connection membership decides, resource type does not", () => {
-    const ctx = iaasCtx({ infraKind: "msp", vdcScope: undefined, vdcVmids: undefined })
+    const ctx = iaasCtx({ infraKind: "msp", vdcScope: undefined })
     expect(isChangeVisibleToTenant({ connectionId: "c1", resourceType: "node", resourceId: "n1" }, ctx)).toBe(true)
     expect(isChangeVisibleToTenant({ connectionId: "c-foreign", resourceType: "vm", resourceId: "100" }, ctx)).toBe(false)
   })
 
-  it("iaas: keeps a guest record whose VMID belongs to the vDC (vm and ct)", () => {
+  it("iaas: keeps a guest record written while the guest sat in a vDC pool (vm and ct)", () => {
     expect(isChangeVisibleToTenant(VM_OWNED, iaasCtx())).toBe(true)
     expect(isChangeVisibleToTenant({ ...VM_OWNED, resourceType: "ct" }, iaasCtx())).toBe(true)
   })
 
   it("iaas: drops a neighbour tenant's VM on the same shared connection", () => {
-    expect(isChangeVisibleToTenant({ ...VM_OWNED, resourceId: "999" }, iaasCtx())).toBe(false)
+    expect(isChangeVisibleToTenant({ ...VM_OWNED, resourceId: "999", pool: "pool-b" }, iaasCtx())).toBe(false)
   })
 
   it("iaas: drops non-guest records (node / storage / pool are provider infra concerns)", () => {
@@ -61,16 +59,51 @@ describe("isChangeVisibleToTenant", () => {
     expect(isChangeVisibleToTenant({ ...VM_OWNED, node: "n9" }, iaasCtx())).toBe(false)
   })
 
-  it("iaas: deny-by-default when the VMID map has no entry or the record has no resourceId", () => {
-    expect(isChangeVisibleToTenant(VM_OWNED, iaasCtx({ vdcVmids: new Map() }))).toBe(false)
-    expect(isChangeVisibleToTenant(VM_OWNED, iaasCtx({ vdcVmids: undefined }))).toBe(false)
-    expect(isChangeVisibleToTenant({ ...VM_OWNED, resourceId: undefined }, iaasCtx())).toBe(false)
+  it("iaas: deny-by-default when the scope lists no pool on the connection or the record has none", () => {
+    const noPools = { ...iaasCtx().vdcScope!, poolsByConnection: new Map() } as any
+    expect(isChangeVisibleToTenant(VM_OWNED, iaasCtx({ vdcScope: noPools }))).toBe(false)
+    expect(isChangeVisibleToTenant({ ...VM_OWNED, pool: undefined }, iaasCtx())).toBe(false)
+  })
+})
+
+describe("isChangeVisibleToTenant on records stamped with the guest's pool", () => {
+  it("iaas: the pool the guest sat in decides, not who holds the VMID now", () => {
+    // VMID 100 is the tenant's today, but these rows are about the guest of
+    // a neighbour's pool that held the ID before
+    expect(isChangeVisibleToTenant({ ...VM_OWNED, action: "deleted", pool: "pool-b" }, iaasCtx())).toBe(false)
+    expect(isChangeVisibleToTenant({ ...VM_OWNED, pool: "pool-b" }, iaasCtx())).toBe(false)
+    // The tenant's own guest, under its pool
+    expect(isChangeVisibleToTenant(VM_OWNED, iaasCtx())).toBe(true)
+  })
+
+  it("iaas: keeps the history of the tenant's guest once its VMID left the vDC", () => {
+    const gone = { ...VM_OWNED, resourceId: "555", action: "deleted", pool: "pool-a" }
+    expect(isChangeVisibleToTenant(gone, iaasCtx())).toBe(true)
+  })
+
+  it("iaas: a guest in no pool, or a pool on another connection, is denied", () => {
+    expect(isChangeVisibleToTenant({ ...VM_OWNED, pool: "" }, iaasCtx())).toBe(false)
+    const ctx = iaasCtx({
+      vdcScope: { ...iaasCtx().vdcScope!, poolsByConnection: new Map([["c2", new Set(["pool-a"])]]) } as any,
+    })
+    expect(isChangeVisibleToTenant({ ...VM_OWNED, pool: "pool-a" }, ctx)).toBe(false)
+  })
+
+  it("iaas: a record from before the stamp cannot tell its guest's owner and is denied", () => {
+    expect(isChangeVisibleToTenant({ ...VM_OWNED, pool: null }, iaasCtx())).toBe(false)
+  })
+
+  it("provider and msp ignore the pool, records from before the stamp included", () => {
+    const ctx = iaasCtx({ infraKind: "msp", vdcScope: undefined })
+    expect(isChangeVisibleToTenant({ ...VM_OWNED, pool: null }, ctx)).toBe(true)
+    expect(isChangeVisibleToTenant({ ...VM_OWNED, pool: "pool-z" }, ctx)).toBe(true)
   })
 })
 
 describe("isChangeVisibleToTenant with ctx.rbacScope (issue #525)", () => {
   const providerCtx = (rbacScope: ChangeVisibilityCtx["rbacScope"]): ChangeVisibilityCtx => ({
     infraKind: "provider",
+    tenantId: "default",
     tenantConnectionIds: new Set(["c1", "c2"]),
     vdcScope: null,
     rbacScope,
@@ -127,7 +160,7 @@ describe("isChangeVisibleToTenant with ctx.rbacScope (issue #525)", () => {
   it("RBAC and the vDC mask compose: a record must pass both", () => {
     const ctx = iaasCtx({ rbacScope: connScope })
     expect(isChangeVisibleToTenant(VM_OWNED, ctx)).toBe(true)
-    expect(isChangeVisibleToTenant({ ...VM_OWNED, resourceId: "999" }, ctx)).toBe(false)
+    expect(isChangeVisibleToTenant({ ...VM_OWNED, pool: "pool-b" }, ctx)).toBe(false)
     expect(isChangeVisibleToTenant(VM_OWNED, iaasCtx({ rbacScope: nodeScope }))).toBe(true)
     expect(isChangeVisibleToTenant(VM_OWNED, iaasCtx({ rbacScope: { ...connScope, fullConnections: new Set(["c2"]) } }))).toBe(false)
   })
@@ -147,5 +180,56 @@ describe("isChangeVisibleToTenant with ctx.rbacScope (issue #525)", () => {
     expect(isChangeVisibleToTenant(NODE_N2, ctx)).toBe(false)
     expect(isChangeVisibleToTenant({ connectionId: "c1", node: "n1", resourceType: "node", resourceId: "n1" }, ctx)).toBe(false)
     expect(isChangeVisibleToTenant(STORAGE, ctx)).toBe(false)
+  })
+})
+
+describe("infrastructure changes", () => {
+  it("never reach a vDC tenant; a connection's own tenant sees them", () => {
+    for (const resourceType of ["firewall", "access", "storage", "network"]) {
+      const record = { connectionId: "c1", node: "n1", resourceType, resourceId: "x" }
+      expect(isChangeVisibleToTenant(record, iaasCtx())).toBe(false)
+      expect(isChangeVisibleToTenant(record, iaasCtx({ infraKind: "msp", vdcScope: undefined }))).toBe(true)
+    }
+  })
+})
+
+describe("redactChangeForTenant", () => {
+  const own: ChangeActor = { name: "me@a.test", source: "audit", ref: "a1", tenantId: "t-a" }
+  const staff: ChangeActor = { name: "ops@provider.test", source: "audit", ref: "a2", tenantId: "default" }
+  const migrator: ChangeActor = { name: "mig@provider.test", source: "migration", ref: "job-1", tenantId: "default" }
+  const pve: ChangeActor = { name: "root@pam!px", source: "task", ref: "UPID:x", token: true }
+
+  it("leaves the provider every author", () => {
+    const c = { ...VM_OWNED, user: "ops@provider.test", actors: [staff] }
+    expect(redactChangeForTenant(c, iaasCtx({ infraKind: "provider" }))).toBe(c)
+  })
+
+  it("shows another tenant's account as ProxCenter and drops the tenant IDs", () => {
+    const c = { ...VM_OWNED, user: "ops@provider.test, me@a.test, alice@pve", actors: [staff, own, pve] }
+    const out = redactChangeForTenant(c, iaasCtx())
+    expect(out.user).toBe(`${MASKED_ACTOR}, me@a.test, alice@pve`)
+    expect(out.actors).toEqual([
+      { name: MASKED_ACTOR, source: "audit", ref: undefined, masked: true },
+      { name: "me@a.test", source: "audit", ref: "a1" },
+      pve,
+    ])
+    expect(JSON.stringify(out)).not.toContain("ops@provider.test")
+  })
+
+  it("masks the account behind another tenant's migration job too", () => {
+    const out = redactChangeForTenant({ ...VM_OWNED, user: "mig@provider.test", actors: [migrator] }, iaasCtx())
+    expect(out.user).toBe(MASKED_ACTOR)
+    expect(JSON.stringify(out)).not.toContain("mig@provider.test")
+  })
+
+  it("keeps an own-tenant author by address, without tenant IDs", () => {
+    const out = redactChangeForTenant({ ...VM_OWNED, user: "me@a.test", actors: [own] }, iaasCtx({ infraKind: "msp" }))
+    expect(out.user).toBe("me@a.test")
+    expect(out.actors).toEqual([{ name: "me@a.test", source: "audit", ref: "a1" }])
+  })
+
+  it("passes a record without actors through", () => {
+    const legacy = { ...VM_OWNED, user: "system" }
+    expect(redactChangeForTenant(legacy, iaasCtx())).toBe(legacy)
   })
 })

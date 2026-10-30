@@ -28,6 +28,7 @@ const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
 const deploymentUpdateMock = vi.fn<(...args: any[]) => Promise<any>>()
 const deploymentCreateMock = vi.fn<(...args: any[]) => Promise<any>>()
 const resolveProviderVdcTargetMock = vi.fn<(...args: any[]) => Promise<any>>()
+const requireProviderTenantMock = vi.fn<() => Promise<Response | null>>()
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('@/lib/tenant', () => ({
@@ -37,9 +38,10 @@ vi.mock('@/lib/tenant', () => ({
     blueprint: { create: vi.fn(async () => ({})) },
   }),
   getCurrentTenantId: () => getCurrentTenantIdMock(),
+  requireProviderTenant: () => requireProviderTenantMock(),
   DEFAULT_TENANT_ID: 'default',
 }))
-vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { VM_CREATE: 'vm.create', VM_CLONE: 'vm.clone' }, buildVmResourceId: (...parts: string[]) => parts.join(':') }))
+vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { VM_CREATE: 'vm.create', VM_CLONE: 'vm.clone', NODE_MANAGE: 'node.manage' }, buildVmResourceId: (...parts: string[]) => parts.join(':') }))
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/schemas', () => ({ deploySchema: { safeParse: (b: any) => ({ success: true, data: b }) } }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
@@ -138,6 +140,7 @@ beforeEach(async () => {
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
   getCurrentTenantIdMock.mockReset().mockResolvedValue('tenant-1')
   auditMock.mockReset().mockResolvedValue({})
+  requireProviderTenantMock.mockReset().mockResolvedValue(null)
   urlFetchRefusalOff.value = false
 })
 
@@ -1152,5 +1155,164 @@ describe('POST templates/deploy: provider deploying into a tenant vDC (roadmap#6
     const res = await callRoute(await loadPost(), { body: targetBody })
     expect(res.status).toBe(409)
     expect(deploymentCreateMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST templates/deploy: firmware, disk bus and HA (#181)', () => {
+  const provider = () => {
+    getCurrentTenantIdMock.mockResolvedValue('default')
+    resolveVdcForTenantMock.mockResolvedValue(null)
+  }
+  const cloudImage = () => getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+  const isoImage = () => getImageBySlugMock.mockReturnValue({ slug: 'win11', format: 'iso', downloadUrl: 'https://img.test/w.iso' })
+  /** The deploy stub, with `ceph` answering as a shared RBD storage. */
+  function stubWithSharedCeph() {
+    stubPveFetchForDeploy()
+    const base = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (conn: any, path: string, opts?: any) => {
+      if (path === '/storage/ceph' && !opts?.method) return { type: 'rbd', content: 'images' }
+      if (path === '/nodes/pve1/storage') return [{ storage: 'ceph', type: 'rbd', content: 'images', active: 1, enabled: 1, shared: 1 }, { storage: 'local-lvm', type: 'dir', content: 'images,iso,import', active: 1, enabled: 1 }]
+      return base(conn, path, opts)
+    })
+  }
+  const haCalls = () => pveFetchMock.mock.calls.filter(([, path, opts]: any) => path === '/cluster/ha/resources' && opts?.method === 'POST')
+
+  beforeEach(() => { stubPveFetchForDeploy(); provider() })
+
+  it('disk image: UEFI, q35, TPM, SATA and the display land in the create call, and the resize targets the SATA disk', async () => {
+    cloudImage()
+    const POST = await loadPost()
+    const hardware = { ...baseBody.hardware, bios: 'ovmf', machine: 'q35', tpm: true, diskBus: 'sata', vga: 'std' }
+    const res = await callRoute(POST, { body: { ...baseBody, hardware } })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+
+    const params = qemuCreateParams()
+    expect(params.get('sata0')).toBe('local-lvm:0,import-from=local-lvm:import/u.qcow2')
+    expect(params.get('scsi0')).toBeNull()
+    expect(params.get('boot')).toBe('order=sata0')
+    expect(params.get('bios')).toBe('ovmf')
+    expect(params.get('machine')).toBe('q35')
+    expect(params.get('efidisk0')).toBe('local-lvm:1,efitype=4m,pre-enrolled-keys=1')
+    expect(params.get('tpmstate0')).toBe('local-lvm:1,version=v2.0')
+    expect(params.get('vga')).toBe('std')
+    expect(params.get('serial0')).toBe('socket')
+    const resize = pveFetchMock.mock.calls.find(([, path]: any) => /\/resize$/.test(path))
+    expect((resize?.[2]?.body as URLSearchParams).get('disk')).toBe('sata0')
+  })
+
+  it('disk image without firmware fields: SCSI disk, SeaBIOS, and a standard display instead of the dead serial one', async () => {
+    cloudImage()
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: baseBody })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+
+    const params = qemuCreateParams()
+    expect(params.get('scsi0')).toBe('local-lvm:0,import-from=local-lvm:import/u.qcow2')
+    expect(params.get('boot')).toBe('order=scsi0')
+    expect(params.get('vga')).toBe('std')
+    expect(params.get('serial0')).toBe('socket')
+    expect(params.get('bios')).toBeNull()
+    expect(params.get('machine')).toBeNull()
+    expect(params.get('efidisk0')).toBeNull()
+    expect(params.get('tpmstate0')).toBeNull()
+  })
+
+  it('ISO install: TPM state and the chosen bus for the empty disk', async () => {
+    isoImage()
+    const POST = await loadPost()
+    const hardware = { ...baseBody.hardware, bios: 'ovmf', tpm: true, diskBus: 'sata' }
+    const res = await callRoute(POST, { body: { ...baseBody, isoStorage: 'local-lvm', hardware } })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+
+    const params = qemuCreateParams()
+    expect(params.get('tpmstate0')).toBe('local-lvm:1,version=v2.0')
+    expect(params.get('sata0')).toBe('local-lvm:10')
+    expect(params.get('scsi0')).toBeNull()
+    expect(params.get('boot')).toBe('order=ide2;sata0')
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ details: expect.objectContaining({ mode: 'iso', tpm: true }) }))
+  })
+
+  it('HA refused without node.manage on the connection, before anything is created', async () => {
+    cloudImage()
+    checkPermissionMock.mockImplementation(async (perm: string) => (perm === 'node.manage' ? new Response('no', { status: 403 }) : null))
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: { ...baseBody, ha: true } })
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).toHaveBeenCalledWith('node.manage', 'connection', 'conn-1')
+    expect(deploymentCreateMock).not.toHaveBeenCalled()
+  })
+
+  it('HA refused outside the provider tenant', async () => {
+    cloudImage()
+    requireProviderTenantMock.mockResolvedValue(new Response('provider only', { status: 403 }))
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: { ...baseBody, ha: true } })
+    expect(res.status).toBe(403)
+    expect(deploymentCreateMock).not.toHaveBeenCalled()
+  })
+
+  it('HA refused on local storage, before anything is created', async () => {
+    cloudImage()
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: { ...baseBody, ha: true } })
+    expect(res.status).toBe(400)
+    expect((await readJson<{ error: string }>(res))?.error).toMatch(/shared storage/)
+    expect(deploymentCreateMock).not.toHaveBeenCalled()
+  })
+
+  it('HA on shared storage: the started VM is handed to the HA manager and the deployment records it', async () => {
+    stubWithSharedCeph()
+    cloudImage()
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: { ...baseBody, storage: 'ceph', ha: true } })
+    expect(res.status).toBe(200)
+    expect(deploymentCreateMock.mock.calls[0][0].data.config.ha).toBe(true)
+
+    await runAfters()
+
+    expect(haCalls()).toHaveLength(1)
+    const body = new URLSearchParams(haCalls()[0][2].body)
+    expect(body.get('sid')).toBe('vm:190')
+    expect(body.get('state')).toBe('started')
+    const last = deploymentUpdateMock.mock.calls.at(-1)![0]
+    expect(last.data.status).toBe('completed')
+    expect(last.data.error).toBeUndefined()
+  })
+
+  it('a failed HA registration keeps the deployment completed and explains it', async () => {
+    stubWithSharedCeph()
+    const base = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (conn: any, path: string, opts?: any) => {
+      if (path === '/cluster/ha/resources') throw new Error('resource already defined')
+      return base(conn, path, opts)
+    })
+    cloudImage()
+    const POST = await loadPost()
+    await callRoute(POST, { body: { ...baseBody, storage: 'ceph', ha: true } })
+
+    await runAfters()
+
+    const last = deploymentUpdateMock.mock.calls.at(-1)![0]
+    expect(last.data.status).toBe('completed')
+    expect(last.data.error).toMatch(/high availability could not be enabled: resource already defined/)
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ details: expect.objectContaining({ ha: false }) }))
+  })
+
+  it('HA on an ISO install keeps the VM stopped until the user starts the installer', async () => {
+    stubWithSharedCeph()
+    isoImage()
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: { ...baseBody, storage: 'ceph', isoStorage: 'local-lvm', ha: true } })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+
+    expect(new URLSearchParams(haCalls()[0][2].body).get('state')).toBe('stopped')
   })
 })

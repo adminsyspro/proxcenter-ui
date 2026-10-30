@@ -4,7 +4,7 @@ import { renderWithProviders, screen, userEvent, waitFor } from '@/__tests__/set
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
 vi.mock('@/contexts/TenantContext', () => ({ useTenant: () => ({ currentTenant: { id: 'default', name: 'Provider' }, loading: false, isFullClusterView: true }) }))
-vi.mock('@/contexts/RBACContext', () => ({ useRBAC: () => ({ hasPermission: () => true, isAdmin: true, permissions: [] }) }))
+vi.mock('@/contexts/RBACContext', () => ({ useRBAC: () => ({ hasPermission: () => true, hasPermissionOn: () => true, isAdmin: true, permissions: [] }) }))
 vi.mock('./DeploymentProgress', () => ({ default: () => <div>Deployment started</div> }))
 import DeployWizard from './DeployWizard'
 

@@ -22,6 +22,11 @@ async function handlePatch(req: Request) {
       return NextResponse.json({ error: "Missing connectionId or node" }, { status: 400 })
     }
 
+    // The row this may create is the SSH override of a node: only the owner
+    // of the connection writes one (roadmap#99).
+    const connection = await prisma.connection.findUnique({ where: { id: String(body.connectionId) }, select: { id: true } })
+    if (!connection) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+
     const tags = body.tags ? String(body.tags) : null
 
     const host = await prisma.managedHost.upsert({

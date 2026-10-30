@@ -15,26 +15,33 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
 // POST /api/v1/orchestrator/host-drains/plan  { connection_id, node, config }
 // Dry run: the guests of the node, where each one would go and which ones the
-// drain would refuse. Nothing moves.
+// drain would refuse. Nothing moves. A selection of guests (#1218) sends
+// config.vmids and no node: the right to migrate each guest is then checked
+// by restrictDrainTargets, as for the drain itself.
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null)
     const connectionId = body?.connection_id
     const node = body?.node
+    const selection = Array.isArray(body?.config?.vmids) && body.config.vmids.length > 0
 
-    if (!connectionId || !node) {
+    if (!connectionId || (!node && !selection)) {
       return NextResponse.json({ error: "connection_id and node are required" }, { status: 400 })
     }
-
-    let safeNode: string
-    try {
-      safeNode = assertNodeName(node)
-    } catch {
-      return NextResponse.json({ error: "Invalid node name" }, { status: 400 })
+    if (node && selection) {
+      return NextResponse.json({ error: "a selection of guests has no node" }, { status: 400 })
     }
 
-    const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", buildNodeResourceId(connectionId, safeNode))
-    if (denied) return denied
+    let safeNode = ""
+    if (!selection) {
+      try {
+        safeNode = assertNodeName(node)
+      } catch {
+        return NextResponse.json({ error: "Invalid node name" }, { status: 400 })
+      }
+      const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", buildNodeResourceId(connectionId, safeNode))
+      if (denied) return denied
+    }
     // The plan names every guest of the node: clusters the caller owns only.
     if (!canMigrateConnections(await getTenantInfrastructureScope(await getCurrentTenantId()), connectionId)) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })

@@ -52,6 +52,15 @@ describe('driveStoragesOf', () => {
     })).toEqual(['Dir-Images', 'ceph'])
   })
 
+  it('reads the rootfs and volume mount points of a container, not its bind mounts', () => {
+    expect(driveStoragesOf({
+      rootfs: 'local-lvm:vm-120-disk-0,size=8G',
+      mp0: 'ceph:vm-120-disk-1,mp=/data,size=10G',
+      mp1: '/srv/share,mp=/share',
+      net0: 'name=eth0,bridge=vmbr0,ip=dhcp',
+    })).toEqual(['local-lvm', 'ceph'])
+  })
+
   it('returns nothing for a missing config', () => {
     expect(driveStoragesOf(null)).toEqual([])
   })

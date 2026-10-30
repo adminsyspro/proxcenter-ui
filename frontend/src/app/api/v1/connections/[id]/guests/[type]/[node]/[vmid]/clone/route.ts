@@ -222,8 +222,10 @@ async function handler(
     for (const [key, value] of Object.entries(body)) {
       if (key === 'full') continue // normalized below to a canonical 1/0
       if (key === 'ha') continue // ProxCenter-only, applied after the clone
+      // pct clone names the copy `hostname` and has no image format.
+      if (type === 'lxc' && key === 'format') continue
       if (value !== undefined && value !== null && value !== '') {
-        formData.append(key, String(value))
+        formData.append(type === 'lxc' && key === 'name' ? 'hostname' : key, String(value))
       }
     }
 
@@ -368,7 +370,7 @@ async function handler(
       const haVmid = Number(body.newid)
       after(async () => {
         try {
-          if (haUpid) await waitForTask(conn, haNode, haUpid)
+          if (haUpid) await waitForTask(conn, haNode, haUpid, { acceptWarnings: true })
           await registerHaResource(conn, haVmid, 'started', type as 'qemu' | 'lxc')
         } catch (err: any) {
           console.error(`[clone-ha] vmid=${safeLog(haVmid)} HA registration failed: ${safeLog(err?.message ?? err)}`)

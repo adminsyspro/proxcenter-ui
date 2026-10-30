@@ -26,11 +26,15 @@ export async function haPermissionDenied(connectionId: string): Promise<Response
   return requireProviderTenant()
 }
 
-/** Storage ids named by the drives of a guest config (`storage:volume,...`), cdroms and `none` excluded. */
+/**
+ * Storage ids named by the drives of a guest config (`storage:volume,...`):
+ * VM disks, EFI and TPM state, a container's rootfs and mount points. Cdroms,
+ * `none` and bind mounts (a host path, no storage) are left out.
+ */
 export function driveStoragesOf(config: Record<string, unknown> | null | undefined): string[] {
   const out = new Set<string>()
   for (const [key, value] of Object.entries(config || {})) {
-    if (!/^(scsi|sata|virtio|ide|efidisk|tpmstate)\d+$/.test(key) || typeof value !== 'string') continue
+    if (!/^((scsi|sata|virtio|ide|efidisk|tpmstate|mp)\d+|rootfs)$/.test(key) || typeof value !== 'string') continue
     if (/(^|,)media=cdrom(,|$)/.test(value)) continue
     const volume = value.split(',')[0]
     const sep = volume.indexOf(':')

@@ -1,59 +1,40 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
-import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { daemonNodeKey, DaemonSlotExpired, withDaemonSlot } from "@/lib/proxmox/daemonSlots"
+import { callGuestAgent, isGuestAgentMuted } from "@/lib/proxmox/guestAgentCall"
+import { getConnectionById, type PveConn } from "@/lib/connections/getConnection"
+import { mapWithConcurrency, PVEPROXY_CONCURRENCY } from "@/lib/inventory/concurrency"
+import { parseVmConfig } from "@/lib/inventory/vmConfig"
+import { checkPermission, filterVmsByPermission, getRBACContext, PERMISSIONS } from "@/lib/rbac"
+import { isGuestType, isNodeName, isVmid, sessionGuestVisibility } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
 /**
  * POST /api/v1/vms/ips
- * 
- * Récupère les IPs, snapshots, uptime et infos OS pour une liste de VMs.
- * Appelé à la demande via le bouton "Charger IPs".
- * 
+ *
+ * IP, snapshot count and OS of the guests the inventory table shows, asked
+ * for one page at a time (roadmap#179). Every call here but /config is a
+ * protected PVE call, served by the 3 pvedaemon workers of the node: they go
+ * through the node's slots (daemonSlots.ts), an agent that did not answer is
+ * left alone for a while (guestAgentCall.ts), and the agent is only asked
+ * when the VM options enable it. The uptime comes from /cluster/resources
+ * with the inventory, it is not read here.
+ *
  * Body: { vms: [{ connId, type, node, vmid, status }] }
- * Response: { data: { "connId:type:node:vmid": { ip, snapshots, uptime, osInfo }, ... } }
+ * Response: { data: { "connId:type:node:vmid": { ip, snapshots, osInfo } }, pending: [keys] }
+ * `pending` lists the guests the time budget left out: ask for them again.
  */
 
-function secondsToUptime(seconds: number) {
-  if (!seconds || seconds < 0) return null
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-
-  if (d > 0) return `${d}j ${h}h`
-  if (h > 0) return `${h}h ${m}m`
-  
-return `${m}m`
-}
-
-// Déterminer le type d'OS à partir des infos du guest agent
-function getOsType(osInfo: any): 'linux' | 'windows' | 'other' {
-  if (!osInfo) return 'other'
-  
-  const id = (osInfo.id || '').toLowerCase()
-  const name = (osInfo.name || '').toLowerCase()
-  
-  // Windows
-  if (id === 'mswindows' || name.includes('windows')) {
-    return 'windows'
-  }
-  
-  // Linux distributions
-  const linuxDistros = ['debian', 'ubuntu', 'centos', 'rhel', 'fedora', 'alpine', 'arch', 'opensuse', 'suse', 'mint', 'manjaro', 'rocky', 'alma', 'oracle', 'gentoo', 'slackware', 'nixos']
-
-  if (linuxDistros.some(d => id.includes(d) || name.includes(d)) || name.includes('linux')) {
-    return 'linux'
-  }
-  
-  // FreeBSD, etc.
-  if (id.includes('freebsd') || id.includes('openbsd') || id.includes('netbsd')) {
-    return 'other'
-  }
-  
-  return 'other'
-}
+/** Longer than a table page (100 rows), shorter than anything a proxy cuts. */
+const MAX_VMS = 200
+/** Calls not sent after this are left for the next request: nginx answers 504 at 60 s. */
+const BUDGET_MS = 20_000
+const DETAILS_TTL_MS = 60_000
+/** The OS of a guest barely changes: one get-osinfo per VM and 6 hours. */
+const OS_TTL_MS = 6 * 3_600_000
+const MAX_CACHED = 10_000
 
 type OsInfo = {
   type: 'linux' | 'windows' | 'other'
@@ -62,191 +43,180 @@ type OsInfo = {
   kernel: string | null
 }
 
-async function getVmDetails(connData: any, vm: { type: string, node: string, vmid: string, status?: string }): Promise<{ ip: string | null, snapshots: number, uptime: string | null, osInfo: OsInfo | null }> {
-  const { type, node, vmid, status } = vm
-  let ip: string | null = null
-  let snapshots = 0
-  let uptime: string | null = null
-  let osInfo: OsInfo | null = null
-  
-  // Récupérer IP, snapshots, status (pour uptime) et OS info en parallèle
-  const [ipResult, snapshotsResult, statusResult, osInfoResult] = await Promise.allSettled([
-    // IP
-    (async () => {
-      if (status !== 'running') return null
-      
-      if (type === 'qemu') {
-        // Essayer le guest-agent
-        try {
-          const interfaces = await pveFetch<any>(
-            connData,
-            `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/agent/network-get-interfaces`
-          )
-          
-          const result = interfaces?.result || interfaces || []
+type GuestDetails = { ip: string | null; snapshots: number | null; osInfo: OsInfo | null }
 
-          for (const iface of result) {
-            if (iface.name === 'lo') continue
-            const ipAddrs = iface['ip-addresses'] || []
+type GuestRef = { connId: string; type: 'qemu' | 'lxc'; node: string; vmid: string; status?: string; id: string }
 
-            for (const addr of ipAddrs) {
-              if (addr['ip-address-type'] === 'ipv4' && addr['ip-address'] && !addr['ip-address'].startsWith('127.')) {
-                return addr['ip-address']
-              }
-            }
-          }
-        } catch {
-          // Fallback sur la config
-          try {
-            const config = await pveFetch<any>(
-              connData,
-              `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/config`
-            )
+const detailsCache = new Map<string, { at: number; details: GuestDetails }>()
+const osCache = new Map<string, { at: number; osInfo: OsInfo | null }>()
 
-            const ipconfigValue = config?.ipconfig0 || ''
+/** Test hook: forget every cached answer. */
+export function resetGuestDetailsCache() {
+  detailsCache.clear()
+  osCache.clear()
+}
 
-            if (ipconfigValue) {
-              const match = ipconfigValue.match(/ip=([^/,]+)/)
+function remember<V>(cache: Map<string, V>, key: string, value: V) {
+  cache.delete(key)
+  cache.set(key, value)
+  if (cache.size > MAX_CACHED) cache.delete(cache.keys().next().value!)
+}
 
-              if (match && match[1] !== 'dhcp') return match[1]
-            }
-          } catch {}
-        }
-      } else if (type === 'lxc') {
-        // Essayer l'endpoint interfaces pour obtenir l'IP réelle (DHCP inclus)
-        if (status === 'running') {
-          try {
-            const interfaces = await pveFetch<any[]>(
-              connData,
-              `/nodes/${encodeURIComponent(node)}/lxc/${vmid}/interfaces`
-            )
+// Déterminer le type d'OS à partir des infos du guest agent
+function getOsType(osInfo: any): 'linux' | 'windows' | 'other' {
+  if (!osInfo) return 'other'
 
-            if (Array.isArray(interfaces)) {
-              for (const iface of interfaces) {
-                if (iface.name === 'lo') continue
+  const id = (osInfo.id || '').toLowerCase()
+  const name = (osInfo.name || '').toLowerCase()
 
-                if (iface.inet) return iface.inet.split('/')[0]
-              }
-            }
-          } catch {}
-        }
+  if (id === 'mswindows' || name.includes('windows')) return 'windows'
 
-        // Fallback: IP statique depuis la config
-        try {
-          const config = await pveFetch<any>(
-            connData,
-            `/nodes/${encodeURIComponent(node)}/lxc/${vmid}/config`
-          )
+  const linuxDistros = ['debian', 'ubuntu', 'centos', 'rhel', 'fedora', 'alpine', 'arch', 'opensuse', 'suse', 'mint', 'manjaro', 'rocky', 'alma', 'oracle', 'gentoo', 'slackware', 'nixos']
 
-          const netValue = config?.net0 || ''
+  if (linuxDistros.some(d => id.includes(d) || name.includes(d)) || name.includes('linux')) return 'linux'
 
-          if (netValue) {
-            const match = netValue.match(/ip=([^/,]+)/)
+  return 'other'
+}
 
-            if (match && match[1] !== 'dhcp') return match[1]
-          }
-        } catch {}
-      }
+function agentOsInfo(osData: any): OsInfo | null {
+  const result = osData?.result || osData
 
-      
-return null
-    })(),
-    
-    // Snapshots
-    (async () => {
-      try {
-        const snapshotList = await pveFetch<any[]>(
-          connData,
-          `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/snapshot`
-        )
+  if (!result || !(result.id || result.name || result['pretty-name'])) return null
 
+  return {
+    type: getOsType(result),
+    name: result['pretty-name'] || result.name || null,
+    version: result.version || result['version-id'] || null,
+    kernel: result['kernel-release'] || null,
+  }
+}
 
-        // Le snapshot "current" n'est pas un vrai snapshot
-        return Array.isArray(snapshotList) 
-          ? snapshotList.filter(s => s.name !== 'current').length 
-          : 0
-      } catch {
-        return 0
-      }
-    })(),
-    
-    // Status (pour uptime)
-    (async () => {
-      if (status !== 'running') return null
+function lxcOsInfo(config: Record<string, any> | null): OsInfo | null {
+  // ostype peut être: debian, ubuntu, centos, fedora, archlinux, alpine, gentoo, nixos, opensuse, unmanaged
+  const ostype = String(config?.ostype || '')
 
-      try {
-        const vmStatus = await pveFetch<any>(
-          connData,
-          `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/status/current`
-        )
+  if (!ostype) return null
+  const isLinux = ['debian', 'ubuntu', 'centos', 'fedora', 'archlinux', 'alpine', 'gentoo', 'nixos', 'opensuse'].includes(ostype)
 
-        
-return vmStatus?.uptime ? secondsToUptime(vmStatus.uptime) : null
-      } catch {
-        return null
-      }
-    })(),
-    
-    // OS Info via guest agent
-    (async (): Promise<OsInfo | null> => {
-      if (status !== 'running') return null
-      
-      if (type === 'qemu') {
-        try {
-          const osData = await pveFetch<any>(
-            connData,
-            `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/agent/get-osinfo`
-          )
-          
-          const result = osData?.result || osData
+  return { type: isLinux ? 'linux' : 'other', name: ostype.charAt(0).toUpperCase() + ostype.slice(1), version: null, kernel: null }
+}
 
-          if (result && (result.id || result.name || result['pretty-name'])) {
-            return {
-              type: getOsType(result),
-              name: result['pretty-name'] || result.name || null,
-              version: result.version || result['version-id'] || null,
-              kernel: result['kernel-release'] || null
-            }
-          }
-        } catch {
-          // Guest agent non disponible ou non installé
-        }
-      } else if (type === 'lxc') {
-        // Pour LXC, on peut essayer de deviner depuis la config
-        try {
-          const config = await pveFetch<any>(
-            connData,
-            `/nodes/${encodeURIComponent(node)}/lxc/${vmid}/config`
-          )
+/** The first routable IPv4 the agent reports. */
+function agentIp(interfaces: any): string | null {
+  const result = interfaces?.result || interfaces || []
 
-          const ostype = config?.ostype || ''
+  for (const iface of Array.isArray(result) ? result : []) {
+    if (iface.name === 'lo') continue
 
-          if (ostype) {
-            // ostype peut être: debian, ubuntu, centos, fedora, archlinux, alpine, gentoo, nixos, opensuse, unmanaged
-            const isLinux = ['debian', 'ubuntu', 'centos', 'fedora', 'archlinux', 'alpine', 'gentoo', 'nixos', 'opensuse'].includes(ostype)
+    for (const addr of iface['ip-addresses'] || []) {
+      if (addr['ip-address-type'] === 'ipv4' && addr['ip-address'] && !addr['ip-address'].startsWith('127.')) return addr['ip-address']
+    }
+  }
 
-            
-return {
-              type: isLinux ? 'linux' : 'other',
-              name: ostype.charAt(0).toUpperCase() + ostype.slice(1),
-              version: null,
-              kernel: null
-            }
-          }
-        } catch {}
-      }
+  return null
+}
 
-      
-return null
-    })()
+function lxcIp(interfaces: any): string | null {
+  for (const iface of Array.isArray(interfaces) ? interfaces : []) {
+    if (iface.name !== 'lo' && iface.inet) return String(iface.inet).split('/')[0]
+  }
+
+  return null
+}
+
+/** A static address of the config (`ip=` of ipconfig0 or net0), never dhcp. */
+function configIp(raw: unknown): string | null {
+  const match = /ip=([^/,]+)/.exec(String(raw ?? ''))
+
+  return match && match[1] !== 'dhcp' ? match[1] : null
+}
+
+class Pending extends Error {}
+
+/** A call the time budget left unsent makes the whole guest pending; any other failure is `fallback`. */
+async function orFallback<T, F>(call: Promise<T>, fallback: (err: unknown) => F): Promise<T | F> {
+  try {
+    return await call
+  } catch (err) {
+    if (err instanceof DaemonSlotExpired) throw new Pending()
+
+    return fallback(err)
+  }
+}
+
+type GuestRead = {
+  conn: PveConn
+  vm: GuestRef
+  config: Record<string, any> | null
+  deadline: number
+  /** Runs a protected call of the guest through its node's pvedaemon slots. */
+  slot: <T>(call: () => Promise<T>) => Promise<T>
+}
+
+type AddressAndOs = Pick<GuestDetails, 'ip' | 'osInfo'>
+
+async function lxcAddressAndOs({ conn, config, vm, slot }: GuestRead): Promise<AddressAndOs> {
+  if (vm.status !== 'running') return { ip: null, osInfo: null }
+  const ip = await orFallback(slot(() => pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(vm.node)}/lxc/${vm.vmid}/interfaces`)).then(lxcIp), () => null)
+
+  return { ip: ip ?? configIp(config?.net0), osInfo: lxcOsInfo(config) }
+}
+
+async function qemuAddressAndOs({ conn, vm, config, deadline }: GuestRead): Promise<AddressAndOs> {
+  const staticIp = configIp(config?.ipconfig0)
+
+  if (vm.status !== 'running') return { ip: null, osInfo: null }
+  if (!parseVmConfig(config).agentEnabled || isGuestAgentMuted(conn, vm.node, vm.vmid)) return { ip: staticIp, osInfo: null }
+
+  const answered = await orFallback(callGuestAgent<any>(conn, vm.node, vm.vmid, 'network-get-interfaces', { deadline }).then(r => ({ ip: agentIp(r) })), () => null)
+
+  if (!answered) return { ip: staticIp, osInfo: null }
+  const ip = answered.ip ?? staticIp
+  const osKey = `${conn.id}:${vm.node}:${vm.vmid}`
+  const known = osCache.get(osKey)
+
+  if (known && Date.now() - known.at < OS_TTL_MS) return { ip, osInfo: known.osInfo }
+  // An old agent without get-osinfo: no OS, nothing to ask again for 6 h.
+  const osInfo = await orFallback(callGuestAgent<any>(conn, vm.node, vm.vmid, 'get-osinfo', { deadline, mute: false }).then(agentOsInfo), () => null)
+
+  remember(osCache, osKey, { at: Date.now(), osInfo })
+
+  return { ip, osInfo }
+}
+
+async function readGuest(conn: PveConn, vm: GuestRef, deadline: number): Promise<GuestDetails> {
+  const node = encodeURIComponent(vm.node)
+  const slot = <T>(call: () => Promise<T>) => withDaemonSlot(daemonNodeKey(conn, vm.node), call, { deadline })
+  const config = await pveFetch<Record<string, any>>(conn, `/nodes/${node}/${vm.type}/${vm.vmid}/config`).catch(() => null)
+  const read: GuestRead = { conn, vm, config, deadline, slot }
+
+  const [snapshots, rest] = await Promise.all([
+    orFallback(slot(() => pveFetch<any[]>(conn, `/nodes/${node}/${vm.type}/${vm.vmid}/snapshot`)).then(list => (Array.isArray(list) ? list.filter(s => s.name !== 'current').length : 0)), () => null),
+    vm.type === 'lxc' ? lxcAddressAndOs(read) : qemuAddressAndOs(read),
   ])
-  
-  if (ipResult.status === 'fulfilled') ip = ipResult.value
-  if (snapshotsResult.status === 'fulfilled') snapshots = snapshotsResult.value
-  if (statusResult.status === 'fulfilled') uptime = statusResult.value
-  if (osInfoResult.status === 'fulfilled') osInfo = osInfoResult.value
-  
-  return { ip, snapshots, uptime, osInfo }
+
+  return { snapshots, ...rest }
+}
+
+function parseGuests(raw: unknown): GuestRef[] {
+  const out: GuestRef[] = []
+
+  for (const vm of Array.isArray(raw) ? raw : []) {
+    const connId = typeof vm?.connId === 'string' ? vm.connId : ''
+    const vmid = String(vm?.vmid ?? '')
+
+    if (!connId || !isGuestType(vm?.type) || !isNodeName(vm?.node) || !isVmid(vmid)) continue
+    out.push({
+      connId,
+      type: vm.type,
+      node: vm.node,
+      vmid,
+      status: typeof vm.status === 'string' ? vm.status : undefined,
+      id: `${connId}:${vm.type}:${vm.node}:${vmid}`,
+    })
+  }
+
+  return out
 }
 
 export async function POST(req: Request) {
@@ -254,65 +224,76 @@ export async function POST(req: Request) {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
 
-    const body = await req.json()
-    const vms = body.vms || []
-    
-    if (!Array.isArray(vms) || vms.length === 0) {
-      return NextResponse.json({ data: {} })
+    const body = await req.json().catch(() => ({}))
+
+    if (Array.isArray(body?.vms) && body.vms.length > MAX_VMS) {
+      return NextResponse.json({ error: `At most ${MAX_VMS} guests per request` }, { status: 400 })
     }
 
-    // Grouper par connexion
-    const byConnection = new Map<string, Array<{ type: string, node: string, vmid: string, status?: string }>>()
+    const guests = parseGuests(body?.vms)
 
-    for (const vm of vms) {
-      if (!vm.connId || !vm.type || !vm.node || !vm.vmid) continue
+    if (guests.length === 0) return NextResponse.json({ data: {}, pending: [] })
 
-      if (!byConnection.has(vm.connId)) {
-        byConnection.set(vm.connId, [])
-      }
+    const rbacCtx = await getRBACContext()
+    const byConnection = new Map<string, GuestRef[]>()
 
-      byConnection.get(vm.connId)!.push({ type: vm.type, node: vm.node, vmid: vm.vmid, status: vm.status })
-    }
+    for (const vm of guests) byConnection.set(vm.connId, [...(byConnection.get(vm.connId) ?? []), vm])
 
-    const data: Record<string, { ip: string | null, snapshots: number, uptime: string | null, osInfo: OsInfo | null }> = {}
+    const data: Record<string, GuestDetails> = {}
+    const pending: string[] = []
+    const deadline = Date.now() + BUDGET_MS
 
-    // Traiter chaque connexion en parallèle
     await Promise.all(
       Array.from(byConnection.entries()).map(async ([connId, connVms]) => {
         try {
-          const connData = await getConnectionById(connId)
-          
-          // Récupérer les détails en parallèle
-          const results = await Promise.allSettled(
-            connVms.map(async (vm) => {
-              const details = await getVmDetails(connData, vm)
-              const key = `${connId}:${vm.type}:${vm.node}:${vm.vmid}`
+          const conn = await getConnectionById(connId)
+          let allowed = connVms
+          let resources: any[] | undefined
 
-              
-return { key, ...details }
-            })
-          )
-          
-          for (const result of results) {
-            if (result.status === 'fulfilled') {
-              data[result.value.key] = { 
-                ip: result.value.ip, 
-                snapshots: result.value.snapshots,
-                uptime: result.value.uptime,
-                osInfo: result.value.osInfo
-              }
-            }
+          // The same per-guest RBAC as the inventory list (/api/v1/vms). Pool
+          // and tag grants match on the guest's pool and tags: read from PVE
+          // (/cluster/resources is not a protected call), never from the body.
+          if (rbacCtx && !rbacCtx.isAdmin) {
+            resources = await pveFetch<any[]>(conn, '/cluster/resources?type=vm')
+            const meta = new Map((Array.isArray(resources) ? resources : []).map(r => [`${r.type}:${r.vmid}`, r]))
+            const withMeta = connVms.map(vm => ({ ...vm, pool: meta.get(`${vm.type}:${vm.vmid}`)?.pool, tags: meta.get(`${vm.type}:${vm.vmid}`)?.tags }))
+
+            allowed = await filterVmsByPermission(rbacCtx.principal ?? (rbacCtx.userId as string), withMeta, PERMISSIONS.VM_VIEW, rbacCtx.tenantId)
           }
+
+          // A vDC session only reads the guests of its pools.
+          const scoped = await sessionGuestVisibility({ connectionId: connId, conn, resources })
+
+          if (!scoped.ok || !scoped.visibility) return
+          const visible = scoped.visibility
+
+          await mapWithConcurrency(allowed.filter(vm => visible.has(vm.type, vm.vmid)), PVEPROXY_CONCURRENCY, async vm => {
+            const hit = detailsCache.get(vm.id)
+
+            if (hit && Date.now() - hit.at < DETAILS_TTL_MS) {
+              data[vm.id] = hit.details
+
+              return
+            }
+            try {
+              const details = await readGuest(conn, vm, deadline)
+
+              remember(detailsCache, vm.id, { at: Date.now(), details })
+              data[vm.id] = details
+            } catch (err) {
+              if (err instanceof Pending) pending.push(vm.id)
+            }
+          })
         } catch (e) {
           console.error(`[vms/ips] Error for connection ${connId}:`, e)
         }
       })
     )
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ data, pending })
   } catch (e: any) {
     console.error("[vms/ips] Error:", e)
-    
-return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

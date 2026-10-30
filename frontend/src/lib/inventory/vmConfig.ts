@@ -7,6 +7,8 @@
 // search identity of the guest (MACs, static IPs, description; #223, #861),
 // parsed by guestNetIdentity.ts at no extra call.
 import { pveFetch } from "@/lib/proxmox/client"
+import { DaemonSlotExpired } from "@/lib/proxmox/daemonSlots"
+import { callGuestAgent } from "@/lib/proxmox/guestAgentCall"
 
 import { mapWithConcurrency, PVEPROXY_CONCURRENCY } from "./concurrency"
 import { EMPTY_GUEST_NET_IDENTITY, parseGuestNetIdentity, type GuestNetIdentity } from "./guestNetIdentity"
@@ -104,7 +106,9 @@ export async function enrichVmsWithConfig<T extends EnrichableVm>(
   // node status is known: membership is online, absence is confirmed offline
   // and skips the call entirely.
   onlineNodes: Set<string> | null,
-  opts: { includeAgent?: boolean } = {},
+  // `agentDeadline` (epoch ms): a probe that could not start before it is not
+  // sent, and leaves the agent fields unset (unknown), not "not responding".
+  opts: { includeAgent?: boolean; agentDeadline?: number } = {},
 ): Promise<Array<T & VmConfigFields & GuestNetIdentity & Partial<VmAgentProbe> & { diskTotal?: number | null }>> {
   return mapWithConcurrency(vms, PVEPROXY_CONCURRENCY, async (vm) => {
     // Confirmed-offline node: no call at all. Every per-guest call to a dead
@@ -136,18 +140,20 @@ export async function enrichVmsWithConfig<T extends EnrichableVm>(
     if (kind !== "qemu" || vm.status !== "running" || !fields.agentEnabled) {
       return { ...enriched, agentResponding: false, agentOsName: null, agentVersion: null }
     }
-    const agentPath = `/nodes/${encodeURIComponent(vm.node)}/qemu/${encodeURIComponent(vm.vmid)}/agent`
+    // Protected calls: through the node's pvedaemon slots, and an agent that
+    // did not answer is left alone for a while (roadmap#179).
     let agentVersion: string | null = null
     try {
       // /agent/info answers on every agent version: it is the liveness probe,
       // and get-osinfo, which old agents lack, is only asked once it answered.
-      const info = await pveFetch<any>(connData, `${agentPath}/info`)
+      const info = await callGuestAgent<any>(connData, vm.node, vm.vmid, "info", { deadline: opts.agentDeadline })
       agentVersion = info?.result?.version ? String(info.result.version) : null
-    } catch {
+    } catch (err) {
+      if (err instanceof DaemonSlotExpired) return enriched
       return { ...enriched, agentResponding: false, agentOsName: null, agentVersion: null }
     }
     try {
-      const info = await pveFetch<any>(connData, `${agentPath}/get-osinfo`)
+      const info = await callGuestAgent<any>(connData, vm.node, vm.vmid, "get-osinfo", { deadline: opts.agentDeadline, mute: false })
       const name = info?.result?.["pretty-name"] ?? info?.result?.name ?? null
       return { ...enriched, agentResponding: true, agentOsName: name ? String(name) : null, agentVersion }
     } catch {

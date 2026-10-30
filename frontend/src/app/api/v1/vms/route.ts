@@ -39,6 +39,9 @@ function round1(n: number) {
   return Math.round((n + Number.EPSILON) * 10) / 10
 }
 
+/** include=agent: probes not started after this are left unknown (roadmap#179). */
+const AGENT_PROBE_BUDGET_MS = 25_000
+
 async function handler(req: Request, ctx: GuardedRouteContext) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
@@ -48,6 +51,7 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     const url = new URL(req.url)
     const connIdFilter = url.searchParams.get('connId')
     const includeAgent = url.searchParams.get('include') === 'agent'
+    const agentDeadline = includeAgent ? Date.now() + AGENT_PROBE_BUDGET_MS : undefined
     const vmidFilter = parseVmidFilter(url.searchParams.get('vmids'))
 
     // Resolve infrastructure scope once; used for both connection enumeration
@@ -160,7 +164,9 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
           }
         })
 
-        const enriched = (await enrichVmsWithConfig(connData, mapped, onlineNodes, { includeAgent }))
+        // The agent probes queue behind the node's pvedaemon slots: past this
+        // budget the rest is left unknown, so the route stays under nginx's 60 s.
+        const enriched = (await enrichVmsWithConfig(connData, mapped, onlineNodes, { includeAgent, agentDeadline }))
           // #938: `diskGb` is the VM's disk size, so every disk of it, not the
           // boot disk `maxdisk` names. Never below maxdisk, and maxdisk alone
           // when the config could not be read.

@@ -8,7 +8,11 @@
 // GUEST_IP_REFRESH_MS per connection, kicks off one bounded-concurrency
 // refresh that nobody waits for. A stopped guest keeps its last known
 // addresses flagged stale, so it can still be found by its former IP.
+// Both probes are protected PVE calls: they go through the node's pvedaemon
+// slots, and an agent that did not answer is left alone (roadmap#179).
 import { pveFetch } from "@/lib/proxmox/client"
+import { daemonNodeKey, withDaemonSlot } from "@/lib/proxmox/daemonSlots"
+import { callGuestAgent } from "@/lib/proxmox/guestAgentCall"
 import {
   GUEST_IP_RETENTION_MS,
   getGuestIpEntry,
@@ -85,7 +89,11 @@ export async function refreshGuestIpIndex(
     const path = liveAddressesPath(g)
     if (!path) return [key, carryOver(prev, now)]
     try {
-      const live = extractLiveAddresses(await pveFetch<unknown>(connData, path))
+      const conn = { ...connData, id: connId }
+      const answer = g.type === "lxc"
+        ? await withDaemonSlot(daemonNodeKey(conn, g.node), () => pveFetch<unknown>(conn, path))
+        : await callGuestAgent<unknown>(conn, g.node, g.vmid, "network-get-interfaces")
+      const live = extractLiveAddresses(answer)
       // An answer without a single routable address (DHCP still pending) is
       // not a new truth: keep what we knew rather than erase it.
       if (live.ips.length === 0) return [key, carryOver(prev, now)]

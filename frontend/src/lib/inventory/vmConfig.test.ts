@@ -6,12 +6,17 @@ const { pveFetchMock } = vi.hoisted(() => ({
 
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 
+import { resetDaemonSlots } from '@/lib/proxmox/daemonSlots'
+import { resetGuestAgentMutes } from '@/lib/proxmox/guestAgentCall'
+
 import { parseVmConfig, enrichVmsWithConfig } from './vmConfig'
 
 const CONN = { baseUrl: 'https://pve.test', apiToken: 'x' }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resetDaemonSlots()
+  resetGuestAgentMutes()
 })
 
 describe('parseVmConfig', () => {
@@ -130,6 +135,23 @@ describe('enrichVmsWithConfig', () => {
 
     expect(out[0]).toMatchObject({ macs: [], configIps: [], description: null })
     expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('leaves the agent unknown when its probe could not start within the budget, and mutes a dead one', async () => {
+    pveFetchMock.mockImplementation(async (_conn, path) => {
+      if (path.endsWith('/config')) return { agent: '1' }
+      throw new Error('QEMU guest agent is not running')
+    })
+    const late = await enrichVmsWithConfig(CONN, [vms[0]], new Set(['n1']), { includeAgent: true, agentDeadline: Date.now() - 1 })
+    expect(late[0].agentResponding).toBeUndefined()
+    expect(pveFetchMock.mock.calls.some(([, p]) => p.includes('/agent/'))).toBe(false)
+
+    const dead = await enrichVmsWithConfig(CONN, [vms[0]], new Set(['n1']), { includeAgent: true })
+    expect(dead[0].agentResponding).toBe(false)
+    pveFetchMock.mockClear()
+    const again = await enrichVmsWithConfig(CONN, [vms[0]], new Set(['n1']), { includeAgent: true })
+    expect(again[0].agentResponding).toBe(false)
+    expect(pveFetchMock.mock.calls.some(([, p]) => p.includes('/agent/'))).toBe(false)
   })
 
   it('probes the agent only with includeAgent, only on running VMs with the flag ON', async () => {

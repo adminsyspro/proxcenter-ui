@@ -39,6 +39,15 @@ const MAX_LEFT_WIDTH = 500
 const DEFAULT_LEFT_WIDTH = 340
 const COLLAPSED_WIDTH = 52
 
+type EnrichedGuest = { ip?: string | null; snapshots?: number | null; osInfo?: AllVmItem['osInfo'] }
+
+type IpSnapTarget = { connId: string; type: string; node: string; vmid: string | number; status?: string }
+
+/** Rounds of `pending` re-asks per page, each bounded by the route's time budget. */
+const IP_SNAP_ROUNDS = 5
+
+const ipSnapKey = (vm: IpSnapTarget) => `${vm.connId}:${vm.type}:${vm.node}:${vm.vmid}`
+
 export default function InventoryPage() {
   const t = useTranslations()
   const { setPageInfo } = usePageTitle()
@@ -104,9 +113,9 @@ export default function InventoryPage() {
   const [nodeActionRequest, setNodeActionRequest] = useState<{ action: 'reboot' | 'shutdown'; connId: string; node: string; ts: number } | null>(null)
 
 
-  // Données brutes des VMs (depuis InventoryTree) et données enrichies (IP, snapshots, uptime)
+  // Données brutes des VMs (depuis InventoryTree) et données enrichies (IP, snapshots, OS)
   const [rawVms, setRawVms] = useState<AllVmItem[]>([])
-  const [enrichedData, setEnrichedData] = useState<Record<string, { ip?: string | null; snapshots?: number; uptime?: string | null; osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null }>>({})
+  const [enrichedData, setEnrichedData] = useState<Record<string, EnrichedGuest>>({})
 
   // A node/cluster/pbs deep-link owns both the view and the selection, and it
   // runs at mount. The RBAC effect below settles later on a cold load — a
@@ -317,7 +326,6 @@ return () => setPageInfo('', '', '')
       if (enriched) {
         result.ip = enriched.ip ?? vm.ip
         result.snapshots = enriched.snapshots ?? vm.snapshots
-        result.uptime = enriched.uptime ?? vm.uptime
         result.osInfo = enriched.osInfo ?? (vm as any).osInfo
       }
       
@@ -474,64 +482,65 @@ return () => setPageInfo('', '', '')
     localStorage.setItem('pxc-inventory-tree-collapsed', String(isTreeCollapsed))
   }, [isTreeCollapsed])
 
-  // Charger les IP, Snapshots et Uptime pour toutes les VMs
-  const loadIpSnap = useCallback(async () => {
-    if (ipSnapLoading || rawVms.length === 0) return
-    
-    setIpSnapLoading(true)
-    
-    // Grouper les VMs par connexion
-    const byConnection: Record<string, typeof rawVms> = {}
+  // Charger IP, snapshots et OS des VMs affichées, page par page (roadmap#179) :
+  // la table passe les lignes de sa page, chaque VM n'est demandée qu'une
+  // fois, et celles que le budget de la route a laissées (`pending`) sont
+  // redemandées aussitôt, au plus IP_SNAP_ROUNDS fois.
+  const ipSnapAsked = useRef(new Set<string>())
+  const ipSnapInFlight = useRef(0)
 
-    rawVms.forEach(vm => {
-      if (!byConnection[vm.connId]) {
-        byConnection[vm.connId] = []
+  const loadIpSnap = useCallback(async (vms: IpSnapTarget[]) => {
+    setIpSnapLoaded(true)
+
+    let batch = vms.filter(vm => !ipSnapAsked.current.has(ipSnapKey(vm)))
+
+    if (batch.length === 0) return
+    batch.forEach(vm => ipSnapAsked.current.add(ipSnapKey(vm)))
+    ipSnapInFlight.current++
+    setIpSnapLoading(true)
+
+    try {
+      for (let round = 0; round < IP_SNAP_ROUNDS && batch.length > 0; round++) {
+        const byConnection = new Map<string, IpSnapTarget[]>()
+
+        batch.forEach(vm => byConnection.set(vm.connId, [...(byConnection.get(vm.connId) ?? []), vm]))
+
+        const answers = await Promise.all(
+          [...byConnection.entries()].map(async ([connId, connVms]) => {
+            try {
+              const res = await fetch('/api/v1/vms/ips', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ vms: connVms.map(v => ({ connId: v.connId, type: v.type, node: v.node, vmid: String(v.vmid), status: v.status })) })
+              })
+
+              if (!res.ok) return { data: {}, retry: [] as string[] }
+              const json = await res.json()
+
+              return { data: (json.data || {}) as Record<string, EnrichedGuest>, retry: (json.pending || []) as string[] }
+            } catch (e) {
+              console.error('Error loading IPs for connection:', connId, e)
+
+              return { data: {}, retry: [] as string[] }
+            }
+          })
+        )
+
+        const answered: Record<string, EnrichedGuest> = Object.assign({}, ...answers.map(a => a.data))
+        const retry = new Set(answers.flatMap(a => a.retry))
+
+        setEnrichedData(prev => ({ ...prev, ...answered }))
+        // Ni servie ni à redemander (erreur) : une prochaine page la redemandera.
+        batch.filter(vm => !answered[ipSnapKey(vm)] && !retry.has(ipSnapKey(vm))).forEach(vm => ipSnapAsked.current.delete(ipSnapKey(vm)))
+        batch = batch.filter(vm => retry.has(ipSnapKey(vm)))
       }
 
-      byConnection[vm.connId].push(vm)
-    })
-    
-    // Charger par connexion en parallèle
-    try {
-      const newEnrichedData: Record<string, { ip?: string | null; snapshots?: number; uptime?: string | null }> = { ...enrichedData }
-      
-      await Promise.all(
-        Object.entries(byConnection).map(async ([connId, vms]) => {
-          const vmsToFetch = vms.map(v => ({
-            connId: v.connId,
-            type: v.type,
-            node: v.node,
-            vmid: v.vmid,
-            status: v.status
-          }))
-          
-          try {
-            const res = await fetch('/api/v1/vms/ips', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ vms: vmsToFetch })
-            })
-            
-            if (!res.ok) return
-            const json = await res.json()
-            const data = json.data || {}
-            
-            // Stocker les données enrichies
-            for (const [key, value] of Object.entries(data)) {
-              newEnrichedData[key] = value as { ip?: string | null; snapshots?: number; uptime?: string | null; osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null }
-            }
-          } catch (e) {
-            console.error('Error loading IPs for connection:', connId, e)
-          }
-        })
-      )
-      
-      setEnrichedData(newEnrichedData)
+      batch.forEach(vm => ipSnapAsked.current.delete(ipSnapKey(vm)))
     } finally {
-      setIpSnapLoading(false)
-      setIpSnapLoaded(true)
+      ipSnapInFlight.current--
+      if (ipSnapInFlight.current === 0) setIpSnapLoading(false)
     }
-  }, [rawVms, ipSnapLoading, enrichedData])
+  }, [])
 
   return (
     <Box

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
+import { DEFAULT_OLLAMA_MODEL, type PreflightVerdict } from '@/lib/ai/qualifiedModels'
+
 async function fetchJson(url: string, init?: RequestInit) {
   const r = await fetch(url, init)
   const text = await r.text()
@@ -30,7 +32,7 @@ const defaultSettings: AISettingsState = {
   enabled: false,
   provider: 'ollama',
   ollamaUrl: 'http://localhost:11434',
-  ollamaModel: 'llama3.1:8b',
+  ollamaModel: DEFAULT_OLLAMA_MODEL,
   openaiKey: '',
   openaiBaseUrl: '',
   openaiModel: 'gpt-4.1-nano',
@@ -39,7 +41,7 @@ const defaultSettings: AISettingsState = {
 export function useAISettings() {
   const [settings, setSettings] = useState<AISettingsState>(defaultSettings)
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<{ type: string; message: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ type: string; message: string; details?: string[] } | null>(null)
   const [saving, setSaving] = useState(false)
   const [availableModels, setAvailableModels] = useState<string[]>([])
 
@@ -98,9 +100,14 @@ export function useAISettings() {
       const json = await res.json()
 
       if (res.ok) {
-        return { success: true, response: json.response, toolCalling: json.toolCalling ?? null } as const
+        return {
+          success: true,
+          response: json.response,
+          toolCalling: json.toolCalling ?? null,
+          preflight: (json.preflight ?? null) as PreflightVerdict | null,
+        } as const
       } else {
-        return { success: false, error: json?.error } as const
+        return { success: false, error: json?.error, code: json?.code as string | undefined } as const
       }
     } catch (e: any) {
       return { success: false, error: e?.message } as const

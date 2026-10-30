@@ -64,6 +64,13 @@ describe('tool catalog', () => {
       cached: true,
     }
 
-    expect(buildToolContext(snapshot, 'tenant-1', 'fr')).toEqual({ snapshot, tenantId: 'tenant-1', locale: 'fr' })
+    // Each question starts with an unspent history budget.
+    expect(buildToolContext(snapshot, 'tenant-1', 'fr')).toEqual({
+      snapshot,
+      tenantId: 'tenant-1',
+      locale: 'fr',
+      usage: { historyLookups: 0 },
+    })
+    expect(buildToolContext(snapshot, 'tenant-1', 'fr', 'Europe/Paris').timeZone).toBe('Europe/Paris')
   })
 })

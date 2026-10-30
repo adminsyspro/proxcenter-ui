@@ -16,6 +16,7 @@
 
 import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById, type PveConn } from '@/lib/connections/getConnection'
+import { resolveStorageCaller, storageVisibilityFilter } from '@/lib/storage/storageVisibility'
 import {
   normalizeStorageEntry,
   aggregateStorage,
@@ -230,10 +231,20 @@ export const rankStorageTool: CatalogTool = {
     const connections = targetConnections(ctx, argString(args, 'cluster'))
 
     const collected = await Promise.all(
-      connections.map(async connection => ({
-        connection,
-        entries: await collectConnectionStorage(connection, ctx.tenantId),
-      }))
+      connections.map(async connection => {
+        // The storage list route's own rule (vDC mask, guest perimeter, node
+        // or storage scope): the snapshot carries no storage to resolve on.
+        const caller = await resolveStorageCaller(connection.id)
+
+        if (!caller.allowed) return { connection, entries: [] as RawStorageEntry[] }
+
+        const [entries, visible] = await Promise.all([
+          collectConnectionStorage(connection, ctx.tenantId),
+          storageVisibilityFilter(connection.id, ctx.tenantId, caller),
+        ])
+
+        return { connection, entries: entries === null ? null : entries.filter(e => visible(e)) }
+      })
     )
 
     const unavailable: string[] = []

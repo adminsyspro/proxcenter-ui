@@ -361,9 +361,8 @@ async function gatherCephPayload(conn: PveConn, nodeName: string): Promise<CephP
 
   /* OSDs */
   const roots = osdRoots(osdList)
-  const flatOsds = roots.length > 0
-    ? flattenOsds(roots)
-    : (Array.isArray(osdList) ? osdList : [])
+  const listedOsds = Array.isArray(osdList) ? osdList : []
+  const flatOsds = roots.length > 0 ? flattenOsds(roots) : listedOsds
 
   const osds = flatOsds
     // A negative id is a CRUSH bucket, never an OSD.
@@ -763,6 +762,14 @@ function combineDeviceClassCounts(results: Record<string, any>[]): Record<string
   return { deviceClassCounts }
 }
 
+/** How the per-cluster results of each view are rolled up; capacity keeps one entry per cluster. */
+const FOCUS_COMBINERS: Record<'all' | 'improvements' | 'capacity' | 'devices', ((results: Record<string, any>[]) => Record<string, unknown>) | undefined> = {
+  all: combineFindings,
+  improvements: combineFindings,
+  capacity: undefined,
+  devices: combineDeviceClassCounts,
+}
+
 /** OSD totals across clusters, every standard device class included. */
 function combineOsdCounts(results: Record<string, any>[]): Record<string, unknown> {
   const osdCountByDeviceClass: Record<string, number> = Object.fromEntries(STANDARD_DEVICE_CLASSES.map(c => [c, 0]))
@@ -907,7 +914,7 @@ export const getCephStatusTool: CatalogTool = {
         })),
         deviceClassCounts,
       }
-    }, focus === 'capacity' ? undefined : focus === 'devices' ? combineDeviceClassCounts : combineFindings)
+    }, FOCUS_COMBINERS[focus])
   },
 }
 

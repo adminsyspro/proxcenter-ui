@@ -6,6 +6,23 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// Host and storage permissions (#459): allowed unless a test says otherwise.
+const perms = vi.hoisted(() => ({
+  denied: new Set<string>(),
+  hiddenStorages: new Set<string>(),
+}))
+
+vi.mock('@/lib/rbac', () => ({
+  PERMISSIONS: { NODE_VIEW: 'node.view', NODE_NETWORK: 'node.network' },
+  buildNodeResourceId: (connId: string, node: string) => `${connId}:${node}`,
+  checkPermission: async (permission: string, type?: string, id?: string) =>
+    perms.denied.has(`${permission}|${type ?? ''}|${id ?? ''}`) ? { status: 403 } : null,
+}))
+vi.mock('@/lib/storage/storageVisibility', () => ({
+  resolveStorageCaller: async () => ({ allowed: true, denied: null, perimeter: null, infraScope: null, partial: false }),
+  storageVisibilityFilter: async () => (row: { storage: string }) => !perms.hiddenStorages.has(row.storage),
+}))
+
 import type { ToolContext } from './types'
 
 const pveFetch = vi.fn()
@@ -28,6 +45,8 @@ const ctx: ToolContext = {
 }
 
 beforeEach(() => {
+  perms.denied.clear()
+  perms.hiddenStorages.clear()
   pveFetch.mockReset().mockImplementation(async (_conn: unknown, path: string) => {
     if (path.endsWith('/network')) {
       return [
@@ -52,5 +71,30 @@ describe('get_node_hardware network section', () => {
     expect(res.network.interfaceCountByType).toEqual({ bridge: 1, eth: 1, vlan: 1 })
     expect(res.network.interfaces.map((i: any) => i.iface)).toEqual(['nic0'])
     expect(res.network.softwareInterfaces.map((i: any) => i.iface)).toEqual(['vmbr0', 'vmbr0.4000'])
+  })
+})
+
+describe('get_node_hardware permissions (#459)', () => {
+  it('refuses a caller who sees the host only through a guest, before any Proxmox call', async () => {
+    const { getNodeHardwareTool } = await import('./nodes')
+    const { invokeTool } = await import('./invoke')
+
+    perms.denied.add('node.view|node|c1:pve1')
+
+    expect(await invokeTool(getNodeHardwareTool, { node: 'pve1' }, ctx)).toMatchObject({ ok: false, error: 'out-of-scope' })
+    expect(pveFetch).not.toHaveBeenCalled()
+  })
+
+  it('leaves out the network and the disks the caller may not read, without asking Proxmox for them', async () => {
+    const { getNodeHardwareTool } = await import('./nodes')
+
+    perms.denied.add('node.network|node|c1:pve1')
+    perms.denied.add('node.view|connection|c1')
+
+    const res = (await getNodeHardwareTool.execute({ node: 'pve1' }, ctx)) as any
+
+    expect(res.network).toMatchObject({ available: false, reason: expect.stringMatching(/permission/) })
+    expect(res.disks).toMatchObject({ available: false, reason: expect.stringMatching(/permission/) })
+    expect(pveFetch.mock.calls.map(c => c[1])).toEqual(['/nodes/pve1/status'])
   })
 })

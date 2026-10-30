@@ -5,6 +5,8 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { validateAIUrl } from "@/lib/ai/url-guard"
 import { resolveMaskedAiSecrets } from "@/lib/ai/storedSecrets"
 import { fetchOllamaCapabilities } from "@/lib/ai/ollama"
+import { requireFeature } from "@/lib/auth/requireEnterprise"
+import { Features } from "@/lib/license/features"
 
 const TIMEOUT_MS = 10_000
 
@@ -88,6 +90,11 @@ export async function POST(request: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
+
+    // The assistant is an Enterprise feature: the widget and the settings tab
+    // hide it, and the API refuses it too, so a direct call cannot get round it.
+    const unlicensed = await requireFeature(Features.AI_INSIGHTS)
+    if (unlicensed) return unlicensed
 
     // The form sends the mask back for a saved key: swap in the stored one.
     const body = await resolveMaskedAiSecrets(await request.json())

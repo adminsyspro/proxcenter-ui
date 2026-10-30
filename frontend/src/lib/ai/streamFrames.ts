@@ -13,6 +13,8 @@
  * or React import belongs here.
  */
 
+import { sanitizeChart, type AiChart } from './charts'
+
 /** ASCII record separator: never produced by a language model writing prose. */
 export const FRAME_MARK = ''
 
@@ -21,6 +23,8 @@ export type StreamFrame =
   | { type: 'tool'; names: string[] }
   /** What was consulted over the whole conversation, sent once at the end. */
   | { type: 'trace'; calls: Array<{ name: string; ok: boolean }> }
+  /** What the widget plots under the answer, sent after the trace. */
+  | { type: 'charts'; charts: AiChart[] }
 
 export type DecodedChunk = { text: string; frames: StreamFrame[] }
 
@@ -42,6 +46,13 @@ function parseFrame(raw: string): StreamFrame | null {
         calls: parsed.calls
           .filter((c: unknown) => c && typeof c === 'object')
           .map((c: any) => ({ name: String(c.name), ok: Boolean(c.ok) })),
+      }
+    }
+
+    if (parsed?.type === 'charts' && Array.isArray(parsed.charts)) {
+      return {
+        type: 'charts',
+        charts: parsed.charts.map(sanitizeChart).filter((c: AiChart | null): c is AiChart => c !== null),
       }
     }
   } catch {

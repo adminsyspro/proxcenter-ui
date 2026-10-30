@@ -17,6 +17,13 @@ import { createFrameDecoder, FRAME_MARK, type StreamFrame } from '@/lib/ai/strea
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 
+const licence = vi.hoisted(() => ({ ai: true }))
+
+// The assistant is Enterprise (`ai_insights`): the route refuses it otherwise.
+vi.mock('@/lib/auth/requireEnterprise', () => ({
+  requireFeature: async () => (licence.ai ? null : new Response(JSON.stringify({ error: 'Feature not licensed' }), { status: 403 })),
+}))
+
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   PERMISSIONS: { CONNECTION_VIEW: 'connection.view', VM_VIEW: 'vm.view' },
@@ -151,6 +158,7 @@ function ollamaStreamToolCall(name: string, args: Record<string, unknown> = {}):
 }
 
 beforeEach(() => {
+  licence.ai = true
   checkPermissionMock.mockReset().mockResolvedValue(null)
   rankToolExecute.mockClear()
   aiSettings = { ...OLLAMA_SETTINGS }
@@ -234,6 +242,15 @@ describe('POST /api/v1/ai/chat/stream', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('refuses without the Enterprise licence, before any upstream call', async () => {
+    licence.ai = false
+
+    const res = await ask()
+
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('refuses to call any provider while the AI feature is disabled', async () => {
     aiSettings = { ...OLLAMA_SETTINGS, enabled: false }
 
@@ -296,6 +313,42 @@ describe('POST /api/v1/ai/chat/stream', () => {
 
       expect(body.tools).toHaveLength(1)
       expect(body.tools[0]).toMatchObject({ type: 'function', function: { name: 'rank_guest_hardware' } })
+    })
+
+    it('sends the charts the tool results support after the trace, never to the model', async () => {
+      rankToolExecute.mockResolvedValueOnce({
+        metric: 'vcpus',
+        unit: 'vCPU',
+        ranking: [
+          { rank: 1, name: 'db-01', node: 'pve1', cluster: 'PVE-PROD', vcpus: 16 },
+          { rank: 2, name: 'web-01', node: 'pve2', cluster: 'PVE-PROD', vcpus: 8 },
+        ],
+      } as any)
+      fetchMock
+        .mockResolvedValueOnce(ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' }))
+        .mockResolvedValueOnce(ollamaStream(['db-01 has 16 vCPUs']))
+
+      const { frames } = await decodeBody(await ask())
+
+      expect(frames.map(f => f.type)).toEqual(['tool', 'trace', 'charts'])
+      expect(frames.at(-1)).toEqual({
+        type: 'charts',
+        charts: [
+          {
+            kind: 'guest-ranking',
+            metric: 'vcpus',
+            unit: 'vCPU',
+            series: ['vcpus'],
+            rows: [
+              { label: 'db-01', detail: 'pve1 · PVE-PROD', values: [16] },
+              { label: 'web-01', detail: 'pve2 · PVE-PROD', values: [8] },
+            ],
+          },
+        ],
+      })
+
+      // The model reads the tool result, not the chart derived from it.
+      expect(JSON.stringify(JSON.parse(fetchMock.mock.calls[1][1].body as string).messages)).not.toContain('guest-ranking')
     })
 
     it('runs the requested tool and streams the answer of the next turn', async () => {
@@ -437,6 +490,40 @@ describe('POST /api/v1/ai/chat/stream', () => {
 
       expect(raw).toBe('pve1 is busiest')
       expect(raw).not.toContain(FRAME_MARK)
+    })
+
+    // qwen3.5:9b wrote its answer into Ollama's `thinking` channel and left
+    // `content` empty: the drawer showed a blank bubble.
+    describe('an empty turn', () => {
+      function thinkingOnly(): Response {
+        return new Response(`${JSON.stringify({ message: { content: '', thinking: 'The biggest is pbs-s3manu.' } })}\n`, { status: 200 })
+      }
+
+      it('is replayed once, and the second answer is the one streamed', async () => {
+        fetchMock
+          .mockResolvedValueOnce(thinkingOnly())
+          .mockResolvedValueOnce(ollamaStream(['pbs-s3manu is the biggest storage.']))
+
+        const res = await ask()
+
+        expect(await res.text()).toBe('pbs-s3manu is the biggest storage.')
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+
+        const [first, second] = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body as string))
+
+        expect(second.messages).toEqual(first.messages)
+        // Still the tool-bearing round, not the closing one.
+        expect(second.tools).toBeDefined()
+      })
+
+      it('says so rather than leave the bubble blank when the replay is empty too', async () => {
+        fetchMock.mockResolvedValueOnce(thinkingOnly()).mockResolvedValueOnce(thinkingOnly())
+
+        const res = await ask()
+
+        expect(await res.text()).toBe('The model returned no answer. Ask the question again.')
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+      })
     })
 
     it('reports a failed tool as consulted but not ok', async () => {

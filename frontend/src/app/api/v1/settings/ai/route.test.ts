@@ -17,6 +17,12 @@ const { checkPermissionMock, getCurrentTenantIdMock, getSettingMock, getSettingW
   setSettingMock: vi.fn(),
 }))
 
+const licence = vi.hoisted(() => ({ ai: true }))
+
+// The assistant is Enterprise (`ai_insights`): its settings are refused otherwise.
+vi.mock("@/lib/auth/requireEnterprise", () => ({
+  requireFeature: async () => (licence.ai ? null : new Response(JSON.stringify({ error: "Feature not licensed" }), { status: 403 })),
+}))
 vi.mock("@/lib/rbac", () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   PERMISSIONS: { ADMIN_SETTINGS: "admin.settings" },
@@ -50,6 +56,7 @@ function rowsFor(tenantId: string, own: Record<string, unknown> | null, provider
 }
 
 beforeEach(() => {
+  licence.ai = true
   vi.clearAllMocks()
   vi.stubEnv("APP_SECRET", "test-secret-key-for-unit-tests")
   checkPermissionMock.mockResolvedValue(null)
@@ -62,6 +69,15 @@ afterEach(() => {
 })
 
 describe("GET /api/v1/settings/ai", () => {
+  it("refuses without the Enterprise licence, for reading as for writing", async () => {
+    licence.ai = false
+    const { GET, PUT } = await import("./route")
+
+    expect((await callRoute(GET as any, { method: "GET" })).status).toBe(403)
+    expect((await callRoute(PUT as any, { method: "PUT", body: { enabled: true } })).status).toBe(403)
+    expect(setSettingMock).not.toHaveBeenCalled()
+  })
+
   it("masks the provider's own keys and flags which are set, legacy plaintext included", async () => {
     rowsFor("default", PROVIDER_ROW)
     const { GET } = await import("./route")

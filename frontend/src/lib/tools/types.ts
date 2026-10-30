@@ -41,6 +41,14 @@ export type ToolContext = {
   snapshot: InventorySnapshot
   tenantId: string
   locale: string
+  /** The reader's IANA time zone, so a tool can say "14:05" rather than a UTC instant. */
+  timeZone?: string
+  /**
+   * What this question has spent on the tools that cost a Proxmox call, shared
+   * by every round of one request. A tool past its budget refuses: the model
+   * then answers from what it already has.
+   */
+  usage?: { historyLookups: number; cveScans?: number }
 }
 
 export type CatalogTool = {

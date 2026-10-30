@@ -5,13 +5,17 @@ import { getSetting } from '@/lib/db/settings'
 import { openAiSecrets } from '@/lib/ai/settingsSecrets'
 import { getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getRequestLocale, languageInstruction, normalizeLocale } from '@/lib/ai/locale'
+import { getRequestLocale, languageInstruction, normalizeLocale, normalizeTimeZone } from '@/lib/ai/locale'
 import { validateAIUrl } from '@/lib/ai/url-guard'
 import { ollamaOptions, ollamaThread } from '@/lib/ai/ollama'
+import { DEFAULT_OLLAMA_MODEL } from '@/lib/ai/qualifiedModels'
+import { collectCharts } from '@/lib/ai/charts'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
 import { READ_ONLY_TOOLS, buildToolContext } from '@/lib/tools/catalog'
 import { toolsForProvider, type AiProvider } from '@/lib/ai/tools/adapters'
 import { runToolRounds, userTextOf, type SendTurn, type ToolMode } from '@/lib/ai/tools/loop'
+import { requireFeature } from '@/lib/auth/requireEnterprise'
+import { Features } from '@/lib/license/features'
 
 // Récupérer les paramètres IA (tenant-scoped)
 async function getAISettings() {
@@ -28,7 +32,7 @@ async function getAISettings() {
     enabled: false,
     provider: 'ollama',
     ollamaUrl: 'http://localhost:11434',
-    ollamaModel: 'llama3.1:8b'
+    ollamaModel: DEFAULT_OLLAMA_MODEL
   }
 }
 
@@ -44,7 +48,12 @@ export async function POST(request: Request) {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
     if (denied) return denied
 
-    const { messages, locale } = await request.json()
+    // The assistant is an Enterprise feature: the widget and the settings tab
+    // hide it, and the API refuses it too, so a direct call cannot get round it.
+    const unlicensed = await requireFeature(Features.AI_INSIGHTS)
+    if (unlicensed) return unlicensed
+
+    const { messages, locale, timeZone } = await request.json()
 
     // The drawer sends `locale`; fall back to the NEXT_LOCALE cookie for any
     // caller that does not (the streaming fallback used to be one of them).
@@ -73,7 +82,7 @@ export async function POST(request: Request) {
     const { prompt: systemPrompt, snapshot } = await buildAiSystemPrompt(lang, uiLocale, {
       toolsEnabled: true,
     })
-    const toolCtx = buildToolContext(snapshot, tenantId, uiLocale)
+    const toolCtx = buildToolContext(snapshot, tenantId, uiLocale, normalizeTimeZone(timeZone))
     const wireTools = toolsForProvider(provider, READ_ONLY_TOOLS)
 
     let send: SendTurn
@@ -223,6 +232,8 @@ export async function POST(request: Request) {
         durationMs: t.durationMs,
         truncated: t.truncated,
       })),
+      // Drawn by the widget from the tool results, never written by the model.
+      charts: collectCharts(outcome.trace),
       toolsDisabled: outcome.toolsDisabled,
       budgetExhausted: outcome.budgetExhausted,
     })

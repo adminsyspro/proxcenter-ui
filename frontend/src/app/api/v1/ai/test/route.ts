@@ -5,7 +5,10 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { validateAIUrl } from "@/lib/ai/url-guard"
 import { resolveMaskedAiSecrets } from "@/lib/ai/storedSecrets"
 import { getRequestLocale, languageInstruction } from "@/lib/ai/locale"
-import { fetchOllamaCapabilities } from "@/lib/ai/ollama"
+import { fetchOllamaCapabilities, OllamaProbeTimeoutError, probeOllamaModel } from "@/lib/ai/ollama"
+import { preflightVerdict } from "@/lib/ai/qualifiedModels"
+import { requireFeature } from "@/lib/auth/requireEnterprise"
+import { Features } from "@/lib/license/features"
 
 /** Sanitize a string for safe logging (strip newlines/control chars) */
 function sanitizeLog(str) {
@@ -17,6 +20,11 @@ export async function POST(request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
+
+    // The assistant is an Enterprise feature: the widget and the settings tab
+    // hide it, and the API refuses it too, so a direct call cannot get round it.
+    const unlicensed = await requireFeature(Features.AI_INSIGHTS)
+    if (unlicensed) return unlicensed
 
     // The form sends the mask back for a saved key: swap in the stored one.
     const settings = await resolveMaskedAiSecrets(await request.json())
@@ -33,37 +41,27 @@ export async function POST(request) {
     if (settings.provider === 'ollama') {
       // Test Ollama
       const ollamaBase = await validateAIUrl(settings.ollamaUrl)
-      const response = await fetch(`${ollamaBase}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: settings.ollamaModel,
-          prompt: probePrompt,
-          stream: false
-        })
-      })
-      
-      if (!response.ok) {
-        const text = await response.text()
-
-        throw new Error(`Ollama error: ${text}`)
-      }
-      
-      const json = await response.json()
 
       // #459: the assistant needs tool calling. A model without it still
       // answers this probe, so the operator would read "Connected" and never
       // learn why the assistant only sees the live snapshot. null = unknown
       // (older Ollama without a capability list, or the probe failed).
-      const { toolCalling } = await fetchOllamaCapabilities(ollamaBase, settings.ollamaModel)
+      const { capabilities, toolCalling } = await fetchOllamaCapabilities(ollamaBase, settings.ollamaModel)
 
-      
-return NextResponse.json({ 
-        success: true, 
-        response: json.response,
+      // #459: load the model as the chat will and report whether it fits this
+      // server, how fast it answers, and which qualified models would fit.
+      const { response, measure } = await probeOllamaModel(ollamaBase, settings.ollamaModel, probePrompt, {
+        thinking: capabilities?.includes('thinking') ?? false,
+      })
+
+
+return NextResponse.json({
+        success: true,
+        response,
         provider: 'ollama',
         model: settings.ollamaModel,
-        toolCalling
+        toolCalling,
+        preflight: preflightVerdict(measure),
       })
       
     } else if (settings.provider === 'openai') {
@@ -145,7 +143,12 @@ return NextResponse.json({
     
   } catch (e) {
     console.error('AI test failed:', sanitizeLog(e?.message || e))
-    
+
+    // Not a failure of the server: a cold model may still be loading.
+    if (e instanceof OllamaProbeTimeoutError) {
+      return NextResponse.json({ error: e.message, code: 'probe-timeout' }, { status: 504 })
+    }
+
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }

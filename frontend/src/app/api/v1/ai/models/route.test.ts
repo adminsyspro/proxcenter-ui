@@ -16,6 +16,13 @@ const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>(
 // Passes the body through unless a test swaps in a stored key for the mask.
 const resolveMaskedAiSecretsMock = vi.fn<(b: Record<string, unknown>) => Promise<Record<string, unknown>>>()
 
+const licence = vi.hoisted(() => ({ ai: true }))
+
+// The assistant is Enterprise (`ai_insights`): the route refuses it otherwise.
+vi.mock('@/lib/auth/requireEnterprise', () => ({
+  requireFeature: async () => (licence.ai ? null : new Response(JSON.stringify({ error: 'Feature not licensed' }), { status: 403 })),
+}))
+
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
@@ -32,6 +39,7 @@ vi.mock('@/lib/ai/storedSecrets', () => ({
 let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
+  licence.ai = true
   resolveMaskedAiSecretsMock.mockReset().mockImplementation(async (b: Record<string, unknown>) => b)
   checkPermissionMock.mockReset().mockResolvedValue(null)
   fetchMock = vi.fn()
@@ -80,6 +88,16 @@ describe('POST /api/v1/ai/models', () => {
     const denied = new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 })
 
     checkPermissionMock.mockResolvedValueOnce(denied as any)
+
+    const handler = await importHandler()
+    const res = await callRoute(handler, { body: { provider: 'ollama', ollamaUrl: 'http://localhost:11434' } })
+
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses without the Enterprise licence, before any upstream call', async () => {
+    licence.ai = false
 
     const handler = await importHandler()
     const res = await callRoute(handler, { body: { provider: 'ollama', ollamaUrl: 'http://localhost:11434' } })

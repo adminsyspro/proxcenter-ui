@@ -151,4 +151,25 @@ describe('createFrameDecoder', () => {
     // The decoder is back to reading prose afterwards.
     expect(decoder.push('more').text).toBe('more')
   })
+
+  it('carries the charts after the trace and drops one that is not a chart', () => {
+    const chart = {
+      kind: 'storage-usage',
+      unit: '%',
+      series: ['used'],
+      rows: [
+        { label: 'ZFS-Pool (pve1)', detail: 'PVE-PROD', values: [93.1] },
+        { label: 'CephStoragePool', values: [86.8] },
+      ],
+    } as const
+    const stream = `ZFS-Pool is the fullest.${encodeFrame(TRACE_FRAME)}${FRAME_MARK}${JSON.stringify({
+      type: 'charts',
+      charts: [chart, { kind: 'pie', rows: [] }],
+    })}\n`
+
+    const { text, frames } = decodeAll([stream.slice(0, 40), stream.slice(40)])
+
+    expect(text).toBe('ZFS-Pool is the fullest.')
+    expect(frames).toEqual([TRACE_FRAME, { type: 'charts', charts: [chart] }])
+  })
 })

@@ -9,6 +9,23 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// Host and storage permissions (#459): allowed unless a test says otherwise.
+const perms = vi.hoisted(() => ({
+  denied: new Set<string>(),
+  hiddenStorages: new Set<string>(),
+}))
+
+vi.mock('@/lib/rbac', () => ({
+  PERMISSIONS: { NODE_VIEW: 'node.view', NODE_NETWORK: 'node.network' },
+  buildNodeResourceId: (connId: string, node: string) => `${connId}:${node}`,
+  checkPermission: async (permission: string, type?: string, id?: string) =>
+    perms.denied.has(`${permission}|${type ?? ''}|${id ?? ''}`) ? { status: 403 } : null,
+}))
+vi.mock('@/lib/storage/storageVisibility', () => ({
+  resolveStorageCaller: async () => ({ allowed: true, denied: null, perimeter: null, infraScope: null, partial: false }),
+  storageVisibilityFilter: async () => (row: { storage: string }) => !perms.hiddenStorages.has(row.storage),
+}))
+
 import type { ToolContext } from './types'
 
 const GB = 1024 ** 3
@@ -52,6 +69,8 @@ async function rank(args: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  perms.denied.clear()
+  perms.hiddenStorages.clear()
   pveFetch.mockReset().mockImplementation(async (_conn: unknown, path: string) => (path.startsWith('/cluster/resources') ? resources : configs))
 })
 
@@ -63,6 +82,15 @@ describe('rank_storage', () => {
     expect(res.ranking[0]).toMatchObject({ name: 'ZFS-Pool', totalGb: 96, shared: false, nodeCount: 1 })
     expect(res.ranking.filter((r: any) => r.name === 'ZFS-Pool').map((r: any) => r.host).sort()).toEqual(['pve1', 'pve2', 'pve3'])
     expect(res.ranking.find((r: any) => r.name === 'CephPool')).toMatchObject({ totalGb: 90, shared: true, host: null })
+  })
+
+  it('leaves out the storages the storage list would hide from the caller (vDC slice, scope)', async () => {
+    perms.hiddenStorages.add('CephPool')
+
+    const res = await rank({ metric: 'total', limit: 10 })
+
+    expect(res.totalConsidered).toBe(6)
+    expect(res.ranking.map((r: any) => r.name)).not.toContain('CephPool')
   })
 
   it('finds the nearly full local storage of one host for the least-free question', async () => {

@@ -7,17 +7,17 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { AI_SECRET_FIELDS, maskAiSecrets, mergeAiSecretUpdate } from '@/lib/ai/settingsSecrets'
 import { AI_SETTINGS_KEY, getOwnAiSettings } from '@/lib/ai/storedSecrets'
 import { withAudit } from '@/lib/audit/withAudit'
+import { DEFAULT_OLLAMA_MODEL } from '@/lib/ai/qualifiedModels'
+import { requireFeature } from '@/lib/auth/requireEnterprise'
+import { Features } from '@/lib/license/features'
 
 const DEFAULT_AI_SETTINGS = {
   enabled: false,
   provider: 'ollama',
   ollamaUrl: 'http://localhost:11434',
   // The assistant is agentic (#459), so the default has to be a model that can
-  // actually call tools. Measured against the real prompt on Ollama 0.14.1:
-  // llama3.1:8b picks the right tool for 4 questions out of 4, qwen2.5:7b for 0
-  // out of 4 and invents the figures instead, and mistral:7b, the previous
-  // default, has no tool support at all.
-  ollamaModel: 'llama3.1:8b',
+  // actually call tools; see lib/ai/qualifiedModels for how it was chosen.
+  ollamaModel: DEFAULT_OLLAMA_MODEL,
   openaiKey: '',
   openaiModel: 'gpt-4.1-nano',
   anthropicKey: '',
@@ -36,6 +36,11 @@ export async function GET() {
     // RBAC: Check admin.settings permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
+
+    // The assistant is an Enterprise feature: the widget and the settings tab
+    // hide it, and the API refuses it too, so a direct call cannot get round it.
+    const unlicensed = await requireFeature(Features.AI_INSIGHTS)
+    if (unlicensed) return unlicensed
 
     const tenantId = await getCurrentTenantId()
     // Non-secret fields inherit the provider's row as before; the keys do not.
@@ -57,6 +62,11 @@ async function handlePut(request: Request) {
     // RBAC: Check admin.settings permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
+
+    // The assistant is an Enterprise feature: the widget and the settings tab
+    // hide it, and the API refuses it too, so a direct call cannot get round it.
+    const unlicensed = await requireFeature(Features.AI_INSIGHTS)
+    if (unlicensed) return unlicensed
 
     const body = await request.json()
     if (!body || typeof body !== 'object' || Array.isArray(body)) {

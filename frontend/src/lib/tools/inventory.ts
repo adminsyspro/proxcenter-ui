@@ -15,11 +15,14 @@ import {
   type CatalogTool,
 } from '@/lib/tools/types'
 
+/** Whole days, null when unknown: what an answer about uptime needs. */
+const days = (seconds?: number) => (seconds ? Math.floor(seconds / 86_400) : null)
+
 export const listGuestsTool: CatalogTool = {
   name: 'list_guests',
   readOnly: true,
   description:
-    'List the VMs and containers visible to the user, with optional filters. Use it when the user asks for a full list that the snapshot truncated, or for the guests of one host, pool or tag. Example: status=\'stopped\', limit=100',
+    'List the VMs and containers visible to the user, with optional filters, their uptime and HA state. Use it when the user asks for a full list that the snapshot truncated, for the guests of one host, pool or tag, or "which VMs are not protected by HA". Example: status=\'stopped\', limit=100 or ha=\'unmanaged\', status=\'running\'',
   parameters: {
     type: 'object',
     properties: {
@@ -33,6 +36,12 @@ export const listGuestsTool: CatalogTool = {
       node: { type: 'string', description: 'Restrict to one host, by name.' },
       pool: { type: 'string', description: 'Restrict to one Proxmox pool.' },
       tag: { type: 'string', description: 'Restrict to guests carrying this tag.' },
+      ha: {
+        type: 'string',
+        description: 'managed: only guests under Proxmox HA; unmanaged: only guests HA does not protect.',
+        enum: ['all', 'managed', 'unmanaged'],
+        default: 'all',
+      },
       limit: { type: 'integer', description: 'Maximum guests to return.', default: 100 },
     },
   },
@@ -43,6 +52,7 @@ export const listGuestsTool: CatalogTool = {
     const nodeRef = argString(args, 'node')?.toLowerCase()
     const poolRef = argString(args, 'pool')?.toLowerCase()
     const tagRef = argString(args, 'tag')?.toLowerCase()
+    const ha = argEnum(args, 'ha', ['all', 'managed', 'unmanaged'] as const, 'all')
 
     const connId = clusterRef ? resolveConnection(ctx, clusterRef).id : undefined
 
@@ -53,6 +63,8 @@ export const listGuestsTool: CatalogTool = {
     if (status === 'stopped') guests = guests.filter(g => g.status !== 'running')
     if (nodeRef) guests = guests.filter(g => g.node.toLowerCase() === nodeRef)
     if (poolRef) guests = guests.filter(g => (g.pool || '').toLowerCase() === poolRef)
+    if (ha === 'managed') guests = guests.filter(g => g.haState)
+    if (ha === 'unmanaged') guests = guests.filter(g => !g.haState)
 
     if (tagRef) {
       guests = guests.filter(g =>
@@ -82,6 +94,8 @@ export const listGuestsTool: CatalogTool = {
         pool: g.pool,
         tags: g.tags,
         template: g.template,
+        uptimeDays: days(g.uptimeSeconds),
+        haState: g.haState ?? null,
       })),
     }
   },
@@ -91,7 +105,7 @@ export const listHostsTool: CatalogTool = {
   name: 'list_hosts',
   readOnly: true,
   description:
-    'List the Proxmox hosts visible to the user with their live CPU and RAM usage, core count and cluster. Use it to know which host names exist before asking for one host\'s hardware. Example: cluster=\'production\'',
+    'List the Proxmox hosts visible to the user with their live CPU and RAM usage, core count, cluster, uptime, Proxmox VE and kernel versions, load, I/O wait, swap and root filesystem usage. Answers "are all hosts on the same Proxmox version?", "which host has not rebooted for months?", "is any host swapping?". Use it to know which host names exist before asking for one host\'s hardware. Example: cluster=\'production\'',
   parameters: {
     type: 'object',
     properties: {
@@ -121,6 +135,14 @@ export const listHostsTool: CatalogTool = {
         memoryTotalGb: n.memTotalGb,
         memoryPct: n.memPct,
         maintenance: n.maintenance ?? null,
+        uptimeDays: days(n.uptimeSeconds),
+        pveVersion: n.pveVersion ?? null,
+        kernel: n.kernel ?? null,
+        load1: n.load1 ?? null,
+        iowaitPct: n.iowaitPct ?? null,
+        swapUsedGb: n.swapUsedGb ?? null,
+        swapTotalGb: n.swapTotalGb ?? null,
+        rootfsUsedPct: n.rootfsPct ?? null,
       })),
     }
   },

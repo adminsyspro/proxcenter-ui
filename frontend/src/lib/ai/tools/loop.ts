@@ -18,6 +18,7 @@ import {
   type AiProvider,
   type ToolCallRequest,
 } from '@/lib/ai/tools/adapters'
+import { chartFromToolResult, type AiChart } from '@/lib/ai/charts'
 import { invokeTool } from '@/lib/tools/invoke'
 import type { CatalogTool, ToolContext } from '@/lib/tools/types'
 
@@ -53,6 +54,8 @@ export type ToolTraceEntry = {
   detail?: string
   durationMs: number
   truncated: boolean
+  /** What the widget can plot from the result, see `charts.ts`. Never sent to the model. */
+  chart?: AiChart
 }
 
 /**
@@ -122,6 +125,21 @@ export function budgetFallbackText(locale: string, trace: ToolTraceEntry[]): str
 }
 
 /**
+ * What the user reads when the model returned an empty turn twice in a row.
+ *
+ * Thinking models served by Ollama sometimes write their whole answer into the
+ * separate `thinking` channel and leave `content` empty: measured on
+ * qwen3.5:9b against the lab (#459), the correct answer sat in `thinking`,
+ * `done_reason` was `stop` after 69 tokens, so this is not a truncation. The
+ * loops retry such a turn once; a blank chat bubble is never shown.
+ */
+export function emptyAnswerText(locale: string): string {
+  return locale === 'fr'
+    ? 'Le modèle n\'a renvoyé aucune réponse. Repose la question.'
+    : 'The model returned no answer. Ask the question again.'
+}
+
+/**
  * What the user wrote, from the request body rather than the provider thread:
  * for Ollama the last user turn also carries the whole system prompt, which
  * names every cluster.
@@ -155,6 +173,12 @@ export function groundClusterArgument(
   const { cluster: _dropped, ...rest } = args
 
   return { args: rest, dropped: cluster }
+}
+
+function traceOutcome(t: ToolTraceEntry): string {
+  if (!t.ok) return String(t.error)
+
+  return t.truncated ? `${t.durationMs}ms, truncated` : `${t.durationMs}ms`
 }
 
 export async function executeToolCalls(
@@ -201,9 +225,17 @@ export async function executeToolCalls(
 
       if (outcome.ok === true) {
         const { content, truncated } = serialiseResult(outcome.value)
+        const chart = chartFromToolResult(call.name, outcome.value)
 
         return {
-          entry: { name: call.name, args: call.args, ok: true, durationMs: Date.now() - startedAt, truncated },
+          entry: {
+            name: call.name,
+            args: call.args,
+            ok: true,
+            durationMs: Date.now() - startedAt,
+            truncated,
+            ...(chart ? { chart } : {}),
+          },
           result: { call, content },
         }
       }
@@ -231,9 +263,7 @@ export async function executeToolCalls(
   // The streaming path relays plain text, so a tool round is invisible from the
   // browser. One compact line per round is what lets an operator tell "the
   // model consulted Ceph and answered" from "the model made it up".
-  console.log(
-    `[ai-tools] ${trace.map(t => `${t.name}(${t.ok ? `${t.durationMs}ms${t.truncated ? ', truncated' : ''}` : t.error})`).join(' ')}`
-  )
+  console.log(`[ai-tools] ${trace.map(t => `${t.name}(${traceOutcome(t)})`).join(' ')}`)
 
   return { results, trace }
 }
@@ -266,6 +296,7 @@ export async function runToolRounds(opts: {
   let mode: ToolMode = tools.length > 0 ? 'auto' : 'off'
   let toolsDisabled = false
   let degradeAttempted = false
+  let emptyRetried = false
   let rounds = 0
 
   while (rounds <= maxRounds) {
@@ -307,9 +338,18 @@ export async function runToolRounds(opts: {
     }
 
     if (calls.length === 0) {
+      const text = parseAssistantText(provider, json)
+
+      // An empty turn is not an answer, see `emptyAnswerText`: ask once more.
+      if (!text.trim() && !emptyRetried) {
+        console.warn('[ai-tools] the model returned an empty turn, retrying it once')
+        emptyRetried = true
+        continue
+      }
+
       return {
         messages,
-        text: parseAssistantText(provider, json),
+        text: text.trim() ? text : emptyAnswerText(ctx.locale),
         trace,
         rounds,
         toolsDisabled,

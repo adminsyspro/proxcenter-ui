@@ -5,15 +5,19 @@ import { getSetting } from '@/lib/db/settings'
 import { openAiSecrets } from '@/lib/ai/settingsSecrets'
 import { getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getRequestLocale, languageInstruction, normalizeLocale } from '@/lib/ai/locale'
+import { getRequestLocale, languageInstruction, normalizeLocale, normalizeTimeZone } from '@/lib/ai/locale'
 import { validateAIUrl } from '@/lib/ai/url-guard'
 import { ollamaOptions, ollamaThread } from '@/lib/ai/ollama'
+import { DEFAULT_OLLAMA_MODEL } from '@/lib/ai/qualifiedModels'
+import { collectCharts } from '@/lib/ai/charts'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
 import { READ_ONLY_TOOLS, buildToolContext } from '@/lib/tools/catalog'
 import { coerceToolArgs, extractTextToolCall, toolResultTurns, toolsForProvider, type ToolCallRequest } from '@/lib/ai/tools/adapters'
-import { budgetFallbackText, executeToolCalls, MAX_TOOL_ROUNDS, userTextOf, type ToolTraceEntry } from '@/lib/ai/tools/loop'
+import { budgetFallbackText, emptyAnswerText, executeToolCalls, MAX_TOOL_ROUNDS, userTextOf, type ToolTraceEntry } from '@/lib/ai/tools/loop'
 import type { ToolContext } from '@/lib/tools/types'
 import { encodeFrame } from '@/lib/ai/streamFrames'
+import { requireFeature } from '@/lib/auth/requireEnterprise'
+import { Features } from '@/lib/license/features'
 
 // Récupérer les paramètres IA (tenant-scoped)
 async function getAISettings() {
@@ -30,7 +34,7 @@ async function getAISettings() {
     enabled: false,
     provider: 'ollama',
     ollamaUrl: 'http://localhost:11434',
-    ollamaModel: 'llama3.1:8b'
+    ollamaModel: DEFAULT_OLLAMA_MODEL
   }
 }
 
@@ -194,6 +198,8 @@ async function streamAgenticConversation(opts: {
   const toolNames = READ_ONLY_TOOLS.map(t => t.name)
   const trace: ToolTraceEntry[] = []
 
+  let emptyRetried = false
+
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     const isLastRound = round === MAX_TOOL_ROUNDS
     const turn = await streamOllamaTurn({
@@ -219,7 +225,21 @@ async function streamAgenticConversation(opts: {
       break
     }
 
-    if (!turn.toolCalls.length) break
+    if (!turn.toolCalls.length) {
+      if (turn.text.trim()) break
+
+      // An empty turn is not an answer (see `emptyAnswerText`): replay the
+      // same round once, then say so rather than leave the bubble blank.
+      if (!emptyRetried) {
+        console.warn('[ai-tools] the model returned an empty turn, retrying it once')
+        emptyRetried = true
+        round--
+        continue
+      }
+
+      controller.enqueue(encoder.encode(emptyAnswerText(ctx.locale)))
+      break
+    }
 
     messages.push(turn.assistant)
 
@@ -238,6 +258,10 @@ async function streamAgenticConversation(opts: {
       encoder.encode(encodeFrame({ type: 'trace', calls: trace.map(t => ({ name: t.name, ok: t.ok })) }))
     )
   }
+
+  const charts = collectCharts(trace)
+
+  if (charts.length) controller.enqueue(encoder.encode(encodeFrame({ type: 'charts', charts })))
 }
 
 // POST /api/v1/ai/chat/stream - Chat avec streaming
@@ -246,7 +270,12 @@ export async function POST(request: Request) {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
     if (denied) return denied
 
-    const { messages, locale } = await request.json()
+    // The assistant is an Enterprise feature: the widget and the settings tab
+    // hide it, and the API refuses it too, so a direct call cannot get round it.
+    const unlicensed = await requireFeature(Features.AI_INSIGHTS)
+    if (unlicensed) return unlicensed
+
+    const { messages, locale, timeZone } = await request.json()
 
     // Le drawer envoie `locale`; repli sur le cookie NEXT_LOCALE pour tout
     // appelant qui ne le fait pas.
@@ -278,7 +307,7 @@ export async function POST(request: Request) {
       toolsEnabled: true,
       terse: true,
     })
-    const toolCtx = buildToolContext(snapshot, tenantId, uiLocale)
+    const toolCtx = buildToolContext(snapshot, tenantId, uiLocale, normalizeTimeZone(timeZone))
     const wireTools = toolsForProvider('ollama', READ_ONLY_TOOLS)
 
     // The SSRF guard's own contract requires every AI route fetching an

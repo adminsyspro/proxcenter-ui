@@ -27,9 +27,9 @@ const ctx: ToolContext = {
       { id: 'c1', name: 'PVE-PROD', nodeCount: 2, guestCount: 3, cephHealth: 'HEALTH_WARN' },
       { id: 'c2', name: 'PVE-DR', nodeCount: 1, guestCount: 1 },
     ],
-    nodes: [node({ name: 'pve1' }), node({ name: 'pve2', maintenance: 'maintenance' }), node({ name: 'pve1-dr', connId: 'c2', cluster: 'PVE-DR' })],
+    nodes: [node({ name: 'pve1', uptimeSeconds: 200 * 86_400, pveVersion: 'pve-manager/9.2.24', kernel: '6.14.8-2-pve', load1: 0.42, swapUsedGb: 0, swapTotalGb: 8, rootfsPct: 41 }), node({ name: 'pve2', maintenance: 'maintenance' }), node({ name: 'pve1-dr', connId: 'c2', cluster: 'PVE-DR' })],
     guests: [
-      guest({ name: 'db-01', vmid: '101', pool: 'Prod', tags: 'db;critical' }),
+      guest({ name: 'db-01', vmid: '101', pool: 'Prod', tags: 'db;critical', haState: 'started', uptimeSeconds: 3 * 86_400 + 10 }),
       guest({ name: 'web-01', vmid: '102', node: 'pve2', tags: 'web' }),
       guest({ name: 'old-01', vmid: '150', status: 'stopped', pool: 'prod' }),
       guest({ name: 'dr-01', vmid: '5101', connId: 'c2', cluster: 'PVE-DR', node: 'pve1-dr' }),
@@ -88,5 +88,35 @@ describe('list_hosts', () => {
     const res = await listHostsTool.execute({ cluster: 'PVE-DR' }, ctx) as any
 
     expect(res.hosts.map((h: any) => h.name)).toEqual(['pve1-dr'])
+  })
+})
+
+describe('uptime, versions and HA (#459)', () => {
+  it('lists the guests HA protects, or the ones it does not', async () => {
+    expect(names(await listGuestsTool.execute({ ha: 'managed' }, ctx))).toEqual(['db-01'])
+    expect(names(await listGuestsTool.execute({ ha: 'unmanaged', status: 'running' }, ctx))).toEqual(['web-01', 'dr-01'])
+  })
+
+  it('gives guest uptime in whole days and the HA state', async () => {
+    const res = (await listGuestsTool.execute({}, ctx)) as any
+
+    expect(res.guests[0]).toMatchObject({ name: 'db-01', uptimeDays: 3, haState: 'started' })
+    expect(res.guests[1]).toMatchObject({ uptimeDays: null, haState: null })
+  })
+
+  it('gives each host its uptime, versions, load, swap and root filesystem', async () => {
+    const res = (await listHostsTool.execute({}, ctx)) as any
+
+    expect(res.hosts[0]).toMatchObject({
+      name: 'pve1',
+      uptimeDays: 200,
+      pveVersion: 'pve-manager/9.2.24',
+      kernel: '6.14.8-2-pve',
+      load1: 0.42,
+      swapUsedGb: 0,
+      swapTotalGb: 8,
+      rootfsUsedPct: 41,
+    })
+    expect(res.hosts[1]).toMatchObject({ uptimeDays: null, pveVersion: null })
   })
 })

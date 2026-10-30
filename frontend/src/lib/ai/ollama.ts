@@ -1,3 +1,5 @@
+import type { PreflightMeasure } from './qualifiedModels'
+
 /**
  * Request options shared by everything that talks to Ollama's /api/chat.
  *
@@ -74,6 +76,120 @@ export async function fetchOllamaCapabilities(
     return UNKNOWN_CAPABILITIES
   } finally {
     clearTimeout(timer)
+  }
+}
+
+/**
+ * Bound of the settings probe. A cold 22 GB model loads in 10 to 60 s, and the
+ * production nginx cuts an API route at 60 s with a 504 the panel cannot
+ * explain, so the probe gives up first and says why.
+ */
+export const OLLAMA_PROBE_TIMEOUT_MS = 45_000
+
+export class OllamaProbeTimeoutError extends Error {
+  constructor() {
+    super(`The model did not answer within ${OLLAMA_PROBE_TIMEOUT_MS / 1000} s`)
+    this.name = 'OllamaProbeTimeoutError'
+  }
+}
+
+export type OllamaProbeResult = {
+  response: string
+  measure: PreflightMeasure
+}
+
+/**
+ * Load the model the way the chat routes will, ask it one sentence, then read
+ * how Ollama placed it.
+ *
+ * Same /api/chat and same `ollamaOptions()` as the chat: a probe with another
+ * context size would load a different footprint, report a GPU share the chat
+ * never gets, and make the first real question reload the model. Ollama keeps
+ * it loaded afterwards, so that first question also starts warm.
+ *
+ * Ollama exposes no GPU memory size. /api/ps after the load is the measure:
+ * `size_vram` against `size` says whether the model fits, and the answer's
+ * `eval_count` / `eval_duration` how fast it generates on this server.
+ */
+export async function probeOllamaModel(
+  base: string,
+  model: string,
+  prompt: string,
+  opts: { thinking: boolean; fetchImpl?: typeof fetch; timeoutMs?: number }
+): Promise<OllamaProbeResult> {
+  const fetchImpl = opts.fetchImpl ?? fetch
+  const root = base.replace(/\/+$/, '')
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? OLLAMA_PROBE_TIMEOUT_MS)
+
+  let json: any
+
+  try {
+    const response = await fetchImpl(`${root}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        stream: false,
+        // One sentence is the whole point; a thinking model would otherwise
+        // spend the token budget reasoning and return an empty reply.
+        ...(opts.thinking ? { think: false } : {}),
+        options: { ...ollamaOptions(), num_predict: 150 },
+      }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      const text = await response.text()
+
+      throw new Error(`Ollama error: ${text}`)
+    }
+
+    json = await response.json()
+  } catch (e) {
+    if (controller.signal.aborted) throw new OllamaProbeTimeoutError()
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
+
+  const evalCount = Number(json?.eval_count)
+  const evalNs = Number(json?.eval_duration)
+  const tokensPerSecond = evalCount > 0 && evalNs > 0 ? evalCount / (evalNs / 1e9) : null
+
+  const loaded = await fetchLoadedModel(root, model, fetchImpl)
+
+  return {
+    response: String(json?.message?.content ?? ''),
+    measure: {
+      model,
+      sizeBytes: loaded?.size ?? null,
+      sizeVramBytes: loaded?.size_vram ?? null,
+      tokensPerSecond,
+    },
+  }
+}
+
+/** The /api/ps entry of a model, or null when unlisted or unreadable. */
+async function fetchLoadedModel(
+  root: string,
+  model: string,
+  fetchImpl: typeof fetch
+): Promise<{ size: number; size_vram: number } | null> {
+  try {
+    const res = await fetchImpl(`${root}/api/ps`, { signal: AbortSignal.timeout(5_000) })
+
+    if (!res.ok) return null
+
+    const json = await res.json()
+    const entry = (json?.models ?? []).find((m: any) => m?.name === model || m?.model === model)
+
+    if (!entry || typeof entry.size !== 'number' || typeof entry.size_vram !== 'number') return null
+
+    return { size: entry.size, size_vram: entry.size_vram }
+  } catch {
+    return null
   }
 }
 

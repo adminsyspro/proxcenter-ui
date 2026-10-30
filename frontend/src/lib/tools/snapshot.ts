@@ -56,6 +56,10 @@ export type SnapshotGuest = {
   pool?: string
   tags?: string
   template: boolean
+  uptimeSeconds?: number
+  /** Proxmox HA state (`started`, `stopped`, `error`...), absent when HA does not manage the guest. */
+  haState?: string
+  haGroup?: string
 }
 
 export type SnapshotNode = {
@@ -69,6 +73,15 @@ export type SnapshotNode = {
   memUsedGb: number
   memTotalGb: number
   maintenance?: string
+  uptimeSeconds?: number
+  pveVersion?: string
+  kernel?: string
+  /** 1-minute load average. */
+  load1?: number
+  iowaitPct?: number
+  swapUsedGb?: number
+  swapTotalGb?: number
+  rootfsPct?: number
 }
 
 export type SnapshotCluster = {
@@ -92,6 +105,13 @@ export type InventorySnapshot = {
   }
   /** Whether the snapshot came from cache, for logging only. */
   cached: boolean
+  /**
+   * True when a vDC mask or a non-admin RBAC scope trimmed the inventory.
+   * Data the snapshot cannot place on one of its hosts, guests or clusters
+   * (a PBS server alert) is then withheld rather than shown. Absent counts
+   * as restricted.
+   */
+  restricted?: boolean
 }
 
 function pct(used?: number, total?: number): number {
@@ -189,6 +209,15 @@ export async function collectInventorySnapshot(): Promise<InventorySnapshot> {
         memUsedGb: gb(node.mem),
         memTotalGb: gb(node.maxmem),
         maintenance: node.maintenance,
+        // Already in the per-node status call the inventory makes: free.
+        uptimeSeconds: node.uptime || undefined,
+        pveVersion: node.pveVersion || undefined,
+        kernel: node.kernel || undefined,
+        load1: Array.isArray(node.loadavg) && Number.isFinite(Number(node.loadavg[0])) ? Number(node.loadavg[0]) : undefined,
+        iowaitPct: typeof node.iowait === 'number' ? Number((node.iowait * 100).toFixed(1)) : undefined,
+        swapUsedGb: node.swapTotal ? gb(node.swapUsed) : undefined,
+        swapTotalGb: node.swapTotal ? gb(node.swapTotal) : undefined,
+        rootfsPct: node.rootfsTotal ? pct(node.rootfsUsed, node.rootfsTotal) : undefined,
       })
 
       for (const g of node.guests) {
@@ -212,6 +241,9 @@ export async function collectInventorySnapshot(): Promise<InventorySnapshot> {
           pool: g.pool,
           tags: g.tags,
           template: g.template === true,
+          uptimeSeconds: g.uptime || undefined,
+          haState: g.hastate || undefined,
+          haGroup: g.hagroup || undefined,
         })
       }
     }
@@ -240,5 +272,6 @@ export async function collectInventorySnapshot(): Promise<InventorySnapshot> {
       onlineNodes,
     },
     cached,
+    restricted: Boolean(mask) || !rbacCtx || !rbacCtx.isAdmin,
   }
 }

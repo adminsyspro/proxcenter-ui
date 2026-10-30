@@ -24,6 +24,13 @@ const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>(
 
 // An admin principal: `collectInventorySnapshot` then skips the per-guest RBAC filter,
 // which is what the dedicated RBAC tests cover, not this file.
+const licence = vi.hoisted(() => ({ ai: true }))
+
+// The assistant is Enterprise (`ai_insights`): the route refuses it otherwise.
+vi.mock('@/lib/auth/requireEnterprise', () => ({
+  requireFeature: async () => (licence.ai ? null : new Response(JSON.stringify({ error: 'Feature not licensed' }), { status: 403 })),
+}))
+
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   PERMISSIONS: { CONNECTION_VIEW: 'connection.view', VM_VIEW: 'vm.view' },
@@ -126,6 +133,7 @@ function ollamaToolCall(name: string, args: Record<string, unknown> = {}): Respo
 }
 
 beforeEach(() => {
+  licence.ai = true
   checkPermissionMock.mockReset().mockResolvedValue(null)
   rankToolExecute.mockClear()
   aiSettings = { ...OLLAMA_SETTINGS }
@@ -188,6 +196,15 @@ describe('POST /api/v1/ai/chat', () => {
     const denied = new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 })
 
     checkPermissionMock.mockResolvedValueOnce(denied as any)
+
+    const res = await ask()
+
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses without the Enterprise licence, before any upstream call', async () => {
+    licence.ai = false
 
     const res = await ask()
 
@@ -280,12 +297,42 @@ describe('POST /api/v1/ai/chat', () => {
       expect(body.budgetExhausted).toBe(false)
     })
 
+    it('returns the charts the tool results support', async () => {
+      rankToolExecute.mockResolvedValueOnce({
+        metric: 'memory_usage',
+        unit: '%',
+        ranking: [
+          { rank: 1, name: 'db-01', memoryUsagePct: 93.4 },
+          { rank: 2, name: 'web-01', memoryUsagePct: 61 },
+        ],
+      } as any)
+      fetchMock
+        .mockResolvedValueOnce(ollamaToolCall('rank_guest_hardware', { metric: 'memory_usage' }))
+        .mockResolvedValueOnce(ollamaReply('db-01 uses the most RAM'))
+
+      const body = await readJson<any>(await ask())
+
+      expect(body.charts).toEqual([
+        {
+          kind: 'guest-ranking',
+          metric: 'memory_usage',
+          unit: '%',
+          series: ['memory_usage'],
+          rows: [
+            { label: 'db-01', values: [93.4] },
+            { label: 'web-01', values: [61] },
+          ],
+        },
+      ])
+    })
+
     it('answers without tools when the model does not ask for any', async () => {
       const body = await readJson<any>(await ask())
 
       expect(fetchMock).toHaveBeenCalledTimes(1)
       expect(rankToolExecute).not.toHaveBeenCalled()
       expect(body.toolCalls).toEqual([])
+      expect(body.charts).toEqual([])
     })
 
     it('falls back to a prompt-only turn when the model cannot do tools', async () => {

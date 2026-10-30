@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 
-import { fetchOllamaCapabilities, ollamaThread } from './ollama'
+import { fetchOllamaCapabilities, OllamaProbeTimeoutError, ollamaThread, probeOllamaModel } from './ollama'
 
 function jsonOk(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -88,5 +88,101 @@ describe('ollamaThread', () => {
 
   it('sends the prompt alone for an empty conversation', () => {
     expect(ollamaThread('PROMPT', [], 'x')).toEqual([{ role: 'system', content: 'PROMPT\n\nx' }])
+  })
+})
+
+describe('probeOllamaModel', () => {
+  /** /api/chat answers `chat`, /api/ps answers `ps` (or fails when it is an Error). */
+  function routeFetch(chat: Response, ps: Response | Error) {
+    return vi.fn(async (url: string) => {
+      if (url.endsWith('/api/chat')) return chat
+      if (url.endsWith('/api/ps')) {
+        if (ps instanceof Error) throw ps
+
+        return ps
+      }
+
+      throw new Error(`unexpected fetch ${url}`)
+    })
+  }
+
+  const reply = () => jsonOk({ message: { content: 'Yes, I am functional.' }, eval_count: 90, eval_duration: 3e9 })
+
+  it('loads the model with the chat options and measures speed and GPU share', async () => {
+    const fetchMock = routeFetch(reply(), jsonOk({
+      models: [
+        { name: 'llama3.1:8b', model: 'llama3.1:8b', size: 7e9, size_vram: 7e9 },
+        { name: 'qwen3.5:9b', model: 'qwen3.5:9b', size: 6.15e9, size_vram: 5e9 },
+      ],
+    }))
+
+    const result = await probeOllamaModel('http://localhost:11434/', 'qwen3.5:9b', 'Are you functional?', {
+      thinking: false,
+      fetchImpl: fetchMock as any,
+    })
+
+    expect(result).toEqual({
+      response: 'Yes, I am functional.',
+      measure: { model: 'qwen3.5:9b', sizeBytes: 6.15e9, sizeVramBytes: 5e9, tokensPerSecond: 30 },
+    })
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+
+    expect(url).toBe('http://localhost:11434/api/chat')
+    expect(body).toMatchObject({
+      model: 'qwen3.5:9b',
+      stream: false,
+      messages: [{ role: 'user', content: 'Are you functional?' }],
+      options: { num_ctx: 16384, num_predict: 150 },
+    })
+    expect(body).not.toHaveProperty('think')
+  })
+
+  it('turns thinking off for a thinking model', async () => {
+    const fetchMock = routeFetch(reply(), jsonOk({ models: [] }))
+
+    await probeOllamaModel('http://localhost:11434', 'qwen3.5:9b', 'x', { thinking: true, fetchImpl: fetchMock as any })
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+
+    expect(JSON.parse(init.body as string).think).toBe(false)
+  })
+
+  it('reports unknown measures when /api/ps fails or no longer lists the model', async () => {
+    for (const ps of [new TypeError('fetch failed'), jsonOk({ models: [] }), new Response('', { status: 500 })]) {
+      const result = await probeOllamaModel('http://localhost:11434', 'qwen3.5:9b', 'x', {
+        thinking: false,
+        fetchImpl: routeFetch(jsonOk({ message: { content: 'ok' } }), ps) as any,
+      })
+
+      expect(result.measure).toEqual({ model: 'qwen3.5:9b', sizeBytes: null, sizeVramBytes: null, tokensPerSecond: null })
+    }
+  })
+
+  it('throws the upstream body on an Ollama error', async () => {
+    const fetchMock = routeFetch(new Response('model "nope" not found', { status: 404 }), jsonOk({ models: [] }))
+
+    await expect(probeOllamaModel('http://localhost:11434', 'nope', 'x', { thinking: false, fetchImpl: fetchMock as any }))
+      .rejects.toThrow('Ollama error: model "nope" not found')
+  })
+
+  it('gives up with a timeout error when the model does not answer in time', async () => {
+    const hanging = vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+    }))
+
+    await expect(probeOllamaModel('http://localhost:11434', 'qwen3.6:35b-a3b', 'x', {
+      thinking: false,
+      fetchImpl: hanging as any,
+      timeoutMs: 20,
+    })).rejects.toBeInstanceOf(OllamaProbeTimeoutError)
+  })
+
+  it('keeps a network failure as such, not as a timeout', async () => {
+    const failing = vi.fn().mockRejectedValue(new TypeError('fetch failed'))
+
+    await expect(probeOllamaModel('http://localhost:11434', 'qwen3.5:9b', 'x', { thinking: false, fetchImpl: failing as any }))
+      .rejects.toThrow('fetch failed')
   })
 })

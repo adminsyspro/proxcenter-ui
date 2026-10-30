@@ -6,6 +6,13 @@ const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>(
 // Passes the body through unless a test swaps in a stored key for the mask.
 const resolveMaskedAiSecretsMock = vi.fn(async (b: Record<string, unknown>) => b)
 
+const licence = vi.hoisted(() => ({ ai: true }))
+
+// The assistant is Enterprise (`ai_insights`): the route refuses it otherwise.
+vi.mock('@/lib/auth/requireEnterprise', () => ({
+  requireFeature: async () => (licence.ai ? null : new Response(JSON.stringify({ error: 'Feature not licensed' }), { status: 403 })),
+}))
+
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
@@ -29,23 +36,39 @@ vi.mock('next/headers', () => ({
   }),
 }))
 
-let fetchMock: ReturnType<typeof vi.fn>
+/** Probe calls only: the Ollama side requests below have their own mocks. */
+type FetchMock = ReturnType<typeof vi.fn<(...args: any[]) => any>>
+
+let fetchMock: FetchMock
+/** Ollama /api/show (capabilities, #459). Unknown by default, as an old server answers. */
+let showMock: FetchMock
+/** Ollama /api/ps (where the probed model was loaded, #459). Empty by default. */
+let psMock: FetchMock
 
 beforeEach(() => {
+  licence.ai = true
   checkPermissionMock.mockReset().mockResolvedValue(null)
   resolveMaskedAiSecretsMock.mockClear()
   cookieLocale = 'en'
   acceptLanguage = undefined
-  fetchMock = vi.fn()
-  vi.stubGlobal('fetch', fetchMock)
+  fetchMock = vi.fn<(...args: any[]) => any>()
+  showMock = vi.fn<(...args: any[]) => any>(async () => new Response('', { status: 404 }))
+  psMock = vi.fn<(...args: any[]) => any>(async () => jsonOk({ models: [] }))
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/show')) return showMock(url, init)
+    if (String(url).endsWith('/api/ps')) return psMock(url, init)
+
+    return fetchMock(url, init)
+  })
 })
 
-/**
- * Probe calls only: the Ollama branch also POSTs /api/show for the capability
- * check (#459), which carries no prompt and must not shift the indexes below.
- */
 function probeCalls() {
-  return fetchMock.mock.calls.filter(([url]) => !String(url).endsWith('/api/show'))
+  return fetchMock.mock.calls
+}
+
+/** What Ollama's /api/chat answers to the probe, with the timings the preflight reads. */
+function ollamaReply(content: string, timing: { eval_count?: number; eval_duration?: number } = {}) {
+  return jsonOk({ message: { role: 'assistant', content }, done: true, ...timing })
 }
 
 /** Prompt text actually sent upstream, whatever the provider's body shape. */
@@ -81,9 +104,19 @@ describe('POST /api/v1/ai/test', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('refuses without the Enterprise licence, before any upstream call', async () => {
+    licence.ai = false
+
+    const handler = await importHandler()
+    const res = await callRoute(handler, { body: { provider: 'ollama', ollamaUrl: 'http://localhost:11434' } })
+
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   describe('ollama provider', () => {
-    it('forwards the prompt to /api/generate and returns the model reply', async () => {
-      fetchMock.mockResolvedValueOnce(jsonOk({ response: 'Oui, je suis fonctionnel.' }))
+    it('probes /api/chat with the chat options and returns the model reply', async () => {
+      fetchMock.mockResolvedValueOnce(ollamaReply('Oui, je suis fonctionnel.'))
 
       const handler = await importHandler()
 
@@ -103,12 +136,19 @@ describe('POST /api/v1/ai/test', () => {
 
       const [calledUrl, init] = fetchMock.mock.calls[0]
 
-      expect(calledUrl).toBe('http://localhost:11434/api/generate')
+      expect(calledUrl).toBe('http://localhost:11434/api/chat')
       expect(init.method).toBe('POST')
-      expect(JSON.parse(init.body as string)).toMatchObject({
+
+      const sent = JSON.parse(init.body as string)
+
+      // Same context as the chat routes, so the probe loads the footprint the
+      // assistant will run with and the first question starts warm.
+      expect(sent).toMatchObject({
         model: 'mistral:7b',
         stream: false,
+        options: { num_ctx: 16384, num_predict: 150 },
       })
+      expect(sent).not.toHaveProperty('think')
     })
 
     // Regression: a CodeQL SSRF fix dropped the trailing-slash trim, which
@@ -116,7 +156,7 @@ describe('POST /api/v1/ai/test', () => {
     // and the forged URL into `http://localhost:11434//api/generate`. Ollama
     // 301s the double slash, fetch follows as GET, Ollama replies 405.
     it('never produces a double slash even when the base URL has trailing slashes', async () => {
-      fetchMock.mockResolvedValueOnce(jsonOk({ response: 'ok' }))
+      fetchMock.mockResolvedValueOnce(ollamaReply('ok'))
 
       const handler = await importHandler()
 
@@ -126,7 +166,7 @@ describe('POST /api/v1/ai/test', () => {
 
       const [calledUrl] = fetchMock.mock.calls[0]
 
-      expect(calledUrl).toBe('http://localhost:11434/api/generate')
+      expect(calledUrl).toBe('http://localhost:11434/api/chat')
       expect(calledUrl).not.toMatch(/\/\/api\//)
     })
 
@@ -146,17 +186,13 @@ describe('POST /api/v1/ai/test', () => {
     // still answers the probe, so "Connected" alone would hide the reason the
     // assistant only sees the live snapshot.
     describe('tool calling capability', () => {
-      /** /api/generate answers, then /api/show answers with `show` (or throws when it is an Error). */
+      /** The probe answers "ok", /api/show answers with `show` (or throws when it is an Error). */
       function routeOllama(show: Response | Error) {
-        fetchMock.mockImplementation(async (url: string) => {
-          if (url.endsWith('/api/generate')) return jsonOk({ response: 'ok' })
-          if (url.endsWith('/api/show')) {
-            if (show instanceof Error) throw show
+        fetchMock.mockResolvedValue(ollamaReply('ok'))
+        showMock.mockImplementation(async () => {
+          if (show instanceof Error) throw show
 
-            return show
-          }
-
-          throw new Error(`unexpected fetch ${url}`)
+          return show
         })
       }
 
@@ -171,7 +207,7 @@ describe('POST /api/v1/ai/test', () => {
         expect(res.status).toBe(200)
         expect(await readJson<any>(res)).toMatchObject({ success: true, response: 'ok', toolCalling: false })
 
-        const [showUrl, showInit] = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/api/show'))!
+        const [showUrl, showInit] = showMock.mock.calls[0]
 
         expect(showUrl).toBe('http://localhost:11434/api/show')
         expect(JSON.parse(showInit.body as string)).toEqual({ model: 'ministral:14b' })
@@ -203,6 +239,81 @@ describe('POST /api/v1/ai/test', () => {
         const res = await callRoute(handler, { body })
 
         expect(await readJson<any>(res)).toMatchObject({ success: true, toolCalling: null })
+      })
+    })
+
+    // #459: "Test connection" doubles as a preflight of the Ollama server.
+    describe('preflight', () => {
+      const body = { provider: 'ollama', ollamaUrl: 'http://localhost:11434', ollamaModel: 'qwen3.5:9b' }
+
+      it('turns thinking off for a thinking model, so one sentence is not spent reasoning', async () => {
+        showMock.mockResolvedValue(jsonOk({ capabilities: ['completion', 'tools', 'thinking'] }))
+        fetchMock.mockResolvedValueOnce(ollamaReply('ok'))
+
+        const handler = await importHandler()
+
+        await callRoute(handler, { body })
+
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toMatchObject({ think: false })
+      })
+
+      it('reports a qualified model loaded whole on the GPU, with its speed, as clean', async () => {
+        fetchMock.mockResolvedValueOnce(ollamaReply('ok', { eval_count: 60, eval_duration: 2e9 }))
+        psMock.mockResolvedValue(jsonOk({ models: [{ name: 'qwen3.5:9b', model: 'qwen3.5:9b', size: 6.15e9, size_vram: 6.15e9 }] }))
+
+        const handler = await importHandler()
+        const res = await callRoute(handler, { body })
+
+        expect(res.status).toBe(200)
+        expect((await readJson<any>(res)).preflight).toEqual({
+          model: 'qwen3.5:9b',
+          qualified: true,
+          gpuShare: 1,
+          tokensPerSecond: 30,
+          issues: [],
+          fits: ['qwen3.5:9b'],
+        })
+      })
+
+      it('flags a model spilling to the CPU and names the qualified ones that fit', async () => {
+        fetchMock.mockResolvedValueOnce(ollamaReply('ok', { eval_count: 20, eval_duration: 5e9 }))
+        psMock.mockResolvedValue(jsonOk({ models: [{ name: 'gemma4:31b', model: 'gemma4:31b', size: 20e9, size_vram: 8e9 }] }))
+
+        const handler = await importHandler()
+        const res = await callRoute(handler, { body: { ...body, ollamaModel: 'gemma4:31b' } })
+
+        expect((await readJson<any>(res)).preflight).toMatchObject({
+          qualified: false,
+          gpuShare: 0.4,
+          issues: ['not-qualified', 'cpu-offload', 'slow'],
+          fits: ['qwen3.5:9b'],
+        })
+      })
+
+      it('says so instead of a 500 when the model does not answer in time', async () => {
+        // Only the timeout clock is faked: the route still awaits real I/O
+        // (URL guard, request body) before it arms the probe's timer.
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+        try {
+          fetchMock.mockImplementation((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+          }))
+
+          const handler = await importHandler()
+          const pending = callRoute(handler, { body })
+
+          while (fetchMock.mock.calls.length === 0) await new Promise(resolve => setImmediate(resolve))
+
+          await vi.advanceTimersByTimeAsync(45_000)
+
+          const res = await pending
+
+          expect(res.status).toBe(504)
+          expect(await readJson<any>(res)).toMatchObject({ code: 'probe-timeout' })
+        } finally {
+          vi.useRealTimers()
+        }
       })
     })
 
@@ -327,7 +438,7 @@ describe('POST /api/v1/ai/test', () => {
   // explicit instruction to answer in the UI language.
   describe('probe prompt language (#686)', () => {
     const providers: Array<[string, Record<string, unknown>, unknown]> = [
-      ['ollama', { provider: 'ollama', ollamaUrl: 'http://localhost:11434', ollamaModel: 'mistral:7b' }, { response: 'ok' }],
+      ['ollama', { provider: 'ollama', ollamaUrl: 'http://localhost:11434', ollamaModel: 'mistral:7b' }, { message: { content: 'ok' } }],
       ['openai', { provider: 'openai', openaiKey: 'sk-test', openaiModel: 'gpt-4.1-nano' }, { choices: [{ message: { content: 'ok' } }] }],
       ['anthropic', { provider: 'anthropic', anthropicKey: 'sk-ant-test', anthropicModel: 'claude-opus-4-7' }, { content: [{ text: 'ok' }] }],
     ]
@@ -354,7 +465,7 @@ describe('POST /api/v1/ai/test', () => {
       ['fr', 'French'],
     ])('asks for the answer in the NEXT_LOCALE language (%s)', async (locale, language) => {
       cookieLocale = locale
-      fetchMock.mockResolvedValueOnce(jsonOk({ response: 'ok' }))
+      fetchMock.mockResolvedValueOnce(ollamaReply('ok'))
 
       const handler = await importHandler()
 
@@ -368,7 +479,7 @@ describe('POST /api/v1/ai/test', () => {
     it('falls back to English when the cookie is absent or unsupported', async () => {
       for (const value of [undefined, 'it']) {
         cookieLocale = value
-        fetchMock.mockResolvedValueOnce(jsonOk({ response: 'ok' }))
+        fetchMock.mockResolvedValueOnce(ollamaReply('ok'))
 
         const handler = await importHandler()
 

@@ -20,6 +20,7 @@ import {
   userTextOf,
   MAX_TOOL_RESULT_CHARS,
   budgetFallbackText, MAX_TOOL_ROUNDS,
+  emptyAnswerText,
 } from './loop'
 import type { ToolCallRequest } from './adapters'
 import { ToolArgumentError, ToolScopeError, type CatalogTool, type ToolContext } from '@/lib/tools/types'
@@ -108,6 +109,24 @@ describe('running the tool calls of one round', () => {
     expect(trace).toHaveLength(1)
     expect(trace[0]).toMatchObject({ name: 'list_nodes', ok: true, truncated: false })
     expect(trace[0].error).toBeUndefined()
+  })
+
+  it('records what the widget can plot from a result, and nothing for a tool without figures', async () => {
+    const hosts = {
+      hosts: [
+        { name: 'pve1', cpuPct: 3.1, memoryPct: 22.3 },
+        { name: 'pve2', cpuPct: 3.3, memoryPct: 80.7 },
+      ],
+    }
+    const tools = [makeTool('list_hosts', async () => hosts), makeTool('list_nodes', async () => ({ nodes: ['pve1'] }))]
+
+    const { results, trace } = await executeToolCalls([call('list_hosts'), call('list_nodes')], tools, makeCtx())
+
+    expect(trace[0].chart).toMatchObject({ kind: 'host-usage', series: ['cpu', 'memory'] })
+    expect(trace[0].chart?.rows).toHaveLength(2)
+    expect('chart' in trace[1]).toBe(false)
+    // The model gets the raw result only.
+    expect(JSON.parse(results[0].content)).toEqual(hosts)
   })
 
   it('passes the call arguments and the context to the tool', async () => {
@@ -526,6 +545,47 @@ describe('driving the model until it answers', () => {
 /* ------------------------------------------------------------------ */
 /* Grounding model-chosen filters                                     */
 /* ------------------------------------------------------------------ */
+
+// #459: qwen3.5:9b wrote its whole answer into Ollama's `thinking` channel and
+// left `content` empty, so the chat showed a blank bubble.
+describe('an empty turn', () => {
+  it('is replayed once, and the second answer is the one returned', async () => {
+    const { send, seen } = makeSend([answerTurn(''), answerTurn('pbs-s3manu is the biggest storage.')])
+
+    const result = await runToolRounds({
+      provider: 'ollama',
+      tools: [makeTool('rank_storage')],
+      ctx: makeCtx(),
+      messages: [{ role: 'user', content: 'biggest storage?' }],
+      send,
+    })
+
+    expect(result.text).toBe('pbs-s3manu is the biggest storage.')
+    expect(send).toHaveBeenCalledTimes(2)
+    // Same thread both times: nothing of the empty turn leaks into the replay.
+    expect(seen[1]).toEqual(seen[0])
+  })
+
+  it('says so rather than return a blank answer when the replay is empty too', async () => {
+    const { send } = makeSend([answerTurn('  \n')])
+
+    const result = await runToolRounds({
+      provider: 'ollama',
+      tools: [makeTool('rank_storage')],
+      ctx: makeCtx(),
+      messages: [{ role: 'user', content: 'biggest storage?' }],
+      send,
+    })
+
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(result.text).toBe(emptyAnswerText('en'))
+  })
+
+  it('is worded in French for a French caller and in English otherwise', () => {
+    expect(emptyAnswerText('fr')).toContain('aucune réponse')
+    expect(emptyAnswerText('de')).toContain('no answer')
+  })
+})
 
 describe('grounding the cluster argument in what the user wrote', () => {
   it('keeps only the string user turns, lower-cased, ignoring tool results', () => {

@@ -16,7 +16,12 @@
 import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
 
+import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+
+import { hasNodePermission, requireNodeView } from './guards'
 import { argString, resolveNode, type CatalogTool } from './types'
+
+const NO_PERMISSION = 'You do not have the permission to view this section of the host.'
 
 const BYTES_PER_GB = 1024 * 1024 * 1024
 
@@ -219,13 +224,25 @@ export const getNodeHardwareTool: CatalogTool = {
     // any Proxmox call is made. Never bypass.
     const { connection, node } = resolveNode(ctx, argString(args, 'node'), argString(args, 'cluster'))
 
+    // Seeing the host (a guest of yours runs on it) is not reading its
+    // hardware: each section asks the right its own page route asks.
+    await requireNodeView(connection.id, node.name)
+
+    const [mayReadNetwork, mayReadDisks] = await Promise.all([
+      hasNodePermission(PERMISSIONS.NODE_NETWORK, connection.id, node.name),
+      checkPermission(PERMISSIONS.NODE_VIEW, 'connection', connection.id).then(denied => !denied),
+    ])
+
     const conn = await getConnectionById(connection.id, ctx.tenantId)
     const base = `/nodes/${encodeURIComponent(node.name)}`
+    const refused = Promise.reject(new Error('permission'))
+
+    refused.catch(() => {})
 
     const [statusResult, networkResult, disksResult] = await Promise.allSettled([
       pveFetch<any>(conn, `${base}/status`),
-      pveFetch<any[]>(conn, `${base}/network`),
-      pveFetch<any[]>(conn, `${base}/disks/list`),
+      mayReadNetwork ? pveFetch<any[]>(conn, `${base}/network`) : refused,
+      mayReadDisks ? pveFetch<any[]>(conn, `${base}/disks/list`) : refused,
     ])
 
     const result: Record<string, unknown> = {
@@ -259,9 +276,9 @@ export const getNodeHardwareTool: CatalogTool = {
       ? networkResult.value
       : null
 
-    result.network = network
-      ? buildNetworkSection(network)
-      : { available: false, reason: failureReason(networkResult) }
+    const networkReason = mayReadNetwork ? failureReason(networkResult) : NO_PERMISSION
+
+    result.network = network ? buildNetworkSection(network) : { available: false, reason: networkReason }
 
     const rawDisks = disksResult.status === 'fulfilled' && Array.isArray(disksResult.value)
       ? disksResult.value
@@ -270,9 +287,9 @@ export const getNodeHardwareTool: CatalogTool = {
     // A restricted API token is routinely refused /disks/list while /status and
     // /network answer fine, so this is the expected partial answer, not an edge
     // case worth failing the whole tool over.
-    result.disks = rawDisks
-      ? buildDisksSection(rawDisks)
-      : { available: false, reason: failureReason(disksResult) }
+    const disksReason = mayReadDisks ? failureReason(disksResult) : NO_PERMISSION
+
+    result.disks = rawDisks ? buildDisksSection(rawDisks) : { available: false, reason: disksReason }
 
     return result
   },

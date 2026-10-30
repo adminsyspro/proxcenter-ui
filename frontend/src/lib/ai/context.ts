@@ -6,7 +6,7 @@
  * gathering + prompt code, and the copies had already drifted apart. Both
  * routes now render from here.
  */
-import { getSessionPrisma } from '@/lib/tenant'
+import { loadScopedAlerts } from '@/lib/tools/alerts'
 import { collectInventorySnapshot, type InventorySnapshot, type SnapshotGuest } from '@/lib/tools/snapshot'
 import { languageInstruction, localeToLanguageName } from '@/lib/ai/locale'
 
@@ -26,29 +26,9 @@ export type AiAlert = {
   threshold?: number | null
 }
 
-export async function collectActiveAlerts(): Promise<AiAlert[]> {
-  try {
-    const prisma = await getSessionPrisma()
-
-    return await prisma.alert.findMany({
-      where: { status: 'active' },
-      orderBy: { lastSeenAt: 'desc' },
-      take: 10,
-      select: {
-        severity: true,
-        message: true,
-        entityName: true,
-        entityType: true,
-        metric: true,
-        currentValue: true,
-        threshold: true,
-      },
-    })
-  } catch (e) {
-    console.error('[ai] Failed to get alerts:', e)
-
-    return []
-  }
+/** The prompt's alerts: scoped like the alerts page, see `loadScopedAlerts`. */
+export async function collectActiveAlerts(snapshot: InventorySnapshot): Promise<AiAlert[]> {
+  return loadScopedAlerts(snapshot, { limit: 10 })
 }
 
 /* ------------------------------------------------------------------ */
@@ -77,7 +57,7 @@ export const promptStrings = {
      * *display* of a call, and deferring a lookup to the user is called out as a
      * failure. The write ban only ever concerns changing something.
      */
-    toolsIntro: 'You have read-only tools that fetch infrastructure details absent from the snapshot below: VM hardware sizing, host hardware (network interfaces, physical disks), storage capacity, and Ceph health, OSDs and latency. CALLING A TOOL IS NORMAL AND EXPECTED: do it every time the answer is not already in the snapshot, and call several if needed. Never guess a number you have not been given.',
+    toolsIntro: 'You have read-only tools that fetch infrastructure details absent from the snapshot below: VM hardware sizing, host hardware (network interfaces, physical disks), storage capacity, Ceph health, OSDs and latency, the history of one host or VM over a period (CPU, memory, network, disk I/O), capacity and over-commitment, the alerts, which guests no backup job protects, the Proxmox tasks of the last days (failed backups, migrations, what runs now), the configuration changes (who changed what), pending updates, subscriptions and certificates, HA and quorum, DRS and Site Recovery, migration jobs, vDC quotas, CVE exposure, capacity forecasts and what-if placement. The user sees the history and the rankings drawn as charts under your answer: when asked for a graph or a curve, call the tool, never say you cannot draw. CALLING A TOOL IS NORMAL AND EXPECTED: do it every time the answer is not already in the snapshot, and call several if needed. Never guess a number you have not been given.',
     toolsNeverDefer: 'You fetch data yourself. NEVER tell the user to run a command, open a console, or check Proxmox to obtain information: if you need it, call the tool that returns it. Answering "the data provided does not say" without having called a tool is a failure.',
     toolsSilent: 'Call tools freely, but never SHOW the call: no tool name, no data field name, no JSON block, and never the words "we could run". State what a value IS, never where it came from.',
     toolsAnswerNotDump: 'ANSWER WITH THE SPECIFIC FINDINGS, never in generalities. Every statement you make must carry the measured value behind it. When a tool returns findings about what can be improved, list EVERY one that bears on the question, as a short bullet, in your own words, with its figure. It is FORBIDDEN to write that improvements exist, that a problem was found, or that something should be checked, without naming each one and giving its number. A summary that names nothing is a failed answer.',
@@ -127,7 +107,7 @@ export const promptStrings = {
   fr: {
     intro: 'Tu es l\'assistant IA de ProxCenter, une plateforme de gestion d\'infrastructure Proxmox.',
     noActions: 'IMPORTANT: Tu ne peux PAS exécuter d\'actions. Tu peux uniquement analyser et suggérer. Si l\'utilisateur demande une action, explique ce qu\'il faudrait faire mais précise qu\'il doit le faire manuellement via l\'interface ProxCenter ou Proxmox.',
-    toolsIntro: 'Tu disposes d\'outils en lecture seule qui récupèrent des détails d\'infrastructure absents de l\'instantané ci-dessous : dimensionnement matériel des VMs, matériel des hôtes (interfaces réseau, disques physiques), capacité de stockage, santé Ceph, OSD et latences. APPELER UN OUTIL EST NORMAL ET ATTENDU : fais-le chaque fois que la réponse n\'est pas déjà dans l\'instantané, et appelles-en plusieurs si besoin. N\'invente jamais un chiffre qui ne t\'a pas été fourni.',
+    toolsIntro: 'Tu disposes d\'outils en lecture seule qui récupèrent des détails d\'infrastructure absents de l\'instantané ci-dessous : dimensionnement matériel des VMs, matériel des hôtes (interfaces réseau, disques physiques), capacité de stockage, santé Ceph, OSD et latences, l\'historique d\'un hôte ou d\'une VM sur une période (CPU, mémoire, réseau, E/S disque), la capacité et le surengagement, les alertes, les VM qu\'aucun job de sauvegarde ne protège, les tâches Proxmox des derniers jours (sauvegardes en échec, migrations, ce qui tourne maintenant), les changements de configuration (qui a modifié quoi), les mises à jour en attente, souscriptions et certificats, la HA et le quorum, le DRS et Site Recovery, les jobs de migration, les quotas vDC, l\'exposition aux CVE, les prévisions de capacité et les simulations de placement. L\'utilisateur voit l\'historique et les classements dessinés en graphiques sous ta réponse : quand on te demande un graphique ou une courbe, appelle l\'outil, ne dis jamais que tu ne peux pas dessiner. APPELER UN OUTIL EST NORMAL ET ATTENDU : fais-le chaque fois que la réponse n\'est pas déjà dans l\'instantané, et appelles-en plusieurs si besoin. N\'invente jamais un chiffre qui ne t\'a pas été fourni.',
     toolsNeverDefer: 'C\'est toi qui récupères les données. Ne dis JAMAIS à l\'utilisateur de lancer une commande, d\'ouvrir une console ou d\'aller voir dans Proxmox pour obtenir une information : s\'il te la faut, appelle l\'outil qui la renvoie. Répondre « les données fournies ne le disent pas » sans avoir appelé d\'outil est un échec.',
     toolsSilent: 'Appelle les outils librement, mais n\'AFFICHE jamais l\'appel : aucun nom d\'outil, aucun nom de champ de données, aucun bloc JSON, et jamais les mots « nous pourrions exécuter ». Énonce ce qu\'une valeur EST, jamais d\'où elle vient.',
     toolsNoWrite: 'Tu peux tout lire et ne rien MODIFIER : tu ne peux pas créer, modifier, migrer, démarrer, arrêter ni supprimer. Cette limite ne porte QUE sur la modification de l\'infrastructure, jamais sur sa lecture. Si l\'utilisateur demande une modification, explique la procédure et précise qu\'il doit l\'appliquer lui-même via ProxCenter ou Proxmox.',
@@ -169,6 +149,14 @@ export type RenderPromptOptions = {
   toolsEnabled?: boolean
   /** Terser host/top-list lines, for the streaming route. */
   terse?: boolean
+}
+
+const terseHostLine = (n: InventorySnapshot['nodes'][number]) => `- ${n.name}: ${n.status} | CPU: ${n.cpuPct}% | RAM: ${n.memPct}%`
+
+function hostLine(n: InventorySnapshot['nodes'][number], s: { online: string; offline: string }) {
+  const state = n.status === 'online' ? `✅ ${s.online}` : `❌ ${s.offline}`
+
+  return `- ${n.name} (${n.cluster}): ${state} | CPU: ${n.cpuPct}% | RAM: ${n.memPct}% (${n.memUsedGb}/${n.memTotalGb} GB)`
 }
 
 /**
@@ -217,10 +205,7 @@ ${s.stateHeader}
   if (snapshot.nodes.length > 0) {
     prompt += `
 🖥️ ${s.hostsHeader}:
-${snapshot.nodes.map(n => terse
-  ? `- ${n.name}: ${n.status} | CPU: ${n.cpuPct}% | RAM: ${n.memPct}%`
-  : `- ${n.name} (${n.cluster}): ${n.status === 'online' ? `✅ ${s.online}` : `❌ ${s.offline}`} | CPU: ${n.cpuPct}% | RAM: ${n.memPct}% (${n.memUsedGb}/${n.memTotalGb} GB)`
-).join('\n')}
+${snapshot.nodes.map(n => (terse ? terseHostLine(n) : hostLine(n, s))).join('\n')}
 `
   }
 
@@ -320,7 +305,9 @@ export async function buildAiSystemPrompt(
   locale: string,
   opts: RenderPromptOptions = {}
 ): Promise<{ prompt: string; snapshot: InventorySnapshot }> {
-  const [snapshot, alerts] = await Promise.all([collectInventorySnapshot(), collectActiveAlerts()])
+  // The alerts are filtered on the snapshot, so they come after it.
+  const snapshot = await collectInventorySnapshot()
+  const alerts = await collectActiveAlerts(snapshot)
 
   return { prompt: renderAiSystemPrompt(snapshot, alerts, lang, locale, opts), snapshot }
 }

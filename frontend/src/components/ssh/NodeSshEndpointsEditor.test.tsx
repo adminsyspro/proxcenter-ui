@@ -81,6 +81,17 @@ describe('NodeSshEndpointsEditor', () => {
     expect(patchCalls()).toHaveLength(0)
   })
 
+  it('refuses an address that is not a bare host without saving', async () => {
+    render(<NodeSshEndpointsEditor connectionId='c1' />)
+
+    const address = (await screen.findAllByLabelText('settings.sshNodeEndpoints.address'))[0]
+    fireEvent.change(address, { target: { value: '10.42.0.250 evil' } })
+    fireEvent.blur(address)
+
+    expect(await screen.findByText('settings.sshNodeEndpoints.invalidAddress')).toBeInTheDocument()
+    expect(patchCalls()).toHaveLength(0)
+  })
+
   it('does not save when nothing changed', async () => {
     render(<NodeSshEndpointsEditor connectionId='c1' />)
 

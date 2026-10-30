@@ -58,3 +58,22 @@ describe("GET /api/v1/orchestrator/host-drains/[id]", () => {
     expect((await callRoute(GET, { method: "GET", params })).status).toBe(404)
   })
 })
+
+describe("GET /api/v1/orchestrator/host-drains/[id], a selection of guests (#1218)", () => {
+  const SELECTION = { id: "d-2", connection_id: "c1", node: "", guests: [{ vmid: 101, source_node: "pve1" }, { vmid: 102, source_node: "pve2" }] }
+
+  it("needs the right to view every node the selection moves guests from", async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => SELECTION })
+    expect((await callRoute(GET, { method: "GET", params })).status).toBe(200)
+    expect(checkPermissionMock).toHaveBeenCalledWith("node.view", "node", "c1:pve1")
+    expect(checkPermissionMock).toHaveBeenCalledWith("node.view", "node", "c1:pve2")
+
+    checkPermissionMock.mockImplementation(async (_p: string, _t?: string, id?: string) => (id === "c1:pve2" ? new Response(null, { status: 403 }) : null))
+    expect((await callRoute(GET, { method: "GET", params })).status).toBe(403)
+  })
+
+  it("answers 404 for a record with neither node nor guests", async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ ...SELECTION, guests: [] }) })
+    expect((await callRoute(GET, { method: "GET", params })).status).toBe(404)
+  })
+})

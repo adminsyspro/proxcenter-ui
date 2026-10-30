@@ -6,8 +6,9 @@ import { nodeScope } from '@/__tests__/setup/rbacScope'
 // #1225: the archive reads every node's task history with the same perimeter
 // as the live Events feed (vDC nodes and pools, RBAC infra scope).
 
-const { getInfraMock, globalFindMany, sessionFindMany, pveFetchMock, rbacScopeMock, vdcVmidsMock, findInitiatorsMock, deniedPermissions } =
+const { getInfraMock, globalFindMany, sessionFindMany, pveFetchMock, rbacScopeMock, vdcVmidsMock, findInitiatorsMock, deniedPermissions, storedMock } =
   vi.hoisted(() => ({
+    storedMock: vi.fn(),
     getInfraMock: vi.fn(),
     globalFindMany: vi.fn(),
     sessionFindMany: vi.fn(),
@@ -39,6 +40,10 @@ vi.mock('@/lib/rbac', () => ({
 vi.mock('@/lib/auth/principal', () => ({ getPrincipal: async () => ({ ok: true, principal: { kind: 'session', userId: 'u-self' } }) }))
 vi.mock('@/lib/alerts/vdcVmids', () => ({ getVdcVmidsByConnection: (...a: any[]) => vdcVmidsMock(...a) }))
 vi.mock('@/lib/audit/taskInitiators', () => ({ findTaskInitiators: (...a: any[]) => findInitiatorsMock(...a) }))
+vi.mock('@/lib/tasks/history', async orig => ({
+  ...(await orig<typeof import('@/lib/tasks/history')>()),
+  fetchStoredTasks: (...a: any[]) => storedMock(...a),
+}))
 
 const NOW = Math.floor(Date.now() / 1000)
 
@@ -69,6 +74,7 @@ beforeEach(() => {
   rbacScopeMock.mockResolvedValue(null)
   vdcVmidsMock.mockResolvedValue(null)
   findInitiatorsMock.mockResolvedValue(new Map())
+  storedMock.mockResolvedValue({ tasks: [], truncated: false })
   pveFetchMock.mockImplementation(async (_c: any, path: string) => {
     if (path === '/nodes') return nodes
     if (path === '/cluster/resources?type=vm') {
@@ -238,5 +244,84 @@ describe('GET /api/v1/events/archive', () => {
 
     expect(status).toBe(500)
     expect(body.error).toBe('boom')
+  })
+})
+
+function storedRow(e: any, connectionId = 'p1') {
+  return {
+    upid: e.upid,
+    connectionId,
+    startTime: new Date(e.starttime * 1000).toISOString(),
+    endTime: e.endtime ? new Date(e.endtime * 1000).toISOString() : null,
+    node: e.node,
+    type: e.type,
+    guestId: e.id,
+    user: e.user,
+    status: e.status ?? '',
+  }
+}
+
+describe('GET /api/v1/events/archive with ProxCenter\'s copy', () => {
+  const dead = { upid: upid('n3', 7, 'qmstart', '100'), node: 'n3', type: 'qmstart', id: '100', user: 'root@pam', starttime: NOW - 50, endtime: NOW - 45, status: 'OK' }
+
+  it('asks the copy for the readable connections and the window', async () => {
+    const { body } = await get({ node: 'n1', vmid: '100' })
+
+    expect(storedMock).toHaveBeenCalledWith(expect.objectContaining({ connectionIds: ['p1'], nodes: ['n1'], vmid: '100' }))
+    expect(body.meta.history).toBe(true)
+  })
+
+  it('shows the tasks of a node that is down from the copy, marked as such', async () => {
+    nodes = [{ node: 'n1', status: 'online' }, { node: 'n2', status: 'online' }, { node: 'n3', status: 'offline' }]
+    storedMock.mockResolvedValue({ tasks: [storedRow(dead)], truncated: false })
+
+    const { body } = await get()
+    const row = body.data.find((t: any) => t.node === 'n3')
+
+    expect(row).toMatchObject({ id: dead.upid, fromHistory: true, guestName: 'web-01', family: 'power' })
+    expect(body.data.filter((t: any) => t.fromHistory)).toHaveLength(1)
+    expect(body.meta.unavailable).toEqual([{ connectionName: 'PVE 1', node: 'n3' }])
+  })
+
+  it('prefers what the node serves over the copy for the same task', async () => {
+    const live = TASKS.n1[1]
+
+    storedMock.mockResolvedValue({ tasks: [storedRow({ ...live, status: '', endtime: undefined })], truncated: false })
+
+    const { body } = await get()
+    const row = body.data.find((t: any) => t.id === live.upid)
+
+    expect(row.status).toBe('job errors')
+    expect(row.fromHistory).toBeUndefined()
+    expect(body.meta.total).toBe(4)
+  })
+
+  it('keeps the copy when the whole cluster cannot be reached', async () => {
+    pveFetchMock.mockRejectedValue(new Error('down'))
+    storedMock.mockResolvedValue({ tasks: [storedRow(dead)], truncated: true })
+
+    const { body } = await get()
+
+    expect(body.data.map((t: any) => t.id)).toEqual([dead.upid])
+    expect(body.meta.unavailable).toEqual([{ connectionName: 'PVE 1', node: '' }])
+    expect(body.meta.truncated).toBe(true)
+  })
+
+  it('applies the RBAC scope to the copy too', async () => {
+    rbacScopeMock.mockResolvedValue(nodeScope('p1', 'n1'))
+    storedMock.mockResolvedValue({ tasks: [storedRow(dead)], truncated: false })
+
+    const { body } = await get()
+
+    expect(body.data.some((t: any) => t.node === 'n3')).toBe(false)
+  })
+
+  it('reads the nodes alone when the copy cannot be read', async () => {
+    storedMock.mockResolvedValue(null)
+
+    const { body } = await get()
+
+    expect(body.meta.history).toBe(false)
+    expect(body.data).toHaveLength(4)
   })
 })

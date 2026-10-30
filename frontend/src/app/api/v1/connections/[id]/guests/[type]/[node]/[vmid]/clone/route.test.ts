@@ -37,12 +37,13 @@ const waitForTaskMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   buildVmResourceId: () => 'res',
-  PERMISSIONS: { VM_CLONE: 'vm.clone' },
+  PERMISSIONS: { VM_CLONE: 'vm.clone', NODE_MANAGE: 'node.manage' },
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 vi.mock('@/lib/cache/inventoryCache', () => ({ invalidateInventoryCache: vi.fn() }))
-vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1' }))
+const requireProviderTenantMock = vi.fn<() => Promise<Response | null>>()
+vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1', requireProviderTenant: () => requireProviderTenantMock() }))
 vi.mock('@/lib/vdc/quota', () => ({
   resolveVdcForTenant: resolveVdcForTenantMock,
   checkVdcQuota: checkVdcQuotaMock,
@@ -96,6 +97,7 @@ beforeEach(() => {
   syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
   waitForTaskMock.mockReset().mockResolvedValue(undefined)
   checkVmidAgainstTenantRangeMock.mockReset().mockResolvedValue({ ok: true })
+  requireProviderTenantMock.mockReset().mockResolvedValue(null)
   getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
   // Default: config reads return an empty config, clone POST returns a UPID.
   pveFetchMock.mockReset().mockImplementation(async (_conn, _path, opts?: any) => {
@@ -292,5 +294,95 @@ describe('POST clone — cluster outside the license (roadmap#58)', () => {
     expect(res.status).toBe(403)
     expect(await res.json()).toMatchObject({ code: 'CONNECTION_LICENSE_EXCLUDED' })
     expect(waitForTaskMock).not.toHaveBeenCalled()
+  })
+})
+
+/** Run the captured after() callbacks one after the other. */
+function runAfterCbs(): Promise<void> {
+  return h.afterCbs.reduce<Promise<void>>((prev, cb) => prev.then(cb), Promise.resolve())
+}
+
+describe('POST clone — high availability on the clone (#181)', () => {
+  const haCalls = () => pveFetchMock.mock.calls.filter(([, path, opts]: any) => path === '/cluster/ha/resources' && opts?.method === 'POST')
+  /** Source on local `Dir-Images`, `ceph` shared. */
+  function stubStorages() {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string, opts?: any) => {
+      if (path === '/storage/ceph') return { type: 'rbd' }
+      if (path === '/storage/Dir-Images') return { type: 'dir' }
+      if (path === '/nodes/pve3/qemu/100/config') return { sata0: 'Dir-Images:100/base-100-disk-1.qcow2,size=60G', efidisk0: 'Dir-Images:100/base-100-disk-0.qcow2' }
+      if (opts?.method === 'POST') return path.endsWith('/clone') ? 'UPID:clone:1' : null
+      return {}
+    })
+  }
+
+  it('never forwards `ha` to the PVE clone call, and registers the clone once the task is done', async () => {
+    stubStorages()
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 150, full: true, storage: 'ceph', target: 'pve2', ha: true } })
+    expect(res.status).toBe(200)
+    expect(cloneCallBody().has('ha')).toBe(false)
+    expect(haCalls()).toHaveLength(0)
+
+    await runAfterCbs()
+
+    expect(waitForTaskMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve2', 'UPID:clone:1')
+    expect(haCalls()).toHaveLength(1)
+    expect(Object.fromEntries(new URLSearchParams(haCalls()[0][2].body))).toEqual({ sid: 'vm:150', state: 'started' })
+  })
+
+  it('refuses HA without node.manage on the connection', async () => {
+    checkPermissionMock.mockImplementation(async (perm: string) => (perm === 'node.manage' ? new Response('no', { status: 403 }) : null))
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 150, storage: 'ceph', ha: true } })
+    expect(res.status).toBe(403)
+    expect(cloneCallBody().get('newid')).toBeNull()
+  })
+
+  it('refuses HA outside the provider tenant', async () => {
+    requireProviderTenantMock.mockResolvedValue(new Response('provider only', { status: 403 }))
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 150, storage: 'ceph', ha: true } })
+    expect(res.status).toBe(403)
+  })
+
+  it('refuses HA on a local target storage before cloning', async () => {
+    stubStorages()
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 150, storage: 'Dir-Images', ha: true } })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/shared storage/)
+    expect(cloneCallBody().get('newid')).toBeNull()
+  })
+
+  it('without a target storage, checks the storages of the source disks (a linked clone keeps them)', async () => {
+    stubStorages()
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 150, full: false, ha: true } })
+    expect(res.status).toBe(400)
+    expect(pveFetchMock).toHaveBeenCalledWith({ id: 'conn-1' }, '/nodes/pve3/qemu/100/config')
+  })
+
+  it('a failed registration is logged, the clone stays', async () => {
+    stubStorages()
+    const base = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (conn: any, path: string, opts?: any) => {
+      if (path === '/cluster/ha/resources') throw new Error('already defined')
+      return base(conn, path, opts)
+    })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 150, storage: 'ceph', ha: true } })
+    expect(res.status).toBe(200)
+    await runAfterCbs()
+    expect(spy.mock.calls.some(c => /\[clone-ha\].*already defined/.test(String(c[0])))).toBe(true)
+    spy.mockRestore()
+  })
+
+  it('without ha, nothing is checked or registered', async () => {
+    const POST = await loadPost()
+    await callRoute(POST, { params: baseParams, body: { newid: 150, storage: 'Dir-Images' } })
+    await runAfterCbs()
+    expect(haCalls()).toHaveLength(0)
+    expect(checkPermissionMock).not.toHaveBeenCalledWith('node.manage', 'connection', 'conn-1')
   })
 })

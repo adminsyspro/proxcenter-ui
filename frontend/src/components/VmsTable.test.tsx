@@ -664,3 +664,42 @@ describe('VmsTable - column menu overrides the responsive rule (#911)', () => {
     expect(container.querySelector('.MuiDataGrid-columnHeader[data-field="tags"]')).toBeNull()
   })
 })
+
+// ------------------------------------------------------------------ //
+// Selection (#1218)
+// ------------------------------------------------------------------ //
+
+describe('VmsTable - selection for Migrate selection (#1218)', () => {
+  const rowCheckbox = (name: string) => screen.getByText(name).closest('[role="row"]')!.querySelector('input[type="checkbox"]') as HTMLInputElement
+
+  it('shows no checkbox unless the parent follows the selection', () => {
+    renderWithProviders(<VmsTable vms={vmRowsFixture} />)
+    expect(document.querySelectorAll('[role="row"] input[type="checkbox"]')).toHaveLength(0)
+  })
+
+  it('reports this table\'s rows and keeps the ids ticked in other tables', () => {
+    const onSelectionChange = vi.fn()
+    renderWithProviders(
+      <VmsTable
+        vms={vmRowsFixture}
+        selectedIds={new Set(['conn1:999'])}
+        onSelectionChange={onSelectionChange}
+        isRowSelectable={vm => !vm.template}
+      />,
+    )
+
+    fireEvent.click(rowCheckbox('web-01'))
+
+    expect(onSelectionChange).toHaveBeenCalledTimes(1)
+    expect([...onSelectionChange.mock.calls[0][0]].sort((a, b) => a.localeCompare(b))).toEqual(['conn1:100', 'conn1:999'])
+    expect(rowCheckbox('ubuntu-template').disabled).toBe(true)
+  })
+
+  it('shows the parent\'s selection ticked', () => {
+    renderWithProviders(
+      <VmsTable vms={vmRowsFixture} selectedIds={new Set(['conn1:101'])} onSelectionChange={vi.fn()} />,
+    )
+    expect(rowCheckbox('db-lxc').checked).toBe(true)
+    expect(rowCheckbox('web-01').checked).toBe(false)
+  })
+})

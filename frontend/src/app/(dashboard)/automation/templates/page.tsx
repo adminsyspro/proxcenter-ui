@@ -118,6 +118,7 @@ export default function TemplatesPage() {
         vmName: config?.vmName,
         // A provider deployment into a tenant vDC retries into that vDC.
         targetVdcId: config?.targetVdcId,
+        ha: config?.ha === true,
       },
     })
     setWizardOpen(true)

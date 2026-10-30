@@ -70,6 +70,43 @@ interface NetworkInterface {
   comments?: string
 }
 
+/** `10.10.10.9/24` -> `10.10.10.0/24`: PVE stores the migration and replication network as a subnet. */
+export function toSubnetCidr(cidr: string): string {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/.exec(cidr.trim())
+
+  if (!m) return cidr
+
+  const prefix = Number(m[5])
+
+  if (prefix > 32 || m.slice(1, 5).some(o => Number(o) > 255)) return cidr
+
+  const ip = m.slice(1, 5).reduce((acc, o) => (acc * 256) + Number(o), 0)
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
+  const net = (ip & mask) >>> 0
+
+  return `${[24, 16, 8, 0].map(s => (net >>> s) & 255).join('.')}/${prefix}`
+}
+
+/**
+ * Options of a migration/replication network select: one per interface
+ * subnet, plus the configured value when no interface of the first node
+ * carries it, so the select never renders blank over a saved setting.
+ */
+export function networkOptions(interfaces: NetworkInterface[], current: string): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = []
+
+  for (const n of interfaces) {
+    const value = n.cidr ? toSubnetCidr(n.cidr) : n.iface
+
+    if (options.some(o => o.value === value)) continue
+    options.push({ value, label: `${n.iface}${n.cidr ? ` (${value})` : ''}${n.comments ? ` - ${n.comments}` : ''}` })
+  }
+
+  if (current && !options.some(o => o.value === current)) options.push({ value: current, label: current })
+
+  return options
+}
+
 interface Props {
   consoleType: string
   keyboard: string
@@ -143,11 +180,7 @@ export default function GeneralSection({
             <InputLabel>{t('dcSettingsMigrationNetwork')}</InputLabel>
             <Select value={migrationNetwork} label={t('dcSettingsMigrationNetwork')} onChange={e => onChange('migrationNetwork', e.target.value)}>
               <MenuItem value="">{t('dcSettingsDefault')}</MenuItem>
-              {networkInterfaces.map(n => (
-                <MenuItem key={n.iface} value={n.cidr || n.iface}>
-                  {n.iface}{n.cidr ? ` (${n.cidr})` : ''}{n.comments ? ` - ${n.comments}` : ''}
-                </MenuItem>
-              ))}
+              {networkOptions(networkInterfaces, migrationNetwork).map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
             </Select>
           </FormControl>
 
@@ -169,11 +202,7 @@ export default function GeneralSection({
             <InputLabel>{t('dcSettingsReplicationNetwork')}</InputLabel>
             <Select value={replicationNetwork} label={t('dcSettingsReplicationNetwork')} onChange={e => onChange('replicationNetwork', e.target.value)}>
               <MenuItem value="">{t('dcSettingsDefault')}</MenuItem>
-              {networkInterfaces.map(n => (
-                <MenuItem key={n.iface} value={n.cidr || n.iface}>
-                  {n.iface}{n.cidr ? ` (${n.cidr})` : ''}{n.comments ? ` - ${n.comments}` : ''}
-                </MenuItem>
-              ))}
+              {networkOptions(networkInterfaces, replicationNetwork).map(o => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
             </Select>
           </FormControl>
         </Box>

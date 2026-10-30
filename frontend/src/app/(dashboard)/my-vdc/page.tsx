@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, Typography, Alert, Stack, Card, CardActionArea, Chip } from '@mui/material'
+import { Box, Typography, Alert } from '@mui/material'
 
 import MyVdcOverview from '@/components/mydc/MyVdcOverview'
-import QuotaDonut from '@/components/mydc/QuotaDonut'
+import VdcSummaryCard from '@/components/mydc/VdcSummaryCard'
 import { readVdcContextCookie, setVdcContextCookie } from '@/lib/vdc/contextCookie'
 
 export default function MyVdcPage() {
@@ -84,8 +84,6 @@ export default function MyVdcPage() {
   const activeVdcs = vdcs.filter((v) => v.enabled !== false)
   const selectedVdc = vdcs.find((v) => v.id === selectedVdcId)
   const contextId = readVdcContextCookie()
-  const formatMbAsGb = (mb: number) => `${(mb / 1024).toFixed(1)} GB`
-  const unlimitedLabel = t('vdc.quotaUnlimited')
 
   const openVdc = (v: any) => {
     // Card click = choose this vDC as the global context, exactly like the
@@ -96,47 +94,20 @@ export default function MyVdcPage() {
     window.location.reload()
   }
 
-  // Multi-vDC landing: one card per active vDC, Cloud Director style.
+  // Multi-vDC landing: one full-width row per active vDC.
   if (activeVdcs.length > 1 && !selectedVdc) {
+    const totalVms = activeVdcs.reduce((n, v) => n + (v.usage?.usedVms || 0), 0)
+
     return (
       <Box sx={{ px: 3, pb: 3, pt: 0 }}>
-        <Typography variant="h5" gutterBottom>{t('vdc.title')}</Typography>
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-            gap: 2,
-          }}
-        >
-          {activeVdcs.map((v) => {
-            const usage = v.usage || {}
-            const quota = v.quota || {}
-            const isContext = v.id === contextId
-
-            return (
-              <Card key={v.id} variant="outlined" sx={{ position: 'relative' }}>
-                <CardActionArea onClick={() => openVdc(v)} sx={{ p: 2 }}>
-                  <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
-                    <Box component="i" className="ri-cloud-line" sx={{ fontSize: 22, color: 'primary.main' }} />
-                    <Typography variant="subtitle1" fontWeight={600} noWrap sx={{ flexGrow: 1 }}>
-                      {v.name}
-                    </Typography>
-                    {isContext && (
-                      <Chip size="small" color="primary" variant="outlined" label={t('myVdc.currentContext')} sx={{ height: 20, fontSize: '0.7rem' }} />
-                    )}
-                  </Stack>
-                  <Stack direction="row" spacing={2} justifyContent="center" mb={1.5}>
-                    <QuotaDonut icon="ri-cpu-line" size={64} used={usage.usedVcpus || 0} max={quota.maxVcpus} unlimitedLabel={unlimitedLabel} />
-                    <QuotaDonut icon="ri-ram-2-line" size={64} used={usage.usedRamMb || 0} max={quota.maxRamMb ?? null} formatValue={formatMbAsGb} unlimitedLabel={unlimitedLabel} />
-                    <QuotaDonut icon="ri-hard-drive-2-line" size={64} used={usage.usedStorageMb || 0} max={quota.maxStorageMb ?? null} formatValue={formatMbAsGb} unlimitedLabel={unlimitedLabel} />
-                  </Stack>
-                  <Typography variant="body2" color="text.secondary" textAlign="center">
-                    {t('myVdc.vmCount', { count: usage.usedVms || 0 })}
-                  </Typography>
-                </CardActionArea>
-              </Card>
-            )
-          })}
+        <Typography variant="h5">{t('vdc.title')}</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2.5 }}>
+          {t('myVdc.grid.summary', { vdcs: activeVdcs.length, vms: totalVms })}
+        </Typography>
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          {activeVdcs.map((v) => (
+            <VdcSummaryCard key={v.id} vdc={v} isContext={v.id === contextId} onOpen={() => openVdc(v)} />
+          ))}
         </Box>
       </Box>
     )

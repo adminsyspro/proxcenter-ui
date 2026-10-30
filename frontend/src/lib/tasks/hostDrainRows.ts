@@ -51,7 +51,12 @@ function guestLabel(g: any): string {
 function guestRoute(d: any, g: any): string {
   const target = g?.target_node || (g?.mode === 'ha' ? 'HA' : '?')
 
-  return `${d.node} → ${target}`
+  return `${g?.source_node || d.node} → ${target}`
+}
+
+/** A selection of guests (#1218) has no node: it is named by its size. */
+function drainName(d: any, total: number): string {
+  return d.node ? `Host drain - ${d.node}` : `Migrate selection - ${total} guest(s)`
 }
 
 export function hostDrainJobRows(drains: any[], resolve: (idOrName?: string | null) => string): any[] {
@@ -71,12 +76,13 @@ export function hostDrainJobRows(drains: any[], resolve: (idOrName?: string | nu
     if (status === 'success') progress = 100
     else if (total > 0) progress = Math.round((settled / total) * 100)
 
-    let detail = `${d.node}: ${d.completed_guests ?? 0}/${total} guest(s) moved`
-    if (status !== 'running' && remaining.length > 0) detail += `, ${remaining.length} still on ${d.node}`
+    const scope = d.node || 'Selection'
+    let detail = `${scope}: ${d.completed_guests ?? 0}/${total} guest(s) moved`
+    if (status !== 'running' && remaining.length > 0) detail += `, ${remaining.length} still on ${d.node || 'their node'}`
 
     rows.push({
       id: d.id,
-      name: `Host drain - ${d.node}`,
+      name: drainName(d, total),
       type: HOST_DRAIN_JOB_TYPE,
       status,
       progress,
@@ -105,7 +111,7 @@ export function hostDrainJobRows(drains: any[], resolve: (idOrName?: string | nu
 
       rows.push({
         id: `${d.id}${HOST_DRAIN_GUEST_SEPARATOR}${g.vmid}`,
-        name: `Host drain - ${guestLabel(g)}`,
+        name: `${d.node ? 'Host drain' : 'Migrate selection'} - ${guestLabel(g)}`,
         type: HOST_DRAIN_JOB_TYPE,
         status: gStatus,
         progress: gStatus === 'success' ? 100 : 0,
@@ -120,7 +126,7 @@ export function hostDrainJobRows(drains: any[], resolve: (idOrName?: string | nu
           node: d.node,
           vmid: g.vmid,
           vmName: g.name,
-          sourceNode: d.node,
+          sourceNode: g.source_node || d.node,
           targetNode: g.target_node,
           mode: g.mode,
           taskId: g.task_id,

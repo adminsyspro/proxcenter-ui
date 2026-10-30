@@ -32,6 +32,8 @@ export interface NutanixVm {
   hostName?: string
   description?: string
   osType?: string
+  /** nic_list in order, raw MAC (`50:6b:8d:...`, empty when Prism has none). */
+  nics: { macAddress: string }[]
 }
 
 export interface NutanixDisk {
@@ -363,6 +365,9 @@ export class NutanixClient {
       diskSizeBytes += d.disk_size_bytes || (d.disk_size_mib ? d.disk_size_mib * 1048576 : 0)
     }
 
+    const nicList: any[] = resources.nic_list || specResources.nic_list || []
+    const nics = nicList.map((n: any) => ({ macAddress: typeof n?.mac_address === "string" ? n.mac_address : "" }))
+
     // Cluster reference
     const clusterRef = resources.cluster_reference || specResources.cluster_reference || {}
     const clusterName = clusterRef.name || undefined
@@ -389,6 +394,7 @@ export class NutanixClient {
       hostName,
       description: status.description || spec.description || undefined,
       osType,
+      nics,
     }
   }
 

@@ -29,7 +29,8 @@ import {
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
 import { nodes, pools } from '@/__tests__/fixtures/pveProvisioning'
-import { CloneVmDialog } from './CloneVmDialog'
+import type { ComponentProps } from 'react'
+import { CloneVmDialog, type CloneVmParams } from './CloneVmDialog'
 
 // ------------------------------------------------------------------ //
 // Context mocks
@@ -37,6 +38,12 @@ import { CloneVmDialog } from './CloneVmDialog'
 
 const { useTenantMock } = vi.hoisted(() => ({ useTenantMock: vi.fn() }))
 vi.mock('@/contexts/TenantContext', () => ({ useTenant: () => useTenantMock() }))
+// node.manage on the connection gates the HA option (#181); off by default,
+// as the RBAC context answers before the user's grants are loaded.
+const rbac = vi.hoisted(() => ({ nodeManage: false }))
+vi.mock('@/contexts/RBACContext', () => ({
+  useRBAC: () => ({ hasPermission: () => true, hasPermissionOn: (perm: string) => perm === 'node.manage' && rbac.nodeManage }),
+}))
 
 // ------------------------------------------------------------------ //
 // Constants
@@ -110,23 +117,11 @@ function seedAllHandlers() {
 // Default props factory
 // ------------------------------------------------------------------ //
 
-function makeProps(overrides: Partial<{
-  open: boolean
-  onClose: ReturnType<typeof vi.fn>
-  onClone: ReturnType<typeof vi.fn>
-  connId: string
-  currentNode: string
-  vmName: string
-  vmid: string
-  vmType: string
-  nextVmid: number
-  pools: string[]
-  existingVmids: number[]
-}> = {}) {
+function makeProps(overrides: Partial<ComponentProps<typeof CloneVmDialog>> = {}): ComponentProps<typeof CloneVmDialog> {
   return {
     open: true,
-    onClose: vi.fn(),
-    onClone: vi.fn().mockResolvedValue(undefined),
+    onClose: vi.fn<() => void>(),
+    onClone: vi.fn<(params: CloneVmParams) => Promise<void>>().mockResolvedValue(undefined),
     connId: CONN_ID,
     currentNode: NODE_NAME,
     vmName: VM_NAME,
@@ -173,6 +168,7 @@ function setVmid(value: string) {
 
 beforeEach(() => {
   useTenantMock.mockReturnValue({ currentTenant: null, loading: false, isFullClusterView: true })
+  rbac.nodeManage = false
 })
 
 afterEach(() => {
@@ -631,5 +627,80 @@ describe('CloneVmDialog - MSP tenant VMID range', () => {
       expect(input.value).toBe('')
     })
     expect(screen.getByRole('button', { name: /^clone$/i })).toBeDisabled()
+  })
+})
+
+// ------------------------------------------------------------------ //
+// High availability on the clone (#181)
+// ------------------------------------------------------------------ //
+
+describe('CloneVmDialog - high availability (#181)', () => {
+  beforeEach(() => {
+    seedAllHandlers()
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/storages`, () =>
+        HttpResponse.json({ data: [...cloneStorage, { storage: 'ceph', content: 'images', type: 'rbd', shared: 1, avail: 1, total: 2 }] }),
+      ),
+    )
+  })
+  const haBox = () => screen.getByRole('checkbox', { name: /Enable high availability/ })
+
+  it('is hidden without node.manage on the connection', async () => {
+    renderWithProviders(<CloneVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+    expect(screen.queryByRole('checkbox', { name: /Enable high availability/ })).toBeNull()
+  })
+
+  it('is hidden for a tenant even with node.manage', async () => {
+    rbac.nodeManage = true
+    useTenantMock.mockReturnValue({ currentTenant: { id: 'acme' }, loading: false, isFullClusterView: false })
+    renderWithProviders(<CloneVmDialog {...makeProps()} />)
+    await screen.findByRole('button', { name: /^clone$/i })
+    expect(screen.queryByRole('checkbox', { name: /Enable high availability/ })).toBeNull()
+  })
+
+  it('with the source storage, sends ha: true to onClone', async () => {
+    rbac.nodeManage = true
+    const onClone = vi.fn().mockResolvedValue(undefined)
+    renderWithProviders(<CloneVmDialog {...makeProps({ onClone })} />)
+    await waitForDataLoad()
+    expect(screen.getByText('Added to the HA manager and started once the clone is done.')).toBeInTheDocument()
+    fireEvent.click(haBox())
+    setVmid('150')
+    await waitFor(() => expect(screen.getByRole('button', { name: /^clone$/i })).not.toBeDisabled())
+    fireEvent.click(screen.getByRole('button', { name: /^clone$/i }))
+    await waitFor(() => expect(onClone).toHaveBeenCalledTimes(1))
+    expect(onClone.mock.calls[0][0].ha).toBe(true)
+  })
+
+  it('a local target storage disables it and drops ha, a shared one brings it back', async () => {
+    rbac.nodeManage = true
+    const onClone = vi.fn().mockResolvedValue(undefined)
+    renderWithProviders(<CloneVmDialog {...makeProps({ onClone })} />)
+    await waitForDataLoad()
+    fireEvent.click(haBox())
+
+    fireEvent.mouseDown(screen.getAllByRole('combobox')[1])
+    fireEvent.click(await screen.findByRole('option', { name: /^local-zfs/ }))
+    await waitFor(() => expect(haBox()).toBeDisabled())
+    expect(haBox()).not.toBeChecked()
+    expect(screen.getByText('Needs shared storage: the target storage is local to its node.')).toBeInTheDocument()
+
+    setVmid('150')
+    await waitFor(() => expect(screen.getByRole('button', { name: /^clone$/i })).not.toBeDisabled())
+    fireEvent.click(screen.getByRole('button', { name: /^clone$/i }))
+    await waitFor(() => expect(onClone).toHaveBeenCalledTimes(1))
+    expect(onClone.mock.calls[0][0].ha).toBeUndefined()
+  })
+
+  it('a shared target storage keeps the choice', async () => {
+    rbac.nodeManage = true
+    renderWithProviders(<CloneVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+    fireEvent.click(haBox())
+    fireEvent.mouseDown(screen.getAllByRole('combobox')[1])
+    fireEvent.click(await screen.findByRole('option', { name: /^ceph/ }))
+    await waitFor(() => expect(haBox()).toBeEnabled())
+    expect(haBox()).toBeChecked()
   })
 })

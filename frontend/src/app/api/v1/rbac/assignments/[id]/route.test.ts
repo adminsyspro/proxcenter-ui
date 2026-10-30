@@ -136,5 +136,13 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
     expect(res.status).toBe(200)
     expect(userRoleUpdateManyMock).toHaveBeenCalledTimes(2)
   })
+  it('refuses moving an assignment to a custom role of another tenant (roadmap#97)', async () => {
+    isSuperAdminMock.mockResolvedValue(true)
+    userRoleFindFirstMock.mockResolvedValue({ ...existingAssignment, tenantId: 't1' })
+    roleFindUniqueMock.mockResolvedValue({ id: 'role_custom', name: 'Custom', tenantId: 't-other', permissions: [] })
+    const res = await callRoute(PATCH as any, { method: 'PATCH', params: { id: 'assign_1' }, body: { role_id: 'role_custom' } })
+    expect(res.status).toBe(404)
+    expect(userRoleUpdateManyMock).not.toHaveBeenCalled()
+  })
 
 })

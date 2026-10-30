@@ -275,6 +275,7 @@ describe("GET /api/v1/orchestrator/jobs — tenant scoping", () => {
     expect(mig.metadata.cancellable).toBe(true)
     expect(body.data.map((j: any) => j.id)).toContain("mig-c2")
     expect(migrationFindManyMock.mock.calls[0][0].where).toEqual({})
+    expect(migrationFindManyMock.mock.calls[0][0].omit).toEqual({ logs: true })
   })
 
   it("iaas: a migration landing outside the vDC perimeter is not listed", async () => {

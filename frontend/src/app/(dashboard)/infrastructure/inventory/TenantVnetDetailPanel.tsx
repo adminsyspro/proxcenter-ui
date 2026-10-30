@@ -62,13 +62,6 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [ipam, setIpam] = useState<IpamSummary | null>(null)
   const [ipamLoading, setIpamLoading] = useState(false)
-  // Client-side vm-info index: vmid → {name, node, status, type}, fetched
-  // from /api/v1/connections/{connId}/guests once we know the connection.
-  // This is the SAME endpoint the inventory tree consumes (and it's
-  // already behind the right RBAC for tenants), so the sparkline + status
-  // pastille get fresh data even if the server-side IPAM enrichment in
-  // /vdcs/.../ipam misses for any reason.
-  const [vmIndex, setVmIndex] = useState<Map<number, { name: string; node: string; status: string; type: string }>>(new Map())
   // Search + pagination for the IPAM allocations table.
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
@@ -117,36 +110,6 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
     return () => { alive = false }
   }, [selectionId, reloadTick])
 
-  // Client-side vm enrichment. Done independently of the IPAM API's
-  // server-side enrichment so the panel doesn't go blank when /cluster/
-  // resources from the route fails for any reason. Same endpoint the
-  // inventory tree consumes — already proven to work behind tenant RBAC.
-  useEffect(() => {
-    if (!ipam?.connectionId) return
-    const connId = ipam.connectionId
-    let alive = true
-    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests`)
-      .then(async (r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (!alive) return
-        const list: any[] = Array.isArray(j?.data) ? j.data : []
-        const idx = new Map<number, { name: string; node: string; status: string; type: string }>()
-        for (const g of list) {
-          const vmidNum = Number(g?.vmid)
-          if (!Number.isFinite(vmidNum)) continue
-          idx.set(vmidNum, {
-            name: String(g.name ?? `vm-${vmidNum}`),
-            node: String(g.node ?? ''),
-            status: String(g.status ?? 'unknown'),
-            type: String(g.type ?? 'qemu'),
-          })
-        }
-        setVmIndex(idx)
-      })
-      .catch(() => { /* tolerate */ })
-    return () => { alive = false }
-  }, [ipam?.connectionId])
-
   // Filter + paginate IPAM allocations. Search matches IP, MAC, vmid,
   // hostname or live VM name. These hooks MUST run on every render —
   // putting them after the loading/error early-returns would violate
@@ -157,7 +120,7 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
     const q = search.trim().toLowerCase()
     if (!q) return ipam.allocations
     return ipam.allocations.filter((a) => {
-      const liveName = (a.vmid != null ? vmIndex.get(a.vmid)?.name : null) ?? a.vm?.name ?? a.hostname ?? ''
+      const liveName = a.vm?.name ?? a.hostname ?? ''
       return (
         a.ip.toLowerCase().includes(q) ||
         a.mac.toLowerCase().includes(q) ||
@@ -165,7 +128,7 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
         String(liveName).toLowerCase().includes(q)
       )
     })
-  }, [ipam, search, vmIndex])
+  }, [ipam, search])
 
   const pagedAllocations = useMemo(
     () => filteredAllocations.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
@@ -335,15 +298,9 @@ export default function TenantVnetDetailPanel({ selectionId }: Props) {
                       </TableHead>
                       <TableBody>
                         {pagedAllocations.map((a) => {
-                          // Source of truth for VM info, in priority order:
-                          //  1. client-side vmIndex (live /guests fetch)
-                          //  2. server-side ipam.allocations[].vm (may be
-                          //     null if the route's /cluster/resources
-                          //     enrichment failed)
-                          // Whichever resolves first wins, so the sparkline
-                          // and pastille always render when at least one
-                          // path succeeded.
-                          const vm = (a.vmid != null ? vmIndex.get(a.vmid) : null) ?? a.vm
+                          // The IPAM route enriches each allocation from
+                          // /cluster/resources; null when that read failed.
+                          const vm = a.vm
                           const orphaned = a.vmid != null && !vm
                           return (
                             <TableRow key={a.id} sx={{ '&:last-child td': { border: 0 } }}>

@@ -7,7 +7,7 @@ const h = vi.hoisted(() => ({
   infra: { kind: "provider" } as any,
   prisma: {
     connection: { findUnique: vi.fn() },
-    migrationJob: { create: vi.fn(async () => ({ id: "job-1" })), findFirst: vi.fn(async () => null) },
+    migrationJob: { create: vi.fn(async () => ({ id: "job-1" })), findFirst: vi.fn(async () => null), findMany: vi.fn(async () => [] as any[]) },
   },
 }))
 
@@ -38,7 +38,7 @@ vi.mock("@/lib/crypto/secret", () => ({ decryptSecret: vi.fn(() => "root:pass") 
 vi.mock("@/lib/migration/orphan-sweep", () => ({ resolveInstanceId: vi.fn(() => "inst-1") }))
 vi.mock("@/lib/tasks/sharedTask", () => ({ TERMINAL_STATUSES: ["completed", "failed", "cancelled"] }))
 
-import { POST } from "./route"
+import { GET, POST } from "./route"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 import { runWarmMigration } from "@/lib/migration/warm/warm-pipeline"
 import { runXcpngWarmMigration } from "@/lib/migration/warm/xcpng-warm-pipeline"
@@ -759,5 +759,26 @@ describe("POST /api/v1/migrations — guest conversion at cutover (#1000)", () =
     expect(createdJobData().config).toMatchObject({ convertGuest: false })
     await runAfters()
     expect(xcpngWarm.mock.calls[0][1]).toMatchObject({ convertGuest: false })
+  })
+})
+
+describe("GET /api/v1/migrations", () => {
+  beforeEach(() => {
+    h.prisma.migrationJob.findMany.mockReset().mockResolvedValue([
+      { id: "j1", sourceVmId: "vm-1", status: "completed", bytesTransferred: BigInt(4096), totalBytes: null },
+    ])
+  })
+
+  it("lists the last jobs without reading their logs", async () => {
+    const body: any = await readJson(await callRoute(GET, { method: "GET" }))
+
+    expect(h.prisma.migrationJob.findMany).toHaveBeenCalledWith({ where: {}, omit: { logs: true }, orderBy: { createdAt: "desc" }, take: 50 })
+    expect(body.data).toEqual([{ id: "j1", sourceVmId: "vm-1", status: "completed", bytesTransferred: 4096, totalBytes: null }])
+  })
+
+  it("keeps the jobs of one source VM when the inventory asks for them", async () => {
+    await callRoute(GET, { method: "GET", searchParams: { sourceConnectionId: "src", sourceVmId: "vm-1" } })
+
+    expect((h.prisma.migrationJob.findMany.mock.calls[0] as any[])[0].where).toEqual({ sourceVmId: "vm-1", sourceConnectionId: "src" })
   })
 })

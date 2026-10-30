@@ -68,22 +68,30 @@ async function handlePost(req: Request) {
     const body = await req.json().catch(() => null)
     const connectionId = body?.connection_id
     const node = body?.node
+    // A selection of guests (#1218): config.vmids and no node. It needs the
+    // right to migrate each guest and to manage each target, which
+    // restrictDrainTargets checks below, as migrating them one by one would.
+    const selection = Array.isArray(body?.config?.vmids) && body.config.vmids.length > 0
 
-    if (!connectionId || !node) {
+    if (!connectionId || (!node && !selection)) {
       return NextResponse.json({ error: "connection_id and node are required" }, { status: 400 })
     }
-
-    let safeNode: string
-    try {
-      safeNode = assertNodeName(node)
-    } catch {
-      return NextResponse.json({ error: "Invalid node name" }, { status: 400 })
+    if (node && selection) {
+      return NextResponse.json({ error: "a selection of guests has no node" }, { status: 400 })
     }
 
-    // Same permission as entering maintenance or migrating from the node, on
-    // a cluster the caller owns.
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "node", buildNodeResourceId(connectionId, safeNode))
-    if (denied) return denied
+    let safeNode = ""
+    if (!selection) {
+      try {
+        safeNode = assertNodeName(node)
+      } catch {
+        return NextResponse.json({ error: "Invalid node name" }, { status: 400 })
+      }
+      // Same permission as entering maintenance or migrating from the node,
+      // on a cluster the caller owns.
+      const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "node", buildNodeResourceId(connectionId, safeNode))
+      if (denied) return denied
+    }
     if (!canMigrateConnections(await getTenantInfrastructureScope(await getCurrentTenantId()), connectionId)) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }

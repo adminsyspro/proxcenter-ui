@@ -442,3 +442,66 @@ describe('HostDrainDialog with Ceph noout (ui#1164)', () => {
     expect(screen.queryByTestId('ceph-noout-option')).toBeNull()
   })
 })
+
+describe('HostDrainDialog, Migrate selection (#1218)', () => {
+  const SELECTION_PLAN = {
+    node: '',
+    candidates: ['pve1', 'pve2', 'pve3'],
+    movable: 2,
+    skipped: 0,
+    guests: [
+      { vmid: 101, name: 'a', type: 'qemu', status: 'pending', mode: 'live', running: true, ha: false, source_node: 'pve1', target_node: 'pve3', reason: 'best_fit' },
+      { vmid: 102, name: 'b', type: 'qemu', status: 'pending', mode: 'offline', running: false, ha: false, source_node: 'pve2', target_node: 'pve1', reason: 'best_fit' },
+    ],
+    projection: [
+      { node: 'pve1', mem_total: 100, mem_before: 40, mem_after: 30, cpu_before: 0.2, cpu_after: 0.1, guests_out: 1, guests_in: 1 },
+      { node: 'pve3', mem_total: 100, mem_before: 40, mem_after: 50, cpu_before: 0.1, cpu_after: 0.2, guests_in: 1 },
+    ],
+  }
+
+  beforeEach(() => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).endsWith('/plan')) return { ok: true, status: 200, json: async () => ({ data: SELECTION_PLAN }) }
+      return { ok: true, status: 200, json: async () => ({ data: { id: 'd-2' } }) }
+    })
+  })
+
+  it('builds a config naming the guests, always moving the stopped ones', () => {
+    expect(buildHostDrainConfig({ mode: 'selection', maxParallel: 2, memCeiling: 90, includeStopped: false, vmids: [101, 102], overrides: { 101: 'pve2' } }))
+      .toEqual({ max_concurrent_migrations: 2, mem_ceiling_percent: 90, include_stopped: true, enter_maintenance: false, guest_targets: { 101: 'pve2' }, vmids: [101, 102] })
+  })
+
+  it('plans without a node, routes each guest from its own node and never offers that node', async () => {
+    renderWithProviders(<HostDrainDialog open mode="selection" connId="c1" node="" vmids={[101, 102]} otherNodes={['pve1', 'pve2', 'pve3']} onClose={() => {}} />)
+    await screen.findByTestId('drain-plan-guest-101')
+
+    const body = JSON.parse(planCalls()[0][1].body)
+    expect(body).toEqual({ connection_id: 'c1', config: expect.objectContaining({ vmids: [101, 102], enter_maintenance: false }) })
+    expect(screen.getByText('Migrate selection (2)')).toBeInTheDocument()
+    expect(screen.queryByText('Also move stopped guests (offline migration)')).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('drain-plan-route-101')).getByText('pve1')).toBeInTheDocument()
+    expect(within(screen.getByTestId('drain-plan-route-102')).getByText('pve2')).toBeInTheDocument()
+
+    await userEvent.click(within(screen.getByTestId('drain-plan-target-101')).getByRole('combobox'))
+    const options = (await screen.findAllByRole('option')).map(o => o.textContent)
+    expect(options).toEqual(['pve2', 'pve3'])
+    expect(screen.getByText('Projected load after the migration')).toBeInTheDocument()
+  })
+
+  it('starts the migration of the selection and reports it', async () => {
+    const onStarted = vi.fn()
+    renderWithProviders(<HostDrainDialog open mode="selection" connId="c1" node="" vmids={[101, 102]} otherNodes={['pve1', 'pve2', 'pve3']} onClose={() => {}} onStarted={onStarted} />)
+    await screen.findByTestId('drain-plan-guest-101')
+
+    const start = await screen.findByRole('button', { name: 'Start the migration' })
+    await waitFor(() => expect(start).toBeEnabled())
+    fireEvent.click(start)
+
+    await waitFor(() => expect(startCalls()).toHaveLength(1))
+    const sent = JSON.parse(startCalls()[0][1].body)
+    expect(sent.node).toBeUndefined()
+    expect(sent.config.vmids).toEqual([101, 102])
+    await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ id: 'd-2' }))
+    expect(toast.success).toHaveBeenCalledWith('Migration of 2 guest(s) started')
+  })
+})

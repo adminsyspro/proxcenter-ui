@@ -142,3 +142,15 @@ describe('POST .../unlock — vmid validation (command injection)', () => {
     })
   }
 })
+
+describe('POST .../unlock: SSH failure (roadmap#99)', () => {
+  it('answers a generic message with the manual hint, never the raw SSH error', async () => {
+    executeSSHMock.mockResolvedValueOnce({ success: false, error: 'connect ECONNREFUSED 10.42.0.250:22' })
+    const res = await callRoute(POST as any, { method: 'POST', params: baseParams })
+    expect(res.status).toBe(500)
+    const body = await readJson<any>(res)
+    expect(body.error).toBe('The unlock command could not be run on the node')
+    expect(body.hint).toBe('Run manually on PVE node: qm unlock 100')
+    expect(JSON.stringify(body)).not.toContain('10.42.0.250')
+  })
+})

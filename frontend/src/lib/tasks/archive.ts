@@ -20,8 +20,11 @@ export const ARCHIVE_PAGE_SIZES = [20, 50, 100] as const
 /** Enough rows to fill a tall card; the list scrolls inside it on a smaller screen. */
 export const ARCHIVE_DEFAULT_PAGE_SIZE = 50
 
-/** Longest window one request may read, so a "since 2019" query cannot walk every index. */
-export const ARCHIVE_MAX_WINDOW_SEC = 90 * 86400
+/**
+ * Longest window one request may read, so a "since 2019" query cannot walk
+ * every index. It matches the longest retention of ProxCenter's own copy.
+ */
+export const ARCHIVE_MAX_WINDOW_SEC = 730 * 86400
 
 /** Entries asked of one node; reaching it means the window holds more than we read. */
 export const ARCHIVE_NODE_LIMIT = 5000
@@ -147,6 +150,8 @@ export interface ArchiveTask {
   connectionId: string
   connectionName: string
   initiatedBy?: { email: string | null; apiTokenId: string | null }
+  /** Read from ProxCenter's copy only: the node could not serve it. */
+  fromHistory?: boolean
 }
 
 export function matchesArchiveFilters(task: ArchiveTask, q: Pick<ArchiveQuery, 'families' | 'status' | 'search'>): boolean {

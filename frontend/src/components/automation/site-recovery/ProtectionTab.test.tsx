@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react'
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { describe, expect, it, vi, afterEach, onTestFinished } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
 import { renderWithProviders, screen, userEvent, fireEvent, within, waitFor } from '@/__tests__/setup/renderWithProviders'
@@ -87,6 +87,7 @@ type VMStatus = {
   last_error?: string
   bytes_sent: number
   duration_ms: number
+  throughput_history?: { timestamp: string; bytes_per_sec: number }[]
 }
 
 // Opening the drawer triggers both requests for every job that protects a VM.
@@ -305,7 +306,8 @@ describe('ProtectionTab job details', () => {
       expect(getComputedStyle(state.querySelector('span')!).backgroundColor).toBe(dotColor)
     }
 
-    expect(screen.getByText('100 · synced-vm').parentElement).toHaveTextContent('2.0 KB · 2m')
+    expect(screen.getByText('100 · synced-vm').parentElement).toHaveTextContent('2.0 KB')
+    expect(screen.getByText('100 · synced-vm').parentElement).toHaveTextContent('2m')
     const errorRow = screen.getByText('102 · error-vm').parentElement!
     expect(errorRow).toHaveTextContent('snapshot failed')
     expect(errorRow).not.toHaveTextContent('4.0 KB')
@@ -324,6 +326,55 @@ describe('ProtectionTab job details', () => {
 
     expect(await screen.findByText('Per-VM status')).toBeInTheDocument()
     expect(screen.getByText('100 · web-01')).toBeInTheDocument()
+  })
+
+  it('shows each guest its own bandwidth sparkline and last sync duration', async () => {
+    stubDrawerFetch([
+      { vmid: 100, vm_name: 'web-01', status: 'synced', last_sync: '2026-01-02T03:04:05Z', bytes_sent: 2048, duration_ms: 95000, throughput_history: [
+        { timestamp: '2026-01-02T01:00:00Z', bytes_per_sec: 1024 },
+        { timestamp: '2026-01-02T02:00:00Z', bytes_per_sec: 4096 },
+      ] },
+      { vmid: 101, vm_name: 'db-01', status: 'synced', last_sync: null, bytes_sent: 0, duration_ms: 0, throughput_history: [{ timestamp: '2026-01-02T01:00:00Z', bytes_per_sec: 1024 }] },
+    ])
+    renderTab([job({ name: 'Spark job', vm_ids: [100, 101], vm_names: ['web-01', 'db-01'] })])
+
+    await openDrawer('Spark job')
+
+    const spark = await screen.findByTestId('vm-sparkline-100')
+    // A single point draws no line.
+    expect(screen.queryByTestId('vm-sparkline-101')).not.toBeInTheDocument()
+    await userEvent.hover(spark)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Bandwidth over the last 24 h, peak 4.0 KB/s')
+    await userEvent.unhover(spark)
+
+    const duration = screen.getByText('2m')
+    expect(duration.parentElement?.querySelector('.ri-timer-line')).toBeInTheDocument()
+    await userEvent.hover(duration)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Duration of the last sync')
+  })
+
+  it('pages per-VM status by the rows the dialog height holds', async () => {
+    // jsdom lays nothing out: report a 400px list, rows keep their 34px default.
+    class FixedObserver {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element) { this.callback([{ target, contentRect: { height: 400 } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', FixedObserver)
+    onTestFinished(() => { vi.unstubAllGlobals() })
+    const statuses = Array.from({ length: 13 }, (_, index) => ({
+      vmid: 300 + index, vm_name: `wide-${index + 1}`, status: 'pending', last_sync: null, bytes_sent: 0, duration_ms: 0,
+    }))
+    stubDrawerFetch(statuses)
+    renderTab([job({ name: 'Wide job', vm_ids: statuses.map(row => row.vmid), vm_names: statuses.map(row => row.vm_name) })])
+
+    await openDrawer('Wide job')
+
+    // (400 - 2 - 40 pagination) / 34 = 10 rows a page.
+    expect(await screen.findByText('309 · wide-10')).toBeInTheDocument()
+    expect(screen.queryByText('310 · wide-11')).not.toBeInTheDocument()
+    expect(screen.getByText('1–10 of 13')).toBeInTheDocument()
   })
 
   it('paginates per-VM status beyond five guests', async () => {

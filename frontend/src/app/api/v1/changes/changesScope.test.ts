@@ -3,12 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { callRoute } from "../../../../__tests__/setup/route-test"
 import { connectionScope, guestDerivedScope, nodeScope } from "@/__tests__/setup/rbacScope"
 
-const { getInfraMock, orchestratorFetchMock, rbacScopeMock, tenantConnectionIdsMock, vdcVmidsMock } = vi.hoisted(() => ({
+const { getInfraMock, orchestratorFetchMock, rbacScopeMock, tenantConnectionIdsMock } = vi.hoisted(() => ({
   getInfraMock: vi.fn(),
   orchestratorFetchMock: vi.fn(),
   rbacScopeMock: vi.fn(),
   tenantConnectionIdsMock: vi.fn(),
-  vdcVmidsMock: vi.fn(),
 }))
 
 // Keep real maskingScope; only stub getTenantInfrastructureScope
@@ -26,18 +25,14 @@ vi.mock("@/lib/orchestrator/client", () => ({
   orchestratorFetch: (...a: any[]) => orchestratorFetchMock(...a),
 }))
 
-vi.mock("@/lib/alerts/vdcVmids", () => ({
-  getVdcVmidsByConnection: (...a: any[]) => vdcVmidsMock(...a),
-}))
-
 vi.mock("@/lib/rbac", () => ({
   checkPermission: vi.fn().mockResolvedValue(null),
   getCurrentRbacInfraScope: rbacScopeMock,
   PERMISSIONS: { CONNECTION_VIEW: "connection.view", ADMIN_SETTINGS: "admin.settings" },
 }))
 
-// Change records carry no pool field (orchestrator struct) — visibility for
-// vDC tenants rides on guest ownership (VMID in the vDC pools).
+// Guest records carry the pool the guest sat in when they were written;
+// visibility for vDC tenants rides on it (see lib/changes/visibility).
 const CLUSTER_LESS = { id: "ev1", node: "n1", resourceType: "vm", resourceId: "100" }
 const VM_OWNED = { id: "ev2", connectionId: "c1", node: "n1", resourceType: "vm", resourceId: "100" }
 const VM_NEIGHBOUR = { id: "ev4", connectionId: "c1", node: "n1", resourceType: "vm", resourceId: "999" }
@@ -56,7 +51,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   rbacScopeMock.mockResolvedValue(null)
   tenantConnectionIdsMock.mockResolvedValue(new Set(["c1"]))
-  vdcVmidsMock.mockResolvedValue(new Map([["c1", new Set(["100"])]]))
   orchestratorFetchMock.mockResolvedValue({ data: [CLUSTER_LESS, VM_OWNED, VM_NEIGHBOUR, NODE_EVENT] })
 })
 

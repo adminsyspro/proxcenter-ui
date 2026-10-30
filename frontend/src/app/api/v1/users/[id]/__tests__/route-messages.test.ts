@@ -34,6 +34,8 @@ vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { ADMIN_USERS: 'admin.users' },
   PROTECTED_ROLE_IDS: ['role_super_admin', 'role_provider_admin'],
   PROVIDER_ONLY_ROLE_IDS: ['role_operator'],
+  isUserSuperAdmin: vi.fn(async () => false),
+  isUserProtected: vi.fn(async () => false),
 }))
 vi.mock('@/lib/rbac/userTargetGuards', () => ({
   denyIfTargetIsProtectedAndCallerIsNot: denyIfProtectedMock,

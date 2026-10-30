@@ -146,6 +146,9 @@ export function agentStatusLabel(guest: DetailGuest, details: GuestDetails | und
   if (!details.agentEnabled) return 'Disabled'
   if (guest.status !== 'running') return 'Enabled (VM not running)'
 
+  // Unset: the probe did not fit in the route's time budget.
+  if (details.agentResponding === undefined) return 'Unknown'
+
   return details.agentResponding ? 'Running' : 'Not responding'
 }
 

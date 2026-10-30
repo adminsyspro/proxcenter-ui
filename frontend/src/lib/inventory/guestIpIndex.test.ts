@@ -6,6 +6,9 @@ const { pveFetchMock } = vi.hoisted(() => ({
 
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 
+import { resetDaemonSlots } from '@/lib/proxmox/daemonSlots'
+import { resetGuestAgentMutes } from '@/lib/proxmox/guestAgentCall'
+
 import {
   GUEST_IP_REFRESH_MS,
   GUEST_IP_RETENTION_MS,
@@ -22,6 +25,8 @@ const CONN = { baseUrl: 'https://pve.test', apiToken: 'x' }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resetDaemonSlots()
+  resetGuestAgentMutes()
   __resetGuestIpIndexForTests()
 })
 

@@ -1,6 +1,8 @@
 /**
  * Remediation plans of the assistant (roadmap#188): a finding turned into at
- * most ten signed cards the user runs one step at a time.
+ * most ten signed cards the user runs one step at a time, and never more
+ * cards than the conversation may still execute (`maxPerConversation`): a
+ * step past the cap would be refused at every click. One plan per question.
  *
  * The steps come from the code, never from the model: the backup coverage
  * resolver picks the unprotected guests, the RAM arithmetic of
@@ -12,6 +14,8 @@
  * MAX_PLAN_MIGRATION_CHECKS candidates, one after the other (at most 5
  * protected GETs); the other plans read no precondition, and the backup jobs
  * and the pending update list come from the caches the read-only tools fill.
+ * Every preflight read goes through the question's chain (`serialPveRead`), so
+ * a plan and a propose_action of the same round never overlap either.
  */
 
 import { randomUUID } from 'node:crypto'
@@ -26,6 +30,7 @@ import {
   issueCard,
   proposalResult,
   requireActions,
+  reservePlan,
   type ActionsContext,
 } from '@/lib/ai/actions/propose'
 import { guestTarget, hostTarget } from '@/lib/ai/actions/target'
@@ -74,6 +79,19 @@ type Built = { title: string; steps: Step[]; summary?: string; notes?: Check[] }
 
 const r1 = (v: number) => Math.round(v * 10) / 10
 
+/**
+ * Card steps one plan may carry: the conversation's execution cap, within
+ * MAX_PLAN_STEPS. The default cap is 5, so a 10-step plan would leave steps 6
+ * to 10 refused (429) at every click.
+ */
+export function planCardLimit(actions: ActionsContext): number {
+  return Math.max(1, Math.min(MAX_PLAN_STEPS, actions.settings.maxPerConversation))
+}
+
+const cardCount = (steps: Step[]) => steps.filter(s => s.card).length
+
+const laterNote = (n: number) => `${n} more left for a later conversation`
+
 /** The step of the last card already in the plan: the one a new card waits for (R12). */
 function previousCardStep(steps: Step[]): number | undefined {
   return steps.findLast(s => s.card)?.step
@@ -92,7 +110,8 @@ async function stepCard(
   return { step, card: issueCard(actions, { ...body, preflight, planId, step, after: previousCardStep(steps) }) }
 }
 
-function groundedHost(args: Record<string, unknown>, ctx: ToolContext, actions: ActionsContext): SnapshotNode {
+/** `userOnly`: the plan's cards act on this host and are disruptive (maintenance), see `assertTargetGrounded`. */
+function groundedHost(args: Record<string, unknown>, ctx: ToolContext, actions: ActionsContext, opts: { userOnly?: boolean } = {}): SnapshotNode {
   const host = argString(args, 'host')
 
   if (!host) throw new ToolArgumentError('Pass host: the host the finding is about.')
@@ -101,7 +120,7 @@ function groundedHost(args: Record<string, unknown>, ctx: ToolContext, actions: 
 
   const { node } = resolveNode(ctx, host, argString(args, 'cluster'))
 
-  assertTargetGrounded(actions, hostTarget(node))
+  assertTargetGrounded(actions, hostTarget(node), opts)
 
   return node
 }
@@ -124,11 +143,12 @@ async function unprotectedGuests(args: Record<string, unknown>, ctx: ToolContext
   consumeProposal(ctx)
 
   const { uncovered, jobsByConnection } = await computeBackupCoverage(ctx, allowed)
+  const limit = planCardLimit(actions)
   const steps: Step[] = []
   let noJob = 0
 
   for (const u of uncovered) {
-    if (steps.length >= MAX_PLAN_STEPS) break
+    if (steps.length >= limit) break
 
     const guest = ctx.snapshot.guests.find(g => g.connId === u.connId && g.vmid === u.vmid)
     const job = firstCompatibleJob(jobsByConnection[u.connId] ?? [], { vmid: u.vmid, node: u.node })
@@ -145,12 +165,12 @@ async function unprotectedGuests(args: Record<string, unknown>, ctx: ToolContext
     return { nothing: uncovered.length ? `None of the ${uncovered.length} unprotected guests fits an existing backup job: create a job from the Backups page.` : 'Every guest is protected by a backup job.' }
   }
 
-  const left = uncovered.length - steps.length
+  const left = uncovered.length - steps.length - noJob
 
   return {
     title: `Add ${steps.length} unprotected guests to existing backup jobs`,
     steps,
-    summary: `${uncovered.length} unprotected, ${steps.length} in this plan${left > 0 ? `, ${left} left for a later plan` : ''}${noJob ? `, ${noJob} with no compatible job` : ''}`,
+    summary: `${uncovered.length} unprotected, ${steps.length} in this plan${left > 0 ? `, ${laterNote(left)}` : ''}${noJob ? `, ${noJob} with no compatible job` : ''}`,
   }
 }
 
@@ -177,12 +197,18 @@ async function hostMemory(args: Record<string, unknown>, ctx: ToolContext, actio
     .sort((a, b) => b.memUsedGb - a.memUsedGb)
   const steps: Step[] = []
   const skipped: Array<{ name: string; text: string }> = []
+  const limit = planCardLimit(actions)
   let used = host.memUsedGb
   let checked = 0
+  let capped = false
 
   for (const guest of movable) {
-    if (steps.length >= MAX_PLAN_STEPS || checked >= MAX_PLAN_MIGRATION_CHECKS) break
     if ((used / host.memTotalGb) * 100 <= HOST_MEMORY_TARGET_PCT) break
+    if (steps.length >= limit) {
+      capped = true
+      break
+    }
+    if (steps.length >= MAX_PLAN_STEPS || checked >= MAX_PLAN_MIGRATION_CHECKS) break
 
     const best = others
       .map(n => evaluateHostFit(ctx.snapshot, guest, { ...n, memUsedGb: n.memUsedGb + (planned.get(n.name) ?? 0) }))
@@ -213,6 +239,8 @@ async function hostMemory(args: Record<string, unknown>, ctx: ToolContext, actio
   const notes: Check[] = skipped.map(s => ({ level: 'warn', text: `Skipped ${s.name}: ${s.text}` }))
   const reasons = [...new Set(skipped.map(s => skipReason(s.text)))].join(', ')
   const skippedNote = skipped.length ? `${skipped.length} guest${skipped.length > 1 ? 's' : ''} skipped: ${reasons}` : ''
+  // How many more moves is not known without checking them with Proxmox: say more are needed.
+  const cappedNote = capped ? `the cap of ${limit} action${limit > 1 ? 's' : ''} per conversation stops it there, more moves left for a later conversation` : ''
 
   if (steps.length === 0) {
     return {
@@ -226,13 +254,13 @@ async function hostMemory(args: Record<string, unknown>, ctx: ToolContext, actio
   return {
     title: `Relieve the RAM of ${host.name}`,
     steps,
-    summary: `${host.name} at ${host.memPct} % RAM, about ${r1((used / host.memTotalGb) * 100)} % once the ${steps.length} moves are done${skippedNote ? `; ${skippedNote}` : ''}`,
+    summary: `${host.name} at ${host.memPct} % RAM, about ${r1((used / host.memTotalGb) * 100)} % once the ${steps.length} moves are done${[skippedNote, cappedNote].filter(Boolean).map(n => `; ${n}`).join('')}`,
     notes,
   }
 }
 
 async function pendingUpdates(args: Record<string, unknown>, ctx: ToolContext, actions: ActionsContext, planId: string): Promise<Built> {
-  const host = groundedHost(args, ctx, actions)
+  const host = groundedHost(args, ctx, actions, { userOnly: true })
 
   if (!(await hasNodePermission(PERMISSIONS.NODE_MANAGE, host.connId, host.name))) {
     throw new ToolScopeError(`You do not have the permission to put ${host.name} in or out of maintenance.`)
@@ -256,9 +284,15 @@ async function pendingUpdates(args: Record<string, unknown>, ctx: ToolContext, a
       href: `/infrastructure/inventory?selectType=cluster&selectId=${encodeURIComponent(host.connId)}`,
     },
   })
-  steps.push(await stepCard(actions, ctx, planId, steps, { kind: 'maintenance', target, params: { mode: 'exit' } }))
+  // A cap of one action per conversation leaves room for the enter step only:
+  // the exit is then asked for in a new conversation (or done from the UI).
+  if (cardCount(steps) < planCardLimit(actions)) {
+    steps.push(await stepCard(actions, ctx, planId, steps, { kind: 'maintenance', target, params: { mode: 'exit' } }))
 
-  return { title: `Install the pending updates of ${host.name}`, steps }
+    return { title: `Install the pending updates of ${host.name}`, steps }
+  }
+
+  return { title: `Install the pending updates of ${host.name}`, steps, summary: `the exit from maintenance, ${laterNote(1)}` }
 }
 
 const BUILDERS: Record<PlanFinding, typeof unprotectedGuests> = {
@@ -269,28 +303,57 @@ const BUILDERS: Record<PlanFinding, typeof unprotectedGuests> = {
 
 const findingsFor = (kinds: readonly ActionKind[]) => PLAN_FINDINGS.filter(f => kinds.includes(FINDING_KIND[f]))
 
+const FINDING_HINTS: Record<PlanFinding, string> = {
+  unprotected_guests: 'unprotected_guests: add guests no backup job covers to an existing job (cluster optional).',
+  host_memory: 'host_memory: move the biggest guests off a host short of RAM (host).',
+  pending_updates: 'pending_updates: maintenance on, install the updates, maintenance off (host).',
+}
+
+const HOST_FINDINGS: readonly PlanFinding[] = ['host_memory', 'pending_updates']
+
+/** Description and schema for these findings only, like propose_action for its kinds. */
+function describePlanTool(findings: readonly PlanFinding[]): Pick<CatalogTool, 'description' | 'parameters'> {
+  const hostFindings = HOST_FINDINGS.filter(f => findings.includes(f))
+  const sample = findings.includes('pending_updates') ? 'pending_updates' : findings[0]
+  const example = HOST_FINDINGS.includes(sample) ? `finding='${sample}', host='pve1'` : `finding='${sample}'`
+
+  return {
+    description:
+      'Propose a step-by-step fix for a finding; nothing runs: the user approves each step on its card. ' +
+      `${findings.map(f => FINDING_HINTS[f]).join(' ')} Example: ${example}`,
+    parameters: {
+      type: 'object',
+      properties: {
+        finding: { type: 'string', description: 'What to fix.', enum: [...findings] },
+        ...(hostFindings.length ? { host: { type: 'string', description: `Host the finding is about (${hostFindings.join(', ')}).` } } : {}),
+        cluster: { type: 'string', description: 'Cluster name, when the user names one.' },
+      },
+      required: ['finding'],
+    },
+  }
+}
+
 export const proposeRemediationPlanTool: CatalogTool = {
   name: 'propose_remediation_plan',
   readOnly: false,
-  description:
-    'Propose a step-by-step fix for a finding; nothing runs: the user approves each step on its card. unprotected_guests: add guests no backup job covers to an existing job (cluster optional). host_memory: move the biggest guests off a host short of RAM (host). pending_updates: maintenance on, install the updates, maintenance off (host). Example: finding=\'pending_updates\', host=\'pve1\'',
-  parameters: {
-    type: 'object',
-    properties: {
-      finding: { type: 'string', description: 'What to fix.', enum: [...PLAN_FINDINGS] },
-      host: { type: 'string', description: 'Host the finding is about (host_memory, pending_updates).' },
-      cluster: { type: 'string', description: 'Cluster name, when the user names one.' },
-    },
-    required: ['finding'],
-  },
+  ...describePlanTool(PLAN_FINDINGS),
   async execute(args, ctx) {
     const actions = requireActions(ctx)
     const finding = argRequiredEnum(args, 'finding', findingsFor(enabledKinds(actions.settings)))
 
     assertProposalBudget(ctx)
 
+    const release = reservePlan(ctx)
     const planId = randomUUID()
-    const built = await BUILDERS[finding](args, ctx, actions, planId)
+    let built: Built
+
+    try {
+      built = await BUILDERS[finding](args, ctx, actions, planId)
+    } catch (e) {
+      // A refused plan (argument, grounding, scope) frees its slot: the model may ask again, fixed.
+      release()
+      throw e
+    }
 
     if ('nothing' in built) return proposalResult({ cards: [], plans: [] }, { status: 'nothing-to-do', proposed: built.nothing, checks: built.notes ?? [] })
 
@@ -311,19 +374,11 @@ export const proposeRemediationPlanTool: CatalogTool = {
   },
 }
 
-/** The plan tool cut to the findings the enabled kinds can serve, or null when none. */
+/** The plan tool cut to the findings the enabled kinds can serve (enum, description, arguments), or null when none. */
 export function remediationToolFor(kinds: readonly ActionKind[]): CatalogTool | null {
   const findings = findingsFor(kinds)
 
   if (findings.length === 0) return null
 
-  const finding = proposeRemediationPlanTool.parameters.properties.finding
-
-  return {
-    ...proposeRemediationPlanTool,
-    parameters: {
-      ...proposeRemediationPlanTool.parameters,
-      properties: { ...proposeRemediationPlanTool.parameters.properties, finding: { ...finding, enum: [...findings] } },
-    },
-  }
+  return { ...proposeRemediationPlanTool, ...describePlanTool(findings) }
 }

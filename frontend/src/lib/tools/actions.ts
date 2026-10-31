@@ -22,7 +22,7 @@ import {
   requireActions,
 } from '@/lib/ai/actions/propose'
 import { findTargetGuest, resolveActionTarget } from '@/lib/ai/actions/target'
-import { ACTION_KINDS, enabledKinds, type ActionCard, type ActionKind, type AiActionsSettings } from '@/lib/ai/actions/types'
+import { ACTION_KINDS, actionTier, enabledKinds, type ActionCard, type ActionKind, type AiActionsSettings } from '@/lib/ai/actions/types'
 import { Features } from '@/lib/license/features'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { PERMISSIONS } from '@/lib/rbac'
@@ -103,13 +103,20 @@ function migrationTarget(args: Record<string, unknown>, target: ActionCard['targ
   return best.host
 }
 
-async function backupParams(args: Record<string, unknown>, target: ActionCard['target'], ctx: ToolContext): Promise<Params> {
+/**
+ * The job a backup_add proposal joins. A job the conversation never named is
+ * ignored, like a target_host only the model named: a job id read from a tool
+ * result (a job comment, a task log) must not pick where the guest goes. The
+ * first compatible job is taken instead.
+ */
+async function backupParams(args: Record<string, unknown>, target: ActionCard['target'], ctx: ToolContext, visibleText: string): Promise<Params> {
   if ((await getAllowedJobPools(ctx.tenantId, target.connId)) !== null) {
     throw new ToolScopeError('Adding a guest to a backup job is not available to a vDC tenant: your backup jobs follow your pools.')
   }
 
   const jobs = await loadBackupJobs(ctx, target.connId)
-  const ref = argString(args, 'job')
+  const named = argString(args, 'job')
+  const ref = named && isGrounded(visibleText, named) ? named : undefined
 
   if (ref) {
     const job = jobs.find(j => j.id === ref)
@@ -147,26 +154,68 @@ function snapshotParams(args: Record<string, unknown>, ctx: ToolContext): Params
   return { name }
 }
 
+/** How the description names each kind, in the order it lists them. */
+const KIND_HINTS: Array<[ActionKind, string]> = [
+  ['start', 'start'],
+  ['shutdown', 'shutdown'],
+  ['reboot', 'reboot'],
+  ['snapshot', 'snapshot (snapshot_name optional)'],
+  ['migrate', 'migrate (target_host optional)'],
+  ['drs_apply', 'drs_apply (guest or recommendation id)'],
+  ['backup_add', 'backup_add (job optional)'],
+  ['maintenance', 'maintenance (host, mode enter|exit)'],
+]
+
+const ACTION_PROPERTIES: CatalogTool['parameters']['properties'] = {
+  action: { type: 'string', description: 'What to do.', enum: [...ACTION_KINDS] },
+  guest: { type: 'string', description: 'VM or container name or vmid, as the user wrote it.' },
+  host: { type: 'string', description: 'Host name, for maintenance.' },
+  cluster: { type: 'string', description: 'Cluster name, only when two clusters share the name.' },
+  target_host: { type: 'string', description: 'migrate: destination host the user named. Omit to let ProxCenter pick.' },
+  snapshot_name: { type: 'string', description: 'snapshot: name, a letter then letters, digits, - or _.' },
+  recommendation: { type: 'string', description: 'drs_apply: recommendation id, else pass guest.' },
+  job: { type: 'string', description: 'backup_add: backup job id. Omit for the first compatible job.' },
+  mode: { type: 'string', description: 'maintenance: enter or exit.', enum: ['enter', 'exit'] },
+}
+
+/** The arguments only some kinds read: left out of the schema when none of them is enabled. */
+const PROPERTY_KINDS: Partial<Record<string, readonly ActionKind[]>> = {
+  guest: ACTION_KINDS.filter(k => k !== 'maintenance'),
+  host: ['maintenance'],
+  target_host: ['migrate'],
+  snapshot_name: ['snapshot'],
+  recommendation: ['drs_apply'],
+  job: ['backup_add'],
+  mode: ['maintenance'],
+}
+
+/**
+ * The description and schema of propose_action for these kinds only: a small
+ * model reads the description as what it can do, and would offer a reboot
+ * the settings turned off if the text still listed it.
+ */
+function describeProposeAction(kinds: readonly ActionKind[]): Pick<CatalogTool, 'description' | 'parameters'> {
+  const listed = KIND_HINTS.filter(([k]) => kinds.includes(k)).map(([, hint]) => hint)
+  const sample = kinds.includes('reboot') ? 'reboot' : kinds[0]
+  const example = sample === 'maintenance' ? "action='maintenance', host='pve1', mode='enter'" : `action='${sample}', guest='web-01'`
+  const properties = Object.fromEntries(
+    Object.entries(ACTION_PROPERTIES)
+      .filter(([key]) => PROPERTY_KINDS[key]?.some(k => kinds.includes(k)) ?? true)
+      .map(([key, prop]) => [key, key === 'action' ? { ...prop, enum: [...kinds] } : prop])
+  )
+
+  return {
+    description:
+      'Propose ONE action on a guest or host the user named; nothing runs: the user gets a card and approves it with their own rights. ' +
+      `Use only when the user asks for the action. Kinds: ${listed.join(', ')}. Example: ${example}`,
+    parameters: { type: 'object', properties, required: ['action'] },
+  }
+}
+
 export const proposeActionTool: CatalogTool = {
   name: 'propose_action',
   readOnly: false,
-  description:
-    'Propose ONE action on a guest or host the user named; nothing runs: the user gets a card and approves it with their own rights. Use only when the user asks for the action. Kinds: start, shutdown, reboot, snapshot (snapshot_name optional), migrate (target_host optional), drs_apply (guest or recommendation id), backup_add (job optional), maintenance (host, mode enter|exit). Example: action=\'reboot\', guest=\'web-01\'',
-  parameters: {
-    type: 'object',
-    properties: {
-      action: { type: 'string', description: 'What to do.', enum: [...ACTION_KINDS] },
-      guest: { type: 'string', description: 'VM or container name or vmid, as the user wrote it.' },
-      host: { type: 'string', description: 'Host name, for maintenance.' },
-      cluster: { type: 'string', description: 'Cluster name, only when two clusters share the name.' },
-      target_host: { type: 'string', description: 'migrate: destination host the user named. Omit to let ProxCenter pick.' },
-      snapshot_name: { type: 'string', description: 'snapshot: name, a letter then letters, digits, - or _.' },
-      recommendation: { type: 'string', description: 'drs_apply: recommendation id, else pass guest.' },
-      job: { type: 'string', description: 'backup_add: backup job id. Omit for the first compatible job.' },
-      mode: { type: 'string', description: 'maintenance: enter or exit.', enum: ['enter', 'exit'] },
-    },
-    required: ['action'],
-  },
+  ...describeProposeAction(ACTION_KINDS),
   async execute(args, ctx) {
     const actions = requireActions(ctx)
     const kind = argRequiredEnum(args, 'action', enabledKinds(actions.settings))
@@ -179,7 +228,8 @@ export const proposeActionTool: CatalogTool = {
       ? resolveActionTarget({ kind, guest: String(rec.vmid), connId: rec.connection_id }, ctx)
       : resolveActionTarget({ kind, guest: argString(args, 'guest'), host: argString(args, 'host'), cluster: argString(args, 'cluster') }, ctx)
 
-    assertTargetGrounded(actions, target)
+    // A disruptive card (a container migration included) only for a target the user typed.
+    assertTargetGrounded(actions, target, { userOnly: actionTier(kind, target) === 'disruptive' })
     consumeProposal(ctx)
 
     let params: Params = {}
@@ -187,7 +237,7 @@ export const proposeActionTool: CatalogTool = {
     if (kind === 'snapshot') params = snapshotParams(args, ctx)
     else if (kind === 'migrate') params = { target: migrationTarget(args, target, ctx, actions.visibleText), online: true }
     else if (kind === 'drs_apply') params = { recommendationId: String(rec.id) }
-    else if (kind === 'backup_add') params = await backupParams(args, target, ctx)
+    else if (kind === 'backup_add') params = await backupParams(args, target, ctx, actions.visibleText)
     else if (kind === 'maintenance') params = await maintenanceParams(args, target, ctx)
 
     const preflight = await preflightAction({ kind, target, params }, ctx)
@@ -203,8 +253,9 @@ export const ACTION_TOOLS: CatalogTool[] = [proposeActionTool, proposeRemediatio
 
 /**
  * The proposal tools a tenant's settings allow: none when actions are off or
- * no kind is enabled, the `action` enum cut to the enabled kinds, and the plan
- * tool only for a finding whose action kind is enabled. The licence is checked
+ * no kind is enabled, the `action` enum, the description and the arguments
+ * cut to the enabled kinds, and the plan tool only for a finding whose action
+ * kind is enabled. The licence is checked
  * by the caller; `execute` re-checks the settings in `ctx.actions` anyway.
  */
 export function actionToolsFor(settings: AiActionsSettings): CatalogTool[] {
@@ -212,13 +263,7 @@ export function actionToolsFor(settings: AiActionsSettings): CatalogTool[] {
 
   if (kinds.length === 0) return []
 
-  const action = proposeActionTool.parameters.properties.action
-  const tools: CatalogTool[] = [
-    {
-      ...proposeActionTool,
-      parameters: { ...proposeActionTool.parameters, properties: { ...proposeActionTool.parameters.properties, action: { ...action, enum: kinds } } },
-    },
-  ]
+  const tools: CatalogTool[] = [{ ...proposeActionTool, ...describeProposeAction(kinds) }]
   const plan = remediationToolFor(kinds)
 
   if (plan) tools.push(plan)

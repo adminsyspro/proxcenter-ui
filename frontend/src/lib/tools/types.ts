@@ -49,7 +49,20 @@ export type ToolContext = {
    * by every round of one request. A tool past its budget refuses: the model
    * then answers from what it already has.
    */
-  usage?: { historyLookups: number; cveScans?: number; proposals?: number }
+  usage?: {
+    historyLookups: number
+    cveScans?: number
+    proposals?: number
+    /** Remediation plans this question asked for: one at most. */
+    plans?: number
+    /**
+     * Tail of the Proxmox reads the action preflights make for this question
+     * (`serialPveRead` in `@/lib/ai/actions/preflight`): the loop runs up to
+     * four tool calls at once, and they must not take several of a node's
+     * three pvedaemon workers together.
+     */
+    pveChain?: Promise<void>
+  }
   /**
    * Set only when the assistant may propose actions (roadmap#188): what is
    * enabled, who the signed cards are issued to, and the conversation text a

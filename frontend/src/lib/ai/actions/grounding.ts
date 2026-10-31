@@ -15,9 +15,9 @@ export const UNGROUNDED_CLUSTER_MESSAGE = 'Name the cluster you want me to act o
 
 /** The two texts a target is grounded on, carried by `ctx.actions`. */
 export type ConversationGrounding = {
-  /** User and assistant turns: a guest or host NAME may come from either. */
+  /** User and assistant turns: the NAME of a safe action's target may come from either. */
   visibleText: string
-  /** User turns only: a bare vmid must come from here. */
+  /** User turns only: a bare vmid, and the name of a disruptive action's target, must come from here. */
   userText: string
 }
 
@@ -74,9 +74,19 @@ export function isGrounded(text: string, term: string | number | undefined): boo
  * or an assistant turn; a vmid only from what the user typed: assistant
  * answers are full of numbers relayed from tool results ("128 GB", "uptime
  * 104 days"), and an injected "reboot 128" must not find one there.
+ *
+ * `userOnly` (the disruptive kinds: shutdown, reboot, maintenance, a container
+ * migration): the name too must come from what the user typed. An assistant
+ * answer relays names read from tool results, and an injected text that gets
+ * the model to write "web-01" must not be enough to put a reboot of web-01
+ * under the user's cursor.
  */
-export function assertTargetGrounded(grounding: ConversationGrounding, target: { name: string; vmid?: number | string }): void {
-  if (isGrounded(grounding.visibleText, target.name)) return
+export function assertTargetGrounded(
+  grounding: ConversationGrounding,
+  target: { name: string; vmid?: number | string },
+  opts: { userOnly?: boolean } = {}
+): void {
+  if (isGrounded(opts.userOnly ? grounding.userText : grounding.visibleText, target.name)) return
   if (target.vmid !== undefined && isGrounded(grounding.userText, target.vmid)) return
 
   throw new ToolScopeError(UNGROUNDED_TARGET_MESSAGE)

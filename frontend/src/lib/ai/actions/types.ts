@@ -36,6 +36,20 @@ export const ACTION_TIER: Record<ActionKind, ActionTier> = {
   maintenance: 'disruptive',
 }
 
+/**
+ * The tier of one card: its kind's, except a container migration. A container
+ * cannot move live, PVE migrates it with a restart (R9), so it asks for the
+ * double confirmation of a disruptive action. Shared by the signer
+ * (`issueCard`), the browser's decoder (`sanitizeActionCard`) and the widget:
+ * a decoder that rebuilt the tier from the kind alone would break the
+ * signature of every container migration card.
+ */
+export function actionTier(kind: ActionKind, target: { guestKind?: 'qemu' | 'lxc' }): ActionTier {
+  if (kind === 'migrate' && target.guestKind === 'lxc') return 'disruptive'
+
+  return ACTION_TIER[kind]
+}
+
 // ---------------------------------------------------------------------------
 // Per-tenant settings (key `ai_actions`)
 // ---------------------------------------------------------------------------

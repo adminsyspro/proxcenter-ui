@@ -174,6 +174,27 @@ describe('tool set', () => {
     expect(withPlan[1].parameters.properties.finding.enum).toEqual(['pending_updates'])
   })
 
+  it('describes only the enabled kinds and findings, so the model claims nothing that is off', () => {
+    const [action] = actionToolsFor(normalizeAiActionsSettings({ enabled: true, actions: { start: true, snapshot: true } }))
+
+    expect(action.description).toContain('start')
+    expect(action.description).toContain('snapshot')
+
+    for (const off of ['reboot', 'shutdown', 'migrate', 'drs_apply', 'backup_add', 'maintenance']) expect(action.description).not.toContain(off)
+
+    const [, plan] = actionToolsFor(normalizeAiActionsSettings({ enabled: true, actions: { maintenance: true } }))
+
+    expect(plan.description).toContain('pending_updates')
+    expect(plan.description).not.toContain('unprotected_guests')
+    expect(plan.description).not.toContain('host_memory')
+    expect(plan.description).not.toContain('backup')
+
+    // Every kind on: the full description, every kind named.
+    const [full] = actionToolsFor(allOn())
+
+    for (const kind of ACTION_KINDS) expect(full.description).toContain(kind)
+  })
+
   it('never marks a proposal tool read-only', () => {
     expect(ACTION_TOOLS.map(t => [t.name, t.readOnly])).toEqual([
       ['propose_action', false],
@@ -229,10 +250,37 @@ describe('grounding (Review Focus 1)', () => {
     expect((await propose({ action: 'reboot', guest: '128' }, ctx('reboot 128', { snap, answered }))).card?.target.name).toBe('app-128')
   })
 
-  it('still takes a name from an assistant answer the user read', async () => {
-    const res = await propose({ action: 'reboot', guest: 'win2025' }, ctx('reboot that one', { answered: 'win2025 uses 90 % CPU.' }))
+  it('still takes a name from an assistant answer the user read, for a safe kind', async () => {
+    const res = await propose({ action: 'snapshot', guest: 'win2025' }, ctx('snapshot that one', { answered: 'win2025 uses 90 % CPU.' }))
 
     expect(res.card?.target.name).toBe('win2025')
+
+    const move = await propose({ action: 'migrate', guest: 'win2025' }, ctx('move that one', { answered: 'win2025 uses 90 % CPU.' }))
+
+    expect(move.card?.target.name).toBe('win2025')
+  })
+
+  it.each([
+    ['reboot', { guest: 'win2025' }, 'win2025 uses 90 % CPU.'],
+    ['shutdown', { guest: 'win2025' }, 'win2025 uses 90 % CPU.'],
+    ['maintenance', { host: 'pve2', mode: 'enter' }, 'pve2 has 12 pending updates.'],
+    ['migrate', { guest: 'ct-web' }, 'ct-web uses 90 % CPU.'],
+  ])('takes the target of a disruptive %s from what the user typed only', async (action, args, answered) => {
+    const res = await propose({ action, ...args }, ctx('do it on that one', { answered }))
+
+    expect(res.refused).toBe('Name the guest or host you want me to act on.')
+    expect(h.pveFetch).not.toHaveBeenCalled()
+
+    const name = 'guest' in args ? args.guest : args.host
+    const typed = await propose({ action, ...args }, ctx(`${action} ${name}`, { answered }))
+
+    expect(typed.card?.target.name).toBe(name)
+  })
+
+  it('grounds the host of a pending_updates plan, maintenance steps, on what the user typed', async () => {
+    const res = await invokeTool(proposeRemediationPlanTool, { finding: 'pending_updates', host: 'pve2' }, ctx('plan it', { answered: 'pve2 has 12 pending updates.' }))
+
+    expect(res).toMatchObject({ ok: false, message: 'Name the guest or host you want me to act on.' })
   })
 
   it('refuses a cluster argument the user did not name', async () => {
@@ -476,6 +524,25 @@ describe('backup_add', () => {
     expect(res.card?.preflight.ok).toBe(true)
   })
 
+  it('takes the job only when the conversation named it, else the first compatible one', async () => {
+    h.pveFetch.mockImplementation(async (_c: unknown, path: string) =>
+      path === '/cluster/backup' ? [{ id: 'weekly', vmid: '101' }, { id: 'nightly', vmid: '101,102' }] : []
+    )
+
+    // The model alone picked nightly: ignored, like a target_host the user never named.
+    const ungrounded = await propose({ action: 'backup_add', guest: 'win2025', job: 'nightly' }, ctx('back up win2025'))
+
+    expect(ungrounded.card?.params).toEqual({ jobId: 'weekly' })
+
+    const named = await propose({ action: 'backup_add', guest: 'win2025', job: 'nightly' }, ctx('add win2025 to the nightly job'))
+
+    expect(named.card?.params).toEqual({ jobId: 'nightly' })
+
+    const unknown = await propose({ action: 'backup_add', guest: 'win2025', job: 'hourly' }, ctx('add win2025 to the hourly job'))
+
+    expect(unknown.error).toBe('out-of-scope')
+  })
+
   it('is refused to a vDC tenant', async () => {
     h.vdcPools = new Set(['gold'])
 
@@ -517,12 +584,60 @@ describe('propose_remediation_plan', () => {
     return { value: outcome.value as Record<string, any>, plan: cardsOf(outcome.value).plans[0] }
   }
 
-  it('turns 65 unprotected guests into 10 signed steps', async () => {
-    const many = Array.from({ length: 65 }, (_, i) => guest(String(1000 + i), `app-${i}`, i % 2 ? 'lxc' : 'qemu', 'running', 'pve2'))
+  const many = () => Array.from({ length: 65 }, (_, i) => guest(String(1000 + i), `app-${i}`, i % 2 ? 'lxc' : 'qemu', 'running', 'pve2'))
+  const nightlyOnly = async (_c: unknown, path: string) => (path === '/cluster/backup' ? [{ id: 'nightly', vmid: '104,205,101,206,300,301' }] : [])
+  const capped = (maxPerConversation: number) =>
+    normalizeAiActionsSettings({ enabled: true, actions: Object.fromEntries(ACTION_KINDS.map(k => [k, true])), maxPerConversation })
 
-    h.pveFetch.mockImplementation(async (_c: unknown, path: string) => (path === '/cluster/backup' ? [{ id: 'nightly', vmid: '104,205,101,206,300,301' }] : []))
+  it('never plans more card steps than the conversation may execute', async () => {
+    const fallback = h.pveFetch.getMockImplementation()!
 
-    const res = await plan({ finding: 'unprotected_guests' }, ctx('protect the unprotected guests', { snap: snapshot(many) }))
+    h.pveFetch.mockImplementation(async (conn: unknown, path: string) => (path === '/cluster/backup' ? nightlyOnly(conn, path) : fallback(conn, path)))
+
+    // The default cap: 5 actions per conversation, so 5 steps, the rest said.
+    const res = await plan({ finding: 'unprotected_guests' }, ctx('protect the unprotected guests', { snap: snapshot(many()) }))
+
+    expect(res.plan?.steps).toHaveLength(5)
+    expect(res.value?.proposed).toContain('5-step plan')
+    expect(res.value?.proposed).toContain('60 more left for a later conversation')
+
+    const two = await plan({ finding: 'pending_updates', host: 'pve2' }, ctx('pve2 has pending updates, plan it', { settings: capped(1) }))
+
+    expect(two.plan?.steps.map(s => s.card?.params.mode ?? 'manual')).toEqual(['enter', 'manual'])
+    expect(two.value?.proposed).toContain('1 more left for a later conversation')
+
+    const big = [
+      guest('400', 'big-1', 'qemu', 'running', 'pve1', { memUsedGb: 12, memTotalGb: 16 }),
+      guest('401', 'big-2', 'qemu', 'running', 'pve1', { memUsedGb: 10, memTotalGb: 12 }),
+    ]
+    // pve1 at 62 of 64 GB: moving big-1 still leaves it above 75 %, the cap stops the plan there.
+    const nodes = [node('c1', 'pve1', 62), node('c1', 'pve2', 20), node('c1', 'pve3', 10), node('c2', 'pve1-dr', 5)]
+    const relief = await plan({ finding: 'host_memory', host: 'pve1' }, ctx('pve1 is short of RAM', { snap: snapshot(big, nodes), settings: capped(1) }))
+
+    expect(relief.plan?.steps).toHaveLength(1)
+    expect(relief.value?.proposed).toContain('more moves left for a later conversation')
+  })
+
+  it('signs every plan step for 2 hours, a loose card for 15 minutes', async () => {
+    h.pveFetch.mockImplementation(nightlyOnly)
+
+    const before = Date.now()
+    const res = await plan({ finding: 'unprotected_guests' }, ctx('protect the unprotected guests', { snap: snapshot(many()) }))
+    const loose = await propose({ action: 'snapshot', guest: 'win2025' }, ctx('snapshot win2025'))
+    const after = Date.now()
+
+    for (const s of res.plan!.steps) {
+      expect(s.card!.expiresAt).toBeGreaterThanOrEqual(before + 2 * 60 * 60 * 1000)
+      expect(s.card!.expiresAt).toBeLessThanOrEqual(after + 2 * 60 * 60 * 1000)
+    }
+    expect(loose.card!.expiresAt).toBeGreaterThanOrEqual(before + 15 * 60 * 1000)
+    expect(loose.card!.expiresAt).toBeLessThanOrEqual(after + 15 * 60 * 1000)
+  })
+
+  it('turns 65 unprotected guests into 10 signed steps when the cap allows it', async () => {
+    h.pveFetch.mockImplementation(nightlyOnly)
+
+    const res = await plan({ finding: 'unprotected_guests' }, ctx('protect the unprotected guests', { snap: snapshot(many()), settings: capped(20) }))
 
     expect(res.plan?.steps).toHaveLength(10)
     expect(res.plan?.finding).toBe('unprotected_guests')
@@ -630,6 +745,78 @@ describe('propose_remediation_plan', () => {
 
     await plan({ finding: 'pending_updates', host: 'pve2' }, c)
     expect(c.usage?.proposals).toBe(1)
+  })
+
+  it('proposes one plan per question, a second one refused', async () => {
+    const c = ctx('pve2 and pve3 have pending updates, plan them')
+
+    expect((await plan({ finding: 'pending_updates', host: 'pve2' }, c)).plan).toBeDefined()
+
+    const second = await plan({ finding: 'pending_updates', host: 'pve3' }, c)
+
+    expect(second.error).toBe('out-of-scope')
+    expect(second.refused).toContain('One remediation plan per question')
+  })
+
+  it('refuses the second of two plans asked in the same round', async () => {
+    const c = ctx('pve2 and pve3 have pending updates, plan them')
+    const both = await Promise.all([plan({ finding: 'pending_updates', host: 'pve2' }, c), plan({ finding: 'pending_updates', host: 'pve3' }, c)])
+
+    expect(both.filter(r => r.plan)).toHaveLength(1)
+    expect(both.filter(r => r.refused?.includes('One remediation plan per question'))).toHaveLength(1)
+  })
+
+  it('lets a plan refused on its arguments be asked again', async () => {
+    const c = ctx('pve2 has pending updates, plan it')
+
+    expect((await plan({ finding: 'pending_updates' }, c)).error).toBe('bad-argument')
+    expect((await plan({ finding: 'pending_updates', host: 'pve2' }, c)).plan).toBeDefined()
+  })
+})
+
+describe('Proxmox load of the proposals', () => {
+  it('keeps one Proxmox read in flight per question, three migrations proposed in one round', async () => {
+    const fallback = h.pveFetch.getMockImplementation()!
+    let inFlight = 0
+    let maxInFlight = 0
+
+    h.pveFetch.mockImplementation(async (conn: unknown, path: string) => {
+      inFlight++
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      await new Promise(resolve => setTimeout(resolve, 2))
+      inFlight--
+
+      return fallback(conn, path)
+    })
+
+    const c = ctx('move win2025, ct-web and evil-vm to pve3')
+    const res = await Promise.all(
+      ['win2025', 'ct-web', 'evil-vm'].map(g => propose({ action: 'migrate', guest: g, target_host: 'pve3' }, c))
+    )
+
+    expect(res.map(r => r.card?.preflight.ok)).toEqual([true, true, true])
+    // Two precondition GETs, plus the container's precondition, config and storage config.
+    expect(h.pveFetch).toHaveBeenCalledTimes(5)
+    expect(maxInFlight).toBe(1)
+  })
+
+  it('does not hold a read behind one that failed', async () => {
+    const fallback = h.pveFetch.getMockImplementation()!
+
+    h.pveFetch.mockImplementation(async (conn: unknown, path: string) => {
+      if (path === '/nodes/pve1/qemu/104/migrate') throw new Error('pvedaemon busy')
+
+      return fallback(conn, path)
+    })
+
+    const c = ctx('move win2025 and evil-vm to pve3')
+    const [failed, passed] = await Promise.all([
+      propose({ action: 'migrate', guest: 'win2025', target_host: 'pve3' }, c),
+      propose({ action: 'migrate', guest: 'evil-vm', target_host: 'pve3' }, c),
+    ])
+
+    expect(failed.card?.preflight.ok).toBe(false)
+    expect(passed.card?.preflight.ok).toBe(true)
   })
 })
 

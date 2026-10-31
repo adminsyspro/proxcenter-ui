@@ -10,7 +10,7 @@
  * Pure module: no Next, Prisma or React import belongs here.
  */
 
-import { ACTION_KINDS, ACTION_TIER, type ActionCard, type ActionPlan } from './types'
+import { ACTION_KINDS, actionTier, type ActionCard, type ActionPlan } from './types'
 
 export const ACTION_CARDS = Symbol('actionCards')
 
@@ -105,13 +105,16 @@ export function sanitizeActionCard(raw: unknown): ActionCard | null {
   const planId = str(raw.planId)
   const step = num(raw.step)
   const after = num(raw.after)
+  const cleanTarget: ActionCard['target'] = { connId, cluster, node, name, ...(vmid !== undefined ? { vmid } : {}), ...(guestKind ? { guestKind } : {}) }
 
   return {
     actionId,
     kind,
-    // Derived, never trusted: the tier decides how many confirmations the widget asks for.
-    tier: ACTION_TIER[kind],
-    target: { connId, cluster, node, name, ...(vmid !== undefined ? { vmid } : {}), ...(guestKind ? { guestKind } : {}) },
+    // Derived, never trusted: the tier decides how many confirmations the
+    // widget asks for. Derived exactly as the signer did (`actionTier`), or
+    // a container migration card would fail its signature at the click.
+    tier: actionTier(kind, cleanTarget),
+    target: cleanTarget,
     params,
     preflight: { ok: preflight.ok === true, checks },
     ...(planId !== undefined ? { planId } : {}),

@@ -7,6 +7,15 @@ import type { ActionBinding, ActionCard } from './types'
 
 export const ACTION_CARD_TTL_MS = 15 * 60 * 1000
 
+/**
+ * A plan step is signed when the plan is proposed but runs only after the
+ * steps before it: a 5-migration plan, or the exit of a pending_updates plan
+ * once the updates are installed by hand, would always outlive 15 minutes.
+ * Two hours is safe because nothing about the step is trusted from its
+ * proposal: execute replays every check, and an actionId runs once.
+ */
+export const ACTION_PLAN_CARD_TTL_MS = 2 * 60 * 60 * 1000
+
 let cachedFor: string | null = null
 let cachedKey: Buffer | null = null
 

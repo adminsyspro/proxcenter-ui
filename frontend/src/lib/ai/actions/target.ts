@@ -11,7 +11,7 @@
 import type { SnapshotGuest, SnapshotNode } from '@/lib/tools/snapshot'
 import { resolveConnection, resolveGuest, resolveNode, ToolScopeError, type ToolContext } from '@/lib/tools/types'
 
-import { ACTION_TIER, type ActionCard, type ActionKind, type ActionTier } from './types'
+import type { ActionCard, ActionKind } from './types'
 
 /** Kinds acting on a host; every other kind acts on one guest. */
 export const HOST_KINDS: readonly ActionKind[] = ['maintenance']
@@ -50,15 +50,8 @@ export function findTargetNode(ctx: ToolContext, connId: string, name: string): 
   return ctx.snapshot.nodes.find(n => n.connId === connId && n.name === name)
 }
 
-/**
- * A container cannot move live: PVE migrates it with a restart (R9), so its
- * migration asks for the double confirmation of a disruptive action.
- */
-export function actionTier(kind: ActionKind, target: ActionCard['target']): ActionTier {
-  if (kind === 'migrate' && target.guestKind === 'lxc') return 'disruptive'
-
-  return ACTION_TIER[kind]
-}
+// Pure, in ./types: the browser's decoder derives the same tier.
+export { actionTier } from './types'
 
 export function resolveActionTarget(input: ActionTargetInput, ctx: ToolContext): ActionCard['target'] {
   if (isHostKind(input.kind)) {

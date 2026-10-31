@@ -11,9 +11,8 @@ import { planAddGuestToJob, type VzdumpJob } from '@/lib/backups/coverage'
 import { ToolArgumentError, ToolScopeError, type ToolContext } from '@/lib/tools/types'
 
 import { ACTION_CARDS, type ActionCardsPayload } from './cards'
-import { actionTier } from './target'
-import { ACTION_CARD_TTL_MS, signCard } from './token'
-import type { ActionCard } from './types'
+import { ACTION_CARD_TTL_MS, ACTION_PLAN_CARD_TTL_MS, signCard } from './token'
+import { actionTier, type ActionCard } from './types'
 
 /** Proposals per question, a plan counting for one: bounds the precondition reads. */
 export const MAX_PROPOSALS_PER_QUESTION = 3
@@ -43,6 +42,27 @@ export function consumeProposal(ctx: ToolContext) {
   usage.proposals = (usage.proposals ?? 0) + 1
 }
 
+export const ONE_PLAN_MESSAGE =
+  'One remediation plan per question: answer with the plan already proposed, the user can ask for another one next.'
+
+/**
+ * Takes the one remediation plan a question may ask for, before any await so
+ * two plan calls of the same round cannot both pass: a plan reads Proxmox for
+ * each of its steps, two would double that load. Returns the release a plan
+ * refused on its arguments calls, so the model can ask again, fixed.
+ */
+export function reservePlan(ctx: ToolContext): () => void {
+  const usage = (ctx.usage ??= { historyLookups: 0 })
+
+  if ((usage.plans ?? 0) >= 1) throw new ToolScopeError(ONE_PLAN_MESSAGE)
+
+  usage.plans = 1
+
+  return () => {
+    usage.plans = 0
+  }
+}
+
 /** A required enum argument, refused with the accepted values when missing or unknown. */
 export function argRequiredEnum<T extends string>(args: Record<string, unknown>, key: string, allowed: readonly T[]): T {
   const raw = typeof args?.[key] === 'string' ? (args[key] as string).trim().toLowerCase() : ''
@@ -69,7 +89,8 @@ export function issueCard(
       params: body.params,
       preflight: body.preflight,
       ...(body.planId ? { planId: body.planId, step: body.step, ...(body.after === undefined ? {} : { after: body.after }) } : {}),
-      expiresAt: Date.now() + ACTION_CARD_TTL_MS,
+      // A plan step waits for the steps before it, a loose card for nobody.
+      expiresAt: Date.now() + (body.planId ? ACTION_PLAN_CARD_TTL_MS : ACTION_CARD_TTL_MS),
     },
     actions.bind
   )

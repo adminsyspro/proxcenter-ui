@@ -14,6 +14,11 @@
  * other; nothing with `inPlan`.
  * Everything else reads the snapshot, the minute-cached backup jobs or the
  * orchestrator.
+ *
+ * Every Proxmox read goes through `serialPveRead`, one at a time per
+ * question: the tool loop runs up to four calls at once, and three
+ * `propose_action migrate` of one round would otherwise take the three
+ * pvedaemon workers of the same node together.
  */
 
 import { planAddGuestToJob, type AddGuestRefusal } from '@/lib/backups/coverage'
@@ -50,6 +55,24 @@ export type PreflightOptions = {
    * by today's state.
    */
   inPlan?: boolean
+}
+
+/**
+ * Runs a Proxmox read of a preflight after every earlier one of the same
+ * question (`ctx.usage.pveChain`) has settled, so at most one is in flight per
+ * question. A failed read does not hold the next one: the chain keeps only
+ * the settling, the caller gets the outcome.
+ */
+export function serialPveRead<T>(ctx: ToolContext, read: () => Promise<T>): Promise<T> {
+  const usage = (ctx.usage ??= { historyLookups: 0 })
+  const run = (usage.pveChain ?? Promise.resolve()).then(read)
+
+  usage.pveChain = run.then(
+    () => undefined,
+    () => undefined
+  )
+
+  return run
 }
 
 const ok = (text: string): Check => ({ level: 'ok', text })
@@ -144,7 +167,9 @@ async function checkPrecondition(guest: SnapshotGuest, dest: string, ctx: ToolCo
 
   try {
     conn = await getConnectionById(guest.connId, ctx.tenantId)
-    pre = (await pveFetch<Record<string, any>>(conn, `/nodes/${encodeURIComponent(guest.node)}/${guest.kind}/${encodeURIComponent(guest.vmid)}/migrate`)) ?? {}
+    const path = `/nodes/${encodeURIComponent(guest.node)}/${guest.kind}/${encodeURIComponent(guest.vmid)}/migrate`
+
+    pre = (await serialPveRead(ctx, () => pveFetch<Record<string, any>>(conn, path))) ?? {}
   } catch (e: any) {
     checks.push(block(`Proxmox could not confirm the move is possible: ${String(e?.message || e).slice(0, 160)}`))
 
@@ -201,13 +226,13 @@ export function clearStorageConfigCache() {
  * minute per tenant and connection, like the backup jobs, an in-flight read
  * shared.
  */
-function loadStorageConfig(tenantId: string, connId: string, conn: Awaited<ReturnType<typeof getConnectionById>>): Promise<StorageConfig[]> {
-  const key = `${tenantId}|${connId}`
+function loadStorageConfig(ctx: ToolContext, connId: string, conn: Awaited<ReturnType<typeof getConnectionById>>): Promise<StorageConfig[]> {
+  const key = `${ctx.tenantId}|${connId}`
   const hit = storageConfigs.get(key)
 
   if (hit && Date.now() - hit.at < STORAGE_CONFIG_TTL_MS) return hit.rows
 
-  const rows = pveFetch<StorageConfig[]>(conn, '/storage').then(list => (Array.isArray(list) ? list : []))
+  const rows = serialPveRead(ctx, () => pveFetch<StorageConfig[]>(conn, '/storage')).then(list => (Array.isArray(list) ? list : []))
 
   storageConfigs.set(key, { at: Date.now(), rows })
   rows.catch(() => {
@@ -236,8 +261,10 @@ async function checkContainerVolumes(guest: SnapshotGuest, ctx: ToolContext, con
   let storages: StorageConfig[]
 
   try {
-    config = (await pveFetch<Record<string, unknown>>(conn, `/nodes/${encodeURIComponent(guest.node)}/lxc/${encodeURIComponent(guest.vmid)}/config`)) ?? {}
-    storages = await loadStorageConfig(ctx.tenantId, guest.connId, conn)
+    const path = `/nodes/${encodeURIComponent(guest.node)}/lxc/${encodeURIComponent(guest.vmid)}/config`
+
+    config = (await serialPveRead(ctx, () => pveFetch<Record<string, unknown>>(conn, path))) ?? {}
+    storages = await loadStorageConfig(ctx, guest.connId, conn)
   } catch (e: any) {
     checks.push(block(`Could not read the volumes of ${guest.name}: ${String(e?.message || e).slice(0, 160)}`))
 
@@ -355,7 +382,8 @@ async function checkBackupAdd(input: PreflightInput, ctx: ToolContext, checks: C
   }
 
   const jobId = String(input.params.jobId ?? '')
-  const job = (await loadBackupJobs(ctx, guest.connId)).find(j => j.id === jobId)
+  // Minute-cached, but a cold cache reads /cluster/backup: in the chain too.
+  const job = (await serialPveRead(ctx, () => loadBackupJobs(ctx, guest.connId))).find(j => j.id === jobId)
 
   if (!job) {
     checks.push(block(`Backup job ${jobId || '(none)'} does not exist on ${guest.cluster}.`))

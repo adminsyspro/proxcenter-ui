@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { InventorySelection } from '../types'
 import { parseVmId } from '../helpers'
 import { deleteSnapshotsSequential } from '@/lib/migration/deleteSnapshotsSequential'
 import { waitForPveTask } from '@/lib/proxmox/waitForTaskClient'
+import { useSelectionGuard } from '@/hooks/useSelectionGuard'
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -74,14 +75,16 @@ export function useSnapshots({
   // (no blocking overlay), but the mutating buttons are disabled while > 0.
   const [snapshotTaskCount, setSnapshotTaskCount] = useState(0)
 
-  // Current selection id, so long-lived closures (task follows and their
+  // Selection generation, so long-lived closures (task follows and their
   // delayed refreshes can run for up to 10 min) can detect that the user has
-  // moved to another VM and must stop writing state.
-  const selectionIdRef = useRef(selection?.id)
+  // moved to another VM and must stop writing state. Leaving a VM and coming
+  // back starts a new generation: the old closures stay detached.
+  const guard = useSelectionGuard(selection?.id)
 
-  useEffect(() => {
-    selectionIdRef.current = selection?.id
-  }, [selection?.id])
+  /** Error banner of the VM `selectionId`, only while it is still displayed. */
+  const setErrorFor = useCallback((selectionId: string, msg: string) => {
+    if (guard.isCurrent(selectionId)) setSnapshotsError(msg)
+  }, [guard])
 
   const loadSnapshots = useCallback(async () => {
     if (selection?.type !== 'vm') return
@@ -94,7 +97,8 @@ export function useSnapshots({
     // refreshes (setTimeout / task follows) may fire after the user switched
     // VM — skip every state write then, otherwise this would paint the
     // previous VM's snapshot list over the newly selected one.
-    const isStale = () => selectionIdRef.current !== selectionId
+    const req = guard.begin(selectionId)
+    const isStale = () => !req.isCurrent()
 
     if (isStale()) return
 
@@ -106,7 +110,7 @@ export function useSnapshots({
       if (type === 'lxc') {
         const featureRes = await fetch(
           `/api/v1/guests/${encodeURIComponent(vmKey)}/features?feature=snapshot`,
-          { cache: 'no-store' }
+          { cache: 'no-store', signal: req.signal }
         )
         const featureJson = await featureRes.json()
         if (!isStale()) setSnapshotFeatureAvailable(featureJson.data?.hasFeature ?? false)
@@ -116,7 +120,7 @@ export function useSnapshots({
 
       const res = await fetch(
         `/api/v1/guests/${encodeURIComponent(vmKey)}/snapshots`,
-        { cache: 'no-store' }
+        { cache: 'no-store', signal: req.signal }
       )
 
       const json = await res.json()
@@ -134,7 +138,7 @@ export function useSnapshots({
     } finally {
       if (!isStale()) setSnapshotsLoading(false)
     }
-  }, [selection, t])
+  }, [selection, t, guard])
 
   /**
    * Follow the PVE task behind a snapshot action to its real end (issue #627).
@@ -165,7 +169,12 @@ export function useSnapshots({
       return
     }
 
-    const selectionId = selection?.id
+    // Bound to the VM the action was fired on. Its bookkeeping (task count,
+    // row flag) belongs to that VM's view only: resetSnapshots zeroes it when
+    // the user leaves, so a follow that outlives its VM must not touch it.
+    const req = guard.begin(selection?.id)
+
+    if (!req.isCurrent()) return
 
     setSnapshotTaskCount((n) => n + 1)
 
@@ -178,8 +187,12 @@ export function useSnapshots({
     setTimeout(loadSnapshots, 2000)
 
     const result = await waitForPveTask(connId, node, upid, {
-      shouldContinue: () => selectionIdRef.current === selectionId,
+      shouldContinue: req.isCurrent,
     })
+
+    // The user navigated to another VM: its state is no longer ours to touch,
+    // not even the task counter or a same-named row of the VM now displayed.
+    if (!req.isCurrent()) return
 
     setSnapshotTaskCount((n) => Math.max(0, n - 1))
 
@@ -190,7 +203,6 @@ export function useSnapshots({
       return next
     })
 
-    // The user navigated to another VM: its state is no longer ours to touch.
     if (result.outcome === 'abandoned') return
 
     if (result.outcome === 'ok') {
@@ -204,7 +216,7 @@ export function useSnapshots({
     // row stays visible if PVE still lists the snapshot).
 
     await loadSnapshots()
-  }, [selection?.id, loadSnapshots, toast])
+  }, [selection?.id, loadSnapshots, toast, guard])
 
   const createSnapshot = useCallback(async () => {
     if (selection?.type !== 'vm' || !newSnapshotName.trim()) return
@@ -231,7 +243,7 @@ export function useSnapshots({
       const json = await res.json()
 
       if (json.error) {
-        setSnapshotsError(json.error)
+        setErrorFor(selection.id, json.error)
         toast.error(json.error)
       } else {
         // Captured before the reset below wipes the field.
@@ -257,12 +269,12 @@ export function useSnapshots({
       }
     } catch (e: any) {
       const errorMsg = e.message || t('errors.addError')
-      setSnapshotsError(errorMsg)
+      setErrorFor(selection.id, errorMsg)
       toast.error(errorMsg)
     } finally {
       setSnapshotActionBusy(false)
     }
-  }, [selection, newSnapshotName, newSnapshotDesc, newSnapshotRam, followSnapshotTask, toast, t])
+  }, [selection, newSnapshotName, newSnapshotDesc, newSnapshotRam, followSnapshotTask, toast, t, setErrorFor])
 
   const deleteSnapshot = useCallback((snapname: string) => {
     if (selection?.type !== 'vm') return
@@ -288,7 +300,7 @@ export function useSnapshots({
           const json = await res.json()
 
           if (json.error) {
-            setSnapshotsError(json.error)
+            setErrorFor(selection.id, json.error)
             toast.error(json.error)
           } else {
             // Fire-and-forget on purpose: the confirm dialog closes and
@@ -308,7 +320,7 @@ export function useSnapshots({
           setConfirmAction(null)
         } catch (e: any) {
           const errorMsg = e.message || t('errors.deleteError')
-          setSnapshotsError(errorMsg)
+          setErrorFor(selection.id, errorMsg)
           toast.error(errorMsg)
         } finally {
           setSnapshotActionBusy(false)
@@ -316,7 +328,7 @@ export function useSnapshots({
         }
       }
     })
-  }, [selection, followSnapshotTask, data?.title, toast, t, setConfirmAction, setConfirmActionLoading])
+  }, [selection, followSnapshotTask, data?.title, toast, t, setConfirmAction, setConfirmActionLoading, setErrorFor])
 
   const deleteAllSnapshots = useCallback(() => {
     if (selection?.type !== 'vm') return
@@ -326,6 +338,9 @@ export function useSnapshots({
     // Current (newest-first) order deletes leaf snapshots before their parents.
     const names = snapshots.filter((s: any) => s?.name !== 'current').map((s: any) => s.name as string)
     if (names.length === 0) return
+
+    const selectionId = selection.id
+    const vmLabel = data?.title || `VM ${vmid}`
 
     setConfirmAction({
       action: 'delete-all-snapshots',
@@ -339,6 +354,17 @@ export function useSnapshots({
         // back on the whole tab.
         setConfirmAction(null)
         setConfirmActionLoading(false)
+
+        // A confirmed run is never cancelled by navigation: the user asked
+        // for every snapshot of this VM to go, and each DELETE already sent
+        // is a PVE task that runs to its end anyway. Leaving the VM only
+        // detaches the run from the view: it stops updating rows, progress
+        // and counters (which then belong to the VM now displayed) and
+        // reports its outcome with the VM name instead.
+        const req = guard.begin(selectionId)
+
+        if (!req.isCurrent()) return
+
         setDeleteAllBusy(true)
         setDeleteAllProgress({ done: 0, total: names.length })
         setSnapshotTaskCount(n => n + 1)
@@ -349,7 +375,7 @@ export function useSnapshots({
 
         try {
           const result = await deleteSnapshotsSequential(vmKey, names, (name, status) => {
-            if (status !== 'done') return
+            if (status !== 'done' || !req.isCurrent()) return
             setDeleteAllProgress(p => ({ ...p, done: p.done + 1 }))
 
             // Each delete goes through the route's ?wait=1, so "done" means PVE
@@ -364,6 +390,12 @@ export function useSnapshots({
             })
           })
 
+          if (!req.isCurrent()) {
+            if (result.ok) toast.success(`${vmLabel}: ${t('inventory.snapshotsAllDeleted')}`)
+            else toast.error(`${vmLabel}: ${result.error || t('errors.deleteError')}`)
+            return
+          }
+
           if (result.ok) {
             toast.success(t('inventory.snapshotsAllDeleted'))
           } else {
@@ -374,21 +406,23 @@ export function useSnapshots({
           await loadSnapshots()
         } catch (e: any) {
           const errorMsg = e.message || t('errors.deleteError')
-          setSnapshotsError(errorMsg)
-          toast.error(errorMsg)
+          if (req.isCurrent()) setSnapshotsError(errorMsg)
+          toast.error(req.isCurrent() ? errorMsg : `${vmLabel}: ${errorMsg}`)
         } finally {
-          setDeleteAllBusy(false)
-          setSnapshotTaskCount(n => Math.max(0, n - 1))
-          // A halted run leaves the snapshots it never reached flagged.
-          setSnapshotRowTasks(prev => {
-            const next = { ...prev }
-            names.forEach(name => delete next[name])
-            return next
-          })
+          if (req.isCurrent()) {
+            setDeleteAllBusy(false)
+            setSnapshotTaskCount(n => Math.max(0, n - 1))
+            // A halted run leaves the snapshots it never reached flagged.
+            setSnapshotRowTasks(prev => {
+              const next = { ...prev }
+              names.forEach(name => delete next[name])
+              return next
+            })
+          }
         }
       }
     })
-  }, [selection, snapshots, loadSnapshots, data?.title, toast, t, setConfirmAction, setConfirmActionLoading])
+  }, [selection, snapshots, loadSnapshots, data?.title, toast, t, setConfirmAction, setConfirmActionLoading, guard])
 
   const rollbackSnapshot = useCallback((snapname: string, hasVmstate?: boolean) => {
     if (selection?.type !== 'vm') return
@@ -414,7 +448,7 @@ export function useSnapshots({
           const json = await res.json()
 
           if (json.error) {
-            setSnapshotsError(json.error)
+            setErrorFor(selection.id, json.error)
             toast.error(json.error)
           } else {
             setConfirmAction(null)
@@ -431,7 +465,7 @@ export function useSnapshots({
           }
         } catch (e: any) {
           const errorMsg = e.message || t('errors.updateError')
-          setSnapshotsError(errorMsg)
+          setErrorFor(selection.id, errorMsg)
           toast.error(errorMsg)
         } finally {
           setSnapshotActionBusy(false)
@@ -439,7 +473,7 @@ export function useSnapshots({
         }
       }
     })
-  }, [selection, followSnapshotTask, data?.title, toast, t, setConfirmAction, setConfirmActionLoading])
+  }, [selection, followSnapshotTask, data?.title, toast, t, setConfirmAction, setConfirmActionLoading, setErrorFor])
 
   // Reset snapshot states when selection changes
   const resetSnapshots = useCallback(() => {
@@ -449,8 +483,12 @@ export function useSnapshots({
     setSnapshotFeatureAvailable(null)
     setSnapshotRowTasks({})
     // Tasks still running on the VM we are leaving must not disable the newly
-    // selected one's buttons. Their own decrement clamps at 0.
+    // selected one's buttons. Their follows are detached by the selection
+    // guard and never decrement this count again.
     setSnapshotTaskCount(0)
+    // Same for a delete-all run that keeps going in the background.
+    setDeleteAllBusy(false)
+    setDeleteAllProgress({ done: 0, total: 0 })
     // A load abandoned by the stale-selection guard never clears its own
     // loading flag; release it here so the lazy-load effect can fire again.
     setSnapshotsLoading(false)

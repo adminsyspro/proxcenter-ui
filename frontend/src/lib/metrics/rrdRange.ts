@@ -88,12 +88,14 @@ export function parseRrdWindow(from: unknown, to: unknown): RrdWindow | null {
 
 /**
  * Clamps a window to what Proxmox can answer: never in the future, never
- * older than the deepest archive.
+ * older than the deepest archive. Both bounds are clamped, so a window that
+ * starts at or after now collapses to the last second instead of keeping a
+ * future-dated `from`/`to` (it then simply holds no point).
  */
 export function clampRrdWindow(window: RrdWindow, now = nowSeconds()): { window: RrdWindow; truncated: boolean } {
   const oldest = now - RRD_MAX_LOOKBACK_SECONDS
   const truncated = window.from < oldest
-  const from = truncated ? oldest : window.from
+  const from = Math.min(truncated ? oldest : window.from, now - 1)
   const to = Math.min(window.to, now)
 
   return { window: { from, to: Math.max(to, from + 1) }, truncated }

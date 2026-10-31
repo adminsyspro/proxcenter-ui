@@ -846,7 +846,8 @@
     "cephNooutOrphan": "Ceph noout sin mantenimiento",
     "cephNooutOrphanDesc": "Alerta cuando un indicador Ceph noout está activo en un host sin que ningún nodo del clúster esté en mantenimiento durante más tiempo que esto",
     "cephNooutHoursUnit": "h",
-    "cephNooutMinutesUnit": "min"
+    "cephNooutMinutesUnit": "min",
+    "batchFailed": "{failed} de {total} acciones fallaron: {error}"
   },
   "inventory": {
     "alertsDialog": {
@@ -2639,7 +2640,8 @@
         "verify": "Comprobación de integridad",
         "conversion": "Conversión del invitado",
         "finish": "Conexión e inicio"
-      }
+      },
+      "cancelMigrationFailed": "No se pudo cancelar la migración, sigue en curso"
     },
     "extDashboard": {
       "hosts": "Hosts",
@@ -6678,7 +6680,8 @@
       "vmMixedStorageWarn": "Solo se replicarán los discos Ceph RBD; se omitirán los demás discos.",
       "vmAlreadyReplicated": "Ya replicada por {job}",
       "vmUnsupportedDisk": "Esta VM tiene una referencia de disco no compatible, como un disco passthrough.",
-      "sshChecks": "Conexiones SSH entre nodos"
+      "sshChecks": "Conexiones SSH entre nodos",
+      "createFailed": "No se pudo crear la tarea de replicación: {error}"
     },
     "schedule": {
       "modeRpo": "Continuo (RPO)",
@@ -7221,7 +7224,8 @@
         "help": "La VM se añade al gestor HA, que la arranca.",
         "helpIso": "La VM se añade al gestor HA y queda detenida hasta que inicie la instalación.",
         "localStorage": "Necesita almacenamiento compartido: el almacenamiento elegido es local a su nodo."
-      }
+      },
+      "statusUnreadable": "No se pudo leer el estado del despliegue ({error}). Puede que siga en curso: consulte la pestaña Despliegues."
     },
     "deployments": {
       "vm": "Máquina virtual",
@@ -7241,7 +7245,8 @@
         "starting": "Iniciando",
         "completed": "Completado",
         "failed": "Fallido"
-      }
+      },
+      "loadFailed": "No se pudieron cargar los despliegues: {error}"
     }
   },
   "console": {
@@ -9460,6 +9465,7 @@
     "cephFlagsCard": "Flags OSD de Ceph",
     "cephFlagsNotSet": "Las flags de mantenimiento de Ceph (noout, norebalance, norecover) no están todas configuradas. Configurarlas evita rebalanceos de datos innecesarios durante la actualización.",
     "cephFlagsAlreadySet": "Todas las flags de mantenimiento de Ceph ya están configuradas.",
+    "cephFlagsUnreadable": "No se pudieron leer los flags de Ceph ({error}). ProxCenter no los modificará durante esta actualización.",
     "setCephFlagsBefore": "Configurar flags de mantenimiento de Ceph (noout, norebalance, norecover)",
     "preparingCluster": "Preparando clúster...",
     "postActionsTitle": "Acciones posteriores a la actualización",
@@ -9488,6 +9494,7 @@
     "vmMigrateFailed": "Migración fallida",
     "vmShutdownSuccess": "Apagada",
     "vmShutdownFailed": "Apagado fallido",
+    "vmShutdownNotFollowed": "No se pudo seguir el apagado hasta el final: es posible que el invitado siga en ejecución",
     "migrateVmsBack": "Migrar VMs de vuelta",
     "migrateVmsBackDescription": "Migrar VMs de vuelta a {node} desde {targets}.",
     "migrateVmsBackBtn": "Migrar de vuelta",
@@ -9516,7 +9523,10 @@
     },
     "healthVotes": "Votos, quórum {required}",
     "healthVotesQDevice": "Votos con QDevice, quórum {required}",
-    "vmActionsFailedTitle": "{count} guest(s) no se pudieron mover ni apagar y siguen en este nodo"
+    "vmActionsFailedTitle": "{count} guest(s) no se pudieron mover ni apagar y siguen en este nodo",
+    "preflightStopped": "Comprobación previa detenida, no se actualizó nada: {error}",
+    "postActionFailed": "La acción falló: {error}",
+    "guestDiscoveryFailed": "No se pudieron listar los invitados de este nodo ({error}), por lo que no se puede planificar su evacuación. Cierre el diálogo y vuelva a intentarlo."
   },
   "replication": {
     "title": "Replicación",

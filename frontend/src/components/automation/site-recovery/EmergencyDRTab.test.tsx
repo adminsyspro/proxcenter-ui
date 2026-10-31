@@ -386,6 +386,63 @@ describe('EmergencyDRTab: starting one replica on the DR site', () => {
   })
 })
 
+describe('EmergencyDRTab: restore points of the dialog actually open (roadmap#184)', () => {
+  function twoGuests(loadRestorePoints: TabProps['loadRestorePoints']) {
+    return harness({
+      jobs: [job({ status: 'synced', vm_ids: [100, 200], vm_names: ['web-01', 'db-01'] })],
+      vmNamesByConn: { src: { 100: 'web-01', 200: 'db-01' } },
+      loadRestorePoints,
+    })
+  }
+
+  it('never lists the restore points of a guest whose dialog was closed meanwhile', async () => {
+    let releaseFirst!: (v: VMRestorePoints) => void
+    const loadRestorePoints = vi.fn((_job: string, vmId: number) => vmId === 100
+      ? new Promise<VMRestorePoints>(r => { releaseFirst = r })
+      : Promise.resolve(restorePointsOf([point('mirror-of-200')], { vm_id: 200 })))
+
+    twoGuests(loadRestorePoints)
+    const first = await openStartDialog(1)
+
+    await userEvent.click(within(first).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    const second = await openStartDialog(2)
+    const select = await within(second).findByRole('combobox')
+
+    releaseFirst(restorePointsOf([point('mirror-of-100')]))
+    await new Promise(r => setTimeout(r, 0))
+
+    fireEvent.mouseDown(select)
+    const options = (await screen.findAllByRole('option')).map(o => o.textContent)
+
+    expect(options).toContain('mirror-of-200')
+    expect(options).not.toContain('mirror-of-100')
+  })
+
+  it('never reports the listing failure of a guest whose dialog was closed meanwhile', async () => {
+    let failFirst!: (e: Error) => void
+    const loadRestorePoints = vi.fn((_job: string, vmId: number) => vmId === 100
+      ? new Promise<VMRestorePoints>((_r, rej) => { failFirst = rej })
+      : Promise.resolve(restorePointsOf([point('mirror-of-200')], { vm_id: 200 })))
+
+    twoGuests(loadRestorePoints)
+    const first = await openStartDialog(1)
+
+    await userEvent.click(within(first).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    const second = await openStartDialog(2)
+
+    await within(second).findByRole('combobox')
+    failFirst(new Error('orchestrator unreachable'))
+    await new Promise(r => setTimeout(r, 0))
+
+    expect(within(second).queryByText(/could not be loaded/i)).not.toBeInTheDocument()
+    expect(within(second).getByRole('combobox')).toBeInTheDocument()
+  })
+})
+
 describe('EmergencyDRTab: stopping a replica that runs on the DR site', () => {
   it('offers to resume the replication job the start had paused, and stops with that choice', async () => {
     const { props } = harness({ jobs: [job({ status: 'paused' })] })

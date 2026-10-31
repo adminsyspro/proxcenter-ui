@@ -230,11 +230,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
     setVmDragState({ vmid: 0, draggedPos: null, dragOverPos: null })
     if (fromPos !== null && fromPos !== toPos && vmDragState.vmid === vm.vmid) {
       try {
-        await fetch(`/api/v1/firewall/vms/${selectedConnection}/${vm.node}/${vm.type}/${vm.vmid}/rules/${fromPos}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ moveto: toPos })
-        })
+        await firewallAPI.updateVMRule(selectedConnection, vm.node, vm.type, vm.vmid, fromPos, { moveto: toPos })
         showToast(t('network.ruleMoved'), 'success')
         void reloadVMFirewallRules(vm)
       } catch (err: any) {

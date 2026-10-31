@@ -129,9 +129,7 @@ export default function FirewallPolicyTable({
       if (ruleDialogIsNew) {
         await firewallAPI.addClusterRule(selectedConnection, ruleForm)
       } else if (ruleDialogEditPos !== null) {
-        await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${ruleDialogEditPos}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ruleForm)
-        })
+        await firewallAPI.updateClusterRule(selectedConnection, ruleDialogEditPos, ruleForm)
       }
       showToast(ruleDialogIsNew ? t('network.ruleAdded') : t('network.ruleModified'), 'success')
       void reloadClusterRules()
@@ -146,9 +144,7 @@ export default function FirewallPolicyTable({
     if (!selectedConnection) return
     const newEnable = isRuleEnabled(rule) ? 0 : 1
     try {
-      await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${rule.pos}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rule, enable: newEnable })
-      })
+      await firewallAPI.updateClusterRule(selectedConnection, rule.pos, { ...rule, enable: newEnable })
       void reloadClusterRules()
       showToast(newEnable === 1 ? t('network.ruleEnabled') : t('network.ruleDisabled'), 'success')
     } catch (err: any) {
@@ -198,9 +194,7 @@ export default function FirewallPolicyTable({
     setDragState({ draggedPos: null, dragOverPos: null })
     if (fromPos === null || fromPos === toPos) return
     try {
-      await fetch(`/api/v1/firewall/cluster/${selectedConnection}/rules/${fromPos}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ moveto: toPos })
-      })
+      await firewallAPI.updateClusterRule(selectedConnection, fromPos, { moveto: toPos })
       void reloadClusterRules()
       showToast(t('network.ruleMoved'), 'success')
     } catch (err: any) {

@@ -37,13 +37,16 @@ vi.mock('@/lib/api/firewall', () => ({
   updateAlias: vi.fn(),
   deleteAlias: vi.fn(),
   createIPSet: vi.fn(),
+  updateIPSetComment: vi.fn(),
   deleteIPSet: vi.fn(),
   addIPSetEntry: vi.fn(),
   deleteIPSetEntry: vi.fn(),
 }))
 
+const { showToastMock } = vi.hoisted(() => ({ showToastMock: vi.fn() }))
+
 vi.mock('@/contexts/ToastContext', () => ({
-  useToast: () => ({ showToast: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
+  useToast: () => ({ showToast: showToastMock, success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
 }))
 
 import * as firewallAPI from '@/lib/api/firewall'
@@ -234,6 +237,30 @@ describe('ObjectsTab', () => {
 
     fireEvent.change(dialog().getByLabelText('Description'), { target: { value: 'renamed' } })
     expect(dialog().getByLabelText('Description')).toHaveValue('renamed')
+
+    api.updateIPSetComment.mockResolvedValue(undefined)
+    fireEvent.click(dialog().getByRole('button', { name: 'Save' }))
+
+    // The comment is really sent, and success is only said once PVE took it.
+    await waitFor(() => expect(api.updateIPSetComment).toHaveBeenCalledWith(CONN, 'trusted', 'renamed'))
+    await waitFor(() => expect(showToastMock).toHaveBeenCalledWith('IP Set updated', 'success'))
+    await waitFor(() => expect(screen.queryByText('Edit IP Set')).not.toBeInTheDocument())
+  })
+
+  it('keeps the IP set dialog open and says why when PVE refuses the comment', async () => {
+    renderTab({ view: 'ipsets' })
+
+    const card = screen.getByText('trusted').closest('div')!
+
+    fireEvent.click(within(card.parentElement!.parentElement!).getByRole('button', { name: 'Edit' }))
+    await waitFor(() => expect(screen.getByText('Edit IP Set')).toBeInTheDocument())
+
+    api.updateIPSetComment.mockRejectedValue(new Error("no such IPSet 'trusted'"))
+    fireEvent.click(dialog().getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(showToastMock).toHaveBeenCalledWith("no such IPSet 'trusted'", 'error'))
+    expect(showToastMock).not.toHaveBeenCalledWith('IP Set updated', 'success')
+    expect(screen.getByText('Edit IP Set')).toBeInTheDocument()
   })
 
   it('adds an entry to an IP set', async () => {

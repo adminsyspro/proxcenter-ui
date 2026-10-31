@@ -40,15 +40,19 @@ import {
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 import type * as firewallAPIType from '@/lib/api/firewall'
 
-vi.mock('@/lib/api/firewall', () => ({
+// The rule updates (edit, toggle, move) keep the real wrapper, served by MSW.
+vi.mock('@/lib/api/firewall', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/firewall')>()),
   getNodeOptions: vi.fn(),
   updateNodeOptions: vi.fn(),
   addNodeRule: vi.fn(),
   deleteNodeRule: vi.fn(),
 }))
 
+const { showToastMock } = vi.hoisted(() => ({ showToastMock: vi.fn() }))
+
 vi.mock('@/contexts/ToastContext', () => ({
-  useToast: () => ({ showToast: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
+  useToast: () => ({ showToast: showToastMock, success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
 }))
 
 import * as firewallAPI from '@/lib/api/firewall'
@@ -435,6 +439,40 @@ describe('HostRulesPanel', () => {
     await waitFor(() => expect(requests).toHaveLength(1))
     expect(await requests[0].json()).toEqual({ moveto: 1 })
     await waitFor(() => expect(p.loadHostRules).toHaveBeenCalledTimes(1))
+  })
+
+  it('reports a toggle, an edit and a move PVE refused, never as done', async () => {
+    const p = await renderPanel()
+
+    expandNode(NODE)
+
+    server.use(
+      http.put(`*/api/v1/firewall/nodes/${CONN}/${NODE}/rules/:pos`, () => HttpResponse.json({ error: 'rule locked by PVE' }, { status: 500 })),
+    )
+
+    const ruleRows = () => screen.getAllByRole('row').filter(r => within(r).queryByRole('button', { name: 'Edit' }))
+
+    fireEvent.click(within(ruleRows()[0]).getByRole('switch'))
+    await waitFor(() => expect(showToastMock).toHaveBeenCalledWith('rule locked by PVE', 'error'))
+
+    fireEvent.click(within(ruleRows()[0]).getByRole('button', { name: 'Edit' }))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(showToastMock).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn(), getData: vi.fn() }
+
+    fireEvent.dragStart(ruleRows()[0], { dataTransfer })
+    fireEvent.dragOver(ruleRows()[1], { dataTransfer })
+    fireEvent.drop(ruleRows()[1], { dataTransfer })
+    await waitFor(() => expect(showToastMock).toHaveBeenCalledTimes(3))
+
+    expect(showToastMock.mock.calls.every(([, severity]) => severity === 'error')).toBe(true)
+    expect(p.loadHostRules).not.toHaveBeenCalled()
+    expect(p.reloadHostRulesForNode).not.toHaveBeenCalled()
   })
 
   it('renders nothing fetchable when no connection is selected', async () => {

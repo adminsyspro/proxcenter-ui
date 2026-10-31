@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { putGuestConfig } from '@/lib/proxmox/guestConfigClient'
+import { useSelectionGuard } from '@/hooks/useSelectionGuard'
 
 import { parseVmId, parseNodeId, fetchDetails } from '../helpers'
 import type { InventorySelection, DetailsPayload, ActiveDialog } from '../types'
@@ -44,6 +45,31 @@ export function useHardwareHandlers({
   setActiveDialog,
 }: UseHardwareHandlersParams) {
 
+  // Loads and post-write reloads below are bound to the selection they were
+  // started for: once the user moves to another one, their answer is dropped
+  // (and their requests aborted) instead of landing in the new panel.
+  const selectionKey = selection ? `${selection.type}:${selection.id}` : null
+  const guard = useSelectionGuard(selectionKey)
+
+  /**
+   * Re-read the details after a configuration write. The write itself is
+   * never aborted: only the follow-up read is, and only its result is skipped
+   * when the user already moved to another selection.
+   */
+  const reloadDetails = useCallback(async (sel: InventorySelection) => {
+    const req = guard.begin(`${sel.type}:${sel.id}`)
+
+    if (!req.isCurrent()) return
+
+    try {
+      const payload = await fetchDetails(sel, req.signal)
+
+      if (req.isCurrent()) setData(payload)
+    } catch (e) {
+      if (req.isCurrent()) throw e
+    }
+  }, [guard, setData])
+
   // ==================== HARDWARE HANDLERS ====================
 
   /**
@@ -70,9 +96,7 @@ export function useHardwareHandlers({
     await writeConfig(connId, type, node, vmid, diskConfig)
 
     // Recharger les données
-    const payload = await fetchDetails(selection)
-
-    setData(payload)
+    await reloadDetails(selection)
   }, [selection])
 
   // Sauvegarder un nouveau réseau
@@ -84,9 +108,7 @@ export function useHardwareHandlers({
     await writeConfig(connId, type, node, vmid, networkConfig)
 
     // Recharger les données
-    const payload = await fetchDetails(selection)
-
-    setData(payload)
+    await reloadDetails(selection)
   }, [selection])
 
   // Sauvegarder le contrôleur SCSI
@@ -98,9 +120,7 @@ export function useHardwareHandlers({
     await writeConfig(connId, type, node, vmid, { scsihw: controller })
 
     // Recharger les données
-    const payload = await fetchDetails(selection)
-
-    setData(payload)
+    await reloadDetails(selection)
   }, [selection])
 
   // Modifier un disque existant
@@ -127,9 +147,7 @@ export function useHardwareHandlers({
     await writeConfig(connId, type, node, vmid, body)
 
     // Recharger les données
-    const payload = await fetchDetails(selection)
-
-    setData(payload)
+    await reloadDetails(selection)
   }, [selection, selectedDisk])
 
   // Supprimer un disque
@@ -173,9 +191,7 @@ export function useHardwareHandlers({
     await writeConfig(connId, type, node, vmid, { delete: selectedDisk.id })
 
     // Recharger les données
-    const payload = await fetchDetails(selection)
-
-    setData(payload)
+    await reloadDetails(selection)
     setSelectedDisk(null)
   }, [selection, selectedDisk])
 
@@ -203,9 +219,7 @@ export function useHardwareHandlers({
     }
 
     // Recharger les données
-    const payload = await fetchDetails(selection)
-
-    setData(payload)
+    await reloadDetails(selection)
   }, [selection, selectedDisk])
 
   // Déplacer un disque vers un autre stockage
@@ -240,9 +254,7 @@ export function useHardwareHandlers({
     }
 
     // Recharger les données
-    const payload = await fetchDetails(selection)
-
-    setData(payload)
+    await reloadDetails(selection)
   }, [selection, selectedDisk])
 
   // Supprimer une interface réseau
@@ -254,9 +266,7 @@ export function useHardwareHandlers({
     await writeConfig(connId, type, node, vmid, { delete: selectedNetwork.id })
 
     // Recharger les données
-    const payload = await fetchDetails(selection)
-
-    setData(payload)
+    await reloadDetails(selection)
     setSelectedNetwork(null)
   }, [selection, selectedNetwork])
 
@@ -437,6 +447,18 @@ export function useHardwareHandlers({
   // États pour Firewall du cluster
   const [clusterFirewallLoaded, setClusterFirewallLoaded] = useState(false)
 
+  // A load abandoned by the selection guard never clears its own loading
+  // flag: release them here, or the lazy loaders (which wait for !loading)
+  // would never start for the newly selected item.
+  useEffect(() => {
+    setBackupsLoading(false)
+    setClusterHaLoading(false)
+    setClusterConfigLoading(false)
+    setClusterNotesLoading(false)
+    setClusterCephLoading(false)
+    setClusterStorageLoading(false)
+  }, [selectionKey])
+
   // États pour Rolling Update
   const [nodeUpdates, setNodeUpdates] = useState<Record<string, { count: number; updates: any[]; version: string | null; loading: boolean; permissionError?: string | null }>>({})
   const [nodeLocalVms, setNodeLocalVms] = useState<Record<string, {
@@ -514,6 +536,8 @@ export function useHardwareHandlers({
   ) => {
     if (!vmid) return
 
+    const req = guard.beginCurrent()
+
     setBackupsLoading(true)
     setBackupsError(null)
     setBackups([])
@@ -533,8 +557,10 @@ export function useHardwareHandlers({
       if (opts?.node) params.set('node', opts.node)
       if (opts?.scanVzdump) params.set('scanVzdump', '1')
 
-      const res = await fetch(`/api/v1/guests/${encodeURIComponent(vmid)}/backups?${params}`, { cache: 'no-store' })
+      const res = await fetch(`/api/v1/guests/${encodeURIComponent(vmid)}/backups?${params}`, { cache: 'no-store', signal: req.signal })
       const json = await res.json()
+
+      if (!req.isCurrent()) return
 
       if (json.error) {
         setBackupsError(json.error)
@@ -546,21 +572,25 @@ export function useHardwareHandlers({
         setBackupsVzdumpScanned(json.data?.vzdumpScanned === true)
       }
     } catch (e: any) {
-      setBackupsError(e.message || t('errors.loadingError'))
+      if (req.isCurrent()) setBackupsError(e.message || t('errors.loadingError'))
     } finally {
-      setBackupsLoading(false)
+      if (req.isCurrent()) setBackupsLoading(false)
     }
-  }, [])
+  }, [guard])
 
   // Charger les données HA du cluster (ressources, groupes et règles)
   const loadClusterHa = useCallback(async (connId: string) => {
     if (!connId) return
 
+    const req = guard.beginCurrent()
+
     setClusterHaLoading(true)
 
     try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha`, { cache: 'no-store' })
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha`, { cache: 'no-store', signal: req.signal })
       const json = await res.json()
+
+      if (!req.isCurrent()) return
 
       if (json.error) {
         console.error('Error loading cluster HA:', json.error)
@@ -573,22 +603,29 @@ export function useHardwareHandlers({
         setClusterPveVersion(json.data?.pveVersion || '')
       }
     } catch (e: any) {
+      if (!req.isCurrent()) return
       console.error('Error loading cluster HA:', e)
     } finally {
-      setClusterHaLoading(false)
-      setClusterHaLoaded(true)
+      if (req.isCurrent()) {
+        setClusterHaLoading(false)
+        setClusterHaLoaded(true)
+      }
     }
-  }, [])
+  }, [guard])
 
   // Charger la configuration du cluster (nodes, join info, networks)
   const loadClusterConfig = useCallback(async (connId: string) => {
     if (!connId) return
 
+    const req = guard.beginCurrent()
+
     setClusterConfigLoading(true)
 
     try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster/config`, { cache: 'no-store' })
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster/config`, { cache: 'no-store', signal: req.signal })
       const json = await res.json()
+
+      if (!req.isCurrent()) return
 
       if (json.error) {
         console.error('Error loading cluster config:', json.error)
@@ -596,22 +633,29 @@ export function useHardwareHandlers({
         setClusterConfig(json.data)
       }
     } catch (e: any) {
+      if (!req.isCurrent()) return
       console.error('Error loading cluster config:', e)
     } finally {
-      setClusterConfigLoading(false)
-      setClusterConfigLoaded(true)
+      if (req.isCurrent()) {
+        setClusterConfigLoading(false)
+        setClusterConfigLoaded(true)
+      }
     }
-  }, [])
+  }, [guard])
 
   // Charger les notes du datacenter
   const loadClusterNotes = useCallback(async (connId: string) => {
     if (!connId) return
 
+    const req = guard.beginCurrent()
+
     setClusterNotesLoading(true)
 
     try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster/options`, { cache: 'no-store' })
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster/options`, { cache: 'no-store', signal: req.signal })
       const json = await res.json()
+
+      if (!req.isCurrent()) return
 
       if (json.data?.description) {
         setClusterNotesContent(json.data.description)
@@ -619,13 +663,16 @@ export function useHardwareHandlers({
         setClusterNotesContent('')
       }
     } catch (e: any) {
+      if (!req.isCurrent()) return
       console.error('Error loading cluster notes:', e)
       setClusterNotesContent('')
     } finally {
-      setClusterNotesLoading(false)
-      setClusterNotesLoaded(true)
+      if (req.isCurrent()) {
+        setClusterNotesLoading(false)
+        setClusterNotesLoaded(true)
+      }
     }
-  }, [])
+  }, [guard])
 
   // Sauvegarder les notes du datacenter
   const handleSaveClusterNotes = async () => {
@@ -657,11 +704,15 @@ export function useHardwareHandlers({
   const loadClusterCeph = useCallback(async (connId: string) => {
     if (!connId) return
 
+    const req = guard.beginCurrent()
+
     setClusterCephLoading(true)
 
     try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph/status`, { cache: 'no-store' })
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph/status`, { cache: 'no-store', signal: req.signal })
       const json = await res.json()
+
+      if (!req.isCurrent()) return
 
       if (json.error) {
         console.error('Error loading Ceph data:', json.error)
@@ -670,23 +721,30 @@ export function useHardwareHandlers({
         setClusterCephData(json.data)
       }
     } catch (e: any) {
+      if (!req.isCurrent()) return
       console.error('Error loading Ceph data:', e)
       setClusterCephData(null)
     } finally {
-      setClusterCephLoading(false)
-      setClusterCephLoaded(true)
+      if (req.isCurrent()) {
+        setClusterCephLoading(false)
+        setClusterCephLoaded(true)
+      }
     }
-  }, [])
+  }, [guard])
 
   // Charger les storages du cluster
   const loadClusterStorage = useCallback(async (connId: string) => {
     if (!connId) return
 
+    const req = guard.beginCurrent()
+
     setClusterStorageLoading(true)
 
     try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/storage`, { cache: 'no-store' })
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/storage`, { cache: 'no-store', signal: req.signal })
       const json = await res.json()
+
+      if (!req.isCurrent()) return
 
       if (json.error) {
         console.error('Error loading storage data:', json.error)
@@ -695,13 +753,16 @@ export function useHardwareHandlers({
         setClusterStorageData(json.data || [])
       }
     } catch (e: any) {
+      if (!req.isCurrent()) return
       console.error('Error loading storage data:', e)
       setClusterStorageData([])
     } finally {
-      setClusterStorageLoading(false)
-      setClusterStorageLoaded(true)
+      if (req.isCurrent()) {
+        setClusterStorageLoading(false)
+        setClusterStorageLoaded(true)
+      }
     }
-  }, [])
+  }, [guard])
 
   // Créer un cluster
   const handleCreateCluster = async (connId: string) => {

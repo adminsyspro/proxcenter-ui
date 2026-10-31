@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { fetchConnectionsNetworks, type HostBridgeItem, type HostVlanItem, type SdnVnetItem } from '@/lib/proxmox/fetchConnectionsNetworks'
 import { guestMatchesSearch } from '@/lib/inventory/guestSearch'
+import { bulkPowerSeverity, runBulkGuestPower } from '@/lib/inventory/bulkGuestPower'
 import { bridgeLabel } from '@/lib/proxmox/hostVlanMap'
 import { sdnSegmentLabel, type SdnVnet } from '@/lib/proxmox/sdnVnetMap'
 
@@ -860,7 +861,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   const [snapshotVmstate, setSnapshotVmstate] = useState(false)
   const [creatingSnapshot, setCreatingSnapshot] = useState(false)
   const [snapshotTarget, setSnapshotTarget] = useState<{ connId: string; type: string; node: string; vmid: string } | null>(null)
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'success' })
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'success' })
   const [backupDialogOpen, setBackupDialogOpen] = useState(false)
   const [backupTarget, setBackupTarget] = useState<{ connId: string; type: string; node: string; vmid: string; name: string } | null>(null)
   const [backupStorages, setBackupStorages] = useState<any[]>([])
@@ -1229,15 +1230,18 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     const vms = getNodeVms(connId, node)
     let vmsToProcess: typeof vms = []
     let apiAction = ''
+    let description = ''
 
     switch (action) {
       case 'start-all':
         vmsToProcess = vms.filter(v => v.status === 'stopped')
         apiAction = 'start'
+        description = t('bulkActions.startingVms')
         break
       case 'shutdown-all':
         vmsToProcess = vms.filter(v => v.status === 'running')
         apiAction = 'shutdown'
+        description = t('bulkActions.stoppingVms')
         break
       case 'migrate-all':
         // Handled by HostDrainDialog (#248): never reaches this path.
@@ -1251,17 +1255,19 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
     setBulkActionBusy(true)
     try {
-      const batchSize = 5
-      for (let i = 0; i < vmsToProcess.length; i += batchSize) {
-        const batch = vmsToProcess.slice(i, i + batchSize)
-        await Promise.all(batch.map(async (vm) => {
-          try {
-            await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${vm.type}/${encodeURIComponent(node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`, { method: 'POST' })
-          } catch {}
-        }))
-      }
+      // Every refused guest is counted: the operator is told how many really
+      // received the order, as the host view's bulk action does.
+      const outcome = await runBulkGuestPower(vmsToProcess.map(vm => ({ connId, node, type: vm.type, vmid: vm.vmid })), apiAction)
+      const severity = bulkPowerSeverity(outcome)
+      const detail = outcome.firstError ? ` (${outcome.firstError})` : ''
+      let message = t('vmActions.bulkFailed', { description, errors: outcome.errors }) + detail
+
+      if (severity === 'success') message = t('vmActions.bulkSuccess', { description, count: outcome.success })
+      else if (severity === 'warning') message = t('vmActions.bulkPartial', { description, success: outcome.success, errors: outcome.errors }) + detail
+
+      setSnackbar({ open: true, message, severity })
       // Trigger immediate SSE poll — tree will be updated via persistent EventSource
-      setTimeout(() => fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {}), 2000)
+      if (outcome.success > 0) setTimeout(() => fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {}), 2000)
     } finally {
       setBulkActionBusy(false)
       setBulkActionDialog({ open: false, action: null, connId: '', node: '', targetNode: '' })

@@ -77,7 +77,7 @@ vi.mock('@/lib/vdc/vnets', async (io) => {
   }
 })
 vi.mock('@/lib/vdc/sdn', () => ({ generatePveMacAddress: () => 'BC:24:11:00:00:01' }))
-vi.mock('@/lib/vdc/ipam', () => ({ allocateIp: vi.fn(), releaseIp: vi.fn(), IpamExhaustedError: class extends Error {} }))
+vi.mock('@/lib/vdc/ipam', () => ({ allocateIp: vi.fn(), allocateIpTracked: vi.fn(), releaseIp: vi.fn(), IpamExhaustedError: class extends Error {} }))
 vi.mock('@/lib/vdc/ipamScan', () => ({ scanUsedIpsForSubnet: vi.fn(), scannedToIntSet: vi.fn(() => new Set()) }))
 vi.mock('@/lib/vdc/network', () => ({ parseCidr: () => null }))
 vi.mock('@/lib/proxmox/tasks', () => ({ waitForTask: vi.fn() }))

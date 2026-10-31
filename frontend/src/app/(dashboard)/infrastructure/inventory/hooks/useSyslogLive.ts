@@ -19,18 +19,26 @@ function useLivePolling(
 
     const { connId, node: nodeName } = parseNodeId(selectionId || '')
 
+    // Owned by this effect run: the cleanup (node switch, tab change, live
+    // mode off) aborts the request in flight, so a late answer for the
+    // previous node can never be written into the current node's panel.
+    const controller = new AbortController()
+    const { signal } = controller
+
     const fetchLogs = async () => {
+      if (signal.aborted) return
       try {
         const res = await fetch(buildUrl(connId, nodeName), {
           cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+          headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' },
+          signal,
         })
         if (res.ok) {
           const json = await res.json()
-          onData(json)
+          if (!signal.aborted) onData(json)
         }
       } catch (e) {
-        console.error('Live polling error:', e)
+        if (!signal.aborted) console.error('Live polling error:', e)
       }
     }
 
@@ -45,7 +53,7 @@ function useLivePolling(
     document.addEventListener('visibilitychange', onVis)
     if (document.visibilityState === 'visible') start()
 
-    return () => { stop(); document.removeEventListener('visibilitychange', onVis) }
+    return () => { controller.abort(); stop(); document.removeEventListener('visibilitychange', onVis) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 }

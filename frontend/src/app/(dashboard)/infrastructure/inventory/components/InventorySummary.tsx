@@ -46,6 +46,7 @@ import UsageBar from './UsageBar'
 import ConsolePreview from './ConsolePreview'
 import StatusChip from './StatusChip'
 import NodeUpdateDialog from '@/components/NodeUpdateDialog'
+import { jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
 
 /* ------------------------------------------------------------------ */
 /* HA State Selector                                                   */
@@ -76,15 +77,14 @@ function HaStateSelector({ haState, haGroup, vmInfo, readOnly, t }: {
     setSaving(true)
     const haSid = `${vmInfo.type === 'lxc' ? 'ct' : 'vm'}:${vmInfo.vmid}`
     try {
-      await fetch(
+      await requireOk(
         `/api/v1/connections/${encodeURIComponent(vmInfo.connId)}/ha/${encodeURIComponent(haSid)}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ state: newState, group: haGroup || undefined }),
-        }
+        jsonInit('POST', { state: newState, group: haGroup || undefined }),
       )
-    } catch { /* ignore */ }
+    } catch {
+      // PVE kept the previous state: show it again rather than the requested one.
+      setDisplayState(haState || '')
+    }
     setSaving(false)
   }
 

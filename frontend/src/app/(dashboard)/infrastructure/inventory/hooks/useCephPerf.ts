@@ -37,12 +37,11 @@ export function useCephPerf(
 
   const active = selectionType === 'cluster' && clusterTab === 7 && !!clusterCephData
 
-  // Reset history when selection changes or becomes inactive
+  // Reset history when the selection changes or the tab becomes inactive:
+  // the samples of one cluster must never be charted under another one.
   useEffect(() => {
-    if (!active) {
-      setClusterCephPerf(null)
-      setClusterCephPerfHistory([])
-    }
+    setClusterCephPerf(null)
+    setClusterCephPerfHistory([])
   }, [active, selectionId])
 
   // Poll Ceph perf every 2s
@@ -51,12 +50,19 @@ export function useCephPerf(
 
     const connId = selectionId?.split(':')[0] || ''
 
+    // Owned by this effect run: the cleanup (cluster switch, tab change)
+    // aborts the request in flight, so a late sample of the previous cluster
+    // is never appended to the current cluster's history.
+    const controller = new AbortController()
+    const { signal } = controller
+
     const fetchCephPerf = async () => {
+      if (signal.aborted) return
       try {
-        const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph/status`, { cache: 'no-store' })
+        const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph/status`, { cache: 'no-store', signal })
         const json = await res.json()
 
-        if (json.data?.pgmap) {
+        if (!signal.aborted && json.data?.pgmap) {
           const now = Date.now()
           const perfData: CephPerfPoint = {
             time: now,
@@ -75,7 +81,7 @@ export function useCephPerf(
           })
         }
       } catch (e) {
-        console.error('Error fetching Ceph perf:', e)
+        if (!signal.aborted) console.error('Error fetching Ceph perf:', e)
       }
     }
 
@@ -90,7 +96,7 @@ export function useCephPerf(
     document.addEventListener('visibilitychange', onVis)
     if (document.visibilityState === 'visible') start()
 
-    return () => { stop(); document.removeEventListener('visibilitychange', onVis) }
+    return () => { controller.abort(); stop(); document.removeEventListener('visibilitychange', onVis) }
   }, [active, selectionId])
 
   // Compute trends from history

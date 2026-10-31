@@ -46,7 +46,7 @@ describe('useHA', () => {
     const { result } = renderHook(() => useHA(makeParams({ detailTab: 9 })))
 
     await waitFor(() => expect(result.current.haLoaded).toBe(true))
-    expect(fetchSpy).toHaveBeenCalledWith(HA_URL, { cache: 'no-store' })
+    expect(fetchSpy).toHaveBeenCalledWith(HA_URL, { cache: 'no-store', signal: expect.any(AbortSignal) })
     expect(result.current.haGroups).toEqual([{ group: 'prod-ha' }])
     expect(result.current.haGroup).toBe('prod-ha')
     expect(result.current.haMaxRestart).toBe(3)
@@ -96,5 +96,156 @@ describe('useHA', () => {
     expect(result.current.haComment).toBe('')
     expect(params.setConfirmAction).toHaveBeenLastCalledWith(null)
     expect(params.setConfirmActionLoading).toHaveBeenLastCalledWith(false)
+  })
+
+  it('never fills the HA form of a guest with the previous guest config (A -> B while A is pending)', async () => {
+    const B = { type: 'vm', id: 'conn-1:pve2:lxc:200' } as any
+    let releaseA!: () => void
+    const aGate = new Promise<void>(r => { releaseA = r })
+
+    fetchSpy.mockImplementation(async (input: any) => {
+      const url = String(input)
+
+      if (url === GROUPS_URL) return { json: async () => ({ data: { groups: [] } }) } as any
+      if (url === HA_URL) {
+        await aGate
+
+        return { json: async () => ({ data: { state: 'started', group: 'group-of-A', max_restart: 9 } }) } as any
+      }
+
+      return { json: async () => ({ data: null }) } as any
+    })
+
+    const { result, rerender } = renderHook(p => useHA(p), { initialProps: makeParams({ detailTab: 9 }) })
+
+    await waitFor(() => expect(result.current.haLoading).toBe(true))
+    rerender(makeParams({ detailTab: 9, selection: B }))
+    act(() => { result.current.resetHA() })
+
+    await waitFor(() => expect(result.current.haLoaded).toBe(true))
+    await act(async () => { releaseA(); await aGate; await Promise.resolve() })
+
+    expect(result.current.haConfig).toBeNull()
+    expect(result.current.haGroup).toBe('')
+    expect(result.current.haMaxRestart).toBe(1)
+    expect(result.current.haLoading).toBe(false)
+    expect(fetchSpy.mock.calls.some((c: any[]) => String(c[0]).includes('ct%3A200'))).toBe(true)
+  })
+
+  it('removes the HA resource but leaves the next guest HA state alone once the user moved on', async () => {
+    const B = { type: 'vm', id: 'conn-1:pve2:lxc:200' } as any
+    let releaseDelete!: () => void
+    const deleteGate = new Promise<void>(r => { releaseDelete = r })
+
+    fetchSpy.mockImplementation(async (input: any, init?: any) => {
+      if (init?.method === 'DELETE') {
+        await deleteGate
+
+        return { json: async () => ({ data: null }) } as any
+      }
+      if (String(input) === GROUPS_URL) return { json: async () => ({ data: { groups: [] } }) } as any
+
+      return { json: async () => ({ data: { state: 'started', group: 'group-of-B' } }) } as any
+    })
+
+    const params = makeParams({ detailTab: 9 })
+    const { result, rerender } = renderHook(p => useHA(p), { initialProps: params })
+
+    await waitFor(() => expect(result.current.haLoaded).toBe(true))
+    act(() => { result.current.removeHaConfig() })
+    const confirm = params.setConfirmAction.mock.calls.at(-1)![0]
+    let pending!: Promise<void>
+    act(() => { pending = confirm.onConfirm() })
+
+    const paramsB = makeParams({ detailTab: 9, selection: B, setConfirmAction: params.setConfirmAction, setConfirmActionLoading: params.setConfirmActionLoading })
+    rerender(paramsB)
+    act(() => { result.current.resetHA() })
+    await waitFor(() => expect(result.current.haGroup).toBe('group-of-B'))
+
+    await act(async () => { releaseDelete(); await pending })
+
+    // The shared confirm dialog is closed, B's HA state is untouched.
+    expect(params.setConfirmAction).toHaveBeenLastCalledWith(null)
+    expect(params.setConfirmActionLoading).toHaveBeenLastCalledWith(false)
+    expect(result.current.haConfig).not.toBeNull()
+    expect(result.current.haGroup).toBe('group-of-B')
+  })
+
+  it('a load fired from a closure of the previous guest sends nothing', async () => {
+    const { result, rerender } = renderHook(p => useHA(p), { initialProps: makeParams() })
+    const staleLoad = result.current.loadHaConfig
+
+    rerender(makeParams({ selection: { type: 'vm', id: 'conn-1:pve2:lxc:200' } }))
+    await act(async () => { await staleLoad() })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('surfaces load, save and removal failures of the guest displayed', async () => {
+    fetchSpy.mockRejectedValue(new Error('pve down'))
+    const params = makeParams({ detailTab: 9 })
+    const { result } = renderHook(() => useHA(params))
+
+    await waitFor(() => expect(result.current.haError).toBe('pve down'))
+
+    fetchSpy.mockRejectedValue(new Error('save refused'))
+    await act(async () => { await result.current.saveHaConfig() })
+    expect(result.current.haError).toBe('save refused')
+
+    fetchSpy.mockRejectedValue(new Error('delete refused'))
+    act(() => { result.current.removeHaConfig() })
+    await act(async () => { await params.setConfirmAction.mock.calls.at(-1)![0].onConfirm() })
+    expect(result.current.haError).toBe('delete refused')
+    expect(result.current.haSaving).toBe(false)
+  })
+
+  it('drops the outcome of a save answered after the switch', async () => {
+    let releaseSave!: () => void
+    const gate = new Promise<void>(r => { releaseSave = r })
+    fetchSpy.mockImplementation(async (_input: any, init?: any) => {
+      if (init?.method === 'POST') {
+        await gate
+
+        return { json: async () => ({ error: 'refused for A' }) } as any
+      }
+
+      return { json: async () => ({ data: null }) } as any
+    })
+    const { result, rerender } = renderHook(p => useHA(p), { initialProps: makeParams() })
+
+    let pending!: Promise<void>
+    act(() => { pending = result.current.saveHaConfig() })
+    rerender(makeParams({ selection: { type: 'vm', id: 'conn-1:pve2:lxc:200' } }))
+    act(() => { result.current.resetHA() })
+    await act(async () => { releaseSave(); await pending })
+
+    expect(result.current.haError).toBeNull()
+    expect(result.current.haSaving).toBe(false)
+  })
+
+  it('drops the failure of a save answered after the switch', async () => {
+    let failSave!: (e: Error) => void
+    fetchSpy.mockImplementation((_input: any, init?: any) => init?.method === 'POST'
+      ? new Promise((_r, rej) => { failSave = rej }) as any
+      : Promise.resolve({ json: async () => ({ data: null }) } as any))
+    const { result, rerender } = renderHook(p => useHA(p), { initialProps: makeParams() })
+
+    let pending!: Promise<void>
+    act(() => { pending = result.current.saveHaConfig() })
+    rerender(makeParams({ selection: { type: 'vm', id: 'conn-1:pve2:lxc:200' } }))
+    await act(async () => { failSave(new Error('A failed')); await pending })
+    expect(result.current.haError).toBeNull()
+  })
+
+  it('drops the failure of a load answered after the switch', async () => {
+    let failA!: (e: Error) => void
+    fetchSpy.mockImplementation((input: any) => String(input) === HA_URL
+      ? new Promise((_r, rej) => { failA = rej }) as any
+      : Promise.resolve({ json: async () => ({ data: null }) } as any))
+    const { result, rerender } = renderHook(p => useHA(p), { initialProps: makeParams({ detailTab: 9 }) })
+
+    await waitFor(() => expect(result.current.haLoading).toBe(true))
+    rerender(makeParams({ detailTab: 0, selection: { type: 'vm', id: 'conn-1:pve2:lxc:200' } }))
+    await act(async () => { failA(new Error('A failed')); await Promise.resolve(); await Promise.resolve() })
+    expect(result.current.haError).toBeNull()
   })
 })

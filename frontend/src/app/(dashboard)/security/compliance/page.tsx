@@ -22,6 +22,7 @@ import {
 } from '@/hooks/useHardeningChecks'
 import FrameworksTab from '@/components/compliance/FrameworksTab'
 import LoginLockoutsCard from '@/components/compliance/LoginLockoutsCard'
+import { jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
 
 // Severity config
 const severityColors: Record<string, 'error' | 'warning' | 'info' | 'default'> = {
@@ -692,22 +693,14 @@ function ProfilesTab() {
         const { data: profile } = await res.json()
 
         // Update checks
-        await fetch(`/api/v1/compliance/profiles/${profile.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ checks: editDialog.checks }),
-        })
+        await requireOk(`/api/v1/compliance/profiles/${profile.id}`, jsonInit('PUT', { checks: editDialog.checks }))
       } else {
         // Update existing
-        await fetch(`/api/v1/compliance/profiles/${editDialog.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: editDialog.name,
-            description: editDialog.description,
-            checks: editDialog.checks,
-          }),
-        })
+        await requireOk(`/api/v1/compliance/profiles/${editDialog.id}`, jsonInit('PUT', {
+          name: editDialog.name,
+          description: editDialog.description,
+          checks: editDialog.checks,
+        }))
       }
 
       void mutateProfiles()
@@ -723,7 +716,7 @@ function ProfilesTab() {
   const handleDeleteProfile = async (profileId: string) => {
     if (!confirm(t('compliance.confirmDeleteProfile'))) return
     try {
-      await fetch(`/api/v1/compliance/profiles/${profileId}`, { method: 'DELETE' })
+      await requireOk(`/api/v1/compliance/profiles/${profileId}`, jsonInit('DELETE'))
       void mutateProfiles()
       setToast({ type: 'success', message: t('compliance.profileDeleted') })
     } catch (e: any) {
@@ -733,11 +726,7 @@ function ProfilesTab() {
 
   const handleActivateProfile = async (profileId: string) => {
     try {
-      await fetch(`/api/v1/compliance/profiles/${profileId}/activate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
+      await requireOk(`/api/v1/compliance/profiles/${profileId}/activate`, jsonInit('POST', {}))
       void mutateProfiles()
       setToast({ type: 'success', message: t('compliance.profileActivated') })
     } catch (e: any) {
@@ -747,11 +736,7 @@ function ProfilesTab() {
 
   const handleDeactivateAll = async () => {
     try {
-      await fetch('/api/v1/compliance/profiles/none/activate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
+      await requireOk('/api/v1/compliance/profiles/none/activate', jsonInit('POST', {}))
       void mutateProfiles()
       setToast({ type: 'success', message: t('compliance.profilesDeactivated') })
     } catch (e: any) {

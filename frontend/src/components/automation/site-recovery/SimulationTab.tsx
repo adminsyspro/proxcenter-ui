@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl'
 import useSWR from 'swr'
 import { useRefreshInterval } from '@/hooks/useRefreshInterval'
 
+import { cpuPercentAfterRedistribution } from './simulationLoad'
+
 import {
   Alert,
   Box,
@@ -970,17 +972,11 @@ export default function SimulationTab({ connections, isEnterprise }: SimulationT
 
       // Add redistributed VM memory and CPU to this node
       const newMem = node.mem + extra.totalMem
-      const addedCpuCores = extra.totalCpu
-      // Approximate CPU increase: each added vCPU adds load proportional to current avg per-core usage
-      const currentCpuPerCore = node.maxcpu > 0 ? node.cpu / node.maxcpu : 0
-      const newCpu = node.maxcpu > 0
-        ? Math.round(((node.cpu / 100 * node.maxcpu) + addedCpuCores * (currentCpuPerCore / 100)) / node.maxcpu * 100)
-        : node.cpu
 
       return {
         ...node,
         mem: newMem,
-        cpu: Math.min(newCpu, 150), // allow over 100% to show overload
+        cpu: cpuPercentAfterRedistribution(node.cpu, node.maxcpu, extra.totalCpu),
       }
     })
   }, [simNodes, simulation])

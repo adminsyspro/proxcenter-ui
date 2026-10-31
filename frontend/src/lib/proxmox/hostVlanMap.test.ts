@@ -85,6 +85,26 @@ describe('buildBridgeVlanMap', () => {
     expect(map.get('vmbr2')).toBe(30)
   })
 
+  it('does not map a bridge mixing a raw-trunk uplink with a VLAN sub-interface', () => {
+    // bond0 carries every VLAN, so the bridge is multi-VLAN even though
+    // bond1.10 alone resolves to VLAN 10.
+    const map = buildBridgeVlanMap([
+      { iface: 'bond0', type: 'bond' },
+      { iface: 'bond1', type: 'bond' },
+      { iface: 'bond1.10', type: 'vlan' },
+      { iface: 'vmbr0', type: 'bridge', bridge_ports: 'bond0 bond1.10' },
+    ])
+    expect(map.has('vmbr0')).toBe(false)
+  })
+
+  it('does not map an OVS bridge mixing a raw port with a VLAN port', () => {
+    const map = buildBridgeVlanMap([
+      { iface: 'eno1.20', type: 'vlan' },
+      { iface: 'vmbr2', type: 'OVSBridge', ovs_ports: 'eno1.20 eno2' },
+    ])
+    expect(map.has('vmbr2')).toBe(false)
+  })
+
   it('does not map a bridge whose uplink ports disagree on the VLAN', () => {
     const map = buildBridgeVlanMap([
       { iface: 'vmbr3', type: 'bridge', bridge_ports: 'bond0.10 bond1.20' },

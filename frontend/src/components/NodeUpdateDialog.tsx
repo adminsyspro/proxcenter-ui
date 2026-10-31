@@ -38,7 +38,9 @@ import { useRBAC } from '@/contexts/RBACContext'
 import { NodeInfo, formatMemory } from '@/components/hardware/utils'
 import { loadNodeRepoIssues, type RepoIssue } from '@/lib/proxmox/aptRepositories'
 import { migrateGuestAndWait, migrationFailureText } from '@/lib/migration/guestMigrateClient'
+import { errorMessage, fetchJsonResult, jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
 import TaskLogButton from '@/components/tasks/TaskLogButton'
+import { waitForPveTask } from '@/lib/proxmox/waitForTaskClient'
 import PendingChangesWarning from '@/components/migration/PendingChangesWarning'
 
 interface RunningVmInfo {
@@ -71,6 +73,11 @@ interface NodeUpdateDialogProps {
   vmCount: number
   nodeUpdates: Record<string, { count: number; updates: any[]; version: string | null }>
   isCluster?: boolean
+  /**
+   * Whether the cluster runs Ceph. When the caller does not know, the dialog
+   * reads it from the connection record (stored by the connection probe, no
+   * Proxmox call).
+   */
   hasCeph?: boolean
 }
 
@@ -114,6 +121,33 @@ function distributeVms(vms: RunningVmInfo[], nodes: NodeInfo[]): Map<number, str
   return result
 }
 
+/**
+ * Shut a guest down and wait for its PVE task to end. Resolves with the
+ * reason instead of throwing, so one guest never stops the others.
+ */
+async function shutdownGuestAndWait(
+  connBaseUrl: string,
+  connectionId: string,
+  nodeName: string,
+  vm: Pick<RunningVmInfo, 'vmid' | 'type'>,
+  t: (key: string) => string,
+): Promise<{ ok: boolean; error?: string; upid?: string }> {
+  const result = await fetchJsonResult<unknown>(
+    `${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/shutdown`,
+    jsonInit('POST'),
+  )
+  if (!result.ok) return { ok: false, error: result.error || t('updates.vmShutdownFailed') }
+
+  const upid = typeof result.data === 'string' ? result.data : ''
+  if (!upid) return { ok: false, error: t('updates.vmShutdownNotFollowed') }
+
+  const task = await waitForPveTask(connectionId, nodeName, upid)
+  if (task.outcome === 'ok') return { ok: true }
+  if (task.outcome === 'failed') return { ok: false, error: task.reason || task.error || t('updates.vmShutdownFailed'), upid }
+
+  return { ok: false, error: t('updates.vmShutdownNotFollowed'), upid }
+}
+
 /** One guest of the pre-flight migrate/shutdown run, with why it failed (#926). */
 function VmActionResultRow({ r, connectionId }: Readonly<{ r: VmActionResult; connectionId: string }>) {
   const t = useTranslations()
@@ -146,7 +180,7 @@ export default function NodeUpdateDialog({
   vmCount,
   nodeUpdates,
   isCluster = false,
-  hasCeph = false,
+  hasCeph: hasCephProp,
 }: NodeUpdateDialogProps) {
   const t = useTranslations()
   // Ceph OSD flags are cluster-wide storage settings: setting them needs
@@ -193,8 +227,14 @@ export default function NodeUpdateDialog({
   const [maintenanceStatus, setMaintenanceStatus] = useState<string | null>(null)
   const [maintenanceLoading, setMaintenanceLoading] = useState(false)
   const [enableMaintenance, setEnableMaintenance] = useState(true)
+  const [hasCeph, setHasCeph] = useState(hasCephProp ?? false)
   const [cephFlags, setCephFlags] = useState<string[]>([])
   const [cephFlagsLoading, setCephFlagsLoading] = useState(false)
+  // Unknown flags: the dialog cannot tell which ones it adds, so it leaves them alone.
+  const [cephFlagsError, setCephFlagsError] = useState<string | null>(null)
+  // The flags this run added; the post-action removes only these, never one
+  // that was already set before the update.
+  const [addedCephFlags, setAddedCephFlags] = useState<string[]>([])
   const [setCephMaintenanceFlags, setSetCephMaintenanceFlags] = useState(true)
   const [preflightLoading, setPreflightLoading] = useState(false)
 
@@ -209,6 +249,10 @@ export default function NodeUpdateDialog({
   // VM migration state
   const [runningVms, setRunningVms] = useState<RunningVmInfo[]>([])
   const [vmsLoading, setVmsLoading] = useState(false)
+  // Guest discovery that failed is not "no guest": the evacuation plan is unknown.
+  const [vmsDiscoveryError, setVmsDiscoveryError] = useState<string | null>(null)
+  // A post-action PVE refused: shown instead of marking the action done.
+  const [postError, setPostError] = useState<string | null>(null)
   const [clusterNodes, setClusterNodes] = useState<NodeInfo[]>([])
   const [migrateSharedVms, setMigrateSharedVms] = useState(true)
   const [shutdownLocalVms, setShutdownLocalVms] = useState(false)
@@ -245,7 +289,8 @@ export default function NodeUpdateDialog({
 
     let cancelled = false
     setMaintenanceLoading(true)
-    setCephFlagsLoading(hasCeph)
+    setCephFlagsLoading(true)
+    setCephFlagsError(null)
 
     // Fetch maintenance status
     fetch(maintenanceUrl)
@@ -257,24 +302,40 @@ export default function NodeUpdateDialog({
       .catch(() => {})
       .finally(() => { if (!cancelled) setMaintenanceLoading(false) })
 
-    // Fetch ceph flags if hasCeph
-    if (hasCeph) {
-      fetch(cephFlagsUrl)
-        .then(res => res.json())
-        .then(json => {
-          if (cancelled) return
-          setCephFlags(json.data?.flags || [])
-        })
-        .catch(() => {})
-        .finally(() => { if (!cancelled) setCephFlagsLoading(false) })
-    }
+    // Does the cluster run Ceph? Then read its flags.
+    const readHasCeph = async (): Promise<boolean> => {
+      if (hasCephProp !== undefined) return hasCephProp
+      const conn = await fetchJsonResult<{ hasCeph?: boolean }>(connBaseUrl, { cache: 'no-store' })
 
-    // Fetch running VMs and cluster nodes for migration
+      return conn.ok && !!conn.data?.hasCeph
+    }
+    readHasCeph()
+      .then(async (withCeph) => {
+        if (cancelled) return
+        setHasCeph(withCeph)
+        if (!withCeph) return
+        const flags = await fetchJsonResult<{ flags?: string[] }>(cephFlagsUrl, { cache: 'no-store' })
+        if (cancelled) return
+        if (flags.ok) setCephFlags(flags.data?.flags || [])
+        else setCephFlagsError(flags.error || 'HTTP error')
+      })
+      .catch((e: unknown) => { if (!cancelled) setCephFlagsError(errorMessage(e)) })
+      .finally(() => { if (!cancelled) setCephFlagsLoading(false) })
+
+    // Fetch running VMs and cluster nodes for migration. Any of the three
+    // failing leaves the plan unknown: it is reported, never read as empty.
     setVmsLoading(true)
+    setVmsDiscoveryError(null)
+    const readJson = async (url: string): Promise<any> => {
+      const result = await fetchJsonResult(url)
+      if (!result.ok) throw new Error(result.error)
+
+      return result.body ?? {}
+    }
     Promise.all([
-      fetch(`${connBaseUrl}/nodes`).then(r => r.json()),
-      fetch(`${connBaseUrl}/resources`).then(r => r.json()),
-      fetch(`${connBaseUrl}/nodes/${encodeURIComponent(nodeName)}/local-vms`).then(r => r.json()),
+      readJson(`${connBaseUrl}/nodes`),
+      readJson(`${connBaseUrl}/resources`),
+      readJson(`${connBaseUrl}/nodes/${encodeURIComponent(nodeName)}/local-vms`),
     ])
       .then(([nodesJson, resourcesJson, localVmsJson]) => {
         if (cancelled) return
@@ -328,11 +389,13 @@ export default function NodeUpdateDialog({
           setVmDistribution(distributeVms(shared, onlineNodes))
         }
       })
-      .catch(() => {})
+      .catch((e: unknown) => {
+        if (!cancelled) setVmsDiscoveryError(errorMessage(e))
+      })
       .finally(() => { if (!cancelled) setVmsLoading(false) })
 
     return () => { cancelled = true }
-  }, [open, connectionId, nodeName, clusterMode, hasCeph, maintenanceUrl, cephFlagsUrl, connBaseUrl])
+  }, [open, connectionId, nodeName, clusterMode, hasCephProp, maintenanceUrl, cephFlagsUrl, connBaseUrl])
 
   // Check SSH + repository configuration when dialog opens
   useEffect(() => {
@@ -382,6 +445,17 @@ export default function NodeUpdateDialog({
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [upgradeLogs])
 
+  // Auto-reboot after a successful upgrade that needs it. On a refusal the
+  // reboot stays required, with the Reboot now button and the reason.
+  const autoRebootNode = useCallback(async () => {
+    try {
+      await requireOk(`${baseUrl}/reboot`, jsonInit('POST'))
+      setRebootRequired(false)
+    } catch (e) {
+      setPostError(t('updates.postActionFailed', { error: errorMessage(e) }))
+    }
+  }, [baseUrl, t])
+
   const pollStatus = useCallback(async () => {
     try {
       const res = await fetch(baseUrl)
@@ -394,27 +468,21 @@ export default function NodeUpdateDialog({
       setUpgradeLogs(json.logs || '')
       setRebootRequired(json.reboot_required || false)
 
-      if (['COMPLETED', 'FAILED'].includes(status)) {
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current)
-          pollingRef.current = null
-        }
-        setCompletedAt(new Date())
-        // Go to post-actions for cluster, completed for standalone
-        setActiveStep(clusterMode ? STEP.POST : STEP.COMPLETED)
+      if (status !== 'COMPLETED' && status !== 'FAILED') return
 
-        // Auto-reboot if enabled, upgrade succeeded, and reboot is needed
-        if (status === 'COMPLETED' && json.reboot_required && autoReboot) {
-          try {
-            await fetch(`${baseUrl}/reboot`, { method: 'POST' })
-            setRebootRequired(false)
-          } catch {}
-        }
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
       }
+      setCompletedAt(new Date())
+      // Go to post-actions for cluster, completed for standalone
+      setActiveStep(clusterMode ? STEP.POST : STEP.COMPLETED)
+
+      if (status === 'COMPLETED' && json.reboot_required && autoReboot) await autoRebootNode()
     } catch {
       // ignore polling errors (node may be rebooting)
     }
-  }, [baseUrl, autoReboot, clusterMode, STEP.POST, STEP.COMPLETED])
+  }, [baseUrl, autoReboot, autoRebootNode, clusterMode, STEP.POST, STEP.COMPLETED])
 
   // Pre-flight: execute maintenance + ceph flags actions then go to config
   const executePreFlight = useCallback(async () => {
@@ -423,25 +491,32 @@ export default function NodeUpdateDialog({
 
     try {
       // Enable maintenance mode if selected and not already active
+      // A refused step throws: the pre-flight stops here, no guest is moved
+      // and the update step is never reached.
       if (enableMaintenance && maintenanceStatus !== 'maintenance') {
-        await fetch(maintenanceUrl, { method: 'POST' })
+        await requireOk(maintenanceUrl, jsonInit('POST'))
         setMaintenanceStatus('maintenance')
         setDidEnableMaintenance(true)
       }
 
-      // Set Ceph maintenance flags if selected and hasCeph
-      if (hasCeph && canSetCephFlags && setCephMaintenanceFlags && !cephMaintenanceFlagsSet) {
-        for (const flag of CEPH_MAINTENANCE_FLAGS) {
-          if (!cephFlags.includes(flag)) {
-            await fetch(cephFlagsUrl, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ flag }),
-            })
+      // Set the missing Ceph maintenance flags, remembering each one added
+      // (also when a later one is refused) so the post-action can clear them.
+      if (hasCeph && !cephFlagsError && canSetCephFlags && setCephMaintenanceFlags && !cephMaintenanceFlagsSet) {
+        const added: string[] = []
+        try {
+          for (const flag of CEPH_MAINTENANCE_FLAGS) {
+            if (!cephFlags.includes(flag)) {
+              await requireOk(cephFlagsUrl, jsonInit('PUT', { flag }))
+              added.push(flag)
+            }
+          }
+        } finally {
+          if (added.length > 0) {
+            setCephFlags(prev => [...new Set([...prev, ...added])])
+            setAddedCephFlags(added)
+            setDidSetCephFlags(true)
           }
         }
-        setCephFlags(prev => [...new Set([...prev, ...CEPH_MAINTENANCE_FLAGS])])
-        setDidSetCephFlags(true)
       }
 
       // Migrate shared-storage VMs (distributed across nodes)
@@ -486,30 +561,26 @@ export default function NodeUpdateDialog({
           setDidMigrateVms(true)
         }
 
-        // Shutdown local VMs
+        // Shutdown local VMs. A guest counts as shut down once its PVE task
+        // ended OK (the guest is stopped), not when the request was accepted:
+        // otherwise the update could start while it is still running.
+        const shutDown: RunningVmInfo[] = []
         for (const vm of vmsToShutdown) {
           setVmActionResults(prev => prev.map(r =>
             r.vmid === vm.vmid && r.action === 'shutdown' ? { ...r, status: 'running' } : r
           ))
-          try {
-            const res = await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/shutdown`, {
-              method: 'POST',
-            })
-            if (!res.ok) {
-              const json = await res.json().catch(() => ({}))
-              throw new Error(json.error || 'Shutdown failed')
-            }
-            setVmActionResults(prev => prev.map(r =>
-              r.vmid === vm.vmid && r.action === 'shutdown' ? { ...r, status: 'success' } : r
-            ))
-          } catch (err: any) {
-            setVmActionResults(prev => prev.map(r =>
-              r.vmid === vm.vmid && r.action === 'shutdown' ? { ...r, status: 'failed', error: err.message } : r
-            ))
-          }
+          const outcome = await shutdownGuestAndWait(connBaseUrl, connectionId, nodeName, vm, t)
+          const patch: Partial<VmActionResult> = outcome.ok
+            ? { status: 'success' }
+            : { status: 'failed', error: outcome.error, upid: outcome.upid, taskNode: nodeName }
+          setVmActionResults(prev => prev.map(r =>
+            r.vmid === vm.vmid && r.action === 'shutdown' ? { ...r, ...patch } : r
+          ))
+          if (outcome.ok) shutDown.push(vm)
         }
+        // Only the guests that did stop are started again afterwards.
         if (vmsToShutdown.length > 0) {
-          setShutdownVmsList(vmsToShutdown)
+          setShutdownVmsList(shutDown)
           setDidShutdownVms(true)
         }
 
@@ -518,12 +589,12 @@ export default function NodeUpdateDialog({
 
       setActiveStep(STEP.CONFIG)
     } catch (e: any) {
-      setError(e.message || 'Failed to prepare cluster')
+      setError(t('updates.preflightStopped', { error: errorMessage(e) }))
       setVmActionsInProgress(false)
     } finally {
       setPreflightLoading(false)
     }
-  }, [enableMaintenance, maintenanceStatus, hasCeph, canSetCephFlags, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG, migrateSharedVms, vmDistribution, sharedVms, shutdownLocalVms, localVms, connBaseUrl, connectionId, nodeName, t])
+  }, [enableMaintenance, maintenanceStatus, hasCeph, cephFlagsError, canSetCephFlags, setCephMaintenanceFlags, cephMaintenanceFlagsSet, cephFlags, maintenanceUrl, cephFlagsUrl, STEP.CONFIG, migrateSharedVms, vmDistribution, sharedVms, shutdownLocalVms, localVms, connBaseUrl, connectionId, nodeName, t])
 
   const startUpdate = useCallback(async () => {
     setLoading(true)
@@ -561,30 +632,38 @@ export default function NodeUpdateDialog({
   // Post-actions: remove ceph flags
   const removeCephMaintenanceFlags = useCallback(async () => {
     setPostCephRemoving(true)
+    setPostError(null)
     try {
-      for (const flag of CEPH_MAINTENANCE_FLAGS) {
-        await fetch(cephFlagsUrl, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ flag }),
-        })
+      const removed: string[] = []
+      try {
+        for (const flag of addedCephFlags) {
+          await requireOk(cephFlagsUrl, jsonInit('DELETE', { flag }))
+          removed.push(flag)
+        }
+      } finally {
+        setCephFlags(prev => prev.filter(f => !removed.includes(f)))
+        setAddedCephFlags(prev => prev.filter(f => !removed.includes(f)))
       }
-      setCephFlags(prev => prev.filter(f => !CEPH_MAINTENANCE_FLAGS.includes(f)))
       setPostCephRemoved(true)
-    } catch {}
+    } catch (e) {
+      setPostError(t('updates.postActionFailed', { error: errorMessage(e) }))
+    }
     setPostCephRemoving(false)
-  }, [cephFlagsUrl])
+  }, [addedCephFlags, cephFlagsUrl, t])
 
   // Post-actions: exit maintenance
   const exitMaintenance = useCallback(async () => {
     setPostMaintenanceExiting(true)
+    setPostError(null)
     try {
-      await fetch(maintenanceUrl, { method: 'DELETE' })
+      await requireOk(maintenanceUrl, jsonInit('DELETE'))
       setMaintenanceStatus(null)
       setPostMaintenanceExited(true)
-    } catch {}
+    } catch (e) {
+      setPostError(t('updates.postActionFailed', { error: errorMessage(e) }))
+    }
     setPostMaintenanceExiting(false)
-  }, [maintenanceUrl])
+  }, [maintenanceUrl, t])
 
   // Post-actions: migrate VMs back (each from its specific target node)
   const migrateVmsBack = useCallback(async () => {
@@ -608,16 +687,20 @@ export default function NodeUpdateDialog({
   // Post-actions: restart shut down VMs
   const restartLocalVmsAction = useCallback(async () => {
     setRestartVmsInProgress(true)
-    try {
-      for (const vm of shutdownVms) {
-        await fetch(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/start`, {
-          method: 'POST',
-        })
+    setPostError(null)
+    const failures: string[] = []
+    for (const vm of shutdownVms) {
+      try {
+        await requireOk(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/start`, jsonInit('POST'))
+      } catch (e) {
+        failures.push(`${vm.name}: ${errorMessage(e)}`)
       }
-      setRestartVmsDone(true)
-    } catch {}
+    }
+    // Done only when every guest was started; otherwise say which were not.
+    if (failures.length === 0) setRestartVmsDone(true)
+    else setPostError(t('updates.postActionFailed', { error: failures.join(', ') }))
     setRestartVmsInProgress(false)
-  }, [shutdownVms, connBaseUrl, nodeName])
+  }, [shutdownVms, connBaseUrl, nodeName, t])
 
   // Closing while the upgrade runs asks first (themed dialog, not the
   // browser's confirm box); finishClose does the actual reset.
@@ -650,6 +733,8 @@ export default function NodeUpdateDialog({
     setCompletedAt(null)
     setMaintenanceStatus(null)
     setCephFlags([])
+    setCephFlagsError(null)
+    setAddedCephFlags([])
     setEnableMaintenance(true)
     setSetCephMaintenanceFlags(true)
     setPreflightLoading(false)
@@ -661,6 +746,8 @@ export default function NodeUpdateDialog({
     setDidEnableMaintenance(false)
     setRunningVms([])
     setVmsLoading(false)
+    setVmsDiscoveryError(null)
+    setPostError(null)
     setClusterNodes([])
     setMigrateSharedVms(true)
     setShutdownLocalVms(false)
@@ -680,11 +767,14 @@ export default function NodeUpdateDialog({
   }
 
   const rebootNode = useCallback(async () => {
+    setPostError(null)
     try {
-      await fetch(`${baseUrl}/reboot`, { method: 'POST' })
+      await requireOk(`${baseUrl}/reboot`, jsonInit('POST'))
       setRebootRequired(false)
-    } catch {}
-  }, [baseUrl])
+    } catch (e) {
+      setPostError(t('updates.postActionFailed', { error: errorMessage(e) }))
+    }
+  }, [baseUrl, t])
 
   const getDuration = () => {
     if (!startedAt || !completedAt) return null
@@ -699,6 +789,53 @@ export default function NodeUpdateDialog({
   const logLines = upgradeLogs
     ? upgradeLogs.split('\n').filter(l => l.trim()).slice(-80)
     : []
+
+  // Body of the Ceph flags card: loading, unreadable, already set, or the toggle.
+  const renderCephFlagsBody = () => {
+    if (cephFlagsLoading) return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
+        <CircularProgress size={16} />
+        <Typography variant="caption" color="text.secondary">Loading...</Typography>
+      </Box>
+    )
+    if (cephFlagsError) return (
+      <Alert severity="warning" sx={{ mb: 1 }}>
+        <Typography variant="body2">{t('updates.cephFlagsUnreadable', { error: cephFlagsError })}</Typography>
+      </Alert>
+    )
+    if (cephMaintenanceFlagsSet) return (
+      <Alert severity="success" sx={{ mb: 1 }}>
+        <Typography variant="body2">{t('updates.cephFlagsAlreadySet')}</Typography>
+      </Alert>
+    )
+
+    return (
+      <>
+        <Alert severity="info" sx={{ mb: 1 }}>
+          <Typography variant="body2">{t('updates.cephFlagsNotSet')}</Typography>
+        </Alert>
+        {cephFlags.length > 0 && (
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
+            {cephFlags.map(f => (
+              <Chip key={f} label={f} size="small" sx={{ fontFamily: 'monospace', fontSize: 11, height: 22 }} />
+            ))}
+          </Box>
+        )}
+        {canSetCephFlags && (
+          <FormControlLabel
+            control={
+              <Switch
+                checked={setCephMaintenanceFlags}
+                onChange={(e) => setSetCephMaintenanceFlags(e.target.checked)}
+                size="small"
+              />
+            }
+            label={<Typography variant="body2">{t('updates.setCephFlagsBefore')}</Typography>}
+          />
+        )}
+      </>
+    )
+  }
 
   return (
     <Dialog
@@ -776,41 +913,7 @@ export default function NodeUpdateDialog({
                     {t('updates.cephFlagsCard')}
                   </Typography>
 
-                  {cephFlagsLoading ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
-                      <CircularProgress size={16} />
-                      <Typography variant="caption" color="text.secondary">Loading...</Typography>
-                    </Box>
-                  ) : cephMaintenanceFlagsSet ? (
-                    <Alert severity="success" sx={{ mb: 1 }}>
-                      <Typography variant="body2">{t('updates.cephFlagsAlreadySet')}</Typography>
-                    </Alert>
-                  ) : (
-                    <>
-                      <Alert severity="info" sx={{ mb: 1 }}>
-                        <Typography variant="body2">{t('updates.cephFlagsNotSet')}</Typography>
-                      </Alert>
-                      {cephFlags.length > 0 && (
-                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
-                          {cephFlags.map(f => (
-                            <Chip key={f} label={f} size="small" sx={{ fontFamily: 'monospace', fontSize: 11, height: 22 }} />
-                          ))}
-                        </Box>
-                      )}
-                      {canSetCephFlags && (
-                        <FormControlLabel
-                          control={
-                            <Switch
-                              checked={setCephMaintenanceFlags}
-                              onChange={(e) => setSetCephMaintenanceFlags(e.target.checked)}
-                              size="small"
-                            />
-                          }
-                          label={<Typography variant="body2">{t('updates.setCephFlagsBefore')}</Typography>}
-                        />
-                      )}
-                    </>
-                  )}
+                  {renderCephFlagsBody()}
                 </CardContent>
               </Card>
             )}
@@ -975,6 +1078,12 @@ export default function NodeUpdateDialog({
                   )}
                 </CardContent>
               </Card>
+            )}
+
+            {vmsDiscoveryError && !vmsLoading && (
+              <Alert severity="error">
+                {t('updates.guestDiscoveryFailed', { error: vmsDiscoveryError })}
+              </Alert>
             )}
 
             {vmsLoading && (
@@ -1228,6 +1337,8 @@ export default function NodeUpdateDialog({
               )}
             </Alert>
 
+            {postError && <Alert severity="error">{postError}</Alert>}
+
             {/* Ceph flags cleanup */}
             {didSetCephFlags && (
               <Card variant="outlined">
@@ -1399,6 +1510,7 @@ export default function NodeUpdateDialog({
         {/* Step: Completed (standalone) or final step (cluster) */}
         {activeStep === STEP.COMPLETED && (
           <Stack spacing={2.5}>
+            {postError && <Alert severity="error">{postError}</Alert>}
             {/* For standalone: show result alert + reboot + logs */}
             {!clusterMode && (
               <>
@@ -1527,7 +1639,7 @@ export default function NodeUpdateDialog({
             <Button
               variant="contained"
               onClick={executePreFlight}
-              disabled={preflightLoading || maintenanceLoading || cephFlagsLoading || vmsLoading}
+              disabled={preflightLoading || maintenanceLoading || cephFlagsLoading || vmsLoading || !!vmsDiscoveryError}
               startIcon={preflightLoading ? <CircularProgress size={16} /> : <i className="ri-arrow-right-line" style={{ fontSize: 18 }} />}
             >
               {preflightLoading ? t('updates.preparingCluster') : t('common.next')}

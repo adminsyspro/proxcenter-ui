@@ -79,6 +79,20 @@ describe('clampRrdWindow', () => {
   it('never looks into the future', () => {
     expect(clampRrdWindow({ from: NOW - 600, to: NOW + 86_400 }, NOW).window.to).toBe(NOW)
   })
+
+  it('never serves a future-dated window when the start itself is in the future', () => {
+    const { window, truncated } = clampRrdWindow({ from: NOW + 3_600, to: NOW + 7_200 }, NOW)
+
+    expect(window.to).toBeLessThanOrEqual(NOW)
+    expect(window.from).toBeLessThan(window.to)
+    expect(truncated).toBe(false)
+  })
+
+  it('pulls a start that sits exactly at now back inside the past', () => {
+    const { window } = clampRrdWindow({ from: NOW, to: NOW + 60 }, NOW)
+
+    expect(window).toEqual({ from: NOW - 1, to: NOW })
+  })
 })
 
 describe('clipRrdRows', () => {
@@ -179,6 +193,13 @@ describe('resolveRrdRequest', () => {
       window: { from: NOW - 600, to: NOW - 300 },
       truncated: false,
     })
+  })
+
+  it('answers a future window from the hour archive with past-only bounds', () => {
+    const resolved = resolveRrdRequest('day', NOW + 3_600, NOW + 7_200, NOW)
+
+    expect(resolved.timeframe).toBe('hour')
+    expect(resolved.window).toEqual({ from: NOW - 1, to: NOW })
   })
 
   it('ignores an unusable window rather than failing the request', () => {

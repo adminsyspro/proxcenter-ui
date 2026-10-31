@@ -228,6 +228,23 @@ export async function createIPSet(conn: PveConn, req: CreateIPSetRequest): Promi
   return postForm(conn, '/cluster/firewall/ipset', form)
 }
 
+/**
+ * Updates the comment of an existing IP set. PVE has no PUT on an IP set: its
+ * create call with `rename` set to the current name only rewrites the comment.
+ * The comment is always sent, so an empty one clears it.
+ */
+export async function updateIPSetComment(conn: PveConn, name: string, comment: string): Promise<StatusBody> {
+  const form = new URLSearchParams()
+
+  form.set('name', name)
+  form.set('rename', name)
+  form.set('comment', comment)
+
+  await postForm(conn, '/cluster/firewall/ipset', form)
+
+  return { status: 'updated' }
+}
+
 export async function deleteIPSet(conn: PveConn, name: string): Promise<StatusBody> {
   return del(conn, `/cluster/firewall/ipset/${encodeURIComponent(name)}`)
 }

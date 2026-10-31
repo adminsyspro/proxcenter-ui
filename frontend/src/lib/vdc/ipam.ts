@@ -154,6 +154,18 @@ function buildRangeBounds(subnet: SubnetRow): {
  *   - else → IpamHintUnavailableError
  */
 export async function allocateIp(input: AllocateIpInput): Promise<IpamAllocation> {
+  return (await allocateIpTracked(input)).allocation
+}
+
+/**
+ * Same as `allocateIp`, and also says whether this call inserted the row
+ * (`created: true`) or returned the allocation the MAC already held. A caller
+ * that undoes its allocations on failure must only release the created ones:
+ * releasing a pre-existing row would drop a reservation the guest still owns.
+ */
+export async function allocateIpTracked(
+  input: AllocateIpInput,
+): Promise<{ allocation: IpamAllocation; created: boolean }> {
   const mac = normalizeMac(input.mac)
   const subnet = await loadSubnet(input.subnetId)
   if (!subnet) throw new Error(`Subnet not found: ${input.subnetId}`)
@@ -169,7 +181,7 @@ export async function allocateIp(input: AllocateIpInput): Promise<IpamAllocation
       // returning the wrong one.
       throw new IpamHintUnavailableError(input.hint)
     }
-    return rowToAllocation(existing)
+    return { allocation: rowToAllocation(existing), created: false }
   }
 
   const { low, high, gatewayInt } = buildRangeBounds(subnet)
@@ -183,18 +195,39 @@ export async function allocateIp(input: AllocateIpInput): Promise<IpamAllocation
   if (input.externalIps) for (const n of input.externalIps) taken.add(n)
   taken.add(gatewayInt)
 
-  // Hint path: try to reserve the requested IP if it's in range and free.
-  if (input.hint) {
-    if (!isValidIpv4(input.hint)) throw new IpamHintUnavailableError(input.hint)
-    const hintInt = ipToInt(input.hint)!
-    if (hintInt < low || hintInt > high || taken.has(hintInt)) {
-      throw new IpamHintUnavailableError(input.hint)
-    }
-    return insertAllocation({ ...input, mac }, input.hint, hintInt)
-  }
+  const allocation = input.hint
+    ? await reserveHint({ ...input, mac }, input.hint, low, high, taken)
+    : await reserveFirstFree({ ...input, mac }, low, high, taken)
 
-  // Auto: load the set of IPAM-tracked IPs and pick the first free.
-  // For typical /24s this is < 254 entries — a single SELECT is fine.
+  return { allocation, created: true }
+}
+
+/** Hint path: reserve the requested IP if it is in range and free. */
+async function reserveHint(
+  input: AllocateIpInput,
+  hint: string,
+  low: number,
+  high: number,
+  taken: Set<number>,
+): Promise<IpamAllocation> {
+  if (!isValidIpv4(hint)) throw new IpamHintUnavailableError(hint)
+  const hintInt = ipToInt(hint)!
+  if (hintInt < low || hintInt > high || taken.has(hintInt)) {
+    throw new IpamHintUnavailableError(hint)
+  }
+  return insertAllocation(input, hint, hintInt)
+}
+
+/**
+ * Auto path: add the IPAM-tracked IPs to `taken` and reserve the first free
+ * one. For typical /24s this is < 254 entries, a single SELECT is fine.
+ */
+async function reserveFirstFree(
+  input: AllocateIpInput,
+  low: number,
+  high: number,
+  taken: Set<number>,
+): Promise<IpamAllocation> {
   const takenRows = await prisma.vdcIpamAllocation.findMany({
     where: { subnetId: input.subnetId },
     select: { ipInt: true },
@@ -202,10 +235,7 @@ export async function allocateIp(input: AllocateIpInput): Promise<IpamAllocation
   for (const r of takenRows) taken.add(typeof r.ipInt === 'bigint' ? Number(r.ipInt) : r.ipInt)
 
   for (let candidate = low; candidate <= high; candidate++) {
-    if (!taken.has(candidate)) {
-      const ip = intToIp(candidate)
-      return insertAllocation({ ...input, mac }, ip, candidate)
-    }
+    if (!taken.has(candidate)) return insertAllocation(input, intToIp(candidate), candidate)
   }
   throw new IpamExhaustedError(input.subnetId)
 }

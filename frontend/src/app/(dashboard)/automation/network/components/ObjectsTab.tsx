@@ -92,9 +92,10 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
     }
   }
 
-  const handleUpdateIPSet = () => {
+  const handleUpdateIPSet = async () => {
     if (!editingIPSet) return
     try {
+      await firewallAPI.updateIPSetComment(selectedConnection, editingIPSet.name, editingIPSet.comment)
       showToast(t('networkPage.ipSetUpdated'), 'success')
       setEditingIPSet(null)
       reload()

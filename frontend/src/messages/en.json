@@ -4645,6 +4645,7 @@
       "rbac": "RBAC (Role-Based Access Control)",
       "ldap": "LDAP / Active Directory",
       "ai_insights": "AI Insights",
+      "ai_actions": "AI Approved Actions",
       "predictive_alerts": "Predictive Alerts",
       "alerts": "Alerting",
       "notifications": "Notifications",

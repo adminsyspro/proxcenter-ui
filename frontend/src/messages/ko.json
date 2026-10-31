@@ -4645,6 +4645,7 @@
       "rbac": "RBAC (역할 기반 액세스 제어)",
       "ldap": "LDAP / Active Directory",
       "ai_insights": "AI 인사이트",
+      "ai_actions": "승인된 AI 작업",
       "predictive_alerts": "예측 알림",
       "alerts": "알림",
       "notifications": "알림 전송",

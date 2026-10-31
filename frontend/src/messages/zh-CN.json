@@ -4645,6 +4645,7 @@
       "rbac": "RBAC（基于角色的访问控制）",
       "ldap": "LDAP / Active Directory",
       "ai_insights": "AI 洞察",
+      "ai_actions": "AI 审批操作",
       "predictive_alerts": "预测性告警",
       "alerts": "告警",
       "notifications": "通知",

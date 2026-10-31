@@ -20,6 +20,7 @@ const DEFAULT_COMMUNITY_FEATURES = {
     { id: 'microsegmentation', name: 'Microsegmentation', enabled: false },
     { id: 'rolling_updates', name: 'Rolling Updates', enabled: false },
     { id: 'ai_insights', name: 'AI Insights', enabled: false },
+    { id: 'ai_actions', name: 'AI Approved Actions', enabled: false },
     { id: 'predictive_alerts', name: 'Predictive Alerts', enabled: false },
     { id: 'green_metrics', name: 'Green Metrics', enabled: false },
     { id: 'cross_cluster_migration', name: 'Cross Cluster Migration', enabled: false },

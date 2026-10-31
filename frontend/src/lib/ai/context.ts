@@ -63,7 +63,8 @@ export const promptStrings = {
     toolsAnswerNotDump: 'ANSWER WITH THE SPECIFIC FINDINGS, never in generalities. Every statement you make must carry the measured value behind it. When a tool returns findings about what can be improved, list EVERY one that bears on the question, as a short bullet, in your own words, with its figure. It is FORBIDDEN to write that improvements exist, that a problem was found, or that something should be checked, without naming each one and giving its number. A summary that names nothing is a failed answer.',
     // Narrowed to modification on purpose. The generic "you cannot execute
     // actions" made the model refuse to look data up as well.
-    actionsPropose: 'You can propose an action with propose_action or propose_remediation_plan when the user explicitly asks for one; you never execute anything: the user approves it on the card shown under your answer. Never claim an action was done.',
+    actionsPropose: 'You change nothing yourself and never execute anything: you can only propose an action with propose_action or propose_remediation_plan when the user explicitly asks for one, and the user approves it on the card shown under your answer. Never claim an action was done.',
+    explainChangesOnlyActions: 'For a request to change something, propose the action with propose_action when the user explicitly asks for it and it is one you can propose; otherwise explain the procedure and say the user must apply it themselves',
     toolsNoWrite: 'You can read anything and CHANGE nothing: you cannot create, modify, migrate, start, stop or delete. That limit applies ONLY to changing the infrastructure, never to reading it. If the user asks for a change, explain the procedure and say they must apply it themselves via ProxCenter or Proxmox.',
     stateHeader: '=== CURRENT INFRASTRUCTURE STATE (live data) ===',
     summary: 'Global summary',
@@ -111,7 +112,8 @@ export const promptStrings = {
     toolsIntro: 'Tu disposes d\'outils en lecture seule qui récupèrent des détails d\'infrastructure absents de l\'instantané ci-dessous : dimensionnement matériel des VMs, matériel des hôtes (interfaces réseau, disques physiques), capacité de stockage, santé Ceph, OSD et latences, l\'historique d\'un hôte ou d\'une VM sur une période (CPU, mémoire, réseau, E/S disque), la capacité et le surengagement, les alertes, les VM qu\'aucun job de sauvegarde ne protège, les tâches Proxmox des derniers jours (sauvegardes en échec, migrations, ce qui tourne maintenant), les changements de configuration (qui a modifié quoi), les mises à jour en attente, souscriptions et certificats, la HA et le quorum, le DRS et Site Recovery, les jobs de migration, les quotas vDC, l\'exposition aux CVE, les prévisions de capacité et les simulations de placement. L\'utilisateur voit l\'historique et les classements dessinés en graphiques sous ta réponse : quand on te demande un graphique ou une courbe, appelle l\'outil, ne dis jamais que tu ne peux pas dessiner. APPELER UN OUTIL EST NORMAL ET ATTENDU : fais-le chaque fois que la réponse n\'est pas déjà dans l\'instantané, et appelles-en plusieurs si besoin. N\'invente jamais un chiffre qui ne t\'a pas été fourni.',
     toolsNeverDefer: 'C\'est toi qui récupères les données. Ne dis JAMAIS à l\'utilisateur de lancer une commande, d\'ouvrir une console ou d\'aller voir dans Proxmox pour obtenir une information : s\'il te la faut, appelle l\'outil qui la renvoie. Répondre « les données fournies ne le disent pas » sans avoir appelé d\'outil est un échec.',
     toolsSilent: 'Appelle les outils librement, mais n\'AFFICHE jamais l\'appel : aucun nom d\'outil, aucun nom de champ de données, aucun bloc JSON, et jamais les mots « nous pourrions exécuter ». Énonce ce qu\'une valeur EST, jamais d\'où elle vient.',
-    actionsPropose: 'Tu peux proposer une action avec propose_action ou propose_remediation_plan quand l\'utilisateur en demande explicitement une ; tu n\'exécutes jamais rien : l\'utilisateur l\'approuve sur la carte affichée sous ta réponse. Ne prétends jamais qu\'une action a été faite.',
+    actionsPropose: 'Tu ne modifies rien toi-même et n\'exécutes jamais rien : tu peux seulement proposer une action avec propose_action ou propose_remediation_plan quand l\'utilisateur en demande explicitement une, et l\'utilisateur l\'approuve sur la carte affichée sous ta réponse. Ne prétends jamais qu\'une action a été faite.',
+    explainChangesOnlyActions: 'Pour une demande de modification, propose l\'action avec propose_action quand l\'utilisateur la demande explicitement et que tu peux la proposer ; sinon explique la procédure et précise qu\'il doit l\'appliquer lui-même',
     toolsNoWrite: 'Tu peux tout lire et ne rien MODIFIER : tu ne peux pas créer, modifier, migrer, démarrer, arrêter ni supprimer. Cette limite ne porte QUE sur la modification de l\'infrastructure, jamais sur sa lecture. Si l\'utilisateur demande une modification, explique la procédure et précise qu\'il doit l\'appliquer lui-même via ProxCenter ou Proxmox.',
     toolsAnswerNotDump: 'RÉPONDS PAR LES CONSTATS PRÉCIS, jamais par des généralités. Chaque affirmation doit porter la valeur mesurée qui la fonde. Quand un outil renvoie des constats sur ce qui peut être amélioré, énumère CHACUN de ceux qui concernent la question, en une puce courte, dans tes propres mots, avec son chiffre. Il est INTERDIT d\'écrire qu\'il y a des améliorations à faire, qu\'un problème a été trouvé, ou qu\'il faut vérifier quelque chose, sans nommer chaque point et donner son chiffre. Un résumé qui ne nomme rien est une réponse ratée.',
     stateHeader: '=== ÉTAT ACTUEL DE L\'INFRASTRUCTURE (données en temps réel) ===',
@@ -155,6 +157,8 @@ export type RenderPromptOptions = {
   actionsEnabled?: boolean
 }
 
+const withoutReadOnlyClaim = (text: string) => text.replace('read-only tools', 'tools').replace('outils en lecture seule', 'outils')
+
 const terseHostLine = (n: InventorySnapshot['nodes'][number]) => `- ${n.name}: ${n.status} | CPU: ${n.cpuPct}% | RAM: ${n.memPct}%`
 
 function hostLine(n: InventorySnapshot['nodes'][number], s: { online: string; offline: string }) {
@@ -195,7 +199,9 @@ export function renderAiSystemPrompt(
 ${toolsEnabled
   // Order is load-bearing: what the model MAY do first, the write ban last, so
   // a limitation never leads and never reads as a general inability to act.
-  ? `${s.toolsIntro}\n\n${s.toolsNeverDefer}\n\n${s.toolsAnswerNotDump}\n\n${s.toolsSilent}\n\n${s.toolsNoWrite}${actionsEnabled ? `\n\n${s.actionsPropose}` : ''}`
+  // With actions on, the read-only claims and the write ban are SWAPPED, not
+  // appended to: a small model obeys the nearest, most repeated instruction.
+  ? `${actionsEnabled ? withoutReadOnlyClaim(s.toolsIntro) : s.toolsIntro}\n\n${s.toolsNeverDefer}\n\n${s.toolsAnswerNotDump}\n\n${s.toolsSilent}\n\n${actionsEnabled ? s.actionsPropose : s.toolsNoWrite}`
   : s.noActions}
 
 ${s.stateHeader}
@@ -295,7 +301,7 @@ ${s.instructions}
 - ${s.respondLang(localeToLanguageName(locale))}
 - ${toolsEnabled ? s.useDataOrTools : s.useData}
 - ${s.citeNames}
-- ${toolsEnabled ? s.explainChangesOnly : s.explainActions}${toolsEnabled ? `\n- ${s.tailNoDump}` : ''}
+- ${toolsEnabled ? (actionsEnabled ? s.explainChangesOnlyActions : s.explainChangesOnly) : s.explainActions}${toolsEnabled ? `\n- ${s.tailNoDump}` : ''}
 
 ${languageInstruction(locale)}
 `

@@ -694,7 +694,7 @@ describe('POST /api/v1/ai/chat/stream, approved actions (roadmap#188)', () => {
     await ask({ conversationId: 'conv-1' })
 
     expect(toolNamesOfFirstCall()).toEqual(['rank_guest_hardware', 'propose_action'])
-    expect(systemOfFirstCall()).toContain('you never execute anything')
+    expect(systemOfFirstCall()).toContain('never execute anything')
   })
 
   it('binds the cards to the session user, the tenant and the conversation, on the raw messages', async () => {
@@ -709,6 +709,24 @@ describe('POST /api/v1/ai/chat/stream, approved actions (roadmap#188)', () => {
     expect(ctx.actions.bind).toEqual({ userId: 'u1', tenantId: 'tenant-1', conversationId: 'conv-1' })
     expect(ctx.actions.userText).toBe('snapshot db-01')
     expect(ctx.actions.visibleText).toBe('snapshot db-01')
+  })
+
+  it('grounds on the raw request body, never on the provider thread that carries the system prompt', async () => {
+    fetchMock
+      .mockResolvedValueOnce(ollamaStreamToolCall('propose_action', {}))
+      .mockResolvedValueOnce(ollamaStream(['proposed']))
+
+    await decodeBody(await ask({ conversationId: 'conv-1', messages: [{ role: 'user', content: 'Snapshot db-01' }] }))
+
+    // The system prompt names the host pve1 and the cluster prod; the user never typed them.
+    expect(sentBody().messages.map((m: any) => m.content).join('\n')).toContain('pve1')
+
+    const actions = proposeExecute.mock.calls[0][1].actions
+
+    expect(actions.visibleText).not.toContain('pve1')
+    expect(actions.visibleText).not.toContain('prod')
+    expect(actions.userText).not.toContain('pve1')
+    expect(actions.userText).not.toContain('prod')
   })
 
   it('sends the cards in an actions frame after the charts, never to the model', async () => {
@@ -745,7 +763,7 @@ describe('POST /api/v1/ai/chat/stream, approved actions (roadmap#188)', () => {
       const { frames } = await decodeBody(await ask(body()))
 
       expect(toolNamesOfFirstCall()).toEqual(['rank_guest_hardware'])
-      expect(systemOfFirstCall()).not.toContain('you never execute anything')
+      expect(systemOfFirstCall()).not.toContain('never execute anything')
       expect(proposeExecute).not.toHaveBeenCalled()
       expect(frames.some(f => f.type === 'actions')).toBe(false)
     })

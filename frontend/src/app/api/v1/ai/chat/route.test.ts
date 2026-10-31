@@ -551,11 +551,29 @@ describe('POST /api/v1/ai/chat, approved actions (roadmap#188)', () => {
     const body = await readJson<any>(await ask({ conversationId: 'conv-1', messages: [{ role: 'user', content: 'Snapshot db-01' }] }))
 
     expect(toolNamesOfFirstCall()).toEqual(['rank_guest_hardware', 'get_ceph_status', 'propose_action'])
-    expect(systemOfFirstCall()).toContain('you never execute anything')
+    expect(systemOfFirstCall()).toContain('never execute anything')
     expect(proposeExecute.mock.calls[0][1].actions.bind).toEqual({ userId: 'u1', tenantId: 'tenant-1', conversationId: 'conv-1' })
     expect(body.actions.plans).toEqual([])
     expect(body.actions.cards).toHaveLength(1)
     expect(body.actions.cards[0]).toMatchObject({ actionId: 'a1', token: 'tok:conv-1' })
+  })
+
+  it('grounds on the raw request body, never on the provider thread that carries the system prompt', async () => {
+    fetchMock
+      .mockResolvedValueOnce(ollamaToolCall('propose_action', {}))
+      .mockResolvedValueOnce(ollamaReply('proposed'))
+
+    await ask({ conversationId: 'conv-1', messages: [{ role: 'user', content: 'Snapshot db-01' }] })
+
+    // The system prompt names the host pve1 and the cluster prod; the user never typed them.
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).messages.map((m: any) => m.content).join('\n')).toContain('pve1')
+
+    const actions = proposeExecute.mock.calls[0][1].actions
+
+    expect(actions.visibleText).not.toContain('pve1')
+    expect(actions.visibleText).not.toContain('prod')
+    expect(actions.userText).not.toContain('pve1')
+    expect(actions.userText).not.toContain('prod')
   })
 
   describe.each([
@@ -571,7 +589,7 @@ describe('POST /api/v1/ai/chat, approved actions (roadmap#188)', () => {
       const res = await readJson<any>(await ask(body()))
 
       expect(toolNamesOfFirstCall()).toEqual(['rank_guest_hardware', 'get_ceph_status'])
-      expect(systemOfFirstCall()).not.toContain('you never execute anything')
+      expect(systemOfFirstCall()).not.toContain('never execute anything')
       expect(proposeExecute).not.toHaveBeenCalled()
       expect('actions' in res).toBe(false)
     })

@@ -58,6 +58,10 @@ export function collectActionCards(trace: ReadonlyArray<{ actions?: ActionCardsP
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 
+/** A manual step may only link inside the app: one leading slash, no scheme, no backslash. */
+export const isRelativeAppPath = (href: string): boolean =>
+  href.startsWith('/') && !href.startsWith('//') && !href.includes('\\') && !/[\u0000-\u001f]/.test(href)
+
 const FINDINGS: ActionPlan['finding'][] = ['unprotected_guests', 'host_memory', 'pending_updates']
 
 /** A card read back from the stream, or null when it is not one. */
@@ -136,8 +140,10 @@ export function sanitizeActionPlan(raw: unknown): ActionPlan | null {
     if (!isRecord(s) || step === undefined) continue
 
     const card = s.card === undefined ? null : sanitizeActionCard(s.card)
-    const manual = isRecord(s.manual) && str(s.manual.text) !== undefined && str(s.manual.href) !== undefined
-      ? { text: s.manual.text as string, href: s.manual.href as string }
+    const manualText = isRecord(s.manual) ? str(s.manual.text) : undefined
+    const manualHref = isRecord(s.manual) ? str(s.manual.href) : undefined
+    const manual = manualText !== undefined
+      ? { text: manualText, href: manualHref !== undefined && isRelativeAppPath(manualHref) ? manualHref : '' }
       : undefined
 
     steps.push({ step, ...(card ? { card } : {}), ...(manual ? { manual } : {}) })

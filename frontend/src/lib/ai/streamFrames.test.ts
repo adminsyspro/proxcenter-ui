@@ -242,3 +242,22 @@ describe('the actions frame (roadmap#188)', () => {
     expect(out.plans[0].steps.map(s => [s.step, Boolean(s.card), Boolean(s.manual)])).toEqual([[1, false, false], [2, false, true], [3, true, false]])
   })
 })
+
+describe('manual plan step links (roadmap#188)', () => {
+  const hrefOf = (href: unknown) => {
+    const plan = { planId: 'p', finding: 'host_memory', title: 't', steps: [{ step: 1, manual: { text: 'Check', href } }] }
+    const { frames } = decodeAll([encodeFrame({ type: 'actions', cards: [], plans: [plan as any] })])
+
+    return (frames[0] as any).plans[0].steps[0].manual
+  }
+
+  it.each(['javascript:alert(1)', '//evil.example', 'https://x', '/a\\b', 'infra', 42])('drops the href %j, keeps the text', href => {
+    expect(hrefOf(href)).toEqual({ text: 'Check', href: '' })
+  })
+
+  it('keeps a relative app path', () => {
+    const href = '/infrastructure/inventory?selectType=cluster&selectId=abc'
+
+    expect(hrefOf(href)).toEqual({ text: 'Check', href })
+  })
+})

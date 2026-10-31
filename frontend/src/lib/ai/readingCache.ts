@@ -43,7 +43,7 @@ export function createReadingCache<T extends { aiFailed?: boolean }>(options: Re
       if (!refresh && fresh(entry) && entry.target === target) return Promise.resolve(entry.value)
 
       const running = inflight.get(key)
-      if (running) return running
+      if (running !== undefined) return running
 
       const job = compute()
         .then(value => {

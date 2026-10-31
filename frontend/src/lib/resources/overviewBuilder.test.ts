@@ -175,7 +175,7 @@ describe('getResourcesOverview', () => {
     const calls = pveFetchMock.mock.calls.length
     await getResourcesOverview(req)
 
-    expect(pveFetchMock.mock.calls.length).toBe(calls)
+    expect(pveFetchMock.mock.calls).toHaveLength(calls)
   })
 
   it('still answers when the score snapshot cannot be written', async () => {

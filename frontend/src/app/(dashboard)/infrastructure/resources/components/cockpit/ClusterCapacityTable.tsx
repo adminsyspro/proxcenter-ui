@@ -61,6 +61,9 @@ export default function ClusterCapacityTable({ clusters, nodes, runways, thresho
                 <TableBody>
                   {rows.map(cluster => {
                     const soonest = runways.find(r => r.clusterId === cluster.id)?.soonest ?? null
+                    const runway = soonest
+                      ? [formatDays(t, soonest.daysToThreshold), t(`resources.cockpit.resource.${soonest.resource}`)].join(' · ')
+                      : formatDays(t, null)
                     const clusterNodes = nodes.filter(n => n.connectionId === cluster.id).map(n => ({ status: n.online ? 'online' : 'offline' }))
 
                     return (
@@ -77,9 +80,7 @@ export default function ClusterCapacityTable({ clusters, nodes, runways, thresho
                         <TableCell><UsageBar pct={cluster.storage.pct} warning={thresholds.storage.warning} critical={thresholds.storage.critical} /></TableCell>
                         <TableCell>{cluster.cpu.ratio.toFixed(1)}:1</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          {soonest
-                            ? `${formatDays(t, soonest.daysToThreshold)} · ${t(`resources.cockpit.resource.${soonest.resource}`)}`
-                            : formatDays(t, null)}
+                          {runway}
                         </TableCell>
                         <TableCell><NPlusOneChip cluster={cluster} /></TableCell>
                         <TableCell sx={{ pr: 2.5, whiteSpace: 'nowrap' }}>

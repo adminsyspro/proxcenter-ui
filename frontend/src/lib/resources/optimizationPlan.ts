@@ -176,7 +176,7 @@ export function buildPlanLevers(input: PlanInput): PlanLever[] {
     }
   }
 
-  return levers
+  return [...levers]
     .sort((a, b) => PRIORITY_ORDER[a.rulePriority] - PRIORITY_ORDER[b.rulePriority])
     .map((lever, i) => ({ ...lever, ref: `l${i + 1}` }))
 }

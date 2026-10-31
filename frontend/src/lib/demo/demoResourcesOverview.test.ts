@@ -30,7 +30,7 @@ describe('demo resources overview', () => {
     expect(clusters).toHaveLength(1)
     expect(clusters[0]).toMatchObject({ id: 'demo-pve-cluster-001', name: 'Production Cluster' })
     expect(clusters[0].nPlusOne).toBeTruthy()
-    expect(nodes.length).toBe(clusters[0].nodesTotal)
+    expect(nodes).toHaveLength(clusters[0].nodesTotal)
     // Sixty days of growth: every pool gets a growth rate.
     expect(storagePools.length).toBeGreaterThan(0)
     expect(storagePools.every(p => p.growthPctPerDay !== null)).toBe(true)

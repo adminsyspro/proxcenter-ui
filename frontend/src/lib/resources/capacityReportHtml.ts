@@ -76,19 +76,33 @@ export function capacityReportHtml(input: CapacityReportInput, t: ReportTranslat
       <td class="${a.daysToThreshold !== null && a.daysToThreshold <= 30 ? 'crit' : ''}">${e(days(a.daysToThreshold))}</td>
     </tr>`).join('')
 
+  const n1Label = (c: CapacityReportInput['clusters'][number]) => {
+    if (!c.nPlusOne.applicable) return t('notApplicable')
+
+    return c.nPlusOne.ok ? t('n1Ok') : t('n1Ko')
+  }
+  const runwayLabel = (c: CapacityReportInput['clusters'][number]) => {
+    if (!c.runwayResource) return days(null)
+    const resource = t(`resource.${c.runwayResource}`)
+
+    return `${days(c.runwayDays)} (${resource})`
+  }
+
   const clusterRows = input.clusters.map(c => {
-    const n1 = c.nPlusOne.applicable ? (c.nPlusOne.ok ? t('n1Ok') : t('n1Ko')) : t('notApplicable')
+    const n1 = n1Label(c)
+    const nodesOnline = `${c.nodesOnline}/${c.nodesTotal}`
+    const ratio = `${c.cpu.ratio.toFixed(1)}:1`
 
     return `
     <tr>
       <td><strong>${e(c.name)}</strong></td>
-      <td>${e(`${c.nodesOnline}/${c.nodesTotal}`)}</td>
+      <td>${e(nodesOnline)}</td>
       <td class="${level(c.cpu.usedPct, th.cpu.warning, th.cpu.critical)}">${e(pct(c.cpu.usedPct))}</td>
       <td class="${level(c.ram.usedPct, th.ram.warning, th.ram.critical)}">${e(pct(c.ram.usedPct))}</td>
       <td class="${level(c.storage.pct, th.storage.warning, th.storage.critical)}">${e(pct(c.storage.pct))}</td>
-      <td>${e(`${c.cpu.ratio.toFixed(1)}:1`)}</td>
+      <td>${e(ratio)}</td>
       <td class="${c.nPlusOne.ok === false ? 'crit' : ''}">${e(n1)}</td>
-      <td>${e(c.runwayResource ? `${days(c.runwayDays)} (${t(`resource.${c.runwayResource}`)})` : days(null))}</td>
+      <td>${e(runwayLabel(c))}</td>
     </tr>`
   }).join('')
 

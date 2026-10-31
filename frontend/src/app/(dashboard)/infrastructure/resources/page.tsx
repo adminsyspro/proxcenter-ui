@@ -157,7 +157,8 @@ export default function ResourcesPage() {
     loadData()
   }
 
-  const reportHref = `/api/v1/resources/report${selectedConnection === 'all' ? '' : `?connectionId=${encodeURIComponent(selectedConnection)}`}`
+  const reportQuery = selectedConnection === 'all' ? '' : `?connectionId=${encodeURIComponent(selectedConnection)}`
+  const reportHref = `/api/v1/resources/report${reportQuery}`
 
   return (
     <ProviderTenantGuard>

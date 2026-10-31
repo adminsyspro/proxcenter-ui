@@ -21,7 +21,7 @@ export function useAiReading<T>(path: string, connectionId: string | undefined, 
     if (connectionId) params.set('connectionId', connectionId)
     const qs = params.toString()
 
-    return `${path}${qs ? `?${qs}` : ''}`
+    return qs ? `${path}?${qs}` : path
   }, [path, connectionId])
 
   // The locale is part of the key only: the server reads it from the cookie.

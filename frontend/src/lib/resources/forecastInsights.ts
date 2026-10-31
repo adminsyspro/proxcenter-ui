@@ -223,12 +223,15 @@ function fmtCrossing(days: number | null): string {
 
   return `reached in ${days} days`
 }
-const fmtSlope = (slope: number | null) => (slope === null ? 'n/a' : `${slope >= 0 ? '+' : ''}${slope} pts/day`)
+const signed = (value: number) => (value >= 0 ? `+${value}` : String(value))
+const fmtSlope = (slope: number | null) => (slope === null ? 'n/a' : `${signed(slope)} pts/day`)
 
 function resourceText(name: string, line: ResourceLine): string {
   const extra = [line.trendType && `trend ${line.trendType}`, line.forecastError != null && `measured 14-day forecast error ±${line.forecastError} pts`].filter(Boolean).join(', ')
 
-  return `${name} ${line.pct}% (critical at ${line.threshold}%), 30-day slope ${fmtSlope(line.slope)}, critical threshold ${fmtCrossing(line.days)}${extra ? ` (${extra})` : ''}`
+  const suffix = extra ? ` (${extra})` : ''
+
+  return `${name} ${line.pct}% (critical at ${line.threshold}%), 30-day slope ${fmtSlope(line.slope)}, critical threshold ${fmtCrossing(line.days)}${suffix}`
 }
 
 export const FORECAST_SYSTEM_PROMPT = `You are a capacity planning analyst for Proxmox VE clusters. You read a forecast computed by the platform and explain it to the infrastructure manager who decides on purchases and rebalancing.
@@ -249,7 +252,8 @@ export function buildForecastPrompt(digest: ForecastDigest, languageLine: string
 
   lines.push(`Scope: ${digest.scope}. History available: ${digest.historyDays} days of daily averages; forecast window: last ${digest.windowDays} days.`)
   lines.push('')
-  lines.push(`[estate] health score ${estate.healthScore}/100${estate.healthDelta30d === null ? '' : `, ${estate.healthDelta30d >= 0 ? '+' : ''}${estate.healthDelta30d} over 30 days`}`)
+  const healthDelta = estate.healthDelta30d === null ? '' : `, ${signed(estate.healthDelta30d)} over 30 days`
+  lines.push(`[estate] health score ${estate.healthScore}/100${healthDelta}`)
   for (const r of RESOURCES) lines.push(`  ${resourceText(r.toUpperCase(), estate.resources[r])}`)
 
   for (const c of digest.clusters) {
@@ -271,8 +275,9 @@ export function buildForecastPrompt(digest: ForecastDigest, languageLine: string
     lines.push('')
     lines.push('Storage pools at risk:')
     for (const p of digest.pools) {
-      const growth = p.growthPerDay === null ? 'growth unknown' : `${p.growthPerDay >= 0 ? '+' : ''}${p.growthPerDay} pts/day`
-      lines.push(`[${p.ref}] pool "${p.name}" on ${p.node ? `node ${p.node} of ` : 'shared storage of '}${p.cluster}: ${p.pct}% used, ${growth}, critical threshold ${digest.thresholds.storage.critical}% ${fmtCrossing(p.days)}`)
+      const growth = p.growthPerDay === null ? 'growth unknown' : `${signed(p.growthPerDay)} pts/day`
+      const where = p.node ? `node ${p.node} of ` : 'shared storage of '
+      lines.push(`[${p.ref}] pool "${p.name}" on ${where}${p.cluster}: ${p.pct}% used, ${growth}, critical threshold ${digest.thresholds.storage.critical}% ${fmtCrossing(p.days)}`)
     }
   }
 

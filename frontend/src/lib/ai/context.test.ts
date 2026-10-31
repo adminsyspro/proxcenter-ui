@@ -403,6 +403,8 @@ describe('proposal wording (roadmap#188)', () => {
     for (const f of ON_ABSENT) expect(on).not.toContain(f)
     expect(on).toContain('propose_action')
     expect(on).toContain(lang === 'en' ? 'Never claim an action was done.' : 'Ne prétends jamais qu\'une action a été faite.')
+    expect(on).toContain(lang === 'en' ? 'call the tool instead of explaining how to look it up' : 'appelle l\'outil au lieu d\'expliquer comment aller les chercher')
+    expect(on).toContain(lang === 'en' ? 'ONLY to changing the infrastructure, never to reading it' : 'QUE sur la modification de l\'infrastructure, jamais sur sa lecture')
     expect(on).toContain(lang === 'en' ? 'propose the action with propose_action' : 'propose l\'action avec propose_action')
   })
 

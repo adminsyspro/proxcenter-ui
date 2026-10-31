@@ -220,6 +220,7 @@
     "networkSecurity": "Network Sicherheit",
     "operations": "Betrieb",
     "events": "Ereignisse",
+    "availability": "Verfügbarkeit",
     "alerts": "Warnmeldungen",
     "jobs": "Task Ceingeben",
     "monitoring": "Überwachung",
@@ -667,6 +668,10 @@
     }
   },
   "alerts": {
+    "errors": {
+      "alertLocked": "Diese Warnung kann nicht gelöscht werden: Lösen Sie sie stattdessen auf.",
+      "alertsLocked": "{count, plural, one {# Warnung kann nicht gelöscht werden und wurde behalten: Lösen Sie sie stattdessen auf.} other {# Warnungen können nicht gelöscht werden und wurden behalten: Lösen Sie sie stattdessen auf.}}"
+    },
     "title": "Warnmeldungen",
     "noActiveAlerts": "No aktiv Warnmeldungen",
     "allSystemsNormal": "Alle Systeme arbeiten normal",
@@ -5321,7 +5326,8 @@
         "backup": "Backups",
         "replication": "Replikation",
         "maintenance": "Wartung",
-        "report": "Berichte"
+        "report": "Berichte",
+        "sla": "SLA"
       },
       "severities": {
         "info": "Info und höher",
@@ -5329,6 +5335,25 @@
         "warning": "Warnungen und kritisch",
         "critical": "Nur kritisch"
       }
+    },
+    "sla": {
+      "title": "SLA",
+      "description": "Warnt, wenn eine SLA-Richtlinie ihr Ausfallbudget aufbraucht: eine Warnung ab dem gewählten Schwellenwert, dann eine kritische Benachrichtigung, sobald das Ziel für den Zeitraum verfehlt ist.",
+      "period": "Budgetzeitraum",
+      "periods": {
+        "month": "Kalendermonat",
+        "rolling30": "Letzte 30 Tage (gleitend)"
+      },
+      "warnPercent": "Warnschwelle",
+      "alertsNote": "Ausfälle abgedeckter Gäste und Quorumverlust kommen über die Kategorie Alarme."
+    },
+    "help": {
+      "alert": "Schwellen- und Statusalarme (CPU, Arbeitsspeicher, Speicher, ausgefallener Knoten oder abgedeckter Gast, Cluster-Quorum, Datenträgerlatenz, Ceph, Backup-Abdeckung, veraltete Snapshots), beim Auslösen und beim Auflösen.",
+      "migration": "Vom DRS ausgeführte Migrationen: gestartet, abgeschlossen oder fehlgeschlagen.",
+      "backup": "Proxmox-Sicherungsaufträge, Erfolg oder Fehler je Auftrag, und die Wiederherstellungsübungen.",
+      "replication": "Site Recovery: erfolgreiche oder fehlgeschlagene Replikationsaufträge sowie Failover, Failback oder Test eines Wiederherstellungsplans.",
+      "maintenance": "Ein Knoten, der den Wartungsmodus betritt oder verlässt, und das Ende seiner Evakuierung.",
+      "report": "Geplante Berichte, nach der Erstellung per E-Mail versendet."
     }
   },
   "audit": {
@@ -9746,7 +9771,8 @@
       "capacity": "Kapazität",
       "security": "Sicherheit",
       "site_recovery": "Site Recovery",
-      "backup": "Backup"
+      "backup": "Backup",
+      "sla": "SLA"
     },
     "typeDescriptions": {
       "infrastructure": "Übersicht über Cluster, Nodes, VMs und Storage",
@@ -11367,5 +11393,435 @@
     "runsInOrchestrator": "Läuft im Orchestrator: Sie können dieses Fenster schließen und jeden Gast im Task Center verfolgen.",
     "candidates": "Mögliche Ziele: {nodes}",
     "noCandidates": "Kein geeigneter Zielknoten."
+  },
+  "availability": {
+    "title": "Verfügbarkeit und SLA",
+    "tabs": {
+      "overview": "Übersicht",
+      "policies": "Richtlinien",
+      "maintenance": "Wartung"
+    },
+    "states": {
+      "up": "Verfügbar",
+      "down": "Ausgefallen",
+      "maintenance": "Wartung",
+      "unobserved": "Nicht beobachtet",
+      "absent": "Nicht vorhanden"
+    },
+    "subtitle": "Verfügbarkeit Ihrer Knoten und Cluster, vom Orchestrator gemessen",
+    "periods": {
+      "label": "Zeitraum",
+      "1h": "1 Std.",
+      "24h": "24 Std.",
+      "7d": "7 Tg.",
+      "30d": "30 Tg.",
+      "1y": "1 J.",
+      "custom": "Benutzerdefiniert",
+      "range": "{from} → {to}",
+      "from": "Von",
+      "to": "Bis",
+      "apply": "Anwenden",
+      "rangeHint": "Höchstens 400 Tage. Ein Ende in der Zukunft endet bei jetzt.",
+      "error": {
+        "order": "Das Ende muss nach dem Beginn liegen.",
+        "tooLong": "Der Zeitraum ist auf 400 Tage begrenzt."
+      }
+    },
+    "tiles": {
+      "nodesUp": "Knoten verfügbar",
+      "clustersQuorate": "Cluster mit Quorum",
+      "nodesDown": "Knoten ausgefallen",
+      "nodesMaintenance": "In Wartung",
+      "lowCoverage": "Verbindungen unter 100 % Abdeckung",
+      "coveredGuestsDown": "Abgedeckte Gäste gestoppt",
+      "clearFilter": "Filter entfernen"
+    },
+    "connection": {
+      "availability": "Knotenverfügbarkeit",
+      "coverage": "Abdeckung",
+      "clusterAvailability": "Clusterverfügbarkeit",
+      "notMeasured": "Nicht gemessen",
+      "lastCollected": "Letzte Messung: {time}",
+      "neverCollected": "Nie gemessen",
+      "clusterRow": "Cluster",
+      "perHost": "Verfügbarkeit pro Host",
+      "noNodes": "Auf dieser Verbindung wurde kein Knoten gemessen",
+      "noMatch": "Keine Verbindung entspricht diesem Filter",
+      "empty": "Keine Verbindung vorhanden",
+      "overall": "Gesamt · {count, plural, one {# Host} other {# Hosts}}",
+      "toggle": "Hosts von {name}",
+      "expandAll": "Alle aufklappen",
+      "collapseAll": "Alle zuklappen",
+      "noneMeasured": "Noch wird keine Verbindung gemessen: Das Verfügbarkeitsregister erfasst nur die in seiner Konfiguration angehakten Verbindungen.",
+      "unmeasured": "{count, plural, one {# Verbindung wird nicht gemessen.} other {# Verbindungen werden nicht gemessen.}}",
+      "configure": "Gemessene Verbindungen wählen",
+      "askAdmin": "Ein Administrator wählt sie über die Einstellungsschaltfläche dieser Seite."
+    },
+    "timeline": {
+      "rowSummary": "{label}: {availability} verfügbar, {incidents, plural, one {# Ausfall} other {# Ausfälle}}",
+      "rowSummaryUnmeasured": "{label}: nicht gemessen",
+      "run": "{state} · {from} → {to} · {duration}",
+      "incident": "Vorfall: {title} ({comments, plural, one {# Kommentar} other {# Kommentare}})",
+      "alertsNoIncident": "{count, plural, one {# Warnung} other {# Warnungen}}, kein Vorfall eröffnet",
+      "bar": "{from} → {to}",
+      "barRate": "{availability} verfügbar",
+      "now": "Jetzt",
+      "moreOutages": "+{count, plural, one {# weiterer Ausfall} other {# weitere Ausfälle}}",
+      "detail": {
+        "title": "Details des Zeitraums",
+        "hint": "Für Details klicken",
+        "close": "Schließen",
+        "slots": "Zustand jedes Intervalls des Zeitraums",
+        "spent": "{state}: {duration}",
+        "events": "Ereignisse des Zeitraums",
+        "none": "Kein Ausfall in diesem Zeitraum.",
+        "viewIncident": "Vorfall anzeigen",
+        "openIncident": "Vorfall eröffnen",
+        "hintHosts": "Klicken, um jeden Host zu sehen"
+      }
+    },
+    "explainer": {
+      "title": "So werden die Werte berechnet",
+      "availability": "Verfügbarkeit = Betriebszeit / (Betriebszeit + Ausfallzeit).",
+      "coverage": "Abdeckung = (Betriebszeit + Ausfallzeit) / (Betriebszeit + Ausfallzeit + nicht beobachtete Zeit). Sie zeigt, welchen Teil des Zeitraums das Register tatsächlich gesehen hat.",
+      "excluded": "Wartungs- und Abwesenheitszeiten fließen in keinen der beiden Werte ein.",
+      "notMeasured": "Ein Wert wird als nicht gemessen angezeigt, wenn nichts beobachtet wurde, nie als 0 %."
+    },
+    "error": {
+      "unavailable": "Der Orchestrator ist nicht erreichbar: derzeit kann kein Verfügbarkeitswert angezeigt werden.",
+      "generic": "Die Verfügbarkeit konnte nicht geladen werden.",
+      "forbidden": "Sie haben keinen Zugriff auf die Verfügbarkeitsdaten."
+    },
+    "loading": "Verfügbarkeit wird geladen",
+    "common": {
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "edit": "Bearbeiten",
+      "delete": "Löschen"
+    },
+    "policies": {
+      "new": "Neue Richtlinie",
+      "empty": "Noch keine SLA-Richtlinie",
+      "status": {
+        "met": "Erfüllt",
+        "atRisk": "Gefährdet",
+        "violated": "Verletzt",
+        "unmeasured": "Nicht gemessen"
+      },
+      "disabled": "Deaktiviert",
+      "guestCount": "{count, plural, one {# Gast} other {# Gäste}}",
+      "belowTarget": "{count, plural, one {# Gast unter dem Ziel} other {# Gäste unter dem Ziel}}",
+      "showGuests": "Gäste von {name} anzeigen",
+      "hideGuests": "Gäste von {name} ausblenden",
+      "noGuests": "Kein Gast entspricht dieser Richtlinie",
+      "guestFallbackVm": "VM {vmid}",
+      "guestFallbackCt": "CT {vmid}",
+      "deleteTitle": "Richtlinie löschen",
+      "deleteMessage": "Die Richtlinie {name} löschen? Ihre Wartungsfenster werden mit gelöscht.",
+      "intro": "Jede Richtlinie legt ein Verfügbarkeitsziel für eine Gruppe von Gästen fest, gemessen über die letzten 30 Tage.",
+      "emptyDescription": "Erstellen Sie eine Richtlinie, um die Verfügbarkeit einer Gruppe von Gästen gegenüber einem Ziel zu verfolgen.",
+      "columns": {
+        "policy": "Richtlinie",
+        "scope": "Umfang",
+        "status": "Status",
+        "target": "Ziel",
+        "availability": "Verfügbarkeit (30 Tg.)",
+        "budget": "Ausfallbudget",
+        "guests": "Gäste"
+      },
+      "budgetUsage": "{used} von {allowed}",
+      "noScope": "Kein Gast ausgewählt",
+      "guests": {
+        "search": "Gast suchen",
+        "belowOnly": "Unter dem Ziel ({count})",
+        "colGuest": "Gast",
+        "colTimeline": "Letzte 30 Tage",
+        "colRate": "Verfügbarkeit",
+        "colDowntime": "Ausfallzeit",
+        "none": "Kein Gast passt.",
+        "expand": "Zeitleiste von {name}",
+        "showMore": "{count} weitere anzeigen ({rest} übrig)"
+      },
+      "unmeasured": "{count, plural, one {# Gast nicht gemessen} other {# Gäste nicht gemessen}}",
+      "unmeasuredHint": "Auf einer Verbindung, die das Register nicht misst: keine Werte, keine Alarme, keine SLA-Benachrichtigung. Klicken, um die gemessenen Verbindungen zu wählen.",
+      "unmeasuredHintAsk": "Auf einer Verbindung, die das Register nicht misst: keine Werte, keine Alarme, keine SLA-Benachrichtigung. Ein Administrator wählt die gemessenen Verbindungen."
+    },
+    "dialog": {
+      "createTitle": "Neue SLA-Richtlinie",
+      "editTitle": "SLA-Richtlinie bearbeiten",
+      "name": "Name",
+      "target": "Ziel (%)",
+      "targetHelp": "Von {min} bis {max}",
+      "enabled": "Richtlinie aktiv",
+      "guests": "Gäste",
+      "tags": "Tags",
+      "pools": "Pools",
+      "all": "Alle",
+      "search": "Suchen",
+      "more": "{count} weitere, Suche eingrenzen",
+      "noGuests": "Kein Gast im Inventar",
+      "noTags": "Kein Tag im Inventar",
+      "noPools": "Kein Pool im Inventar",
+      "membershipNote": "Die Zugehörigkeit zu Tags und Pools wird bei der Berechnung der Werte ausgewertet, nicht beim Speichern der Richtlinie.",
+      "inventoryError": "Das Inventar konnte nicht geladen werden: Gäste, Tags und Pools können nicht aufgelistet werden.",
+      "scopeTitle": "Abgedeckte Gäste",
+      "scopeHelp": "Ein Gast ist abgedeckt, wenn er angehakt ist, eines der Tags trägt oder zu einem der Pools gehört.",
+      "tabCount": "{label} ({count})",
+      "selection": "Gäste {guests} · Tags {tags} · Pools {pools}",
+      "allOf": "Alle von {group}",
+      "groupCount": "{ticked} / {total}",
+      "measuredOnly": "Nur die Gäste der gemessenen Verbindungen werden angeboten."
+    },
+    "errors": {
+      "guest_out_of_scope": "Ein ausgewählter Gast oder Pool liegt außerhalb Ihres Bereichs.",
+      "target_out_of_scope": "Das Ziel liegt außerhalb Ihres Bereichs.",
+      "name_taken": "Eine Richtlinie mit diesem Namen existiert bereits.",
+      "invalid_target": "Das Ziel muss zwischen 90 und 99,999 liegen.",
+      "invalid_window": "Das Fenster muss nach seinem Beginn enden und höchstens 31 Tage dauern.",
+      "invalid_name": "Der Name ist erforderlich und hat höchstens 120 Zeichen.",
+      "invalid_reason": "Der Grund ist erforderlich und hat höchstens 500 Zeichen.",
+      "feature_required": "Diese Funktion erfordert die Enterprise-Edition.",
+      "orchestrator_unavailable": "Der Orchestrator ist nicht erreichbar, nichts wurde gespeichert.",
+      "generic": "Die Anfrage ist fehlgeschlagen.",
+      "invalid_body": "Die Anfrage ist fehlerhaft.",
+      "invalid_guests": "Die Gästeliste ist ungültig.",
+      "invalid_selector": "Die Tags oder Pools sind ungültig.",
+      "invalid_scope": "Der Bereich ist ungültig.",
+      "invalid_target_ref": "Das Ziel ist unvollständig oder ungültig.",
+      "invalid_fields": "Die angeforderte Liste ist nicht verfügbar.",
+      "forbidden": "Sie dürfen SLA-Richtlinien und Wartungsfenster nicht ändern.",
+      "not_found": "Dieses Element existiert nicht mehr.",
+      "connection_not_measured": "Ein angehakter Gast liegt auf einer nicht gemessenen Verbindung. Messen Sie zuerst die Verbindung."
+    },
+    "maintenance": {
+      "new": "Neues Fenster",
+      "empty": "Kein Wartungsfenster",
+      "createTitle": "Neues Wartungsfenster",
+      "editTitle": "Wartungsfenster bearbeiten",
+      "scope": "Bereich",
+      "scopes": {
+        "connection": "Verbindung",
+        "node": "Knoten",
+        "guest": "Gast",
+        "policy": "Richtlinie"
+      },
+      "connection": "Verbindung",
+      "node": "Knoten",
+      "guest": "Gast",
+      "policy": "Richtlinie",
+      "startsAt": "Beginn",
+      "endsAt": "Ende",
+      "reason": "Grund",
+      "limit": "Ein Fenster dauert höchstens 31 Tage.",
+      "status": {
+        "ongoing": "Laufend",
+        "upcoming": "Bevorstehend",
+        "past": "Vergangen"
+      },
+      "deleteTitle": "Wartungsfenster löschen",
+      "deleteMessage": "Dieses Wartungsfenster löschen? Die abgedeckte Zeit zählt wieder in die Raten.",
+      "unknownPolicy": "Unbekannte Richtlinie",
+      "intro": "Während eines deklarierten Fensters zählt die Nichtverfügbarkeit der betroffenen Objekte als Wartung, nicht als Ausfall.",
+      "emptyDescription": "Deklarieren Sie vor geplanten Arbeiten ein Fenster, damit diese nicht gegen die Ziele zählen.",
+      "columns": {
+        "status": "Status",
+        "target": "Ziel",
+        "start": "Beginn",
+        "end": "Ende",
+        "duration": "Dauer",
+        "reason": "Grund",
+        "author": "Deklariert von"
+      },
+      "quickEnd": "Ende nach",
+      "hours": "{hours} Std."
+    },
+    "settings": {
+      "tabLabel": "Verfügbarkeit und SLA",
+      "title": "Verfügbarkeit und SLA",
+      "description": "Wie lange der Verfügbarkeitsverlauf aufbewahrt wird und mit welchem Ziel neue SLA-Richtlinien beginnen.",
+      "retentionLabel": "Aufbewahrung des Verlaufs (Tage)",
+      "retentionHelp": "Wie viele Tage Verfügbarkeitsverlauf der Orchestrator aufbewahrt, von {min} bis {max} Tagen. Ältere Einträge werden gelöscht.",
+      "targetLabel": "Standard-SLA-Ziel (%)",
+      "targetHelp": "Das Ziel, mit dem eine neue Richtlinie beginnt, von {targetMin} bis {targetMax}. Bestehende Richtlinien behalten ihr eigenes Ziel.",
+      "save": "Speichern",
+      "saving": "Wird gespeichert...",
+      "saved": "Einstellungen gespeichert",
+      "loadError": "Die Einstellungen konnten nicht geladen werden.",
+      "errors": {
+        "invalid_retention": "Die Aufbewahrung muss eine ganze Zahl von Tagen zwischen {min} und {max} sein.",
+        "invalid_target": "Das Ziel muss zwischen {targetMin} und {targetMax} liegen.",
+        "invalid_body": "Die Anfrage ist fehlerhaft.",
+        "orchestrator_unavailable": "Der Orchestrator ist nicht verfügbar, es wurde nichts gespeichert.",
+        "generic": "Die Einstellungen konnten nicht gespeichert werden."
+      }
+    },
+    "measured": {
+      "open": "Gemessene Verbindungen",
+      "title": "Gemessene Verbindungen",
+      "description": "Das Verfügbarkeitsregister erfasst nur die hier angehakten Verbindungen: ihre Knoten, das Cluster-Quorum und ihre Gäste. Nichts wird gemessen, solange keine Verbindung angehakt ist. Eine abgewählte Verbindung wird nicht mehr erfasst; ihr Verlauf bleibt bis zur Aufbewahrungsdauer erhalten.",
+      "empty": "Keine Proxmox-VE-Verbindung.",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "saveError": "Die gemessenen Verbindungen konnten nicht gespeichert werden.",
+      "invalidConnections": "Eine angehakte Verbindung existiert nicht mehr. Laden Sie die Seite neu.",
+      "loadError": "Die Verbindungen konnten nicht geladen werden.",
+      "unmeasureWarning": "{connection} wird von {count, plural, one {# Richtlinie} other {# Richtlinien}} verwendet ({policies}): Ihre Gäste werden nicht mehr gemessen; ihr Verlauf bleibt erhalten."
+    }
+  },
+  "incidents": {
+    "title": "Vorfall",
+    "status": {
+      "open": "Offen",
+      "resolved": "Behoben",
+      "closed": "Geschlossen"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Warnung",
+      "critical": "Kritisch"
+    },
+    "header": {
+      "editTitle": "Titel bearbeiten",
+      "saveTitle": "Titel speichern",
+      "cancel": "Abbrechen",
+      "ongoing": "laufend",
+      "titleLabel": "Titel"
+    },
+    "facts": {
+      "started": "Beginn",
+      "ended": "Ende",
+      "duration": "Dauer",
+      "alerts": "Alarme",
+      "alertsTotal": "{total, plural, one {# Alarm} other {# Alarme}}",
+      "alertsActive": "{count, plural, one {# aktiv} other {# aktiv}}",
+      "alertsResolved": "alle behoben",
+      "report": "SLA-Bericht",
+      "reportIn": "Enthalten",
+      "reportOut": "Nicht enthalten",
+      "reportPending": "Wird geprüft",
+      "postmortem": "Post-Mortem"
+    },
+    "empty": {
+      "none": "Für diese Warnung wurde noch kein Vorfall eröffnet.",
+      "open": "Vorfall eröffnen"
+    },
+    "alerts": {
+      "title": "Warnungen",
+      "detach": "Lösen",
+      "ongoing": "Laufend",
+      "sameOutage": "Warnungen desselben Ausfalls",
+      "noCandidates": "Keine weitere Warnung passt zu diesem Ausfall.",
+      "attach": "Zuordnen ({count})",
+      "search": "Warnungen suchen",
+      "unknown": "Unbekanntes Objekt",
+      "outOfSla": "Keine SLA-Richtlinie: weder in der Zeitleiste noch im Bericht",
+      "description": "Die Alarme dieses Vorfalls, nach Beginn sortiert. Der Vorfall gilt als behoben, sobald alle Alarme behoben sind.",
+      "sameOutageHint": "Weitere Alarme desselben Knotens, seiner Gäste oder seines Clusters, ausgelöst innerhalb von 15 Minuten um diesen Ausfall. Markieren Sie die mit derselben Ursache, um sie hier zu verfolgen.",
+      "resolvedAt": "Behoben um {time} nach {duration}",
+      "activeFor": "Aktiv seit {duration}",
+      "showMore": "{count, plural, one {# weiteren Alarm anzeigen} other {# weitere Alarme anzeigen}}",
+      "showLess": "Weniger anzeigen",
+      "outOfSlaShort": "Außerhalb der SLA-Richtlinie"
+    },
+    "journal": {
+      "title": "Journal",
+      "placeholder": "Kommentar hinzufügen",
+      "internalNote": "Interne Notiz",
+      "internal": "Intern",
+      "add": "Hinzufügen",
+      "edited": "bearbeitet",
+      "edit": "Bearbeiten",
+      "delete": "Löschen",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "empty": "Noch kein Kommentar.",
+      "deleteTitle": "Diesen Kommentar löschen?",
+      "deleteMessage": "Der Kommentar wird endgültig gelöscht.",
+      "description": "Austausch und Entscheidungen im Verlauf des Vorfalls. Interne Notizen erscheinen nie im SLA-Bericht."
+    },
+    "postmortem": {
+      "title": "Post-Mortem",
+      "rootCause": "Grundursache",
+      "impact": "Auswirkung",
+      "actions": "Korrekturmaßnahmen",
+      "addAction": "Maßnahme hinzufügen",
+      "actionPlaceholder": "Korrekturmaßnahme",
+      "deleteAction": "Maßnahme löschen",
+      "validate": "Post-Mortem bestätigen",
+      "reopen": "Wieder öffnen",
+      "needResolved": "Das Post-Mortem kann bestätigt werden, sobald alle Warnungen des Vorfalls behoben sind.",
+      "needFields": "Füllen Sie Grundursache und Auswirkung aus, um das Post-Mortem zu bestätigen.",
+      "slaNotice": "Wird in den SLA-Bericht übernommen; interne Notizen erscheinen dort nie.",
+      "validatedBy": "Bestätigt von {by}",
+      "noActions": "Noch keine Korrekturmaßnahme.",
+      "notInReport": "Nicht im SLA-Bericht: Keine Warnung dieses Vorfalls betrifft einen Gast, den eine SLA-Richtlinie abdeckt.",
+      "description": "Sobald alle Alarme behoben sind, Grundursache und Auswirkung erfassen, Korrekturmaßnahmen auflisten und dann bestätigen, um den Vorfall abzuschließen."
+    },
+    "report": {
+      "title": "Vorfallbericht",
+      "description": "Ein PDF zum Teilen: Eckdaten, Alarme nach Beginn, Post-Mortem und öffentliches Journal. Interne Notizen erscheinen darin nie.",
+      "download": "PDF herunterladen",
+      "draftHint": "Das Post-Mortem ist noch nicht bestätigt: Der Bericht kennzeichnet es als Entwurf.",
+      "failed": "Der Bericht konnte nicht erstellt werden. Bitte erneut versuchen.",
+      "pdfTitle": "Vorfallbericht",
+      "generated": "Erstellt am {time}",
+      "severity": "Schweregrad",
+      "colStarted": "Beginn",
+      "colObject": "Objekt",
+      "colMessage": "Meldung",
+      "colResolved": "Behoben",
+      "validated": "Bestätigt von {by} am {time}",
+      "draft": "Entwurf: Das Post-Mortem ist noch nicht bestätigt.",
+      "notFilled": "Nicht ausgefüllt.",
+      "footer": "Bericht erstellt von {app}. Interne Notizen sind nie enthalten."
+    },
+    "delete": {
+      "action": "Vorfall löschen",
+      "title": "Diesen Vorfall löschen?",
+      "message": "Der Vorfall, sein Journal und seine Maßnahmen werden endgültig gelöscht. Die Warnungen bleiben erhalten."
+    },
+    "errors": {
+      "alertInIncident": "Diese Warnung gehört zu einem Vorfall: Lösen Sie sie stattdessen auf.",
+      "closed": "Der Vorfall ist geschlossen. Öffnen Sie ihn wieder, um ihn zu ändern.",
+      "notResolved": "Der Vorfall kann nicht geschlossen werden, solange Warnungen aktiv sind.",
+      "alreadyAttached": "Diese Warnung ist bereits einem Vorfall zugeordnet.",
+      "notFound": "Dieser Vorfall existiert nicht mehr.",
+      "generic": "Der Vorgang ist fehlgeschlagen. Versuchen Sie es erneut.",
+      "alertsKept": "{count, plural, one {# Alarm gehört zu einem Vorfall und wurde behalten.} other {# Alarme gehören zu einem Vorfall und wurden behalten.}}"
+    },
+    "tab": "Vorfälle ({count})",
+    "list": {
+      "intro": "Ein Vorfall fasst die Alarme eines Ausfalls zusammen, mit Journal und Post-Mortem.",
+      "filterLabel": "Nach Status filtern",
+      "columns": {
+        "status": "Status",
+        "title": "Titel",
+        "severity": "Schweregrad",
+        "started": "Beginn",
+        "duration": "Dauer",
+        "alerts": "Alarme",
+        "comments": "Kommentare",
+        "postmortem": "Post-Mortem",
+        "actions": "Aktionen"
+      },
+      "filter": {
+        "all": "Alle",
+        "open": "Offen",
+        "resolved": "Gelöst",
+        "closed": "Geschlossen"
+      },
+      "empty": "Kein Vorfall",
+      "emptyDescription": "Öffnen Sie einen Vorfall aus einem Alarm, um ihn hier zu verfolgen.",
+      "postmortem": {
+        "todo": "Offen",
+        "inProgress": "In Arbeit",
+        "validated": "Validiert"
+      }
+    },
+    "actions": {
+      "open": "Vorfall öffnen",
+      "view": "Vorfall anzeigen",
+      "availability": "Verfügbarkeit anzeigen"
+    }
   }
 }

@@ -216,6 +216,7 @@
     "networkSecurity": "Sécurité Réseau",
     "operations": "Opérations",
     "events": "Évènements",
+    "availability": "Disponibilité",
     "alerts": "Alertes",
     "jobs": "Task Center",
     "monitoring": "Monitoring",
@@ -676,6 +677,10 @@
     }
   },
   "alerts": {
+    "errors": {
+      "alertLocked": "Cette alerte ne peut pas être supprimée : résolvez-la plutôt.",
+      "alertsLocked": "{count, plural, one {# alerte ne peut pas être supprimée et a été conservée : résolvez-la plutôt.} other {# alertes ne peuvent pas être supprimées et ont été conservées : résolvez-les plutôt.}}"
+    },
     "title": "Alertes",
     "noActiveAlerts": "Aucune alerte active",
     "allSystemsNormal": "Tous les systèmes fonctionnent normalement",
@@ -5332,7 +5337,8 @@
         "backup": "Sauvegardes",
         "replication": "Réplication",
         "maintenance": "Maintenance",
-        "report": "Rapports"
+        "report": "Rapports",
+        "sla": "SLA"
       },
       "severities": {
         "info": "Info et plus",
@@ -5340,6 +5346,25 @@
         "warning": "Avertissements et critiques",
         "critical": "Critiques uniquement"
       }
+    },
+    "sla": {
+      "title": "SLA",
+      "description": "Prévient quand une politique SLA consomme son budget d'indisponibilité : un avertissement au seuil choisi, puis une notification critique quand l'objectif est perdu pour la période.",
+      "period": "Période du budget",
+      "periods": {
+        "month": "Mois civil",
+        "rolling30": "30 derniers jours (glissants)"
+      },
+      "warnPercent": "Seuil d'avertissement",
+      "alertsNote": "Les arrêts d'invités couverts et les pertes de quorum arrivent par la catégorie Alertes."
+    },
+    "help": {
+      "alert": "Alertes de seuil et d'état (CPU, mémoire, stockage, nœud ou invité couvert à l'arrêt, quorum de cluster, latence disque, Ceph, couverture des sauvegardes, snapshots anciens), à leur déclenchement et à leur résolution.",
+      "migration": "Migrations lancées par le DRS : démarrées, terminées ou en échec.",
+      "backup": "Tâches de sauvegarde Proxmox, réussite ou échec par tâche, et exercices de restauration.",
+      "replication": "Site Recovery : tâches de réplication réussies ou en échec, et bascule, retour ou test d'un plan de reprise.",
+      "maintenance": "Un nœud qui entre en mode maintenance ou en sort, et la fin de son évacuation.",
+      "report": "Rapports programmés, envoyés par e-mail une fois générés."
     }
   },
   "audit": {
@@ -9800,7 +9825,8 @@
       "capacity": "Capacité",
       "security": "Sécurité",
       "site_recovery": "Reprise d'activité",
-      "backup": "Sauvegarde"
+      "backup": "Sauvegarde",
+      "sla": "SLA"
     },
     "typeDescriptions": {
       "infrastructure": "Vue d'ensemble des clusters, nœuds, VMs et stockage",
@@ -11700,5 +11726,435 @@
     "runsInOrchestrator": "S'exécute dans l'orchestrateur : vous pouvez fermer cette fenêtre et suivre chaque invité dans le Task Center.",
     "candidates": "Cibles éligibles : {nodes}",
     "noCandidates": "Aucun nœud cible éligible."
+  },
+  "availability": {
+    "title": "Disponibilité et SLA",
+    "tabs": {
+      "overview": "Vue d'ensemble",
+      "policies": "Politiques",
+      "maintenance": "Maintenance"
+    },
+    "states": {
+      "up": "En service",
+      "down": "Hors service",
+      "maintenance": "Maintenance",
+      "unobserved": "Non observé",
+      "absent": "Absent"
+    },
+    "subtitle": "Disponibilité de vos nœuds et clusters, mesurée par l'orchestrateur",
+    "periods": {
+      "label": "Période",
+      "1h": "1 h",
+      "24h": "24 h",
+      "7d": "7 j",
+      "30d": "30 j",
+      "1y": "1 an",
+      "custom": "Personnalisée",
+      "range": "{from} → {to}",
+      "from": "Du",
+      "to": "Au",
+      "apply": "Appliquer",
+      "rangeHint": "400 jours au plus. Une fin dans le futur s'arrête à maintenant.",
+      "error": {
+        "order": "La fin doit suivre le début.",
+        "tooLong": "La plage est limitée à 400 jours."
+      }
+    },
+    "tiles": {
+      "nodesUp": "Nœuds en service",
+      "clustersQuorate": "Clusters avec quorum",
+      "nodesDown": "Nœuds hors service",
+      "nodesMaintenance": "En maintenance",
+      "lowCoverage": "Connexions sous 100 % de couverture",
+      "coveredGuestsDown": "Invités couverts à l'arrêt",
+      "clearFilter": "Retirer le filtre"
+    },
+    "connection": {
+      "availability": "Disponibilité des nœuds",
+      "coverage": "Couverture",
+      "clusterAvailability": "Disponibilité du cluster",
+      "notMeasured": "Non mesuré",
+      "lastCollected": "Dernier relevé : {time}",
+      "neverCollected": "Jamais relevé",
+      "clusterRow": "Cluster",
+      "perHost": "Disponibilité par hôte",
+      "noNodes": "Aucun nœud mesuré sur cette connexion",
+      "noMatch": "Aucune connexion ne correspond à ce filtre",
+      "empty": "Aucune connexion à afficher",
+      "overall": "Ensemble · {count, plural, one {# hôte} other {# hôtes}}",
+      "toggle": "Hôtes de {name}",
+      "expandAll": "Tout déplier",
+      "collapseAll": "Tout replier",
+      "noneMeasured": "Aucune connexion n'est encore mesurée : le registre de disponibilité n'enregistre que les connexions cochées dans sa configuration.",
+      "unmeasured": "{count, plural, one {# connexion n'est pas mesurée.} other {# connexions ne sont pas mesurées.}}",
+      "configure": "Choisir les connexions mesurées",
+      "askAdmin": "Un administrateur les choisit avec le bouton de configuration de cette page."
+    },
+    "timeline": {
+      "rowSummary": "{label} : {availability} disponible, {incidents, plural, one {# panne} other {# pannes}}",
+      "rowSummaryUnmeasured": "{label} : non mesuré",
+      "run": "{state} · {from} → {to} · {duration}",
+      "incident": "Incident : {title} ({comments, plural, one {# commentaire} other {# commentaires}})",
+      "alertsNoIncident": "{count, plural, one {# alerte} other {# alertes}}, aucun incident ouvert",
+      "bar": "{from} → {to}",
+      "barRate": "{availability} de disponibilité",
+      "now": "Maintenant",
+      "moreOutages": "+{count, plural, one {# autre panne} other {# autres pannes}}",
+      "detail": {
+        "title": "Détail de la période",
+        "hint": "Cliquez pour le détail",
+        "close": "Fermer",
+        "slots": "État de chaque créneau de la période",
+        "spent": "{state} : {duration}",
+        "events": "Événements de la période",
+        "none": "Aucune panne sur cette période.",
+        "viewIncident": "Voir l'incident",
+        "openIncident": "Ouvrir un incident",
+        "hintHosts": "Cliquez pour voir chaque hôte"
+      }
+    },
+    "explainer": {
+      "title": "Comment ces taux sont calculés",
+      "availability": "Disponibilité = temps en service / (temps en service + temps hors service).",
+      "coverage": "Couverture = (temps en service + temps hors service) / (temps en service + temps hors service + temps non observé). Elle indique la part de la période réellement vue par le registre.",
+      "excluded": "Les périodes de maintenance et d'absence sont exclues des deux taux.",
+      "notMeasured": "Un taux est affiché « non mesuré » quand rien n'a été observé, jamais 0 %."
+    },
+    "error": {
+      "unavailable": "L'orchestrateur est injoignable : aucun chiffre de disponibilité ne peut être affiché pour le moment.",
+      "generic": "Impossible de charger la disponibilité.",
+      "forbidden": "Vous n'avez pas accès aux données de disponibilité."
+    },
+    "loading": "Chargement de la disponibilité",
+    "common": {
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "edit": "Modifier",
+      "delete": "Supprimer"
+    },
+    "policies": {
+      "new": "Nouvelle politique",
+      "empty": "Aucune politique SLA pour le moment",
+      "status": {
+        "met": "Respecté",
+        "atRisk": "À risque",
+        "violated": "Violé",
+        "unmeasured": "Non mesuré"
+      },
+      "disabled": "Désactivée",
+      "guestCount": "{count, plural, one {# invité} other {# invités}}",
+      "belowTarget": "{count, plural, one {# invité sous l'objectif} other {# invités sous l'objectif}}",
+      "showGuests": "Afficher les invités de {name}",
+      "hideGuests": "Masquer les invités de {name}",
+      "noGuests": "Aucun invité ne correspond à cette politique",
+      "guestFallbackVm": "VM {vmid}",
+      "guestFallbackCt": "CT {vmid}",
+      "deleteTitle": "Supprimer la politique",
+      "deleteMessage": "Supprimer la politique {name} ? Ses fenêtres de maintenance sont supprimées avec elle.",
+      "intro": "Chaque politique fixe un objectif de disponibilité pour un groupe d'invités, mesuré sur les 30 derniers jours.",
+      "emptyDescription": "Créez une politique pour suivre la disponibilité d'un groupe d'invités par rapport à un objectif.",
+      "columns": {
+        "policy": "Politique",
+        "scope": "Périmètre",
+        "status": "Statut",
+        "target": "Objectif",
+        "availability": "Disponibilité (30 j)",
+        "budget": "Budget d'indisponibilité",
+        "guests": "Invités"
+      },
+      "budgetUsage": "{used} sur {allowed}",
+      "noScope": "Aucun invité sélectionné",
+      "guests": {
+        "search": "Rechercher un invité",
+        "belowOnly": "Sous l'objectif ({count})",
+        "colGuest": "Invité",
+        "colTimeline": "30 derniers jours",
+        "colRate": "Disponibilité",
+        "colDowntime": "Indisponibilité",
+        "none": "Aucun invité ne correspond.",
+        "expand": "Frise de {name}",
+        "showMore": "Voir {count} de plus ({rest} restants)"
+      },
+      "unmeasured": "{count, plural, one {# invité non mesuré} other {# invités non mesurés}}",
+      "unmeasuredHint": "Sur une connexion que le registre ne mesure pas : aucun chiffre, aucune alerte, aucune notification SLA. Cliquez pour choisir les connexions mesurées.",
+      "unmeasuredHintAsk": "Sur une connexion que le registre ne mesure pas : aucun chiffre, aucune alerte, aucune notification SLA. Un administrateur choisit les connexions mesurées."
+    },
+    "dialog": {
+      "createTitle": "Nouvelle politique SLA",
+      "editTitle": "Modifier la politique SLA",
+      "name": "Nom",
+      "target": "Objectif (%)",
+      "targetHelp": "De {min} à {max}",
+      "enabled": "Politique activée",
+      "guests": "Invités",
+      "tags": "Tags",
+      "pools": "Pools",
+      "all": "Tout",
+      "search": "Rechercher",
+      "more": "{count} de plus, affinez la recherche",
+      "noGuests": "Aucun invité dans l'inventaire",
+      "noTags": "Aucun tag dans l'inventaire",
+      "noPools": "Aucun pool dans l'inventaire",
+      "membershipNote": "L'appartenance aux tags et aux pools est évaluée au moment du calcul des chiffres, pas à l'enregistrement de la politique.",
+      "inventoryError": "L'inventaire n'a pas pu être chargé : les invités, tags et pools ne peuvent pas être listés.",
+      "scopeTitle": "Invités couverts",
+      "scopeHelp": "Un invité est couvert s'il est coché, s'il porte l'un des tags ou s'il appartient à l'un des pools.",
+      "tabCount": "{label} ({count})",
+      "selection": "Invités {guests} · Tags {tags} · Pools {pools}",
+      "allOf": "Tout {group}",
+      "groupCount": "{ticked} / {total}",
+      "measuredOnly": "Seuls les invités des connexions mesurées sont proposés."
+    },
+    "errors": {
+      "guest_out_of_scope": "Un invité ou un pool sélectionné est hors de votre périmètre.",
+      "target_out_of_scope": "La cible est hors de votre périmètre.",
+      "name_taken": "Une politique porte déjà ce nom.",
+      "invalid_target": "L'objectif doit être compris entre 90 et 99,999.",
+      "invalid_window": "La fenêtre doit se terminer après son début et durer 31 jours au plus.",
+      "invalid_name": "Le nom est obligatoire et compte 120 caractères au plus.",
+      "invalid_reason": "Le motif est obligatoire et compte 500 caractères au plus.",
+      "feature_required": "Cette fonctionnalité nécessite l'édition Enterprise.",
+      "orchestrator_unavailable": "L'orchestrateur est injoignable, rien n'a été enregistré.",
+      "generic": "La requête a échoué.",
+      "invalid_body": "La requête est mal formée.",
+      "invalid_guests": "La liste des invités est invalide.",
+      "invalid_selector": "Les tags ou les pools sont invalides.",
+      "invalid_scope": "La portée est invalide.",
+      "invalid_target_ref": "La cible est incomplète ou invalide.",
+      "invalid_fields": "La liste demandée n'est pas disponible.",
+      "forbidden": "Vous n'avez pas le droit de modifier les politiques SLA ou les fenêtres de maintenance.",
+      "not_found": "Cet élément n'existe plus.",
+      "connection_not_measured": "Un invité coché est sur une connexion non mesurée. Mesurez d'abord la connexion."
+    },
+    "maintenance": {
+      "new": "Nouvelle fenêtre",
+      "empty": "Aucune fenêtre de maintenance",
+      "createTitle": "Nouvelle fenêtre de maintenance",
+      "editTitle": "Modifier la fenêtre de maintenance",
+      "scope": "Portée",
+      "scopes": {
+        "connection": "Connexion",
+        "node": "Nœud",
+        "guest": "Invité",
+        "policy": "Politique"
+      },
+      "connection": "Connexion",
+      "node": "Nœud",
+      "guest": "Invité",
+      "policy": "Politique",
+      "startsAt": "Début",
+      "endsAt": "Fin",
+      "reason": "Motif",
+      "limit": "Une fenêtre dure 31 jours au plus.",
+      "status": {
+        "ongoing": "En cours",
+        "upcoming": "À venir",
+        "past": "Passée"
+      },
+      "deleteTitle": "Supprimer la fenêtre de maintenance",
+      "deleteMessage": "Supprimer cette fenêtre de maintenance ? Le temps qu'elle couvrait est de nouveau compté dans les taux.",
+      "unknownPolicy": "Politique inconnue",
+      "intro": "Pendant une fenêtre déclarée, l'indisponibilité des objets visés compte comme de la maintenance, pas comme une panne.",
+      "emptyDescription": "Déclarez une fenêtre avant une intervention planifiée pour qu'elle ne pèse pas sur les objectifs.",
+      "columns": {
+        "status": "Statut",
+        "target": "Cible",
+        "start": "Début",
+        "end": "Fin",
+        "duration": "Durée",
+        "reason": "Motif",
+        "author": "Déclarée par"
+      },
+      "quickEnd": "Fin après",
+      "hours": "{hours} h"
+    },
+    "settings": {
+      "tabLabel": "Disponibilité et SLA",
+      "title": "Disponibilité et SLA",
+      "description": "Durée de conservation de l'historique de disponibilité et objectif proposé par défaut aux nouvelles politiques SLA.",
+      "retentionLabel": "Rétention de l'historique (jours)",
+      "retentionHelp": "Nombre de jours d'historique de disponibilité conservés par l'orchestrateur, de {min} à {max} jours. Les relevés plus anciens sont supprimés.",
+      "targetLabel": "Objectif SLA par défaut (%)",
+      "targetHelp": "L'objectif proposé à la création d'une politique, de {targetMin} à {targetMax}. Les politiques existantes gardent leur propre objectif.",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "saved": "Réglages enregistrés",
+      "loadError": "Impossible de charger les réglages.",
+      "errors": {
+        "invalid_retention": "La rétention doit être un nombre entier de jours, de {min} à {max}.",
+        "invalid_target": "L'objectif doit être compris entre {targetMin} et {targetMax}.",
+        "invalid_body": "La requête est mal formée.",
+        "orchestrator_unavailable": "L'orchestrateur est indisponible, rien n'a été enregistré.",
+        "generic": "Impossible d'enregistrer les réglages."
+      }
+    },
+    "measured": {
+      "open": "Connexions mesurées",
+      "title": "Connexions mesurées",
+      "description": "Le registre de disponibilité n'enregistre que les connexions cochées ici : leurs nœuds, le quorum du cluster et leurs invités. Rien n'est mesuré tant qu'aucune connexion n'est cochée. Une connexion décochée cesse d'être enregistrée ; son historique est gardé jusqu'à la rétention.",
+      "empty": "Aucune connexion Proxmox VE.",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "saveError": "Impossible d'enregistrer les connexions mesurées.",
+      "invalidConnections": "Une connexion cochée n'existe plus. Rechargez la page.",
+      "loadError": "Impossible de charger la liste des connexions.",
+      "unmeasureWarning": "{connection} est utilisée par {count, plural, one {# politique} other {# politiques}} ({policies}) : ses invités ne seront plus mesurés ; leur historique est conservé."
+    }
+  },
+  "incidents": {
+    "title": "Incident",
+    "status": {
+      "open": "Ouvert",
+      "resolved": "Résolu",
+      "closed": "Clos"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Avertissement",
+      "critical": "Critique"
+    },
+    "header": {
+      "editTitle": "Modifier le titre",
+      "saveTitle": "Enregistrer le titre",
+      "cancel": "Annuler",
+      "ongoing": "en cours",
+      "titleLabel": "Titre"
+    },
+    "facts": {
+      "started": "Début",
+      "ended": "Fin",
+      "duration": "Durée",
+      "alerts": "Alertes",
+      "alertsTotal": "{total, plural, one {# alerte} other {# alertes}}",
+      "alertsActive": "{count, plural, one {# active} other {# actives}}",
+      "alertsResolved": "toutes résolues",
+      "report": "Rapport SLA",
+      "reportIn": "Inclus",
+      "reportOut": "Non inclus",
+      "reportPending": "Vérification",
+      "postmortem": "Post-mortem"
+    },
+    "empty": {
+      "none": "Aucun incident n'a encore été ouvert pour cette alerte.",
+      "open": "Ouvrir un incident"
+    },
+    "alerts": {
+      "title": "Alertes",
+      "detach": "Détacher",
+      "ongoing": "En cours",
+      "sameOutage": "Alertes de la même panne",
+      "noCandidates": "Aucune autre alerte ne correspond à cette panne.",
+      "attach": "Rattacher ({count})",
+      "search": "Rechercher une alerte",
+      "unknown": "Objet inconnu",
+      "outOfSla": "Hors politique SLA : absent de la frise et du rapport",
+      "description": "Les alertes suivies par cet incident, par heure de début. L'incident se résout de lui-même quand elles sont toutes résolues.",
+      "sameOutageHint": "Autres alertes du même nœud, de ses invités ou de son cluster, levées à 15 minutes près de cette panne. Cochez celles qui ont la même cause pour les suivre ici.",
+      "resolvedAt": "Résolue à {time} après {duration}",
+      "activeFor": "Active depuis {duration}",
+      "showMore": "Voir {count, plural, one {# alerte de plus} other {# alertes de plus}}",
+      "showLess": "Réduire",
+      "outOfSlaShort": "Hors politique SLA"
+    },
+    "journal": {
+      "title": "Journal",
+      "placeholder": "Ajouter un commentaire",
+      "internalNote": "Note interne",
+      "internal": "Interne",
+      "add": "Ajouter",
+      "edited": "modifié",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "empty": "Aucun commentaire pour l'instant.",
+      "deleteTitle": "Supprimer ce commentaire ?",
+      "deleteMessage": "Le commentaire sera supprimé définitivement.",
+      "description": "Échanges et décisions au fil de l'incident. Les notes internes restent hors du rapport SLA."
+    },
+    "postmortem": {
+      "title": "Post-mortem",
+      "rootCause": "Cause racine",
+      "impact": "Impact",
+      "actions": "Actions correctives",
+      "addAction": "Ajouter une action",
+      "actionPlaceholder": "Action corrective",
+      "deleteAction": "Supprimer l'action",
+      "validate": "Valider le post-mortem",
+      "reopen": "Rouvrir",
+      "needResolved": "Le post-mortem peut être validé quand toutes les alertes de l'incident sont résolues.",
+      "needFields": "Renseignez la cause racine et l'impact pour valider le post-mortem.",
+      "slaNotice": "Repris dans le rapport SLA ; les notes internes n'y figurent jamais.",
+      "validatedBy": "Validé par {by}",
+      "noActions": "Aucune action corrective pour l'instant.",
+      "notInReport": "Absent du rapport SLA : aucune alerte de cet incident ne concerne un invité couvert par une politique SLA.",
+      "description": "Une fois toutes les alertes résolues, renseignez la cause racine et l'impact, listez les actions correctives, puis validez pour clore l'incident."
+    },
+    "report": {
+      "title": "Rapport d'incident",
+      "description": "Un PDF à partager : faits clés, alertes par heure de début, post-mortem et journal public. Les notes internes n'y figurent jamais.",
+      "download": "Télécharger le PDF",
+      "draftHint": "Le post-mortem n'est pas encore validé : le rapport le marque comme brouillon.",
+      "failed": "Le rapport n'a pas pu être généré. Réessayez.",
+      "pdfTitle": "Rapport d'incident",
+      "generated": "Généré le {time}",
+      "severity": "Gravité",
+      "colStarted": "Début",
+      "colObject": "Objet",
+      "colMessage": "Message",
+      "colResolved": "Résolue",
+      "validated": "Validé par {by} le {time}",
+      "draft": "Brouillon : le post-mortem n'est pas encore validé.",
+      "notFilled": "Non renseigné.",
+      "footer": "Rapport généré par {app}. Les notes internes n'y figurent jamais."
+    },
+    "delete": {
+      "action": "Supprimer l'incident",
+      "title": "Supprimer cet incident ?",
+      "message": "L'incident, son journal et ses actions seront supprimés définitivement. Les alertes sont conservées."
+    },
+    "errors": {
+      "alertInIncident": "Cette alerte appartient à un incident : résolvez-la plutôt.",
+      "closed": "L'incident est clos. Rouvrez-le pour le modifier.",
+      "notResolved": "L'incident ne peut pas être clos tant que des alertes sont actives.",
+      "alreadyAttached": "Cette alerte est déjà rattachée à un incident.",
+      "notFound": "Cet incident n'existe plus.",
+      "generic": "L'opération a échoué. Réessayez.",
+      "alertsKept": "{count, plural, one {# alerte appartient à un incident et a été conservée.} other {# alertes appartiennent à un incident et ont été conservées.}}"
+    },
+    "tab": "Incidents ({count})",
+    "list": {
+      "intro": "Un incident regroupe les alertes d'une même panne, avec un journal et un post-mortem.",
+      "filterLabel": "Filtrer par statut",
+      "columns": {
+        "status": "Statut",
+        "title": "Titre",
+        "severity": "Sévérité",
+        "started": "Début",
+        "duration": "Durée",
+        "alerts": "Alertes",
+        "comments": "Commentaires",
+        "postmortem": "Post-mortem",
+        "actions": "Actions"
+      },
+      "filter": {
+        "all": "Tous",
+        "open": "Ouverts",
+        "resolved": "Résolus",
+        "closed": "Clos"
+      },
+      "empty": "Aucun incident",
+      "emptyDescription": "Ouvrez un incident depuis une alerte pour le suivre ici.",
+      "postmortem": {
+        "todo": "À faire",
+        "inProgress": "En cours",
+        "validated": "Validé"
+      }
+    },
+    "actions": {
+      "open": "Ouvrir un incident",
+      "view": "Voir l'incident",
+      "availability": "Voir la disponibilité"
+    }
   }
 }

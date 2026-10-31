@@ -132,6 +132,13 @@ export const menuData = (t = (key) => key) => [
         permissions: ['events.view']
       },
       {
+        label: t('navigation.availability'),
+        icon: 'ri-heart-pulse-line',
+        href: '/operations/availability',
+        requires: { hasVdc: false }, // Provider and whole-connection tenants only, never a vDC
+        requiredFeature: 'sla_monitoring'
+      },
+      {
         label: t('navigation.changes'),
         icon: 'ri-git-commit-line',
         href: '/operations/changes',

@@ -438,6 +438,13 @@ describe('leader routing (ui#803 defect 2)', () => {
     expect(await fetchPathWithLeaderUrl('/drs/recommendations?validate=true', leader)).toBe(`${leader}/api/v1/drs/recommendations?validate=true`)
   })
 
+  it('routes /availability to the leader URL: it reads the latest metrics sample', async () => {
+    const leader = 'http://127.0.0.1:8081'
+    expect(await fetchPathWithLeaderUrl('/availability/current', leader)).toBe(`${leader}/api/v1/availability/current`)
+    expect(await fetchPathWithLeaderUrl('/availability/query', leader)).toBe(`${leader}/api/v1/availability/query`)
+    expect(await fetchPathWithLeaderUrl('/availability-other', leader)).toBe('http://localhost:8080/api/v1/availability-other')
+  })
+
   it('keeps non-leader endpoints on the local orchestrator', async () => {
     const leader = 'http://127.0.0.1:8081'
     expect(await fetchPathWithLeaderUrl('/health', leader)).toBe('http://localhost:8080/api/v1/health')

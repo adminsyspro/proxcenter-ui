@@ -37,6 +37,13 @@ export const Features = {
   // network-isolated VM, boot it, record the evidence and clean up. Routes
   // under /api/v1/backups/restore-drills and the Backups page gate on it.
   BACKUP_RESTORE_DRILLS: 'backup_restore_drills',
+  // Availability and SLA: availability registry history beyond 24 h, SLA
+  // policies, maintenance windows and reports. Community keeps the live
+  // health and 24 h node and cluster availability.
+  SLA_MONITORING: 'sla_monitoring',
+  // Incident register: alerts grouped into incidents with a journal, corrective
+  // actions and a post-mortem. Default tenant only. Routes under /api/v1/incidents.
+  INCIDENTS: 'incidents',
   // Option capabilities (granted by stackable add-on licenses, never by an
   // edition). NEVER add these to EDITION_FEATURES.
   // ProxCenter control-plane HA (this paid add-on): multi-node conversion of
@@ -83,6 +90,8 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'multi_tenancy',
     'sflow_monitoring',
     'backup_restore_drills',
+    'sla_monitoring',
+    'incidents',
   ],
   enterprise_plus: [
     'drs',
@@ -111,6 +120,8 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'multi_tenancy',
     'sflow_monitoring',
     'backup_restore_drills',
+    'sla_monitoring',
+    'incidents',
   ],
 }
 

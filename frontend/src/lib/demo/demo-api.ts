@@ -16,6 +16,7 @@ import { applyRrdWindow, presetRangeMeta, resolveRrdRequest } from '@/lib/metric
 
 import { buildClusterCapacity, buildNodeCapacities, buildStoragePools, computeStoppedAllocation, storageEntryKey, type ConnectionSnapshot } from '@/lib/resources/capacity'
 
+import { demoAvailabilityResponse, demoSettings } from './availabilityDemo'
 import mockDataJson from './mock-data.json'
 import { domainMock, resolveDomainMock } from './mocks'
 import cloudImagesJson from '@/data/cloudImages.json'
@@ -1141,6 +1142,15 @@ const DEMO_REPORT_TYPES: any[] = [
       { id: 'jobs', name: 'Backup Jobs', description: 'Per-VM backup status, duration, size and transferred data' }],
   },
   {
+    type: 'sla', name: 'SLA Availability Report',
+    description: 'Availability of the guests covered by each SLA policy: objective, measured availability, coverage, downtime budget, incidents and maintenance windows',
+    sections: [
+      { id: 'summary', name: 'Executive Summary', description: 'Objective, availability, coverage and budget per policy' },
+      { id: 'policies', name: 'Policies', description: 'Guests under the objective of each policy' },
+      { id: 'incidents', name: 'Incidents', description: 'Down time of the covered guests during the period' },
+      { id: 'maintenance', name: 'Maintenance', description: 'Declared maintenance windows of the period' }],
+  },
+  {
     type: 'vdc', name: 'vDC Report',
     description: 'Cross-tenant view of every Virtual Data Center: tenant ownership, quota vs usage, network, IPAM and backup bindings',
     sections: [SUMMARY_SECTION,
@@ -1801,6 +1811,7 @@ export const EXTRA_MOCKS: MockDataMap = {
         'ceph_replication',
         'cve_scanning',
         'change_tracking',
+        'sla_monitoring',
       ],
       options: ['control_plane_ha'],
     },
@@ -4000,6 +4011,11 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
       return NextResponse.json({ data: result }, { headers: demoHeaders })
     }
 
+    // The settings tab reads the saved values back from the answer: echo them.
+    if (method === 'PUT' && cleanPath === '/api/v1/availability/settings') {
+      return req.json().catch(() => null).then(sent => NextResponse.json(demoSettings(sent), { headers: demoHeaders }))
+    }
+
     const specificMock = lookupMock(method, pathname, urlObj)
     if (specificMock instanceof Response) return specificMock
     if (specificMock !== null) {
@@ -4019,6 +4035,18 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
 
   if (cleanPath === '/api/v1/inventory/events') {
     return buildInventoryEventsSSE()
+  }
+
+  // --- Availability and SLA: period-dependent, generated on demand ---
+  if (cleanPath.startsWith('/api/v1/availability/') || cleanPath.startsWith('/api/v1/sla/')) {
+    const body = demoAvailabilityResponse(urlObj, new Date())
+    if (body !== undefined) {
+      const code = (body as { error?: unknown }).error
+      let status = 200
+      if (code === 'not_found') status = 404
+      else if (typeof code === 'string') status = 400
+      return NextResponse.json(body, { status, headers: demoHeaders })
+    }
   }
 
   // --- sFlow mock data ---

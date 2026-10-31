@@ -61,6 +61,29 @@ describe('GET /orchestrator/reports/[id]/download', () => {
     expect(res.headers.get('Content-Disposition')).toContain('.csv')
   })
 
+  it('drops the length of a compressed body, which fetch hands over decoded', async () => {
+    h.fetchMock.mockResolvedValue(new Response(Buffer.from('payload'), {
+      status: 200,
+      headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Encoding': 'gzip', 'Content-Length': '4' },
+    }))
+
+    const res = await callRoute(GET as any, { params: { id: 'rep-1' }, searchParams: { format: 'csv' } })
+
+    expect(res.headers.get('Content-Length')).toBeNull()
+    expect(await res.text()).toBe('payload')
+  })
+
+  it('keeps the length of a body sent as is', async () => {
+    h.fetchMock.mockResolvedValue(new Response(Buffer.from('payload'), {
+      status: 200,
+      headers: { 'Content-Type': 'application/pdf', 'Content-Length': '7' },
+    }))
+
+    const res = await callRoute(GET as any, { params: { id: 'rep-1' } })
+
+    expect(res.headers.get('Content-Length')).toBe('7')
+  })
+
   it('rejects an unknown format without calling the orchestrator', async () => {
     const res = await callRoute(GET as any, { params: { id: 'rep-1' }, searchParams: { format: 'xlsx' } })
 

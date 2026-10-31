@@ -19,7 +19,7 @@ const state = vi.hoisted(() => ({
 vi.mock('@/contexts/PageTitleContext', () => ({ usePageTitle: () => ({ setPageInfo: vi.fn() }) }))
 vi.mock('@/contexts/TenantContext', () => ({ useTenant: () => ({ currentTenant: { id: 'default' } }) }))
 vi.mock('@/components/guards/EnterpriseGuard', () => ({ default: ({ children }: { children: ReactNode }) => children }))
-vi.mock('@/contexts/LicenseContext', () => ({ Features: { ALERTS: 'alerts' }, useLicense: () => ({ isEnterprise: true }) }))
+vi.mock('@/contexts/LicenseContext', () => ({ Features: { ALERTS: 'alerts' }, useLicense: () => ({ isEnterprise: true, hasFeature: () => false }) }))
 vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ showToast: state.showToast }) }))
 vi.mock('@/hooks/useConnections', () => ({ useConnections: () => ({ data: { data: [] } }) }))
 vi.mock('@/hooks/useAlerts', () => ({
@@ -45,6 +45,9 @@ vi.mock('@mui/x-data-grid', () => ({
       ))}
     </div>
   ),
+  // The incident column asks about the grid's visible page; this table has no state.
+  useGridApiRef: () => ({ current: null }),
+  gridPaginatedVisibleSortedGridRowIdsSelector: () => [],
 }))
 
 import AlertsPage from './page'

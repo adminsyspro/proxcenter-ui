@@ -5771,6 +5771,7 @@
       "confirmTitle": "¿{action}?",
       "checks": "Comprobaciones",
       "done": "Hecho",
+      "doneWithWarnings": "Hecho con advertencias",
       "alreadyRun": "Ya ejecutada",
       "expired": "Caducada: vuelva a preguntar al asistente.",
       "untracked": "Seguimiento detenido, la tarea puede seguir en curso.",

@@ -18,6 +18,7 @@ import type { ActionCard } from '@/lib/ai/actions/types'
  */
 
 export const ACTION_POLL_MS = 5_000
+// Counted from the dispatch, hidden and closed-panel time included.
 export const ACTION_TRACK_MAX_MS = 15 * 60 * 1000
 const MAX_POLL_ERRORS = 3
 
@@ -30,13 +31,13 @@ const RETRYABLE = new Set(['route-refused', 'internal-error', 'network', 'confir
 export type ActionRun =
   | { phase: 'sending' }
   | { phase: 'tracking'; progress?: number }
-  | { phase: 'done'; code?: 'already-executed' }
+  | { phase: 'done'; code?: 'already-executed' | 'warnings' }
   | { phase: 'failed'; code: string; message: string; retryable: boolean }
   | { phase: 'untracked' }
 
 export type ActionRuns = Record<string, ActionRun>
 
-type Outcome = { ok: true } | { ok: false; reason: string } | { unknown: true }
+type Outcome = { ok: true; warnings?: boolean } | { ok: false; reason: string } | { unknown: true }
 
 type FinishedListener = (card: ActionCard, line: string) => void
 
@@ -76,7 +77,9 @@ export function resultLine(card: ActionCard, outcome: Outcome): string {
 
   if ('unknown' in outcome) return `${what}: started, outcome unknown`
 
-  return outcome.ok ? `${what}: done` : `${what}: failed (${outcome.reason})`
+  if (outcome.ok) return outcome.warnings ? `${what}: done with warnings` : `${what}: done`
+
+  return `${what}: failed (${outcome.reason})`
 }
 
 type WithActions = { content: string; actions?: ActionCardsPayload; actionResults?: string[] }
@@ -163,7 +166,12 @@ function createEngine(setRuns: (update: (prev: ActionRuns) => ActionRuns) => voi
     controller = null
     active = null
     setRun(card.actionId, run)
-    onFinished?.(card, resultLine(card, outcome))
+
+    // Only a final outcome reaches the model: a failure the user can still
+    // retry would leave "failed" then "done" for the same card.
+    const retryLater = run.phase === 'failed' && run.retryable && Date.now() < card.expiresAt
+
+    if (!retryLater) onFinished?.(card, resultLine(card, outcome))
   }
 
   const timedOut = (current: Track) => Date.now() - current.startedAt >= ACTION_TRACK_MAX_MS
@@ -180,8 +188,14 @@ function createEngine(setRuns: (update: (prev: ActionRuns) => ActionRuns) => voi
       return
     }
 
-    if (body.exitstatus === 'OK') {
+    const exit = str(body.exitstatus)
+
+    // Proxmox ends many good tasks (backup, migration, replication) with
+    // "WARNINGS: n": the action ran, the next step of a plan may go on.
+    if (exit === 'OK') {
       finish(current.card, { phase: 'done' }, { ok: true })
+    } else if (exit.startsWith('WARNINGS')) {
+      finish(current.card, { phase: 'done', code: 'warnings' }, { ok: true, warnings: true })
     } else {
       finish(
         current.card,
@@ -293,14 +307,16 @@ function createEngine(setRuns: (update: (prev: ActionRuns) => ActionRuns) => voi
       const mine = gen
 
       active = card.actionId
+      // Aborts the task polls only.
       controller = new AbortController()
       setRun(card.actionId, { phase: 'sending' })
 
+      // Never aborted: once sent, the server may already have dispatched, so a
+      // reset or unmount drops the answer through `gen` instead.
       fetch(EXECUTE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ card, conversationId, ...(confirmed ? { confirmed: true } : {}) }),
-        signal: controller.signal
+        body: JSON.stringify({ card, conversationId, ...(confirmed ? { confirmed: true } : {}) })
       })
         .then(res => res.json().catch(() => null))
         .then((body: unknown) => {
@@ -323,7 +339,7 @@ function createEngine(setRuns: (update: (prev: ActionRuns) => ActionRuns) => voi
       else stopTimer()
     },
 
-    /** Drops the work in progress; the task itself keeps running in Proxmox. */
+    /** Drops the work in progress (aborting a task poll, not the execute POST); the task keeps running in Proxmox. */
     stop() {
       gen += 1
       stopTimer()

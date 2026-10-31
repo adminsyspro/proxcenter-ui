@@ -204,17 +204,89 @@ describe('useActionExecution', () => {
     act(() => result.current.execute(card(), true))
     await flush()
     expect(result.current.runs.a1).toEqual({ phase: 'failed', code: 'route-refused', message: 'VM is locked', retryable: true })
-    expect(onFinished).toHaveBeenCalledWith(expect.objectContaining({ actionId: 'a1' }), 'Action reboot win2025 (104) on pve1: failed (route-refused)')
 
     fetchMock.mockResolvedValueOnce(json({ ok: false, code: 'target-changed', message: 'moved' }, 409))
     act(() => result.current.execute(card(), true))
     await flush()
     expect(result.current.runs.a1).toMatchObject({ phase: 'failed', code: 'target-changed', retryable: false })
+    expect(onFinished).toHaveBeenCalledTimes(1)
+    expect(onFinished).toHaveBeenCalledWith(expect.objectContaining({ actionId: 'a1' }), 'Action reboot win2025 (104) on pve1: failed (target-changed)')
 
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
     act(() => result.current.execute(card({ actionId: 'a2' }), true))
     await flush()
     expect(result.current.runs.a2).toMatchObject({ phase: 'failed', code: 'network', retryable: true })
+  })
+
+  it('tells the model only the final outcome: no line for a failure that can still be retried', async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ ok: false, code: 'route-refused', message: 'VM is locked' }, 409))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(json({ ok: true, result: { node: 'pve1', connId: 'c1', message: 'Done' } }))
+
+    const { result, onFinished } = setup()
+    const start = card({ kind: 'start', tier: 'safe' })
+
+    for (let i = 0; i < 3; i++) {
+      act(() => result.current.execute(start, false))
+      await flush()
+    }
+
+    expect(result.current.runs.a1).toEqual({ phase: 'done' })
+    expect(onFinished).toHaveBeenCalledTimes(1)
+    expect(onFinished).toHaveBeenCalledWith(start, 'Action start win2025 (104) on pve1: done')
+  })
+
+  it('reports a retryable failure when the card can no longer run anyway', async () => {
+    fetchMock.mockResolvedValueOnce(json({ ok: false, code: 'route-refused', message: 'VM is locked' }, 409))
+
+    const { result, onFinished } = setup()
+    const late = card({ expiresAt: Date.now() + 10 })
+
+    await advance(20)
+    act(() => result.current.execute(late, true))
+    await flush()
+
+    expect(onFinished).toHaveBeenCalledWith(late, 'Action reboot win2025 (104) on pve1: failed (route-refused)')
+  })
+
+  it('counts a task ended with WARNINGS as done, so the plan goes on', async () => {
+    fetchMock.mockImplementation(async url =>
+      url === '/api/v1/ai/actions/execute'
+        ? json(STARTED)
+        : json({ status: 'stopped', exitstatus: 'WARNINGS: 2', failureReason: null, message: 'Failed: WARNINGS: 2' })
+    )
+
+    const { result, onFinished } = setup()
+
+    act(() => result.current.execute(card(), true))
+    await flush()
+    await advance(ACTION_POLL_MS)
+
+    expect(result.current.runs.a1).toEqual({ phase: 'done', code: 'warnings' })
+    expect(onFinished).toHaveBeenCalledWith(expect.objectContaining({ actionId: 'a1' }), 'Action reboot win2025 (104) on pve1: done with warnings')
+  })
+
+  it('never aborts the execute request, only the task polls', async () => {
+    let answer: (r: Response) => void = () => {}
+
+    fetchMock.mockImplementation(url =>
+      url === '/api/v1/ai/actions/execute'
+        ? Promise.resolve(json(STARTED))
+        : new Promise<Response>(resolve => { answer = resolve })
+    )
+
+    const { result, unmount } = setup()
+
+    act(() => result.current.execute(card(), true))
+    await flush()
+    await advance(ACTION_POLL_MS)
+    unmount()
+
+    // The server may already have dispatched: the request runs to its end.
+    expect(executeCalls()[0][1]?.signal).toBeUndefined()
+    expect(taskCalls()[0][1]?.signal?.aborted).toBe(true)
+    answer(json(RUNNING))
   })
 
   it('counts an already executed card as done, so the next plan step unlocks like on the server', async () => {

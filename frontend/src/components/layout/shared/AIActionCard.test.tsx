@@ -82,6 +82,21 @@ describe('AIActionCard', () => {
     expect(onExecute).toHaveBeenCalledWith(c, true)
   })
 
+  it('disables the confirmation when another action started while the dialog was open', () => {
+    const c = card({ kind: 'reboot', tier: 'disruptive' })
+    const onExecute = vi.fn()
+    const { rerender } = render(<AIActionCard card={c} busy={false} onExecute={onExecute} t={t} />)
+
+    fireEvent.click(executeButton())
+    rerender(<AIActionCard card={c} busy onExecute={onExecute} t={t} />)
+
+    const confirm = within(screen.getByRole('dialog')).getByRole('button', { name: 'ai.actions.confirm' }) as HTMLButtonElement
+
+    expect(confirm.disabled).toBe(true)
+    fireEvent.click(confirm)
+    expect(onExecute).not.toHaveBeenCalled()
+  })
+
   it('sends nothing when the confirmation is cancelled', async () => {
     const { onExecute } = renderCard({ card: card({ kind: 'shutdown', tier: 'disruptive' }) })
 
@@ -150,6 +165,10 @@ describe('AIActionCard', () => {
     renderCard({ run: { phase: 'done' } })
     expect(screen.getByText('ai.actions.done')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'ai.actions.execute' })).toBeNull()
+    cleanup()
+
+    renderCard({ run: { phase: 'done', code: 'warnings' } })
+    expect(screen.getByText('ai.actions.doneWithWarnings')).toBeTruthy()
     cleanup()
 
     renderCard({ run: { phase: 'failed', code: 'route-refused', message: 'VM is locked (backup)', retryable: true } })

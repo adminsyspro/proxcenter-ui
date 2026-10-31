@@ -5771,6 +5771,7 @@
       "confirmTitle": "{action}?",
       "checks": "사전 점검",
       "done": "완료",
+      "doneWithWarnings": "경고와 함께 완료",
       "alreadyRun": "이미 실행됨",
       "expired": "만료됨: 어시스턴트에게 다시 요청하세요.",
       "untracked": "추적이 중지되었습니다. 작업이 아직 실행 중일 수 있습니다.",

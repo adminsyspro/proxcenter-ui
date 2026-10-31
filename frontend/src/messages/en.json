@@ -5771,6 +5771,7 @@
       "confirmTitle": "{action}?",
       "checks": "Checks",
       "done": "Done",
+      "doneWithWarnings": "Done with warnings",
       "alreadyRun": "Already run",
       "expired": "Expired: ask the assistant again.",
       "untracked": "Tracking stopped, the task may still be running.",

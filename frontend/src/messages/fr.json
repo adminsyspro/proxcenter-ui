@@ -5771,6 +5771,7 @@
       "confirmTitle": "{action} ?",
       "checks": "Contrôles",
       "done": "Terminé",
+      "doneWithWarnings": "Terminé avec des avertissements",
       "alreadyRun": "Déjà exécutée",
       "expired": "Expirée : redemandez à l’assistant.",
       "untracked": "Suivi arrêté, la tâche est peut-être encore en cours.",

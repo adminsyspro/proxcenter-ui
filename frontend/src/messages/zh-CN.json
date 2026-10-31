@@ -5771,6 +5771,7 @@
       "confirmTitle": "{action}？",
       "checks": "预检",
       "done": "已完成",
+      "doneWithWarnings": "已完成，但有警告",
       "alreadyRun": "已执行",
       "expired": "已过期：请重新询问助手。",
       "untracked": "已停止跟踪，任务可能仍在运行。",

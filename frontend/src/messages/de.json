@@ -5752,6 +5752,7 @@
       "confirmTitle": "{action}?",
       "checks": "Prüfungen",
       "done": "Erledigt",
+      "doneWithWarnings": "Mit Warnungen erledigt",
       "alreadyRun": "Bereits ausgeführt",
       "expired": "Abgelaufen: Fragen Sie den Assistenten erneut.",
       "untracked": "Verfolgung beendet, die Aufgabe läuft möglicherweise noch.",

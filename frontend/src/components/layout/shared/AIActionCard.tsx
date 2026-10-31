@@ -81,6 +81,12 @@ const guestStatusOf = (card: ActionCard): string | undefined => {
   return undefined
 }
 
+const DONE_KEYS: Record<'done' | 'already-executed' | 'warnings', string> = {
+  done: 'ai.actions.done',
+  'already-executed': 'ai.actions.alreadyRun',
+  warnings: 'ai.actions.doneWithWarnings'
+}
+
 const SITUATION_CHANGED = new Set(['expired', 'target-changed', 'preflight-failed', 'out-of-scope'])
 
 export function failureText(run: Extract<ActionRun, { phase: 'failed' }>, t: Translate): string {
@@ -249,6 +255,7 @@ const ConfirmDialog = ({
   card,
   title,
   open,
+  disabled,
   onCancel,
   onConfirm,
   t
@@ -256,6 +263,8 @@ const ConfirmDialog = ({
   card: ActionCard
   title: string
   open: boolean
+  /** Another action started, or the card expired, while the dialog was open. */
+  disabled: boolean
   onCancel: () => void
   onConfirm: () => void
   t: Translate
@@ -282,7 +291,13 @@ const ConfirmDialog = ({
     </DialogContent>
     <DialogActions>
       <Button onClick={onCancel}>{t('common.cancel')}</Button>
-      <Button variant='contained' color={card.kind === 'shutdown' ? 'error' : 'warning'} disableElevation onClick={onConfirm}>
+      <Button
+        variant='contained'
+        color={card.kind === 'shutdown' ? 'error' : 'warning'}
+        disableElevation
+        disabled={disabled}
+        onClick={onConfirm}
+      >
         {t('ai.actions.confirm')}
       </Button>
     </DialogActions>
@@ -341,6 +356,8 @@ export default function AIActionCard({
   }
 
   const confirm = () => {
+    // The engine would drop it silently: the button is disabled, and checked again.
+    if (disabled) return
     setConfirming(false)
     onExecute(card, true)
   }
@@ -351,7 +368,7 @@ export default function AIActionCard({
   if (run?.phase === 'done') {
     status = (
       <StatusLine icon='ri-checkbox-circle-line' color='success.main'>
-        {t(run.code === 'already-executed' ? 'ai.actions.alreadyRun' : 'ai.actions.done')}
+        {t(DONE_KEYS[run.code ?? 'done'])}
       </StatusLine>
     )
   } else if (run?.phase === 'untracked') {
@@ -428,7 +445,15 @@ export default function AIActionCard({
         </Button>
       )}
       {disruptive && (
-        <ConfirmDialog card={card} title={title} open={confirming} onCancel={() => setConfirming(false)} onConfirm={confirm} t={t} />
+        <ConfirmDialog
+          card={card}
+          title={title}
+          open={confirming}
+          disabled={disabled}
+          onCancel={() => setConfirming(false)}
+          onConfirm={confirm}
+          t={t}
+        />
       )}
     </Box>
   )

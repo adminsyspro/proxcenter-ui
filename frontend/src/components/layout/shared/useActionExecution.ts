@@ -77,7 +77,7 @@ export function resultLine(card: ActionCard, outcome: Outcome): string {
 
   if ('unknown' in outcome) return `${what}: started, outcome unknown`
 
-  if (outcome.ok) return outcome.warnings ? `${what}: done with warnings` : `${what}: done`
+  if (outcome.ok === true) return outcome.warnings ? `${what}: done with warnings` : `${what}: done`
 
   return `${what}: failed (${outcome.reason})`
 }

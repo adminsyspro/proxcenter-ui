@@ -364,7 +364,7 @@ async function handler(req: Request) {
     const bind: ActionBinding = { userId: principal.userId, tenantId, conversationId }
     const verdict = verifyCard(card as ActionCard, bind)
 
-    if (!verdict.ok) {
+    if (verdict.ok === false) {
       if (verdict.reason === 'bad-signature') {
         return refuseUnverified(refusal(400, 'bad-signature', 'This card was not issued to you in this conversation, or it was altered.'))
       }

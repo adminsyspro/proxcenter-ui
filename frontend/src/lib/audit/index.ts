@@ -220,6 +220,12 @@ export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient)
   // scope after the handler returns (issue #1105).
   markAuditExplicit()
 
+  // An approved assistant action tags every row it causes (roadmap#188);
+  // outside one this is entry.details itself. Read before any await: the
+  // origin is switched off as soon as the dispatch returns, and a row the
+  // handler fired without awaiting it belongs to the action all the same.
+  const details = withAuditOrigin(entry.details)
+
   const id = nanoid()
   const timestamp = new Date()
 
@@ -272,10 +278,6 @@ export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient)
       // Fallback to default (e.g. during login before session exists)
     }
   }
-
-  // An approved assistant action tags every row it causes (roadmap#188);
-  // outside one this is entry.details itself.
-  const details = withAuditOrigin(entry.details)
 
   const client = tx ?? prisma
   await client.auditLog.create({

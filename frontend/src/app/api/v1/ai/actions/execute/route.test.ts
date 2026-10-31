@@ -445,6 +445,27 @@ describe('POST /api/v1/ai/actions/execute', () => {
     expect(pveCalls('POST', '/snapshot')).toHaveLength(0)
   })
 
+  it('counts only the dispatches that succeeded toward the cap', async () => {
+    await enable({ maxPerConversation: 1 })
+
+    // The route refuses the first one twice: nothing ran, nothing spent.
+    for (let i = 0; i < 2; i++) {
+      h.pveFetch.mockImplementationOnce(async () => {
+        throw new Error('PVE said no')
+      })
+      expect((await run(snapCard())).body.code).toBe('route-refused')
+    }
+
+    expect((await run(snapCard())).status).toBe(200)
+    expect((await run(snapCard())).body.code).toBe('cap-reached')
+    expect((await rows('ai.action')).map(r => [r.details && (r.details as any).outcome, r.status])).toEqual([
+      ['dispatched', 'failure'],
+      ['dispatched', 'failure'],
+      ['dispatched', 'success'],
+      ['refused', 'failure'],
+    ])
+  })
+
   it('counts the cap per conversation', async () => {
     await enable({ maxPerConversation: 1 })
     expect((await run(snapCard())).status).toBe(200)

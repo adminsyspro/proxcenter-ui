@@ -13,6 +13,22 @@ import { getCurrentTenantId } from '@/lib/tenant'
 const MODEL_FIELDS: Record<string, string> = { ollama: 'ollamaModel', openai: 'openaiModel', anthropic: 'anthropicModel' }
 
 /**
+ * Whether the widget should say "Read-only" or "Actions on approval". A
+ * single boolean: the per-kind choices and the cap stay admin-only. A failure
+ * here says "off" and is logged: it must not 500 the status, which would hide
+ * the whole assistant, and execute re-checks the settings anyway.
+ */
+async function readActionsEnabled(tenantId: string): Promise<boolean> {
+  try {
+    return (await hasServerFeature(Features.AI_ACTIONS)) && enabledKinds(await getAiActionsSettings(tenantId)).length > 0
+  } catch (e) {
+    console.error('Failed to read the AI actions settings, reported off:', e)
+
+    return false
+  }
+}
+
+/**
  * GET /api/v1/ai/status
  *
  * Whether the assistant is on, and which model answers, for every user who
@@ -38,11 +54,7 @@ export async function GET() {
     const modelField = MODEL_FIELDS[provider] ?? 'ollamaModel'
     const model = typeof settings?.[modelField] === 'string' ? (settings[modelField] as string) : null
 
-    // Whether the widget should say "Read-only" or "Actions on approval". A
-    // single boolean: the per-kind choices and the cap stay admin-only.
-    const tenantId = await getCurrentTenantId()
-    const actionsEnabled = (await hasServerFeature(Features.AI_ACTIONS))
-      && enabledKinds(await getAiActionsSettings(tenantId)).length > 0
+    const actionsEnabled = await readActionsEnabled(await getCurrentTenantId())
 
     return NextResponse.json({ data: { enabled: settings?.enabled === true, provider, model, actionsEnabled } })
   } catch (e: any) {

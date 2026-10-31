@@ -8,6 +8,8 @@ const h = vi.hoisted(() => ({
   settings: null as Record<string, unknown> | null,
   actionsLicensed: true,
   actions: null as Record<string, unknown> | null,
+  actionsError: null as Error | null,
+  actionsLicenceError: null as Error | null,
   checkPermission: vi.fn(),
 }))
 
@@ -18,10 +20,18 @@ vi.mock('@/lib/rbac', () => ({
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'default' }))
 vi.mock('@/lib/auth/requireEnterprise', () => ({
   requireFeature: async () => (h.licensed ? null : new Response(JSON.stringify({ error: 'Feature not licensed' }), { status: 403 })),
-  hasServerFeature: async () => h.actionsLicensed,
+  hasServerFeature: async () => {
+    if (h.actionsLicenceError) throw h.actionsLicenceError
+
+    return h.actionsLicensed
+  },
 }))
 vi.mock('@/lib/db/settings', () => ({
-  getSetting: async (key: string) => (key === 'ai_actions' ? h.actions : h.settings),
+  getSetting: async (key: string) => {
+    if (key === 'ai_actions' && h.actionsError) throw h.actionsError
+
+    return key === 'ai_actions' ? h.actions : h.settings
+  },
 }))
 
 import { GET } from './route'
@@ -34,6 +44,8 @@ beforeEach(() => {
   h.settings = null
   h.actionsLicensed = true
   h.actions = null
+  h.actionsError = null
+  h.actionsLicenceError = null
   h.checkPermission.mockReset().mockImplementation(async () => (h.denied ? new Response('{}', { status: 403 }) : null))
 })
 
@@ -79,6 +91,25 @@ describe('GET /api/v1/ai/status', () => {
 
     h.actions = { enabled: true, actions: {} }
     expect((await readJson<any>(await get())).data.actionsEnabled).toBe(false)
+  })
+
+  it('keeps the assistant on, actions off, when the actions settings cannot be read', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    h.settings = { enabled: true, provider: 'ollama', ollamaModel: 'qwen3:8b' }
+    h.actionsError = new Error('settings table locked')
+
+    const res = await get()
+
+    expect(res.status).toBe(200)
+    expect((await readJson<any>(res)).data).toEqual({ enabled: true, provider: 'ollama', model: 'qwen3:8b', actionsEnabled: false })
+    expect(logged).toHaveBeenCalled()
+
+    h.actionsError = null
+    h.actionsLicenceError = new Error('licence service down')
+    expect((await readJson<any>(await get())).data).toMatchObject({ enabled: true, actionsEnabled: false })
+
+    logged.mockRestore()
   })
 
   it('exposes nothing else of the actions settings', async () => {

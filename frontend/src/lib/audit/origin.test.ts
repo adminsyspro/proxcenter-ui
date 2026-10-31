@@ -12,12 +12,16 @@ vi.mock('@/lib/syslog/forwarder', () => ({ forwardAuditEvent: forwardMock }))
 import { prismaTest, truncate } from '@/__tests__/setup/prisma-test'
 
 import { audit } from './index'
-import { auditOrigin } from './origin'
+import { runWithAuditOrigin } from './origin'
 
 const ORIGIN = { via: 'assistant' as const, conversationId: 'conv-1', actionId: 'act-1' }
 
 async function rowOf(id: string) {
   return prismaTest.auditLog.findUnique({ where: { id } })
+}
+
+async function rows() {
+  return prismaTest.auditLog.findMany()
 }
 
 beforeEach(async () => {
@@ -41,7 +45,7 @@ describe('auditOrigin', () => {
   })
 
   it('merges the origin into details, its keys winning, the others kept', async () => {
-    const id = await auditOrigin.run(ORIGIN, () =>
+    const id = await runWithAuditOrigin(ORIGIN, () =>
       audit({ action: 'start', category: 'vms', details: { node: 'pve1', via: 'forged', actionId: 'other' }, tenantId: 'default' })
     )
     const row = await rowOf(id)
@@ -51,13 +55,50 @@ describe('auditOrigin', () => {
   })
 
   it('tags a row that had no details', async () => {
-    const id = await auditOrigin.run(ORIGIN, () => audit({ action: 'start', category: 'vms', tenantId: 'default' }))
+    const id = await runWithAuditOrigin(ORIGIN, () => audit({ action: 'start', category: 'vms', tenantId: 'default' }))
 
     expect((await rowOf(id))?.details).toEqual(ORIGIN)
   })
 
+  it('does not tag a row that work started inside the dispatch writes after it returned', async () => {
+    let late: Promise<string> | undefined
+    let release!: () => void
+    const gate = new Promise<void>(resolve => {
+      release = resolve
+    })
+
+    await runWithAuditOrigin(ORIGIN, async () => {
+      // Background work the handler started and did not wait for: a timer, an unawaited promise.
+      late = gate.then(() => audit({ action: 'sync', category: 'vms', details: { a: 1 }, tenantId: 'default' }))
+    })
+    release()
+
+    expect((await rowOf(await late!))?.details).toEqual({ a: 1 })
+  })
+
+  it('still tags a row the dispatch fired without awaiting it', async () => {
+    let fired: Promise<string> | undefined
+
+    await runWithAuditOrigin(ORIGIN, async () => {
+      fired = audit({ action: 'start', category: 'vms', details: { a: 1 }, tenantId: 'default' })
+    })
+
+    expect((await rowOf(await fired!))?.details).toEqual({ a: 1, ...ORIGIN })
+  })
+
+  it('tags the rows written inside the dispatch and returns its value', async () => {
+    const result = await runWithAuditOrigin(ORIGIN, async () => {
+      await audit({ action: 'start', category: 'vms', tenantId: 'default' })
+
+      return 42
+    })
+
+    expect(result).toBe(42)
+    expect((await rows())[0].details).toEqual(ORIGIN)
+  })
+
   it('does not leak past its run', async () => {
-    await auditOrigin.run(ORIGIN, async () => {})
+    await runWithAuditOrigin(ORIGIN, async () => {})
     const row = await rowOf(await audit({ action: 'start', category: 'vms', details: { a: 1 }, tenantId: 'default' }))
 
     expect(row?.details).toEqual({ a: 1 })

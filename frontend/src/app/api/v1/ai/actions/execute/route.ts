@@ -9,7 +9,7 @@ import { actionTier, isHostKind, resolveActionTarget } from '@/lib/ai/actions/ta
 import { verifyCard } from '@/lib/ai/actions/token'
 import { enabledKinds, type ActionBinding, type ActionCard } from '@/lib/ai/actions/types'
 import { audit, type AuditCategory } from '@/lib/audit'
-import { auditOrigin } from '@/lib/audit/origin'
+import { runWithAuditOrigin } from '@/lib/audit/origin'
 import { withAudit } from '@/lib/audit/withAudit'
 import { getPrincipal } from '@/lib/auth/principal'
 import { requireFeature } from '@/lib/auth/requireEnterprise'
@@ -168,9 +168,14 @@ async function alreadyExecuted({ tenantId, userId }: Owner, actionId: string): P
   return row !== null
 }
 
+/**
+ * The actions this conversation has spent: dispatched AND accepted by the
+ * route. A dispatch the route refused (a 403, a 500 from Proxmox) changed
+ * nothing, and counting it would let a few retries of one card exhaust the cap.
+ */
 async function dispatchedInConversation({ tenantId, userId }: Owner, conversationId: string): Promise<number> {
   return prisma.auditLog.count({
-    where: { tenantId, userId, action: 'ai.action', AND: [detail('conversationId', conversationId), detail('outcome', 'dispatched')] },
+    where: { tenantId, userId, action: 'ai.action', status: 'success', AND: [detail('conversationId', conversationId), detail('outcome', 'dispatched')] },
   })
 }
 
@@ -268,6 +273,13 @@ async function executeVerified(v: Verified): Promise<Response> {
     return refuse(refusal(429, 'cap-reached', `At most ${settings.maxPerConversation} actions can be executed per conversation: start a new conversation.`))
   }
 
+  // R12 checks that the previous step was DISPATCHED and accepted by its
+  // route, not that its Proxmox task finished: a migration or an HA
+  // evacuation may still be running when the next step is clicked. Following
+  // the task here would mean polling Proxmox from this request; the widget
+  // follows it instead and keeps the next step locked until it ends (or warns
+  // when its outcome is unknown), and the next step's own preflight, replayed
+  // below, blocks what the unfinished task makes impossible.
   if (card.after !== undefined && !(card.planId && (await stepSucceeded(owner, card.planId, card.after)))) {
     return refuse(refusal(409, 'previous-step-pending', `Step ${card.after} of this plan has not succeeded yet.`))
   }
@@ -292,7 +304,7 @@ async function executeVerified(v: Verified): Promise<Response> {
     return refuse(refusal(409, 'preflight-failed', block?.text ?? 'The action is blocked.', { checks: preflight.checks }))
   }
 
-  const dispatched = await auditOrigin.run({ via: 'assistant', conversationId, actionId: card.actionId }, () => dispatchAction(card, v.baseUrl))
+  const dispatched = await runWithAuditOrigin({ via: 'assistant', conversationId, actionId: card.actionId }, () => dispatchAction(card, v.baseUrl))
   const ok = dispatched.httpStatus >= 200 && dispatched.httpStatus < 300
   const message = ok ? successMessage(card, dispatched) : routeError(dispatched)
 

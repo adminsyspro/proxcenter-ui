@@ -150,7 +150,12 @@ const ACTION_SUGGESTIONS: Array<{ key: string; kind: ActionKind; prefill?: boole
 ]
 
 /** The text a prefill suggestion leaves in the input: its label without the ellipsis, ready for a name. */
-const prefillText = (label: string) => `${label.replace(/\s*(…|\.\.\.)\s*$/, '')} `
+const prefillText = (label: string) => {
+  const text = label.trimEnd()
+  const ellipsis = ['…', '...'].find(e => text.endsWith(e))
+
+  return `${(ellipsis ? text.slice(0, -ellipsis.length) : text).trimEnd()} `
+}
 
 const WIDE_STORAGE_KEY = 'proxcenter.aiChat.wide'
 

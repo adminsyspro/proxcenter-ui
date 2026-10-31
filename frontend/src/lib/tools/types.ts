@@ -310,14 +310,33 @@ export function resolveConnection(ctx: ToolContext, ref?: string): ResolvedConne
  * cluster is visible.
  */
 function splitHostReply(ctx: ToolContext, nodeRef: string): { nodeRef: string; clusterRef?: string } {
-  const m = /^(.+?)\s*\(([^()]+)\)$/.exec(nodeRef.trim())
+  const split = trailingParens(nodeRef)
 
-  if (!m) return { nodeRef }
+  if (!split) return { nodeRef }
 
-  const cluster = m[2].trim().toLowerCase()
+  const cluster = split.inner.trim().toLowerCase()
   const visible = visibleConnections(ctx.snapshot).some(c => c.name.toLowerCase() === cluster || c.id.toLowerCase() === cluster)
 
-  return visible ? { nodeRef: m[1], clusterRef: m[2].trim() } : { nodeRef }
+  return visible ? { nodeRef: split.head, clusterRef: split.inner.trim() } : { nodeRef }
+}
+
+/**
+ * `head (inner)` split in two, else null: a non-empty head, then one pair of
+ * parentheses closing the text, with no parenthesis inside. String work
+ * rather than a regex: the lazy `(.+?)\s*\(` form backtracks on long input.
+ */
+export function trailingParens(text: string): { head: string; inner: string } | null {
+  const trimmed = text.trim()
+  const open = trimmed.lastIndexOf('(')
+
+  if (!trimmed.endsWith(')') || open < 1) return null
+
+  const head = trimmed.slice(0, open).trim()
+  const inner = trimmed.slice(open + 1, -1)
+
+  if (!head || !inner.trim() || inner.includes(')')) return null
+
+  return { head, inner }
 }
 
 export function resolveNode(ctx: ToolContext, nodeArg: string | undefined, clusterArg?: string): {
@@ -378,11 +397,26 @@ export function resolveNode(ctx: ToolContext, nodeArg: string | undefined, clust
 
 type GuestRef = { vmid: string; kind?: 'qemu' | 'lxc'; name?: string; node?: string; cluster?: string }
 
-/** `VM 111`, `vm111`, `CT 101`, `vmid 111`, `#111`, `qemu/111`, `lxc 101`. */
-const PREFIXED_VMID = /^(?:(vmid|vm|qemu|ct|lxc)\s*[#:/]?\s*|#\s*)(\d+)$/i
+/** `VM 111`, `vm111`, `CT 101`, `vmid 111`, `#111`, `qemu/111`, `lxc 101`. The separator class shares no character with `\d`: no backtracking. */
+const PREFIXED_VMID = /^(?:(vmid|vm|qemu|ct|lxc)|#)[\s#:/]*(\d+)$/i
 
-/** `w22-i1000 (vmid 111, pve3, PVE-PROD)`: the reply of a guest choice. */
-const CHOICE_REPLY = /^(.+?)\s*\(\s*vmid\s+(\d+)\s*(?:,\s*([^,()]+?)\s*)?(?:,\s*([^()]+?)\s*)?\)$/i
+const GUEST_KINDS: Record<string, 'qemu' | 'lxc'> = { vm: 'qemu', qemu: 'qemu', ct: 'lxc', lxc: 'lxc' }
+
+/** `w22-i1000 (vmid 111, pve3, PVE-PROD)`, the reply of a guest choice: name, vmid, then host and cluster if given. */
+function parseChoiceReply(text: string): GuestRef | null {
+  const split = trailingParens(text)
+
+  if (!split) return null
+
+  const [first, node, ...cluster] = split.inner.split(',').map(part => part.trim())
+  const vmid = /^vmid\s+(\d+)$/i.exec(first)
+
+  if (!vmid) return null
+
+  const clusterName = cluster.join(', ')
+
+  return { vmid: vmid[1], name: split.head, ...(node ? { node } : {}), ...(clusterName ? { cluster: clusterName } : {}) }
+}
 
 /**
  * The vmid a guest reference carries besides the bare number. Small models
@@ -394,22 +428,12 @@ export function parseGuestRef(ref: string): GuestRef | null {
   const prefixed = PREFIXED_VMID.exec(text)
 
   if (prefixed) {
-    const word = prefixed[1]?.toLowerCase()
-    const kind = word === 'ct' || word === 'lxc' ? 'lxc' : word === 'vm' || word === 'qemu' ? 'qemu' : undefined
+    const kind = GUEST_KINDS[prefixed[1]?.toLowerCase() ?? '']
 
     return { vmid: prefixed[2], ...(kind ? { kind } : {}) }
   }
 
-  const reply = CHOICE_REPLY.exec(text)
-
-  if (!reply) return null
-
-  return {
-    vmid: reply[2],
-    name: reply[1].trim(),
-    ...(reply[3] ? { node: reply[3] } : {}),
-    ...(reply[4] ? { cluster: reply[4] } : {}),
-  }
+  return parseChoiceReply(text)
 }
 
 /** Keeps the guests matching each detail of the reference, a detail that would leave none being ignored. */

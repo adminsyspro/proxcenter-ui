@@ -18,6 +18,7 @@ import type { SnapshotGuest, SnapshotNode, InventorySnapshot } from '@/lib/tools
 import {
   AmbiguousTargetError,
   parseGuestRef,
+  trailingParens,
   argEnum,
   argPresentationEnum,
   ToolArgumentError,
@@ -438,6 +439,25 @@ describe('guest references the model passes as the user wrote them', () => {
     expect(parseGuestRef('vm-111')).toBeNull()
     expect(parseGuestRef('web-01')).toBeNull()
     expect(parseGuestRef('VM 1a')).toBeNull()
+    expect(parseGuestRef('vmid: 111')).toEqual({ vmid: '111' })
+    expect(parseGuestRef('w22-i1000 (vmid 111)')).toEqual({ vmid: '111', name: 'w22-i1000' })
+    expect(parseGuestRef('w22-i1000 (vmid 111, pve3)')).toEqual({ vmid: '111', name: 'w22-i1000', node: 'pve3' })
+    expect(parseGuestRef('w22-i1000 (pve3, PVE-PROD)')).toBeNull()
+    expect(parseGuestRef('(vmid 111)')).toBeNull()
+    expect(parseGuestRef('a (vmid 111))')).toBeNull()
+  })
+
+  it('splits a trailing parenthesis in linear time, a long hostile input included', () => {
+    expect(trailingParens('pve1 (PVE-PROD)')).toEqual({ head: 'pve1', inner: 'PVE-PROD' })
+    expect(trailingParens('pve1(PVE-PROD) ')).toEqual({ head: 'pve1', inner: 'PVE-PROD' })
+    expect(trailingParens('pve1 ()')).toBeNull()
+    expect(trailingParens('pve1')).toBeNull()
+
+    const started = performance.now()
+
+    expect(trailingParens(`${' '.repeat(50_000)}a${' ('.repeat(20_000)}`)).toBeNull()
+    expect(parseGuestRef(`vm${' '.repeat(50_000)}x`)).toBeNull()
+    expect(performance.now() - started).toBeLessThan(500)
   })
 
   it('still refuses a prefixed vmid nobody can see', () => {

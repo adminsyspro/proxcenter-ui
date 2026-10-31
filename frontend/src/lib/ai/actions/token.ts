@@ -30,13 +30,19 @@ function getKey(): Buffer {
   return cachedKey
 }
 
+/**
+ * UTF-16 code unit order, the default `sort()` order, spelled out. Never
+ * `localeCompare`: the signed bytes must not depend on the server's locale.
+ */
+const byCodeUnit = (a: string, b: string): number => Number(a > b) - Number(a < b)
+
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
   if (value !== null && typeof value === 'object') {
     const o = value as Record<string, unknown>
     const parts = Object.keys(o)
       .filter(k => o[k] !== undefined)
-      .sort()
+      .sort(byCodeUnit)
       .map(k => `${JSON.stringify(k)}:${canonical(o[k])}`)
     return `{${parts.join(',')}}`
   }

@@ -38,7 +38,7 @@ import { useRBAC } from '@/contexts/RBACContext'
 import { NodeInfo, formatMemory } from '@/components/hardware/utils'
 import { loadNodeRepoIssues, type RepoIssue } from '@/lib/proxmox/aptRepositories'
 import { migrateGuestAndWait, migrationFailureText } from '@/lib/migration/guestMigrateClient'
-import { fetchJsonResult, jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
+import { errorMessage, fetchJsonResult, jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
 import TaskLogButton from '@/components/tasks/TaskLogButton'
 import { waitForPveTask } from '@/lib/proxmox/waitForTaskClient'
 import PendingChangesWarning from '@/components/migration/PendingChangesWarning'
@@ -319,6 +319,7 @@ export default function NodeUpdateDialog({
         if (flags.ok) setCephFlags(flags.data?.flags || [])
         else setCephFlagsError(flags.error || 'HTTP error')
       })
+      .catch((e: unknown) => { if (!cancelled) setCephFlagsError(errorMessage(e)) })
       .finally(() => { if (!cancelled) setCephFlagsLoading(false) })
 
     // Fetch running VMs and cluster nodes for migration. Any of the three
@@ -389,7 +390,7 @@ export default function NodeUpdateDialog({
         }
       })
       .catch((e: unknown) => {
-        if (!cancelled) setVmsDiscoveryError(e instanceof Error ? e.message : String(e))
+        if (!cancelled) setVmsDiscoveryError(errorMessage(e))
       })
       .finally(() => { if (!cancelled) setVmsLoading(false) })
 
@@ -444,6 +445,17 @@ export default function NodeUpdateDialog({
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [upgradeLogs])
 
+  // Auto-reboot after a successful upgrade that needs it. On a refusal the
+  // reboot stays required, with the Reboot now button and the reason.
+  const autoRebootNode = useCallback(async () => {
+    try {
+      await requireOk(`${baseUrl}/reboot`, jsonInit('POST'))
+      setRebootRequired(false)
+    } catch (e) {
+      setPostError(t('updates.postActionFailed', { error: errorMessage(e) }))
+    }
+  }, [baseUrl, t])
+
   const pollStatus = useCallback(async () => {
     try {
       const res = await fetch(baseUrl)
@@ -456,30 +468,21 @@ export default function NodeUpdateDialog({
       setUpgradeLogs(json.logs || '')
       setRebootRequired(json.reboot_required || false)
 
-      if (['COMPLETED', 'FAILED'].includes(status)) {
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current)
-          pollingRef.current = null
-        }
-        setCompletedAt(new Date())
-        // Go to post-actions for cluster, completed for standalone
-        setActiveStep(clusterMode ? STEP.POST : STEP.COMPLETED)
+      if (status !== 'COMPLETED' && status !== 'FAILED') return
 
-        // Auto-reboot if enabled, upgrade succeeded, and reboot is needed
-        if (status === 'COMPLETED' && json.reboot_required && autoReboot) {
-          try {
-            await requireOk(`${baseUrl}/reboot`, jsonInit('POST'))
-            setRebootRequired(false)
-          } catch (e) {
-            // The reboot stays required, with the Reboot now button and the reason.
-            setPostError(t('updates.postActionFailed', { error: e instanceof Error ? e.message : String(e) }))
-          }
-        }
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
       }
+      setCompletedAt(new Date())
+      // Go to post-actions for cluster, completed for standalone
+      setActiveStep(clusterMode ? STEP.POST : STEP.COMPLETED)
+
+      if (status === 'COMPLETED' && json.reboot_required && autoReboot) await autoRebootNode()
     } catch {
       // ignore polling errors (node may be rebooting)
     }
-  }, [baseUrl, autoReboot, clusterMode, STEP.POST, STEP.COMPLETED, t])
+  }, [baseUrl, autoReboot, autoRebootNode, clusterMode, STEP.POST, STEP.COMPLETED])
 
   // Pre-flight: execute maintenance + ceph flags actions then go to config
   const executePreFlight = useCallback(async () => {
@@ -586,7 +589,7 @@ export default function NodeUpdateDialog({
 
       setActiveStep(STEP.CONFIG)
     } catch (e: any) {
-      setError(t('updates.preflightStopped', { error: e?.message || String(e) }))
+      setError(t('updates.preflightStopped', { error: errorMessage(e) }))
       setVmActionsInProgress(false)
     } finally {
       setPreflightLoading(false)
@@ -643,7 +646,7 @@ export default function NodeUpdateDialog({
       }
       setPostCephRemoved(true)
     } catch (e) {
-      setPostError(t('updates.postActionFailed', { error: e instanceof Error ? e.message : String(e) }))
+      setPostError(t('updates.postActionFailed', { error: errorMessage(e) }))
     }
     setPostCephRemoving(false)
   }, [addedCephFlags, cephFlagsUrl, t])
@@ -657,7 +660,7 @@ export default function NodeUpdateDialog({
       setMaintenanceStatus(null)
       setPostMaintenanceExited(true)
     } catch (e) {
-      setPostError(t('updates.postActionFailed', { error: e instanceof Error ? e.message : String(e) }))
+      setPostError(t('updates.postActionFailed', { error: errorMessage(e) }))
     }
     setPostMaintenanceExiting(false)
   }, [maintenanceUrl, t])
@@ -690,7 +693,7 @@ export default function NodeUpdateDialog({
       try {
         await requireOk(`${connBaseUrl}/guests/${vm.type}/${encodeURIComponent(nodeName)}/${vm.vmid}/start`, jsonInit('POST'))
       } catch (e) {
-        failures.push(`${vm.name}: ${e instanceof Error ? e.message : String(e)}`)
+        failures.push(`${vm.name}: ${errorMessage(e)}`)
       }
     }
     // Done only when every guest was started; otherwise say which were not.
@@ -769,7 +772,7 @@ export default function NodeUpdateDialog({
       await requireOk(`${baseUrl}/reboot`, jsonInit('POST'))
       setRebootRequired(false)
     } catch (e) {
-      setPostError(t('updates.postActionFailed', { error: e instanceof Error ? e.message : String(e) }))
+      setPostError(t('updates.postActionFailed', { error: errorMessage(e) }))
     }
   }, [baseUrl, t])
 
@@ -786,6 +789,53 @@ export default function NodeUpdateDialog({
   const logLines = upgradeLogs
     ? upgradeLogs.split('\n').filter(l => l.trim()).slice(-80)
     : []
+
+  // Body of the Ceph flags card: loading, unreadable, already set, or the toggle.
+  const renderCephFlagsBody = () => {
+    if (cephFlagsLoading) return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
+        <CircularProgress size={16} />
+        <Typography variant="caption" color="text.secondary">Loading...</Typography>
+      </Box>
+    )
+    if (cephFlagsError) return (
+      <Alert severity="warning" sx={{ mb: 1 }}>
+        <Typography variant="body2">{t('updates.cephFlagsUnreadable', { error: cephFlagsError })}</Typography>
+      </Alert>
+    )
+    if (cephMaintenanceFlagsSet) return (
+      <Alert severity="success" sx={{ mb: 1 }}>
+        <Typography variant="body2">{t('updates.cephFlagsAlreadySet')}</Typography>
+      </Alert>
+    )
+
+    return (
+      <>
+        <Alert severity="info" sx={{ mb: 1 }}>
+          <Typography variant="body2">{t('updates.cephFlagsNotSet')}</Typography>
+        </Alert>
+        {cephFlags.length > 0 && (
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
+            {cephFlags.map(f => (
+              <Chip key={f} label={f} size="small" sx={{ fontFamily: 'monospace', fontSize: 11, height: 22 }} />
+            ))}
+          </Box>
+        )}
+        {canSetCephFlags && (
+          <FormControlLabel
+            control={
+              <Switch
+                checked={setCephMaintenanceFlags}
+                onChange={(e) => setSetCephMaintenanceFlags(e.target.checked)}
+                size="small"
+              />
+            }
+            label={<Typography variant="body2">{t('updates.setCephFlagsBefore')}</Typography>}
+          />
+        )}
+      </>
+    )
+  }
 
   return (
     <Dialog
@@ -863,45 +913,7 @@ export default function NodeUpdateDialog({
                     {t('updates.cephFlagsCard')}
                   </Typography>
 
-                  {cephFlagsLoading ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
-                      <CircularProgress size={16} />
-                      <Typography variant="caption" color="text.secondary">Loading...</Typography>
-                    </Box>
-                  ) : cephFlagsError ? (
-                    <Alert severity="warning" sx={{ mb: 1 }}>
-                      <Typography variant="body2">{t('updates.cephFlagsUnreadable', { error: cephFlagsError })}</Typography>
-                    </Alert>
-                  ) : cephMaintenanceFlagsSet ? (
-                    <Alert severity="success" sx={{ mb: 1 }}>
-                      <Typography variant="body2">{t('updates.cephFlagsAlreadySet')}</Typography>
-                    </Alert>
-                  ) : (
-                    <>
-                      <Alert severity="info" sx={{ mb: 1 }}>
-                        <Typography variant="body2">{t('updates.cephFlagsNotSet')}</Typography>
-                      </Alert>
-                      {cephFlags.length > 0 && (
-                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1 }}>
-                          {cephFlags.map(f => (
-                            <Chip key={f} label={f} size="small" sx={{ fontFamily: 'monospace', fontSize: 11, height: 22 }} />
-                          ))}
-                        </Box>
-                      )}
-                      {canSetCephFlags && (
-                        <FormControlLabel
-                          control={
-                            <Switch
-                              checked={setCephMaintenanceFlags}
-                              onChange={(e) => setSetCephMaintenanceFlags(e.target.checked)}
-                              size="small"
-                            />
-                          }
-                          label={<Typography variant="body2">{t('updates.setCephFlagsBefore')}</Typography>}
-                        />
-                      )}
-                    </>
-                  )}
+                  {renderCephFlagsBody()}
                 </CardContent>
               </Card>
             )}

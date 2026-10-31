@@ -151,7 +151,11 @@ export function useNodeData(
     fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/disks`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : null)
       .then(json => { if (req.isCurrent()) setNodeDisksData(json ? (json.data || json) : null) })
-      .catch(e => { if (!req.isCurrent()) return; console.error('Failed to load node disks:', e); setNodeDisksData(null) })
+      .catch(e => {
+        if (!req.isCurrent()) return
+        console.error('Failed to load node disks:', e)
+        setNodeDisksData(null)
+      })
       .finally(() => { if (req.isCurrent()) { setNodeDisksLoading(false); setNodeDisksLoaded(true) } })
   }, [isNode, selectionId, nodeTab, nodeDisksLoaded, nodeDisksLoading])
 
@@ -169,7 +173,11 @@ export function useNodeData(
     fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/subscription`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : null)
       .then(json => { if (req.isCurrent()) setNodeSubscriptionData(json ? (json.data || json) : null) })
-      .catch(e => { if (!req.isCurrent()) return; console.error('Failed to load node subscription:', e); setNodeSubscriptionData(null) })
+      .catch(e => {
+        if (!req.isCurrent()) return
+        console.error('Failed to load node subscription:', e)
+        setNodeSubscriptionData(null)
+      })
       .finally(() => { if (req.isCurrent()) { setNodeSubscriptionLoading(false); setNodeSubscriptionLoaded(true) } })
   }, [isNode, selectionId, nodeTab, nodeSubscriptionLoaded, nodeSubscriptionLoading, clusterName])
 
@@ -187,7 +195,11 @@ export function useNodeData(
     fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : null)
       .then(json => { if (req.isCurrent()) setNodeReplicationData(json ? (json.data || json) : null) })
-      .catch(e => { if (!req.isCurrent()) return; console.error('Failed to load node replication:', e); setNodeReplicationData(null) })
+      .catch(e => {
+        if (!req.isCurrent()) return
+        console.error('Failed to load node replication:', e)
+        setNodeReplicationData(null)
+      })
       .finally(() => { if (req.isCurrent()) { setNodeReplicationLoading(false); setNodeReplicationLoaded(true) } })
   }, [isNode, selectionId, nodeTab, nodeReplicationLoaded, nodeReplicationLoading, clusterName])
 
@@ -202,7 +214,11 @@ export function useNodeData(
     fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/system`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : null)
       .then(json => { if (req.isCurrent()) setNodeSystemData(json ? (json.data || json) : null) })
-      .catch(e => { if (!req.isCurrent()) return; console.error('Failed to load node system:', e); setNodeSystemData(null) })
+      .catch(e => {
+        if (!req.isCurrent()) return
+        console.error('Failed to load node system:', e)
+        setNodeSystemData(null)
+      })
       .finally(() => { if (req.isCurrent()) { setNodeSystemLoading(false); setNodeSystemLoaded(true) } })
   }, [isNode, selectionId, nodeTab, nodeSystemLoaded, nodeSystemLoading])
 
@@ -236,7 +252,11 @@ export function useNodeData(
     fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/ceph`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : { hasCeph: false })
       .then(json => { if (req.isCurrent()) setNodeCephData(json.data || json) })
-      .catch(e => { if (!req.isCurrent()) return; console.error('Failed to load node Ceph:', e); setNodeCephData({ hasCeph: false }) })
+      .catch(e => {
+        if (!req.isCurrent()) return
+        console.error('Failed to load node Ceph:', e)
+        setNodeCephData({ hasCeph: false })
+      })
       .finally(() => { if (req.isCurrent()) { setNodeCephLoading(false); setNodeCephLoaded(true) } })
   }, [isNode, selectionId, nodeTab, nodeCephLoaded, nodeCephLoading, clusterName])
 

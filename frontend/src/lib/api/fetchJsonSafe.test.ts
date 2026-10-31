@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 
-import { ApiError, fetchJsonResult, fetchJsonSafe, jsonInit, requireOk, settleCounts } from './fetchJsonSafe'
+import { ApiError, errorMessage, fetchJsonResult, fetchJsonSafe, jsonInit, requireOk, settleCounts } from './fetchJsonSafe'
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -146,5 +146,15 @@ describe('settleCounts', () => {
 
   it('stringifies a non-Error rejection', async () => {
     expect(await settleCounts([() => Promise.reject('boom')])).toEqual({ succeeded: 0, failed: 1, firstError: 'boom' })
+  })
+})
+
+describe('errorMessage', () => {
+  it('reads an Error, a thrown string, else the fallback', () => {
+    expect(errorMessage(new ApiError('refused', 403))).toBe('refused')
+    expect(errorMessage('boom')).toBe('boom')
+    expect(errorMessage({ reason: 'x' })).toBe('Unexpected error')
+    expect(errorMessage(new Error(''), 'fallback')).toBe('fallback')
+    expect(errorMessage(undefined, 'fallback')).toBe('fallback')
   })
 })

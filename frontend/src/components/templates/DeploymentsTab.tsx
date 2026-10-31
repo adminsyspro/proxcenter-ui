@@ -6,7 +6,7 @@ import { Alert, Box, Chip, IconButton, Tooltip, Typography } from '@mui/material
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 
 import { useToast } from '@/contexts/ToastContext'
-import { fetchJsonResult } from '@/lib/api/fetchJsonSafe'
+import { errorMessage, fetchJsonResult } from '@/lib/api/fetchJsonSafe'
 import EmptyState from '@/components/EmptyState'
 import DeploymentDetailDialog from './DeploymentDetailDialog'
 
@@ -63,7 +63,7 @@ export default function DeploymentsTab({ onRetry }: DeploymentsTabProps) {
           setLoadError(result.error || null)
         }
       })
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => setLoadError(errorMessage(e)))
       .finally(() => setLoading(false))
   }, [])
 

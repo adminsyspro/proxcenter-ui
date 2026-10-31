@@ -1260,11 +1260,10 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       const outcome = await runBulkGuestPower(vmsToProcess.map(vm => ({ connId, node, type: vm.type, vmid: vm.vmid })), apiAction)
       const severity = bulkPowerSeverity(outcome)
       const detail = outcome.firstError ? ` (${outcome.firstError})` : ''
-      const message = severity === 'success'
-        ? t('vmActions.bulkSuccess', { description, count: outcome.success })
-        : severity === 'warning'
-          ? t('vmActions.bulkPartial', { description, success: outcome.success, errors: outcome.errors }) + detail
-          : t('vmActions.bulkFailed', { description, errors: outcome.errors }) + detail
+      let message = t('vmActions.bulkFailed', { description, errors: outcome.errors }) + detail
+
+      if (severity === 'success') message = t('vmActions.bulkSuccess', { description, count: outcome.success })
+      else if (severity === 'warning') message = t('vmActions.bulkPartial', { description, success: outcome.success, errors: outcome.errors }) + detail
 
       setSnackbar({ open: true, message, severity })
       // Trigger immediate SSE poll — tree will be updated via persistent EventSource

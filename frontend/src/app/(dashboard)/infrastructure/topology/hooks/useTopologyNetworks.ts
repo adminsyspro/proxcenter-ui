@@ -109,7 +109,8 @@ export function useTopologyNetworks(connections: InventoryCluster[], enabled: bo
     const present = new Set(guests.map(g => g.key))
 
     // Guests gone from the inventory (deleted, or moved: the old node key).
-    for (const key of [...requestedRef.current]) {
+    // Deleting the entry being visited is safe while iterating a Set.
+    for (const key of requestedRef.current) {
       if (!present.has(key)) requestedRef.current.delete(key)
     }
     setNetworkMap(prev => {

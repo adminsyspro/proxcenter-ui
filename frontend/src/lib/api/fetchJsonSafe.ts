@@ -114,6 +114,14 @@ export async function requireOk<B = unknown>(
   return result.body as B | undefined
 }
 
+/** Message of a caught value: an Error's message, a thrown string, else `fallback`. */
+export function errorMessage(e: unknown, fallback = 'Unexpected error'): string {
+  if (e instanceof Error) return e.message || fallback
+  if (typeof e === 'string' && e) return e
+
+  return fallback
+}
+
 /** JSON request init for {@link requireOk}. */
 export function jsonInit(method: string, payload?: unknown): RequestInit {
   return payload === undefined

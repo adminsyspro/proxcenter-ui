@@ -149,7 +149,7 @@ export async function buildFleetBackupFreshness(opts: {
       for (const snapshot of result.data) {
         const groupKey = `${snapshot.backupType}/${snapshot.backupId}`
         const owner = owners.get(namespaceKey(pbs.id, snapshot.datastore, snapshot.namespace)) ?? null
-        const ownerKey = owner ? [...owner].sort().join(",") : ""
+        const ownerKey = owner ? [...owner].sort((a, b) => a.localeCompare(b)).join(",") : ""
         const byOwner = best.get(groupKey) ?? new Map<string, Attributed>()
         const current = byOwner.get(ownerKey)
         if (!current || snapshot.backupTime > current.snapshot.backupTime) {

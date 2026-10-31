@@ -66,7 +66,7 @@ export function useSelectionGuard(key: string | null | undefined): SelectionGuar
   const current = norm(key)
   const genRef = useRef<Generation | null>(null)
 
-  if (genRef.current === null) genRef.current = { key: current, controller: new AbortController() }
+  genRef.current ??= { key: current, controller: new AbortController() }
 
   const switchGeneration = useCallback((nextKey: string | null) => {
     const gen = genRef.current!

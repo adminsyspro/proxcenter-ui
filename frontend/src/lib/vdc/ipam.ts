@@ -195,18 +195,39 @@ export async function allocateIpTracked(
   if (input.externalIps) for (const n of input.externalIps) taken.add(n)
   taken.add(gatewayInt)
 
-  // Hint path: try to reserve the requested IP if it's in range and free.
-  if (input.hint) {
-    if (!isValidIpv4(input.hint)) throw new IpamHintUnavailableError(input.hint)
-    const hintInt = ipToInt(input.hint)!
-    if (hintInt < low || hintInt > high || taken.has(hintInt)) {
-      throw new IpamHintUnavailableError(input.hint)
-    }
-    return { allocation: await insertAllocation({ ...input, mac }, input.hint, hintInt), created: true }
-  }
+  const allocation = input.hint
+    ? await reserveHint({ ...input, mac }, input.hint, low, high, taken)
+    : await reserveFirstFree({ ...input, mac }, low, high, taken)
 
-  // Auto: load the set of IPAM-tracked IPs and pick the first free.
-  // For typical /24s this is < 254 entries — a single SELECT is fine.
+  return { allocation, created: true }
+}
+
+/** Hint path: reserve the requested IP if it is in range and free. */
+async function reserveHint(
+  input: AllocateIpInput,
+  hint: string,
+  low: number,
+  high: number,
+  taken: Set<number>,
+): Promise<IpamAllocation> {
+  if (!isValidIpv4(hint)) throw new IpamHintUnavailableError(hint)
+  const hintInt = ipToInt(hint)!
+  if (hintInt < low || hintInt > high || taken.has(hintInt)) {
+    throw new IpamHintUnavailableError(hint)
+  }
+  return insertAllocation(input, hint, hintInt)
+}
+
+/**
+ * Auto path: add the IPAM-tracked IPs to `taken` and reserve the first free
+ * one. For typical /24s this is < 254 entries, a single SELECT is fine.
+ */
+async function reserveFirstFree(
+  input: AllocateIpInput,
+  low: number,
+  high: number,
+  taken: Set<number>,
+): Promise<IpamAllocation> {
   const takenRows = await prisma.vdcIpamAllocation.findMany({
     where: { subnetId: input.subnetId },
     select: { ipInt: true },
@@ -214,10 +235,7 @@ export async function allocateIpTracked(
   for (const r of takenRows) taken.add(typeof r.ipInt === 'bigint' ? Number(r.ipInt) : r.ipInt)
 
   for (let candidate = low; candidate <= high; candidate++) {
-    if (!taken.has(candidate)) {
-      const ip = intToIp(candidate)
-      return { allocation: await insertAllocation({ ...input, mac }, ip, candidate), created: true }
-    }
+    if (!taken.has(candidate)) return insertAllocation(input, intToIp(candidate), candidate)
   }
   throw new IpamExhaustedError(input.subnetId)
 }

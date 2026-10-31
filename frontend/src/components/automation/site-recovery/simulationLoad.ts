@@ -9,7 +9,7 @@
  * without blowing up the bar.
  */
 export function cpuPercentAfterRedistribution(cpuPercent: number, maxcpu: number, addedVcpus: number): number {
-  if (!(maxcpu > 0)) return cpuPercent
+  if (!Number.isFinite(maxcpu) || maxcpu <= 0) return cpuPercent
 
   const perCore = cpuPercent / 100
   const busyCores = perCore * maxcpu + addedVcpus * perCore

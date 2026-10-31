@@ -29,6 +29,19 @@ interface UseHAParams {
 /* Hook                                                                */
 /* ------------------------------------------------------------------ */
 
+/** HA form values for a guest's HA config; the defaults when it has none. */
+function haFormFrom(data: any) {
+  return {
+    state: data?.state || 'started',
+    group: data?.group || '',
+    maxRestart: data?.max_restart ?? 1,
+    maxRelocate: data?.max_relocate ?? 1,
+    // PVE returns failback as 0/1; treat undefined as enabled (PVE default).
+    failback: data?.failback === undefined ? true : Boolean(Number(data.failback)),
+    comment: data?.comment || '',
+  }
+}
+
 export function useHA({
   selection,
   detailTab,
@@ -88,25 +101,14 @@ export function useHA({
       } else {
         setHaConfig(configJson.data)
 
+        const form = haFormFrom(configJson.data)
 
-        // Remplir le formulaire si la config existe
-        if (configJson.data) {
-          setHaState(configJson.data.state || 'started')
-          setHaGroup(configJson.data.group || '')
-          setHaMaxRestart(configJson.data.max_restart ?? 1)
-          setHaMaxRelocate(configJson.data.max_relocate ?? 1)
-          // PVE returns failback as 0/1; treat undefined as enabled (PVE default).
-          setHaFailback(configJson.data.failback === undefined ? true : Boolean(Number(configJson.data.failback)))
-          setHaComment(configJson.data.comment || '')
-        } else {
-          // Reset le formulaire si pas de config
-          setHaState('started')
-          setHaGroup('')
-          setHaMaxRestart(1)
-          setHaMaxRelocate(1)
-          setHaFailback(true)
-          setHaComment('')
-        }
+        setHaState(form.state)
+        setHaGroup(form.group)
+        setHaMaxRestart(form.maxRestart)
+        setHaMaxRelocate(form.maxRelocate)
+        setHaFailback(form.failback)
+        setHaComment(form.comment)
       }
 
       if (groupsJson.data?.groups) {

@@ -49,7 +49,7 @@ import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
 import { formatAlertValue } from '@/lib/alerts/formatAlertValue'
-import { jsonInit, requireOk, settleCounts } from '@/lib/api/fetchJsonSafe'
+import { errorMessage, jsonInit, requireOk, settleCounts } from '@/lib/api/fetchJsonSafe'
 
 /* --------------------------------
    Types
@@ -344,7 +344,7 @@ return true
   )
 
   // A rejected mutation shows the server's reason, never a success toast.
-  const errorText = (e: unknown) => `${t('common.error')}: ${e instanceof Error ? e.message : String(e)}`
+  const errorText = (e: unknown) => `${t('common.error')}: ${errorMessage(e)}`
 
   // Batch actions run every call and say how many the server refused.
   const reportBatch = (counts: { succeeded: number; failed: number; firstError?: string }, total: number, toastSuccess: boolean) => {

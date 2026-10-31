@@ -77,6 +77,21 @@ describe("parsePreflightOutput", () => {
     expect(r.missing).toContain("vddk-lib")
     expect(r.error).toMatch(/libvixDiskLib|VDDK|symlink/i)
   })
+  // roadmap#177: in OpenVDDK's directory the remedy is "Prepare this node".
+  it("points at OpenVDDK and its automated setup in OpenVDDK's directory", () => {
+    const out = ALL_PRESENT.replace(/vddk-lib=.*/, "vddk-lib=")
+    const r = parsePreflightOutput(out, "/usr/lib/openvddk")
+    expect(r.error).toContain("install OpenVDDK 0.7.4")
+    expect(r.error).toContain("Prepare this node")
+    expect(r.error).not.toContain("Broadcom")
+    expect(r.libdir).toBe("/usr/lib/openvddk")
+  })
+  it("names both libraries for an explicit libdir, which may hold either", () => {
+    const out = ALL_PRESENT.replace(/vddk-lib=.*/, "vddk-lib=")
+    const r = parsePreflightOutput(out, "/usr/lib/vmware-vix-disklib")
+    expect(r.error).toContain("install OpenVDDK 0.7.4")
+    expect(r.error).toContain("install the Broadcom VDDK")
+  })
 })
 
 describe("parsePreflightOutput: PVE 9 requirement", () => {
@@ -144,19 +159,21 @@ describe("runWarmNodePreflight", () => {
     mockNodeIp.mockResolvedValue({ host: "10.0.0.7", port: 2201, source: "override" })
   })
 
-  it("resolves the node IP the way the engine does, then probes that node (default libdir)", async () => {
+  it("resolves the node IP the way the engine does, then probes that node (OpenVDDK by default)", async () => {
     mockSSH.mockResolvedValue({ success: true, output: ALL_PRESENT })
     const r = await runWarmNodePreflight("conn", "pve1")
     expect(r.ok).toBe(true)
+    expect(r.libdir).toBe("/usr/lib/openvddk")
     // Engine parity: getNodeSshEndpointForMigration(prisma, connId, node, baseUrl)
     expect(mockNodeIp).toHaveBeenCalledWith(expect.anything(), "conn", "pve1", "https://pve.local:8006")
-    // Probe ran against the resolved host and per-node port, with the engine's default libdir.
-    expect(mockSSH).toHaveBeenCalledWith("conn", { host: "10.0.0.7", port: 2201, source: "override" }, expect.stringContaining("vmware-vix-disklib"), undefined, { readOnly: true })
+    // Probe ran against the resolved host and per-node port, with the default library's directory.
+    expect(mockSSH).toHaveBeenCalledWith("conn", { host: "10.0.0.7", port: 2201, source: "override" }, expect.stringContaining("'/usr/lib/openvddk'/lib64/libvixDiskLib.so"), undefined, { readOnly: true })
   })
 
   it("honours a custom vddkLibdir so the verdict matches the migration's libdir", async () => {
     mockSSH.mockResolvedValue({ success: true, output: ALL_PRESENT })
-    await runWarmNodePreflight("conn", "pve1", "/opt/vddk")
+    const r = await runWarmNodePreflight("conn", "pve1", "/opt/vddk")
+    expect(r.libdir).toBe("/opt/vddk")
     expect(mockSSH).toHaveBeenCalledWith("conn", { host: "10.0.0.7", port: 2201, source: "override" }, expect.stringContaining("'/opt/vddk'/lib64/libvixDiskLib.so"), undefined, { readOnly: true })
   })
 

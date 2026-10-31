@@ -16,7 +16,11 @@ describe("buildNbdkitVddkCmd", () => {
       moref: "vm-9",
       diskPath: "[ds] vm/vm.vmdk",
     })
-    expect(cmd).toContain("nbdkit -r -U '/tmp/v.sock' vddk") // -r: read-only (source disk)
+    expect(cmd).toContain("nbdkit -f -r -U '/tmp/v.sock' --filter=retry vddk") // -f: errors in the reader's log; -r: read-only (source disk)
+    // The retry filter reopens the disk after a failed read (roadmap#177):
+    // it must sit before the plugin name, its parameters after it.
+    expect(cmd.indexOf("--filter=retry")).toBeLessThan(cmd.indexOf(" vddk "))
+    expect(cmd).toContain(" retries=5 retry-delay=2 ")
     expect(cmd).toContain("libdir='/opt/vddk'")
     expect(cmd).toContain("server='10.0.0.9'")
     expect(cmd).toContain("user='root'")
@@ -27,6 +31,18 @@ describe("buildNbdkitVddkCmd", () => {
     expect(cmd).toContain("vm=moref='vm-9'")
     // The single quotes keep the space-bearing disk path as one argument.
     expect(cmd).toContain("file='[ds] vm/vm.vmdk'")
+  })
+
+  // roadmap#177: the node is never a VMware VM, so HotAdd can only fail there;
+  // naming the network transports keeps OpenVDDK from logging a HotAdd error.
+  it("asks for the network transports only, NBDSSL first", () => {
+    const cmd = buildNbdkitVddkCmd({
+      sock: "/tmp/v.sock", libdir: "/opt/vddk", server: "10.0.0.9", user: "root",
+      passwordFile: "/tmp/pw", thumbprint: "AB:CD", moref: "vm-9", diskPath: "[ds] vm/vm.vmdk",
+    })
+    expect(cmd).toContain(" transports=nbdssl:nbd ")
+    expect(cmd).not.toContain("hotadd")
+    expect(cmd.indexOf("transports=")).toBeLessThan(cmd.indexOf("file="))
   })
 
   it("appends the snapshot moref when reading a snapshot's logical view (CBT delta read)", () => {

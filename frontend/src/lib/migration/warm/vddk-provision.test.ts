@@ -1,11 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import {
-  resolveVddkArtifact,
-  buildVddkInstallScript,
-  buildVddkProvisionCommand,
-  provisionWarmNode,
-  isVddkPackageTokenConfigured,
-} from "./vddk-provision"
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { buildOpenVddkInstallScript, provisionWarmNode, provisionFailureDetail, OPENVDDK_LOCAL_KIT_PATHS } from "./vddk-provision"
+import { OPENVDDK_KIT } from "./vddk-library"
 
 vi.mock("@/lib/ssh/exec", async (importActual) => {
   const actual = await importActual<typeof import("@/lib/ssh/exec")>()
@@ -24,113 +19,20 @@ vi.mock("../pve-tasks", () => ({
 }))
 vi.mock("@/lib/db/prisma", () => ({ prisma: {} }))
 
-// Tests mock HTTP — the real registry is NEVER hit.
-const fetchMock = vi.fn()
-vi.stubGlobal("fetch", fetchMock)
 
-const TOKEN = "ghp_enterprise_package_token"
-const BEARER = "djE6c2hvcnQtbGl2ZWQtcHVsbC1iZWFyZXI"
-const DIGEST = "sha256:12c100ab21408dd43c45c5e10026a8a8bfff0bea94b933bf1dae947d66bc6495"
-const SIZE = 32935592
-
-const tokenOk = () => ({ ok: true, status: 200, json: async () => ({ token: BEARER }) })
-const manifestOk = () => ({
-  ok: true,
-  status: 200,
-  json: async () => ({ layers: [{ mediaType: "application/gzip", digest: DIGEST, size: SIZE }] }),
-})
-
-// Mirrors the probe output shape asserted in vddk-preflight.test.ts.
 const ALL_PRESENT = [
   "nbdkit=/usr/sbin/nbdkit",
   "nbd-client=/usr/sbin/nbd-client",
   "vddk-plugin=/usr/lib/x86_64-linux-gnu/nbdkit/plugins/nbdkit-vddk-plugin.so",
-  "vddk-lib=/usr/lib/vmware-vix-disklib/lib64/libvixDiskLib.so.9",
+  "vddk-lib=/usr/lib/openvddk/lib64/libvixDiskLib.so.8",
 ].join("\n")
 
 beforeEach(() => {
-  fetchMock.mockReset()
   mockSSH.mockReset()
-  vi.stubEnv("GHCR_TOKEN", TOKEN)
-})
-afterEach(() => vi.unstubAllEnvs())
-
-describe("isVddkPackageTokenConfigured", () => {
-  it("is true only when GHCR_TOKEN is set and non-blank", () => {
-    expect(isVddkPackageTokenConfigured()).toBe(true)
-    vi.stubEnv("GHCR_TOKEN", "   ")
-    expect(isVddkPackageTokenConfigured()).toBe(false)
-    vi.stubEnv("GHCR_TOKEN", "")
-    expect(isVddkPackageTokenConfigured()).toBe(false)
-  })
 })
 
-describe("resolveVddkArtifact", () => {
-  it("exchanges the token for a pull bearer, reads layers[0] from the OCI manifest", async () => {
-    fetchMock.mockResolvedValueOnce(tokenOk()).mockResolvedValueOnce(manifestOk())
-
-    const art = await resolveVddkArtifact(TOKEN)
-    expect(art).toEqual({ bearer: BEARER, digest: DIGEST, size: SIZE })
-
-    // Token exchange: pull scope on the package, HTTP Basic adminsyspro:<token>.
-    const [tokenUrl, tokenInit] = fetchMock.mock.calls[0]
-    expect(tokenUrl).toBe("https://ghcr.io/token?scope=repository:adminsyspro/proxcenter-vddk:pull&service=ghcr.io")
-    expect(tokenInit.headers.Authorization).toBe(
-      `Basic ${Buffer.from(`adminsyspro:${TOKEN}`).toString("base64")}`,
-    )
-
-    // Manifest read: bearer auth + the OCI manifest Accept header.
-    const [manifestUrl, manifestInit] = fetchMock.mock.calls[1]
-    expect(manifestUrl).toBe("https://ghcr.io/v2/adminsyspro/proxcenter-vddk/manifests/9.1.0.0")
-    expect(manifestInit.headers.Authorization).toBe(`Bearer ${BEARER}`)
-    expect(manifestInit.headers.Accept).toBe("application/vnd.oci.image.manifest.v1+json")
-  })
-
-  it("honours PROXCENTER_VDDK_PACKAGE and PROXCENTER_VDDK_TAG overrides", async () => {
-    vi.stubEnv("PROXCENTER_VDDK_PACKAGE", "adminsyspro/vddk-lab")
-    vi.stubEnv("PROXCENTER_VDDK_TAG", "8.0.3")
-    fetchMock.mockResolvedValueOnce(tokenOk()).mockResolvedValueOnce(manifestOk())
-
-    await resolveVddkArtifact(TOKEN)
-    expect(fetchMock.mock.calls[0][0]).toContain("scope=repository:adminsyspro/vddk-lab:pull")
-    expect(fetchMock.mock.calls[1][0]).toBe("https://ghcr.io/v2/adminsyspro/vddk-lab/manifests/8.0.3")
-  })
-
-  it("fails actionably on a rejected token (401) without leaking the token", async () => {
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) })
-
-    const err = await resolveVddkArtifact(TOKEN).catch((e: Error) => e)
-    expect(err).toBeInstanceOf(Error)
-    expect((err as Error).message).toMatch(/GHCR_TOKEN/)
-    expect((err as Error).message).toMatch(/401/)
-    expect((err as Error).message).not.toContain(TOKEN)
-  })
-
-  it("fails actionably when the manifest returns 404, naming the package and tag", async () => {
-    fetchMock
-      .mockResolvedValueOnce(tokenOk())
-      .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) })
-
-    const err = await resolveVddkArtifact(TOKEN).catch((e: Error) => e)
-    expect(err).toBeInstanceOf(Error)
-    expect((err as Error).message).toContain("adminsyspro/proxcenter-vddk:9.1.0.0")
-    expect((err as Error).message).toMatch(/404/)
-    expect((err as Error).message).toMatch(/PROXCENTER_VDDK_TAG/)
-    expect((err as Error).message).not.toContain(TOKEN)
-    expect((err as Error).message).not.toContain(BEARER)
-  })
-
-  it("fails when the manifest has no layers[0]", async () => {
-    fetchMock
-      .mockResolvedValueOnce(tokenOk())
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ layers: [] }) })
-
-    await expect(resolveVddkArtifact(TOKEN)).rejects.toThrow(/no layers|malformed/i)
-  })
-})
-
-describe("buildVddkInstallScript", () => {
-  const script = () => buildVddkInstallScript({ pkg: "adminsyspro/proxcenter-vddk", digest: DIGEST })
+describe("buildOpenVddkInstallScript: runtime steps", () => {
+  const script = () => buildOpenVddkInstallScript()
 
   it("refuses a Debian < 13 node before touching anything, and names PVE 9", () => {
     const lines = script().split("\n")
@@ -176,30 +78,6 @@ describe("buildVddkInstallScript", () => {
     expect(s).toContain("apt-get install -y nbdkit-plugin-vddk")
   })
 
-  it("downloads the VDDK blob into the libdir, stripping the tarball root dir", () => {
-    const s = script()
-    expect(s).toContain("mkdir -p '/usr/lib/vmware-vix-disklib'")
-    expect(s).toContain(`"https://ghcr.io/v2/adminsyspro/proxcenter-vddk/blobs/${DIGEST}"`)
-    expect(s).toContain("curl -fsSL")
-    expect(s).toContain("tar xz -C '/usr/lib/vmware-vix-disklib' --strip-components=1")
-  })
-
-  it("guards the download so a provisioned node never re-downloads 33 MB", () => {
-    const s = script()
-    expect(s).toContain(
-      "if [ ! -e '/usr/lib/vmware-vix-disklib'/lib64/libvixDiskLib.so.9 ] && [ ! -e '/usr/lib/vmware-vix-disklib'/lib64/libvixDiskLib.so.8 ]; then",
-    )
-  })
-
-  it("adds the .so.8 -> .so.9 symlink only when .so.9 exists and .so.8 does not, then ldconfig", () => {
-    const s = script()
-    expect(s).toContain(
-      "if [ -e '/usr/lib/vmware-vix-disklib'/lib64/libvixDiskLib.so.9 ] && [ ! -e '/usr/lib/vmware-vix-disklib'/lib64/libvixDiskLib.so.8 ]; then",
-    )
-    expect(s).toContain("ln -sf libvixDiskLib.so.9 '/usr/lib/vmware-vix-disklib'/lib64/libvixDiskLib.so.8")
-    expect(s).toContain("ldconfig")
-  })
-
   it("loads the nbd module now and at boot with max_part=0", () => {
     const s = script()
     expect(s).toContain("modprobe nbd max_part=0")
@@ -237,89 +115,141 @@ describe("buildVddkInstallScript", () => {
     expect(s.indexOf("LVMCONF=/etc/lvm/lvm.conf")).toBeGreaterThan(s.indexOf("modprobe nbd max_part=0"))
     expect(s.indexOf("LVMCONF=/etc/lvm/lvm.conf")).toBeGreaterThan(s.indexOf("/etc/modprobe.d/proxcenter-nbd.conf"))
   })
-
-  it("fails fast and loud: set -eo pipefail so a broken curl cannot be masked by tar", () => {
-    expect(script()).toContain("set -eo pipefail")
-  })
-
-  it("NEVER embeds the token or bearer — the script only references $VDDK_BEARER", () => {
-    const s = script()
-    expect(s).toContain('Authorization: Bearer $VDDK_BEARER')
-    expect(s).not.toContain(TOKEN)
-    expect(s).not.toContain(BEARER)
-  })
-
-  it("honours a custom libdir", () => {
-    const s = buildVddkInstallScript({ pkg: "adminsyspro/proxcenter-vddk", digest: DIGEST, libdir: "/opt/vddk" })
-    expect(s).toContain("mkdir -p '/opt/vddk'")
-    expect(s).toContain("tar xz -C '/opt/vddk' --strip-components=1")
-    expect(s).toContain("ln -sf libvixDiskLib.so.9 '/opt/vddk'/lib64/libvixDiskLib.so.8")
-  })
-
-  it("rejects a malformed digest or package path (nothing unvetted reaches the shell)", () => {
-    expect(() => buildVddkInstallScript({ pkg: "adminsyspro/proxcenter-vddk", digest: "sha256:short" })).toThrow(/digest/i)
-    expect(() => buildVddkInstallScript({ pkg: "bad path; rm -rf /", digest: DIGEST })).toThrow(/package/i)
-  })
 })
 
-describe("buildVddkProvisionCommand", () => {
-  it("hands the bearer to the remote shell as an environment variable, outside the script text", () => {
-    const s = buildVddkInstallScript({ pkg: "adminsyspro/proxcenter-vddk", digest: DIGEST })
-    const cmd = buildVddkProvisionCommand(s, BEARER)
-    expect(cmd.startsWith(`env VDDK_BEARER='${BEARER}' bash -c `)).toBe(true)
-    // The bash -c payload (everything after the env assignment) must not
-    // carry the literal bearer — it references $VDDK_BEARER instead.
-    const payload = cmd.slice(cmd.indexOf("bash -c"))
-    expect(payload).not.toContain(BEARER)
+describe("buildOpenVddkInstallScript (roadmap#177)", () => {
+  const s = () => buildOpenVddkInstallScript()
+
+  it("fails fast: set -eo pipefail first", () => {
+    expect(s().startsWith("set -eo pipefail")).toBe(true)
+  })
+
+  it("installs OpenVDDK into /usr/lib/openvddk from the pinned GitHub release, no token involved", () => {
+    const script = s()
+    expect(script).toContain("LIB='/usr/lib/openvddk'")
+    expect(script).toContain(`KIT_URL='https://github.com/openvddk/openvddk/releases/download/v0.7.4/${OPENVDDK_KIT.file}'`)
+    expect(script).not.toContain("Bearer")
+    expect(script).not.toContain("vmware-vix-disklib")
+    // The library step sits between the plugin and the nbd module.
+    expect(script.indexOf("KIT_URL=")).toBeGreaterThan(script.indexOf("apt-get install -y nbdkit-plugin-vddk"))
+    expect(script.indexOf("KIT_URL=")).toBeLessThan(script.indexOf("modprobe nbd"))
+  })
+
+  it("uses a kit copied onto the node before trying GitHub, for nodes without internet access", () => {
+    const script = s()
+    expect(OPENVDDK_LOCAL_KIT_PATHS).toEqual([`/root/${OPENVDDK_KIT.file}`, `/var/tmp/${OPENVDDK_KIT.file}`])
+    expect(script).toContain(`for f in '/root/${OPENVDDK_KIT.file}' '/var/tmp/${OPENVDDK_KIT.file}'; do`)
+    expect(script.indexOf('cp "$KIT_SRC" "$STAGE/kit.tar.gz"')).toBeLessThan(script.indexOf("curl -fsSL"))
+    expect(script).toContain(`copy ${OPENVDDK_KIT.file} to /root/ on the node`)
+  })
+
+  it("checks the pinned kit SHA-256 before extracting, whatever its source, then the kit's own SHA256SUMS", () => {
+    const script = s()
+    expect(script).toContain(`KIT_SHA=${OPENVDDK_KIT.sha256}`)
+    const check = script.indexOf("sha256sum -c --quiet - ")
+    const extract = script.indexOf("tar xzf")
+    expect(check).toBeGreaterThan(script.indexOf('cp "$KIT_SRC"'))
+    expect(check).toBeGreaterThan(script.indexOf("curl -fsSL"))
+    expect(check).toBeLessThan(extract)
+    expect(script.indexOf("sha256sum -c --quiet SHA256SUMS")).toBeGreaterThan(extract)
+  })
+
+  it("skips a node that already carries this exact release (idempotent)", () => {
+    const script = s()
+    expect(script).toContain(`LIB_SHA=${OPENVDDK_KIT.libSha256}`)
+    expect(script).toContain(`sha256sum "$LIB/lib/${OPENVDDK_KIT.libFile}"`)
+    expect(script).toContain("is already installed in $LIB")
+  })
+
+  it("never replaces a directory that holds something else than OpenVDDK", () => {
+    const script = s()
+    expect(script).toContain('! grep -qs OpenVDDK "$LIB/NOTICE"')
+    expect(script.indexOf("refusing to replace it")).toBeLessThan(script.indexOf("curl -fsSL"))
+  })
+
+  it("links lib64 to lib, stages next to the target and swaps the directory whole", () => {
+    const script = s()
+    expect(script).toContain('ln -s lib "$STAGE/kit/lib64"')
+    expect(script).toContain('STAGE="$(mktemp -d "$PARENT/.proxcenter-openvddk.XXXXXX")"')
+    expect(script).toContain(`trap 'rm -rf "$STAGE"' EXIT`)
+    expect(script).toContain('mv "$STAGE/kit" "$LIB"')
+    expect(script).toContain('chmod 755 "$STAGE/kit"')
+  })
+
+  it("takes a custom directory, shell-quoted, and refuses Broadcom's or a system one", () => {
+    expect(buildOpenVddkInstallScript({ libdir: "/opt/openvddk/" })).toContain("LIB='/opt/openvddk'")
+    expect(() => buildOpenVddkInstallScript({ libdir: "/usr/lib/vmware-vix-disklib" })).toThrow(/Broadcom/)
+    expect(() => buildOpenVddkInstallScript({ libdir: "/usr/lib" })).toThrow(/system directory/)
+  })
+
+  it("marks every fatal message so the operator reads the cause, not apt", () => {
+    for (const line of s().split("\n").filter(l => l.includes(">&2") && !l.includes("WARN:"))) {
+      expect(line).toContain('echo "proxcenter: ')
+    }
   })
 })
 
 describe("provisionWarmNode", () => {
-  it("resolves the artifact, runs the script on the engine-resolved node IP, then re-runs the preflight", async () => {
-    fetchMock.mockResolvedValueOnce(tokenOk()).mockResolvedValueOnce(manifestOk())
+  it("installs OpenVDDK on the engine-resolved node, then re-runs the preflight on its directory", async () => {
     mockSSH
-      .mockResolvedValueOnce({ success: true, output: "" }) // install script
-      .mockResolvedValueOnce({ success: true, output: ALL_PRESENT }) // preflight probe
+      .mockResolvedValueOnce({ success: true, output: "" })
+      .mockResolvedValueOnce({ success: true, output: ALL_PRESENT })
 
     const r = await provisionWarmNode("conn", "pve1")
     expect(r.ok).toBe(true)
-    expect(r.missing).toEqual([])
+    expect(r.libdir).toBe("/usr/lib/openvddk")
 
-    // Install run: bearer via env, generous timeout for apt + the download.
     const [connId, nodeIp, cmd, timeoutMs] = mockSSH.mock.calls[0]
     expect(connId).toBe("conn")
     expect(nodeIp).toEqual({ host: "10.0.0.7", port: 2201, source: "override" })
-    expect(cmd).toContain("env VDDK_BEARER=")
+    expect(cmd.startsWith("bash -c ")).toBe(true)
     expect(cmd).toContain("nbdkit-plugin-vddk")
     expect(timeoutMs).toBeGreaterThan(60_000)
-
-    // Verdict comes from the existing preflight probe, on the same node.
     expect(mockSSH.mock.calls[1][1]).toEqual({ host: "10.0.0.7", port: 2201, source: "override" })
-    expect(mockSSH.mock.calls[1][2]).toContain("vmware-vix-disklib")
+    expect(mockSSH.mock.calls[1][2]).toContain("'/usr/lib/openvddk'/lib64/libvixDiskLib.so")
   })
 
-  it("fails with an actionable error when GHCR_TOKEN is not configured", async () => {
-    vi.stubEnv("GHCR_TOKEN", "")
-    await expect(provisionWarmNode("conn", "pve1")).rejects.toThrow(/GHCR_TOKEN/)
-    expect(fetchMock).not.toHaveBeenCalled()
+  it("installs only into OpenVDDK's own directory, whatever the request names, before any SSH", async () => {
+    await expect(provisionWarmNode("conn", "pve1", "/usr/lib/vmware-vix-disklib")).rejects.toThrow(/installs OpenVDDK in \/usr\/lib\/openvddk only/)
+    await expect(provisionWarmNode("conn", "pve1", "/usr/local/bin")).rejects.toThrow(/only/)
     expect(mockSSH).not.toHaveBeenCalled()
   })
 
-  it("redacts the bearer and token from a failed script's output before throwing", async () => {
-    fetchMock.mockResolvedValueOnce(tokenOk()).mockResolvedValueOnce(manifestOk())
-    mockSSH.mockResolvedValueOnce({
-      success: false,
-      output: `curl -fsSL -H "Authorization: Bearer ${BEARER}" failed`,
-      error: `curl: (22) The requested URL returned error: 403 (token ${TOKEN})`,
-    })
+  it("accepts the default directory named explicitly, trailing slash included", async () => {
+    mockSSH.mockResolvedValueOnce({ success: true, output: "" }).mockResolvedValueOnce({ success: true, output: ALL_PRESENT })
+    await provisionWarmNode("conn", "pve1", "/usr/lib/openvddk/")
+    expect(mockSSH.mock.calls[0][2]).toContain("/usr/lib/openvddk")
+  })
 
+  it("throws the script's own reason when it fails, not the apt noise", async () => {
+    const apt = Array.from({ length: 40 }, (_, i) => `W: Target Packages (contrib) is configured multiple times ${i}`).join("\n")
+    mockSSH.mockResolvedValueOnce({ success: false, error: `${apt}\nproxcenter: /root/kit.tar.gz does not match the SHA-256 ProxCenter pins: nothing was installed.` })
     const err = await provisionWarmNode("conn", "pve1").catch((e: Error) => e)
-    expect(err).toBeInstanceOf(Error)
-    expect((err as Error).message).toContain("pve1")
-    expect((err as Error).message).toContain("[redacted]")
-    expect((err as Error).message).not.toContain(BEARER)
-    expect((err as Error).message).not.toContain(TOKEN)
-    // The preflight is not consulted after a failed install.
+    expect((err as Error).message).toBe(
+      "Warm-migration node provisioning failed on pve1 (10.0.0.7:2201): /root/kit.tar.gz does not match the SHA-256 ProxCenter pins: nothing was installed.",
+    )
     expect(mockSSH).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Found in the lab (roadmap#177): a kit refused for its checksum came back as
+// 4,351 characters of apt output with the reason buried in the middle.
+describe("provisionFailureDetail", () => {
+  const apt = Array.from({ length: 40 }, (_, i) => `W: Target Packages (contrib) is configured multiple times ${i}`).join("\n")
+
+  it("keeps only the script's own reasons when it gave one", () => {
+    expect(provisionFailureDetail(`${apt}\nproxcenter: Bad kit: nothing was installed.\n`, "Reading package lists...")).toBe("Bad kit: nothing was installed.")
+  })
+
+  it("falls back to the bounded tail of the output, apt warnings left out", () => {
+    const out = `${apt}\n${Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n")}\nE: Unable to locate package nbdkit-plugin-vddk`
+    const d = provisionFailureDetail(undefined, out)
+    expect(d).toContain("E: Unable to locate package nbdkit-plugin-vddk")
+    expect(d).not.toContain("W: Target Packages")
+    expect(d.split("\n").length).toBeLessThanOrEqual(12)
+  })
+
+  it("says so when the script printed nothing", () => {
+    expect(provisionFailureDetail("", "")).toBe("no output")
   })
 })

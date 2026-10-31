@@ -38,6 +38,10 @@ export interface VddkReaderHandle {
  * attach, our `nbd-client -unix` simply fails (the device is in use) and we move
  * on to the next candidate — detaching it here would disconnect the other job's
  * live reader and corrupt its copy. So no node-wide lock is needed.
+ * A failure on a device that is still clean afterwards (no pid, size 0) is the
+ * server's: nbdkit could not open the disk. The loop stops there instead of
+ * offering the same socket to the fifteen other devices, which behind the retry
+ * filter cost a minute each (roadmap#177).
  * `sock` is a system-generated path, escaped all the same so the builder does
  * not depend on its callers for safety.
  */
@@ -48,6 +52,10 @@ export function buildNbdConnectCmd(sock: string): string {
     "for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do",
     "  [ -s /sys/block/nbd$i/pid ] && continue",
     `  if err=$(nbd-client -unix ${shellEscape(sock)} /dev/nbd$i 2>&1); then ATTACHED=/dev/nbd$i; echo "NBD_DEV=$ATTACHED"; break; fi`,
+    // Next device only when this one was taken meanwhile (pid or size set). A
+    // clean device that still failed means nbdkit refused the open: every other
+    // device would get the same answer, one retry window each.
+    `  [ -s /sys/block/nbd$i/pid ] || [ "$(cat /sys/block/nbd$i/size 2>/dev/null)" != 0 ] || break`,
     "done",
     '[ -n "$ATTACHED" ] || { echo "NBD_ALLOC_FAILED: ${err}"; exit 1; }',
   ].join("\n")
@@ -89,6 +97,17 @@ export interface PollOpts { intervalMs?: number; maxAttempts?: number }
  * command went on to start nbdkit anyway (#1028).
  */
 export const VDDK_LAUNCH_TIMEOUT_MS = 120_000
+
+/**
+ * Budget for the attach. nbd-client returns only once nbdkit has opened the
+ * disk during the NBD handshake, and the retry filter (vddk-cmd.ts) reopens a
+ * failed open with delays of 2 to 32 s, about a minute in all. Under the 30 s
+ * executeSSH default the attach was cut off in the middle of those retries,
+ * with an empty nbdkit log instead of the VDDK error (roadmap#177, lab, an open
+ * right after a source consolidation). Past this budget the error is real and
+ * the log holds it.
+ */
+export const VDDK_ATTACH_TIMEOUT_MS = 180_000
 
 /**
  * Stop every nbdkit reader of one job and remove its socket, password and log
@@ -160,7 +179,7 @@ export async function startVddkReader(
 
   // Attach the socket to the first free kernel NBD device; the command echoes
   // the device it chose as "NBD_DEV=/dev/nbdN".
-  const connect = await executeSSH(connectionId, nodeIp, buildNbdConnectCmd(opts.sock))
+  const connect = await executeSSH(connectionId, nodeIp, buildNbdConnectCmd(opts.sock), VDDK_ATTACH_TIMEOUT_MS)
   const reported = (connect.output ?? "")
     .split("\n").map(l => l.trim())
     .find(l => l.startsWith("NBD_DEV="))?.slice("NBD_DEV=".length).trim() ?? ""

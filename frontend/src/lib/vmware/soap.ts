@@ -638,6 +638,23 @@ export async function soapWaitForConsolidation(
  * pending: until it runs, the next warm run of the VM waits on it.
  */
 export async function soapConsolidateVmDisks(session: SoapSession, vmid: string, opts: SoapTaskWaitOptions = {}): Promise<void> {
+  const taskMor = await soapStartConsolidateVmDisks(session, vmid)
+  if (!taskMor) return
+  await waitForSoapTask(session, taskMor, {
+    ...opts,
+    timeoutMs: opts.timeoutMs ?? SNAPSHOT_REMOVE_TIMEOUT_MS,
+    label: `Disk consolidation of ${vmid}`,
+  })
+}
+
+/**
+ * Start ConsolidateVMDisks_Task and return its task MOR without waiting for it.
+ * For a caller that already polls runtime.consolidationNeeded in short slices so
+ * a cancel stays responsive: a multi-terabyte merge can take hours, and waiting
+ * on the task would hold the job that long. Throws on a SOAP fault, which is
+ * what vSphere answers when a merge is already running on the VM.
+ */
+export async function soapStartConsolidateVmDisks(session: SoapSession, vmid: string): Promise<string | undefined> {
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
@@ -652,13 +669,7 @@ export async function soapConsolidateVmDisks(session: SoapSession, vmid: string,
     const fault = result.text.match(/<faultstring>([\s\S]*?)<\/faultstring>/)?.[1] || ""
     throw new Error(`Failed to consolidate the disks of ${vmid}: ${fault}`)
   }
-  const taskMor = result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
-  if (!taskMor) return
-  await waitForSoapTask(session, taskMor, {
-    ...opts,
-    timeoutMs: opts.timeoutMs ?? SNAPSHOT_REMOVE_TIMEOUT_MS,
-    label: `Disk consolidation of ${vmid}`,
-  })
+  return result.text.match(/<returnval type="Task">([^<]+)<\/returnval>/)?.[1]
 }
 
 /**

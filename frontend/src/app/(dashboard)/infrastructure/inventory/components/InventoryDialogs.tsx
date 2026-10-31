@@ -108,7 +108,8 @@ import { bulkLoadProjection } from '../bulkLoadProjection'
 import MigrationLiveColumns, { type LiveJob } from './MigrationLiveColumns'
 import LiveLogBox from '@/components/ui/LiveLogBox'
 import BulkLoadProjectionBlock from './BulkLoadProjectionBlock'
-import BulkWarmReadinessAlert, { useBulkWarmReadiness } from './BulkWarmReadiness'
+import BulkWarmReadinessAlert, { installGuestConversion, useBulkWarmReadiness, useWarmSetupConfirmText } from './BulkWarmReadiness'
+import { OPENVDDK_DEFAULT_LIBDIR, OPENVDDK_KIT } from '@/lib/migration/warm/vddk-library'
 
 /**
  * Which sources may be migrated warm. VMware (direct ESXi) and vCenter read
@@ -1005,7 +1006,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   type WarmSource = { sourceVersion: string; vddkMajor?: number; minVersion: string; absoluteMin: string; blocked: boolean; warning: boolean }
   // roadmap#53: can the node reach the VMkernel adapter the copy goes through?
   type WarmCopyReach = { address: string; ports: Record<string, boolean>; ok: boolean; error?: string; vcenter?: { host: string; resolved: boolean; open: boolean } }
-  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; tokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource; copy?: WarmCopyReach; guestConversion?: GuestConversionReadiness } | null>(null)
+  const [warmPreflight, setWarmPreflight] = useState<{ key: string; loading: boolean; ok: boolean; missing: string[]; kind: 'nbd' | 'vddk'; error?: string; setupAvailable?: boolean; libdir?: string; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource; copy?: WarmCopyReach; guestConversion?: GuestConversionReadiness } | null>(null)
   // Bumped after a successful automated node setup so this effect re-runs and
   // the go/no-go flips to ready without the user having to reselect the node.
   const [warmPreflightRefresh, setWarmPreflightRefresh] = useState(0)
@@ -1038,11 +1039,10 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
       body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'warm-check', sourceConnectionId: esxiMigrateVm?.connId, targetStorage: migTargetStorage || undefined, requiredDiskBytes: esxiMigrateVm?.committed || 0, ...(copyVnic?.address && { sourceVmId: esxiMigrateVm?.vmid, copyVmk: copyVnic.device }) }),
     })
       .then(r => r.json())
-      .then((d: { ok?: boolean; missing?: string[]; kind?: string; error?: string; vddkTokenConfigured?: boolean; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource; copy?: WarmCopyReach; guestConversion?: GuestConversionReadiness }) => {
-        // vddkTokenConfigured: server-side boolean saying an Enterprise VDDK
-        // package token exists, i.e. the automated "Prepare this node" action
-        // can work. The token itself never reaches the client.
-        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], kind: d.kind === 'nbd' ? 'nbd' : 'vddk', error: d.error, tokenConfigured: !!d.vddkTokenConfigured, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor, space: d.space, source: d.source, copy: d.copy, guestConversion: d.guestConversion })
+      .then((d: { ok?: boolean; missing?: string[]; kind?: string; error?: string; vddkSetupAvailable?: boolean; libdir?: string; osUnsupported?: boolean; debianMajor?: number; space?: WarmSpace; source?: WarmSource; copy?: WarmCopyReach; guestConversion?: GuestConversionReadiness }) => {
+        // vddkSetupAvailable: server-side boolean saying the automated "Prepare
+        // this node" action can install OpenVDDK on this node (roadmap#177).
+        if (!cancelled) setWarmPreflight({ key, loading: false, ok: !!d.ok, missing: d.missing || [], kind: d.kind === 'nbd' ? 'nbd' : 'vddk', error: d.error, setupAvailable: !!d.vddkSetupAvailable, libdir: d.libdir, osUnsupported: !!d.osUnsupported, debianMajor: d.debianMajor, space: d.space, source: d.source, copy: d.copy, guestConversion: d.guestConversion })
       })
       .catch(() => { if (!cancelled) setWarmPreflight({ key, loading: false, ok: false, missing: [], kind: expectedKind }) })
     return () => { cancelled = true }
@@ -1123,49 +1123,227 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // same two steps the cold virt-v2v checklist offers. Then the check re-runs.
   const prepareConversionNode = React.useCallback(async (missing: string[]) => {
     const key = `${migTargetConn}::${migTargetNode}`
-    const post = (action: string) => fetch('/api/v1/migrations/preflight', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action }),
-    }).then(r => r.json().catch(() => ({})))
     setConvPrep({ key, running: true })
     try {
-      if (missing.some(m => !m.startsWith('the VirtIO drivers'))) {
-        const d = await post('install')
-        if (d?.success === false) throw new Error(String(d.error || d.output || 'install failed').slice(-400))
-      }
-      if (missing.some(m => m.startsWith('the VirtIO drivers'))) {
-        await post('install-virtio-win')
-        for (let i = 0; i < 600; i++) {
-          await new Promise(r => setTimeout(r, 2000))
-          const p = await post('check-virtio-win')
-          if (p?.done) { if (p.error) throw new Error(String(p.error)); break }
-        }
-      }
+      await installGuestConversion(migTargetConn, migTargetNode, missing)
       setConvPrep(null)
       setWarmPreflightRefresh(n => n + 1)
     } catch (e) {
       setConvPrep({ key, running: false, error: e instanceof Error ? e.message : String(e) })
     }
   }, [migTargetConn, migTargetNode])
-  const renderConvertGuestMissing = () => (
-    <Alert
-      severity="warning"
-      sx={{ fontSize: 12 }}
-      icon={<i className="ri-tools-line" style={{ fontSize: 18 }} />}
-      data-testid="mig-convert-guest-missing"
-      action={(
-        <Button size="small" color="inherit" disabled={!!convPrepCurrent?.running} onClick={() => { void prepareConversionNode(conversionMissing) }}
-          startIcon={convPrepCurrent?.running ? <CircularProgress size={12} /> : undefined}>
-          {convPrepCurrent?.running ? t('inventoryPage.esxiMigration.convertGuestInstalling') : t('inventoryPage.esxiMigration.convertGuestInstall')}
-        </Button>
-      )}
-    >
-      {t('inventoryPage.esxiMigration.convertGuestMissing', { node: migTargetNode, items: conversionMissing.join(', ') })}
-      {convPrepCurrent?.error && (
-        <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>{t('inventoryPage.esxiMigration.convertGuestInstallFailed', { error: convPrepCurrent.error })}</Typography>
-      )}
-    </Alert>
+  // Everything the target node still lacks for this warm run, in ONE panel: one
+  // row per missing piece (the warm runtime, the guest conversion), each with
+  // its own small action on the right, the setup guide reduced to a link. Two
+  // full alerts with paragraphs and big buttons, interleaved with the switches,
+  // read as clutter.
+  const prereqRow = (o: { testId: string; ok: boolean; label: string; detail: string; hint?: string; action?: React.ReactNode; below?: React.ReactNode }) => (
+    <Box data-testid={o.testId} data-ok={o.ok ? 'true' : 'false'}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+        <Box sx={{ minWidth: 0, display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
+          <Box component="i" className={o.ok ? 'ri-checkbox-circle-fill' : 'ri-error-warning-fill'} sx={{ fontSize: 16, lineHeight: '20px', color: o.ok ? 'success.main' : 'warning.main', flexShrink: 0 }} />
+          <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2"><Box component="span" sx={{ fontWeight: 600 }}>{o.label}</Box> · {o.detail}</Typography>
+          {o.hint && <Typography variant="caption" sx={{ display: 'block', opacity: 0.75 }}>{o.hint}</Typography>}
+          </Box>
+        </Box>
+        {o.action && <Box sx={{ flexShrink: 0 }}>{o.action}</Box>}
+      </Box>
+      {o.below}
+    </Box>
   )
+  const prereqButton = (o: { label: string; running?: boolean; onClick: () => void; testId?: string }) => (
+    <Button size="small" variant="outlined" color="warning" disabled={!!o.running} onClick={o.onClick} data-testid={o.testId}
+      startIcon={o.running ? <CircularProgress size={12} color="inherit" /> : undefined}
+      sx={{ textTransform: 'none', fontSize: 11, whiteSpace: 'nowrap', py: 0.25 }}>
+      {o.label}
+    </Button>
+  )
+  // Below the runtime row: the confirmation of "Prepare" (what lands where),
+  // or why the preparation failed. Nothing in the other phases.
+  const renderWarmSetupStep = (libdir: string | undefined) => {
+    if (warmSetupCurrent?.phase === 'error') {
+      return (
+        <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 0.75 }}>
+          {t('inventoryPage.esxiMigration.warmSetupFailed', { error: warmSetupCurrent.error || '' })}
+        </Typography>
+      )
+    }
+    if (warmSetupCurrent?.phase !== 'confirm') return undefined
+    return (
+      <Box sx={{ mt: 0.75 }}>
+        <Typography variant="caption" sx={{ display: 'block', opacity: 0.85, mb: 0.75 }}>
+          {warmSetupConfirmText(libdir)}
+        </Typography>
+        <Stack direction="row" spacing={1}>
+          <Button size="small" color="warning" variant="contained" onClick={runWarmNodeSetup} sx={{ textTransform: 'none', fontSize: 11 }}>
+            {t('inventoryPage.esxiMigration.warmSetupConfirm')}
+          </Button>
+          <Button size="small" color="inherit" onClick={() => setWarmSetup(null)} sx={{ textTransform: 'none', fontSize: 11 }}>
+            {t('inventoryPage.esxiMigration.warmSetupCancel')}
+          </Button>
+        </Stack>
+      </Box>
+    )
+  }
+  const renderWarmPrereqs = () => {
+    const pf = warmPreflightCurrent
+    if (!pf) return null
+    const nodeMissing = !pf.ok
+    const canPrepare = pf.kind !== 'nbd' && !!pf.setupAvailable && !pf.osUnsupported
+    const setupRunning = warmSetupCurrent?.phase === 'running'
+    // The conversion row shows whenever the conversion is asked for and the node
+    // was probed for it, ready or not, like the runtime row: the operator sees
+    // what was checked, not only what failed.
+    const conversionChecked = !!pf.guestConversion && migConvertGuest && (isVmwareSource || esxiMigrateVm?.hostType === 'xcpng')
+    const allOk = !nodeMissing && conversionMissing.length === 0
+    const libName = pf.libdir === OPENVDDK_DEFAULT_LIBDIR ? `OpenVDDK ${OPENVDDK_KIT.version}` : 'VDDK'
+    const runtimeLib = pf.kind === 'nbd'
+      ? t('inventoryPage.esxiMigration.warmPrereqRuntimeReadyNbd')
+      : t('inventoryPage.esxiMigration.warmPrereqRuntimeReady', { lib: libName })
+    return (
+      <Alert
+        severity={allOk ? 'success' : 'warning'}
+        sx={{ fontSize: 12, '& .MuiAlert-message': { width: '100%' } }}
+        icon={<i className={allOk ? 'ri-checkbox-circle-line' : 'ri-error-warning-line'} style={{ fontSize: 18 }} />}
+        data-testid="mig-warm-prereqs"
+      >
+        <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
+          {t(allOk ? 'inventoryPage.esxiMigration.warmPrereqTitleReady' : 'inventoryPage.esxiMigration.warmPrereqTitle', { node: migTargetNode })}
+        </Typography>
+        <Stack spacing={1.25}>
+          {!nodeMissing && prereqRow({
+            testId: 'mig-warm-prereq-runtime',
+            ok: true,
+            label: t('inventoryPage.esxiMigration.warmPrereqRuntime'),
+            detail: runtimeLib,
+          })}
+          {nodeMissing && prereqRow({
+            testId: 'mig-warm-prereq-runtime',
+            ok: false,
+            label: t('inventoryPage.esxiMigration.warmPrereqRuntime'),
+            // Debian < 13 cannot be prepared at all (nbdkit-plugin-vddk is only
+            // packaged from Debian 13 / PVE 9 on): the version verdict replaces the
+            // missing list and no action is offered. The NBD path (XCP-ng) has no
+            // such floor and nothing to install from here: one apt line.
+            detail: pf.kind !== 'nbd' && pf.osUnsupported
+              ? t('inventoryPage.esxiMigration.warmPrepNeedsPve9', { debian: String(pf.debianMajor ?? ''), pve: String((pf.debianMajor ?? 13) - 4) })
+              : t('inventoryPage.esxiMigration.warmPrereqMissing', { items: pf.missing.join(', ') }),
+            hint: pf.kind === 'nbd' ? t('inventoryPage.esxiMigration.warmPreflightNbdHint') : undefined,
+            action: canPrepare && warmSetupCurrent?.phase !== 'confirm'
+              ? prereqButton({
+                  label: setupRunning ? t('inventoryPage.esxiMigration.warmPrereqPreparing') : t('inventoryPage.esxiMigration.warmPrereqPrepare'),
+                  running: setupRunning,
+                  onClick: () => setWarmSetup({ key: warmSetupKey, phase: 'confirm' }),
+                  testId: 'mig-warm-prepare',
+                })
+              : undefined,
+            // OpenVDDK provisioning (roadmap#177) installs apt packages, adds a
+            // Debian non-free source and writes under /usr/lib: confirm first.
+            below: canPrepare ? renderWarmSetupStep(pf.libdir) : undefined,
+          })}
+          {conversionChecked && conversionMissing.length === 0 && prereqRow({
+            testId: 'mig-convert-guest-ready',
+            ok: true,
+            label: t('inventoryPage.esxiMigration.warmPrereqConversion'),
+            detail: t('inventoryPage.esxiMigration.warmPrereqConversionReady'),
+          })}
+          {conversionMissing.length > 0 && prereqRow({
+            testId: 'mig-convert-guest-missing',
+            ok: false,
+            label: t('inventoryPage.esxiMigration.warmPrereqConversion'),
+            detail: t('inventoryPage.esxiMigration.warmPrereqMissing', { items: conversionMissing.join(', ') }),
+            hint: t('inventoryPage.esxiMigration.warmPrereqConversionHint'),
+            action: prereqButton({
+              label: convPrepCurrent?.running ? t('inventoryPage.esxiMigration.convertGuestInstalling') : t('inventoryPage.esxiMigration.warmPrereqInstall'),
+              running: convPrepCurrent?.running,
+              onClick: () => { void prepareConversionNode(conversionMissing) },
+              testId: 'mig-convert-guest-install',
+            }),
+            below: convPrepCurrent?.error ? (
+              <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 0.5 }}>
+                {t('inventoryPage.esxiMigration.convertGuestInstallFailed', { error: convPrepCurrent.error })}
+              </Typography>
+            ) : undefined,
+          })}
+        </Stack>
+        {nodeMissing && pf.kind !== 'nbd' && (
+          <Link
+            href="https://docs.proxcenter.io/automation/migration#warm-migration-node-setup"
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="caption"
+            sx={{ display: 'inline-block', mt: 1, fontWeight: 600 }}
+          >
+            {t('inventoryPage.esxiMigration.warmPrereqGuide')}
+          </Link>
+        )}
+      </Alert>
+    )
+  }
+  // The info banner at the bottom of the config step, per source and type.
+  const migrationInfoText = (): string => {
+    const hostType = esxiMigrateVm?.hostType
+    if (hostType === 'nutanix') return 'Cold migration only. Disks will be downloaded from Nutanix and converted via virt-v2v with automatic virtio driver injection.'
+    if (hostType === 'hyperv') return 'Cold migration only. The Hyper-V SMB share is mounted on the target Proxmox node automatically, and the disks attached to the VM are read from the Hyper-V host.'
+    if (hostType === 'vcenter') {
+      return migType === 'warm'
+        ? 'Warm migration: the source stays online while changed blocks are copied (CBT) over vCenter, then a short cutover does a clean guest shutdown before the final sync. No in-transit data loss. vSAN-backed disks are supported. Needs a block-storage target and the VDDK runtime on the Proxmox node.'
+        : 'Cold migration: the source VM must be powered off. virt-v2v handles disk conversion and virtio driver injection automatically.'
+    }
+    if (hostType === 'xcpng' && migType === 'warm') return t('inventoryPage.esxiMigration.xcpngWarmMigrationInfo')
+    // A direct ESXi host in warm mode used to fall through to the SSHFS Boot text.
+    if (migType === 'warm') return t('inventoryPage.esxiMigration.migrationTypeWarmDesc')
+    if (migType === 'cold') return t('inventoryPage.esxiMigration.coldMigrationInfo')
+    return t('inventoryPage.esxiMigration.sshfsBootMigrationInfo')
+  }
+  // Warm go/no-go, at the bottom of the dialog (right above the launch button):
+  // is the chosen target node provisioned with the VDDK runtime, can it convert
+  // the guest? Mirrors the engine's planning-time preflight so a launch that
+  // would fail is blocked here, with the missing pieces named.
+  const renderWarmReadiness = () => {
+    if (migType !== 'warm' || !warmPreflightCurrent) return null
+    if (warmPreflightCurrent.loading) {
+      return (
+        <Alert severity="info" sx={{ fontSize: 12 }} icon={<CircularProgress size={16} />}>
+          {t('inventoryPage.esxiMigration.warmPreflightChecking')}
+        </Alert>
+      )
+    }
+    if (warmPreflightCurrent.source?.blocked) {
+      const source = warmPreflightCurrent.source
+      return (
+        /* #946: the node can be fully provisioned and the run still be
+           impossible, because the VDDK reads the SOURCE and is supported
+           only against its own vSphere release and the two before it. This
+           replaces the node alert entirely: nothing about the node is wrong,
+           and offering to prepare it again would send the operator nowhere. */
+        <Alert severity="error" sx={{ fontSize: 12, '& .MuiAlert-message': { width: '100%' } }} icon={<i className="ri-close-circle-line" style={{ fontSize: 18 }} />}>
+          <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+            {t('inventoryPage.esxiMigration.warmSourceTooOldTitle')}
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 0.5 }}>
+            {t('inventoryPage.esxiMigration.warmSourceTooOld', {
+              version: source.sourceVersion,
+              min: source.absoluteMin,
+            })}
+          </Typography>
+          {source.vddkMajor !== undefined && (
+            <Typography variant="body2" sx={{ mb: 0.5 }}>
+              {t('inventoryPage.esxiMigration.warmSourceNodeVddk', {
+                vddk: String(source.vddkMajor),
+                min: source.minVersion,
+              })}
+            </Typography>
+          )}
+          <Typography variant="body2">
+            {t('inventoryPage.esxiMigration.warmSourceUseCold')}
+          </Typography>
+        </Alert>
+      )
+    }
+    return renderWarmPrereqs()
+  }
   // A Windows release the node's virt-v2v does not know (#1173), warm and cold:
   // on a PVE 9 node, ProxCenter's virt-v2v build that knows it can be installed
   // from here (virt-v2v-backport.ts), then the check re-runs.
@@ -1216,7 +1394,6 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
         onInstall: () => { void installWarmBackport() },
         testId: 'mig-convert-guest-unsupported-os',
       })}
-      {conversionMissing.length > 0 && renderConvertGuestMissing()}
     </>
   )
   // Cold side (virt-v2v pipeline): the preflight of every node the migration
@@ -1245,6 +1422,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // ready. Keyed like warmPreflight so a pending confirm/error from a
   // previously selected target is never shown against another node.
   const [warmSetup, setWarmSetup] = useState<{ key: string; phase: 'confirm' | 'running' | 'error'; error?: string } | null>(null)
+  const warmSetupConfirmText = useWarmSetupConfirmText()
   const warmSetupKey = `${migTargetConn}::${migTargetNode}`
   const warmSetupCurrent = warmSetup && warmSetup.key === warmSetupKey ? warmSetup : null
   const runWarmNodeSetup = React.useCallback(async () => {
@@ -1878,11 +2056,28 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     if (nodes.length === 0 || selected.length === 0) return []
     return [...new Set<string>(selected.map((vm: any, idx: number) => bulkNodeOf(vm.vmid, idx, nodes)))].sort((a, b) => a.localeCompare(b))
   }, [bulkMigOpen, bulkMigJobs.length, bulkMigHostInfo, bulkWarmAllowed, migType, migTargetConn, migTargetNode, migNodeOptions, bulkMigSelected, bulkNodeOf])
+  // Guest families of the selected VMs per node, for the conversion check of the
+  // batch: a node that cannot convert them holds the launch while the
+  // conversion is switched on (same rule as the single VM dialog).
+  const bulkGuestsByNode = React.useMemo(() => {
+    const out: Record<string, { linux: boolean; windows: boolean }> = {}
+    if (bulkWarmNodes.length === 0 || !bulkMigHostInfo) return out
+    const nodes = bulkTargetNodes(migTargetNode, migTargetConn, migNodeOptions as any[])
+    const selected = (bulkMigHostInfo.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
+    selected.forEach((vm: any, idx: number) => {
+      const node = bulkNodeOf(vm.vmid, idx, nodes)
+      const win = /windows/i.test(String(vm.guest_OS || vm.guestOS || ''))
+      const cur = out[node] || { linux: false, windows: false }
+      out[node] = { linux: cur.linux || !win, windows: cur.windows || win }
+    })
+    return out
+  }, [bulkWarmNodes, bulkMigHostInfo, migTargetNode, migTargetConn, migNodeOptions, bulkMigSelected, bulkNodeOf])
   const bulkWarm = useBulkWarmReadiness({
     sourceConnectionId: bulkMigHostInfo?.connectionId ?? '',
     targetConnectionId: migTargetConn,
     nodes: bulkWarmNodes,
     kind: bulkMigHostInfo?.hostType === 'xcpng' ? 'nbd' : 'vddk',
+    conversion: { enabled: migConvertGuest, guestsByNode: bulkGuestsByNode },
   })
   const bulkSpaceVms = React.useMemo(() => {
     if (!bulkMigOpen || bulkMigJobs.length > 0 || !bulkMigHostInfo || !migTargetConn || !migTargetNode || !migTargetStorage) return null
@@ -3731,168 +3926,6 @@ return
                     </Alert>
                   )}
 
-                  {/* Warm migration note: source stays online; change tracking enabled on it;
-                      cutover does a clean guest shutdown; needs a block-storage target plus the
-                      node runtime, which is nbdkit-vddk for VMware and the NBD toolchain for
-                      XCP-ng, hence the per-source wording. */}
-                  {migType === 'warm' && (
-                    <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-flashlight-line" style={{ fontSize: 18 }} />}>
-                      {t(esxiMigrateVm?.hostType === 'xcpng' ? 'inventoryPage.esxiMigration.migrationTypeWarmNoteXcpng' : 'inventoryPage.esxiMigration.migrationTypeWarmNote')}
-                    </Alert>
-                  )}
-
-                  {/* Warm go/no-go: is the chosen target node provisioned with the VDDK
-                      runtime? Mirrors the engine's planning-time preflight so a launch that
-                      would fail is blocked here, with the missing pieces named. */}
-                  {migType === 'warm' && warmPreflightCurrent && (
-                    warmPreflightCurrent.loading ? (
-                      <Alert severity="info" sx={{ fontSize: 12 }} icon={<CircularProgress size={16} />}>
-                        {t('inventoryPage.esxiMigration.warmPreflightChecking')}
-                      </Alert>
-                    ) : warmPreflightCurrent.source?.blocked ? (
-                      /* #946: the node can be fully provisioned and the run still be
-                         impossible, because the VDDK reads the SOURCE and is supported
-                         only against its own vSphere release and the two before it. This
-                         replaces the node alert entirely: nothing about the node is wrong,
-                         and offering to prepare it again would send the operator nowhere. */
-                      <Alert severity="error" sx={{ fontSize: 12, '& .MuiAlert-message': { width: '100%' } }} icon={<i className="ri-close-circle-line" style={{ fontSize: 18 }} />}>
-                        <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-                          {t('inventoryPage.esxiMigration.warmSourceTooOldTitle')}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 0.5 }}>
-                          {t('inventoryPage.esxiMigration.warmSourceTooOld', {
-                            version: warmPreflightCurrent.source.sourceVersion,
-                            min: warmPreflightCurrent.source.absoluteMin,
-                          })}
-                        </Typography>
-                        {warmPreflightCurrent.source.vddkMajor !== undefined && (
-                          <Typography variant="body2" sx={{ mb: 0.5 }}>
-                            {t('inventoryPage.esxiMigration.warmSourceNodeVddk', {
-                              vddk: String(warmPreflightCurrent.source.vddkMajor),
-                              min: warmPreflightCurrent.source.minVersion,
-                            })}
-                          </Typography>
-                        )}
-                        <Typography variant="body2">
-                          {t('inventoryPage.esxiMigration.warmSourceUseCold')}
-                        </Typography>
-                      </Alert>
-                    ) : warmPreflightCurrent.ok ? (
-                      <Alert severity="success" sx={{ fontSize: 12 }} icon={<i className="ri-checkbox-circle-line" style={{ fontSize: 18 }} />}>
-                        {t(warmPreflightCurrent.kind === 'nbd' ? 'inventoryPage.esxiMigration.warmPreflightReadyNbd' : 'inventoryPage.esxiMigration.warmPreflightReady')}
-                      </Alert>
-                    ) : (
-                      <Alert severity="warning" sx={{ fontSize: 12, '& .MuiAlert-message': { width: '100%' } }} icon={<i className="ri-error-warning-line" style={{ fontSize: 18 }} />}>
-                        <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-                          {t('inventoryPage.esxiMigration.warmPreflightFailedTitle')}
-                        </Typography>
-                        {/* Debian < 13 cannot be prepared at all (nbdkit-plugin-vddk is only
-                            packaged from Debian 13 / PVE 9 on), so the version verdict replaces
-                            the missing list and the automated action below stays hidden. The
-                            NBD path carries no such floor (the nbd plugin ships with nbdkit),
-                            so it never shows the PVE 9 verdict. */}
-                        {warmPreflightCurrent.kind !== 'nbd' && warmPreflightCurrent.osUnsupported ? (
-                          <Typography variant="body2" sx={{ mb: 0.5 }}>
-                            {t('inventoryPage.esxiMigration.warmPrepNeedsPve9', {
-                              debian: String(warmPreflightCurrent.debianMajor ?? ''),
-                              pve: String((warmPreflightCurrent.debianMajor ?? 13) - 4),
-                            })}
-                          </Typography>
-                        ) : warmPreflightCurrent.missing.length > 0 && (
-                          <Typography variant="body2" sx={{ mb: 0.5 }}>
-                            {t('inventoryPage.esxiMigration.warmPreflightMissing', { items: warmPreflightCurrent.missing.join(', ') })}
-                          </Typography>
-                        )}
-                        {/* NBD path (XCP-ng source): everything missing is a plain Debian
-                            package, so the fix is one apt line the operator runs on the node.
-                            No Enterprise package, hence no automated action and no VDDK doc
-                            link below. */}
-                        {warmPreflightCurrent.kind === 'nbd' && (
-                          <Typography variant="body2">
-                            {t('inventoryPage.esxiMigration.warmPreflightNbdHint')}
-                          </Typography>
-                        )}
-                        {/* Automated provisioning — offered only when the server holds the
-                            Enterprise VDDK package token (boolean flag from the route; the
-                            token itself never reaches the client). Confirm first: it installs
-                            apt packages, adds a Debian non-free apt source, and writes ~96 MB
-                            under /usr/lib on the hypervisor. The manual doc link below stays
-                            visible as the fallback either way. */}
-                        {warmPreflightCurrent.kind !== 'nbd' && warmPreflightCurrent.tokenConfigured && !warmPreflightCurrent.osUnsupported && (
-                          <Box sx={{ mb: 1 }}>
-                            {warmSetupCurrent?.phase === 'running' ? (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <CircularProgress size={14} />
-                                <Typography variant="body2">
-                                  {t('inventoryPage.esxiMigration.warmSetupRunning')}
-                                </Typography>
-                              </Box>
-                            ) : warmSetupCurrent?.phase === 'confirm' ? (
-                              <>
-                                <Typography variant="body2" sx={{ mb: 0.75 }}>
-                                  {t('inventoryPage.esxiMigration.warmSetupConfirmText')}
-                                </Typography>
-                                <Stack direction="row" spacing={1}>
-                                  <Button
-                                    size="small"
-                                    color="warning"
-                                    variant="contained"
-                                    startIcon={<i className="ri-download-line" />}
-                                    onClick={runWarmNodeSetup}
-                                    sx={{ textTransform: 'none', fontSize: 11, whiteSpace: 'nowrap' }}
-                                  >
-                                    {t('inventoryPage.esxiMigration.warmSetupConfirm')}
-                                  </Button>
-                                  <Button
-                                    size="small"
-                                    color="inherit"
-                                    onClick={() => setWarmSetup(null)}
-                                    sx={{ textTransform: 'none', fontSize: 11 }}
-                                  >
-                                    {t('inventoryPage.esxiMigration.warmSetupCancel')}
-                                  </Button>
-                                </Stack>
-                              </>
-                            ) : (
-                              <>
-                                {warmSetupCurrent?.phase === 'error' && (
-                                  <Typography variant="body2" color="error.main" sx={{ mb: 0.75 }}>
-                                    {t('inventoryPage.esxiMigration.warmSetupFailed', { error: warmSetupCurrent.error || '' })}
-                                  </Typography>
-                                )}
-                                <Button
-                                  size="small"
-                                  color="warning"
-                                  variant="contained"
-                                  startIcon={<i className="ri-tools-line" />}
-                                  onClick={() => setWarmSetup({ key: warmSetupKey, phase: 'confirm' })}
-                                  sx={{ textTransform: 'none', fontSize: 11, whiteSpace: 'nowrap' }}
-                                >
-                                  {t('inventoryPage.esxiMigration.warmSetupAction')}
-                                </Button>
-                              </>
-                            )}
-                          </Box>
-                        )}
-                        {warmPreflightCurrent.kind !== 'nbd' && (
-                        <Typography variant="caption" sx={{ opacity: 0.8, display: 'block' }}>
-                          {t.rich('inventoryPage.esxiMigration.warmPreflightDocsHint', {
-                            link: (chunks) => (
-                              <Link
-                                href="https://docs.proxcenter.io/automation/migration#warm-migration-node-setup"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                sx={{ fontWeight: 600 }}
-                              >
-                                {chunks}
-                              </Link>
-                            ),
-                          })}
-                        </Typography>
-                        )}
-                      </Alert>
-                    )
-                  )}
 
                   {/* Warm target too small: the engine refuses it at planning time (disks'
                       capacity plus a 10 % margin, like the cold engine), so say so while the
@@ -4325,21 +4358,11 @@ return
               <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: theme.palette.mode === 'dark' ? 'rgba(var(--mui-palette-primary-mainChannel) / 0.08)' : 'rgba(var(--mui-palette-primary-mainChannel) / 0.06)', border: '1px solid', borderColor: 'primary.main', borderOpacity: 0.2, display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className="ri-information-line" style={{ fontSize: 18, color: theme.palette.primary.main }} />
                 <Typography variant="caption" color="primary">
-                  {esxiMigrateVm?.hostType === 'nutanix'
-                    ? 'Cold migration only. Disks will be downloaded from Nutanix and converted via virt-v2v with automatic virtio driver injection.'
-                    : esxiMigrateVm?.hostType === 'hyperv'
-                    ? 'Cold migration only. The Hyper-V SMB share is mounted on the target Proxmox node automatically, and the disks attached to the VM are read from the Hyper-V host.'
-                    : esxiMigrateVm?.hostType === 'vcenter'
-                    ? (migType === 'warm'
-                        ? 'Warm migration: the source stays online while changed blocks are copied (CBT) over vCenter, then a short cutover does a clean guest shutdown before the final sync. No in-transit data loss. vSAN-backed disks are supported. Needs a block-storage target and the VDDK runtime on the Proxmox node.'
-                        : 'Cold migration: the source VM must be powered off. virt-v2v handles disk conversion and virtio driver injection automatically.')
-                    : (esxiMigrateVm?.hostType === 'xcpng' && migType === 'warm')
-                    ? t('inventoryPage.esxiMigration.xcpngWarmMigrationInfo')
-                    : migType === 'cold' ? t('inventoryPage.esxiMigration.coldMigrationInfo')
-                    : t('inventoryPage.esxiMigration.sshfsBootMigrationInfo')
-                  }
+                  {migrationInfoText()}
                 </Typography>
               </Box>
+
+              {renderWarmReadiness()}
             </Stack>
           )}
 
@@ -4642,6 +4665,9 @@ return
                   // failed check, and a click can't beat the verdict to fire a doomed
                   // migration. Cluster-auto is not gated (the engine backstop covers it).
                   if (migType === 'warm' && migTargetNode !== '__auto__' && !warmPreflightCurrent?.ok) return true
+                  // Guest conversion asked for at cutover but the node cannot do it: install
+                  // what is missing or switch the conversion off, never a silent fallback.
+                  if (migType === 'warm' && conversionMissing.length > 0) return true
                   // Warm: the selected storage cannot hold the source disks (or could not be read).
                   if (migType === 'warm' && warmSpaceShort) return true
                   // Review step (#317 lot 2): a kept disk on a file-based storage, or a

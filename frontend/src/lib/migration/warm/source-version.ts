@@ -34,6 +34,11 @@ export const ABSOLUTE_MIN_SOURCE_VERSION = "6.5"
  * rule (a VDDK works with its own release and the two before it). vSphere's
  * majors run 6.0, 6.5, 6.7, 7.0, 8.0, 9.0, which is why the floors are not
  * simply "major minus two".
+ *
+ * OpenVDDK, the default library since roadmap#177, ships as
+ * `libvixDiskLib.so.8.0.3` and so reads as generation 8: floor vSphere 6.7,
+ * which matches what its author qualifies (6.7 and 7.0 and later; 6.5 is not
+ * supported).
  */
 const VDDK_MIN_SOURCE_VERSION: Record<number, string> = {
   7: "6.5",

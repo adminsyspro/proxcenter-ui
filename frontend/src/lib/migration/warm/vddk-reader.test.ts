@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { buildJobReaderSweepCmd, buildNbdConnectCmd, buildReaderTeardownCmd, startVddkReader, stopVddkReader, VDDK_LAUNCH_TIMEOUT_MS } from "./vddk-reader"
+import { buildJobReaderSweepCmd, buildNbdConnectCmd, buildReaderTeardownCmd, startVddkReader, stopVddkReader, VDDK_ATTACH_TIMEOUT_MS, VDDK_LAUNCH_TIMEOUT_MS } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
 
 // Mock only executeSSH; keep the real shellEscape (vddk-cmd uses it transitively).
@@ -33,6 +33,10 @@ describe("pure builders", () => {
     // owned by another concurrent migration, and `nbd-client -d` would disconnect
     // its live reader. A failed attach must simply fall through to the next device.
     expect(c).not.toContain("nbd-client -d")
+    // Next device only on a lost race; a refusal by nbdkit on a clean device
+    // ends the loop instead of costing a retry window per device (roadmap#177).
+    expect(c).toContain(`[ -s /sys/block/nbd$i/pid ] || [ "$(cat /sys/block/nbd$i/size 2>/dev/null)" != 0 ] || break`)
+    expect(c.indexOf("|| break")).toBeGreaterThan(c.indexOf("nbd-client -unix"))
   })
   it("tears down device, nbdkit, socket, password file", () => {
     const c = buildReaderTeardownCmd({ nbdDev: "/dev/nbd3", sock: "/tmp/v.sock", pwFile: "/tmp/pw" })
@@ -99,11 +103,15 @@ describe("startVddkReader", () => {
     // The launch call writes the password (no trailing newline) and backgrounds nbdkit to a log file.
     const launchCmd = mockSSH.mock.calls[0][2] as string
     expect(launchCmd).toContain("printf '%s'")
-    expect(launchCmd).toContain("nohup nbdkit -r -U '/tmp/v.sock' vddk")
+    expect(launchCmd).toContain("nohup nbdkit -f -r -U '/tmp/v.sock' --filter=retry vddk")
     expect(launchCmd).not.toContain("\ns3cr3t\n") // password not heredoc'd raw
     // The device-attach call uses the free-device connect builder.
     const connectCmd = mockSSH.mock.calls[3][2] as string
     expect(connectCmd).toContain("nbd-client -unix '/tmp/v.sock' /dev/nbd$i")
+    // The attach waits for nbdkit's open, which the retry filter may repeat for
+    // about a minute (roadmap#177): it needs more than the 30 s default.
+    expect(mockSSH.mock.calls[3][3]).toBe(VDDK_ATTACH_TIMEOUT_MS)
+    expect(VDDK_ATTACH_TIMEOUT_MS).toBeGreaterThan((2 + 4 + 8 + 16 + 32) * 1000)
   })
 
   it("returns the actual device the node picked (not a fixed index)", async () => {

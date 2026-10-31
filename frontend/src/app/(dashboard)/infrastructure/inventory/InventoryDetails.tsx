@@ -258,6 +258,24 @@ export default function InventoryDetails({
   const { hasFeature, isEnterprise, loading: licenseLoading } = useLicense()
   const toast = useToast()
   const logCopy = useCopyToClipboard()
+  // Migration panel cards (Transfer metrics, Migration logs): each collapses
+  // from its header so the other gets the room, the choice remembered per
+  // viewer; the logs can also open full size. Browser storage is a convenience
+  // only: a blocked or empty store just means both cards open.
+  const MIG_PANEL_KEY = 'proxcenter.migrationPanel'
+  const [migPanel, setMigPanel] = useState<{ metrics: boolean; logs: boolean }>(() => {
+    try {
+      const v = typeof window !== 'undefined' ? JSON.parse(window.localStorage.getItem(MIG_PANEL_KEY) || 'null') : null
+      if (v && typeof v.metrics === 'boolean' && typeof v.logs === 'boolean') return v
+    } catch { /* storage unavailable: defaults */ }
+    return { metrics: true, logs: true }
+  })
+  const toggleMigPanel = (card: 'metrics' | 'logs') => setMigPanel(prev => {
+    const next = { ...prev, [card]: !prev[card] }
+    try { window.localStorage.setItem(MIG_PANEL_KEY, JSON.stringify(next)) } catch { /* storage unavailable */ }
+    return next
+  })
+  const [migLogsFull, setMigLogsFull] = useState(false)
   // LXC sharing the host kernel doesn't give strong-enough multi-tenant
   // isolation. Tenants on a shared cluster see only "Create VM" — the
   // provider keeps the LXC option for lightweight workloads on dedicated
@@ -4507,12 +4525,25 @@ return vm?.isCluster ?? false
                 {/* Transfer Metrics — real data from migration job */}
                 <Card variant="outlined" sx={{ borderRadius: 2, flexShrink: 0 }}>
                   <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-                    <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={migPanel.metrics}
+                      data-testid="mig-metrics-toggle"
+                      onClick={() => toggleMigPanel('metrics')}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMigPanel('metrics') } }}
+                      sx={{ px: 2, py: 1.5, borderBottom: migPanel.metrics ? '1px solid' : 'none', borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+                    >
                       <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 13 }}>
                         <i className="ri-line-chart-line" style={{ fontSize: 16, opacity: 0.7 }} />
                         {t('inventoryPage.esxiMigration.transferMetrics')}
+                        {!migPanel.metrics && vmMigJob && (
+                          <Typography component="span" variant="caption" sx={{ opacity: 0.5 }}>{vmMigJob.progress || 0}%</Typography>
+                        )}
                       </Typography>
+                      <i className={migPanel.metrics ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'} style={{ fontSize: 18, opacity: 0.6 }} />
                     </Box>
+                    <Collapse in={migPanel.metrics} unmountOnExit>
                     <Box sx={{ p: 2, flex: 1 }}>
                       {vmMigJob ? (
                         <>
@@ -4623,31 +4654,54 @@ return vm?.isCluster ?? false
                         </Box>
                       )}
                     </Box>
+                    </Collapse>
                   </CardContent>
                 </Card>
 
                 {/* Migration Logs — real data from migration job */}
-                <Card variant="outlined" sx={{ borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                <Card variant="outlined" sx={{ borderRadius: 2, flex: migPanel.logs ? 1 : '0 0 auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                   <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                    <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 13 }}>
-                        <i className="ri-terminal-box-line" style={{ fontSize: 16, opacity: 0.7 }} />
-                        {t('inventoryPage.esxiMigration.migrationLogs')}
+                    <Box sx={{ px: 2, py: 1.5, borderBottom: migPanel.logs ? '1px solid' : 'none', borderColor: 'divider', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Box
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={migPanel.logs}
+                        data-testid="mig-logs-toggle"
+                        onClick={() => toggleMigPanel('logs')}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMigPanel('logs') } }}
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, cursor: 'pointer', userSelect: 'none' }}
+                      >
+                        <Typography fontWeight={900} sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 13 }}>
+                          <i className="ri-terminal-box-line" style={{ fontSize: 16, opacity: 0.7 }} />
+                          {t('inventoryPage.esxiMigration.migrationLogs')}
+                          {vmMigJob?.logs?.length > 0 && (
+                            <Typography component="span" variant="caption" sx={{ opacity: 0.4 }}>({vmMigJob.logs.length})</Typography>
+                          )}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
                         {vmMigJob?.logs?.length > 0 && (
-                          <Typography component="span" variant="caption" sx={{ opacity: 0.4 }}>({vmMigJob.logs.length})</Typography>
+                          <MuiTooltip title={logCopy.copied ? t('common.copied') : t('common.copy')}>
+                            <IconButton size="small" sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }} onClick={() => {
+                              const text = migrationLogText(vmMigJob.logs)
+                              void logCopy.copy(text)
+                            }}>
+                              <i className={logCopy.copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 14 }} />
+                            </IconButton>
+                          </MuiTooltip>
                         )}
-                      </Typography>
-                      {vmMigJob?.logs?.length > 0 && (
-                        <MuiTooltip title={logCopy.copied ? t('common.copied') : t('common.copy')}>
-                          <IconButton size="small" sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }} onClick={() => {
-                            const text = migrationLogText(vmMigJob.logs)
-                            void logCopy.copy(text)
-                          }}>
-                            <i className={logCopy.copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 14 }} />
+                        <MuiTooltip title={t('inventoryPage.esxiMigration.migrationLogsExpand')}>
+                          <IconButton size="small" data-testid="mig-logs-expand" aria-label={t('inventoryPage.esxiMigration.migrationLogsExpand')} sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }} onClick={() => setMigLogsFull(true)}>
+                            <i className="ri-fullscreen-line" style={{ fontSize: 14 }} />
                           </IconButton>
                         </MuiTooltip>
-                      )}
+                        <IconButton size="small" aria-hidden tabIndex={-1} sx={{ opacity: 0.6 }} onClick={() => toggleMigPanel('logs')}>
+                          <i className={migPanel.logs ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'} style={{ fontSize: 18 }} />
+                        </IconButton>
+                      </Box>
                     </Box>
+                    {migPanel.logs && (
+                    <Box data-testid="mig-logs-box" sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                     <LiveLogBox
                       lineCount={vmMigJob?.logs?.length ?? 0}
                       resetKey={vmMigJob?.id}
@@ -4663,8 +4717,50 @@ return vm?.isCluster ?? false
                         </Typography>
                       )}
                     </LiveLogBox>
+                    </Box>
+                    )}
                   </CardContent>
                 </Card>
+
+                {/* The same logs, full size: the side panel is too short to read a long run. */}
+                <Dialog open={migLogsFull} onClose={() => setMigLogsFull(false)} maxWidth="lg" fullWidth PaperProps={{ sx: { height: '85vh' } }}>
+                  <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 15 }}>
+                    <i className="ri-terminal-box-line" style={{ fontSize: 18, opacity: 0.7 }} />
+                    <Box component="span" sx={{ flex: 1 }}>
+                      {t('inventoryPage.esxiMigration.migrationLogs')}
+                      {vmMigJob?.sourceVmName ? ` · ${vmMigJob.sourceVmName}` : ''}
+                    </Box>
+                    {vmMigJob?.logs?.length > 0 && (
+                      <MuiTooltip title={logCopy.copied ? t('common.copied') : t('common.copy')}>
+                        <IconButton size="small" onClick={() => { void logCopy.copy(migrationLogText(vmMigJob.logs)) }}>
+                          <i className={logCopy.copied ? 'ri-check-line' : 'ri-file-copy-line'} style={{ fontSize: 16 }} />
+                        </IconButton>
+                      </MuiTooltip>
+                    )}
+                    <IconButton size="small" aria-label={t('common.close')} onClick={() => setMigLogsFull(false)}>
+                      <i className="ri-close-line" style={{ fontSize: 18 }} />
+                    </IconButton>
+                  </DialogTitle>
+                  <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <Box data-testid="mig-logs-dialog-box" sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                      <LiveLogBox
+                        lineCount={vmMigJob?.logs?.length ?? 0}
+                        resetKey={vmMigJob?.id}
+                        jumpButton={false}
+                        wrapperSx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+                        sx={{ p: 2, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.03)', fontFamily: '"JetBrains Mono", monospace', fontSize: 12, overflow: 'auto', lineHeight: 1.8, flex: 1, minHeight: 0 }}
+                      >
+                        {vmMigJob?.logs?.length > 0 ? (
+                          <MigrationLogLines logs={vmMigJob.logs} />
+                        ) : (
+                          <Typography variant="body2" sx={{ fontFamily: 'inherit', fontSize: 'inherit', opacity: 0.3, fontStyle: 'italic' }}>
+                            {t('inventoryPage.esxiMigration.logsWillAppear')}
+                          </Typography>
+                        )}
+                      </LiveLogBox>
+                    </Box>
+                  </DialogContent>
+                </Dialog>
 
                 {/* Same warning the migrate dialog shows: a target volume holding a
                     completed copy survives the cancel, so the operator has to know

@@ -5,7 +5,6 @@ import { denyMigrationEnds } from "@/lib/migration/authorize"
 import { runV2vPreflight, installV2vPackages, installVirtV2vBackport, startVirtioWinDownload, checkVirtioWinProgress } from "@/lib/migration/v2v-preflight"
 import { runWarmNodePreflight } from "@/lib/migration/warm/vddk-preflight"
 import { runXcpngWarmNodePreflight } from "@/lib/migration/warm/xcpng-node-preflight"
-import { isVddkPackageTokenConfigured } from "@/lib/migration/warm/vddk-provision"
 import { checkTargetStorageSpace } from "@/lib/migration/warm/target-space"
 import { MAX_DISKS } from "@/lib/migration/target-overrides"
 import { assertStorageName } from "@/lib/ssh/validate"
@@ -112,18 +111,16 @@ export async function POST(req: Request) {
     }
 
     // Warm migration go/no-go: report whether the target node has the VDDK
-    // runtime the engine needs, plus whether this server holds the Enterprise
-    // VDDK package token — a boolean only, added here in the route layer so
-    // the dialog can offer the automated "Prepare this node" action
-    // (POST /api/v1/migrations/warm-node-setup) without the token ever
-    // reaching the client. Manual node prep stays documented as the fallback.
+    // runtime the engine needs (OpenVDDK, roadmap#177), and whether "Prepare
+    // this node" (POST /api/v1/migrations/warm-node-setup) can install it: always
+    // in OpenVDDK's own directory, never for an explicit libdir, which may name a
+    // Broadcom VDDK. Manual node prep stays documented as the fallback.
     //
     // Which runtime is needed depends on the SOURCE: VMware warm reads through
     // nbdkit-vddk, XCP-ng warm re-exports xapi-nbd through nbdkit's nbd plugin,
     // so the two need different probes. The source connection type decides which
     // one runs, and `kind` tells the dialog which one answered. On the nbd path
-    // there is nothing to install from the Enterprise repo, so the VDDK token
-    // flag is always false there.
+    // there is no VDDK to install, so the setup flag is always false there.
     //
     // `space` is the target storage's live free space against the source disks
     // (requiredDiskBytes, the dialog's committed size) plus the 10 % margin the
@@ -150,7 +147,7 @@ export async function POST(req: Request) {
           runXcpngWarmNodePreflight(targetConnectionId, targetNode),
           checkGuestConversionNode(targetConnectionId, targetNode),
         ])
-        return NextResponse.json({ ...nbdResult, kind: "nbd", guestConversion, vddkTokenConfigured: false, space })
+        return NextResponse.json({ ...nbdResult, kind: "nbd", guestConversion, vddkSetupAvailable: false, space })
       }
       // #1000: whether the node can convert the guest at cutover. Advisory:
       // without it the cutover keeps the compatible hardware, so it never
@@ -184,7 +181,7 @@ export async function POST(req: Request) {
         ok: result.ok && !source?.blocked,
         kind: "vddk",
         guestConversion,
-        vddkTokenConfigured: isVddkPackageTokenConfigured(),
+        vddkSetupAvailable: !vddkLibdir,
         space,
         ...(copy && { copy }),
         source: source && (source.blocked || source.warning)

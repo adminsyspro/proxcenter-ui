@@ -48,7 +48,7 @@ export function useAvailabilityOverview(range: PeriodWindow) {
       if (availabilityErrorKind(error) === 'forbidden') return
 
       // Same default policy as SWR: exponential backoff, 5 s base.
-      const timeout = ~~((Math.random() + 0.5) * (1 << Math.min(opts.retryCount, 8))) * (config.errorRetryInterval ?? 5000)
+      const timeout = Math.trunc((Math.random() + 0.5) * (1 << Math.min(opts.retryCount, 8))) * (config.errorRetryInterval ?? 5000)
 
       setTimeout(() => revalidate(opts), timeout)
     },

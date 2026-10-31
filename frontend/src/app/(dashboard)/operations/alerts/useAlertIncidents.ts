@@ -27,7 +27,7 @@ async function fetchBatches(url: string): Promise<{ incidents: Record<string, In
 
 /** The incident each of these alerts belongs to; alerts without one are absent from the map. */
 export function useAlertIncidents(alertIds: string[], enabled: boolean): Record<string, IncidentSummary> {
-  const key = enabled && alertIds.length > 0 ? `${BASE}${[...alertIds].sort().join(',')}` : null
+  const key = enabled && alertIds.length > 0 ? `${BASE}${[...alertIds].sort((a, b) => a.localeCompare(b)).join(',')}` : null
   const { data } = useSWR<{ incidents: Record<string, IncidentSummary> }>(key, fetchBatches, { compare: dequal, revalidateOnFocus: false })
 
   return data?.incidents ?? NONE

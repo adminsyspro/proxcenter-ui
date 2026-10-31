@@ -14,7 +14,7 @@ function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
   return fn
 }
 
-const retention = () => screen.findByLabelText('History retention (days)') as Promise<HTMLInputElement>
+const retention = async () => (await screen.findByLabelText('History retention (days)')) as HTMLInputElement
 const target = () => screen.getByLabelText('Default SLA target (%)') as HTMLInputElement
 
 afterEach(() => {

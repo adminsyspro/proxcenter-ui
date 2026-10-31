@@ -11,6 +11,8 @@ import type { InfraScope } from '@/lib/tenant/infraScope'
 
 import type { AvailabilityScope, ConnScope, ObjectRef } from './types'
 
+const byName = (a: string, b: string) => a.localeCompare(b)
+
 export function toAvailabilityScope(infra: InfraScope): AvailabilityScope | null {
   switch (infra.kind) {
     case 'provider':
@@ -26,8 +28,8 @@ export function toAvailabilityScope(infra: InfraScope): AvailabilityScope | null
       for (const id of vdcScope.connectionIds) {
         connections[id] = {
           all: false,
-          nodes: [...(vdcScope.nodesByConnection.get(id) ?? [])].sort(),
-          pools: [...(vdcScope.poolsByConnection.get(id) ?? [])].sort(),
+          nodes: [...(vdcScope.nodesByConnection.get(id) ?? [])].sort(byName),
+          pools: [...(vdcScope.poolsByConnection.get(id) ?? [])].sort(byName),
         }
       }
       return { connections }
@@ -82,7 +84,7 @@ export function narrowByRbac(
     const granted = nodeGrants.get(id)
     if (!granted?.size) continue
     const nodes = tenant.all ? [...granted] : (tenant.nodes ?? []).filter(n => granted.has(n))
-    if (nodes.length) connections[id] = { all: false, nodes: nodes.sort(), pools: [] }
+    if (nodes.length) connections[id] = { all: false, nodes: nodes.sort(byName), pools: [] }
   }
   return { scope: { connections }, connectionIds: connectionIds.filter(id => Object.hasOwn(connections, id)) }
 }

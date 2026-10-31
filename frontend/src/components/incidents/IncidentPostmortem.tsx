@@ -110,7 +110,7 @@ export default function IncidentPostmortem({ view, canManage, run, inReport }: R
             value={action}
             onChange={e => setAction(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter' && action.trim()) addAction()
+              if (e.key === 'Enter' && action.trim()) void addAction()
             }}
             slotProps={{ htmlInput: { maxLength: MAX_ACTION } }}
           />

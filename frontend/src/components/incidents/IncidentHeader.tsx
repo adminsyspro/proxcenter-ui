@@ -64,7 +64,7 @@ export default function IncidentHeader({ view, canManage, run }: Readonly<Props>
           value={draft}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => {
-            if (e.key === 'Enter') save()
+            if (e.key === 'Enter') void save()
             if (e.key === 'Escape') setEditing(false)
           }}
           slotProps={{ htmlInput: { 'aria-label': t('header.titleLabel'), maxLength: 200 } }}

@@ -44,8 +44,10 @@ vi.mock('@/lib/api/firewall', () => ({
   getFirewallLog: vi.fn(),
 }))
 
+const { showToastMock } = vi.hoisted(() => ({ showToastMock: vi.fn() }))
+
 vi.mock('@/contexts/ToastContext', () => ({
-  useToast: () => ({ showToast: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
+  useToast: () => ({ showToast: showToastMock, success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
 }))
 
 import * as firewallAPI from '@/lib/api/firewall'
@@ -559,15 +561,7 @@ describe('VMRulesPanel', () => {
     renderPanel()
     expandTo('web-01', 'VLAN 20')
 
-    const requests: Request[] = []
-
-    server.use(
-      http.put(`*/api/v1/firewall/vms/${CONN}/pve1/qemu/100/rules/0`, ({ request }) => {
-        requests.push(request.clone())
-
-        return HttpResponse.json({})
-      }),
-    )
+    api.updateVMRule.mockResolvedValue(undefined)
 
     const from = screen.getAllByRole('row').find(r => within(r).queryByText('https in'))!
     const to = screen.getAllByRole('row').find(r => within(r).queryByText('1') && r !== from)!
@@ -578,8 +572,26 @@ describe('VMRulesPanel', () => {
     fireEvent.dragOver(to, { dataTransfer })
     fireEvent.drop(to, { dataTransfer })
 
-    await waitFor(() => expect(requests).toHaveLength(1))
-    expect(await requests[0].json()).toEqual({ moveto: 1 })
+    await waitFor(() => expect(api.updateVMRule).toHaveBeenCalledWith(CONN, 'pve1', 'qemu', 100, 0, { moveto: 1 }))
+    await waitFor(() => expect(showToastMock).toHaveBeenCalledWith('Rule moved', 'success'))
+  })
+
+  it('reports a move PVE refused instead of claiming it moved', async () => {
+    renderPanel()
+    expandTo('web-01', 'VLAN 20')
+
+    api.updateVMRule.mockRejectedValue(new Error('rule locked by PVE'))
+
+    const from = screen.getAllByRole('row').find(r => within(r).queryByText('https in'))!
+    const to = screen.getAllByRole('row').find(r => within(r).queryByText('1') && r !== from)!
+    const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn(), getData: () => '0' }
+
+    fireEvent.dragStart(from, { dataTransfer })
+    fireEvent.dragOver(to, { dataTransfer })
+    fireEvent.drop(to, { dataTransfer })
+
+    await waitFor(() => expect(showToastMock).toHaveBeenCalledWith('rule locked by PVE', 'error'))
+    expect(showToastMock).not.toHaveBeenCalledWith('Rule moved', 'success')
   })
 
   it('shows a progress bar instead of the table while the rules load', () => {

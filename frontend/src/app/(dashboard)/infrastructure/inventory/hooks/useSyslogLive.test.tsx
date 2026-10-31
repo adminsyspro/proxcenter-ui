@@ -58,6 +58,58 @@ describe('useSyslogLive', () => {
   })
 })
 
+describe('useSyslogLive selection guard', () => {
+  it('aborts the poll in flight on a node switch and never writes node A lines', async () => {
+    let releaseA!: () => void
+    const gate = new Promise<void>(r => { releaseA = r })
+
+    fetchSpy.mockImplementation(async (input: any) => {
+      if (String(input).includes('/pve1/')) {
+        await gate
+
+        return { ok: true, json: async () => ({ data: ['line of pve1'] }) } as any
+      }
+
+      return { ok: true, json: async () => ({ data: ['line of pve2'] }) } as any
+    })
+    const setData = vi.fn()
+    const { rerender } = renderHook(({ id }) => useSyslogLive(true, 'node', id, 6, 6, setData), { initialProps: { id: 'conn1:pve1' } })
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    const aSignal = (fetchSpy.mock.calls[0][1] as any).signal as AbortSignal
+
+    rerender({ id: 'conn1:pve2' })
+    await waitFor(() => expect(setData).toHaveBeenCalledWith(['line of pve2']))
+    expect(aSignal.aborted).toBe(true)
+
+    await act(async () => { releaseA(); await gate; await Promise.resolve() })
+    expect(setData).not.toHaveBeenCalledWith(['line of pve1'])
+  })
+
+  it('stays silent about the failure of an aborted poll', async () => {
+    let failA!: (e: Error) => void
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    fetchSpy.mockImplementation(() => new Promise((_r, rej) => { failA = rej }) as any)
+    const { unmount } = renderHook(() => useSyslogLive(true, 'node', 'conn1:pve1', 6, 6, vi.fn()))
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    unmount()
+    await act(async () => { failA(new Error('AbortError')); await Promise.resolve() })
+    expect(errSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('useSyslogLive errors', () => {
+  it('logs a poll failure of the node displayed', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fetchSpy.mockRejectedValue(new Error('pve down'))
+    renderHook(() => useSyslogLive(true, 'node', 'conn1:pve1', 6, 6, vi.fn()))
+
+    await waitFor(() => expect(errSpy).toHaveBeenCalledWith('Live polling error:', expect.any(Error)))
+  })
+})
+
 describe('useCephLogLive', () => {
   it('merges the Ceph log into the node Ceph data', async () => {
     fetchSpy.mockResolvedValue({ ok: true, json: async () => ({ data: { log: ['mon.pve1 cluster [INF] overall HEALTH_OK'] } }) } as any)

@@ -13,6 +13,7 @@ import {
 } from '@mui/material'
 
 import { useTaskDetail } from '@/hooks/useTaskDetail'
+import { fetchJsonResult } from '@/lib/api/fetchJsonSafe'
 
 interface DeploymentProgressProps {
   deploymentId: string
@@ -61,6 +62,10 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
     isTaskActive
   )
 
+  // Read inside the poller without restarting it when the function identity changes.
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t }, [t])
+
   useEffect(() => {
     if (!deploymentId) return
 
@@ -68,18 +73,25 @@ export default function DeploymentProgress({ deploymentId, onComplete }: Deploym
     const poll = async () => {
       try {
         const url = `/api/v1/templates/deployments/${deploymentId}`
-        const res = await fetch(url)
-        const text = await res.text()
-        let data: any
-        try {
-          data = JSON.parse(text)
-        } catch {
-          console.warn('[DeploymentProgress] Non-JSON response from', url, '→', text.slice(0, 200))
-          if (active) setTimeout(poll, 5000)
+        const result = await fetchJsonResult<any>(url)
+        if (!active) return
+
+        if (!result.ok || !result.data) {
+          // A 4xx (deployment gone, access denied, bad id) will not change on
+          // a retry: say so and end the wait, instead of a spinner forever.
+          if ((result.status >= 400 && result.status < 500) || (result.ok && !result.data)) {
+            const message = tRef.current('templates.deploy.statusUnreadable', { error: result.error || `HTTP ${result.status}` })
+            setStatus('failed')
+            setError(message)
+            onComplete('failed', message)
+            return
+          }
+          // A 5xx or a proxy error page is usually transient: retry, as before.
+          console.warn('[DeploymentProgress] Status unavailable from', url, '→', result.error)
+          setTimeout(poll, 5000)
           return
         }
-        const deployment = data.data
-        if (!active || !deployment) return
+        const deployment = result.data
 
         setStatus(deployment.status)
         setCurrentStep(deployment.currentStep ?? null)

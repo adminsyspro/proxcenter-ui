@@ -22,6 +22,7 @@ import {
   getIPSets,
   createIPSet,
   deleteIPSet,
+  updateIPSetComment,
   addIPSetEntry,
   deleteIPSetEntry,
   getSecurityGroups,
@@ -413,6 +414,25 @@ describe('IP sets', () => {
 
     expect(await deleteIPSet(conn, 'blocklist')).toEqual({ status: 'deleted' })
     expect(callAt().path).toBe('/cluster/firewall/ipset/blocklist')
+  })
+
+  it('updateIPSetComment renames the set onto itself, the only way PVE edits a comment', async () => {
+    expect(await updateIPSetComment(conn, 'blocklist', 'known bad')).toEqual({ status: 'updated' })
+
+    let { path, init } = callAt()
+
+    expect(path).toBe('/cluster/firewall/ipset')
+    expect(init.method).toBe('POST')
+    expect(formOf(init).get('name')).toBe('blocklist')
+    expect(formOf(init).get('rename')).toBe('blocklist')
+    expect(formOf(init).get('comment')).toBe('known bad')
+
+    await updateIPSetComment(conn, 'blocklist', '')
+    ;({ path, init } = callAt())
+
+    // An empty comment is sent, so clearing the field clears it on PVE.
+    expect(formOf(init).has('comment')).toBe(true)
+    expect(formOf(init).get('comment')).toBe('')
   })
 
   it('deleteIPSetEntry escapes the CIDR slash like the Go url.PathEscape', async () => {

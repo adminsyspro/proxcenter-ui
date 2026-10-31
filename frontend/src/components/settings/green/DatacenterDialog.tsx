@@ -70,6 +70,11 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
   const [error, setError] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<AssignmentState>({ clusters: new Set(), nodes: new Set() })
   const [initialAssignments, setInitialAssignments] = useState<AssignmentState>({ clusters: new Set(), nodes: new Set() })
+  // Row created by this dialog whose second step (assignments) failed: a
+  // retry updates it instead of creating a second datacenter, and closing the
+  // dialog still tells the list it exists.
+  const [created, setCreated] = useState<DatacenterValues | null>(null)
+  const targetId = initial?.id ?? created?.id
 
   useEffect(() => {
     if (initial) {
@@ -85,6 +90,7 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
       })
     }
     setError(null)
+    setCreated(null)
     // Reset assignments — they'll be repopulated below for an existing DC.
     setAssignments({ clusters: new Set(), nodes: new Set() })
     setInitialAssignments({ clusters: new Set(), nodes: new Set() })
@@ -132,10 +138,10 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
     setSaving(true)
     setError(null)
     try {
-      const url = initial?.id
-        ? `/api/v1/admin/datacenters/${encodeURIComponent(initial.id)}`
+      const url = targetId
+        ? `/api/v1/admin/datacenters/${encodeURIComponent(targetId)}`
         : `/api/v1/admin/datacenters`
-      const method = initial?.id ? 'PUT' : 'POST'
+      const method = targetId ? 'PUT' : 'POST'
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -163,7 +169,8 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
       // Persist assignments after the DC row is in place. We always have an
       // ID at this point — either from the freshly inserted row or from the
       // existing edit target.
-      const dcId = (json.data?.id ?? initial?.id) as string | undefined
+      const dcId = (json.data?.id ?? targetId) as string | undefined
+      if (!targetId && dcId) setCreated({ ...json.data, id: dcId })
       if (dcId) {
         const assignRes = await fetch(`/api/v1/admin/datacenters/${encodeURIComponent(dcId)}/assignments`, {
           method: 'PUT',
@@ -182,6 +189,7 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
         }
       }
 
+      setCreated(null)
       onSaved(json.data)
       onClose()
     } catch (e: any) {
@@ -191,8 +199,16 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
     }
   }
 
+  const handleClose = () => {
+    if (created) {
+      setCreated(null)
+      onSaved(created)
+    }
+    onClose()
+  }
+
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
       <DialogTitle>
         {initial?.id ? t('settings.green.dc.editTitle') : t('settings.green.dc.addTitle')}
       </DialogTitle>
@@ -389,7 +405,7 @@ export default function DatacenterDialog({ open, initial, onClose, onSaved }: Pr
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={saving}>{t('common.cancel')}</Button>
+        <Button onClick={handleClose} disabled={saving}>{t('common.cancel')}</Button>
         <Button variant="contained" onClick={handleSave} disabled={saving || !form.name}>
           {saving ? t('common.saving') : t('common.save')}
         </Button>

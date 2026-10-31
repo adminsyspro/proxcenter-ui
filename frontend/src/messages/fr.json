@@ -846,7 +846,8 @@
     "cephNooutOrphan": "Ceph noout sans maintenance",
     "cephNooutOrphanDesc": "Alerte quand un drapeau Ceph noout est posé sur un hôte alors qu'aucun nœud du cluster n'est en maintenance depuis plus longtemps que ceci",
     "cephNooutHoursUnit": "h",
-    "cephNooutMinutesUnit": "min"
+    "cephNooutMinutesUnit": "min",
+    "batchFailed": "{failed} actions sur {total} ont échoué : {error}"
   },
   "inventory": {
     "alertsDialog": {
@@ -2639,7 +2640,8 @@
         "verify": "Contrôle d'intégrité",
         "conversion": "Conversion de l'invité",
         "finish": "Attachement et démarrage"
-      }
+      },
+      "cancelMigrationFailed": "La migration n'a pas pu être annulée et continue"
     },
     "extDashboard": {
       "hosts": "Hôtes",
@@ -6493,7 +6495,8 @@
       "vmMixedStorageWarn": "Seuls les disques Ceph RBD seront répliqués ; les autres disques seront ignorés.",
       "vmAlreadyReplicated": "Déjà répliquée par {job}",
       "vmUnsupportedDisk": "Cette VM possède une référence de disque non prise en charge, par exemple un disque en passthrough.",
-      "sshChecks": "Connexions SSH entre nœuds"
+      "sshChecks": "Connexions SSH entre nœuds",
+      "createFailed": "La tâche de réplication n'a pas pu être créée : {error}"
     },
     "schedule": {
       "modeRpo": "Continu (RPO)",
@@ -7036,7 +7039,8 @@
         "help": "La VM est ajoutée au gestionnaire HA, qui la démarre.",
         "helpIso": "La VM est ajoutée au gestionnaire HA et reste arrêtée jusqu'au lancement de l'installation.",
         "localStorage": "Exige un stockage partagé : le stockage choisi est local à son nœud."
-      }
+      },
+      "statusUnreadable": "L'état du déploiement n'a pas pu être lu ({error}). Il est peut-être encore en cours : consultez l'onglet Déploiements."
     },
     "deployments": {
       "vm": "Machine Virtuelle",
@@ -7056,7 +7060,8 @@
         "starting": "Démarrage",
         "completed": "Terminé",
         "failed": "Échoué"
-      }
+      },
+      "loadFailed": "Les déploiements n'ont pas pu être chargés : {error}"
     }
   },
   "console": {
@@ -9270,6 +9275,7 @@
     "cephFlagsCard": "Flags OSD Ceph",
     "cephFlagsNotSet": "Les flags de maintenance Ceph (noout, norebalance, norecover) ne sont pas tous définis. Les activer empêche le rééquilibrage inutile des données pendant la mise à jour.",
     "cephFlagsAlreadySet": "Tous les flags de maintenance Ceph sont déjà définis.",
+    "cephFlagsUnreadable": "Les flags Ceph n'ont pas pu être lus ({error}). ProxCenter ne les modifiera pas pendant cette mise à jour.",
     "setCephFlagsBefore": "Définir les flags de maintenance Ceph (noout, norebalance, norecover)",
     "preparingCluster": "Préparation du cluster...",
     "postActionsTitle": "Actions post-mise à jour",
@@ -9298,6 +9304,7 @@
     "vmMigrateFailed": "Échec de la migration",
     "vmShutdownSuccess": "Éteinte",
     "vmShutdownFailed": "Échec de l'extinction",
+    "vmShutdownNotFollowed": "L'arrêt n'a pas pu être suivi jusqu'au bout : l'invité tourne peut-être encore",
     "migrateVmsBack": "Remigrer les VMs",
     "migrateVmsBackDescription": "Remigrer les VMs vers {node} depuis {targets}.",
     "migrateVmsBackBtn": "Remigrer",
@@ -9326,7 +9333,10 @@
     },
     "healthVotes": "Voix, quorum {required}",
     "healthVotesQDevice": "Voix avec QDevice, quorum {required}",
-    "vmActionsFailedTitle": "{count} guest(s) n'ont pas pu être déplacés ou arrêtés et sont toujours sur ce nœud"
+    "vmActionsFailedTitle": "{count} guest(s) n'ont pas pu être déplacés ou arrêtés et sont toujours sur ce nœud",
+    "preflightStopped": "Pré-vérification arrêtée, rien n'a été mis à jour : {error}",
+    "postActionFailed": "L'action a échoué : {error}",
+    "guestDiscoveryFailed": "Les invités de ce nœud n'ont pas pu être listés ({error}), leur évacuation ne peut donc pas être planifiée. Fermez la fenêtre et réessayez."
   },
   "replication": {
     "title": "Réplication",

@@ -22,7 +22,7 @@ import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { validateCpuAgainstPolicy, isPolicyRestrictive, resolveAllowedCpuModels, pickPolicyDefaultModel, parseCpuProperty } from "@/lib/vdc/computePolicy"
 import { getAllowedNetworksForTenant, validateNetAgainstScope, resolveSubnetForBridge } from "@/lib/vdc/vnets"
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
-import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
+import { allocateIp, allocateIpTracked, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
 import { parseCidr } from "@/lib/vdc/network"
 import { waitForTask } from "@/lib/proxmox/tasks"
@@ -914,7 +914,7 @@ async function runIsoDeploy(args: {
       subnetId: isoSubnet.subnetId,
       connectionId: body.connectionId,
     })
-    const allocated = await allocateIp({
+    const { allocation: allocated, created } = await allocateIpTracked({
       vdcId: isoSubnet.vdcId,
       subnetId: isoSubnet.subnetId,
       vnetId: isoSubnet.vnetId,
@@ -927,7 +927,10 @@ async function runIsoDeploy(args: {
     })
     isoIpamAlloc = { subnetId: isoSubnet.subnetId, ip: allocated.ip }
     isoNetSpec = `${hw.networkModel}=${isoMac},bridge=${hw.networkBridge}${hw.vlanTag ? `,tag=${hw.vlanTag}` : ""}`
-    onIpamAllocation?.(isoIpamAlloc)
+    // The pipeline releases what it reports here when the deploy fails, so
+    // only report a row this deploy inserted: a pinned staticMac may already
+    // hold its reservation, which a failed deploy must leave in place.
+    if (created) onIpamAllocation?.(isoIpamAlloc)
   }
 
   const createParams = new URLSearchParams({

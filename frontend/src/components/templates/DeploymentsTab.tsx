@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material'
+import { Alert, Box, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
 
 import { useToast } from '@/contexts/ToastContext'
+import { fetchJsonResult } from '@/lib/api/fetchJsonSafe'
 import EmptyState from '@/components/EmptyState'
 import DeploymentDetailDialog from './DeploymentDetailDialog'
 
@@ -47,17 +48,23 @@ export default function DeploymentsTab({ onRetry }: DeploymentsTabProps) {
   const { showToast } = useToast()
   const [deployments, setDeployments] = useState<Deployment[]>([])
   const [loading, setLoading] = useState(true)
+  // A failed load is not an empty history: the last list stays, with the reason.
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [detailDeployment, setDetailDeployment] = useState<Deployment | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
   const fetchDeployments = useCallback(() => {
-    fetch('/api/v1/templates/deployments')
-      .then(r => r.json())
-      .then(res => {
-        setDeployments(res.data || [])
-        setLoading(false)
+    fetchJsonResult<Deployment[]>('/api/v1/templates/deployments')
+      .then(result => {
+        if (result.ok) {
+          setDeployments(result.data || [])
+          setLoadError(null)
+        } else {
+          setLoadError(result.error || null)
+        }
       })
-      .catch(() => setLoading(false))
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { fetchDeployments() }, [fetchDeployments])
@@ -192,6 +199,18 @@ export default function DeploymentsTab({ onRetry }: DeploymentsTabProps) {
     },
   ], [t, onRetry, handleDelete, handleViewDetail])
 
+  const loadErrorBanner = loadError && (
+    <Alert severity="error" sx={{ mb: 2 }} action={
+      <IconButton size="small" aria-label={t('common.retry')} onClick={fetchDeployments}><i className="ri-refresh-line" /></IconButton>
+    }>
+      {t('templates.deployments.loadFailed', { error: loadError })}
+    </Alert>
+  )
+
+  if (!loading && deployments.length === 0 && loadError) {
+    return <Box sx={{ p: 2 }}>{loadErrorBanner}</Box>
+  }
+
   if (!loading && deployments.length === 0) {
     return (
       <Box sx={{ p: 2 }}>
@@ -207,6 +226,7 @@ export default function DeploymentsTab({ onRetry }: DeploymentsTabProps) {
 
   return (
     <Box sx={{ flex: 1, minHeight: 0, p: 2 }}>
+      {loadErrorBanner}
       <DataGrid
         rows={deployments}
         columns={columns}

@@ -761,6 +761,243 @@ describe('useSnapshots stale-selection guard', () => {
   })
 })
 
+describe('useSnapshots across a selection switch (roadmap#184)', () => {
+  const VM_B = { type: 'vm', id: 'conn-2:pve9:qemu:200' } as any
+
+  it('keeps deleting A in the background but never touches B rows, progress or busy state', async () => {
+    // A and B both carry a snapshot named "shared".
+    vi.spyOn(global, 'fetch').mockImplementation(async (input: any) => {
+      const list = String(input).includes('conn-2')
+        ? [{ name: 'shared' }, { name: 'current' }]
+        : [{ name: 'a-only' }, { name: 'shared' }, { name: 'current' }]
+
+      return { ok: true, json: async () => ({ data: { snapshots: list } }) } as any
+    })
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    seqMock.mockImplementation(async (_vmKey: string, names: string[], cb: any) => {
+      cb(names[0], 'done')
+      await gate
+      cb(names[1], 'done')
+
+      return { ok: true }
+    })
+
+    const params = makeParams()
+    const { result, rerender } = renderHook((p: any) => useSnapshots(p), { initialProps: params })
+
+    await act(async () => { await result.current.loadSnapshots() })
+    act(() => { result.current.deleteAllSnapshots() })
+    const confirm = params.setConfirmAction.mock.calls.at(-1)![0]
+    let run!: Promise<void>
+    await act(async () => { run = confirm.onConfirm(); await flushAsync() })
+    expect(result.current.deleteAllBusy).toBe(true)
+
+    // The user moves to VM B while A's run continues.
+    rerender({ ...params, selection: VM_B, data: { title: 'vm-b' } })
+    act(() => { result.current.resetSnapshots() })
+    await act(async () => { await result.current.loadSnapshots() })
+    expect(result.current.snapshots.map((s: any) => s.name)).toEqual(['shared', 'current'])
+    expect(result.current.deleteAllBusy).toBe(false)
+    expect(result.current.snapshotTaskBusy).toBe(false)
+
+    await act(async () => { release(); await run; await flushAsync() })
+
+    // A's run completed (all its DELETEs were sent) ...
+    expect(seqMock).toHaveBeenCalledWith('conn-1:qemu:pve1:100', ['a-only', 'shared'], expect.any(Function))
+    // ... without removing B's same-named row nor its progress/busy state.
+    expect(result.current.snapshots.map((s: any) => s.name)).toEqual(['shared', 'current'])
+    expect(result.current.deleteAllProgress).toEqual({ done: 0, total: 0 })
+    expect(result.current.snapshotRowTasks).toEqual({})
+    expect(result.current.snapshotTaskBusy).toBe(false)
+    // Its outcome is still reported, with the VM it was about.
+    expect(params.toast.success).toHaveBeenCalledWith('my-vm: inventory.snapshotsAllDeleted')
+  })
+
+  it('reports a background delete-all failure with the VM name and leaves B error-free', async () => {
+    mockGuestFetch({ lists: [[{ name: 'snap1' }, { name: 'current' }]] })
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    seqMock.mockImplementation(async () => { await gate
+
+      return { ok: false, error: 'snapshot is locked' } })
+
+    const params = makeParams()
+    const { result, rerender } = renderHook((p: any) => useSnapshots(p), { initialProps: params })
+
+    await act(async () => { await result.current.loadSnapshots() })
+    act(() => { result.current.deleteAllSnapshots() })
+    const confirm = params.setConfirmAction.mock.calls.at(-1)![0]
+    let run!: Promise<void>
+    await act(async () => { run = confirm.onConfirm(); await flushAsync() })
+
+    rerender({ ...params, selection: VM_B })
+    act(() => { result.current.resetSnapshots() })
+    await act(async () => { release(); await run; await flushAsync() })
+
+    expect(params.toast.error).toHaveBeenCalledWith('my-vm: snapshot is locked')
+    expect(result.current.snapshotsError).toBeNull()
+  })
+
+  it('reports a background delete-all exception with the VM name', async () => {
+    mockGuestFetch({ lists: [[{ name: 'snap1' }, { name: 'current' }]] })
+    let fail!: (e: Error) => void
+    seqMock.mockImplementation(() => new Promise((_r, rej) => { fail = rej }))
+
+    const params = makeParams()
+    const { result, rerender } = renderHook((p: any) => useSnapshots(p), { initialProps: params })
+
+    await act(async () => { await result.current.loadSnapshots() })
+    act(() => { result.current.deleteAllSnapshots() })
+    const confirm = params.setConfirmAction.mock.calls.at(-1)![0]
+    let run!: Promise<void>
+    await act(async () => { run = confirm.onConfirm(); await flushAsync() })
+
+    rerender({ ...params, selection: VM_B })
+    act(() => { result.current.resetSnapshots() })
+    await act(async () => { fail(new Error('network down')); await run; await flushAsync() })
+
+    expect(params.toast.error).toHaveBeenCalledWith('my-vm: network down')
+    expect(result.current.snapshotsError).toBeNull()
+  })
+
+  it('a task of A ending after the switch neither unlocks B nor clears its same-named row', async () => {
+    vi.useFakeTimers()
+    try {
+      mockGuestFetch({ lists: [[{ name: 'snap1' }, { name: 'current' }]] })
+      const resolvers: Array<(v: any) => void> = []
+      waitMock.mockImplementation(() => new Promise((r) => { resolvers.push(r) }))
+
+      const params = makeParams()
+      const { result, rerender } = renderHook((p: any) => useSnapshots(p), { initialProps: params })
+
+      // Delete on A starts a followed task.
+      await confirmDelete(result, params, 'snap1')
+      expect(result.current.snapshotTaskBusy).toBe(true)
+
+      // Switch to B, which starts its own task on a snapshot with the same name.
+      rerender({ ...params, selection: VM_B })
+      act(() => { result.current.resetSnapshots() })
+      await confirmDelete(result, params, 'snap1')
+      expect(result.current.snapshotTaskBusy).toBe(true)
+      expect(result.current.snapshotRowTasks).toEqual({ snap1: 'delete' })
+
+      // A's task ends first: B stays locked and flagged.
+      await act(async () => { resolvers[0]({ outcome: 'ok' }); await flushAsync() })
+      expect(result.current.snapshotTaskBusy).toBe(true)
+      expect(result.current.snapshotRowTasks).toEqual({ snap1: 'delete' })
+
+      // B's own task ending releases it.
+      await act(async () => { resolvers[1]({ outcome: 'ok' }); await flushAsync() })
+      expect(result.current.snapshotTaskBusy).toBe(false)
+      expect(result.current.snapshotRowTasks).toEqual({})
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('drops the error of an action answered after the switch', async () => {
+    let releaseDelete!: () => void
+    const gate = new Promise<void>((r) => { releaseDelete = r })
+    vi.spyOn(global, 'fetch').mockImplementation(async (_input: any, init?: any) => {
+      if (init?.method === 'DELETE') {
+        await gate
+
+        return { ok: true, json: async () => ({ error: 'VM is locked' }) } as any
+      }
+
+      return { ok: true, json: async () => ({ data: { snapshots: [] } }) } as any
+    })
+
+    const params = makeParams()
+    const { result, rerender } = renderHook((p: any) => useSnapshots(p), { initialProps: params })
+
+    await act(async () => { await result.current.deleteSnapshot('snap1') })
+    const confirm = params.setConfirmAction.mock.calls.at(-1)![0]
+    let pending!: Promise<void>
+    act(() => { pending = confirm.onConfirm() })
+
+    rerender({ ...params, selection: VM_B })
+    act(() => { result.current.resetSnapshots() })
+    await act(async () => { releaseDelete(); await pending })
+
+    expect(params.toast.error).toHaveBeenCalledWith('VM is locked')
+    expect(result.current.snapshotsError).toBeNull()
+  })
+})
+
+describe('useSnapshots action errors of the VM displayed', () => {
+  it('createSnapshot surfaces an API refusal and a network failure', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ error: 'name taken' }) } as any)
+    const params = makeParams()
+    const { result } = renderHook(() => useSnapshots(params))
+
+    await act(async () => { result.current.setNewSnapshotName('s1') })
+    await act(async () => { await result.current.createSnapshot() })
+    expect(result.current.snapshotsError).toBe('name taken')
+
+    vi.spyOn(global, 'fetch').mockRejectedValue(new Error('network down'))
+    await act(async () => { await result.current.createSnapshot() })
+    expect(result.current.snapshotsError).toBe('network down')
+    expect(params.toast.error).toHaveBeenCalledWith('network down')
+  })
+
+  it('deleteSnapshot surfaces a network failure', async () => {
+    vi.spyOn(global, 'fetch').mockRejectedValue(new Error('network down'))
+    const params = makeParams()
+    const { result } = renderHook(() => useSnapshots(params))
+
+    await confirmDelete(result, params)
+    expect(result.current.snapshotsError).toBe('network down')
+  })
+
+  it('rollbackSnapshot surfaces an API refusal and a network failure', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ error: 'VM is running' }) } as any)
+    const params = makeParams()
+    const { result } = renderHook(() => useSnapshots(params))
+
+    await act(async () => { result.current.rollbackSnapshot('snap1') })
+    await act(async () => { await params.setConfirmAction.mock.calls.at(-1)![0].onConfirm() })
+    expect(result.current.snapshotsError).toBe('VM is running')
+
+    vi.spyOn(global, 'fetch').mockRejectedValue(new Error('network down'))
+    await act(async () => { result.current.rollbackSnapshot('snap1') })
+    await act(async () => { await params.setConfirmAction.mock.calls.at(-1)![0].onConfirm() })
+    expect(result.current.snapshotsError).toBe('network down')
+  })
+
+  it('a task follow started from a closure of the previous VM tracks nothing', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ data: { success: true, upid: UPID } }) } as any)
+    const params = makeParams()
+    const { result, rerender } = renderHook((p: any) => useSnapshots(p), { initialProps: params })
+
+    await act(async () => { await result.current.deleteSnapshot('snap1') })
+    const confirm = params.setConfirmAction.mock.calls.at(-1)![0]
+
+    rerender({ ...params, selection: { type: 'vm', id: 'conn-2:pve9:qemu:200' } })
+    await act(async () => { await confirm.onConfirm(); await flushAsync() })
+
+    expect(waitMock).not.toHaveBeenCalled()
+    expect(result.current.snapshotTaskBusy).toBe(false)
+    expect(result.current.snapshotRowTasks).toEqual({})
+  })
+
+  it('a delete-all confirmed from a closure of the previous VM deletes nothing', async () => {
+    const params = makeParams()
+    const { result, rerender } = renderHook((p: any) => useSnapshots(p), { initialProps: params })
+
+    await act(async () => { await result.current.loadSnapshots() })
+    act(() => { result.current.deleteAllSnapshots() })
+    const confirm = params.setConfirmAction.mock.calls.at(-1)![0]
+
+    rerender({ ...params, selection: { type: 'vm', id: 'conn-2:pve9:qemu:200' } })
+    await act(async () => { await confirm.onConfirm() })
+
+    expect(seqMock).not.toHaveBeenCalled()
+    expect(result.current.deleteAllBusy).toBe(false)
+  })
+})
+
 describe('useSnapshots lazy load', () => {
   it('loads the snapshots on its own when the Snapshots tab is opened', async () => {
     const { result, unmount } = renderHook(() => useSnapshots(makeParams({ detailTab: 5 }) as any))

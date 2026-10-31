@@ -154,6 +154,18 @@ function buildRangeBounds(subnet: SubnetRow): {
  *   - else → IpamHintUnavailableError
  */
 export async function allocateIp(input: AllocateIpInput): Promise<IpamAllocation> {
+  return (await allocateIpTracked(input)).allocation
+}
+
+/**
+ * Same as `allocateIp`, and also says whether this call inserted the row
+ * (`created: true`) or returned the allocation the MAC already held. A caller
+ * that undoes its allocations on failure must only release the created ones:
+ * releasing a pre-existing row would drop a reservation the guest still owns.
+ */
+export async function allocateIpTracked(
+  input: AllocateIpInput,
+): Promise<{ allocation: IpamAllocation; created: boolean }> {
   const mac = normalizeMac(input.mac)
   const subnet = await loadSubnet(input.subnetId)
   if (!subnet) throw new Error(`Subnet not found: ${input.subnetId}`)
@@ -169,7 +181,7 @@ export async function allocateIp(input: AllocateIpInput): Promise<IpamAllocation
       // returning the wrong one.
       throw new IpamHintUnavailableError(input.hint)
     }
-    return rowToAllocation(existing)
+    return { allocation: rowToAllocation(existing), created: false }
   }
 
   const { low, high, gatewayInt } = buildRangeBounds(subnet)
@@ -190,7 +202,7 @@ export async function allocateIp(input: AllocateIpInput): Promise<IpamAllocation
     if (hintInt < low || hintInt > high || taken.has(hintInt)) {
       throw new IpamHintUnavailableError(input.hint)
     }
-    return insertAllocation({ ...input, mac }, input.hint, hintInt)
+    return { allocation: await insertAllocation({ ...input, mac }, input.hint, hintInt), created: true }
   }
 
   // Auto: load the set of IPAM-tracked IPs and pick the first free.
@@ -204,7 +216,7 @@ export async function allocateIp(input: AllocateIpInput): Promise<IpamAllocation
   for (let candidate = low; candidate <= high; candidate++) {
     if (!taken.has(candidate)) {
       const ip = intToIp(candidate)
-      return insertAllocation({ ...input, mac }, ip, candidate)
+      return { allocation: await insertAllocation({ ...input, mac }, ip, candidate), created: true }
     }
   }
   throw new IpamExhaustedError(input.subnetId)

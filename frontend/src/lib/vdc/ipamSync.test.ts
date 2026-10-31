@@ -341,6 +341,81 @@ describe('syncIpamForVmConfig — rollback on PVE failure simulation', () => {
   })
 })
 
+describe('syncIpamForVmConfig — rollback of an edit that keeps the allocation', () => {
+  it('keeps a pre-existing allocation when an unchanged NIC edit is rolled back', async () => {
+    // A config edit that leaves net0 alone (here only the name changes)
+    // resolves to allocateIp's idempotent fast path: nothing was inserted, so
+    // a failed PVE write must not release the reservation the guest owns.
+    const existing = await allocateIp({
+      vdcId: 'vdc-1',
+      subnetId: 'subnet-1',
+      vnetId: 'vnet-1',
+      connectionId: 'conn-1',
+      mac: 'AA:00:00:00:00:01',
+      vmid: 100,
+      hostname: 'web',
+    })
+
+    const net0 = 'virtio=AA:00:00:00:00:01,bridge=tenantA'
+    const result = await syncIpamForVmConfig({
+      before: { name: 'web', net0, ipconfig0: `ip=${existing.ip}/24,gw=10.42.0.254` },
+      after: { name: 'web-renamed', net0, ipconfig0: `ip=${existing.ip}/24,gw=10.42.0.254` },
+      conn: fakeConn,
+      connectionId: 'conn-1',
+      vmid: 100,
+      hostname: 'web-renamed',
+    })
+
+    await result.rollback()
+
+    const row = await findAllocationByMac('subnet-1', 'AA:00:00:00:00:01')
+    expect(row?.ip).toBe(existing.ip)
+    expect(row?.id).toBe(existing.id)
+  })
+
+  it('keeps a pre-existing allocation on rollback when the guest config has no ipconfig line', async () => {
+    const existing = await allocateIp({
+      vdcId: 'vdc-1',
+      subnetId: 'subnet-1',
+      vnetId: 'vnet-1',
+      connectionId: 'conn-1',
+      mac: 'AA:00:00:00:00:02',
+      vmid: 101,
+      hostname: 'db',
+    })
+
+    const net0 = 'virtio=AA:00:00:00:00:02,bridge=tenantA'
+    const result = await syncIpamForVmConfig({
+      before: { net0, cores: 2 },
+      after: { net0, cores: 4 },
+      conn: fakeConn,
+      connectionId: 'conn-1',
+      vmid: 101,
+      hostname: 'db',
+    })
+
+    await result.rollback()
+
+    expect((await findAllocationByMac('subnet-1', 'AA:00:00:00:00:02'))?.ip).toBe(existing.ip)
+  })
+
+  it('still releases an allocation the edit created when it is rolled back', async () => {
+    const result = await syncIpamForVmConfig({
+      before: { net0: 'virtio=AA:00:00:00:00:03,bridge=vmbr0' },
+      after: { net0: 'virtio=AA:00:00:00:00:03,bridge=tenantA' },
+      conn: fakeConn,
+      connectionId: 'conn-1',
+      vmid: 102,
+      hostname: 'new',
+    })
+    expect(await findAllocationByMac('subnet-1', 'AA:00:00:00:00:03')).not.toBeNull()
+
+    await result.rollback()
+
+    expect(await findAllocationByMac('subnet-1', 'AA:00:00:00:00:03')).toBeNull()
+  })
+})
+
 describe('syncIpamForVmConfig — unrelated VM, no allocations', () => {
   it('does not leak any allocation when reconfiguring a non-IPAM VM', async () => {
     await syncIpamForVmConfig({

@@ -27,8 +27,9 @@ import {
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const deleteIPSetMock = vi.fn<(conn: any, name: string) => Promise<any>>()
+const updateIPSetCommentMock = vi.fn<(conn: any, name: string, comment: string) => Promise<any>>()
 
-vi.mock('@/lib/firewall/pveDirect', () => ({ deleteIPSet: deleteIPSetMock }))
+vi.mock('@/lib/firewall/pveDirect', () => ({ deleteIPSet: deleteIPSetMock, updateIPSetComment: updateIPSetCommentMock }))
 
 installFirewallRouteMocks()
 
@@ -111,5 +112,81 @@ describe('DELETE /api/v1/firewall/ipsets/[connectionId]/[ipsetName]', () => {
     expect(res.status).toBe(403)
     expect(orchestrator.delete).not.toHaveBeenCalled()
     expect(deleteIPSetMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('PUT /api/v1/firewall/ipsets/[connectionId]/[ipsetName]', () => {
+
+  it('updates the comment on PVE with the raw IP set name', async () => {
+    updateIPSetCommentMock.mockResolvedValue({ status: 'updated' })
+
+    const { PUT } = handlersOf(await import('./route'))
+    const res = await callRoute(PUT, { params: PARAMS, method: 'PUT', body: { comment: 'Blocked hosts' } })
+
+    expect(res.status).toBe(200)
+    expect(await readJson<any>(res)).toEqual({ success: true })
+    expect(checkPermissionMock).toHaveBeenCalledWith('node.manage', 'connection', 'conn-1')
+    expect(getConnectionByIdMock).toHaveBeenCalledWith('conn-1')
+    expect(updateIPSetCommentMock).toHaveBeenCalledWith(CONN, 'blacklist', 'Blocked hosts')
+  })
+
+  it('clears the comment when the body carries none', async () => {
+    updateIPSetCommentMock.mockResolvedValue({ status: 'updated' })
+
+    const { PUT } = handlersOf(await import('./route'))
+    const res = await callRoute(PUT, { params: PARAMS, method: 'PUT', body: {} })
+
+    expect(res.status).toBe(200)
+    expect(updateIPSetCommentMock).toHaveBeenCalledWith(CONN, 'blacklist', '')
+  })
+
+  it('refuses a comment that is not a string', async () => {
+    const { PUT } = handlersOf(await import('./route'))
+    const res = await callRoute(PUT, { params: PARAMS, method: 'PUT', body: { comment: 42 } })
+
+    expect(res.status).toBe(400)
+    expect(updateIPSetCommentMock).not.toHaveBeenCalled()
+  })
+
+  it('answers 500 with the PVE error', async () => {
+    updateIPSetCommentMock.mockRejectedValueOnce(new Error("no such IPSet 'blacklist'"))
+
+    const { PUT } = handlersOf(await import('./route'))
+    const res = await callRoute(PUT, { params: PARAMS, method: 'PUT', body: { comment: 'x' } })
+
+    expect(res.status).toBe(500)
+    expect(await readJson<any>(res)).toEqual({ error: "no such IPSet 'blacklist'" })
+  })
+
+  it('falls back to a generic message when the thrown value carries none', async () => {
+    updateIPSetCommentMock.mockRejectedValueOnce('socket hang up')
+
+    const { PUT } = handlersOf(await import('./route'))
+    const res = await callRoute(PUT, { params: PARAMS, method: 'PUT', body: { comment: 'x' } })
+
+    expect(res.status).toBe(500)
+    expect(await readJson<any>(res)).toEqual({ error: 'Failed to update IP set' })
+  })
+
+  it('returns the ownership denial before calling anything', async () => {
+    verifyConnectionOwnershipMock.mockResolvedValue(denied(404, 'Connection not found'))
+
+    const { PUT } = handlersOf(await import('./route'))
+    const res = await callRoute(PUT, { params: { ...PARAMS, connectionId: 'conn-other' }, method: 'PUT', body: { comment: 'x' } })
+
+    expect(res.status).toBe(404)
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+    expect(updateIPSetCommentMock).not.toHaveBeenCalled()
+  })
+
+  it('returns the RBAC denial without touching PVE', async () => {
+    checkPermissionMock.mockResolvedValue(denied(403, 'Forbidden'))
+
+    const { PUT } = handlersOf(await import('./route'))
+    const res = await callRoute(PUT, { params: PARAMS, method: 'PUT', body: { comment: 'x' } })
+
+    expect(res.status).toBe(403)
+    expect(getConnectionByIdMock).not.toHaveBeenCalled()
+    expect(updateIPSetCommentMock).not.toHaveBeenCalled()
   })
 })

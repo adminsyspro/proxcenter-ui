@@ -70,6 +70,23 @@ describe('NodeSshEndpointsEditor', () => {
     expect(JSON.parse(String(init.body))).toEqual({ sshAddress: '100.64.0.2', sshPort: 2202 })
   })
 
+  it('reports a refused save and does not hand the unsaved address to the wizard', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') return { ok: false, status: 500, json: async () => ({ error: 'host locked' }) }
+      if (url.endsWith('/network')) return { ok: true, json: async () => ({ data: [] }) }
+      return { ok: true, json: async () => ({ data: NODES }) }
+    })
+    const onChange = vi.fn()
+    render(<NodeSshEndpointsEditor connectionId='c1' onChange={onChange} />)
+
+    const address = (await screen.findAllByLabelText('settings.sshNodeEndpoints.address'))[1]
+    fireEvent.change(address, { target: { value: '100.64.0.2' } })
+    fireEvent.blur(address)
+
+    expect(await screen.findByText('settings.sshNodeEndpoints.saveFailed')).toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalledWith(expect.objectContaining({ pve2: expect.objectContaining({ address: '100.64.0.2' }) }))
+  })
+
   it('refuses an out-of-range port without saving', async () => {
     render(<NodeSshEndpointsEditor connectionId='c1' />)
 

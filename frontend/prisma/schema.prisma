@@ -1373,7 +1373,9 @@ model Favorite {
   vmName       String?  @map("vm_name")
   createdAt    DateTime @map("created_at")
 
-  @@unique([userId, vmKey])
+  // Scoped per tenant: a user who works in several tenants keeps a separate
+  // favorite list in each, so the same VM key may be starred once per tenant.
+  @@unique([tenantId, userId, vmKey])
   @@index([userId])
   @@index([vmKey])
   @@index([tenantId])

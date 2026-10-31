@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import type { InventorySelection } from '../types'
 import { parseVmId } from '../helpers'
+import { useSelectionGuard } from '@/hooks/useSelectionGuard'
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -25,8 +26,15 @@ export function useNotes({ selection, detailTab, t }: UseNotesParams) {
   const [notesEditing, setNotesEditing] = useState(false)
   const [notesLoaded, setNotesLoaded] = useState(false)
 
+  // Requests are bound to the guest they were started for (see resetNotes).
+  const guard = useSelectionGuard(selection?.id)
+
   const loadNotes = useCallback(async () => {
     if (!selection || selection.type !== 'vm') return
+
+    const req = guard.begin(selection.id)
+
+    if (!req.isCurrent()) return
 
     const { connId, type, node, vmid } = parseVmId(selection.id)
     const vmKey = `${connId}:${type}:${node}:${vmid}`
@@ -37,10 +45,12 @@ export function useNotes({ selection, detailTab, t }: UseNotesParams) {
     try {
       const res = await fetch(
         `/api/v1/guests/${encodeURIComponent(vmKey)}/notes`,
-        { cache: 'no-store' }
+        { cache: 'no-store', signal: req.signal }
       )
 
       const json = await res.json()
+
+      if (!req.isCurrent()) return
 
       if (json.error) {
         setNotesError(json.error)
@@ -49,17 +59,21 @@ export function useNotes({ selection, detailTab, t }: UseNotesParams) {
         setNotesLoaded(true)
       }
     } catch (e: any) {
-      setNotesError(e.message || t('errors.loadingError'))
+      if (req.isCurrent()) setNotesError(e.message || t('errors.loadingError'))
     } finally {
-      setNotesLoading(false)
+      if (req.isCurrent()) setNotesLoading(false)
     }
-  }, [selection])
+  }, [selection, guard])
 
   const saveNotes = useCallback(async () => {
     if (!selection || selection.type !== 'vm') return
 
     const { connId, type, node, vmid } = parseVmId(selection.id)
     const vmKey = `${connId}:${type}:${node}:${vmid}`
+
+    // The save itself always goes through; only its outcome is dropped when
+    // the user already moved to another guest.
+    const req = guard.begin(selection.id)
 
     setNotesSaving(true)
     setNotesError(null)
@@ -76,17 +90,19 @@ export function useNotes({ selection, detailTab, t }: UseNotesParams) {
 
       const json = await res.json()
 
+      if (!req.isCurrent()) return
+
       if (json.error) {
         setNotesError(json.error)
       } else {
         setNotesEditing(false)
       }
     } catch (e: any) {
-      setNotesError(e.message || t('errors.updateError'))
+      if (req.isCurrent()) setNotesError(e.message || t('errors.updateError'))
     } finally {
-      setNotesSaving(false)
+      if (req.isCurrent()) setNotesSaving(false)
     }
-  }, [selection, vmNotes])
+  }, [selection, vmNotes, guard])
 
   // Charger les notes quand on sélectionne l'onglet Résumé (0) ou Notes (6)
   useEffect(() => {
@@ -100,6 +116,11 @@ export function useNotes({ selection, detailTab, t }: UseNotesParams) {
     setVmNotes('')
     setNotesError(null)
     setNotesEditing(false)
+    // The previous guest's load (if any) is abandoned by the guard and never
+    // clears its own flags: without this, the lazy-load effect would wait for
+    // it forever and the new guest's notes would never be fetched.
+    setNotesLoading(false)
+    setNotesSaving(false)
   }, [])
 
   return {

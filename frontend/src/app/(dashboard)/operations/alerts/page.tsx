@@ -49,6 +49,7 @@ import EmptyState from '@/components/EmptyState'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
 import { formatAlertValue } from '@/lib/alerts/formatAlertValue'
+import { jsonInit, requireOk, settleCounts } from '@/lib/api/fetchJsonSafe'
 
 /* --------------------------------
    Types
@@ -342,6 +343,18 @@ return true
     [selectionModel, filteredAlerts]
   )
 
+  // A rejected mutation shows the server's reason, never a success toast.
+  const errorText = (e: unknown) => `${t('common.error')}: ${e instanceof Error ? e.message : String(e)}`
+
+  // Batch actions run every call and say how many the server refused.
+  const reportBatch = (counts: { succeeded: number; failed: number; firstError?: string }, total: number, toastSuccess: boolean) => {
+    if (counts.failed === 0) {
+      if (toastSuccess) showToast(t('common.success'), 'success')
+      return
+    }
+    showToast(t('alerts.batchFailed', { failed: counts.failed, total, error: counts.firstError || '' }), 'error')
+  }
+
   const handleClearAll = () => {
     if (!isEnterprise) return
 
@@ -360,11 +373,11 @@ return true
           // tenant (défense en profondeur pour les appels API directs) —
           // /clear reste l'endpoint utilisé par cette page, sans sélecteur
           // de connexion nécessaire.
-          await fetch('/api/v1/orchestrator/alerts/clear', { method: 'DELETE' })
+          await requireOk('/api/v1/orchestrator/alerts/clear', jsonInit('DELETE'))
           showToast(t('common.success'), 'success')
           revalidateAll()
         } catch (e) {
-          showToast(t('common.error'), 'error')
+          showToast(errorText(e), 'error')
         }
 
         setConfirmDialog(d => ({ ...d, open: false }))
@@ -399,16 +412,12 @@ return true
         ? `/api/v1/orchestrator/alerts/rules/${editingRule.id}`
         : '/api/v1/orchestrator/alerts/rules'
 
-      await fetch(url, {
-        method: editingRule ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ruleForm)
-      })
+      await requireOk(url, jsonInit(editingRule ? 'PUT' : 'POST', ruleForm))
       showToast(t('common.success'), 'success')
       setRuleDialog(false)
       revalidateAll()
     } catch (e) {
-      showToast(t('common.error'), 'error')
+      showToast(errorText(e), 'error')
     } finally {
       setSavingRule(false)
     }
@@ -423,11 +432,11 @@ return true
       message: t('common.deleteConfirmation'),
       onConfirm: async () => {
         try {
-          await fetch(`/api/v1/orchestrator/alerts/rules/${id}`, { method: 'DELETE' })
+          await requireOk(`/api/v1/orchestrator/alerts/rules/${id}`, jsonInit('DELETE'))
           showToast(t('common.success'), 'success')
           revalidateAll()
         } catch (e) {
-          showToast(t('common.error'), 'error')
+          showToast(errorText(e), 'error')
         }
 
         setConfirmDialog(d => ({ ...d, open: false }))
@@ -439,10 +448,10 @@ return true
     if (!isEnterprise) return
 
     try {
-      await fetch(`/api/v1/orchestrator/alerts/rules/${id}/toggle`, { method: 'POST' })
+      await requireOk(`/api/v1/orchestrator/alerts/rules/${id}/toggle`, jsonInit('POST'))
       revalidateAll()
     } catch (e) {
-      showToast(t('common.error'), 'error')
+      showToast(errorText(e), 'error')
     }
   }
 
@@ -452,15 +461,11 @@ return true
     try {
       const userId = session?.user?.name || 'unknown'
 
-      await fetch(`/api/v1/orchestrator/alerts/${id}/acknowledge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acknowledged_by: userId })
-      })
+      await requireOk(`/api/v1/orchestrator/alerts/${id}/acknowledge`, jsonInit('POST', { acknowledged_by: userId }))
       showToast(t('common.success'), 'success')
       revalidateAll()
     } catch (e) {
-      showToast(t('common.error'), 'error')
+      showToast(errorText(e), 'error')
     }
   }
 
@@ -468,51 +473,37 @@ return true
     if (!isEnterprise) return
 
     try {
-      await fetch(`/api/v1/orchestrator/alerts/${id}/resolve`, { method: 'POST' })
+      await requireOk(`/api/v1/orchestrator/alerts/${id}/resolve`, jsonInit('POST'))
       showToast(t('common.success'), 'success')
       revalidateAll()
     } catch (e) {
-      showToast(t('common.error'), 'error')
+      showToast(errorText(e), 'error')
     }
   }
 
   const handleDeleteAlerts = async (ids: string[]) => {
     if (!isEnterprise || ids.length === 0) return
 
-    try {
-      await Promise.all(
-        ids.map(id =>
-          fetch(`/api/v1/orchestrator/alerts/${id}`, { method: 'DELETE' })
-        )
-      )
-      setSelectionModel({ type: 'include', ids: new Set() })
-      revalidateAll()
-    } catch (e) {
-      showToast(t('common.error'), 'error')
-    }
+    const counts = await settleCounts(
+      ids.map(id => () => requireOk(`/api/v1/orchestrator/alerts/${id}`, jsonInit('DELETE')))
+    )
+
+    if (counts.succeeded > 0) setSelectionModel({ type: 'include', ids: new Set() })
+    revalidateAll()
+    reportBatch(counts, ids.length, false)
   }
 
   const handleAcknowledgeSelected = async (ids: string[]) => {
     if (!isEnterprise || ids.length === 0) return
 
-    try {
-      const userId = session?.user?.name || 'unknown'
-      await Promise.all(
-        ids.map(id =>
-          fetch(`/api/v1/orchestrator/alerts/${id}/acknowledge`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ acknowledged_by: userId })
-          })
-        )
-      )
-      setSelectionModel({ type: 'include', ids: new Set() })
-      showToast(t('common.success'), 'success')
-      revalidateAll()
-    } catch (e) {
-      console.error('Batch acknowledge failed:', e)
-      showToast(t('common.error'), 'error')
-    }
+    const userId = session?.user?.name || 'unknown'
+    const counts = await settleCounts(
+      ids.map(id => () => requireOk(`/api/v1/orchestrator/alerts/${id}/acknowledge`, jsonInit('POST', { acknowledged_by: userId })))
+    )
+
+    if (counts.succeeded > 0) setSelectionModel({ type: 'include', ids: new Set() })
+    revalidateAll()
+    reportBatch(counts, ids.length, true)
   }
 
   // Batch delete goes through the confirmation dialog (unlike single-row delete)
@@ -548,15 +539,11 @@ return true
     if (!muteTargetFingerprint || !isEnterprise) return
 
     try {
-      await fetch('/api/v1/alerts/silence', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fingerprint: muteTargetFingerprint, duration })
-      })
+      await requireOk('/api/v1/alerts/silence', jsonInit('POST', { fingerprint: muteTargetFingerprint, duration }))
       showToast(t('common.success'), 'success')
       revalidateAll()
     } catch (e) {
-      showToast(t('common.error'), 'error')
+      showToast(errorText(e), 'error')
     }
 
     setMuteTargetFingerprint(null)
@@ -566,13 +553,11 @@ return true
     if (!isEnterprise) return
 
     try {
-      await fetch(`/api/v1/alerts/silence?fingerprint=${encodeURIComponent(fingerprint)}`, {
-        method: 'DELETE'
-      })
+      await requireOk(`/api/v1/alerts/silence?fingerprint=${encodeURIComponent(fingerprint)}`, jsonInit('DELETE'))
       showToast(t('common.success'), 'success')
       revalidateAll()
     } catch (e) {
-      showToast(t('common.error'), 'error')
+      showToast(errorText(e), 'error')
     }
   }
 

@@ -41,6 +41,9 @@ export const Features = {
   // policies, maintenance windows and reports. Community keeps the live
   // health and 24 h node and cluster availability.
   SLA_MONITORING: 'sla_monitoring',
+  // Incident register: alerts grouped into incidents with a journal, corrective
+  // actions and a post-mortem. Default tenant only. Routes under /api/v1/incidents.
+  INCIDENTS: 'incidents',
   // Option capabilities (granted by stackable add-on licenses, never by an
   // edition). NEVER add these to EDITION_FEATURES.
   // ProxCenter control-plane HA (this paid add-on): multi-node conversion of
@@ -88,6 +91,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'sflow_monitoring',
     'backup_restore_drills',
     'sla_monitoring',
+    'incidents',
   ],
   enterprise_plus: [
     'drs',
@@ -117,6 +121,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'sflow_monitoring',
     'backup_restore_drills',
     'sla_monitoring',
+    'incidents',
   ],
 }
 

@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
 
+import { useRouter, useSearchParams } from 'next/navigation'
+
 import { useSession } from 'next-auth/react'
+import { useSWRConfig } from 'swr'
 
 import { useTranslations } from 'next-intl'
 
@@ -29,14 +32,15 @@ import {
   Slider,
   Stack,
   Switch,
-  Tab,
-  Tabs,
   TextField,
   Tooltip,
   Typography
 } from '@mui/material'
-import { DataGrid, GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
+import { DataGrid, GridColDef, GridRowSelectionModel, gridPaginatedVisibleSortedGridRowIdsSelector, useGridApiRef } from '@mui/x-data-grid'
 
+import IncidentDialog from '@/components/incidents/IncidentDialog'
+import { useIncidentsEnabled } from '@/components/incidents/useIncidentsEnabled'
+import { useRBAC } from '@/contexts/RBACContext'
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useTenant } from '@/contexts/TenantContext'
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
@@ -50,6 +54,11 @@ import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
 import { formatAlertValue } from '@/lib/alerts/formatAlertValue'
 import { errorMessage, jsonInit, requireOk, settleCounts } from '@/lib/api/fetchJsonSafe'
+
+import { AlertMessageCell, AlertsTabs, IncidentButtons, IncidentCell, summarizeDeletes } from './AlertIncidentParts'
+import IncidentsTab from './IncidentsTab'
+import { useAlertIncidents } from './useAlertIncidents'
+import { useIncidentList } from './useIncidentList'
 
 /* --------------------------------
    Types
@@ -221,6 +230,12 @@ export default function AlertsPage() {
   )
   const [mounted, setMounted] = useState(false)
   const [tab, setTab] = useState(0)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { hasPermission } = useRBAC()
+  const { mutate: globalMutate } = useSWRConfig()
+  const incidentsEnabled = useIncidentsEnabled()
+  const [incidentDialog, setIncidentDialog] = useState<{ incidentId: string | null; seedAlertId?: string } | null>(null)
 
   const { showToast } = useToast()
 
@@ -262,6 +277,13 @@ export default function AlertsPage() {
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // ?tab=incidents opens the Incidents tab once the register is on offer
+  const wantsIncidentsTab = searchParams?.get('tab') === 'incidents'
+
+  useEffect(() => {
+    if (incidentsEnabled && wantsIncidentsTab) setTab(2)
+  }, [incidentsEnabled, wantsIncidentsTab])
 
   useEffect(() => {
     setPageInfo(t('alerts.title'), t('alerts.title'), 'ri-notification-3-line')
@@ -319,6 +341,30 @@ return () => setPageInfo('', '', '')
     void mutateSummary()
     void mutateRules()
   }, [mutateAlerts, mutateSummary, mutateRules])
+
+  // The grid's page decides which alerts are asked about; sorting changes it, so it is read from the grid.
+  const gridApiRef = useGridApiRef()
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 })
+  const [visibleAlertIds, setVisibleAlertIds] = useState<string[]>([])
+
+  // The grid reports its state changes while it renders: the page reads the
+  // rows it shows once that render is over, never during it.
+  const syncVisibleAlertIds = useCallback(() => {
+    queueMicrotask(() => {
+      if (!gridApiRef.current?.state) return
+
+      const ids = gridPaginatedVisibleSortedGridRowIdsSelector(gridApiRef).map(String)
+
+      setVisibleAlertIds(prev => (prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids))
+    })
+  }, [gridApiRef])
+
+  const { data: incidentTotal } = useIncidentList('all', 1, incidentsEnabled)
+  const incidentCount = incidentTotal?.total ?? 0
+
+  const refreshIncidents = useCallback(() => {
+    void globalMutate(key => typeof key === 'string' && key.startsWith('/api/v1/incidents'))
+  }, [globalMutate])
 
   const filteredAlerts = useMemo(() => {
     return alerts.filter(alert => {
@@ -484,13 +530,26 @@ return true
   const handleDeleteAlerts = async (ids: string[]) => {
     if (!isEnterprise || ids.length === 0) return
 
-    const counts = await settleCounts(
-      ids.map(id => () => requireOk(`/api/v1/orchestrator/alerts/${id}`, jsonInit('DELETE')))
-    )
+    try {
+      const responses = await Promise.all(ids.map(id => fetch(`/api/v1/orchestrator/alerts/${id}`, jsonInit('DELETE'))))
 
-    if (counts.succeeded > 0) setSelectionModel({ type: 'include', ids: new Set() })
-    revalidateAll()
-    reportBatch(counts, ids.length, false)
+      // An alert attached to an incident is refused (409) with its own message; any other refusal is a failure.
+      const { kept, neutral, deleted, failed, firstError } = await summarizeDeletes(responses)
+
+      if (kept > 0) {
+        // Outside the Default tenant the refusal never names the incident.
+        const single = kept === 1 && ids.length === 1
+
+        if (neutral > 0) showToast(single ? t('alerts.errors.alertLocked') : t('alerts.errors.alertsLocked', { count: kept }), 'warning')
+        else showToast(single ? t('incidents.errors.alertInIncident') : t('incidents.errors.alertsKept', { count: kept }), 'warning')
+      }
+
+      if (deleted > 0) setSelectionModel({ type: 'include', ids: new Set() })
+      revalidateAll()
+      reportBatch({ succeeded: deleted, failed, firstError }, ids.length, false)
+    } catch (e) {
+      showToast(errorText(e), 'error')
+    }
   }
 
   const handleAcknowledgeSelected = async (ids: string[]) => {
@@ -563,6 +622,8 @@ return true
 
   const timeAgo = useTimeAgo(t)
 
+  const alertIncidents = useAlertIncidents(visibleAlertIds, incidentsEnabled)
+
   const alertColumns: GridColDef[] = [
     { field: 'severity', headerName: t('alerts.severity'), width: 100, renderCell: (p) => <SeverityChip severity={p.value} t={t} /> },
     { field: 'status', headerName: t('common.status'), width: 100, renderCell: (p) => <StatusChip status={p.value} t={t} /> },
@@ -571,13 +632,17 @@ return true
       headerName: t('alerts.message'),
       flex: 1,
       minWidth: 300,
-      renderCell: (p) => (
-        <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', py: 0.5 }}>
-          <Typography variant="body2" sx={{ fontWeight: 500, lineHeight: 1.4 }}>{p.value}</Typography>
-          <Typography variant="caption" sx={{ opacity: 0.6, lineHeight: 1.2 }}>{p.row.occurrences} {t('alerts.occurrences')}</Typography>
-        </Box>
-      )
+      renderCell: (p) => <AlertMessageCell message={p.value} occurrences={p.row.occurrences} />
     },
+    ...(incidentsEnabled
+      ? [{
+        field: 'incident',
+        headerName: t('incidents.title'),
+        width: 240,
+        sortable: false,
+        renderCell: (p) => <IncidentCell summary={alertIncidents[p.row.id]} onOpen={incidentId => setIncidentDialog({ incidentId })} />
+      } satisfies GridColDef]
+      : []),
     {
       field: 'resource',
       headerName: t('alerts.resource'),
@@ -604,10 +669,27 @@ return true
     {
       field: 'actions',
       headerName: t('common.actions'),
-      width: 200,
+      width: incidentsEnabled ? 250 : 200,
       sortable: false,
-      renderCell: (p) => {
-        const { status, id, _fingerprint } = p.row
+      renderCell: (p) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {incidentsEnabled && (
+            <IncidentButtons
+              alert={p.row}
+              summary={alertIncidents[p.row.id]}
+              canManage={hasPermission('alerts.manage')}
+              onOpen={(incidentId, seedAlertId) => setIncidentDialog({ incidentId, seedAlertId })}
+              onAvailability={href => router.push(href)}
+            />
+          )}
+          {renderStatusActions(p.row)}
+        </Box>
+      )
+    }
+  ]
+
+  function renderStatusActions(row: AlertData) {
+        const { status, id, _fingerprint } = row
 
         if (status === 'active') {
           return (
@@ -653,7 +735,7 @@ return true
         }
 
         if (status === 'silenced') {
-          const silencedUntil = p.row.silenced_until
+          const silencedUntil = row.silenced_until
           const tooltipText = silencedUntil
             ? t('alerts.silencedUntil', { date: new Date(silencedUntil).toLocaleString() })
             : t('alerts.silencedIndefinite')
@@ -690,9 +772,7 @@ return true
         }
 
         return null
-      }
-    }
-  ]
+  }
 
   const ruleColumns: GridColDef[] = [
     { field: 'enabled', headerName: t('common.active'), width: 80, renderCell: (p) => <Switch size="small" checked={p.value} onChange={() => handleToggleRule(p.row.id)} /> },
@@ -756,10 +836,14 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
 
       <Card variant="outlined" sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-            <Tab label={t('alerts.alertsTab', { count: summary.total_active })} />
-            <Tab label={t('alerts.eventRules', { count: rules.length })} />
-          </Tabs>
+          <AlertsTabs
+            tab={tab}
+            onChange={setTab}
+            activeCount={summary.total_active}
+            rulesCount={rules.length}
+            incidentCount={incidentCount}
+            incidentsEnabled={incidentsEnabled}
+          />
         </Box>
 
         {tab === 0 && (
@@ -806,13 +890,16 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
                 />
               ) : (
               <DataGrid
+                apiRef={gridApiRef}
                 rows={filteredAlerts}
                 columns={alertColumns}
                 loading={loading}
                 density="compact"
                 getRowHeight={() => 'auto'}
                 pageSizeOptions={[25, 50, 100]}
-                initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+                paginationModel={paginationModel}
+                onPaginationModelChange={setPaginationModel}
+                onStateChange={syncVisibleAlertIds}
                 checkboxSelection
                 rowSelectionModel={selectionModel}
                 onRowSelectionModelChange={(newModel) => setSelectionModel(newModel)}
@@ -872,7 +959,18 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
             </Box>
           </Box>
         )}
+        {tab === 2 && incidentsEnabled && (
+          <IncidentsTab onOpen={incidentId => setIncidentDialog({ incidentId })} />
+        )}
       </Card>
+
+      <IncidentDialog
+        open={incidentDialog !== null}
+        incidentId={incidentDialog?.incidentId ?? null}
+        seedAlertId={incidentDialog?.seedAlertId}
+        onClose={() => setIncidentDialog(null)}
+        onChanged={() => { refreshIncidents(); void mutateAlerts() }}
+      />
 
       <Dialog open={ruleDialog} onClose={() => setRuleDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{editingRule ? t('alerts.editRule') : t('alerts.newRule')}</DialogTitle>

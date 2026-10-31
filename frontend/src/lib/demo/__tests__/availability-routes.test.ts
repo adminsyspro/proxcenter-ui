@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { DEMO_AVAILABILITY_CONNECTION_ID } from '../availabilityDemo'
 import { demoResponse } from '../demo-api'
 
 const get = async (path: string, method = 'GET') => {
@@ -21,7 +22,7 @@ describe('demo mode on the availability routes', () => {
     expect((await get('/api/v1/sla/policies?fields=names')).body.items).toHaveLength(2)
     expect((await get('/api/v1/sla/policies/demo-sla-web')).body).toMatchObject({ policy: { name: 'Production web' } })
     expect((await get('/api/v1/sla/maintenance-windows')).body).toMatchObject({ total: 1 })
-    expect((await get('/api/v1/availability/settings')).body).toEqual({ retentionDays: 400, defaultTarget: 99.9 })
+    expect((await get('/api/v1/availability/settings')).body).toEqual({ retentionDays: 400, defaultTarget: 99.9, measuredConnections: [DEMO_AVAILABILITY_CONNECTION_ID], policiesByConnection: {} })
   })
 
   it('offers the SLA report in the report catalogue', async () => {
@@ -40,9 +41,9 @@ describe('demo mode on the availability routes', () => {
       const res = await demoResponse(new Request('http://localhost/api/v1/availability/settings', { method: 'PUT', body: JSON.stringify(body) }))
       return { status: res?.status, body: await res?.json() }
     }
-    expect(await put({ retentionDays: 90 })).toEqual({ status: 200, body: { retentionDays: 90, defaultTarget: 99.9 } })
-    expect((await put({ retentionDays: 90, defaultTarget: 99.5 })).body).toEqual({ retentionDays: 90, defaultTarget: 99.5 })
-    expect((await put('nope')).body).toEqual({ retentionDays: 400, defaultTarget: 99.9 })
+    expect(await put({ retentionDays: 90 })).toEqual({ status: 200, body: { retentionDays: 90, defaultTarget: 99.9, measuredConnections: [DEMO_AVAILABILITY_CONNECTION_ID], policiesByConnection: {} } })
+    expect((await put({ retentionDays: 90, defaultTarget: 99.5 })).body).toEqual({ retentionDays: 90, defaultTarget: 99.5, measuredConnections: [DEMO_AVAILABILITY_CONNECTION_ID], policiesByConnection: {} })
+    expect((await put('nope')).body).toEqual({ retentionDays: 400, defaultTarget: 99.9, measuredConnections: [DEMO_AVAILABILITY_CONNECTION_ID], policiesByConnection: {} })
   })
 
   it('handles the other writes like any other demo write', async () => {

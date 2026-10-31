@@ -66,6 +66,13 @@ function asIaas() {
   } })
 }
 
+// A tenant that owns whole connections: c1 is its own, c2 is not.
+function asMsp() {
+  m.session.mockResolvedValue({ user: { id: 'u2', email: 'acme@x', tenantId: 'acme' } })
+  m.tenant.mockResolvedValue('acme')
+  m.infra.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['c1']) })
+}
+
 function resetCommon() {
   vi.clearAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -118,17 +125,23 @@ describe('PUT /sla/maintenance-windows/{id}', () => {
 
   it('404 for a missing window or one outside the perimeter', async () => {
     expect((await put(BODY, 'w9')).status).toBe(404)
-    asIaas()
-    m.db.slaMaintenanceWindow.findFirst.mockResolvedValue(W({ node: 'pve2' }))
+    asMsp()
+    m.db.slaMaintenanceWindow.findFirst.mockResolvedValue(W({ connectionId: 'c2' }))
     expect((await put(BODY)).status).toBe(404)
     expect(m.db.slaMaintenanceWindow.updateMany).not.toHaveBeenCalled()
   })
 
   it('refuses moving the window outside the perimeter', async () => {
-    asIaas()
-    const res = await put({ ...BODY, node: 'pve2' })
+    asMsp()
+    const res = await put({ ...BODY, connectionId: 'c2' })
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: 'target_out_of_scope' })
+  })
+
+  it('a vDC tenant gets a 404, before any write', async () => {
+    asIaas()
+    expect((await put(BODY)).status).toBe(404)
+    expect(m.db.slaMaintenanceWindow.updateMany).not.toHaveBeenCalled()
   })
 
   it('403 without alerts.manage', async () => {
@@ -146,7 +159,7 @@ describe('DELETE /sla/maintenance-windows/{id}', () => {
 
   it('404 for a missing window or one outside the perimeter', async () => {
     expect((await del('w9')).status).toBe(404)
-    asIaas()
+    asMsp()
     m.db.slaMaintenanceWindow.findFirst.mockResolvedValue(W({ connectionId: 'c2' }))
     expect((await del()).status).toBe(404)
     expect(m.db.slaMaintenanceWindow.deleteMany).not.toHaveBeenCalled()

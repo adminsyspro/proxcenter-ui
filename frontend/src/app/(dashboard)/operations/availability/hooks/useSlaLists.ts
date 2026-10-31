@@ -55,9 +55,19 @@ export function useInventoryOptions(enabled: boolean) {
   return { options, error, isLoading }
 }
 
+/** The visible connections the registry measures, loaded while `enabled`. */
+export function useMeasuredConnections(enabled: boolean) {
+  return useSWRFetch<{ connectionIds: string[] }>(enabled ? '/api/v1/availability/measured' : null, { revalidateOnFocus: false })
+}
+
 /** One policy with one result per guest, named. */
 export function usePolicyDetail(id: string | null) {
-  return useSWRFetch<{ to: string; results: (import('@/lib/availability/types').Result & { name: string | null; type: 'qemu' | 'lxc' | null })[] }>(
+  return useSWRFetch<{
+    to: string
+    results: (import('@/lib/availability/types').Result & { name: string | null; type: 'qemu' | 'lxc' | null })[]
+    /** Connection id to name, for the guests listed. */
+    connectionNames?: Record<string, string>
+  }>(
     id ? `/api/v1/sla/policies/${id}?period=30d` : null,
     { revalidateOnFocus: false },
   )

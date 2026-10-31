@@ -49,6 +49,11 @@ export function putRetentionSettings(body: OrchestratorAvailabilitySettings): Pr
   return orchestratorFetch<OrchestratorAvailabilitySettings>('/availability/settings', { method: 'PUT', body })
 }
 
+/** The connections the registry measures. */
+export async function getMeasuredConnections(): Promise<string[]> {
+  return (await getRetentionSettings()).connection_ids ?? []
+}
+
 /** The status of an orchestrator refusal, null when the call did not get an answer. */
 export function upstreamStatus(error: unknown): number | null {
   return parseOrchestratorError(error)?.status ?? null

@@ -1,4 +1,4 @@
-// GET    /api/v1/sla/policies/{id}?period=30d   the policy, its summary and one result per guest, named
+// GET    /api/v1/sla/policies/{id}?period=30d   the policy, its summary and one result per guest, named, with its connection's name
 // PUT    /api/v1/sla/policies/{id}              replace its name, target, selector and state
 // DELETE /api/v1/sla/policies/{id}              remove it with its policy-scoped maintenance windows
 //
@@ -7,16 +7,19 @@
 import { NextResponse } from 'next/server'
 
 import { withAudit } from '@/lib/audit/withAudit'
+import { prisma } from '@/lib/db/prisma'
 import { requireSlaManage, requireSlaRead } from '@/lib/availability/guard'
 import { availabilityErrorResponse, codeResponse, notFound } from '@/lib/availability/orchestrator'
 import { parsePeriod, periodBounds } from '@/lib/availability/period'
 import {
   evaluatePolicy,
+  guestsOnUnmeasured,
   isRowId,
   isUniqueViolation,
   policyData,
   policyInScope,
   policyView,
+  rowGuests,
   withGuestNames,
 } from '@/lib/availability/policies'
 import { parsePolicyBody } from '@/lib/availability/validate'
@@ -43,13 +46,19 @@ export async function GET(request: Request, ctx: Ctx) {
     const now = new Date()
     const evaluation = await evaluatePolicy({ tenantId: access.tenantId, scope: access.scope }, id, period, now)
     const { from, to } = periodBounds(period, now)
+    const connectionIds = [...new Set(evaluation.results.map(r => r.ref.connection_id))]
+    const [results, connections] = await Promise.all([
+      withGuestNames(access.scope, evaluation.results),
+      prisma.connection.findMany({ where: { id: { in: connectionIds } }, select: { id: true, name: true } }),
+    ])
 
     return NextResponse.json({
       policy: policyView(row),
       period,
       from,
       to,
-      results: await withGuestNames(access.scope, evaluation.results),
+      results,
+      connectionNames: Object.fromEntries(connections.map(c => [c.id, c.name])),
       summary: evaluation.summary,
     })
   } catch (e) {
@@ -76,9 +85,11 @@ async function handlePut(request: Request, ctx: Ctx) {
     const input = parsed.value
 
     const db = getTenantPrisma(access.tenantId)
-    if (!(await db.slaPolicy.findFirst({ where: { id }, select: { id: true } }))) return notFound()
+    const current = await db.slaPolicy.findFirst({ where: { id }, select: { guests: true } })
+    if (!current) return notFound()
 
     if (!(await policyInScope(access.scope, access.connectionIds, input))) return codeResponse('guest_out_of_scope', 400)
+    if (await guestsOnUnmeasured(input.guests, rowGuests(current))) return codeResponse('connection_not_measured', 400)
 
     if (await db.slaPolicy.findFirst({ where: { name: input.name, NOT: { id } }, select: { id: true } })) {
       return codeResponse('name_taken', 409)

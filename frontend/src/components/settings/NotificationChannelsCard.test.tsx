@@ -557,3 +557,24 @@ describe('NotificationChannelsCard dialog', () => {
     })
   })
 })
+
+describe('NotificationChannelsCard SLA type', () => {
+  const typeOptions = async (dialog: HTMLElement) => {
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Notification types' }))
+
+    return (await screen.findAllByRole('option')).map(o => o.textContent)
+  }
+
+  it('offers the SLA type only with the SLA feature, or to a channel already subscribed', async () => {
+    // No licence provider: no feature.
+    mockFetch([channel(), channel({ id: 'c2', name: 'SLA Teams', types: ['sla'] })])
+    renderCard()
+
+    expect(await typeOptions(await openEdit('Ops Slack'))).not.toContain('SLA')
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    expect(await typeOptions(await openEdit('SLA Teams'))).toContain('SLA')
+  })
+})

@@ -61,3 +61,49 @@ describe('CheckboxGroup', () => {
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 })
+
+describe('CheckboxGroup by group', () => {
+  const grouped = [
+    { key: 'p1', label: 'web', group: 'PVE-PROD' },
+    { key: 'p2', label: 'db', group: 'PVE-PROD' },
+    { key: 'd1', label: 'web-dr', group: 'PVE-DR' },
+  ]
+
+  function Grouped() {
+    const [selected, setSelected] = useState<Set<string>>(new Set())
+
+    return <CheckboxGroup title='Guests' items={grouped} selected={selected} onChange={setSelected} emptyText='none' searchable />
+  }
+
+  it('heads each connection, ticks a whole one and counts it', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(<Grouped />)
+
+    const prod = screen.getByRole('checkbox', { name: 'All of PVE-PROD' })
+
+    expect(screen.getByText('0 / 2')).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: 'web' }))
+    expect(prod).toHaveAttribute('data-indeterminate', 'true')
+
+    await user.click(prod)
+    expect(prod).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'db' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'web-dr' })).not.toBeChecked()
+    expect(screen.getByText('2 / 2')).toBeInTheDocument()
+
+    await user.click(prod)
+    expect(screen.getByRole('checkbox', { name: 'web' })).not.toBeChecked()
+  })
+
+  it('finds the guests of a connection by its name', async () => {
+    const user = userEvent.setup()
+
+    renderWithProviders(<Grouped />)
+    await user.type(screen.getByRole('textbox'), 'pve-dr')
+
+    expect(screen.getByRole('checkbox', { name: 'web-dr' })).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'db' })).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'All of PVE-PROD' })).toBeNull()
+  })
+})

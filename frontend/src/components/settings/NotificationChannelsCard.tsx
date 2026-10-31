@@ -42,6 +42,7 @@ import {
 } from '@mui/material'
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
+import { Features, useLicense } from '@/contexts/LicenseContext'
 import { DestinationDialogActions, SMALL_SELECT_SX, TestResultAlert } from '@/components/settings/destinations/DestinationDialogParts'
 import {
   ActivityCaption,
@@ -307,6 +308,12 @@ function ChannelDialog({ channel, initial, saving, onCancel, onSave }: DialogPro
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [touched, setTouched] = useState(false)
   const [showSecrets, setShowSecrets] = useState(false)
+  const { hasFeature } = useLicense()
+
+  // The SLA budget notifications exist with the SLA feature only; a channel
+  // already subscribed to them keeps showing it.
+  const offeredTypes = CHANNEL_NOTIFICATION_TYPES.filter(type =>
+    type !== 'sla' || hasFeature(Features.SLA_MONITORING) || form.types.includes('sla'))
 
   const isNew = !channel
   const nameMissing = form.name.trim() === ''
@@ -374,8 +381,8 @@ function ChannelDialog({ channel, initial, saving, onCancel, onSave }: DialogPro
               autoFocus={isNew}
             />
             <FormControl size='small' fullWidth sx={SMALL_SELECT_SX}>
-              <InputLabel>{t('fields.type')}</InputLabel>
-              <Select value={form.type} label={t('fields.type')} onChange={e => patch({ type: e.target.value as ChannelType })}>
+              <InputLabel id='channel-type-label'>{t('fields.type')}</InputLabel>
+              <Select labelId='channel-type-label' value={form.type} label={t('fields.type')} onChange={e => patch({ type: e.target.value as ChannelType })}>
                 {CHANNEL_TYPES.map(type => (
                   <MenuItem key={type} value={type}>
                     <Stack direction='row' spacing={1} alignItems='center'>
@@ -469,8 +476,9 @@ function ChannelDialog({ channel, initial, saving, onCancel, onSave }: DialogPro
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             <FormControl size='small' fullWidth sx={SMALL_SELECT_SX}>
-              <InputLabel shrink>{t('fields.types')}</InputLabel>
+              <InputLabel shrink id='channel-types-label'>{t('fields.types')}</InputLabel>
               <Select
+                labelId='channel-types-label'
                 multiple
                 displayEmpty
                 value={form.types}
@@ -488,7 +496,7 @@ function ChannelDialog({ channel, initial, saving, onCancel, onSave }: DialogPro
                   return list.map(notificationTypeLabel).join(', ')
                 }}
               >
-                {CHANNEL_NOTIFICATION_TYPES.map(type => (
+                {offeredTypes.map(type => (
                   <MenuItem key={type} value={type}>
                     {notificationTypeLabel(type)}
                   </MenuItem>
@@ -498,8 +506,9 @@ function ChannelDialog({ channel, initial, saving, onCancel, onSave }: DialogPro
             </FormControl>
 
             <FormControl size='small' fullWidth sx={SMALL_SELECT_SX}>
-              <InputLabel>{t('fields.minSeverity')}</InputLabel>
+              <InputLabel id='channel-severity-label'>{t('fields.minSeverity')}</InputLabel>
               <Select
+                labelId='channel-severity-label'
                 value={form.min_severity}
                 label={t('fields.minSeverity')}
                 onChange={e => patch({ min_severity: e.target.value as ChannelSeverity })}

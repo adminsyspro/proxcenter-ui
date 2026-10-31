@@ -10,12 +10,13 @@ import { NextResponse } from 'next/server'
 
 import { withAudit } from '@/lib/audit/withAudit'
 import { requireSlaManage, requireSlaRead } from '@/lib/availability/guard'
-import { availabilityErrorResponse, codeResponse, upstreamStatus } from '@/lib/availability/orchestrator'
+import { availabilityErrorResponse, codeResponse, getMeasuredConnections, upstreamStatus } from '@/lib/availability/orchestrator'
 import { parsePeriod, periodBounds } from '@/lib/availability/period'
 import {
-  PAGE_SIZE,
   evaluatePolicy,
+  guestsOnUnmeasured,
   isUniqueViolation,
+  PAGE_SIZE,
   policyData,
   policyInScope,
   policyView,
@@ -64,6 +65,8 @@ export async function GET(request: Request) {
     ])
 
     const now = new Date()
+    // The guests of a connection left out of the registry have no figure: each row counts them.
+    const measured = new Set(rows.length === 0 ? [] : await getMeasuredConnections())
     // One query per policy of the page (20 at most), in parallel. A policy
     // deleted meanwhile answers 404: its row keeps no summary.
     const evaluations = await Promise.all(rows.map(row =>
@@ -78,6 +81,7 @@ export async function GET(request: Request) {
         ...policyView(row),
         summary: evaluations[i]?.summary ?? null,
         guestCount: evaluations[i]?.results.length ?? 0,
+        unmeasuredGuests: evaluations[i]?.results.filter(r => !measured.has(r.ref.connection_id)).length ?? 0,
       })),
       total,
       page,
@@ -108,6 +112,7 @@ async function handlePost(request: Request) {
     const input = parsed.value
 
     if (!(await policyInScope(access.scope, access.connectionIds, input))) return codeResponse('guest_out_of_scope', 400)
+    if (await guestsOnUnmeasured(input.guests)) return codeResponse('connection_not_measured', 400)
 
     const db = getTenantPrisma(access.tenantId)
     if (await db.slaPolicy.findFirst({ where: { name: input.name }, select: { id: true } })) {

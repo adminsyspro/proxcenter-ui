@@ -11,7 +11,7 @@ export const CHANNEL_TYPES = ['slack', 'teams', 'ntfy', 'discord', 'webhook'] as
 export type ChannelType = (typeof CHANNEL_TYPES)[number]
 
 /** Notification types a channel can subscribe to; an empty list means all. */
-export const CHANNEL_NOTIFICATION_TYPES = ['alert', 'event', 'migration', 'backup', 'replication', 'maintenance', 'report'] as const
+export const CHANNEL_NOTIFICATION_TYPES = ['alert', 'event', 'migration', 'backup', 'replication', 'maintenance', 'report', 'sla'] as const
 export type ChannelNotificationType = (typeof CHANNEL_NOTIFICATION_TYPES)[number]
 
 export const CHANNEL_SEVERITIES = ['info', 'success', 'warning', 'critical'] as const

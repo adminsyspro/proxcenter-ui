@@ -6,6 +6,8 @@ export interface GuestOption {
   name: string | null
   type: 'qemu' | 'lxc'
   node: string
+  /** running, stopped..., as the inventory reports it. */
+  status?: string
 }
 
 export interface ConnectionOption {
@@ -50,6 +52,7 @@ export function inventoryOptions(data: any): InventoryOptions {
           name: g.name || null,
           type: g.type,
           node: node.node,
+          status: typeof g.status === 'string' ? g.status : undefined,
         })
 
         if (g.pool) pools.add(g.pool)

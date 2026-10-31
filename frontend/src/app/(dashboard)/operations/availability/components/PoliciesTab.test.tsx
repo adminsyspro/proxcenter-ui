@@ -12,6 +12,7 @@ vi.mock('../hooks/useSlaLists', () => ({
   usePolicies: (page: number) => policiesMock(page),
   usePolicyDetail: () => ({ data: undefined, error: undefined, isLoading: false }),
   useInventoryOptions: () => ({ options: { connections: [], guests: [], tags: [], pools: [] }, error: undefined, isLoading: false }),
+  useMeasuredConnections: () => ({ data: { connectionIds: [] }, error: undefined, isLoading: false }),
 }))
 
 vi.mock('@/contexts/RBACContext', () => ({ useRBAC: () => ({ hasPermission: () => true }) }))

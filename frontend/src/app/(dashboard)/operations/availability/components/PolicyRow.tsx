@@ -21,7 +21,7 @@ import { usePolicyDetail } from '../hooks/useSlaLists'
 
 import { useAvailabilityFormat } from './availabilityFormat'
 import { policyStatus, type PolicyItem, type PolicyStatus } from './slaApi'
-import TimelineRowItem, { type TimelineRow } from './TimelineRowItem'
+import PolicyGuests from './PolicyGuests'
 
 const STATUS_COLOR: Record<PolicyStatus, 'success' | 'warning' | 'error' | 'default'> = {
   met: 'success',
@@ -41,6 +41,8 @@ interface Props {
   canManage: boolean
   onEdit: (policy: PolicyItem) => void
   onDelete: (policy: PolicyItem) => void
+  /** Opens the measured connections; unset for whoever may not change them. */
+  onConfigure?: () => void
 }
 
 /** A value with a thin bar under it, as in the overview cards. */
@@ -83,8 +85,8 @@ function ScopeChips({ policy }: Readonly<{ policy: PolicyItem }>) {
   )
 }
 
-/** A policy on one table row; the chevron opens the timelines of its guests under it. */
-export default function PolicyRow({ policy, canManage, onEdit, onDelete }: Props) {
+/** A policy on one table row; the chevron opens the list of its guests under it. */
+export default function PolicyRow({ policy, canManage, onEdit, onDelete, onConfigure }: Readonly<Props>) {
   const t = useTranslations('availability')
   const { rate, target, span } = useAvailabilityFormat()
   const [open, setOpen] = useState(false)
@@ -96,17 +98,11 @@ export default function PolicyRow({ policy, canManage, onEdit, onDelete }: Props
   const belowTarget = availability === null ? undefined : policy.summary?.below_target
   const barColor = STATUS_COLOR[status] === 'default' ? 'primary' : STATUS_COLOR[status]
 
-  const rows: TimelineRow[] = (data?.results ?? []).map(r => ({
-    label: r.name ?? t(r.type === 'lxc' ? 'policies.guestFallbackCt' : 'policies.guestFallbackVm', { vmid: r.ref.vmid ?? 0 }),
-    guestType: r.type,
-    result: r,
-  }))
-
   let detail
   if (error) detail = <Alert severity='warning'>{t('error.generic')}</Alert>
   else if (isLoading || !data) detail = <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={20} aria-label={t('loading')} /></Box>
-  else if (rows.length === 0) detail = <Typography variant='body2' color='text.secondary'>{t('policies.noGuests')}</Typography>
-  else detail = rows.map(row => <TimelineRowItem key={row.result.ref.connection_id + ':' + row.result.ref.vmid} row={row} to={data.to} />)
+  else if (data.results.length === 0) detail = <Typography variant='body2' color='text.secondary'>{t('policies.noGuests')}</Typography>
+  else detail = <PolicyGuests guests={data.results} connectionNames={data.connectionNames ?? {}} target={policy.target} to={data.to} />
 
   return (
     <>
@@ -147,6 +143,19 @@ export default function PolicyRow({ policy, canManage, onEdit, onDelete }: Props
           {belowTarget !== undefined && belowTarget > 0 && (
             <Typography variant='caption' color='error.main' noWrap sx={{ display: 'block' }}>{t('policies.belowTarget', { count: belowTarget })}</Typography>
           )}
+          {(policy.unmeasuredGuests ?? 0) > 0 && (
+            <Tooltip describeChild title={t(onConfigure ? 'policies.unmeasuredHint' : 'policies.unmeasuredHintAsk')}>
+              <Chip
+                size='small'
+                color='warning'
+                variant='outlined'
+                icon={<i className='ri-eye-off-line' aria-hidden='true' />}
+                label={t('policies.unmeasured', { count: policy.unmeasuredGuests ?? 0 })}
+                onClick={onConfigure}
+                sx={{ mt: 0.5 }}
+              />
+            </Tooltip>
+          )}
         </TableCell>
         <TableCell align='right' sx={{ whiteSpace: 'nowrap' }}>
           {canManage && (
@@ -168,7 +177,7 @@ export default function PolicyRow({ policy, canManage, onEdit, onDelete }: Props
       <TableRow>
         <TableCell colSpan={POLICY_COLUMNS} sx={{ py: 0, ...(open ? {} : { borderBottom: 0 }) }}>
           <Collapse in={open} unmountOnExit>
-            <Box sx={{ py: 1.5, pl: 6, display: 'flex', flexDirection: 'column', gap: 1 }}>{detail}</Box>
+            <Box sx={{ py: 1.5, pl: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>{detail}</Box>
           </Collapse>
         </TableCell>
       </TableRow>

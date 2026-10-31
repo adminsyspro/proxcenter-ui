@@ -681,6 +681,10 @@
     }
   },
   "alerts": {
+    "errors": {
+      "alertLocked": "此告警无法删除：请改为将其解决。",
+      "alertsLocked": "{count, plural, other {# 条告警无法删除，已保留：请改为将其解决。}}"
+    },
     "title": "告警",
     "noActiveAlerts": "无活跃告警",
     "allSystemsNormal": "所有系统运行正常",
@@ -5326,7 +5330,8 @@
         "backup": "备份",
         "replication": "复制",
         "maintenance": "维护",
-        "report": "报告"
+        "report": "报告",
+        "sla": "SLA"
       },
       "severities": {
         "info": "信息及以上",
@@ -5334,6 +5339,25 @@
         "warning": "警告和严重",
         "critical": "仅严重"
       }
+    },
+    "sla": {
+      "title": "SLA",
+      "description": "当 SLA 策略消耗其停机预算时发出通知：超过设定阈值时发出警告，本周期目标无法达成时发出严重通知。",
+      "period": "预算周期",
+      "periods": {
+        "month": "自然月",
+        "rolling30": "最近 30 天（滚动）"
+      },
+      "warnPercent": "警告阈值",
+      "alertsNote": "受保护客户机停机和集群仲裁丢失通过“告警”类别通知。"
+    },
+    "help": {
+      "alert": "阈值和状态告警（CPU、内存、存储、节点或受保护客户机停机、集群仲裁、磁盘延迟、Ceph、备份覆盖率、过期快照），在触发和恢复时发送。",
+      "migration": "DRS 执行的迁移：开始、完成或失败。",
+      "backup": "Proxmox 备份任务每个任务的成功或失败，以及恢复演练。",
+      "replication": "Site Recovery：成功或失败的复制任务，以及恢复计划的故障转移、回切或测试。",
+      "maintenance": "节点进入或退出维护模式，以及其疏散完成。",
+      "report": "计划报告，生成后通过电子邮件发送。"
     }
   },
   "audit": {
@@ -11715,7 +11739,18 @@
       "1h": "1 小时",
       "24h": "24 小时",
       "7d": "7 天",
-      "30d": "30 天"
+      "30d": "30 天",
+      "1y": "1 年",
+      "custom": "自定义",
+      "range": "{from} → {to}",
+      "from": "从",
+      "to": "至",
+      "apply": "应用",
+      "rangeHint": "最长 400 天。未来的结束时间截止到当前。",
+      "error": {
+        "order": "结束时间必须晚于开始时间。",
+        "tooLong": "时间范围最长 400 天。"
+      }
     },
     "tiles": {
       "nodesUp": "正常节点",
@@ -11737,12 +11772,38 @@
       "perHost": "各主机可用性",
       "noNodes": "此连接上没有已测量的节点",
       "noMatch": "没有连接符合此筛选",
-      "empty": "没有可显示的连接"
+      "empty": "没有可显示的连接",
+      "overall": "总体 · {count} 台主机",
+      "toggle": "{name} 的主机",
+      "expandAll": "全部展开",
+      "collapseAll": "全部折叠",
+      "noneMeasured": "尚未测量任何连接：可用性登记仅记录在其配置中勾选的连接。",
+      "unmeasured": "{count} 个连接未被测量。",
+      "configure": "选择要测量的连接",
+      "askAdmin": "由管理员通过本页的设置按钮选择。"
     },
     "timeline": {
-      "rowSummary": "{label}：可用性 {availability}，{incidents, plural, other {# 次故障}}",
+      "rowSummary": "{label}：可用性 {availability}，{incidents, plural, other {# 次中断}}",
       "rowSummaryUnmeasured": "{label}：未测量",
-      "run": "{state} · {from} → {to} · {duration}"
+      "run": "{state} · {from} → {to} · {duration}",
+      "incident": "事件：{title}（{comments, plural, other {# 条评论}}）",
+      "alertsNoIncident": "{count, plural, other {# 条}}告警，未创建事件",
+      "bar": "{from} → {to}",
+      "barRate": "可用性 {availability}",
+      "now": "现在",
+      "moreOutages": "+{count, plural, other {另有 # 次中断}}",
+      "detail": {
+        "title": "时段详情",
+        "hint": "点击查看详情",
+        "close": "关闭",
+        "slots": "该时段每个时间片的状态",
+        "spent": "{state}：{duration}",
+        "events": "该时段的事件",
+        "none": "此时段内无故障。",
+        "viewIncident": "查看事件",
+        "openIncident": "创建事件",
+        "hintHosts": "点击查看每台主机"
+      }
     },
     "explainer": {
       "title": "这些比率的计算方式",
@@ -11794,7 +11855,21 @@
         "guests": "客户机"
       },
       "budgetUsage": "{used} / {allowed}",
-      "noScope": "未选择客户机"
+      "noScope": "未选择客户机",
+      "guests": {
+        "search": "搜索虚拟机",
+        "belowOnly": "低于目标 ({count})",
+        "colGuest": "虚拟机",
+        "colTimeline": "最近 30 天",
+        "colRate": "可用性",
+        "colDowntime": "停机时间",
+        "none": "没有匹配的虚拟机。",
+        "expand": "{name} 的时间线",
+        "showMore": "再显示 {count} 个（剩余 {rest} 个）"
+      },
+      "unmeasured": "{count} 台客户机未被测量",
+      "unmeasuredHint": "位于登记未测量的连接上：无数据、无告警、无 SLA 通知。点击选择要测量的连接。",
+      "unmeasuredHintAsk": "位于登记未测量的连接上：无数据、无告警、无 SLA 通知。由管理员选择要测量的连接。"
     },
     "dialog": {
       "createTitle": "新建 SLA 策略",
@@ -11817,7 +11892,10 @@
       "scopeTitle": "覆盖的客户机",
       "scopeHelp": "勾选的客户机、带有其中一个标签的客户机或属于其中一个池的客户机均被覆盖。",
       "tabCount": "{label}（{count}）",
-      "selection": "客户机 {guests} · 标签 {tags} · 池 {pools}"
+      "selection": "客户机 {guests} · 标签 {tags} · 池 {pools}",
+      "allOf": "{group} 全部",
+      "groupCount": "{ticked} / {total}",
+      "measuredOnly": "仅提供已测量连接的客户机。"
     },
     "errors": {
       "guest_out_of_scope": "所选客户机或资源池超出您的权限范围。",
@@ -11837,7 +11915,8 @@
       "invalid_target_ref": "目标不完整或无效。",
       "invalid_fields": "请求的列表不可用。",
       "forbidden": "您无权修改 SLA 策略或维护窗口。",
-      "not_found": "此项目已不存在。"
+      "not_found": "此项目已不存在。",
+      "connection_not_measured": "某个勾选的客户机位于未测量的连接上。请先测量该连接。"
     },
     "maintenance": {
       "new": "新建窗口",
@@ -11900,6 +11979,174 @@
         "orchestrator_unavailable": "编排器不可用，未保存任何内容。",
         "generic": "无法保存设置。"
       }
+    },
+    "measured": {
+      "open": "测量的连接",
+      "title": "测量的连接",
+      "description": "可用性登记仅记录此处勾选的连接：其节点、集群仲裁和客户机。在勾选连接之前不测量任何内容。取消勾选的连接将停止记录，其历史保留至保留期结束。",
+      "empty": "没有 Proxmox VE 连接。",
+      "save": "保存",
+      "cancel": "取消",
+      "saveError": "无法保存测量的连接。",
+      "invalidConnections": "勾选的某个连接已不存在。请重新加载页面。",
+      "loadError": "无法加载连接列表。",
+      "unmeasureWarning": "{connection} 被 {count} 个策略使用（{policies}）：其客户机将不再被测量；历史记录会保留。"
+    }
+  },
+  "incidents": {
+    "title": "事件",
+    "status": {
+      "open": "进行中",
+      "resolved": "已解决",
+      "closed": "已关闭"
+    },
+    "severity": {
+      "info": "信息",
+      "warning": "警告",
+      "critical": "严重"
+    },
+    "header": {
+      "editTitle": "编辑标题",
+      "saveTitle": "保存标题",
+      "cancel": "取消",
+      "ongoing": "进行中",
+      "titleLabel": "标题"
+    },
+    "facts": {
+      "started": "开始",
+      "ended": "结束",
+      "duration": "持续时间",
+      "alerts": "告警",
+      "alertsTotal": "{total} 条告警",
+      "alertsActive": "{count} 条活动",
+      "alertsResolved": "全部已解决",
+      "report": "SLA 报告",
+      "reportIn": "已包含",
+      "reportOut": "未包含",
+      "reportPending": "检查中",
+      "postmortem": "事后分析"
+    },
+    "empty": {
+      "none": "此告警尚未创建事件。",
+      "open": "创建事件"
+    },
+    "alerts": {
+      "title": "告警",
+      "detach": "分离",
+      "ongoing": "进行中",
+      "sameOutage": "同一故障的告警",
+      "noCandidates": "没有其他告警与此故障匹配。",
+      "attach": "关联（{count}）",
+      "search": "搜索告警",
+      "unknown": "未知对象",
+      "outOfSla": "不在 SLA 策略内：不出现在时间线和报告中",
+      "description": "此事件跟踪的告警，按开始时间排序。所有告警解决后，事件会自动解决。",
+      "sameOutageHint": "同一节点、其虚拟机或其集群在此故障前后 15 分钟内产生的其他告警。勾选原因相同的告警，在此一并跟踪。",
+      "resolvedAt": "于 {time} 解决，历时 {duration}",
+      "activeFor": "已持续 {duration}",
+      "showMore": "再显示 {count} 条告警",
+      "showLess": "收起",
+      "outOfSlaShort": "不在 SLA 策略内"
+    },
+    "journal": {
+      "title": "日志",
+      "placeholder": "添加评论",
+      "internalNote": "内部备注",
+      "internal": "内部",
+      "add": "添加",
+      "edited": "已编辑",
+      "edit": "编辑",
+      "delete": "删除",
+      "save": "保存",
+      "cancel": "取消",
+      "empty": "暂无评论。",
+      "deleteTitle": "删除此评论？",
+      "deleteMessage": "评论将被永久删除。",
+      "description": "事件处理过程中的沟通与决定。内部备注不会出现在 SLA 报告中。"
+    },
+    "postmortem": {
+      "title": "事后复盘",
+      "rootCause": "根本原因",
+      "impact": "影响",
+      "actions": "纠正措施",
+      "addAction": "添加措施",
+      "actionPlaceholder": "纠正措施",
+      "deleteAction": "删除措施",
+      "validate": "确认事后复盘",
+      "reopen": "重新打开",
+      "needResolved": "事件的所有告警解决后，才能确认事后复盘。",
+      "needFields": "请填写根本原因和影响以确认事后复盘。",
+      "slaNotice": "已纳入 SLA 报告；内部备注不会出现在其中。",
+      "validatedBy": "由 {by} 确认",
+      "noActions": "暂无纠正措施。",
+      "notInReport": "未纳入 SLA 报告：此事件的告警均不涉及受 SLA 策略覆盖的虚拟机。",
+      "description": "所有告警解决后，填写根本原因和影响，列出纠正措施，然后验证以关闭事件。"
+    },
+    "report": {
+      "title": "事件报告",
+      "description": "可分享的 PDF：关键信息、按开始时间排列的告警、事后分析和公开日志。内部备注不会出现在其中。",
+      "download": "下载 PDF",
+      "draftHint": "事后分析尚未验证：报告会将其标记为草稿。",
+      "failed": "无法生成报告，请重试。",
+      "pdfTitle": "事件报告",
+      "generated": "生成于 {time}",
+      "severity": "严重程度",
+      "colStarted": "开始",
+      "colObject": "对象",
+      "colMessage": "消息",
+      "colResolved": "已解决",
+      "validated": "由 {by} 于 {time} 验证",
+      "draft": "草稿：事后分析尚未验证。",
+      "notFilled": "未填写。",
+      "footer": "报告由 {app} 生成。内部备注从不包含在内。"
+    },
+    "delete": {
+      "action": "删除事件",
+      "title": "删除此事件？",
+      "message": "事件、其日志和措施将被永久删除。告警将保留。"
+    },
+    "errors": {
+      "alertInIncident": "此告警属于某个事件：请改为将其解决。",
+      "closed": "事件已关闭。请重新打开后再修改。",
+      "notResolved": "仍有活动告警时，无法关闭事件。",
+      "alreadyAttached": "此告警已关联到某个事件。",
+      "notFound": "该事件已不存在。",
+      "generic": "操作失败，请重试。",
+      "alertsKept": "{count, plural, other {# 条告警属于某个事件,已保留。}}"
+    },
+    "tab": "事件 ({count})",
+    "list": {
+      "intro": "事件将同一次故障的告警与日志和事后复盘归在一起。",
+      "filterLabel": "按状态筛选",
+      "columns": {
+        "status": "状态",
+        "title": "标题",
+        "severity": "严重程度",
+        "started": "开始",
+        "duration": "持续时间",
+        "alerts": "告警",
+        "comments": "评论",
+        "postmortem": "事后复盘",
+        "actions": "操作"
+      },
+      "filter": {
+        "all": "全部",
+        "open": "进行中",
+        "resolved": "已解决",
+        "closed": "已关闭"
+      },
+      "empty": "没有事件",
+      "emptyDescription": "从告警创建事件后,可在此处跟踪。",
+      "postmortem": {
+        "todo": "待处理",
+        "inProgress": "进行中",
+        "validated": "已确认"
+      }
+    },
+    "actions": {
+      "open": "创建事件",
+      "view": "查看事件",
+      "availability": "查看可用性"
     }
   }
 }

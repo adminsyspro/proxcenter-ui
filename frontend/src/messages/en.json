@@ -677,6 +677,10 @@
     }
   },
   "alerts": {
+    "errors": {
+      "alertLocked": "This alert cannot be deleted: resolve it instead.",
+      "alertsLocked": "{count, plural, one {# alert cannot be deleted and was kept: resolve it instead.} other {# alerts cannot be deleted and were kept: resolve them instead.}}"
+    },
     "title": "Alerts",
     "noActiveAlerts": "No active alerts",
     "allSystemsNormal": "All systems operating normally",
@@ -5326,7 +5330,8 @@
         "backup": "Backups",
         "replication": "Replication",
         "maintenance": "Maintenance",
-        "report": "Reports"
+        "report": "Reports",
+        "sla": "SLA"
       },
       "severities": {
         "info": "Info and above",
@@ -5334,6 +5339,25 @@
         "warning": "Warnings and critical",
         "critical": "Critical only"
       }
+    },
+    "sla": {
+      "title": "SLA",
+      "description": "Warns when an SLA policy spends its downtime budget: a warning past the chosen threshold, then a critical notification once the target is lost for the period.",
+      "period": "Budget period",
+      "periods": {
+        "month": "Calendar month",
+        "rolling30": "Last 30 days (rolling)"
+      },
+      "warnPercent": "Warning threshold",
+      "alertsNote": "Covered guests going down and lost cluster quorum come through the Alerts category."
+    },
+    "help": {
+      "alert": "Threshold and state alerts (CPU, memory, storage, node or covered guest down, cluster quorum, disk latency, Ceph, backup coverage, stale snapshots) when they fire and when they resolve.",
+      "migration": "Migrations run by DRS: started, completed or failed.",
+      "backup": "Proxmox backup jobs, success or failure per job, and the restore drills.",
+      "replication": "Site Recovery: replication jobs that succeed or fail, and the failover, failback or test of a recovery plan.",
+      "maintenance": "A node entering or leaving maintenance mode, and the end of its evacuation.",
+      "report": "Scheduled reports, sent by email once generated."
     }
   },
   "audit": {
@@ -11715,7 +11739,18 @@
       "1h": "1h",
       "24h": "24h",
       "7d": "7d",
-      "30d": "30d"
+      "30d": "30d",
+      "1y": "1y",
+      "custom": "Custom",
+      "range": "{from} → {to}",
+      "from": "From",
+      "to": "To",
+      "apply": "Apply",
+      "rangeHint": "400 days at most. An end in the future stops at now.",
+      "error": {
+        "order": "The end must come after the start.",
+        "tooLong": "The range is limited to 400 days."
+      }
     },
     "tiles": {
       "nodesUp": "Nodes up",
@@ -11737,12 +11772,38 @@
       "perHost": "Availability per host",
       "noNodes": "No node measured on this connection",
       "noMatch": "No connection matches this filter",
-      "empty": "No connection to show"
+      "empty": "No connection to show",
+      "overall": "Overall · {count, plural, one {# host} other {# hosts}}",
+      "toggle": "Hosts of {name}",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "noneMeasured": "No connection is measured yet: the availability registry only records the connections ticked in its configuration.",
+      "unmeasured": "{count, plural, one {# connection is not measured.} other {# connections are not measured.}}",
+      "configure": "Choose the measured connections",
+      "askAdmin": "An administrator chooses them with the settings button of this page."
     },
     "timeline": {
-      "rowSummary": "{label}: {availability} available, {incidents, plural, one {# incident} other {# incidents}}",
+      "rowSummary": "{label}: {availability} available, {incidents, plural, one {# outage} other {# outages}}",
       "rowSummaryUnmeasured": "{label}: not measured",
-      "run": "{state} · {from} → {to} · {duration}"
+      "run": "{state} · {from} → {to} · {duration}",
+      "incident": "Incident: {title} ({comments, plural, one {# comment} other {# comments}})",
+      "alertsNoIncident": "{count, plural, one {# alert} other {# alerts}}, no incident opened",
+      "bar": "{from} → {to}",
+      "barRate": "{availability} available",
+      "now": "Now",
+      "moreOutages": "+{count, plural, one {# other outage} other {# other outages}}",
+      "detail": {
+        "title": "Detail of the period",
+        "hint": "Click for the detail",
+        "close": "Close",
+        "slots": "State of each slot of the period",
+        "spent": "{state}: {duration}",
+        "events": "Events of the period",
+        "none": "No outage in this period.",
+        "viewIncident": "View the incident",
+        "openIncident": "Open an incident",
+        "hintHosts": "Click to see each host"
+      }
     },
     "explainer": {
       "title": "How these rates are calculated",
@@ -11794,7 +11855,21 @@
         "guests": "Guests"
       },
       "budgetUsage": "{used} of {allowed}",
-      "noScope": "No guest selected"
+      "noScope": "No guest selected",
+      "guests": {
+        "search": "Search a guest",
+        "belowOnly": "Below target ({count})",
+        "colGuest": "Guest",
+        "colTimeline": "Last 30 days",
+        "colRate": "Availability",
+        "colDowntime": "Downtime",
+        "none": "No guest matches.",
+        "expand": "Timeline of {name}",
+        "showMore": "Show {count} more ({rest} left)"
+      },
+      "unmeasured": "{count, plural, one {# guest not measured} other {# guests not measured}}",
+      "unmeasuredHint": "On a connection the registry does not measure: no figure, no alert, no SLA notification. Click to choose the measured connections.",
+      "unmeasuredHintAsk": "On a connection the registry does not measure: no figure, no alert, no SLA notification. An administrator chooses the measured connections."
     },
     "dialog": {
       "createTitle": "New SLA policy",
@@ -11817,7 +11892,10 @@
       "scopeTitle": "Covered guests",
       "scopeHelp": "A guest is covered when it is ticked, carries one of the tags or belongs to one of the pools.",
       "tabCount": "{label} ({count})",
-      "selection": "Guests {guests} · Tags {tags} · Pools {pools}"
+      "selection": "Guests {guests} · Tags {tags} · Pools {pools}",
+      "allOf": "All of {group}",
+      "groupCount": "{ticked} / {total}",
+      "measuredOnly": "Only the guests of the measured connections are offered."
     },
     "errors": {
       "guest_out_of_scope": "A selected guest or pool is outside your perimeter.",
@@ -11837,7 +11915,8 @@
       "invalid_target_ref": "The target is incomplete or invalid.",
       "invalid_fields": "The requested list is not available.",
       "forbidden": "You do not have the right to change SLA policies or maintenance windows.",
-      "not_found": "This item no longer exists."
+      "not_found": "This item no longer exists.",
+      "connection_not_measured": "A ticked guest is on a connection that is not measured. Measure the connection first."
     },
     "maintenance": {
       "new": "New window",
@@ -11900,6 +11979,174 @@
         "orchestrator_unavailable": "The orchestrator is unavailable, nothing was saved.",
         "generic": "The settings could not be saved."
       }
+    },
+    "measured": {
+      "open": "Measured connections",
+      "title": "Measured connections",
+      "description": "The availability registry only records the connections ticked here: their nodes, cluster quorum and guests. Nothing is measured until a connection is ticked. An unticked connection stops being recorded; its history is kept until the retention.",
+      "empty": "No Proxmox VE connection.",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saveError": "The measured connections could not be saved.",
+      "invalidConnections": "A ticked connection no longer exists. Reload the page.",
+      "loadError": "The connections could not be loaded.",
+      "unmeasureWarning": "{connection} is used by {count, plural, one {# policy} other {# policies}} ({policies}): its guests will no longer be measured; their history is kept."
+    }
+  },
+  "incidents": {
+    "title": "Incident",
+    "status": {
+      "open": "Open",
+      "resolved": "Resolved",
+      "closed": "Closed"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Warning",
+      "critical": "Critical"
+    },
+    "header": {
+      "editTitle": "Edit the title",
+      "saveTitle": "Save the title",
+      "cancel": "Cancel",
+      "ongoing": "ongoing",
+      "titleLabel": "Title"
+    },
+    "facts": {
+      "started": "Started",
+      "ended": "Ended",
+      "duration": "Duration",
+      "alerts": "Alerts",
+      "alertsTotal": "{total, plural, one {# alert} other {# alerts}}",
+      "alertsActive": "{count, plural, one {# active} other {# active}}",
+      "alertsResolved": "all resolved",
+      "report": "SLA report",
+      "reportIn": "Included",
+      "reportOut": "Not included",
+      "reportPending": "Checking",
+      "postmortem": "Post-mortem"
+    },
+    "empty": {
+      "none": "No incident has been opened for this alert yet.",
+      "open": "Open an incident"
+    },
+    "alerts": {
+      "title": "Alerts",
+      "detach": "Detach",
+      "ongoing": "Ongoing",
+      "sameOutage": "Alerts of the same outage",
+      "noCandidates": "No other alert matches this outage.",
+      "attach": "Attach ({count})",
+      "search": "Search alerts",
+      "unknown": "Unknown object",
+      "outOfSla": "Out of SLA policy: absent from the timeline and the report",
+      "description": "The alerts this incident follows, by start time. The incident resolves on its own once they are all resolved.",
+      "sameOutageHint": "Other alerts of the same node, its guests or its cluster, raised within 15 minutes of this outage. Tick those with the same cause to follow them here.",
+      "resolvedAt": "Resolved at {time} after {duration}",
+      "activeFor": "Active for {duration}",
+      "showMore": "Show {count, plural, one {# more alert} other {# more alerts}}",
+      "showLess": "Show less",
+      "outOfSlaShort": "Out of SLA policy"
+    },
+    "journal": {
+      "title": "Journal",
+      "placeholder": "Add a comment",
+      "internalNote": "Internal note",
+      "internal": "Internal",
+      "add": "Add",
+      "edited": "edited",
+      "edit": "Edit",
+      "delete": "Delete",
+      "save": "Save",
+      "cancel": "Cancel",
+      "empty": "No comment yet.",
+      "deleteTitle": "Delete this comment?",
+      "deleteMessage": "The comment will be permanently deleted.",
+      "description": "Exchanges and decisions as the incident is followed. Internal notes stay out of the SLA report."
+    },
+    "postmortem": {
+      "title": "Post-mortem",
+      "rootCause": "Root cause",
+      "impact": "Impact",
+      "actions": "Corrective actions",
+      "addAction": "Add an action",
+      "actionPlaceholder": "Corrective action",
+      "deleteAction": "Delete the action",
+      "validate": "Validate the post-mortem",
+      "reopen": "Reopen",
+      "needResolved": "The post-mortem can be validated once every alert of the incident is resolved.",
+      "needFields": "Fill in the root cause and the impact to validate the post-mortem.",
+      "slaNotice": "Included in the SLA report; internal notes never appear in it.",
+      "validatedBy": "Validated by {by}",
+      "noActions": "No corrective action yet.",
+      "notInReport": "Not in the SLA report: no alert of this incident concerns a guest covered by an SLA policy.",
+      "description": "Once every alert is resolved, write the root cause and the impact, list the corrective actions, then validate to close the incident."
+    },
+    "report": {
+      "title": "Incident report",
+      "description": "A PDF to share: key facts, alerts by start time, post-mortem and public journal. Internal notes never appear in it.",
+      "download": "Download the PDF",
+      "draftHint": "The post-mortem is not validated yet: the report marks it as a draft.",
+      "failed": "The report could not be generated. Try again.",
+      "pdfTitle": "Incident report",
+      "generated": "Generated on {time}",
+      "severity": "Severity",
+      "colStarted": "Started",
+      "colObject": "Object",
+      "colMessage": "Message",
+      "colResolved": "Resolved",
+      "validated": "Validated by {by} on {time}",
+      "draft": "Draft: the post-mortem is not validated yet.",
+      "notFilled": "Not filled in.",
+      "footer": "Report generated by {app}. Internal notes are never included."
+    },
+    "delete": {
+      "action": "Delete the incident",
+      "title": "Delete this incident?",
+      "message": "The incident, its journal and its actions will be permanently deleted. The alerts are kept."
+    },
+    "errors": {
+      "alertInIncident": "This alert belongs to an incident: resolve it instead.",
+      "closed": "The incident is closed. Reopen it to change it.",
+      "notResolved": "The incident cannot be closed while alerts are still active.",
+      "alreadyAttached": "This alert is already attached to an incident.",
+      "notFound": "This incident no longer exists.",
+      "generic": "The operation failed. Try again.",
+      "alertsKept": "{count, plural, one {# alert belongs to an incident and was kept.} other {# alerts belong to an incident and were kept.}}"
+    },
+    "tab": "Incidents ({count})",
+    "list": {
+      "intro": "An incident groups the alerts of one outage, with a journal and a post-mortem.",
+      "filterLabel": "Filter by status",
+      "columns": {
+        "status": "Status",
+        "title": "Title",
+        "severity": "Severity",
+        "started": "Start",
+        "duration": "Duration",
+        "alerts": "Alerts",
+        "comments": "Comments",
+        "postmortem": "Post-mortem",
+        "actions": "Actions"
+      },
+      "filter": {
+        "all": "All",
+        "open": "Open",
+        "resolved": "Resolved",
+        "closed": "Closed"
+      },
+      "empty": "No incident",
+      "emptyDescription": "Open an incident from an alert to follow it here.",
+      "postmortem": {
+        "todo": "To do",
+        "inProgress": "In progress",
+        "validated": "Validated"
+      }
+    },
+    "actions": {
+      "open": "Open an incident",
+      "view": "View the incident",
+      "availability": "View availability"
     }
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
 
-import { alertsApi } from '@/lib/orchestrator/client'
+import { alertsApi, parseOrchestratorError } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getCurrentTenantId, getTenantConnectionIds } from '@/lib/tenant'
 import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
@@ -8,6 +9,8 @@ import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rb
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
 import { withAudit } from '@/lib/audit/withAudit'
+import { authOptions } from '@/lib/auth/config'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/constants'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -61,6 +64,22 @@ export async function GET(
 }
 
 /**
+ * True for a caller of the Default tenant, judged on the session claim AND on
+ * getCurrentTenantId like the incident routes. Any doubt counts as not Default.
+ */
+async function isDefaultTenantCaller(): Promise<boolean> {
+  try {
+    const session = await getServerSession(authOptions)
+    const claim = (session as { user?: { tenantId?: string } } | null)?.user?.tenantId
+    if (claim && claim !== DEFAULT_TENANT_ID) return false
+
+    return (await getCurrentTenantId()) === DEFAULT_TENANT_ID
+  } catch {
+    return false
+  }
+}
+
+/**
  * DELETE /api/v1/orchestrator/alerts/[id]
  * Supprime une alerte par son ID
  */
@@ -96,6 +115,18 @@ async function handleDelete(
 
     return NextResponse.json(response.data)
   } catch (error: any) {
+    // An alert attached to an incident is refused by the orchestrator (the
+    // incident register, ALERT_IN_INCIDENT). The Default tenant is told why;
+    // any other tenant gets a neutral lock that never names an incident.
+    const upstream = parseOrchestratorError(error)
+    if (upstream?.status === 409 && upstream.details?.code === 'ALERT_IN_INCIDENT') {
+      if (await isDefaultTenantCaller()) {
+        return NextResponse.json({ error: 'alert_in_incident', code: 'ALERT_IN_INCIDENT' }, { status: 409 })
+      }
+
+      return NextResponse.json({ error: 'alert_locked', code: 'ALERT_LOCKED' }, { status: 409 })
+    }
+
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('[orchestrator/alerts/[id]] DELETE error:', error)
     }

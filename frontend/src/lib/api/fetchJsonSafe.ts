@@ -42,7 +42,7 @@ export interface JsonResponseResult<T = unknown> extends JsonResult<T> {
  * The message a failed API call should show: the body's `error` (a string,
  * or an object carrying `message`), else its `message`, else `HTTP <status>`.
  */
-function errorMessageOf(body: unknown, status: number): string {
+export function errorMessageOf(body: unknown, status: number): string {
   const b = (body && typeof body === 'object' ? body : {}) as { error?: unknown; message?: unknown }
   if (typeof b.error === 'string' && b.error) return b.error
   const nested = (b.error && typeof b.error === 'object' ? (b.error as { message?: unknown }).message : undefined)

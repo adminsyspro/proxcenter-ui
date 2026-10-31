@@ -90,6 +90,15 @@ describe('registry and edition mapping invariants', () => {
     expect(optionDisplayName('mystery_cap')).toBe('mystery_cap')
   })
 
+  it('grants incidents to both enterprise tiers and not to community', () => {
+    expect(Features.INCIDENTS).toBe('incidents')
+    expect(EDITION_FEATURES.enterprise).toContain('incidents')
+    expect(EDITION_FEATURES.enterprise_plus).toContain('incidents')
+    expect(EDITION_FEATURES.community ?? []).not.toContain('incidents')
+    expect(effectiveHasFeature(enterprise, 'incidents')).toBe(true)
+    expect(effectiveHasFeature({ licensed: true, edition: 'community' }, 'incidents')).toBe(false)
+  })
+
   it('grants SLA monitoring to both enterprise tiers and not to community', () => {
     expect(Features.SLA_MONITORING).toBe('sla_monitoring')
     expect(EDITION_FEATURES.enterprise).toContain('sla_monitoring')

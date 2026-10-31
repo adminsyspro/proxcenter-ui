@@ -66,6 +66,13 @@ function asIaas() {
   } })
 }
 
+// A tenant that owns whole connections: c1 is its own, c2 is not.
+function asMsp() {
+  m.session.mockResolvedValue({ user: { id: 'u2', email: 'acme@x', tenantId: 'acme' } })
+  m.tenant.mockResolvedValue('acme')
+  m.infra.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['c1']) })
+}
+
 function resetCommon() {
   vi.clearAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -110,11 +117,17 @@ describe('GET /sla/maintenance-windows', () => {
     expect(body.data[0]).not.toHaveProperty('tenantId')
   })
 
-  it('an iaas tenant sees only the windows of its perimeter', async () => {
-    asIaas()
+  it('a tenant sees only the windows of its connections', async () => {
+    asMsp()
     const body = await (await callRoute(GET as any)).json()
-    expect(body.data.map((w: any) => w.id)).toEqual(['w1', 'w4'])
+    expect(body.data.map((w: any) => w.id)).toEqual(['w1', 'w2', 'w4'])
     expect(m.tenantPrismaFor).toHaveBeenCalledWith('acme')
+  })
+
+  it('a vDC tenant gets a 404', async () => {
+    asIaas()
+    expect((await callRoute(GET as any)).status).toBe(404)
+    expect(m.db.slaMaintenanceWindow.findMany).not.toHaveBeenCalled()
   })
 
   it('403 without sla_monitoring', async () => {
@@ -159,12 +172,12 @@ describe('POST /sla/maintenance-windows', () => {
   })
 
   it('refuses a target outside the perimeter, without a name', async () => {
-    asIaas()
-    let res = await post({ ...BODY, node: 'pve2' })
+    asMsp()
+    let res = await post({ ...BODY, connectionId: 'c2' })
     expect(await res.json()).toEqual({ error: 'target_out_of_scope' })
-    res = await post({ ...BODY, scope: 'connection' })
+    res = await post({ ...BODY, scope: 'connection', connectionId: 'c2' })
     expect(await res.json()).toEqual({ error: 'target_out_of_scope' })
-    res = await post({ ...BODY, scope: 'guest', vmid: 200 })
+    res = await post({ ...BODY, scope: 'guest', connectionId: 'c2', vmid: 200 })
     expect(await res.json()).toEqual({ error: 'guest_out_of_scope' })
     res = await post({ ...BODY, startsAt: '2026-10-28T08:00', endsAt: '2026-10-28T10:00' })
     expect(await res.json()).toEqual({ error: 'invalid_window' })
@@ -172,7 +185,8 @@ describe('POST /sla/maintenance-windows', () => {
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: 'target_out_of_scope' })
     expect(m.db.slaMaintenanceWindow.create).not.toHaveBeenCalled()
-    expect((await post({ ...BODY, scope: 'guest', vmid: 100 })).status).toBe(201)
+    expect((await post({ ...BODY, scope: 'guest', vmid: 200 })).status).toBe(201)
+    expect((await post({ ...BODY, scope: 'connection' })).status).toBe(201)
     expect((await post({ ...BODY, scope: 'policy', policyId: 'p1' })).status).toBe(201)
   })
 

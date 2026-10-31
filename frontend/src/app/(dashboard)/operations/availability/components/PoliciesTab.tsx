@@ -30,7 +30,12 @@ import PolicyDialog from './PolicyDialog'
 import PolicyRow from './PolicyRow'
 import { errorCodeOf, slaRequest, type PolicyItem } from './slaApi'
 
-export default function PoliciesTab() {
+interface Props {
+  /** Opens the measured connections; unset for whoever may not change them. */
+  onConfigure?: () => void
+}
+
+export default function PoliciesTab({ onConfigure }: Readonly<Props>) {
   const t = useTranslations('availability')
   const { hasPermission } = useRBAC()
   const canManage = hasPermission('alerts.manage')
@@ -94,7 +99,7 @@ export default function PoliciesTab() {
             </TableHead>
             <TableBody>
               {data.data.map(p => (
-                <PolicyRow key={p.id} policy={p} canManage={canManage} onEdit={setEditing} onDelete={p2 => { setDeleteError(null); setDeleting(p2) }} />
+                <PolicyRow key={p.id} policy={p} canManage={canManage} onEdit={setEditing} onDelete={p2 => { setDeleteError(null); setDeleting(p2) }} onConfigure={onConfigure} />
               ))}
             </TableBody>
           </Table>

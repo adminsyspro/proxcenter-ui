@@ -7,14 +7,18 @@ import { inventoryFixture, makePolicy } from './fixtures'
 import { inventoryOptions } from './inventoryOptions'
 import PolicyDialog from './PolicyDialog'
 
+const { measured } = vi.hoisted(() => ({ measured: { ids: ['c1'] as string[] } }))
+
 vi.mock('../hooks/useSlaLists', () => ({
   useInventoryOptions: () => ({ options: inventoryOptions(inventoryFixture), error: undefined, isLoading: false }),
+  useMeasuredConnections: () => ({ data: { connectionIds: measured.ids }, error: undefined, isLoading: false }),
 }))
 
 const fetchMock = vi.fn()
 
 beforeEach(() => {
   fetchMock.mockReset().mockResolvedValue({ ok: true, status: 201, json: async () => ({}) })
+  measured.ids = ['c1']
   vi.stubGlobal('fetch', fetchMock)
 })
 
@@ -55,6 +59,19 @@ describe('PolicyDialog', () => {
     await user.click(tagsAll)
     expect(tagsAll).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'prod' })).not.toBeChecked()
+  })
+
+  it('offers only the guests of a measured connection, and keeps one ticked earlier', async () => {
+    measured.ids = []
+    renderDialog(null)
+
+    expect(screen.queryByRole('checkbox', { name: /web/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/Only the guests of the measured connections are offered\.$/)).toBeInTheDocument()
+    cleanup()
+
+    renderDialog(makePolicy({ guests: [{ connectionId: 'c1', vmid: 100 }] }))
+    expect(screen.getByRole('checkbox', { name: /web/ })).toBeChecked()
+    expect(screen.queryByRole('checkbox', { name: /CT 101/ })).not.toBeInTheDocument()
   })
 
   it('creates a policy with the ticked guests and tags', async () => {

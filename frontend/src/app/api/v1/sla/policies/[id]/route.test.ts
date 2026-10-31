@@ -66,6 +66,13 @@ function asIaas() {
   } })
 }
 
+// A tenant that owns whole connections: c1 is its own, c2 is not.
+function asMsp() {
+  m.session.mockResolvedValue({ user: { id: 'u2', email: 'acme@x', tenantId: 'acme' } })
+  m.tenant.mockResolvedValue('acme')
+  m.infra.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['c1']) })
+}
+
 function resetCommon() {
   vi.clearAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -132,12 +139,18 @@ describe('GET /sla/policies/{id}', () => {
     expect(body.results.map((r: any) => [r.ref.vmid, r.name, r.type])).toEqual([[100, 'web-01', 'qemu'], [300, 'migrated', 'qemu'], [200, 'secret-db', 'lxc'], [404, null, null]])
     expect(m.pveFetch).toHaveBeenCalledWith({ id: 'c1' }, '/cluster/resources?type=vm')
 
-    // iaas: the orchestrator mock answers a guest out of scope anyway; it gets
-    // no name. 300 is in the vDC pool on a node outside the vDC: named.
-    asIaas()
+    // A tenant of c1 only: the orchestrator mock answers a guest of c2 anyway;
+    // it gets no name, and c2 is not read.
+    asMsp()
+    m.pveFetch.mockClear()
+    m.orchestrator.mockResolvedValue({ summary: SUMMARY, policy: null, results: [
+      { ref: { connection_id: 'c1', kind: 'guest', vmid: 100 }, availability: 99.5 },
+      { ref: { connection_id: 'c2', kind: 'guest', vmid: 200 }, availability: 100 },
+    ] })
     body = await (await call(GET)).json()
-    expect(body.results.map((r: any) => [r.ref.vmid, r.name, r.type])).toEqual([[100, 'web-01', 'qemu'], [300, 'migrated', 'qemu'], [200, null, null], [404, null, null]])
+    expect(body.results.map((r: any) => [r.ref.vmid, r.name, r.type])).toEqual([[100, 'web-01', 'qemu'], [200, null, null]])
     expect(JSON.stringify(body)).not.toContain('secret-db')
+    expect(m.pveFetch).not.toHaveBeenCalledWith({ id: 'c2' }, expect.anything())
   })
 
   it('404 for a policy of another tenant or a malformed id, without asking the orchestrator', async () => {
@@ -172,11 +185,31 @@ describe('PUT /sla/policies/{id}', () => {
     expect(m.db.slaPolicy.updateMany).not.toHaveBeenCalled()
   })
 
-  it('rejects guests outside the vDC scope', async () => {
-    asIaas()
-    const res = await put({ ...BODY, guests: [{ connectionId: 'c1', vmid: 200 }] })
+  it('keeps a guest it held on a connection no longer measured, and refuses a new one there', async () => {
+    m.orchestrator.mockResolvedValue({ retention_days: 400, connection_ids: [] })
+    m.db.slaPolicy.findFirst.mockImplementation(async ({ where }: any) =>
+      (where.id === 'p1' && !where.name ? { ...ROW, guests: [{ connectionId: 'c1', vmid: 100 }] } : null))
+
+    expect((await put(BODY)).status).toBe(200)
+    expect(m.orchestrator).not.toHaveBeenCalled()
+
+    const res = await put({ ...BODY, guests: [{ connectionId: 'c1', vmid: 100 }, { connectionId: 'c1', vmid: 101 }] })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'connection_not_measured' })
+    expect(m.orchestrator).toHaveBeenCalledWith('/availability/settings')
+  })
+
+  it('rejects guests on a connection the tenant does not own', async () => {
+    asMsp()
+    const res = await put({ ...BODY, guests: [{ connectionId: 'c2', vmid: 200 }] })
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: 'guest_out_of_scope' })
+    expect(m.db.slaPolicy.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('a vDC tenant gets a 404, before any write', async () => {
+    asIaas()
+    expect((await put(BODY)).status).toBe(404)
     expect(m.db.slaPolicy.updateMany).not.toHaveBeenCalled()
   })
 

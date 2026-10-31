@@ -1,11 +1,11 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { Box, ButtonBase, Typography } from '@mui/material'
+import { Box, ButtonBase } from '@mui/material'
+
+import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
 
 import type { OverviewTiles } from '../hooks/useAvailabilityOverview'
-
-import { GlyphIcon, PROXMOX } from './RowGlyph'
 
 export type TileFilter = 'down' | 'maintenance' | 'coverage'
 
@@ -15,62 +15,62 @@ interface Props {
   nodesDown: number
   /** Connections measured with a coverage under 100%. */
   lowCoverage: number
+  /** Connections of the page, the total the low coverage tile counts against. */
+  connectionsTotal: number
   filter: TileFilter | null
   onFilter: (filter: TileFilter | null) => void
 }
 
-const tileSx = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'flex-start',
-  gap: 0.5,
-  p: 2,
-  textAlign: 'start',
-  border: 1,
-  borderColor: 'divider',
-  borderRadius: 1,
-  bgcolor: 'background.paper',
-  borderTopWidth: 3,
+// The theme colors, as CSS variables the donuts can fill with.
+const COLOR = {
+  success: 'var(--mui-palette-success-main)',
+  error: 'var(--mui-palette-error-main)',
+  info: 'var(--mui-palette-info-main)',
+  warning: 'var(--mui-palette-warning-main)',
 }
+const REMAINDER = 'var(--mui-palette-action-hover)'
 
-export default function AvailabilityTiles({ tiles, nodesDown, lowCoverage, filter, onFilter }: Props) {
+/** A count out of a total, worded "n / total", the arc in `color` over the remainder. */
+const ratio = (value: number, total: number, color: string) => ({
+  value: `${value} / ${total}`,
+  segments: [{ value, color }, { value: Math.max(0, total - value), color: REMAINDER }],
+})
+
+/** The donut stat cards of the Operations pages: three figures, then three that filter the connections. */
+export default function AvailabilityTiles({ tiles, nodesDown, lowCoverage, connectionsTotal, filter, onFilter }: Readonly<Props>) {
   const t = useTranslations('availability')
 
   const info = [
-    { key: 'nodesUp', icon: PROXMOX, label: t('tiles.nodesUp'), value: `${tiles.nodesUp} / ${tiles.nodesTotal}`, color: 'success.main' },
-    { key: 'clustersQuorate', icon: 'ri-server-line', label: t('tiles.clustersQuorate'), value: `${tiles.clustersQuorate} / ${tiles.clustersTotal}`, color: 'success.main' },
+    { key: 'nodesUp', title: t('tiles.nodesUp'), ...ratio(tiles.nodesUp, tiles.nodesTotal, COLOR.success) },
+    { key: 'clustersQuorate', title: t('tiles.clustersQuorate'), ...ratio(tiles.clustersQuorate, tiles.clustersTotal, COLOR.success) },
     ...(tiles.coveredGuestsDown === null
       ? []
-      : [{ key: 'coveredGuestsDown', icon: 'ri-computer-line', label: t('tiles.coveredGuestsDown'), value: String(tiles.coveredGuestsDown), color: 'error.main' }]),
+      : [{ key: 'coveredGuestsDown', title: t('tiles.coveredGuestsDown'), value: String(tiles.coveredGuestsDown), segments: [{ value: tiles.coveredGuestsDown, color: COLOR.error }] }]),
   ]
-  const filters: { key: TileFilter; icon: string; label: string; value: number; color: string }[] = [
-    { key: 'down', icon: 'ri-error-warning-line', label: t('tiles.nodesDown'), value: nodesDown, color: 'error.main' },
-    { key: 'maintenance', icon: 'ri-tools-line', label: t('tiles.nodesMaintenance'), value: tiles.nodesMaintenance, color: 'info.main' },
-    { key: 'coverage', icon: 'ri-eye-off-line', label: t('tiles.lowCoverage'), value: lowCoverage, color: 'warning.main' },
+  const filters: { key: TileFilter; title: string; value: number; total: number; color: string }[] = [
+    { key: 'down', title: t('tiles.nodesDown'), value: nodesDown, total: tiles.nodesTotal, color: COLOR.error },
+    { key: 'maintenance', title: t('tiles.nodesMaintenance'), value: tiles.nodesMaintenance, total: tiles.nodesTotal, color: COLOR.info },
+    { key: 'coverage', title: t('tiles.lowCoverage'), value: lowCoverage, total: connectionsTotal, color: COLOR.warning },
   ]
 
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: `repeat(${3 + info.length}, 1fr)` }, gap: 1.5 }}>
-      {info.map(i => (
-        <Box key={i.key} sx={{ ...tileSx, borderTopColor: i.color }}>
-          <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>
-            <GlyphIcon icon={i.icon} /> {i.label}
-          </Typography>
-          <Typography variant='h5'>{i.value}</Typography>
-        </Box>
-      ))}
+      {info.map(i => <DonutTotalCard key={i.key} title={i.title} value={i.value} segments={i.segments} />)}
       {filters.map(f => (
         <ButtonBase
           key={f.key}
           aria-pressed={filter === f.key}
           title={filter === f.key ? t('tiles.clearFilter') : undefined}
           onClick={() => onFilter(filter === f.key ? null : f.key)}
-          sx={{ ...tileSx, borderTopColor: f.color, ...(filter === f.key ? { outline: 2, outlineStyle: 'solid', outlineColor: f.color } : {}) }}
+          sx={{
+            display: 'block',
+            textAlign: 'start',
+            borderRadius: 1,
+            '& > .MuiCard-root': { height: '100%' },
+            ...(filter === f.key ? { outline: 2, outlineStyle: 'solid', outlineColor: f.color } : {}),
+          }}
         >
-          <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>
-            <i className={f.icon} aria-hidden='true' /> {f.label}
-          </Typography>
-          <Typography variant='h5'>{f.value}</Typography>
+          <DonutStatCard title={f.title} value={f.value} total={f.total} color={f.color} />
         </ButtonBase>
       ))}
     </Box>

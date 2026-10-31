@@ -12,6 +12,7 @@ const m = vi.hoisted(() => ({
   getSetting: vi.fn(),
   setSetting: vi.fn(),
   audit: vi.fn(),
+  count: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: () => m.session() }))
@@ -23,7 +24,7 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: unknown[]) => m.checkPermission(...a),
   getCurrentRbacInfraScope: vi.fn(),
 }))
-vi.mock('@/lib/db/prisma', () => ({ prisma: {} }))
+vi.mock('@/lib/db/prisma', () => ({ prisma: { connection: { count: (...a: unknown[]) => m.count(...a) } } }))
 vi.mock('@/lib/orchestrator/client', async orig => ({
   ...(await orig<typeof import('@/lib/orchestrator/client')>()),
   orchestratorFetch: (...a: unknown[]) => m.orchestrator(...a),
@@ -49,7 +50,11 @@ beforeEach(() => {
   m.tenant.mockResolvedValue('default')
   m.hasFeature.mockResolvedValue(true)
   m.checkPermission.mockResolvedValue(null)
-  m.orchestrator.mockImplementation(async (_path: string, opts?: any) => (opts?.method === 'PUT' ? opts.body : { retention_days: 400 }))
+  m.orchestrator.mockImplementation(async (_path: string, opts?: any) => (opts?.method === 'PUT'
+    ? { retention_days: opts.body.retention_days ?? 400, connection_ids: opts.body.connection_ids ?? ['c1'] }
+    : { retention_days: 400, connection_ids: ['c1'], connection_policies: { c1: ['Gold'] } }))
+  // Every id asked for is a Proxmox VE connection unless a test says otherwise.
+  m.count.mockImplementation(async ({ where }: any) => where.id.in.length)
   m.getSetting.mockImplementation(async () => target)
   m.setSetting.mockImplementation(async (_k: string, _t: string, v: unknown) => { target = v })
   m.audit.mockResolvedValue('a1')
@@ -61,7 +66,7 @@ describe('GET /availability/settings', () => {
   it('the orchestrator retention and the default target', async () => {
     const res = await callRoute(GET as any)
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ retentionDays: 400, defaultTarget: 99.9 })
+    expect(await res.json()).toEqual({ retentionDays: 400, defaultTarget: 99.9, measuredConnections: ['c1'], policiesByConnection: { c1: ['Gold'] } })
     expect(m.orchestrator).toHaveBeenCalledWith('/availability/settings')
     expect(m.checkPermission).toHaveBeenCalledWith('admin.settings')
   })
@@ -98,16 +103,39 @@ describe('PUT /availability/settings', () => {
   it('relays the retention to the orchestrator and stores the default target', async () => {
     const res = await put({ retentionDays: 90, defaultTarget: 99.95 })
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ retentionDays: 90, defaultTarget: 99.95 })
+    expect(await res.json()).toEqual({ retentionDays: 90, defaultTarget: 99.95, measuredConnections: ['c1'], policiesByConnection: {} })
     expect(m.orchestrator).toHaveBeenCalledWith('/availability/settings', { method: 'PUT', body: { retention_days: 90 } })
     expect(m.setSetting).toHaveBeenCalledWith('sla.default_target', 'default', 99.95)
     expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ category: 'settings', action: 'update', resourceType: 'availability_settings', status: 'success' }))
   })
 
   it('accepts either field alone', async () => {
-    expect(await (await put({ defaultTarget: 99.5 })).json()).toEqual({ retentionDays: 400, defaultTarget: 99.5 })
+    expect(await (await put({ defaultTarget: 99.5 })).json()).toEqual({ retentionDays: 400, defaultTarget: 99.5, measuredConnections: ['c1'], policiesByConnection: { c1: ['Gold'] } })
     expect(m.orchestrator).not.toHaveBeenCalledWith('/availability/settings', expect.objectContaining({ method: 'PUT' }))
-    expect(await (await put({ retentionDays: 30 })).json()).toEqual({ retentionDays: 30, defaultTarget: 99.5 })
+    expect(await (await put({ retentionDays: 30 })).json()).toEqual({ retentionDays: 30, defaultTarget: 99.5, measuredConnections: ['c1'], policiesByConnection: {} })
+  })
+
+  it('relays the measured connections, once each, after checking they exist', async () => {
+    const res = await put({ measuredConnections: ['c2', 'c3', 'c2'] })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ retentionDays: 400, defaultTarget: 99.9, measuredConnections: ['c2', 'c3'], policiesByConnection: {} })
+    expect(m.count).toHaveBeenCalledWith({ where: { id: { in: ['c2', 'c3'] }, type: 'pve' } })
+    expect(m.orchestrator).toHaveBeenCalledWith('/availability/settings', { method: 'PUT', body: { connection_ids: ['c2', 'c3'] } })
+
+    // Unticking them all asks nothing of the database.
+    m.count.mockClear()
+    expect((await put({ measuredConnections: [] })).status).toBe(200)
+    expect(m.count).not.toHaveBeenCalled()
+  })
+
+  it('refuses an unknown or malformed connection, without writing anything', async () => {
+    m.count.mockResolvedValue(0)
+    for (const measuredConnections of [['gone'], 'c1', [''], [42]]) {
+      const res = await put({ measuredConnections })
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'invalid_connections' })
+    }
+    expect(m.orchestrator).not.toHaveBeenCalled()
   })
 
   it('bounds of the retention: 30 to 1825 days', async () => {

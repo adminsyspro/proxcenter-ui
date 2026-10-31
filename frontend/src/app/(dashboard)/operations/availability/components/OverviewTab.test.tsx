@@ -44,6 +44,38 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('OverviewTab', () => {
+  it('scrolls to the card of the URL hash once, after the data is there', () => {
+    const scroll = vi.fn()
+
+    Element.prototype.scrollIntoView = scroll
+    window.location.hash = '#conn-c2'
+
+    const { rerender } = renderWithProviders(<OverviewTab />)
+
+    expect(scroll).toHaveBeenCalledTimes(1)
+    expect(scroll).toHaveBeenCalledWith({ block: 'start' })
+    expect(scroll.mock.contexts[0]).toBe(document.getElementById('conn-c2'))
+    // The linked card opens on its hosts, the others stay folded.
+    expect(screen.getByRole('button', { name: 'Hosts of Lyon' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Hosts of Paris' })).toHaveAttribute('aria-expanded', 'false')
+    hookMock.mockReturnValue({ data: overview(), error: undefined, isLoading: false })
+    rerender(<OverviewTab />)
+    expect(scroll).toHaveBeenCalledTimes(1)
+    window.location.hash = ''
+  })
+
+  it('waits for the data before scrolling to the anchor', () => {
+    const scroll = vi.fn()
+
+    Element.prototype.scrollIntoView = scroll
+    window.location.hash = '#conn-c2'
+    hookMock.mockReturnValue({ data: undefined, error: undefined, isLoading: true })
+    renderWithProviders(<OverviewTab />)
+
+    expect(scroll).not.toHaveBeenCalled()
+    window.location.hash = ''
+  })
+
   it('shows the error banner and no numeric tile on a 503', () => {
     hookMock.mockReturnValue({ data: undefined, error: new Error('API error: 503'), isLoading: false })
 
@@ -66,11 +98,12 @@ describe('OverviewTab', () => {
     expect(screen.queryByText('Nodes up')).not.toBeInTheDocument()
   })
 
-  it('shows not measured, not 0%, for a null coverage', () => {
+  it('shows not measured, not 0%, for a null coverage', async () => {
     renderWithProviders(<OverviewTab />)
 
     const lyon = screen.getByRole('region', { name: 'Lyon' })
 
+    await userEvent.click(within(lyon).getByRole('button', { name: 'Hosts of Lyon' }))
     expect(within(lyon).getAllByText('Not measured').length).toBeGreaterThanOrEqual(2)
     expect(within(lyon).queryByText('0%')).not.toBeInTheDocument()
   })
@@ -79,12 +112,14 @@ describe('OverviewTab', () => {
     renderWithProviders(<OverviewTab />)
 
     const paris = screen.getByRole('region', { name: 'Paris' })
+
+    await userEvent.click(within(paris).getByRole('button', { name: 'Hosts of Paris' }))
+
     const bar = within(paris).getAllByRole('img')[0]
 
-    bar.getBoundingClientRect = () => ({ left: 0, width: 300, top: 0, right: 300, bottom: 20, height: 20, x: 0, y: 0, toJSON: () => ({}) })
-    await userEvent.pointer({ target: bar, coords: { clientX: 150 } })
+    await userEvent.hover(bar.querySelector('[data-state="down"]') as HTMLElement)
 
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(/^Down · .* · 1m$/)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/Down · .* · 1mClick for the detail$/)
     expect(screen.queryByRole('region', { name: 'Slot detail' })).not.toBeInTheDocument()
   })
 
@@ -109,5 +144,45 @@ describe('OverviewTab', () => {
     await userEvent.click(screen.getByRole('button', { name: '7d' }))
 
     expect(hookMock).toHaveBeenLastCalledWith('7d')
+  })
+
+  it('folds every card by default, and opens or folds them all at once', async () => {
+    renderWithProviders(<OverviewTab />)
+
+    const toggles = () => ['Paris', 'Lyon'].map(n => screen.getByRole('button', { name: `Hosts of ${n}` }).getAttribute('aria-expanded'))
+
+    expect(toggles()).toEqual(['false', 'false'])
+    expect(screen.queryByText('Availability per host')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
+    expect(toggles()).toEqual(['true', 'true'])
+    expect(screen.getAllByText('Availability per host')).toHaveLength(2)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hosts of Paris' }))
+    expect(toggles()).toEqual(['false', 'true'])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse all' }))
+    expect(toggles()).toEqual(['false', 'false'])
+  })
+
+  it('explains an empty page when no connection is measured, with the button that opens the configuration', async () => {
+    const onConfigure = vi.fn()
+    hookMock.mockReturnValue({ data: { ...overview(), connections: [], unmeasured: 2, canConfigure: true }, error: undefined, isLoading: false })
+    renderWithProviders(<OverviewTab onConfigure={onConfigure} />)
+
+    expect(screen.getByText(/^No connection is measured yet/)).toBeInTheDocument()
+    expect(screen.queryByText('No connection to show')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Choose the measured connections' }))
+    expect(onConfigure).toHaveBeenCalledTimes(1)
+  })
+
+  it('names how many connections are left out, without a button for whoever may not change them', () => {
+    hookMock.mockReturnValue({ data: { ...overview(), unmeasured: 3, canConfigure: false }, error: undefined, isLoading: false })
+    renderWithProviders(<OverviewTab onConfigure={vi.fn()} />)
+
+    expect(screen.getByText(/3 connections are not measured\./)).toBeInTheDocument()
+    expect(screen.getByText(/An administrator chooses them/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Choose the measured connections' })).not.toBeInTheDocument()
   })
 })

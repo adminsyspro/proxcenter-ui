@@ -677,6 +677,10 @@
     }
   },
   "alerts": {
+    "errors": {
+      "alertLocked": "Esta alerta no se puede eliminar: resuélvala en su lugar.",
+      "alertsLocked": "{count, plural, one {# alerta no se puede eliminar y se conservó: resuélvala en su lugar.} other {# alertas no se pueden eliminar y se conservaron: resuélvalas en su lugar.}}"
+    },
     "title": "Alertas",
     "noActiveAlerts": "No hay alertas activas",
     "allSystemsNormal": "Todos los sistemas funcionan con normalidad",
@@ -5326,7 +5330,8 @@
         "backup": "Copias de seguridad",
         "replication": "Replicación",
         "maintenance": "Mantenimiento",
-        "report": "Informes"
+        "report": "Informes",
+        "sla": "SLA"
       },
       "severities": {
         "info": "Info y superiores",
@@ -5334,6 +5339,25 @@
         "warning": "Avisos y críticas",
         "critical": "Solo críticas"
       }
+    },
+    "sla": {
+      "title": "SLA",
+      "description": "Avisa cuando una política SLA consume su presupuesto de indisponibilidad: una advertencia al superar el umbral, y una notificación crítica cuando el objetivo se pierde para el período.",
+      "period": "Período del presupuesto",
+      "periods": {
+        "month": "Mes natural",
+        "rolling30": "Últimos 30 días (móviles)"
+      },
+      "warnPercent": "Umbral de advertencia",
+      "alertsNote": "Las caídas de invitados cubiertos y las pérdidas de quórum llegan por la categoría Alertas."
+    },
+    "help": {
+      "alert": "Alertas de umbral y de estado (CPU, memoria, almacenamiento, nodo o invitado cubierto caído, quórum del clúster, latencia de disco, Ceph, cobertura de copias, instantáneas antiguas), al dispararse y al resolverse.",
+      "migration": "Migraciones ejecutadas por el DRS: iniciadas, completadas o fallidas.",
+      "backup": "Tareas de copia de seguridad de Proxmox, éxito o fallo por tarea, y los simulacros de restauración.",
+      "replication": "Site Recovery: tareas de replicación correctas o fallidas, y la conmutación, reversión o prueba de un plan de recuperación.",
+      "maintenance": "Un nodo que entra en modo mantenimiento o sale de él, y el fin de su evacuación.",
+      "report": "Informes programados, enviados por correo una vez generados."
     }
   },
   "audit": {
@@ -11715,7 +11739,18 @@
       "1h": "1 h",
       "24h": "24 h",
       "7d": "7 d",
-      "30d": "30 d"
+      "30d": "30 d",
+      "1y": "1 año",
+      "custom": "Personalizado",
+      "range": "{from} → {to}",
+      "from": "Desde",
+      "to": "Hasta",
+      "apply": "Aplicar",
+      "rangeHint": "400 días como máximo. Un fin en el futuro se detiene en el momento actual.",
+      "error": {
+        "order": "El fin debe ser posterior al inicio.",
+        "tooLong": "El rango está limitado a 400 días."
+      }
     },
     "tiles": {
       "nodesUp": "Nodos activos",
@@ -11737,12 +11772,38 @@
       "perHost": "Disponibilidad por host",
       "noNodes": "Ningún nodo medido en esta conexión",
       "noMatch": "Ninguna conexión coincide con este filtro",
-      "empty": "No hay conexiones que mostrar"
+      "empty": "No hay conexiones que mostrar",
+      "overall": "Conjunto · {count, plural, one {# host} other {# hosts}}",
+      "toggle": "Hosts de {name}",
+      "expandAll": "Expandir todo",
+      "collapseAll": "Contraer todo",
+      "noneMeasured": "Todavía no se mide ninguna conexión: el registro de disponibilidad solo registra las conexiones marcadas en su configuración.",
+      "unmeasured": "{count, plural, one {# conexión no se mide.} other {# conexiones no se miden.}}",
+      "configure": "Elegir las conexiones medidas",
+      "askAdmin": "Un administrador las elige con el botón de configuración de esta página."
     },
     "timeline": {
-      "rowSummary": "{label}: {availability} disponible, {incidents, plural, one {# incidente} other {# incidentes}}",
+      "rowSummary": "{label}: {availability} disponible, {incidents, plural, one {# caída} other {# caídas}}",
       "rowSummaryUnmeasured": "{label}: no medido",
-      "run": "{state} · {from} → {to} · {duration}"
+      "run": "{state} · {from} → {to} · {duration}",
+      "incident": "Incidente: {title} ({comments, plural, one {# comentario} other {# comentarios}})",
+      "alertsNoIncident": "{count, plural, one {# alerta} other {# alertas}}, ningún incidente abierto",
+      "bar": "{from} → {to}",
+      "barRate": "{availability} disponible",
+      "now": "Ahora",
+      "moreOutages": "+{count, plural, one {# interrupción más} other {# interrupciones más}}",
+      "detail": {
+        "title": "Detalle del periodo",
+        "hint": "Haga clic para ver el detalle",
+        "close": "Cerrar",
+        "slots": "Estado de cada intervalo del periodo",
+        "spent": "{state}: {duration}",
+        "events": "Eventos del periodo",
+        "none": "Ninguna caída en este periodo.",
+        "viewIncident": "Ver el incidente",
+        "openIncident": "Abrir un incidente",
+        "hintHosts": "Haga clic para ver cada host"
+      }
     },
     "explainer": {
       "title": "Cómo se calculan estas tasas",
@@ -11794,7 +11855,21 @@
         "guests": "Invitados"
       },
       "budgetUsage": "{used} de {allowed}",
-      "noScope": "Ningún invitado seleccionado"
+      "noScope": "Ningún invitado seleccionado",
+      "guests": {
+        "search": "Buscar un invitado",
+        "belowOnly": "Bajo el objetivo ({count})",
+        "colGuest": "Invitado",
+        "colTimeline": "Últimos 30 días",
+        "colRate": "Disponibilidad",
+        "colDowntime": "Indisponibilidad",
+        "none": "Ningún invitado coincide.",
+        "expand": "Línea de tiempo de {name}",
+        "showMore": "Ver {count} más ({rest} restantes)"
+      },
+      "unmeasured": "{count, plural, one {# invitado no medido} other {# invitados no medidos}}",
+      "unmeasuredHint": "En una conexión que el registro no mide: sin cifras, sin alertas, sin notificaciones SLA. Haga clic para elegir las conexiones medidas.",
+      "unmeasuredHintAsk": "En una conexión que el registro no mide: sin cifras, sin alertas, sin notificaciones SLA. Un administrador elige las conexiones medidas."
     },
     "dialog": {
       "createTitle": "Nueva política SLA",
@@ -11817,7 +11892,10 @@
       "scopeTitle": "Invitados cubiertos",
       "scopeHelp": "Un invitado está cubierto si está marcado, lleva una de las etiquetas o pertenece a uno de los pools.",
       "tabCount": "{label} ({count})",
-      "selection": "Invitados {guests} · Etiquetas {tags} · Pools {pools}"
+      "selection": "Invitados {guests} · Etiquetas {tags} · Pools {pools}",
+      "allOf": "Todo {group}",
+      "groupCount": "{ticked} / {total}",
+      "measuredOnly": "Solo se ofrecen los invitados de las conexiones medidas."
     },
     "errors": {
       "guest_out_of_scope": "Un invitado o pool seleccionado está fuera de su perímetro.",
@@ -11837,7 +11915,8 @@
       "invalid_target_ref": "El destino está incompleto o no es válido.",
       "invalid_fields": "La lista solicitada no está disponible.",
       "forbidden": "No tiene permiso para modificar las políticas SLA ni las ventanas de mantenimiento.",
-      "not_found": "Este elemento ya no existe."
+      "not_found": "Este elemento ya no existe.",
+      "connection_not_measured": "Un invitado marcado está en una conexión no medida. Mida primero la conexión."
     },
     "maintenance": {
       "new": "Nueva ventana",
@@ -11900,6 +11979,174 @@
         "orchestrator_unavailable": "El orquestador no está disponible, no se guardó nada.",
         "generic": "No se pudieron guardar los ajustes."
       }
+    },
+    "measured": {
+      "open": "Conexiones medidas",
+      "title": "Conexiones medidas",
+      "description": "El registro de disponibilidad solo registra las conexiones marcadas aquí: sus nodos, el quórum del clúster y sus invitados. No se mide nada mientras no se marque ninguna conexión. Una conexión desmarcada deja de registrarse; su historial se conserva hasta la retención.",
+      "empty": "Ninguna conexión Proxmox VE.",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "saveError": "No se pudieron guardar las conexiones medidas.",
+      "invalidConnections": "Una conexión marcada ya no existe. Recargue la página.",
+      "loadError": "No se pudieron cargar las conexiones.",
+      "unmeasureWarning": "{connection} la usan {count, plural, one {# política} other {# políticas}} ({policies}): sus invitados dejarán de medirse; su historial se conserva."
+    }
+  },
+  "incidents": {
+    "title": "Incidente",
+    "status": {
+      "open": "Abierto",
+      "resolved": "Resuelto",
+      "closed": "Cerrado"
+    },
+    "severity": {
+      "info": "Info",
+      "warning": "Advertencia",
+      "critical": "Crítica"
+    },
+    "header": {
+      "editTitle": "Editar el título",
+      "saveTitle": "Guardar el título",
+      "cancel": "Cancelar",
+      "ongoing": "en curso",
+      "titleLabel": "Título"
+    },
+    "facts": {
+      "started": "Inicio",
+      "ended": "Fin",
+      "duration": "Duración",
+      "alerts": "Alertas",
+      "alertsTotal": "{total, plural, one {# alerta} other {# alertas}}",
+      "alertsActive": "{count, plural, one {# activa} other {# activas}}",
+      "alertsResolved": "todas resueltas",
+      "report": "Informe SLA",
+      "reportIn": "Incluido",
+      "reportOut": "No incluido",
+      "reportPending": "Comprobando",
+      "postmortem": "Post-mortem"
+    },
+    "empty": {
+      "none": "Aún no se ha abierto ningún incidente para esta alerta.",
+      "open": "Abrir un incidente"
+    },
+    "alerts": {
+      "title": "Alertas",
+      "detach": "Desvincular",
+      "ongoing": "En curso",
+      "sameOutage": "Alertas de la misma caída",
+      "noCandidates": "Ninguna otra alerta coincide con esta caída.",
+      "attach": "Vincular ({count})",
+      "search": "Buscar alertas",
+      "unknown": "Objeto desconocido",
+      "outOfSla": "Fuera de política de SLA: ausente de la línea de tiempo y del informe",
+      "description": "Las alertas que sigue este incidente, por hora de inicio. El incidente se resuelve solo cuando todas están resueltas.",
+      "sameOutageHint": "Otras alertas del mismo nodo, sus invitados o su clúster, generadas con 15 minutos de margen respecto a esta caída. Marque las que tienen la misma causa para seguirlas aquí.",
+      "resolvedAt": "Resuelta a las {time} tras {duration}",
+      "activeFor": "Activa desde hace {duration}",
+      "showMore": "Ver {count, plural, one {# alerta más} other {# alertas más}}",
+      "showLess": "Ver menos",
+      "outOfSlaShort": "Fuera de política SLA"
+    },
+    "journal": {
+      "title": "Diario",
+      "placeholder": "Añadir un comentario",
+      "internalNote": "Nota interna",
+      "internal": "Interna",
+      "add": "Añadir",
+      "edited": "editado",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "empty": "Todavía no hay comentarios.",
+      "deleteTitle": "¿Eliminar este comentario?",
+      "deleteMessage": "El comentario se eliminará de forma permanente.",
+      "description": "Intercambios y decisiones a lo largo del incidente. Las notas internas nunca aparecen en el informe SLA."
+    },
+    "postmortem": {
+      "title": "Post-mortem",
+      "rootCause": "Causa raíz",
+      "impact": "Impacto",
+      "actions": "Acciones correctivas",
+      "addAction": "Añadir una acción",
+      "actionPlaceholder": "Acción correctiva",
+      "deleteAction": "Eliminar la acción",
+      "validate": "Validar el post-mortem",
+      "reopen": "Reabrir",
+      "needResolved": "El post-mortem se puede validar cuando todas las alertas del incidente estén resueltas.",
+      "needFields": "Rellene la causa raíz y el impacto para validar el post-mortem.",
+      "slaNotice": "Incluido en el informe de SLA; las notas internas nunca aparecen en él.",
+      "validatedBy": "Validado por {by}",
+      "noActions": "Todavía no hay acciones correctivas.",
+      "notInReport": "Fuera del informe de SLA: ninguna alerta de este incidente afecta a un invitado cubierto por una política de SLA.",
+      "description": "Cuando todas las alertas estén resueltas, indique la causa raíz y el impacto, enumere las acciones correctivas y valide para cerrar el incidente."
+    },
+    "report": {
+      "title": "Informe del incidente",
+      "description": "Un PDF para compartir: datos clave, alertas por hora de inicio, post-mortem y diario público. Las notas internas nunca aparecen en él.",
+      "download": "Descargar el PDF",
+      "draftHint": "El post-mortem aún no está validado: el informe lo marca como borrador.",
+      "failed": "No se pudo generar el informe. Inténtelo de nuevo.",
+      "pdfTitle": "Informe del incidente",
+      "generated": "Generado el {time}",
+      "severity": "Gravedad",
+      "colStarted": "Inicio",
+      "colObject": "Objeto",
+      "colMessage": "Mensaje",
+      "colResolved": "Resuelta",
+      "validated": "Validado por {by} el {time}",
+      "draft": "Borrador: el post-mortem aún no está validado.",
+      "notFilled": "Sin rellenar.",
+      "footer": "Informe generado por {app}. Las notas internas nunca se incluyen."
+    },
+    "delete": {
+      "action": "Eliminar el incidente",
+      "title": "¿Eliminar este incidente?",
+      "message": "El incidente, su diario y sus acciones se eliminarán de forma permanente. Las alertas se conservan."
+    },
+    "errors": {
+      "alertInIncident": "Esta alerta pertenece a un incidente: resuélvala en su lugar.",
+      "closed": "El incidente está cerrado. Reábralo para modificarlo.",
+      "notResolved": "El incidente no se puede cerrar mientras haya alertas activas.",
+      "alreadyAttached": "Esta alerta ya está vinculada a un incidente.",
+      "notFound": "Este incidente ya no existe.",
+      "generic": "La operación ha fallado. Inténtelo de nuevo.",
+      "alertsKept": "{count, plural, one {# alerta pertenece a un incidente y se conservó.} other {# alertas pertenecen a un incidente y se conservaron.}}"
+    },
+    "tab": "Incidentes ({count})",
+    "list": {
+      "intro": "Un incidente agrupa las alertas de una misma caída, con un diario y un post-mortem.",
+      "filterLabel": "Filtrar por estado",
+      "columns": {
+        "status": "Estado",
+        "title": "Título",
+        "severity": "Gravedad",
+        "started": "Inicio",
+        "duration": "Duración",
+        "alerts": "Alertas",
+        "comments": "Comentarios",
+        "postmortem": "Post-mortem",
+        "actions": "Acciones"
+      },
+      "filter": {
+        "all": "Todos",
+        "open": "Abiertos",
+        "resolved": "Resueltos",
+        "closed": "Cerrados"
+      },
+      "empty": "Ningún incidente",
+      "emptyDescription": "Abra un incidente desde una alerta para seguirlo aquí.",
+      "postmortem": {
+        "todo": "Pendiente",
+        "inProgress": "En curso",
+        "validated": "Validado"
+      }
+    },
+    "actions": {
+      "open": "Abrir un incidente",
+      "view": "Ver el incidente",
+      "availability": "Ver la disponibilidad"
     }
   }
 }

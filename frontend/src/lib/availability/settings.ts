@@ -27,13 +27,17 @@ export async function setDefaultTarget(target: number): Promise<void> {
 export interface SettingsInput {
   retentionDays?: number
   defaultTarget?: number
+  measuredConnections?: string[]
 }
 
-/** A PUT carries one or both fields, each within its bounds. */
+/** The most connections a PUT may tick, as the orchestrator bounds them. */
+export const MAX_MEASURED_CONNECTIONS = 1000
+
+/** A PUT carries one field or more, each within its bounds. */
 export function parseSettingsBody(body: unknown): Parsed<SettingsInput> {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { ok: false, error: 'invalid_body' }
-  const { retentionDays, defaultTarget } = body as Record<string, unknown>
-  if (retentionDays === undefined && defaultTarget === undefined) return { ok: false, error: 'invalid_body' }
+  const { retentionDays, defaultTarget, measuredConnections } = body as Record<string, unknown>
+  if (retentionDays === undefined && defaultTarget === undefined && measuredConnections === undefined) return { ok: false, error: 'invalid_body' }
   const value: SettingsInput = {}
   if (retentionDays !== undefined) {
     if (typeof retentionDays !== 'number' || !Number.isInteger(retentionDays) ||
@@ -45,6 +49,13 @@ export function parseSettingsBody(body: unknown): Parsed<SettingsInput> {
   if (defaultTarget !== undefined) {
     if (!isValidTarget(defaultTarget)) return { ok: false, error: 'invalid_target' }
     value.defaultTarget = defaultTarget
+  }
+  if (measuredConnections !== undefined) {
+    if (!Array.isArray(measuredConnections) || measuredConnections.length > MAX_MEASURED_CONNECTIONS ||
+      !measuredConnections.every(id => typeof id === 'string' && id !== '' && id.length <= 128)) {
+      return { ok: false, error: 'invalid_connections' }
+    }
+    value.measuredConnections = [...new Set(measuredConnections as string[])]
   }
   return { ok: true, value }
 }

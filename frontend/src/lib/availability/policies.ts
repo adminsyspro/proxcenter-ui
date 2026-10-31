@@ -6,7 +6,7 @@
 
 import type { Prisma } from '@prisma/client'
 
-import { queryAvailability } from './orchestrator'
+import { getMeasuredConnections, queryAvailability } from './orchestrator'
 import type { Period } from './period'
 import { periodBounds } from './period'
 import type { AvailabilityScope, GuestKey, QueryResponse, Result } from './types'
@@ -86,6 +86,25 @@ export async function policyInScope(
   input: PolicyInput,
 ): Promise<boolean> {
   return poolsInScope(scope, input.pools) && (await guestsInScope(scope, connectionIds, input.guests))
+}
+
+/**
+ * Whether a ticked guest lies on a connection the registry does not measure:
+ * such a guest would have no figure at all. A guest the policy holds already
+ * is let through, so that a policy whose connection was unticked meanwhile can
+ * still be edited. No guest, no question to the orchestrator.
+ */
+export async function guestsOnUnmeasured(guests: readonly GuestKey[], kept: readonly GuestKey[] = []): Promise<boolean> {
+  const held = new Set(kept.map(g => `${g.connectionId}:${g.vmid}`))
+  const added = guests.filter(g => !held.has(`${g.connectionId}:${g.vmid}`))
+  if (added.length === 0) return false
+  const measured = new Set(await getMeasuredConnections())
+  return added.some(g => !measured.has(g.connectionId))
+}
+
+/** The stored guests of a policy row. */
+export function rowGuests(row: Pick<PolicyRow, 'guests'>): GuestKey[] {
+  return storedGuests(row.guests)
 }
 
 /** One policy evaluated over the period, within the caller's perimeter. */

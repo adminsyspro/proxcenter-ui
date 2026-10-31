@@ -1,7 +1,7 @@
 'use client'
 
 import type { CurrentState, Result, Summary } from '@/lib/availability/types'
-import type { Period } from '@/lib/availability/period'
+import { windowQuery, type Period, type PeriodWindow } from '@/lib/availability/period'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 
 import { availabilityErrorKind } from './errorKind'
@@ -26,17 +26,21 @@ export interface OverviewTiles {
 
 /** Body of GET /api/v1/availability/overview. */
 export interface OverviewResponse {
-  period: Period
+  period: Period | 'custom'
   from: string
   to: string
   connections: ConnectionOverview[]
   current: { states: CurrentState[]; collectedAt: Record<string, string> }
   tiles: OverviewTiles
+  /** The visible connections the registry does not measure. */
+  unmeasured?: number
+  /** Whether the caller may choose the measured connections. */
+  canConfigure?: boolean
 }
 
 /** The "state and availability" tab data, refreshed every 30 s. A failure (503 included) leaves `data` unset. */
-export function useAvailabilityOverview(period: Period) {
-  return useSWRFetch<OverviewResponse>(`/api/v1/availability/overview?period=${period}`, {
+export function useAvailabilityOverview(range: PeriodWindow) {
+  return useSWRFetch<OverviewResponse>(`/api/v1/availability/overview?${windowQuery(range)}`, {
     refreshInterval: 30000,
     revalidateOnFocus: false,
     // A refusal does not change by asking again: no backoff retry on 403.

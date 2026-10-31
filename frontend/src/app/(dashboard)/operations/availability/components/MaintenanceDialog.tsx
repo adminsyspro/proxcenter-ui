@@ -62,7 +62,7 @@ interface Props {
 }
 
 /** Declare or edit a maintenance window: scope, target, period and reason. */
-export default function MaintenanceDialog({ open, window: edited, onClose, onSaved }: Props) {
+export default function MaintenanceDialog({ open, window: edited, onClose, onSaved }: Readonly<Props>) {
   const t = useTranslations('availability')
   const { options, error: inventoryError, isLoading } = useInventoryOptions(open)
 

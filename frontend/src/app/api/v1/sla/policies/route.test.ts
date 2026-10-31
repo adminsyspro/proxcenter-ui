@@ -70,6 +70,17 @@ function asIaas() {
   } })
 }
 
+// A tenant that owns whole connections: c1 is its own, c2 is not.
+function asMsp() {
+  m.session.mockResolvedValue({ user: { id: 'u2', email: 'acme@x', tenantId: 'acme' } })
+  m.tenant.mockResolvedValue('acme')
+  m.infra.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['c1']) })
+}
+
+let measured: string[]
+
+const guestResult = (connection_id: string, vmid: number) => ({ ref: { connection_id, kind: 'guest', vmid } })
+
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -80,7 +91,10 @@ beforeEach(() => {
   m.rbacScope.mockResolvedValue(null)
   m.infra.mockResolvedValue({ kind: 'provider' })
   m.connections.mockImplementation(async ({ where }: any) => ['c1', 'c2'].filter(id => !where.id || where.id.in.includes(id)).map(id => ({ id })))
-  m.orchestrator.mockImplementation(async (_path: string, opts: any) => ({ results: [{}, {}], summary: { ...SUMMARY, policy: opts.body.policy_id } }))
+  measured = ['c1', 'c2']
+  m.orchestrator.mockImplementation(async (path: string, opts: any) => (path === '/availability/settings'
+    ? { retention_days: 400, connection_ids: measured }
+    : { results: [guestResult('c1', 100), guestResult('c2', 300)], summary: { ...SUMMARY, policy: opts.body.policy_id } }))
   m.pveFetch.mockResolvedValue([
     { type: 'qemu', vmid: 100, node: 'pve1', pool: 'acme' },
     { type: 'qemu', vmid: 200, node: 'pve1', pool: 'other-tenant' },
@@ -104,12 +118,21 @@ describe('GET /sla/policies', () => {
     expect(body).toMatchObject({ total: 2, page: 2, pageSize: 20, period: '7d', defaultTarget: 99.5 })
     expect(body.data.map((p: any) => [p.id, p.summary.policy, p.guestCount])).toEqual([['p1', 'p1', 2], ['p2', 'p2', 2]])
     expect(body.data[0]).not.toHaveProperty('tenantId')
-    const bodies = m.orchestrator.mock.calls.map(([path, opts]: any) => [path, opts.body.policy_id, opts.body.slot_seconds, opts.body.scope])
+    const bodies = m.orchestrator.mock.calls
+      .filter(([path]: any) => path === '/availability/query')
+      .map(([path, opts]: any) => [path, opts.body.policy_id, opts.body.slot_seconds, opts.body.scope])
     expect(bodies).toEqual([['/availability/query', 'p1', 600, null], ['/availability/query', 'p2', 600, null]])
   })
 
+  it('counts the guests of each policy on a connection the registry does not measure', async () => {
+    measured = ['c1']
+    const body = await (await callRoute(GET as any)).json()
+    expect(body.data.map((p: any) => [p.id, p.guestCount, p.unmeasuredGuests])).toEqual([['p1', 2, 1], ['p2', 2, 1]])
+  })
+
   it('a policy deleted meanwhile keeps its row without a summary', async () => {
-    m.orchestrator.mockImplementation(async (_p: string, opts: any) => {
+    m.orchestrator.mockImplementation(async (p: string, opts: any) => {
+      if (p === '/availability/settings') return { connection_ids: measured }
       if (opts.body.policy_id === 'p2') throw new Error('Orchestrator 404: {"error":"policy_not_found"}')
       return { results: [], summary: SUMMARY }
     })
@@ -155,7 +178,7 @@ describe('GET /sla/policies?fields=names', () => {
   })
 
   it('reads the policies of the caller tenant only', async () => {
-    asIaas()
+    asMsp()
     await callRoute(GET as any, { searchParams: { fields: 'names' } })
     expect(m.tenantPrismaFor).toHaveBeenCalledWith('acme')
     expect(m.tenantPrismaFor).not.toHaveBeenCalledWith('default')
@@ -188,23 +211,41 @@ describe('POST /sla/policies', () => {
     expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ category: 'alerts', action: 'create', resourceType: 'sla_policy', status: 'success' }))
   })
 
-  it('rejects guests outside the vDC scope', async () => {
-    asIaas()
-    const res = await post({ ...BODY, guests: [{ connectionId: 'c1', vmid: 200 }] })
+  it('refuses a guest of a connection the registry does not measure, before writing', async () => {
+    measured = ['c2']
+    const res = await post(BODY)
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'connection_not_measured' })
+    expect(m.db.slaPolicy.create).not.toHaveBeenCalled()
+
+    // A policy by tag only asks nothing of the orchestrator.
+    m.orchestrator.mockClear()
+    expect((await post({ ...BODY, guests: [] })).status).toBe(201)
+    expect(m.orchestrator).not.toHaveBeenCalled()
+  })
+
+  it('rejects guests on a connection the tenant does not own', async () => {
+    asMsp()
+    const res = await post({ ...BODY, guests: [{ connectionId: 'c2', vmid: 300 }] })
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body).toEqual({ error: 'guest_out_of_scope' })
-    expect(JSON.stringify(body)).not.toMatch(/other-tenant|pve1|200/)
+    expect(JSON.stringify(body)).not.toMatch(/c2|300/)
     expect(m.db.slaPolicy.create).not.toHaveBeenCalled()
   })
 
-  it('accepts a vDC guest of the tenant pools, and refuses another connection or pool', async () => {
-    asIaas()
+  it('accepts any guest or pool of a connection the tenant owns', async () => {
+    asMsp()
     expect((await post(BODY)).status).toBe(201)
-    // In the vDC pool on a node outside the vDC: accepted, the pool decides.
-    expect((await post({ ...BODY, name: 'Moved', guests: [{ connectionId: 'c1', vmid: 300 }] })).status).toBe(201)
-    expect((await post({ ...BODY, guests: [{ connectionId: 'c2', vmid: 100 }] })).status).toBe(400)
-    expect(await (await post({ ...BODY, guests: [], pools: ['other-tenant'] })).json()).toEqual({ error: 'guest_out_of_scope' })
+    expect((await post({ ...BODY, name: 'Other pool', guests: [{ connectionId: 'c1', vmid: 200 }], pools: ['other-tenant'] })).status).toBe(201)
+  })
+
+  it('a vDC tenant gets a 404, before any write', async () => {
+    asIaas()
+    const res = await post(BODY)
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'not_found' })
+    expect(m.db.slaPolicy.create).not.toHaveBeenCalled()
   })
 
   it('refuses a duplicate name, also when two writes race', async () => {

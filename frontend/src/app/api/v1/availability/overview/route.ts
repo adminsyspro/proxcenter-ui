@@ -1,22 +1,25 @@
-// GET /api/v1/availability/overview?period=24h
+// GET /api/v1/availability/overview?period=24h, or ?period=custom&from=&to=
 //
 // The "health and availability" tab: per visible connection, the cluster row
 // (whole connections only), one row per node and their rates, the instant
-// state of the nodes and clusters, and the tiles. Enterprise only
+// state of the nodes and clusters, and the tiles. Only the connections the
+// registry measures are shown; `unmeasured` counts the visible others, and
+// `canConfigure` tells whether the caller may tick them. Enterprise only
 // (`sla_monitoring`). An orchestrator out of reach is a 503 and no figure at
 // all.
 
 import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/db/prisma'
-import { requireSlaRead } from '@/lib/availability/guard'
+import { requireAvailabilitySettingsAccess, requireSlaRead } from '@/lib/availability/guard'
 import {
   availabilityErrorResponse,
   codeResponse,
   currentAvailability,
+  getMeasuredConnections,
   queryAvailability,
 } from '@/lib/availability/orchestrator'
-import { DEFAULT_PERIOD, parsePeriod, periodBounds } from '@/lib/availability/period'
+import { DEFAULT_PERIOD, parseWindow, windowBounds } from '@/lib/availability/period'
 import { allowsInfraRef } from '@/lib/availability/scope'
 import { summarize } from '@/lib/availability/summary'
 import type { CurrentResponse, CurrentState, QueryResponse, Result, Summary } from '@/lib/availability/types'
@@ -40,11 +43,19 @@ export async function GET(request: Request) {
     const access = await requireSlaRead()
     if (access.denied) return access.denied
 
-    const period = parsePeriod(new URL(request.url).searchParams.get('period'), DEFAULT_PERIOD)
-    if (period === null) return codeResponse('invalid_period', 400)
+    const requested = parseWindow(new URL(request.url).searchParams, DEFAULT_PERIOD)
+    const bounds = requested === null ? null : windowBounds(requested, new Date())
+    if (requested === null || bounds === null) return codeResponse('invalid_period', 400)
 
-    const { from, to, slotSeconds } = periodBounds(period, new Date())
-    const ids = access.connectionIds
+    const period = typeof requested === 'string' ? requested : 'custom'
+    const { from, to, slotSeconds } = bounds
+    // No visible connection: nothing to ask the orchestrator.
+    const [measured, settingsAccess] = await Promise.all([
+      access.connectionIds.length === 0 ? Promise.resolve([] as string[]) : getMeasuredConnections(),
+      requireAvailabilitySettingsAccess(),
+    ])
+    const measuredSet = new Set(measured)
+    const ids = access.connectionIds.filter(id => measuredSet.has(id))
     const common = { tenant_id: access.tenantId, scope: access.scope }
 
     // No visible connection: nothing to ask, the orchestrator refuses an empty target.
@@ -81,6 +92,8 @@ export async function GET(request: Request) {
       from,
       to,
       connections,
+      unmeasured: access.connectionIds.length - ids.length,
+      canConfigure: !settingsAccess.denied,
       current: { states, collectedAt: current.collected_at },
       tiles: {
         nodesUp: nodeStates.filter(s => s.state === 'up').length,

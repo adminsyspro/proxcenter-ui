@@ -28,6 +28,10 @@ import {
 
 import NumericTextField from '@/components/ui/NumericTextField'
 import NotificationChannelsCard from '@/components/settings/NotificationChannelsCard'
+import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
+import NotificationCategoryHelp from '@/components/settings/NotificationCategoryHelp'
+import NotificationSlaRow from '@/components/settings/NotificationSlaRow'
+import { useLicense, Features } from '@/contexts/LicenseContext'
 import {
   formatRecipients,
   invalidRecipients,
@@ -53,6 +57,7 @@ return json
 export default function NotificationsTab() {
   const t = useTranslations()
   const locale = useLocale()
+  const { hasFeature } = useLicense()
   const [settings, setSettings] = useState(null)
   const [categoryMinSeverity, setCategoryMinSeverity] = useState({})
   const [loading, setLoading] = useState(true)
@@ -201,8 +206,10 @@ return
 
   const renderCategorySeverity = typeKey => (
     <FormControl size='small' sx={{ minWidth: 200 }}>
-      <InputLabel>{t('notifications.categorySeverity')}</InputLabel>
+      <InputLabel id={`category-severity-${typeKey}`}>{t('notifications.categorySeverity')}</InputLabel>
       <Select
+        labelId={`category-severity-${typeKey}`}
+        sx={SMALL_SELECT_SX}
         value={categoryMinSeverity[typeKey] ?? INHERIT}
         label={t('notifications.categorySeverity')}
         onChange={e => setCategorySeverity(typeKey, e.target.value)}
@@ -236,7 +243,7 @@ return
     </FormControl>
   )
 
-  const renderCategoryRow = ({ typeKey, enabled, onToggle, icon, iconColor, label }) => (
+  const renderCategoryRow = ({ typeKey, enabled, onToggle, icon, iconColor, label, help }) => (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
       <FormControlLabel
         sx={{ minWidth: 240, mr: 0 }}
@@ -245,6 +252,7 @@ return
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <i className={icon} style={{ color: iconColor }} />
             {label}
+            <NotificationCategoryHelp text={help} />
           </Box>
         }
       />
@@ -556,7 +564,8 @@ return
               onToggle: e => setSettings(s => ({ ...s, enable_alerts: e.target.checked })),
               icon: 'ri-alarm-warning-line',
               iconColor: '#ef4444',
-              label: t('notifications.alerts')
+              label: t('notifications.alerts'),
+              help: t('notifications.help.alert')
             })}
             {renderCategoryRow({
               typeKey: 'migration',
@@ -564,7 +573,8 @@ return
               onToggle: e => setSettings(s => ({ ...s, enable_migrations: e.target.checked })),
               icon: 'ri-swap-line',
               iconColor: '#3b82f6',
-              label: t('notifications.migrations')
+              label: t('notifications.migrations'),
+              help: t('notifications.help.migration')
             })}
             {renderCategoryRow({
               typeKey: 'backup',
@@ -572,7 +582,8 @@ return
               onToggle: e => setSettings(s => ({ ...s, enable_backups: e.target.checked })),
               icon: 'ri-hard-drive-2-line',
               iconColor: '#10b981',
-              label: t('notifications.backups')
+              label: t('notifications.backups'),
+              help: t('notifications.help.backup')
             })}
             {renderCategoryRow({
               typeKey: 'replication',
@@ -580,7 +591,8 @@ return
               onToggle: e => setSettings(s => ({ ...s, enable_replication: e.target.checked })),
               icon: 'ri-refresh-line',
               iconColor: '#F29221',
-              label: t('notifications.replication')
+              label: t('notifications.replication'),
+              help: t('notifications.help.replication')
             })}
             {renderCategoryRow({
               typeKey: 'maintenance',
@@ -588,8 +600,16 @@ return
               onToggle: e => setSettings(s => ({ ...s, enable_maintenance: e.target.checked })),
               icon: 'ri-tools-line',
               iconColor: '#8b5cf6',
-              label: t('notifications.maintenance')
+              label: t('notifications.maintenance'),
+              help: t('notifications.help.maintenance')
             })}
+            {hasFeature(Features.SLA_MONITORING) && (
+              <NotificationSlaRow
+                settings={settings}
+                onChange={patch => setSettings(s => ({ ...s, ...patch }))}
+                severity={renderCategorySeverity('sla')}
+              />
+            )}
             <FormControlLabel
               control={
                 <Switch
@@ -601,6 +621,7 @@ return
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <i className='ri-file-chart-line' style={{ color: '#06b6d4' }} />
                   {t('notifications.reports')}
+                  <NotificationCategoryHelp text={t('notifications.help.report')} />
                 </Box>
               }
             />

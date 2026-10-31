@@ -115,4 +115,19 @@ describe('PolicyRow budget and guests under target', () => {
     // The ticked guests in the scope column, the guests the policy resolves to in the last one.
     expect(screen.getAllByText('1 guest')).toHaveLength(2)
   })
+
+  it('flags the guests on a connection left out of the registry, and opens its configuration', async () => {
+    const onConfigure = vi.fn()
+    renderWithProviders(inTable(<PolicyRow policy={makePolicy({ guestCount: 4, unmeasuredGuests: 3 })} canManage onEdit={() => {}} onDelete={() => {}} onConfigure={onConfigure} />))
+
+    await userEvent.click(screen.getByRole('button', { name: '3 guests not measured' }))
+    expect(onConfigure).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows no flag when every guest is measured', () => {
+    renderWithProviders(inTable(<PolicyRow policy={makePolicy({ unmeasuredGuests: 0 })} canManage onEdit={() => {}} onDelete={() => {}} />))
+
+    expect(screen.queryByText(/not measured/)).not.toBeInTheDocument()
+  })
 })
+

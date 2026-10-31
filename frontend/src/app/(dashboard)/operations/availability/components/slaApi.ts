@@ -16,6 +16,7 @@ export class SlaApiError extends Error {
 
 const KNOWN_CODES = [
   'guest_out_of_scope',
+  'connection_not_measured',
   'target_out_of_scope',
   'name_taken',
   'invalid_target',
@@ -101,6 +102,8 @@ export interface PolicyItem {
   updatedAt: string
   summary: Summary | null
   guestCount: number
+  /** Guests on a connection the registry does not measure: they have no figure. */
+  unmeasuredGuests?: number
 }
 
 export interface PoliciesResponse {

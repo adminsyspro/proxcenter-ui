@@ -13,7 +13,7 @@ import {
 } from './availabilityDemo'
 
 const NOW = new Date('2026-10-27T10:00:30Z')
-const SLOTS: Record<string, number> = { '1h': 60, '24h': 1440, '7d': 1008, '30d': 720 }
+const SLOTS: Record<string, number> = { '1h': 60, '24h': 1440, '7d': 1008, '30d': 720, '1y': 365 }
 
 describe('demoOverview', () => {
   it('describes one connection with a cluster row and three nodes', () => {
@@ -102,7 +102,7 @@ describe('policies', () => {
   })
 
   it('serves the settings', () => {
-    expect(demoSettings()).toEqual({ retentionDays: 400, defaultTarget: 99.9 })
+    expect(demoSettings()).toEqual({ retentionDays: 400, defaultTarget: 99.9, measuredConnections: [DEMO_AVAILABILITY_CONNECTION_ID], policiesByConnection: {} })
   })
 })
 
@@ -120,7 +120,8 @@ describe('demoAvailabilityResponse', () => {
     })
     expect(ask('/api/v1/sla/policies/demo-sla-erp?period=24h')).toMatchObject({ policy: { name: 'ERP' } })
     expect(ask('/api/v1/sla/maintenance-windows')).toMatchObject({ total: 1 })
-    expect(ask('/api/v1/availability/settings')).toEqual({ retentionDays: 400, defaultTarget: 99.9 })
+    expect(ask('/api/v1/availability/settings')).toEqual({ retentionDays: 400, defaultTarget: 99.9, measuredConnections: [DEMO_AVAILABILITY_CONNECTION_ID], policiesByConnection: {} })
+    expect(ask('/api/v1/availability/measured')).toEqual({ connectionIds: [DEMO_AVAILABILITY_CONNECTION_ID] })
   })
 
   it('refuses an unknown period or policy and ignores other paths', () => {

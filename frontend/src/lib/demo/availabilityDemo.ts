@@ -7,7 +7,7 @@
 // upcoming maintenance window. The events sit at fixed distances before `now`,
 // so every period shows the same story as far as it reaches back.
 
-import { parsePeriod, periodBounds, type Period } from '@/lib/availability/period'
+import { parsePeriod, parseWindow, periodBounds, windowBounds, type Period, type PeriodWindow } from '@/lib/availability/period'
 import { summarize } from '@/lib/availability/summary'
 import type {
   AvailabilityState,
@@ -113,13 +113,13 @@ function buildResult(ref: ObjectRef, events: Event[], now: number, fromMs: numbe
   }
 }
 
-function window(period: Period, now: Date) {
-  const { from, to, slotSeconds } = periodBounds(period, now)
+function window(period: PeriodWindow, now: Date) {
+  const { from, to, slotSeconds } = windowBounds(period, now) ?? periodBounds('24h', now)
   // Events hang off the minute, so a 47 minute incident is 47 one minute slots.
   return { from, to, slotSeconds, nowMs: Math.floor(now.getTime() / MIN) * MIN }
 }
 
-export function demoOverview(period: Period, now: Date) {
+export function demoOverview(period: PeriodWindow, now: Date) {
   const w = window(period, now)
   const fromMs = Date.parse(w.from)
   const toMs = Date.parse(w.to)
@@ -131,10 +131,12 @@ export function demoOverview(period: Period, now: Date) {
   const summary = summarize(nodes)
 
   return {
-    period,
+    period: typeof period === 'string' ? period : 'custom',
     from: w.from,
     to: w.to,
     connections: [{ id: DEMO_AVAILABILITY_CONNECTION_ID, name: CONNECTION_NAME, cluster, nodes, summary }],
+    unmeasured: 0,
+    canConfigure: true,
     current: { states, collectedAt: { [DEMO_AVAILABILITY_CONNECTION_ID]: new Date(w.nowMs).toISOString() } },
     tiles: {
       nodesUp: nodes.length,
@@ -218,6 +220,7 @@ export function demoPolicyDetail(id: string, period: Period, now: Date) {
     from,
     to,
     results: results.map((r, i) => ({ ...r, name: policy.guests[i].name, type: policy.guests[i].type })),
+    connectionNames: { [DEMO_AVAILABILITY_CONNECTION_ID]: CONNECTION_NAME },
     summary: policySummary(policy, results),
   }
 }
@@ -249,6 +252,8 @@ export function demoSettings(sent?: unknown) {
   return {
     retentionDays: Number.isFinite(body.retentionDays) ? (body.retentionDays as number) : RETENTION_DAYS,
     defaultTarget: Number.isFinite(body.defaultTarget) ? (body.defaultTarget as number) : DEFAULT_TARGET,
+    measuredConnections: Array.isArray(body.measuredConnections) ? body.measuredConnections : [DEMO_AVAILABILITY_CONNECTION_ID],
+    policiesByConnection: {},
   }
 }
 
@@ -261,11 +266,12 @@ export function demoAvailabilityResponse(url: URL, now: Date): unknown {
   const params = url.searchParams
 
   if (path === '/api/v1/availability/settings') return demoSettings()
+  if (path === '/api/v1/availability/measured') return { connectionIds: [DEMO_AVAILABILITY_CONNECTION_ID] }
   if (path === '/api/v1/sla/maintenance-windows') return demoMaintenanceWindows(now)
 
   if (path === '/api/v1/availability/overview') {
-    const period = parsePeriod(params.get('period'), '24h')
-    return period === null ? { error: 'invalid_period' } : demoOverview(period, now)
+    const requested = parseWindow(params, '24h')
+    return requested === null || windowBounds(requested, now) === null ? { error: 'invalid_period' } : demoOverview(requested, now)
   }
 
   if (path === '/api/v1/sla/policies') {

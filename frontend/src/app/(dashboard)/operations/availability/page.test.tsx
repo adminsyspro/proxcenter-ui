@@ -19,7 +19,8 @@ const renderWithProviders = (ui: ReactElement) =>
     </NextIntlClientProvider>,
   )
 
-const { licenseMock, replaceMock, searchMock, setPageInfoMock } = vi.hoisted(() => ({
+const { licenseMock, replaceMock, searchMock, setPageInfoMock, settingsMock } = vi.hoisted(() => ({
+  settingsMock: vi.fn(),
   licenseMock: vi.fn(),
   replaceMock: vi.fn(),
   searchMock: vi.fn(),
@@ -36,13 +37,39 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/',
 }))
 vi.mock('@/contexts/PageTitleContext', () => ({ usePageTitle: () => ({ setPageInfo: setPageInfoMock }) }))
-vi.mock('./components/OverviewTab', () => ({ default: () => <div>overview body</div> }))
+vi.mock('./components/OverviewTab', async () => {
+  const { useIncidentDialog } = await import('./components/IncidentDialogContext')
+
+  return {
+    default: function OverviewTab() {
+      const { open } = useIncidentDialog()
+
+      return (
+        <div>
+          overview body
+          <button onClick={() => open('i1')}>open incident</button>
+          <button onClick={() => open(null, 'a1')}>open alert</button>
+        </div>
+      )
+    },
+  }
+})
+vi.mock('./components/MeasuredConnectionsDialog', () => ({
+  useMeasuredSettings: () => settingsMock(),
+  default: (p: { open: boolean; measured: string[] }) => <div data-testid='measured' data-open={String(p.open)} data-measured={p.measured.join(',')} />,
+}))
+vi.mock('@/components/incidents/IncidentDialog', () => ({
+  default: (p: { open: boolean; incidentId: string | null; seedAlertId?: string }) => (
+    <div data-testid='drawer' data-open={String(p.open)} data-incident={p.incidentId ?? ''} data-seed={p.seedAlertId ?? ''} />
+  ),
+}))
 
 beforeEach(() => {
   licenseMock.mockReset()
   replaceMock.mockReset()
   searchMock.mockReset().mockReturnValue(new URLSearchParams())
   setPageInfoMock.mockReset()
+  settingsMock.mockReset().mockReturnValue({ data: undefined })
 })
 
 afterEach(cleanup)
@@ -105,4 +132,34 @@ describe('availability page', () => {
 
     expect(replaceMock).toHaveBeenCalledWith('?tab=maintenance')
   })
+
+  it('mounts the incident panel at the first opening only, on what the tab asked for', async () => {
+    licenseMock.mockReturnValue({ hasFeature: () => true })
+
+    renderWithProviders(<Page />)
+
+    expect(screen.queryByTestId('drawer')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'open incident' }))
+    expect(screen.getByTestId('drawer')).toHaveAttribute('data-open', 'true')
+    expect(screen.getByTestId('drawer')).toHaveAttribute('data-incident', 'i1')
+    await userEvent.click(screen.getByRole('button', { name: 'open alert' }))
+    expect(screen.getAllByTestId('drawer')).toHaveLength(1)
+    expect(screen.getByTestId('drawer')).toHaveAttribute('data-seed', 'a1')
+    expect(screen.getByTestId('drawer')).toHaveAttribute('data-incident', '')
+  })
+
+  it('opens the measured connections from the settings button, offered to whoever reads the settings only', async () => {
+    licenseMock.mockReturnValue({ hasFeature: (id: string) => id === 'sla_monitoring' })
+    renderWithProviders(<Page />)
+    expect(screen.queryByRole('button', { name: 'Measured connections' })).not.toBeInTheDocument()
+    cleanup()
+
+    settingsMock.mockReturnValue({ data: { measuredConnections: ['c1'] } })
+    renderWithProviders(<Page />)
+    expect(screen.getByTestId('measured')).toHaveAttribute('data-open', 'false')
+    await userEvent.click(screen.getByRole('button', { name: 'Measured connections' }))
+    expect(screen.getByTestId('measured')).toHaveAttribute('data-open', 'true')
+    expect(screen.getByTestId('measured')).toHaveAttribute('data-measured', 'c1')
+  })
 })
+

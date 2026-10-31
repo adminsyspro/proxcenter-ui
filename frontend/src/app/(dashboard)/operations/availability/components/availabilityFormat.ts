@@ -56,6 +56,15 @@ export function useAvailabilityFormat() {
     target: (value: number) => format.number(value / 100, { style: 'percent', maximumFractionDigits: 3 }),
     dateTime: (iso: string) => format.dateTime(new Date(iso), { dateStyle: 'medium', timeStyle: 'medium' }),
     duration: (fromIso: string, toIso: string) => span((Date.parse(toIso) - Date.parse(fromIso)) / 1000),
+    /** How long before `toIso` the instant `fromIso` was, in the unit of the period: "24 hours ago", "30 days ago". */
+    ago: (fromIso: string, toIso: string) => {
+      const seconds = (Date.parse(toIso) - Date.parse(fromIso)) / 1000
+      let unit: 'minute' | 'hour' | 'day' = 'day'
+      if (seconds < 3600) unit = 'minute'
+      else if (seconds <= 86400) unit = 'hour'
+
+      return format.relativeTime(new Date(fromIso), { now: new Date(toIso), unit })
+    },
     span,
   }
 }

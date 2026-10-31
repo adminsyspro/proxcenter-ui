@@ -14,7 +14,7 @@ interface Props {
 }
 
 /** The confirmation of a deletion: a MUI modal, never a browser dialog. */
-export default function DeleteConfirmDialog({ open, title, message, busy, error, onConfirm, onClose }: Props) {
+export default function DeleteConfirmDialog({ open, title, message, busy, error, onConfirm, onClose }: Readonly<Props>) {
   const t = useTranslations('availability')
 
   return (

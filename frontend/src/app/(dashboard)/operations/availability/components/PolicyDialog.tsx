@@ -20,11 +20,15 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 
-import { useInventoryOptions } from '../hooks/useSlaLists'
+import { GuestGlyph } from '@/components/automation/drs/glyphs'
+
+import { useInventoryOptions, useMeasuredConnections } from '../hooks/useSlaLists'
 
 import CheckboxGroup, { type CheckboxItem } from './CheckboxGroup'
 import { guestKey } from './inventoryOptions'
+import { PROXMOX } from './RowGlyph'
 import { errorCodeOf, slaRequest, TARGET_MAX, TARGET_MIN, type PolicyItem } from './slaApi'
 
 interface Props {
@@ -42,9 +46,11 @@ type ScopeTab = 'guests' | 'tags' | 'pools'
 const LIST_HEIGHT = 260
 
 /** Create or edit a policy: name, target and the guests it covers (ticked, by tag or by pool). */
-export default function PolicyDialog({ open, policy, defaultTarget, onClose, onSaved }: Props) {
+export default function PolicyDialog({ open, policy, defaultTarget, onClose, onSaved }: Readonly<Props>) {
   const t = useTranslations('availability')
-  const { options, error: inventoryError, isLoading } = useInventoryOptions(open)
+  const { options, error: inventoryError, isLoading: inventoryLoading } = useInventoryOptions(open)
+  const { data: measuredData, error: measuredError, isLoading: measuredLoading } = useMeasuredConnections(open)
+  const isLoading = inventoryLoading || measuredLoading
 
   const [name, setName] = useState('')
   const [target, setTarget] = useState('')
@@ -70,22 +76,36 @@ export default function PolicyDialog({ open, policy, defaultTarget, onClose, onS
     setTab('guests')
   }, [open, policy, defaultTarget])
 
+  const dotBorder = useTheme().palette.background.paper
+
   const guestItems = useMemo<CheckboxItem[]>(() => {
-    const known = new Set(options.guests.map(g => g.key))
-    const listed = options.guests.map(g => ({
+    // Only the guests of a measured connection are offered; one ticked earlier stays.
+    const measured = new Set(measuredData?.connectionIds ?? [])
+    const ticked = new Set((policy?.guests ?? []).map(g => guestKey(g.connectionId, g.vmid)))
+    const offered = options.guests.filter(g => measured.has(g.connectionId) || ticked.has(g.key))
+    const known = new Set(offered.map(g => g.key))
+    const connectionNames = new Map(options.guests.map(g => [g.connectionId, g.connectionName]))
+    const listed = offered.map(g => ({
       key: g.key,
       label: g.name ?? t(g.type === 'lxc' ? 'policies.guestFallbackCt' : 'policies.guestFallbackVm', { vmid: g.vmid }),
-      secondary: `${g.vmid} - ${g.connectionName}`,
-      icon: g.type === 'lxc' ? 'ri-instance-line' : 'ri-computer-line',
+      secondary: String(g.vmid),
+      glyph: <GuestGlyph type={g.type} status={g.status} dotBorder={dotBorder} />,
+      group: g.connectionName,
     }))
 
     // A guest ticked earlier but no longer listed stays visible, so saving does not drop it unseen.
     const missing = (policy?.guests ?? [])
       .filter(g => !known.has(guestKey(g.connectionId, g.vmid)))
-      .map(g => ({ key: guestKey(g.connectionId, g.vmid), label: t('policies.guestFallbackVm', { vmid: g.vmid }), icon: 'ri-computer-line' }))
+      .map(g => ({
+        key: guestKey(g.connectionId, g.vmid),
+        label: t('policies.guestFallbackVm', { vmid: g.vmid }),
+        glyph: <GuestGlyph dotBorder={dotBorder} />,
+        group: connectionNames.get(g.connectionId) ?? g.connectionId,
+      }))
 
-    return [...listed, ...missing]
-  }, [options.guests, policy, t])
+    // One run per connection, guests by name inside it.
+    return [...listed, ...missing].sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label))
+  }, [options.guests, measuredData, policy, t, dotBorder])
 
   const labelItems = (list: string[], kept: string[]): CheckboxItem[] =>
     [...new Set([...list, ...kept])].sort((a, b) => a.localeCompare(b)).map(v => ({ key: v, label: v }))
@@ -130,7 +150,7 @@ export default function PolicyDialog({ open, policy, defaultTarget, onClose, onS
   }
 
   let scopeBody
-  if (inventoryError) scopeBody = <Alert severity='warning'>{t('dialog.inventoryError')}</Alert>
+  if (inventoryError || measuredError) scopeBody = <Alert severity='warning'>{t('dialog.inventoryError')}</Alert>
   else if (isLoading) scopeBody = <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: LIST_HEIGHT }}><CircularProgress size={20} aria-label={t('loading')} /></Box>
   else {
     const list = lists[tab]
@@ -146,6 +166,7 @@ export default function PolicyDialog({ open, policy, defaultTarget, onClose, onS
         emptyText={list.empty}
         searchable
         listHeight={LIST_HEIGHT}
+        groupIcon={tab === 'guests' ? PROXMOX : undefined}
       />
     )
   }
@@ -196,7 +217,7 @@ export default function PolicyDialog({ open, policy, defaultTarget, onClose, onS
           </Tabs>
           {scopeBody}
         </Box>
-        <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('dialog.membershipNote')}</Typography>
+        <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('dialog.membershipNote')} {t('dialog.measuredOnly')}</Typography>
       </DialogContent>
       <DialogActions>
         <Typography variant='body2' color='text.secondary' sx={{ mr: 'auto', pl: 1 }}>

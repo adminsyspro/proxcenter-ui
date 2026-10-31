@@ -24,7 +24,7 @@ function orchestratorBaseUrlForPath(path: string): string {
 }
 
 export interface OrchestratorRequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: any
   timeout?: number
 }

@@ -114,7 +114,11 @@ export interface CurrentResponse {
 
 /** GET / PUT /availability/settings */
 export interface OrchestratorAvailabilitySettings {
-  retention_days: number
+  retention_days?: number
+  /** The connections the registry measures; none until ticked. */
+  connection_ids?: string[]
+  /** The enabled policies covering a guest of each connection, by name. */
+  connection_policies?: Record<string, string[]>
 }
 
 /** A guest ticked in a policy, as stored in SlaPolicy.guests. */

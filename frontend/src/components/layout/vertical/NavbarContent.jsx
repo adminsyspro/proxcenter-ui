@@ -612,8 +612,8 @@ return () => window.removeEventListener('keydown', onKeyDown)
   return (
     <>
       <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 2, px: 2, position: 'relative' }}>
-        {/* Page Title - Left side */}
-        <Box sx={{ flex: 1, display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 2, minWidth: 0 }}>
+        {/* Page Title - Left side, stopped short of the centered search bar (360 px) so a long subtitle ends in an ellipsis instead of running under it */}
+        <Box sx={{ flex: 1, display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 2, minWidth: 0, maxWidth: 'calc(50% - 196px)' }}>
           {title && (
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
               {icon && (

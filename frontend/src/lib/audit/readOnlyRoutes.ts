@@ -29,6 +29,7 @@ export const READ_ONLY_MUTATION_ROUTES: Readonly<Record<string, string>> = {
   'v1/favorites': 'Per-user favourites, no infrastructure or security effect',
   'v1/guest-file-restore/probe': 'Lists the content of a backup, read-only',
   'v1/ha/validate': 'Validates a ProxCenter HA configuration, read-only',
+  'v1/incidents/for-outages': 'Lookup of the incidents matching a list of outages (POST for a large body), read-only',
   'v1/settings/tls/acme/dns-test': 'Reads the DNS zones with the stored DNS-01 credentials, writes nothing',
   'v1/inventory/poll': 'Asks for an immediate inventory refresh after a UI action',
   'v1/migrations/batches/copy-check': 'Migration preflight, read-only',

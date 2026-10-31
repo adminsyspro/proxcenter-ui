@@ -63,6 +63,7 @@ const STATES = [
 
 let lastQuery: any
 let lastCurrent: any
+let measured: string[]
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -76,7 +77,9 @@ beforeEach(() => {
     const ids = ['c1', 'c2'].filter(id => !where.id || where.id.in.includes(id))
     return ids.map(id => (select.name ? { id, name: NAMES[id] } : { id }))
   })
+  measured = ['c1', 'c2']
   m.orchestrator.mockImplementation(async (path: string, opts: any) => {
+    if (path === '/availability/settings') return { retention_days: 400, connection_ids: measured }
     if (path === '/availability/query') {
       lastQuery = opts.body
       return { from: opts.body.from, to: opts.body.to, results: RESULTS, summary: { coverage: 87.5 }, policy: null }
@@ -166,29 +169,35 @@ describe('GET /availability/overview', () => {
     expect(await res.json()).toEqual({ error: 'orchestrator_unavailable' })
   })
 
-  it('an iaas tenant sees neither the cluster row nor another connection', async () => {
+  it('a tenant of whole connections sees only its own', async () => {
     m.tenant.mockResolvedValue('acme')
     m.session.mockResolvedValue({ user: { id: 'u2', email: 'acme@x', tenantId: 'acme' } })
+    m.infra.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['c1']) })
+    const res = await overview()
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(lastQuery.scope).toEqual({ connections: { c1: { all: true } } })
+    expect(lastQuery.connection_ids).toEqual(['c1'])
+    expect(lastQuery.tenant_id).toBe('acme')
+    // The orchestrator mock answers everything: the route still drops what is out of scope.
+    expect(body.connections.map((c: any) => [c.id, c.cluster?.ref.kind ?? null, c.nodes.length])).toEqual([['c1', 'cluster', 2]])
+    expect(body.tiles).toMatchObject({ clustersTotal: 1, nodesTotal: 2 })
+    expect(JSON.stringify(body)).not.toContain('Paris DR')
+    expect(JSON.stringify(body)).not.toContain('pve3')
+    // Names are read for the connections of the perimeter only.
+    const nameCall = m.connections.mock.calls.find(([a]: any) => a.select.name)
+    expect(nameCall?.[0].where).toEqual({ id: { in: ['c1'] } })
+  })
+
+  it('a vDC tenant gets a 404, without asking the orchestrator', async () => {
+    m.tenant.mockResolvedValue('acme')
     m.infra.mockResolvedValue({ kind: 'iaas', vdcScope: {
       connectionIds: new Set(['c1']), nodesByConnection: new Map([['c1', new Set(['pve1'])]]), poolsByConnection: new Map([['c1', new Set(['acme'])]]),
     } })
     const res = await overview()
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(lastQuery.scope).toEqual({ connections: { c1: { all: false, nodes: ['pve1'], pools: ['acme'] } } })
-    expect(lastQuery.connection_ids).toEqual(['c1'])
-    expect(lastQuery.tenant_id).toBe('acme')
-    // The orchestrator mock answers everything: the route still drops what is out of scope.
-    expect(body.connections).toHaveLength(1)
-    expect(body.connections[0].cluster).toBeNull()
-    expect(body.connections[0].nodes.map((n: any) => n.ref.node)).toEqual(['pve1'])
-    expect(body.current.states.map((s: any) => s.ref.node ?? s.ref.kind)).toEqual(['pve1'])
-    expect(body.tiles).toMatchObject({ clustersTotal: 0, nodesTotal: 1, coverage: 100 })
-    expect(JSON.stringify(body)).not.toContain('Paris DR')
-    expect(JSON.stringify(body)).not.toContain('pve2')
-    // Names are read for the connections of the perimeter only.
-    const nameCall = m.connections.mock.calls.find(([a]: any) => a.select.name)
-    expect(nameCall[0].where).toEqual({ id: { in: ['c1'] } })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'not_found' })
+    expect(m.orchestrator).not.toHaveBeenCalled()
   })
 
   it('no visible connection: an empty overview without calling the orchestrator', async () => {
@@ -208,4 +217,27 @@ describe('GET /availability/overview', () => {
     expect((await overview()).status).toBe(403)
     expect(m.orchestrator).not.toHaveBeenCalled()
   })
+
+  it('shows only the measured connections and counts the others', async () => {
+    measured = ['c2', 'c9']
+    const body = await (await overview()).json()
+    expect(body.connections.map((c: any) => c.id)).toEqual(['c2'])
+    expect(body.unmeasured).toBe(1)
+    expect(body.canConfigure).toBe(true)
+    expect(lastQuery.connection_ids).toEqual(['c2'])
+    expect(lastCurrent.connection_ids).toEqual(['c2'])
+  })
+
+  it('asks nothing more when no connection is measured, and tells who may tick them', async () => {
+    measured = []
+    m.tenant.mockResolvedValue('msp-1')
+    m.session.mockResolvedValue({ user: { id: 'u1', email: 'ops@lab', tenantId: 'msp-1' } })
+    m.infra.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['c1', 'c2']) })
+    const body = await (await overview()).json()
+    expect(body.connections).toEqual([])
+    expect(body.unmeasured).toBeGreaterThan(0)
+    expect(body.canConfigure).toBe(false)
+    expect(m.orchestrator.mock.calls.map(c => c[0])).toEqual(['/availability/settings'])
+  })
 })
+

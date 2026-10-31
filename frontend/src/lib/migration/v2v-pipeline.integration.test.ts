@@ -52,6 +52,17 @@ vi.mock("@/lib/vmware/soap", async importOriginal => {
 })
 vi.mock("@/lib/crypto/secret", () => ({ decryptSecret: vi.fn(() => "root:pw") }))
 vi.mock("./nfc-export", () => ({ runVcenterNfcExport: vi.fn() }))
+// Hyper-V source with credentials (#1255): the WinRM client answers from these fakes.
+const hypervFake = vi.hoisted(() => ({
+  getVmReadiness: async () => ({ state: "Off", checkpointCount: 0 }),
+  getVM: async (..._args: any[]): Promise<any> => ({}),
+}))
+vi.mock("@/lib/hyperv/client", () => ({
+  HyperVClient: class {
+    getVmReadiness(...args: any[]) { return (hypervFake.getVmReadiness as any)(...args) }
+    getVM(...args: any[]) { return hypervFake.getVM(...args) }
+  },
+}))
 
 import { executeSSH } from "@/lib/ssh/exec"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -737,5 +748,75 @@ describe("runV2vMigrationPipeline Windows data disks (lab 22/10)", () => {
 
     expect(customizeRuns()).toHaveLength(0)
     expect(messages().some(m => m.startsWith("Guest disks:"))).toBe(false)
+  })
+})
+
+describe("runV2vMigrationPipeline Hyper-V disks (#1255)", () => {
+  const ATTACHED = "/mnt/hyperv/TestVM01/Virtual Hard Disks/disk01.vhdx"
+  let getVmCalls: any[][]
+  let shareScans: string[]
+
+  /** Source connection with credentials, share already mounted, every path present on it. */
+  function hypervSource(getVM: (...args: any[]) => Promise<any>) {
+    getVmCalls = []
+    shareScans = []
+    hypervFake.getVM = async (...args: any[]) => { getVmCalls.push(args); return getVM(...args) }
+    prisma.connection.findUnique.mockResolvedValue({ baseUrl: "http://10.42.0.61", apiTokenEnc: "enc", hypervShareName: "VMs", insecureTLS: true } as any)
+    vi.mocked(executeSSH).mockImplementation((async (connId: string, host: string, command: string) => {
+      if (command.startsWith("mountpoint -q /mnt/hyperv")) return ok("mounted")
+      if (command.startsWith("test -f ")) return ok("yes")
+      if (command.startsWith("find /mnt/hyperv")) { shareScans.push(command); return ok("/mnt/hyperv/OtherVM/other-data.vhdx") }
+      return sshRouter(connId, host, command)
+    }) as any)
+  }
+
+  const vmWithDisks = (diskMountPaths: string[]) => async () => ({ cpuCount: 2, memoryMB: 4096, diskPaths: diskMountPaths, diskMountPaths, generation: 2 })
+  const config = (overrides: Partial<V2vMigrationConfig> = {}) => makeConfig({ sourceVmName: "TestVM01", diskPaths: undefined, ...overrides })
+
+  it("migrates the disks attached to the VM when the job carries none (bulk), with no scan of the share", { timeout: 15000 }, async () => {
+    hypervSource(vmWithDisks([ATTACHED]))
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+
+    await runPipelineToEnd("v2v-it-hyperv-attached", config())
+
+    expect(prisma.row.status).toBe("completed")
+    expect(getVmCalls[0]).toEqual(["vm-1", { shareName: "VMs" }])
+    expect(v2vLaunches).toHaveLength(1)
+    expect(v2vLaunches[0]).toContain(ATTACHED)
+    expect(v2vLaunches[0]).not.toContain("other-data.vhdx")
+    expect(shareScans).toEqual([])
+    expect(messages()).toContain(`Disks attached to the VM on the Hyper-V host: ${ATTACHED}`)
+  })
+
+  it("keeps the dialog's paths when the job carries some", { timeout: 15000 }, async () => {
+    hypervSource(vmWithDisks(["/mnt/hyperv/elsewhere.vhdx"]))
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+
+    await runPipelineToEnd("v2v-it-hyperv-dialog", config({ diskPaths: [ATTACHED] }))
+
+    expect(prisma.row.status).toBe("completed")
+    expect(v2vLaunches[0]).toContain(ATTACHED)
+    expect(v2vLaunches[0]).not.toContain("elsewhere.vhdx")
+  })
+
+  it("fails with the way out when WinRM cannot tell which disks are attached", { timeout: 15000 }, async () => {
+    hypervSource(async () => { throw new Error("WinRM timeout") })
+
+    await runPipelineToEnd("v2v-it-hyperv-nowinrm", config())
+
+    expect(prisma.row.status).toBe("failed")
+    expect(String(prisma.row.error)).toContain("Could not read the disks attached to this VM from the Hyper-V host over WinRM")
+    expect(v2vLaunches).toHaveLength(0)
+    expect(shareScans).toEqual([])
+  })
+
+  it("fails plainly when the VM has no disk attached", { timeout: 15000 }, async () => {
+    hypervSource(vmWithDisks([]))
+
+    await runPipelineToEnd("v2v-it-hyperv-nodisk", config())
+
+    expect(prisma.row.status).toBe("failed")
+    expect(String(prisma.row.error)).toContain('Hyper-V VM "TestVM01" has no virtual hard disk attached.')
+    expect(v2vLaunches).toHaveLength(0)
   })
 })

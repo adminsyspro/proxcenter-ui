@@ -12,7 +12,7 @@ import { emptyMigrationStats, sumMigrationStats, type MigrationStats } from '@/l
 import { bulkBatchFromPayload, bulkLogOffsets, bulkRowsFromBatch, bulkSourceTypeLabel, fetchActiveBulkBatch, fetchBulkBatch, isBulkBatchFinished, shouldTrackBulkJob, type BatchPayload, type BulkMigBatch, type BulkMigJobRow } from './bulkJobList'
 import { mergeJobLogs } from '@/lib/migration/jobLogs'
 import { useFavorites } from './hooks/useFavorites'
-import { useMigrationOptions } from './hooks/useMigrationOptions'
+import { hypervDiskPathsFromScan, useMigrationOptions } from './hooks/useMigrationOptions'
 import { useSnapshots } from './hooks/useSnapshots'
 import { useTasks } from './hooks/useTasks'
 import { useNotes } from './hooks/useNotes'
@@ -998,9 +998,8 @@ export default function InventoryDetails({
         tempStorages: aggregatedTempStorages,
         virtV2v: mergeVirtV2vSupport(results.map(r => r.virtV2v)),
       })
-      if (detectedDisks.length > 0) {
-        setMigDiskPaths(detectedDisks.join('\n'))
-      }
+      const scanned = hypervDiskPathsFromScan(esxiMigrateVm, detectedDisks)
+      if (scanned !== null) setMigDiskPaths(scanned)
     }).catch(() => setVcenterPreflight({ checked: true, ok: false, installing: false, errors: ['Preflight check failed'], virtV2vInstalled: false, virtioWinInstalled: false, nbdkitInstalled: false, nbdcopyInstalled: false, guestfsToolsInstalled: false, ovmfInstalled: false, ntfsCompressionPluginInstalled: false, detectedDisks: [], tempStorages: [] }))
     void loadMigStorages(migTargetConn, fetchNode)
     // Fetch classic Linux/OVS bridges (node-scoped) AND SDN VNets (cluster-scoped),

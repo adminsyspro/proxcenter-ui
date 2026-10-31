@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { deriveHypervDiskPaths } from "./useMigrationOptions"
+import { deriveHypervDiskPaths, hypervDiskPathsFromScan } from "./useMigrationOptions"
 
 describe("deriveHypervDiskPaths", () => {
   it("returns blank for a non-Hyper-V VM", () => {
@@ -32,5 +32,22 @@ describe("deriveHypervDiskPaths", () => {
       diskPaths: ["C:\\VMs\\a.vhdx", "C:\\VMs\\b.vhdx"],
       diskMountPaths: ["/mnt/hyperv/wrong/a.vhdx"],
     })).toBe("/mnt/hyperv/a.vhdx\n/mnt/hyperv/b.vhdx")
+  })
+})
+
+describe("hypervDiskPathsFromScan (#1255)", () => {
+  const scanned = ["/mnt/hyperv/OtherVM/other-data.vhdx", "/mnt/hyperv/TestVM01/disk01.vhdx"]
+
+  it("leaves the disks the host reported alone, whatever the share scan found", () => {
+    expect(hypervDiskPathsFromScan({ hostType: "hyperv", diskPaths: ["D:\\HV\\TestVM01\\disk01.vhdx"] }, scanned)).toBeNull()
+  })
+
+  it("fills the free-text field when the host reported no disk", () => {
+    expect(hypervDiskPathsFromScan({ hostType: "hyperv", diskPaths: [] }, scanned)).toBe(scanned.join("\n"))
+    expect(hypervDiskPathsFromScan({ hostType: "hyperv" }, scanned)).toBe(scanned.join("\n"))
+  })
+
+  it("does nothing when the scan found nothing", () => {
+    expect(hypervDiskPathsFromScan({ hostType: "hyperv" }, [])).toBeNull()
   })
 })

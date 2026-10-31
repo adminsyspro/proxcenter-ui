@@ -10,7 +10,7 @@ vi.mock("undici", () => ({
 }))
 
 import {
-  soapCreateSnapshot, soapRemoveSnapshot, soapRemoveAllSnapshots, soapConsolidateVmDisks,
+  soapCreateSnapshot, soapRemoveSnapshot, soapRemoveAllSnapshots, soapConsolidateVmDisks, soapStartConsolidateVmDisks,
   soapWaitForConsolidation, soapFindSnapshotsByNamePrefix, parseSnapshotList,
   formatSoapBudget,
 } from "./soap"
@@ -299,5 +299,22 @@ describe("soapConsolidateVmDisks", () => {
     undiciRequest.mockResolvedValueOnce(reply("<returnval/>"))
     await expect(soapConsolidateVmDisks(session, "vm-9", fast)).resolves.toBeUndefined()
     expect(undiciRequest).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("soapStartConsolidateVmDisks", () => {
+  // The warm wait polls runtime.consolidationNeeded in slices so a cancel stays
+  // responsive (roadmap#177): starting the merge must not wait on its task.
+  it("submits ConsolidateVMDisks_Task and returns the task without polling it", async () => {
+    undiciRequest.mockResolvedValueOnce(reply(TASK))
+    await expect(soapStartConsolidateVmDisks(session, "vm-9")).resolves.toBe("task-42")
+    expect(bodyOf(0)).toContain("<urn:ConsolidateVMDisks_Task>")
+    expect(bodyOf(0)).toContain('<urn:_this type="VirtualMachine">vm-9</urn:_this>')
+    expect(undiciRequest).toHaveBeenCalledTimes(1)
+  })
+
+  it("throws on the fault vSphere answers when a merge already runs", async () => {
+    undiciRequest.mockResolvedValueOnce(reply("<faultstring>Another task is already in progress.</faultstring>"))
+    await expect(soapStartConsolidateVmDisks(session, "vm-9")).rejects.toThrow(/Failed to consolidate the disks of vm-9: Another task is already in progress/)
   })
 })

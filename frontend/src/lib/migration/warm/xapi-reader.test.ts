@@ -27,7 +27,7 @@ describe("buildNbdkitXapiCmd", () => {
   it("builds a read-only TLS nbd plugin command with a safely escaped export", () => {
     const cmd = buildNbdkitXapiCmd(TARGET, "/tmp/xapi.sock.ca")
 
-    expect(cmd).toContain("nbdkit -r -U '/tmp/xapi.sock' nbd")
+    expect(cmd).toContain("nbdkit -f -r -U '/tmp/xapi.sock' nbd")
     expect(cmd).toContain("hostname='10.0.0.9'")
     expect(cmd).toContain("port='10809'")
     expect(cmd).toContain("export='vdi/abc?session_id=OpaqueRef:session'")

@@ -10,7 +10,7 @@ import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
   soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, vmwareToolsState, soapCreateSnapshot, soapRemoveSnapshot,
   soapWaitForConsolidation, soapFindSnapshotsByNamePrefix, CONSOLIDATION_TIMEOUT_MS, soapGetGuestStaticIpv4,
-  SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS, soapPowerOffVm,
+  SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS, soapPowerOffVm, soapConsolidateVmDisks, soapStartConsolidateVmDisks,
 } from "@/lib/vmware/soap"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, GuestStaticIpv4 } from "@/lib/vmware/soap"
 import {
@@ -117,6 +117,21 @@ const CUTOVER_CONSOLIDATION_TIMEOUT_MS = 2 * 60 * 1000
  * job cancellable while it waits.
  */
 const CONSOLIDATION_SLICE_MS = 60_000
+
+/**
+ * Budget for consolidating the source after a failed run. The job is already
+ * terminal, so this only delays the end of the cleanup; past it the merge goes
+ * on in vSphere and the next run of the VM picks it up.
+ */
+const FAILURE_CONSOLIDATE_TIMEOUT_MS = 10 * 60 * 1000
+
+/**
+ * How often the consolidation wait starts the merge again while the source
+ * stays flagged. A start refused because a merge is running costs one SOAP
+ * call; one that failed on a still-locked delta is retried here instead of
+ * leaving the run to wait out its whole budget.
+ */
+const CONSOLIDATION_RESTART_MS = 5 * 60 * 1000
 
 /**
  * Create a warm snapshot and record its MOR for cleanup — including when the
@@ -493,7 +508,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
      * budget is consumed in short slices rather than one long call so a cancel
      * request is honoured within the slice instead of hours later.
      */
-    async function waitOutSourceConsolidation(label: string, budgetMs = CONSOLIDATION_TIMEOUT_MS): Promise<void> {
+    async function waitOutSourceConsolidation(label: string, budgetMs = CONSOLIDATION_TIMEOUT_MS): Promise<boolean> {
       const t0 = Date.now()
       let announced = false
       const announce = () => {
@@ -501,16 +516,47 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         announced = true
         void appendLog(jobId, `Source is still consolidating a previous snapshot; waiting before the ${label} pass (merging a multi-terabyte delta can take hours). Cancel the job if you would rather stop here.`, "warn").catch(() => {})
       }
+      const log: ConsolidationLog = (msg, level) => appendLog(jobId, msg, level)
+      let lastStart = Date.now()
+      await startPendingConsolidation(soapSession!, config.sourceVmId, log, announce)
       let cleared = false
       while (!cleared && Date.now() - t0 < budgetMs) {
         if (isCancelled(jobId)) throw new Error("Migration cancelled")
         cleared = await soapWaitForConsolidation(soapSession!, config.sourceVmId, Math.min(CONSOLIDATION_SLICE_MS, budgetMs), undefined, announce)
+        // A merge started while the delta was still locked fails in vSphere and
+        // leaves the flag set; once the lock goes, only a new start clears it.
+        if (!cleared && Date.now() - lastStart >= CONSOLIDATION_RESTART_MS) {
+          lastStart = Date.now()
+          await startPendingConsolidation(soapSession!, config.sourceVmId, log, undefined, { quietRefusal: true })
+        }
       }
       const waitedSec = Math.round((Date.now() - t0) / 1000)
       if (!cleared) {
         await appendLog(jobId, `Source is STILL consolidating after ${waitedSec}s; starting the ${label} pass anyway — vCenter may reject the snapshot`, "warn")
       } else if (announced) {
         await appendLog(jobId, `Source finished consolidating after ${waitedSec}s; starting the ${label} pass`, "info")
+      }
+      return announced
+    }
+
+    /**
+     * Read the source's disk files again after a consolidation. The paths were
+     * read at planning time, and a VM flagged for consolidation then still runs
+     * on its delta (`vm-000001.vmdk`); once merged, that file is gone, and
+     * opening it under the next snapshot never returned with OpenVDDK
+     * (roadmap#177, lab). The disk objects are updated in place, by device key,
+     * so the disk plan that holds them follows.
+     */
+    async function refreshSourceDiskPaths(): Promise<void> {
+      let fresh: EsxiDiskInfo[]
+      try {
+        fresh = parseVmConfig(await soapGetVmConfig(soapSession!, config.sourceVmId)).disks
+      } catch (e: any) {
+        await appendLog(jobId, `Could not read the source disks again after the consolidation (${e?.message || e}); keeping the paths read at planning time`, "warn").catch(() => {})
+        return
+      }
+      for (const change of refreshDiskFileNames(vmConfig.disks, fresh)) {
+        await appendLog(jobId, `Disk ${change.index + 1}: the source now runs on ${change.to} (was ${change.from} before the consolidation)`, "info").catch(() => {})
       }
     }
 
@@ -519,7 +565,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       label: string, baseline: (deviceKey: number) => string, window: PassWindow,
       passOpts: { removeTimeoutMs?: number; createTimeoutMs?: number; consolidationTimeoutMs?: number } = {},
     ): Promise<number> {
-      await waitOutSourceConsolidation(label, passOpts.consolidationTimeoutMs)
+      if (await waitOutSourceConsolidation(label, passOpts.consolidationTimeoutMs)) await refreshSourceDiskPaths()
       const snapMor = await createWarmSnapshot(soapSession!, config.sourceVmId, `${SNAPSHOT_PREFIX}-${label}`, ourSnapshots,
         mor => appendLog(jobId, `CreateSnapshot (${label}) failed, but the snapshot ${mor} exists on the source — it is now tracked and will be cleaned up`, "warn"),
         passOpts.createTimeoutMs)
@@ -908,6 +954,78 @@ async function restoreSourceCbt(jobId: string, session: SoapSession | null, sour
 }
 
 /**
+ * Point each planned disk at the file the source runs on now, matched by device
+ * key: a consolidation merges the delta a flagged VM was left on, so the path
+ * read at planning time no longer exists. Updates `planned` in place, the other
+ * fields stay as planned; a disk the fresh read does not list is left alone.
+ * Returns what changed, for the job log.
+ */
+export function refreshDiskFileNames(planned: EsxiDiskInfo[], fresh: EsxiDiskInfo[]): Array<{ index: number; from: string; to: string }> {
+  const byKey = new Map(fresh.filter(d => d.deviceKey != null).map(d => [d.deviceKey!, d]))
+  const changes: Array<{ index: number; from: string; to: string }> = []
+  planned.forEach((disk, index) => {
+    const now = disk.deviceKey != null ? byKey.get(disk.deviceKey) : undefined
+    if (!now || !now.fileName || now.fileName === disk.fileName) return
+    changes.push({ index, from: disk.fileName, to: now.fileName })
+    disk.fileName = now.fileName
+    disk.datastoreName = now.datastoreName
+    disk.relativePath = now.relativePath
+  })
+  return changes
+}
+
+/** Job log sink of the consolidation helpers; a failed append is swallowed there. */
+type ConsolidationLog = (msg: string, level: "info" | "warn") => Promise<unknown>
+
+/**
+ * Start the merge of a source that vSphere flags for disk consolidation.
+ *
+ * runtime.consolidationNeeded stays set when a merge FAILED: a snapshot removed
+ * while its disks were still held, as after a network cut during a copy
+ * (roadmap#177). Nothing clears it on its own, so a run that only waits burns
+ * its whole budget (four hours) and then goes on with the VM still flagged.
+ * The task is started, not waited on: the caller polls the flag in short slices
+ * so a cancel stays responsive. When a merge is already running vSphere refuses
+ * a second one, and the caller's wait covers that case as before.
+ *
+ * `onPending` fires before anything is started, so the caller's "waiting" line
+ * comes first in the job log. `quietRefusal` is for the periodic restarts: a
+ * refusal there means the merge is still running, already said once. Returns
+ * whether the VM was flagged. Never throws.
+ */
+export async function startPendingConsolidation(
+  session: SoapSession, sourceVmId: string, log: ConsolidationLog, onPending?: () => void, opts: { quietRefusal?: boolean } = {},
+): Promise<boolean> {
+  if (await soapWaitForConsolidation(session, sourceVmId, 0, 0)) return false
+  onPending?.()
+  try {
+    await soapStartConsolidateVmDisks(session, sourceVmId)
+    await log("Source flagged for disk consolidation: started Consolidate on it", "info").catch(() => {})
+  } catch (e: any) {
+    if (!opts.quietRefusal) await log(`Consolidate not started on the source (${e?.message || e}); waiting for the merge vSphere is running`, "info").catch(() => {})
+  }
+  return true
+}
+
+/**
+ * Merge left pending on the source by the snapshot removal of a failed run.
+ * A copy that died with its NFC session still open on the host (a network cut,
+ * roadmap#177) leaves the delta locked while the snapshot is removed: vSphere
+ * then flags the VM for consolidation and nothing clears the flag on its own.
+ * Waits for the task here, within FAILURE_CONSOLIDATE_TIMEOUT_MS: the job is
+ * already terminal. Never throws: the job already failed for another reason.
+ */
+export async function consolidateSourceAfterFailure(session: SoapSession, sourceVmId: string, log: ConsolidationLog): Promise<void> {
+  if (await soapWaitForConsolidation(session, sourceVmId, 0, 0)) return
+  try {
+    await soapConsolidateVmDisks(session, sourceVmId, { timeoutMs: FAILURE_CONSOLIDATE_TIMEOUT_MS })
+    await log("Consolidated the source VM disks (vSphere flagged a pending merge after the warm snapshot was removed)", "info").catch(() => {})
+  } catch (e: any) {
+    await log(`Could not consolidate the source VM disks (${e?.message || e}); the next warm run of this VM starts the consolidation itself, or run "Consolidate" on the VM in vSphere`, "warn").catch(() => {})
+  }
+}
+
+/**
  * Failure cleanup: stop readers, remove our snapshots by specific MOR, free orphan
  * target volumes, and log (under `jobId`) each copied volume deliberately kept so
  * the operator knows what survived and where.
@@ -939,6 +1057,7 @@ async function cleanupOnFailure(
     // One warm job per source VM, so nothing else owns these.
     await sweepWarmSnapshots(session, config.sourceVmId,
       msg => appendLog(jobId, msg, "warn")).catch(() => {})
+    await consolidateSourceAfterFailure(session, config.sourceVmId, (msg, level) => appendLog(jobId, msg, level))
   }
   // Unmap every RBD volume (a kept one too), then free the volumes the VM never referenced (orphans). volumesToFree also
   // covers a volume created by an allocation that reported a failure, and skips the

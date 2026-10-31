@@ -16,7 +16,11 @@ describe("buildNbdkitVddkCmd", () => {
       moref: "vm-9",
       diskPath: "[ds] vm/vm.vmdk",
     })
-    expect(cmd).toContain("nbdkit -r -U '/tmp/v.sock' vddk") // -r: read-only (source disk)
+    expect(cmd).toContain("nbdkit -f -r -U '/tmp/v.sock' --filter=retry vddk") // -f: errors in the reader's log; -r: read-only (source disk)
+    // The retry filter reopens the disk after a failed read (roadmap#177):
+    // it must sit before the plugin name, its parameters after it.
+    expect(cmd.indexOf("--filter=retry")).toBeLessThan(cmd.indexOf(" vddk "))
+    expect(cmd).toContain(" retries=5 retry-delay=2 ")
     expect(cmd).toContain("libdir='/opt/vddk'")
     expect(cmd).toContain("server='10.0.0.9'")
     expect(cmd).toContain("user='root'")

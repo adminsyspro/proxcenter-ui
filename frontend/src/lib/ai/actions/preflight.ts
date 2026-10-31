@@ -8,9 +8,10 @@
  * the execute route calls it with a plain tool context. It never throws; a
  * failed check is a `block`, since an action we could not check is not run.
  *
- * Proxmox load: only `migrate` reads Proxmox here, one precondition GET (a
- * protected call), plus for a container its config and the host's storage
- * list (plain reads), all one after the other; nothing with `inPlan`.
+ * Proxmox load: only `migrate` reads Proxmox here, exactly one protected GET
+ * (the precondition), plus for a container two non-protected reads (its
+ * config and the cluster storage config, cached a minute), one after the
+ * other; nothing with `inPlan`.
  * Everything else reads the snapshot, the minute-cached backup jobs or the
  * orchestrator.
  */
@@ -173,7 +174,7 @@ async function checkPrecondition(guest: SnapshotGuest, dest: string, ctx: ToolCo
   // The container precondition says nothing of local volumes: PVE builds its
   // allowed list from storage NAMES, so a rootfs on an LVM defined on every
   // node but not shared passes it (lab, CT 7001 on LVM-Thick).
-  if (guest.kind === 'lxc' && !blocked(checks)) await checkContainerVolumes(guest, conn, checks)
+  if (guest.kind === 'lxc' && !blocked(checks)) await checkContainerVolumes(guest, ctx, conn, checks)
 
   if (!blocked(checks)) checks.push(ok('Proxmox allows the move: no local disk, no host-bound resource.'))
 }
@@ -181,27 +182,69 @@ async function checkPrecondition(guest: SnapshotGuest, dest: string, ctx: ToolCo
 /** Volume keys of a container config: the root disk, mount points and detached volumes. */
 const LXC_VOLUME_KEY = /^(rootfs|mp\d+|unused\d+)$/
 
+export const STORAGE_CONFIG_TTL_MS = 60_000
+
+type StorageConfig = { storage?: string; type?: string; shared?: number | boolean; nodes?: string }
+
+const storageConfigs = new Map<string, { at: number; rows: Promise<StorageConfig[]> }>()
+
+/** Test hook: the cache is module state. */
+export function clearStorageConfigCache() {
+  storageConfigs.clear()
+}
+
 /**
- * Blocks a container with a volume on a storage that is not shared, or with a
- * bind mount (a host path, no `storage:` prefix). Two plain reads, one after
- * the other, neither of them a protected call: the container config and the
- * host's storage list, judged with `isSharedStorage` like the local-vms route.
+ * The cluster's storage definitions, `GET /storage`: a read of storage.cfg,
+ * not a protected call and no storage activated. `/nodes/{node}/storage` is
+ * avoided on purpose: it is protected (one of the node's 3 pvedaemon workers)
+ * and queries every storage, so a dead NFS mount would stall it. Cached a
+ * minute per tenant and connection, like the backup jobs, an in-flight read
+ * shared.
  */
-async function checkContainerVolumes(guest: SnapshotGuest, conn: Awaited<ReturnType<typeof getConnectionById>>, checks: Check[]) {
-  const base = `/nodes/${encodeURIComponent(guest.node)}`
+function loadStorageConfig(tenantId: string, connId: string, conn: Awaited<ReturnType<typeof getConnectionById>>): Promise<StorageConfig[]> {
+  const key = `${tenantId}|${connId}`
+  const hit = storageConfigs.get(key)
+
+  if (hit && Date.now() - hit.at < STORAGE_CONFIG_TTL_MS) return hit.rows
+
+  const rows = pveFetch<StorageConfig[]>(conn, '/storage').then(list => (Array.isArray(list) ? list : []))
+
+  storageConfigs.set(key, { at: Date.now(), rows })
+  rows.catch(() => {
+    if (storageConfigs.get(key)?.rows === rows) storageConfigs.delete(key)
+  })
+
+  return rows
+}
+
+/** Whether a storage definition applies to that host: `nodes` absent means every node. */
+function definedOn(def: StorageConfig, node: string): boolean {
+  if (!def.nodes) return true
+
+  return def.nodes.split(',').map(n => n.trim()).includes(node)
+}
+
+/**
+ * Blocks a container with a volume on a storage that is not shared, on a
+ * storage not defined for its host, or with a bind mount (a host path, no
+ * `storage:` prefix). Two reads, one after the other, neither protected: the
+ * container config and the cluster storage config (minute cache), judged with
+ * `isSharedStorage` like the local-vms route.
+ */
+async function checkContainerVolumes(guest: SnapshotGuest, ctx: ToolContext, conn: Awaited<ReturnType<typeof getConnectionById>>, checks: Check[]) {
   let config: Record<string, unknown>
-  let storages: any[]
+  let storages: StorageConfig[]
 
   try {
-    config = (await pveFetch<Record<string, unknown>>(conn, `${base}/lxc/${encodeURIComponent(guest.vmid)}/config`)) ?? {}
-    storages = (await pveFetch<any[]>(conn, `${base}/storage`)) ?? []
+    config = (await pveFetch<Record<string, unknown>>(conn, `/nodes/${encodeURIComponent(guest.node)}/lxc/${encodeURIComponent(guest.vmid)}/config`)) ?? {}
+    storages = await loadStorageConfig(ctx.tenantId, guest.connId, conn)
   } catch (e: any) {
     checks.push(block(`Could not read the volumes of ${guest.name}: ${String(e?.message || e).slice(0, 160)}`))
 
     return
   }
 
-  const byName = new Map((Array.isArray(storages) ? storages : []).map(s => [String(s?.storage), s]))
+  const byName = new Map(storages.map(s => [String(s?.storage), s]))
   const local: string[] = []
 
   for (const [key, value] of Object.entries(config)) {
@@ -217,8 +260,9 @@ async function checkContainerVolumes(guest: SnapshotGuest, conn: Awaited<ReturnT
     const storage = volume.split(':')[0]
     const def = byName.get(storage)
 
-    // A storage the host does not list is not known to be shared: fail closed.
-    if (!def || !isSharedStorage(def)) local.push(`${key} on ${storage}`)
+    // A storage unknown to the cluster, or not defined for this host, is not
+    // known to be shared: fail closed.
+    if (!def || !definedOn(def, guest.node) || !isSharedStorage(def)) local.push(`${key} on ${storage}`)
   }
 
   if (local.length) {

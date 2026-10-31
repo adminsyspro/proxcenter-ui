@@ -35,7 +35,7 @@ vi.mock('@/lib/rbac', () => ({
 
 import { ACTION_CARDS } from '@/lib/ai/actions/cards'
 import { conversationGrounding } from '@/lib/ai/actions/grounding'
-import { preflightAction } from '@/lib/ai/actions/preflight'
+import { clearStorageConfigCache, preflightAction } from '@/lib/ai/actions/preflight'
 import { resolveActionTarget } from '@/lib/ai/actions/target'
 import { verifyCard } from '@/lib/ai/actions/token'
 import { ACTION_KINDS, normalizeAiActionsSettings, type ActionCard, type ActionPlan, type AiActionsSettings } from '@/lib/ai/actions/types'
@@ -109,10 +109,12 @@ function ctx(
 
 const shared = { allowed_nodes: ['pve2', 'pve3'], local_disks: [], local_resources: [], 'mapped-resources': [], not_allowed_nodes: {}, running: 1 }
 const lxcShared = { 'allowed-nodes': ['pve2', 'pve3'], 'not-allowed-nodes': {}, running: 1 }
+// The cluster storage config (`GET /storage`), as the lab answers it.
 const storages = [
-  { storage: 'CephStoragePool', type: 'rbd', shared: 0, active: 1 },
-  { storage: 'LVM-Thick', type: 'lvm', shared: 0, active: 1 },
-  { storage: 'local', type: 'dir', shared: 0, active: 1 },
+  { storage: 'CephStoragePool', type: 'rbd', shared: 1 },
+  { storage: 'LVM-Thick', type: 'lvm', shared: 0 },
+  { storage: 'local', type: 'dir', shared: 0 },
+  { storage: 'nfs-pve2', type: 'nfs', shared: 1, nodes: 'pve2,pve3' },
 ]
 const localDisk = { allowed_nodes: [], local_disks: [{ drivename: 'scsi0', shared: 0, volid: 'Dir-Images:1/vm-1-disk-0.qcow2' }], local_resources: [], not_allowed_nodes: {} }
 
@@ -137,6 +139,7 @@ afterAll(() => {
 beforeEach(() => {
   clearBackupJobsCache()
   clearHostsCache()
+  clearStorageConfigCache()
   h.denied.clear()
   h.vdcPools = null
   h.licensed = true
@@ -145,7 +148,7 @@ beforeEach(() => {
     if (/^\/nodes\/pve\d\/qemu\/\d+\/migrate/.test(path)) return shared
     if (/^\/nodes\/pve\d\/lxc\/\d+\/migrate/.test(path)) return lxcShared
     if (/\/lxc\/\d+\/config$/.test(path)) return { hostname: 'ct', rootfs: 'CephStoragePool:vm-205-disk-0,size=8G' }
-    if (/^\/nodes\/pve\d\/storage$/.test(path)) return storages
+    if (path === '/storage') return storages
     if (path === '/cluster/backup') return []
     if (path.endsWith('/apt/update')) return [{ Package: 'pve-manager' }]
     throw new Error(`unexpected path ${path}`)
@@ -392,11 +395,35 @@ describe('migrate', () => {
     expect(res.card?.preflight.checks.find(c => c.level === 'block')?.text).toContain('bind mount')
   })
 
-  it('lets a container on Ceph RBD through', async () => {
+  it('lets a container on Ceph RBD through with one protected call, the precondition', async () => {
     const res = await propose({ action: 'migrate', guest: 'ct-web', target_host: 'pve3' }, ctx('move ct-web to pve3'))
 
     expect(res.card?.preflight.ok).toBe(true)
-    expect(h.pveFetch.mock.calls.map(c => c[1])).toEqual(['/nodes/pve1/lxc/205/migrate', '/nodes/pve1/lxc/205/config', '/nodes/pve1/storage'])
+    // Precondition (protected), then the config and the cluster storage
+    // config (neither protected); never the per-node storage status.
+    expect(h.pveFetch.mock.calls.map(c => c[1])).toEqual(['/nodes/pve1/lxc/205/migrate', '/nodes/pve1/lxc/205/config', '/storage'])
+  })
+
+  it('reads the storage config once a minute per connection', async () => {
+    const c = ctx('move ct-web to pve3')
+
+    await propose({ action: 'migrate', guest: 'ct-web', target_host: 'pve3' }, c)
+    await propose({ action: 'migrate', guest: 'ct-web', target_host: 'pve3' }, c)
+
+    expect(h.pveFetch.mock.calls.filter(call => call[1] === '/storage')).toHaveLength(1)
+    expect(h.pveFetch.mock.calls.some(call => /^\/nodes\/[^/]+\/storage/.test(String(call[1])))).toBe(false)
+  })
+
+  it('blocks a container on a shared storage not defined for its host', async () => {
+    const fallback = h.pveFetch.getMockImplementation()!
+
+    h.pveFetch.mockImplementation(async (conn: unknown, path: string) =>
+      path === '/nodes/pve1/lxc/205/config' ? { rootfs: 'nfs-pve2:205/vm-205-disk-0.raw' } : fallback(conn, path)
+    )
+
+    const res = await propose({ action: 'migrate', guest: 'ct-web', target_host: 'pve3' }, ctx('move ct-web to pve3'))
+
+    expect(res.card?.preflight.checks.find(c => c.level === 'block')?.text).toContain('nfs-pve2')
   })
 
   it('blocks a stopped guest without calling Proxmox', async () => {

@@ -59,7 +59,7 @@ export const HOST_MEMORY_TARGET_PCT = 75
 /**
  * Candidates of a host_memory plan checked with Proxmox, one after the other:
  * each is the full migrate preflight, so one protected precondition GET (plus,
- * for a container, its config and the host's storage list, plain reads). At
+ * for a container, its config and the cached storage config, not protected). At
  * most 5 protected GETs per plan question, and the plan never offers a move
  * Proxmox or the local-storage rule would refuse at click time (R10).
  */

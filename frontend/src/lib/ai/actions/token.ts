@@ -34,18 +34,27 @@ function canonical(value: unknown): string {
   return JSON.stringify(value) ?? 'null'
 }
 
+function validBinding(bind: ActionBinding): boolean {
+  if (!bind || typeof bind !== 'object') return false
+  return [bind.userId, bind.tenantId, bind.conversationId].every(v => typeof v === 'string' && v.length > 0)
+}
+
 // `token` is the signature itself and `preflight` is display data recomputed at
-// execution, so neither is covered.
+// execution, so neither is covered. The binding must be complete: a missing or
+// empty field would silently weaken it and let two callers share cards.
 function mac(card: Record<string, unknown>, bind: ActionBinding): Buffer {
+  const key = getKey()
   const { token: _token, preflight: _preflight, ...signed } = card
   const payload = canonical({
     card: signed,
-    bind: { userId: bind?.userId, tenantId: bind?.tenantId, conversationId: bind?.conversationId },
+    bind: { userId: bind.userId, tenantId: bind.tenantId, conversationId: bind.conversationId },
   })
-  return createHmac('sha256', getKey()).update(payload).digest()
+  return createHmac('sha256', key).update(payload).digest()
 }
 
 export function signCard(body: Omit<ActionCard, 'token'>, bind: ActionBinding): ActionCard {
+  getKey()
+  if (!validBinding(bind)) throw new Error('Action card binding needs a non-empty userId, tenantId and conversationId')
   return { ...body, token: mac(body as Record<string, unknown>, bind).toString('base64url') }
 }
 
@@ -53,9 +62,17 @@ export function verifyCard(
   card: ActionCard,
   bind: ActionBinding,
 ): { ok: true } | { ok: false; reason: 'bad-signature' | 'expired' } {
-  const expected = mac(card && typeof card === 'object' ? (card as Record<string, unknown>) : {}, bind)
+  getKey() // a missing APP_SECRET is the only thing that throws
+  if (!validBinding(bind) || !card || typeof card !== 'object') return { ok: false, reason: 'bad-signature' }
 
-  const token = card && typeof card === 'object' ? card.token : undefined
+  let expected: Buffer
+  try {
+    expected = mac(card as Record<string, unknown>, bind)
+  } catch {
+    return { ok: false, reason: 'bad-signature' }
+  }
+
+  const token = card.token
   if (typeof token !== 'string' || token.length === 0) return { ok: false, reason: 'bad-signature' }
 
   const given = Buffer.from(token, 'base64url')

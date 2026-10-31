@@ -82,6 +82,33 @@ describe('action card token', () => {
     expect(verifyCard(null as unknown as ActionCard, bind)).toEqual({ ok: false, reason: 'bad-signature' })
   })
 
+  it('requires a complete binding', () => {
+    const c = signCard(body(), bind)
+    const bads = [
+      { ...bind, userId: undefined },
+      { ...bind, userId: '' },
+      { ...bind, tenantId: '' },
+      { ...bind, conversationId: '' },
+      { ...bind, conversationId: undefined },
+    ] as unknown as ActionBinding[]
+    for (const b of bads) {
+      expect(() => signCard(body(), b)).toThrow()
+      expect(verifyCard(c, b)).toEqual({ ok: false, reason: 'bad-signature' })
+    }
+  })
+
+  it('does not throw on a hostile card', () => {
+    const c = signCard(body(), bind)
+    const cyclic: Record<string, unknown> = { ...c }
+    cyclic.self = cyclic
+    const big = { ...c, params: { n: BigInt(1) } }
+    const getter = { ...c }
+    Object.defineProperty(getter, 'kind', { enumerable: true, get() { throw new Error('boom') } })
+    for (const h of [cyclic, big, getter]) {
+      expect(verifyCard(h as unknown as ActionCard, bind)).toEqual({ ok: false, reason: 'bad-signature' })
+    }
+  })
+
   it('fails closed without APP_SECRET', () => {
     const c = signCard(body(), bind)
     for (const v of [undefined, '']) {

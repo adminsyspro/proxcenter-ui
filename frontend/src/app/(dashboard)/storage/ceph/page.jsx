@@ -45,6 +45,7 @@ import { usePageTitle } from '@/contexts/PageTitleContext'
 import PermissionGuard from '@/components/guards/PermissionGuard'
 import { formatBytes } from '@/utils/format'
 import { useCephPerformance, useCephRRD } from '@/hooks/useCeph'
+import { useSelectionGuard } from '@/hooks/useSelectionGuard'
 import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 
 /* -----------------------------
@@ -529,17 +530,39 @@ return {
     scanConnections()
   }, [])
 
+  // Every load is bound to the connection (and, for RRD, the timeframe) it
+  // was started for: switching aborts it and drops its answer, so a slow
+  // cluster can never paint its health or graphs under another one.
+  const cephGuard = useSelectionGuard(connId || null)
+  const rrdGuard = useSelectionGuard(connId ? `${connId}|${rrdTimeframe}` : null)
+  const hasCephData = !!cephData
+
+  // A new connection starts blank: the previous cluster's figures must not
+  // stay on screen (nor receive the new cluster's live samples) meanwhile.
+  useEffect(() => {
+    setCephData(null)
+    setRrdData(null)
+    setIopsHistory([])
+    setThroughputHistory([])
+    setLoading(false)
+    setRrdLoading(false)
+  }, [connId])
+
   // Charger les données Ceph
   const loadCeph = async () => {
     if (!connId) return
-    
+
+    const req = cephGuard.begin(connId)
+
     setLoading(true)
     setError(null)
     
     try {
-      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph`)
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph`, { signal: req.signal })
       const json = await res.json()
-      
+
+      if (!req.isCurrent()) return
+
       if (!res.ok) {
         setError(json.error || t('ceph.errorStatus', { status: res.status }))
         setCephData(null)
@@ -549,10 +572,11 @@ return
       
       setCephData(json.data)
     } catch (e) {
+      if (!req.isCurrent()) return
       setError(e?.message || String(e))
       setCephData(null)
     } finally {
-      setLoading(false)
+      if (req.isCurrent()) setLoading(false)
     }
   }
 
@@ -565,32 +589,37 @@ return
   // Charger les données RRD pour les graphiques
   const loadRrd = async () => {
     if (!connId) return
-    
+
+    const req = rrdGuard.begin(`${connId}|${rrdTimeframe}`)
+
     setRrdLoading(true)
 
     try {
       const res = await fetch(
-        `/api/v1/connections/${encodeURIComponent(connId)}/ceph/rrd?timeframe=${rrdTimeframe}`
+        `/api/v1/connections/${encodeURIComponent(connId)}/ceph/rrd?timeframe=${rrdTimeframe}`,
+        { signal: req.signal }
       )
 
       const json = await res.json()
-      
-      if (res.ok && json?.data) {
+
+      if (req.isCurrent() && res.ok && json?.data) {
         setRrdData(json.data)
       }
     } catch (e) {
-      console.error('Failed to load RRD data:', e)
+      if (req.isCurrent()) console.error('Failed to load RRD data:', e)
     } finally {
-      setRrdLoading(false)
+      if (req.isCurrent()) setRrdLoading(false)
     }
   }
 
-
+  // Keyed on the presence of the Ceph data, not on the object: live mode
+  // replaces it every 5 s, which used to re-read the RRD each time on top of
+  // the 30 s SWR refresh below.
   useEffect(() => {
-    if (!scanning && connId && cephData) {
+    if (!scanning && connId && hasCephData) {
       loadRrd()
     }
-  }, [scanning, connId, cephData, rrdTimeframe])
+  }, [scanning, connId, hasCephData, rrdTimeframe])
 
   // Mettre à jour l'historique IOPS et Throughput quand cephData change
   useEffect(() => {

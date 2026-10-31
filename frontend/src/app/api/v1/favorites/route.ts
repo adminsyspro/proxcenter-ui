@@ -70,13 +70,14 @@ export async function POST(req: Request) {
     // Clé unique pour la VM
     const vmKey = `${connectionId}:${node}:${vmType}:${vmid}`
 
-    // Vérifier si déjà en favori
+    // Already starred in THIS tenant? The same key may be starred in another
+    // tenant: favorites are unique per (tenant, user, vm key).
     const existing = await prisma.favorite.findUnique({
-      where: { userId_vmKey: { userId, vmKey } },
-      select: { id: true, tenantId: true },
+      where: { tenantId_userId_vmKey: { tenantId, userId, vmKey } },
+      select: { id: true },
     })
 
-    if (existing && existing.tenantId === tenantId) {
+    if (existing) {
       return NextResponse.json(
         { error: 'This VM is already in your favorites' },
         { status: 409 }
@@ -107,6 +108,15 @@ export async function POST(req: Request) {
       message: 'Favorite added',
     })
   } catch (error: any) {
+    // A concurrent POST for the same key won the insert: same answer as the
+    // lookup above rather than a 500.
+    if (error?.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'This VM is already in your favorites' },
+        { status: 409 }
+      )
+    }
+
     console.error('Error adding favorite:', error)
 
 return NextResponse.json(

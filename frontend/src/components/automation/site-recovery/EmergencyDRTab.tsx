@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
+import { useSelectionGuard } from '@/hooks/useSelectionGuard'
+
 import {
   Alert,
   Box,
@@ -136,6 +138,10 @@ export default function EmergencyDRTab({
   const [restorePoints, setRestorePoints] = useState<{ loading: boolean; data: VMRestorePoints | null; failed: boolean }>({
     loading: false, data: null, failed: false
   })
+  // The restore points belong to the replica whose dialog is open: an answer
+  // for a dialog closed or replaced meanwhile is dropped.
+  const restorePointsKey = (vm: DRReadyVM | null) => (vm ? `${vm.jobId}:${vm.vmId}` : null)
+  const restorePointsGuard = useSelectionGuard(restorePointsKey(startTarget))
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success'
   })
@@ -255,12 +261,14 @@ export default function EmergencyDRTab({
   const stopJobPaused = !!stopTarget && jobs.find(j => j.id === stopTarget.jobId)?.status === 'paused'
 
   const openStartDialog = (vm: DRReadyVM) => {
+    const req = restorePointsGuard.switchTo(restorePointsKey(vm))
+
     setRestorePoint('')
     setStartTarget(vm)
     setRestorePoints({ loading: true, data: null, failed: false })
     loadRestorePoints(vm.jobId, vm.vmId)
-      .then(data => setRestorePoints({ loading: false, data, failed: false }))
-      .catch(() => setRestorePoints({ loading: false, data: null, failed: true }))
+      .then(data => { if (req.isCurrent()) setRestorePoints({ loading: false, data, failed: false }) })
+      .catch(() => { if (req.isCurrent()) setRestorePoints({ loading: false, data: null, failed: true }) })
   }
 
   const openStopDialog = (vm: DRReadyVM) => {

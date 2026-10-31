@@ -98,9 +98,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
     if (!selectedConnection) return
     const newEnable = isRuleEnabled(rule) ? 0 : 1
     try {
-      await fetch(`/api/v1/firewall/nodes/${selectedConnection}/${node}/rules/${rule.pos}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...rule, enable: newEnable })
-      })
+      await firewallAPI.updateNodeRule(selectedConnection, node, rule.pos, { ...rule, enable: newEnable })
       showToast(newEnable === 1 ? t('network.ruleEnabled') : t('network.ruleDisabled'), 'success')
       void reloadHostRulesForNode(node)
     } catch (err: any) {
@@ -126,11 +124,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
   const handleUpdateHostRule = async () => {
     if (!editingHostRule?.rule || !selectedConnection) return
     try {
-      await fetch(`/api/v1/firewall/nodes/${selectedConnection}/${editingHostRule.node}/rules/${editingHostRule.rule.pos}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newHostRule)
-      })
+      await firewallAPI.updateNodeRule(selectedConnection, editingHostRule.node, editingHostRule.rule.pos, newHostRule)
       showToast(t('network.ruleModified'), 'success')
       setHostRuleDialogOpen(false)
       setEditingHostRule(null)
@@ -182,11 +176,7 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
     setHostDragState({ node: '', draggedPos: null, dragOverPos: null })
     if (fromPos !== null && fromPos !== toPos && hostDragState.node === node) {
       try {
-        await fetch(`/api/v1/firewall/nodes/${selectedConnection}/${node}/rules/${fromPos}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ moveto: toPos })
-        })
+        await firewallAPI.updateNodeRule(selectedConnection, node, fromPos, { moveto: toPos })
         showToast(t('network.ruleMoved'), 'success')
         void loadHostRules()
       } catch (err: any) {

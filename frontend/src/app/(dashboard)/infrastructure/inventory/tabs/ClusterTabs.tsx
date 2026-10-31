@@ -95,6 +95,7 @@ import { normalizeScopedFlags, scopedFlagEntries, withScopedFlag, type ScopedFla
 import { CephScopedFlagChips } from '@/components/ceph/CephFlagChips'
 import CephHealthCheckDetail from '@/components/ceph/CephHealthCheckDetail'
 import { isNodeReachable, nodeStatusMeta } from '../nodeStatusMeta'
+import { jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
 
 const INVENTORY_OSD_STYLE: Record<OsdGridState, { color: string; label: string; opacity: number }> = {
   down: { color: '#ef4444', label: 'Down', opacity: 1 },
@@ -177,16 +178,12 @@ function HaResourceStateCell({ sid, state, group, connId, t }: {
     setDisplayState(newState)
     setSaving(true)
     try {
-      await fetch(
+      await requireOk(
         `/api/v1/connections/${encodeURIComponent(connId)}/ha/${encodeURIComponent(sid)}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ state: newState, group: group || undefined }),
-        }
+        jsonInit('POST', { state: newState, group: group || undefined }),
       )
     } catch {
-      setDisplayState(state) // revert on error
+      setDisplayState(state) // revert on error, HTTP refusals included
     }
     setSaving(false)
   }

@@ -81,12 +81,16 @@ export function buildBridgeVlanMap(ifaces: HostNetIface[]): Map<string, number> 
     if (!raw) continue
     const ports = raw.split(/\s+/).filter(Boolean)
 
+    // One unresolved uplink (a raw trunk such as `bond0`) makes the bridge
+    // multi-VLAN whatever its other ports carry: it is left unmapped.
     const vlans = new Set<number>()
+    let unresolved = false
     for (const port of ports) {
       const id = vlanByName.get(port) ?? parseVlanTag(port)
-      if (id != null) vlans.add(id)
+      if (id == null) unresolved = true
+      else vlans.add(id)
     }
-    if (vlans.size === 1) map.set(iface.iface, [...vlans][0])
+    if (!unresolved && vlans.size === 1) map.set(iface.iface, [...vlans][0])
   }
 
   return map

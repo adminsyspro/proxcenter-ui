@@ -31,7 +31,7 @@ describe('useCephPerf', () => {
 
     await waitFor(() => expect(result.current.clusterCephPerf).not.toBeNull())
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/connections/conn%201/ceph/status', { cache: 'no-store' })
+    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/connections/conn%201/ceph/status', { cache: 'no-store', signal: expect.any(AbortSignal) })
     expect(result.current.clusterCephPerf).toMatchObject({
       read_bytes_sec: 1048576,
       write_bytes_sec: 524288,
@@ -59,5 +59,50 @@ describe('useCephPerf', () => {
 
     await waitFor(() => expect(result.current.clusterCephPerfFiltered).toHaveLength(2))
     expect(fetchSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('never appends a late sample of cluster A to the history of cluster B', async () => {
+    let releaseA!: () => void
+    const gate = new Promise<void>(r => { releaseA = r })
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    fetchSpy.mockImplementation(async (input: any) => {
+      if (String(input).includes('connA')) {
+        await gate
+
+        return { json: async () => ({ data: { pgmap: { ...PGMAP, read_op_per_sec: 999 } } }) } as any
+      }
+
+      return { json: async () => ({ data: { pgmap: PGMAP } }) } as any
+    })
+
+    const { result, rerender } = renderHook(({ id }) => useCephPerf('cluster', id, 7, { health: 'ok' }, 3600), { initialProps: { id: 'connA' } })
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    rerender({ id: 'connB' })
+    await waitFor(() => expect(result.current.clusterCephPerfFiltered).toHaveLength(1))
+
+    await act(async () => { releaseA(); await gate; await Promise.resolve() })
+    expect(result.current.clusterCephPerfFiltered).toHaveLength(1)
+    expect(result.current.clusterCephPerf.read_op_per_sec).toBe(120)
+    expect(errSpy).not.toHaveBeenCalled()
+  })
+
+  it('clears the history when switching cluster while the Ceph tab stays open', async () => {
+    const { result, rerender } = renderHook(({ id }) => useCephPerf('cluster', id, 7, { health: 'ok' }, 3600), { initialProps: { id: 'connA' } })
+
+    await waitFor(() => expect(result.current.clusterCephPerfFiltered).toHaveLength(1))
+    fetchSpy.mockImplementation(() => new Promise(() => {}) as any)
+    rerender({ id: 'connB' })
+    expect(result.current.clusterCephPerfFiltered).toHaveLength(0)
+    expect(result.current.clusterCephPerf).toBeNull()
+  })
+
+  it('logs a poll failure of the cluster displayed', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fetchSpy.mockRejectedValue(new Error('pve down'))
+    renderHook(() => useCephPerf('cluster', 'conn1', 7, { health: 'ok' }, 3600))
+
+    await waitFor(() => expect(errSpy).toHaveBeenCalledWith('Error fetching Ceph perf:', expect.any(Error)))
   })
 })

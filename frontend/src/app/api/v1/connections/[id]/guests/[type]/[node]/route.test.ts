@@ -35,11 +35,11 @@ vi.mock('@/lib/vdc/vnets', async (io) => {
     getAllowedNetworksForTenant: getAllowedNetworksForTenantMock,
     validateNetAgainstScope: actual.validateNetAgainstScope,
     resolveSubnetForBridge: vi.fn(async () => null),
-    parseBridgeFromNet: () => null,
+    parseBridgeFromNet: (net: string) => /(?:^|,)bridge=([^,]+)/.exec(net)?.[1] ?? null,
   }
 })
 vi.mock('@/lib/vdc/sdn', () => ({ generatePveMacAddress: () => 'BC:24:11:00:00:01' }))
-vi.mock('@/lib/vdc/ipam', () => ({ allocateIp: vi.fn(), releaseIp: vi.fn(), IpamExhaustedError: class extends Error {} }))
+vi.mock('@/lib/vdc/ipam', () => ({ allocateIp: vi.fn(), allocateIpTracked: vi.fn(), releaseIp: vi.fn(), IpamExhaustedError: class extends Error {} }))
 vi.mock('@/lib/vdc/network', () => ({ parseCidr: () => null }))
 const enforceGuestTagAccessMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 vi.mock('@/lib/proxmox/tagAccessServer', () => ({ enforceGuestTagAccess: enforceGuestTagAccessMock }))
@@ -244,6 +244,37 @@ describe('POST guests: explicit tenant NIC identity', () => {
     checkPermissionMock.mockImplementation(async permission => permission === 'vm.create' ? null : Response.json({ error: 'denied' }, { status: 403 }))
     const res = await callRoute(await loadPost(), { params: baseParams, body: { vmid: 190, net0: 'virtio,bridge=vmbr0' } })
     expect(res.status).toBe(200)
+  })
+})
+
+describe('POST guests create: IPAM rollback on a failed PVE create', () => {
+  const subnet = { vdcId: 'vdc-1', vnetId: 'vnet-1', subnetId: 'subnet-1', cidr: '10.42.0.0/24', gateway: '10.42.0.254', dnsServers: [] }
+
+  async function failCreate(created: boolean) {
+    const { resolveSubnetForBridge } = await import('@/lib/vdc/vnets')
+    const { allocateIpTracked, releaseIp } = await import('@/lib/vdc/ipam')
+    vi.mocked(resolveSubnetForBridge).mockImplementation(async (_c: string, bridge: string) => (bridge === 'tenantA' ? subnet : null) as any)
+    vi.mocked(allocateIpTracked).mockResolvedValue({ allocation: { ip: '10.42.0.7' } as any, created })
+    vi.mocked(releaseIp).mockReset()
+    pveFetchMock.mockRejectedValue(new Error('vmid 190 already exists'))
+    const res = await callRoute(await loadPost(), {
+      params: baseParams,
+      body: { vmid: 190, net0: 'virtio=AA:BB:CC:DD:EE:01,bridge=tenantA' },
+    })
+    vi.mocked(resolveSubnetForBridge).mockImplementation(async () => null)
+    return { res, releaseIp: vi.mocked(releaseIp) }
+  }
+
+  it('keeps the reservation a pinned MAC already held', async () => {
+    const { res, releaseIp } = await failCreate(false)
+    expect(res.status).toBe(500)
+    expect(releaseIp).not.toHaveBeenCalled()
+  })
+
+  it('releases the reservation this request inserted', async () => {
+    const { res, releaseIp } = await failCreate(true)
+    expect(res.status).toBe(500)
+    expect(releaseIp).toHaveBeenCalledWith({ subnetId: 'subnet-1', ip: '10.42.0.7' })
   })
 })
 

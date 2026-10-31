@@ -850,7 +850,8 @@
     "cephNooutOrphan": "无维护状态下的 Ceph noout",
     "cephNooutOrphanDesc": "当集群中没有任何节点处于维护状态，而主机上的 Ceph noout 标志持续超过此时长时告警",
     "cephNooutHoursUnit": "小时",
-    "cephNooutMinutesUnit": "分钟"
+    "cephNooutMinutesUnit": "分钟",
+    "batchFailed": "{total} 个操作中有 {failed} 个失败：{error}"
   },
   "inventory": {
     "alertsDialog": {
@@ -2639,7 +2640,8 @@
         "verify": "完整性检查",
         "conversion": "客户机转换",
         "finish": "挂载并启动"
-      }
+      },
+      "cancelMigrationFailed": "无法取消迁移，迁移仍在运行"
     },
     "extDashboard": {
       "hosts": "主机",
@@ -6793,7 +6795,8 @@
       "vmMixedStorageWarn": "仅复制 Ceph RBD 磁盘，其他磁盘将被跳过。",
       "vmAlreadyReplicated": "已由 {job} 复制",
       "vmUnsupportedDisk": "此虚拟机具有不受支持的磁盘引用，例如直通磁盘。",
-      "sshChecks": "节点间 SSH 连接"
+      "sshChecks": "节点间 SSH 连接",
+      "createFailed": "无法创建复制任务：{error}"
     },
     "schedule": {
       "modeRpo": "持续（RPO）",
@@ -7336,7 +7339,8 @@
         "help": "虚拟机将加入 HA 管理器并由其启动。",
         "helpIso": "虚拟机将加入 HA 管理器，并保持停止状态直到您开始安装。",
         "localStorage": "需要共享存储：所选存储是节点本地存储。"
-      }
+      },
+      "statusUnreadable": "无法读取部署状态（{error}）。部署可能仍在进行中，请查看“部署”选项卡。"
     },
     "deployments": {
       "vm": "虚拟机",
@@ -7356,7 +7360,8 @@
         "starting": "启动中",
         "completed": "已完成",
         "failed": "失败"
-      }
+      },
+      "loadFailed": "无法加载部署列表：{error}"
     }
   },
   "console": {
@@ -9575,6 +9580,7 @@
     "cephFlagsCard": "Ceph OSD 标志",
     "cephFlagsNotSet": "Ceph 维护标志（noout、norebalance、norecover）未全部设置。设置这些标志可防止更新期间不必要的数据重新平衡。",
     "cephFlagsAlreadySet": "所有 Ceph 维护标志已设置。",
+    "cephFlagsUnreadable": "无法读取 Ceph 标志（{error}）。本次更新期间 ProxCenter 不会更改它们。",
     "setCephFlagsBefore": "设置 Ceph 维护标志（noout、norebalance、norecover）",
     "preparingCluster": "正在准备集群...",
     "postActionsTitle": "更新后操作",
@@ -9603,6 +9609,7 @@
     "vmMigrateFailed": "迁移失败",
     "vmShutdownSuccess": "已关闭",
     "vmShutdownFailed": "关闭失败",
+    "vmShutdownNotFollowed": "无法跟踪关机直至完成：客户机可能仍在运行",
     "migrateVmsBack": "迁移虚拟机回原位",
     "migrateVmsBackDescription": "将虚拟机从 {targets} 迁移回 {node}。",
     "migrateVmsBackBtn": "迁移回原位",
@@ -9631,7 +9638,10 @@
     },
     "healthVotes": "票数，仲裁 {required}",
     "healthVotesQDevice": "含 QDevice 的票数，仲裁 {required}",
-    "vmActionsFailedTitle": "{count} 个客户机无法迁移或关闭，仍在此节点上"
+    "vmActionsFailedTitle": "{count} 个客户机无法迁移或关闭，仍在此节点上",
+    "preflightStopped": "预检已停止，未进行任何更新：{error}",
+    "postActionFailed": "操作失败：{error}",
+    "guestDiscoveryFailed": "无法列出此节点的虚拟机（{error}），因此无法规划其迁出。请关闭对话框后重试。"
   },
   "replication": {
     "title": "复制",

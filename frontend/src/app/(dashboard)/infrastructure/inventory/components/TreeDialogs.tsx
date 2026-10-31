@@ -233,8 +233,8 @@ export interface TreeDialogsProps {
   executeBackupNow: () => Promise<void>
 
   // Snackbar
-  snackbar: { open: boolean; message: string; severity: 'success' | 'error' | 'info' }
-  setSnackbar: React.Dispatch<React.SetStateAction<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>>
+  snackbar: { open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }
+  setSnackbar: React.Dispatch<React.SetStateAction<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>>
 
   // Unlock error dialog
   unlockErrorDialog: { open: boolean; error: string; hint?: string }

@@ -846,7 +846,8 @@
     "cephNooutOrphan": "Ceph noout without maintenance",
     "cephNooutOrphanDesc": "Alert when a Ceph noout flag is set on a host while no node of the cluster is in maintenance for longer than this",
     "cephNooutHoursUnit": "h",
-    "cephNooutMinutesUnit": "min"
+    "cephNooutMinutesUnit": "min",
+    "batchFailed": "{failed} of {total} actions failed: {error}"
   },
   "inventory": {
     "alertsDialog": {
@@ -2639,7 +2640,8 @@
         "verify": "Integrity check",
         "conversion": "Guest conversion",
         "finish": "Attach and start"
-      }
+      },
+      "cancelMigrationFailed": "The migration could not be cancelled and is still running"
     },
     "extDashboard": {
       "hosts": "Hosts",
@@ -6793,7 +6795,8 @@
       "vmMixedStorageWarn": "Only Ceph RBD disks will be replicated; other disks are skipped.",
       "vmAlreadyReplicated": "Already replicated by {job}",
       "vmUnsupportedDisk": "This VM has an unsupported disk reference, such as a passthrough disk.",
-      "sshChecks": "SSH connections between nodes"
+      "sshChecks": "SSH connections between nodes",
+      "createFailed": "The replication job could not be created: {error}"
     },
     "schedule": {
       "modeRpo": "Continuous (RPO)",
@@ -7336,7 +7339,8 @@
         "help": "The VM is added to the HA manager, which starts it.",
         "helpIso": "The VM is added to the HA manager and stays stopped until you start the installer.",
         "localStorage": "Needs shared storage: the selected storage is local to its node."
-      }
+      },
+      "statusUnreadable": "The deployment status could not be read ({error}). It may still be running: check the Deployments tab."
     },
     "deployments": {
       "vm": "Virtual Machine",
@@ -7356,7 +7360,8 @@
         "starting": "Starting",
         "completed": "Completed",
         "failed": "Failed"
-      }
+      },
+      "loadFailed": "The deployments could not be loaded: {error}"
     }
   },
   "console": {
@@ -9575,6 +9580,7 @@
     "cephFlagsCard": "Ceph OSD Flags",
     "cephFlagsNotSet": "Ceph maintenance flags (noout, norebalance, norecover) are not all set. Setting them prevents unnecessary data rebalancing during the update.",
     "cephFlagsAlreadySet": "All Ceph maintenance flags are already set.",
+    "cephFlagsUnreadable": "The Ceph flags could not be read ({error}). ProxCenter will not change them during this update.",
     "setCephFlagsBefore": "Set Ceph maintenance flags (noout, norebalance, norecover)",
     "preparingCluster": "Preparing cluster...",
     "postActionsTitle": "Post-update Actions",
@@ -9603,6 +9609,7 @@
     "vmMigrateFailed": "Migration failed",
     "vmShutdownSuccess": "Shut down",
     "vmShutdownFailed": "Shutdown failed",
+    "vmShutdownNotFollowed": "The shutdown could not be followed to the end: the guest may still be running",
     "migrateVmsBack": "Migrate VMs Back",
     "migrateVmsBackDescription": "Migrate VMs back to {node} from {targets}.",
     "migrateVmsBackBtn": "Migrate back",
@@ -9631,7 +9638,10 @@
     },
     "healthVotes": "Votes, quorum {required}",
     "healthVotesQDevice": "Votes with QDevice, quorum {required}",
-    "vmActionsFailedTitle": "{count} guest(s) could not be moved or shut down and are still on this node"
+    "vmActionsFailedTitle": "{count} guest(s) could not be moved or shut down and are still on this node",
+    "preflightStopped": "Pre-flight stopped, nothing was updated: {error}",
+    "postActionFailed": "The action failed: {error}",
+    "guestDiscoveryFailed": "The guests of this node could not be listed ({error}), so their evacuation cannot be planned. Close the dialog and try again."
   },
   "replication": {
     "title": "Replication",

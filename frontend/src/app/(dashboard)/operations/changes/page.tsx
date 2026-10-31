@@ -23,8 +23,10 @@ import { buildChangesCsv } from '@/lib/changes/csv'
 import { RESOURCE_LABELS, actionMeta } from '@/lib/changes/journal'
 import type { JournalChange } from '@/lib/changes/journal'
 import { dateStamp, downloadCsv } from '@/lib/export/download'
+import { jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import { useToast } from '@/contexts/ToastContext'
 import { Features, useLicense } from '@/contexts/LicenseContext'
 import { useChanges } from '@/hooks/useChanges'
 import { useGuestStatus } from '@/hooks/useGuestStatus'
@@ -38,6 +40,7 @@ import { CardsSkeleton } from '@/components/skeletons'
 
 export default function ChangesPage() {
   const t = useTranslations()
+  const toast = useToast()
   const { hasFeature, loading: licenseLoading } = useLicense()
 
   const { setPageInfo } = usePageTitle()
@@ -65,15 +68,16 @@ export default function ChangesPage() {
     setPurging(true)
 
     try {
-      await fetch('/api/v1/changes', { method: 'DELETE' })
+      await requireOk('/api/v1/changes', jsonInit('DELETE'))
       await mutate()
       setPurgeOpen(false)
     } catch (e) {
-      console.error('Purge failed:', e)
+      // The journal was not purged: the dialog stays open with the reason.
+      toast.error(`${t('common.error')}: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setPurging(false)
     }
-  }, [mutate])
+  }, [mutate, t, toast])
 
   // The CSV carries what the filters select, every page of it, not just the
   // rows currently on screen.
@@ -109,19 +113,15 @@ export default function ChangesPage() {
     setSavingSettings(true)
 
     try {
-      await fetch('/api/v1/changes/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ retentionDays })
-      })
+      await requireOk('/api/v1/changes/settings', jsonInit('PUT', { retentionDays }))
       await mutateSettings()
       setSettingsOpen(false)
     } catch (e) {
-      console.error('Settings save failed:', e)
+      toast.error(`${t('common.error')}: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setSavingSettings(false)
     }
-  }, [retentionDays, mutateSettings])
+  }, [retentionDays, mutateSettings, t, toast])
 
   if (!licenseLoading && !hasFeature(Features.CHANGE_TRACKING)) {
     return <EnterpriseGuard requiredFeature={Features.CHANGE_TRACKING} featureName={t('changes.title')}><span /></EnterpriseGuard>

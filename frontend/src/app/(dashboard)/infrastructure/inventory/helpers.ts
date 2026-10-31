@@ -998,7 +998,12 @@ export function migrationSourceApiPrefix(type: string | null | undefined): strin
   return type && MIGRATION_SOURCE_API_PREFIXES.has(type) ? type : 'vmware'
 }
 
-export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayload | null> {
+/**
+ * Detail payload of one inventory selection. `signal` cancels every request
+ * of the load, including the follow-up ones it has not sent yet, once the
+ * selection it was started for is no longer the current one.
+ */
+export async function fetchDetails(sel: InventorySelection, signal?: AbortSignal): Promise<DetailsPayload | null> {
   // Root / section selections don't have details — skip fetching
   if (sel.type === 'root' || sel.type === 'storage-root' || sel.type === 'network-root' || sel.type === 'backup-root' || sel.type === 'migration-root' || sel.type === 'net-conn' || sel.type === 'net-node' || sel.type === 'net-vlan' || sel.type === 'net-bridge' || sel.type === 'tvnet' || sel.type === 'storage-cluster' || sel.type === 'storage-node') return null
 
@@ -1006,11 +1011,11 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
 
   if (sel.type === 'cluster') {
     const [connR, nodesR, resourcesR, cephR, storageR] = await Promise.all([
-      fetch(`/api/v1/connections/${encodeURIComponent(sel.id)}`, { cache: 'no-store' }),
-      fetch(`/api/v1/connections/${encodeURIComponent(sel.id)}/nodes`, { cache: 'no-store' }),
-      fetch(`/api/v1/connections/${encodeURIComponent(sel.id)}/resources`, { cache: 'no-store' }),
-      fetch(`/api/v1/connections/${encodeURIComponent(sel.id)}/ceph/status`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/connections/${encodeURIComponent(sel.id)}/storage`, { cache: 'no-store' }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(sel.id)}`, { cache: 'no-store', signal }),
+      fetch(`/api/v1/connections/${encodeURIComponent(sel.id)}/nodes`, { cache: 'no-store', signal }),
+      fetch(`/api/v1/connections/${encodeURIComponent(sel.id)}/resources`, { cache: 'no-store', signal }),
+      fetch(`/api/v1/connections/${encodeURIComponent(sel.id)}/ceph/status`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(sel.id)}/storage`, { cache: 'no-store', signal }).catch(() => null),
     ])
 
     let connName = sel.id
@@ -1166,7 +1171,7 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
     const { connId, node } = parseNodeId(sel.id)
 
     // First: fetch nodes list to check if node is online
-    const nodesR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes`, { cache: 'no-store' })
+    const nodesR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes`, { cache: 'no-store', signal })
     let nodes: any[]
     try {
       nodes = asArray<any>(safeJson(await nodesR.json()))
@@ -1201,12 +1206,12 @@ export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayl
 
     // Node is online — fetch all details in parallel
     const [statusR, resourcesR, versionR, subscriptionR, updatesR, maintenanceR] = await Promise.all([
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/status`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/version`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/subscription`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/apt`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`, { cache: 'no-store' }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/status`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/version`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/subscription`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/apt`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/maintenance`, { cache: 'no-store', signal }).catch(() => null),
     ])
 
     let vmsData: DetailsPayload['vmsData'] = []
@@ -1348,7 +1353,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
     if (isPartOfCluster) {
       try {
-        const clusterStatusR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster`, { cache: 'no-store' })
+        const clusterStatusR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/cluster`, { cache: 'no-store', signal })
         if (clusterStatusR.ok) {
           const clusterData = await clusterStatusR.json()
           clusterName = clusterData?.data?.name || 'Cluster'
@@ -1401,10 +1406,10 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const { connId, node, type, vmid } = parseVmId(sel.id)
 
     const [resourcesR, nodesR, configR, nodeStatusR] = await Promise.all([
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store' }),
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes`, { cache: 'no-store' }),
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/status`, { cache: 'no-store' }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/resources`, { cache: 'no-store', signal }),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes`, { cache: 'no-store', signal }),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/config`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/status`, { cache: 'no-store', signal }).catch(() => null),
     ])
 
     let resources: any[]
@@ -1448,7 +1453,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     } else if (effectiveNode !== node) {
       // VM moved — refetch the host node status for the new location.
       try {
-        const r = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(effectiveNode)}/status`, { cache: 'no-store' })
+        const r = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(effectiveNode)}/status`, { cache: 'no-store', signal })
         if (r.ok) {
           const json = await r.json()
           nodeStatusData = json?.data || json
@@ -1850,9 +1855,9 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const pbsId = sel.id
 
     const [connR, statusR, datastoresR] = await Promise.all([
-      fetch(`/api/v1/connections/${encodeURIComponent(pbsId)}`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/status`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/datastores`, { cache: 'no-store' }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(pbsId)}`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/status`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/datastores`, { cache: 'no-store', signal }).catch(() => null),
     ])
 
     let connName = pbsId
@@ -1882,7 +1887,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
     let rrdData: any[] = []
     try {
-      const rrdR = await fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/rrd?timeframe=hour`, { cache: 'no-store' })
+      const rrdR = await fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/rrd?timeframe=hour`, { cache: 'no-store', signal })
       if (rrdR.ok) {
         const json = await rrdR.json()
         rrdData = json?.data || []
@@ -1939,9 +1944,9 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const [pbsId, datastoreName] = sel.id.split(':')
 
     const [connR, datastoresR, backupsR] = await Promise.all([
-      fetch(`/api/v1/connections/${encodeURIComponent(pbsId)}`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/datastores`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/backups?datastore=${encodeURIComponent(datastoreName)}&pageSize=5000`, { cache: 'no-store' }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(pbsId)}`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/datastores`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/pbs/${encodeURIComponent(pbsId)}/backups?datastore=${encodeURIComponent(datastoreName)}&pageSize=5000`, { cache: 'no-store', signal }).catch(() => null),
     ])
 
     let connName = pbsId
@@ -1974,7 +1979,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     try {
       const rrdR = await fetch(
         `/api/v1/pbs/${encodeURIComponent(pbsId)}/datastores/${encodeURIComponent(datastoreName)}/rrd?timeframe=hour`,
-        { cache: 'no-store' }
+        { cache: 'no-store', signal }
       )
       if (rrdR.ok) {
         const json = await rrdR.json()
@@ -2031,7 +2036,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const apiPrefix = migrationSourceApiPrefix(hypervisorType)
 
     // Fetch all connections of this type
-    const connsR = await fetch('/api/v1/connections', { cache: 'no-store' }).catch(() => null)
+    const connsR = await fetch('/api/v1/connections', { cache: 'no-store', signal }).catch(() => null)
     const connsData = connsR?.ok ? await connsR.json().catch(() => ({})) : {}
     const allConns = (connsData?.data || []).filter((c: any) => c.type === hypervisorType)
 
@@ -2039,7 +2044,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const hostsWithVms = await Promise.all(
       allConns.map(async (conn: any) => {
         try {
-          const vmsR = await fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(conn.id)}/vms`, { cache: 'no-store' })
+          const vmsR = await fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(conn.id)}/vms`, { cache: 'no-store', signal })
           const vmsData = vmsR.ok ? await vmsR.json().catch(() => ({})) : {}
           return {
             connectionId: conn.id,
@@ -2058,11 +2063,11 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
     // Fetch migration history for all connections of this type
     const connIds = new Set(allConns.map((c: any) => c.id))
-    const migsR = await fetch('/api/v1/migrations', { cache: 'no-store' }).catch(() => null)
+    const migsR = await fetch('/api/v1/migrations', { cache: 'no-store', signal }).catch(() => null)
     const migsData = migsR?.ok ? await migsR.json().catch(() => ({})) : {}
     const migrations = ((migsData?.data || []) as any[]).filter((j: any) => connIds.has(j.sourceConnectionId))
     // Counters over the whole history: the list above is the last 50 jobs only.
-    const statsR = await fetch('/api/v1/migrations/stats', { cache: 'no-store' }).catch(() => null)
+    const statsR = await fetch('/api/v1/migrations/stats', { cache: 'no-store', signal }).catch(() => null)
     const statsData = statsR?.ok ? await statsR.json().catch(() => ({})) : {}
     const migrationStats = sumMigrationStats(statsData?.data?.bySource, connIds as Set<string>)
 
@@ -2095,14 +2100,14 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
   if (sel.type === 'ext') {
     const connId = sel.id
     // First fetch the connection to know its type
-    const connR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { cache: 'no-store' })
+    const connR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { cache: 'no-store', signal })
     const connData = await connR.json().catch(() => ({}))
     const conn = connData?.data || connData || {}
     const apiPrefix = migrationSourceApiPrefix(conn.type)
 
     const [statusR, vmsR] = await Promise.all([
-      fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/status`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/vms`, { cache: 'no-store' }).catch(() => null),
+      fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/status`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/vms`, { cache: 'no-store', signal }).catch(() => null),
     ])
 
     const statusData = statusR?.ok ? await statusR.json().catch(() => ({})) : {}
@@ -2159,7 +2164,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const vmid = vmidParts.join(':')
 
     // Determine API prefix from connection type
-    const connTypeR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { cache: 'no-store' }).catch(() => null)
+    const connTypeR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { cache: 'no-store', signal }).catch(() => null)
     const connTypeData = connTypeR?.ok ? await connTypeR.json().catch(() => ({})) : {}
     // Same vCenter-disambiguation rule as in the host panel above (sel.type === 'ext'):
     // promote subType='vcenter' to hostType='vcenter' so all UI gates that key off
@@ -2170,8 +2175,8 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const apiPrefix = migrationSourceApiPrefix(connType)
 
     const [vmR, statusR] = await Promise.all([
-      fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/vms/${encodeURIComponent(vmid)}`, { cache: 'no-store' }),
-      fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/status`, { cache: 'no-store' }).catch(() => null),
+      fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/vms/${encodeURIComponent(vmid)}`, { cache: 'no-store', signal }),
+      fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/status`, { cache: 'no-store', signal }).catch(() => null),
     ])
     const vmJson = await vmR.json().catch(() => ({}))
     const vm = vmJson?.data || {}
@@ -2236,9 +2241,9 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
     // Fetch connection info + storage details
     const [connR, storageR, nodesR] = await Promise.all([
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/storage`, { cache: 'no-store' }).catch(() => null),
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes`, { cache: 'no-store' }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/storage`, { cache: 'no-store', signal }).catch(() => null),
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes`, { cache: 'no-store', signal }).catch(() => null),
     ])
 
     let connName = connId
@@ -2281,7 +2286,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
       try {
         const contentR = await fetch(
           `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(contentNode)}/storage/${encodeURIComponent(storageName)}/content`,
-          { cache: 'no-store' }
+          { cache: 'no-store', signal }
         )
         if (contentR.ok) {
           const json = await contentR.json()

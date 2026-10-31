@@ -31,6 +31,7 @@
 
 import {
   allocateIp,
+  allocateIpTracked,
   releaseIp,
   releaseByMac,
   findAllocationsForVm,
@@ -354,7 +355,7 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
         // bodyOverrides correction below rewrite ipconfigN.
         const rawHint = afterSlot.ipFromIpconfig ?? undefined
         const hint = rawHint && ipInCidrUsable(rawHint, afterSubnet.cidr) ? rawHint : undefined
-        const allocated = await allocateIp({
+        const { allocation: allocated, created } = await allocateIpTracked({
           vdcId: afterSubnet.vdcId,
           subnetId: afterSubnet.subnetId,
           vnetId: afterSubnet.vnetId,
@@ -365,7 +366,10 @@ export async function syncIpamForVmConfig(args: SyncIpamArgs): Promise<SyncIpamR
           hint,
           externalIps,
         })
-        journal.push(undoAllocate(args.connectionId, afterSubnet.subnetId, allocated.ip))
+        // Only an allocation this call inserted has an inverse. The idempotent
+        // fast path hands back the row the MAC already held (unchanged NIC):
+        // releasing it on a failed PVE write would drop a live reservation.
+        if (created) journal.push(undoAllocate(args.connectionId, afterSubnet.subnetId, allocated.ip))
 
         // If the IP we got differs from what the after-snapshot says
         // (auto-pick or hint that lived in `before` not `after`), surface

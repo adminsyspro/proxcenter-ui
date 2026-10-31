@@ -837,7 +837,8 @@
     "cephNooutOrphan": "Ceph noout ohne Wartung",
     "cephNooutOrphanDesc": "Alarm, wenn ein Ceph-noout-Flag auf einem Host gesetzt ist, obwohl kein Knoten des Clusters seit länger als dieser Dauer in Wartung ist",
     "cephNooutHoursUnit": "Std.",
-    "cephNooutMinutesUnit": "Min."
+    "cephNooutMinutesUnit": "Min.",
+    "batchFailed": "{failed} von {total} Aktionen fehlgeschlagen: {error}"
   },
   "inventory": {
     "alertsDialog": {
@@ -2628,7 +2629,8 @@
         "verify": "Integritätsprüfung",
         "conversion": "Gastkonvertierung",
         "finish": "Anhängen und Starten"
-      }
+      },
+      "cancelMigrationFailed": "Die Migration konnte nicht abgebrochen werden und läuft weiter"
     },
     "extDashboard": {
       "hosts": "Hosts",
@@ -6774,7 +6776,8 @@
       "vmMixedStorageWarn": "Nur Ceph-RBD-Datenträger werden repliziert; andere Datenträger werden übersprungen.",
       "vmAlreadyReplicated": "Bereits repliziert von {job}",
       "vmUnsupportedDisk": "Diese VM hat einen nicht unterstützten Datenträgerverweis, etwa einen Passthrough-Datenträger.",
-      "sshChecks": "SSH-Verbindungen zwischen Knoten"
+      "sshChecks": "SSH-Verbindungen zwischen Knoten",
+      "createFailed": "Der Replikationsauftrag konnte nicht erstellt werden: {error}"
     },
     "schedule": {
       "modeRpo": "Kontinuierlich (RPO)",
@@ -7317,7 +7320,8 @@
         "help": "Die VM wird dem HA-Manager hinzugefügt, der sie startet.",
         "helpIso": "Die VM wird dem HA-Manager hinzugefügt und bleibt gestoppt, bis Sie die Installation starten.",
         "localStorage": "Benötigt gemeinsamen Speicher: der gewählte Speicher ist lokal auf seinem Knoten."
-      }
+      },
+      "statusUnreadable": "Der Bereitstellungsstatus konnte nicht gelesen werden ({error}). Sie läuft möglicherweise noch: siehe Registerkarte Bereitstellungen."
     },
     "deployments": {
       "vm": "Virtuelle Maschine",
@@ -7337,7 +7341,8 @@
         "starting": "Wird gestartet",
         "completed": "Abgeschlossen",
         "failed": "Fehlgeschlagen"
-      }
+      },
+      "loadFailed": "Die Bereitstellungen konnten nicht geladen werden: {error}"
     }
   },
   "console": {
@@ -9522,6 +9527,7 @@
     "cephFlagsCard": "Ceph-OSD-Flags",
     "cephFlagsNotSet": "Ceph-Wartungsflags (noout, norebalance, norecover) sind nicht alle gesetzt. Das Setzen verhindert unnötige Daten-Rebalancierung während des Updates.",
     "cephFlagsAlreadySet": "Alle Ceph-Wartungsflags sind bereits gesetzt.",
+    "cephFlagsUnreadable": "Die Ceph-Flags konnten nicht gelesen werden ({error}). ProxCenter ändert sie während dieses Updates nicht.",
     "setCephFlagsBefore": "Ceph-Wartungsflags setzen (noout, norebalance, norecover)",
     "preparingCluster": "Cluster wird vorbereitet...",
     "postActionsTitle": "Post-aktualisieren Actions",
@@ -9550,6 +9556,7 @@
     "vmMigrateFailed": "Migration fehlgeschlagen",
     "vmShutdownSuccess": "Heruntergefahren",
     "vmShutdownFailed": "Shutdown fehlgeschlagen",
+    "vmShutdownNotFollowed": "Das Herunterfahren konnte nicht bis zum Ende verfolgt werden: Der Gast läuft möglicherweise noch",
     "migrateVmsBack": "VMs zurückmigrieren",
     "migrateVmsBackDescription": "VMs zurück zu {node} von {targets} migrieren.",
     "migrateVmsBackBtn": "Zurückmigrieren",
@@ -9578,7 +9585,10 @@
     },
     "healthVotes": "Stimmen, Quorum {required}",
     "healthVotesQDevice": "Stimmen mit QDevice, Quorum {required}",
-    "vmActionsFailedTitle": "{count} Gast/Gäste konnten nicht verschoben oder heruntergefahren werden und befinden sich noch auf diesem Knoten"
+    "vmActionsFailedTitle": "{count} Gast/Gäste konnten nicht verschoben oder heruntergefahren werden und befinden sich noch auf diesem Knoten",
+    "preflightStopped": "Vorabprüfung abgebrochen, nichts wurde aktualisiert: {error}",
+    "postActionFailed": "Die Aktion ist fehlgeschlagen: {error}",
+    "guestDiscoveryFailed": "Die Gäste dieses Knotens konnten nicht aufgelistet werden ({error}), daher kann ihre Evakuierung nicht geplant werden. Schließen Sie den Dialog und versuchen Sie es erneut."
   },
   "replication": {
     "title": "Replikation",

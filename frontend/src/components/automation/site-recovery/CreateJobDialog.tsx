@@ -44,7 +44,8 @@ interface VM {
 interface CreateJobDialogProps {
   open: boolean
   onClose: () => void
-  onSubmit: (data: CreateReplicationJobRequest) => void
+  /** Rejects with the server's reason: the dialog then stays open and shows it. */
+  onSubmit: (data: CreateReplicationJobRequest) => Promise<void> | void
   connections: Connection[]
   allVMs: VM[]
   engines?: StorageEngine[]
@@ -64,6 +65,8 @@ const fetcher = (url: string) => fetch(url).then(res => {
 export default function CreateJobDialog({ open, onClose, onSubmit, connections, allVMs, engines, jobs }: CreateJobDialogProps) {
   const t = useTranslations()
   const [name, setName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [engine, setEngine] = useState<StorageEngine>('rbd')
   const [targetNode, setTargetNode] = useState('')
   const [vmPage, setVmPage] = useState(0)
@@ -321,8 +324,8 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
     setSelectedVMs(prev => prev.includes(vmid) ? prev.filter(id => id !== vmid) : [...prev, vmid])
   }
 
-  const handleSubmit = () => {
-    if (!canSubmit) return
+  const handleSubmit = async () => {
+    if (!canSubmit || submitting) return
     const base = {
       name: name.trim() || undefined,
       vm_ids: selectionMode === 'vms' ? selectedVMs : [],
@@ -342,19 +345,25 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
       snapshot_keep_source: keepSource,
       snapshot_keep_target: keepTarget,
     }
-    if (scheduleValue.mode === 'rpo') {
-      onSubmit({ ...base, rpo_target: scheduleValue.rpoTargetSeconds })
-    } else {
-      onSubmit({
-        ...base,
-        schedule_spec: scheduleValue.scheduleSpec,
-        timezone: scheduleValue.timezone,
-      })
+    const request = scheduleValue.mode === 'rpo'
+      ? { ...base, rpo_target: scheduleValue.rpoTargetSeconds }
+      : { ...base, schedule_spec: scheduleValue.scheduleSpec, timezone: scheduleValue.timezone }
+
+    setSubmitting(true)
+    setSubmitError(null)
+    try {
+      await onSubmit(request)
+      handleClose()
+    } catch (e) {
+      // The job was not created: keep the form as filled in and say why.
+      setSubmitError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSubmitting(false)
     }
-    handleClose()
   }
 
   const handleClose = () => {
+    setSubmitError(null)
     setName('')
     setEngine('rbd')
     setVmPage(0)
@@ -980,14 +989,20 @@ export default function CreateJobDialog({ open, onClose, onSubmit, connections, 
             </Alert>
           )}
 
+          {submitError && (
+            <Alert severity='error' onClose={() => setSubmitError(null)}>
+              {t('siteRecovery.createJob.createFailed', { error: submitError })}
+            </Alert>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={handleClose}>{t('common.cancel')}</Button>
         <Button
           variant='contained'
-          onClick={handleSubmit}
-          disabled={!canSubmit}
+          onClick={() => { void handleSubmit() }}
+          disabled={!canSubmit || submitting}
+          startIcon={submitting ? <CircularProgress size={16} /> : undefined}
         >
           {t('siteRecovery.createJob.create')}
         </Button>

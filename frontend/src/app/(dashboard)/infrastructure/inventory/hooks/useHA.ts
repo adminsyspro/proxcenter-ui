@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import type { InventorySelection } from '../types'
 import { parseVmId } from '../helpers'
+import { useSelectionGuard } from '@/hooks/useSelectionGuard'
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -27,6 +28,19 @@ interface UseHAParams {
 /* ------------------------------------------------------------------ */
 /* Hook                                                                */
 /* ------------------------------------------------------------------ */
+
+/** HA form values for a guest's HA config; the defaults when it has none. */
+function haFormFrom(data: any) {
+  return {
+    state: data?.state || 'started',
+    group: data?.group || '',
+    maxRestart: data?.max_restart ?? 1,
+    maxRelocate: data?.max_relocate ?? 1,
+    // PVE returns failback as 0/1; treat undefined as enabled (PVE default).
+    failback: data?.failback === undefined ? true : Boolean(Number(data.failback)),
+    comment: data?.comment || '',
+  }
+}
 
 export function useHA({
   selection,
@@ -54,8 +68,15 @@ export function useHA({
   const [haFailback, setHaFailback] = useState<boolean>(true)
   const [haComment, setHaComment] = useState<string>('')
 
+  // Requests are bound to the guest they were started for (see resetHA).
+  const guard = useSelectionGuard(selection?.id)
+
   const loadHaConfig = useCallback(async () => {
     if (!selection || selection.type !== 'vm') return
+
+    const req = guard.begin(selection.id)
+
+    if (!req.isCurrent()) return
 
     const { connId, type, vmid } = parseVmId(selection.id)
     const haSid = `${type === 'lxc' ? 'ct' : 'vm'}:${vmid}`
@@ -66,37 +87,28 @@ export function useHA({
     try {
       // Charger la config HA et les groupes en parallèle
       const [configRes, groupsRes] = await Promise.all([
-        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/${encodeURIComponent(haSid)}`, { cache: 'no-store' }),
-        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha`, { cache: 'no-store' })
+        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha/${encodeURIComponent(haSid)}`, { cache: 'no-store', signal: req.signal }),
+        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ha`, { cache: 'no-store', signal: req.signal })
       ])
 
       const configJson = await configRes.json()
       const groupsJson = await groupsRes.json()
+
+      if (!req.isCurrent()) return
 
       if (configJson.error) {
         setHaError(configJson.error)
       } else {
         setHaConfig(configJson.data)
 
+        const form = haFormFrom(configJson.data)
 
-        // Remplir le formulaire si la config existe
-        if (configJson.data) {
-          setHaState(configJson.data.state || 'started')
-          setHaGroup(configJson.data.group || '')
-          setHaMaxRestart(configJson.data.max_restart ?? 1)
-          setHaMaxRelocate(configJson.data.max_relocate ?? 1)
-          // PVE returns failback as 0/1; treat undefined as enabled (PVE default).
-          setHaFailback(configJson.data.failback === undefined ? true : Boolean(Number(configJson.data.failback)))
-          setHaComment(configJson.data.comment || '')
-        } else {
-          // Reset le formulaire si pas de config
-          setHaState('started')
-          setHaGroup('')
-          setHaMaxRestart(1)
-          setHaMaxRelocate(1)
-          setHaFailback(true)
-          setHaComment('')
-        }
+        setHaState(form.state)
+        setHaGroup(form.group)
+        setHaMaxRestart(form.maxRestart)
+        setHaMaxRelocate(form.maxRelocate)
+        setHaFailback(form.failback)
+        setHaComment(form.comment)
       }
 
       if (groupsJson.data?.groups) {
@@ -105,17 +117,21 @@ export function useHA({
 
       setHaLoaded(true)
     } catch (e: any) {
-      setHaError(e.message || t('errors.loadingError'))
+      if (req.isCurrent()) setHaError(e.message || t('errors.loadingError'))
     } finally {
-      setHaLoading(false)
+      if (req.isCurrent()) setHaLoading(false)
     }
-  }, [selection])
+  }, [selection, guard])
 
   const saveHaConfig = useCallback(async () => {
     if (!selection || selection.type !== 'vm') return
 
     const { connId, type, vmid } = parseVmId(selection.id)
     const haSid = `${type === 'lxc' ? 'ct' : 'vm'}:${vmid}`
+
+    // The write always goes through; only its outcome is dropped when the user
+    // already moved to another guest.
+    const req = guard.begin(selection.id)
 
     setHaSaving(true)
     setHaError(null)
@@ -139,6 +155,8 @@ export function useHA({
 
       const json = await res.json()
 
+      if (!req.isCurrent()) return
+
       if (json.error) {
         setHaError(json.error)
       } else {
@@ -148,11 +166,11 @@ export function useHA({
         void loadHaConfig()
       }
     } catch (e: any) {
-      setHaError(e.message || t('errors.updateError'))
+      if (req.isCurrent()) setHaError(e.message || t('errors.updateError'))
     } finally {
-      setHaSaving(false)
+      if (req.isCurrent()) setHaSaving(false)
     }
-  }, [selection, haState, haGroup, haMaxRestart, haMaxRelocate, haFailback, haComment, loadHaConfig])
+  }, [selection, haState, haGroup, haMaxRestart, haMaxRelocate, haFailback, haComment, loadHaConfig, guard])
 
   const removeHaConfig = useCallback(() => {
     if (!selection || selection.type !== 'vm') return
@@ -166,6 +184,10 @@ export function useHA({
       message: t('common.deleteConfirmation'),
       vmName: data?.title || `VM ${vmid}`,
       onConfirm: async () => {
+        // The confirm dialog is shared by the whole panel and is always
+        // closed; the HA state is only touched while this guest is current.
+        const req = guard.begin(selection.id)
+
         setConfirmActionLoading(true)
         setHaSaving(true)
         setHaError(null)
@@ -178,9 +200,9 @@ export function useHA({
 
           const json = await res.json()
 
-          if (json.error) {
+          if (req.isCurrent() && json.error) {
             setHaError(json.error)
-          } else {
+          } else if (req.isCurrent()) {
             setHaConfig(null)
             setHaEditing(false)
 
@@ -195,14 +217,14 @@ export function useHA({
 
           setConfirmAction(null)
         } catch (e: any) {
-          setHaError(e.message || t('errors.deleteError'))
+          if (req.isCurrent()) setHaError(e.message || t('errors.deleteError'))
         } finally {
-          setHaSaving(false)
+          if (req.isCurrent()) setHaSaving(false)
           setConfirmActionLoading(false)
         }
       }
     })
-  }, [selection, data?.title])
+  }, [selection, data?.title, guard])
 
   // Charger la config HA quand on sélectionne l'onglet HA (index 9)
   useEffect(() => {
@@ -217,6 +239,10 @@ export function useHA({
     setHaGroups([])
     setHaError(null)
     setHaEditing(false)
+    // The previous guest's load or save is abandoned by the guard and never
+    // clears its own flags: release them so the new guest's load can start.
+    setHaLoading(false)
+    setHaSaving(false)
   }, [])
 
   return {

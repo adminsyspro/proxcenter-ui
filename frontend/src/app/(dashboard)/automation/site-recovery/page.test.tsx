@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   jobs: [] as Array<{ id: string }>, plans: [] as Array<{ id: string; name?: string }>, jobsLoading: false,
   vms: [] as Array<Record<string, unknown>>,
   startError: vi.fn(), stopError: vi.fn(), restorePoints: vi.fn(), restorePointsError: vi.fn(),
+  createOk: vi.fn(), createError: vi.fn(),
   health: { engines: ['rbd', 'zfs'] }, mutate: vi.fn(), mutateVMs: vi.fn(), pageTitle: vi.fn(), swr: vi.fn(),
 }))
 
@@ -110,8 +111,8 @@ const GUEST_ROW = vi.hoisted(() => ({
 
 vi.mock('@/components/automation/site-recovery', () => ({
   DashboardTab: ({ onSyncJob }: { onSyncJob: (id: string) => void }) => <div>Dashboard content<button onClick={() => onSyncJob('job')}>Sync job</button></div>,
-  ProtectionTab: ({ onResumeJob, onEditJob }: { onResumeJob: (id: string) => void; onEditJob: (id: string) => void }) => (
-    <div>Protection content<button onClick={() => onResumeJob('job')}>Resume job</button><button onClick={() => onEditJob('job')}>Edit job</button></div>
+  ProtectionTab: ({ onResumeJob, onPauseJob, onEditJob }: { onResumeJob: (id: string) => void; onPauseJob: (id: string) => void; onEditJob: (id: string) => void }) => (
+    <div>Protection content<button onClick={() => onResumeJob('job')}>Resume job</button><button onClick={() => onPauseJob('job')}>Pause job</button><button onClick={() => onEditJob('job')}>Edit job</button></div>
   ),
   SnapshotsTab: () => <div>Snapshots content</div>,
   GuestFailoverDialog: (props: GuestDialogStubProps) => props.open && props.target ? (
@@ -144,7 +145,12 @@ vi.mock('@/components/automation/site-recovery', () => ({
     </div>
   ),
   SimulationTab: ({ connections }: { connections: Array<{ hasCeph: boolean }> }) => <div>Simulation: {String(connections.some(connection => connection.hasCeph))}</div>,
-  CreateJobDialog: ({ open }: { open: boolean }) => open ? <div>Create job dialog</div> : null,
+  CreateJobDialog: ({ open, onSubmit }: { open: boolean; onSubmit: (data: unknown) => Promise<void> | void }) => (
+    <>
+      {open ? <div>Create job dialog</div> : null}
+      <button onClick={() => Promise.resolve(onSubmit({ name: 'nightly' })).then(state.createOk, state.createError)}>Submit new job</button>
+    </>
+  ),
   CreatePlanDialog: ({ open, plan, jobs, onSubmit, onClose }: PlanDialogProps) => open ? (
     <div>
       {`Plan dialog for ${plan ? plan.name : 'a new plan'} over ${jobs.length} job(s)`}
@@ -266,6 +272,46 @@ it.each(['Sync job', 'Resume job'])('surfaces active-test 409 errors for %s', as
   await userEvent.click(screen.getByRole('button', { name: label }))
   expect(await screen.findByText('A test failover is active. Run cleanup before starting this operation.')).toBeInTheDocument()
   expect(state.mutate).not.toHaveBeenCalled()
+})
+
+it('shows why the orchestrator refused to pause a job instead of saying nothing', async () => {
+  state.jobs = [{ id: 'job' }]
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{"error":"pause refused by orchestrator"}', { status: 500 }))
+  vi.stubGlobal('fetch', fetchMock)
+  renderWithProviders(<SiteRecoveryPage />)
+  await userEvent.click(screen.getByRole('tab', { name: 'Replication' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Pause job' }))
+  expect(await screen.findByText('pause refused by orchestrator')).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/orchestrator/replication/jobs/job/pause', { method: 'POST' })
+  expect(state.mutate).not.toHaveBeenCalled()
+})
+
+it('refreshes the jobs after an accepted pause', async () => {
+  state.jobs = [{ id: 'job' }]
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"status":"paused"}', { status: 200 })))
+  renderWithProviders(<SiteRecoveryPage />)
+  await userEvent.click(screen.getByRole('tab', { name: 'Replication' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Pause job' }))
+  await waitFor(() => expect(state.mutate).toHaveBeenCalled())
+})
+
+it('rejects a job creation the orchestrator refused, so the dialog can keep the form', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"error":"pool not found on target"}', { status: 400 })))
+  renderWithProviders(<SiteRecoveryPage />)
+  await userEvent.click(screen.getByRole('button', { name: 'Submit new job' }))
+  await waitFor(() => expect(state.createError).toHaveBeenCalledWith(expect.objectContaining({ message: 'pool not found on target' })))
+  expect(state.createOk).not.toHaveBeenCalled()
+  expect(state.mutate).not.toHaveBeenCalled()
+})
+
+it('creates a job and refreshes the list when the orchestrator accepts it', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{"id":"job-2"}', { status: 201 }))
+  vi.stubGlobal('fetch', fetchMock)
+  renderWithProviders(<SiteRecoveryPage />)
+  await userEvent.click(screen.getByRole('button', { name: 'Submit new job' }))
+  await waitFor(() => expect(state.createOk).toHaveBeenCalled())
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/orchestrator/replication/jobs', expect.objectContaining({ method: 'POST', body: '{"name":"nightly"}' }))
+  expect(state.mutate).toHaveBeenCalled()
 })
 
 it('passes the active-test cleanup instruction to Emergency start errors', async () => {
@@ -550,5 +596,37 @@ it('closes the guest dialog and refreshes the plans', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Guest dialog close' }))
 
   expect(screen.queryByTestId('guest-dialog')).toBeNull()
+  expect(state.mutate).toHaveBeenCalled()
+})
+
+it('never fills a reopened guest dialog with the restore points of the dialog closed before (roadmap#184)', async () => {
+  let releaseFirst!: (v: unknown) => void
+  emergency.loadVMRestorePoints
+    .mockImplementationOnce(() => new Promise(r => { releaseFirst = r }))
+    .mockResolvedValueOnce({ vm_id: 9101, restore_points: [{ snapshot: 'second-open' }] })
+
+  await openGuestRow('Row failover')
+  await userEvent.click(screen.getByRole('button', { name: 'Guest dialog close' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Row failover' }))
+  await waitFor(() => expect(screen.getByTestId('guest-dialog-restore-points').textContent).toContain('second-open'))
+
+  await act(async () => { releaseFirst({ vm_id: 9101, restore_points: [{ snapshot: 'first-open' }] }) })
+  expect(screen.getByTestId('guest-dialog-restore-points').textContent).toContain('second-open')
+  expect(screen.getByTestId('guest-dialog-restore-points').textContent).not.toContain('first-open')
+})
+
+it('keeps the outcome of a guest action out of a dialog reopened meanwhile (roadmap#184)', async () => {
+  emergency.loadVMRestorePoints.mockResolvedValue(null)
+  let refuse!: (e: Error) => void
+  emergency.failoverGuest.mockImplementationOnce(() => new Promise((_r, rej) => { refuse = rej }))
+
+  await openGuestRow('Row failover')
+  await userEvent.click(screen.getByRole('button', { name: 'Guest dialog failover' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Guest dialog close' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Row failover' }))
+
+  await act(async () => { refuse(new Error('refused for the closed dialog')) })
+  expect(screen.getByTestId('guest-dialog-error').textContent).toBe('')
+  // The plans are still refreshed: the action did reach the orchestrator.
   expect(state.mutate).toHaveBeenCalled()
 })

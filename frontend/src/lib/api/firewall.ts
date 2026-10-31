@@ -169,7 +169,10 @@ async function fetchAPI<T>(url: string, options?: RequestInit): Promise<T> {
     throw new Error(error.error || `HTTP ${response.status}`)
   }
 
-  return response.json()
+  // A write may answer with an empty body: that is a success, not a parse error.
+  const text = await response.text()
+
+  return (text ? JSON.parse(text) : undefined) as T
 }
 
 // ================================================================================
@@ -228,6 +231,17 @@ export async function createIPSet(connectionId: string, data: CreateIPSetRequest
   await fetchAPI(`/api/v1/firewall/ipsets/${connectionId}`, {
     method: 'POST',
     body: JSON.stringify(data),
+  })
+}
+
+/**
+ * Changes the comment of an IP set. PVE has no PUT on an IP set: its create
+ * call takes `rename` and, set to the current name, only updates the comment.
+ */
+export async function updateIPSetComment(connectionId: string, name: string, comment: string): Promise<void> {
+  await fetchAPI(`/api/v1/firewall/ipsets/${connectionId}/${encodeURIComponent(name)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ comment }),
   })
 }
 
@@ -317,6 +331,14 @@ export async function addClusterRule(connectionId: string, data: CreateRuleReque
   })
 }
 
+/** Edits, toggles (`enable`) or moves (`moveto`) the cluster rule at `pos`. */
+export async function updateClusterRule(connectionId: string, pos: number, data: CreateRuleRequest): Promise<void> {
+  await fetchAPI(`/api/v1/firewall/cluster/${connectionId}/rules/${pos}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
 export async function deleteClusterRule(connectionId: string, pos: number): Promise<void> {
   await fetchAPI(`/api/v1/firewall/cluster/${connectionId}/rules/${pos}`, {
     method: 'DELETE',
@@ -345,6 +367,14 @@ export async function updateNodeOptions(connectionId: string, node: string, data
 export async function addNodeRule(connectionId: string, node: string, data: CreateRuleRequest): Promise<void> {
   await fetchAPI(`/api/v1/firewall/nodes/${connectionId}/${node}/rules`, {
     method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+/** Edits, toggles (`enable`) or moves (`moveto`) the host rule at `pos`. */
+export async function updateNodeRule(connectionId: string, node: string, pos: number, data: CreateRuleRequest): Promise<void> {
+  await fetchAPI(`/api/v1/firewall/nodes/${connectionId}/${node}/rules/${pos}`, {
+    method: 'PUT',
     body: JSON.stringify(data),
   })
 }

@@ -819,6 +819,31 @@ describe('fetchDetails — cluster allVms isCluster', () => {
 /* fetchDetails — section/network selections have no generic details   */
 /* ------------------------------------------------------------------ */
 
+describe('fetchDetails — cancellation (roadmap#184)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('hands the caller signal to every request of the load', async () => {
+    const fetchMock = vi.fn((input: any) => Promise.resolve({ ok: true, json: async () => ({ data: String(input).endsWith('/nodes') ? [{ node: 'pve1', status: 'online' }] : [] }) } as Response))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    await fetchDetails({ type: 'cluster', id: 'conn1' } as any, controller.signal)
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(0)
+    for (const call of fetchMock.mock.calls as any[]) expect(call[1]?.signal).toBe(controller.signal)
+  })
+
+  it('stays callable without a signal', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchDetails({ type: 'cluster', id: 'conn1' } as any)
+    for (const call of fetchMock.mock.calls as any[]) expect(call[1]).toMatchObject({ cache: 'no-store', signal: undefined })
+  })
+})
+
 describe('fetchDetails — section selections return null (no generic CPU/RAM panel)', () => {
   // net-bridge is a host-bridge selection (#490); like the other net-*/section
   // types it must NOT fall through to the generic 'UNKNOWN' details payload.

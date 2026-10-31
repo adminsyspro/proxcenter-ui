@@ -99,6 +99,7 @@ import BackupJobsPanel from './BackupJobsPanel'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
+import { requireOk } from '@/lib/api/fetchJsonSafe'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import type { Status, InventorySelection, Kpi, KV, UtilMetric, DetailsPayload, RrdTimeframe, SeriesPoint, ActiveDialog } from './types'
 import { humanizePveError, optionSaveBody, TAG_PALETTE, hashStringToInt, parseTags, formatBps, formatTime, formatUptime, parseMarkdown, parseNodeId, parseVmId, getMetricIcon, pickNumber, buildSeriesFromRrd, fetchRrd, fetchRrdRange, fetchDetails, proxmoxWebUiOrigin, proxmoxNodeWebUiOrigin } from './helpers'
@@ -162,6 +163,7 @@ import { PAGE_SIZES } from '@/components/ui/PagedRows'
 import { countExtVmPower, filterExtVms, filteredSelectionState, toggleFilteredSelection, type ExtVmPowerFilter } from './extVmList'
 import { isNodeReachable } from './nodeStatusMeta'
 import { mergeVirtV2vSupport, type VirtV2vSupport } from '@/lib/migration/warm/virt-v2v-windows'
+import { useSelectionGuard } from '@/hooks/useSelectionGuard'
 
 /**
  * Rang de l'onglet Sauvegardes d'une VM dans `VmDetailTabs` (Résumé, Matériel,
@@ -408,12 +410,19 @@ export default function InventoryDetails({
   // to do exactly that.
   const [cancelMigConfirm, setCancelMigConfirm] = useState<string | null>(null)
   const [cancelMigBusy, setCancelMigBusy] = useState(false)
-  const cancelVmMigration = async (jobId: string) => {
+  // Resolves true once the orchestrator accepted the cancel. A refusal is
+  // shown, and the confirmation stays open: the migration is still running.
+  const cancelVmMigration = async (jobId: string): Promise<boolean> => {
     setCancelMigBusy(true)
     try {
-      const res = await fetch(`/api/v1/migrations/${jobId}/cancel`, { method: 'POST' })
-      const d = await res.json().catch(() => ({}))
-      if (d.data) setVmMigJob(d.data)
+      const d = await requireOk<{ data?: any }>(`/api/v1/migrations/${jobId}/cancel`, { method: 'POST' })
+      if (d?.data) setVmMigJob(d.data)
+
+      return true
+    } catch (e) {
+      toast.error(`${t('inventoryPage.esxiMigration.cancelMigrationFailed')}: ${e instanceof Error ? e.message : String(e)}`)
+
+      return false
     } finally {
       setCancelMigBusy(false)
     }
@@ -1655,15 +1664,22 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
   const nodeConnId = selection?.type === 'node' ? parseNodeId(selection.id).connId : null
   const { data: hostsData } = useHostsByConnection(nodeConnId)
 
+  // Selection generation for the per-selection loaders of this component: a
+  // late answer for the previous selection is aborted and never written.
+  const selectionGuard = useSelectionGuard(selection ? `${selection.type}:${selection.id}` : null)
+
   useEffect(() => {
     setEntityTags([])
     setProxmoxBaseUrl(null)
     setProxmoxBehindProxy(false)
     if (!selection) return
+    const req = selectionGuard.beginCurrent()
+
     if (selection.type === 'cluster') {
-      fetch(`/api/v1/connections/${encodeURIComponent(selection.id)}`)
+      fetch(`/api/v1/connections/${encodeURIComponent(selection.id)}`, { signal: req.signal })
         .then(r => r.ok ? r.json() : null)
         .then(json => {
+          if (!req.isCurrent()) return
           const tags = json?.data?.tags
           setEntityTags(tags ? String(tags).split(';').filter(Boolean) : [])
           setProxmoxBaseUrl(json?.data?.baseUrl ?? null)
@@ -1678,15 +1694,16 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
       setEntityTags(tags ? String(tags).split(';').filter(Boolean) : [])
       // baseUrl + behindProxy let the node link to the native Proxmox web UI
       // (cluster nodes deep-link to their own management IP via proxmoxNodeWebUiOrigin).
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}`)
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { signal: req.signal })
         .then(r => r.ok ? r.json() : null)
         .then(json => {
+          if (!req.isCurrent()) return
           setProxmoxBaseUrl(json?.data?.baseUrl ?? null)
           setProxmoxBehindProxy(!!json?.data?.behindProxy)
         })
         .catch(() => {})
     }
-  }, [selection?.id, selection?.type, hostsData])
+  }, [selection?.id, selection?.type, hostsData, selectionGuard])
 
   // Reset non-data states when selection changes (data/loading/error/localTags are reset by useDetailData)
   useEffect(() => {
@@ -1720,8 +1737,10 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
     // Réinitialiser les états HA
     resetHA()
 
-    // Réinitialiser les états de réplication
+    // Réinitialiser les états de réplication. Clearing the loading flag too lets
+    // the new selection start its own load while the previous one is aborted.
     setReplicationLoaded(false)
+    setReplicationLoading(false)
     setReplicationJobs([])
     setAvailableTargetNodes([])
     setSourceCephAvailable(false)
@@ -1898,25 +1917,33 @@ return textExts.includes(ext) || imageExts.includes(ext) || fileName.startsWith(
   useEffect(() => {
     if (selection?.type !== 'vm') {
       setGuestInfo(null)
-      
-return
+      // The previous VM's load is aborted and no longer clears its own flag.
+      setGuestInfoLoading(false)
+
+      return
     }
-    
+
+    const req = selectionGuard.beginCurrent()
+
     const loadGuestInfo = async () => {
       const { connId, type, node, vmid } = parseVmId(selection.id)
 
       setGuestInfoLoading(true)
-      
+
       try {
         const res = await fetch(
           `/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/guest`,
-          { cache: 'no-store' }
+          { cache: 'no-store', signal: req.signal }
         )
-        
+
+        if (!req.isCurrent()) return
+
         if (res.ok) {
           const json = await res.json()
           const data = json.data || {}
-          
+
+          if (!req.isCurrent()) return
+
           setGuestInfo({
             ip: data.ip,
             uptime: data.uptime,
@@ -1928,26 +1955,30 @@ return
           setGuestInfo(null)
         }
       } catch (e) {
+        if (!req.isCurrent()) return
         console.error('Error loading guest info:', e)
         setGuestInfo(null)
       } finally {
-        setGuestInfoLoading(false)
+        if (req.isCurrent()) setGuestInfoLoading(false)
       }
     }
-    
+
     void loadGuestInfo()
-  }, [selection?.type, selection?.id])
+  }, [selection?.type, selection?.id, selectionGuard])
 
   // Charger le lock status quand une VM est sélectionnée
   useEffect(() => {
     if (selection?.type === 'vm') {
       const { connId, node, type, vmid } = parseVmId(selection.id)
-      
-      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/unlock`, { 
-        cache: 'no-store' 
+      const req = selectionGuard.beginCurrent()
+
+      fetch(`/api/v1/connections/${encodeURIComponent(connId)}/guests/${type}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/unlock`, {
+        cache: 'no-store',
+        signal: req.signal,
       })
         .then(res => res.ok ? res.json() : null)
         .then(json => {
+          if (!req.isCurrent()) return
           if (json?.data) {
             setVmLock({
               locked: json.data.locked || false,
@@ -1957,24 +1988,29 @@ return
             setVmLock({ locked: false })
           }
         })
-        .catch(() => setVmLock({ locked: false }))
+        .catch(() => { if (req.isCurrent()) setVmLock({ locked: false }) })
     } else {
       setVmLock({ locked: false })
     }
-  }, [selection?.type, selection?.id])
+  }, [selection?.type, selection?.id, selectionGuard])
 
   // Charger les jobs de réplication quand on sélectionne l'onglet Réplication (index 7)
   useEffect(() => {
     if (detailTab === 7 && selection?.type === 'vm' && !replicationLoaded && !replicationLoading) {
       setReplicationLoading(true)
       const { connId, node, vmid } = parseVmId(selection.id)
-      
+      // Not tied to this effect's cleanup: the effect re-runs when the loading
+      // flag flips, only a selection change may cancel the load.
+      const req = selectionGuard.beginCurrent()
+      const init = { cache: 'no-store' as const, signal: req.signal }
+
       // Charger les jobs de réplication, les nœuds disponibles et vérifier Ceph
       Promise.all([
-        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication?guest=${vmid}`, { cache: 'no-store' }).catch(() => null),
-        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes`, { cache: 'no-store' }).catch(() => null),
-        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph/status`, { cache: 'no-store' }).catch(() => null),
+        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication?guest=${vmid}`, init).catch(() => null),
+        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes`, init).catch(() => null),
+        fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph/status`, init).catch(() => null),
       ]).then(async ([replicationRes, nodesRes, cephRes]) => {
+        if (!req.isCurrent()) return
         let jobs: any[] = []
         let nodes: string[] = []
         let hasCeph = false
@@ -2005,17 +2041,19 @@ return
           } catch {}
         }
         
+        if (!req.isCurrent()) return
         setReplicationJobs(jobs)
         setAvailableTargetNodes(nodes)
         setSourceCephAvailable(hasCeph)
         setReplicationLoaded(true)
         setReplicationLoading(false)
       }).catch(() => {
+        if (!req.isCurrent()) return
         setReplicationLoading(false)
         setReplicationLoaded(true)
       })
     }
-  }, [detailTab, selection?.type, selection?.id, replicationLoaded, replicationLoading])
+  }, [detailTab, selection?.type, selection?.id, replicationLoaded, replicationLoading, selectionGuard])
 
   // Charger les clusters Ceph disponibles quand on ouvre le dialog
   useEffect(() => {
@@ -2237,10 +2275,18 @@ return
       return
     }
     const connId = data.storageInfo.connId
+    // Aborted on cleanup (selection change or storageInfo refresh): a late read
+    // for the previous storage never lands in the current history.
+    const controller = new AbortController()
+    // One read in flight at most: a slow ceph status never stacks a second one.
+    let inFlight = false
     const fetchPerf = async () => {
+      if (inFlight || controller.signal.aborted) return
+      inFlight = true
       try {
-        const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph/status`, { cache: 'no-store' })
+        const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/ceph/status`, { cache: 'no-store', signal: controller.signal })
         const json = await res.json()
+        if (controller.signal.aborted) return
         if (json.data?.pgmap) {
           const now = Date.now()
           const pt = {
@@ -2256,7 +2302,9 @@ return
             return [...prev, pt].filter(p => p.time > cutoff)
           })
         }
-      } catch { /* ignore */ }
+      } catch { /* ignore */ } finally {
+        inFlight = false
+      }
     }
     void fetchPerf()
 
@@ -2269,7 +2317,11 @@ return
     document.addEventListener('visibilitychange', onVis)
     if (document.visibilityState === 'visible') start()
 
-    return () => { stop(); document.removeEventListener('visibilitychange', onVis) }
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVis)
+      controller.abort()
+    }
   }, [selection?.type, selection?.id, data?.storageInfo])
 
   // Fetch storage RRD history when viewing any storage
@@ -3691,7 +3743,7 @@ return vm?.isCluster ?? false
             nodesTotal={data.nodesData?.length}
             vmCount={selection?.type === 'node' ? data.vmsData?.filter((vm: any) => vm.status === 'running').length : undefined}
             isCluster={!!data.clusterName}
-            hasCeph={!!data.cephHealth}
+            hasCeph={data.cephHealth ? true : undefined}
             haState={selection?.type === 'vm' ? (allVms.find(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === selection.id)?.hastate || null) : null}
             haGroup={selection?.type === 'vm' ? (allVms.find(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === selection.id)?.hagroup || null) : null}
             agentEnabled={selection?.type === 'vm' ? data.optionsInfo?.agentEnabled ?? null : null}
@@ -4649,8 +4701,7 @@ return vm?.isCluster ?? false
                       startIcon={cancelMigBusy ? <CircularProgress size={16} /> : undefined}
                       onClick={async () => {
                         if (!cancelMigConfirm) return
-                        await cancelVmMigration(cancelMigConfirm)
-                        setCancelMigConfirm(null)
+                        if (await cancelVmMigration(cancelMigConfirm)) setCancelMigConfirm(null)
                       }}
                     >
                       {t('inventoryPage.esxiMigration.cancelMigration')}

@@ -15,6 +15,7 @@ import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import ProviderTenantGuard from '@/components/guards/ProviderTenantGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import { useSelectionGuard } from '@/hooks/useSelectionGuard'
 
 import {
   useReplicationHealth,
@@ -57,6 +58,7 @@ import {
   startGuestFailback,
   stopDRVM,
 } from '@/lib/site-recovery/emergencyActions'
+import { jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
 
 const fetcher = (url: string) => fetch(url).then(res => {
   if (!res.ok) throw new Error('Failed to fetch')
@@ -207,17 +209,10 @@ export default function SiteRecoveryPage() {
 
   // ── Handlers ──────────────────────────────────────────────────────
 
+  // Rejects with the server's reason so the dialog stays open and shows it.
   const handleCreateJob = useCallback(async (data: any) => {
-    try {
-      await fetch('/api/v1/orchestrator/replication/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
-      void mutateJobs()
-    } catch (e) {
-      console.error('Failed to create job:', e)
-    }
+    await requireOk('/api/v1/orchestrator/replication/jobs', jsonInit('POST', data))
+    void mutateJobs()
   }, [mutateJobs])
 
   const handleUpdateJob = async (id: string, req: UpdateReplicationJobRequest) => {
@@ -263,7 +258,7 @@ export default function SiteRecoveryPage() {
     return `${message}. ${t('siteRecovery.failover.unavailableRefreshed')}`
   }, [mutatePlans, mutateJobs, t])
 
-  const handleJobAction = useCallback(async (id: string, action: 'sync' | 'resume') => {
+  const handleJobAction = useCallback(async (id: string, action: 'sync' | 'resume' | 'pause') => {
     try {
       const response = await fetch(`/api/v1/orchestrator/replication/jobs/${id}/${action}`, { method: 'POST' })
       if (!response.ok) {
@@ -280,14 +275,7 @@ export default function SiteRecoveryPage() {
 
   const handleSyncJob = useCallback((id: string) => handleJobAction(id, 'sync'), [handleJobAction])
 
-  const handlePauseJob = useCallback(async (id: string) => {
-    try {
-      await fetch(`/api/v1/orchestrator/replication/jobs/${id}/pause`, { method: 'POST' })
-      void mutateJobs()
-    } catch (e) {
-      console.error('Failed to pause job:', e)
-    }
-  }, [mutateJobs])
+  const handlePauseJob = useCallback((id: string) => handleJobAction(id, 'pause'), [handleJobAction])
 
   const handleResumeJob = useCallback((id: string) => handleJobAction(id, 'resume'), [handleJobAction])
 
@@ -610,6 +598,13 @@ export default function SiteRecoveryPage() {
     targetSite: connections.find(connection => connection.id === vm.targetCluster)?.name || vm.targetCluster,
   })
 
+  // Loads and action outcomes of the per-guest dialog belong to the guest
+  // (and mode) it was opened for: closing it or opening another one drops
+  // whatever is still in flight for the previous one.
+  const guestDialogKey = (open: boolean, mode: string, target: GuestDialogTarget | null) =>
+    (open && target ? `${mode}:${target.planId}:${target.vmId}` : null)
+  const guestGuard = useSelectionGuard(guestDialogKey(guestDialog.open, guestDialog.mode, guestDialog.target))
+
   const fetchExecution = useCallback(async (executionId: string) => {
     const res = await fetch(`/api/v1/orchestrator/replication/executions/${executionId}`)
 
@@ -620,24 +615,27 @@ export default function SiteRecoveryPage() {
   // failback started before this page load) is rehydrated from the execution
   // its plan state points at, so the dialog lands on the live view.
   const openGuestDialog = useCallback((vm: DRReadyVM, mode: 'failover' | 'failback') => {
+    const target = guestTargetOf(vm)
+    const req = guestGuard.switchTo(guestDialogKey(true, mode, target))
+
     setGuestError(null)
     setGuestExecution(null)
-    setGuestDialog({ open: true, mode, target: guestTargetOf(vm) })
+    setGuestDialog({ open: true, mode, target })
 
     const plan = (plans || []).find((p: RecoveryPlan) => p.id === vm.planId)
     const guest = guestStateOf(plan, vm.vmId)
 
     if (guest?.executionId && (guest.state === 'failing_over' || guest.state === 'failing_back')) {
-      fetchExecution(guest.executionId).then(data => { if (data) setGuestExecution(data) }).catch(() => { /* the dialog shows the start screen instead */ })
+      fetchExecution(guest.executionId).then(data => { if (data && req.isCurrent()) setGuestExecution(data) }).catch(() => { /* the dialog shows the start screen instead */ })
     }
 
     if (mode === 'failover') {
       setGuestRestorePoints({ loading: true, data: null, failed: false })
       loadVMRestorePointsRequest(vm.jobId, vm.vmId)
-        .then(data => setGuestRestorePoints({ loading: false, data, failed: false }))
-        .catch(() => setGuestRestorePoints({ loading: false, data: null, failed: true }))
+        .then(data => { if (req.isCurrent()) setGuestRestorePoints({ loading: false, data, failed: false }) })
+        .catch(() => { if (req.isCurrent()) setGuestRestorePoints({ loading: false, data: null, failed: true }) })
     }
-  }, [plans, fetchExecution])
+  }, [plans, fetchExecution, guestGuard])
 
   const closeGuestDialog = useCallback(() => {
     setGuestDialog(prev => ({ ...prev, open: false }))
@@ -645,18 +643,23 @@ export default function SiteRecoveryPage() {
   }, [mutatePlans])
 
   const runGuestAction = useCallback(async (action: () => Promise<any>, onDone: (data: any) => void) => {
+    // The action itself always completes; its outcome only reaches the dialog
+    // if that dialog is still the one it was started from.
+    const req = guestGuard.beginCurrent()
+
     try {
       const data = await action()
 
+      if (!req.isCurrent()) return
       setGuestError(null)
       onDone(data)
     } catch (e: any) {
-      setGuestError(e?.message || String(e))
+      if (req.isCurrent()) setGuestError(e?.message || String(e))
     } finally {
       void mutatePlans()
       refreshAfterEmergencyAction()
     }
-  }, [mutatePlans, refreshAfterEmergencyAction])
+  }, [mutatePlans, refreshAfterEmergencyAction, guestGuard])
 
   const handleGuestFailover = useCallback((restorePoint?: string) => {
     const target = guestDialog.target
@@ -699,11 +702,13 @@ export default function SiteRecoveryPage() {
 
   useEffect(() => {
     if (!guestDialog.open || !guestExecutionId || !guestExecutionRunning) return
+    let alive = true
     const interval = setInterval(async () => {
       try {
         const data = await fetchExecution(guestExecutionId)
 
-        if (!data) return
+        // A poll answered after the dialog closed or moved on is dropped.
+        if (!data || !alive) return
         setGuestExecution(data)
         if (data.status !== 'running') {
           clearInterval(interval)
@@ -715,7 +720,10 @@ export default function SiteRecoveryPage() {
       }
     }, 3000)
 
-    return () => clearInterval(interval)
+    return () => {
+      alive = false
+      clearInterval(interval)
+    }
   }, [guestDialog.open, guestExecutionId, guestExecutionRunning, fetchExecution, mutatePlans, refreshAfterEmergencyAction])
 
   const guestDialogPlan = useMemo(() =>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { parseNodeId } from '../helpers'
+import { useSelectionGuard } from '@/hooks/useSelectionGuard'
 
 interface UseNodeDataResult {
   nodeNotesData: string
@@ -91,6 +92,11 @@ export function useNodeData(
 
   const isNode = selectionType === 'node'
 
+  // Each tab loader is bound to the node it was started for. Switching node
+  // aborts its request and drops its writes, including the loading/loaded
+  // flags of its finally block: the reset below then lets the new node load.
+  const guard = useSelectionGuard(isNode ? selectionId : null)
+
   // Reset all node data when selection changes
   useEffect(() => {
     setNodeNotesData('')
@@ -111,6 +117,7 @@ export function useNodeData(
     setNodeSystemLoading(false)
     setNodeSystemSubTab(0)
     setNodeSyslogData([])
+    setNodeSyslogLoading(false)
     setNodeCephData(null)
     setNodeCephLoaded(false)
     setNodeCephLoading(false)
@@ -124,12 +131,13 @@ export function useNodeData(
 
     setNodeNotesLoading(true)
     const { connId, node } = parseNodeId(selectionId || '')
+    const req = guard.beginCurrent()
 
-    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/notes`, { cache: 'no-store' })
+    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/notes`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : null)
-      .then(json => { if (json) setNodeNotesData(json.data?.notes || '') })
-      .catch(e => console.error('Failed to load node notes:', e))
-      .finally(() => { setNodeNotesLoading(false); setNodeNotesLoaded(true) })
+      .then(json => { if (json && req.isCurrent()) setNodeNotesData(json.data?.notes || '') })
+      .catch(e => { if (req.isCurrent()) console.error('Failed to load node notes:', e) })
+      .finally(() => { if (req.isCurrent()) { setNodeNotesLoading(false); setNodeNotesLoaded(true) } })
   }, [isNode, selectionId, nodeTab, nodeNotesLoaded, nodeNotesLoading])
 
   // Load Disks (nodeTab === 5)
@@ -138,12 +146,17 @@ export function useNodeData(
 
     setNodeDisksLoading(true)
     const { connId, node } = parseNodeId(selectionId || '')
+    const req = guard.beginCurrent()
 
-    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/disks`, { cache: 'no-store' })
+    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/disks`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : null)
-      .then(json => setNodeDisksData(json ? (json.data || json) : null))
-      .catch(e => { console.error('Failed to load node disks:', e); setNodeDisksData(null) })
-      .finally(() => { setNodeDisksLoading(false); setNodeDisksLoaded(true) })
+      .then(json => { if (req.isCurrent()) setNodeDisksData(json ? (json.data || json) : null) })
+      .catch(e => {
+        if (!req.isCurrent()) return
+        console.error('Failed to load node disks:', e)
+        setNodeDisksData(null)
+      })
+      .finally(() => { if (req.isCurrent()) { setNodeDisksLoading(false); setNodeDisksLoaded(true) } })
   }, [isNode, selectionId, nodeTab, nodeDisksLoaded, nodeDisksLoading])
 
   // Load Subscription (cluster: tab 11, standalone: tab 12)
@@ -155,12 +168,17 @@ export function useNodeData(
 
     setNodeSubscriptionLoading(true)
     const { connId, node } = parseNodeId(selectionId || '')
+    const req = guard.beginCurrent()
 
-    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/subscription`, { cache: 'no-store' })
+    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/subscription`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : null)
-      .then(json => setNodeSubscriptionData(json ? (json.data || json) : null))
-      .catch(e => { console.error('Failed to load node subscription:', e); setNodeSubscriptionData(null) })
-      .finally(() => { setNodeSubscriptionLoading(false); setNodeSubscriptionLoaded(true) })
+      .then(json => { if (req.isCurrent()) setNodeSubscriptionData(json ? (json.data || json) : null) })
+      .catch(e => {
+        if (!req.isCurrent()) return
+        console.error('Failed to load node subscription:', e)
+        setNodeSubscriptionData(null)
+      })
+      .finally(() => { if (req.isCurrent()) { setNodeSubscriptionLoading(false); setNodeSubscriptionLoaded(true) } })
   }, [isNode, selectionId, nodeTab, nodeSubscriptionLoaded, nodeSubscriptionLoading, clusterName])
 
   // Load Replication (cluster: tab 9, standalone: tab 10)
@@ -172,12 +190,17 @@ export function useNodeData(
 
     setNodeReplicationLoading(true)
     const { connId, node } = parseNodeId(selectionId || '')
+    const req = guard.beginCurrent()
 
-    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication`, { cache: 'no-store' })
+    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/replication`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : null)
-      .then(json => setNodeReplicationData(json ? (json.data || json) : null))
-      .catch(e => { console.error('Failed to load node replication:', e); setNodeReplicationData(null) })
-      .finally(() => { setNodeReplicationLoading(false); setNodeReplicationLoaded(true) })
+      .then(json => { if (req.isCurrent()) setNodeReplicationData(json ? (json.data || json) : null) })
+      .catch(e => {
+        if (!req.isCurrent()) return
+        console.error('Failed to load node replication:', e)
+        setNodeReplicationData(null)
+      })
+      .finally(() => { if (req.isCurrent()) { setNodeReplicationLoading(false); setNodeReplicationLoaded(true) } })
   }, [isNode, selectionId, nodeTab, nodeReplicationLoaded, nodeReplicationLoading, clusterName])
 
   // Load System (nodeTab === 6)
@@ -186,12 +209,17 @@ export function useNodeData(
 
     setNodeSystemLoading(true)
     const { connId, node } = parseNodeId(selectionId || '')
+    const req = guard.beginCurrent()
 
-    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/system`, { cache: 'no-store' })
+    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/system`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : null)
-      .then(json => setNodeSystemData(json ? (json.data || json) : null))
-      .catch(e => { console.error('Failed to load node system:', e); setNodeSystemData(null) })
-      .finally(() => { setNodeSystemLoading(false); setNodeSystemLoaded(true) })
+      .then(json => { if (req.isCurrent()) setNodeSystemData(json ? (json.data || json) : null) })
+      .catch(e => {
+        if (!req.isCurrent()) return
+        console.error('Failed to load node system:', e)
+        setNodeSystemData(null)
+      })
+      .finally(() => { if (req.isCurrent()) { setNodeSystemLoading(false); setNodeSystemLoaded(true) } })
   }, [isNode, selectionId, nodeTab, nodeSystemLoaded, nodeSystemLoading])
 
   // Load Syslog (nodeTab === 6, nodeSystemSubTab === 6)
@@ -200,12 +228,13 @@ export function useNodeData(
 
     setNodeSyslogLoading(true)
     const { connId, node } = parseNodeId(selectionId || '')
+    const req = guard.beginCurrent()
 
-    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/syslog?limit=200&_t=${Date.now()}`, { cache: 'no-store' })
+    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/syslog?limit=200&_t=${Date.now()}`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : null)
-      .then(json => { if (json) setNodeSyslogData(json.data || []) })
-      .catch(e => console.error('Failed to load syslog:', e))
-      .finally(() => setNodeSyslogLoading(false))
+      .then(json => { if (json && req.isCurrent()) setNodeSyslogData(json.data || []) })
+      .catch(e => { if (req.isCurrent()) console.error('Failed to load syslog:', e) })
+      .finally(() => { if (req.isCurrent()) setNodeSyslogLoading(false) })
   }, [isNode, selectionId, nodeTab, nodeSystemSubTab])
 
   // Load Ceph (cluster nodes only, tab 8)
@@ -218,12 +247,17 @@ export function useNodeData(
 
     setNodeCephLoading(true)
     const { connId, node } = parseNodeId(selectionId || '')
+    const req = guard.beginCurrent()
 
-    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/ceph`, { cache: 'no-store' })
+    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/ceph`, { cache: 'no-store', signal: req.signal })
       .then(res => res.ok ? res.json() : { hasCeph: false })
-      .then(json => setNodeCephData(json.data || json))
-      .catch(e => { console.error('Failed to load node Ceph:', e); setNodeCephData({ hasCeph: false }) })
-      .finally(() => { setNodeCephLoading(false); setNodeCephLoaded(true) })
+      .then(json => { if (req.isCurrent()) setNodeCephData(json.data || json) })
+      .catch(e => {
+        if (!req.isCurrent()) return
+        console.error('Failed to load node Ceph:', e)
+        setNodeCephData({ hasCeph: false })
+      })
+      .finally(() => { if (req.isCurrent()) { setNodeCephLoading(false); setNodeCephLoaded(true) } })
   }, [isNode, selectionId, nodeTab, nodeCephLoaded, nodeCephLoading, clusterName])
 
   return {

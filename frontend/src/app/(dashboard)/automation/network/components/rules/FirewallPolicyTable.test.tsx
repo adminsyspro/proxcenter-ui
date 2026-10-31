@@ -32,15 +32,19 @@ import {
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 import type * as firewallAPIType from '@/lib/api/firewall'
 
-vi.mock('@/lib/api/firewall', () => ({
+// The rule updates (edit, toggle, reorder) keep the real wrapper, served by MSW.
+vi.mock('@/lib/api/firewall', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/firewall')>()),
   updateClusterOptions: vi.fn(),
   getClusterRules: vi.fn(),
   addClusterRule: vi.fn(),
   deleteClusterRule: vi.fn(),
 }))
 
+const { showToastMock } = vi.hoisted(() => ({ showToastMock: vi.fn() }))
+
 vi.mock('@/contexts/ToastContext', () => ({
-  useToast: () => ({ showToast: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
+  useToast: () => ({ showToast: showToastMock, success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
 }))
 
 import * as firewallAPI from '@/lib/api/firewall'
@@ -317,6 +321,48 @@ describe('FirewallPolicyTable', () => {
 
     await waitFor(() => expect(requests).toHaveLength(1))
     expect(await requests[0].json()).toEqual({ moveto: 1 })
+  })
+
+  describe('a write PVE refuses is reported, never shown as done', () => {
+    beforeEach(() => {
+      server.use(
+        http.put(`*/api/v1/firewall/cluster/${CONN}/rules/:pos`, () => HttpResponse.json({ error: 'rule locked by PVE' }, { status: 500 })),
+      )
+    })
+
+    const lastToast = () => showToastMock.mock.calls.at(-1)
+
+    it('a refused toggle', async () => {
+      renderTable()
+      fireEvent.click(within(ruleRow('pve ui')).getByRole('switch'))
+
+      await waitFor(() => expect(lastToast()).toEqual(['rule locked by PVE', 'error']))
+      expect(showToastMock).not.toHaveBeenCalledWith(expect.anything(), 'success')
+      expect(api.getClusterRules).not.toHaveBeenCalled()
+    })
+
+    it('a refused edit keeps the dialog open', async () => {
+      renderTable()
+      fireEvent.click(within(ruleRow('pve ui')).getByRole('button', { name: 'Edit' }))
+      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => expect(lastToast()).toEqual(['rule locked by PVE', 'error']))
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    it('a refused move', async () => {
+      renderTable()
+      const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn(), getData: () => '0' }
+
+      fireEvent.dragStart(ruleRow('pve ui'), { dataTransfer })
+      fireEvent.dragOver(ruleRow('sg-web'), { dataTransfer })
+      fireEvent.drop(ruleRow('sg-web'), { dataTransfer })
+
+      await waitFor(() => expect(lastToast()).toEqual(['rule locked by PVE', 'error']))
+      expect(showToastMock).not.toHaveBeenCalledWith(expect.anything(), 'success')
+    })
   })
 
   it('says so when the cluster has no rule, and still offers to add one', () => {

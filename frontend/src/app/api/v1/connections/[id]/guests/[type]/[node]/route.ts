@@ -11,7 +11,7 @@ import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { validateCpuAgainstPolicy, pickPolicyDefaultModel } from "@/lib/vdc/computePolicy"
 import { getAllowedNetworksForTenant, validateNetAgainstScope, resolveSubnetForBridge, parseBridgeFromNet } from "@/lib/vdc/vnets"
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
-import { allocateIp, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
+import { allocateIpTracked, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam"
 import { parseCidr } from "@/lib/vdc/network"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
@@ -275,7 +275,7 @@ async function handler(
 
         try {
           const vmidNum = body.vmid != null ? Number(body.vmid) : null
-          const allocated = await allocateIp({
+          const { allocation: allocated, created } = await allocateIpTracked({
             vdcId: subnet.vdcId,
             subnetId: subnet.subnetId,
             vnetId: subnet.vnetId,
@@ -291,7 +291,10 @@ async function handler(
             `gw=${subnet.gateway}`,
           ].join(',')
           body[ipconfigKey] = ipconfig
-          allocations.push({ subnetId: subnet.subnetId, ip: allocated.ip })
+          // Only what this request inserted is rolled back on failure: a MAC
+          // the caller pinned may already hold its reservation (re-create of
+          // the same guest), and releasing that row would drop it.
+          if (created) allocations.push({ subnetId: subnet.subnetId, ip: allocated.ip })
           // DNS resolvers live at the VM level in PVE CloudInit (`nameserver`
           // is shared across NICs). Take the first non-empty list we see;
           // if multiple NICs declare different DNS the first one wins —

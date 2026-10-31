@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { InventorySelection, DetailsPayload } from '../types'
 import { fetchDetails, parseVmId, parseNodeId, cpuPct, pct } from '../helpers'
 import type { VmRow, TrendPoint } from '@/components/VmsTable'
+import { useSelectionGuard } from '@/hooks/useSelectionGuard'
 
 /**
  * Custom hook that encapsulates the detail/data fetching logic
@@ -19,23 +20,31 @@ export function useDetailData(selection: InventorySelection | null) {
   const [localTags, setLocalTags] = useState<string[]>([])
   const [refreshing, setRefreshing] = useState(false)
 
+  // Every load of this panel (initial fetch, refresh, 30s poll) is bound to
+  // the selection it was started for: switching aborts it and drops its writes.
+  const selectionKey = selection ? `${selection.type}:${selection.id}` : null
+  const guard = useSelectionGuard(selectionKey)
+
   // ---- Main fetch on selection change ----
   useEffect(() => {
-    let alive = true
+    const req = guard.begin(selectionKey)
 
     async function run() {
       setError(null)
       setData(null)
       setLocalTags([])
+      // A refresh still running for the previous selection must not keep
+      // this one's refresh (manual or 30s poll) locked out.
+      setRefreshing(false)
 
       if (!selection) return
 
       setLoading(true)
 
       try {
-        const payload = await fetchDetails(selection)
+        const payload = await fetchDetails(selection, req.signal)
 
-        if (!alive) return
+        if (!req.isCurrent()) return
         if (!payload) {
           // root selection — no details to display
           setLoading(false)
@@ -44,26 +53,19 @@ export function useDetailData(selection: InventorySelection | null) {
         setData(payload)
         setLocalTags(payload.tags || [])
       } catch (e: any) {
-        if (!alive) return
+        if (!req.isCurrent()) return
         setError(e?.message || String(e))
       } finally {
-        if (!alive) return
-        setLoading(false)
+        if (req.isCurrent()) setLoading(false)
       }
     }
 
     void run()
-
-    return () => {
-      alive = false
-    }
   }, [selection?.type, selection?.id])
 
   // ---- Live-metrics polling (CPU/RAM/Storage every 2s) ----
   // Uses targeted /status/current endpoint instead of /cluster/resources (all VMs).
   // Pauses when the browser tab is hidden (Page Visibility API).
-  const pollAliveRef = useRef(true)
-
   useEffect(() => {
     if (!selection || !data) return
     const isVm = selection.type === 'vm'
@@ -74,21 +76,25 @@ export function useDetailData(selection: InventorySelection | null) {
     if (isVm && data.vmRealStatus !== 'running') return
     if (isNode && data.status !== 'ok') return
 
-    pollAliveRef.current = true
+    // Owned by this effect run: its cleanup (selection or status change)
+    // aborts the poll in flight, so a late answer for the previous guest or
+    // node can never overwrite the metrics of the current one.
+    const controller = new AbortController()
+    const { signal } = controller
     let intervalId: ReturnType<typeof setInterval> | null = null
 
     const poll = async () => {
-      if (!pollAliveRef.current) return
+      if (signal.aborted) return
       try {
         if (isVm) {
           const { connId, node, type, vmid } = parseVmId(selection.id)
           const res = await fetch(
             `/api/v1/connections/${encodeURIComponent(connId)}/guests/${encodeURIComponent(type)}/${encodeURIComponent(node)}/${encodeURIComponent(vmid)}/status`,
-            { cache: 'no-store' }
+            { cache: 'no-store', signal }
           )
           const json = await res.json()
           const g = json?.data
-          if (!g || !pollAliveRef.current) return
+          if (!g || signal.aborted) return
           setData(prev => prev ? {
             ...prev,
             metrics: {
@@ -101,11 +107,11 @@ export function useDetailData(selection: InventorySelection | null) {
           const { connId, node } = parseNodeId(selection.id)
           const res = await fetch(
             `/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(node)}/status`,
-            { cache: 'no-store' }
+            { cache: 'no-store', signal }
           )
           const json = await res.json()
           const n = json?.data
-          if (!n || !pollAliveRef.current) return
+          if (!n || signal.aborted) return
           const cpu = n.cpu
           const mem = n.memory?.used ?? n.mem
           const maxmem = n.memory?.total ?? n.maxmem
@@ -148,7 +154,7 @@ export function useDetailData(selection: InventorySelection | null) {
     if (document.visibilityState === 'visible') start()
 
     return () => {
-      pollAliveRef.current = false
+      controller.abort()
       stop()
       document.removeEventListener('visibilitychange', onVisChange)
     }
@@ -157,19 +163,21 @@ export function useDetailData(selection: InventorySelection | null) {
   // ---- refreshData callback ----
   const refreshData = useCallback(async () => {
     if (!selection || refreshing) return
+    const req = guard.begin(`${selection.type}:${selection.id}`)
+    if (!req.isCurrent()) return
     setRefreshing(true)
     try {
-      const payload = await fetchDetails(selection)
-      if (payload) {
+      const payload = await fetchDetails(selection, req.signal)
+      if (payload && req.isCurrent()) {
         setData(payload)
         setLocalTags(payload.tags || [])
       }
     } catch (e: any) {
-      console.error('Refresh error:', e)
+      if (req.isCurrent()) console.error('Refresh error:', e)
     } finally {
-      setRefreshing(false)
+      if (req.isCurrent()) setRefreshing(false)
     }
-  }, [selection, refreshing])
+  }, [selection, refreshing, guard])
 
   // ---- Full-details polling (hardware config + pending flags every 30s) ----
   // The metrics poll above only refreshes /status (live CPU/RAM/Storage); the

@@ -131,7 +131,7 @@ function stubCreateFlowFetches() {
   }))
 }
 
-function renderCreateFlow(onSubmit: () => void) {
+function renderCreateFlow(onSubmit: () => void, onClose: () => void = vi.fn()) {
   stubCreateFlowFetches()
   renderWithProviders(
     // renderWithProviders's own SWRConfig sets revalidateOnMount:false (to
@@ -141,7 +141,7 @@ function renderCreateFlow(onSubmit: () => void) {
     <SWRConfig value={{ revalidateOnMount: true }}>
       <CreateJobDialog
         open
-        onClose={vi.fn()}
+        onClose={onClose}
         onSubmit={onSubmit}
         connections={[
           { id: 'src', name: 'Source', hasCeph: true, engines: ['rbd'] },
@@ -170,6 +170,49 @@ async function fillCreateFlow() {
   fireEvent.mouseDown(screen.getAllByRole('combobox')[2])
   await userEvent.click(await screen.findByRole('option', { name: /rbd/ }))
 }
+
+describe('CreateJobDialog submission outcome', () => {
+  it('keeps the form open with the reason when the job is refused', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new Error('pool not found on target'))
+    const onClose = vi.fn()
+    renderCreateFlow(onSubmit, onClose)
+    await fillCreateFlow()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).not.toBeDisabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    expect(await screen.findByText(/pool not found on target/)).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    // The selections survive, so the operator can fix and retry.
+    expect(screen.getByRole('checkbox', { name: /web-01/ })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Create Job' })).not.toBeDisabled()
+  })
+
+  it('stringifies a non-Error rejection', async () => {
+    const onSubmit = vi.fn().mockRejectedValue('socket hang up')
+    renderCreateFlow(onSubmit)
+    await fillCreateFlow()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).not.toBeDisabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    expect(await screen.findByText(/socket hang up/)).toBeInTheDocument()
+  })
+
+  it('closes once the job is accepted', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const onClose = vi.fn()
+    renderCreateFlow(onSubmit, onClose)
+    await fillCreateFlow()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create Job' })).not.toBeDisabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Create Job' }))
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText(/could not be created/i)).not.toBeInTheDocument()
+  })
+})
 
 describe('CreateJobDialog snapshot retention (issue #664)', () => {
   it('shows the default retention of 3 on both source and target', () => {

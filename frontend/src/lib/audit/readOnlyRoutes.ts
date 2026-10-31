@@ -48,7 +48,6 @@ export const READ_ONLY_MUTATION_ROUTES: Readonly<Record<string, string>> = {
   'v1/orchestrator/reports/preview': 'Report preview, read-only',
   'v1/orchestrator/rolling-updates/preflight': 'Rolling update preflight, read-only',
   'v1/orchestrator/sflow/health/check': 'sFlow health check, read-only',
-  'v1/resources/analyze': 'Capacity analysis, read-only',
   'v1/settings/syslog/test': 'Sends a test message to a syslog destination',
   'v1/vms/ips': 'Bulk read of guest IP addresses (POST for a large body)',
   'v1/vms/networks': 'Bulk read of guest network config (POST for a large body)',

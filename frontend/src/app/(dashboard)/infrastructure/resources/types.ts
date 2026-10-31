@@ -8,6 +8,8 @@ export type KpiData = {
 
 export type ResourceTrend = {
   t: string
+  /** ISO day (YYYY-MM-DD) of a historical point: lines the weekly pattern up with real weekdays. */
+  d?: string
   cpu: number
   ram: number
   storage?: number
@@ -32,22 +34,6 @@ export type TopVm = {
   ramAllocated: number
 }
 
-export type Recommendation = {
-  id: string
-  type: 'overprovisioned' | 'underused' | 'stopped' | 'snapshot' | 'orphan' | 'prediction' | 'optimization'
-  severity: 'high' | 'medium' | 'low' | 'info'
-  title: string
-  description: string
-  savings?: string
-  vmId?: string
-  vmName?: string
-  // i18n keys for basic (rule-based) provider
-  titleKey?: string
-  descriptionKey?: string
-  savingsKey?: string
-  params?: Record<string, string | number>
-}
-
 export type PredictiveAlert = {
   resource: 'cpu' | 'ram' | 'storage'
   currentValue: number
@@ -58,17 +44,8 @@ export type PredictiveAlert = {
   severity: 'critical' | 'warning' | 'ok'
   trendType?: 'stable' | 'linear' | 'accelerating' | 'decelerating'
   confidence?: number
-}
-
-export type AiAnalysis = {
-  summary: string
-  recommendations: Recommendation[]
-  loading: boolean
-  error?: string
-  provider?: string
-  // i18n keys for basic (rule-based) provider
-  summaryKey?: string
-  summaryParams?: Record<string, string | number>
+  /** Mean error in points of this forecast 14 days ahead, measured on past days; null on a short history. */
+  forecastError?: number | null
 }
 
 export type GreenMetrics = {
@@ -119,6 +96,7 @@ export type OverprovisioningData = {
   }
   perNode: {
     name: string
+    connectionId?: string
     cpuRatio: number
     ramRatio: number
     cpuAllocated: number
@@ -127,9 +105,12 @@ export type OverprovisioningData = {
     ramPhysical: number
   }[]
   topOverprovisioned: {
+    /** connId:type:node:vmid, as on the other VM lists of the page. */
+    id?: string
     vmid: string
     name: string
     node: string
+    connName?: string
     cpuAllocated: number
     cpuUsedPct: number
     ramAllocatedGB: number
@@ -146,15 +127,14 @@ export type ResourceThresholds = {
   storage: { warning: number; critical: number }
 }
 
-export type StoragePool = {
-  name: string
-  type: string
-  used: number
-  total: number
-  pct: number
-  nodes: string[]
-  projectedFullDate?: string | null
-}
+// Shapes computed server-side by src/lib/resources/capacity.ts.
+export type {
+  ClusterCapacity,
+  NodeCapacity,
+  NPlusOne,
+  StoppedAllocation,
+  StoragePoolCapacity as StoragePool,
+} from '@/lib/resources/capacity'
 
 export type NetworkMetrics = {
   totalIn: number

@@ -87,3 +87,15 @@ describe('UsageBar provisioning marker (#969)', () => {
     expect(screen.queryByTestId('usage-bar-overflow')).not.toBeInTheDocument()
   })
 })
+
+describe('gradientColorAt', () => {
+  it('follows the gauge gradient: green, yellow at half, red at full', async () => {
+    const { gradientColorAt } = await import('./UsageBar')
+
+    expect(gradientColorAt(0)).toBe('rgb(34, 197, 94)')
+    expect(gradientColorAt(50)).toBe('rgb(234, 179, 8)')
+    expect(gradientColorAt(100)).toBe('rgb(239, 68, 68)')
+    expect(gradientColorAt(150)).toBe('rgb(239, 68, 68)')
+    expect(gradientColorAt(25)).toBe('rgb(134, 188, 51)')
+  })
+})

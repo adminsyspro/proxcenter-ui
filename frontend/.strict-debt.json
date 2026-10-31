@@ -29,7 +29,6 @@
     "src/app/(dashboard)/infrastructure/inventory/tabs/NodeTabs.tsx": 10,
     "src/app/(dashboard)/infrastructure/inventory/tabs/VmDetailTabs.tsx": 17,
     "src/app/(dashboard)/infrastructure/inventory/tabs/pbs/PbsSyslogTab.test.tsx": 1,
-    "src/app/(dashboard)/infrastructure/resources/algorithms/improvedPrediction.ts": 2,
     "src/app/(dashboard)/infrastructure/resources/algorithms/predictions.ts": 6,
     "src/app/(dashboard)/infrastructure/resources/components/NetworkIoCard.tsx": 1,
     "src/app/(dashboard)/infrastructure/resources/components/ProjectionChart.tsx": 1,

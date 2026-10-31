@@ -5364,7 +5364,8 @@
       "drainFinish": "Drenaje de host finalizado",
       "replicationSync": "Sincronización de replicación",
       "replicationFix": "Corrección de réplica",
-      "drillRun": "Simulacro de restauración"
+      "drillRun": "Simulacro de restauración",
+      "aiAction": "Acción del asistente"
     }
   },
   "security": {

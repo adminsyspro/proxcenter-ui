@@ -5364,7 +5364,8 @@
       "drainFinish": "호스트 드레인 완료",
       "replicationSync": "복제 동기화",
       "replicationFix": "복제본 수정",
-      "drillRun": "복원 훈련"
+      "drillRun": "복원 훈련",
+      "aiAction": "어시스턴트 작업"
     }
   },
   "security": {

@@ -5364,7 +5364,8 @@
       "drainFinish": "主机清空结束",
       "replicationSync": "复制同步",
       "replicationFix": "副本修复",
-      "drillRun": "恢复演练"
+      "drillRun": "恢复演练",
+      "aiAction": "助手操作"
     }
   },
   "security": {

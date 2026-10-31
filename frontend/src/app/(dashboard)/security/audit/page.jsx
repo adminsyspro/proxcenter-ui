@@ -115,6 +115,9 @@ const ACTION_KEYS = {
   'replication.sync': 'audit.actions.replicationSync',
   'replication.fix': 'audit.actions.replicationFix',
   'drill.run': 'audit.actions.drillRun',
+
+  // Approved assistant actions (roadmap#188)
+  'ai.action': 'audit.actions.aiAction',
 }
 
 /* --------------------------------

@@ -5364,7 +5364,8 @@
       "drainFinish": "Drain d'hôte terminé",
       "replicationSync": "Synchronisation de réplication",
       "replicationFix": "Correction de réplica",
-      "drillRun": "Exercice de restauration"
+      "drillRun": "Exercice de restauration",
+      "aiAction": "Action de l'assistant"
     }
   },
   "security": {

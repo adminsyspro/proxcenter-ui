@@ -5364,7 +5364,8 @@
       "drainFinish": "Host drain finished",
       "replicationSync": "Replication sync",
       "replicationFix": "Replica fix",
-      "drillRun": "Restore drill"
+      "drillRun": "Restore drill",
+      "aiAction": "Assistant action"
     }
   },
   "security": {

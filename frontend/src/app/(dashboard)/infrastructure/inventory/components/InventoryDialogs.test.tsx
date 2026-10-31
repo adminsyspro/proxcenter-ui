@@ -1261,7 +1261,7 @@ describe('migration dialog options', () => {
         const body = await request.json() as any
         preflightBodies.push(body)
         return HttpResponse.json({
-          ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false,
+          ok: true, missing: [], kind: 'vddk', vddkSetupAvailable: false,
           space: { storage: body.targetStorage, availableBytes: 12 * 1024 ** 3, requiredBytes: body.requiredDiskBytes, sufficient: false },
         })
       }),
@@ -1286,6 +1286,112 @@ describe('migration dialog options', () => {
     })
   })
 
+  // One panel lists what the node lacks, one row per missing piece with its own
+  // small action, instead of two full alerts interleaved with the switches.
+  it('lists the missing warm runtime and guest conversion in one panel, one action per row', async () => {
+    server.use(
+      http.post('*/api/v1/migrations/preflight', async ({ request }) => {
+        const body = await request.json() as any
+        return HttpResponse.json({
+          ok: false, missing: ['vddk-lib'], kind: 'vddk', vddkSetupAvailable: true, libdir: '/usr/lib/openvddk',
+          guestConversion: { linux: ['virt-v2v-in-place (package virt-v2v)'], windows: [] },
+          space: { storage: body.targetStorage, availableBytes: 100 * 1024 ** 3, requiredBytes: body.requiredDiskBytes, sufficient: true },
+        })
+      }),
+    )
+    renderWithProviders(
+      <OptionsHarness
+        vm={WARM_VM}
+        dialogOverrides={{
+          migType: 'warm', migConvertGuest: true, migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS],
+          migTargetConn: CONN_ID, migTargetNode: NODE_NAME,
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('harness-open-single'))
+    const panel = await screen.findByTestId('mig-warm-prereqs')
+    expect(screen.getAllByRole('alert').filter(a => a.textContent?.includes('vddk-lib') || a.textContent?.includes('virt-v2v-in-place'))).toHaveLength(1)
+    const runtime = within(panel).getByTestId('mig-warm-prereq-runtime')
+    const conversion = within(panel).getByTestId('mig-convert-guest-missing')
+    expect(runtime.textContent).toContain('vddk-lib')
+    expect(conversion.textContent).toContain('virt-v2v-in-place (package virt-v2v)')
+    expect(within(runtime).getByRole('button', { name: 'Prepare' }).className).toContain('MuiButton-outlined')
+    expect(within(conversion).getByRole('button', { name: 'Install' }).className).toContain('MuiButton-outlined')
+    expect(within(panel).getByRole('link', { name: 'Node setup guide' })).toBeTruthy()
+    expect(panel.querySelector('.MuiAlert-action')).toBeNull()
+    // The bottom banner describes warm, not SSHFS Boot (a direct ESXi host fell through to it).
+    expect(screen.queryByText(/immediately booted on Proxmox from the ESXi datastore/)).toBeNull()
+    expect(screen.getAllByText(/changed blocks are copied \(CBT\)/).length).toBeGreaterThan(0)
+
+    // Preparing asks for confirmation inside the row, with what will be installed where.
+    fireEvent.click(within(runtime).getByRole('button', { name: 'Prepare' }))
+    expect(within(runtime).getByText(/install it into \/usr\/lib\/openvddk/)).toBeTruthy()
+    expect(within(runtime).getByRole('button', { name: 'Prepare the node' })).toBeTruthy()
+  })
+
+  it('keeps both checks visible when the node is ready but conversion is not', async () => {
+    let conv: string[] = []
+    server.use(
+      http.post('*/api/v1/migrations/preflight', async ({ request }) => {
+        const body = await request.json() as any
+        return HttpResponse.json({
+          ok: true, missing: [], kind: 'vddk', vddkSetupAvailable: true,
+          guestConversion: { linux: conv, windows: [] },
+          space: { storage: body.targetStorage, availableBytes: 100 * 1024 ** 3, requiredBytes: body.requiredDiskBytes, sufficient: true },
+        })
+      }),
+    )
+    conv = ['virt-v2v-in-place (package virt-v2v)']
+    renderWithProviders(
+      <OptionsHarness
+        vm={WARM_VM}
+        dialogOverrides={{
+          migType: 'warm', migConvertGuest: true, migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS],
+          migTargetConn: CONN_ID, migTargetNode: NODE_NAME,
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByText('harness-open-single'))
+    const panel = await screen.findByTestId('mig-warm-prereqs')
+    // The runtime check still shows, as passed: what was checked stays visible.
+    expect(within(panel).getByTestId('mig-warm-prereq-runtime').dataset.ok).toBe('true')
+    expect(within(panel).getByTestId('mig-convert-guest-missing')).toBeTruthy()
+    expect(screen.queryByText(/Target node is ready for warm migration/)).toBeNull()
+    // Conversion asked for but impossible on the node: the launch waits.
+    expect(screen.getByRole('button', { name: /^Review$/ })).toBeDisabled()
+    expect(within(panel).getByTestId('mig-convert-guest-missing').textContent).toContain('turn off "Convert the guest at cutover"')
+  })
+
+  it('shows a green checklist with both checks passed when nothing is missing', async () => {
+    server.use(
+      http.post('*/api/v1/migrations/preflight', async ({ request }) => {
+        const body = await request.json() as any
+        return HttpResponse.json({
+          ok: true, missing: [], kind: 'vddk', vddkSetupAvailable: true, libdir: '/usr/lib/openvddk',
+          guestConversion: { linux: [], windows: [] },
+          space: { storage: body.targetStorage, availableBytes: 100 * 1024 ** 3, requiredBytes: body.requiredDiskBytes, sufficient: true },
+        })
+      }),
+    )
+    renderWithProviders(
+      <OptionsHarness
+        vm={WARM_VM}
+        dialogOverrides={{
+          migType: 'warm', migConvertGuest: true, migTargetStorage: 'san-lvm', migStorages: [THICK_LVM, ZFS],
+          migTargetConn: CONN_ID, migTargetNode: NODE_NAME,
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByText('harness-open-single'))
+    const panel = await screen.findByTestId('mig-warm-prereqs')
+    expect(panel.className).toContain('MuiAlert-standardSuccess')
+    expect(within(panel).getByText(/is ready for warm migration/)).toBeTruthy()
+    expect(within(panel).getByTestId('mig-warm-prereq-runtime').textContent).toContain('OpenVDDK 0.7.4 found')
+    expect(within(panel).getByTestId('mig-convert-guest-ready').textContent).toContain('ready')
+    expect(within(panel).queryByRole('button')).toBeNull()
+  })
+
   it('enables the launch when the storage is large enough', async () => {
     const preflightBodies: any[] = []
     server.use(
@@ -1297,7 +1403,7 @@ describe('migration dialog options', () => {
           return HttpResponse.json({ spaces: body.needs.map((n: any) => ({ storage: n.storage, availableBytes: 32 * 1024 ** 3, requiredBytes: n.requiredBytes, sufficient: true })) })
         }
         return HttpResponse.json({
-          ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false,
+          ok: true, missing: [], kind: 'vddk', vddkSetupAvailable: false,
           space: { storage: body.targetStorage, availableBytes: 32 * 1024 ** 3, requiredBytes: body.requiredDiskBytes, sufficient: true },
         })
       }),
@@ -1316,7 +1422,7 @@ describe('migration dialog options', () => {
     )
 
     fireEvent.click(screen.getByText('harness-open-single'))
-    await screen.findByText(/Target node is ready for warm migration/)
+    await screen.findByText(/is ready for warm migration/)
     expect(screen.queryByText(/Not enough free space/)).not.toBeInTheDocument()
     // VMware source: "Review" opens the review step (#317), where the launch
     // button is enabled once the per-storage space check answered, because
@@ -1342,7 +1448,7 @@ describe('migration dialog options', () => {
         const body = await request.json() as any
         preflightBodies.push(body)
         return HttpResponse.json({
-          ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false,
+          ok: true, missing: [], kind: 'vddk', vddkSetupAvailable: false,
           space: { storage: 'san-lvm', availableBytes: 0, requiredBytes: 0, sufficient: false, error: 'No such storage.' },
         })
       }),
@@ -1368,7 +1474,7 @@ describe('migration dialog options', () => {
         const body = await request.json() as any
         preflightBodies.push(body)
         return HttpResponse.json({
-          ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false,
+          ok: true, missing: [], kind: 'vddk', vddkSetupAvailable: false,
           space: { storage: body.targetStorage, availableBytes: 12 * 1024 ** 3, requiredBytes: body.requiredDiskBytes, sufficient: true },
         })
       }),
@@ -1710,7 +1816,7 @@ describe('migration dialog options', () => {
           if (body.action === 'storage-space') {
             return HttpResponse.json({ spaces: body.needs.map((n: any) => ({ storage: n.storage, availableBytes: availableOf(n.storage), requiredBytes: n.requiredBytes, sufficient: availableOf(n.storage) >= n.requiredBytes * 1.1 })) })
           }
-          return HttpResponse.json({ ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false, space: { storage: body.targetStorage, availableBytes: 100 * GIB2, requiredBytes: body.requiredDiskBytes, sufficient: true } })
+          return HttpResponse.json({ ok: true, missing: [], kind: 'vddk', vddkSetupAvailable: false, space: { storage: body.targetStorage, availableBytes: 100 * GIB2, requiredBytes: body.requiredDiskBytes, sufficient: true } })
         }),
       )
     }

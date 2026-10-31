@@ -33,7 +33,9 @@ function redactLogTail(text: string | undefined): string {
  * `hostname=<address>` matches the certificate as well.
  */
 export function buildNbdkitXapiCmd(t: XapiNbdTarget, caDir: string): string {
-  return ["nbdkit", "-r", "-U", shellEscape(t.sock), "nbd",
+  // -f: stay in the foreground of the backgrounded launch, so errors land in the
+  // reader's log rather than syslog (same reason as buildNbdkitVddkCmd).
+  return ["nbdkit", "-f", "-r", "-U", shellEscape(t.sock), "nbd",
     `hostname=${shellEscape(t.address)}`, `port=${shellEscape(String(t.port))}`,
     `export=${shellEscape(t.exportname)}`, "tls=require",
     `tls-certificates=${shellEscape(caDir)}`].join(" ")

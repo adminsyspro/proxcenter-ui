@@ -59,7 +59,7 @@ function seed(preflightBodies: any[], ifaces: any = IFACES) {
       const address = IFACES.vnics.find((v: any) => v.device === body.copyVmk)?.address
       const reachable = address !== '10.42.53.21'
       const copy = address ? { address, ports: { 902: reachable }, ok: reachable } : undefined
-      return HttpResponse.json({ ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: false, space: { sufficient: true, availableBytes: 1e12, requiredBytes: 1e9, storage: 'san-lvm' }, ...(copy && { copy }) })
+      return HttpResponse.json({ ok: true, missing: [], kind: 'vddk', vddkSetupAvailable: false, space: { sufficient: true, availableBytes: 1e12, requiredBytes: 1e9, storage: 'san-lvm' }, ...(copy && { copy }) })
     }),
   )
 }

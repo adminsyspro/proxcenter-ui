@@ -65,7 +65,7 @@ const sanitizeActions = (raw: unknown): ActionCardsPayload | null => {
   return cards.length || plans.length ? { cards, plans } : null
 }
 
-type AiSettings = { provider?: string; model?: string | null }
+type AiSettings = { provider?: string; model?: string | null; actionsEnabled?: boolean }
 
 // Human labels for the assistant's read-only tools (#459). A name missing
 // here (a newer tool, or one the model invented) falls back to the raw name.
@@ -347,7 +347,7 @@ const AssistantMessage = ({
   )
 }
 
-const Welcome = ({ onSelect, disabled, t }: { onSelect: (text: string) => void; disabled: boolean; t: Translate }) => (
+const Welcome = ({ onSelect, disabled, actionsEnabled, t }: { onSelect: (text: string) => void; disabled: boolean; actionsEnabled: boolean; t: Translate }) => (
   <Box sx={{ py: 4 }}>
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', mb: 6 }}>
       <AssistantAvatar size={48} />
@@ -360,6 +360,11 @@ const Welcome = ({ onSelect, disabled, t }: { onSelect: (text: string) => void; 
         sx={{ maxWidth: 360 }}
         dangerouslySetInnerHTML={{ __html: t('ai.welcomeMessage') }}
       />
+      {actionsEnabled && (
+        <Typography variant='body2' color='text.secondary' sx={{ maxWidth: 360, mt: 1 }}>
+          {t('ai.actionsWelcome')}
+        </Typography>
+      )}
     </Box>
 
     <Box
@@ -378,10 +383,10 @@ const Welcome = ({ onSelect, disabled, t }: { onSelect: (text: string) => void; 
       <Box component='i' className='ri-shield-check-line' sx={{ color: 'success.main', fontSize: 18, lineHeight: 1.3 }} />
       <Box>
         <Typography variant='body2' sx={{ fontWeight: 600 }}>
-          {t('ai.readOnly')}
+          {t(actionsEnabled ? 'ai.actionsMode' : 'ai.readOnly')}
         </Typography>
         <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.5 }}>
-          {t('ai.readOnlyScope')}
+          {t(actionsEnabled ? 'ai.actionsScope' : 'ai.readOnlyScope')}
         </Typography>
       </Box>
     </Box>
@@ -771,7 +776,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
                     </Typography>
                   )}
                   {aiEnabled && (
-                    <Tooltip title={t('ai.readOnlyScope')}>
+                    <Tooltip title={t(aiSettings?.actionsEnabled ? 'ai.actionsScope' : 'ai.readOnlyScope')}>
                       <Typography
                         variant="caption"
                         color="text.secondary"
@@ -779,8 +784,12 @@ export default function AIChatWidget({ available }: { available: boolean }) {
                         sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, flexShrink: 0 }}
                       >
                         {aiSettings && <Box component="span" aria-hidden sx={{ opacity: 0.5 }}>·</Box>}
-                        <Box component="i" className="ri-lock-line" sx={{ fontSize: 12, color: 'success.main' }} />
-                        {t('ai.readOnlyBadge')}
+                        <Box
+                          component="i"
+                          className={aiSettings?.actionsEnabled ? 'ri-shield-check-line' : 'ri-lock-line'}
+                          sx={{ fontSize: 12, color: 'success.main' }}
+                        />
+                        {t(aiSettings?.actionsEnabled ? 'ai.actionsBadge' : 'ai.readOnlyBadge')}
                       </Typography>
                     </Tooltip>
                   )}
@@ -828,7 +837,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
                 </Alert>
               )}
 
-              {messages.length === 0 && aiEnabled && <Welcome onSelect={sendMessage} disabled={loading} t={t} />}
+              {messages.length === 0 && aiEnabled && <Welcome onSelect={sendMessage} disabled={loading} actionsEnabled={aiSettings?.actionsEnabled === true} t={t} />}
 
               {messages.map((msg, i) =>
                 msg.role === 'user' ? (

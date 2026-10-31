@@ -5065,6 +5065,57 @@
       "notesOtherInstallKey": "API-Token funktionieren nur mit dem APP_SECRET, unter dem sie erstellt wurden. Bewahren Sie die .env-Datei der Installation, oder zumindest APP_SECRET, neben dieser Sicherung auf: Mit demselben Schlüssel kommen auch sie zurück.",
       "otherInstall": "Diese Sicherung stammt von einer anderen Instanz, ihre Lizenzen sind nicht mitgekommen. Verbinden Sie diese Instanz unter Einstellungen > Lizenz mit Ihrem proxcenter.io-Konto, übernehmen Sie die Lizenzen der früheren Instanz und ordnen Sie sie bei mehreren Lizenzen erneut Ihren Clustern zu.",
       "openLicenseTab": "Lizenz öffnen"
+    },
+    "aiActions": {
+      "tabLabel": "KI-Aktionen",
+      "title": "Aktionen des KI-Assistenten",
+      "description": "Legen Sie fest, welche Aktionen der Assistent vorschlagen darf. Standardmäßig ist alles deaktiviert.",
+      "info": "Der Assistent schlägt Aktionen vor, er führt nie etwas selbstständig aus. Jede Aktion wird vom Benutzer auf ihrer Karte genehmigt und mit SEINEN eigenen Rechten ausgeführt, im Audit-Protokoll mit der Unterhaltung festgehalten.",
+      "enabled": "Dem Assistenten erlauben, Aktionen vorzuschlagen",
+      "enabledHelper": "Bei Deaktivierung bleibt der Assistent schreibgeschützt; die Auswahl unten bleibt erhalten, wird aber ignoriert.",
+      "groupSafe": "Sichere Aktionen",
+      "groupDisruptive": "Störende Aktionen (doppelte Bestätigung)",
+      "selectAll": "Alle",
+      "maxPerConversation": "Max. Aktionen pro Unterhaltung",
+      "maxPerConversationHelper": "Zwischen 1 und 20. Standard 5.",
+      "save": "Speichern",
+      "saved": "Einstellungen der KI-Aktionen gespeichert",
+      "saveFailed": "Die Einstellungen der KI-Aktionen konnten nicht gespeichert werden: {error}",
+      "loadError": "Die Einstellungen der KI-Aktionen konnten nicht geladen werden: {error}",
+      "kinds": {
+        "snapshot": {
+          "label": "Snapshot erstellen",
+          "help": "Erstellt einen Snapshot einer VM oder eines Containers; der Gast läuft weiter."
+        },
+        "start": {
+          "label": "Gast starten",
+          "help": "Schaltet eine gestoppte VM oder einen gestoppten Container ein."
+        },
+        "migrate": {
+          "label": "Gast migrieren",
+          "help": "Live-Migration im selben Cluster, nur Gäste auf gemeinsamem Speicher; ein Container wird auf dem Zielhost neu gestartet."
+        },
+        "drs_apply": {
+          "label": "DRS-Empfehlung anwenden",
+          "help": "Führt eine von DRS bereits empfohlene Lastverteilungs-Migration aus."
+        },
+        "backup_add": {
+          "label": "Gast zu einem Backup-Job hinzufügen",
+          "help": "Fügt eine VM oder einen Container zu einem bestehenden Backup-Job hinzu; es startet nicht sofort ein Backup."
+        },
+        "shutdown": {
+          "label": "Gast herunterfahren",
+          "help": "Fährt eine laufende VM oder einen laufenden Container sauber herunter; seine Dienste werden beendet."
+        },
+        "reboot": {
+          "label": "Gast neu starten",
+          "help": "Startet eine laufende VM oder einen laufenden Container neu; seine Dienste werden unterbrochen."
+        },
+        "maintenance": {
+          "label": "Wartungsmodus aktivieren oder beenden",
+          "help": "Versetzt einen Node in den Wartungsmodus oder nimmt ihn wieder in Betrieb; die Gäste werden vom Node evakuiert."
+        }
+      }
     }
   },
   "green": {
@@ -5787,7 +5838,11 @@
         "taskFailed": "Die Aufgabe ist fehlgeschlagen: {reason}",
         "taskFailedNoReason": "Die Aufgabe ist fehlgeschlagen."
       }
-    }
+    },
+    "actionsBadge": "Aktionen nach Genehmigung",
+    "actionsMode": "Assistent mit genehmigten Aktionen",
+    "actionsScope": "Er fragt Ihre Infrastruktur ab und kann Aktionen vorschlagen; ohne Ihre Genehmigung wird nichts ausgeführt.",
+    "actionsWelcome": "Ich kann Aktionen vorschlagen; ohne Ihre Genehmigung wird nichts ausgeführt."
   },
   "jobs": {
     "title": "Task Ceingeben",

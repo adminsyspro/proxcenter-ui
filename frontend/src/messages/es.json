@@ -5076,6 +5076,57 @@
       "notesOtherInstallKey": "Los tokens de API solo funcionan con el APP_SECRET con el que se crearon. Guarde el archivo .env de la instalación, o al menos APP_SECRET, junto a esta copia: con la misma clave, también se recuperan.",
       "otherInstall": "Esta copia procede de otra instancia y sus licencias no la han acompañado. Conecte esta instancia a su cuenta de proxcenter.io desde Ajustes > Licencia, recupere las licencias de la instancia anterior y vuelva a asignarlas a sus clústeres si tiene varias.",
       "openLicenseTab": "Abrir Licencia"
+    },
+    "aiActions": {
+      "tabLabel": "Acciones de IA",
+      "title": "Acciones del asistente de IA",
+      "description": "Elige qué acciones puede proponer el asistente. Todo está desactivado por defecto.",
+      "info": "El asistente propone acciones, nunca ejecuta nada por sí solo. Cada acción la aprueba el usuario en su tarjeta y se ejecuta con SUS propios permisos, registrada en la auditoría junto con la conversación.",
+      "enabled": "Permitir que el asistente proponga acciones",
+      "enabledHelper": "Desactivado, el asistente sigue en solo lectura; las opciones de abajo se conservan pero se ignoran.",
+      "groupSafe": "Acciones seguras",
+      "groupDisruptive": "Acciones disruptivas (doble confirmación)",
+      "selectAll": "Todas",
+      "maxPerConversation": "Máx. de acciones por conversación",
+      "maxPerConversationHelper": "Entre 1 y 20. Por defecto 5.",
+      "save": "Guardar",
+      "saved": "Ajustes de las acciones de IA guardados",
+      "saveFailed": "No se pudieron guardar los ajustes de las acciones de IA: {error}",
+      "loadError": "No se pudieron cargar los ajustes de las acciones de IA: {error}",
+      "kinds": {
+        "snapshot": {
+          "label": "Crear una instantánea",
+          "help": "Toma una instantánea de una VM o un contenedor; el invitado sigue funcionando."
+        },
+        "start": {
+          "label": "Iniciar un invitado",
+          "help": "Enciende una VM o un contenedor detenido."
+        },
+        "migrate": {
+          "label": "Migrar un invitado",
+          "help": "Migración en caliente dentro del mismo clúster, solo invitados con almacenamiento compartido; un contenedor se reinicia en el host de destino."
+        },
+        "drs_apply": {
+          "label": "Aplicar una recomendación de DRS",
+          "help": "Ejecuta una migración de equilibrado de carga ya recomendada por DRS."
+        },
+        "backup_add": {
+          "label": "Añadir un invitado a un trabajo de copia",
+          "help": "Añade una VM o un contenedor a un trabajo de copia existente; no se inicia ninguna copia de inmediato."
+        },
+        "shutdown": {
+          "label": "Apagar un invitado",
+          "help": "Apaga limpiamente una VM o un contenedor en marcha; sus servicios se detienen."
+        },
+        "reboot": {
+          "label": "Reiniciar un invitado",
+          "help": "Reinicia una VM o un contenedor en marcha; sus servicios se interrumpen."
+        },
+        "maintenance": {
+          "label": "Entrar o salir del modo mantenimiento",
+          "help": "Pone un nodo en mantenimiento o lo devuelve al servicio; los invitados se evacúan del nodo."
+        }
+      }
     }
   },
   "green": {
@@ -5806,7 +5857,11 @@
         "taskFailed": "La tarea falló: {reason}",
         "taskFailedNoReason": "La tarea falló."
       }
-    }
+    },
+    "actionsBadge": "Acciones con aprobación",
+    "actionsMode": "Asistente con acciones aprobadas",
+    "actionsScope": "Consulta tu infraestructura y puede proponer acciones; nada se ejecuta sin tu aprobación.",
+    "actionsWelcome": "Puedo proponer acciones; nada se ejecuta sin tu aprobación."
   },
   "jobs": {
     "title": "Centro de tareas",

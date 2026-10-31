@@ -2,7 +2,9 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 
-import { requireFeature } from '@/lib/auth/requireEnterprise'
+import { enabledKinds } from '@/lib/ai/actions/types'
+import { getAiActionsSettings } from '@/lib/ai/actions/settings'
+import { hasServerFeature, requireFeature } from '@/lib/auth/requireEnterprise'
 import { getSetting } from '@/lib/db/settings'
 import { Features } from '@/lib/license/features'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
@@ -36,7 +38,13 @@ export async function GET() {
     const modelField = MODEL_FIELDS[provider] ?? 'ollamaModel'
     const model = typeof settings?.[modelField] === 'string' ? (settings[modelField] as string) : null
 
-    return NextResponse.json({ data: { enabled: settings?.enabled === true, provider, model } })
+    // Whether the widget should say "Read-only" or "Actions on approval". A
+    // single boolean: the per-kind choices and the cap stay admin-only.
+    const tenantId = await getCurrentTenantId()
+    const actionsEnabled = (await hasServerFeature(Features.AI_ACTIONS))
+      && enabledKinds(await getAiActionsSettings(tenantId)).length > 0
+
+    return NextResponse.json({ data: { enabled: settings?.enabled === true, provider, model, actionsEnabled } })
   } catch (e: any) {
     console.error('Failed to read the AI status:', e)
 

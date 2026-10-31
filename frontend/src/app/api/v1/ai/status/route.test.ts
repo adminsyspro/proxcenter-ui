@@ -6,6 +6,8 @@ const h = vi.hoisted(() => ({
   denied: false,
   licensed: true,
   settings: null as Record<string, unknown> | null,
+  actionsLicensed: true,
+  actions: null as Record<string, unknown> | null,
   checkPermission: vi.fn(),
 }))
 
@@ -13,11 +15,14 @@ vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { CONNECTION_VIEW: 'connection.view' },
   checkPermission: (...a: unknown[]) => h.checkPermission(...a),
 }))
+vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'default' }))
 vi.mock('@/lib/auth/requireEnterprise', () => ({
   requireFeature: async () => (h.licensed ? null : new Response(JSON.stringify({ error: 'Feature not licensed' }), { status: 403 })),
+  hasServerFeature: async () => h.actionsLicensed,
 }))
-vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'default' }))
-vi.mock('@/lib/db/settings', () => ({ getSetting: async () => h.settings }))
+vi.mock('@/lib/db/settings', () => ({
+  getSetting: async (key: string) => (key === 'ai_actions' ? h.actions : h.settings),
+}))
 
 import { GET } from './route'
 
@@ -27,6 +32,8 @@ beforeEach(() => {
   h.denied = false
   h.licensed = true
   h.settings = null
+  h.actionsLicensed = true
+  h.actions = null
   h.checkPermission.mockReset().mockImplementation(async () => (h.denied ? new Response('{}', { status: 403 }) : null))
 })
 
@@ -41,12 +48,12 @@ describe('GET /api/v1/ai/status', () => {
 
     const body = await readJson<any>(res)
 
-    expect(body).toEqual({ data: { enabled: true, provider: 'openai', model: 'gpt-4.1-nano' } })
+    expect(body).toEqual({ data: { enabled: true, provider: 'openai', model: 'gpt-4.1-nano', actionsEnabled: false } })
     expect(JSON.stringify(body)).not.toMatch(/sk-secret|10\.0\.0\.5/)
   })
 
   it('reports the assistant off when nothing is configured', async () => {
-    expect((await readJson<any>(await get())).data).toEqual({ enabled: false, provider: 'ollama', model: null })
+    expect((await readJson<any>(await get())).data).toEqual({ enabled: false, provider: 'ollama', model: null, actionsEnabled: false })
   })
 
   it('refuses without the permission or without the Enterprise licence', async () => {
@@ -56,5 +63,26 @@ describe('GET /api/v1/ai/status', () => {
     h.denied = false
     h.licensed = false
     expect((await get()).status).toBe(403)
+  })
+
+  it('tells the widget the actions are on only when licensed, switched on and at least one kind is allowed', async () => {
+    h.settings = { enabled: true }
+    h.actions = { enabled: true, actions: { snapshot: true }, maxPerConversation: 5 }
+    expect((await readJson<any>(await get())).data.actionsEnabled).toBe(true)
+
+    h.actionsLicensed = false
+    expect((await readJson<any>(await get())).data.actionsEnabled).toBe(false)
+
+    h.actionsLicensed = true
+    h.actions = { enabled: false, actions: { snapshot: true } }
+    expect((await readJson<any>(await get())).data.actionsEnabled).toBe(false)
+
+    h.actions = { enabled: true, actions: {} }
+    expect((await readJson<any>(await get())).data.actionsEnabled).toBe(false)
+  })
+
+  it('exposes nothing else of the actions settings', async () => {
+    h.actions = { enabled: true, actions: { snapshot: true, reboot: true }, maxPerConversation: 9 }
+    expect(Object.keys((await readJson<any>(await get())).data).sort()).toEqual(['actionsEnabled', 'enabled', 'model', 'provider'])
   })
 })

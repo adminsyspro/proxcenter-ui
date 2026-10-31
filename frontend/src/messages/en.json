@@ -5076,6 +5076,57 @@
       "notesOtherInstallKey": "API tokens only work under the APP_SECRET they were created with. Keep the install's .env file, or at least APP_SECRET, next to this backup: with the same key they come back too.",
       "otherInstall": "This backup comes from another instance and its licences did not come with it. Connect this instance to your proxcenter.io account from Settings > License, take over the licences of the former instance, then assign them to your clusters again if you hold several.",
       "openLicenseTab": "Open License"
+    },
+    "aiActions": {
+      "tabLabel": "AI actions",
+      "title": "AI assistant actions",
+      "description": "Choose which actions the assistant may propose. Everything is off by default.",
+      "info": "The assistant proposes actions, it never runs anything on its own. Each action is approved by the user on its card and runs with THEIR own rights, logged in the audit trail with the conversation.",
+      "enabled": "Allow the assistant to propose actions",
+      "enabledHelper": "When off, the assistant stays read-only and the choices below are kept but ignored.",
+      "groupSafe": "Safe actions",
+      "groupDisruptive": "Disruptive actions (double confirmation)",
+      "selectAll": "All",
+      "maxPerConversation": "Max actions per conversation",
+      "maxPerConversationHelper": "Between 1 and 20. Default 5.",
+      "save": "Save",
+      "saved": "AI actions settings saved",
+      "saveFailed": "Could not save the AI actions settings: {error}",
+      "loadError": "Could not load the AI actions settings: {error}",
+      "kinds": {
+        "snapshot": {
+          "label": "Create a snapshot",
+          "help": "Takes a snapshot of a VM or container; the guest keeps running."
+        },
+        "start": {
+          "label": "Start a guest",
+          "help": "Powers on a stopped VM or container."
+        },
+        "migrate": {
+          "label": "Migrate a guest",
+          "help": "Live migration inside the same cluster, guests on shared storage only; a container restarts on the target host."
+        },
+        "drs_apply": {
+          "label": "Apply a DRS recommendation",
+          "help": "Runs a load-balancing migration that DRS has already recommended."
+        },
+        "backup_add": {
+          "label": "Add a guest to a backup job",
+          "help": "Adds a VM or container to an existing backup job; no backup starts immediately."
+        },
+        "shutdown": {
+          "label": "Shut down a guest",
+          "help": "Cleanly shuts down a running VM or container; its services stop."
+        },
+        "reboot": {
+          "label": "Reboot a guest",
+          "help": "Restarts a running VM or container; its services are interrupted."
+        },
+        "maintenance": {
+          "label": "Enter or exit maintenance mode",
+          "help": "Puts a node in maintenance mode, or brings it back; guests are evacuated from the node."
+        }
+      }
     }
   },
   "green": {
@@ -5806,7 +5857,11 @@
         "taskFailed": "The task failed: {reason}",
         "taskFailedNoReason": "The task failed."
       }
-    }
+    },
+    "actionsBadge": "Actions on approval",
+    "actionsMode": "Assistant with approved actions",
+    "actionsScope": "It looks up your infrastructure and can propose actions; nothing runs without your approval.",
+    "actionsWelcome": "I can propose actions; nothing runs without your approval."
   },
   "jobs": {
     "title": "Task Center",

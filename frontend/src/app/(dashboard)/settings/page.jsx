@@ -82,6 +82,11 @@ const GuestFileRestoreTab = dynamic(() => import('@/components/settings/GuestFil
   loading: tabLoading
 })
 
+const AIActionsTab = dynamic(() => import('@/components/settings/AIActionsTab'), {
+  ssr: false,
+  loading: tabLoading
+})
+
 const AppearanceTab = dynamic(() => import('@/components/settings/AppearanceTab'), {
   ssr: false,
   loading: tabLoading
@@ -2466,6 +2471,7 @@ export default function SettingsPage() {
     { name: 'syslog', group: 'monitoring', label: t('settings.syslog.tabLabel'), icon: 'ri-broadcast-line', component: SyslogTab, requiredFeature: Features.SYSLOG_FORWARDING, providerOnly: true },
     { name: 'broadcast', group: 'monitoring', label: t('settings.broadcast.tabLabel'), icon: 'ri-megaphone-line', component: BroadcastTab, providerOnly: true },
     { name: 'ai', group: 'insights', label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS, providerOnly: true },
+    { name: 'ai-actions', group: 'insights', label: t('settings.aiActions.tabLabel'), icon: 'ri-flashlight-line', component: AIActionsTab, requiredFeature: Features.AI_ACTIONS, providerOnly: true },
     { name: 'green', group: 'insights', label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS, providerOnly: true },
     { name: 'appearance', group: 'personalization', label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
     { name: 'white-label', group: 'personalization', label: 'White Label', icon: 'ri-pantone-line', component: WhiteLabelTab, requiredFeature: Features.WHITE_LABEL, superAdminOnly: true },

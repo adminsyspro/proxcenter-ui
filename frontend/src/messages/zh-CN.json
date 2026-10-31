@@ -5076,6 +5076,57 @@
       "notesOtherInstallKey": "API 令牌只能在创建时所用的 APP_SECRET 下使用。请将安装的 .env 文件（至少是 APP_SECRET）与本备份一起保存：使用相同的密钥，令牌也会一并恢复。",
       "otherInstall": "此备份来自另一个实例，其许可证没有随之迁移。请在 设置 > 许可证 中将本实例连接到您的 proxcenter.io 账户，接管原实例的许可证；如有多个许可证，再将其重新分配给集群。",
       "openLicenseTab": "打开许可证"
+    },
+    "aiActions": {
+      "tabLabel": "AI 操作",
+      "title": "AI 助手操作",
+      "description": "选择助手可以建议的操作。默认全部关闭。",
+      "info": "助手只提出操作建议，从不自行执行。每个操作都由用户在其卡片上批准，并以用户自己的权限执行，连同对话一起记录在审计日志中。",
+      "enabled": "允许助手建议操作",
+      "enabledHelper": "关闭后助手保持只读；下方的选择会保留但被忽略。",
+      "groupSafe": "安全操作",
+      "groupDisruptive": "会造成中断的操作（二次确认）",
+      "selectAll": "全选",
+      "maxPerConversation": "每次对话的最大操作数",
+      "maxPerConversationHelper": "1 到 20 之间，默认 5。",
+      "save": "保存",
+      "saved": "AI 操作设置已保存",
+      "saveFailed": "无法保存 AI 操作设置：{error}",
+      "loadError": "无法加载 AI 操作设置：{error}",
+      "kinds": {
+        "snapshot": {
+          "label": "创建快照",
+          "help": "为虚拟机或容器创建快照；客户机继续运行。"
+        },
+        "start": {
+          "label": "启动客户机",
+          "help": "开启已停止的虚拟机或容器。"
+        },
+        "migrate": {
+          "label": "迁移客户机",
+          "help": "同一集群内的在线迁移，仅限使用共享存储的客户机；容器会在目标主机上重启。"
+        },
+        "drs_apply": {
+          "label": "应用 DRS 建议",
+          "help": "执行 DRS 已经建议的负载均衡迁移。"
+        },
+        "backup_add": {
+          "label": "将客户机加入备份任务",
+          "help": "将虚拟机或容器加入现有备份任务；不会立即开始备份。"
+        },
+        "shutdown": {
+          "label": "关闭客户机",
+          "help": "正常关闭正在运行的虚拟机或容器；其服务将停止。"
+        },
+        "reboot": {
+          "label": "重启客户机",
+          "help": "重启正在运行的虚拟机或容器；其服务将中断。"
+        },
+        "maintenance": {
+          "label": "进入或退出维护模式",
+          "help": "将节点置于维护模式或恢复服务；客户机会从该节点疏散。"
+        }
+      }
     }
   },
   "green": {
@@ -5806,7 +5857,11 @@
         "taskFailed": "任务失败：{reason}",
         "taskFailedNoReason": "任务失败。"
       }
-    }
+    },
+    "actionsBadge": "经批准后执行操作",
+    "actionsMode": "支持已批准操作的助手",
+    "actionsScope": "它可以查询您的基础设施并建议操作；未经您批准不会执行任何操作。",
+    "actionsWelcome": "我可以建议操作；未经您批准不会执行任何操作。"
   },
   "jobs": {
     "title": "任务中心",

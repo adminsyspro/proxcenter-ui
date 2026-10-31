@@ -83,6 +83,22 @@ const openWidget = async () => {
 }
 
 describe('AIChatWidget', () => {
+  it('says actions on approval instead of read-only when the status reports actions on', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/v1/ai/status') return new Response(JSON.stringify({ data: { ...SETTINGS.data, actionsEnabled: true } }))
+
+      return new Response('{}')
+    })
+    render(<AIChatWidget available />)
+    fireEvent.click(screen.getByRole('button', { name: 'ai.title' }))
+
+    expect(await screen.findByText('ai.actionsMode')).toBeTruthy()
+    expect(screen.getByText('ai.actionsBadge')).toBeTruthy()
+    expect(screen.getByText('ai.actionsWelcome')).toBeTruthy()
+    expect(screen.queryByText('ai.readOnly')).toBeNull()
+    expect(screen.queryByText('ai.readOnlyBadge')).toBeNull()
+  })
+
   it('shows nothing when the assistant is not available', () => {
     const { container } = render(<AIChatWidget available={false} />)
 

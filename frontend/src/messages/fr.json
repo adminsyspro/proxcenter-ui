@@ -5076,6 +5076,57 @@
       "notesOtherInstallKey": "Les jetons API ne fonctionnent qu'avec l'APP_SECRET sous lequel ils ont été créés. Conservez le fichier .env de l'installation, ou au moins APP_SECRET, à côté de cette sauvegarde : avec la même clé, ils reviennent aussi.",
       "otherInstall": "Cette sauvegarde vient d'une autre instance et ses licences ne l'ont pas suivie. Connectez cette instance à votre compte proxcenter.io depuis Paramètres > Licence, reprenez les licences de l'ancienne instance, puis réassociez-les à vos clusters si vous en avez plusieurs.",
       "openLicenseTab": "Ouvrir Licence"
+    },
+    "aiActions": {
+      "tabLabel": "Actions IA",
+      "title": "Actions de l'assistant IA",
+      "description": "Choisissez les actions que l'assistant peut proposer. Tout est désactivé par défaut.",
+      "info": "L'assistant propose des actions, il n'exécute jamais rien seul. Chaque action est approuvée par l'utilisateur sur sa carte et s'exécute avec SES propres droits, journalisée dans l'audit avec la conversation.",
+      "enabled": "Autoriser l'assistant à proposer des actions",
+      "enabledHelper": "Désactivé, l'assistant reste en lecture seule ; les choix ci-dessous sont conservés mais ignorés.",
+      "groupSafe": "Actions sûres",
+      "groupDisruptive": "Actions perturbatrices (double confirmation)",
+      "selectAll": "Tout",
+      "maxPerConversation": "Actions max. par conversation",
+      "maxPerConversationHelper": "Entre 1 et 20. Par défaut 5.",
+      "save": "Enregistrer",
+      "saved": "Réglages des actions IA enregistrés",
+      "saveFailed": "Impossible d'enregistrer les réglages des actions IA : {error}",
+      "loadError": "Impossible de charger les réglages des actions IA : {error}",
+      "kinds": {
+        "snapshot": {
+          "label": "Créer un snapshot",
+          "help": "Prend un snapshot d'une VM ou d'un conteneur ; l'invité continue de tourner."
+        },
+        "start": {
+          "label": "Démarrer un invité",
+          "help": "Allume une VM ou un conteneur arrêté."
+        },
+        "migrate": {
+          "label": "Migrer un invité",
+          "help": "Migration à chaud dans le même cluster, invités à stockage partagé uniquement ; un conteneur redémarre sur l'hôte cible."
+        },
+        "drs_apply": {
+          "label": "Appliquer une recommandation DRS",
+          "help": "Exécute une migration d'équilibrage déjà recommandée par DRS."
+        },
+        "backup_add": {
+          "label": "Ajouter un invité à un job de sauvegarde",
+          "help": "Ajoute une VM ou un conteneur à un job de sauvegarde existant ; aucune sauvegarde ne démarre immédiatement."
+        },
+        "shutdown": {
+          "label": "Arrêter un invité",
+          "help": "Arrête proprement une VM ou un conteneur en marche ; ses services s'arrêtent."
+        },
+        "reboot": {
+          "label": "Redémarrer un invité",
+          "help": "Redémarre une VM ou un conteneur en marche ; ses services sont interrompus."
+        },
+        "maintenance": {
+          "label": "Entrer ou sortir du mode maintenance",
+          "help": "Met un nœud en maintenance ou le remet en service ; les invités sont évacués du nœud."
+        }
+      }
     }
   },
   "green": {
@@ -5806,7 +5857,11 @@
         "taskFailed": "La tâche a échoué : {reason}",
         "taskFailedNoReason": "La tâche a échoué."
       }
-    }
+    },
+    "actionsBadge": "Actions sur approbation",
+    "actionsMode": "Assistant avec actions approuvées",
+    "actionsScope": "Il consulte votre infrastructure et peut proposer des actions ; rien ne s'exécute sans votre approbation.",
+    "actionsWelcome": "Je peux proposer des actions ; rien ne s'exécute sans votre approbation."
   },
   "jobs": {
     "title": "Task Center",

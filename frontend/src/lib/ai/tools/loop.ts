@@ -18,6 +18,7 @@ import {
   type AiProvider,
   type ToolCallRequest,
 } from '@/lib/ai/tools/adapters'
+import { cardsFromToolResult, type ActionCardsPayload } from '@/lib/ai/actions/cards'
 import { chartFromToolResult, type AiChart } from '@/lib/ai/charts'
 import { invokeTool } from '@/lib/tools/invoke'
 import type { CatalogTool, ToolContext } from '@/lib/tools/types'
@@ -56,6 +57,8 @@ export type ToolTraceEntry = {
   truncated: boolean
   /** What the widget can plot from the result, see `charts.ts`. Never sent to the model. */
   chart?: AiChart
+  /** The signed action cards a proposal tool produced, see `actions/cards.ts`. Never sent to the model. */
+  actions?: ActionCardsPayload
 }
 
 /**
@@ -226,6 +229,7 @@ export async function executeToolCalls(
       if (outcome.ok === true) {
         const { content, truncated } = serialiseResult(outcome.value)
         const chart = chartFromToolResult(call.name, outcome.value)
+        const actions = cardsFromToolResult(call.name, outcome.value)
 
         return {
           entry: {
@@ -235,6 +239,7 @@ export async function executeToolCalls(
             durationMs: Date.now() - startedAt,
             truncated,
             ...(chart ? { chart } : {}),
+            ...(actions ? { actions } : {}),
           },
           result: { call, content },
         }

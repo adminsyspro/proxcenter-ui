@@ -10,7 +10,7 @@
  * Pure module: no Next, Prisma or React import belongs here.
  */
 
-import type { ActionCard, ActionPlan } from './types'
+import { ACTION_KINDS, ACTION_TIER, type ActionCard, type ActionPlan } from './types'
 
 export const ACTION_CARDS = Symbol('actionCards')
 
@@ -47,4 +47,101 @@ export function collectActionCards(trace: ReadonlyArray<{ actions?: ActionCardsP
   }
 
   return { cards: [...cards.values()], plans: [...plans.values()] }
+}
+
+// ---------------------------------------------------------------------------
+// Decoder side: what the browser keeps of a card read off the stream. Only the
+// fields of the type, with the right primitive types; the signature is checked
+// by the server when the card is executed, not here.
+// ---------------------------------------------------------------------------
+
+const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
+const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+
+const FINDINGS: ActionPlan['finding'][] = ['unprotected_guests', 'host_memory', 'pending_updates']
+
+/** A card read back from the stream, or null when it is not one. */
+export function sanitizeActionCard(raw: unknown): ActionCard | null {
+  if (!isRecord(raw)) return null
+
+  const kind = ACTION_KINDS.find(k => k === raw.kind)
+  const target = isRecord(raw.target) ? raw.target : null
+  const actionId = str(raw.actionId)
+  const token = str(raw.token)
+  const expiresAt = num(raw.expiresAt)
+
+  if (!kind || !target || !actionId || !token || expiresAt === undefined) return null
+
+  const connId = str(target.connId)
+  const cluster = str(target.cluster)
+  const node = str(target.node)
+  const name = str(target.name)
+
+  if (connId === undefined || cluster === undefined || node === undefined || name === undefined) return null
+
+  const params: ActionCard['params'] = {}
+
+  if (isRecord(raw.params)) {
+    for (const [k, v] of Object.entries(raw.params)) {
+      if (typeof v === 'string' || typeof v === 'boolean' || num(v) !== undefined) params[k] = v as string | number | boolean
+    }
+  }
+
+  const preflight = isRecord(raw.preflight) ? raw.preflight : {}
+  const checks: ActionCard['preflight']['checks'] = []
+
+  for (const c of Array.isArray(preflight.checks) ? preflight.checks : []) {
+    const level = isRecord(c) ? (['ok', 'warn', 'block'] as const).find(l => l === c.level) : undefined
+
+    if (level && isRecord(c) && typeof c.text === 'string') checks.push({ level, text: c.text })
+  }
+
+  const vmid = num(target.vmid)
+  const guestKind = target.guestKind === 'qemu' || target.guestKind === 'lxc' ? target.guestKind : undefined
+  const planId = str(raw.planId)
+  const step = num(raw.step)
+  const after = num(raw.after)
+
+  return {
+    actionId,
+    kind,
+    // Derived, never trusted: the tier decides how many confirmations the widget asks for.
+    tier: ACTION_TIER[kind],
+    target: { connId, cluster, node, name, ...(vmid !== undefined ? { vmid } : {}), ...(guestKind ? { guestKind } : {}) },
+    params,
+    preflight: { ok: preflight.ok === true, checks },
+    ...(planId !== undefined ? { planId } : {}),
+    ...(step !== undefined ? { step } : {}),
+    ...(after !== undefined ? { after } : {}),
+    expiresAt,
+    token,
+  }
+}
+
+/** A plan read back from the stream. A step whose card is malformed loses the card, not the step. */
+export function sanitizeActionPlan(raw: unknown): ActionPlan | null {
+  if (!isRecord(raw)) return null
+
+  const planId = str(raw.planId)
+  const title = str(raw.title)
+  const finding = FINDINGS.find(f => f === raw.finding)
+
+  if (!planId || title === undefined || !finding || !Array.isArray(raw.steps)) return null
+
+  const steps: ActionPlan['steps'] = []
+
+  for (const s of raw.steps) {
+    const step = isRecord(s) ? num(s.step) : undefined
+
+    if (!isRecord(s) || step === undefined) continue
+
+    const card = s.card === undefined ? null : sanitizeActionCard(s.card)
+    const manual = isRecord(s.manual) && str(s.manual.text) !== undefined && str(s.manual.href) !== undefined
+      ? { text: s.manual.text as string, href: s.manual.href as string }
+      : undefined
+
+    steps.push({ step, ...(card ? { card } : {}), ...(manual ? { manual } : {}) })
+  }
+
+  return { planId, finding, title, steps }
 }

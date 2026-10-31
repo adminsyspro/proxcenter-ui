@@ -9,12 +9,14 @@ import { getRequestLocale, languageInstruction, normalizeLocale, normalizeTimeZo
 import { validateAIUrl } from '@/lib/ai/url-guard'
 import { ollamaOptions, ollamaThread } from '@/lib/ai/ollama'
 import { DEFAULT_OLLAMA_MODEL } from '@/lib/ai/qualifiedModels'
+import { collectActionCards } from '@/lib/ai/actions/cards'
+import { resolveAssistantTools } from '@/lib/ai/actions/resolve'
 import { collectCharts } from '@/lib/ai/charts'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
-import { READ_ONLY_TOOLS, buildToolContext } from '@/lib/tools/catalog'
+import { buildToolContext } from '@/lib/tools/catalog'
 import { coerceToolArgs, extractTextToolCall, toolResultTurns, toolsForProvider, type ToolCallRequest } from '@/lib/ai/tools/adapters'
 import { budgetFallbackText, emptyAnswerText, executeToolCalls, MAX_TOOL_ROUNDS, userTextOf, type ToolTraceEntry } from '@/lib/ai/tools/loop'
-import type { ToolContext } from '@/lib/tools/types'
+import type { CatalogTool, ToolContext } from '@/lib/tools/types'
 import { encodeFrame } from '@/lib/ai/streamFrames'
 import { requireFeature } from '@/lib/auth/requireEnterprise'
 import { Features } from '@/lib/license/features'
@@ -186,16 +188,18 @@ async function streamAgenticConversation(opts: {
   model: string
   messages: any[]
   wireTools: unknown[]
+  /** The tools handed to the model: read-only, plus the proposal tools when actions are on. */
+  tools: CatalogTool[]
   ctx: ToolContext
   /** The user's own words, see `userTextOf`. */
   userText: string
   controller: ReadableStreamDefaultController
   encoder: TextEncoder
 }) {
-  const { base, model, wireTools, ctx, controller, encoder } = opts
+  const { base, model, wireTools, tools, ctx, controller, encoder } = opts
   const messages = [...opts.messages]
 
-  const toolNames = READ_ONLY_TOOLS.map(t => t.name)
+  const toolNames = tools.map(t => t.name)
   const trace: ToolTraceEntry[] = []
 
   let emptyRetried = false
@@ -247,7 +251,7 @@ async function streamAgenticConversation(opts: {
     // the user waits, in place of the generic spinner.
     controller.enqueue(encoder.encode(encodeFrame({ type: 'tool', names: turn.toolCalls.map(c => c.name) })))
 
-    const { results, trace: roundTrace } = await executeToolCalls(turn.toolCalls, READ_ONLY_TOOLS, ctx, { userText: opts.userText })
+    const { results, trace: roundTrace } = await executeToolCalls(turn.toolCalls, tools, ctx, { userText: opts.userText })
 
     trace.push(...roundTrace)
     messages.push(...toolResultTurns('ollama', results))
@@ -262,6 +266,10 @@ async function streamAgenticConversation(opts: {
   const charts = collectCharts(trace)
 
   if (charts.length) controller.enqueue(encoder.encode(encodeFrame({ type: 'charts', charts })))
+
+  const { cards, plans } = collectActionCards(trace)
+
+  if (cards.length || plans.length) controller.enqueue(encoder.encode(encodeFrame({ type: 'actions', cards, plans })))
 }
 
 // POST /api/v1/ai/chat/stream - Chat avec streaming
@@ -275,7 +283,7 @@ export async function POST(request: Request) {
     const unlicensed = await requireFeature(Features.AI_INSIGHTS)
     if (unlicensed) return unlicensed
 
-    const { messages, locale, timeZone } = await request.json()
+    const { messages, locale, timeZone, conversationId } = await request.json()
 
     // Le drawer envoie `locale`; repli sur le cookie NEXT_LOCALE pour tout
     // appelant qui ne le fait pas.
@@ -303,12 +311,19 @@ export async function POST(request: Request) {
 
     const tenantId = await getCurrentTenantId()
 
+    // Read-only unless every condition for proposing actions holds, see the helper.
+    const assistant = await resolveAssistantTools({ tenantId, conversationId, messages })
+
     const { prompt: systemPrompt, snapshot } = await buildAiSystemPrompt(lang, uiLocale, {
       toolsEnabled: true,
       terse: true,
+      ...(assistant.actionsEnabled ? { actionsEnabled: true } : {}),
     })
-    const toolCtx = buildToolContext(snapshot, tenantId, uiLocale, normalizeTimeZone(timeZone))
-    const wireTools = toolsForProvider('ollama', READ_ONLY_TOOLS)
+    const toolCtx = {
+      ...buildToolContext(snapshot, tenantId, uiLocale, normalizeTimeZone(timeZone)),
+      ...(assistant.actions ? { actions: assistant.actions } : {}),
+    }
+    const wireTools = toolsForProvider('ollama', assistant.tools)
 
     // The SSRF guard's own contract requires every AI route fetching an
     // operator-supplied base URL to go through it; this route used to skip it.
@@ -326,6 +341,7 @@ export async function POST(request: Request) {
             model: settings.ollamaModel,
             messages: ollamaMessages,
             wireTools,
+            tools: assistant.tools,
             ctx: toolCtx,
             userText: userTextOf(messages),
             controller,

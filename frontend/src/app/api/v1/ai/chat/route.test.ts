@@ -24,10 +24,11 @@ const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>(
 
 // An admin principal: `collectInventorySnapshot` then skips the per-guest RBAC filter,
 // which is what the dedicated RBAC tests cover, not this file.
-const licence = vi.hoisted(() => ({ ai: true }))
+const licence = vi.hoisted(() => ({ ai: true, actions: true }))
 
 // The assistant is Enterprise (`ai_insights`): the route refuses it otherwise.
 vi.mock('@/lib/auth/requireEnterprise', () => ({
+  hasServerFeature: async () => licence.actions,
   requireFeature: async () => (licence.ai ? null : new Response(JSON.stringify({ error: 'Feature not licensed' }), { status: 403 })),
 }))
 
@@ -41,6 +42,45 @@ vi.mock('@/lib/rbac', () => ({
   filterCandidateConnections: (clusters: unknown) => clusters,
   pruneEmptyConnections: (clusters: unknown) => clusters,
 }))
+
+const actionsEnv = vi.hoisted(() => ({
+  licensed: true,
+  principal: { kind: 'session', userId: 'u1', tenantId: 'tenant-1', connectionIds: null } as any,
+  kinds: { snapshot: true } as Record<string, boolean>,
+}))
+
+vi.mock('@/lib/auth/principal', () => ({ getPrincipal: async () => ({ ok: true, principal: actionsEnv.principal }) }))
+
+vi.mock('@/lib/ai/actions/settings', () => ({
+  getAiActionsSettings: async () => ({ enabled: true, actions: actionsEnv.kinds, maxPerConversation: 5 }),
+}))
+
+const proposeExecute = vi.hoisted(() => vi.fn())
+
+vi.mock('@/lib/tools/actions', async () => {
+  const { ACTION_CARDS } = await import('@/lib/ai/actions/cards')
+
+  proposeExecute.mockImplementation(async (_args: unknown, ctx: any) => {
+    const value: Record<string | symbol, unknown> = { status: 'awaiting-approval' }
+
+    value[ACTION_CARDS] = {
+      cards: [{
+        actionId: 'a1', kind: 'snapshot', tier: 'safe',
+        target: { connId: 'conn-1', cluster: 'prod', node: 'pve1', vmid: 101, guestKind: 'qemu', name: 'db-01' },
+        params: { snapshotName: 'x' }, preflight: { ok: true, checks: [] }, expiresAt: 1, token: `tok:${ctx.actions?.bind.conversationId}`,
+      }],
+      plans: [],
+    }
+
+    return value
+  })
+
+  return {
+    actionToolsFor: (s: any) => (s.enabled && Object.values(s.actions).some(Boolean)
+      ? [{ name: 'propose_action', description: 'Propose.', parameters: { type: 'object', properties: {} }, execute: proposeExecute }]
+      : []),
+  }
+})
 
 let aiSettings: Record<string, unknown>
 
@@ -134,6 +174,10 @@ function ollamaToolCall(name: string, args: Record<string, unknown> = {}): Respo
 
 beforeEach(() => {
   licence.ai = true
+  licence.actions = true
+  actionsEnv.principal = { kind: 'session', userId: 'u1', tenantId: 'tenant-1', connectionIds: null }
+  actionsEnv.kinds = { snapshot: true }
+  proposeExecute.mockClear()
   checkPermissionMock.mockReset().mockResolvedValue(null)
   rankToolExecute.mockClear()
   aiSettings = { ...OLLAMA_SETTINGS }
@@ -491,6 +535,45 @@ describe('POST /api/v1/ai/chat', () => {
       await ask()
 
       expect(fetchMock.mock.calls[0][0]).toBe('https://api.openai.com/v1/chat/completions')
+    })
+  })
+})
+
+describe('POST /api/v1/ai/chat, approved actions (roadmap#188)', () => {
+  const toolNamesOfFirstCall = () => JSON.parse(fetchMock.mock.calls[0][1].body as string).tools.map((t: any) => t.function.name)
+  const systemOfFirstCall = () => JSON.parse(fetchMock.mock.calls[0][1].body as string).messages.find((m: any) => m.role === 'system').content
+
+  it('hands the proposal tools and returns the cards in an actions field', async () => {
+    fetchMock
+      .mockResolvedValueOnce(ollamaToolCall('propose_action', {}))
+      .mockResolvedValueOnce(ollamaReply('proposed'))
+
+    const body = await readJson<any>(await ask({ conversationId: 'conv-1', messages: [{ role: 'user', content: 'Snapshot db-01' }] }))
+
+    expect(toolNamesOfFirstCall()).toEqual(['rank_guest_hardware', 'get_ceph_status', 'propose_action'])
+    expect(systemOfFirstCall()).toContain('you never execute anything')
+    expect(proposeExecute.mock.calls[0][1].actions.bind).toEqual({ userId: 'u1', tenantId: 'tenant-1', conversationId: 'conv-1' })
+    expect(body.actions.plans).toEqual([])
+    expect(body.actions.cards).toHaveLength(1)
+    expect(body.actions.cards[0]).toMatchObject({ actionId: 'a1', token: 'tok:conv-1' })
+  })
+
+  describe.each([
+    ['no conversationId', () => ({}), () => undefined],
+    ['no licence', () => ({ conversationId: 'conv-1' }), () => { licence.actions = false }],
+    ['no enabled kind', () => ({ conversationId: 'conv-1' }), () => { actionsEnv.kinds = { snapshot: false } }],
+    ['an API token', () => ({ conversationId: 'conv-1' }), () => { actionsEnv.principal = { kind: 'token', userId: 'u1', tenantId: 'tenant-1', connectionIds: null } }],
+  ])('with %s', (_label, body, arrange) => {
+    it('stays read-only exactly as before', async () => {
+      arrange()
+      fetchMock.mockResolvedValueOnce(ollamaReply('ok'))
+
+      const res = await readJson<any>(await ask(body()))
+
+      expect(toolNamesOfFirstCall()).toEqual(['rank_guest_hardware', 'get_ceph_status'])
+      expect(systemOfFirstCall()).not.toContain('you never execute anything')
+      expect(proposeExecute).not.toHaveBeenCalled()
+      expect('actions' in res).toBe(false)
     })
   })
 })

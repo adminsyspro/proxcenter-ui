@@ -173,3 +173,72 @@ describe('createFrameDecoder', () => {
     expect(frames).toEqual([TRACE_FRAME, { type: 'charts', charts: [chart] }])
   })
 })
+
+describe('the actions frame (roadmap#188)', () => {
+  const card = (over: Record<string, unknown> = {}) => ({
+    actionId: 'a1',
+    kind: 'reboot',
+    tier: 'safe',
+    target: { connId: 'c1', cluster: 'PVE-PROD', node: 'pve1', vmid: 101, guestKind: 'qemu', name: 'db-01' },
+    params: { snapshotName: 'x', n: 2, force: true, bad: { nested: 1 } },
+    preflight: { ok: true, checks: [{ level: 'warn', text: 'busy' }, { level: 'nope', text: 'x' }] },
+    expiresAt: 5,
+    token: 'tok',
+    extra: 'dropped',
+    ...over,
+  })
+
+  it('round-trips, keeping only the typed fields and deriving the tier', () => {
+    const { frames } = decodeAll([encodeFrame({ type: 'actions', cards: [card() as any], plans: [] })])
+    const out = frames[0] as Extract<StreamFrame, { type: 'actions' }>
+
+    expect(out.cards).toHaveLength(1)
+    expect(out.cards[0]).toEqual({
+      actionId: 'a1',
+      kind: 'reboot',
+      tier: 'disruptive',
+      target: { connId: 'c1', cluster: 'PVE-PROD', node: 'pve1', vmid: 101, guestKind: 'qemu', name: 'db-01' },
+      params: { snapshotName: 'x', n: 2, force: true },
+      preflight: { ok: true, checks: [{ level: 'warn', text: 'busy' }] },
+      expiresAt: 5,
+      token: 'tok',
+    })
+  })
+
+  it('is split-safe like the other frames', () => {
+    const stream = `hi${encodeFrame({ type: 'actions', cards: [card() as any], plans: [] })}`
+    const whole = decodeAll([stream])
+    const cut = decodeAll([stream.slice(0, 30), stream.slice(30)])
+
+    expect(cut).toEqual(whole)
+  })
+
+  it.each([
+    ['no token', { token: undefined }],
+    ['a kind outside the whitelist', { kind: 'delete_vm' }],
+    ['an incomplete target', { target: { connId: 'c1', cluster: 'x' } }],
+    ['no actionId', { actionId: 3 }],
+  ])('drops a card with %s', (_l, over) => {
+    const { frames } = decodeAll([encodeFrame({ type: 'actions', cards: [card(over) as any, card() as any], plans: [] })])
+
+    expect((frames[0] as any).cards).toHaveLength(1)
+  })
+
+  it('drops the card of a plan step but keeps the step', () => {
+    const plan = {
+      planId: 'p1',
+      finding: 'host_memory',
+      title: 'Free memory',
+      steps: [
+        { step: 1, card: card({ token: 1 }) },
+        { step: 2, manual: { text: 'Check', href: '/x' } },
+        { step: 3, card: card() },
+      ],
+    }
+    const { frames } = decodeAll([encodeFrame({ type: 'actions', cards: [], plans: [plan as any, { planId: 'bad' } as any] })])
+    const out = frames[0] as Extract<StreamFrame, { type: 'actions' }>
+
+    expect(out.plans).toHaveLength(1)
+    expect(out.plans[0].steps.map(s => [s.step, Boolean(s.card), Boolean(s.manual)])).toEqual([[1, false, false], [2, false, true], [3, true, false]])
+  })
+})

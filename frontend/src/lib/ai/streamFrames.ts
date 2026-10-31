@@ -13,6 +13,8 @@
  * or React import belongs here.
  */
 
+import { sanitizeActionCard, sanitizeActionPlan } from './actions/cards'
+import type { ActionCard, ActionPlan } from './actions/types'
 import { sanitizeChart, type AiChart } from './charts'
 
 /** ASCII record separator: never produced by a language model writing prose. */
@@ -25,6 +27,8 @@ export type StreamFrame =
   | { type: 'trace'; calls: Array<{ name: string; ok: boolean }> }
   /** What the widget plots under the answer, sent after the trace. */
   | { type: 'charts'; charts: AiChart[] }
+  /** The signed action cards the assistant proposed, sent after the charts. */
+  | { type: 'actions'; cards: ActionCard[]; plans: ActionPlan[] }
 
 export type DecodedChunk = { text: string; frames: StreamFrame[] }
 
@@ -53,6 +57,18 @@ function parseFrame(raw: string): StreamFrame | null {
       return {
         type: 'charts',
         charts: parsed.charts.map(sanitizeChart).filter((c: AiChart | null): c is AiChart => c !== null),
+      }
+    }
+
+    if (parsed?.type === 'actions' && (Array.isArray(parsed.cards) || Array.isArray(parsed.plans))) {
+      return {
+        type: 'actions',
+        cards: (Array.isArray(parsed.cards) ? parsed.cards : [])
+          .map(sanitizeActionCard)
+          .filter((c: ActionCard | null): c is ActionCard => c !== null),
+        plans: (Array.isArray(parsed.plans) ? parsed.plans : [])
+          .map(sanitizeActionPlan)
+          .filter((p: ActionPlan | null): p is ActionPlan => p !== null),
       }
     }
   } catch {

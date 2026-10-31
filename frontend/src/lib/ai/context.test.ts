@@ -376,3 +376,18 @@ describe('an empty estate', () => {
     expect(prompt).toContain('written in English')
   })
 })
+
+describe('proposal sentences (roadmap#188)', () => {
+  it('adds the two sentences only when actions are enabled, in both languages', () => {
+    const off = render({ toolsEnabled: true })
+
+    expect(render({ toolsEnabled: true, actionsEnabled: false })).toBe(off)
+    expect(off).not.toContain('propose_action')
+
+    const en = render({ toolsEnabled: true, actionsEnabled: true })
+
+    expect(en).toContain('propose_action or propose_remediation_plan')
+    expect(en).toContain('Never claim an action was done.')
+    expect(render({ toolsEnabled: true, actionsEnabled: true }, 'fr', 'fr')).toContain('propose_action ou propose_remediation_plan')
+  })
+})

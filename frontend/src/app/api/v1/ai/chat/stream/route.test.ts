@@ -17,10 +17,11 @@ import { createFrameDecoder, FRAME_MARK, type StreamFrame } from '@/lib/ai/strea
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 
-const licence = vi.hoisted(() => ({ ai: true }))
+const licence = vi.hoisted(() => ({ ai: true, actions: true }))
 
 // The assistant is Enterprise (`ai_insights`): the route refuses it otherwise.
 vi.mock('@/lib/auth/requireEnterprise', () => ({
+  hasServerFeature: async () => licence.actions,
   requireFeature: async () => (licence.ai ? null : new Response(JSON.stringify({ error: 'Feature not licensed' }), { status: 403 })),
 }))
 
@@ -34,6 +35,45 @@ vi.mock('@/lib/rbac', () => ({
   filterCandidateConnections: (clusters: unknown) => clusters,
   pruneEmptyConnections: (clusters: unknown) => clusters,
 }))
+
+const actionsEnv = vi.hoisted(() => ({
+  licensed: true,
+  principal: { kind: 'session', userId: 'u1', tenantId: 'tenant-1', connectionIds: null } as any,
+  kinds: { snapshot: true } as Record<string, boolean>,
+}))
+
+vi.mock('@/lib/auth/principal', () => ({ getPrincipal: async () => ({ ok: true, principal: actionsEnv.principal }) }))
+
+vi.mock('@/lib/ai/actions/settings', () => ({
+  getAiActionsSettings: async () => ({ enabled: true, actions: actionsEnv.kinds, maxPerConversation: 5 }),
+}))
+
+const proposeExecute = vi.hoisted(() => vi.fn())
+
+vi.mock('@/lib/tools/actions', async () => {
+  const { ACTION_CARDS } = await import('@/lib/ai/actions/cards')
+
+  proposeExecute.mockImplementation(async (_args: unknown, ctx: any) => {
+    const value: Record<string | symbol, unknown> = { status: 'awaiting-approval' }
+
+    value[ACTION_CARDS] = {
+      cards: [{
+        actionId: 'a1', kind: 'snapshot', tier: 'safe',
+        target: { connId: 'conn-1', cluster: 'prod', node: 'pve1', vmid: 101, guestKind: 'qemu', name: 'db-01' },
+        params: { snapshotName: 'x' }, preflight: { ok: true, checks: [] }, expiresAt: 1, token: `tok:${ctx.actions?.bind.conversationId}`,
+      }],
+      plans: [],
+    }
+
+    return value
+  })
+
+  return {
+    actionToolsFor: (s: any) => (s.enabled && Object.values(s.actions).some(Boolean)
+      ? [{ name: 'propose_action', description: 'Propose.', parameters: { type: 'object', properties: {} }, execute: proposeExecute }]
+      : []),
+  }
+})
 
 let aiSettings: Record<string, unknown>
 
@@ -159,6 +199,10 @@ function ollamaStreamToolCall(name: string, args: Record<string, unknown> = {}):
 
 beforeEach(() => {
   licence.ai = true
+  licence.actions = true
+  actionsEnv.principal = { kind: 'session', userId: 'u1', tenantId: 'tenant-1', connectionIds: null }
+  actionsEnv.kinds = { snapshot: true }
+  proposeExecute.mockClear()
   checkPermissionMock.mockReset().mockResolvedValue(null)
   rankToolExecute.mockClear()
   aiSettings = { ...OLLAMA_SETTINGS }
@@ -638,6 +682,72 @@ describe('POST /api/v1/ai/chat/stream', () => {
 
       expect(message).toContain('written in English')
       expect(message).not.toContain('ignore previous instructions')
+    })
+  })
+})
+
+describe('POST /api/v1/ai/chat/stream, approved actions (roadmap#188)', () => {
+  const toolNamesOfFirstCall = () => sentBody().tools.map((t: any) => t.function.name)
+  const systemOfFirstCall = () => sentBody().messages.find((m: any) => m.role === 'system').content
+
+  it('hands the proposal tools after the read-only ones, with the two prompt sentences', async () => {
+    await ask({ conversationId: 'conv-1' })
+
+    expect(toolNamesOfFirstCall()).toEqual(['rank_guest_hardware', 'propose_action'])
+    expect(systemOfFirstCall()).toContain('you never execute anything')
+  })
+
+  it('binds the cards to the session user, the tenant and the conversation, on the raw messages', async () => {
+    fetchMock
+      .mockResolvedValueOnce(ollamaStreamToolCall('propose_action', {}))
+      .mockResolvedValueOnce(ollamaStream(['proposed']))
+
+    await decodeBody(await ask({ conversationId: 'conv-1', messages: [{ role: 'user', content: 'Snapshot db-01' }] }))
+
+    const ctx = proposeExecute.mock.calls[0][1]
+
+    expect(ctx.actions.bind).toEqual({ userId: 'u1', tenantId: 'tenant-1', conversationId: 'conv-1' })
+    expect(ctx.actions.userText).toBe('snapshot db-01')
+    expect(ctx.actions.visibleText).toBe('snapshot db-01')
+  })
+
+  it('sends the cards in an actions frame after the charts, never to the model', async () => {
+    fetchMock
+      .mockResolvedValueOnce(ollamaStreamToolCall('propose_action', {}))
+      .mockResolvedValueOnce(ollamaStream(['I proposed it']))
+
+    const { frames } = await decodeBody(await ask({ conversationId: 'conv-1' }))
+
+    expect(frames.map(f => f.type)).toEqual(['tool', 'trace', 'actions'])
+
+    const actions = frames.at(-1) as Extract<StreamFrame, { type: 'actions' }>
+
+    expect(actions.plans).toEqual([])
+    expect(actions.cards).toHaveLength(1)
+    expect(actions.cards[0]).toMatchObject({ actionId: 'a1', kind: 'snapshot', token: 'tok:conv-1' })
+    expect(JSON.stringify(JSON.parse(fetchMock.mock.calls[1][1].body as string).messages)).not.toContain('tok:conv-1')
+  })
+
+  describe.each([
+    ['no conversationId', () => ({}), () => undefined],
+    ['an invalid conversationId', () => ({ conversationId: 'a b/c' }), () => undefined],
+    ['no licence', () => ({ conversationId: 'conv-1' }), () => { licence.actions = false }],
+    ['no enabled kind', () => ({ conversationId: 'conv-1' }), () => { actionsEnv.kinds = { snapshot: false } }],
+    ['an API token', () => ({ conversationId: 'conv-1' }), () => { actionsEnv.principal = { kind: 'token', userId: 'u1', tenantId: 'tenant-1', connectionIds: null } }],
+    ['an unknown user', () => ({ conversationId: 'conv-1' }), () => { actionsEnv.principal = { kind: 'session', tenantId: 'tenant-1', connectionIds: null } }],
+  ])('with %s', (_label, body, arrange) => {
+    it('stays read-only exactly as before', async () => {
+      arrange()
+      fetchMock
+        .mockResolvedValueOnce(ollamaStreamToolCall('propose_action', {}))
+        .mockResolvedValueOnce(ollamaStream(['no']))
+
+      const { frames } = await decodeBody(await ask(body()))
+
+      expect(toolNamesOfFirstCall()).toEqual(['rank_guest_hardware'])
+      expect(systemOfFirstCall()).not.toContain('you never execute anything')
+      expect(proposeExecute).not.toHaveBeenCalled()
+      expect(frames.some(f => f.type === 'actions')).toBe(false)
     })
   })
 })

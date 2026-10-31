@@ -9,9 +9,11 @@ import { getRequestLocale, languageInstruction, normalizeLocale, normalizeTimeZo
 import { validateAIUrl } from '@/lib/ai/url-guard'
 import { ollamaOptions, ollamaThread } from '@/lib/ai/ollama'
 import { DEFAULT_OLLAMA_MODEL } from '@/lib/ai/qualifiedModels'
+import { collectActionCards } from '@/lib/ai/actions/cards'
+import { resolveAssistantTools } from '@/lib/ai/actions/resolve'
 import { collectCharts } from '@/lib/ai/charts'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
-import { READ_ONLY_TOOLS, buildToolContext } from '@/lib/tools/catalog'
+import { buildToolContext } from '@/lib/tools/catalog'
 import { toolsForProvider, type AiProvider } from '@/lib/ai/tools/adapters'
 import { runToolRounds, userTextOf, type SendTurn, type ToolMode } from '@/lib/ai/tools/loop'
 import { requireFeature } from '@/lib/auth/requireEnterprise'
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
     const unlicensed = await requireFeature(Features.AI_INSIGHTS)
     if (unlicensed) return unlicensed
 
-    const { messages, locale, timeZone } = await request.json()
+    const { messages, locale, timeZone, conversationId } = await request.json()
 
     // The drawer sends `locale`; fall back to the NEXT_LOCALE cookie for any
     // caller that does not (the streaming fallback used to be one of them).
@@ -79,11 +81,18 @@ export async function POST(request: Request) {
 
     // The snapshot is RBAC-scoped and is reused as the tool context, so the
     // tools can only ever reach what the prompt was already allowed to show.
+    // Read-only unless every condition for proposing actions holds, see the helper.
+    const assistant = await resolveAssistantTools({ tenantId, conversationId, messages })
+
     const { prompt: systemPrompt, snapshot } = await buildAiSystemPrompt(lang, uiLocale, {
       toolsEnabled: true,
+      ...(assistant.actionsEnabled ? { actionsEnabled: true } : {}),
     })
-    const toolCtx = buildToolContext(snapshot, tenantId, uiLocale, normalizeTimeZone(timeZone))
-    const wireTools = toolsForProvider(provider, READ_ONLY_TOOLS)
+    const toolCtx = {
+      ...buildToolContext(snapshot, tenantId, uiLocale, normalizeTimeZone(timeZone)),
+      ...(assistant.actions ? { actions: assistant.actions } : {}),
+    }
+    const wireTools = toolsForProvider(provider, assistant.tools)
 
     let send: SendTurn
     let initialMessages: any[]
@@ -212,12 +221,14 @@ export async function POST(request: Request) {
 
     const outcome = await runToolRounds({
       provider,
-      tools: READ_ONLY_TOOLS,
+      tools: assistant.tools,
       ctx: toolCtx,
       userText: userTextOf(messages),
       messages: initialMessages,
       send,
     })
+
+    const actionCards = collectActionCards(outcome.trace)
 
     return NextResponse.json({
       response: outcome.text,
@@ -234,6 +245,8 @@ export async function POST(request: Request) {
       })),
       // Drawn by the widget from the tool results, never written by the model.
       charts: collectCharts(outcome.trace),
+      // Signed cards the user approves in the widget; present only when the assistant proposed some.
+      ...(actionCards.cards.length || actionCards.plans.length ? { actions: actionCards } : {}),
       toolsDisabled: outcome.toolsDisabled,
       budgetExhausted: outcome.budgetExhausted,
     })

@@ -24,6 +24,7 @@ import {
 } from './loop'
 import type { ToolCallRequest } from './adapters'
 import { ToolArgumentError, ToolScopeError, type CatalogTool, type ToolContext } from '@/lib/tools/types'
+import { ACTION_CARDS } from '@/lib/ai/actions/cards'
 
 /* ------------------------------------------------------------------ */
 /* Fixtures                                                           */
@@ -97,6 +98,21 @@ afterEach(() => {
 /* ------------------------------------------------------------------ */
 /* executeToolCalls                                                   */
 /* ------------------------------------------------------------------ */
+
+describe('action cards beside a tool result (roadmap#188)', () => {
+  it('lifts the cards of a proposal tool into the trace and keeps them out of what the model reads', async () => {
+    const value: Record<string | symbol, unknown> = { status: 'awaiting-approval' }
+
+    value[ACTION_CARDS] = { cards: [{ actionId: 'a1', token: 'secret-token' }], plans: [] }
+
+    const tools = [makeTool('propose_action', async () => value), makeTool('list_nodes', async () => ({ nodes: [] }))]
+    const { results, trace } = await executeToolCalls([call('propose_action'), call('list_nodes')], tools, makeCtx())
+
+    expect(trace[0].actions?.cards).toHaveLength(1)
+    expect('actions' in trace[1]).toBe(false)
+    expect(results[0].content).not.toContain('secret-token')
+  })
+})
 
 describe('running the tool calls of one round', () => {
   it('serialises the tool value into the content and records a success', async () => {

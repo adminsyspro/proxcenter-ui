@@ -5082,6 +5082,7 @@
       "title": "Actions de l'assistant IA",
       "description": "Choisissez les actions que l'assistant peut proposer. Tout est désactivé par défaut.",
       "info": "L'assistant propose des actions, il n'exécute jamais rien seul. Chaque action est approuvée par l'utilisateur sur sa carte et s'exécute avec SES propres droits, journalisée dans l'audit avec la conversation.",
+      "vdcInherit": "Les tenants vDC suivent ces réglages : ils n'ont pas de réglages d'actions IA propres.",
       "enabled": "Autoriser l'assistant à proposer des actions",
       "enabledHelper": "Désactivé, l'assistant reste en lecture seule ; les choix ci-dessous sont conservés mais ignorés.",
       "groupSafe": "Actions sûres",
@@ -5826,6 +5827,7 @@
       "alreadyRun": "Déjà exécutée",
       "expired": "Expirée : redemandez à l’assistant.",
       "untracked": "Suivi arrêté, la tâche est peut-être encore en cours.",
+      "previousUnknown": "Le résultat de l'étape {step} est inconnu : vérifiez-le dans le Centre de tâches avant de lancer cette étape.",
       "taskCenter": "Ouvrir le Centre de tâches",
       "waitsFor": "Attend l’étape {step}",
       "manualStep": "Étape manuelle",
@@ -5846,7 +5848,8 @@
         "shutdown": "L’invité est arrêté proprement. Ses services restent indisponibles jusqu’à son prochain démarrage.",
         "reboot": "L’invité redémarre. Ses services sont indisponibles le temps du démarrage.",
         "maintenanceEnter": "L’hôte passe en mode maintenance Proxmox : la HA déplace ses invités gérés par la HA vers d’autres hôtes et n’y place plus rien.",
-        "maintenanceExit": "L’hôte sort du mode maintenance : la HA peut de nouveau y placer des invités et y ramène ceux qu’elle avait déplacés."
+        "maintenanceExit": "L’hôte sort du mode maintenance : la HA peut de nouveau y placer des invités et y ramène ceux qu’elle avait déplacés.",
+        "migrate": "Le conteneur s'arrête, passe sur l'hôte cible et y redémarre : ses services sont indisponibles pendant ce temps."
       },
       "errors": {
         "capReached": "La limite d’actions de cette conversation est atteinte. Démarrez une nouvelle conversation pour en exécuter d’autres.",

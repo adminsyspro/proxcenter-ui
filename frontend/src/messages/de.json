@@ -5071,6 +5071,7 @@
       "title": "Aktionen des KI-Assistenten",
       "description": "Legen Sie fest, welche Aktionen der Assistent vorschlagen darf. Standardmäßig ist alles deaktiviert.",
       "info": "Der Assistent schlägt Aktionen vor, er führt nie etwas selbstständig aus. Jede Aktion wird vom Benutzer auf ihrer Karte genehmigt und mit SEINEN eigenen Rechten ausgeführt, im Audit-Protokoll mit der Unterhaltung festgehalten.",
+      "vdcInherit": "vDC-Mandanten übernehmen diese Einstellungen: Sie haben keine eigenen Einstellungen für KI-Aktionen.",
       "enabled": "Dem Assistenten erlauben, Aktionen vorzuschlagen",
       "enabledHelper": "Bei Deaktivierung bleibt der Assistent schreibgeschützt; die Auswahl unten bleibt erhalten, wird aber ignoriert.",
       "groupSafe": "Sichere Aktionen",
@@ -5807,6 +5808,7 @@
       "alreadyRun": "Bereits ausgeführt",
       "expired": "Abgelaufen: Fragen Sie den Assistenten erneut.",
       "untracked": "Verfolgung beendet, die Aufgabe läuft möglicherweise noch.",
+      "previousUnknown": "Das Ergebnis von Schritt {step} ist unbekannt: Prüfen Sie es im Task Center, bevor Sie diesen Schritt ausführen.",
       "taskCenter": "Task Center öffnen",
       "waitsFor": "Wartet auf Schritt {step}",
       "manualStep": "Manueller Schritt",
@@ -5827,7 +5829,8 @@
         "shutdown": "Der Gast wird sauber heruntergefahren. Seine Dienste bleiben bis zum nächsten Start nicht verfügbar.",
         "reboot": "Der Gast startet neu. Seine Dienste sind während des Starts nicht verfügbar.",
         "maintenanceEnter": "Der Host wechselt in den Proxmox-Wartungsmodus: HA verschiebt seine HA-verwalteten Gäste auf andere Hosts und platziert dort nichts Neues.",
-        "maintenanceExit": "Der Host verlässt den Wartungsmodus: HA kann wieder Gäste darauf platzieren und verschiebt die zuvor verschobenen Gäste zurück."
+        "maintenanceExit": "Der Host verlässt den Wartungsmodus: HA kann wieder Gäste darauf platzieren und verschiebt die zuvor verschobenen Gäste zurück.",
+        "migrate": "Der Container wird gestoppt, auf den Zielhost verschoben und dort neu gestartet: Seine Dienste sind währenddessen nicht verfügbar."
       },
       "errors": {
         "capReached": "Das Aktionslimit dieser Unterhaltung ist erreicht. Starten Sie eine neue Unterhaltung, um weitere auszuführen.",

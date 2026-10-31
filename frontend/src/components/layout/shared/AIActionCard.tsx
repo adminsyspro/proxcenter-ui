@@ -19,7 +19,7 @@ import {
 import { alpha, useTheme } from '@mui/material/styles'
 
 import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
-import { ACTION_TIER, type ActionCard, type ActionKind } from '@/lib/ai/actions/types'
+import { actionTier, type ActionCard, type ActionKind } from '@/lib/ai/actions/types'
 
 import type { ActionRun } from './useActionExecution'
 
@@ -68,9 +68,10 @@ const effectKey = (card: ActionCard) =>
     ? `ai.actions.effects.${isExit(card) ? 'maintenanceExit' : 'maintenanceEnter'}`
     : `ai.actions.effects.${card.kind}`
 
-// Either says so and the modal opens: the decoder derives the tier from the
-// kind, this keeps the second click even for a card that skipped it.
-const isDisruptive = (card: ActionCard) => card.tier === 'disruptive' || ACTION_TIER[card.kind] === 'disruptive'
+// Either says so and the modal opens: the decoder derives the tier with
+// `actionTier`, this keeps the second click even for a card that skipped it
+// (a container migration included).
+export const isDisruptive = (card: ActionCard) => card.tier === 'disruptive' || actionTier(card.kind, card.target) === 'disruptive'
 
 // The state the guest or host had when the card was built, which its checks
 // passed: a start is proposed for a stopped guest, a reboot for a running one.
@@ -314,6 +315,7 @@ export default function AIActionCard({
   run,
   busy,
   waitsFor,
+  previousUnknown,
   embedded = false,
   onExecute,
   t
@@ -324,6 +326,8 @@ export default function AIActionCard({
   busy: boolean
   /** Plan step this one waits for, while it has not succeeded here. */
   waitsFor?: number
+  /** Plan step before this one whose task outcome is unknown (its tracking stopped). */
+  previousUnknown?: number
   embedded?: boolean
   onExecute: (card: ActionCard, confirmed: boolean) => void
   t: Translate
@@ -331,8 +335,9 @@ export default function AIActionCard({
   const [expired, setExpired] = useState(() => Date.now() >= card.expiresAt)
   const [confirming, setConfirming] = useState(false)
 
-  // A card is signed for 15 minutes: it turns expired on screen when the
-  // server would start refusing it. A local timer, no request.
+  // A card is signed for 15 minutes (a plan step for 2 hours): it turns
+  // expired on screen when the server would start refusing it. A local
+  // timer, no request.
   useEffect(() => {
     if (expired) return undefined
     const timer = setTimeout(() => setExpired(true), Math.max(0, card.expiresAt - Date.now()))
@@ -402,6 +407,15 @@ export default function AIActionCard({
     status = (
       <StatusLine icon='ri-lock-line' color='text.secondary'>
         {t('ai.actions.waitsFor', { step: String(waitsFor) })}
+      </StatusLine>
+    )
+  } else if (!running && previousUnknown !== undefined) {
+    status = (
+      <StatusLine icon='ri-error-warning-line' color='warning.main'>
+        {t('ai.actions.previousUnknown', { step: String(previousUnknown) })}{' '}
+        <Box component={Link} href={TASK_CENTER_HREF} sx={{ color: 'primary.main', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}>
+          {t('ai.actions.taskCenter')}
+        </Box>
       </StatusLine>
     )
   }

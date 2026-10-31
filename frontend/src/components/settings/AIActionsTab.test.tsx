@@ -49,6 +49,7 @@ describe('AIActionsTab', () => {
   it('shows the approval notice and loads the saved settings with save disabled', async () => {
     await renderLoaded()
     expect(screen.getByText(/never runs anything on its own/)).toBeInTheDocument()
+    expect(screen.getByText(/vDC tenants follow these settings/)).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: 'Allow the assistant to propose actions' })).toBeChecked()
     expect(box('Start a guest')).not.toBeChecked()
     expect(screen.getByLabelText('Max actions per conversation')).toHaveValue(5)

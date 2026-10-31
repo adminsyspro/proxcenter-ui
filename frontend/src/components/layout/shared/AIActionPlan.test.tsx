@@ -86,6 +86,27 @@ describe('AIActionPlan', () => {
     expect(onExecute).toHaveBeenCalledWith(expect.objectContaining({ actionId: 's3' }), true)
   })
 
+  it('unlocks the next step when the previous one lost its tracking, warning that its outcome is unknown', () => {
+    const { onExecute } = renderPlan({ s1: { phase: 'untracked' } })
+    const exit = stepGroup('ai.actions.title.maintenanceExit')
+
+    // The server accepted step 1 (R12): only its task outcome is unknown.
+    expect((within(exit).getByRole('button', { name: 'ai.actions.execute' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(within(exit).queryByText('ai.actions.waitsFor(1)')).toBeNull()
+    expect(within(exit).getByText('ai.actions.previousUnknown(1)')).toBeTruthy()
+    expect(within(exit).getByRole('link', { name: 'ai.actions.taskCenter' })).toBeTruthy()
+
+    fireEvent.click(within(exit).getByRole('button', { name: 'ai.actions.execute' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'ai.actions.confirm' }))
+    expect(onExecute).toHaveBeenCalledWith(expect.objectContaining({ actionId: 's3' }), true)
+  })
+
+  it('drops the warning once the next step itself ran', () => {
+    renderPlan({ s1: { phase: 'untracked' }, s3: { phase: 'done' } })
+
+    expect(within(stepGroup('ai.actions.title.maintenanceExit')).queryByText('ai.actions.previousUnknown(1)')).toBeNull()
+  })
+
   it('renders a manual step as a link inside the app', () => {
     renderPlan({}, '/infrastructure/inventory?selectType=cluster&selectId=c1')
 

@@ -118,6 +118,26 @@ describe('AIActionCard', () => {
     expect(onExecute).not.toHaveBeenCalled()
   })
 
+  it('asks a confirmation for a container migration, whatever tier the card carries', () => {
+    const ct = { connId: 'c1', cluster: 'prod', node: 'pve1', vmid: 205, guestKind: 'lxc' as const, name: 'ct-web' }
+    const { onExecute } = renderCard({ card: card({ kind: 'migrate', tier: 'safe', target: ct, params: { target: 'pve2', online: true } }) })
+
+    fireEvent.click(executeButton())
+
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByText('ai.actions.effects.migrate')).toBeTruthy()
+    expect(onExecute).not.toHaveBeenCalled()
+  })
+
+  it('runs a VM live migration in one click', () => {
+    const c = card({ kind: 'migrate', params: { target: 'pve2', online: true } })
+    const { onExecute } = renderCard({ card: c })
+
+    fireEvent.click(executeButton())
+
+    expect(onExecute).toHaveBeenCalledWith(c, false)
+  })
+
   it('cannot run a card with a blocking check, and shows why without opening the details', () => {
     renderCard({
       card: card({ preflight: { ok: false, checks: [{ level: 'ok', text: 'Exists' }, { level: 'block', text: 'Guest is already running' }] } })

@@ -105,7 +105,10 @@ export default function AIActionsTab() {
         <Typography variant='body2' color='text.secondary'>{t('description')}</Typography>
       </Box>
 
-      <Alert severity='info'>{t('info')}</Alert>
+      <Alert severity='info'>
+        {t('info')}
+        <Box component='span' sx={{ display: 'block', mt: 1 }}>{t('vdcInherit')}</Box>
+      </Alert>
 
       {error && <Alert severity='error'>{t('loadError', { error: error.message })}</Alert>}
 

@@ -5082,6 +5082,7 @@
       "title": "Acciones del asistente de IA",
       "description": "Elige qué acciones puede proponer el asistente. Todo está desactivado por defecto.",
       "info": "El asistente propone acciones, nunca ejecuta nada por sí solo. Cada acción la aprueba el usuario en su tarjeta y se ejecuta con SUS propios permisos, registrada en la auditoría junto con la conversación.",
+      "vdcInherit": "Los tenants vDC siguen esta configuración: no tienen una configuración propia de acciones de IA.",
       "enabled": "Permitir que el asistente proponga acciones",
       "enabledHelper": "Desactivado, el asistente sigue en solo lectura; las opciones de abajo se conservan pero se ignoran.",
       "groupSafe": "Acciones seguras",
@@ -5826,6 +5827,7 @@
       "alreadyRun": "Ya ejecutada",
       "expired": "Caducada: vuelva a preguntar al asistente.",
       "untracked": "Seguimiento detenido, la tarea puede seguir en curso.",
+      "previousUnknown": "El resultado del paso {step} es desconocido: compruébelo en el Centro de tareas antes de ejecutar este paso.",
       "taskCenter": "Abrir el Centro de tareas",
       "waitsFor": "Espera al paso {step}",
       "manualStep": "Paso manual",
@@ -5846,7 +5848,8 @@
         "shutdown": "El invitado se apaga de forma ordenada. Sus servicios quedan sin servicio hasta que se vuelva a iniciar.",
         "reboot": "El invitado se reinicia. Sus servicios no están disponibles mientras arranca.",
         "maintenanceEnter": "El host entra en el modo de mantenimiento de Proxmox: HA mueve sus invitados gestionados por HA a otros hosts y no coloca nada nuevo en él.",
-        "maintenanceExit": "El host sale del modo de mantenimiento: HA puede volver a colocar invitados en él y devuelve los que había movido."
+        "maintenanceExit": "El host sale del modo de mantenimiento: HA puede volver a colocar invitados en él y devuelve los que había movido.",
+        "migrate": "El contenedor se detiene, pasa al host de destino y vuelve a arrancar allí: sus servicios no están disponibles mientras tanto."
       },
       "errors": {
         "capReached": "Se alcanzó el límite de acciones de esta conversación. Inicie una nueva conversación para ejecutar más.",

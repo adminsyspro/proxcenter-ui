@@ -5082,6 +5082,7 @@
       "title": "AI assistant actions",
       "description": "Choose which actions the assistant may propose. Everything is off by default.",
       "info": "The assistant proposes actions, it never runs anything on its own. Each action is approved by the user on its card and runs with THEIR own rights, logged in the audit trail with the conversation.",
+      "vdcInherit": "vDC tenants follow these settings: they have no AI actions settings of their own.",
       "enabled": "Allow the assistant to propose actions",
       "enabledHelper": "When off, the assistant stays read-only and the choices below are kept but ignored.",
       "groupSafe": "Safe actions",
@@ -5826,6 +5827,7 @@
       "alreadyRun": "Already run",
       "expired": "Expired: ask the assistant again.",
       "untracked": "Tracking stopped, the task may still be running.",
+      "previousUnknown": "The outcome of step {step} is unknown: check it in the Task Center before running this step.",
       "taskCenter": "Open the Task Center",
       "waitsFor": "Waits for step {step}",
       "manualStep": "Manual step",
@@ -5846,7 +5848,8 @@
         "shutdown": "The guest is shut down cleanly. Its services stay unavailable until it is started again.",
         "reboot": "The guest restarts. Its services are unavailable while it boots.",
         "maintenanceEnter": "The host enters Proxmox maintenance mode: HA moves its HA-managed guests to other hosts and places nothing new on it.",
-        "maintenanceExit": "The host leaves maintenance mode: HA can place guests on it again and moves back the guests it had moved away."
+        "maintenanceExit": "The host leaves maintenance mode: HA can place guests on it again and moves back the guests it had moved away.",
+        "migrate": "The container stops, moves to the target host and starts again there: its services are unavailable meanwhile."
       },
       "errors": {
         "capReached": "The action limit of this conversation is reached. Start a new conversation to run more.",

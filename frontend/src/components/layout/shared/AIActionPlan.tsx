@@ -100,13 +100,20 @@ const ManualStep = ({ manual, t }: { manual: { text: string; href: string }; t: 
  * A remediation plan (roadmap#188): its steps in order, run one at a time. A
  * card step unlocks when the card step it waits for (`after`) succeeded in
  * this widget; the server refuses it otherwise anyway.
+ *
+ * A previous step whose tracking stopped (`untracked`) unlocks the next one
+ * too: the server accepted it, so execute lets the next step through (R12),
+ * and keeping it locked would strand the plan for good. Its card then warns
+ * that the previous task's outcome is unknown and points to the Task Center.
  */
 export default function AIActionPlan({ plan, runs, busy, onExecute, t }: Shared & { plan: ActionPlan }) {
   const cardOfStep = new Map<number, ActionCard>()
 
   for (const s of plan.steps) if (s.card) cardOfStep.set(s.step, s.card)
 
-  const succeeded = (card: ActionCard | undefined) => Boolean(card && runs[card.actionId]?.phase === 'done')
+  const phaseOf = (card: ActionCard | undefined) => (card ? runs[card.actionId]?.phase : undefined)
+  const succeeded = (card: ActionCard | undefined) => phaseOf(card) === 'done'
+  const unlocks = (card: ActionCard | undefined) => succeeded(card) || phaseOf(card) === 'untracked'
   const cards = [...cardOfStep.values()]
   const doneCount = cards.filter(c => succeeded(c)).length
 
@@ -134,7 +141,9 @@ export default function AIActionPlan({ plan, runs, busy, onExecute, t }: Shared 
       </Box>
       <Box component='ol' sx={{ listStyle: 'none', m: 0, p: 0 }}>
         {plan.steps.map((s, i) => {
-          const waitsFor = s.card?.after !== undefined && !succeeded(cardOfStep.get(s.card.after)) ? s.card.after : undefined
+          const after = s.card?.after
+          const waitsFor = after !== undefined && !unlocks(cardOfStep.get(after)) ? after : undefined
+          const previousUnknown = after !== undefined && phaseOf(cardOfStep.get(after)) === 'untracked' ? after : undefined
 
           return (
             <Box
@@ -151,6 +160,7 @@ export default function AIActionPlan({ plan, runs, busy, onExecute, t }: Shared 
                     run={runs[s.card.actionId]}
                     busy={busy}
                     waitsFor={waitsFor}
+                    previousUnknown={previousUnknown}
                     onExecute={onExecute}
                     t={t}
                   />

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { ToolScopeError } from '@/lib/tools/types'
 
-import { assertTargetGrounded, isGrounded, visibleConversationText } from './grounding'
+import { assertTargetGrounded, conversationGrounding, isGrounded, visibleConversationText } from './grounding'
 
 describe('visibleConversationText', () => {
   it('keeps the user and assistant turns only, lowercased', () => {
@@ -39,19 +39,32 @@ describe('isGrounded', () => {
 
 describe('assertTargetGrounded', () => {
   const guest = { name: 'win2025', vmid: 104 }
+  const said = (text: string) => ({ visibleText: text, userText: text })
 
   it('accepts the name or the vmid of a guest', () => {
-    expect(() => assertTargetGrounded('reboot win2025', guest)).not.toThrow()
-    expect(() => assertTargetGrounded('reboot 104', guest)).not.toThrow()
+    expect(() => assertTargetGrounded(said('reboot win2025'), guest)).not.toThrow()
+    expect(() => assertTargetGrounded(said('reboot 104'), guest)).not.toThrow()
+  })
+
+  it('takes a vmid from the user turns only', () => {
+    const g = conversationGrounding([
+      { role: 'user', content: 'how long has pve1 been up?' },
+      { role: 'assistant', content: 'pve1 has been up 104 days.' },
+      { role: 'user', content: 'reboot it' },
+    ])
+
+    expect(g.userText).not.toContain('104')
+    expect(() => assertTargetGrounded(g, guest)).toThrow(ToolScopeError)
+    expect(() => assertTargetGrounded(g, { name: 'pve1' })).not.toThrow()
   })
 
   it('refuses a target the user never named', () => {
-    expect(() => assertTargetGrounded('reboot the windows box', guest)).toThrow(ToolScopeError)
-    expect(() => assertTargetGrounded('reboot the windows box', guest)).toThrow('Name the guest or host you want me to act on.')
+    expect(() => assertTargetGrounded(said('reboot the windows box'), guest)).toThrow(ToolScopeError)
+    expect(() => assertTargetGrounded(said('reboot the windows box'), guest)).toThrow('Name the guest or host you want me to act on.')
   })
 
   it('grounds a host on its name', () => {
-    expect(() => assertTargetGrounded('drain pve1', { name: 'pve1' })).not.toThrow()
-    expect(() => assertTargetGrounded('drain pve12', { name: 'pve1' })).toThrow(ToolScopeError)
+    expect(() => assertTargetGrounded(said('drain pve1'), { name: 'pve1' })).not.toThrow()
+    expect(() => assertTargetGrounded(said('drain pve12'), { name: 'pve1' })).toThrow(ToolScopeError)
   })
 })

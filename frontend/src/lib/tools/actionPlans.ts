@@ -8,14 +8,15 @@
  * the update sequence. Only the host or cluster the finding is about must be
  * grounded in the conversation; the guests a plan names were chosen here.
  *
- * Proxmox load: no precondition read (each migration step is checked when it
- * runs); the backup jobs and the pending update list come from the caches the
- * read-only tools already fill.
+ * Proxmox load: a host_memory plan runs the full migrate preflight on at most
+ * MAX_PLAN_MIGRATION_CHECKS candidates, one after the other (at most 5
+ * protected GETs); the other plans read no precondition, and the backup jobs
+ * and the pending update list come from the caches the read-only tools fill.
  */
 
 import { randomUUID } from 'node:crypto'
 
-import { assertTargetGrounded, isGrounded, UNGROUNDED_TARGET_MESSAGE } from '@/lib/ai/actions/grounding'
+import { assertClusterGrounded, assertTargetGrounded } from '@/lib/ai/actions/grounding'
 import { preflightAction } from '@/lib/ai/actions/preflight'
 import {
   argRequiredEnum,
@@ -55,9 +56,21 @@ export const MAX_PLAN_STEPS = 10
 /** A host_memory plan moves guests until the host would be back under this RAM use. */
 export const HOST_MEMORY_TARGET_PCT = 75
 
+/**
+ * Candidates of a host_memory plan checked with Proxmox, one after the other:
+ * each is the full migrate preflight, so one protected precondition GET (plus,
+ * for a container, its config and the host's storage list, plain reads). At
+ * most 5 protected GETs per plan question, and the plan never offers a move
+ * Proxmox or the local-storage rule would refuse at click time (R10).
+ */
+export const MAX_PLAN_MIGRATION_CHECKS = 5
+
 type Step = ActionPlan['steps'][number]
 
-type Built = { title: string; steps: Step[]; summary?: string } | { nothing: string }
+type Check = ActionCard['preflight']['checks'][number]
+
+/** `notes` reach the model as checks: why a candidate was left out of the plan. */
+type Built = { title: string; steps: Step[]; summary?: string; notes?: Check[] } | { nothing: string; notes?: Check[] }
 
 const r1 = (v: number) => Math.round(v * 10) / 10
 
@@ -73,25 +86,27 @@ async function stepCard(
   return { step, card: issueCard(actions, { ...body, preflight, planId, step }) }
 }
 
-function groundedHost(args: Record<string, unknown>, ctx: ToolContext, visibleText: string): SnapshotNode {
+function groundedHost(args: Record<string, unknown>, ctx: ToolContext, actions: ActionsContext): SnapshotNode {
   const host = argString(args, 'host')
 
   if (!host) throw new ToolArgumentError('Pass host: the host the finding is about.')
 
+  assertClusterGrounded(actions, ctx, argString(args, 'cluster'))
+
   const { node } = resolveNode(ctx, host, argString(args, 'cluster'))
 
-  assertTargetGrounded(visibleText, hostTarget(node))
+  assertTargetGrounded(actions, hostTarget(node))
 
   return node
 }
 
 async function unprotectedGuests(args: Record<string, unknown>, ctx: ToolContext, actions: ActionsContext, planId: string): Promise<Built> {
   const clusterRef = argString(args, 'cluster')
+
+  assertClusterGrounded(actions, ctx, clusterRef)
+
   const scope = clusterRef ? [resolveConnection(ctx, clusterRef)] : ctx.snapshot.clusters.map(c => ({ id: c.id, name: c.name }))
 
-  if (clusterRef && !isGrounded(actions.visibleText, scope[0].name) && !isGrounded(actions.visibleText, scope[0].id)) {
-    throw new ToolScopeError(UNGROUNDED_TARGET_MESSAGE)
-  }
 
   // The add-to-job route refuses a vDC tenant: their jobs follow their pools.
   const allowed = []
@@ -133,8 +148,16 @@ async function unprotectedGuests(args: Record<string, unknown>, ctx: ToolContext
   }
 }
 
+/** Why a candidate was dropped, in two words for the summary. */
+function skipReason(text: string): string {
+  if (text.includes('local storage')) return 'local storage'
+  if (text.includes('tied to its host')) return 'host-bound resources'
+
+  return 'refused by the preflight'
+}
+
 async function hostMemory(args: Record<string, unknown>, ctx: ToolContext, actions: ActionsContext, planId: string): Promise<Built> {
-  const host = groundedHost(args, ctx, actions.visibleText)
+  const host = groundedHost(args, ctx, actions)
 
   consumeProposal(ctx)
 
@@ -147,10 +170,13 @@ async function hostMemory(args: Record<string, unknown>, ctx: ToolContext, actio
     .filter(g => g.connId === host.connId && g.node === host.name && g.status === 'running' && !g.template)
     .sort((a, b) => b.memUsedGb - a.memUsedGb)
   const steps: Step[] = []
+  const skipped: Array<{ name: string; text: string }> = []
   let used = host.memUsedGb
+  let checked = 0
 
   for (const guest of movable) {
-    if (steps.length >= MAX_PLAN_STEPS || (used / host.memTotalGb) * 100 <= HOST_MEMORY_TARGET_PCT) break
+    if (steps.length >= MAX_PLAN_STEPS || checked >= MAX_PLAN_MIGRATION_CHECKS) break
+    if ((used / host.memTotalGb) * 100 <= HOST_MEMORY_TARGET_PCT) break
 
     const best = others
       .map(n => evaluateHostFit(ctx.snapshot, guest, { ...n, memUsedGb: n.memUsedGb + (planned.get(n.name) ?? 0) }))
@@ -159,22 +185,48 @@ async function hostMemory(args: Record<string, unknown>, ctx: ToolContext, actio
 
     if (!best) continue
 
+    const body = { kind: 'migrate' as const, target: guestTarget(guest), params: { target: best.host, online: true } }
+
+    // Sequential on purpose: one protected call in flight at a time.
+    checked++
+    const preflight = await preflightAction(body, ctx)
+
+    if (!preflight.ok) {
+      skipped.push({ name: guest.name, text: preflight.checks.find(c => c.level === 'block')?.text ?? 'refused' })
+      continue
+    }
+
     planned.set(best.host, (planned.get(best.host) ?? 0) + guest.memTotalGb)
     used -= guest.memUsedGb
-    steps.push(await stepCard(actions, ctx, planId, steps.length + 1, { kind: 'migrate', target: guestTarget(guest), params: { target: best.host, online: true } }))
+
+    const step = steps.length + 1
+
+    steps.push({ step, card: issueCard(actions, { ...body, preflight, planId, step }) })
   }
 
-  if (steps.length === 0) return { nothing: `No other host of ${host.cluster} has the RAM to take a guest of ${host.name}.` }
+  const notes: Check[] = skipped.map(s => ({ level: 'warn', text: `Skipped ${s.name}: ${s.text}` }))
+  const reasons = [...new Set(skipped.map(s => skipReason(s.text)))].join(', ')
+  const skippedNote = skipped.length ? `${skipped.length} guest${skipped.length > 1 ? 's' : ''} skipped: ${reasons}` : ''
+
+  if (steps.length === 0) {
+    return {
+      nothing: skipped.length
+        ? `No guest of ${host.name} can move now (${skippedNote}).`
+        : `No other host of ${host.cluster} has the RAM to take a guest of ${host.name}.`,
+      notes,
+    }
+  }
 
   return {
     title: `Relieve the RAM of ${host.name}`,
     steps,
-    summary: `${host.name} at ${host.memPct} % RAM, about ${r1((used / host.memTotalGb) * 100)} % once the ${steps.length} moves are done`,
+    summary: `${host.name} at ${host.memPct} % RAM, about ${r1((used / host.memTotalGb) * 100)} % once the ${steps.length} moves are done${skippedNote ? `; ${skippedNote}` : ''}`,
+    notes,
   }
 }
 
 async function pendingUpdates(args: Record<string, unknown>, ctx: ToolContext, actions: ActionsContext, planId: string): Promise<Built> {
-  const host = groundedHost(args, ctx, actions.visibleText)
+  const host = groundedHost(args, ctx, actions)
 
   if (!(await hasNodePermission(PERMISSIONS.NODE_MANAGE, host.connId, host.name))) {
     throw new ToolScopeError(`You do not have the permission to put ${host.name} in or out of maintenance.`)
@@ -234,12 +286,13 @@ export const proposeRemediationPlanTool: CatalogTool = {
     const planId = randomUUID()
     const built = await BUILDERS[finding](args, ctx, actions, planId)
 
-    if ('nothing' in built) return proposalResult({ cards: [], plans: [] }, { status: 'nothing-to-do', proposed: built.nothing, checks: [] })
+    if ('nothing' in built) return proposalResult({ cards: [], plans: [] }, { status: 'nothing-to-do', proposed: built.nothing, checks: built.notes ?? [] })
 
     const plan: ActionPlan = { planId, finding, title: built.title, steps: built.steps }
-    const checks = built.steps
-      .flatMap(s => (s.card?.preflight.checks ?? []).filter(c => c.level !== 'ok').map(c => ({ level: c.level, text: `Step ${s.step}: ${c.text}` })))
-      .slice(0, MAX_PLAN_STEPS)
+    const checks = [
+      ...built.steps.flatMap(s => (s.card?.preflight.checks ?? []).filter(c => c.level !== 'ok').map(c => ({ level: c.level, text: `Step ${s.step}: ${c.text}` }))),
+      ...(built.notes ?? []),
+    ].slice(0, MAX_PLAN_STEPS)
 
     return proposalResult(
       { cards: [], plans: [plan] },

@@ -34,7 +34,7 @@ vi.mock('@/lib/rbac', () => ({
 }))
 
 import { ACTION_CARDS } from '@/lib/ai/actions/cards'
-import { visibleConversationText } from '@/lib/ai/actions/grounding'
+import { conversationGrounding } from '@/lib/ai/actions/grounding'
 import { preflightAction } from '@/lib/ai/actions/preflight'
 import { resolveActionTarget } from '@/lib/ai/actions/target'
 import { verifyCard } from '@/lib/ai/actions/token'
@@ -86,8 +86,12 @@ function snapshot(extraGuests: SnapshotGuest[] = [], nodes?: SnapshotNode[]): In
   }
 }
 
-function ctx(said: string, over: { settings?: AiActionsSettings; snap?: InventorySnapshot; toolText?: string } = {}): ToolContext {
+function ctx(
+  said: string,
+  over: { settings?: AiActionsSettings; snap?: InventorySnapshot; toolText?: string; answered?: string } = {}
+): ToolContext {
   const messages = [
+    ...(over.answered ? [{ role: 'user', content: 'how is the estate?' }, { role: 'assistant', content: over.answered }] : []),
     { role: 'user', content: said },
     // A tool result never reaches the visible text, even when it names a guest.
     ...(over.toolText ? [{ role: 'tool', content: over.toolText }] : []),
@@ -99,12 +103,18 @@ function ctx(said: string, over: { settings?: AiActionsSettings; snap?: Inventor
     locale: 'en',
     timeZone: 'UTC',
     usage: { historyLookups: 0 },
-    actions: { settings: over.settings ?? allOn(), bind, visibleText: visibleConversationText(messages) },
+    actions: { settings: over.settings ?? allOn(), bind, ...conversationGrounding(messages) },
   }
 }
 
 const shared = { allowed_nodes: ['pve2', 'pve3'], local_disks: [], local_resources: [], 'mapped-resources': [], not_allowed_nodes: {}, running: 1 }
 const lxcShared = { 'allowed-nodes': ['pve2', 'pve3'], 'not-allowed-nodes': {}, running: 1 }
+const storages = [
+  { storage: 'CephStoragePool', type: 'rbd', shared: 0, active: 1 },
+  { storage: 'LVM-Thick', type: 'lvm', shared: 0, active: 1 },
+  { storage: 'local', type: 'dir', shared: 0, active: 1 },
+]
+const localDisk = { allowed_nodes: [], local_disks: [{ drivename: 'scsi0', shared: 0, volid: 'Dir-Images:1/vm-1-disk-0.qcow2' }], local_resources: [], not_allowed_nodes: {} }
 
 const cardsOf = (value: unknown) =>
   (value as Record<symbol, { cards: ActionCard[]; plans: ActionPlan[] } | undefined>)[ACTION_CARDS] ?? { cards: [], plans: [] }
@@ -132,8 +142,10 @@ beforeEach(() => {
   h.licensed = true
   h.client.getRecommendations.mockReset().mockResolvedValue({ data: [] })
   h.pveFetch.mockReset().mockImplementation(async (_conn: unknown, path: string) => {
-    if (path.startsWith('/nodes/pve1/qemu/104/migrate')) return shared
-    if (path.startsWith('/nodes/pve1/lxc/205/migrate')) return lxcShared
+    if (/^\/nodes\/pve\d\/qemu\/\d+\/migrate/.test(path)) return shared
+    if (/^\/nodes\/pve\d\/lxc\/\d+\/migrate/.test(path)) return lxcShared
+    if (/\/lxc\/\d+\/config$/.test(path)) return { hostname: 'ct', rootfs: 'CephStoragePool:vm-205-disk-0,size=8G' }
+    if (/^\/nodes\/pve\d\/storage$/.test(path)) return storages
     if (path === '/cluster/backup') return []
     if (path.endsWith('/apt/update')) return [{ Package: 'pve-manager' }]
     throw new Error(`unexpected path ${path}`)
@@ -199,6 +211,40 @@ describe('grounding (Review Focus 1)', () => {
     const res = await propose({ action: 'maintenance', host: 'pve2', mode: 'enter' }, ctx('drain the busy host'))
 
     expect(res.refused).toBe('Name the guest or host you want me to act on.')
+  })
+
+  it('takes a vmid from what the user typed only, never from an assistant answer', async () => {
+    const snap = snapshot([guest('128', 'app-128', 'qemu', 'running', 'pve2')])
+    const answered = 'pve2 has 128 GB of RAM and has been up 104 days.'
+
+    expect((await propose({ action: 'reboot', guest: '128' }, ctx('reboot it', { snap, answered }))).refused).toBe(
+      'Name the guest or host you want me to act on.'
+    )
+    expect((await propose({ action: 'reboot', guest: '104' }, ctx('ok do it', { answered }))).refused).toBe(
+      'Name the guest or host you want me to act on.'
+    )
+    expect((await propose({ action: 'reboot', guest: '128' }, ctx('reboot 128', { snap, answered }))).card?.target.name).toBe('app-128')
+  })
+
+  it('still takes a name from an assistant answer the user read', async () => {
+    const res = await propose({ action: 'reboot', guest: 'win2025' }, ctx('reboot that one', { answered: 'win2025 uses 90 % CPU.' }))
+
+    expect(res.card?.target.name).toBe('win2025')
+  })
+
+  it('refuses a cluster argument the user did not name', async () => {
+    const refused = await propose({ action: 'start', guest: 'db-01', cluster: 'PVE-PROD' }, ctx('start db-01'))
+
+    expect(refused.error).toBe('out-of-scope')
+    expect(refused.refused).toBe('Name the cluster you want me to act on.')
+
+    const named = await propose({ action: 'start', guest: 'db-01', cluster: 'PVE-PROD' }, ctx('start db-01 on pve-prod'))
+
+    expect(named.card?.target.cluster).toBe('PVE-PROD')
+
+    const planRefused = await invokeTool(proposeRemediationPlanTool, { finding: 'pending_updates', host: 'pve2', cluster: 'PVE-PROD' }, ctx('update pve2'))
+
+    expect(planRefused).toMatchObject({ ok: false, message: 'Name the cluster you want me to act on.' })
   })
 
   it('accepts the vmid as the name', async () => {
@@ -319,6 +365,38 @@ describe('migrate', () => {
 
     expect(res.card?.preflight.ok).toBe(false)
     expect(res.card?.preflight.checks.find(c => c.level === 'block')?.text).toContain('local-lvm')
+  })
+
+  it('blocks a container whose rootfs is on a storage defined everywhere but not shared', async () => {
+    const fallback = h.pveFetch.getMockImplementation()!
+
+    h.pveFetch.mockImplementation(async (conn: unknown, path: string) =>
+      path === '/nodes/pve1/lxc/205/config' ? { rootfs: 'LVM-Thick:vm-205-disk-0,size=8G' } : fallback(conn, path)
+    )
+
+    const res = await propose({ action: 'migrate', guest: 'ct-web', target_host: 'pve3' }, ctx('move ct-web to pve3'))
+
+    expect(res.card?.preflight.ok).toBe(false)
+    expect(res.card?.preflight.checks.find(c => c.level === 'block')?.text).toContain('LVM-Thick')
+  })
+
+  it('blocks a container with a bind mount', async () => {
+    const fallback = h.pveFetch.getMockImplementation()!
+
+    h.pveFetch.mockImplementation(async (conn: unknown, path: string) =>
+      path === '/nodes/pve1/lxc/205/config' ? { rootfs: 'CephStoragePool:vm-205-disk-0', mp0: '/srv/data,mp=/data' } : fallback(conn, path)
+    )
+
+    const res = await propose({ action: 'migrate', guest: 'ct-web', target_host: 'pve3' }, ctx('move ct-web to pve3'))
+
+    expect(res.card?.preflight.checks.find(c => c.level === 'block')?.text).toContain('bind mount')
+  })
+
+  it('lets a container on Ceph RBD through', async () => {
+    const res = await propose({ action: 'migrate', guest: 'ct-web', target_host: 'pve3' }, ctx('move ct-web to pve3'))
+
+    expect(res.card?.preflight.ok).toBe(true)
+    expect(h.pveFetch.mock.calls.map(c => c[1])).toEqual(['/nodes/pve1/lxc/205/migrate', '/nodes/pve1/lxc/205/config', '/nodes/pve1/storage'])
   })
 
   it('blocks a stopped guest without calling Proxmox', async () => {
@@ -449,7 +527,7 @@ describe('propose_remediation_plan', () => {
     expect(res.refused).toBe('Name the guest or host you want me to act on.')
   })
 
-  it('relieves a host short of RAM by moving its biggest guests, without a Proxmox call', async () => {
+  it('relieves a host short of RAM by moving its biggest guests, each checked with Proxmox', async () => {
     const big = [
       guest('400', 'big-1', 'qemu', 'running', 'pve1', { memUsedGb: 12, memTotalGb: 16 }),
       guest('401', 'big-2', 'qemu', 'running', 'pve1', { memUsedGb: 10, memTotalGb: 12 }),
@@ -461,7 +539,46 @@ describe('propose_remediation_plan', () => {
     expect(steps.length).toBeGreaterThan(0)
     expect(steps[0].card).toMatchObject({ kind: 'migrate', target: { name: 'big-1', node: 'pve1' } })
     expect(steps.every(s => s.card?.params.target !== 'pve1')).toBe(true)
-    expect(h.pveFetch).not.toHaveBeenCalled()
+    expect(steps[0].card?.preflight.ok).toBe(true)
+    expect(h.pveFetch.mock.calls.filter(c => String(c[1]).endsWith('/migrate'))).toHaveLength(steps.length)
+  })
+
+  it('drops a candidate on local storage from a host_memory plan, and says so', async () => {
+    const big = [
+      guest('400', 'big-1', 'qemu', 'running', 'pve1', { memUsedGb: 12, memTotalGb: 16 }),
+      guest('401', 'big-2', 'qemu', 'running', 'pve1', { memUsedGb: 10, memTotalGb: 12 }),
+    ]
+    const fallback = h.pveFetch.getMockImplementation()!
+
+    h.pveFetch.mockImplementation(async (conn: unknown, path: string) => (path === '/nodes/pve1/qemu/400/migrate' ? localDisk : fallback(conn, path)))
+
+    const res = await plan({ finding: 'host_memory', host: 'pve1' }, ctx('pve1 is short of RAM', { snap: snapshot(big) }))
+
+    expect(res.plan!.steps.map(s => s.card?.target.name)).toEqual(['big-2'])
+    expect(res.value?.proposed).toContain('1 guest skipped: local storage')
+    expect(res.value?.checks).toContainEqual(expect.objectContaining({ level: 'warn', text: expect.stringContaining('Skipped big-1') }))
+  })
+
+  it('checks at most 5 candidates of a host_memory plan with Proxmox, one at a time', async () => {
+    const eight = Array.from({ length: 8 }, (_, i) => guest(String(500 + i), `local-${i}`, 'qemu', 'running', 'pve1', { memUsedGb: 3, memTotalGb: 4 }))
+    let inFlight = 0
+    let maxInFlight = 0
+
+    h.pveFetch.mockImplementation(async () => {
+      inFlight++
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      await new Promise(resolve => setTimeout(resolve, 1))
+      inFlight--
+
+      return localDisk
+    })
+
+    const res = await plan({ finding: 'host_memory', host: 'pve1' }, ctx('pve1 is short of RAM', { snap: snapshot(eight) }))
+
+    expect(h.pveFetch).toHaveBeenCalledTimes(5)
+    expect(maxInFlight).toBe(1)
+    expect(res.value?.status).toBe('nothing-to-do')
+    expect(res.value?.proposed).toContain('5 guests skipped: local storage')
   })
 
   it('counts as one proposal', async () => {

@@ -52,11 +52,12 @@ export type ToolContext = {
   usage?: { historyLookups: number; cveScans?: number; proposals?: number }
   /**
    * Set only when the assistant may propose actions (roadmap#188): what is
-   * enabled, who the signed cards are issued to, and the conversation text the
-   * user saw, which is all a proposal target may be grounded on. Without it
-   * the proposal tools refuse.
+   * enabled, who the signed cards are issued to, and the conversation text a
+   * proposal target may be grounded on (`conversationGrounding` in
+   * `@/lib/ai/actions/grounding`): user and assistant turns for a name, user
+   * turns only for a vmid. Without it the proposal tools refuse.
    */
-  actions?: { settings: AiActionsSettings; bind: ActionBinding; visibleText: string }
+  actions?: { settings: AiActionsSettings; bind: ActionBinding; visibleText: string; userText: string }
 }
 
 export type CatalogTool = {

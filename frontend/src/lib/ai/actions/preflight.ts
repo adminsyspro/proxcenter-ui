@@ -9,14 +9,17 @@
  * failed check is a `block`, since an action we could not check is not run.
  *
  * Proxmox load: only `migrate` reads Proxmox here, one precondition GET (a
- * protected call), and not at all inside a plan. Everything else reads the
- * snapshot, the minute-cached backup jobs or the orchestrator.
+ * protected call), plus for a container its config and the host's storage
+ * list (plain reads), all one after the other; nothing with `inPlan`.
+ * Everything else reads the snapshot, the minute-cached backup jobs or the
+ * orchestrator.
  */
 
 import { planAddGuestToJob, type AddGuestRefusal } from '@/lib/backups/coverage'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { pveFetch } from '@/lib/proxmox/client'
+import { isSharedStorage } from '@/lib/proxmox/storage'
 import { PERMISSIONS } from '@/lib/rbac'
 import { drsMoveVisible } from '@/lib/tools/automation'
 import { loadBackupJobs } from '@/lib/tools/backups'
@@ -136,10 +139,10 @@ function refusalReason(entry: unknown): string {
 
 async function checkPrecondition(guest: SnapshotGuest, dest: string, ctx: ToolContext, checks: Check[]) {
   let pre: Record<string, any>
+  let conn: Awaited<ReturnType<typeof getConnectionById>>
 
   try {
-    const conn = await getConnectionById(guest.connId, ctx.tenantId)
-
+    conn = await getConnectionById(guest.connId, ctx.tenantId)
     pre = (await pveFetch<Record<string, any>>(conn, `/nodes/${encodeURIComponent(guest.node)}/${guest.kind}/${encodeURIComponent(guest.vmid)}/migrate`)) ?? {}
   } catch (e: any) {
     checks.push(block(`Proxmox could not confirm the move is possible: ${String(e?.message || e).slice(0, 160)}`))
@@ -167,7 +170,60 @@ async function checkPrecondition(guest: SnapshotGuest, dest: string, ctx: ToolCo
     checks.push(block(`Proxmox does not allow ${dest} as a target: ${refusalReason(refused?.[dest])}.`))
   }
 
+  // The container precondition says nothing of local volumes: PVE builds its
+  // allowed list from storage NAMES, so a rootfs on an LVM defined on every
+  // node but not shared passes it (lab, CT 7001 on LVM-Thick).
+  if (guest.kind === 'lxc' && !blocked(checks)) await checkContainerVolumes(guest, conn, checks)
+
   if (!blocked(checks)) checks.push(ok('Proxmox allows the move: no local disk, no host-bound resource.'))
+}
+
+/** Volume keys of a container config: the root disk, mount points and detached volumes. */
+const LXC_VOLUME_KEY = /^(rootfs|mp\d+|unused\d+)$/
+
+/**
+ * Blocks a container with a volume on a storage that is not shared, or with a
+ * bind mount (a host path, no `storage:` prefix). Two plain reads, one after
+ * the other, neither of them a protected call: the container config and the
+ * host's storage list, judged with `isSharedStorage` like the local-vms route.
+ */
+async function checkContainerVolumes(guest: SnapshotGuest, conn: Awaited<ReturnType<typeof getConnectionById>>, checks: Check[]) {
+  const base = `/nodes/${encodeURIComponent(guest.node)}`
+  let config: Record<string, unknown>
+  let storages: any[]
+
+  try {
+    config = (await pveFetch<Record<string, unknown>>(conn, `${base}/lxc/${encodeURIComponent(guest.vmid)}/config`)) ?? {}
+    storages = (await pveFetch<any[]>(conn, `${base}/storage`)) ?? []
+  } catch (e: any) {
+    checks.push(block(`Could not read the volumes of ${guest.name}: ${String(e?.message || e).slice(0, 160)}`))
+
+    return
+  }
+
+  const byName = new Map((Array.isArray(storages) ? storages : []).map(s => [String(s?.storage), s]))
+  const local: string[] = []
+
+  for (const [key, value] of Object.entries(config)) {
+    if (!LXC_VOLUME_KEY.test(key) || typeof value !== 'string') continue
+
+    const volume = value.split(',')[0].trim().replace(/^volume=/, '')
+
+    if (volume.startsWith('/')) {
+      local.push(`${key} bind mount ${volume}`)
+      continue
+    }
+
+    const storage = volume.split(':')[0]
+    const def = byName.get(storage)
+
+    // A storage the host does not list is not known to be shared: fail closed.
+    if (!def || !isSharedStorage(def)) local.push(`${key} on ${storage}`)
+  }
+
+  if (local.length) {
+    checks.push(block(`${guest.name} has volumes on local storage (${local.slice(0, 4).join(', ')}): the assistant only moves guests on shared storage.`))
+  }
 }
 
 async function checkMigrate(input: PreflightInput, ctx: ToolContext, checks: Check[], opts: PreflightOptions) {

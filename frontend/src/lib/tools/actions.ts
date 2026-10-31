@@ -9,7 +9,7 @@
  * them through `actionToolsFor`, after the licence check.
  */
 
-import { assertTargetGrounded, isGrounded } from '@/lib/ai/actions/grounding'
+import { assertClusterGrounded, assertTargetGrounded, isGrounded } from '@/lib/ai/actions/grounding'
 import { DRS_AWAITING, preflightAction, SNAPSHOT_NAME_RE } from '@/lib/ai/actions/preflight'
 import {
   argRequiredEnum,
@@ -172,13 +172,14 @@ export const proposeActionTool: CatalogTool = {
     const kind = argRequiredEnum(args, 'action', enabledKinds(actions.settings))
 
     assertProposalBudget(ctx)
+    assertClusterGrounded(actions, ctx, argString(args, 'cluster'))
 
     const rec = kind === 'drs_apply' ? await findRecommendation(args, ctx) : null
     const target = rec
       ? resolveActionTarget({ kind, guest: String(rec.vmid), connId: rec.connection_id }, ctx)
       : resolveActionTarget({ kind, guest: argString(args, 'guest'), host: argString(args, 'host'), cluster: argString(args, 'cluster') }, ctx)
 
-    assertTargetGrounded(actions.visibleText, target)
+    assertTargetGrounded(actions, target)
     consumeProposal(ctx)
 
     let params: Params = {}

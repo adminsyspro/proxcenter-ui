@@ -6080,6 +6080,7 @@
     "refresh": "Actualizar",
     "evolutionProjections": "Evolución y proyecciones",
     "historyWindow": "Historial usado para la proyección",
+    "historyAvailable": "Solo hay {days} días de historial, las ventanas más largas mostrarían el mismo gráfico",
     "filterAll": "Todos",
     "before": "antes",
     "aiIntelligence": "Inteligencia AI",

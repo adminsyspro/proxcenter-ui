@@ -48,7 +48,7 @@ export default function ResourcesPage() {
 
   // Data hook
   const {
-    loading, error, kpis, trends, trendsPeriod,
+    loading, error, kpis, trends, trendsPeriod, historyAvailableDays,
     topCpuVms, topRamVms, green, greenConfigured, overprovisioning,
     networkMetrics, connections,
     aiAnalysis, loadData, runAiAnalysis, setAiAnalysis,
@@ -120,7 +120,7 @@ export default function ResourcesPage() {
 
         <Grid container spacing={3}>
           <Grid size={{ xs: 12, lg: 8 }}>
-            <ProjectionChart data={projectedTrends} loading={loading} period={trendsPeriod} windowDays={historyDays} onWindowDaysChange={setHistoryDays} />
+            <ProjectionChart data={projectedTrends} loading={loading} period={trendsPeriod} windowDays={historyDays} availableDays={historyAvailableDays} onWindowDaysChange={setHistoryDays} />
           </Grid>
           <Grid size={{ xs: 12, lg: 4 }}>
             <PredictiveAlertsCard alerts={alerts} loading={loading} />

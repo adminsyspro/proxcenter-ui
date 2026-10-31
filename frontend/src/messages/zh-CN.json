@@ -6080,6 +6080,7 @@
     "refresh": "刷新",
     "evolutionProjections": "趋势与预测",
     "historyWindow": "用于预测的历史时段",
+    "historyAvailable": "仅有 {days} 天的历史数据，更长的时段会显示相同的图表",
     "filterAll": "全部",
     "before": "之前",
     "aiIntelligence": "AI 智能",

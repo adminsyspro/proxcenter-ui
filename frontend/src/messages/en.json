@@ -6080,6 +6080,7 @@
     "refresh": "Refresh",
     "evolutionProjections": "Evolution & Projections",
     "historyWindow": "History used for the forecast",
+    "historyAvailable": "Only {days} days of history available, the longer windows would show the same chart",
     "filterAll": "All",
     "before": "before",
     "aiIntelligence": "AI Intelligence",

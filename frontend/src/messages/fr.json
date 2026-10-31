@@ -6080,6 +6080,7 @@
     "refresh": "Actualiser",
     "evolutionProjections": "Évolution & Projections",
     "historyWindow": "Historique utilisé pour la projection",
+    "historyAvailable": "Seulement {days} jours d’historique disponibles, les fenêtres plus longues afficheraient le même graphique",
     "filterAll": "Tout",
     "before": "avant",
     "aiIntelligence": "Intelligence IA",

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { DEFAULT_HISTORY_WINDOW_DAYS, HISTORY_WINDOW_DAYS, isHistoryWindowDays, sliceTrendsToWindow } from './historyWindow'
+import { DEFAULT_HISTORY_WINDOW_DAYS, HISTORY_WINDOW_DAYS, effectiveWindow, isHistoryWindowDays, isWindowUseful, sliceTrendsToWindow } from './historyWindow'
 import { FORECAST_HORIZON_DAYS, findThresholdDayLinear } from './linearRegression'
 import type { ResourceTrend } from '../types'
 
@@ -50,6 +50,26 @@ describe('history window values', () => {
     expect(isHistoryWindowDays(30)).toBe(false)
     expect(isHistoryWindowDays('365')).toBe(false)
     expect(isHistoryWindowDays(Number.NaN)).toBe(false)
+  })
+})
+
+describe('windows the history can fill', () => {
+  const useful = (available: number) => HISTORY_WINDOW_DAYS.filter(d => isWindowUseful(d, available))
+
+  it('offers only the shortest window that already holds a short history', () => {
+    expect(useful(59)).toEqual([90])
+    expect(useful(90)).toEqual([90])
+    expect(useful(91)).toEqual([90, 180])
+    expect(useful(200)).toEqual([90, 180, 365])
+    expect(useful(366)).toEqual([90, 180, 365])
+  })
+
+  it('falls back to the widest useful window without forgetting the choice', () => {
+    expect(effectiveWindow(365, 59)).toBe(90)
+    expect(effectiveWindow(180, 120)).toBe(180)
+    expect(effectiveWindow(365, 120)).toBe(180)
+    expect(effectiveWindow(365, 300)).toBe(365)
+    expect(effectiveWindow(90, 300)).toBe(90)
   })
 })
 

@@ -56,6 +56,7 @@ describe('useResourceData', () => {
     expect(byDefault.trendsPeriod).toEqual({ start: '2026-05-05', end: '2026-10-31', daysCount: 180 })
     expect(year.trends).toHaveLength(365)
     expect(year.trends[364].t).toBe('d365')
+    expect(year.historyAvailableDays).toBe(366)
     expect(new Set(swrMock.mock.calls.map(c => c[0]))).toEqual(new Set(['/api/v1/resources/overview#fr']))
   })
 })

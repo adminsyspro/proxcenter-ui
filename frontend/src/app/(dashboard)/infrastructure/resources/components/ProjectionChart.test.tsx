@@ -41,4 +41,17 @@ describe('ProjectionChart history window', () => {
     expect(screen.queryByRole('button', { name: /^365/ })).toBeNull()
     expect(screen.getByRole('button', { name: 'CPU' })).toBeInTheDocument()
   })
+
+  it('greys out the windows a short history cannot fill and says why', () => {
+    const onChange = vi.fn()
+    const period = { start: '2026-09-02', end: '2026-10-31', daysCount: 59 }
+
+    renderWithProviders(<ProjectionChart data={data} period={period} windowDays={365} availableDays={59} onWindowDaysChange={onChange} />)
+
+    expect(screen.getByRole('button', { name: /^90/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /^180/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^365/ })).toBeDisabled()
+    expect(screen.getByRole('group', { name: 'History used for the forecast' }).getAttribute('title')).toMatch(/^Only 59 days of history available/)
+    expect(screen.getByText(/, 59d\)$/)).toBeInTheDocument()
+  })
 })

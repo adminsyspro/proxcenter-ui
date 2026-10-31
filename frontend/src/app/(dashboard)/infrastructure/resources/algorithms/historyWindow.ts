@@ -12,6 +12,21 @@ export function isHistoryWindowDays(value: unknown): value is HistoryWindowDays 
   return HISTORY_WINDOW_DAYS.includes(value as HistoryWindowDays)
 }
 
+// A window is worth offering only if it shows something a shorter one does not:
+// with 59 days of history, 90 days already holds all of it, so 180 and 365 would
+// redraw the very same chart.
+export function isWindowUseful(days: HistoryWindowDays, availableDays: number): boolean {
+  return !HISTORY_WINDOW_DAYS.some(shorter => shorter < days && shorter >= availableDays)
+}
+
+// The window actually in effect: the stored choice, or the widest useful one when
+// the history is too short for it (same data, so the stored choice is kept).
+export function effectiveWindow(chosen: HistoryWindowDays, availableDays: number): HistoryWindowDays {
+  if (isWindowUseful(chosen, availableDays)) return chosen
+
+  return HISTORY_WINDOW_DAYS.filter(days => isWindowUseful(days, availableDays)).at(-1) ?? DEFAULT_HISTORY_WINDOW_DAYS
+}
+
 function shiftIsoDay(isoDay: string, days: number): string {
   const date = new Date(`${isoDay}T00:00:00Z`)
 

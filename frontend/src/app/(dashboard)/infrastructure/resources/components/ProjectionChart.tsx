@@ -21,14 +21,16 @@ import ChartContainer from '@/components/ChartContainer'
 import { getDateLocale } from '@/lib/i18n/date'
 import type { ResourceTrend } from '../types'
 import { COLORS } from '../constants'
-import { HISTORY_WINDOW_DAYS, isHistoryWindowDays, type HistoryWindowDays } from '../algorithms/historyWindow'
+import { HISTORY_WINDOW_DAYS, effectiveWindow, isHistoryWindowDays, isWindowUseful, type HistoryWindowDays } from '../algorithms/historyWindow'
 import { InsightsIcon } from './icons'
 
-export default function ProjectionChart({ data, loading, period, windowDays, onWindowDaysChange }: {
+export default function ProjectionChart({ data, loading, period, windowDays, availableDays, onWindowDaysChange }: {
   data: ResourceTrend[]
   loading?: boolean
   period?: { start: string | null; end: string | null; daysCount: number } | null
   windowDays?: HistoryWindowDays
+  // Days of history the overview returned, before the window is applied
+  availableDays?: number
   onWindowDaysChange?: (days: HistoryWindowDays) => void
 }) {
   const theme = useTheme()
@@ -48,6 +50,8 @@ export default function ProjectionChart({ data, loading, period, windowDays, onW
   }
 
   const historicalCount = Math.max(0, data.length - 30)
+  const historyDays = availableDays ?? Number.POSITIVE_INFINITY
+  const shortHistory = HISTORY_WINDOW_DAYS.some(days => !isWindowUseful(days, historyDays))
 
   const formatPeriod = () => {
     if (!period || !period.start || !period.end) return ''
@@ -67,7 +71,7 @@ export default function ProjectionChart({ data, loading, period, windowDays, onW
               {t('resources.evolutionProjections')}
               {period && period.start && (
                 <Typography component="span" variant="body2" sx={{ ml: 1, color: 'text.secondary', fontWeight: 400 }}>
-                  ({formatPeriod()})
+                  ({formatPeriod()}, {period.daysCount}{t('resources.daysUnit')})
                 </Typography>
               )}
             </Typography>
@@ -75,15 +79,15 @@ export default function ProjectionChart({ data, loading, period, windowDays, onW
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap justifyContent="flex-end">
           {windowDays !== undefined && onWindowDaysChange && (
             <ToggleButtonGroup
-              value={windowDays}
+              value={effectiveWindow(windowDays, historyDays)}
               exclusive
               onChange={(_, v) => { if (isHistoryWindowDays(v)) onWindowDaysChange(v) }}
               size="small"
               aria-label={t('resources.historyWindow')}
-              title={t('resources.historyWindow')}
+              title={shortHistory ? t('resources.historyAvailable', { days: availableDays ?? 0 }) : t('resources.historyWindow')}
             >
               {HISTORY_WINDOW_DAYS.map(days => (
-                <ToggleButton key={days} value={days} sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>{`${days}${t('resources.daysUnit')}`}</ToggleButton>
+                <ToggleButton key={days} value={days} disabled={!isWindowUseful(days, historyDays)} sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>{`${days}${t('resources.daysUnit')}`}</ToggleButton>
               ))}
             </ToggleButtonGroup>
           )}

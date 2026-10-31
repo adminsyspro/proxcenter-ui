@@ -6080,6 +6080,7 @@
     "refresh": "새로 고침",
     "evolutionProjections": "추이 및 예측",
     "historyWindow": "예측에 사용할 기록 기간",
+    "historyAvailable": "사용 가능한 기록이 {days}일뿐이라 더 긴 기간도 같은 차트를 보여줍니다",
     "filterAll": "전체",
     "before": "이전",
     "aiIntelligence": "AI 인텔리전스",

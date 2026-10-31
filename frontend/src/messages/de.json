@@ -6061,6 +6061,7 @@
     "refresh": "Aktualisieren",
     "evolutionProjections": "Entwicklung & Prognosen",
     "historyWindow": "Für die Prognose genutzter Verlauf",
+    "historyAvailable": "Nur {days} Tage Verlauf verfügbar, längere Zeiträume würden dasselbe Diagramm zeigen",
     "filterAll": "Alle",
     "before": "vorher",
     "aiIntelligence": "KI-Intelligenz",

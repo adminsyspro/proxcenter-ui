@@ -34,6 +34,7 @@ export function useResourceData(connectionId?: string, historyDays: number = DEF
 
   // Derive state from SWR data
   const kpis: KpiData | null = json?.data?.kpis ?? null
+  const historyAvailableDays: number = json?.data?.trends?.length ?? 0
   const { trends, period: trendsPeriod } = useMemo(
     () => sliceTrendsToWindow(json?.data?.trends ?? [], json?.data?.trendsPeriod ?? null, historyDays),
     [json, historyDays],
@@ -96,6 +97,7 @@ export function useResourceData(connectionId?: string, historyDays: number = DEF
     kpis,
     trends,
     trendsPeriod,
+    historyAvailableDays,
     topCpuVms,
     topRamVms,
     green,

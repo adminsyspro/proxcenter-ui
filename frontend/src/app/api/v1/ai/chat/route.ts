@@ -7,11 +7,12 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getRequestLocale, languageInstruction, normalizeLocale, normalizeTimeZone } from '@/lib/ai/locale'
 import { validateAIUrl } from '@/lib/ai/url-guard'
-import { ollamaOptions, ollamaThread } from '@/lib/ai/ollama'
+import { ollamaCanThink, ollamaOptions, ollamaThread } from '@/lib/ai/ollama'
 import { DEFAULT_OLLAMA_MODEL } from '@/lib/ai/qualifiedModels'
 import { collectActionCards } from '@/lib/ai/actions/cards'
 import { resolveAssistantTools } from '@/lib/ai/actions/resolve'
 import { collectCharts } from '@/lib/ai/charts'
+import { collectTargetChoices, consultedOk } from '@/lib/ai/choices'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
 import { buildToolContext } from '@/lib/tools/catalog'
 import { toolsForProvider, type AiProvider } from '@/lib/ai/tools/adapters'
@@ -127,7 +128,9 @@ export async function POST(request: Request) {
       model = settings.ollamaModel
       initialMessages = ollamaThread(systemPrompt, messages, languageInstruction(uiLocale))
 
-      send = async (msgs, mode) => {
+      send = async (msgs, mode, opts) => {
+        // The replay of an empty turn runs without thinking (see `ollamaCanThink`).
+        const noThink = opts?.retryEmpty === true && await ollamaCanThink(ollamaBase, settings.ollamaModel)
         const response = await fetch(`${ollamaBase}/api/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -136,6 +139,7 @@ export async function POST(request: Request) {
             messages: msgs,
             stream: false,
             ...toolFields(mode),
+            ...(noThink ? { think: false } : {}),
             options: ollamaOptions(),
           })
         })
@@ -229,6 +233,7 @@ export async function POST(request: Request) {
     })
 
     const actionCards = collectActionCards(outcome.trace)
+    const choices = collectTargetChoices(outcome.trace)
 
     return NextResponse.json({
       response: outcome.text,
@@ -238,7 +243,7 @@ export async function POST(request: Request) {
       // operator can tell a tool failure from a model that stayed vague.
       toolCalls: outcome.trace.map(t => ({
         name: t.name,
-        ok: t.ok,
+        ok: consultedOk(t),
         error: t.error,
         durationMs: t.durationMs,
         truncated: t.truncated,
@@ -247,6 +252,8 @@ export async function POST(request: Request) {
       charts: collectCharts(outcome.trace),
       // Signed cards the user approves in the widget; present only when the assistant proposed some.
       ...(actionCards.cards.length || actionCards.plans.length ? { actions: actionCards } : {}),
+      // Targets an ambiguous reference matched, computed by the resolvers: the user clicks one.
+      ...(choices.length ? { choices } : {}),
       toolsDisabled: outcome.toolsDisabled,
       budgetExhausted: outcome.budgetExhausted,
     })

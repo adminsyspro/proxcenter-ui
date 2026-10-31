@@ -22,6 +22,17 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 
+const AMBIGUOUS = vi.hoisted(() => [
+  { kind: 'guest' as const, guestKind: 'qemu' as const, label: 'w22-i1000 · #111 · pve3 · PVE-PROD', reply: 'w22-i1000 (vmid 111, pve3, PVE-PROD)' },
+  { kind: 'guest' as const, guestKind: 'qemu' as const, label: 'w22-i1000 · #115 · pve1 · PVE-PROD', reply: 'w22-i1000 (vmid 115, pve1, PVE-PROD)' },
+])
+
+const refuseAmbiguous = async () => {
+  const { AmbiguousTargetError } = await import('@/lib/tools/types')
+
+  throw new AmbiguousTargetError('Several guests are named "w22-i1000".', AMBIGUOUS)
+}
+
 // An admin principal: `collectInventorySnapshot` then skips the per-guest RBAC filter,
 // which is what the dedicated RBAC tests cover, not this file.
 const licence = vi.hoisted(() => ({ ai: true, actions: true }))
@@ -574,6 +585,30 @@ describe('POST /api/v1/ai/chat, approved actions (roadmap#188)', () => {
     expect(actions.visibleText).not.toContain('prod')
     expect(actions.userText).not.toContain('pve1')
     expect(actions.userText).not.toContain('prod')
+  })
+
+  it('returns the choices of an ambiguous target in a choices field, and points at them on an empty turn', async () => {
+    proposeExecute.mockImplementationOnce(refuseAmbiguous)
+    // Two empty turns: the replay asks Ollama whether the model thinks first.
+    const turns = [ollamaToolCall('propose_action', {}), ollamaReply(''), ollamaReply('')]
+
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).endsWith('/api/show') ? new Response(JSON.stringify({ capabilities: [] })) : turns.shift() ?? ollamaReply('unexpected'))
+
+    const body = await readJson<any>(await ask({ conversationId: 'conv-1', locale: 'fr', messages: [{ role: 'user', content: 'Snapshot w22-i1000' }] }))
+
+    expect(body.choices).toEqual(AMBIGUOUS)
+    expect(body.response).toBe('Plusieurs cibles correspondent : choisis celle que tu veux.')
+    expect('actions' in body).toBe(false)
+    expect(JSON.stringify(JSON.parse(fetchMock.mock.calls[1][1].body as string).messages)).not.toContain('vmid 111')
+  })
+
+  it('returns no choices field when no target was ambiguous', async () => {
+    fetchMock
+      .mockResolvedValueOnce(ollamaToolCall('propose_action', {}))
+      .mockResolvedValueOnce(ollamaReply('proposed'))
+
+    expect('choices' in (await readJson<any>(await ask({ conversationId: 'conv-1' })))).toBe(false)
   })
 
   describe.each([

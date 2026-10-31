@@ -157,7 +157,18 @@ export type RenderPromptOptions = {
   actionsEnabled?: boolean
 }
 
-const withoutReadOnlyClaim = (text: string) => text.replace('read-only tools', 'tools').replace('outils en lecture seule', 'outils')
+// With actions on, the tools intro drops its read-only claim and stops calling
+// the inventory "the snapshot": next to an action that takes snapshots,
+// qwen3.5:9b read "take a snapshot of w22-i1000" as "show its details" and
+// answered with the hardware sheet (recette #188).
+const withoutReadOnlyClaim = (text: string) =>
+  text
+    .replace('read-only tools', 'tools')
+    .replace('outils en lecture seule', 'outils')
+    .replace('the snapshot below', 'the inventory below')
+    .replace('already in the snapshot', 'already in the inventory')
+    .replace("de l'instantané ci-dessous", "de l'inventaire ci-dessous")
+    .replace("dans l'instantané", "dans l'inventaire")
 
 const terseHostLine = (n: InventorySnapshot['nodes'][number]) => `- ${n.name}: ${n.status} | CPU: ${n.cpuPct}% | RAM: ${n.memPct}%`
 

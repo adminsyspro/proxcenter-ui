@@ -7,7 +7,7 @@
  * only decides how to hand the outcome back to its caller.
  */
 
-import { ToolArgumentError, ToolScopeError, type CatalogTool, type ToolContext } from '@/lib/tools/types'
+import { AmbiguousTargetError, ToolArgumentError, ToolScopeError, type CatalogTool, type TargetChoice, type ToolContext } from '@/lib/tools/types'
 
 export type ToolOutcome =
   | { ok: true; value: unknown }
@@ -16,6 +16,8 @@ export type ToolOutcome =
       /** `out-of-scope` and `bad-argument` are answers the caller can act on; `failed` is not. */
       error: 'out-of-scope' | 'bad-argument' | 'failed'
       message: string
+      /** The targets an ambiguous reference matched (`AmbiguousTargetError`), for the user to pick from. */
+      choices?: TargetChoice[]
     }
 
 /**
@@ -58,7 +60,9 @@ export async function invokeTool(
     // tool cannot take, and must be told so in words it can act on. Anything
     // else is a real failure and stays generic.
     if (e instanceof ToolScopeError) {
-      return { ok: false, error: 'out-of-scope', message: String(e.message || 'Out of scope.') }
+      const choices = e instanceof AmbiguousTargetError && e.choices.length ? { choices: e.choices } : {}
+
+      return { ok: false, error: 'out-of-scope', message: String(e.message || 'Out of scope.'), ...choices }
     }
 
     if (e instanceof ToolArgumentError) {

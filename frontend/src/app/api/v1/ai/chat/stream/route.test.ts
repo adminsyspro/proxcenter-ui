@@ -12,10 +12,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute } from '@/__tests__/setup/route-test'
-import { OLLAMA_NUM_CTX } from '@/lib/ai/ollama'
+import { clearOllamaThinkingCache, OLLAMA_NUM_CTX } from '@/lib/ai/ollama'
 import { createFrameDecoder, FRAME_MARK, type StreamFrame } from '@/lib/ai/streamFrames'
+import { CLOSING_NUDGE } from '@/lib/ai/tools/loop'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
+
+const AMBIGUOUS = vi.hoisted(() => [
+  { kind: 'guest' as const, guestKind: 'qemu' as const, label: 'w22-i1000 · #111 · pve3 · PVE-PROD', reply: 'w22-i1000 (vmid 111, pve3, PVE-PROD)' },
+  { kind: 'guest' as const, guestKind: 'qemu' as const, label: 'w22-i1000 · #115 · pve1 · PVE-PROD', reply: 'w22-i1000 (vmid 115, pve1, PVE-PROD)' },
+])
+
+const refuseAmbiguous = async () => {
+  const { AmbiguousTargetError } = await import('@/lib/tools/types')
+
+  throw new AmbiguousTargetError('Several guests are named "w22-i1000".', AMBIGUOUS)
+}
 
 const licence = vi.hoisted(() => ({ ai: true, actions: true }))
 
@@ -526,6 +538,29 @@ describe('POST /api/v1/ai/chat/stream', () => {
       expect(text).toContain('I could not conclude')
     })
 
+    it('asks a closing turn that still calls a tool once to answer from what it holds', async () => {
+      // qwen3.5:9b, out of rounds with 17 simulations in hand, asked for an 18th.
+      let closing = 0
+
+      fetchMock.mockImplementation(async (_url: string, init: any) => {
+        const body = JSON.parse(init.body as string)
+
+        if (body.tools) return ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' })
+
+        return ++closing === 1
+          ? ollamaStream(['{"name": "rank_guest_hardware", "parameters": {"metric": "memory"}}'])
+          : ollamaStream(['db-01 has the most vCPU.'])
+      })
+
+      const { text } = await decodeBody(await ask())
+      const lastBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)
+
+      expect(text).toBe('db-01 has the most vCPU.')
+      expect(lastBody.tools).toBeUndefined()
+      expect(lastBody.messages.at(-1)).toEqual({ role: 'user', content: CLOSING_NUDGE })
+      expect(closing).toBe(2)
+    })
+
     it('emits no frame at all on a plain answer, so the stream stays as it was', async () => {
       fetchMock.mockResolvedValueOnce(ollamaStream(['pve', '1 is busiest']))
 
@@ -543,30 +578,57 @@ describe('POST /api/v1/ai/chat/stream', () => {
         return new Response(`${JSON.stringify({ message: { content: '', thinking: 'The biggest is pbs-s3manu.' } })}\n`, { status: 200 })
       }
 
-      it('is replayed once, and the second answer is the one streamed', async () => {
-        fetchMock
-          .mockResolvedValueOnce(thinkingOnly())
-          .mockResolvedValueOnce(ollamaStream(['pbs-s3manu is the biggest storage.']))
+      // `/api/show` answers the capability probe; every other call is a chat turn.
+      function serve(capabilities: string[], turns: Response[]) {
+        fetchMock.mockImplementation(async (url: string) => {
+          if (String(url).endsWith('/api/show')) {
+            return new Response(JSON.stringify({ capabilities }), { status: 200 })
+          }
+
+          return turns.shift() ?? ollamaStream(['unexpected extra turn'])
+        })
+      }
+
+      const chatBodies = () =>
+        fetchMock.mock.calls
+          .filter(([url]) => String(url).endsWith('/api/chat'))
+          .map(([, init]) => JSON.parse(init.body as string))
+
+      beforeEach(() => clearOllamaThinkingCache())
+
+      it('is replayed once without thinking, and the second answer is the one streamed', async () => {
+        serve(['completion', 'tools', 'thinking'], [thinkingOnly(), ollamaStream(['pbs-s3manu is the biggest storage.'])])
 
         const res = await ask()
 
         expect(await res.text()).toBe('pbs-s3manu is the biggest storage.')
-        expect(fetchMock).toHaveBeenCalledTimes(2)
 
-        const [first, second] = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body as string))
+        const [first, second] = chatBodies()
 
+        expect(chatBodies()).toHaveLength(2)
         expect(second.messages).toEqual(first.messages)
         // Still the tool-bearing round, not the closing one.
         expect(second.tools).toBeDefined()
+        // Measured on qwen3.5:9b: the replay only lands in `content` with thinking off.
+        expect(first.think).toBeUndefined()
+        expect(second.think).toBe(false)
+      })
+
+      it('keeps the replay as is for a model without a thinking channel', async () => {
+        serve(['completion', 'tools'], [thinkingOnly(), ollamaStream(['ok'])])
+
+        await (await ask()).text()
+
+        expect(chatBodies().map(b => b.think)).toEqual([undefined, undefined])
       })
 
       it('says so rather than leave the bubble blank when the replay is empty too', async () => {
-        fetchMock.mockResolvedValueOnce(thinkingOnly()).mockResolvedValueOnce(thinkingOnly())
+        serve(['completion', 'tools', 'thinking'], [thinkingOnly(), thinkingOnly()])
 
         const res = await ask()
 
         expect(await res.text()).toBe('The model returned no answer. Ask the question again.')
-        expect(fetchMock).toHaveBeenCalledTimes(2)
+        expect(chatBodies()).toHaveLength(2)
       })
     })
 
@@ -741,6 +803,33 @@ describe('POST /api/v1/ai/chat/stream, approved actions (roadmap#188)', () => {
 
     expect(text).toBe('I proposed the action below. Check it, then approve it on the card.')
     expect(frames.map(f => f.type)).toEqual(['tool', 'trace', 'actions'])
+  })
+
+  it('sends the choices of an ambiguous target in a choices frame, never to the model, and points at them on an empty turn', async () => {
+    proposeExecute.mockImplementationOnce(refuseAmbiguous)
+    fetchMock
+      .mockResolvedValueOnce(ollamaStreamToolCall('propose_action', {}))
+      .mockResolvedValueOnce(emptyTurn())
+      .mockResolvedValueOnce(emptyTurn())
+
+    const { text, frames } = await decodeBody(await ask({ conversationId: 'conv-1' }))
+
+    expect(text).toBe('Several targets match: pick the one you want.')
+    expect(frames.map(f => f.type)).toEqual(['tool', 'trace', 'choices'])
+    expect(frames.at(-1)).toEqual({ type: 'choices', choices: AMBIGUOUS })
+    expect(JSON.stringify(JSON.parse(fetchMock.mock.calls[1][1].body as string).messages)).not.toContain('vmid 111')
+  })
+
+  it('keeps the model text above the choices when it wrote one', async () => {
+    proposeExecute.mockImplementationOnce(refuseAmbiguous)
+    fetchMock
+      .mockResolvedValueOnce(ollamaStreamToolCall('propose_action', {}))
+      .mockResolvedValueOnce(ollamaStream(['Two VMs are named w22-i1000.']))
+
+    const { text, frames } = await decodeBody(await ask({ conversationId: 'conv-1' }))
+
+    expect(text).toBe('Two VMs are named w22-i1000.')
+    expect(frames.map(f => f.type)).toEqual(['tool', 'trace', 'choices'])
   })
 
   it('sends the cards in an actions frame after the charts, never to the model', async () => {

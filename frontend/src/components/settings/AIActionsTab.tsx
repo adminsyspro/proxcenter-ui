@@ -25,6 +25,7 @@ import {
 import NumericTextField from '@/components/ui/NumericTextField'
 import { useToast } from '@/contexts/ToastContext'
 import {
+  ACTION_KIND_ICONS,
   ACTION_KINDS,
   ACTION_TIER,
   DEFAULT_MAX_PER_CONVERSATION,
@@ -100,10 +101,7 @@ export default function AIActionsTab() {
 
   return (
     <Stack spacing={3}>
-      <Box>
-        <Typography variant='h5' fontWeight={600}>{t('title')}</Typography>
-        <Typography variant='body2' color='text.secondary'>{t('description')}</Typography>
-      </Box>
+      <Typography variant='body2' sx={{ opacity: 0.7 }}>{t('description')}</Typography>
 
       <Alert severity='info'>
         {t('info')}
@@ -168,23 +166,42 @@ export default function AIActionsTab() {
                   />
 
                   <Stack sx={{ pl: 6 }}>
-                    {kinds.map(kind => (
-                      <Box key={kind}>
+                    {kinds.map(kind => {
+                      const label = t(`kinds.${kind}.label`)
+                      const help = t(`kinds.${kind}.help`)
+
+                      return (
                         <FormControlLabel
+                          key={kind}
+                          title={`${label}${t('labelSeparator')}${help}`}
+                          sx={{ mr: 0, minWidth: 0 }}
+                          slotProps={{ typography: { sx: { minWidth: 0 } } }}
                           control={
                             <Checkbox
                               checked={form.actions[kind]}
                               disabled={!form.enabled}
                               onChange={e => setKinds([kind], e.target.checked)}
+                              slotProps={{ input: { 'aria-label': label } }}
                             />
                           }
-                          label={t(`kinds.${kind}.label`)}
+                          label={
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+                              <Box
+                                component='i'
+                                aria-hidden
+                                className={ACTION_KIND_ICONS[kind]}
+                                sx={{ fontSize: 18, flexShrink: 0, color: tier === 'safe' ? 'primary.main' : 'warning.main' }}
+                              />
+                              <Typography variant='body2' noWrap sx={{ minWidth: 0 }}>
+                                <Box component='span' sx={{ fontWeight: 600 }}>{label}</Box>
+                                {t('labelSeparator')}
+                                <Box component='span' sx={{ color: 'text.secondary' }}>{help}</Box>
+                              </Typography>
+                            </Box>
+                          }
                         />
-                        <Typography variant='body2' color='text.secondary' sx={{ display: 'block', pl: 8, mt: -1, mb: 1 }}>
-                          {t(`kinds.${kind}.help`)}
-                        </Typography>
-                      </Box>
-                    ))}
+                      )
+                    })}
                   </Stack>
                 </CardContent>
               </Card>

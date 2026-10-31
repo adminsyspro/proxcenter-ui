@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 
-import { enabledKinds } from '@/lib/ai/actions/types'
+import { enabledKinds, type ActionKind } from '@/lib/ai/actions/types'
 import { getAiActionsSettings } from '@/lib/ai/actions/settings'
 import { hasServerFeature, requireFeature } from '@/lib/auth/requireEnterprise'
 import { getSetting } from '@/lib/db/settings'
@@ -13,18 +13,21 @@ import { getCurrentTenantId } from '@/lib/tenant'
 const MODEL_FIELDS: Record<string, string> = { ollama: 'ollamaModel', openai: 'openaiModel', anthropic: 'anthropicModel' }
 
 /**
- * Whether the widget should say "Read-only" or "Actions on approval". A
- * single boolean: the per-kind choices and the cap stay admin-only. A failure
- * here says "off" and is logged: it must not 500 the status, which would hide
- * the whole assistant, and execute re-checks the settings anyway.
+ * The action kinds the assistant may propose, empty when actions are off:
+ * whether the widget says "Read-only" or "Actions on approval", and which
+ * action suggestions it offers. Only the kinds leave here, which the model's
+ * own tool list already tells any user who can chat; the cap and the rest of
+ * the settings stay admin-only. A failure here says "off" and is logged: it
+ * must not 500 the status, which would hide the whole assistant, and execute
+ * re-checks the settings anyway.
  */
-async function readActionsEnabled(tenantId: string): Promise<boolean> {
+async function readActionKinds(tenantId: string): Promise<ActionKind[]> {
   try {
-    return (await hasServerFeature(Features.AI_ACTIONS)) && enabledKinds(await getAiActionsSettings(tenantId)).length > 0
+    return (await hasServerFeature(Features.AI_ACTIONS)) ? enabledKinds(await getAiActionsSettings(tenantId)) : []
   } catch (e) {
     console.error('Failed to read the AI actions settings, reported off:', e)
 
-    return false
+    return []
   }
 }
 
@@ -54,9 +57,11 @@ export async function GET() {
     const modelField = MODEL_FIELDS[provider] ?? 'ollamaModel'
     const model = typeof settings?.[modelField] === 'string' ? (settings[modelField] as string) : null
 
-    const actionsEnabled = await readActionsEnabled(await getCurrentTenantId())
+    const actionKinds = await readActionKinds(await getCurrentTenantId())
 
-    return NextResponse.json({ data: { enabled: settings?.enabled === true, provider, model, actionsEnabled } })
+    return NextResponse.json({
+      data: { enabled: settings?.enabled === true, provider, model, actionsEnabled: actionKinds.length > 0, actionKinds },
+    })
   } catch (e: any) {
     console.error('Failed to read the AI status:', e)
 

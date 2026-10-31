@@ -21,12 +21,15 @@ import {
 import { alpha, useTheme } from '@mui/material/styles'
 
 import { sanitizeActionCard, sanitizeActionPlan, type ActionCardsPayload } from '@/lib/ai/actions/cards'
-import type { ActionCard, ActionPlan } from '@/lib/ai/actions/types'
+import { ACTION_KIND_ICONS, type ActionCard, type ActionKind, type ActionPlan } from '@/lib/ai/actions/types'
 import { sanitizeChart, type AiChart } from '@/lib/ai/charts'
+import { sanitizeTargetChoices } from '@/lib/ai/choices'
 import { createFrameDecoder, type DecodedChunk } from '@/lib/ai/streamFrames'
+import type { TargetChoice } from '@/lib/tools/types'
 
 import { AIActions } from './AIActionPlan'
 import AIChart from './AIChart'
+import AIChoiceList from './AIChoiceList'
 import AIMarkdown from './AIMarkdown'
 import { LogoIcon } from './Logo'
 import {
@@ -52,6 +55,8 @@ type ChatMessage = {
   actions?: ActionCardsPayload
   /** One line per action run from this answer, sent with it to the model. */
   actionResults?: string[]
+  /** Targets an ambiguous reference matched, clicked to answer "which one?"; never sent back. */
+  choices?: TargetChoice[]
   stopped?: boolean
 }
 
@@ -65,7 +70,7 @@ const sanitizeActions = (raw: unknown): ActionCardsPayload | null => {
   return cards.length || plans.length ? { cards, plans } : null
 }
 
-type AiSettings = { provider?: string; model?: string | null; actionsEnabled?: boolean }
+type AiSettings = { provider?: string; model?: string | null; actionsEnabled?: boolean; actionKinds?: string[] }
 
 // Human labels for the assistant's read-only tools (#459). A name missing
 // here (a newer tool, or one the model invented) falls back to the raw name.
@@ -124,8 +129,28 @@ const SUGGESTIONS = [
   { icon: 'ri-shield-cross-line', key: 'suggestFailedBackups' },
   { icon: 'ri-history-line', key: 'suggestChanges' },
   { icon: 'ri-line-chart-line', key: 'suggestTopCpu' },
-  { icon: 'ri-scales-3-line', key: 'suggestCapacity' }
+  { icon: 'ri-scales-3-line', key: 'suggestCapacity' },
+  { icon: 'ri-save-3-line', key: 'suggestBackupCoverage' },
+  { icon: 'ri-hard-drive-3-line', key: 'suggestStorageForecast' }
 ]
+
+/**
+ * What the assistant can propose (roadmap#188), shown only for an enabled
+ * kind. A suggestion that needs a target the user must name (`prefill`) fills
+ * the input instead of sending: a canned question cannot name the user's VM,
+ * and a target the user did not name is refused anyway.
+ */
+const ACTION_SUGGESTIONS: Array<{ key: string; kind: ActionKind; prefill?: boolean }> = [
+  { key: 'suggestActProtect', kind: 'backup_add' },
+  { key: 'suggestActDrs', kind: 'drs_apply' },
+  { key: 'suggestActSnapshot', kind: 'snapshot', prefill: true },
+  { key: 'suggestActStart', kind: 'start', prefill: true },
+  { key: 'suggestActUpdates', kind: 'maintenance', prefill: true },
+  { key: 'suggestActEvacuate', kind: 'migrate', prefill: true }
+]
+
+/** The text a prefill suggestion leaves in the input: its label without the ellipsis, ready for a name. */
+const prefillText = (label: string) => `${label.replace(/\s*(…|\.\.\.)\s*$/, '')} `
 
 const WIDE_STORAGE_KEY = 'proxcenter.aiChat.wide'
 
@@ -280,13 +305,18 @@ const AssistantMessage = ({
   isStreaming,
   t,
   locale,
-  exec
+  exec,
+  choicesActive,
+  onChoose
 }: {
   message: ChatMessage
   isStreaming: boolean
   t: Translate
   locale: string
   exec: ActionExecution
+  /** Only the last answer, with no other one running, takes a click on its choices. */
+  choicesActive: boolean
+  onChoose: (reply: string) => void
 }) => {
   const hasTrace = Boolean(message.toolTrace?.length)
   const showFooter = !isStreaming && (message.content || hasTrace)
@@ -322,6 +352,9 @@ const AssistantMessage = ({
         {!isStreaming && message.actions && (
           <AIActions payload={message.actions} runs={exec.runs} busy={exec.busy} onExecute={exec.execute} t={t} />
         )}
+        {!isStreaming && Boolean(message.choices?.length) && (
+          <AIChoiceList choices={message.choices!} disabled={!choicesActive} onSelect={onChoose} t={t} />
+        )}
         {message.stopped && (
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 2, fontStyle: 'italic' }}>
             {t('ai.stopped')}
@@ -349,7 +382,59 @@ const AssistantMessage = ({
   )
 }
 
-const Welcome = ({ onSelect, disabled, actionsEnabled, t }: { onSelect: (text: string) => void; disabled: boolean; actionsEnabled: boolean; t: Translate }) => (
+const SuggestionGrid = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <>
+    <Typography
+      variant='overline'
+      color='text.secondary'
+      sx={{ display: 'block', mb: 2, lineHeight: 1.5, letterSpacing: 0.8 }}
+    >
+      {title}
+    </Typography>
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>{children}</Box>
+  </>
+)
+
+const Suggestion = ({ icon, text, disabled, onClick }: { icon: string; text: string; disabled: boolean; onClick: () => void }) => (
+  <ButtonBase
+    disabled={disabled}
+    onClick={onClick}
+    sx={theme => ({
+      justifyContent: 'flex-start',
+      alignItems: 'flex-start',
+      gap: 2.5,
+      p: 2.5,
+      borderRadius: 1.5,
+      border: 1,
+      borderColor: 'divider',
+      textAlign: 'left',
+      transition: 'border-color 0.15s, background-color 0.15s',
+      '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
+      '&.Mui-focusVisible': { borderColor: 'primary.main' }
+    })}
+  >
+    <Box component='i' className={icon} sx={{ color: 'primary.main', fontSize: 18, lineHeight: 1.25 }} />
+    <Typography variant='body2' sx={{ lineHeight: 1.4 }}>
+      {text}
+    </Typography>
+  </ButtonBase>
+)
+
+type WelcomeProps = {
+  onSelect: (text: string) => void
+  /** Puts a suggestion's text in the input, for the user to finish with a name. */
+  onPrefill: (text: string) => void
+  disabled: boolean
+  actionsEnabled: boolean
+  /** The enabled action kinds: an action suggestion shows only for its kind. */
+  actionKinds: readonly string[]
+  t: Translate
+}
+
+const Welcome = ({ onSelect, onPrefill, disabled, actionsEnabled, actionKinds, t }: WelcomeProps) => {
+  const actionSuggestions = actionsEnabled ? ACTION_SUGGESTIONS.filter(s => actionKinds.includes(s.kind)) : []
+
+  return (
   <Box sx={{ py: 4 }}>
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', mb: 6 }}>
       <AssistantAvatar size={48} />
@@ -388,46 +473,36 @@ const Welcome = ({ onSelect, disabled, actionsEnabled, t }: { onSelect: (text: s
       </Box>
     </Box>
 
-    <Typography
-      variant='overline'
-      color='text.secondary'
-      sx={{ display: 'block', mb: 2, lineHeight: 1.5, letterSpacing: 0.8 }}
-    >
-      {t('ai.suggestions')}
-    </Typography>
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>
+    <SuggestionGrid title={t('ai.suggestions')}>
       {SUGGESTIONS.map(s => {
         const text = t(`ai.${s.key}`)
 
-        return (
-          <ButtonBase
-            key={s.key}
-            disabled={disabled}
-            onClick={() => onSelect(text)}
-            sx={theme => ({
-              justifyContent: 'flex-start',
-              alignItems: 'flex-start',
-              gap: 2.5,
-              p: 2.5,
-              borderRadius: 1.5,
-              border: 1,
-              borderColor: 'divider',
-              textAlign: 'left',
-              transition: 'border-color 0.15s, background-color 0.15s',
-              '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
-              '&.Mui-focusVisible': { borderColor: 'primary.main' }
-            })}
-          >
-            <Box component='i' className={s.icon} sx={{ color: 'primary.main', fontSize: 18, lineHeight: 1.25 }} />
-            <Typography variant='body2' sx={{ lineHeight: 1.4 }}>
-              {text}
-            </Typography>
-          </ButtonBase>
-        )
+        return <Suggestion key={s.key} icon={s.icon} text={text} disabled={disabled} onClick={() => onSelect(text)} />
       })}
-    </Box>
+    </SuggestionGrid>
+
+    {actionSuggestions.length > 0 && (
+      <Box sx={{ mt: 5 }}>
+        <SuggestionGrid title={t('ai.suggestActions')}>
+          {actionSuggestions.map(s => {
+            const text = t(`ai.${s.key}`)
+
+            return (
+              <Suggestion
+                key={s.key}
+                icon={ACTION_KIND_ICONS[s.kind]}
+                text={text}
+                disabled={disabled}
+                onClick={() => (s.prefill ? onPrefill(prefillText(text)) : onSelect(text))}
+              />
+            )
+          })}
+        </SuggestionGrid>
+      </Box>
+    )}
   </Box>
-)
+  )
+}
 
 /**
  * The assistant (#459): a round launcher bottom-right of every page and the
@@ -462,6 +537,18 @@ export default function AIChatWidget({ available }: { available: boolean }) {
   }, [])
 
   const exec = useActionExecution({ conversationId, paused: !open, onFinished: onActionFinished })
+
+  // A suggestion that needs a name: leave its text in the input, cursor at the end.
+  const prefillInput = useCallback((text: string) => {
+    setInput(text)
+    requestAnimationFrame(() => {
+      const el = inputRef.current
+
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(text.length, text.length)
+    })
+  }, [])
 
   // Vérifier si l'IA est activée, à chaque ouverture
   useEffect(() => {
@@ -538,6 +625,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
     let toolTrace: ToolCall[] | null = null
     let charts: AiChart[] | null = null
     let actions: ActionCardsPayload | null = null
+    let choices: TargetChoice[] | null = null
 
     // Mettre à jour le message en temps réel
     const publish = (extra: Partial<ChatMessage> = {}) => {
@@ -551,6 +639,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
           ...(toolTrace ? { toolTrace } : {}),
           ...(charts?.length ? { charts } : {}),
           ...(actions ? { actions } : {}),
+          ...(choices?.length ? { choices } : {}),
           ...extra
         }
 
@@ -595,7 +684,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
           else if (frame.type === 'charts') charts = frame.charts
           else if (frame.type === 'actions' && (frame.cards.length || frame.plans.length)) {
             actions = { cards: frame.cards, plans: frame.plans }
-          }
+          } else if (frame.type === 'choices' && frame.choices.length) choices = frame.choices
         }
       }
 
@@ -654,6 +743,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
           : null
         charts = Array.isArray(json.charts) ? json.charts.map(sanitizeChart).filter(Boolean) : null
         actions = sanitizeActions(json.actions)
+        choices = sanitizeTargetChoices(json.choices)
         publish()
       } catch (fallbackError) {
         if (controller.signal.aborted) {
@@ -834,7 +924,16 @@ export default function AIChatWidget({ available }: { available: boolean }) {
                 </Alert>
               )}
 
-              {messages.length === 0 && aiEnabled && <Welcome onSelect={sendMessage} disabled={loading} actionsEnabled={aiSettings?.actionsEnabled === true} t={t} />}
+              {messages.length === 0 && aiEnabled && (
+                <Welcome
+                  onSelect={sendMessage}
+                  onPrefill={prefillInput}
+                  disabled={loading}
+                  actionsEnabled={aiSettings?.actionsEnabled === true}
+                  actionKinds={aiSettings?.actionKinds ?? []}
+                  t={t}
+                />
+              )}
 
               {messages.map((msg, i) =>
                 msg.role === 'user' ? (
@@ -847,6 +946,8 @@ export default function AIChatWidget({ available }: { available: boolean }) {
                     t={t}
                     locale={locale}
                     exec={exec}
+                    choicesActive={i === messages.length - 1 && !loading}
+                    onChoose={reply => void sendMessage(reply)}
                   />
                 )
               )}

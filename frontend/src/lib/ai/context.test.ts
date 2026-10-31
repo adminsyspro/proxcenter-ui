@@ -389,7 +389,8 @@ describe('proposal wording (roadmap#188)', () => {
     'Tu peux tout lire et ne rien MODIFIER : tu ne peux pas créer, modifier, migrer, démarrer, arrêter ni supprimer.',
     'Pour une demande de MODIFICATION, explique la procédure et précise que tu ne peux pas l\'appliquer.',
   ]
-  const ON_ABSENT = ['CHANGE nothing', 'cannot apply it', 'read-only tools', 'ne rien MODIFIER', 'ne peux pas l\'appliquer', 'en lecture seule']
+  // "the snapshot" for the inventory made qwen3.5:9b answer "take a snapshot of X" with X's details (recette #188).
+  const ON_ABSENT = ['CHANGE nothing', 'cannot apply it', 'read-only tools', 'ne rien MODIFIER', 'ne peux pas l\'appliquer', 'en lecture seule', 'the snapshot below', 'in the snapshot', 'l\'instantané']
 
   it('keeps today\'s text byte for byte when actions are off', () => {
     for (const f of OFF_EN) expect(render({ toolsEnabled: true, actionsEnabled: false })).toContain(f)

@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
 import { invokeTool } from './invoke'
-import { ToolArgumentError, ToolScopeError, type CatalogTool, type ToolContext } from './types'
+import { AmbiguousTargetError, ToolArgumentError, ToolScopeError, type CatalogTool, type ToolContext } from './types'
 
 const ctx: ToolContext = {
   snapshot: {
@@ -78,6 +78,21 @@ describe('invokeTool', () => {
     }), {}, ctx)
 
     expect(outcome).toEqual({ ok: false, error: 'out-of-scope', message: 'Unknown cluster "lab". Visible clusters: prod.' })
+  })
+
+  it('carries the choices of an ambiguous reference beside the refusal, and none on a plain one', async () => {
+    const choice = { kind: 'cluster' as const, label: 'prod', reply: 'prod' }
+    const outcome = await invokeTool(makeTool(async () => {
+      throw new AmbiguousTargetError('Several clusters are visible.', [choice])
+    }), {}, ctx)
+
+    expect(outcome).toEqual({ ok: false, error: 'out-of-scope', message: 'Several clusters are visible.', choices: [choice] })
+
+    const empty = await invokeTool(makeTool(async () => {
+      throw new AmbiguousTargetError('Several clusters are visible.', [])
+    }), {}, ctx)
+
+    expect('choices' in empty).toBe(false)
   })
 
   it('reports a rejected value verbatim', async () => {

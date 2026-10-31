@@ -33,7 +33,7 @@ import {
   reservePlan,
   type ActionsContext,
 } from '@/lib/ai/actions/propose'
-import { guestTarget, hostTarget } from '@/lib/ai/actions/target'
+import { assertTargetUnambiguous, guestTarget, hostTarget } from '@/lib/ai/actions/target'
 import { enabledKinds, type ActionCard, type ActionKind, type ActionPlan } from '@/lib/ai/actions/types'
 import { PERMISSIONS } from '@/lib/rbac'
 import { getAllowedJobPools } from '@/lib/vdc/backupJobs'
@@ -121,6 +121,8 @@ function groundedHost(args: Record<string, unknown>, ctx: ToolContext, actions: 
   const { node } = resolveNode(ctx, host, argString(args, 'cluster'))
 
   assertTargetGrounded(actions, hostTarget(node), opts)
+  // A host name two clusters share: the user names the cluster, the model never picks it.
+  assertTargetUnambiguous(ctx, hostTarget(node), actions.userText)
 
   return node
 }

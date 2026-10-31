@@ -22,9 +22,11 @@ import {
   budgetFallbackText, MAX_TOOL_ROUNDS,
   emptyAnswerText,
   proposedActionText,
+  ambiguousTargetText,
+  emptyClosingText,
 } from './loop'
 import type { ToolCallRequest } from './adapters'
-import { ToolArgumentError, ToolScopeError, type CatalogTool, type ToolContext } from '@/lib/tools/types'
+import { AmbiguousTargetError, ToolArgumentError, ToolScopeError, type CatalogTool, type ToolContext } from '@/lib/tools/types'
 import { ACTION_CARDS } from '@/lib/ai/actions/cards'
 
 /* ------------------------------------------------------------------ */
@@ -179,6 +181,22 @@ describe('running the tool calls of one round', () => {
 
     expect(JSON.parse(results[0].content).error).toBe('Unknown cluster "prod". Visible clusters: lab.')
     expect(trace[0]).toMatchObject({ ok: false, error: 'out-of-scope' })
+  })
+
+  it('keeps the choices of an ambiguous refusal in the trace, never in what the model reads', async () => {
+    const choices = [
+      { kind: 'guest' as const, guestKind: 'qemu' as const, label: 'w22-i1000 · #111 · pve3 · PVE-PROD', reply: 'w22-i1000 (vmid 111, pve3, PVE-PROD)' },
+      { kind: 'guest' as const, guestKind: 'qemu' as const, label: 'w22-i1000 · #115 · pve1 · PVE-PROD', reply: 'w22-i1000 (vmid 115, pve1, PVE-PROD)' },
+    ]
+    const tools = [makeTool('propose_action', async () => {
+      throw new AmbiguousTargetError('Several guests are named "w22-i1000".', choices)
+    })]
+
+    const { results, trace } = await executeToolCalls([call('propose_action')], tools, makeCtx())
+
+    expect(trace[0]).toMatchObject({ ok: false, error: 'out-of-scope', choices })
+    expect(JSON.parse(results[0].content)).toEqual({ error: 'Several guests are named "w22-i1000".' })
+    expect(results[0].content).not.toContain('vmid 111')
   })
 
   it('hands a rejected argument to the model with the accepted values, as a bad-argument entry', async () => {
@@ -473,6 +491,13 @@ describe('driving the model until it answers', () => {
     expect(budgetFallbackText('de', [])).toContain('I could not conclude')
   })
 
+  it('quotes no refusal a later call recovered from', () => {
+    const entry = (ok: boolean, detail?: string) => ({ name: 'simulate_migration', args: {}, ok, error: ok ? undefined : 'out-of-scope', detail, durationMs: 1, truncated: false })
+
+    expect(budgetFallbackText('en', [entry(false, 'Several guests are named "NginX"'), entry(true)])).toContain('I could not conclude')
+    expect(budgetFallbackText('en', [entry(true), entry(false, 'boom')])).toBe('I could not retrieve that data. Last error: boom')
+  })
+
   it('honours a tighter round budget than the default', async () => {
     const { send } = makeSend([toolTurn('list_nodes')])
 
@@ -581,6 +606,9 @@ describe('an empty turn', () => {
     expect(send).toHaveBeenCalledTimes(2)
     // Same thread both times: nothing of the empty turn leaks into the replay.
     expect(seen[1]).toEqual(seen[0])
+    // Only the replay is flagged, so the provider can turn thinking off for it alone.
+    expect(send.mock.calls[0]).toHaveLength(2)
+    expect((send.mock.calls[1] as unknown[])[2]).toEqual({ retryEmpty: true })
   })
 
   it('says so rather than return a blank answer when the replay is empty too', async () => {
@@ -615,6 +643,27 @@ describe('an empty turn', () => {
 
     expect(result.text).toBe(proposedActionText('en'))
     expect(proposedActionText('fr')).toContain('J\'ai proposé')
+  })
+
+  it('points at the choices when a target was ambiguous and no card was proposed', async () => {
+    const choice = { kind: 'cluster' as const, label: 'PVE-PROD', reply: 'PVE-PROD' }
+    const { send } = makeSend([toolTurn('get_capacity'), answerTurn(''), answerTurn('')])
+
+    const result = await runToolRounds({
+      provider: 'ollama',
+      tools: [makeTool('get_capacity', async () => {
+        throw new AmbiguousTargetError('Several clusters are visible.', [choice])
+      })],
+      ctx: makeCtx(),
+      messages: [{ role: 'user', content: 'capacity?' }],
+      send,
+    })
+
+    expect(result.text).toBe(ambiguousTargetText('en'))
+    expect(ambiguousTargetText('fr')).toBe('Plusieurs cibles correspondent : choisis celle que tu veux.')
+    // A card proposed in the same answer stays what the line points at.
+    expect(emptyClosingText('en', [{ choices: [choice] }, { actions: { cards: [{ actionId: 'a' } as any], plans: [] } }])).toBe(proposedActionText('en'))
+    expect(emptyClosingText('en', [])).toBe(emptyAnswerText('en'))
   })
 
   it('is worded in French for a French caller and in English otherwise', () => {

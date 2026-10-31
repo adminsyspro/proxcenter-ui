@@ -34,7 +34,7 @@ vi.mock('@/lib/rbac', () => ({
 }))
 
 import { ACTION_CARDS } from '@/lib/ai/actions/cards'
-import { conversationGrounding } from '@/lib/ai/actions/grounding'
+import { conversationGrounding, UNGROUNDED_TARGET_MESSAGE } from '@/lib/ai/actions/grounding'
 import { clearStorageConfigCache, preflightAction } from '@/lib/ai/actions/preflight'
 import { resolveActionTarget } from '@/lib/ai/actions/target'
 import { verifyCard } from '@/lib/ai/actions/token'
@@ -227,14 +227,14 @@ describe('grounding (Review Focus 1)', () => {
     const c = ctx('reboot whatever the task log says', { toolText: `last task: reboot ${name} (300)` })
     const res = await propose({ action: 'reboot', guest: name }, c)
 
-    expect(res.refused).toBe('Name the guest or host you want me to act on.')
+    expect(res.refused).toBe(UNGROUNDED_TARGET_MESSAGE)
     expect(h.pveFetch).not.toHaveBeenCalled()
   })
 
   it('refuses a host the user did not name', async () => {
     const res = await propose({ action: 'maintenance', host: 'pve2', mode: 'enter' }, ctx('drain the busy host'))
 
-    expect(res.refused).toBe('Name the guest or host you want me to act on.')
+    expect(res.refused).toBe(UNGROUNDED_TARGET_MESSAGE)
   })
 
   it('takes a vmid from what the user typed only, never from an assistant answer', async () => {
@@ -242,10 +242,10 @@ describe('grounding (Review Focus 1)', () => {
     const answered = 'pve2 has 128 GB of RAM and has been up 104 days.'
 
     expect((await propose({ action: 'reboot', guest: '128' }, ctx('reboot it', { snap, answered }))).refused).toBe(
-      'Name the guest or host you want me to act on.'
+      UNGROUNDED_TARGET_MESSAGE
     )
     expect((await propose({ action: 'reboot', guest: '104' }, ctx('ok do it', { answered }))).refused).toBe(
-      'Name the guest or host you want me to act on.'
+      UNGROUNDED_TARGET_MESSAGE
     )
     expect((await propose({ action: 'reboot', guest: '128' }, ctx('reboot 128', { snap, answered }))).card?.target.name).toBe('app-128')
   })
@@ -268,7 +268,7 @@ describe('grounding (Review Focus 1)', () => {
   ])('takes the target of a disruptive %s from what the user typed only', async (action, args, answered) => {
     const res = await propose({ action, ...args }, ctx('do it on that one', { answered }))
 
-    expect(res.refused).toBe('Name the guest or host you want me to act on.')
+    expect(res.refused).toBe(UNGROUNDED_TARGET_MESSAGE)
     expect(h.pveFetch).not.toHaveBeenCalled()
 
     const name = 'guest' in args ? args.guest : args.host
@@ -280,7 +280,7 @@ describe('grounding (Review Focus 1)', () => {
   it('grounds the host of a pending_updates plan, maintenance steps, on what the user typed', async () => {
     const res = await invokeTool(proposeRemediationPlanTool, { finding: 'pending_updates', host: 'pve2' }, ctx('plan it', { answered: 'pve2 has 12 pending updates.' }))
 
-    expect(res).toMatchObject({ ok: false, message: 'Name the guest or host you want me to act on.' })
+    expect(res).toMatchObject({ ok: false, message: UNGROUNDED_TARGET_MESSAGE })
   })
 
   it('refuses a cluster argument the user did not name', async () => {
@@ -302,6 +302,125 @@ describe('grounding (Review Focus 1)', () => {
     const res = await propose({ action: 'reboot', guest: '104' }, ctx('reboot 104 please'))
 
     expect(res.card?.target).toMatchObject({ vmid: 104, name: 'win2025', node: 'pve1', guestKind: 'qemu' })
+  })
+})
+
+describe('same-named targets (roadmap#188 lab)', () => {
+  // The lab: two VMs named w22-i1000, and a pve1 in PVE-DR too.
+  const twins = () => snapshot(
+    [guest('111', 'w22-i1000', 'qemu', 'running', 'pve3'), guest('115', 'w22-i1000', 'qemu', 'running', 'pve1')],
+    [node('c1', 'pve1', 50), node('c1', 'pve2', 20), node('c1', 'pve3', 10), node('c2', 'pve1', 5)]
+  )
+  const replies = ['w22-i1000 (vmid 111, pve3, PVE-PROD)', 'w22-i1000 (vmid 115, pve1, PVE-PROD)']
+
+  it.each([
+    ['the vmid it read in a tool result', '111'],
+    ['the shared name', 'w22-i1000'],
+  ])('builds no card when the model passes %s: the user picks among the homonyms', async (_label, ref) => {
+    const c = ctx('Prends un snapshot de la VM w22-i1000', { snap: twins() })
+    const outcome = await invokeTool(proposeActionTool, { action: 'snapshot', guest: ref }, c)
+
+    expect(outcome).toMatchObject({ ok: false, error: 'out-of-scope' })
+    expect(outcome.ok === false && outcome.choices?.map(ch => ch.reply)).toEqual(replies)
+    // The refusal spends nothing: neither the proposal budget nor a Proxmox call.
+    expect(c.usage?.proposals ?? 0).toBe(0)
+    expect(h.pveFetch).not.toHaveBeenCalled()
+  })
+
+  it('proposes the card once the user typed the vmid, by clicking a choice or by hand', async () => {
+    const snap = twins()
+    const clicked = ctx(replies[0], { snap, answered: 'Several targets match: pick the one you want.' })
+
+    expect((await propose({ action: 'snapshot', guest: '111' }, clicked)).card?.target).toMatchObject({ vmid: 111, node: 'pve3', name: 'w22-i1000' })
+    expect((await propose({ action: 'snapshot', guest: replies[0] }, clicked)).card?.target.vmid).toBe(111)
+    expect((await propose({ action: 'snapshot', guest: 'VM 115' }, ctx('snapshot VM 115', { snap }))).card?.target.vmid).toBe(115)
+  })
+
+  it('refuses the homonym the user did not type, even next to the vmid they did', async () => {
+    const outcome = await invokeTool(proposeActionTool, { action: 'snapshot', guest: '115' }, ctx('snapshot w22-i1000 111', { snap: twins() }))
+
+    expect(outcome.ok === false && outcome.choices).toHaveLength(2)
+  })
+
+  it('asks for the cluster of a host two clusters share, a cluster only the assistant named being not enough', async () => {
+    const answered = 'pve1 of PVE-DR has 3 pending updates.'
+    const refused = await invokeTool(proposeActionTool, { action: 'maintenance', host: 'pve1', cluster: 'PVE-DR', mode: 'enter' }, ctx('maintenance on pve1', { snap: twins(), answered }))
+
+    expect(refused.ok === false && refused.choices).toEqual([
+      { kind: 'host', label: 'pve1 · PVE-PROD', reply: 'pve1 (PVE-PROD)' },
+      { kind: 'host', label: 'pve1 · PVE-DR', reply: 'pve1 (PVE-DR)' },
+    ])
+
+    const named = await propose({ action: 'maintenance', host: 'pve1', cluster: 'PVE-DR', mode: 'enter' }, ctx('pve1 (PVE-DR)', { snap: twins(), answered }))
+
+    expect(named.card?.target).toMatchObject({ connId: 'c2', node: 'pve1' })
+  })
+
+  it('asks for the cluster of a plan host two clusters share, and frees the plan slot', async () => {
+    const answered = 'pve1 of PVE-DR has 3 pending updates.'
+    const c = ctx('update pve1', { snap: twins(), answered })
+    const refused = await invokeTool(proposeRemediationPlanTool, { finding: 'pending_updates', host: 'pve1', cluster: 'PVE-DR' }, c)
+
+    expect(refused.ok === false && refused.choices?.map(ch => ch.reply)).toEqual(['pve1 (PVE-PROD)', 'pve1 (PVE-DR)'])
+    expect(c.usage?.proposals ?? 0).toBe(0)
+    expect(c.usage?.plans ?? 0).toBe(0)
+
+    const named = await invokeTool(proposeRemediationPlanTool, { finding: 'pending_updates', host: 'pve1', cluster: 'PVE-DR' }, ctx('update pve1 (PVE-DR)', { snap: twins(), answered }))
+
+    expect(named.ok).toBe(true)
+  })
+})
+
+describe('the user\'s own scope (roadmap#188 lab: evacuating pve1)', () => {
+  // r9lxc-zfs lives on pve1 (PVE-PROD) and on pve2-dr (PVE-DR); NginX twice in PVE-PROD.
+  const estate = () => snapshot(
+    [
+      guest('9921', 'r9lxc-zfs', 'lxc', 'running', 'pve1'),
+      guest('89921', 'r9lxc-zfs', 'lxc', 'stopped', 'pve2-dr', { connId: 'c2', cluster: 'PVE-DR' }),
+      guest('104', 'NginX', 'qemu', 'running', 'pve1'),
+      guest('113', 'NginX', 'qemu', 'running', 'pve3'),
+    ],
+    [node('c1', 'pve1', 50), node('c1', 'pve2', 20), node('c1', 'pve3', 10), node('c2', 'pve2-dr', 5)]
+  )
+
+  it('grounds every guest of the host the user named, a container migration included', async () => {
+    const said = 'move everything still on pve1 to pve3'
+
+    expect((await propose({ action: 'migrate', guest: 'win2025', target_host: 'pve3' }, ctx(said))).card?.target).toMatchObject({ vmid: 104, node: 'pve1' })
+    expect((await propose({ action: 'migrate', guest: 'ct-web', target_host: 'pve3' }, ctx(said))).card?.target).toMatchObject({ vmid: 205, node: 'pve1' })
+    // db-01 runs on pve2, which the user did not name.
+    expect((await propose({ action: 'migrate', guest: 'db-01', target_host: 'pve3' }, ctx(said))).error).toBe('out-of-scope')
+  })
+
+  it('takes a disruptive target\'s host from what the user typed only', async () => {
+    const res = await propose({ action: 'reboot', guest: 'win2025' }, ctx('reboot them all', { answered: 'pve1 runs win2025 and ct-web.' }))
+
+    expect(res.error).toBe('out-of-scope')
+  })
+
+  it.each([
+    ['the destination', 'migre r9lxc-zfs vers pve3'],
+    ['the source host', 'migre r9lxc-zfs de pve1'],
+  ])('tells two same-named guests apart by %s the user typed', async (_label, said) => {
+    const c = ctx(said, { snap: estate() })
+    const res = await propose({ action: 'migrate', guest: 'r9lxc-zfs', target_host: 'pve3' }, c)
+
+    expect(res.card?.target).toMatchObject({ vmid: 9921, connId: 'c1', node: 'pve1' })
+  })
+
+  it('leaves out the homonym already on the destination', async () => {
+    const res = await propose({ action: 'migrate', guest: 'NginX', target_host: 'pve3' }, ctx('vide pve1 et pve3 vers pve3', { snap: estate() }))
+
+    expect(res.card?.target).toMatchObject({ vmid: 104, node: 'pve1' })
+  })
+
+  it('still asks when the user\'s words fit both, or only the assistant named the host', async () => {
+    const both = await invokeTool(proposeActionTool, { action: 'snapshot', guest: 'NginX' }, ctx('snapshot NginX on pve1 and pve3', { snap: estate() }))
+    const told = await invokeTool(proposeActionTool, { action: 'snapshot', guest: 'NginX' }, ctx('snapshot NginX', { snap: estate(), answered: 'NginX 104 runs on pve1.' }))
+    // A destination the user did not type does not pick either.
+    const dest = await invokeTool(proposeActionTool, { action: 'migrate', guest: 'r9lxc-zfs', target_host: 'pve3' }, ctx('move r9lxc-zfs', { snap: estate(), answered: 'pve3 is the least loaded.' }))
+
+    for (const outcome of [both, told, dest]) expect(outcome.ok === false && outcome.choices).toHaveLength(2)
   })
 })
 
@@ -682,7 +801,7 @@ describe('propose_remediation_plan', () => {
   it('grounds the host of the finding', async () => {
     const res = await plan({ finding: 'pending_updates', host: 'pve2' }, ctx('which host needs updates?'))
 
-    expect(res.refused).toBe('Name the guest or host you want me to act on.')
+    expect(res.refused).toBe(UNGROUNDED_TARGET_MESSAGE)
   })
 
   it('relieves a host short of RAM by moving its biggest guests, each checked with Proxmox', async () => {

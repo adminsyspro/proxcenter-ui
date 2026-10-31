@@ -16,6 +16,8 @@ import { describe, it, expect } from 'vitest'
 import type { SnapshotGuest, SnapshotNode, InventorySnapshot } from '@/lib/tools/snapshot'
 
 import {
+  AmbiguousTargetError,
+  parseGuestRef,
   argEnum,
   argPresentationEnum,
   ToolArgumentError,
@@ -293,6 +295,153 @@ describe('resolveGuest', () => {
 
   it('refuses an empty reference rather than defaulting to the first guest', () => {
     expect(() => resolveGuest(ctx(), undefined)).toThrow(ToolScopeError)
+  })
+})
+
+/** The choices an ambiguous resolver refusal carries, or a failure when it threw nothing or something else. */
+function choicesOf(run: () => unknown) {
+  try {
+    run()
+  } catch (e) {
+    expect(e).toBeInstanceOf(AmbiguousTargetError)
+    // Still a scope refusal: every existing `instanceof ToolScopeError` keeps working.
+    expect(e).toBeInstanceOf(ToolScopeError)
+
+    return (e as AmbiguousTargetError).choices
+  }
+
+  throw new Error('should have thrown')
+}
+
+describe('ambiguous targets as clickable choices (roadmap#188)', () => {
+  // The lab: two VMs named w22-i1000 in PVE-PROD, host names reused by PVE-DR.
+  const lab = () => snapshot({
+    clusters: [
+      { id: 'c1', name: 'PVE-PROD', nodeCount: 3, guestCount: 3 },
+      { id: 'c2', name: 'PVE-DR', nodeCount: 1, guestCount: 1 },
+    ],
+    nodes: [
+      node({ name: 'pve1', connId: 'c1', cluster: 'PVE-PROD' }),
+      node({ name: 'pve3', connId: 'c1', cluster: 'PVE-PROD' }),
+      node({ name: 'pve1', connId: 'c2', cluster: 'PVE-DR' }),
+    ],
+    guests: [
+      guest({ name: 'w22-i1000', vmid: '111', connId: 'c1', cluster: 'PVE-PROD', node: 'pve3' }),
+      guest({ name: 'w22-i1000', vmid: '115', connId: 'c1', cluster: 'PVE-PROD', node: 'pve1' }),
+      guest({ name: 'ct-web', vmid: '101', connId: 'c1', cluster: 'PVE-PROD', node: 'pve1', kind: 'lxc', type: 'CT' }),
+      guest({ name: 'dr-db', vmid: '101', connId: 'c2', cluster: 'PVE-DR', node: 'pve1' }),
+    ],
+  })
+
+  it('lists every guest of a shared name, labelled and with a reply that resolves alone', () => {
+    const choices = choicesOf(() => resolveGuest(ctx(lab()), 'w22-i1000'))
+
+    expect(choices).toEqual([
+      { kind: 'guest', guestKind: 'qemu', label: 'w22-i1000 · #111 · pve3 · PVE-PROD', reply: 'w22-i1000 (vmid 111, pve3, PVE-PROD)' },
+      { kind: 'guest', guestKind: 'qemu', label: 'w22-i1000 · #115 · pve1 · PVE-PROD', reply: 'w22-i1000 (vmid 115, pve1, PVE-PROD)' },
+    ])
+    // The model reads the same refusal as before.
+    expect(() => resolveGuest(ctx(lab()), 'w22-i1000')).toThrow(/Several guests are named "w22-i1000".*Use the vmid/)
+
+    for (const choice of choices) expect(resolveGuest(ctx(lab()), choice.reply).vmid).toBe(choice.reply.match(/vmid (\d+)/)![1])
+  })
+
+  it('offers at most 8 of the guests a loose name matches', () => {
+    const many = snapshot({ guests: Array.from({ length: 12 }, (_, i) => guest({ name: `app-${i}`, vmid: String(200 + i), connId: 'conn-1' })) })
+    const choices = choicesOf(() => resolveGuest(ctx(many), 'app'))
+
+    expect(choices).toHaveLength(8)
+    expect(choices[0]).toMatchObject({ kind: 'guest', label: 'app-0 · #200 · pve1 · prod' })
+  })
+
+  it('offers both guests of a vmid two clusters reuse, which used to fall through to "not found"', () => {
+    const choices = choicesOf(() => resolveGuest(ctx(lab()), '101'))
+
+    expect(choices.map(c => c.reply)).toEqual(['ct-web (vmid 101, pve1, PVE-PROD)', 'dr-db (vmid 101, pve1, PVE-DR)'])
+    expect(choices[0].guestKind).toBe('lxc')
+    // The reply of a choice names the cluster, which settles it.
+    expect(resolveGuest(ctx(lab()), 'dr-db (vmid 101, pve1, PVE-DR)').connId).toBe('c2')
+    // So does the kind a prefix names.
+    expect(resolveGuest(ctx(lab()), 'CT 101').name).toBe('ct-web')
+  })
+
+  it('lists the hosts of a name two clusters share', () => {
+    const choices = choicesOf(() => resolveNode(ctx(lab()), 'pve1'))
+
+    expect(choices).toEqual([
+      { kind: 'host', label: 'pve1 · PVE-PROD', reply: 'pve1 (PVE-PROD)' },
+      { kind: 'host', label: 'pve1 · PVE-DR', reply: 'pve1 (PVE-DR)' },
+    ])
+    expect(() => resolveNode(ctx(lab()), 'pve1')).toThrow('pass the "cluster" argument with one of: PVE-PROD, PVE-DR')
+  })
+
+  it('resolves the reply of a host choice passed whole as the host', () => {
+    expect(resolveNode(ctx(lab()), 'pve1 (PVE-DR)')).toMatchObject({ connection: { id: 'c2' }, node: { connId: 'c2', name: 'pve1' } })
+    // An invisible cluster in the parentheses is not taken as one.
+    expect(() => resolveNode(ctx(lab()), 'pve1 (secret)')).toThrow(/Unknown host/)
+  })
+
+  it('lists the hosts of the cluster when none is named', () => {
+    const choices = choicesOf(() => resolveNode(ctx(), undefined))
+
+    expect(choices.map(c => c.reply)).toEqual(['pve1 (prod)', 'pve2 (prod)'])
+    expect(() => resolveNode(ctx(), undefined)).toThrow('Name a host, one of: pve1, pve2.')
+  })
+
+  it('lists the clusters when several are visible and none is named', () => {
+    expect(choicesOf(() => resolveConnection(ctx(lab())))).toEqual([
+      { kind: 'cluster', label: 'PVE-PROD', reply: 'PVE-PROD' },
+      { kind: 'cluster', label: 'PVE-DR', reply: 'PVE-DR' },
+    ])
+  })
+
+  it('keeps a refusal that is not about several matches a plain scope refusal', () => {
+    for (const run of [() => resolveGuest(ctx(), 'nope'), () => resolveNode(ctx(), 'pve9'), () => resolveConnection(ctx(), 'nope')]) {
+      try {
+        run()
+        throw new Error('should have thrown')
+      } catch (e) {
+        expect(e).toBeInstanceOf(ToolScopeError)
+        expect(e).not.toBeInstanceOf(AmbiguousTargetError)
+      }
+    }
+  })
+})
+
+describe('guest references the model passes as the user wrote them', () => {
+  const snap = () => snapshot({
+    guests: [
+      guest({ name: 'db-01', vmid: '100', connId: 'conn-1' }),
+      guest({ name: 'cache', vmid: '101', connId: 'conn-1', kind: 'lxc', type: 'CT' }),
+      guest({ name: 'vm7', vmid: '300', connId: 'conn-1' }),
+      guest({ name: 'web', vmid: '7', connId: 'conn-1' }),
+    ],
+  })
+
+  it.each([
+    ['VM 100', '100'], ['vm100', '100'], ['vmid 100', '100'], ['VMID: 100', '100'], ['#100', '100'], ['qemu/100', '100'],
+    ['CT 101', '101'], ['ct101', '101'], ['lxc 101', '101'], ['LXC/101', '101'],
+    ['db-01 (vmid 100, pve1, prod)', '100'], ['cache (vmid 101)', '101'],
+  ])('reads %s as vmid %s', (ref, vmid) => {
+    expect(resolveGuest(ctx(snap()), ref).vmid).toBe(vmid)
+  })
+
+  it('finds a guest really named like a prefixed vmid by its name', () => {
+    expect(resolveGuest(ctx(snap()), 'vm7').vmid).toBe('300')
+  })
+
+  it('parses the forms and nothing else', () => {
+    expect(parseGuestRef('VM 111')).toEqual({ vmid: '111', kind: 'qemu' })
+    expect(parseGuestRef('lxc 101')).toEqual({ vmid: '101', kind: 'lxc' })
+    expect(parseGuestRef('#111')).toEqual({ vmid: '111' })
+    expect(parseGuestRef('w22-i1000 (vmid 111, pve3, PVE-PROD)')).toEqual({ vmid: '111', name: 'w22-i1000', node: 'pve3', cluster: 'PVE-PROD' })
+    expect(parseGuestRef('vm-111')).toBeNull()
+    expect(parseGuestRef('web-01')).toBeNull()
+    expect(parseGuestRef('VM 1a')).toBeNull()
+  })
+
+  it('still refuses a prefixed vmid nobody can see', () => {
+    expect(() => resolveGuest(ctx(snap()), 'VM 999')).toThrow(/No VM or container matching "VM 999"/)
   })
 })
 

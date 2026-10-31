@@ -19,7 +19,7 @@ import {
 import { alpha, useTheme } from '@mui/material/styles'
 
 import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
-import { actionTier, type ActionCard, type ActionKind } from '@/lib/ai/actions/types'
+import { ACTION_KIND_ICONS, actionTier, type ActionCard, type ActionKind } from '@/lib/ai/actions/types'
 
 import type { ActionRun } from './useActionExecution'
 
@@ -28,17 +28,6 @@ type Translate = (key: string, values?: Record<string, string>) => string
 type Check = ActionCard['preflight']['checks'][number]
 
 const TASK_CENTER_HREF = '/operations/task-center'
-
-export const KIND_ICONS: Record<ActionKind, string> = {
-  snapshot: 'ri-camera-line',
-  start: 'ri-play-line',
-  shutdown: 'ri-shut-down-line',
-  reboot: 'ri-restart-line',
-  migrate: 'ri-arrow-left-right-line',
-  drs_apply: 'ri-scales-3-line',
-  backup_add: 'ri-save-3-line',
-  maintenance: 'ri-tools-line'
-}
 
 const TITLE_KEYS: Record<Exclude<ActionKind, 'maintenance'>, string> = {
   snapshot: 'ai.actions.title.snapshot',
@@ -180,7 +169,7 @@ const KindIcon = ({ card }: { card: ActionCard }) => {
         }
       }}
     >
-      <i className={KIND_ICONS[card.kind]} style={{ fontSize: 17 }} />
+      <i className={ACTION_KIND_ICONS[card.kind]} style={{ fontSize: 17 }} />
     </Box>
   )
 }
@@ -283,7 +272,7 @@ const ConfirmDialog = ({
     }}
   >
     <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-      <Box component='i' className={KIND_ICONS[card.kind]} aria-hidden sx={{ fontSize: 20, color: 'warning.main' }} />
+      <Box component='i' className={ACTION_KIND_ICONS[card.kind]} aria-hidden sx={{ fontSize: 20, color: 'warning.main' }} />
       {t('ai.actions.confirmTitle', { action: title })}
     </DialogTitle>
     <DialogContent>

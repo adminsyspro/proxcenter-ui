@@ -51,6 +51,7 @@ import { findCountry } from '@/lib/utils/countries'
 
 
 import LicenseTab from '@/components/settings/license/LicenseTab'
+import LlmModelLabel from '@/components/settings/LlmModelLabel'
 import SettingsNav from '@/components/settings/SettingsNav'
 import { useConnectionsManagement } from '@/hooks/useConnectionsManagement'
 import { useAISettings } from '@/hooks/useAISettings'
@@ -1816,7 +1817,65 @@ function ConnectionsTab() {
 
 /* ==================== AITab Component ==================== */
 
+// One "Artificial Intelligence" tab, two sub-tabs: the model the assistant
+// runs on, and the actions it may propose (#188). The actions keep their own
+// feature id, so the sub-tab only shows when that capability is licensed.
+const AI_SUB_TABS = ['model', 'actions']
+
 function AITab() {
+  const t = useTranslations()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const { hasFeature } = useLicense()
+  const actionsAvailable = hasFeature(Features.AI_ACTIONS)
+  const requested = AI_SUB_TABS.indexOf(searchParams.get('sub') || '')
+  const subTab = requested === 1 && !actionsAvailable ? 0 : Math.max(0, requested)
+
+  const changeSubTab = (_, index) => {
+    const params = new URLSearchParams(searchParams.toString())
+
+    params.set('sub', AI_SUB_TABS[index])
+    router.replace(`?${params.toString()}`, { scroll: false })
+  }
+
+  return (
+    <>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs value={subTab} onChange={changeSubTab} sx={{ '& .MuiTab-root': { minHeight: 48 } }}>
+          <Tab
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <i className='ri-cpu-line' style={{ fontSize: 18 }} />
+                <span>{t('settings.aiModelSubTab')}</span>
+              </Box>
+            }
+          />
+          {actionsAvailable && (
+            <Tab
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <i className='ri-flashlight-line' style={{ fontSize: 18 }} />
+                  <span>{t('settings.aiActions.subTabLabel')}</span>
+                </Box>
+              }
+            />
+          )}
+        </Tabs>
+      </Box>
+
+      <SubTabPanel value={subTab} index={0}>
+        <AIModelSettings />
+      </SubTabPanel>
+      {actionsAvailable && (
+        <SubTabPanel value={subTab} index={1}>
+          <AIActionsTab />
+        </SubTabPanel>
+      )}
+    </>
+  )
+}
+
+function AIModelSettings() {
   const t = useTranslations()
 
   const {
@@ -1978,7 +2037,7 @@ function AITab() {
                   </MenuItem>
                   <MenuItem value='anthropic'>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <i className='ri-sparkling-line' />
+                      <i className='simple-icons-anthropic' />
                       {t('settings.anthropicCloudOption')}
                     </Box>
                   </MenuItem>
@@ -2020,13 +2079,17 @@ function AITab() {
                       {availableModels.length > 0
                         ? availableModels.map(m => (
                           <MenuItem key={m} value={m}>
-                            {m}
-                            {isQualifiedOllamaModel(m) ? ` (${t('settings.recommended')})` : ''}
-                            {modelToolCalling[m] === false ? ` (${t('settings.modelNoToolCalling')})` : ''}
+                            <LlmModelLabel model={m}>
+                              {m}
+                              {isQualifiedOllamaModel(m) ? ` (${t('settings.recommended')})` : ''}
+                              {modelToolCalling[m] === false ? ` (${t('settings.modelNoToolCalling')})` : ''}
+                            </LlmModelLabel>
                           </MenuItem>
                         ))
                         : QUALIFIED_OLLAMA_MODELS.map(q => (
-                          <MenuItem key={q.model} value={q.model}>{q.model} ({t('settings.recommended')})</MenuItem>
+                          <MenuItem key={q.model} value={q.model}>
+                            <LlmModelLabel model={q.model}>{q.model} ({t('settings.recommended')})</LlmModelLabel>
+                          </MenuItem>
                         ))}
                     </Select>
                     <FormHelperText>{t('settings.ollamaToolModelHelp')}</FormHelperText>
@@ -2083,15 +2146,19 @@ function AITab() {
                     >
                       {availableModels.length > 0 ? (
                         availableModels.map(m => (
-                          <MenuItem key={m} value={m}>{m}</MenuItem>
+                          <MenuItem key={m} value={m}><LlmModelLabel model={m} /></MenuItem>
                         ))
                       ) : (
-                        <>
-                          <MenuItem value='gpt-4.1-nano'>{t('settings.openaiModels.gpt41Nano')}</MenuItem>
-                          <MenuItem value='gpt-4.1-mini'>{t('settings.openaiModels.gpt41Mini')}</MenuItem>
-                          <MenuItem value='gpt-4.1'>{t('settings.openaiModels.gpt41')}</MenuItem>
-                          <MenuItem value='o3-mini'>{t('settings.openaiModels.o3Mini')}</MenuItem>
-                        </>
+                        [
+                          ['gpt-4.1-nano', 'gpt41Nano'],
+                          ['gpt-4.1-mini', 'gpt41Mini'],
+                          ['gpt-4.1', 'gpt41'],
+                          ['o3-mini', 'o3Mini'],
+                        ].map(([model, key]) => (
+                          <MenuItem key={model} value={model}>
+                            <LlmModelLabel model={model}>{t(`settings.openaiModels.${key}`)}</LlmModelLabel>
+                          </MenuItem>
+                        ))
                       )}
                     </Select>
                   </FormControl>
@@ -2137,14 +2204,18 @@ function AITab() {
                     >
                       {availableModels.length > 0 ? (
                         availableModels.map(m => (
-                          <MenuItem key={m} value={m}>{m}</MenuItem>
+                          <MenuItem key={m} value={m}><LlmModelLabel model={m} /></MenuItem>
                         ))
                       ) : (
-                        <>
-                          <MenuItem value='claude-haiku-4-5-20251001'>{t('settings.anthropicModels.haiku')}</MenuItem>
-                          <MenuItem value='claude-sonnet-4-6-20250514'>{t('settings.anthropicModels.sonnet')}</MenuItem>
-                          <MenuItem value='claude-opus-4-6-20250918'>{t('settings.anthropicModels.opus')}</MenuItem>
-                        </>
+                        [
+                          ['claude-haiku-4-5-20251001', 'haiku'],
+                          ['claude-sonnet-4-6-20250514', 'sonnet'],
+                          ['claude-opus-4-6-20250918', 'opus'],
+                        ].map(([model, key]) => (
+                          <MenuItem key={model} value={model}>
+                            <LlmModelLabel model={model}>{t(`settings.anthropicModels.${key}`)}</LlmModelLabel>
+                          </MenuItem>
+                        ))
                       )}
                     </Select>
                   </FormControl>
@@ -2471,7 +2542,6 @@ export default function SettingsPage() {
     { name: 'syslog', group: 'monitoring', label: t('settings.syslog.tabLabel'), icon: 'ri-broadcast-line', component: SyslogTab, requiredFeature: Features.SYSLOG_FORWARDING, providerOnly: true },
     { name: 'broadcast', group: 'monitoring', label: t('settings.broadcast.tabLabel'), icon: 'ri-megaphone-line', component: BroadcastTab, providerOnly: true },
     { name: 'ai', group: 'insights', label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS, providerOnly: true },
-    { name: 'ai-actions', group: 'insights', label: t('settings.aiActions.tabLabel'), icon: 'ri-flashlight-line', component: AIActionsTab, requiredFeature: Features.AI_ACTIONS, providerOnly: true },
     { name: 'green', group: 'insights', label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS, providerOnly: true },
     { name: 'appearance', group: 'personalization', label: t('settings.appearance'), icon: 'ri-palette-line', component: AppearanceTab },
     { name: 'white-label', group: 'personalization', label: 'White Label', icon: 'ri-pantone-line', component: WhiteLabelTab, requiredFeature: Features.WHITE_LABEL, superAdminOnly: true },

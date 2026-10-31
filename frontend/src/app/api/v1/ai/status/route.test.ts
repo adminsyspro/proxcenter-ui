@@ -60,12 +60,12 @@ describe('GET /api/v1/ai/status', () => {
 
     const body = await readJson<any>(res)
 
-    expect(body).toEqual({ data: { enabled: true, provider: 'openai', model: 'gpt-4.1-nano', actionsEnabled: false } })
+    expect(body).toEqual({ data: { enabled: true, provider: 'openai', model: 'gpt-4.1-nano', actionsEnabled: false, actionKinds: [] } })
     expect(JSON.stringify(body)).not.toMatch(/sk-secret|10\.0\.0\.5/)
   })
 
   it('reports the assistant off when nothing is configured', async () => {
-    expect((await readJson<any>(await get())).data).toEqual({ enabled: false, provider: 'ollama', model: null, actionsEnabled: false })
+    expect((await readJson<any>(await get())).data).toEqual({ enabled: false, provider: 'ollama', model: null, actionsEnabled: false, actionKinds: [] })
   })
 
   it('refuses without the permission or without the Enterprise licence', async () => {
@@ -80,7 +80,7 @@ describe('GET /api/v1/ai/status', () => {
   it('tells the widget the actions are on only when licensed, switched on and at least one kind is allowed', async () => {
     h.settings = { enabled: true }
     h.actions = { enabled: true, actions: { snapshot: true }, maxPerConversation: 5 }
-    expect((await readJson<any>(await get())).data.actionsEnabled).toBe(true)
+    expect((await readJson<any>(await get())).data).toMatchObject({ actionsEnabled: true, actionKinds: ['snapshot'] })
 
     h.actionsLicensed = false
     expect((await readJson<any>(await get())).data.actionsEnabled).toBe(false)
@@ -102,7 +102,7 @@ describe('GET /api/v1/ai/status', () => {
     const res = await get()
 
     expect(res.status).toBe(200)
-    expect((await readJson<any>(res)).data).toEqual({ enabled: true, provider: 'ollama', model: 'qwen3:8b', actionsEnabled: false })
+    expect((await readJson<any>(res)).data).toEqual({ enabled: true, provider: 'ollama', model: 'qwen3:8b', actionsEnabled: false, actionKinds: [] })
     expect(logged).toHaveBeenCalled()
 
     h.actionsError = null
@@ -112,8 +112,12 @@ describe('GET /api/v1/ai/status', () => {
     logged.mockRestore()
   })
 
-  it('exposes nothing else of the actions settings', async () => {
+  it('exposes the enabled kinds and nothing else of the actions settings', async () => {
     h.actions = { enabled: true, actions: { snapshot: true, reboot: true }, maxPerConversation: 9 }
-    expect(Object.keys((await readJson<any>(await get())).data).sort()).toEqual(['actionsEnabled', 'enabled', 'model', 'provider'])
+
+    const data = (await readJson<any>(await get())).data
+
+    expect(Object.keys(data).sort()).toEqual(['actionKinds', 'actionsEnabled', 'enabled', 'model', 'provider'])
+    expect([...data.actionKinds].sort()).toEqual(['reboot', 'snapshot'])
   })
 })

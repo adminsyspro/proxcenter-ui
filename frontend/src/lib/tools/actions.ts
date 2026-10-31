@@ -21,7 +21,17 @@ import {
   issueCard,
   requireActions,
 } from '@/lib/ai/actions/propose'
-import { findTargetGuest, resolveActionTarget } from '@/lib/ai/actions/target'
+import {
+  assertTargetUnambiguous,
+  findTargetGuest,
+  guestsNamed,
+  guestTarget,
+  isHostKind,
+  pickHomonymByScope,
+  resolveActionTarget,
+  type ActionTargetInput,
+  type HomonymScope,
+} from '@/lib/ai/actions/target'
 import { ACTION_KINDS, actionTier, enabledKinds, type ActionCard, type ActionKind, type AiActionsSettings } from '@/lib/ai/actions/types'
 import { Features } from '@/lib/license/features'
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
@@ -33,7 +43,7 @@ import { drsMoveVisible, requireAutomationAccess } from './automation'
 import { loadBackupJobs } from './backups'
 import { evaluateHostFit } from './forecast'
 import { hasNodePermission } from './guards'
-import { argString, resolveGuest, ToolArgumentError, ToolScopeError, type CatalogTool, type ToolContext } from './types'
+import { AmbiguousTargetError, argString, resolveConnection, resolveGuest, ToolArgumentError, ToolScopeError, type CatalogTool, type ToolContext } from './types'
 
 type Params = ActionCard['params']
 
@@ -207,8 +217,31 @@ function describeProposeAction(kinds: readonly ActionKind[]): Pick<CatalogTool, 
   return {
     description:
       'Propose ONE action on a guest or host the user named; nothing runs: the user gets a card and approves it with their own rights. ' +
-      `Use only when the user asks for the action. Kinds: ${listed.join(', ')}. Example: ${example}`,
+      `Use only when the user asks for the action. Kinds: ${listed.join(', ')}. Example: ${example}` +
+      (kinds.includes('snapshot') ? ". 'Take a snapshot of X' means action='snapshot': a Proxmox snapshot, a restorable copy of the guest, never a summary of it." : ''),
     parameters: { type: 'object', properties, required: ['action'] },
+  }
+}
+
+/**
+ * `resolveActionTarget`, except that a name several guests share resolves to
+ * the one the user's own words point at (`pickHomonymByScope`) instead of
+ * refusing: the model keeps passing the name it was asked about, never the
+ * vmid it read in a tool result.
+ */
+function resolveScopedTarget(input: ActionTargetInput, ctx: ToolContext, scope: HomonymScope): ActionCard['target'] {
+  try {
+    return resolveActionTarget(input, ctx)
+  } catch (err) {
+    if (!(err instanceof AmbiguousTargetError) || isHostKind(input.kind)) throw err
+
+    const connId = input.cluster ? resolveConnection(ctx, input.cluster).id : undefined
+    const homonyms = guestsNamed(ctx, input.guest).filter(g => !connId || g.connId === connId)
+    const picked = pickHomonymByScope(ctx, homonyms, scope)
+
+    if (!picked) throw err
+
+    return guestTarget(picked)
   }
 }
 
@@ -224,12 +257,18 @@ export const proposeActionTool: CatalogTool = {
     assertClusterGrounded(actions, ctx, argString(args, 'cluster'))
 
     const rec = kind === 'drs_apply' ? await findRecommendation(args, ctx) : null
+    const targetHost = kind === 'migrate' ? argString(args, 'target_host') : undefined
     const target = rec
       ? resolveActionTarget({ kind, guest: String(rec.vmid), connId: rec.connection_id }, ctx)
-      : resolveActionTarget({ kind, guest: argString(args, 'guest'), host: argString(args, 'host'), cluster: argString(args, 'cluster') }, ctx)
+      : resolveScopedTarget({ kind, guest: argString(args, 'guest'), host: argString(args, 'host'), cluster: argString(args, 'cluster') }, ctx, {
+          userText: actions.userText,
+          targetHost,
+        })
 
     // A disruptive card (a container migration included) only for a target the user typed.
     assertTargetGrounded(actions, target, { userOnly: actionTier(kind, target) === 'disruptive' })
+    // One of several homonyms only once the user told which: refused before the budget is spent.
+    assertTargetUnambiguous(ctx, target, actions.userText, { targetHost })
     consumeProposal(ctx)
 
     let params: Params = {}

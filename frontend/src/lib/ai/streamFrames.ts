@@ -16,6 +16,8 @@
 import { sanitizeActionCard, sanitizeActionPlan } from './actions/cards'
 import type { ActionCard, ActionPlan } from './actions/types'
 import { sanitizeChart, type AiChart } from './charts'
+import { sanitizeTargetChoices } from './choices'
+import type { TargetChoice } from '@/lib/tools/types'
 
 /** ASCII record separator: never produced by a language model writing prose. */
 export const FRAME_MARK = ''
@@ -29,6 +31,8 @@ export type StreamFrame =
   | { type: 'charts'; charts: AiChart[] }
   /** The signed action cards the assistant proposed, sent after the charts. */
   | { type: 'actions'; cards: ActionCard[]; plans: ActionPlan[] }
+  /** The targets an ambiguous reference matched, for the user to click, sent after the actions. */
+  | { type: 'choices'; choices: TargetChoice[] }
 
 export type DecodedChunk = { text: string; frames: StreamFrame[] }
 
@@ -70,6 +74,10 @@ function parseFrame(raw: string): StreamFrame | null {
           .map(sanitizeActionPlan)
           .filter((p: ActionPlan | null): p is ActionPlan => p !== null),
       }
+    }
+
+    if (parsed?.type === 'choices' && Array.isArray(parsed.choices)) {
+      return { type: 'choices', choices: sanitizeTargetChoices(parsed.choices) }
     }
   } catch {
     // Malformed frame: dropped below, never surfaced as prose.

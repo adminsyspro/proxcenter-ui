@@ -102,6 +102,51 @@ export class ToolScopeError extends Error {
 }
 
 /**
+ * One of several targets a reference matched, offered to the user as a
+ * clickable row under the answer (roadmap#188). `reply` is sent as the user's
+ * next message when clicked, and names the target precisely enough to resolve
+ * it alone: the vmid and the cluster for a guest, the cluster for a host.
+ */
+export type TargetChoice = { label: string; reply: string; kind: 'guest' | 'host' | 'cluster'; guestKind?: 'qemu' | 'lxc' }
+
+/** At most this many choices reach the user: past it, a narrower question beats a long list. */
+export const MAX_TARGET_CHOICES = 8
+
+/**
+ * A scope refusal for a reference that matched several targets: two VMs of
+ * the same name, a host name two clusters share, several clusters and none
+ * named. The model reads the same text as before; the choices are computed
+ * here, never by the model, and travel beside the result to the widget (the
+ * loop lifts them into the trace, like the charts and the cards).
+ */
+export class AmbiguousTargetError extends ToolScopeError {
+  readonly choices: TargetChoice[]
+
+  constructor(message: string, choices: TargetChoice[]) {
+    super(message)
+    this.name = 'AmbiguousTargetError'
+    this.choices = choices.slice(0, MAX_TARGET_CHOICES)
+  }
+}
+
+export function guestChoice(g: SnapshotGuest): TargetChoice {
+  return {
+    kind: 'guest',
+    guestKind: g.kind,
+    label: `${g.name} · #${g.vmid} · ${g.node} · ${g.cluster}`,
+    reply: `${g.name} (vmid ${g.vmid}, ${g.node}, ${g.cluster})`,
+  }
+}
+
+export function hostChoice(n: SnapshotNode): TargetChoice {
+  return { kind: 'host', label: `${n.name} · ${n.cluster}`, reply: `${n.name} (${n.cluster})` }
+}
+
+export function clusterChoice(c: { name: string }): TargetChoice {
+  return { kind: 'cluster', label: c.name, reply: c.name }
+}
+
+/**
  * Raised when the model passes a value a tool cannot interpret.
  *
  * Surfaced to the model verbatim, like a scope refusal: naming the accepted
@@ -231,8 +276,9 @@ export function resolveConnection(ctx: ToolContext, ref?: string): ResolvedConne
 
     // Naming the argument matters: llama3.1:8b, told only to "name one",
     // retried with an invented `clusterName` key and never got through.
-    throw new ToolScopeError(
-      `Several clusters are visible: pass the "cluster" argument with one of: ${available.map(c => c.name).join(', ')}.`
+    throw new AmbiguousTargetError(
+      `Several clusters are visible: pass the "cluster" argument with one of: ${available.map(c => c.name).join(', ')}.`,
+      available.map(clusterChoice)
     )
   }
 
@@ -258,10 +304,28 @@ export function resolveConnection(ctx: ToolContext, ref?: string): ResolvedConne
  * enough. Demanding the cluster anyway cost a failed call against the lab,
  * where PVE-PROD and PVE-DR are both visible and "pve1" only lives in one.
  */
-export function resolveNode(ctx: ToolContext, nodeRef: string | undefined, clusterRef?: string): {
+/**
+ * `pve1 (PVE-PROD)`, the reply of a host choice, when the model passes it
+ * whole as the host: split into the host and its cluster, only when that
+ * cluster is visible.
+ */
+function splitHostReply(ctx: ToolContext, nodeRef: string): { nodeRef: string; clusterRef?: string } {
+  const m = /^(.+?)\s*\(([^()]+)\)$/.exec(nodeRef.trim())
+
+  if (!m) return { nodeRef }
+
+  const cluster = m[2].trim().toLowerCase()
+  const visible = visibleConnections(ctx.snapshot).some(c => c.name.toLowerCase() === cluster || c.id.toLowerCase() === cluster)
+
+  return visible ? { nodeRef: m[1], clusterRef: m[2].trim() } : { nodeRef }
+}
+
+export function resolveNode(ctx: ToolContext, nodeArg: string | undefined, clusterArg?: string): {
   connection: ResolvedConnection
   node: SnapshotNode
 } {
+  const { nodeRef, clusterRef } = nodeArg && !clusterArg ? splitHostReply(ctx, nodeArg) : { nodeRef: nodeArg, clusterRef: clusterArg }
+
   if (nodeRef && !clusterRef) {
     const needle = nodeRef.trim().toLowerCase()
     const matches = ctx.snapshot.nodes.filter(n => n.name.toLowerCase() === needle)
@@ -274,8 +338,9 @@ export function resolveNode(ctx: ToolContext, nodeRef: string | undefined, clust
     }
 
     if (matches.length > 1) {
-      throw new ToolScopeError(
-        `Several clusters have a host named "${nodeRef}": pass the "cluster" argument with one of: ${matches.map(n => n.cluster).join(', ')}.`
+      throw new AmbiguousTargetError(
+        `Several clusters have a host named "${nodeRef}": pass the "cluster" argument with one of: ${matches.map(n => n.cluster).join(', ')}.`,
+        matches.map(hostChoice)
       )
     }
 
@@ -292,9 +357,11 @@ export function resolveNode(ctx: ToolContext, nodeRef: string | undefined, clust
   if (!nodeRef) {
     if (candidates.length === 1) return { connection, node: candidates[0] }
 
-    throw new ToolScopeError(
-      `Name a host, one of: ${candidates.map(n => n.name).join(', ') || 'none visible'}.`
-    )
+    const message = `Name a host, one of: ${candidates.map(n => n.name).join(', ') || 'none visible'}.`
+
+    if (candidates.length === 0) throw new ToolScopeError(message)
+
+    throw new AmbiguousTargetError(message, candidates.map(hostChoice))
   }
 
   const needle = nodeRef.trim().toLowerCase()
@@ -309,30 +376,112 @@ export function resolveNode(ctx: ToolContext, nodeRef: string | undefined, clust
   return { connection, node }
 }
 
+type GuestRef = { vmid: string; kind?: 'qemu' | 'lxc'; name?: string; node?: string; cluster?: string }
+
+/** `VM 111`, `vm111`, `CT 101`, `vmid 111`, `#111`, `qemu/111`, `lxc 101`. */
+const PREFIXED_VMID = /^(?:(vmid|vm|qemu|ct|lxc)\s*[#:/]?\s*|#\s*)(\d+)$/i
+
+/** `w22-i1000 (vmid 111, pve3, PVE-PROD)`: the reply of a guest choice. */
+const CHOICE_REPLY = /^(.+?)\s*\(\s*vmid\s+(\d+)\s*(?:,\s*([^,()]+?)\s*)?(?:,\s*([^()]+?)\s*)?\)$/i
+
+/**
+ * The vmid a guest reference carries besides the bare number. Small models
+ * pass what the user wrote: "VM 100" failed on every tool when only "100"
+ * was understood.
+ */
+export function parseGuestRef(ref: string): GuestRef | null {
+  const text = ref.trim()
+  const prefixed = PREFIXED_VMID.exec(text)
+
+  if (prefixed) {
+    const word = prefixed[1]?.toLowerCase()
+    const kind = word === 'ct' || word === 'lxc' ? 'lxc' : word === 'vm' || word === 'qemu' ? 'qemu' : undefined
+
+    return { vmid: prefixed[2], ...(kind ? { kind } : {}) }
+  }
+
+  const reply = CHOICE_REPLY.exec(text)
+
+  if (!reply) return null
+
+  return {
+    vmid: reply[2],
+    name: reply[1].trim(),
+    ...(reply[3] ? { node: reply[3] } : {}),
+    ...(reply[4] ? { cluster: reply[4] } : {}),
+  }
+}
+
+/** Keeps the guests matching each detail of the reference, a detail that would leave none being ignored. */
+function narrowByRef(guests: SnapshotGuest[], ref: GuestRef): SnapshotGuest[] {
+  const lower = (v: string) => v.trim().toLowerCase()
+  const filters: Array<((g: SnapshotGuest) => boolean) | null> = [
+    ref.kind ? g => g.kind === ref.kind : null,
+    ref.cluster ? g => lower(g.cluster) === lower(ref.cluster!) || lower(g.connId) === lower(ref.cluster!) : null,
+    ref.node ? g => lower(g.node) === lower(ref.node!) : null,
+    ref.name ? g => lower(g.name) === lower(ref.name!) : null,
+  ]
+
+  return filters.reduce((kept, f) => {
+    if (!f) return kept
+
+    const narrowed = kept.filter(f)
+
+    return narrowed.length ? narrowed : kept
+  }, guests)
+}
+
 /**
  * Resolve a guest by name or vmid, across every cluster the caller may see.
  *
  * Name matching is exact first, then case-insensitive, then unique substring:
  * a user says "the database VM" and the model passes "database", which should
  * find `db-01` if that is the only candidate rather than failing outright.
+ * A vmid is read bare or in the forms of `parseGuestRef`. Several matches are
+ * an `AmbiguousTargetError`: the user picks, the model never does.
  */
+/**
+ * The guests of `guests` a migration to host `dest` can concern: those of a
+ * cluster that has that host (a guest only moves within its cluster), and not
+ * already on it. Narrows same-named guests: "move Ubuntu to pve1-dr" is about
+ * the Ubuntu of PVE-DR, not the one of PVE-PROD.
+ */
+export function guestsMovableTo(ctx: ToolContext, guests: SnapshotGuest[], dest: string): SnapshotGuest[] {
+  const host = dest.trim().toLowerCase()
+  const clusters = new Set(ctx.snapshot.nodes.filter(n => n.name.toLowerCase() === host).map(n => n.connId))
+
+  return guests.filter(g => clusters.has(g.connId) && g.node.toLowerCase() !== host)
+}
+
 export function resolveGuest(ctx: ToolContext, ref: string | undefined): SnapshotGuest {
   if (!ref) throw new ToolScopeError('Name a VM or container, by name or by vmid.')
 
   const needle = ref.trim().toLowerCase()
   const guests = ctx.snapshot.guests
-
-  const byVmid = guests.filter(g => g.vmid === needle)
-
-  if (byVmid.length === 1) return byVmid[0]
-
   const exact = guests.filter(g => g.name.toLowerCase() === needle)
+  // A guest really named "vm100" is found by its name, not as vmid 100.
+  const parsed: GuestRef | null = /^\d+$/.test(needle) ? { vmid: needle } : exact.length ? null : parseGuestRef(ref)
+
+  if (parsed) {
+    const byVmid = narrowByRef(guests.filter(g => g.vmid === parsed.vmid), parsed)
+
+    if (byVmid.length === 1) return byVmid[0]
+
+    // Two clusters may reuse a vmid: falling through to a name match found nothing.
+    if (byVmid.length > 1) {
+      throw new AmbiguousTargetError(
+        `Several guests have vmid ${parsed.vmid}: ${byVmid.map(g => `${g.name} (${g.vmid} on ${g.cluster})`).join(', ')}. Pass the "cluster" argument.`,
+        byVmid.map(guestChoice)
+      )
+    }
+  }
 
   if (exact.length === 1) return exact[0]
 
   if (exact.length > 1) {
-    throw new ToolScopeError(
-      `Several guests are named "${ref}": ${exact.map(g => `${g.name} (${g.vmid} on ${g.cluster})`).join(', ')}. Use the vmid.`
+    throw new AmbiguousTargetError(
+      `Several guests are named "${ref}": ${exact.map(g => `${g.name} (${g.vmid} on ${g.cluster})`).join(', ')}. Use the vmid.`,
+      exact.map(guestChoice)
     )
   }
 
@@ -341,8 +490,9 @@ export function resolveGuest(ctx: ToolContext, ref: string | undefined): Snapsho
   if (partial.length === 1) return partial[0]
 
   if (partial.length > 1) {
-    throw new ToolScopeError(
-      `"${ref}" matches several guests: ${partial.slice(0, 10).map(g => `${g.name} (${g.vmid})`).join(', ')}. Be more specific.`
+    throw new AmbiguousTargetError(
+      `"${ref}" matches several guests: ${partial.slice(0, 10).map(g => `${g.name} (${g.vmid})`).join(', ')}. Be more specific.`,
+      partial.map(guestChoice)
     )
   }
 

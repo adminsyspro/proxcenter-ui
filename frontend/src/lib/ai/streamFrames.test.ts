@@ -174,6 +174,37 @@ describe('createFrameDecoder', () => {
   })
 })
 
+describe('the choices frame (roadmap#188)', () => {
+  const choice = { kind: 'guest', guestKind: 'qemu', label: 'w22-i1000 · #111 · pve3 · PVE-PROD', reply: 'w22-i1000 (vmid 111, pve3, PVE-PROD)' }
+
+  it('round-trips the choices, split anywhere', () => {
+    const stream = `Which one?${encodeFrame({ type: 'choices', choices: [choice as any] })}`
+    const whole = decodeAll([stream])
+
+    expect(whole.text).toBe('Which one?')
+    expect(whole.frames).toEqual([{ type: 'choices', choices: [choice] }])
+
+    for (let i = 1; i < stream.length; i++) expect(decodeAll([stream.slice(0, i), stream.slice(i)])).toEqual(whole)
+  })
+
+  it('drops a choice of an unknown kind, a missing or overlong text, and keeps the guest kind of guests only', () => {
+    const { frames } = decodeAll([
+      encodeFrame({
+        type: 'choices',
+        choices: [
+          { kind: 'vm', label: 'a', reply: 'a' },
+          { kind: 'host', label: 'pve1 · PVE-PROD', reply: 'x'.repeat(201) },
+          { kind: 'host', label: '', reply: 'pve1 (PVE-PROD)' },
+          { kind: 'host', label: 'pve1 · PVE-PROD', reply: 'pve1 (PVE-PROD)', guestKind: 'qemu', extra: 1 },
+          'junk',
+        ] as any,
+      }),
+    ])
+
+    expect(frames).toEqual([{ type: 'choices', choices: [{ kind: 'host', label: 'pve1 · PVE-PROD', reply: 'pve1 (PVE-PROD)' }] }])
+  })
+})
+
 describe('the actions frame (roadmap#188)', () => {
   const card = (over: Record<string, unknown> = {}) => ({
     actionId: 'a1',

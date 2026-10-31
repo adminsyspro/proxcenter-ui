@@ -99,6 +99,48 @@ describe('AIChatWidget', () => {
     expect(screen.queryByText('ai.readOnlyBadge')).toBeNull()
   })
 
+  it('offers an action suggestion per enabled kind, sending a complete one and prefilling one that needs a name', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: FetchInit) => {
+      if (url === '/api/v1/ai/status') {
+        return new Response(JSON.stringify({ data: { ...SETTINGS.data, actionsEnabled: true, actionKinds: ['snapshot', 'backup_add'] } }))
+      }
+
+      if (url === '/api/v1/ai/chat/stream') return streamReply(init)
+
+      return new Response('{}')
+    })
+    render(<AIChatWidget available />)
+    fireEvent.click(screen.getByRole('button', { name: 'ai.title' }))
+
+    expect(await screen.findByText('ai.suggestActions')).toBeTruthy()
+    expect(screen.getByText('ai.suggestBackupCoverage')).toBeTruthy()
+    // Not enabled: no suggestion for them.
+    expect(screen.queryByText('ai.suggestActEvacuate')).toBeNull()
+    expect(screen.queryByText('ai.suggestActDrs')).toBeNull()
+    expect(screen.queryByText('ai.suggestActUpdates')).toBeNull()
+
+    // The key is its own text in these tests: a prefill keeps it, ellipsis aside, with a trailing space.
+    fireEvent.click(screen.getByText('ai.suggestActSnapshot'))
+
+    const input = screen.getByPlaceholderText('ai.askQuestion') as HTMLTextAreaElement
+
+    expect(input.value).toBe('ai.suggestActSnapshot ')
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/ai/chat/stream')).toBe(false)
+
+    fireEvent.click(screen.getByText('ai.suggestActProtect'))
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === '/api/v1/ai/chat/stream')).toBe(true))
+  })
+
+  it('offers no action suggestion while the assistant is read-only', async () => {
+    render(<AIChatWidget available />)
+    await openWidget()
+
+    expect(screen.getByText('ai.suggestStorageForecast')).toBeTruthy()
+    expect(screen.queryByText('ai.suggestActions')).toBeNull()
+    expect(screen.queryByText('ai.suggestActSnapshot')).toBeNull()
+  })
+
   it('shows nothing when the assistant is not available', () => {
     const { container } = render(<AIChatWidget available={false} />)
 
@@ -402,6 +444,81 @@ describe('AIChatWidget actions (roadmap#188)', () => {
     expect(screen.queryByRole('link', { name: 'ai.actions.openPage' })).toBeNull()
 
     expect(bodyOf('/api/v1/ai/chat').conversationId).toBe(bodyOf('/api/v1/ai/chat/stream').conversationId)
+  })
+})
+
+describe('AIChatWidget choices (roadmap#188)', () => {
+  const CHOICES = [
+    { kind: 'guest', guestKind: 'qemu', label: 'w22-i1000 · #111 · pve3 · PVE-PROD', reply: 'w22-i1000 (vmid 111, pve3, PVE-PROD)' },
+    { kind: 'guest', guestKind: 'qemu', label: 'w22-i1000 · #115 · pve1 · PVE-PROD', reply: 'w22-i1000 (vmid 115, pve1, PVE-PROD)' }
+  ] as const
+
+  const ask = async (text: string) => {
+    const input = screen.getByPlaceholderText('ai.askQuestion')
+
+    fireEvent.change(input, { target: { value: text } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+  }
+
+  const rowsOf = (group: HTMLElement) => within(group).getAllByRole('button')
+
+  it('sends the reply of the clicked row, keeps the choices out of the history, and disables the list after', async () => {
+    streamReply = () => streamOf(['Several targets match: pick the one you want.', encodeFrame({ type: 'choices', choices: [...CHOICES] })])
+    render(<AIChatWidget available />)
+    await openWidget()
+    await ask('snapshot w22-i1000')
+
+    const group = await screen.findByRole('group', { name: 'ai.whichOne' })
+
+    expect(rowsOf(group).map(r => r.textContent)).toEqual([CHOICES[0].label, CHOICES[1].label])
+
+    streamReply = () => streamOf(['Here is the card.'])
+    fireEvent.click(rowsOf(group)[0])
+    await screen.findByText('Here is the card.')
+
+    expect(bodyOf('/api/v1/ai/chat/stream', 1).messages).toEqual([
+      { role: 'user', content: 'snapshot w22-i1000' },
+      { role: 'assistant', content: 'Several targets match: pick the one you want.' },
+      { role: 'user', content: CHOICES[0].reply }
+    ])
+    // Still shown under its answer, no longer clickable.
+    for (const row of rowsOf(screen.getByRole('group', { name: 'ai.whichOne' }))) expect((row as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('disables the choices of an answer once another message is sent', async () => {
+    streamReply = () => streamOf(['Which one?', encodeFrame({ type: 'choices', choices: [...CHOICES] })])
+    render(<AIChatWidget available />)
+    await openWidget()
+    await ask('snapshot w22-i1000')
+
+    const group = await screen.findByRole('group', { name: 'ai.whichOne' })
+
+    for (const row of rowsOf(group)) expect((row as HTMLButtonElement).disabled).toBe(false)
+
+    streamReply = () => streamOf(['never mind then'])
+    await ask('never mind')
+    await screen.findByText('never mind then')
+
+    for (const row of rowsOf(screen.getByRole('group', { name: 'ai.whichOne' }))) expect((row as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('sanitises the choices of the plain route like the stream decoder does', async () => {
+    streamReply = () => new Response('{}', { status: 500 })
+    fetchMock.mockImplementation(async (url: string, init?: FetchInit) => {
+      if (url === '/api/v1/ai/status') return new Response(JSON.stringify(SETTINGS))
+      if (url === '/api/v1/ai/chat/stream') return streamReply(init)
+
+      return new Response(
+        JSON.stringify({ response: 'Which one?', choices: [CHOICES[0], { kind: 'vm', label: 'x', reply: 'x' }, CHOICES[0], { kind: 'cluster', label: 'PVE-DR', reply: 'PVE-DR' }] })
+      )
+    })
+    render(<AIChatWidget available />)
+    await openWidget()
+    await ask('capacity?')
+
+    const group = await screen.findByRole('group', { name: 'ai.whichOne' })
+
+    expect(rowsOf(group).map(r => r.textContent)).toEqual([CHOICES[0].label, 'PVE-DR'])
   })
 })
 

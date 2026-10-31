@@ -18,8 +18,10 @@ import type { InventorySnapshot, SnapshotGuest, SnapshotNode } from './snapshot'
 import { requireNodeView } from './guards'
 import { downsample, fetchRrd, HISTORY_CHART_POINTS } from './history'
 import {
+  AmbiguousTargetError,
   argNumber,
   argString,
+  guestsMovableTo,
   resolveConnection,
   resolveGuest,
   resolveNode,
@@ -246,6 +248,26 @@ export function evaluateHostFit(snapshot: InventorySnapshot, guest: SnapshotGues
   }
 }
 
+/**
+ * `resolveGuest`, except that a name several guests share resolves to the only
+ * one that could move to `target` (`guestsMovableTo`). A read: the model's
+ * target picks nothing the user then has to approve.
+ */
+function resolveMovableGuest(ctx: ToolContext, ref: string | undefined, target: string | undefined): SnapshotGuest {
+  try {
+    return resolveGuest(ctx, ref)
+  } catch (err) {
+    if (!(err instanceof AmbiguousTargetError) || !target) throw err
+
+    const needle = String(ref ?? '').trim().toLowerCase()
+    const movable = guestsMovableTo(ctx, ctx.snapshot.guests.filter(g => g.name.toLowerCase() === needle), target)
+
+    if (movable.length !== 1) throw err
+
+    return movable[0]
+  }
+}
+
 export const simulateMigrationTool: CatalogTool = {
   name: 'simulate_migration',
   readOnly: true,
@@ -260,9 +282,9 @@ export const simulateMigrationTool: CatalogTool = {
     },
   },
   execute: syncExecute((args, ctx) => {
-    const guest = resolveGuest(ctx, argString(args, 'guest'))
-    const count = argNumber(args, 'count', 1, { min: 1, max: 50 })
     const targetRef = argString(args, 'target')
+    const guest = resolveMovableGuest(ctx, argString(args, 'guest'), targetRef)
+    const count = argNumber(args, 'count', 1, { min: 1, max: 50 })
     const hosts = ctx.snapshot.nodes.filter(n => n.connId === guest.connId && n.status === 'online' && n.name !== guest.node)
 
     const evaluate = (host: SnapshotNode) => evaluateHostFit(ctx.snapshot, guest, host, count)

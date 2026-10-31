@@ -10,7 +10,8 @@
 
 import { resolveConnection, ToolScopeError, type ToolContext } from '@/lib/tools/types'
 
-export const UNGROUNDED_TARGET_MESSAGE = 'Name the guest or host you want me to act on.'
+export const UNGROUNDED_TARGET_MESSAGE =
+  'The user named neither this guest nor the host it runs on: ask them which guest or host to act on, do not explain how to do it by hand.'
 export const UNGROUNDED_CLUSTER_MESSAGE = 'Name the cluster you want me to act on.'
 
 /** The two texts a target is grounded on, carried by `ctx.actions`. */
@@ -80,14 +81,23 @@ export function isGrounded(text: string, term: string | number | undefined): boo
  * answer relays names read from tool results, and an injected text that gets
  * the model to write "web-01" must not be enough to put a reboot of web-01
  * under the user's cursor.
+ *
+ * A guest is also grounded by its host, on the same text as its name: "move
+ * everything off pve1" names every guest of pve1 (lab, roadmap#188: the
+ * evacuation of pve1 got no card at all, its guests being named only in tool
+ * results). An injection can then only aim at a guest of a host the user
+ * talked about, and every card still waits for the user's approval.
  */
 export function assertTargetGrounded(
   grounding: ConversationGrounding,
-  target: { name: string; vmid?: number | string },
+  target: { name: string; vmid?: number | string; node?: string },
   opts: { userOnly?: boolean } = {}
 ): void {
-  if (isGrounded(opts.userOnly ? grounding.userText : grounding.visibleText, target.name)) return
+  const text = opts.userOnly ? grounding.userText : grounding.visibleText
+
+  if (isGrounded(text, target.name)) return
   if (target.vmid !== undefined && isGrounded(grounding.userText, target.vmid)) return
+  if (target.vmid !== undefined && isGrounded(text, target.node)) return
 
   throw new ToolScopeError(UNGROUNDED_TARGET_MESSAGE)
 }

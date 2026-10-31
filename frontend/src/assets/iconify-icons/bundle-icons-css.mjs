@@ -39,7 +39,22 @@ async function generateIconsCSS() {
             'tabler-anchor',
             'uit-adobe-alt',
             // 'fa6-regular-comment',
-            'twemoji-auto-rickshaw'
+            'twemoji-auto-rickshaw',
+            // LLM vendor logos for the AI settings (src/lib/ai/modelVendor.ts).
+            'logos:qwen-icon',
+            'logos:meta-icon',
+            'logos:mistral-ai-icon',
+            'logos:google-gemini-icon',
+            'logos:google-icon',
+            'logos:claude-icon',
+            'logos:deepseek-icon',
+            'logos:microsoft-icon',
+            'logos:cohere-icon',
+            'logos:nvidia',
+            'simple-icons:openai',
+            // Provider picker of the AI settings.
+            'simple-icons:anthropic',
+            'simple-icons:ibm'
         ],
         svg: [
         /* {

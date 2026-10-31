@@ -24,6 +24,18 @@ export type ActionKind = (typeof ACTION_KINDS)[number]
 
 export type ActionTier = 'safe' | 'disruptive'
 
+/** One Remix icon per kind: the card, the drawer's suggestions and the settings rows show the same. */
+export const ACTION_KIND_ICONS: Record<ActionKind, string> = {
+  snapshot: 'ri-camera-line',
+  start: 'ri-play-line',
+  shutdown: 'ri-shut-down-line',
+  reboot: 'ri-restart-line',
+  migrate: 'ri-arrow-left-right-line',
+  drs_apply: 'ri-scales-3-line',
+  backup_add: 'ri-save-3-line',
+  maintenance: 'ri-tools-line',
+}
+
 // Disruptive kinds ask for a double confirmation in the widget.
 export const ACTION_TIER: Record<ActionKind, ActionTier> = {
   snapshot: 'safe',

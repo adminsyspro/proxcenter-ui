@@ -7,7 +7,7 @@
  * of a host?".
  */
 
-import { argNumber, argString, resolveConnection, type CatalogTool } from './types'
+import { argNumber, argString, resolveConnection, syncExecute, type CatalogTool } from './types'
 import type { SnapshotGuest, SnapshotNode } from './snapshot'
 
 /** RAM kept back on every host for the host itself, ZFS ARC and spikes. */
@@ -57,7 +57,7 @@ export const getCapacityTool: CatalogTool = {
       vm_memory_gb: { type: 'number', description: 'RAM of the VM the user plans to add, in GB, to count how many fit.' },
     },
   },
-  async execute(args, ctx) {
+  execute: syncExecute((args, ctx) => {
     const clusterRef = argString(args, 'cluster')
     const vmMemoryGb = args.vm_memory_gb === undefined || args.vm_memory_gb === null || args.vm_memory_gb === ''
       ? undefined
@@ -108,5 +108,5 @@ export const getCapacityTool: CatalogTool = {
       clusters,
       note: 'An over-commit ratio is assigned divided by physical: BELOW 1 means NOT over-committed (0.6 = 60 % of the RAM is assigned). It counts running guests only. CPU over-commit of 2 to 4 is common; RAM over-commit above 1 relies on ballooning or KSM.',
     }
-  },
+  }),
 }

@@ -37,6 +37,14 @@ export type OllamaModelCapabilities = {
 
 const UNKNOWN_CAPABILITIES: OllamaModelCapabilities = { capabilities: null, toolCalling: null }
 
+/** The base URL without its trailing slashes, read without a regex. */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length
+  while (end > 0 && value[end - 1] === '/') end--
+
+  return value.slice(0, end)
+}
+
 /**
  * Ask Ollama whether a model can call tools.
  *
@@ -57,7 +65,7 @@ export async function fetchOllamaCapabilities(
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const res = await fetchImpl(`${base.replace(/\/+$/, '')}/api/show`, {
+    const res = await fetchImpl(`${stripTrailingSlashes(base)}/api/show`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model }),
@@ -118,7 +126,7 @@ export async function probeOllamaModel(
   opts: { thinking: boolean; fetchImpl?: typeof fetch; timeoutMs?: number }
 ): Promise<OllamaProbeResult> {
   const fetchImpl = opts.fetchImpl ?? fetch
-  const root = base.replace(/\/+$/, '')
+  const root = stripTrailingSlashes(base)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? OLLAMA_PROBE_TIMEOUT_MS)
 

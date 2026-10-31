@@ -19,7 +19,7 @@
 
 import type { SnapshotGuest } from '@/lib/tools/snapshot'
 import type { CatalogTool, ToolContext } from '@/lib/tools/types'
-import { argEnum, argNumber, argString, resolveConnection, resolveGuest } from '@/lib/tools/types'
+import { argEnum, argNumber, argString, resolveConnection, resolveGuest, syncExecute } from '@/lib/tools/types'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import type { PveConn } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
@@ -131,7 +131,7 @@ export const rankGuestHardwareTool: CatalogTool = {
       },
     },
   },
-  async execute(args: Record<string, unknown>, ctx: ToolContext) {
+  execute: syncExecute((args: Record<string, unknown>, ctx: ToolContext) => {
     const metric = argEnum(args, 'metric', RANK_METRICS, 'vcpus')
     const limit = argNumber(args, 'limit', 10, { min: 1, max: 50 })
     const status = argEnum(args, 'status', STATUS_FILTERS, 'all')
@@ -190,7 +190,7 @@ export const rankGuestHardwareTool: CatalogTool = {
       })),
       note: metric === 'disk' ? DISK_RANK_NOTE : undefined,
     }
-  },
+  }),
 }
 
 /* ------------------------------------------------------------------ */

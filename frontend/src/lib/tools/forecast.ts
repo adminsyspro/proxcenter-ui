@@ -22,6 +22,7 @@ import {
   resolveConnection,
   resolveGuest,
   resolveNode,
+  syncExecute,
   ToolArgumentError,
   ToolScopeError,
   type CatalogTool,
@@ -230,7 +231,7 @@ export const simulateMigrationTool: CatalogTool = {
       count: { type: 'integer', description: 'How many guests of that size to place, for a sizing question.', default: 1, minimum: 1, maximum: 50 },
     },
   },
-  async execute(args, ctx) {
+  execute: syncExecute((args, ctx) => {
     const guest = resolveGuest(ctx, argString(args, 'guest'))
     const count = argNumber(args, 'count', 1, { min: 1, max: 50 })
     const targetRef = argString(args, 'target')
@@ -284,5 +285,5 @@ export const simulateMigrationTool: CatalogTool = {
         .map(evaluate)
         .sort((a, b) => Number(b.fits) - Number(a.fits) || b.ramFreeAfterReserveGb - a.ramFreeAfterReserveGb),
     }
-  },
+  }),
 }

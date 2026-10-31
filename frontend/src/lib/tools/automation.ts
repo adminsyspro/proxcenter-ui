@@ -171,7 +171,7 @@ export const getSiteRecoveryTool: CatalogTool = {
         (Array.isArray(j.vm_ids) && j.vm_ids.every((vmid: unknown) => guestVisible(ctx.snapshot, j.source_cluster, vmid)))
       )
       .map((j: any) => {
-        const lastSync = typeof j.last_sync === 'string' ? Date.parse(j.last_sync) : NaN
+        const lastSync = typeof j.last_sync === 'string' ? Date.parse(j.last_sync) : Number.NaN
         const lagSeconds = Number.isFinite(lastSync) ? Math.max(0, Math.round((now - lastSync) / 1000)) : null
         const rpo = typeof j.rpo_target === 'number' && j.rpo_target > 0 ? j.rpo_target : null
 

@@ -12,6 +12,7 @@ import {
   argNumber,
   argString,
   resolveConnection,
+  syncExecute,
   type CatalogTool,
 } from '@/lib/tools/types'
 
@@ -45,7 +46,7 @@ export const listGuestsTool: CatalogTool = {
       limit: { type: 'integer', description: 'Maximum guests to return.', default: 100 },
     },
   },
-  async execute(args, ctx) {
+  execute: syncExecute((args, ctx) => {
     const status = argEnum(args, 'status', ['all', 'running', 'stopped'] as const, 'all')
     const limit = argNumber(args, 'limit', 100, { min: 1, max: 500 })
     const clusterRef = argString(args, 'cluster')
@@ -98,7 +99,7 @@ export const listGuestsTool: CatalogTool = {
         haState: g.haState ?? null,
       })),
     }
-  },
+  }),
 }
 
 export const listHostsTool: CatalogTool = {
@@ -112,7 +113,7 @@ export const listHostsTool: CatalogTool = {
       cluster: { type: 'string', description: 'Cluster name, only when the user names one. Omit it to list every visible cluster.' },
     },
   },
-  async execute(args, ctx) {
+  execute: syncExecute((args, ctx) => {
     const clusterRef = argString(args, 'cluster')
     const connId = clusterRef ? resolveConnection(ctx, clusterRef).id : undefined
     const nodes = connId ? ctx.snapshot.nodes.filter(n => n.connId === connId) : ctx.snapshot.nodes
@@ -145,5 +146,5 @@ export const listHostsTool: CatalogTool = {
         rootfsUsedPct: n.rootfsPct ?? null,
       })),
     }
-  },
+  }),
 }

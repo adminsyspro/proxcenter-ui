@@ -61,6 +61,16 @@ export type CatalogTool = {
   execute: (args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>
 }
 
+/**
+ * `execute` for a tool that reads only the snapshot: a throw still reaches the
+ * caller as a rejection, as it would from an async body.
+ */
+export function syncExecute(
+  body: (args: Record<string, unknown>, ctx: ToolContext) => unknown
+): CatalogTool['execute'] {
+  return (args, ctx) => new Promise(resolve => resolve(body(args, ctx)))
+}
+
 /** Raised when the model asks for something the caller may not see. */
 export class ToolScopeError extends Error {
   constructor(message: string) {

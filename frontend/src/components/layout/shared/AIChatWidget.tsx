@@ -635,7 +635,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
     // An IME composition (Korean, Chinese) also ends on Enter.
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
-      sendMessage(input)
+      void sendMessage(input)
     }
   }
 

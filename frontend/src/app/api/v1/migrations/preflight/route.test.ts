@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 // RBAC allows; the route gates on VM_MIGRATE.
 vi.mock("@/lib/rbac", () => ({
+  getCurrentRbacInfraScope: vi.fn(async () => null),
   checkPermission: vi.fn(async () => null),
   PERMISSIONS: { VM_MIGRATE: "vm.migrate", CONNECTION_VIEW: "connection.view" },
 }))

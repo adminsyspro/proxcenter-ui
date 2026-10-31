@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { requireProviderTenant } from "@/lib/tenant"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -9,6 +10,9 @@ export const runtime = "nodejs"
 // POST /api/v1/orchestrator/drs/enforce-rules
 async function handlePost() {
   try {
+    // Enforces the rules of every cluster of the fleet.
+    const providerGate = await requireProviderTenant()
+    if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_EXECUTE, "global", "*")
 
     if (denied) return denied

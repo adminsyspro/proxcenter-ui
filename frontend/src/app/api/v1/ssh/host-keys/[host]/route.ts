@@ -4,6 +4,7 @@ import { safeLog } from "@/lib/log/sanitize"
 import { orchestratorFetch, parseOrchestratorError } from "@/lib/orchestrator"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { forgetHostKey } from "@/lib/ssh/host-key-store"
+import { hostKeyInScope, hostKeyScope } from "@/lib/ssh/hostKeyAccess"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -43,6 +44,12 @@ async function handleDelete(
         { error: "Invalid host: expected a bare host name or address, without a port" },
         { status: 400 }
       )
+    }
+
+    // The stores are installation-wide: the caller only forgets the pin of a
+    // host of a connection they manage, and an unknown host reads as unpinned.
+    if (!hostKeyInScope(await hostKeyScope(PERMISSIONS.CONNECTION_MANAGE), host)) {
+      return NextResponse.json({ error: `no pinned host key for ${host}` }, { status: 404 })
     }
 
     let orchestratorCleared = false

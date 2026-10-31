@@ -26,6 +26,7 @@ vi.mock('@/lib/tenant', () => ({
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
+  getCurrentRbacInfraScope: async () => null,
   PERMISSIONS: { NODE_VIEW: 'node.view' },
 }))
 

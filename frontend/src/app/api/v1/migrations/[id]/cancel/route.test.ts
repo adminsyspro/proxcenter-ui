@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
 const h = vi.hoisted(() => ({
-  migrationJobFindUnique: vi.fn(),
+  migrationJobFindFirst: vi.fn(),
   migrationJobUpdate: vi.fn(),
   checkPermission: vi.fn(),
   cancelMigrationJob: vi.fn(),
@@ -15,13 +15,14 @@ const h = vi.hoisted(() => ({
 vi.mock("@/lib/tenant", () => ({
   getSessionPrisma: vi.fn(async () => ({
     migrationJob: {
-      findUnique: h.migrationJobFindUnique,
+      findFirst: h.migrationJobFindFirst,
       update: h.migrationJobUpdate,
     },
   })),
 }))
 
 vi.mock("@/lib/rbac", () => ({
+  getCurrentRbacInfraScope: vi.fn(async () => null),
   checkPermission: h.checkPermission,
   PERMISSIONS: { VM_MIGRATE: "vm.migrate" },
 }))
@@ -46,7 +47,7 @@ import { POST } from "./route"
 
 beforeEach(() => {
   h.checkPermission.mockReset().mockResolvedValue(null)
-  h.migrationJobFindUnique.mockReset().mockResolvedValue({ id: "job-1", status: "transferring" })
+  h.migrationJobFindFirst.mockReset().mockResolvedValue({ id: "job-1", status: "transferring" })
   h.migrationJobUpdate.mockReset().mockResolvedValue({ id: "job-1", status: "cancelled" })
   h.cancelMigrationJob.mockReset()
   h.cancelWarmMigrationJob.mockReset()
@@ -86,13 +87,13 @@ describe("POST /api/v1/migrations/[id]/cancel", () => {
 
     expect(res.status).toBe(403)
     expect(await readJson(res)).toEqual({ error: "forbidden" })
-    expect(h.migrationJobFindUnique).not.toHaveBeenCalled()
+    expect(h.migrationJobFindFirst).not.toHaveBeenCalled()
     expect(h.cancelXcpngMigrationJob).not.toHaveBeenCalled()
     expect(h.migrationJobUpdate).not.toHaveBeenCalled()
   })
 
   it("returns 404 when the migration job does not exist", async () => {
-    h.migrationJobFindUnique.mockResolvedValueOnce(null)
+    h.migrationJobFindFirst.mockResolvedValueOnce(null)
 
     const res = await callRoute(POST, { params: { id: "missing" }, method: "POST" })
 
@@ -103,7 +104,7 @@ describe("POST /api/v1/migrations/[id]/cancel", () => {
   })
 
   it.each(["completed", "failed", "cancelled"])("refuses to cancel a %s job", async (status) => {
-    h.migrationJobFindUnique.mockResolvedValueOnce({ id: "job-1", status })
+    h.migrationJobFindFirst.mockResolvedValueOnce({ id: "job-1", status })
 
     const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
 

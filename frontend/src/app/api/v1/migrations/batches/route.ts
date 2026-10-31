@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth"
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { migrateScope, mayMigrateBetweenClusters } from "@/lib/migration/authorize"
 import { NicConfigError } from "@/lib/rbac/nicPermissions"
 import { authOptions } from "@/lib/auth/config"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
@@ -89,6 +90,13 @@ async function handlePost(req: Request) {
     for (const id of new Set([first.sourceConnectionId, first.targetConnectionId])) {
       const deniedView = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
       if (deniedView) return deniedView
+    }
+    // Following and steering a batch takes vm.migrate on both whole clusters
+    // (lib/migration/batch-access): a caller holding it on some nodes only
+    // starts their VMs one by one.
+    for (const id of new Set([first.sourceConnectionId, first.targetConnectionId])) {
+      const deniedMigrate = await checkPermission(PERMISSIONS.VM_MIGRATE, "connection", id)
+      if (deniedMigrate) return deniedMigrate
     }
     // Warm VMware: every VM's node must reach the copy adapter of its source
     // host (lib/migration/batch-copy-reach), or its job fails at planning.
@@ -199,7 +207,8 @@ export async function GET(req: Request) {
       include: { jobs: { select: { status: true } } },
     })
     const infra = await getTenantInfrastructureScope(tenantId)
-    const visible = batches.filter((b: any) => canMigrateConnections(infra, b.sourceConnectionId, b.targetConnectionId))
+    const scope = await migrateScope()
+    const visible = batches.filter((b: any) => canMigrateConnections(infra, b.sourceConnectionId, b.targetConnectionId) && mayMigrateBetweenClusters(scope, b.sourceConnectionId, b.targetConnectionId))
     // Source hypervisor of each batch, for the icon of its taskbar entry. Read
     // with the global client: a provider batch may come from a connection an
     // MSP tenant owns, and only the type of a connection the batch already

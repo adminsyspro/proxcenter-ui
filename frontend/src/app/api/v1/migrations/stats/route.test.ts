@@ -8,7 +8,7 @@ const h = vi.hoisted(() => ({
   global: { connection: { findMany: vi.fn() } },
 }))
 
-vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => h.denied), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
+vi.mock("@/lib/rbac", () => ({ getCurrentRbacInfraScope: vi.fn(async () => null), checkPermission: vi.fn(async () => h.denied), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
 vi.mock("@/lib/tenant", () => ({ getSessionPrisma: vi.fn(async () => h.session), getCurrentTenantId: vi.fn(async () => h.tenantId) }))
 vi.mock("@/lib/tenant/infraScope", async (orig) => ({
   ...(await orig<typeof import("@/lib/tenant/infraScope")>()),

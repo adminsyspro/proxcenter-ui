@@ -35,6 +35,8 @@ vi.mock("@/lib/tenant/infraScope", async (orig) => ({
 
 // Mutable variable: getCurrentTenantId returns this (the session tenant)
 let currentTenantId = "default"
+// The caller's node.view perimeter (null = unrestricted)
+let rbacScope: any = null
 
 vi.mock("@/lib/tenant", () => ({
   getSessionPrisma: async () => ({
@@ -63,6 +65,8 @@ vi.mock("@/lib/connections/getConnection", () => ({
 
 vi.mock("@/lib/rbac", () => ({
   checkPermission: checkPermissionMock,
+  getCurrentRbacInfraScope: async () => rbacScope,
+  getRequestGuestScopePerimeter: async () => null,
   PERMISSIONS: { NODE_VIEW: "node.view", CONNECTION_VIEW: "connection.view" },
 }))
 
@@ -113,6 +117,7 @@ function mockPveNodes() {
 beforeEach(() => {
   vi.clearAllMocks()
   currentTenantId = "default"
+  rbacScope = null
   checkPermissionMock.mockResolvedValue(null)
   getInfraMock.mockResolvedValue({ kind: "provider" })
   getConnectionByIdMock.mockResolvedValue(MSP_CONN)
@@ -189,5 +194,41 @@ describe("GET /api/v1/connections/[id]/nodes (cross-tenant ManagedHost handling)
     await expect(callRoute(GET, { params: { id: "c-msp" } })).rejects.toThrow(
       /Connection not found/
     )
+  })
+})
+
+describe("GET /api/v1/connections/[id]/nodes (caller grants, roadmap#184)", () => {
+  const scoped = (nodes: string[]) => ({ fullConnections: new Set<string>(), nodesByConnection: new Map([["c-msp", new Set(nodes)]]), guestDerived: false })
+
+  it("hides the nodes and the API node the caller's grants do not name", async () => {
+    mockPveNodes()
+    rbacScope = scoped(["pve9"])
+
+    const body = await readJson<any>(await callRoute(GET, { params: { id: "c-msp" } }))
+
+    expect(body.data).toEqual([])
+    expect(body.connectedNode).toBeNull()
+  })
+
+  it("keeps the named node, fresh or from the cache another caller filled", async () => {
+    mockPveNodes()
+    await callRoute(GET, { params: { id: "c-msp" } })
+    rbacScope = scoped(["pve1"])
+
+    const body = await readJson<any>(await callRoute(GET, { params: { id: "c-msp" } }))
+
+    expect(body.data.map((n: any) => n.node)).toEqual(["pve1"])
+    expect(pveFetchMock.mock.calls.filter(c => c[1] === "/nodes")).toHaveLength(1)
+  })
+
+  it("serves the whole cached list to the next unrestricted caller", async () => {
+    mockPveNodes()
+    rbacScope = scoped(["pve9"])
+    await callRoute(GET, { params: { id: "c-msp" } })
+    rbacScope = null
+
+    const body = await readJson<any>(await callRoute(GET, { params: { id: "c-msp" } }))
+
+    expect(body.data.map((n: any) => n.node)).toEqual(["pve1"])
   })
 })

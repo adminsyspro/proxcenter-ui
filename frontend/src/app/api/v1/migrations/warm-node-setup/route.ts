@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { denyMigrationEnds } from "@/lib/migration/authorize"
 import { requireFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { provisionWarmNode } from "@/lib/migration/warm/vddk-provision"
@@ -45,6 +46,8 @@ async function handlePost(req: Request) {
       { status: 400 }
     )
   }
+  const deniedEnds = await denyMigrationEnds(undefined, targetConnectionId, [targetNode])
+  if (deniedEnds) return deniedEnds
 
   try {
     const result = await provisionWarmNode(targetConnectionId, targetNode, vddkLibdir)

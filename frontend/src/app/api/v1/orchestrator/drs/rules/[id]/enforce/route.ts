@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getTenantConnectionIds } from "@/lib/tenant"
+import { mayActOnDrsRule } from "@/lib/orchestrator/drsRuleScope"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -20,14 +20,8 @@ async function handlePost(
     const client = getOrchestratorClient()
 
     // Verify rule belongs to tenant
-    const rulesRes = await client.getRules()
-    const rules = Array.isArray(rulesRes.data) ? rulesRes.data : []
-    const rule = rules.find((r: any) => r.id === id)
-    if (rule?.connection_id) {
-      const tenantConnectionIds = await getTenantConnectionIds()
-      if (!tenantConnectionIds.has(rule.connection_id)) {
-        return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
-      }
+    if (!(await mayActOnDrsRule(client, id))) {
+      return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
     }
 
     const response = await client.enforceRule(id)

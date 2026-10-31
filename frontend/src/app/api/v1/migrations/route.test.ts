@@ -22,7 +22,7 @@ vi.mock("@/lib/tenant/infraScope", async (orig) => ({
   ...(await orig<typeof import("@/lib/tenant/infraScope")>()),
   getTenantInfrastructureScope: vi.fn(async () => h.infra),
 }))
-vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate", CONNECTION_MANAGE: "connection.manage" } }))
+vi.mock("@/lib/rbac", () => ({ getCurrentRbacInfraScope: vi.fn(async () => null), checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate", CONNECTION_MANAGE: "connection.manage" } }))
 vi.mock("@/lib/tenant", () => ({
   getSessionPrisma: vi.fn(async () => h.prisma),
   getCurrentTenantId: vi.fn(async () => "default"),

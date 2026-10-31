@@ -20,7 +20,7 @@ vi.mock("next/server", async (io) => {
 })
 vi.mock("next-auth", () => ({ getServerSession: vi.fn(async () => ({ user: { id: "u1" } })) }))
 vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
-vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => h.denied), PERMISSIONS: { VM_MIGRATE: "vm.migrate", CONNECTION_VIEW: "connection.view" } }))
+vi.mock("@/lib/rbac", () => ({ getCurrentRbacInfraScope: vi.fn(async () => null), checkPermission: vi.fn(async () => h.denied), PERMISSIONS: { VM_MIGRATE: "vm.migrate", CONNECTION_VIEW: "connection.view" } }))
 vi.mock("@/lib/tenant", () => ({
   getSessionPrisma: vi.fn(async () => h.prisma),
   getCurrentTenantId: vi.fn(async () => h.tenantId),

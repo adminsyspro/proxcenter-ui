@@ -14,10 +14,13 @@ const h = vi.hoisted(() => ({
   getTenantInfrastructureScope: vi.fn(async () => null as any),
   maskingScope: vi.fn((scope: any) => scope),
   pveFetch: vi.fn(async (_conn: any, _path: string) => undefined as any),
+  sessionGuestVisibility: vi.fn(async (_input: any) => ({ ok: true, visibility: { all: true, has: () => true } }) as any),
 }))
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: h.checkPermission,
+  getRBACContext: async () => ({ isAdmin: true, tenantId: 'default' }),
+  filterVmsByPermission: async (_p: unknown, list: unknown[]) => list,
   PERMISSIONS: { VM_VIEW: 'vm.view' },
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: h.getConnectionById }))
@@ -27,6 +30,10 @@ vi.mock('@/lib/tenant/infraScope', () => ({
   maskingScope: h.maskingScope,
 }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: h.pveFetch }))
+vi.mock('@/lib/vdc/guestGuard', async (orig) => ({
+  ...(await orig<typeof import('@/lib/vdc/guestGuard')>()),
+  sessionGuestVisibility: h.sessionGuestVisibility,
+}))
 
 import { POST } from './route'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
@@ -98,6 +105,7 @@ beforeEach(() => {
   h.maskingScope.mockReset().mockImplementation((scope: any) => scope)
   h.getConnectionById.mockClear()
   h.pveFetch.mockReset()
+  h.sessionGuestVisibility.mockReset().mockResolvedValue({ ok: true, visibility: { all: true, has: () => true } })
   stubPve()
 })
 
@@ -258,5 +266,44 @@ describe('POST /api/v1/vms/networks', () => {
     })
 
     expect(res.status).toBe(500)
+  })
+
+  // roadmap#184: the guest list comes from the body, so each entry is checked
+  // before its identifiers reach the PVE URL and against the vDC pools.
+  it('drops malformed guests before any PVE call', async () => {
+    stubPve()
+
+    const json = await post({
+      vms: [
+        { connId: CONN, type: 'qemu/../../cluster', node: NODE, vmid: '100' },
+        { connId: CONN, type: 'qemu', node: NODE, vmid: '100/../105' },
+      ],
+    })
+
+    expect(json.data).toEqual({})
+    expect(h.pveFetch).not.toHaveBeenCalled()
+  })
+
+  it('answers only the guests of the vDC pools to a vDC session', async () => {
+    stubPve()
+    h.sessionGuestVisibility.mockResolvedValue({ ok: true, visibility: { all: false, has: (_t: any, vmid: any) => vmid === '101' } })
+
+    const json = await post({
+      vms: [
+        { connId: CONN, type: 'qemu', node: NODE, vmid: '100' },
+        { connId: CONN, type: 'qemu', node: NODE, vmid: '101' },
+      ],
+    })
+
+    expect(Object.keys(json.data)).toEqual([`${CONN}:qemu:${NODE}:101`])
+    expect(h.pveFetch.mock.calls.map((c: any[]) => c[1])).not.toContain(`/nodes/${NODE}/qemu/100/config`)
+  })
+
+  it('answers nothing for a connection whose vDC visibility cannot be read', async () => {
+    stubPve()
+    h.sessionGuestVisibility.mockResolvedValue({ ok: false })
+
+    expect((await post(oneVm)).data).toEqual({})
+    expect(h.pveFetch).not.toHaveBeenCalled()
   })
 })

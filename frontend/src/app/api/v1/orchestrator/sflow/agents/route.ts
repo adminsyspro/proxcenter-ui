@@ -233,6 +233,23 @@ async function recordSFlowConfigureAudit(
   }
 }
 
+// The connections among `ids` on which the caller holds `permission`. The
+// checks at the top of each handler only say the caller holds it SOMEWHERE: a
+// grant scoped to one connection passes them, so every connection read or
+// configured is checked on its own.
+async function connectionsGranted(permission: string, ids: Iterable<string>): Promise<Set<string>> {
+  const granted = new Set<string>()
+  for (const id of new Set(ids)) {
+    if (!(await checkPermission(permission, "connection", id))) granted.add(id)
+  }
+  return granted
+}
+
+async function visibleAgents(data: NodeSFlowStatus[]): Promise<NodeSFlowStatus[]> {
+  const viewable = await connectionsGranted(PERMISSIONS.CONNECTION_VIEW, data.map(n => n.connectionId))
+  return data.filter(n => viewable.has(n.connectionId))
+}
+
 // GET /api/v1/orchestrator/sflow/agents — check sFlow status on all nodes
 export async function GET() {
   try {
@@ -242,7 +259,7 @@ export async function GET() {
     const tenantId = await getCurrentTenantId()
     const cached = agentsCache.get(tenantId)
     if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
-      return NextResponse.json({ data: cached.data })
+      return NextResponse.json({ data: await visibleAgents(cached.data) })
     }
 
     const prisma = await getSessionPrisma()
@@ -279,8 +296,9 @@ export async function GET() {
       await reportExpectedAgents(expectedAgentsFrom(results, probedConnectionIds))
     }
 
+    // The probe and its cache cover the tenant; each caller reads its own connections.
     agentsCache.set(tenantId, { at: Date.now(), data: results })
-    return NextResponse.json({ data: results })
+    return NextResponse.json({ data: await visibleAgents(results) })
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Failed to check sFlow agents" },
@@ -339,26 +357,33 @@ async function handlePost(request: NextRequest) {
       error?: string
       bridgesConfigured?: number
     }> = []
+    const manageable = await connectionsGranted(PERMISSIONS.CONNECTION_MANAGE, connections.map(c => c.id))
     // The nodes just set, for the orchestrator to start expecting them now:
     // the grace period before "telemetry missing" runs from this run.
     const configuredNow: ExpectedAgentReport[] = []
 
     for (const nodeReq of nodes) {
       const { ip, connectionId } = nodeReq
-      const conn = connections.find(c => c.id === connectionId)
+      const conn = connections.find(c => c.id === connectionId && manageable.has(c.id))
       if (!conn) {
         results.push({ node: nodeReq.node, ip, success: false, error: "Connection not found" })
         continue
       }
+      // Only a node the connection lists, reached on its own address: the posted
+      // ip is never a target, or the connection's credentials would be offered
+      // to any host the caller names.
+      const host = conn.hosts?.find(h => h.node === nodeReq.node && h.enabled && !!(h.ip || h.sshAddress))
+      if (!host) {
+        results.push({ node: nodeReq.node, ip, success: false, error: "Unknown node for this connection" })
+        continue
+      }
 
       try {
-        // Reach the node on its own SSH address and port; the posted ip only
-        // stands in for a node this connection no longer lists.
-        const host = conn.hosts?.find(h => h.node === nodeReq.node)
-        const target = host ? managedHostSshEndpoint({ ...host, ip: host.ip || ip }, conn.sshPort) : ip
+        const target = managedHostSshEndpoint(host, conn.sshPort)
         // The agent is pinned to the address the table and the port map key the
         // node on, the same `ip` the GET reports for it.
-        const applied = await applySFlowOnNode(conn.id, target, desiredConfig, host?.ip || ip)
+        const agentIp = host.ip || target.host
+        const applied = await applySFlowOnNode(conn.id, target, desiredConfig, agentIp)
 
         results.push({
           node: nodeReq.node,
@@ -372,7 +397,7 @@ async function handlePost(request: NextRequest) {
             connection_id: conn.id,
             connection_name: conn.name,
             node: nodeReq.node,
-            agent_ip: host?.ip || ip,
+            agent_ip: agentIp,
             target: collectorTarget,
             polling_interval: safePolling,
             sampling_rate: safeSampling,
@@ -393,8 +418,12 @@ async function handlePost(request: NextRequest) {
 
     // Remember what was asked for, so the reconciler can put it back after a
     // node loses its OVS database. Only worth storing if it worked somewhere.
+    // The reconciler puts it back on EVERY connection of the tenant, so only a
+    // caller who manages all of them may set it.
     if (successCount > 0) {
-      await saveDesiredSFlowConfig(tenantId, desiredConfig)
+      if (connections.every(c => manageable.has(c.id))) {
+        await saveDesiredSFlowConfig(tenantId, desiredConfig)
+      }
       if (!(await requireProviderTenant())) {
         await reportExpectedAgents({ connection_ids: [], agents: configuredNow })
       }

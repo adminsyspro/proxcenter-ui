@@ -31,6 +31,17 @@ vi.mock('@/lib/ssh/host-key-store', () => ({
   forgetHostKey: (host: string) => forgetHostKeyMock(host),
 }))
 
+const { hostKeyScopeMock } = vi.hoisted(() => ({
+  hostKeyScopeMock: vi.fn<(...a: any[]) => Promise<{ all: boolean; hosts: Set<string> }>>(),
+}))
+
+// Which hosts a caller reaches is hostKeyAccess.test.ts's business; here the
+// route only has to ask it and honour the answer.
+vi.mock('@/lib/ssh/hostKeyAccess', () => ({
+  hostKeyScope: (...a: unknown[]) => hostKeyScopeMock(...a),
+  hostKeyInScope: (scope: { all: boolean; hosts: Set<string> }, host: string) => scope.all || scope.hosts.has(host),
+}))
+
 import { DELETE } from './route'
 
 /** The error shape orchestratorFetch throws on a non-OK upstream response. */
@@ -49,6 +60,7 @@ function call(host: string) {
 }
 
 beforeEach(() => {
+  hostKeyScopeMock.mockReset().mockResolvedValue({ all: true, hosts: new Set() })
   checkPermissionMock.mockReset().mockResolvedValue(null)
   orchestratorFetchMock.mockReset().mockResolvedValue({ status: 'forgotten', host: '10.42.0.101' })
   forgetHostKeyMock.mockReset().mockResolvedValue(0)
@@ -204,5 +216,27 @@ describe('DELETE /api/v1/ssh/host-keys/[host]', () => {
     expect(await readJson<any>(res)).toMatchObject({ host: 'pve-node1.lab' })
     expect(orchestratorFetchMock).toHaveBeenCalledWith('/ssh/host-keys/pve-node1.lab', { method: 'DELETE' })
     expect(forgetHostKeyMock).toHaveBeenCalledWith('pve-node1.lab')
+  })
+
+  // roadmap#184: a pin is forgotten only for a host of a connection the caller manages.
+  it('answers 404 and clears nothing for a host outside the caller connections', async () => {
+    hostKeyScopeMock.mockResolvedValue({ all: false, hosts: new Set(['10.42.0.111']) })
+
+    const res = await call('10.42.0.101')
+
+    expect(res.status).toBe(404)
+    expect(orchestratorFetchMock).not.toHaveBeenCalled()
+    expect(forgetHostKeyMock).not.toHaveBeenCalled()
+    expect(hostKeyScopeMock).toHaveBeenCalledWith('connection.manage')
+  })
+
+  it('still clears the pin of a host of a managed connection', async () => {
+    hostKeyScopeMock.mockResolvedValue({ all: false, hosts: new Set(['10.42.0.111']) })
+    forgetHostKeyMock.mockResolvedValue(1)
+
+    const res = await call('10.42.0.111')
+
+    expect(res.status).toBe(200)
+    expect(forgetHostKeyMock).toHaveBeenCalledWith('10.42.0.111')
   })
 })

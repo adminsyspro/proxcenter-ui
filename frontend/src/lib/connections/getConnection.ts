@@ -288,22 +288,17 @@ export async function getPbsConnectionById(id: string, tenantId?: string): Promi
   // whole fleet including MSP-owned PBS connections (A1 fleet-scope decision);
   // its session callers still need a pbs-scoped view grant (see
   // assertProviderFleetViewFromSession). Any OTHER tenant must own the
-  // connection OR have it referenced by one of its vDC PBS bindings. The
-  // latter lets tenants reach provider-owned PBS connections through their
-  // vDC scope (mirrors the assertVdcPbsAccess pattern used in the backups
-  // route).
+  // connection. A vDC namespace binding on a provider PBS is NOT enough here:
+  // this loader serves the whole server (ACL, users, syslog, tasks, job
+  // config), so a bound tenant would read and write past its namespace. The
+  // namespace-filtered routes reach that PBS through assertVdcPbsAccess +
+  // getPbsConnectionByIdUnscoped instead.
   if (c.tenantId !== resolvedTenantId) {
-    if (resolvedTenantId === DEFAULT_TENANT_ID) {
-      if (!explicitTenant) {
-        await assertProviderFleetViewFromSession(id, "pbs")
-      }
-    } else {
-      const { getVdcScope } = await import('@/lib/vdc/scope')
-      // Ownership check on direct PBS access: full union, not the view context.
-      const scope = await getVdcScope(resolvedTenantId, { ignoreVdcContext: true })
-      if (!scope || !scope.pbsConnectionIds.has(id)) {
-        throw new Error(`PBS Connection not found: ${id}`)
-      }
+    if (resolvedTenantId !== DEFAULT_TENANT_ID) {
+      throw new Error(`PBS Connection not found: ${id}`)
+    }
+    if (!explicitTenant) {
+      await assertProviderFleetViewFromSession(id, "pbs")
     }
   }
 

@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
-import { getTenantConnectionIds } from '@/lib/tenant'
+import { isTenantRuleConnection, mayActOnDrsRule } from '@/lib/orchestrator/drsRuleScope'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withAudit } from '@/lib/audit/withAudit'
 
@@ -10,17 +10,6 @@ export const runtime = "nodejs"
 
 interface RouteParams {
   params: Promise<{ id: string }>
-}
-
-async function verifyDrsRuleBelongsToTenant(client: any, id: string): Promise<boolean> {
-  const rulesRes = await client.getRules()
-  const rules = Array.isArray(rulesRes.data) ? rulesRes.data : []
-  const rule = rules.find((r: any) => r.id === id)
-  if (rule?.connection_id) {
-    const tenantConnectionIds = await getTenantConnectionIds()
-    return tenantConnectionIds.has(rule.connection_id)
-  }
-  return true // no connection_id = global rule
 }
 
 // PUT /api/v1/orchestrator/drs/rules/:id — tenant-scoped
@@ -33,7 +22,7 @@ async function handlePut(request: NextRequest, { params }: RouteParams) {
     const client = getOrchestratorClient()
     if (!client) return NextResponse.json({ error: 'Orchestrator not configured' }, { status: 503 })
 
-    if (!(await verifyDrsRuleBelongsToTenant(client, id))) {
+    if (!(await mayActOnDrsRule(client, id))) {
       return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
     }
 
@@ -42,6 +31,10 @@ async function handlePut(request: NextRequest, { params }: RouteParams) {
     if (rule.connectionId !== undefined) {
       rule.connection_id = rule.connectionId
       delete rule.connectionId
+    }
+    // Moving a rule is creating it on the new cluster: same tenant check.
+    if (rule.connection_id !== undefined && !(await isTenantRuleConnection(rule.connection_id))) {
+      return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
     if (rule.fromTag !== undefined) {
       rule.from_tag = rule.fromTag
@@ -76,7 +69,7 @@ async function handleDelete(request: NextRequest, { params }: RouteParams) {
     const client = getOrchestratorClient()
     if (!client) return NextResponse.json({ error: 'Orchestrator not configured' }, { status: 503 })
 
-    if (!(await verifyDrsRuleBelongsToTenant(client, id))) {
+    if (!(await mayActOnDrsRule(client, id))) {
       return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
     }
 

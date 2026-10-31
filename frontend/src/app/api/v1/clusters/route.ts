@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, filterVisibleConnections, getCurrentRbacInfraScope, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
@@ -29,11 +29,13 @@ export async function GET() {
 
     const prisma = await getSessionPrisma()
     // 1) Connexions SQLite - uniquement PVE (pas PBS)
-    const connections = await prisma.connection.findMany({
+    // connection.view passes on a grant scoped to any connection: keep the
+    // clusters the caller's grants name, as the connections list does.
+    const connections = filterVisibleConnections(await prisma.connection.findMany({
       where: { type: 'pve' },
       orderBy: { createdAt: "desc" },
       select: { id: true, name: true },
-    })
+    }), await getCurrentRbacInfraScope(PERMISSIONS.CONNECTION_VIEW))
 
     if (!connections.length) {
       return NextResponse.json(

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { migrateScope, scopedJobWhere } from "@/lib/migration/authorize"
 import { requestWarmCutover } from "@/lib/migration/warm/warm-pipeline"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -26,7 +27,7 @@ async function handlePost(
     if (denied) return denied
 
     const { id } = await params
-    const job = await prisma.migrationJob.findUnique({ where: { id } })
+    const job = await prisma.migrationJob.findFirst({ where: scopedJobWhere({ id }, await migrateScope()) })
     if (!job) return NextResponse.json({ error: "Migration job not found" }, { status: 404 })
     if (!CUTOVER_ELIGIBLE.has(job.status)) {
       return NextResponse.json({ error: `Cannot cut over a ${job.status} job` }, { status: 400 })

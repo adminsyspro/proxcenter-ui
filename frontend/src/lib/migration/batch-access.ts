@@ -6,13 +6,16 @@
  * is simply not found. On top of that the caller must be allowed to migrate
  * between the batch's two clusters right now (canMigrateConnections): a user
  * who lost that right, or a vDC tenant, gets the same bare 404 as for a batch
- * that does not exist, so nothing is learnt about other connections.
+ * that does not exist, so nothing is learnt about other connections. The
+ * caller must also hold vm.migrate on both whole clusters: a batch spans
+ * every node its VMs go to.
  */
 import { NextResponse } from "next/server"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { mayMigrateBetweenClusters, migrateScope } from "@/lib/migration/authorize"
 
 import { sliceJobLogs } from "./jobLogs"
 
@@ -42,6 +45,7 @@ export async function loadBatchForCaller(id: string): Promise<BatchAccess> {
   const batch = await prisma.migrationBatch.findUnique({ where: { id } }) as BatchRow | null
   if (!batch) return notFound()
   if (!canMigrateConnections(await getTenantInfrastructureScope(tenantId), batch.sourceConnectionId, batch.targetConnectionId)) return notFound()
+  if (!mayMigrateBetweenClusters(await migrateScope(), batch.sourceConnectionId, batch.targetConnectionId)) return notFound()
   return { ok: true, batch, prisma, tenantId }
 }
 

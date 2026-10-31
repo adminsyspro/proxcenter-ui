@@ -5,7 +5,7 @@
 
 import { NextResponse } from "next/server"
 
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, getCurrentRbacInfraScope, PERMISSIONS, type RbacInfraScope } from "@/lib/rbac"
 import { sensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import type { MigrationNicMapping } from "@/lib/migration/target-overrides"
@@ -34,6 +34,8 @@ export interface MigrationTargetRequest {
  *   of the target): only a tenant owning BOTH clusters may run it, as for a
  *   remote migration. A vDC tenant never does, an MSP only between its own
  *   clusters; 404 so nothing is learnt about other connections.
+ * - vm.migrate must be held on the source connection and on the target node
+ *   (see denyMigrationEnds).
  * - Every NIC the job creates (net0 and each per-NIC mapping) needs the VLAN
  *   and MAC permissions a tenant user would need to set it by hand.
  */
@@ -41,6 +43,8 @@ export async function authorizeMigrationTarget(r: MigrationTargetRequest): Promi
   if (!canMigrateConnections(await getTenantInfrastructureScope(r.tenantId), r.sourceConnectionId, r.targetConnectionId)) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
+  const deniedEnds = await denyMigrationEnds(r.sourceConnectionId, r.targetConnectionId, [r.targetNode])
+  if (deniedEnds) return deniedEnds
   if (r.copyVmk) {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_MANAGE, "connection", r.sourceConnectionId)
     if (denied) return denied
@@ -78,4 +82,53 @@ export function migrationNicPermissions(r: Pick<MigrationTargetRequest, "tenantI
     resourceType: onVm ? "vm" : "connection",
     resourceId: onVm ? `${r.targetConnectionId}:${r.targetNode}:qemu:${r.targetVmid}` : r.targetConnectionId,
   }))
+}
+
+/**
+ * Null when the caller holds vm.migrate on both ends of a migration: the
+ * source connection (absent for the checks that only touch the target) and
+ * every target node, a grant on the whole target connection covering them
+ * all. The routes check vm.migrate without a resource first, which a grant
+ * scoped to any other cluster satisfies; this is the check on the resources.
+ */
+export async function denyMigrationEnds(sourceConnectionId: string | undefined, targetConnectionId: string, targetNodes: readonly string[]): Promise<Response | null> {
+  if (sourceConnectionId) {
+    const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "connection", sourceConnectionId)
+    if (denied) return denied
+  }
+  for (const node of new Set(targetNodes)) {
+    const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "node", `${targetConnectionId}:${node}`)
+    if (denied) return denied
+  }
+  return null
+}
+
+/** The caller's vm.migrate perimeter, null when unrestricted. */
+export function migrateScope(): Promise<RbacInfraScope | null> {
+  return getCurrentRbacInfraScope(PERMISSIONS.VM_MIGRATE)
+}
+
+/**
+ * `where` narrowed to the migration jobs the caller may see and steer: the
+ * same two ends as denyMigrationEnds, read from the job. Returned as is when
+ * the scope is unrestricted, so the tenant filter alone applies.
+ */
+export function scopedJobWhere<W extends object>(where: W, scope: RbacInfraScope | null): W | { AND: object[] } {
+  if (!scope) return where
+  const full = [...scope.fullConnections]
+  const nodeGrants = scope.nodeGrantsByConnection ?? scope.nodesByConnection
+  return {
+    AND: [where, {
+      sourceConnectionId: { in: full },
+      OR: [
+        { targetConnectionId: { in: full } },
+        ...[...nodeGrants].map(([connectionId, nodes]) => ({ targetConnectionId: connectionId, targetNode: { in: [...nodes] } })),
+      ],
+    }],
+  }
+}
+
+/** Whether the caller may steer a bulk migration: vm.migrate on both whole clusters. */
+export function mayMigrateBetweenClusters(scope: RbacInfraScope | null, sourceConnectionId: string, targetConnectionId: string): boolean {
+  return !scope || (scope.fullConnections.has(sourceConnectionId) && scope.fullConnections.has(targetConnectionId))
 }

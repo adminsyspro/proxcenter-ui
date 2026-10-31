@@ -3,7 +3,8 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, getCurrentRbacInfraScope, PERMISSIONS } from "@/lib/rbac"
+import { listableNodes } from "@/lib/rbac/nodeList"
 import { resolveManagementAddress } from "@/lib/proxmox/resolveManagementIp"
 import { orderedIps, persistNodeIps } from "@/lib/proxmox/nodeIpPersistence"
 import { extractHostFromUrl, extractPortFromUrl } from "@/lib/proxmox/urlUtils"
@@ -35,9 +36,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
   // RBAC: Check node.view without resource context so scoped users (node/vm/tag/pool) pass.
-  // Actual filtering happens after fetching.
+  // The answer is then narrowed to the nodes their grants name (lib/rbac/nodeList).
   const denied = await checkPermission(PERMISSIONS.NODE_VIEW)
   if (denied) return denied
+  const allowed = await listableNodes(await getCurrentRbacInfraScope(PERMISSIONS.NODE_VIEW), id)
+  const narrow = (list: any[]) => (allowed ? list.filter((n: any) => allowed.has(n.node || n.name)) : list)
+  const shownNode = (node: string | null) => (node && (!allowed || allowed.has(node)) ? node : null)
 
   // Resolve tenant for vDC-aware caching and filtering
   const tenantId = await getCurrentTenantId()
@@ -55,7 +59,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const cache = getNodesCache()
   const cached = cache.get(cacheKey)
   if (cached && Date.now() - cached.timestamp < NODES_CACHE_TTL) {
-    return NextResponse.json({ data: cached.data, connectedNode: cached.connectedNode })
+    return NextResponse.json({ data: narrow(cached.data), connectedNode: shownNode(cached.connectedNode) })
   }
 
   const conn = await getConnectionById(id)
@@ -237,5 +241,5 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   // Cache the response for 30s (keyed by tenant)
   cache.set(cacheKey, { data: nodesWithSsh, connectedNode, timestamp: Date.now() })
 
-  return NextResponse.json({ data: nodesWithSsh, connectedNode })
+  return NextResponse.json({ data: narrow(nodesWithSsh), connectedNode: shownNode(connectedNode) })
 }

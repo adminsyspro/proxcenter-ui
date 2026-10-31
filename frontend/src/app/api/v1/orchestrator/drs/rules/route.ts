@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
-import { getTenantConnectionIds } from '@/lib/tenant'
+import { requireProviderTenant } from '@/lib/tenant'
+import { drsConnectionIds, isTenantRuleConnection } from '@/lib/orchestrator/drsRuleScope'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withAudit } from '@/lib/audit/withAudit'
 
@@ -12,7 +13,9 @@ export const runtime = "nodejs"
 // Transform frontend camelCase body to orchestrator snake_case
 function toOrchestratorFormat(body: any) {
   return {
-    id: body.id || randomUUID(),
+    // Always a fresh id: the orchestrator saves by id, so a posted one could
+    // overwrite another tenant's rule without passing the ownership check.
+    id: randomUUID(),
     name: body.name,
     type: body.type,
     connection_id: body.connectionId || body.connection_id || '',
@@ -34,11 +37,14 @@ export async function GET() {
     const client = getOrchestratorClient()
     if (!client) return NextResponse.json([])
 
-    const tenantConnectionIds = await getTenantConnectionIds()
+    const ruleConnectionIds = await drsConnectionIds()
+    const isProvider = !(await requireProviderTenant())
     const response = await client.getRules()
 
+    // Rules of the clusters the tenant owns; a connection-less rule (older
+    // versions) is the provider's to see and clean up.
     const all = Array.isArray(response.data) ? response.data : []
-    const filtered = all.filter((r: any) => !r.connection_id || tenantConnectionIds.has(r.connection_id))
+    const filtered = all.filter((r: any) => (r.connection_id ? ruleConnectionIds.has(r.connection_id) : isProvider))
 
     return NextResponse.json(filtered)
   } catch (error: any) {
@@ -68,9 +74,12 @@ async function handlePost(request: NextRequest) {
     const body = await request.json()
     const rule = toOrchestratorFormat(body)
 
-    // Validate connection belongs to current tenant
-    const tenantConnectionIds = await getTenantConnectionIds()
-    if (rule.connection_id && !tenantConnectionIds.has(rule.connection_id)) {
+    // A rule applies to one cluster of the caller's tenant: without a
+    // connection it would apply to none and be anybody's to edit.
+    if (!rule.connection_id) {
+      return NextResponse.json({ error: 'connectionId is required' }, { status: 400 })
+    }
+    if (!(await isTenantRuleConnection(rule.connection_id))) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
 

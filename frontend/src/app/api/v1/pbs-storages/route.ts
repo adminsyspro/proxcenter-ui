@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { pveFetch } from "@/lib/proxmox/client"
 import { decryptSecret } from "@/lib/crypto/secret"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, filterVisibleConnections, getCurrentRbacInfraScope, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
 
@@ -50,8 +50,11 @@ export async function GET() {
       }
     })
 
-    const pveConnections = connections.filter(c => c.type === 'pve')
-    const pbsConnections = connections.filter(c => c.type === 'pbs')
+    // backup.view passes on a grant scoped to any connection: only the
+    // clusters and PBS servers the caller's grants name.
+    const visible = filterVisibleConnections(connections, await getCurrentRbacInfraScope(PERMISSIONS.BACKUP_VIEW))
+    const pveConnections = visible.filter(c => c.type === 'pve')
+    const pbsConnections = visible.filter(c => c.type === 'pbs')
 
     // Créer un map des PBS par URL pour le matching
     const pbsByUrl = new Map<string, { id: string, name: string }>()

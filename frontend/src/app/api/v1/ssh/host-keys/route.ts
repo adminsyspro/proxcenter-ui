@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { orchestratorFetch } from "@/lib/orchestrator"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { listPinnedHostKeys } from "@/lib/ssh/host-key-store"
+import { hostKeyInScope, hostKeyScope } from "@/lib/ssh/hostKeyAccess"
 
 export const runtime = "nodejs"
 
@@ -116,7 +117,10 @@ export async function GET() {
       accumulate(rows, row.host, row.keyType || "", row.firstSeenAt, "frontend")
     }
 
+    // Installation-wide stores: each caller lists the hosts of its own connections.
+    const scope = await hostKeyScope(PERMISSIONS.CONNECTION_VIEW)
     const hosts: MergedHostKey[] = Array.from(rows.entries())
+      .filter(([host]) => hostKeyInScope(scope, host))
       .map(([host, entry]) => ({
         host,
         keyTypes: Array.from(entry.keyTypes).sort((a, b) => a.localeCompare(b)),

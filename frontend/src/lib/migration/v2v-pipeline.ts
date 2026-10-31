@@ -1235,6 +1235,9 @@ export async function runV2vMigrationPipeline(
         const smbPass = colonIdx > 0 ? creds.substring(colonIdx + 1) : creds
         const smbHost = (sourceConn.baseUrl || "").replace(/^https?:\/\//, "").replace(/:\d+\/?$/, "").split("/")[0]
         const shareName = (sourceConn as any).hypervShareName || "VMs"
+        // Disks attached to the VM as the host reports them, mapped under the
+        // mount. null when WinRM could not be read.
+        let attachedDisks: string[] | null = null
 
         // The offline path copies the disk files as they are: the VM must be
         // powered off and carry no checkpoint (the active disk would be a
@@ -1264,9 +1267,11 @@ export async function runV2vMigrationPipeline(
           }
           await appendLog(jobId, "Source VM is powered off with no checkpoint", "success")
           try {
-            sourceSizing = hypervSourceSizing(await hyperv.getVM(config.sourceVmId))
+            const sourceVm = await hyperv.getVM(config.sourceVmId, { shareName })
+            sourceSizing = hypervSourceSizing(sourceVm)
+            attachedDisks = sourceVm.diskMountPaths
           } catch (sizingErr: any) {
-            await appendLog(jobId, `Could not read the source VM sizing over WinRM: ${sizingErr?.message || String(sizingErr)}`, "warn")
+            await appendLog(jobId, `Could not read the source VM sizing and disks over WinRM: ${sizingErr?.message || String(sizingErr)}`, "warn")
           }
         } catch (probeErr: any) {
           const msg = probeErr?.message || String(probeErr)
@@ -1300,32 +1305,33 @@ export async function runV2vMigrationPipeline(
           await appendLog(jobId, "Hyper-V SMB share already mounted at /mnt/hyperv")
         }
 
-        // Locate the configured disk files on the mounted share. The dialog
-        // derives these from the host's paths; a share rooted elsewhere, or a
-        // job created before relative paths were mapped, still resolves by
-        // file name as long as it is unambiguous.
-        if (config.diskPaths && config.diskPaths.length > 0) {
-          const resolution = await resolveHypervDiskPaths(
-            config.diskPaths,
-            (cmd) => executeSSH(config.targetConnectionId, nodeIp, cmd),
-          )
-          for (const note of resolution.notes) await appendLog(jobId, note, "warn")
-          config.diskPaths = resolution.paths
+        // Without paths from the dialog (bulk migration, or a host that
+        // reported none) the job takes the disks attached to the VM, read over
+        // WinRM above. Never a scan of the share by file name: a disk need not
+        // carry the VM name, and one that does may belong to another VM (#1255).
+        let requestedDisks = config.diskPaths ?? []
+        if (requestedDisks.length === 0) {
+          if (attachedDisks === null) {
+            throw new Error("Could not read the disks attached to this VM from the Hyper-V host over WinRM, so they cannot be located on the share. Check the Hyper-V connection, or migrate the VM on its own and enter its VHDX paths.")
+          }
+          if (attachedDisks.length === 0) {
+            throw new Error(`Hyper-V VM "${config.sourceVmName || config.sourceVmId}" has no virtual hard disk attached.`)
+          }
+          await appendLog(jobId, `Disks attached to the VM on the Hyper-V host: ${attachedDisks.join(", ")}`)
+          requestedDisks = attachedDisks
         }
 
-        // Auto-detect disk paths if not provided
-        if (!config.diskPaths || config.diskPaths.length === 0) {
-          const vmName = config.sourceVmName.replaceAll(/[^a-zA-Z0-9._-]/g, "*")
-          const findResult = await executeSSH(config.targetConnectionId, nodeIp,
-            `find /mnt/hyperv -iname "*${vmName}*" \\( -iname "*.vhdx" -o -iname "*.vhd" \\) 2>/dev/null || true`)
-          const detected = (findResult.output || "").split("\n").map(l => l.trim()).filter(l => l && l.startsWith("/"))
-          if (detected.length > 0) {
-            config.diskPaths = detected
-            await appendLog(jobId, `Auto-detected ${detected.length} disk(s): ${detected.join(", ")}`)
-          } else {
-            throw new Error("No VHDX/VHD files found for this VM in /mnt/hyperv/. Ensure the Hyper-V SMB share contains the VM disks.")
-          }
-        }
+        // Locate the disk files on the mounted share. The paths derive from
+        // the host's; a share rooted elsewhere, or a job created before
+        // relative paths were mapped, still resolves by file name as long as
+        // it is unambiguous.
+        const resolution = await resolveHypervDiskPaths(
+          requestedDisks,
+          (cmd) => executeSSH(config.targetConnectionId, nodeIp, cmd),
+        )
+        // appendLog queues per job, so the notes land in order.
+        await Promise.all(resolution.notes.map(note => appendLog(jobId, note, "warn")))
+        config.diskPaths = resolution.paths
       }
     }
 

@@ -60,6 +60,36 @@ describe("runV2vPreflight: virt-v2v support (#1173)", () => {
   })
 })
 
+describe("runV2vPreflight: Hyper-V disk suggestion (#1255)", () => {
+  const SHARE = ["/mnt/hyperv/OtherVM/other-data.vhdx", "/mnt/hyperv/TestVM01/disk01.vhdx"]
+
+  /** A share holding two VMs' disks, none named after TestVM01 unless `named` lists some. */
+  function shareNode(named: string[] = []) {
+    stockNode()
+    const base = ssh.getMockImplementation()!
+    ssh.mockImplementation(async (conn: string, ip: any, cmd: string, ...rest: any[]) => {
+      if (cmd.startsWith("find /mnt/hyperv -iname \"*TestVM01*\"")) return { success: true, output: named.join("\n") }
+      if (cmd.startsWith("find /mnt/hyperv")) return { success: true, output: SHARE.join("\n") }
+      return base(conn, ip, cmd, ...rest)
+    })
+  }
+
+  beforeEach(() => { ssh.mockReset() })
+
+  it("suggests nothing when no file carries the VM name, instead of every disk on the share", async () => {
+    shareNode()
+    const r = await runV2vPreflight("c1", "pve3", 1, "TestVM01", "hyperv")
+    expect(r.detectedDisks).toBeUndefined()
+    expect(ssh.mock.calls.filter(c => c[2].startsWith("find /mnt/hyperv"))).toHaveLength(1)
+  })
+
+  it("suggests the files named after the VM", async () => {
+    shareNode(["/mnt/hyperv/TestVM01/TestVM01.vhdx"])
+    const r = await runV2vPreflight("c1", "pve3", 1, "TestVM01", "hyperv")
+    expect(r.detectedDisks).toEqual(["/mnt/hyperv/TestVM01/TestVM01.vhdx"])
+  })
+})
+
 describe("installing the backport", () => {
   beforeEach(() => {
     ssh.mockReset()

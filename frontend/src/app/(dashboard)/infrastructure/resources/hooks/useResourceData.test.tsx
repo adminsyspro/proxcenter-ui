@@ -43,4 +43,20 @@ describe('useResourceData', () => {
     expect(result.current.error).toBe('boom')
     expect(result.current.kpis).toBeNull()
   })
+
+  it('feeds the last 180 days by default and the chosen window otherwise, from one overview', () => {
+    const trends = Array.from({ length: 366 }, (_, i) => ({ t: `d${i}`, cpu: i, ram: i }))
+    const trendsPeriod = { start: '2025-10-31', end: '2026-10-31', daysCount: 366 }
+    swrMock.mockReturnValue({ data: { data: { trends, trendsPeriod } }, error: undefined, isLoading: false, mutate })
+
+    const byDefault = renderHook(() => useResourceData()).result.current
+    const year = renderHook(() => useResourceData(undefined, 365)).result.current
+
+    expect(byDefault.trends).toHaveLength(180)
+    expect(byDefault.trendsPeriod).toEqual({ start: '2026-05-05', end: '2026-10-31', daysCount: 180 })
+    expect(year.trends).toHaveLength(365)
+    expect(year.trends[364].t).toBe('d365')
+    expect(year.historyAvailableDays).toBe(366)
+    expect(new Set(swrMock.mock.calls.map(c => c[0]))).toEqual(new Set(['/api/v1/resources/overview#fr']))
+  })
 })

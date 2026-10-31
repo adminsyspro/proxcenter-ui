@@ -41,7 +41,10 @@ export function detectTrendType(slope: number): 'stable' | 'linear' | 'accelerat
   return 'linear'
 }
 
-export function findThresholdDayLinear(currentValue: number, slope: number, threshold: number, maxDays: number = 180): number | null {
+// How far ahead a threshold crossing is reported: a year, for annual capacity planning.
+export const FORECAST_HORIZON_DAYS = 365
+
+export function findThresholdDayLinear(currentValue: number, slope: number, threshold: number, maxDays: number = FORECAST_HORIZON_DAYS): number | null {
   if (slope <= 0) return null
   if (currentValue >= threshold) return 0
 

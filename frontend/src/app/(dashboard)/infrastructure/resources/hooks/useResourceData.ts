@@ -7,13 +7,16 @@ import { useTranslations, useLocale } from 'next-intl'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 
 import type {
-  KpiData, ResourceTrend, TopVm, GreenMetrics,
+  KpiData, TopVm, GreenMetrics,
   OverprovisioningData, AiAnalysis, ResourceThresholds,
   StoragePool, NetworkMetrics, HealthScoreHistoryEntry, ConnectionInfo,
 } from '../types'
 import { DEFAULT_THRESHOLDS } from '../constants'
+import { DEFAULT_HISTORY_WINDOW_DAYS, sliceTrendsToWindow } from '../algorithms/historyWindow'
 
-export function useResourceData(connectionId?: string) {
+// The overview carries up to a year of daily trends; each caller picks how much of
+// it feeds the forecast, from the same cached response (no extra Proxmox call).
+export function useResourceData(connectionId?: string, historyDays: number = DEFAULT_HISTORY_WINDOW_DAYS) {
   const t = useTranslations()
   const locale = useLocale()
 
@@ -31,8 +34,11 @@ export function useResourceData(connectionId?: string) {
 
   // Derive state from SWR data
   const kpis: KpiData | null = json?.data?.kpis ?? null
-  const trends: ResourceTrend[] = json?.data?.trends ?? []
-  const trendsPeriod = json?.data?.trendsPeriod ?? null
+  const historyAvailableDays: number = json?.data?.trends?.length ?? 0
+  const { trends, period: trendsPeriod } = useMemo(
+    () => sliceTrendsToWindow(json?.data?.trends ?? [], json?.data?.trendsPeriod ?? null, historyDays),
+    [json, historyDays],
+  )
   const topCpuVms: TopVm[] = json?.data?.topCpuVms ?? []
   const topRamVms: TopVm[] = json?.data?.topRamVms ?? []
   const green: GreenMetrics | null = json?.data?.green ?? null
@@ -91,6 +97,7 @@ export function useResourceData(connectionId?: string) {
     kpis,
     trends,
     trendsPeriod,
+    historyAvailableDays,
     topCpuVms,
     topRamVms,
     green,

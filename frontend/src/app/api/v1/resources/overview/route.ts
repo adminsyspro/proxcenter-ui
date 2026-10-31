@@ -544,7 +544,7 @@ function calculateGreenMetrics(data: {
 }
 
 // Formater les tendances pour le frontend avec les moyennes pondérées
-// Affiche jusqu'à 90 jours de données historiques
+// Affiche jusqu'à 365 jours de données historiques
 // Stratégie : filtrer les jours avec trop peu de nodes (données incomplètes)
 function formatTrendsForChartWeighted(
   globalAverages: Map<string, { cpu: number, ram: number, nodeCount: number }>,
@@ -586,8 +586,9 @@ return data.nodeCount >= minNodes
     validDays.push(...sortedDays)
   }
   
-  // Prendre les 180 derniers jours (6 mois)
-  const MAX_DAYS = 180
+  // A year of history: the year RRD Proxmox already returns covers it, and the
+  // resources page lets the user narrow the forecast window (90, 180 or 365 days).
+  const MAX_DAYS = 365
   const today = new Date()
   const cutoffDate = new Date(today)
 

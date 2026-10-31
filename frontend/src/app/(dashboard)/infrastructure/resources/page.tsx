@@ -27,6 +27,7 @@ import { RefreshIcon } from './components/icons'
 import GlobalHealthScore from './components/GlobalHealthScore'
 import PredictiveAlertsCard from './components/PredictiveAlertsCard'
 import ProjectionChart from './components/ProjectionChart'
+import { useHistoryWindow } from './hooks/useHistoryWindow'
 import GreenMetricsCard from './components/GreenMetricsCard'
 import OverprovisioningCard from './components/OverprovisioningCard'
 import AiInsightsCard from './components/AiInsightsCard'
@@ -43,14 +44,15 @@ export default function ResourcesPage() {
   // Cluster drill-down (F4)
   const [selectedConnection, setSelectedConnection] = useState('all')
   const [drawerVm, setDrawerVm] = useState<VmIdentity | null>(null)
+  const [historyDays, setHistoryDays] = useHistoryWindow()
 
   // Data hook
   const {
-    loading, error, kpis, trends, trendsPeriod,
+    loading, error, kpis, trends, trendsPeriod, historyAvailableDays,
     topCpuVms, topRamVms, green, greenConfigured, overprovisioning,
     networkMetrics, connections,
     aiAnalysis, loadData, runAiAnalysis, setAiAnalysis,
-  } = useResourceData(selectedConnection === 'all' ? undefined : selectedConnection)
+  } = useResourceData(selectedConnection === 'all' ? undefined : selectedConnection, historyDays)
 
   useEffect(() => {
     setPageInfo(t('navigation.resources'), t('dashboard.widgets.resources'), 'ri-pie-chart-fill')
@@ -118,7 +120,7 @@ export default function ResourcesPage() {
 
         <Grid container spacing={3}>
           <Grid size={{ xs: 12, lg: 8 }}>
-            <ProjectionChart data={projectedTrends} loading={loading} period={trendsPeriod} />
+            <ProjectionChart data={projectedTrends} loading={loading} period={trendsPeriod} windowDays={historyDays} availableDays={historyAvailableDays} onWindowDaysChange={setHistoryDays} />
           </Grid>
           <Grid size={{ xs: 12, lg: 4 }}>
             <PredictiveAlertsCard alerts={alerts} loading={loading} />

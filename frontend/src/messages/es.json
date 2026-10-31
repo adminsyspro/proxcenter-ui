@@ -4248,6 +4248,7 @@
     "notifications": "Notificaciones",
     "security": "Seguridad",
     "ai": "Inteligencia artificial",
+    "aiModelSubTab": "Modelo",
     "license": "Licencia",
     "tenant": "Tenant",
     "deleteConnectionConfirm": "¿Eliminar esta conexión {type}?",
@@ -4310,7 +4311,7 @@
     "anthropicCloudOption": "Claude Claude (Cloud)",
     "ollamaInfo": "<b>Ollama</b> allows en ejecución LLMs locally. Sin data is sent externally.",
     "ollamaUrlLabel": "URL URL",
-    "ollamaToolModelHelp": "El asistente responde a las preguntas de infraestructura llamando a herramientas. Calificados en nuestro laboratorio: qwen3.5:9b (8 GB de memoria GPU), mistral-small3.2:24b (20 GB) y qwen3.6:35b-a3b (24 GB). «Probar conexión» comprueba que el modelo cabe en este servidor.",
+    "ollamaToolModelHelp": "El asistente responde a las preguntas de infraestructura llamando a herramientas. Recomendados por ProxCenter: qwen3.5:9b (8 GB de memoria GPU), mistral-small3.2:24b (20 GB) y qwen3.6:35b-a3b (24 GB). «Probar conexión» comprueba que el modelo cabe en este servidor.",
     "preflightMeasured": "Medido en este servidor: {gpu} % del modelo en memoria GPU, {speed, number} tokens por segundo.",
     "preflightCpuOffload": "Solo el {gpu} % del modelo cabe en la memoria GPU, el resto se ejecuta en la CPU: las respuestas serán lentas.",
     "preflightSlow": "A {speed, number} tokens por segundo, una respuesta puede tardar más de un minuto.",
@@ -4647,6 +4648,7 @@
       "rbac": "RBAC (Rol-Based Access Control)",
       "ldap": "LDAP / Activo Directorio",
       "ai_insights": "Insights de IA",
+      "ai_actions": "Acciones de IA aprobadas",
       "predictive_alerts": "Alertas predictivas",
       "alerts": "Alertas",
       "notifications": "Notificaciones",
@@ -5077,6 +5079,58 @@
       "notesOtherInstallKey": "Los tokens de API solo funcionan con el APP_SECRET con el que se crearon. Guarde el archivo .env de la instalación, o al menos APP_SECRET, junto a esta copia: con la misma clave, también se recuperan.",
       "otherInstall": "Esta copia procede de otra instancia y sus licencias no la han acompañado. Conecte esta instancia a su cuenta de proxcenter.io desde Ajustes > Licencia, recupere las licencias de la instancia anterior y vuelva a asignarlas a sus clústeres si tiene varias.",
       "openLicenseTab": "Abrir Licencia"
+    },
+    "aiActions": {
+      "subTabLabel": "Acciones",
+      "description": "Elige qué acciones puede proponer el asistente. Todo está desactivado por defecto.",
+      "info": "El asistente propone acciones, nunca ejecuta nada por sí solo. Cada acción la aprueba el usuario en su tarjeta y se ejecuta con SUS propios permisos, registrada en la auditoría junto con la conversación.",
+      "vdcInherit": "Los tenants vDC siguen esta configuración: no tienen una configuración propia de acciones de IA.",
+      "enabled": "Permitir que el asistente proponga acciones",
+      "enabledHelper": "Desactivado, el asistente sigue en solo lectura; las opciones de abajo se conservan pero se ignoran.",
+      "groupSafe": "Acciones seguras",
+      "groupDisruptive": "Acciones disruptivas (doble confirmación)",
+      "selectAll": "Todas",
+      "maxPerConversation": "Máx. de acciones por conversación",
+      "maxPerConversationHelper": "Entre 1 y 20. Por defecto 5.",
+      "save": "Guardar",
+      "saved": "Ajustes de las acciones de IA guardados",
+      "saveFailed": "No se pudieron guardar los ajustes de las acciones de IA: {error}",
+      "loadError": "No se pudieron cargar los ajustes de las acciones de IA: {error}",
+      "labelSeparator": ": ",
+      "kinds": {
+        "snapshot": {
+          "label": "Crear una instantánea",
+          "help": "Toma una instantánea de una VM o un contenedor; el invitado sigue funcionando."
+        },
+        "start": {
+          "label": "Iniciar un invitado",
+          "help": "Enciende una VM o un contenedor detenido."
+        },
+        "migrate": {
+          "label": "Migrar un invitado",
+          "help": "Migración en caliente dentro del mismo clúster, solo invitados con almacenamiento compartido; un contenedor se reinicia en el host de destino."
+        },
+        "drs_apply": {
+          "label": "Aplicar una recomendación de DRS",
+          "help": "Ejecuta una migración de equilibrado de carga ya recomendada por DRS."
+        },
+        "backup_add": {
+          "label": "Añadir un invitado a un trabajo de copia",
+          "help": "Añade una VM o un contenedor a un trabajo de copia existente; no se inicia ninguna copia de inmediato."
+        },
+        "shutdown": {
+          "label": "Apagar un invitado",
+          "help": "Apaga limpiamente una VM o un contenedor en marcha; sus servicios se detienen."
+        },
+        "reboot": {
+          "label": "Reiniciar un invitado",
+          "help": "Reinicia una VM o un contenedor en marcha; sus servicios se interrumpen."
+        },
+        "maintenance": {
+          "label": "Entrar o salir del modo mantenimiento",
+          "help": "Pone un nodo en mantenimiento o lo devuelve al servicio; los invitados se evacúan del nodo."
+        }
+      }
     }
   },
   "green": {
@@ -5365,7 +5419,8 @@
       "drainFinish": "Drenaje de host finalizado",
       "replicationSync": "Sincronización de replicación",
       "replicationFix": "Corrección de réplica",
-      "drillRun": "Simulacro de restauración"
+      "drillRun": "Simulacro de restauración",
+      "aiAction": "Acción del asistente"
     }
   },
   "security": {
@@ -5683,12 +5738,22 @@
     "suggestCapacity": "¿Puedo añadir 5 VM de 8 GB?",
     "suggestInfraStatus": "Resume el estado de mi infraestructura",
     "suggestAlerts": "¿Hay alguna alerta?",
+    "suggestBackupCoverage": "¿Qué VM no tienen copia de seguridad?",
+    "suggestStorageForecast": "¿Cuándo se llenará mi almacenamiento?",
+    "suggestActions": "Acciones",
+    "suggestActProtect": "Añade mis VM sin protección a una tarea de copia de seguridad",
+    "suggestActDrs": "¿Hay recomendaciones DRS para aplicar?",
+    "suggestActUpdates": "Planifica las actualizaciones del host…",
+    "suggestActSnapshot": "Haz un snapshot de la VM…",
+    "suggestActStart": "Arranca la VM…",
+    "suggestActEvacuate": "Propón migrar las VM y contenedores del host…",
     "consulting": "Consultando: {tools}",
     "toolFailed": "fallido",
     "readOnly": "Asistente de solo lectura",
     "readOnlyBadge": "Solo lectura",
     "readOnlyScope": "Consulta sus hosts, VM, contenedores, almacenamiento, Ceph y alertas. Nunca modifica nada.",
     "sources": "Fuentes",
+    "whichOne": "¿Cuál?",
     "copy": "Copiar respuesta",
     "copied": "Copiado",
     "send": "Enviar",
@@ -5762,7 +5827,57 @@
       "getHostMaintenance": "Mantenimiento de hosts",
       "forecastCapacity": "Previsión de capacidad",
       "getCveExposure": "Exposición a CVE"
-    }
+    },
+    "actions": {
+      "execute": "Ejecutar",
+      "retry": "Reintentar",
+      "running": "En curso",
+      "confirm": "Confirmar",
+      "confirmTitle": "¿{action}?",
+      "checks": "Comprobaciones",
+      "done": "Hecho",
+      "doneWithWarnings": "Hecho con advertencias",
+      "alreadyRun": "Ya ejecutada",
+      "expired": "Caducada: vuelva a preguntar al asistente.",
+      "untracked": "Seguimiento detenido, la tarea puede seguir en curso.",
+      "previousUnknown": "El resultado del paso {step} es desconocido: compruébelo en el Centro de tareas antes de ejecutar este paso.",
+      "taskCenter": "Abrir el Centro de tareas",
+      "waitsFor": "Espera al paso {step}",
+      "manualStep": "Paso manual",
+      "openPage": "Abrir la página",
+      "planProgress": "{done}/{total} hechos",
+      "title": {
+        "snapshot": "Snapshot «{name}»",
+        "start": "Iniciar",
+        "shutdown": "Apagar",
+        "reboot": "Reiniciar",
+        "migrate": "Migrar en caliente a {target}",
+        "migrateLxc": "Migrar a {target} (reinicio)",
+        "drsApply": "Aplicar el movimiento DRS",
+        "backupAdd": "Añadir al trabajo de copia {job}",
+        "maintenanceEnter": "Entrar en mantenimiento",
+        "maintenanceExit": "Salir de mantenimiento"
+      },
+      "effects": {
+        "shutdown": "El invitado se apaga de forma ordenada. Sus servicios quedan sin servicio hasta que se vuelva a iniciar.",
+        "reboot": "El invitado se reinicia. Sus servicios no están disponibles mientras arranca.",
+        "maintenanceEnter": "El host entra en el modo de mantenimiento de Proxmox: HA mueve sus invitados gestionados por HA a otros hosts y no coloca nada nuevo en él.",
+        "maintenanceExit": "El host sale del modo de mantenimiento: HA puede volver a colocar invitados en él y devuelve los que había movido.",
+        "migrate": "El contenedor se detiene, pasa al host de destino y vuelve a arrancar allí: sus servicios no están disponibles mientras tanto."
+      },
+      "errors": {
+        "capReached": "Se alcanzó el límite de acciones de esta conversación. Inicie una nueva conversación para ejecutar más.",
+        "actionDisabled": "Esta acción está desactivada en los ajustes de acciones de IA.",
+        "situationChanged": "La situación cambió desde la propuesta: vuelva a preguntar al asistente.",
+        "network": "No se pudo enviar la acción. Inténtelo de nuevo.",
+        "generic": "No se pudo ejecutar la acción. Inténtelo de nuevo.",
+        "taskFailed": "La tarea falló: {reason}",
+        "taskFailedNoReason": "La tarea falló."
+      }
+    },
+    "actionsBadge": "Acciones con aprobación",
+    "actionsMode": "Asistente con acciones aprobadas",
+    "actionsScope": "Consulta tu infraestructura y puede proponer acciones; nada se ejecuta sin tu aprobación."
   },
   "jobs": {
     "title": "Centro de tareas",

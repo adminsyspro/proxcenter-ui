@@ -149,6 +149,17 @@ describe('simulate_migration', () => {
     expect(res.candidates.map((c: any) => c.host)).toEqual(['pve2'])
   })
 
+  it('tells same-named guests apart by the cluster of the target, and asks when it cannot', async () => {
+    const c = ctx()
+    const twin = { ...c.snapshot.guests[1], connId: 'c2', cluster: 'PVE-DR', vmid: '10102', node: 'pve1-dr' }
+
+    c.snapshot = { ...c.snapshot, clusters: [...c.snapshot.clusters, { id: 'c2', name: 'PVE-DR', nodeCount: 2, guestCount: 1 }], nodes: [...c.snapshot.nodes, node('pve1-dr', 4, { connId: 'c2', cluster: 'PVE-DR' }), node('pve2-dr', 4, { connId: 'c2', cluster: 'PVE-DR' })], guests: [...c.snapshot.guests, twin] }
+
+    expect(((await simulateMigrationTool.execute({ guest: 'web-01', target: 'pve2-dr' }, c)) as any).vmid).toBe('10102')
+    expect(((await simulateMigrationTool.execute({ guest: 'web-01', target: 'pve1' }, c)) as any).vmid).toBe('102')
+    expect(await invokeTool(simulateMigrationTool, { guest: 'web-01' }, c)).toMatchObject({ error: 'out-of-scope', choices: [{}, {}] })
+  })
+
   it('refuses the current host and calls nothing', async () => {
     expect(await invokeTool(simulateMigrationTool, { guest: 'db-01', target: 'pve1' }, ctx())).toMatchObject({ error: 'bad-argument' })
     expect(pveFetch).not.toHaveBeenCalled()

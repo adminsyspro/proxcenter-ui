@@ -376,3 +376,42 @@ describe('an empty estate', () => {
     expect(prompt).toContain('written in English')
   })
 })
+
+describe('proposal wording (roadmap#188)', () => {
+  // Pinned from main: the actions-off prompt must not drift.
+  const OFF_EN = [
+    'You have read-only tools that fetch infrastructure details',
+    'You can read anything and CHANGE nothing: you cannot create, modify, migrate, start, stop or delete.',
+    'For a request to CHANGE something, explain the procedure and say you cannot apply it.',
+  ]
+  const OFF_FR = [
+    'Tu disposes d\'outils en lecture seule',
+    'Tu peux tout lire et ne rien MODIFIER : tu ne peux pas créer, modifier, migrer, démarrer, arrêter ni supprimer.',
+    'Pour une demande de MODIFICATION, explique la procédure et précise que tu ne peux pas l\'appliquer.',
+  ]
+  // "the snapshot" for the inventory made qwen3.5:9b answer "take a snapshot of X" with X's details (recette #188).
+  const ON_ABSENT = ['CHANGE nothing', 'cannot apply it', 'read-only tools', 'ne rien MODIFIER', 'ne peux pas l\'appliquer', 'en lecture seule', 'the snapshot below', 'in the snapshot', 'l\'instantané']
+
+  it('keeps today\'s text byte for byte when actions are off', () => {
+    for (const f of OFF_EN) expect(render({ toolsEnabled: true, actionsEnabled: false })).toContain(f)
+    for (const f of OFF_FR) expect(render({ toolsEnabled: true }, 'fr', 'fr')).toContain(f)
+    expect(render({ toolsEnabled: true, actionsEnabled: false })).toBe(render({ toolsEnabled: true }))
+  })
+
+  it.each([['en', 'en'], ['fr', 'fr']])('swaps the read-only and write-ban passages when actions are on (%s)', (_l, lang) => {
+    const on = render({ toolsEnabled: true, actionsEnabled: true }, lang, lang)
+
+    for (const f of ON_ABSENT) expect(on).not.toContain(f)
+    expect(on).toContain('propose_action')
+    expect(on).toContain(lang === 'en' ? 'Never claim an action was done.' : 'Ne prétends jamais qu\'une action a été faite.')
+    expect(on).toContain(lang === 'en' ? 'call the tool instead of explaining how to look it up' : 'appelle l\'outil au lieu d\'expliquer comment aller les chercher')
+    expect(on).toContain(lang === 'en' ? 'ONLY to changing the infrastructure, never to reading it' : 'QUE sur la modification de l\'infrastructure, jamais sur sa lecture')
+    expect(on).toContain(lang === 'en' ? 'propose the action with propose_action' : 'propose l\'action avec propose_action')
+  })
+
+  it('serves the other locales the English variant', () => {
+    const on = render({ toolsEnabled: true, actionsEnabled: true }, 'de', 'en')
+
+    for (const f of ON_ABSENT) expect(on).not.toContain(f)
+  })
+})

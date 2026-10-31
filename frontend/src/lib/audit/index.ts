@@ -10,6 +10,7 @@ import { getPrincipal, getTokenPrincipalContext } from "@/lib/auth/principal"
 import { forwardAuditEvent } from "@/lib/syslog/forwarder"
 import { clientIpFromHeaders } from "@/lib/net/clientIp"
 
+import { withAuditOrigin } from "./origin"
 import { markAuditExplicit } from "./scope"
 
 export type AuditCategory =
@@ -97,6 +98,10 @@ export type AuditAction =
 
   // SDN
   | "sdn.apply"
+
+  // An action the assistant proposed and the user approved on its card
+  // (roadmap#188), written by /api/v1/ai/actions/execute for every outcome
+  | "ai.action"
 
   // Site Recovery, one guest of a plan (ui#943)
   | "dr.guest_failover"
@@ -215,6 +220,12 @@ export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient)
   // scope after the handler returns (issue #1105).
   markAuditExplicit()
 
+  // An approved assistant action tags every row it causes (roadmap#188);
+  // outside one this is entry.details itself. Read before any await: the
+  // origin is switched off as soon as the dispatch returns, and a row the
+  // handler fired without awaiting it belongs to the action all the same.
+  const details = withAuditOrigin(entry.details)
+
   const id = nanoid()
   const timestamp = new Date()
 
@@ -281,7 +292,7 @@ export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient)
       resourceType: entry.resourceType || null,
       resourceId: entry.resourceId || null,
       resourceName: entry.resourceName || null,
-      details: (entry.details ?? null) as Prisma.InputJsonValue,
+      details: (details ?? null) as Prisma.InputJsonValue,
       ipAddress: ipAddress || null,
       userAgent: userAgent || null,
       status: entry.status || "success",
@@ -311,7 +322,7 @@ export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient)
     resourceType: entry.resourceType || null,
     resourceId: entry.resourceId || null,
     resourceName: entry.resourceName || null,
-    details: entry.details ?? null,
+    details: details ?? null,
     ipAddress: ipAddress || null,
     userAgent: userAgent || null,
     status: entry.status || "success",

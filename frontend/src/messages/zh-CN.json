@@ -4248,6 +4248,7 @@
     "notifications": "通知",
     "security": "安全",
     "ai": "人工智能",
+    "aiModelSubTab": "模型",
     "license": "许可证",
     "tenant": "租户",
     "deleteConnectionConfirm": "删除此 {type} 连接？",
@@ -4310,7 +4311,7 @@
     "anthropicCloudOption": "Anthropic Claude（云端）",
     "ollamaInfo": "<b>Ollama</b> 允许在本地运行大语言模型。不会向外部发送任何数据。",
     "ollamaUrlLabel": "Ollama URL",
-    "ollamaToolModelHelp": "助手通过调用工具来回答基础设施问题。在我们实验室验证过的模型：qwen3.5:9b（8 GB 显存）、mistral-small3.2:24b（20 GB）和 qwen3.6:35b-a3b（24 GB）。“测试连接”会检查该模型是否适合此服务器。",
+    "ollamaToolModelHelp": "助手通过调用工具来回答基础设施问题。ProxCenter 推荐的模型：qwen3.5:9b（8 GB 显存）、mistral-small3.2:24b（20 GB）和 qwen3.6:35b-a3b（24 GB）。“测试连接”会检查该模型是否适合此服务器。",
     "preflightMeasured": "在此服务器上测得：模型 {gpu}% 位于显存中，每秒 {speed, number} 个 token。",
     "preflightCpuOffload": "模型只有 {gpu}% 能放入显存，其余部分在 CPU 上运行：回答会很慢。",
     "preflightSlow": "每秒 {speed, number} 个 token 时，一个回答可能需要一分钟以上。",
@@ -4647,6 +4648,7 @@
       "rbac": "RBAC（基于角色的访问控制）",
       "ldap": "LDAP / Active Directory",
       "ai_insights": "AI 洞察",
+      "ai_actions": "AI 审批操作",
       "predictive_alerts": "预测性告警",
       "alerts": "告警",
       "notifications": "通知",
@@ -5077,6 +5079,58 @@
       "notesOtherInstallKey": "API 令牌只能在创建时所用的 APP_SECRET 下使用。请将安装的 .env 文件（至少是 APP_SECRET）与本备份一起保存：使用相同的密钥，令牌也会一并恢复。",
       "otherInstall": "此备份来自另一个实例，其许可证没有随之迁移。请在 设置 > 许可证 中将本实例连接到您的 proxcenter.io 账户，接管原实例的许可证；如有多个许可证，再将其重新分配给集群。",
       "openLicenseTab": "打开许可证"
+    },
+    "aiActions": {
+      "subTabLabel": "操作",
+      "description": "选择助手可以建议的操作。默认全部关闭。",
+      "info": "助手只提出操作建议，从不自行执行。每个操作都由用户在其卡片上批准，并以用户自己的权限执行，连同对话一起记录在审计日志中。",
+      "vdcInherit": "vDC 租户沿用这些设置：他们没有自己的 AI 操作设置。",
+      "enabled": "允许助手建议操作",
+      "enabledHelper": "关闭后助手保持只读；下方的选择会保留但被忽略。",
+      "groupSafe": "安全操作",
+      "groupDisruptive": "会造成中断的操作（二次确认）",
+      "selectAll": "全选",
+      "maxPerConversation": "每次对话的最大操作数",
+      "maxPerConversationHelper": "1 到 20 之间，默认 5。",
+      "save": "保存",
+      "saved": "AI 操作设置已保存",
+      "saveFailed": "无法保存 AI 操作设置：{error}",
+      "loadError": "无法加载 AI 操作设置：{error}",
+      "labelSeparator": "：",
+      "kinds": {
+        "snapshot": {
+          "label": "创建快照",
+          "help": "为虚拟机或容器创建快照；客户机继续运行。"
+        },
+        "start": {
+          "label": "启动客户机",
+          "help": "开启已停止的虚拟机或容器。"
+        },
+        "migrate": {
+          "label": "迁移客户机",
+          "help": "同一集群内的在线迁移，仅限使用共享存储的客户机；容器会在目标主机上重启。"
+        },
+        "drs_apply": {
+          "label": "应用 DRS 建议",
+          "help": "执行 DRS 已经建议的负载均衡迁移。"
+        },
+        "backup_add": {
+          "label": "将客户机加入备份任务",
+          "help": "将虚拟机或容器加入现有备份任务；不会立即开始备份。"
+        },
+        "shutdown": {
+          "label": "关闭客户机",
+          "help": "正常关闭正在运行的虚拟机或容器；其服务将停止。"
+        },
+        "reboot": {
+          "label": "重启客户机",
+          "help": "重启正在运行的虚拟机或容器；其服务将中断。"
+        },
+        "maintenance": {
+          "label": "进入或退出维护模式",
+          "help": "将节点置于维护模式或恢复服务；客户机会从该节点疏散。"
+        }
+      }
     }
   },
   "green": {
@@ -5365,7 +5419,8 @@
       "drainFinish": "主机清空结束",
       "replicationSync": "复制同步",
       "replicationFix": "副本修复",
-      "drillRun": "恢复演练"
+      "drillRun": "恢复演练",
+      "aiAction": "助手操作"
     }
   },
   "security": {
@@ -5683,12 +5738,22 @@
     "suggestCapacity": "我能再添加 5 台 8 GB 的虚拟机吗？",
     "suggestInfraStatus": "总结我的基础设施状态",
     "suggestAlerts": "是否有告警？",
+    "suggestBackupCoverage": "哪些虚拟机没有备份？",
+    "suggestStorageForecast": "我的存储什么时候会满？",
+    "suggestActions": "操作",
+    "suggestActProtect": "将未受保护的虚拟机加入备份任务",
+    "suggestActDrs": "有可应用的 DRS 建议吗？",
+    "suggestActUpdates": "规划以下主机的更新…",
+    "suggestActSnapshot": "为以下虚拟机创建快照…",
+    "suggestActStart": "启动以下虚拟机…",
+    "suggestActEvacuate": "建议迁出以下主机的虚拟机和容器…",
     "consulting": "正在查询：{tools}",
     "toolFailed": "失败",
     "readOnly": "只读助手",
     "readOnlyBadge": "只读",
     "readOnlyScope": "它会查询您的主机、虚拟机、容器、存储、Ceph 和告警，从不做任何更改。",
     "sources": "来源",
+    "whichOne": "哪一个？",
     "copy": "复制回答",
     "copied": "已复制",
     "send": "发送",
@@ -5762,7 +5827,57 @@
       "getHostMaintenance": "主机维护",
       "forecastCapacity": "容量预测",
       "getCveExposure": "CVE 暴露"
-    }
+    },
+    "actions": {
+      "execute": "执行",
+      "retry": "重试",
+      "running": "运行中",
+      "confirm": "确认",
+      "confirmTitle": "{action}？",
+      "checks": "预检",
+      "done": "已完成",
+      "doneWithWarnings": "已完成，但有警告",
+      "alreadyRun": "已执行",
+      "expired": "已过期：请重新询问助手。",
+      "untracked": "已停止跟踪，任务可能仍在运行。",
+      "previousUnknown": "第 {step} 步的结果未知：请先在任务中心确认，再执行此步骤。",
+      "taskCenter": "打开任务中心",
+      "waitsFor": "等待第 {step} 步",
+      "manualStep": "手动步骤",
+      "openPage": "打开页面",
+      "planProgress": "已完成 {done}/{total}",
+      "title": {
+        "snapshot": "快照“{name}”",
+        "start": "启动",
+        "shutdown": "关机",
+        "reboot": "重启",
+        "migrate": "在线迁移到 {target}",
+        "migrateLxc": "迁移到 {target}（重启）",
+        "drsApply": "应用 DRS 迁移",
+        "backupAdd": "加入备份作业 {job}",
+        "maintenanceEnter": "进入维护模式",
+        "maintenanceExit": "退出维护模式"
+      },
+      "effects": {
+        "shutdown": "客户机将正常关机。在再次启动之前，其服务不可用。",
+        "reboot": "客户机将重启。启动期间其服务不可用。",
+        "maintenanceEnter": "主机进入 Proxmox 维护模式：HA 会将其受 HA 管理的客户机迁移到其他主机，并且不再在其上放置新的客户机。",
+        "maintenanceExit": "主机退出维护模式：HA 可以再次在其上放置客户机，并迁回之前迁走的客户机。",
+        "migrate": "容器将停止，迁移到目标主机后在那里重新启动：在此期间其服务不可用。"
+      },
+      "errors": {
+        "capReached": "已达到本次对话的操作上限。请开始新对话以执行更多操作。",
+        "actionDisabled": "此操作已在 AI 操作设置中关闭。",
+        "situationChanged": "自提议以来情况已变化：请重新询问助手。",
+        "network": "无法发送该操作。请重试。",
+        "generic": "无法执行该操作。请重试。",
+        "taskFailed": "任务失败：{reason}",
+        "taskFailedNoReason": "任务失败。"
+      }
+    },
+    "actionsBadge": "经批准后执行操作",
+    "actionsMode": "支持已批准操作的助手",
+    "actionsScope": "它可以查询您的基础设施并建议操作；未经您批准不会执行任何操作。"
   },
   "jobs": {
     "title": "任务中心",

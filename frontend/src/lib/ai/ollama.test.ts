@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 
-import { fetchOllamaCapabilities, OllamaProbeTimeoutError, ollamaThread, probeOllamaModel } from './ollama'
+import { clearOllamaThinkingCache, fetchOllamaCapabilities, ollamaCanThink, OllamaProbeTimeoutError, ollamaThread, probeOllamaModel } from './ollama'
 
 function jsonOk(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -184,5 +184,31 @@ describe('probeOllamaModel', () => {
 
     await expect(probeOllamaModel('http://localhost:11434', 'qwen3.5:9b', 'x', { thinking: false, fetchImpl: failing as any }))
       .rejects.toThrow('fetch failed')
+  })
+})
+
+describe('ollamaCanThink', () => {
+  const show = (capabilities: string[]) => vi.fn().mockResolvedValue(new Response(JSON.stringify({ capabilities }), { status: 200 }))
+
+  beforeEach(() => clearOllamaThinkingCache())
+
+  it('is true only for a model that declares a thinking channel', async () => {
+    expect(await ollamaCanThink('http://localhost:11434', 'qwen3.5:9b', show(['completion', 'tools', 'thinking']) as any)).toBe(true)
+    expect(await ollamaCanThink('http://localhost:11434', 'llama3.1:8b', show(['completion', 'tools']) as any)).toBe(false)
+  })
+
+  it('is false when the server cannot say', async () => {
+    const down = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'))
+
+    expect(await ollamaCanThink('http://localhost:11434', 'qwen3.5:9b', down as any)).toBe(false)
+  })
+
+  it('asks the server once per model, not once per empty turn', async () => {
+    const fetchMock = show(['thinking'])
+
+    await ollamaCanThink('http://localhost:11434/', 'qwen3.5:9b', fetchMock as any)
+    await ollamaCanThink('http://localhost:11434', 'qwen3.5:9b', fetchMock as any)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

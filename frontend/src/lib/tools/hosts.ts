@@ -92,6 +92,19 @@ async function requireNodeView(connIds: string[]) {
 /** Pending updates move once a night (pveupdate), subscriptions and certificates even less. */
 export const HOST_MAINTENANCE_TTL_MS = 15 * 60_000
 
+/**
+ * The pending update list of one host, through the very cache entry
+ * get_host_maintenance fills (same key), so a remediation plan
+ * (roadmap#188) asked right after that tool costs no Proxmox call.
+ */
+export function readPendingUpdates(ctx: ToolContext, node: SnapshotNode): Promise<any[]> {
+  const path = `/nodes/${encodeURIComponent(node.name)}/apt/update`
+
+  return cached<any[]>(`${ctx.tenantId}|${node.connId}|${path}`, HOST_MAINTENANCE_TTL_MS, async () =>
+    pveFetch<any[]>(await getConnectionById(node.connId, ctx.tenantId), path)
+  ).then(list => (Array.isArray(list) ? list : []))
+}
+
 /** Hosts read per call: past it the model narrows to a cluster or a host. */
 export const MAX_MAINTENANCE_HOSTS = 12
 

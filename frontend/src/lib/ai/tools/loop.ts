@@ -18,9 +18,11 @@ import {
   type AiProvider,
   type ToolCallRequest,
 } from '@/lib/ai/tools/adapters'
+import { cardsFromToolResult, collectActionCards, type ActionCardsPayload } from '@/lib/ai/actions/cards'
 import { chartFromToolResult, type AiChart } from '@/lib/ai/charts'
+import { collectTargetChoices } from '@/lib/ai/choices'
 import { invokeTool } from '@/lib/tools/invoke'
-import type { CatalogTool, ToolContext } from '@/lib/tools/types'
+import type { CatalogTool, TargetChoice, ToolContext } from '@/lib/tools/types'
 
 /**
  * How many times the model may come back for more data.
@@ -56,6 +58,10 @@ export type ToolTraceEntry = {
   truncated: boolean
   /** What the widget can plot from the result, see `charts.ts`. Never sent to the model. */
   chart?: AiChart
+  /** The signed action cards a proposal tool produced, see `actions/cards.ts`. Never sent to the model. */
+  actions?: ActionCardsPayload
+  /** The targets an ambiguous reference matched, offered as clickable choices, see `choices.ts`. Never sent to the model. */
+  choices?: TargetChoice[]
 }
 
 /**
@@ -70,7 +76,11 @@ export type ToolTraceEntry = {
  */
 export type ToolMode = 'auto' | 'none' | 'off'
 
-export type SendTurn = (messages: any[], mode: ToolMode) => Promise<any>
+/**
+ * `retryEmpty` marks the single replay of an empty turn: a provider with a
+ * thinking channel can turn it off for that turn (see `ollamaCanThink`).
+ */
+export type SendTurn = (messages: any[], mode: ToolMode, opts?: { retryEmpty?: boolean }) => Promise<any>
 
 export type ToolRoundsResult = {
   /** The full thread, tool turns included. */
@@ -104,13 +114,20 @@ function serialiseResult(value: unknown): { content: string; truncated: boolean 
   }
 }
 
+/** Said once to a model that still calls a tool with the round budget spent. */
+export const CLOSING_NUDGE =
+  'No lookups are left for this question. Answer me now from the tool results above, in my language; do not call a tool.'
+
 /**
  * What the user reads when the round budget is spent and the closing turn is
  * still a tool call written as text. A raw JSON call is never an answer; the
- * last refusal or failure the tools gave is the honest one.
+ * refusal the last call got is the honest one. An earlier one is not: a
+ * later call recovered from it (lab, roadmap#188: "Last error: several guests
+ * are named NginX" under 17 successful simulations).
  */
 export function budgetFallbackText(locale: string, trace: ToolTraceEntry[]): string {
-  const lastFailure = [...trace].reverse().find(t => !t.ok)
+  const last = trace[trace.length - 1]
+  const lastFailure = last && !last.ok ? last : undefined
   const fr = locale === 'fr'
 
   if (lastFailure?.detail) {
@@ -122,6 +139,43 @@ export function budgetFallbackText(locale: string, trace: ToolTraceEntry[]): str
   return fr
     ? 'Je n\'ai pas pu conclure dans le nombre de consultations autorisé. Reformule la question ou précise le cluster.'
     : 'I could not conclude within the allowed number of lookups. Rephrase the question or name the cluster.'
+}
+
+/**
+ * What the user reads when the model closed with an empty turn right after a
+ * successful proposal. The card is the answer, so the line points at it
+ * instead of reporting a failure above a perfectly valid card.
+ */
+export function proposedActionText(locale: string): string {
+  return locale === 'fr'
+    ? 'J\'ai proposé l\'action ci-dessous. Vérifie-la, puis approuve-la sur la carte.'
+    : 'I proposed the action below. Check it, then approve it on the card.'
+}
+
+/**
+ * What the user reads above the clickable choices when the model closed with
+ * an empty turn: the rows are the answer, so the line points at them.
+ */
+export function ambiguousTargetText(locale: string): string {
+  return locale === 'fr'
+    ? 'Plusieurs cibles correspondent : choisis celle que tu veux.'
+    : 'Several targets match: pick the one you want.'
+}
+
+/**
+ * The text of a turn that stayed empty after its retry: the card pointer when
+ * a proposal succeeded, the choice pointer when a target was ambiguous, else
+ * the failure line.
+ */
+export function emptyClosingText(
+  locale: string,
+  trace: ReadonlyArray<{ actions?: ActionCardsPayload; choices?: TargetChoice[] }>
+): string {
+  const { cards, plans } = collectActionCards(trace)
+
+  if (cards.length || plans.length) return proposedActionText(locale)
+
+  return collectTargetChoices(trace).length ? ambiguousTargetText(locale) : emptyAnswerText(locale)
 }
 
 /**
@@ -226,6 +280,7 @@ export async function executeToolCalls(
       if (outcome.ok === true) {
         const { content, truncated } = serialiseResult(outcome.value)
         const chart = chartFromToolResult(call.name, outcome.value)
+        const actions = cardsFromToolResult(call.name, outcome.value)
 
         return {
           entry: {
@@ -235,6 +290,7 @@ export async function executeToolCalls(
             durationMs: Date.now() - startedAt,
             truncated,
             ...(chart ? { chart } : {}),
+            ...(actions ? { actions } : {}),
           },
           result: { call, content },
         }
@@ -249,6 +305,7 @@ export async function executeToolCalls(
           detail: outcome.message,
           durationMs: Date.now() - startedAt,
           truncated: false,
+          ...(outcome.choices?.length ? { choices: outcome.choices } : {}),
         },
         result: { call, content: JSON.stringify({ error: outcome.message }) },
       }
@@ -297,6 +354,7 @@ export async function runToolRounds(opts: {
   let toolsDisabled = false
   let degradeAttempted = false
   let emptyRetried = false
+  let replayingEmpty = false
   let rounds = 0
 
   while (rounds <= maxRounds) {
@@ -304,8 +362,10 @@ export async function runToolRounds(opts: {
 
     try {
       // A copy per turn: the thread is mutated below, and handing the live
-      // array to the caller would let it observe a later state.
-      json = await send([...messages], mode)
+      // array to the caller would let it observe a later state. The replay of
+      // an empty turn says so, so the provider can turn thinking off for it.
+      json = replayingEmpty ? await send([...messages], mode, { retryEmpty: true }) : await send([...messages], mode)
+      replayingEmpty = false
     } catch (e: any) {
       const message = String(e?.message || e)
 
@@ -344,12 +404,13 @@ export async function runToolRounds(opts: {
       if (!text.trim() && !emptyRetried) {
         console.warn('[ai-tools] the model returned an empty turn, retrying it once')
         emptyRetried = true
+        replayingEmpty = true
         continue
       }
 
       return {
         messages,
-        text: text.trim() ? text : emptyAnswerText(ctx.locale),
+        text: text.trim() ? text : emptyClosingText(ctx.locale, trace),
         trace,
         rounds,
         toolsDisabled,

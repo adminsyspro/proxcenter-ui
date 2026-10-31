@@ -7,15 +7,18 @@ import { getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getRequestLocale, languageInstruction, normalizeLocale, normalizeTimeZone } from '@/lib/ai/locale'
 import { validateAIUrl } from '@/lib/ai/url-guard'
-import { ollamaOptions, ollamaThread } from '@/lib/ai/ollama'
+import { ollamaCanThink, ollamaOptions, ollamaThread } from '@/lib/ai/ollama'
 import { DEFAULT_OLLAMA_MODEL } from '@/lib/ai/qualifiedModels'
+import { collectActionCards } from '@/lib/ai/actions/cards'
+import { resolveAssistantTools } from '@/lib/ai/actions/resolve'
 import { collectCharts } from '@/lib/ai/charts'
+import { collectTargetChoices, consultedOk } from '@/lib/ai/choices'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
-import { READ_ONLY_TOOLS, buildToolContext } from '@/lib/tools/catalog'
+import { buildToolContext } from '@/lib/tools/catalog'
 import { coerceToolArgs, extractTextToolCall, toolResultTurns, toolsForProvider, type ToolCallRequest } from '@/lib/ai/tools/adapters'
-import { budgetFallbackText, emptyAnswerText, executeToolCalls, MAX_TOOL_ROUNDS, userTextOf, type ToolTraceEntry } from '@/lib/ai/tools/loop'
-import type { ToolContext } from '@/lib/tools/types'
-import { encodeFrame } from '@/lib/ai/streamFrames'
+import { budgetFallbackText, CLOSING_NUDGE, emptyClosingText, executeToolCalls, MAX_TOOL_ROUNDS, userTextOf, type ToolTraceEntry } from '@/lib/ai/tools/loop'
+import type { CatalogTool, ToolContext } from '@/lib/tools/types'
+import { encodeFrame, withoutFrameMarks } from '@/lib/ai/streamFrames'
 import { requireFeature } from '@/lib/auth/requireEnterprise'
 import { Features } from '@/lib/license/features'
 
@@ -45,6 +48,9 @@ type OllamaTurn = {
   toolCalls: ToolCallRequest[]
   /** The raw assistant message, echoed back so the thread stays coherent. */
   assistant: any
+  /** What went into the separate thinking channel, to tell an empty turn's cause. */
+  thinkingChars: number
+  doneReason?: string
 }
 
 /**
@@ -75,8 +81,10 @@ async function streamOllamaTurn(opts: {
   toolNames: string[]
   controller: ReadableStreamDefaultController
   encoder: TextEncoder
+  /** Turn the thinking channel off for this turn (replay of an empty turn). */
+  noThink?: boolean
 }): Promise<OllamaTurn> {
-  const { base, model, messages, tools, relay, toolNames, controller, encoder } = opts
+  const { base, model, messages, tools, relay, toolNames, controller, encoder, noThink } = opts
 
   const response = await fetch(`${base}/api/chat`, {
     method: 'POST',
@@ -86,6 +94,7 @@ async function streamOllamaTurn(opts: {
       messages,
       stream: true,
       ...(tools ? { tools } : {}),
+      ...(noThink ? { think: false } : {}),
       options: ollamaOptions(),
     })
   })
@@ -98,13 +107,15 @@ async function streamOllamaTurn(opts: {
 
   const reader = response.body?.getReader()
 
-  if (!reader) return { text: '', toolCalls: [], assistant: { role: 'assistant', content: '' } }
+  if (!reader) return { text: '', toolCalls: [], assistant: { role: 'assistant', content: '' }, thinkingChars: 0 }
 
   const decoder = new TextDecoder()
   const rawToolCalls: any[] = []
 
   let buffer = ''
   let text = ''
+  let thinkingChars = 0
+  let doneReason: string | undefined
 
   const consume = (line: string) => {
     if (!line.trim()) return
@@ -114,12 +125,15 @@ async function streamOllamaTurn(opts: {
 
       if (json.message?.content) {
         text += json.message.content
-        if (relay) controller.enqueue(encoder.encode(json.message.content))
+        if (relay) controller.enqueue(encoder.encode(withoutFrameMarks(json.message.content)))
       }
 
       if (Array.isArray(json.message?.tool_calls)) {
         rawToolCalls.push(...json.message.tool_calls)
       }
+
+      if (typeof json.message?.thinking === 'string') thinkingChars += json.message.thinking.length
+      if (json.done_reason) doneReason = String(json.done_reason)
     } catch {
       // Ignorer les lignes non-JSON
     }
@@ -153,19 +167,21 @@ async function streamOllamaTurn(opts: {
     if (textCall) {
       console.warn(`[ai-tools] recovered a text-form call to ${textCall.name} from the streamed output`)
 
-      return { text: '', toolCalls: [textCall], assistant: { role: 'assistant', content: text } }
+      return { text: '', toolCalls: [textCall], assistant: { role: 'assistant', content: text }, thinkingChars, doneReason }
     }
   }
 
   // Prose, and it was held back: emit it now that it is known to be an answer.
   if (!relay && toolCalls.length === 0 && text) {
-    controller.enqueue(encoder.encode(text))
+    controller.enqueue(encoder.encode(withoutFrameMarks(text)))
   }
 
   return {
     text,
     toolCalls,
     assistant: { role: 'assistant', content: text, ...(rawToolCalls.length ? { tool_calls: rawToolCalls } : {}) },
+    thinkingChars,
+    doneReason,
   }
 }
 
@@ -186,19 +202,23 @@ async function streamAgenticConversation(opts: {
   model: string
   messages: any[]
   wireTools: unknown[]
+  /** The tools handed to the model: read-only, plus the proposal tools when actions are on. */
+  tools: CatalogTool[]
   ctx: ToolContext
   /** The user's own words, see `userTextOf`. */
   userText: string
   controller: ReadableStreamDefaultController
   encoder: TextEncoder
 }) {
-  const { base, model, wireTools, ctx, controller, encoder } = opts
+  const { base, model, wireTools, tools, ctx, controller, encoder } = opts
   const messages = [...opts.messages]
 
-  const toolNames = READ_ONLY_TOOLS.map(t => t.name)
+  const toolNames = tools.map(t => t.name)
   const trace: ToolTraceEntry[] = []
 
   let emptyRetried = false
+  let replayingEmpty = false
+  let closingNudged = false
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     const isLastRound = round === MAX_TOOL_ROUNDS
@@ -218,10 +238,25 @@ async function streamAgenticConversation(opts: {
       toolNames,
       controller,
       encoder,
+      // The replay of an empty turn runs without thinking (see `ollamaCanThink`).
+      noThink: replayingEmpty && await ollamaCanThink(base, model),
     })
 
+    replayingEmpty = false
+
     if (isLastRound && turn.toolCalls.length) {
-      controller.enqueue(encoder.encode(budgetFallbackText(ctx.locale, trace)))
+      // qwen3.5:9b asks for an 18th simulation with the tools withheld (lab,
+      // roadmap#188) though it holds the 17 others: say so once, then let it
+      // answer from them, the fallback being only for a second refusal.
+      if (!closingNudged) {
+        console.warn('[ai-tools] the model still called a tool with the budget spent, asking it once to answer')
+        closingNudged = true
+        messages.push({ role: 'user', content: CLOSING_NUDGE })
+        round--
+        continue
+      }
+
+      controller.enqueue(encoder.encode(withoutFrameMarks(budgetFallbackText(ctx.locale, trace))))
       break
     }
 
@@ -231,13 +266,14 @@ async function streamAgenticConversation(opts: {
       // An empty turn is not an answer (see `emptyAnswerText`): replay the
       // same round once, then say so rather than leave the bubble blank.
       if (!emptyRetried) {
-        console.warn('[ai-tools] the model returned an empty turn, retrying it once')
+        console.warn(`[ai-tools] the model returned an empty turn (thinking: ${turn.thinkingChars} chars, done_reason: ${turn.doneReason ?? 'none'}), retrying it once`)
         emptyRetried = true
+        replayingEmpty = true
         round--
         continue
       }
 
-      controller.enqueue(encoder.encode(emptyAnswerText(ctx.locale)))
+      controller.enqueue(encoder.encode(withoutFrameMarks(emptyClosingText(ctx.locale, trace))))
       break
     }
 
@@ -247,7 +283,7 @@ async function streamAgenticConversation(opts: {
     // the user waits, in place of the generic spinner.
     controller.enqueue(encoder.encode(encodeFrame({ type: 'tool', names: turn.toolCalls.map(c => c.name) })))
 
-    const { results, trace: roundTrace } = await executeToolCalls(turn.toolCalls, READ_ONLY_TOOLS, ctx, { userText: opts.userText })
+    const { results, trace: roundTrace } = await executeToolCalls(turn.toolCalls, tools, ctx, { userText: opts.userText })
 
     trace.push(...roundTrace)
     messages.push(...toolResultTurns('ollama', results))
@@ -255,13 +291,22 @@ async function streamAgenticConversation(opts: {
 
   if (trace.length) {
     controller.enqueue(
-      encoder.encode(encodeFrame({ type: 'trace', calls: trace.map(t => ({ name: t.name, ok: t.ok })) }))
+      encoder.encode(encodeFrame({ type: 'trace', calls: trace.map(t => ({ name: t.name, ok: consultedOk(t) })) }))
     )
   }
 
   const charts = collectCharts(trace)
 
   if (charts.length) controller.enqueue(encoder.encode(encodeFrame({ type: 'charts', charts })))
+
+  const { cards, plans } = collectActionCards(trace)
+
+  if (cards.length || plans.length) controller.enqueue(encoder.encode(encodeFrame({ type: 'actions', cards, plans })))
+
+  // Computed by the resolvers, never by the model: see `choices.ts`.
+  const choices = collectTargetChoices(trace)
+
+  if (choices.length) controller.enqueue(encoder.encode(encodeFrame({ type: 'choices', choices })))
 }
 
 // POST /api/v1/ai/chat/stream - Chat avec streaming
@@ -275,7 +320,7 @@ export async function POST(request: Request) {
     const unlicensed = await requireFeature(Features.AI_INSIGHTS)
     if (unlicensed) return unlicensed
 
-    const { messages, locale, timeZone } = await request.json()
+    const { messages, locale, timeZone, conversationId } = await request.json()
 
     // Le drawer envoie `locale`; repli sur le cookie NEXT_LOCALE pour tout
     // appelant qui ne le fait pas.
@@ -303,12 +348,19 @@ export async function POST(request: Request) {
 
     const tenantId = await getCurrentTenantId()
 
+    // Read-only unless every condition for proposing actions holds, see the helper.
+    const assistant = await resolveAssistantTools({ tenantId, conversationId, messages })
+
     const { prompt: systemPrompt, snapshot } = await buildAiSystemPrompt(lang, uiLocale, {
       toolsEnabled: true,
       terse: true,
+      ...(assistant.actionsEnabled ? { actionsEnabled: true } : {}),
     })
-    const toolCtx = buildToolContext(snapshot, tenantId, uiLocale, normalizeTimeZone(timeZone))
-    const wireTools = toolsForProvider('ollama', READ_ONLY_TOOLS)
+    const toolCtx = {
+      ...buildToolContext(snapshot, tenantId, uiLocale, normalizeTimeZone(timeZone)),
+      ...(assistant.actions ? { actions: assistant.actions } : {}),
+    }
+    const wireTools = toolsForProvider('ollama', assistant.tools)
 
     // The SSRF guard's own contract requires every AI route fetching an
     // operator-supplied base URL to go through it; this route used to skip it.
@@ -326,6 +378,7 @@ export async function POST(request: Request) {
             model: settings.ollamaModel,
             messages: ollamaMessages,
             wireTools,
+            tools: assistant.tools,
             ctx: toolCtx,
             userText: userTextOf(messages),
             controller,

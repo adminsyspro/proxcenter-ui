@@ -20,12 +20,25 @@ import {
 } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 
+import { sanitizeActionCard, sanitizeActionPlan, type ActionCardsPayload } from '@/lib/ai/actions/cards'
+import { ACTION_KIND_ICONS, type ActionCard, type ActionKind, type ActionPlan } from '@/lib/ai/actions/types'
 import { sanitizeChart, type AiChart } from '@/lib/ai/charts'
+import { sanitizeTargetChoices } from '@/lib/ai/choices'
 import { createFrameDecoder, type DecodedChunk } from '@/lib/ai/streamFrames'
+import type { TargetChoice } from '@/lib/tools/types'
 
+import { AIActions } from './AIActionPlan'
 import AIChart from './AIChart'
+import AIChoiceList from './AIChoiceList'
 import AIMarkdown from './AIMarkdown'
 import { LogoIcon } from './Logo'
+import {
+  historyContent,
+  newConversationId,
+  useActionExecution,
+  withActionResult,
+  type ActionExecution
+} from './useActionExecution'
 
 type Translate = (key: string, values?: Record<string, string>) => string
 
@@ -38,10 +51,26 @@ type ChatMessage = {
   toolActivity?: string[]
   toolTrace?: ToolCall[]
   charts?: AiChart[]
+  /** Signed cards and plans proposed by this answer (roadmap#188); never sent back. */
+  actions?: ActionCardsPayload
+  /** One line per action run from this answer, sent with it to the model. */
+  actionResults?: string[]
+  /** Targets an ambiguous reference matched, clicked to answer "which one?"; never sent back. */
+  choices?: TargetChoice[]
   stopped?: boolean
 }
 
-type AiSettings = { provider?: string; model?: string | null }
+// The plain route hands its actions over as they came from the tools, unlike
+// the stream whose decoder sanitises them: same filter here.
+const sanitizeActions = (raw: unknown): ActionCardsPayload | null => {
+  const src = (typeof raw === 'object' && raw !== null ? raw : {}) as { cards?: unknown; plans?: unknown }
+  const cards = (Array.isArray(src.cards) ? src.cards : []).map(sanitizeActionCard).filter((c): c is ActionCard => c !== null)
+  const plans = (Array.isArray(src.plans) ? src.plans : []).map(sanitizeActionPlan).filter((p): p is ActionPlan => p !== null)
+
+  return cards.length || plans.length ? { cards, plans } : null
+}
+
+type AiSettings = { provider?: string; model?: string | null; actionsEnabled?: boolean; actionKinds?: string[] }
 
 // Human labels for the assistant's read-only tools (#459). A name missing
 // here (a newer tool, or one the model invented) falls back to the raw name.
@@ -75,7 +104,9 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
 const toolLabel = (t: Translate, name: string) => (TOOL_LABEL_KEYS[name] ? t(TOOL_LABEL_KEYS[name]) : name)
 
 /**
- * One source per distinct tool, failed when any of its calls failed.
+ * One source per distinct tool, failed only when none of its calls succeeded:
+ * a proposal that went through and a later call refused by the per-question
+ * budget is still a tool that worked.
  * `calls` is either a list of names (a round starting) or a list of
  * `{ name, ok }` entries (the finished trace).
  */
@@ -86,7 +117,7 @@ export const toolSources = (calls: Array<string | ToolCall>) => {
     const name = typeof call === 'string' ? call : call.name
     const failed = typeof call !== 'string' && call.ok === false
 
-    sources.set(name, (sources.get(name) ?? false) || failed)
+    sources.set(name, sources.has(name) ? sources.get(name)! && failed : failed)
   }
 
   return [...sources].map(([name, failed]) => ({ name, failed }))
@@ -98,8 +129,33 @@ const SUGGESTIONS = [
   { icon: 'ri-shield-cross-line', key: 'suggestFailedBackups' },
   { icon: 'ri-history-line', key: 'suggestChanges' },
   { icon: 'ri-line-chart-line', key: 'suggestTopCpu' },
-  { icon: 'ri-scales-3-line', key: 'suggestCapacity' }
+  { icon: 'ri-scales-3-line', key: 'suggestCapacity' },
+  { icon: 'ri-save-3-line', key: 'suggestBackupCoverage' },
+  { icon: 'ri-hard-drive-3-line', key: 'suggestStorageForecast' }
 ]
+
+/**
+ * What the assistant can propose (roadmap#188), shown only for an enabled
+ * kind. A suggestion that needs a target the user must name (`prefill`) fills
+ * the input instead of sending: a canned question cannot name the user's VM,
+ * and a target the user did not name is refused anyway.
+ */
+const ACTION_SUGGESTIONS: Array<{ key: string; kind: ActionKind; prefill?: boolean }> = [
+  { key: 'suggestActProtect', kind: 'backup_add' },
+  { key: 'suggestActDrs', kind: 'drs_apply' },
+  { key: 'suggestActSnapshot', kind: 'snapshot', prefill: true },
+  { key: 'suggestActStart', kind: 'start', prefill: true },
+  { key: 'suggestActUpdates', kind: 'maintenance', prefill: true },
+  { key: 'suggestActEvacuate', kind: 'migrate', prefill: true }
+]
+
+/** The text a prefill suggestion leaves in the input: its label without the ellipsis, ready for a name. */
+const prefillText = (label: string) => {
+  const text = label.trimEnd()
+  const ellipsis = ['…', '...'].find(e => text.endsWith(e))
+
+  return `${(ellipsis ? text.slice(0, -ellipsis.length) : text).trimEnd()} `
+}
 
 const WIDE_STORAGE_KEY = 'proxcenter.aiChat.wide'
 
@@ -253,12 +309,19 @@ const AssistantMessage = ({
   message,
   isStreaming,
   t,
-  locale
+  locale,
+  exec,
+  choicesActive,
+  onChoose
 }: {
   message: ChatMessage
   isStreaming: boolean
   t: Translate
   locale: string
+  exec: ActionExecution
+  /** Only the last answer, with no other one running, takes a click on its choices. */
+  choicesActive: boolean
+  onChoose: (reply: string) => void
 }) => {
   const hasTrace = Boolean(message.toolTrace?.length)
   const showFooter = !isStreaming && (message.content || hasTrace)
@@ -291,6 +354,12 @@ const AssistantMessage = ({
         {!isStreaming && message.charts?.map((chart, index) => (
           <AIChart key={`${chart.kind}-${chart.metric ?? index}`} chart={chart} t={t} locale={locale} />
         ))}
+        {!isStreaming && message.actions && (
+          <AIActions payload={message.actions} runs={exec.runs} busy={exec.busy} onExecute={exec.execute} t={t} />
+        )}
+        {!isStreaming && Boolean(message.choices?.length) && (
+          <AIChoiceList choices={message.choices!} disabled={!choicesActive} onSelect={onChoose} t={t} />
+        )}
         {message.stopped && (
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 2, fontStyle: 'italic' }}>
             {t('ai.stopped')}
@@ -318,7 +387,59 @@ const AssistantMessage = ({
   )
 }
 
-const Welcome = ({ onSelect, disabled, t }: { onSelect: (text: string) => void; disabled: boolean; t: Translate }) => (
+const SuggestionGrid = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <>
+    <Typography
+      variant='overline'
+      color='text.secondary'
+      sx={{ display: 'block', mb: 2, lineHeight: 1.5, letterSpacing: 0.8 }}
+    >
+      {title}
+    </Typography>
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>{children}</Box>
+  </>
+)
+
+const Suggestion = ({ icon, text, disabled, onClick }: { icon: string; text: string; disabled: boolean; onClick: () => void }) => (
+  <ButtonBase
+    disabled={disabled}
+    onClick={onClick}
+    sx={theme => ({
+      justifyContent: 'flex-start',
+      alignItems: 'flex-start',
+      gap: 2.5,
+      p: 2.5,
+      borderRadius: 1.5,
+      border: 1,
+      borderColor: 'divider',
+      textAlign: 'left',
+      transition: 'border-color 0.15s, background-color 0.15s',
+      '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
+      '&.Mui-focusVisible': { borderColor: 'primary.main' }
+    })}
+  >
+    <Box component='i' className={icon} sx={{ color: 'primary.main', fontSize: 18, lineHeight: 1.25 }} />
+    <Typography variant='body2' sx={{ lineHeight: 1.4 }}>
+      {text}
+    </Typography>
+  </ButtonBase>
+)
+
+type WelcomeProps = {
+  onSelect: (text: string) => void
+  /** Puts a suggestion's text in the input, for the user to finish with a name. */
+  onPrefill: (text: string) => void
+  disabled: boolean
+  actionsEnabled: boolean
+  /** The enabled action kinds: an action suggestion shows only for its kind. */
+  actionKinds: readonly string[]
+  t: Translate
+}
+
+const Welcome = ({ onSelect, onPrefill, disabled, actionsEnabled, actionKinds, t }: WelcomeProps) => {
+  const actionSuggestions = actionsEnabled ? ACTION_SUGGESTIONS.filter(s => actionKinds.includes(s.kind)) : []
+
+  return (
   <Box sx={{ py: 4 }}>
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', mb: 6 }}>
       <AssistantAvatar size={48} />
@@ -349,54 +470,44 @@ const Welcome = ({ onSelect, disabled, t }: { onSelect: (text: string) => void; 
       <Box component='i' className='ri-shield-check-line' sx={{ color: 'success.main', fontSize: 18, lineHeight: 1.3 }} />
       <Box>
         <Typography variant='body2' sx={{ fontWeight: 600 }}>
-          {t('ai.readOnly')}
+          {t(actionsEnabled ? 'ai.actionsMode' : 'ai.readOnly')}
         </Typography>
         <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.5 }}>
-          {t('ai.readOnlyScope')}
+          {t(actionsEnabled ? 'ai.actionsScope' : 'ai.readOnlyScope')}
         </Typography>
       </Box>
     </Box>
 
-    <Typography
-      variant='overline'
-      color='text.secondary'
-      sx={{ display: 'block', mb: 2, lineHeight: 1.5, letterSpacing: 0.8 }}
-    >
-      {t('ai.suggestions')}
-    </Typography>
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>
+    <SuggestionGrid title={t('ai.suggestions')}>
       {SUGGESTIONS.map(s => {
         const text = t(`ai.${s.key}`)
 
-        return (
-          <ButtonBase
-            key={s.key}
-            disabled={disabled}
-            onClick={() => onSelect(text)}
-            sx={theme => ({
-              justifyContent: 'flex-start',
-              alignItems: 'flex-start',
-              gap: 2.5,
-              p: 2.5,
-              borderRadius: 1.5,
-              border: 1,
-              borderColor: 'divider',
-              textAlign: 'left',
-              transition: 'border-color 0.15s, background-color 0.15s',
-              '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
-              '&.Mui-focusVisible': { borderColor: 'primary.main' }
-            })}
-          >
-            <Box component='i' className={s.icon} sx={{ color: 'primary.main', fontSize: 18, lineHeight: 1.25 }} />
-            <Typography variant='body2' sx={{ lineHeight: 1.4 }}>
-              {text}
-            </Typography>
-          </ButtonBase>
-        )
+        return <Suggestion key={s.key} icon={s.icon} text={text} disabled={disabled} onClick={() => onSelect(text)} />
       })}
-    </Box>
+    </SuggestionGrid>
+
+    {actionSuggestions.length > 0 && (
+      <Box sx={{ mt: 5 }}>
+        <SuggestionGrid title={t('ai.suggestActions')}>
+          {actionSuggestions.map(s => {
+            const text = t(`ai.${s.key}`)
+
+            return (
+              <Suggestion
+                key={s.key}
+                icon={ACTION_KIND_ICONS[s.kind]}
+                text={text}
+                disabled={disabled}
+                onClick={() => (s.prefill ? onPrefill(prefillText(text)) : onSelect(text))}
+              />
+            )
+          })}
+        </SuggestionGrid>
+      </Box>
+    )}
   </Box>
-)
+  )
+}
 
 /**
  * The assistant (#459): a round launcher bottom-right of every page and the
@@ -422,6 +533,27 @@ export default function AIChatWidget({ available }: { available: boolean }) {
   const stickRef = useRef(true)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  // Binds the signed cards to this thread; a cleared conversation is a new one.
+  const [conversationId, setConversationId] = useState(newConversationId)
+
+  // Once an action is over, its line rides with the answer that proposed it.
+  const onActionFinished = useCallback((card: ActionCard, line: string) => {
+    setMessages(prev => withActionResult(prev, card.actionId, line))
+  }, [])
+
+  const exec = useActionExecution({ conversationId, paused: !open, onFinished: onActionFinished })
+
+  // A suggestion that needs a name: leave its text in the input, cursor at the end.
+  const prefillInput = useCallback((text: string) => {
+    setInput(text)
+    requestAnimationFrame(() => {
+      const el = inputRef.current
+
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(text.length, text.length)
+    })
+  }, [])
 
   // Vérifier si l'IA est activée, à chaque ouverture
   useEffect(() => {
@@ -481,7 +613,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
 
     // The stored messages also carry the tool activity shown in the bubbles
     // (#459); the providers only ever get the conversation itself.
-    const history = [...messages, userMessage].map(({ role, content }) => ({ role, content }))
+    const history = [...messages, userMessage].map(m => ({ role: m.role, content: historyContent(m) }))
 
     const controller = new AbortController()
 
@@ -497,6 +629,8 @@ export default function AIChatWidget({ available }: { available: boolean }) {
     let toolActivity: string[] | null = null
     let toolTrace: ToolCall[] | null = null
     let charts: AiChart[] | null = null
+    let actions: ActionCardsPayload | null = null
+    let choices: TargetChoice[] | null = null
 
     // Mettre à jour le message en temps réel
     const publish = (extra: Partial<ChatMessage> = {}) => {
@@ -509,6 +643,8 @@ export default function AIChatWidget({ available }: { available: boolean }) {
           ...(toolActivity ? { toolActivity } : {}),
           ...(toolTrace ? { toolTrace } : {}),
           ...(charts?.length ? { charts } : {}),
+          ...(actions ? { actions } : {}),
+          ...(choices?.length ? { choices } : {}),
           ...extra
         }
 
@@ -523,7 +659,8 @@ export default function AIChatWidget({ available }: { available: boolean }) {
         body: JSON.stringify({
           messages: history,
           locale,
-          timeZone: readerTimeZone()
+          timeZone: readerTimeZone(),
+          conversationId
         }),
         signal: controller.signal
       })
@@ -550,6 +687,9 @@ export default function AIChatWidget({ available }: { available: boolean }) {
           if (frame.type === 'tool') toolActivity = frame.names
           else if (frame.type === 'trace') toolTrace = frame.calls
           else if (frame.type === 'charts') charts = frame.charts
+          else if (frame.type === 'actions' && (frame.cards.length || frame.plans.length)) {
+            actions = { cards: frame.cards, plans: frame.plans }
+          } else if (frame.type === 'choices' && frame.choices.length) choices = frame.choices
         }
       }
 
@@ -589,7 +729,8 @@ export default function AIChatWidget({ available }: { available: boolean }) {
           body: JSON.stringify({
             messages: history,
             locale, // #686: the fallback used to omit it and always answered in English
-            timeZone: readerTimeZone()
+            timeZone: readerTimeZone(),
+            conversationId
           }),
           signal: controller.signal
         })
@@ -606,6 +747,8 @@ export default function AIChatWidget({ available }: { available: boolean }) {
           ? json.toolCalls.map((c: { name: string; ok?: boolean }) => ({ name: c.name, ok: c.ok !== false }))
           : null
         charts = Array.isArray(json.charts) ? json.charts.map(sanitizeChart).filter(Boolean) : null
+        actions = sanitizeActions(json.actions)
+        choices = sanitizeTargetChoices(json.choices)
         publish()
       } catch (fallbackError) {
         if (controller.signal.aborted) {
@@ -627,7 +770,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
     // `locale` is a dependency: without it the callback keeps the locale
     // captured at mount and a language switch mid-conversation would keep
     // asking the model for the previous language.
-  }, [messages, loading, locale, t])
+  }, [messages, loading, locale, t, conversationId])
 
   const handleStop = () => abortControllerRef.current?.abort()
 
@@ -641,6 +784,8 @@ export default function AIChatWidget({ available }: { available: boolean }) {
 
   const handleClear = () => {
     abortControllerRef.current?.abort()
+    exec.reset()
+    setConversationId(newConversationId())
     setMessages([])
     setError(null)
   }
@@ -723,7 +868,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
                     </Typography>
                   )}
                   {aiEnabled && (
-                    <Tooltip title={t('ai.readOnlyScope')}>
+                    <Tooltip title={t(aiSettings?.actionsEnabled ? 'ai.actionsScope' : 'ai.readOnlyScope')}>
                       <Typography
                         variant="caption"
                         color="text.secondary"
@@ -731,8 +876,12 @@ export default function AIChatWidget({ available }: { available: boolean }) {
                         sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, flexShrink: 0 }}
                       >
                         {aiSettings && <Box component="span" aria-hidden sx={{ opacity: 0.5 }}>·</Box>}
-                        <Box component="i" className="ri-lock-line" sx={{ fontSize: 12, color: 'success.main' }} />
-                        {t('ai.readOnlyBadge')}
+                        <Box
+                          component="i"
+                          className={aiSettings?.actionsEnabled ? 'ri-shield-check-line' : 'ri-lock-line'}
+                          sx={{ fontSize: 12, color: 'success.main' }}
+                        />
+                        {t(aiSettings?.actionsEnabled ? 'ai.actionsBadge' : 'ai.readOnlyBadge')}
                       </Typography>
                     </Tooltip>
                   )}
@@ -780,7 +929,16 @@ export default function AIChatWidget({ available }: { available: boolean }) {
                 </Alert>
               )}
 
-              {messages.length === 0 && aiEnabled && <Welcome onSelect={sendMessage} disabled={loading} t={t} />}
+              {messages.length === 0 && aiEnabled && (
+                <Welcome
+                  onSelect={sendMessage}
+                  onPrefill={prefillInput}
+                  disabled={loading}
+                  actionsEnabled={aiSettings?.actionsEnabled === true}
+                  actionKinds={aiSettings?.actionKinds ?? []}
+                  t={t}
+                />
+              )}
 
               {messages.map((msg, i) =>
                 msg.role === 'user' ? (
@@ -792,6 +950,9 @@ export default function AIChatWidget({ available }: { available: boolean }) {
                     isStreaming={streaming && i === messages.length - 1}
                     t={t}
                     locale={locale}
+                    exec={exec}
+                    choicesActive={i === messages.length - 1 && !loading}
+                    onChoose={reply => void sendMessage(reply)}
                   />
                 )
               )}

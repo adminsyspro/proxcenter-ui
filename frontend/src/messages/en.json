@@ -4248,6 +4248,7 @@
     "notifications": "Notifications",
     "security": "Security",
     "ai": "Artificial Intelligence",
+    "aiModelSubTab": "Model",
     "license": "License",
     "tenant": "Tenant",
     "deleteConnectionConfirm": "Delete this {type} connection?",
@@ -4310,7 +4311,7 @@
     "anthropicCloudOption": "Anthropic Claude (Cloud)",
     "ollamaInfo": "<b>Ollama</b> allows running LLMs locally. No data is sent externally.",
     "ollamaUrlLabel": "Ollama URL",
-    "ollamaToolModelHelp": "The assistant answers infrastructure questions by calling tools. Qualified on our lab: qwen3.5:9b (8 GB of GPU memory), mistral-small3.2:24b (20 GB) and qwen3.6:35b-a3b (24 GB). Test connection checks that the model fits this server.",
+    "ollamaToolModelHelp": "The assistant answers infrastructure questions by calling tools. Recommended by ProxCenter: qwen3.5:9b (8 GB of GPU memory), mistral-small3.2:24b (20 GB) and qwen3.6:35b-a3b (24 GB). Test connection checks that the model fits this server.",
     "preflightMeasured": "Measured on this server: {gpu}% of the model in GPU memory, {speed, number} tokens per second.",
     "preflightCpuOffload": "Only {gpu}% of the model fits in GPU memory, the rest runs on the CPU: answers will be slow.",
     "preflightSlow": "At {speed, number} tokens per second, an answer can take more than a minute.",
@@ -4647,6 +4648,7 @@
       "rbac": "RBAC (Role-Based Access Control)",
       "ldap": "LDAP / Active Directory",
       "ai_insights": "AI Insights",
+      "ai_actions": "AI Approved Actions",
       "predictive_alerts": "Predictive Alerts",
       "alerts": "Alerting",
       "notifications": "Notifications",
@@ -5077,6 +5079,58 @@
       "notesOtherInstallKey": "API tokens only work under the APP_SECRET they were created with. Keep the install's .env file, or at least APP_SECRET, next to this backup: with the same key they come back too.",
       "otherInstall": "This backup comes from another instance and its licences did not come with it. Connect this instance to your proxcenter.io account from Settings > License, take over the licences of the former instance, then assign them to your clusters again if you hold several.",
       "openLicenseTab": "Open License"
+    },
+    "aiActions": {
+      "subTabLabel": "Actions",
+      "description": "Choose which actions the assistant may propose. Everything is off by default.",
+      "info": "The assistant proposes actions, it never runs anything on its own. Each action is approved by the user on its card and runs with THEIR own rights, logged in the audit trail with the conversation.",
+      "vdcInherit": "vDC tenants follow these settings: they have no AI actions settings of their own.",
+      "enabled": "Allow the assistant to propose actions",
+      "enabledHelper": "When off, the assistant stays read-only and the choices below are kept but ignored.",
+      "groupSafe": "Safe actions",
+      "groupDisruptive": "Disruptive actions (double confirmation)",
+      "selectAll": "All",
+      "maxPerConversation": "Max actions per conversation",
+      "maxPerConversationHelper": "Between 1 and 20. Default 5.",
+      "save": "Save",
+      "saved": "AI actions settings saved",
+      "saveFailed": "Could not save the AI actions settings: {error}",
+      "loadError": "Could not load the AI actions settings: {error}",
+      "labelSeparator": ": ",
+      "kinds": {
+        "snapshot": {
+          "label": "Create a snapshot",
+          "help": "Takes a snapshot of a VM or container; the guest keeps running."
+        },
+        "start": {
+          "label": "Start a guest",
+          "help": "Powers on a stopped VM or container."
+        },
+        "migrate": {
+          "label": "Migrate a guest",
+          "help": "Live migration inside the same cluster, guests on shared storage only; a container restarts on the target host."
+        },
+        "drs_apply": {
+          "label": "Apply a DRS recommendation",
+          "help": "Runs a load-balancing migration that DRS has already recommended."
+        },
+        "backup_add": {
+          "label": "Add a guest to a backup job",
+          "help": "Adds a VM or container to an existing backup job; no backup starts immediately."
+        },
+        "shutdown": {
+          "label": "Shut down a guest",
+          "help": "Cleanly shuts down a running VM or container; its services stop."
+        },
+        "reboot": {
+          "label": "Reboot a guest",
+          "help": "Restarts a running VM or container; its services are interrupted."
+        },
+        "maintenance": {
+          "label": "Enter or exit maintenance mode",
+          "help": "Puts a node in maintenance mode, or brings it back; guests are evacuated from the node."
+        }
+      }
     }
   },
   "green": {
@@ -5365,7 +5419,8 @@
       "drainFinish": "Host drain finished",
       "replicationSync": "Replication sync",
       "replicationFix": "Replica fix",
-      "drillRun": "Restore drill"
+      "drillRun": "Restore drill",
+      "aiAction": "Assistant action"
     }
   },
   "security": {
@@ -5683,12 +5738,22 @@
     "suggestCapacity": "Can I add 5 VMs of 8 GB?",
     "suggestInfraStatus": "Summarize my infrastructure status",
     "suggestAlerts": "Are there any alerts?",
+    "suggestBackupCoverage": "Which VMs have no backup?",
+    "suggestStorageForecast": "When will my storage be full?",
+    "suggestActions": "Actions",
+    "suggestActProtect": "Add my unprotected VMs to a backup job",
+    "suggestActDrs": "Are there DRS recommendations to apply?",
+    "suggestActUpdates": "Plan the updates of host…",
+    "suggestActSnapshot": "Take a snapshot of the VM…",
+    "suggestActStart": "Start the VM…",
+    "suggestActEvacuate": "Propose migrating the VMs and containers off host…",
     "consulting": "Looking up: {tools}",
     "toolFailed": "failed",
     "readOnly": "Read-only assistant",
     "readOnlyBadge": "Read-only",
     "readOnlyScope": "It looks up your hosts, VMs, containers, storage, Ceph and alerts. It never changes anything.",
     "sources": "Sources",
+    "whichOne": "Which one?",
     "copy": "Copy answer",
     "copied": "Copied",
     "send": "Send",
@@ -5762,7 +5827,57 @@
       "getHostMaintenance": "Host maintenance",
       "forecastCapacity": "Capacity forecast",
       "getCveExposure": "CVE exposure"
-    }
+    },
+    "actions": {
+      "execute": "Execute",
+      "retry": "Retry",
+      "running": "Running",
+      "confirm": "Confirm",
+      "confirmTitle": "{action}?",
+      "checks": "Checks",
+      "done": "Done",
+      "doneWithWarnings": "Done with warnings",
+      "alreadyRun": "Already run",
+      "expired": "Expired: ask the assistant again.",
+      "untracked": "Tracking stopped, the task may still be running.",
+      "previousUnknown": "The outcome of step {step} is unknown: check it in the Task Center before running this step.",
+      "taskCenter": "Open the Task Center",
+      "waitsFor": "Waits for step {step}",
+      "manualStep": "Manual step",
+      "openPage": "Open the page",
+      "planProgress": "{done}/{total} done",
+      "title": {
+        "snapshot": "Snapshot \"{name}\"",
+        "start": "Start",
+        "shutdown": "Shut down",
+        "reboot": "Reboot",
+        "migrate": "Live migrate to {target}",
+        "migrateLxc": "Migrate to {target} (restart)",
+        "drsApply": "Apply the DRS move",
+        "backupAdd": "Add to backup job {job}",
+        "maintenanceEnter": "Enter maintenance mode",
+        "maintenanceExit": "Exit maintenance mode"
+      },
+      "effects": {
+        "shutdown": "The guest is shut down cleanly. Its services stay unavailable until it is started again.",
+        "reboot": "The guest restarts. Its services are unavailable while it boots.",
+        "maintenanceEnter": "The host enters Proxmox maintenance mode: HA moves its HA-managed guests to other hosts and places nothing new on it.",
+        "maintenanceExit": "The host leaves maintenance mode: HA can place guests on it again and moves back the guests it had moved away.",
+        "migrate": "The container stops, moves to the target host and starts again there: its services are unavailable meanwhile."
+      },
+      "errors": {
+        "capReached": "The action limit of this conversation is reached. Start a new conversation to run more.",
+        "actionDisabled": "This action is turned off in the AI actions settings.",
+        "situationChanged": "The situation changed since the proposal: ask the assistant again.",
+        "network": "The action could not be sent. Try again.",
+        "generic": "The action could not be run. Try again.",
+        "taskFailed": "The task failed: {reason}",
+        "taskFailedNoReason": "The task failed."
+      }
+    },
+    "actionsBadge": "Actions on approval",
+    "actionsMode": "Assistant with approved actions",
+    "actionsScope": "It looks up your infrastructure and can propose actions; nothing runs without your approval."
   },
   "jobs": {
     "title": "Task Center",

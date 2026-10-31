@@ -2,13 +2,34 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 
-import { requireFeature } from '@/lib/auth/requireEnterprise'
+import { enabledKinds, type ActionKind } from '@/lib/ai/actions/types'
+import { getAiActionsSettings } from '@/lib/ai/actions/settings'
+import { hasServerFeature, requireFeature } from '@/lib/auth/requireEnterprise'
 import { getSetting } from '@/lib/db/settings'
 import { Features } from '@/lib/license/features'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'
 
 const MODEL_FIELDS: Record<string, string> = { ollama: 'ollamaModel', openai: 'openaiModel', anthropic: 'anthropicModel' }
+
+/**
+ * The action kinds the assistant may propose, empty when actions are off:
+ * whether the widget says "Read-only" or "Actions on approval", and which
+ * action suggestions it offers. Only the kinds leave here, which the model's
+ * own tool list already tells any user who can chat; the cap and the rest of
+ * the settings stay admin-only. A failure here says "off" and is logged: it
+ * must not 500 the status, which would hide the whole assistant, and execute
+ * re-checks the settings anyway.
+ */
+async function readActionKinds(tenantId: string): Promise<ActionKind[]> {
+  try {
+    return (await hasServerFeature(Features.AI_ACTIONS)) ? enabledKinds(await getAiActionsSettings(tenantId)) : []
+  } catch (e) {
+    console.error('Failed to read the AI actions settings, reported off:', e)
+
+    return []
+  }
+}
 
 /**
  * GET /api/v1/ai/status
@@ -36,7 +57,11 @@ export async function GET() {
     const modelField = MODEL_FIELDS[provider] ?? 'ollamaModel'
     const model = typeof settings?.[modelField] === 'string' ? (settings[modelField] as string) : null
 
-    return NextResponse.json({ data: { enabled: settings?.enabled === true, provider, model } })
+    const actionKinds = await readActionKinds(await getCurrentTenantId())
+
+    return NextResponse.json({
+      data: { enabled: settings?.enabled === true, provider, model, actionsEnabled: actionKinds.length > 0, actionKinds },
+    })
   } catch (e: any) {
     console.error('Failed to read the AI status:', e)
 

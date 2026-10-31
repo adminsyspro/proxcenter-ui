@@ -9,6 +9,9 @@ export const Features = {
   MICROSEGMENTATION: 'microsegmentation',
   ROLLING_UPDATES: 'rolling_updates',
   AI_INSIGHTS: 'ai_insights',
+  // Approved actions of the assistant (roadmap#188): it proposes, the user
+  // clicks. Always paired with AI_INSIGHTS on its routes.
+  AI_ACTIONS: 'ai_actions',
   PREDICTIVE_ALERTS: 'predictive_alerts',
   ALERTS: 'alerts',
   GREEN_METRICS: 'green_metrics',
@@ -59,6 +62,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'microsegmentation',
     'rolling_updates',
     'ai_insights',
+    'ai_actions',
     'predictive_alerts',
     'alerts',
     'green_metrics',
@@ -86,6 +90,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'microsegmentation',
     'rolling_updates',
     'ai_insights',
+    'ai_actions',
     'predictive_alerts',
     'alerts',
     'green_metrics',

@@ -87,6 +87,38 @@ export async function fetchOllamaCapabilities(
   }
 }
 
+const THINKING_CACHE_TTL_MS = 5 * 60_000
+const thinkingCache = new Map<string, { at: number; value: Promise<boolean> }>()
+
+/**
+ * Whether the model has a separate thinking channel (`/api/show` lists
+ * "thinking"), cached 5 minutes per server and model.
+ *
+ * Used to replay an empty turn with `think: false`. Measured on qwen3.5:9b
+ * (#459, recette #188): the model sometimes writes its whole final answer
+ * into `message.thinking` and leaves `content` empty, and a plain replay often
+ * does the same. Turning thinking off for that one replay forces the answer
+ * into `content`. Only a model that declares the capability gets the flag:
+ * Ollama rejects `think` on a model without it.
+ */
+export function ollamaCanThink(base: string, model: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  const key = `${stripTrailingSlashes(base)}|${model}`
+  const hit = thinkingCache.get(key)
+
+  if (hit && Date.now() - hit.at < THINKING_CACHE_TTL_MS) return hit.value
+
+  const value = fetchOllamaCapabilities(base, model, fetchImpl).then(c => Boolean(c.capabilities?.includes('thinking')))
+
+  thinkingCache.set(key, { at: Date.now(), value })
+
+  return value
+}
+
+/** Test seam: forget the cached capabilities. */
+export function clearOllamaThinkingCache() {
+  thinkingCache.clear()
+}
+
 /**
  * Bound of the settings probe. A cold 22 GB model loads in 10 to 60 s, and the
  * production nginx cuts an API route at 60 s with a 504 the panel cannot

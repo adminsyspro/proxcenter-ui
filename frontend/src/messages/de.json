@@ -4237,6 +4237,7 @@
     "notifications": "Benachrichtigungen",
     "security": "Sicherheit",
     "ai": "Künstliche Intelligenz",
+    "aiModelSubTab": "Modell",
     "license": "Lizenz",
     "tenant": "Mandant",
     "deleteConnectionConfirm": "löschen this {type} connection?",
@@ -4299,7 +4300,7 @@
     "anthropicCloudOption": "Anthropic Claude (Cloud)",
     "ollamaInfo": "<b>Ollama</b> ermöglicht die lokale Ausführung von LLMs. Es werden keine Daten extern gesendet.",
     "ollamaUrlLabel": "Ollama-URL",
-    "ollamaToolModelHelp": "Der Assistent beantwortet Infrastrukturfragen über Tool-Aufrufe. In unserem Labor qualifiziert: qwen3.5:9b (8 GB GPU-Speicher), mistral-small3.2:24b (20 GB) und qwen3.6:35b-a3b (24 GB). „Verbindung testen“ prüft, ob das Modell auf diesen Server passt.",
+    "ollamaToolModelHelp": "Der Assistent beantwortet Infrastrukturfragen über Tool-Aufrufe. Von ProxCenter empfohlen: qwen3.5:9b (8 GB GPU-Speicher), mistral-small3.2:24b (20 GB) und qwen3.6:35b-a3b (24 GB). „Verbindung testen“ prüft, ob das Modell auf diesen Server passt.",
     "preflightMeasured": "Auf diesem Server gemessen: {gpu} % des Modells im GPU-Speicher, {speed, number} Token pro Sekunde.",
     "preflightCpuOffload": "Nur {gpu} % des Modells passen in den GPU-Speicher, der Rest läuft auf der CPU: Antworten werden langsam sein.",
     "preflightSlow": "Bei {speed, number} Token pro Sekunde kann eine Antwort länger als eine Minute dauern.",
@@ -4636,6 +4637,7 @@
       "rbac": "RBAC (rollenbasierte Zugriffskontrolle)",
       "ldap": "LDAP / aktiv Directory",
       "ai_insights": "KI-Einblicke",
+      "ai_actions": "Genehmigte KI-Aktionen",
       "predictive_alerts": "Predictive Warnmeldungen",
       "alerts": "Alarmierung",
       "notifications": "Benachrichtigungen",
@@ -5066,6 +5068,58 @@
       "notesOtherInstallKey": "API-Token funktionieren nur mit dem APP_SECRET, unter dem sie erstellt wurden. Bewahren Sie die .env-Datei der Installation, oder zumindest APP_SECRET, neben dieser Sicherung auf: Mit demselben Schlüssel kommen auch sie zurück.",
       "otherInstall": "Diese Sicherung stammt von einer anderen Instanz, ihre Lizenzen sind nicht mitgekommen. Verbinden Sie diese Instanz unter Einstellungen > Lizenz mit Ihrem proxcenter.io-Konto, übernehmen Sie die Lizenzen der früheren Instanz und ordnen Sie sie bei mehreren Lizenzen erneut Ihren Clustern zu.",
       "openLicenseTab": "Lizenz öffnen"
+    },
+    "aiActions": {
+      "subTabLabel": "Aktionen",
+      "description": "Legen Sie fest, welche Aktionen der Assistent vorschlagen darf. Standardmäßig ist alles deaktiviert.",
+      "info": "Der Assistent schlägt Aktionen vor, er führt nie etwas selbstständig aus. Jede Aktion wird vom Benutzer auf ihrer Karte genehmigt und mit SEINEN eigenen Rechten ausgeführt, im Audit-Protokoll mit der Unterhaltung festgehalten.",
+      "vdcInherit": "vDC-Mandanten übernehmen diese Einstellungen: Sie haben keine eigenen Einstellungen für KI-Aktionen.",
+      "enabled": "Dem Assistenten erlauben, Aktionen vorzuschlagen",
+      "enabledHelper": "Bei Deaktivierung bleibt der Assistent schreibgeschützt; die Auswahl unten bleibt erhalten, wird aber ignoriert.",
+      "groupSafe": "Sichere Aktionen",
+      "groupDisruptive": "Störende Aktionen (doppelte Bestätigung)",
+      "selectAll": "Alle",
+      "maxPerConversation": "Max. Aktionen pro Unterhaltung",
+      "maxPerConversationHelper": "Zwischen 1 und 20. Standard 5.",
+      "save": "Speichern",
+      "saved": "Einstellungen der KI-Aktionen gespeichert",
+      "saveFailed": "Die Einstellungen der KI-Aktionen konnten nicht gespeichert werden: {error}",
+      "loadError": "Die Einstellungen der KI-Aktionen konnten nicht geladen werden: {error}",
+      "labelSeparator": ": ",
+      "kinds": {
+        "snapshot": {
+          "label": "Snapshot erstellen",
+          "help": "Erstellt einen Snapshot einer VM oder eines Containers; der Gast läuft weiter."
+        },
+        "start": {
+          "label": "Gast starten",
+          "help": "Schaltet eine gestoppte VM oder einen gestoppten Container ein."
+        },
+        "migrate": {
+          "label": "Gast migrieren",
+          "help": "Live-Migration im selben Cluster, nur Gäste auf gemeinsamem Speicher; ein Container wird auf dem Zielhost neu gestartet."
+        },
+        "drs_apply": {
+          "label": "DRS-Empfehlung anwenden",
+          "help": "Führt eine von DRS bereits empfohlene Lastverteilungs-Migration aus."
+        },
+        "backup_add": {
+          "label": "Gast zu einem Backup-Job hinzufügen",
+          "help": "Fügt eine VM oder einen Container zu einem bestehenden Backup-Job hinzu; es startet nicht sofort ein Backup."
+        },
+        "shutdown": {
+          "label": "Gast herunterfahren",
+          "help": "Fährt eine laufende VM oder einen laufenden Container sauber herunter; seine Dienste werden beendet."
+        },
+        "reboot": {
+          "label": "Gast neu starten",
+          "help": "Startet eine laufende VM oder einen laufenden Container neu; seine Dienste werden unterbrochen."
+        },
+        "maintenance": {
+          "label": "Wartungsmodus aktivieren oder beenden",
+          "help": "Versetzt einen Node in den Wartungsmodus oder nimmt ihn wieder in Betrieb; die Gäste werden vom Node evakuiert."
+        }
+      }
     }
   },
   "green": {
@@ -5354,7 +5408,8 @@
       "drainFinish": "Host-Drain beendet",
       "replicationSync": "Replikationssynchronisierung",
       "replicationFix": "Replikat-Korrektur",
-      "drillRun": "Wiederherstellungsübung"
+      "drillRun": "Wiederherstellungsübung",
+      "aiAction": "Aktion des Assistenten"
     }
   },
   "security": {
@@ -5663,13 +5718,23 @@
     "suggestChanges": "Was hat sich gestern geändert?",
     "suggestCapacity": "Kann ich 5 VMs mit 8 GB hinzufügen?",
     "suggestInfraStatus": "Summarize my Infrastruktur status",
-    "suggestAlerts": "Are there any Warnmeldungen?",
+    "suggestAlerts": "Gibt es Warnmeldungen?",
+    "suggestBackupCoverage": "Welche VMs haben kein Backup?",
+    "suggestStorageForecast": "Wann ist mein Speicher voll?",
+    "suggestActions": "Aktionen",
+    "suggestActProtect": "Füge meine ungeschützten VMs einem Backup-Job hinzu",
+    "suggestActDrs": "Gibt es DRS-Empfehlungen zum Anwenden?",
+    "suggestActUpdates": "Plane die Updates des Hosts…",
+    "suggestActSnapshot": "Erstelle einen Snapshot der VM…",
+    "suggestActStart": "Starte die VM…",
+    "suggestActEvacuate": "Schlage die Migration der VMs und Container vom Host vor…",
     "consulting": "Wird abgefragt: {tools}",
     "toolFailed": "fehlgeschlagen",
     "readOnly": "Assistent mit Lesezugriff",
     "readOnlyBadge": "Nur Lesen",
     "readOnlyScope": "Er fragt Ihre Hosts, VMs, Container, Speicher, Ceph und Alarme ab. Er ändert nie etwas.",
     "sources": "Quellen",
+    "whichOne": "Welches?",
     "copy": "Antwort kopieren",
     "copied": "Kopiert",
     "send": "Senden",
@@ -5743,7 +5808,57 @@
       "getHostMaintenance": "Host-Wartung",
       "forecastCapacity": "Kapazitätsprognose",
       "getCveExposure": "CVE-Gefährdung"
-    }
+    },
+    "actions": {
+      "execute": "Ausführen",
+      "retry": "Erneut versuchen",
+      "running": "Läuft",
+      "confirm": "Bestätigen",
+      "confirmTitle": "{action}?",
+      "checks": "Prüfungen",
+      "done": "Erledigt",
+      "doneWithWarnings": "Mit Warnungen erledigt",
+      "alreadyRun": "Bereits ausgeführt",
+      "expired": "Abgelaufen: Fragen Sie den Assistenten erneut.",
+      "untracked": "Verfolgung beendet, die Aufgabe läuft möglicherweise noch.",
+      "previousUnknown": "Das Ergebnis von Schritt {step} ist unbekannt: Prüfen Sie es im Task Center, bevor Sie diesen Schritt ausführen.",
+      "taskCenter": "Task Center öffnen",
+      "waitsFor": "Wartet auf Schritt {step}",
+      "manualStep": "Manueller Schritt",
+      "openPage": "Seite öffnen",
+      "planProgress": "{done}/{total} erledigt",
+      "title": {
+        "snapshot": "Snapshot „{name}“",
+        "start": "Starten",
+        "shutdown": "Herunterfahren",
+        "reboot": "Neu starten",
+        "migrate": "Live-Migration nach {target}",
+        "migrateLxc": "Auf {target} migrieren (Neustart)",
+        "drsApply": "DRS-Verschiebung anwenden",
+        "backupAdd": "Zum Backup-Job {job} hinzufügen",
+        "maintenanceEnter": "Wartungsmodus aktivieren",
+        "maintenanceExit": "Wartungsmodus beenden"
+      },
+      "effects": {
+        "shutdown": "Der Gast wird sauber heruntergefahren. Seine Dienste bleiben bis zum nächsten Start nicht verfügbar.",
+        "reboot": "Der Gast startet neu. Seine Dienste sind während des Starts nicht verfügbar.",
+        "maintenanceEnter": "Der Host wechselt in den Proxmox-Wartungsmodus: HA verschiebt seine HA-verwalteten Gäste auf andere Hosts und platziert dort nichts Neues.",
+        "maintenanceExit": "Der Host verlässt den Wartungsmodus: HA kann wieder Gäste darauf platzieren und verschiebt die zuvor verschobenen Gäste zurück.",
+        "migrate": "Der Container wird gestoppt, auf den Zielhost verschoben und dort neu gestartet: Seine Dienste sind währenddessen nicht verfügbar."
+      },
+      "errors": {
+        "capReached": "Das Aktionslimit dieser Unterhaltung ist erreicht. Starten Sie eine neue Unterhaltung, um weitere auszuführen.",
+        "actionDisabled": "Diese Aktion ist in den Einstellungen der KI-Aktionen deaktiviert.",
+        "situationChanged": "Die Lage hat sich seit dem Vorschlag geändert: Fragen Sie den Assistenten erneut.",
+        "network": "Die Aktion konnte nicht gesendet werden. Versuchen Sie es erneut.",
+        "generic": "Die Aktion konnte nicht ausgeführt werden. Versuchen Sie es erneut.",
+        "taskFailed": "Die Aufgabe ist fehlgeschlagen: {reason}",
+        "taskFailedNoReason": "Die Aufgabe ist fehlgeschlagen."
+      }
+    },
+    "actionsBadge": "Aktionen nach Genehmigung",
+    "actionsMode": "Assistent mit genehmigten Aktionen",
+    "actionsScope": "Er fragt Ihre Infrastruktur ab und kann Aktionen vorschlagen; ohne Ihre Genehmigung wird nichts ausgeführt."
   },
   "jobs": {
     "title": "Task Ceingeben",

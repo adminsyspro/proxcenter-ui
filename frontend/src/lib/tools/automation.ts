@@ -35,6 +35,20 @@ const guestVisible = (snapshot: InventorySnapshot, connId: string, vmid: unknown
 const nodeVisible = (snapshot: InventorySnapshot, connId: string, node: unknown) =>
   typeof node === 'string' && snapshot.nodes.some(n => n.connId === connId && n.name === node)
 
+/**
+ * A DRS recommendation or migration names a guest and two hosts: it is shown
+ * (or proposed, roadmap#188) only when all three are in the caller's snapshot,
+ * so it never reveals a host or a guest out of scope.
+ */
+export function drsMoveVisible(snapshot: InventorySnapshot, r: any): boolean {
+  return (
+    typeof r?.connection_id === 'string' &&
+    guestVisible(snapshot, r.connection_id, r.vmid) &&
+    nodeVisible(snapshot, r.connection_id, r.source_node) &&
+    nodeVisible(snapshot, r.connection_id, r.target_node)
+  )
+}
+
 const clusterName = (snapshot: InventorySnapshot, connId: string) => snapshot.clusters.find(c => c.id === connId)?.name ?? null
 
 const spread = (values: number[]) => (values.length > 1 ? Math.round((Math.max(...values) - Math.min(...values)) * 10) / 10 : 0)
@@ -88,13 +102,7 @@ export const getDrsStatusTool: CatalogTool = {
 
     if (!statusRes && !recsRes) return { available: false, reason: 'The DRS service is not reachable right now.' }
 
-    // A recommendation names a guest and two hosts: kept only when all three
-    // are visible, so it never reveals a host or a guest out of scope.
-    const visibleMove = (r: any) =>
-      connIds.includes(r?.connection_id) &&
-      guestVisible(ctx.snapshot, r.connection_id, r.vmid) &&
-      nodeVisible(ctx.snapshot, r.connection_id, r.source_node) &&
-      nodeVisible(ctx.snapshot, r.connection_id, r.target_node)
+    const visibleMove = (r: any) => connIds.includes(r?.connection_id) && drsMoveVisible(ctx.snapshot, r)
 
     const recs = (Array.isArray(recsRes?.data) ? recsRes.data : []).filter(visibleMove)
     const migs = (Array.isArray(migsRes?.data) ? migsRes.data : []).filter(visibleMove)

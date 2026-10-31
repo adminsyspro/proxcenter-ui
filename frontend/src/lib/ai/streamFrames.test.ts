@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest'
 
-import { createFrameDecoder, encodeFrame, FRAME_MARK, type StreamFrame } from './streamFrames'
+import { createFrameDecoder, encodeFrame, FRAME_MARK, withoutFrameMarks, type StreamFrame } from './streamFrames'
 
 const TOOL_FRAME: StreamFrame = { type: 'tool', names: ['rank_guest_hardware', 'list_ceph_osds'] }
 const TRACE_FRAME: StreamFrame = {
@@ -171,5 +171,131 @@ describe('createFrameDecoder', () => {
 
     expect(text).toBe('ZFS-Pool is the fullest.')
     expect(frames).toEqual([TRACE_FRAME, { type: 'charts', charts: [chart] }])
+  })
+})
+
+describe('the choices frame (roadmap#188)', () => {
+  const choice = { kind: 'guest', guestKind: 'qemu', label: 'w22-i1000 · #111 · pve3 · PVE-PROD', reply: 'w22-i1000 (vmid 111, pve3, PVE-PROD)' }
+
+  it('round-trips the choices, split anywhere', () => {
+    const stream = `Which one?${encodeFrame({ type: 'choices', choices: [choice as any] })}`
+    const whole = decodeAll([stream])
+
+    expect(whole.text).toBe('Which one?')
+    expect(whole.frames).toEqual([{ type: 'choices', choices: [choice] }])
+
+    for (let i = 1; i < stream.length; i++) expect(decodeAll([stream.slice(0, i), stream.slice(i)])).toEqual(whole)
+  })
+
+  it('drops a choice of an unknown kind, a missing or overlong text, and keeps the guest kind of guests only', () => {
+    const { frames } = decodeAll([
+      encodeFrame({
+        type: 'choices',
+        choices: [
+          { kind: 'vm', label: 'a', reply: 'a' },
+          { kind: 'host', label: 'pve1 · PVE-PROD', reply: 'x'.repeat(201) },
+          { kind: 'host', label: '', reply: 'pve1 (PVE-PROD)' },
+          { kind: 'host', label: 'pve1 · PVE-PROD', reply: 'pve1 (PVE-PROD)', guestKind: 'qemu', extra: 1 },
+          'junk',
+        ] as any,
+      }),
+    ])
+
+    expect(frames).toEqual([{ type: 'choices', choices: [{ kind: 'host', label: 'pve1 · PVE-PROD', reply: 'pve1 (PVE-PROD)' }] }])
+  })
+})
+
+describe('the actions frame (roadmap#188)', () => {
+  const card = (over: Record<string, unknown> = {}) => ({
+    actionId: 'a1',
+    kind: 'reboot',
+    tier: 'safe',
+    target: { connId: 'c1', cluster: 'PVE-PROD', node: 'pve1', vmid: 101, guestKind: 'qemu', name: 'db-01' },
+    params: { snapshotName: 'x', n: 2, force: true, bad: { nested: 1 } },
+    preflight: { ok: true, checks: [{ level: 'warn', text: 'busy' }, { level: 'nope', text: 'x' }] },
+    expiresAt: 5,
+    token: 'tok',
+    extra: 'dropped',
+    ...over,
+  })
+
+  it('round-trips, keeping only the typed fields and deriving the tier', () => {
+    const { frames } = decodeAll([encodeFrame({ type: 'actions', cards: [card() as any], plans: [] })])
+    const out = frames[0] as Extract<StreamFrame, { type: 'actions' }>
+
+    expect(out.cards).toHaveLength(1)
+    expect(out.cards[0]).toEqual({
+      actionId: 'a1',
+      kind: 'reboot',
+      tier: 'disruptive',
+      target: { connId: 'c1', cluster: 'PVE-PROD', node: 'pve1', vmid: 101, guestKind: 'qemu', name: 'db-01' },
+      params: { snapshotName: 'x', n: 2, force: true },
+      preflight: { ok: true, checks: [{ level: 'warn', text: 'busy' }] },
+      expiresAt: 5,
+      token: 'tok',
+    })
+  })
+
+  it('is split-safe like the other frames', () => {
+    const stream = `hi${encodeFrame({ type: 'actions', cards: [card() as any], plans: [] })}`
+    const whole = decodeAll([stream])
+    const cut = decodeAll([stream.slice(0, 30), stream.slice(30)])
+
+    expect(cut).toEqual(whole)
+  })
+
+  it.each([
+    ['no token', { token: undefined }],
+    ['a kind outside the whitelist', { kind: 'delete_vm' }],
+    ['an incomplete target', { target: { connId: 'c1', cluster: 'x' } }],
+    ['no actionId', { actionId: 3 }],
+  ])('drops a card with %s', (_l, over) => {
+    const { frames } = decodeAll([encodeFrame({ type: 'actions', cards: [card(over) as any, card() as any], plans: [] })])
+
+    expect((frames[0] as any).cards).toHaveLength(1)
+  })
+
+  it('drops the card of a plan step but keeps the step', () => {
+    const plan = {
+      planId: 'p1',
+      finding: 'host_memory',
+      title: 'Free memory',
+      steps: [
+        { step: 1, card: card({ token: 1 }) },
+        { step: 2, manual: { text: 'Check', href: '/x' } },
+        { step: 3, card: card() },
+      ],
+    }
+    const { frames } = decodeAll([encodeFrame({ type: 'actions', cards: [], plans: [plan as any, { planId: 'bad' } as any] })])
+    const out = frames[0] as Extract<StreamFrame, { type: 'actions' }>
+
+    expect(out.plans).toHaveLength(1)
+    expect(out.plans[0].steps.map(s => [s.step, Boolean(s.card), Boolean(s.manual)])).toEqual([[1, false, false], [2, false, true], [3, true, false]])
+  })
+})
+
+describe('manual plan step links (roadmap#188)', () => {
+  const hrefOf = (href: unknown) => {
+    const plan = { planId: 'p', finding: 'host_memory', title: 't', steps: [{ step: 1, manual: { text: 'Check', href } }] }
+    const { frames } = decodeAll([encodeFrame({ type: 'actions', cards: [], plans: [plan as any] })])
+
+    return (frames[0] as any).plans[0].steps[0].manual
+  }
+
+  it.each(['javascript:alert(1)', '//evil.example', 'https://x', '/a\\b', 'infra', 42])('drops the href %j, keeps the text', href => {
+    expect(hrefOf(href)).toEqual({ text: 'Check', href: '' })
+  })
+
+  it('keeps a relative app path', () => {
+    const href = '/infrastructure/inventory?selectType=cluster&selectId=abc'
+
+    expect(hrefOf(href)).toEqual({ text: 'Check', href })
+  })
+})
+
+describe('withoutFrameMarks', () => {
+  it('drops every frame mark and leaves other text as it is', () => {
+    expect(withoutFrameMarks(`a${FRAME_MARK}b${FRAME_MARK}`)).toBe('ab')
+    expect(withoutFrameMarks('plain')).toBe('plain')
   })
 })

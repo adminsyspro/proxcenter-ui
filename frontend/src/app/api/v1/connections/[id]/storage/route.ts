@@ -4,8 +4,8 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { isSharedStorage, vmDiskFormats } from "@/lib/proxmox/storage"
 import { formatBytes } from "@/utils/format"
-import { checkPermission, getCurrentRbacInfraScope, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
-import { hasInfraGrant, hasStorageGrant, isStorageVisible } from "@/lib/rbac/infraScope"
+import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { resolveStorageCaller, storageVisibilityFilter } from "@/lib/storage/storageVisibility"
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { attachPbsStorage, PbsAttachError } from "@/lib/storage/attachPbsStorage"
@@ -22,26 +22,11 @@ async function getHandler(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
 
-    // connection.view (not storage.view) so tenant admins can see the list.
-    // The endpoint already filters results by vDC scope below, so a tenant
-    // only sees the storages actually assigned to their vDC.
-    //
-    // Flat-scoped callers (vm/tag/pool) never match a connection-scoped check,
-    // so they used to 403 here and the Create VM wizard showed an empty
-    // Storage dropdown (issue #262). They come in through the guest-derived
-    // perimeter instead, and the payload is narrowed to it further down.
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
-    const perimeter = denied ? await getRequestGuestScopePerimeter(id) : null
+    // Who may read this list, and how it is narrowed below: see
+    // lib/storage/storageVisibility, shared with the assistant's tools.
+    const caller = await resolveStorageCaller(id)
 
-    // A caller holding connection.view, or storage.view (the right the storage
-    // pages carry), on a node or a storage of this cluster only (node or
-    // storage scope, issue #921) never matches the connection either. They
-    // get the list narrowed by isStorageVisible further down: their nodes'
-    // local storages, the shared ones, the storages they were granted.
-    const infraScope = denied ? await getCurrentRbacInfraScope([PERMISSIONS.CONNECTION_VIEW, PERMISSIONS.STORAGE_VIEW]) : null
-    const partial = !!infraScope && (hasInfraGrant(infraScope, id) || hasStorageGrant(infraScope, id))
-
-    if (denied && !partial && !(perimeter?.holdsPermission && perimeter.hasVisibleGuests)) return denied
+    if (!caller.allowed) return caller.denied ?? NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
     const conn = await getConnectionById(id)
 
@@ -176,68 +161,10 @@ async function getHandler(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     let result = Array.from(aggregatedMap.values())
 
-    // vDC filtering: restrict to storages assigned to the tenant's vDC.
-    // Drop SHARED storages (ceph, nfs, cifs, …) from tenant views — on a
-    // shared pool, browsing content would leak filenames from every other
-    // tenant sitting on the same backend. Super admin (scope=null) keeps
-    // the full list, since they need to see shared storages to manage them.
-    //
-    // Exception: PVE-PBS storages (type === 'pbs'). They are technically
-    // "shared" (network mount) but isolation between tenants happens at
-    // the namespace level (vdc_pbs_namespaces binding), enforced on the
-    // backup snapshot/file routes. Hiding PBS storages here breaks the VM
-    // backup tab — `loadPveStorages` couldn't find any PVE-PBS bridge to
-    // run the file-restore against.
-    const tenantId = await getCurrentTenantId()
-    // iaas (vDC) tenants are masked to their slice; provider + msp see the full
-    // cluster (maskingScope is null for both → no filtering below).
-    const vdcScope = maskingScope(await getTenantInfrastructureScope(tenantId))
-    if (vdcScope) {
-      const allowedStorages = vdcScope.storagesByConnection.get(id)
-      const allowedNodes = vdcScope.nodesByConnection.get(id)
-      if (allowedStorages && allowedNodes) {
-        result = result.filter((s: any) => {
-          if (!allowedStorages.has(s.storage)) return false
-          if (s.shared && s.type !== 'pbs') return false
-          // PBS rows are aggregated cross-node — their `node` field is
-          // arbitrary (first one seen). Match against the full nodes list
-          // and require at least one to be in the tenant's vDC, so a PBS
-          // mounted on any reachable node passes through.
-          if (s.type === 'pbs') {
-            const nodes: string[] = Array.isArray(s.nodes) ? s.nodes : (s.node ? [s.node] : [])
-            return nodes.some(n => allowedNodes.has(n))
-          }
-          // Non-shared storages are per-node — only return rows whose node
-          // is actually authorised in the tenant's vDC. Avoids surfacing
-          // `local` from sibling nodes the tenant can't reach anyway.
-          return s.node && allowedNodes.has(s.node)
-        })
-      } else {
-        result = []
-      }
-    }
+    // vDC mask, guest perimeter (#262) and node or storage scope (#921).
+    const visible = await storageVisibilityFilter(id, await getCurrentTenantId(), caller)
 
-    // RBAC narrowing for flat-scoped callers (vm/tag/pool). A PVE storage
-    // belongs to no pool, so filtering by pool membership would return an
-    // empty list and leave the Create VM wizard with nothing to pick
-    // (issue #262). Return the shared storages, usable from anywhere on the
-    // cluster, plus the local ones sitting on a node that already hosts one of
-    // their guests. Everything else stays hidden.
-    if (perimeter?.restricted) {
-      result = result.filter((s: any) => {
-        if (s.shared) return true
-        const nodes: string[] = Array.isArray(s.nodes) ? s.nodes : s.node ? [s.node] : []
-        return nodes.some(n => perimeter.nodes.has(n))
-      })
-    }
-
-    // Node- and storage-scoped callers (issue #921): the aggregated rows carry
-    // the nodes mounting a shared storage, so the exact rule applies here.
-    if (partial && infraScope) {
-      result = result.filter((s: any) =>
-        isStorageVisible(infraScope, id, { storage: s.storage, shared: !!s.shared, node: s.node, nodes: Array.isArray(s.nodes) ? s.nodes : null }),
-      )
-    }
+    result = result.filter((s: any) => visible(s))
 
     // Trier: partagés d'abord, puis par utilisation décroissante
     result.sort((a, b) => {

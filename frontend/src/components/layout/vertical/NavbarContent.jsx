@@ -39,7 +39,7 @@ import { useSettings } from '@core/hooks/useSettings'
 import ThemeDropdown from '@components/layout/shared/ThemeDropdown'
 
 // AI Chat Drawer
-import AIChatDrawer from '@components/layout/shared/AIChatDrawer'
+import AIChatWidget from '@components/layout/shared/AIChatWidget'
 
 // Tasks Dropdown
 import TasksDropdown from '@components/layout/shared/TasksDropdown'
@@ -196,7 +196,8 @@ const NavbarContent = ({ targetLayout } = {}) => {
 
   useEffect(() => {
     if (licenseLoading || !hasFeature(Features.AI_INSIGHTS)) return
-    fetch('/api/v1/settings/ai')
+    // Readable by every user who may chat, unlike /settings/ai (admin only).
+    fetch('/api/v1/ai/status')
       .then(r => r.ok ? r.json() : null)
       .then(json => { if (json?.data?.enabled) setAiEnabled(true) })
       .catch(() => {})
@@ -216,7 +217,6 @@ const NavbarContent = ({ targetLayout } = {}) => {
   const [searchOpen, setSearchOpen] = useState(false)
 
   // AI Chat
-  const [aiChatOpen, setAiChatOpen] = useState(false)
 
   // About Dialog
 
@@ -774,15 +774,6 @@ return () => window.removeEventListener('keydown', onKeyDown)
 
           {/* Theme Dropdown */}
           <ThemeDropdown />
-
-          {/* AI Assistant — hidden if feature not activated */}
-          {aiAvailable && (
-            <Tooltip title={t('navbar.aiAssistant')}>
-              <IconButton size='small' onClick={() => setAiChatOpen(true)}>
-                <i className='ri-sparkling-2-line' />
-              </IconButton>
-            </Tooltip>
-          )}
 
           {/* Running Tasks */}
           <TasksDropdown />
@@ -1461,7 +1452,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
       </Menu>
 
       {/* AI Chat Drawer */}
-      <AIChatDrawer open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
+      <AIChatWidget available={aiAvailable} />
 
       {/* What's New Dialog */}
       <WhatsNewDialog

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
+import { DEFAULT_OLLAMA_MODEL, type PreflightVerdict } from '@/lib/ai/qualifiedModels'
+
 async function fetchJson(url: string, init?: RequestInit) {
   const r = await fetch(url, init)
   const text = await r.text()
@@ -30,7 +32,7 @@ const defaultSettings: AISettingsState = {
   enabled: false,
   provider: 'ollama',
   ollamaUrl: 'http://localhost:11434',
-  ollamaModel: 'mistral:7b',
+  ollamaModel: DEFAULT_OLLAMA_MODEL,
   openaiKey: '',
   openaiBaseUrl: '',
   openaiModel: 'gpt-4.1-nano',
@@ -39,9 +41,14 @@ const defaultSettings: AISettingsState = {
 export function useAISettings() {
   const [settings, setSettings] = useState<AISettingsState>(defaultSettings)
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<{ type: string; message: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ type: string; message: string; details?: string[] } | null>(null)
   const [saving, setSaving] = useState(false)
   const [availableModels, setAvailableModels] = useState<string[]>([])
+
+  // Per Ollama model: true / false when the server reports capabilities, null
+  // when unknown (#459). A model without tool calling still works, but the
+  // assistant then only sees the live snapshot, so the list must say so.
+  const [modelToolCalling, setModelToolCalling] = useState<Record<string, boolean | null>>({})
   const [loadingModels, setLoadingModels] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -93,9 +100,14 @@ export function useAISettings() {
       const json = await res.json()
 
       if (res.ok) {
-        return { success: true, response: json.response } as const
+        return {
+          success: true,
+          response: json.response,
+          toolCalling: json.toolCalling ?? null,
+          preflight: (json.preflight ?? null) as PreflightVerdict | null,
+        } as const
       } else {
-        return { success: false, error: json?.error } as const
+        return { success: false, error: json?.error, code: json?.code as string | undefined } as const
       }
     } catch (e: any) {
       return { success: false, error: e?.message } as const
@@ -125,6 +137,7 @@ export function useAISettings() {
 
       if (json?.models?.length > 0) {
         setAvailableModels(json.models)
+        setModelToolCalling(json.toolCalling ?? {})
       }
     } catch (e) {
       console.error('Failed to load models', e)
@@ -149,6 +162,7 @@ export function useAISettings() {
       (provider === 'anthropic' && !anthropicKey)
     ) {
       setAvailableModels([])
+      setModelToolCalling({})
 
       return
     }
@@ -172,6 +186,7 @@ export function useAISettings() {
     setTestResult,
     saving,
     availableModels,
+    modelToolCalling,
     loadingModels,
     loadSettings,
     saveSettings,

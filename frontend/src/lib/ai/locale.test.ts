@@ -20,6 +20,7 @@ import {
   languageInstruction,
   jsonLanguageInstruction,
   getRequestLocale,
+  normalizeTimeZone,
 } from './locale'
 
 beforeEach(() => {
@@ -142,5 +143,20 @@ describe('getRequestLocale', () => {
 
   it('falls back to English with neither cookie nor header', async () => {
     await expect(getRequestLocale()).resolves.toBe('en')
+  })
+})
+
+describe('normalizeTimeZone', () => {
+  it('keeps a zone the runtime knows', () => {
+    expect(normalizeTimeZone('Europe/Paris')).toBe('Europe/Paris')
+    expect(normalizeTimeZone('UTC')).toBe('UTC')
+  })
+
+  it('drops anything else, the value comes from the request body', () => {
+    expect(normalizeTimeZone('Mars/Olympus')).toBeUndefined()
+    expect(normalizeTimeZone('Europe/Paris; DROP')).toBeUndefined()
+    expect(normalizeTimeZone('x'.repeat(65))).toBeUndefined()
+    expect(normalizeTimeZone(42)).toBeUndefined()
+    expect(normalizeTimeZone(undefined)).toBeUndefined()
   })
 })

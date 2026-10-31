@@ -495,7 +495,6 @@
     "src/components/layout/horizontal/NavbarContent.jsx",
     "src/components/layout/horizontal/Navigation.jsx",
     "src/components/layout/horizontal/VerticalNavContent.jsx",
-    "src/components/layout/shared/AIChatDrawer.jsx",
     "src/components/layout/shared/CommandPalette.jsx",
     "src/components/layout/shared/Logo.jsx",
     "src/components/layout/shared/ModeDropdown.jsx",

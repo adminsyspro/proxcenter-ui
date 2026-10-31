@@ -83,3 +83,42 @@ export function enabledKinds(s: AiActionsSettings): ActionKind[] {
   if (!s.enabled) return []
   return ACTION_KINDS.filter(k => s.actions[k])
 }
+
+// ---------------------------------------------------------------------------
+// Action cards and plans (built and signed server side, rendered client side)
+// ---------------------------------------------------------------------------
+
+export type ActionCard = {
+  actionId: string
+  kind: ActionKind
+  tier: ActionTier
+  target: {
+    connId: string
+    cluster: string
+    node: string
+    vmid?: number
+    guestKind?: 'qemu' | 'lxc'
+    name: string
+  }
+  params: Record<string, string | number | boolean>
+  // Display data only: recomputed at execution, not covered by the signature.
+  preflight: {
+    ok: boolean
+    checks: Array<{ level: 'ok' | 'warn' | 'block'; text: string }>
+  }
+  planId?: string
+  step?: number
+  expiresAt: number
+  token: string
+}
+
+export type ActionPlan = {
+  planId: string
+  finding: 'unprotected_guests' | 'host_memory' | 'pending_updates'
+  title: string
+  steps: Array<{ step: number; card?: ActionCard; manual?: { text: string; href: string } }>
+}
+
+// Who a card was issued to: part of the signature, so a card cannot be replayed
+// by another user, in another tenant or in another conversation.
+export type ActionBinding = { userId: string; tenantId: string; conversationId: string }

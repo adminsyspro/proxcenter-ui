@@ -392,10 +392,14 @@ describe('the user\'s own scope (roadmap#188 lab: evacuating pve1)', () => {
     expect((await propose({ action: 'migrate', guest: 'db-01', target_host: 'pve3' }, ctx(said))).error).toBe('out-of-scope')
   })
 
-  it('takes a disruptive target\'s host from what the user typed only', async () => {
-    const res = await propose({ action: 'reboot', guest: 'win2025' }, ctx('reboot them all', { answered: 'pve1 runs win2025 and ct-web.' }))
+  it('never grounds a shutdown or a reboot by its host, and a container migration\'s host only from what the user typed', async () => {
+    for (const action of ['reboot', 'shutdown']) {
+      expect((await propose({ action, guest: 'win2025' }, ctx('is pve1 healthy?'))).error).toBe('out-of-scope')
+    }
 
-    expect(res.error).toBe('out-of-scope')
+    const answered = await propose({ action: 'migrate', guest: 'ct-web', target_host: 'pve3' }, ctx('move them to pve3', { answered: 'pve1 runs ct-web.' }))
+
+    expect(answered.error).toBe('out-of-scope')
   })
 
   it.each([

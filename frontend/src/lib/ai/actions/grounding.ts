@@ -82,22 +82,23 @@ export function isGrounded(text: string, term: string | number | undefined): boo
  * the model to write "web-01" must not be enough to put a reboot of web-01
  * under the user's cursor.
  *
- * A guest is also grounded by its host, on the same text as its name: "move
- * everything off pve1" names every guest of pve1 (lab, roadmap#188: the
- * evacuation of pve1 got no card at all, its guests being named only in tool
- * results). An injection can then only aim at a guest of a host the user
- * talked about, and every card still waits for the user's approval.
+ * `byHost` (a migration only): a guest is also grounded by its host, on the
+ * same text as its name: "move everything off pve1" names every guest of pve1
+ * (lab, roadmap#188: the evacuation of pve1 got no card at all, its guests
+ * being named only in tool results). Never for a shutdown or a reboot: "is
+ * pve1 healthy?" must not let a note planted in a VM put a shutdown of that VM
+ * under the user's cursor.
  */
 export function assertTargetGrounded(
   grounding: ConversationGrounding,
   target: { name: string; vmid?: number | string; node?: string },
-  opts: { userOnly?: boolean } = {}
+  opts: { userOnly?: boolean; byHost?: boolean } = {}
 ): void {
   const text = opts.userOnly ? grounding.userText : grounding.visibleText
 
   if (isGrounded(text, target.name)) return
   if (target.vmid !== undefined && isGrounded(grounding.userText, target.vmid)) return
-  if (target.vmid !== undefined && isGrounded(text, target.node)) return
+  if (opts.byHost && target.vmid !== undefined && isGrounded(text, target.node)) return
 
   throw new ToolScopeError(UNGROUNDED_TARGET_MESSAGE)
 }

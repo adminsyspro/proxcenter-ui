@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest'
 
-import { createFrameDecoder, encodeFrame, FRAME_MARK, type StreamFrame } from './streamFrames'
+import { createFrameDecoder, encodeFrame, FRAME_MARK, withoutFrameMarks, type StreamFrame } from './streamFrames'
 
 const TOOL_FRAME: StreamFrame = { type: 'tool', names: ['rank_guest_hardware', 'list_ceph_osds'] }
 const TRACE_FRAME: StreamFrame = {
@@ -290,5 +290,12 @@ describe('manual plan step links (roadmap#188)', () => {
     const href = '/infrastructure/inventory?selectType=cluster&selectId=abc'
 
     expect(hrefOf(href)).toEqual({ text: 'Check', href })
+  })
+})
+
+describe('withoutFrameMarks', () => {
+  it('drops every frame mark and leaves other text as it is', () => {
+    expect(withoutFrameMarks(`a${FRAME_MARK}b${FRAME_MARK}`)).toBe('ab')
+    expect(withoutFrameMarks('plain')).toBe('plain')
   })
 })

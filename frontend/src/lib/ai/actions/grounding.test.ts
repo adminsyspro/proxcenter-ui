@@ -63,19 +63,22 @@ describe('assertTargetGrounded', () => {
     expect(() => assertTargetGrounded(said('reboot the windows box'), guest)).toThrow(UNGROUNDED_TARGET_MESSAGE)
   })
 
-  it('grounds a guest on the host it runs on, from the same text as its name', () => {
+  it('grounds a guest on the host it runs on, for a migration only, from the same text as its name', () => {
     const onPve1 = { name: 'win2025', vmid: 104, node: 'pve1' }
+    const byHost = { byHost: true }
     const answered = conversationGrounding([
       { role: 'user', content: 'what is wrong?' },
       { role: 'assistant', content: 'pve1 is overloaded.' },
     ])
 
-    expect(() => assertTargetGrounded(said('move everything off pve1'), onPve1)).not.toThrow()
-    expect(() => assertTargetGrounded(said('move everything off pve12'), onPve1)).toThrow(ToolScopeError)
-    expect(() => assertTargetGrounded(answered, onPve1)).not.toThrow()
-    expect(() => assertTargetGrounded(answered, onPve1, { userOnly: true })).toThrow(ToolScopeError)
+    expect(() => assertTargetGrounded(said('move everything off pve1'), onPve1, byHost)).not.toThrow()
+    expect(() => assertTargetGrounded(said('move everything off pve12'), onPve1, byHost)).toThrow(ToolScopeError)
+    expect(() => assertTargetGrounded(answered, onPve1, byHost)).not.toThrow()
+    expect(() => assertTargetGrounded(answered, onPve1, { ...byHost, userOnly: true })).toThrow(ToolScopeError)
+    // A shutdown or a reboot never: "is pve1 healthy?" names no guest of pve1.
+    expect(() => assertTargetGrounded(said('is pve1 healthy?'), onPve1, { userOnly: true })).toThrow(ToolScopeError)
     // A host target has no vmid: its own name grounds it, not a node field.
-    expect(() => assertTargetGrounded(said('move everything off pve1'), { name: 'pve2', node: 'pve1' })).toThrow(ToolScopeError)
+    expect(() => assertTargetGrounded(said('move everything off pve1'), { name: 'pve2', node: 'pve1' }, byHost)).toThrow(ToolScopeError)
   })
 
   it('grounds a host on its name', () => {

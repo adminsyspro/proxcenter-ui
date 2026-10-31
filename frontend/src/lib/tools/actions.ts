@@ -266,7 +266,8 @@ export const proposeActionTool: CatalogTool = {
         })
 
     // A disruptive card (a container migration included) only for a target the user typed.
-    assertTargetGrounded(actions, target, { userOnly: actionTier(kind, target) === 'disruptive' })
+    // A migration may also be grounded by its source host: "move everything off pve1".
+    assertTargetGrounded(actions, target, { userOnly: actionTier(kind, target) === 'disruptive', byHost: kind === 'migrate' })
     // One of several homonyms only once the user told which: refused before the budget is spent.
     assertTargetUnambiguous(ctx, target, actions.userText, { targetHost })
     consumeProposal(ctx)

@@ -18,7 +18,7 @@ import { buildToolContext } from '@/lib/tools/catalog'
 import { coerceToolArgs, extractTextToolCall, toolResultTurns, toolsForProvider, type ToolCallRequest } from '@/lib/ai/tools/adapters'
 import { budgetFallbackText, CLOSING_NUDGE, emptyClosingText, executeToolCalls, MAX_TOOL_ROUNDS, userTextOf, type ToolTraceEntry } from '@/lib/ai/tools/loop'
 import type { CatalogTool, ToolContext } from '@/lib/tools/types'
-import { encodeFrame } from '@/lib/ai/streamFrames'
+import { encodeFrame, withoutFrameMarks } from '@/lib/ai/streamFrames'
 import { requireFeature } from '@/lib/auth/requireEnterprise'
 import { Features } from '@/lib/license/features'
 
@@ -125,7 +125,7 @@ async function streamOllamaTurn(opts: {
 
       if (json.message?.content) {
         text += json.message.content
-        if (relay) controller.enqueue(encoder.encode(json.message.content))
+        if (relay) controller.enqueue(encoder.encode(withoutFrameMarks(json.message.content)))
       }
 
       if (Array.isArray(json.message?.tool_calls)) {
@@ -173,7 +173,7 @@ async function streamOllamaTurn(opts: {
 
   // Prose, and it was held back: emit it now that it is known to be an answer.
   if (!relay && toolCalls.length === 0 && text) {
-    controller.enqueue(encoder.encode(text))
+    controller.enqueue(encoder.encode(withoutFrameMarks(text)))
   }
 
   return {
@@ -256,7 +256,7 @@ async function streamAgenticConversation(opts: {
         continue
       }
 
-      controller.enqueue(encoder.encode(budgetFallbackText(ctx.locale, trace)))
+      controller.enqueue(encoder.encode(withoutFrameMarks(budgetFallbackText(ctx.locale, trace))))
       break
     }
 
@@ -273,7 +273,7 @@ async function streamAgenticConversation(opts: {
         continue
       }
 
-      controller.enqueue(encoder.encode(emptyClosingText(ctx.locale, trace)))
+      controller.enqueue(encoder.encode(withoutFrameMarks(emptyClosingText(ctx.locale, trace))))
       break
     }
 

@@ -36,6 +36,16 @@ export type StreamFrame =
 
 export type DecodedChunk = { text: string; frames: StreamFrame[] }
 
+/**
+ * Text relayed to the browser with every frame mark removed. The browser reads
+ * a mark as the start of a frame, so a model talked into writing one (by text
+ * planted in a VM note it read) would forge a frame: a "choices" row whose
+ * click sends words the user never chose. Only `encodeFrame` writes marks.
+ */
+export function withoutFrameMarks(text: string): string {
+  return text.includes(FRAME_MARK) ? text.split(FRAME_MARK).join('') : text
+}
+
 export function encodeFrame(frame: StreamFrame): string {
   return `${FRAME_MARK}${JSON.stringify(frame)}\n`
 }

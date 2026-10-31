@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
   features: new Set<string>(['ai_insights', 'ai_actions']),
   principal: { kind: 'session', userId: 'u1', userEmail: 'u1@test.local', tenantId: 'default', connectionIds: null } as Record<string, unknown> | null,
   snapshot: null as InventorySnapshot | null,
+  snapshotError: null as Error | null,
+  invalidateInventoryCache: vi.fn<(tenantId?: string) => void>(),
   client: {
     getRecommendations: vi.fn<(...args: unknown[]) => Promise<{ data: unknown[] }>>(),
     executeRecommendation: vi.fn<(id: string) => Promise<{ data: unknown }>>(),
@@ -77,7 +79,15 @@ vi.mock('@/lib/tenant', async io => ({
 }))
 vi.mock('@/lib/tools/snapshot', async io => ({
   ...(await io<typeof import('@/lib/tools/snapshot')>()),
-  collectInventorySnapshot: async () => h.snapshot,
+  collectInventorySnapshot: async () => {
+    if (h.snapshotError) throw h.snapshotError
+
+    return h.snapshot
+  },
+}))
+vi.mock('@/lib/cache/inventoryCache', async io => ({
+  ...(await io<typeof import('@/lib/cache/inventoryCache')>()),
+  invalidateInventoryCache: (tenantId?: string) => h.invalidateInventoryCache(tenantId),
 }))
 
 import { prismaTest, truncate } from '@/__tests__/setup/prisma-test'
@@ -186,6 +196,8 @@ beforeEach(async () => {
   h.features = new Set(['ai_insights', 'ai_actions'])
   h.principal = { kind: 'session', userId: 'u1', userEmail: 'u1@test.local', tenantId: 'default', connectionIds: null }
   h.snapshot = snapshot()
+  h.snapshotError = null
+  h.invalidateInventoryCache.mockReset()
   h.executeSSH.mockReset().mockResolvedValue({ success: true, output: '' })
   h.client.getRecommendations.mockReset().mockResolvedValue({ data: [] })
   h.client.executeRecommendation.mockReset().mockResolvedValue({ data: { status: 'executing' } })
@@ -394,6 +406,45 @@ describe('POST /api/v1/ai/actions/execute', () => {
     expect(pveCalls('POST', '/snapshot')).toHaveLength(5)
   })
 
+  it('counts the cap per user: another user reusing the conversation id is not capped', async () => {
+    for (let i = 0; i < 5; i++) expect((await run(snapCard())).status).toBe(200)
+
+    h.principal = { kind: 'session', userId: 'u2', userEmail: 'u2@test.local', tenantId: 'default', connectionIds: null }
+    const other = { ...bind, userId: 'u2' }
+    const res = await run(card('snapshot', WIN, { name: 'from-u2' }, {}, other))
+
+    expect(res.status).toBe(200)
+    expect((await rows('ai.action')).map(r => r.userId)).toEqual(['u1', 'u1', 'u1', 'u1', 'u1', 'u2'])
+  })
+
+  it('does not let another user unlock the next step of a plan with the same plan id', async () => {
+    const step1 = card('backup_add', CT, { jobId: 'nightly' }, { planId: 'plan-x', step: 1 })
+
+    expect((await run(step1)).status).toBe(200)
+
+    h.principal = { kind: 'session', userId: 'u2', tenantId: 'default', connectionIds: null }
+    const step2 = card('backup_add', CT, { jobId: 'nightly' }, { planId: 'plan-x', step: 2, after: 1 }, { ...bind, userId: 'u2' })
+
+    expect((await run(step2)).body.code).toBe('previous-step-pending')
+  })
+
+  it('answers a generic 500 for a failure after verification, and still writes the ai.action row', async () => {
+    h.snapshotError = new Error('PrismaClientKnownRequestError: connection to 10.0.0.5:5432 refused, APP_SECRET=abc')
+    const c = snapCard()
+    const res = await run(c)
+
+    expect(res.status).toBe(500)
+    expect(res.body).toEqual({ ok: false, code: 'internal-error', message: 'The action could not be run. Try again.' })
+    expect(JSON.stringify(res.body)).not.toMatch(/Prisma|10\.0\.0\.5|APP_SECRET/)
+
+    const ai = await rows('ai.action')
+
+    expect(ai).toHaveLength(1)
+    expect(ai[0]).toMatchObject({ status: 'failure', userId: 'u1', errorMessage: 'The action could not be run. Try again.' })
+    expect(ai[0].details).toMatchObject({ outcome: 'refused', code: 'internal-error', httpStatus: 500, actionId: c.actionId, conversationId: CONV })
+    expect(pveCalls('POST', '/snapshot')).toHaveLength(0)
+  })
+
   it('counts the cap per conversation', async () => {
     await enable({ maxPerConversation: 1 })
     expect((await run(snapCard())).status).toBe(200)
@@ -568,6 +619,16 @@ describe('POST /api/v1/ai/actions/execute', () => {
       expect(net).toMatchObject({ category: 'nodes', resourceId: 'pve2' })
       expect(net.details).toMatchObject({ method: 'POST', via: 'assistant', actionId: c.actionId })
       expect((await rows('ai.action'))[0]).toMatchObject({ category: 'nodes', resourceType: 'node', resourceId: 'pve2' })
+      expect(h.invalidateInventoryCache).toHaveBeenCalledTimes(1)
+    })
+
+    it('leaves the inventory cache alone when the maintenance route fails', async () => {
+      h.executeSSH.mockResolvedValue({ success: false, error: 'ssh: connection refused' })
+      const res = await run(card('maintenance', HOST2, { mode: 'enter' }), { confirmed: true })
+
+      expect(res.status).toBe(500)
+      expect(res.body.code).toBe('route-refused')
+      expect(h.invalidateInventoryCache).not.toHaveBeenCalled()
     })
 
     it('exits maintenance with DELETE', async () => {

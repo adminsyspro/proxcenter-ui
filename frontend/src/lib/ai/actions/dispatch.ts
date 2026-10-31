@@ -21,6 +21,7 @@ import { POST as backupJobGuestsRoute } from '@/app/api/v1/connections/[id]/back
 import { DELETE as maintenanceExitRoute, POST as maintenanceEnterRoute } from '@/app/api/v1/connections/[id]/nodes/[node]/maintenance/route'
 import { POST as snapshotRoute } from '@/app/api/v1/guests/[vmid]/snapshots/route'
 import { POST as drsActionRoute } from '@/app/api/v1/orchestrator/drs/recommendations/[id]/[action]/route'
+import { invalidateInventoryCache } from '@/lib/cache/inventoryCache'
 
 import type { ActionCard } from './types'
 
@@ -151,28 +152,35 @@ async function readBody(res: Response): Promise<any> {
 /**
  * Calls the card's route and hands back its status and answer untouched: a
  * 403 of the route stays a 403. A handler that throws (withAudit rethrows
- * after writing its failure row) is reported as the 500 Next would answer.
+ * after writing its failure row), or a card no route maps, is reported as
+ * the 500 Next would answer.
  */
 export async function dispatchAction(card: ActionCard, baseUrl = 'http://localhost'): Promise<DispatchResult> {
-  const call = routeFor(card)
-  const payload = call.body === undefined ? undefined : JSON.stringify(call.body)
-  const headers: Record<string, string> = {}
-
-  // withAudit() records a JSON body only when its length is declared.
-  if (payload !== undefined) {
-    headers['content-type'] = 'application/json'
-    headers['content-length'] = String(Buffer.byteLength(payload))
-  }
-
-  const req = new Request(new URL(call.path, baseUrl), { method: call.method, headers, body: payload })
-
   let res: Response
 
   try {
+    const call = routeFor(card)
+    const payload = call.body === undefined ? undefined : JSON.stringify(call.body)
+    const headers: Record<string, string> = {}
+
+    // withAudit() records a JSON body only when its length is declared.
+    if (payload !== undefined) {
+      headers['content-type'] = 'application/json'
+      headers['content-length'] = String(Buffer.byteLength(payload))
+    }
+
+    const req = new Request(new URL(call.path, baseUrl), { method: call.method, headers, body: payload })
+
     res = await call.handler(req, { params: Promise.resolve(call.params) })
   } catch (e: unknown) {
     return { httpStatus: 500, body: { error: e instanceof Error ? e.message : String(e) } }
   }
+
+  // The maintenance route runs over SSH and leaves the inventory cache as it
+  // was, unlike the guest routes: without this, the exit step of a plan
+  // replayed right after the enter step would read a host not yet in
+  // maintenance and be refused.
+  if (res.ok && card.kind === 'maintenance') invalidateInventoryCache()
 
   const body = await readBody(res)
   const upid = res.ok ? upidOf(body) : undefined

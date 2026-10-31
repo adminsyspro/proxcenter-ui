@@ -39,7 +39,10 @@ const MAX_CONVERSATION_ID = 200
 
 type Refusal = { status: number; code: string; message: string; checks?: ActionCard['preflight']['checks'] }
 
-type Verified = { card: ActionCard; conversationId: string; confirmed: boolean; tenantId: string; baseUrl: string }
+type Verified = { card: ActionCard; conversationId: string; confirmed: boolean; tenantId: string; userId: string; baseUrl: string }
+
+/** Answered for any unexpected failure: the real error, which can name the database or a secret, stays in the server log. */
+const INTERNAL_MESSAGE = 'The action could not be run. Try again.'
 
 const refusal = (status: number, code: string, message: string, extra: Partial<Refusal> = {}): Refusal => ({ status, code, message, ...extra })
 
@@ -57,12 +60,14 @@ function categoryOf(card: ActionCard): AuditCategory {
 }
 
 /** The `ai.action` row of a verified card: the target and the trail (conversation, action, plan step). */
-async function auditCard(card: ActionCard, conversationId: string, outcome: 'dispatched' | 'refused', status: number, extra: { code?: string; error?: string }) {
+async function auditCard(card: ActionCard, conversationId: string, outcome: 'dispatched' | 'refused', status: number, extra: { code?: string; error?: string; userId: string }) {
   const host = isHostKind(card.kind)
   const ok = outcome === 'dispatched' && status >= 200 && status < 300
 
   await audit({
     action: 'ai.action',
+    // Stated, not left to the session lookup: replay, cap and plan order filter on it.
+    userId: extra.userId,
     category: categoryOf(card),
     resourceType: host ? 'node' : card.target.guestKind,
     resourceId: host ? card.target.node : String(card.target.vmid),
@@ -145,29 +150,33 @@ async function serialized<T>(key: string, fn: () => Promise<T>): Promise<T> {
 
 // ---------------------------------------------------------------------------
 // The audit trail as the source of replay, cap and plan order: one durable
-// store, shared by every instance.
+// store, shared by every instance. Always per user too: the conversation id
+// is chosen by the browser, so two users of a tenant could share one, and
+// neither may spend or unlock the other's actions.
 // ---------------------------------------------------------------------------
+
+type Owner = { tenantId: string; userId: string }
 
 const detail = (key: string, value: string | number) => ({ details: { path: [key], equals: value } })
 
-async function alreadyExecuted(tenantId: string, actionId: string): Promise<boolean> {
+async function alreadyExecuted({ tenantId, userId }: Owner, actionId: string): Promise<boolean> {
   const row = await prisma.auditLog.findFirst({
-    where: { tenantId, action: 'ai.action', status: 'success', AND: [detail('actionId', actionId), detail('outcome', 'dispatched')] },
+    where: { tenantId, userId, action: 'ai.action', status: 'success', AND: [detail('actionId', actionId), detail('outcome', 'dispatched')] },
     select: { id: true },
   })
 
   return row !== null
 }
 
-async function dispatchedInConversation(tenantId: string, conversationId: string): Promise<number> {
+async function dispatchedInConversation({ tenantId, userId }: Owner, conversationId: string): Promise<number> {
   return prisma.auditLog.count({
-    where: { tenantId, action: 'ai.action', AND: [detail('conversationId', conversationId), detail('outcome', 'dispatched')] },
+    where: { tenantId, userId, action: 'ai.action', AND: [detail('conversationId', conversationId), detail('outcome', 'dispatched')] },
   })
 }
 
-async function stepSucceeded(tenantId: string, planId: string, step: number): Promise<boolean> {
+async function stepSucceeded({ tenantId, userId }: Owner, planId: string, step: number): Promise<boolean> {
   const row = await prisma.auditLog.findFirst({
-    where: { tenantId, action: 'ai.action', status: 'success', AND: [detail('planId', planId), detail('step', step), detail('outcome', 'dispatched')] },
+    where: { tenantId, userId, action: 'ai.action', status: 'success', AND: [detail('planId', planId), detail('step', step), detail('outcome', 'dispatched')] },
     select: { id: true },
   })
 
@@ -232,9 +241,10 @@ function routeError(d: DispatchResult): string {
 /** Every check after the signature, in the plan's order, then the dispatch. */
 async function executeVerified(v: Verified): Promise<Response> {
   const { card, conversationId, tenantId } = v
+  const owner: Owner = { tenantId, userId: v.userId }
 
   const refuse = async (r: Refusal) => {
-    await auditCard(card, conversationId, 'refused', r.status, { code: r.code, error: r.message })
+    await auditCard(card, conversationId, 'refused', r.status, { code: r.code, error: r.message, userId: v.userId })
       .catch(e => console.error('[ai/actions/execute] audit failed:', e?.message || e))
 
     return respond(r)
@@ -250,15 +260,15 @@ async function executeVerified(v: Verified): Promise<Response> {
     return refuse(refusal(400, 'confirmation-required', `Confirm first: ${describeCard(card)}.`))
   }
 
-  if (await alreadyExecuted(tenantId, card.actionId)) {
+  if (await alreadyExecuted(owner, card.actionId)) {
     return refuse(refusal(409, 'already-executed', 'This action was already executed.'))
   }
 
-  if ((await dispatchedInConversation(tenantId, conversationId)) >= settings.maxPerConversation) {
+  if ((await dispatchedInConversation(owner, conversationId)) >= settings.maxPerConversation) {
     return refuse(refusal(429, 'cap-reached', `At most ${settings.maxPerConversation} actions can be executed per conversation: start a new conversation.`))
   }
 
-  if (card.after !== undefined && !(card.planId && (await stepSucceeded(tenantId, card.planId, card.after)))) {
+  if (card.after !== undefined && !(card.planId && (await stepSucceeded(owner, card.planId, card.after)))) {
     return refuse(refusal(409, 'previous-step-pending', `Step ${card.after} of this plan has not succeeded yet.`))
   }
 
@@ -287,7 +297,7 @@ async function executeVerified(v: Verified): Promise<Response> {
   const message = ok ? successMessage(card, dispatched) : routeError(dispatched)
 
   // The action ran: a lost row must not turn its answer into an error.
-  await auditCard(card, conversationId, 'dispatched', dispatched.httpStatus, ok ? {} : { error: message })
+  await auditCard(card, conversationId, 'dispatched', dispatched.httpStatus, ok ? { userId: v.userId } : { error: message, userId: v.userId })
     .catch(e => console.error('[ai/actions/execute] audit of a dispatched action failed:', e?.message || e))
 
   if (!ok) {
@@ -310,6 +320,9 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 async function handler(req: Request) {
+  // Hoisted so an unexpected failure after the signature still leaves the card's row (R4).
+  let verified: Verified | undefined
+
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
     if (denied) return refuseUnverified(await fromGuard(denied, 'forbidden'))
@@ -345,20 +358,34 @@ async function handler(req: Request) {
       }
 
       // Expired but authentic: its claims are ours, audit them.
-      await auditCard(card as ActionCard, conversationId, 'refused', 400, { code: 'expired', error: 'This card expired.' })
+      await auditCard(card as ActionCard, conversationId, 'refused', 400, { code: 'expired', error: 'This card expired.', userId: principal.userId })
         .catch(e => console.error('[ai/actions/execute] audit failed:', e?.message || e))
 
       return respond(refusal(400, 'expired', 'This card expired: ask the assistant again.'))
     }
 
     // From here the card is one this server issued, unaltered.
-    const verified: Verified = { card: card as ActionCard, conversationId, confirmed: isRecord(body) && body.confirmed === true, tenantId, baseUrl: req.url }
+    const v: Verified = {
+      card: card as ActionCard,
+      conversationId,
+      confirmed: isRecord(body) && body.confirmed === true,
+      tenantId,
+      userId: principal.userId,
+      baseUrl: req.url,
+    }
 
-    return await serialized(`${tenantId}|${conversationId}`, () => executeVerified(verified))
+    verified = v
+
+    return await serialized(`${tenantId}|${principal.userId}|${conversationId}`, () => executeVerified(v))
   } catch (e: unknown) {
     console.error('[ai/actions/execute] Error:', e)
 
-    return NextResponse.json({ ok: false, code: 'internal-error', message: e instanceof Error ? e.message : String(e) }, { status: 500 })
+    if (verified) {
+      await auditCard(verified.card, verified.conversationId, 'refused', 500, { code: 'internal-error', error: INTERNAL_MESSAGE, userId: verified.userId })
+        .catch(err => console.error('[ai/actions/execute] audit failed:', err?.message || err))
+    }
+
+    return NextResponse.json({ ok: false, code: 'internal-error', message: INTERNAL_MESSAGE }, { status: 500 })
   }
 }
 

@@ -20,6 +20,7 @@
  * outside the caller's scope gets a "not found" and no Proxmox call is made.
  */
 
+import type { ActionBinding, AiActionsSettings } from '@/lib/ai/actions/types'
 import type { InventorySnapshot, SnapshotGuest, SnapshotNode } from '@/lib/tools/snapshot'
 
 export type JsonSchemaProperty = {
@@ -48,7 +49,14 @@ export type ToolContext = {
    * by every round of one request. A tool past its budget refuses: the model
    * then answers from what it already has.
    */
-  usage?: { historyLookups: number; cveScans?: number }
+  usage?: { historyLookups: number; cveScans?: number; proposals?: number }
+  /**
+   * Set only when the assistant may propose actions (roadmap#188): what is
+   * enabled, who the signed cards are issued to, and the conversation text the
+   * user saw, which is all a proposal target may be grounded on. Without it
+   * the proposal tools refuse.
+   */
+  actions?: { settings: AiActionsSettings; bind: ActionBinding; visibleText: string }
 }
 
 export type CatalogTool = {

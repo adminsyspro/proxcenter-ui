@@ -30,7 +30,8 @@ export function clearBackupJobsCache() {
   jobsCache.clear()
 }
 
-function loadJobs(ctx: ToolContext, connId: string): Promise<VzdumpJob[]> {
+/** The cluster's vzdump jobs, one `/cluster/backup` read per tenant and cluster a minute. */
+export function loadBackupJobs(ctx: ToolContext, connId: string): Promise<VzdumpJob[]> {
   const key = `${ctx.tenantId}|${connId}`
   const hit = jobsCache.get(key)
 
@@ -70,6 +71,48 @@ function groupUncovered(guests: Array<CoverageGuest & { reason: string }>) {
   return [...groups.values()]
 }
 
+/**
+ * Coverage of the snapshot's guests on these clusters, as the Backups page
+ * resolves it. Shared with the remediation plan of the assistant
+ * (roadmap#188), which turns the uncovered guests into backup_add steps.
+ */
+export async function computeBackupCoverage(ctx: ToolContext, connections: Array<{ id: string; name: string }>) {
+  const settings = coverageSettingsFromThresholds(await getSetting('alert_thresholds', ctx.tenantId))
+  const jobsByConnection: Record<string, VzdumpJob[]> = {}
+  const unreadable: string[] = []
+
+  await Promise.all(
+    connections.map(async c => {
+      try {
+        jobsByConnection[c.id] = await loadBackupJobs(ctx, c.id)
+      } catch {
+        unreadable.push(c.name)
+      }
+    })
+  )
+
+  // A cluster whose jobs cannot be read contributes nothing: without its
+  // jobs every guest would look unprotected.
+  const guests: CoverageGuest[] = ctx.snapshot.guests
+    .filter(g => g.connId in jobsByConnection)
+    .map(g => ({
+      connId: g.connId,
+      connectionName: g.cluster,
+      node: g.node,
+      vmid: g.vmid,
+      type: g.kind,
+      name: g.name,
+      status: g.status,
+      template: g.template,
+      tags: (g.tags || '').split(/[;,]/).map(t => t.trim()).filter(Boolean),
+      pool: g.pool ?? null,
+    }))
+
+  const { uncovered, summary } = resolveBackupCoverage({ guests, jobsByConnection, settings, now: Date.now() })
+
+  return { uncovered, summary, settings, unreadable, jobsByConnection }
+}
+
 export const getBackupCoverageTool: CatalogTool = {
   name: 'get_backup_coverage',
   readOnly: true,
@@ -87,38 +130,7 @@ export const getBackupCoverageTool: CatalogTool = {
     const clusterRef = argString(args, 'cluster')
     const connections = clusterRef ? [resolveConnection(ctx, clusterRef)] : ctx.snapshot.clusters.map(c => ({ id: c.id, name: c.name }))
 
-    const settings = coverageSettingsFromThresholds(await getSetting('alert_thresholds', ctx.tenantId))
-    const jobsByConnection: Record<string, VzdumpJob[]> = {}
-    const unreadable: string[] = []
-
-    await Promise.all(
-      connections.map(async c => {
-        try {
-          jobsByConnection[c.id] = await loadJobs(ctx, c.id)
-        } catch {
-          unreadable.push(c.name)
-        }
-      })
-    )
-
-    // A cluster whose jobs cannot be read contributes nothing: without its
-    // jobs every guest would look unprotected.
-    const guests: CoverageGuest[] = ctx.snapshot.guests
-      .filter(g => g.connId in jobsByConnection)
-      .map(g => ({
-        connId: g.connId,
-        connectionName: g.cluster,
-        node: g.node,
-        vmid: g.vmid,
-        type: g.kind,
-        name: g.name,
-        status: g.status,
-        template: g.template,
-        tags: (g.tags || '').split(/[;,]/).map(t => t.trim()).filter(Boolean),
-        pool: g.pool ?? null,
-      }))
-
-    const { uncovered, summary } = resolveBackupCoverage({ guests, jobsByConnection, settings, now: Date.now() })
+    const { uncovered, summary, settings, unreadable } = await computeBackupCoverage(ctx, connections)
 
     return {
       checked: summary.total,

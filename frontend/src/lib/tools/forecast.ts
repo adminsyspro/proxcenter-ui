@@ -14,6 +14,7 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { resolveStorageCaller, storageVisibilityFilter } from '@/lib/storage/storageVisibility'
 
 import { HOST_RAM_RESERVE_PCT } from './capacity'
+import type { InventorySnapshot, SnapshotGuest, SnapshotNode } from './snapshot'
 import { requireNodeView } from './guards'
 import { downsample, fetchRrd, HISTORY_CHART_POINTS } from './history'
 import {
@@ -218,6 +219,33 @@ export const forecastCapacityTool: CatalogTool = {
 /* simulate_migration                                                 */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Whether `count` guests the size of `guest` fit on `host`, by the
+ * simulation's arithmetic: assigned RAM against the host's free RAM after its
+ * reserve, and the vCPU overcommit it would reach. Shared with the migration
+ * proposals of the assistant (roadmap#188), so both say the same thing.
+ */
+export function evaluateHostFit(snapshot: InventorySnapshot, guest: SnapshotGuest, host: SnapshotNode, count = 1) {
+  const reserve = (host.memTotalGb * HOST_RAM_RESERVE_PCT) / 100
+  const free = Math.max(0, host.memTotalGb - host.memUsedGb - reserve)
+  const ramNeeded = guest.memTotalGb * count
+  const vcpusRunning = snapshot.guests
+    .filter(g => g.connId === host.connId && g.node === host.name && g.status === 'running' && !g.template)
+    .reduce((s, g) => s + (g.vcpus ?? 0), 0)
+  const vcpusAfter = vcpusRunning + (guest.vcpus ?? 0) * count
+
+  return {
+    host: host.name,
+    fits: ramNeeded <= free,
+    ramFreeAfterReserveGb: r1(free),
+    ramNeededGb: r1(ramNeeded),
+    ramUsedPctBefore: host.memPct,
+    ramUsedPctAfter: host.memTotalGb > 0 ? r1(((host.memUsedGb + ramNeeded) / host.memTotalGb) * 100) : null,
+    cpuOvercommitAfter: host.cores ? r1(vcpusAfter / host.cores) : null,
+    ...(host.maintenance ? { inMaintenance: true } : {}),
+  }
+}
+
 export const simulateMigrationTool: CatalogTool = {
   name: 'simulate_migration',
   readOnly: true,
@@ -237,26 +265,7 @@ export const simulateMigrationTool: CatalogTool = {
     const targetRef = argString(args, 'target')
     const hosts = ctx.snapshot.nodes.filter(n => n.connId === guest.connId && n.status === 'online' && n.name !== guest.node)
 
-    const evaluate = (host: (typeof hosts)[number]) => {
-      const reserve = (host.memTotalGb * HOST_RAM_RESERVE_PCT) / 100
-      const free = Math.max(0, host.memTotalGb - host.memUsedGb - reserve)
-      const ramNeeded = guest.memTotalGb * count
-      const vcpusRunning = ctx.snapshot.guests
-        .filter(g => g.connId === host.connId && g.node === host.name && g.status === 'running' && !g.template)
-        .reduce((s, g) => s + (g.vcpus ?? 0), 0)
-      const vcpusAfter = vcpusRunning + (guest.vcpus ?? 0) * count
-
-      return {
-        host: host.name,
-        fits: ramNeeded <= free,
-        ramFreeAfterReserveGb: r1(free),
-        ramNeededGb: r1(ramNeeded),
-        ramUsedPctBefore: host.memPct,
-        ramUsedPctAfter: host.memTotalGb > 0 ? r1(((host.memUsedGb + ramNeeded) / host.memTotalGb) * 100) : null,
-        cpuOvercommitAfter: host.cores ? r1(vcpusAfter / host.cores) : null,
-        ...(host.maintenance ? { inMaintenance: true } : {}),
-      }
-    }
+    const evaluate = (host: SnapshotNode) => evaluateHostFit(ctx.snapshot, guest, host, count)
 
     const base = {
       guest: guest.name,

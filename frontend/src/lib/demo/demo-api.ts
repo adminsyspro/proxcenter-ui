@@ -14,6 +14,8 @@ import { NextResponse } from 'next/server'
 import { aggregateStorage, normalizeStorageEntry } from '@/lib/proxmox/storage'
 import { applyRrdWindow, presetRangeMeta, resolveRrdRequest } from '@/lib/metrics/rrdRange'
 
+import { buildClusterCapacity, buildNodeCapacities, buildStoragePools, computeStoppedAllocation, storageEntryKey, type ConnectionSnapshot } from '@/lib/resources/capacity'
+
 import mockDataJson from './mock-data.json'
 import { domainMock, resolveDomainMock } from './mocks'
 import cloudImagesJson from '@/data/cloudImages.json'
@@ -2793,19 +2795,48 @@ export const EXTRA_MOCKS: MockDataMap = {
     const resources = demoResources('demo-pve-cluster-001')
     const storageData = (MOCK_DATA['/api/v1/connections/demo-pve-cluster-001/storage'] as any)?.data || []
 
-    const topCpuVms = [...resources].sort((a: any, b: any) => (b.cpu || 0) - (a.cpu || 0)).slice(0, 5).map((v: any) => ({
-      vmid: v.vmid, name: v.name, node: v.node, cpu: v.cpu, maxcpu: v.maxcpu || 4,
-    }))
-    const topRamVms = [...resources].sort((a: any, b: any) => (b.mem || 0) - (a.mem || 0)).slice(0, 5).map((v: any) => ({
-      vmid: v.vmid, name: v.name, node: v.node, mem: v.mem, maxmem: v.maxmem,
-    }))
-
-    const seen = new Set<string>()
-    const storagePools = storageData.filter((s: any) => {
-      if (seen.has(s.storage)) return false
-      seen.add(s.storage)
-      return true
+    // Same shape as the real overview (TopVm): id = connId:type:node:vmid, cpu/ram in %.
+    const asTopVm = (v: any) => ({
+      id: `demo-pve-cluster-001:${v.type}:${v.node}:${v.vmid}`,
+      name: v.name, node: v.node, connName: 'Production Cluster', status: v.status,
+      cpu: Math.round((v.cpu || 0) * 100),
+      ram: v.maxmem ? Math.round(((v.mem || 0) / v.maxmem) * 100) : 0,
+      cpuAllocated: v.maxcpu || 4, ramAllocated: v.maxmem || 0,
     })
+    const running = resources.filter((v: any) => v.status === 'running' && !v.template)
+    const topCpuVms = [...running].sort((a: any, b: any) => (b.cpu || 0) - (a.cpu || 0)).slice(0, 10).map(asTopVm)
+    const topRamVms = [...running].sort((a: any, b: any) => ((b.mem || 0) / (b.maxmem || 1)) - ((a.mem || 0) / (a.maxmem || 1))).slice(0, 10).map(asTopVm)
+
+    // Capacity model built by the very functions the real overview uses.
+    const snapshot: ConnectionSnapshot = {
+      id: 'demo-pve-cluster-001',
+      name: 'Production Cluster',
+      nodes: demoNodes('demo-pve-cluster-001').map((n: any) => ({ node: n.node, status: n.status, cpu: n.cpu, maxcpu: n.maxcpu, mem: n.mem, maxmem: n.maxmem })),
+      guests: resources.map((g: any) => ({ vmid: g.vmid, node: g.node, type: g.type, status: g.status, template: g.template, maxcpu: g.maxcpu, maxmem: g.maxmem, maxdisk: g.maxdisk })),
+      storages: storageData.map((st: any) => ({ storage: st.storage, node: st.node, status: st.status, shared: st.shared, disk: st.used, maxdisk: st.total, plugintype: st.type })),
+    }
+    // Sixty days of slow growth up to today's figure, so the pools show a runway.
+    const storageDaily = new Map(snapshot.storages.map((st: any) => {
+      const pct = st.maxdisk ? (st.disk / st.maxdisk) * 100 : 0
+      const series = new Map(Array.from({ length: 60 }, (_, i) => {
+        const day = new Date(Date.now() - (59 - i) * 86_400_000).toISOString().slice(0, 10)
+        return [day, Math.max(0, pct - (59 - i) * 0.08)] as [string, number]
+      }))
+      return [storageEntryKey(snapshot.id, st.node, st.storage), series] as [string, Map<string, number>]
+    }))
+    const demoThresholds = { cpu: { warning: 80, critical: 90 }, ram: { warning: 80, critical: 90 }, storage: { warning: 80, critical: 90 } }
+    const nodesCapacity = buildNodeCapacities(snapshot)
+    const storagePools = buildStoragePools([snapshot], storageDaily, demoThresholds)
+    const trends = generateRrdData('day', undefined, 'capacity-trends').map(p => {
+      const d = new Date(p.time * 1000)
+      return {
+        t: d.toISOString().slice(0, 10),
+        cpu: Math.round(p.cpu * 1000) / 10,
+        ram: Math.round((p.memused / p.memtotal) * 1000) / 10,
+        storage: 55 + Math.round(Math.random() * 30) / 10,
+      }
+    })
+    const clusters = [buildClusterCapacity(snapshot, nodesCapacity, storagePools, demoThresholds, trends)]
 
     return {
       data: {
@@ -2818,15 +2849,7 @@ export const EXTRA_MOCKS: MockDataMap = {
           vms: { total: 171, running: 161, stopped: 10 },
           efficiency: 82,
         },
-        trends: generateRrdData('day', undefined, 'capacity-trends').map(p => {
-          const d = new Date(p.time * 1000)
-          return {
-            t: d.toISOString().slice(0, 10),
-            cpu: Math.round(p.cpu * 1000) / 10,
-            ram: Math.round((p.memused / p.memtotal) * 1000) / 10,
-            storage: 55 + Math.round(Math.random() * 30) / 10,
-          }
-        }),
+        trends,
         topCpuVms,
         topRamVms,
         storagePools,
@@ -2861,6 +2884,10 @@ export const EXTRA_MOCKS: MockDataMap = {
         },
         healthScoreHistory: generateHealthHistory(),
         connections: [{ id: 'demo-pve-cluster-001', name: 'Production Cluster' }],
+        thresholds: demoThresholds,
+        clusters,
+        nodes: nodesCapacity,
+        stoppedAllocation: computeStoppedAllocation(snapshot.guests),
       },
     }
   },

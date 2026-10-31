@@ -1,23 +1,26 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 
-import { useTranslations, useLocale } from 'next-intl'
+import { useLocale } from 'next-intl'
 
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 
 import type {
   KpiData, TopVm, GreenMetrics,
-  OverprovisioningData, AiAnalysis, ResourceThresholds,
+  OverprovisioningData, ResourceThresholds,
   StoragePool, NetworkMetrics, HealthScoreHistoryEntry, ConnectionInfo,
+  ClusterCapacity, NodeCapacity, StoppedAllocation,
 } from '../types'
 import { DEFAULT_THRESHOLDS } from '../constants'
 import { DEFAULT_HISTORY_WINDOW_DAYS, sliceTrendsToWindow } from '../algorithms/historyWindow'
 
 // The overview carries up to a year of daily trends; each caller picks how much of
 // it feeds the forecast, from the same cached response (no extra Proxmox call).
+// Stable empty list, so memoised consumers do not recompute on every render.
+const EMPTY: never[] = []
+
 export function useResourceData(connectionId?: string, historyDays: number = DEFAULT_HISTORY_WINDOW_DAYS) {
-  const t = useTranslations()
   const locale = useLocale()
 
   // Build SWR key from connectionId + locale (server pre-formats date labels per locale)
@@ -39,57 +42,23 @@ export function useResourceData(connectionId?: string, historyDays: number = DEF
     () => sliceTrendsToWindow(json?.data?.trends ?? [], json?.data?.trendsPeriod ?? null, historyDays),
     [json, historyDays],
   )
-  const topCpuVms: TopVm[] = json?.data?.topCpuVms ?? []
-  const topRamVms: TopVm[] = json?.data?.topRamVms ?? []
+  const topCpuVms: TopVm[] = json?.data?.topCpuVms ?? EMPTY
+  const topRamVms: TopVm[] = json?.data?.topRamVms ?? EMPTY
   const green: GreenMetrics | null = json?.data?.green ?? null
   const greenConfigured: boolean = json?.data?.greenConfigured !== false
   const overprovisioning: OverprovisioningData | null = json?.data?.overprovisioning ?? null
   const thresholds: ResourceThresholds = json?.data?.thresholds ?? DEFAULT_THRESHOLDS
-  const storagePools: StoragePool[] = json?.data?.storagePools ?? []
+  const storagePools: StoragePool[] = json?.data?.storagePools ?? EMPTY
   const networkMetrics: NetworkMetrics | null = json?.data?.networkMetrics ?? null
-  const healthScoreHistory: HealthScoreHistoryEntry[] = json?.data?.healthScoreHistory ?? []
+  const healthScoreHistory: HealthScoreHistoryEntry[] = json?.data?.healthScoreHistory ?? EMPTY
   const connections: ConnectionInfo[] = json?.data?.connections ?? []
+  const clusters: ClusterCapacity[] = json?.data?.clusters ?? EMPTY
+  const nodes: NodeCapacity[] = json?.data?.nodes ?? EMPTY
+  const stoppedAllocation: StoppedAllocation | null = json?.data?.stoppedAllocation ?? null
 
   const error = swrError ? swrError.message : null
 
-  // AI analysis state (not part of the overview fetch)
-  const [aiAnalysis, setAiAnalysis] = useState<AiAnalysis>({ summary: '', recommendations: [], loading: false })
-
-  // Reset AI analysis when connection changes
-  useEffect(() => {
-    setAiAnalysis({ summary: '', recommendations: [], loading: false })
-  }, [connectionId])
-
   const loadData = useCallback(() => { void mutate() }, [mutate])
-
-  const runAiAnalysis = async () => {
-    if (!kpis) return
-    setAiAnalysis(prev => ({ ...prev, loading: true, error: undefined }))
-
-    try {
-      const res = await fetch('/api/v1/resources/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // #686: the page already knows its locale, so send it rather than
-        // leaving the route to infer one from request headers.
-        body: JSON.stringify({ kpis, topCpuVms, topRamVms, locale }),
-      })
-
-      if (!res.ok) throw new Error(t('resources.analysisError'))
-      const json = await res.json()
-
-      setAiAnalysis({
-        summary: json.data?.summary || '',
-        recommendations: json.data?.recommendations || [],
-        loading: false,
-        provider: json.data?.provider,
-        summaryKey: json.data?.summaryKey,
-        summaryParams: json.data?.summaryParams,
-      })
-    } catch (e: any) {
-      setAiAnalysis(prev => ({ ...prev, loading: false, error: e.message }))
-    }
-  }
 
   return {
     loading: isLoading,
@@ -108,9 +77,9 @@ export function useResourceData(connectionId?: string, historyDays: number = DEF
     networkMetrics,
     healthScoreHistory,
     connections,
-    aiAnalysis,
+    clusters,
+    nodes,
+    stoppedAllocation,
     loadData,
-    runAiAnalysis,
-    setAiAnalysis,
   }
 }

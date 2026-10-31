@@ -1,14 +1,23 @@
-import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
-
-import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { prisma } from "@/lib/db/prisma"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getDateLocale } from "@/lib/i18n/date"
-
-export const runtime = "nodejs"
+import { calculateImprovedPredictions } from "@/app/(dashboard)/infrastructure/resources/algorithms/improvedPrediction"
+import { calculateHealthScoreWithDetails } from "@/app/(dashboard)/infrastructure/resources/algorithms/healthScore"
+import { DEFAULT_HISTORY_WINDOW_DAYS } from "@/app/(dashboard)/infrastructure/resources/algorithms/historyWindow"
+import type { ResourceThresholds, ResourceTrend } from "@/app/(dashboard)/infrastructure/resources/types"
+import {
+  buildClusterCapacity,
+  buildNodeCapacities,
+  buildStoragePools,
+  clusterKpis,
+  computeStoppedAllocation,
+  storageEntryKey,
+  sumPools,
+  type ConnectionSnapshot,
+  type NodeCapacity,
+  type ScopeKpis,
+  type StorageDailyIndex,
+} from "./capacity"
 
 // In-memory response cache: avoids re-fetching 26+ RRD calls from Proxmox on every request.
 // Key = tenantId:connectionId (or tenantId:all), value = { response JSON, timestamp }
@@ -98,6 +107,7 @@ type VmData = {
   maxmem?: number
   disk?: number
   maxdisk?: number
+  template?: number
 }
 
 type RrdPoint = {
@@ -551,7 +561,7 @@ function formatTrendsForChartWeighted(
   storageData: Map<string, number[]>,
   dateLocale: string
 ): {
-  trends: Array<{ t: string, cpu: number, ram: number, storage?: number }>,
+  trends: Array<{ t: string, d: string, cpu: number, ram: number, storage?: number }>,
   periodStart: string | null,
   periodEnd: string | null,
   daysCount: number
@@ -619,7 +629,7 @@ return data.nodeCount >= minNodes
     }
   }
   
-  const trends: Array<{ t: string, cpu: number, ram: number, storage?: number }> = []
+  const trends: Array<{ t: string, d: string, cpu: number, ram: number, storage?: number }> = []
   
   // Trouver la plage de dates à afficher
   const firstDay = new Date(recentDays[0])
@@ -660,6 +670,7 @@ return data.nodeCount >= minNodes
     // Toujours ajouter un point (avec la dernière valeur valide si pas de données)
     trends.push({ 
       t: label, 
+      d: dayKey,
       cpu: lastValidCpu, 
       ram: lastValidRam, 
       storage: lastValidStorage 
@@ -699,6 +710,14 @@ async function loadResourceThresholds(tenantId: string) {
   return DEFAULT_THRESHOLDS
 }
 
+// Health score of one scope, as the page shows it: same algorithm, same
+// thresholds, same default forecast window.
+function scopeScore(kpis: ScopeKpis, trends: ResourceTrend[], thresholds: ResourceThresholds): number {
+  const { alerts } = calculateImprovedPredictions(kpis, trends.slice(-DEFAULT_HISTORY_WINDOW_DAYS), thresholds)
+
+  return calculateHealthScoreWithDetails(kpis, alerts, thresholds).score
+}
+
 // Save health score snapshot (F8) - one per day. Best-effort: P2002 (unique
 // violation on `date`) means we already saved today's snapshot, swallow it.
 async function saveHealthScoreSnapshot(score: number, cpuPct: number, ramPct: number, storagePct: number, connectionId: string | undefined, tenantId: string) {
@@ -708,7 +727,7 @@ async function saveHealthScoreSnapshot(score: number, cpuPct: number, ramPct: nu
     const dateKey = connectionId ? `${today}_${connectionId}` : today
 
     await prisma.healthScoreHistory.upsert({
-      where: { date: dateKey },
+      where: { tenantId_date: { tenantId, date: dateKey } },
       update: {}, // INSERT OR IGNORE: keep first write of the day
       create: {
         id,
@@ -756,25 +775,34 @@ async function loadHealthScoreHistory(connectionId: string | undefined, tenantId
   }
 }
 
-export async function GET(request: Request) {
-  try {
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
-    if (denied) return denied
+export type OverviewRequest = {
+  // Tenant-scoped client of the caller's session: it only sees the tenant's connections.
+  prisma: { connection: { findMany: (args: any) => Promise<Array<{ id: string; name: string }>> } }
+  tenantId: string
+  filterConnectionId?: string
+  dateLocale: string
+}
 
-    const prisma = await getSessionPrisma()
-    const tenantId = await getCurrentTenantId()
-    const cookieStore = await cookies()
-    const dateLocale = getDateLocale(cookieStore.get('NEXT_LOCALE')?.value || 'en')
-    // Parse query params (F4: connectionId filter)
-    const { searchParams } = new URL(request.url)
-    const filterConnectionId = searchParams.get('connectionId') || undefined
+// The overview page and its PDF report read the same snapshot, so a report drawn
+// right after the page costs Proxmox nothing.
+export async function getResourcesOverview(request: OverviewRequest): Promise<{ data: any }> {
+  const { tenantId, filterConnectionId, dateLocale } = request
+  const cacheKey = `${tenantId}:${filterConnectionId || 'all'}:${dateLocale}`
+  const cached = overviewCache.get(cacheKey)
 
-    // Check in-memory cache (avoids 26+ RRD calls to Proxmox)
-    const cacheKey = `${tenantId}:${filterConnectionId || 'all'}:${dateLocale}`
-    const cached = overviewCache.get(cacheKey)
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-      return NextResponse.json(cached.data)
-    }
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) return cached.data
+
+  const responseBody = await buildResourcesOverview(request)
+
+  overviewCache.set(cacheKey, { data: responseBody, timestamp: Date.now() })
+  for (const [key, val] of overviewCache) {
+    if (Date.now() - val.timestamp > CACHE_TTL_MS * 3) overviewCache.delete(key)
+  }
+
+  return responseBody
+}
+
+async function buildResourcesOverview({ prisma, tenantId, filterConnectionId, dateLocale }: OverviewRequest): Promise<{ data: any }> {
 
     // Load settings in parallel
     const [greenSettings, resourceThresholds] = await Promise.all([
@@ -789,8 +817,15 @@ export async function GET(request: Request) {
       select: { id: true, name: true },
     })
 
-    if (!allConnections.length) {
-      return NextResponse.json({
+    // F4: filter by connectionId if specified
+    const connections = filterConnectionId
+      ? allConnections.filter(c => c.id === filterConnectionId)
+      : allConnections
+
+    // No cluster, or a filter that matches none of the tenant's: an empty answer,
+    // and above all no health snapshot written under an arbitrary id.
+    if (!connections.length) {
+      return {
         data: {
           kpis: {
             cpu: { used: 0, allocated: 0, total: 0, trend: 0 },
@@ -802,17 +837,20 @@ export async function GET(request: Request) {
           trends: [],
           topCpuVms: [],
           topRamVms: [],
-          connections: [],
+          connections: allConnections.map(c => ({ id: c.id, name: c.name })),
+          clusters: [],
+          nodes: [],
+          storagePools: [],
+          stoppedAllocation: { count: 0, vcpu: 0, ramBytes: 0, diskBytes: 0 },
+          largestStopped: [],
+          healthScoreHistory: [],
+          thresholds: resourceThresholds,
           green: null,
           greenConfigured: !!greenSettings,
         }
-      })
+      }
     }
 
-    // F4: filter by connectionId if specified
-    const connections = filterConnectionId
-      ? allConnections.filter(c => c.id === filterConnectionId)
-      : allConnections
 
     // Agrégateurs globaux
     let totalCpuUsed = 0
@@ -835,16 +873,20 @@ export async function GET(request: Request) {
     const allRamValues: number[] = []
     const allStorageValues: number[] = []
 
-    // F5: Storage pool tracking
-    const storagePoolMap = new Map<string, { name: string; type: string; used: number; total: number; nodes: Set<string> }>()
 
     // F6: Network metrics tracking (keyed by connId:nodeName to avoid collisions)
     const networkPerNode = new Map<string, { name: string; netin: number; netout: number }>()
     // Track per-node-per-day for proper aggregation: day -> nodeKey -> data points
     const networkTrendsByDay = new Map<string, Map<string, { netin: number[]; netout: number[] }>>()
 
+    // Capacity model (clusters, nodes, pools): built from the very same reads.
+    const snapshots: ConnectionSnapshot[] = []
+    const storageDaily: StorageDailyIndex = new Map()
+    const storageByDayPerConnection = new Map<string, Map<string, number[]>>()
+
     const allVms: Array<{
       id: string
+      connId: string
       name: string
       node: string
       connName: string
@@ -877,6 +919,10 @@ export async function GET(request: Request) {
           const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
           const vms = vmsResult.status === 'fulfilled' ? vmsResult.value || [] : []
           const storages = storageResult.status === 'fulfilled' ? storageResult.value || [] : []
+
+          snapshots.push({ id: conn.id, name: conn.name, nodes, guests: vms, storages })
+          const connStorageByDay = new Map<string, number[]>()
+          storageByDayPerConnection.set(conn.id, connStorageByDay)
           
           // Agréger les nodes (données synchrones) et préparer les requêtes RRD
           const onlineNodes = nodes.filter(node => node.status === 'online')
@@ -986,33 +1032,17 @@ export async function GET(request: Request) {
           // Agréger le stockage (données synchrones) et préparer les requêtes RRD
           const availableStorages = storages.filter(s => s.status === 'available')
 
-          for (const storage of availableStorages) {
-            totalStorageCapacity += storage.maxdisk || 0
-            totalStorageUsed += storage.disk || 0
-
-            // F5: Aggregate by pool name
-            if (storage.storage) {
-              const poolKey = storage.storage
-              if (!storagePoolMap.has(poolKey)) {
-                storagePoolMap.set(poolKey, {
-                  name: poolKey,
-                  type: storage.plugintype || storage.type || 'unknown',
-                  used: 0,
-                  total: 0,
-                  nodes: new Set(),
-                })
-              }
-              const pool = storagePoolMap.get(poolKey)!
-              pool.used += storage.disk || 0
-              pool.total += storage.maxdisk || 0
-              if (storage.node) pool.nodes.add(storage.node)
-            }
-          }
-
           // Identifier les storages qui ont besoin de requêtes RRD
-          const storagesNeedingRrd = availableStorages.filter(
-            s => s.maxdisk > 0 && s.node && s.storage
-          )
+          // A shared storage reports the same history on every node: read it once
+          // per cluster instead of once per node (one protected RRD call each).
+          const sharedSeen = new Set<string>()
+          const storagesNeedingRrd = availableStorages.filter(s => {
+            if (!(s.maxdisk > 0 && s.node && s.storage)) return false
+            if (!s.shared) return true
+            if (sharedSeen.has(s.storage)) return false
+            sharedSeen.add(s.storage)
+            return true
+          })
 
           // Récupérer les données RRD de tous les storages en parallèle
           const storageRrdResults = await Promise.allSettled(
@@ -1041,6 +1071,8 @@ export async function GET(request: Request) {
               }
 
               globalStorageByDay.get(today)!.push(storagePct)
+              if (!connStorageByDay.has(today)) connStorageByDay.set(today, [])
+              connStorageByDay.get(today)!.push(storagePct)
             }
           }
 
@@ -1050,6 +1082,8 @@ export async function GET(request: Request) {
             const result = storageRrdResults[i]
 
             if (result.status === 'fulfilled' && result.value && result.value.length > 0) {
+              const entryDaily = new Map<string, number[]>()
+
               for (const point of result.value) {
                 if (!point.time) continue
 
@@ -1069,15 +1103,25 @@ export async function GET(request: Request) {
                     }
 
                     globalStorageByDay.get(dayKey)!.push(pct)
+                    if (!connStorageByDay.has(dayKey)) connStorageByDay.set(dayKey, [])
+                    connStorageByDay.get(dayKey)!.push(pct)
+                    if (!entryDaily.has(dayKey)) entryDaily.set(dayKey, [])
+                    entryDaily.get(dayKey)!.push(pct)
                   }
                 }
               }
+
+              const dailyMean = new Map<string, number>()
+              for (const [day, values] of entryDaily) dailyMean.set(day, values.reduce((a, b) => a + b, 0) / values.length)
+              storageDaily.set(storageEntryKey(conn.id, storage.node, storage.storage), dailyMean)
             }
             // Silently ignore rejected - storage RRD might not be available
           }
           
           // Agréger les VMs
           for (const vm of vms) {
+            // A template never runs: it is neither a running nor a stopped guest.
+            if (vm.template === 1) continue
             totalVms++
 
             if (vm.status === 'running') {
@@ -1097,6 +1141,7 @@ export async function GET(request: Request) {
             
             allVms.push({
               id: `${conn.id}:${vm.type}:${vm.node}:${vm.vmid}`,
+              connId: conn.id,
               name: vm.name || `${vm.type}/${vm.vmid}`,
               node: vm.node,
               connName: conn.name,
@@ -1115,16 +1160,14 @@ export async function GET(request: Request) {
       })
     )
 
-    // Recalculate storage from storagePoolMap to deduplicate shared storages
-    // Shared storages (Ceph, NFS, etc.) report the same maxdisk on each node,
-    // so dividing by node count gives the real capacity.
-    totalStorageUsed = 0
-    totalStorageCapacity = 0
-    for (const pool of storagePoolMap.values()) {
-      const nodeCount = pool.nodes.size || 1
-      totalStorageUsed += pool.used / nodeCount
-      totalStorageCapacity += pool.total / nodeCount
-    }
+    // Storage pools: a shared storage counts once per cluster, a local one once
+    // per node (see buildStoragePools).
+    const storagePools = buildStoragePools(snapshots, storageDaily, resourceThresholds)
+    const storageTotals = sumPools(storagePools)
+
+    totalStorageUsed = storageTotals.used
+    totalStorageCapacity = storageTotals.total
+    const nodesCapacity: NodeCapacity[] = snapshots.flatMap(buildNodeCapacities)
 
     // Calculer les pourcentages globaux actuels
     const cpuUsedPct = totalCpuCapacity > 0 ? (totalCpuUsed / totalCpuCapacity) * 100 : 0
@@ -1177,16 +1220,19 @@ export async function GET(request: Request) {
 
     // Données par nœud
     const perNodeOverprovisioning = Array.from(nodeCapacities.entries()).map(([compositeKey, capacity]) => {
-      // compositeKey = "connId:pveNodeName" — extract actual PVE node name
-      const actualNodeName = compositeKey.includes(':') ? compositeKey.split(':').slice(1).join(':') : compositeKey
+      // compositeKey = "connId:pveNodeName": two clusters may both have a "pve1"
+      const separator = compositeKey.indexOf(':')
+      const connId = compositeKey.slice(0, separator)
+      const actualNodeName = compositeKey.slice(separator + 1)
       // Calculer les allocations par nœud
-      const nodeVms = allVms.filter(vm => vm.node === actualNodeName && vm.status === 'running')
+      const nodeVms = allVms.filter(vm => vm.connId === connId && vm.node === actualNodeName && vm.status === 'running')
       const nodeCpuAllocated = nodeVms.reduce((sum, vm) => sum + (vm.cpuAllocated || 0), 0)
       const nodeRamAllocated = nodeVms.reduce((sum, vm) => sum + (vm.ramAllocated || 0), 0) / (1024 * 1024 * 1024)
       const nodeRamCapacity = capacity.maxMem / (1024 * 1024 * 1024)
 
       return {
         name: actualNodeName,
+        connectionId: connId,
         cpuRatio: capacity.maxCpu > 0 ? nodeCpuAllocated / capacity.maxCpu : 0,
         ramRatio: nodeRamCapacity > 0 ? nodeRamAllocated / nodeRamCapacity : 0,
         cpuAllocated: nodeCpuAllocated,
@@ -1220,9 +1266,11 @@ export async function GET(request: Request) {
         const numericVmid = vm.id.split(':').pop() || vm.id
 
         return {
+          id: vm.id,
           vmid: numericVmid,
           name: vm.name,
           node: vm.node,
+          connName: vm.connName,
           cpuAllocated,
           cpuUsedPct,
           ramAllocatedGB,
@@ -1239,6 +1287,13 @@ export async function GET(request: Request) {
       .sort((a, b) => b.priorityScore - a.priorityScore)
       .slice(0, 10)
       .map(({ priorityScore, ...vm }) => vm)  // Retirer priorityScore du résultat
+
+    // Largest stopped guests: what reclaiming their allocation would free first.
+    const largestStopped = allVms
+      .filter(vm => vm.status === 'stopped')
+      .sort((a, b) => (b.ramAllocated || 0) - (a.ramAllocated || 0))
+      .slice(0, 10)
+      .map(vm => ({ id: vm.id, name: vm.name, node: vm.node, connName: vm.connName, vcpu: vm.cpuAllocated || 0, ramBytes: vm.ramAllocated || 0 }))
 
     const overprovisioningData = {
       cpu: {
@@ -1284,27 +1339,13 @@ export async function GET(request: Request) {
         date.setDate(date.getDate() - i)
         trends.push({
           t: date.toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' }),
+          d: date.toISOString().split('T')[0],
           cpu: Math.round(cpuUsedPct * 10) / 10,
           ram: Math.round(ramUsedPct * 10) / 10,
           storage: Math.round(storageUsedPct * 10) / 10,
         })
       }
     }
-
-    // F5: Build storage pools array
-    const storagePools = Array.from(storagePoolMap.values()).map(pool => {
-      const nodeCount = pool.nodes.size || 1
-      const dedupUsed = pool.used / nodeCount
-      const dedupTotal = pool.total / nodeCount
-      return {
-        name: pool.name,
-        type: pool.type,
-        used: dedupUsed,
-        total: dedupTotal,
-        pct: dedupTotal > 0 ? Math.round((dedupUsed / dedupTotal) * 1000) / 10 : 0,
-        nodes: Array.from(pool.nodes),
-      }
-    }).sort((a, b) => b.pct - a.pct)
 
     // F6: Build network metrics
     const totalNetIn = Array.from(networkPerNode.values()).reduce((s, n) => s + n.netin, 0)
@@ -1347,19 +1388,52 @@ export async function GET(request: Request) {
     const healthRamPct = Math.round(ramUsedPct * 10) / 10
     const healthStoragePct = Math.round(storageUsedPct * 10) / 10
 
-    // Simple health score estimate for snapshot (matches frontend algorithm roughly)
-    let snapshotScore = 100
-    if (healthCpuPct > 90) snapshotScore -= 30
-    else if (healthCpuPct > 80) snapshotScore -= 15
-    else if (healthCpuPct > 70) snapshotScore -= 5
-    if (healthRamPct > 90) snapshotScore -= 30
-    else if (healthRamPct > 80) snapshotScore -= 15
-    else if (healthRamPct > 70) snapshotScore -= 5
-    if (healthStoragePct > 90) snapshotScore -= 20
-    else if (healthStoragePct > 80) snapshotScore -= 10
-    snapshotScore = Math.max(0, Math.min(100, snapshotScore))
+    // Snapshot the score the page shows (same algorithm, same thresholds, same
+    // default window), so the history curve continues the figure on screen.
+    const snapshotKpis = {
+      cpu: { used: healthCpuPct, allocated: totalCpuAllocated, total: totalCpuCapacity, trend: cpuTrend },
+      ram: { used: healthRamPct, allocated: totalRamAllocated, total: totalRamCapacity, trend: ramTrend },
+      storage: { used: totalStorageUsed, total: totalStorageCapacity, trend: storageTrend },
+      vms: { total: totalVms, running: runningVms, stopped: stoppedVms },
+      efficiency,
+    }
+    const snapshotScore = scopeScore(snapshotKpis, trends, resourceThresholds)
+
+    // Per-cluster capacity, each with its own daily history for its own runway.
+    const clusters = snapshots.map(snapshot => {
+      const prefix = `${snapshot.id}:`
+      const clusterRrd = new Map(Array.from(allNodesRrdData).filter(([key]) => key.startsWith(prefix)))
+      const clusterCaps = new Map(Array.from(nodeCapacities).filter(([key]) => key.startsWith(prefix)))
+      const clusterTrends = formatTrendsForChartWeighted(
+        calculateGlobalAverages(clusterRrd, clusterCaps),
+        storageByDayPerConnection.get(snapshot.id) ?? new Map(),
+        dateLocale,
+      ).trends
+
+      return buildClusterCapacity(
+        snapshot,
+        nodesCapacity.filter(node => node.connectionId === snapshot.id),
+        storagePools,
+        resourceThresholds,
+        clusterTrends,
+      )
+    }).sort((a, b) => a.name.localeCompare(b.name))
 
     await saveHealthScoreSnapshot(snapshotScore, healthCpuPct, healthRamPct, healthStoragePct, filterConnectionId, tenantId)
+
+    // Each cluster's own history: recorded from the all-clusters view too, so a
+    // cluster gets its daily point even on days nobody opens it alone. The first
+    // write of the day wins, whichever view made it.
+    if (!filterConnectionId) {
+      await Promise.all(clusters.map(cluster => {
+        const kpisOfCluster = clusterKpis(cluster)
+
+        return saveHealthScoreSnapshot(
+          scopeScore(kpisOfCluster, cluster.trends, resourceThresholds),
+          cluster.cpu.usedPct, cluster.ram.usedPct, cluster.storage.pct, cluster.id, tenantId,
+        )
+      }))
+    }
 
     // F8: Load history
     const healthScoreHistory = await loadHealthScoreHistory(filterConnectionId, tenantId)
@@ -1411,8 +1485,14 @@ export async function GET(request: Request) {
         }, greenConfig) : null,
         greenConfigured: !!greenSettings,
 
-        // F5: Storage per pool
+        // F5: Storage per pool (shared once per cluster, local once per node)
         storagePools,
+
+        // Capacity planning: per cluster and per node, plus what stopped guests hold
+        clusters,
+        nodes: nodesCapacity,
+        stoppedAllocation: computeStoppedAllocation(snapshots.flatMap(snapshot => snapshot.guests)),
+        largestStopped,
 
         // F6: Network I/O
         networkMetrics,
@@ -1450,17 +1530,5 @@ export async function GET(request: Request) {
       }
     }
 
-    // Cache the response for 60s
-    overviewCache.set(cacheKey, { data: responseBody, timestamp: Date.now() })
-    // Evict old entries
-    for (const [key, val] of overviewCache) {
-      if (Date.now() - val.timestamp > CACHE_TTL_MS * 3) overviewCache.delete(key)
-    }
-
-    return NextResponse.json(responseBody)
-  } catch (e: any) {
-    console.error("[resources/overview] Error:", e)
-    
-return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
-  }
+    return responseBody
 }

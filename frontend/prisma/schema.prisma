@@ -1383,7 +1383,7 @@ model Favorite {
 model HealthScoreHistory {
   id           String   @id
   tenantId     String   @default("default") @map("tenant_id")
-  date         String   @unique
+  date         String
   score        Int
   cpuPct       Float?   @map("cpu_pct")
   ramPct       Float?   @map("ram_pct")
@@ -1393,6 +1393,9 @@ model HealthScoreHistory {
   connectionId String?  @map("connection_id")
   createdAt    DateTime @map("created_at")
 
+  // One snapshot per day and per tenant: a date-only key let the first tenant of
+  // the day take the slot of every other one.
+  @@unique([tenantId, date])
   @@index([date])
   @@index([tenantId])
   @@map("health_score_history")

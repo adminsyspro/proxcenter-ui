@@ -5839,6 +5839,7 @@
         "shutdown": "종료",
         "reboot": "재부팅",
         "migrate": "{target}(으)로 라이브 마이그레이션",
+        "migrateLxc": "{target}(으)로 마이그레이션 (재시작)",
         "drsApply": "DRS 이동 적용",
         "backupAdd": "백업 작업 {job}에 추가",
         "maintenanceEnter": "유지 관리 모드 시작",
@@ -5863,8 +5864,7 @@
     },
     "actionsBadge": "승인 시 작업 실행",
     "actionsMode": "승인된 작업을 지원하는 어시스턴트",
-    "actionsScope": "인프라를 조회하고 작업을 제안할 수 있으며, 승인 없이는 아무것도 실행되지 않습니다.",
-    "actionsWelcome": "작업을 제안할 수 있으며, 승인 없이는 아무것도 실행되지 않습니다."
+    "actionsScope": "인프라를 조회하고 작업을 제안할 수 있으며, 승인 없이는 아무것도 실행되지 않습니다."
   },
   "jobs": {
     "title": "작업 센터",

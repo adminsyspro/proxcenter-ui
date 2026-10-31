@@ -15,7 +15,7 @@ import { collectCharts } from '@/lib/ai/charts'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
 import { buildToolContext } from '@/lib/tools/catalog'
 import { coerceToolArgs, extractTextToolCall, toolResultTurns, toolsForProvider, type ToolCallRequest } from '@/lib/ai/tools/adapters'
-import { budgetFallbackText, emptyAnswerText, executeToolCalls, MAX_TOOL_ROUNDS, userTextOf, type ToolTraceEntry } from '@/lib/ai/tools/loop'
+import { budgetFallbackText, emptyClosingText, executeToolCalls, MAX_TOOL_ROUNDS, userTextOf, type ToolTraceEntry } from '@/lib/ai/tools/loop'
 import type { CatalogTool, ToolContext } from '@/lib/tools/types'
 import { encodeFrame } from '@/lib/ai/streamFrames'
 import { requireFeature } from '@/lib/auth/requireEnterprise'
@@ -241,7 +241,7 @@ async function streamAgenticConversation(opts: {
         continue
       }
 
-      controller.enqueue(encoder.encode(emptyAnswerText(ctx.locale)))
+      controller.enqueue(encoder.encode(emptyClosingText(ctx.locale, trace)))
       break
     }
 

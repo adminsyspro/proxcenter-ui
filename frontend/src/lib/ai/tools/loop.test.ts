@@ -21,6 +21,7 @@ import {
   MAX_TOOL_RESULT_CHARS,
   budgetFallbackText, MAX_TOOL_ROUNDS,
   emptyAnswerText,
+  proposedActionText,
 } from './loop'
 import type { ToolCallRequest } from './adapters'
 import { ToolArgumentError, ToolScopeError, type CatalogTool, type ToolContext } from '@/lib/tools/types'
@@ -595,6 +596,25 @@ describe('an empty turn', () => {
 
     expect(send).toHaveBeenCalledTimes(2)
     expect(result.text).toBe(emptyAnswerText('en'))
+  })
+
+  it('points at the card rather than report a failure when a proposal succeeded', async () => {
+    const value: Record<string | symbol, unknown> = { status: 'awaiting-approval' }
+
+    value[ACTION_CARDS] = { cards: [{ actionId: 'a1', token: 't' }], plans: [] }
+
+    const { send } = makeSend([toolTurn('propose_action'), answerTurn(''), answerTurn('')])
+
+    const result = await runToolRounds({
+      provider: 'ollama',
+      tools: [makeTool('propose_action', async () => value)],
+      ctx: makeCtx(),
+      messages: [{ role: 'user', content: 'migrate it' }],
+      send,
+    })
+
+    expect(result.text).toBe(proposedActionText('en'))
+    expect(proposedActionText('fr')).toContain('J\'ai proposé')
   })
 
   it('is worded in French for a French caller and in English otherwise', () => {

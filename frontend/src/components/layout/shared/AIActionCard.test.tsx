@@ -118,6 +118,18 @@ describe('AIActionCard', () => {
     expect(onExecute).not.toHaveBeenCalled()
   })
 
+  it('titles a container migration as a restart, not a live migration', () => {
+    const ct = { connId: 'c1', cluster: 'prod', node: 'pve1', vmid: 205, guestKind: 'lxc' as const, name: 'ct-web' }
+
+    renderCard({ card: card({ kind: 'migrate', target: ct, params: { target: 'pve2', online: true } }) })
+
+    expect(screen.getByRole('group', { name: 'ai.actions.title.migrateLxc(pve2)' })).toBeTruthy()
+
+    fireEvent.click(executeButton())
+
+    expect(within(screen.getByRole('dialog')).getByText('ai.actions.confirmTitle(ai.actions.title.migrateLxc(pve2))')).toBeTruthy()
+  })
+
   it('asks a confirmation for a container migration, whatever tier the card carries', () => {
     const ct = { connId: 'c1', cluster: 'prod', node: 'pve1', vmid: 205, guestKind: 'lxc' as const, name: 'ct-web' }
     const { onExecute } = renderCard({ card: card({ kind: 'migrate', tier: 'safe', target: ct, params: { target: 'pve2', online: true } }) })

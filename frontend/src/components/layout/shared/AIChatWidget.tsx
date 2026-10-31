@@ -99,7 +99,9 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
 const toolLabel = (t: Translate, name: string) => (TOOL_LABEL_KEYS[name] ? t(TOOL_LABEL_KEYS[name]) : name)
 
 /**
- * One source per distinct tool, failed when any of its calls failed.
+ * One source per distinct tool, failed only when none of its calls succeeded:
+ * a proposal that went through and a later call refused by the per-question
+ * budget is still a tool that worked.
  * `calls` is either a list of names (a round starting) or a list of
  * `{ name, ok }` entries (the finished trace).
  */
@@ -110,7 +112,7 @@ export const toolSources = (calls: Array<string | ToolCall>) => {
     const name = typeof call === 'string' ? call : call.name
     const failed = typeof call !== 'string' && call.ok === false
 
-    sources.set(name, (sources.get(name) ?? false) || failed)
+    sources.set(name, sources.has(name) ? sources.get(name)! && failed : failed)
   }
 
   return [...sources].map(([name, failed]) => ({ name, failed }))
@@ -360,11 +362,6 @@ const Welcome = ({ onSelect, disabled, actionsEnabled, t }: { onSelect: (text: s
         sx={{ maxWidth: 360 }}
         dangerouslySetInnerHTML={{ __html: t('ai.welcomeMessage') }}
       />
-      {actionsEnabled && (
-        <Typography variant='body2' color='text.secondary' sx={{ maxWidth: 360, mt: 1 }}>
-          {t('ai.actionsWelcome')}
-        </Typography>
-      )}
     </Box>
 
     <Box

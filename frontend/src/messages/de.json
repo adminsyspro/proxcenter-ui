@@ -5820,6 +5820,7 @@
         "shutdown": "Herunterfahren",
         "reboot": "Neu starten",
         "migrate": "Live-Migration nach {target}",
+        "migrateLxc": "Auf {target} migrieren (Neustart)",
         "drsApply": "DRS-Verschiebung anwenden",
         "backupAdd": "Zum Backup-Job {job} hinzufügen",
         "maintenanceEnter": "Wartungsmodus aktivieren",
@@ -5844,8 +5845,7 @@
     },
     "actionsBadge": "Aktionen nach Genehmigung",
     "actionsMode": "Assistent mit genehmigten Aktionen",
-    "actionsScope": "Er fragt Ihre Infrastruktur ab und kann Aktionen vorschlagen; ohne Ihre Genehmigung wird nichts ausgeführt.",
-    "actionsWelcome": "Ich kann Aktionen vorschlagen; ohne Ihre Genehmigung wird nichts ausgeführt."
+    "actionsScope": "Er fragt Ihre Infrastruktur ab und kann Aktionen vorschlagen; ohne Ihre Genehmigung wird nichts ausgeführt."
   },
   "jobs": {
     "title": "Task Ceingeben",

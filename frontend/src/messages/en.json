@@ -5839,6 +5839,7 @@
         "shutdown": "Shut down",
         "reboot": "Reboot",
         "migrate": "Live migrate to {target}",
+        "migrateLxc": "Migrate to {target} (restart)",
         "drsApply": "Apply the DRS move",
         "backupAdd": "Add to backup job {job}",
         "maintenanceEnter": "Enter maintenance mode",
@@ -5863,8 +5864,7 @@
     },
     "actionsBadge": "Actions on approval",
     "actionsMode": "Assistant with approved actions",
-    "actionsScope": "It looks up your infrastructure and can propose actions; nothing runs without your approval.",
-    "actionsWelcome": "I can propose actions; nothing runs without your approval."
+    "actionsScope": "It looks up your infrastructure and can propose actions; nothing runs without your approval."
   },
   "jobs": {
     "title": "Task Center",

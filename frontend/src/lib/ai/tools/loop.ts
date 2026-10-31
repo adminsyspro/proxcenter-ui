@@ -18,7 +18,7 @@ import {
   type AiProvider,
   type ToolCallRequest,
 } from '@/lib/ai/tools/adapters'
-import { cardsFromToolResult, type ActionCardsPayload } from '@/lib/ai/actions/cards'
+import { cardsFromToolResult, collectActionCards, type ActionCardsPayload } from '@/lib/ai/actions/cards'
 import { chartFromToolResult, type AiChart } from '@/lib/ai/charts'
 import { invokeTool } from '@/lib/tools/invoke'
 import type { CatalogTool, ToolContext } from '@/lib/tools/types'
@@ -125,6 +125,24 @@ export function budgetFallbackText(locale: string, trace: ToolTraceEntry[]): str
   return fr
     ? 'Je n\'ai pas pu conclure dans le nombre de consultations autorisé. Reformule la question ou précise le cluster.'
     : 'I could not conclude within the allowed number of lookups. Rephrase the question or name the cluster.'
+}
+
+/**
+ * What the user reads when the model closed with an empty turn right after a
+ * successful proposal. The card is the answer, so the line points at it
+ * instead of reporting a failure above a perfectly valid card.
+ */
+export function proposedActionText(locale: string): string {
+  return locale === 'fr'
+    ? 'J\'ai proposé l\'action ci-dessous. Vérifie-la, puis approuve-la sur la carte.'
+    : 'I proposed the action below. Check it, then approve it on the card.'
+}
+
+/** The text of a turn that stayed empty after its retry: the card pointer when a proposal succeeded, else the failure line. */
+export function emptyClosingText(locale: string, trace: ReadonlyArray<{ actions?: ActionCardsPayload }>): string {
+  const { cards, plans } = collectActionCards(trace)
+
+  return cards.length || plans.length ? proposedActionText(locale) : emptyAnswerText(locale)
 }
 
 /**
@@ -354,7 +372,7 @@ export async function runToolRounds(opts: {
 
       return {
         messages,
-        text: text.trim() ? text : emptyAnswerText(ctx.locale),
+        text: text.trim() ? text : emptyClosingText(ctx.locale, trace),
         trace,
         rounds,
         toolsDisabled,

@@ -5839,6 +5839,7 @@
         "shutdown": "关机",
         "reboot": "重启",
         "migrate": "在线迁移到 {target}",
+        "migrateLxc": "迁移到 {target}（重启）",
         "drsApply": "应用 DRS 迁移",
         "backupAdd": "加入备份作业 {job}",
         "maintenanceEnter": "进入维护模式",
@@ -5863,8 +5864,7 @@
     },
     "actionsBadge": "经批准后执行操作",
     "actionsMode": "支持已批准操作的助手",
-    "actionsScope": "它可以查询您的基础设施并建议操作；未经您批准不会执行任何操作。",
-    "actionsWelcome": "我可以建议操作；未经您批准不会执行任何操作。"
+    "actionsScope": "它可以查询您的基础设施并建议操作；未经您批准不会执行任何操作。"
   },
   "jobs": {
     "title": "任务中心",

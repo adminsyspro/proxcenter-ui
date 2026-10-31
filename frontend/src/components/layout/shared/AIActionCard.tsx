@@ -56,6 +56,8 @@ const isExit = (card: ActionCard) => card.params.mode === 'exit'
 export function actionTitle(card: ActionCard, t: Translate): string {
   if (card.kind === 'maintenance') return t(isExit(card) ? 'ai.actions.title.maintenanceExit' : 'ai.actions.title.maintenanceEnter')
 
+  // PVE migrates a container with a restart: "Live" would promise otherwise.
+  if (card.kind === 'migrate' && card.target.guestKind === 'lxc') return t('ai.actions.title.migrateLxc', { target: String(card.params.target ?? '') })
   if (card.kind === 'migrate') return t(TITLE_KEYS.migrate, { target: String(card.params.target ?? '') })
   if (card.kind === 'snapshot') return t(TITLE_KEYS.snapshot, { name: String(card.params.name ?? '') })
   if (card.kind === 'backup_add') return t(TITLE_KEYS.backup_add, { job: String(card.params.jobId ?? '') })

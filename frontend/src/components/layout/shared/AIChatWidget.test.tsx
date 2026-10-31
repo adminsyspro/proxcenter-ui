@@ -94,7 +94,7 @@ describe('AIChatWidget', () => {
 
     expect(await screen.findByText('ai.actionsMode')).toBeTruthy()
     expect(screen.getByText('ai.actionsBadge')).toBeTruthy()
-    expect(screen.getByText('ai.actionsWelcome')).toBeTruthy()
+    expect(screen.queryByText('ai.actionsWelcome')).toBeNull()
     expect(screen.queryByText('ai.readOnly')).toBeNull()
     expect(screen.queryByText('ai.readOnlyBadge')).toBeNull()
   })
@@ -406,7 +406,7 @@ describe('AIChatWidget actions (roadmap#188)', () => {
 })
 
 describe('toolSources', () => {
-  it('lists each tool once, failed when any of its calls failed', () => {
+  it('lists each tool once, failed only when none of its calls succeeded', () => {
     expect(
       toolSources([
         { name: 'list_hosts', ok: true },
@@ -415,8 +415,22 @@ describe('toolSources', () => {
         { name: 'get_ceph_status', ok: true }
       ])
     ).toEqual([
-      { name: 'list_hosts', failed: true },
-      { name: 'get_ceph_status', failed: true }
+      { name: 'list_hosts', failed: false },
+      { name: 'get_ceph_status', failed: false }
+    ])
+  })
+
+  it('keeps a proposal ok when a later call to it was refused, and failed when every call failed', () => {
+    expect(
+      toolSources([
+        { name: 'propose_action', ok: true },
+        { name: 'propose_action', ok: false },
+        { name: 'list_hosts', ok: false },
+        { name: 'list_hosts', ok: false }
+      ])
+    ).toEqual([
+      { name: 'propose_action', failed: false },
+      { name: 'list_hosts', failed: true }
     ])
   })
 

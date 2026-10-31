@@ -729,6 +729,20 @@ describe('POST /api/v1/ai/chat/stream, approved actions (roadmap#188)', () => {
     expect(actions.userText).not.toContain('prod')
   })
 
+  const emptyTurn = () => new Response(`${JSON.stringify({ message: { content: '', thinking: 'done' } })}\n`, { status: 200 })
+
+  it('points at the card when the closing turn is empty after a successful proposal', async () => {
+    fetchMock
+      .mockResolvedValueOnce(ollamaStreamToolCall('propose_action', {}))
+      .mockResolvedValueOnce(emptyTurn())
+      .mockResolvedValueOnce(emptyTurn())
+
+    const { text, frames } = await decodeBody(await ask({ conversationId: 'conv-1' }))
+
+    expect(text).toBe('I proposed the action below. Check it, then approve it on the card.')
+    expect(frames.map(f => f.type)).toEqual(['tool', 'trace', 'actions'])
+  })
+
   it('sends the cards in an actions frame after the charts, never to the model', async () => {
     fetchMock
       .mockResolvedValueOnce(ollamaStreamToolCall('propose_action', {}))

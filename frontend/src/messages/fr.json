@@ -5839,6 +5839,7 @@
         "shutdown": "Arrêter",
         "reboot": "Redémarrer",
         "migrate": "Migrer à chaud vers {target}",
+        "migrateLxc": "Migrer vers {target} (redémarrage)",
         "drsApply": "Appliquer le déplacement DRS",
         "backupAdd": "Ajouter au job de sauvegarde {job}",
         "maintenanceEnter": "Passer en maintenance",
@@ -5863,8 +5864,7 @@
     },
     "actionsBadge": "Actions sur approbation",
     "actionsMode": "Assistant avec actions approuvées",
-    "actionsScope": "Il consulte votre infrastructure et peut proposer des actions ; rien ne s'exécute sans votre approbation.",
-    "actionsWelcome": "Je peux proposer des actions ; rien ne s'exécute sans votre approbation."
+    "actionsScope": "Il consulte votre infrastructure et peut proposer des actions ; rien ne s'exécute sans votre approbation."
   },
   "jobs": {
     "title": "Task Center",

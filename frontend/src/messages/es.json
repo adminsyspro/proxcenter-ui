@@ -5839,6 +5839,7 @@
         "shutdown": "Apagar",
         "reboot": "Reiniciar",
         "migrate": "Migrar en caliente a {target}",
+        "migrateLxc": "Migrar a {target} (reinicio)",
         "drsApply": "Aplicar el movimiento DRS",
         "backupAdd": "Añadir al trabajo de copia {job}",
         "maintenanceEnter": "Entrar en mantenimiento",
@@ -5863,8 +5864,7 @@
     },
     "actionsBadge": "Acciones con aprobación",
     "actionsMode": "Asistente con acciones aprobadas",
-    "actionsScope": "Consulta tu infraestructura y puede proponer acciones; nada se ejecuta sin tu aprobación.",
-    "actionsWelcome": "Puedo proponer acciones; nada se ejecuta sin tu aprobación."
+    "actionsScope": "Consulta tu infraestructura y puede proponer acciones; nada se ejecuta sin tu aprobación."
   },
   "jobs": {
     "title": "Centro de tareas",

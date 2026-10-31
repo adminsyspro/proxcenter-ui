@@ -6060,6 +6060,7 @@
     "analysisMayTakeAWhile": "Ein lokales Modell kann bis zu einer Minute für die Antwort brauchen.",
     "refresh": "Aktualisieren",
     "evolutionProjections": "Entwicklung & Prognosen",
+    "historyWindow": "Für die Prognose genutzter Verlauf",
     "filterAll": "Alle",
     "before": "vorher",
     "aiIntelligence": "KI-Intelligenz",

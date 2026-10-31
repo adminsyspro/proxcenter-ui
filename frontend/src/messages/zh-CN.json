@@ -6079,6 +6079,7 @@
     "analysisMayTakeAWhile": "本地模型可能需要长达一分钟才能回答。",
     "refresh": "刷新",
     "evolutionProjections": "趋势与预测",
+    "historyWindow": "用于预测的历史时段",
     "filterAll": "全部",
     "before": "之前",
     "aiIntelligence": "AI 智能",

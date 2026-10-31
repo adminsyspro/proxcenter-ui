@@ -6079,6 +6079,7 @@
     "analysisMayTakeAWhile": "로컬 모델은 응답까지 최대 1분이 걸릴 수 있습니다.",
     "refresh": "새로 고침",
     "evolutionProjections": "추이 및 예측",
+    "historyWindow": "예측에 사용할 기록 기간",
     "filterAll": "전체",
     "before": "이전",
     "aiIntelligence": "AI 인텔리전스",

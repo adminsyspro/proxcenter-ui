@@ -6079,6 +6079,7 @@
     "analysisMayTakeAWhile": "Un modelo local puede tardar hasta un minuto en responder.",
     "refresh": "Actualizar",
     "evolutionProjections": "Evolución y proyecciones",
+    "historyWindow": "Historial usado para la proyección",
     "filterAll": "Todos",
     "before": "antes",
     "aiIntelligence": "Inteligencia AI",

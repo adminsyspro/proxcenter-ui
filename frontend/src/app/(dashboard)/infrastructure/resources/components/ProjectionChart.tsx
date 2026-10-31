@@ -21,12 +21,15 @@ import ChartContainer from '@/components/ChartContainer'
 import { getDateLocale } from '@/lib/i18n/date'
 import type { ResourceTrend } from '../types'
 import { COLORS } from '../constants'
+import { HISTORY_WINDOW_DAYS, isHistoryWindowDays, type HistoryWindowDays } from '../algorithms/historyWindow'
 import { InsightsIcon } from './icons'
 
-export default function ProjectionChart({ data, loading, period }: {
+export default function ProjectionChart({ data, loading, period, windowDays, onWindowDaysChange }: {
   data: ResourceTrend[]
   loading?: boolean
   period?: { start: string | null; end: string | null; daysCount: number } | null
+  windowDays?: HistoryWindowDays
+  onWindowDaysChange?: (days: HistoryWindowDays) => void
 }) {
   const theme = useTheme()
   const t = useTranslations()
@@ -57,7 +60,7 @@ export default function ProjectionChart({ data, loading, period }: {
   return (
     <Card variant="outlined" sx={{ height: '100%' }}>
       <CardContent>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap spacing={1}>
           <Stack direction="row" alignItems="center" spacing={1}>
             <InsightsIcon sx={{ color: COLORS.primary }} />
             <Typography variant="h6" fontWeight={700}>
@@ -69,12 +72,28 @@ export default function ProjectionChart({ data, loading, period }: {
               )}
             </Typography>
           </Stack>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+          {windowDays !== undefined && onWindowDaysChange && (
+            <ToggleButtonGroup
+              value={windowDays}
+              exclusive
+              onChange={(_, v) => { if (isHistoryWindowDays(v)) onWindowDaysChange(v) }}
+              size="small"
+              aria-label={t('resources.historyWindow')}
+              title={t('resources.historyWindow')}
+            >
+              {HISTORY_WINDOW_DAYS.map(days => (
+                <ToggleButton key={days} value={days} sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>{`${days}${t('resources.daysUnit')}`}</ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          )}
           <ToggleButtonGroup value={selectedResource} exclusive onChange={(_, v) => v && setSelectedResource(v)} size="small">
             <ToggleButton value="all" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>{t('resources.filterAll')}</ToggleButton>
             <ToggleButton value="cpu" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>CPU</ToggleButton>
             <ToggleButton value="ram" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>RAM</ToggleButton>
             <ToggleButton value="storage" sx={{ px: 1.5, py: 0.5, textTransform: 'none' }}>{t('resources.storageLabel')}</ToggleButton>
           </ToggleButtonGroup>
+          </Stack>
         </Stack>
 
         <Box sx={{ width: '100%', height: 320 }}>

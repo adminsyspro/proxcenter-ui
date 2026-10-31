@@ -58,7 +58,7 @@ export function argRequiredEnum<T extends string>(args: Record<string, unknown>,
 
 export function issueCard(
   actions: ActionsContext,
-  body: Pick<ActionCard, 'kind' | 'target' | 'params' | 'preflight'> & { planId?: string; step?: number }
+  body: Pick<ActionCard, 'kind' | 'target' | 'params' | 'preflight'> & { planId?: string; step?: number; after?: number }
 ): ActionCard {
   return signCard(
     {
@@ -68,7 +68,7 @@ export function issueCard(
       target: body.target,
       params: body.params,
       preflight: body.preflight,
-      ...(body.planId ? { planId: body.planId, step: body.step } : {}),
+      ...(body.planId ? { planId: body.planId, step: body.step, ...(body.after === undefined ? {} : { after: body.after }) } : {}),
       expiresAt: Date.now() + ACTION_CARD_TTL_MS,
     },
     actions.bind

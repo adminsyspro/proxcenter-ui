@@ -531,6 +531,8 @@ describe('propose_remediation_plan', () => {
       expect(s.step).toBe(i + 1)
       expect(s.card).toMatchObject({ kind: 'backup_add', planId: res.plan!.planId, step: i + 1, params: { jobId: 'nightly' } })
       expect(verifyCard(s.card!, bind)).toEqual({ ok: true })
+      // R12: each step names the card step it waits for, the first none.
+      expect(s.card!.after).toBe(i === 0 ? undefined : i)
     })
     expect(res.value?.status).toBe('awaiting-approval')
     expect(res.value?.proposed).toContain('10')
@@ -546,6 +548,20 @@ describe('propose_remediation_plan', () => {
     expect(steps[1].manual?.href).toBe('/infrastructure/inventory?selectType=cluster&selectId=c1')
     // The exit step runs after the enter step: it is not blocked by today's state.
     expect(steps[2].card?.preflight.ok).toBe(true)
+    // R12: exit waits for the enter card, the manual step in between is skipped.
+    expect(steps[0].card?.after).toBeUndefined()
+    expect(steps[2].card?.after).toBe(1)
+    expect(verifyCard(steps[2].card!, bind)).toEqual({ ok: true })
+    expect(verifyCard({ ...steps[2].card!, after: undefined }, bind)).toEqual({ ok: false, reason: 'bad-signature' })
+  })
+
+  it('plans only the exit of a host already in maintenance, waiting on no step', async () => {
+    const nodes = [node('c1', 'pve1', 50), node('c1', 'pve2', 20, { maintenance: 'maintenance' }), node('c1', 'pve3', 10)]
+    const res = await plan({ finding: 'pending_updates', host: 'pve2' }, ctx('pve2 has pending updates, plan it', { snap: snapshot([], nodes) }))
+    const steps = res.plan!.steps
+
+    expect(steps.map(s => s.card?.params.mode ?? 'manual')).toEqual(['manual', 'exit'])
+    expect(steps[1].card?.after).toBeUndefined()
   })
 
   it('grounds the host of the finding', async () => {
@@ -567,6 +583,7 @@ describe('propose_remediation_plan', () => {
     expect(steps[0].card).toMatchObject({ kind: 'migrate', target: { name: 'big-1', node: 'pve1' } })
     expect(steps.every(s => s.card?.params.target !== 'pve1')).toBe(true)
     expect(steps[0].card?.preflight.ok).toBe(true)
+    expect(steps.map(s => s.card?.after)).toEqual(steps.map((_, i) => (i === 0 ? undefined : i)))
     expect(h.pveFetch.mock.calls.filter(c => String(c[1]).endsWith('/migrate'))).toHaveLength(steps.length)
   })
 

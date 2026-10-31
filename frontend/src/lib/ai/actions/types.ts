@@ -108,6 +108,12 @@ export type ActionCard = {
   }
   planId?: string
   step?: number
+  /**
+   * The step of the previous card of the same plan (manual steps skipped),
+   * absent on the first one: execute refuses this card until that step was
+   * dispatched and succeeded, so a plan runs one step at a time server side too.
+   */
+  after?: number
   expiresAt: number
   token: string
 }

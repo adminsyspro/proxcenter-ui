@@ -74,16 +74,22 @@ type Built = { title: string; steps: Step[]; summary?: string; notes?: Check[] }
 
 const r1 = (v: number) => Math.round(v * 10) / 10
 
+/** The step of the last card already in the plan: the one a new card waits for (R12). */
+function previousCardStep(steps: Step[]): number | undefined {
+  return steps.findLast(s => s.card)?.step
+}
+
 async function stepCard(
   actions: ActionsContext,
   ctx: ToolContext,
   planId: string,
-  step: number,
+  steps: Step[],
   body: Pick<ActionCard, 'kind' | 'target' | 'params'>
 ): Promise<Step> {
+  const step = steps.length + 1
   const preflight = await preflightAction(body, ctx, { inPlan: true })
 
-  return { step, card: issueCard(actions, { ...body, preflight, planId, step }) }
+  return { step, card: issueCard(actions, { ...body, preflight, planId, step, after: previousCardStep(steps) }) }
 }
 
 function groundedHost(args: Record<string, unknown>, ctx: ToolContext, actions: ActionsContext): SnapshotNode {
@@ -132,7 +138,7 @@ async function unprotectedGuests(args: Record<string, unknown>, ctx: ToolContext
       continue
     }
 
-    steps.push(await stepCard(actions, ctx, planId, steps.length + 1, { kind: 'backup_add', target: guestTarget(guest), params: { jobId: job.id } }))
+    steps.push(await stepCard(actions, ctx, planId, steps, { kind: 'backup_add', target: guestTarget(guest), params: { jobId: job.id } }))
   }
 
   if (steps.length === 0) {
@@ -201,7 +207,7 @@ async function hostMemory(args: Record<string, unknown>, ctx: ToolContext, actio
 
     const step = steps.length + 1
 
-    steps.push({ step, card: issueCard(actions, { ...body, preflight, planId, step }) })
+    steps.push({ step, card: issueCard(actions, { ...body, preflight, planId, step, after: previousCardStep(steps) }) })
   }
 
   const notes: Check[] = skipped.map(s => ({ level: 'warn', text: `Skipped ${s.name}: ${s.text}` }))
@@ -241,7 +247,7 @@ async function pendingUpdates(args: Record<string, unknown>, ctx: ToolContext, a
   const target = hostTarget(host)
   const steps: Step[] = []
 
-  if (!host.maintenance) steps.push(await stepCard(actions, ctx, planId, 1, { kind: 'maintenance', target, params: { mode: 'enter' } }))
+  if (!host.maintenance) steps.push(await stepCard(actions, ctx, planId, steps, { kind: 'maintenance', target, params: { mode: 'enter' } }))
 
   steps.push({
     step: steps.length + 1,
@@ -250,7 +256,7 @@ async function pendingUpdates(args: Record<string, unknown>, ctx: ToolContext, a
       href: `/infrastructure/inventory?selectType=cluster&selectId=${encodeURIComponent(host.connId)}`,
     },
   })
-  steps.push(await stepCard(actions, ctx, planId, steps.length + 1, { kind: 'maintenance', target, params: { mode: 'exit' } }))
+  steps.push(await stepCard(actions, ctx, planId, steps, { kind: 'maintenance', target, params: { mode: 'exit' } }))
 
   return { title: `Install the pending updates of ${host.name}`, steps }
 }

@@ -274,7 +274,10 @@ export async function runV2vPreflight(
     }
   } catch {}
 
-  // 7. Scan /mnt/hyperv/ for VHDX/VHD files (Hyper-V only)
+  // 7. Scan /mnt/hyperv/ for VHDX/VHD files named after the VM (Hyper-V only).
+  // A suggestion for the dialog's free-text field, used only when the host
+  // reported no disk for the VM. Nothing when no file carries the VM name:
+  // every disk on the share belongs to every VM on it (#1255).
   if (sourceType === 'hyperv' && vmName) {
     try {
       const scanResult = await probe(
@@ -282,14 +285,6 @@ export async function runV2vPreflight(
       const detected = (scanResult.output || '').split('\n').map(l => l.trim()).filter(l => l && l.startsWith('/'))
       if (detected.length > 0) {
         result.detectedDisks = detected
-      } else {
-        // Fallback: list all VHDX/VHD in /mnt/hyperv/
-        const allResult = await probe(
-          `find /mnt/hyperv -iname "*.vhdx" -o -iname "*.vhd" 2>/dev/null || true`)
-        const all = (allResult.output || '').split('\n').map(l => l.trim()).filter(l => l && l.startsWith('/'))
-        if (all.length > 0) {
-          result.detectedDisks = all
-        }
       }
     } catch {}
   }

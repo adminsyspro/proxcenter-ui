@@ -35,6 +35,18 @@ export function deriveHypervDiskPaths(vm: MigrationDialogVm): string {
 }
 
 /**
+ * What the preflight's share scan may write into migDiskPaths, or null to
+ * leave it alone. The scan only feeds the free-text field shown when the host
+ * reported no disk for the VM; when it did, the dialog lists those disks and
+ * migDiskPaths already holds them, so a scan by name (or, before #1255, of
+ * the whole share) must not replace them behind the list.
+ */
+export function hypervDiskPathsFromScan(vm: MigrationDialogVm, detected: string[]): string | null {
+  if (detected.length === 0 || vm?.diskPaths?.length) return null
+  return detected.join('\n')
+}
+
+/**
  * Per-migration option state shared by the single-VM and the bulk migration
  * dialogs (components/InventoryDialogs.tsx).
  *

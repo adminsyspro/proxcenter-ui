@@ -991,6 +991,13 @@ async function postRrdBatch(
   return dataMap
 }
 
+const MIGRATION_SOURCE_API_PREFIXES = new Set(['xcpng', 'nutanix', 'hyperv'])
+
+/** API prefix of a migration source's routes (/api/v1/<prefix>/<id>/vms); VMware and vCenter share 'vmware'. */
+export function migrationSourceApiPrefix(type: string | null | undefined): string {
+  return type && MIGRATION_SOURCE_API_PREFIXES.has(type) ? type : 'vmware'
+}
+
 export async function fetchDetails(sel: InventorySelection): Promise<DetailsPayload | null> {
   // Root / section selections don't have details — skip fetching
   if (sel.type === 'root' || sel.type === 'storage-root' || sel.type === 'network-root' || sel.type === 'backup-root' || sel.type === 'migration-root' || sel.type === 'net-conn' || sel.type === 'net-node' || sel.type === 'net-vlan' || sel.type === 'net-bridge' || sel.type === 'tvnet' || sel.type === 'storage-cluster' || sel.type === 'storage-node') return null
@@ -2021,7 +2028,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
   if (sel.type === 'ext-type') {
     const hypervisorType = sel.id // 'vmware' or 'xcpng'
     const label = hypervisorType === 'vmware' ? 'VMware ESXi' : hypervisorType === 'xcpng' ? 'XCP-ng' : hypervisorType === 'nutanix' ? 'Nutanix AHV' : hypervisorType === 'hyperv' ? 'Microsoft Hyper-V' : hypervisorType.toUpperCase()
-    const apiPrefix = hypervisorType === 'xcpng' ? 'xcpng' : hypervisorType === 'nutanix' ? 'nutanix' : 'vmware'
+    const apiPrefix = migrationSourceApiPrefix(hypervisorType)
 
     // Fetch all connections of this type
     const connsR = await fetch('/api/v1/connections', { cache: 'no-store' }).catch(() => null)
@@ -2091,7 +2098,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const connR = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}`, { cache: 'no-store' })
     const connData = await connR.json().catch(() => ({}))
     const conn = connData?.data || connData || {}
-    const apiPrefix = conn.type === 'xcpng' ? 'xcpng' : conn.type === 'nutanix' ? 'nutanix' : 'vmware'
+    const apiPrefix = migrationSourceApiPrefix(conn.type)
 
     const [statusR, vmsR] = await Promise.all([
       fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/status`, { cache: 'no-store' }).catch(() => null),
@@ -2160,7 +2167,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
     const rawConnType = connTypeData?.data?.type || connTypeData?.type || 'vmware'
     const rawConnSubType = connTypeData?.data?.subType || connTypeData?.subType
     const connType = (rawConnType === 'vmware' && rawConnSubType === 'vcenter') ? 'vcenter' : rawConnType
-    const apiPrefix = connType === 'xcpng' ? 'xcpng' : connType === 'nutanix' ? 'nutanix' : connType === 'hyperv' ? 'hyperv' : 'vmware'
+    const apiPrefix = migrationSourceApiPrefix(connType)
 
     const [vmR, statusR] = await Promise.all([
       fetch(`/api/v1/${apiPrefix}/${encodeURIComponent(connId)}/vms/${encodeURIComponent(vmid)}`, { cache: 'no-store' }),

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 
 import { RRD_BATCH_MAX_PATHS } from '@/lib/metrics/rrdBatchLimit'
 
@@ -48,6 +48,7 @@ import {
   fetchRrdRange,
   fetchRrd,
   fetchRrdBatch,
+  migrationSourceApiPrefix,
 } from './helpers'
 
 /* ------------------------------------------------------------------ */
@@ -1847,5 +1848,57 @@ describe('fetchDetails: storage content listing refused', () => {
     const payload = await fetchDetails({ type: 'storage', id: 'conn1:local:pve1' } as any)
 
     expect(payload?.storageInfo?.contentDenied).toBe(false)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* fetchDetails: Hyper-V host pages read the Hyper-V API (#1255)       */
+/* ------------------------------------------------------------------ */
+
+describe('migrationSourceApiPrefix', () => {
+  it('routes each migration source to its own API, VMware and vCenter to the vmware one', () => {
+    expect(['xcpng', 'nutanix', 'hyperv', 'vmware', 'vcenter', undefined].map(migrationSourceApiPrefix))
+      .toEqual(['xcpng', 'nutanix', 'hyperv', 'vmware', 'vmware', 'vmware'])
+  })
+})
+
+describe('fetchDetails: Hyper-V host and hypervisor group', () => {
+  const hvConn = { id: 'conn-hv', name: 'Hyper-V', type: 'hyperv', baseUrl: '10.42.0.61' }
+  const hvVm = { vmid: 'guid-1', name: 'TestVM01', status: 'stopped', diskPaths: ['D:\\HV\\TestVM01\\disk01.vhdx'] }
+  let urls: string[]
+
+  beforeEach(() => {
+    urls = []
+    vi.stubGlobal('fetch', vi.fn((input: any) => {
+      const url = String(input)
+      urls.push(url)
+      const body = url.startsWith('/api/v1/hyperv/conn-hv/vms') ? { data: { vms: [hvVm] } }
+        : url === '/api/v1/connections' ? { data: [hvConn] }
+        : url.startsWith('/api/v1/connections/') ? { data: hvConn }
+        : { data: [] }
+      return Promise.resolve({ ok: true, json: async () => body } as Response)
+    }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('lists the host VMs from the Hyper-V API, so they can be selected for a bulk migration', async () => {
+    const payload = await fetchDetails({ type: 'ext', id: 'conn-hv' } as any)
+
+    expect(payload?.esxiHostInfo?.hostType).toBe('hyperv')
+    expect(payload?.esxiHostInfo?.vms).toEqual([hvVm])
+    expect(urls).toContain('/api/v1/hyperv/conn-hv/vms')
+    expect(urls.some(u => u.startsWith('/api/v1/vmware/'))).toBe(false)
+  })
+
+  it('counts the VMs of every Hyper-V host from the Hyper-V API', async () => {
+    const payload = await fetchDetails({ type: 'ext-type', id: 'hyperv' } as any)
+
+    expect(payload?.kpis?.[1]).toEqual({ label: 'VMs', value: '1' })
+    expect(payload?.extTypeInfo?.hosts[0].vms).toEqual([hvVm])
+    expect(urls).toContain('/api/v1/hyperv/conn-hv/vms')
+    expect(urls.some(u => u.startsWith('/api/v1/vmware/'))).toBe(false)
   })
 })

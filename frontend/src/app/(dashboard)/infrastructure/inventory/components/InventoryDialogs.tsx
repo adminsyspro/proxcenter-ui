@@ -4328,7 +4328,7 @@ return
                   {esxiMigrateVm?.hostType === 'nutanix'
                     ? 'Cold migration only. Disks will be downloaded from Nutanix and converted via virt-v2v with automatic virtio driver injection.'
                     : esxiMigrateVm?.hostType === 'hyperv'
-                    ? 'Cold migration only. Mount your Hyper-V share at /mnt/hyperv/ on the target Proxmox node. Disks are detected automatically.'
+                    ? 'Cold migration only. The Hyper-V SMB share is mounted on the target Proxmox node automatically, and the disks attached to the VM are read from the Hyper-V host.'
                     : esxiMigrateVm?.hostType === 'vcenter'
                     ? (migType === 'warm'
                         ? 'Warm migration: the source stays online while changed blocks are copied (CBT) over vCenter, then a short cutover does a clean guest shutdown before the final sync. No in-transit data loss. vSAN-backed disks are supported. Needs a block-storage target and the VDDK runtime on the Proxmox node.'
@@ -5168,7 +5168,7 @@ return
                 )}
                 {bulkMigHostInfo?.hostType === 'hyperv' && (
                   <Alert severity="info" sx={{ fontSize: 12 }} icon={<i className="ri-information-line" style={{ fontSize: 18 }} />}>
-                    Cold migration only. Mount your Hyper-V share at /mnt/hyperv/ on the target Proxmox node. Disks are detected automatically.
+                    Cold migration only. The Hyper-V SMB share is mounted on the target Proxmox node automatically, and the disks attached to the VM are read from the Hyper-V host.
                   </Alert>
                 )}
                 {bulkMigHostInfo?.hostType === 'nutanix' && (

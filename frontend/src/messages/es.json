@@ -5762,6 +5762,49 @@
       "getHostMaintenance": "Mantenimiento de hosts",
       "forecastCapacity": "Previsión de capacidad",
       "getCveExposure": "Exposición a CVE"
+    },
+    "actions": {
+      "execute": "Ejecutar",
+      "retry": "Reintentar",
+      "running": "En curso",
+      "confirm": "Confirmar",
+      "confirmTitle": "¿{action}?",
+      "checks": "Comprobaciones",
+      "done": "Hecho",
+      "alreadyRun": "Ya ejecutada",
+      "expired": "Caducada: vuelva a preguntar al asistente.",
+      "untracked": "Seguimiento detenido, la tarea puede seguir en curso.",
+      "taskCenter": "Abrir el Centro de tareas",
+      "waitsFor": "Espera al paso {step}",
+      "manualStep": "Paso manual",
+      "openPage": "Abrir la página",
+      "planProgress": "{done}/{total} hechos",
+      "title": {
+        "snapshot": "Snapshot «{name}»",
+        "start": "Iniciar",
+        "shutdown": "Apagar",
+        "reboot": "Reiniciar",
+        "migrate": "Migrar en caliente a {target}",
+        "drsApply": "Aplicar el movimiento DRS",
+        "backupAdd": "Añadir al trabajo de copia {job}",
+        "maintenanceEnter": "Entrar en mantenimiento",
+        "maintenanceExit": "Salir de mantenimiento"
+      },
+      "effects": {
+        "shutdown": "El invitado se apaga de forma ordenada. Sus servicios quedan sin servicio hasta que se vuelva a iniciar.",
+        "reboot": "El invitado se reinicia. Sus servicios no están disponibles mientras arranca.",
+        "maintenanceEnter": "El host entra en el modo de mantenimiento de Proxmox: HA mueve sus invitados gestionados por HA a otros hosts y no coloca nada nuevo en él.",
+        "maintenanceExit": "El host sale del modo de mantenimiento: HA puede volver a colocar invitados en él y devuelve los que había movido."
+      },
+      "errors": {
+        "capReached": "Se alcanzó el límite de acciones de esta conversación. Inicie una nueva conversación para ejecutar más.",
+        "actionDisabled": "Esta acción está desactivada en los ajustes de acciones de IA.",
+        "situationChanged": "La situación cambió desde la propuesta: vuelva a preguntar al asistente.",
+        "network": "No se pudo enviar la acción. Inténtelo de nuevo.",
+        "generic": "No se pudo ejecutar la acción. Inténtelo de nuevo.",
+        "taskFailed": "La tarea falló: {reason}",
+        "taskFailedNoReason": "La tarea falló."
+      }
     }
   },
   "jobs": {

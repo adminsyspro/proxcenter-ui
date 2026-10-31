@@ -5743,6 +5743,49 @@
       "getHostMaintenance": "Host-Wartung",
       "forecastCapacity": "Kapazitätsprognose",
       "getCveExposure": "CVE-Gefährdung"
+    },
+    "actions": {
+      "execute": "Ausführen",
+      "retry": "Erneut versuchen",
+      "running": "Läuft",
+      "confirm": "Bestätigen",
+      "confirmTitle": "{action}?",
+      "checks": "Prüfungen",
+      "done": "Erledigt",
+      "alreadyRun": "Bereits ausgeführt",
+      "expired": "Abgelaufen: Fragen Sie den Assistenten erneut.",
+      "untracked": "Verfolgung beendet, die Aufgabe läuft möglicherweise noch.",
+      "taskCenter": "Task Center öffnen",
+      "waitsFor": "Wartet auf Schritt {step}",
+      "manualStep": "Manueller Schritt",
+      "openPage": "Seite öffnen",
+      "planProgress": "{done}/{total} erledigt",
+      "title": {
+        "snapshot": "Snapshot „{name}“",
+        "start": "Starten",
+        "shutdown": "Herunterfahren",
+        "reboot": "Neu starten",
+        "migrate": "Live-Migration nach {target}",
+        "drsApply": "DRS-Verschiebung anwenden",
+        "backupAdd": "Zum Backup-Job {job} hinzufügen",
+        "maintenanceEnter": "Wartungsmodus aktivieren",
+        "maintenanceExit": "Wartungsmodus beenden"
+      },
+      "effects": {
+        "shutdown": "Der Gast wird sauber heruntergefahren. Seine Dienste bleiben bis zum nächsten Start nicht verfügbar.",
+        "reboot": "Der Gast startet neu. Seine Dienste sind während des Starts nicht verfügbar.",
+        "maintenanceEnter": "Der Host wechselt in den Proxmox-Wartungsmodus: HA verschiebt seine HA-verwalteten Gäste auf andere Hosts und platziert dort nichts Neues.",
+        "maintenanceExit": "Der Host verlässt den Wartungsmodus: HA kann wieder Gäste darauf platzieren und verschiebt die zuvor verschobenen Gäste zurück."
+      },
+      "errors": {
+        "capReached": "Das Aktionslimit dieser Unterhaltung ist erreicht. Starten Sie eine neue Unterhaltung, um weitere auszuführen.",
+        "actionDisabled": "Diese Aktion ist in den Einstellungen der KI-Aktionen deaktiviert.",
+        "situationChanged": "Die Lage hat sich seit dem Vorschlag geändert: Fragen Sie den Assistenten erneut.",
+        "network": "Die Aktion konnte nicht gesendet werden. Versuchen Sie es erneut.",
+        "generic": "Die Aktion konnte nicht ausgeführt werden. Versuchen Sie es erneut.",
+        "taskFailed": "Die Aufgabe ist fehlgeschlagen: {reason}",
+        "taskFailedNoReason": "Die Aufgabe ist fehlgeschlagen."
+      }
     }
   },
   "jobs": {

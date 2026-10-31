@@ -5762,6 +5762,49 @@
       "getHostMaintenance": "主机维护",
       "forecastCapacity": "容量预测",
       "getCveExposure": "CVE 暴露"
+    },
+    "actions": {
+      "execute": "执行",
+      "retry": "重试",
+      "running": "运行中",
+      "confirm": "确认",
+      "confirmTitle": "{action}？",
+      "checks": "预检",
+      "done": "已完成",
+      "alreadyRun": "已执行",
+      "expired": "已过期：请重新询问助手。",
+      "untracked": "已停止跟踪，任务可能仍在运行。",
+      "taskCenter": "打开任务中心",
+      "waitsFor": "等待第 {step} 步",
+      "manualStep": "手动步骤",
+      "openPage": "打开页面",
+      "planProgress": "已完成 {done}/{total}",
+      "title": {
+        "snapshot": "快照“{name}”",
+        "start": "启动",
+        "shutdown": "关机",
+        "reboot": "重启",
+        "migrate": "在线迁移到 {target}",
+        "drsApply": "应用 DRS 迁移",
+        "backupAdd": "加入备份作业 {job}",
+        "maintenanceEnter": "进入维护模式",
+        "maintenanceExit": "退出维护模式"
+      },
+      "effects": {
+        "shutdown": "客户机将正常关机。在再次启动之前，其服务不可用。",
+        "reboot": "客户机将重启。启动期间其服务不可用。",
+        "maintenanceEnter": "主机进入 Proxmox 维护模式：HA 会将其受 HA 管理的客户机迁移到其他主机，并且不再在其上放置新的客户机。",
+        "maintenanceExit": "主机退出维护模式：HA 可以再次在其上放置客户机，并迁回之前迁走的客户机。"
+      },
+      "errors": {
+        "capReached": "已达到本次对话的操作上限。请开始新对话以执行更多操作。",
+        "actionDisabled": "此操作已在 AI 操作设置中关闭。",
+        "situationChanged": "自提议以来情况已变化：请重新询问助手。",
+        "network": "无法发送该操作。请重试。",
+        "generic": "无法执行该操作。请重试。",
+        "taskFailed": "任务失败：{reason}",
+        "taskFailedNoReason": "任务失败。"
+      }
     }
   },
   "jobs": {

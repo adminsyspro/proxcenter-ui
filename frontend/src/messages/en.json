@@ -5762,6 +5762,49 @@
       "getHostMaintenance": "Host maintenance",
       "forecastCapacity": "Capacity forecast",
       "getCveExposure": "CVE exposure"
+    },
+    "actions": {
+      "execute": "Execute",
+      "retry": "Retry",
+      "running": "Running",
+      "confirm": "Confirm",
+      "confirmTitle": "{action}?",
+      "checks": "Checks",
+      "done": "Done",
+      "alreadyRun": "Already run",
+      "expired": "Expired: ask the assistant again.",
+      "untracked": "Tracking stopped, the task may still be running.",
+      "taskCenter": "Open the Task Center",
+      "waitsFor": "Waits for step {step}",
+      "manualStep": "Manual step",
+      "openPage": "Open the page",
+      "planProgress": "{done}/{total} done",
+      "title": {
+        "snapshot": "Snapshot \"{name}\"",
+        "start": "Start",
+        "shutdown": "Shut down",
+        "reboot": "Reboot",
+        "migrate": "Live migrate to {target}",
+        "drsApply": "Apply the DRS move",
+        "backupAdd": "Add to backup job {job}",
+        "maintenanceEnter": "Enter maintenance mode",
+        "maintenanceExit": "Exit maintenance mode"
+      },
+      "effects": {
+        "shutdown": "The guest is shut down cleanly. Its services stay unavailable until it is started again.",
+        "reboot": "The guest restarts. Its services are unavailable while it boots.",
+        "maintenanceEnter": "The host enters Proxmox maintenance mode: HA moves its HA-managed guests to other hosts and places nothing new on it.",
+        "maintenanceExit": "The host leaves maintenance mode: HA can place guests on it again and moves back the guests it had moved away."
+      },
+      "errors": {
+        "capReached": "The action limit of this conversation is reached. Start a new conversation to run more.",
+        "actionDisabled": "This action is turned off in the AI actions settings.",
+        "situationChanged": "The situation changed since the proposal: ask the assistant again.",
+        "network": "The action could not be sent. Try again.",
+        "generic": "The action could not be run. Try again.",
+        "taskFailed": "The task failed: {reason}",
+        "taskFailedNoReason": "The task failed."
+      }
     }
   },
   "jobs": {

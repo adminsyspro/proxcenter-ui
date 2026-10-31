@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, cleanup, fireEvent, waitFor, screen } from '@testing-library/react'
+import { render, cleanup, fireEvent, waitFor, screen, within } from '@testing-library/react'
 
+import type { ActionCard } from '@/lib/ai/actions/types'
 import { encodeFrame } from '@/lib/ai/streamFrames'
 
 const h = vi.hoisted(() => ({
@@ -12,6 +13,10 @@ vi.mock('next-intl', () => ({ useTranslations: () => h.t, useLocale: () => 'en' 
 
 // The real logo pulls the navigation and branding contexts.
 vi.mock('./Logo', () => ({ LogoIcon: () => <svg data-testid='logo' /> }))
+
+vi.mock('next/link', () => ({
+  default: ({ children, href }: { children?: unknown; href: string }) => <a href={href}>{children as never}</a>
+}))
 
 import AIChatWidget, { toolSources } from './AIChatWidget'
 
@@ -116,7 +121,9 @@ describe('AIChatWidget', () => {
       messages: [{ role: 'user', content: 'ai.suggestInfraStatus' }],
       locale: 'en',
       // So a history answer gives times in the reader's zone.
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      // Binds the action cards of this thread (roadmap#188).
+      conversationId: expect.stringMatching(/^[A-Za-z0-9_-]{1,100}$/)
     })
   })
 
@@ -264,6 +271,121 @@ describe('AIChatWidget', () => {
     await openWidget()
     fireEvent.click(screen.getByRole('button', { name: 'common.close', expanded: true }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+})
+
+const START_CARD: ActionCard = {
+  actionId: 'act-1',
+  kind: 'start',
+  tier: 'safe',
+  target: { connId: 'c1', cluster: 'prod', node: 'pve1', vmid: 104, guestKind: 'qemu', name: 'win2025' },
+  params: {},
+  preflight: { ok: true, checks: [{ level: 'ok', text: 'Guest is stopped' }] },
+  expiresAt: Date.now() + 600_000,
+  token: 'signed'
+}
+
+const bodyOf = (url: string, nth = 0) => {
+  const calls = fetchMock.mock.calls.filter(([u]) => u === url)
+
+  return JSON.parse(calls[nth][1]!.body!)
+}
+
+describe('AIChatWidget actions (roadmap#188)', () => {
+  const ask = async (text: string) => {
+    const input = screen.getByPlaceholderText('ai.askQuestion')
+
+    fireEvent.change(input, { target: { value: text } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+  }
+
+  it('renders the cards of the actions frame under the answer and runs one with the thread id', async () => {
+    streamReply = () =>
+      streamOf(['Here is the card.', encodeFrame({ type: 'actions', cards: [START_CARD], plans: [] })])
+    fetchMock.mockImplementation(async (url: string, init?: FetchInit) => {
+      if (url === '/api/v1/ai/status') return new Response(JSON.stringify(SETTINGS))
+      if (url === '/api/v1/ai/chat/stream') return streamReply(init)
+      if (url === '/api/v1/ai/actions/execute') return new Response(JSON.stringify({ ok: true, result: { node: 'pve1', connId: 'c1', message: 'Done' } }))
+
+      return new Response(JSON.stringify({ response: 'fallback' }))
+    })
+    render(<AIChatWidget available />)
+    await openWidget()
+    await ask('start win2025')
+
+    const card = await screen.findByRole('group', { name: 'ai.actions.title.start' })
+
+    fireEvent.click(within(card).getByRole('button', { name: 'ai.actions.execute' }))
+    expect(await within(card).findByText('ai.actions.done')).toBeTruthy()
+
+    const executed = bodyOf('/api/v1/ai/actions/execute')
+
+    expect(executed.card.token).toBe('signed')
+    expect(executed.conversationId).toBe(bodyOf('/api/v1/ai/chat/stream').conversationId)
+    expect(executed.confirmed).toBeUndefined()
+
+    // The next turn tells the model what was run, on the answer that proposed
+    // it, and never sends the cards themselves.
+    streamReply = () => streamOf(['ok'])
+    await ask('and now?')
+    await screen.findByText('ok')
+
+    const next = bodyOf('/api/v1/ai/chat/stream', 1)
+
+    expect(next.messages).toEqual([
+      { role: 'user', content: 'start win2025' },
+      { role: 'assistant', content: 'Here is the card.\n\nAction start win2025 (104) on pve1: done' },
+      { role: 'user', content: 'and now?' }
+    ])
+    expect(next.conversationId).toBe(executed.conversationId)
+  })
+
+  it('starts a new thread id when the conversation is cleared', async () => {
+    render(<AIChatWidget available />)
+    await openWidget()
+    await ask('first')
+    await screen.findByText('80.6%')
+
+    fireEvent.click(screen.getByRole('button', { name: 'ai.clearConversation' }))
+    await ask('second')
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([u]) => u === '/api/v1/ai/chat/stream')).toHaveLength(2))
+
+    expect(bodyOf('/api/v1/ai/chat/stream', 1).conversationId).not.toBe(bodyOf('/api/v1/ai/chat/stream', 0).conversationId)
+  })
+
+  it('sanitises the actions of the plain route like the stream decoder does', async () => {
+    streamReply = () => new Response('{}', { status: 500 })
+    fetchMock.mockImplementation(async (url: string, init?: FetchInit) => {
+      if (url === '/api/v1/ai/status') return new Response(JSON.stringify(SETTINGS))
+      if (url === '/api/v1/ai/chat/stream') return streamReply(init)
+
+      return new Response(
+        JSON.stringify({
+          response: 'fallback',
+          actions: {
+            cards: [START_CARD, { ...START_CARD, actionId: 'bad', kind: 'destroy' }, 'junk'],
+            plans: [
+              {
+                planId: 'p1',
+                finding: 'pending_updates',
+                title: 'Install the pending updates of pve1',
+                steps: [{ step: 1, manual: { text: 'Do it by hand.', href: 'javascript:alert(1)' } }]
+              }
+            ]
+          }
+        })
+      )
+    })
+    render(<AIChatWidget available />)
+    await openWidget()
+    await ask('start win2025')
+
+    expect(await screen.findByRole('group', { name: 'ai.actions.title.start' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'ai.actions.execute' })).toHaveLength(1)
+    expect(screen.getByText('Do it by hand.')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'ai.actions.openPage' })).toBeNull()
+
+    expect(bodyOf('/api/v1/ai/chat').conversationId).toBe(bodyOf('/api/v1/ai/chat/stream').conversationId)
   })
 })
 

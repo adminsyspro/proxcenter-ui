@@ -20,12 +20,22 @@ import {
 } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 
+import { sanitizeActionCard, sanitizeActionPlan, type ActionCardsPayload } from '@/lib/ai/actions/cards'
+import type { ActionCard, ActionPlan } from '@/lib/ai/actions/types'
 import { sanitizeChart, type AiChart } from '@/lib/ai/charts'
 import { createFrameDecoder, type DecodedChunk } from '@/lib/ai/streamFrames'
 
+import { AIActions } from './AIActionPlan'
 import AIChart from './AIChart'
 import AIMarkdown from './AIMarkdown'
 import { LogoIcon } from './Logo'
+import {
+  historyContent,
+  newConversationId,
+  useActionExecution,
+  withActionResult,
+  type ActionExecution
+} from './useActionExecution'
 
 type Translate = (key: string, values?: Record<string, string>) => string
 
@@ -38,7 +48,21 @@ type ChatMessage = {
   toolActivity?: string[]
   toolTrace?: ToolCall[]
   charts?: AiChart[]
+  /** Signed cards and plans proposed by this answer (roadmap#188); never sent back. */
+  actions?: ActionCardsPayload
+  /** One line per action run from this answer, sent with it to the model. */
+  actionResults?: string[]
   stopped?: boolean
+}
+
+// The plain route hands its actions over as they came from the tools, unlike
+// the stream whose decoder sanitises them: same filter here.
+const sanitizeActions = (raw: unknown): ActionCardsPayload | null => {
+  const src = (typeof raw === 'object' && raw !== null ? raw : {}) as { cards?: unknown; plans?: unknown }
+  const cards = (Array.isArray(src.cards) ? src.cards : []).map(sanitizeActionCard).filter((c): c is ActionCard => c !== null)
+  const plans = (Array.isArray(src.plans) ? src.plans : []).map(sanitizeActionPlan).filter((p): p is ActionPlan => p !== null)
+
+  return cards.length || plans.length ? { cards, plans } : null
 }
 
 type AiSettings = { provider?: string; model?: string | null }
@@ -253,12 +277,14 @@ const AssistantMessage = ({
   message,
   isStreaming,
   t,
-  locale
+  locale,
+  exec
 }: {
   message: ChatMessage
   isStreaming: boolean
   t: Translate
   locale: string
+  exec: ActionExecution
 }) => {
   const hasTrace = Boolean(message.toolTrace?.length)
   const showFooter = !isStreaming && (message.content || hasTrace)
@@ -291,6 +317,9 @@ const AssistantMessage = ({
         {!isStreaming && message.charts?.map((chart, index) => (
           <AIChart key={`${chart.kind}-${chart.metric ?? index}`} chart={chart} t={t} locale={locale} />
         ))}
+        {!isStreaming && message.actions && (
+          <AIActions payload={message.actions} runs={exec.runs} busy={exec.busy} onExecute={exec.execute} t={t} />
+        )}
         {message.stopped && (
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 2, fontStyle: 'italic' }}>
             {t('ai.stopped')}
@@ -422,6 +451,15 @@ export default function AIChatWidget({ available }: { available: boolean }) {
   const stickRef = useRef(true)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  // Binds the signed cards to this thread; a cleared conversation is a new one.
+  const [conversationId, setConversationId] = useState(newConversationId)
+
+  // Once an action is over, its line rides with the answer that proposed it.
+  const onActionFinished = useCallback((card: ActionCard, line: string) => {
+    setMessages(prev => withActionResult(prev, card.actionId, line))
+  }, [])
+
+  const exec = useActionExecution({ conversationId, paused: !open, onFinished: onActionFinished })
 
   // Vérifier si l'IA est activée, à chaque ouverture
   useEffect(() => {
@@ -481,7 +519,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
 
     // The stored messages also carry the tool activity shown in the bubbles
     // (#459); the providers only ever get the conversation itself.
-    const history = [...messages, userMessage].map(({ role, content }) => ({ role, content }))
+    const history = [...messages, userMessage].map(m => ({ role: m.role, content: historyContent(m) }))
 
     const controller = new AbortController()
 
@@ -497,6 +535,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
     let toolActivity: string[] | null = null
     let toolTrace: ToolCall[] | null = null
     let charts: AiChart[] | null = null
+    let actions: ActionCardsPayload | null = null
 
     // Mettre à jour le message en temps réel
     const publish = (extra: Partial<ChatMessage> = {}) => {
@@ -509,6 +548,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
           ...(toolActivity ? { toolActivity } : {}),
           ...(toolTrace ? { toolTrace } : {}),
           ...(charts?.length ? { charts } : {}),
+          ...(actions ? { actions } : {}),
           ...extra
         }
 
@@ -523,7 +563,8 @@ export default function AIChatWidget({ available }: { available: boolean }) {
         body: JSON.stringify({
           messages: history,
           locale,
-          timeZone: readerTimeZone()
+          timeZone: readerTimeZone(),
+          conversationId
         }),
         signal: controller.signal
       })
@@ -550,6 +591,9 @@ export default function AIChatWidget({ available }: { available: boolean }) {
           if (frame.type === 'tool') toolActivity = frame.names
           else if (frame.type === 'trace') toolTrace = frame.calls
           else if (frame.type === 'charts') charts = frame.charts
+          else if (frame.type === 'actions' && (frame.cards.length || frame.plans.length)) {
+            actions = { cards: frame.cards, plans: frame.plans }
+          }
         }
       }
 
@@ -589,7 +633,8 @@ export default function AIChatWidget({ available }: { available: boolean }) {
           body: JSON.stringify({
             messages: history,
             locale, // #686: the fallback used to omit it and always answered in English
-            timeZone: readerTimeZone()
+            timeZone: readerTimeZone(),
+            conversationId
           }),
           signal: controller.signal
         })
@@ -606,6 +651,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
           ? json.toolCalls.map((c: { name: string; ok?: boolean }) => ({ name: c.name, ok: c.ok !== false }))
           : null
         charts = Array.isArray(json.charts) ? json.charts.map(sanitizeChart).filter(Boolean) : null
+        actions = sanitizeActions(json.actions)
         publish()
       } catch (fallbackError) {
         if (controller.signal.aborted) {
@@ -627,7 +673,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
     // `locale` is a dependency: without it the callback keeps the locale
     // captured at mount and a language switch mid-conversation would keep
     // asking the model for the previous language.
-  }, [messages, loading, locale, t])
+  }, [messages, loading, locale, t, conversationId])
 
   const handleStop = () => abortControllerRef.current?.abort()
 
@@ -641,6 +687,8 @@ export default function AIChatWidget({ available }: { available: boolean }) {
 
   const handleClear = () => {
     abortControllerRef.current?.abort()
+    exec.reset()
+    setConversationId(newConversationId())
     setMessages([])
     setError(null)
   }
@@ -792,6 +840,7 @@ export default function AIChatWidget({ available }: { available: boolean }) {
                     isStreaming={streaming && i === messages.length - 1}
                     t={t}
                     locale={locale}
+                    exec={exec}
                   />
                 )
               )}

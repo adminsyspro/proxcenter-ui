@@ -5762,6 +5762,49 @@
       "getHostMaintenance": "Maintenance des hôtes",
       "forecastCapacity": "Prévision de capacité",
       "getCveExposure": "Exposition CVE"
+    },
+    "actions": {
+      "execute": "Exécuter",
+      "retry": "Réessayer",
+      "running": "En cours",
+      "confirm": "Confirmer",
+      "confirmTitle": "{action} ?",
+      "checks": "Contrôles",
+      "done": "Terminé",
+      "alreadyRun": "Déjà exécutée",
+      "expired": "Expirée : redemandez à l’assistant.",
+      "untracked": "Suivi arrêté, la tâche est peut-être encore en cours.",
+      "taskCenter": "Ouvrir le Centre de tâches",
+      "waitsFor": "Attend l’étape {step}",
+      "manualStep": "Étape manuelle",
+      "openPage": "Ouvrir la page",
+      "planProgress": "{done}/{total} faites",
+      "title": {
+        "snapshot": "Snapshot « {name} »",
+        "start": "Démarrer",
+        "shutdown": "Arrêter",
+        "reboot": "Redémarrer",
+        "migrate": "Migrer à chaud vers {target}",
+        "drsApply": "Appliquer le déplacement DRS",
+        "backupAdd": "Ajouter au job de sauvegarde {job}",
+        "maintenanceEnter": "Passer en maintenance",
+        "maintenanceExit": "Sortir de maintenance"
+      },
+      "effects": {
+        "shutdown": "L’invité est arrêté proprement. Ses services restent indisponibles jusqu’à son prochain démarrage.",
+        "reboot": "L’invité redémarre. Ses services sont indisponibles le temps du démarrage.",
+        "maintenanceEnter": "L’hôte passe en mode maintenance Proxmox : la HA déplace ses invités gérés par la HA vers d’autres hôtes et n’y place plus rien.",
+        "maintenanceExit": "L’hôte sort du mode maintenance : la HA peut de nouveau y placer des invités et y ramène ceux qu’elle avait déplacés."
+      },
+      "errors": {
+        "capReached": "La limite d’actions de cette conversation est atteinte. Démarrez une nouvelle conversation pour en exécuter d’autres.",
+        "actionDisabled": "Cette action est désactivée dans les réglages des actions IA.",
+        "situationChanged": "La situation a changé depuis la proposition : redemandez à l’assistant.",
+        "network": "L’action n’a pas pu être envoyée. Réessayez.",
+        "generic": "L’action n’a pas pu être exécutée. Réessayez.",
+        "taskFailed": "La tâche a échoué : {reason}",
+        "taskFailedNoReason": "La tâche a échoué."
+      }
     }
   },
   "jobs": {

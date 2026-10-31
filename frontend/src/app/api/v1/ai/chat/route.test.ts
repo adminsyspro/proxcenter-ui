@@ -1,28 +1,45 @@
 /**
- * Tests for the non-streaming AI chat route, focused on the language the
- * model is asked to answer in (#686).
+ * Tests for the non-streaming AI chat route.
  *
- * The prompt body itself only exists in French and English, so a German,
- * Spanish, Korean or Chinese user reads an English prompt. What must follow
- * their UI language is the *answer*, and that is carried by an explicit
- * instruction rather than by t(): the reply is free text produced by a model,
- * not a translated string.
+ * Two concerns live here. The older one is the language the model is asked to
+ * answer in (#686): the prompt body only exists in French and English, so a
+ * German, Spanish, Korean or Chinese user reads an English prompt, and what must
+ * follow their UI language is the *answer*, carried by an explicit instruction
+ * rather than by t(). The newer one is the agentic wiring (#459): the route must
+ * attach the read-only tools, run whatever the model asks for, feed the results
+ * back and report what it consulted.
  *
- * Only the Ollama branch is driven here. It is the branch that inlines the
- * system prompt into the user message, so a single upstream body carries
- * everything these tests assert; OpenAI and Anthropic send the same
- * `systemPrompt` in their own envelope.
+ * The prompt is rendered for real (only its data sources are mocked) so the
+ * language assertions keep their end-to-end meaning. The tool registry is
+ * faked, because what this route owns is the wiring, not the tools themselves.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+import { OLLAMA_NUM_CTX } from '@/lib/ai/ollama'
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 
+// An admin principal: `collectInventorySnapshot` then skips the per-guest RBAC filter,
+// which is what the dedicated RBAC tests cover, not this file.
+const licence = vi.hoisted(() => ({ ai: true }))
+
+// The assistant is Enterprise (`ai_insights`): the route refuses it otherwise.
+vi.mock('@/lib/auth/requireEnterprise', () => ({
+  requireFeature: async () => (licence.ai ? null : new Response(JSON.stringify({ error: 'Feature not licensed' }), { status: 403 })),
+}))
+
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
-  PERMISSIONS: { CONNECTION_VIEW: 'connection.view' },
+  PERMISSIONS: { CONNECTION_VIEW: 'connection.view', VM_VIEW: 'vm.view' },
+  getRBACContext: async () => ({ isAdmin: true, tenantId: 'tenant-1', userId: 'u1', principal: { kind: 'user' } }),
+  getRbacInfraScope: async () => null,
+  filterVmsByPermission: async (_p: unknown, vms: unknown[]) => vms,
+  applyRbacInfraFilter: (cluster: unknown) => cluster,
+  filterCandidateConnections: (clusters: unknown) => clusters,
+  pruneEmptyConnections: (clusters: unknown) => clusters,
 }))
 
 let aiSettings: Record<string, unknown>
@@ -31,18 +48,50 @@ vi.mock('@/lib/db/settings', () => ({
   getSetting: async () => aiSettings,
 }))
 
-// No connection and no alert: the prompt still builds, and these tests are
-// about its language, not about the infrastructure section.
 vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: async () => 'tenant-1',
   getSessionPrisma: async () => ({
-    connection: { findMany: async () => [] },
     alert: { findMany: async () => [] },
   }),
 }))
 
-vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn() }))
-vi.mock('@/lib/crypto/secret', () => ({ decryptSecret: vi.fn() }))
+// One cluster, one host, one guest: enough for the prompt to build, little
+// enough that the assertions below stay about wiring and language.
+let inventory: any
+
+vi.mock('@/lib/inventory/fetchRawInventory', () => ({
+  getInventorySWR: async () => ({ raw: inventory, cached: false }),
+}))
+
+vi.mock('@/lib/tenant/infraScope', () => ({
+  getTenantInfrastructureScope: async () => ({ kind: 'provider' }),
+  maskingScope: () => null,
+}))
+
+vi.mock('@/lib/vdc/context', () => ({ getVdcContext: async () => null }))
+vi.mock('@/lib/vdc/scope', () => ({ applyVdcFilter: (cluster: unknown) => cluster }))
+
+const rankToolExecute = vi.fn(
+  async (_args: Record<string, unknown>, _ctx: unknown) => ({ ranking: [{ rank: 1, name: 'db-01', vcpus: 16 }] })
+)
+
+vi.mock('@/lib/tools/catalog', () => ({
+  READ_ONLY_TOOLS: [
+    {
+      name: 'rank_guest_hardware',
+      description: 'Rank guests by assigned hardware.',
+      parameters: { type: 'object', properties: { metric: { type: 'string', description: 'metric' } } },
+      execute: rankToolExecute,
+    },
+    {
+      name: 'get_ceph_status',
+      description: 'Ceph health and OSDs.',
+      parameters: { type: 'object', properties: {} },
+      execute: async () => ({ hasCeph: false }),
+    },
+  ],
+  buildToolContext: (snapshot: unknown, tenantId: string, locale: string) => ({ snapshot, tenantId, locale }),
+}))
 
 // The route prefers the `locale` field of the body and falls back to the
 // NEXT_LOCALE cookie middleware sets. `undefined` simulates no cookie.
@@ -70,17 +119,47 @@ const OLLAMA_SETTINGS = {
 }
 
 function ollamaReply(content = 'ok'): Response {
-  return new Response(JSON.stringify({ message: { content } }), {
+  return new Response(JSON.stringify({ message: { role: 'assistant', content } }), {
     status: 200,
     headers: { 'content-type': 'application/json' },
   })
 }
 
+function ollamaToolCall(name: string, args: Record<string, unknown> = {}): Response {
+  return new Response(
+    JSON.stringify({ message: { role: 'assistant', content: '', tool_calls: [{ function: { name, arguments: args } }] } }),
+    { status: 200, headers: { 'content-type': 'application/json' } }
+  )
+}
+
 beforeEach(() => {
+  licence.ai = true
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  rankToolExecute.mockClear()
   aiSettings = { ...OLLAMA_SETTINGS }
   cookieLocale = 'en'
   acceptLanguage = undefined
+  inventory = {
+    clusters: [{
+      id: 'conn-1',
+      name: 'prod',
+      type: 'pve',
+      isCluster: true,
+      status: 'online',
+      nodes: [{
+        node: 'pve1',
+        status: 'online',
+        maxcpu: 32,
+        mem: 64 * 1024 ** 3,
+        maxmem: 128 * 1024 ** 3,
+        guests: [{ vmid: 101, name: 'db-01', type: 'qemu', status: 'running', node: 'pve1', maxcpu: 16 }],
+      }],
+    }],
+    pbsServers: [],
+    externalHypervisors: [],
+    storages: [],
+    stats: {},
+  }
   fetchMock = vi.fn().mockResolvedValue(ollamaReply())
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -91,11 +170,17 @@ async function importHandler() {
   return mod.POST
 }
 
-/** The user message actually sent upstream, system prompt included. */
-function sentMessage(): string {
-  const body = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+/** The body of the nth upstream call. */
+function sentBody(call = 0): any {
+  return JSON.parse(fetchMock.mock.calls[call][1].body as string)
+}
 
-  return body.messages[body.messages.length - 1].content
+/** What the model reads for the question: the system message, then the last user turn. */
+function sentMessage(call = 0): string {
+  const body = sentBody(call)
+  const system = body.messages.find((m: any) => m.role === 'system')?.content ?? ''
+
+  return `${system}\n${body.messages[body.messages.length - 1].content}`
 }
 
 async function ask(body: Record<string, unknown> = {}) {
@@ -111,6 +196,15 @@ describe('POST /api/v1/ai/chat', () => {
     const denied = new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 })
 
     checkPermissionMock.mockResolvedValueOnce(denied as any)
+
+    const res = await ask()
+
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses without the Enterprise licence, before any upstream call', async () => {
+    licence.ai = false
 
     const res = await ask()
 
@@ -136,6 +230,146 @@ describe('POST /api/v1/ai/chat', () => {
     expect(res.status).toBeGreaterThanOrEqual(400)
     expect(JSON.stringify(body)).toContain('Unknown provider')
     expect(JSON.stringify(body)).not.toContain('inconnu')
+  })
+
+  it('rejects an unknown provider before gathering any infrastructure data', async () => {
+    aiSettings = { ...OLLAMA_SETTINGS, provider: 'mistral-cloud' }
+
+    await ask()
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  describe('agentic tools (#459)', () => {
+    it('widens the Ollama context window past the 4096 default that truncated the tool instructions', async () => {
+      await ask()
+
+      // Ollama drops everything after the first five tokens of an over-long
+      // request, which with this prompt is the paragraph saying tools exist.
+      expect(sentBody().options.num_ctx).toBe(OLLAMA_NUM_CTX)
+      expect(OLLAMA_NUM_CTX).toBeGreaterThanOrEqual(8192)
+    })
+
+    it('offers the read-only tools to the model', async () => {
+      await ask()
+
+      const body = sentBody()
+
+      expect(body.tools).toHaveLength(2)
+      expect(body.tools[0]).toMatchObject({
+        type: 'function',
+        function: { name: 'rank_guest_hardware' },
+      })
+      expect(body.tools[0].function.parameters).toMatchObject({ type: 'object' })
+    })
+
+    it('runs the tool the model asked for and sends the result back', async () => {
+      fetchMock
+        .mockResolvedValueOnce(ollamaToolCall('rank_guest_hardware', { metric: 'vcpus' }))
+        .mockResolvedValueOnce(ollamaReply('db-01 has the most vCPUs, 16.'))
+
+      const res = await ask()
+      const body = await readJson<any>(res)
+
+      expect(rankToolExecute).toHaveBeenCalledTimes(1)
+      expect(rankToolExecute.mock.calls[0][0]).toEqual({ metric: 'vcpus' })
+      expect(body.response).toContain('16')
+
+      // Second turn carries the assistant turn plus the tool result.
+      const second = sentBody(1)
+      const roles = second.messages.map((m: any) => m.role)
+
+      expect(roles).toContain('assistant')
+      expect(roles).toContain('tool')
+      expect(JSON.stringify(second.messages)).toContain('db-01')
+    })
+
+    it('reports what it consulted so a tool failure is distinguishable from a vague model', async () => {
+      fetchMock
+        .mockResolvedValueOnce(ollamaToolCall('rank_guest_hardware', { metric: 'vcpus' }))
+        .mockResolvedValueOnce(ollamaReply('done'))
+
+      const body = await readJson<any>(await ask())
+
+      expect(body.toolCalls).toHaveLength(1)
+      expect(body.toolCalls[0]).toMatchObject({ name: 'rank_guest_hardware', ok: true })
+      expect(body.toolsDisabled).toBe(false)
+      expect(body.budgetExhausted).toBe(false)
+    })
+
+    it('returns the charts the tool results support', async () => {
+      rankToolExecute.mockResolvedValueOnce({
+        metric: 'memory_usage',
+        unit: '%',
+        ranking: [
+          { rank: 1, name: 'db-01', memoryUsagePct: 93.4 },
+          { rank: 2, name: 'web-01', memoryUsagePct: 61 },
+        ],
+      } as any)
+      fetchMock
+        .mockResolvedValueOnce(ollamaToolCall('rank_guest_hardware', { metric: 'memory_usage' }))
+        .mockResolvedValueOnce(ollamaReply('db-01 uses the most RAM'))
+
+      const body = await readJson<any>(await ask())
+
+      expect(body.charts).toEqual([
+        {
+          kind: 'guest-ranking',
+          metric: 'memory_usage',
+          unit: '%',
+          series: ['memory_usage'],
+          rows: [
+            { label: 'db-01', values: [93.4] },
+            { label: 'web-01', values: [61] },
+          ],
+        },
+      ])
+    })
+
+    it('answers without tools when the model does not ask for any', async () => {
+      const body = await readJson<any>(await ask())
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(rankToolExecute).not.toHaveBeenCalled()
+      expect(body.toolCalls).toEqual([])
+      expect(body.charts).toEqual([])
+    })
+
+    it('falls back to a prompt-only turn when the model cannot do tools', async () => {
+      // Ollama answers a tools payload with this exact complaint for models
+      // that were not trained for it. The user must get an answer anyway.
+      fetchMock
+        .mockResolvedValueOnce(new Response('model does not support tools', { status: 400 }))
+        .mockResolvedValueOnce(ollamaReply('answered from the snapshot'))
+
+      const res = await ask()
+      const body = await readJson<any>(res)
+
+      expect(res.status).toBe(200)
+      expect(body.toolsDisabled).toBe(true)
+      expect(body.response).toContain('answered from the snapshot')
+      expect(sentBody(1).tools).toBeUndefined()
+    })
+
+    it('tells the model in the prompt that the tools exist and are read-only', async () => {
+      await ask()
+
+      const message = sentMessage()
+
+      expect(message).toContain('read-only tools')
+      expect(message).toContain('CALLING A TOOL IS NORMAL AND EXPECTED')
+      expect(message).toContain('You can read anything and CHANGE nothing')
+    })
+
+    it('carries the live infrastructure snapshot into the prompt', async () => {
+      await ask()
+
+      const message = sentMessage()
+
+      expect(message).toContain('pve1')
+      expect(message).toContain('db-01')
+      expect(message).toContain('1 host(s) (1 online)')
+    })
   })
 
   describe('answer language (#686)', () => {
@@ -169,15 +403,17 @@ describe('POST /api/v1/ai/chat', () => {
       expect(message).not.toContain('Respond in')
     })
 
-    it('repeats the instruction last, after the user question', async () => {
+    it('closes the system message with the language instruction and leaves the question untouched', async () => {
       await ask({ locale: 'de' })
 
-      const message = sentMessage()
+      const { messages } = sentBody(0)
 
-      // Ollama reads the system prompt inlined in the user message, and
-      // weighs the tail of it most, so the instruction closes the message.
-      expect(message.trimEnd().endsWith('This overrides any other language mentioned in this prompt.')).toBe(true)
-      expect(message.indexOf('How many VMs are running?')).toBeLessThan(message.lastIndexOf('written in German'))
+      // Measured on the lab (#459): with the instruction trailing the question,
+      // a follow-up like "Can you do that?" was refused 6 times of 8 instead
+      // of 8, and the German and Korean answers held either way (#686).
+      expect(messages[0].role).toBe('system')
+      expect(messages[0].content.trimEnd().endsWith('This overrides any other language mentioned in this prompt.')).toBe(true)
+      expect(messages.at(-1).content).toBe('How many VMs are running?')
     })
 
     it('falls back to the NEXT_LOCALE cookie when the body carries no locale', async () => {
@@ -236,7 +472,7 @@ describe('POST /api/v1/ai/chat', () => {
 
       expect(fetchMock.mock.calls[0][0]).toBe('https://llm.example.com/v1/chat/completions')
       expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-test')
-      expect(body).toEqual({ response: 'answer', provider: 'openai', model: 'gpt-4o-mini' })
+      expect(body).toMatchObject({ response: 'answer', provider: 'openai', model: 'gpt-4o-mini' })
     })
 
     it('keeps a base URL without trailing slash unchanged', async () => {

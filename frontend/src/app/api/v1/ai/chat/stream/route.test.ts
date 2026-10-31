@@ -12,12 +12,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import { callRoute } from '@/__tests__/setup/route-test'
+import { OLLAMA_NUM_CTX } from '@/lib/ai/ollama'
+import { createFrameDecoder, FRAME_MARK, type StreamFrame } from '@/lib/ai/streamFrames'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 
+const licence = vi.hoisted(() => ({ ai: true }))
+
+// The assistant is Enterprise (`ai_insights`): the route refuses it otherwise.
+vi.mock('@/lib/auth/requireEnterprise', () => ({
+  requireFeature: async () => (licence.ai ? null : new Response(JSON.stringify({ error: 'Feature not licensed' }), { status: 403 })),
+}))
+
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
-  PERMISSIONS: { CONNECTION_VIEW: 'connection.view' },
+  PERMISSIONS: { CONNECTION_VIEW: 'connection.view', VM_VIEW: 'vm.view' },
+  getRBACContext: async () => ({ isAdmin: true, tenantId: 'tenant-1', userId: 'u1', principal: { kind: 'user' } }),
+  getRbacInfraScope: async () => null,
+  filterVmsByPermission: async (_p: unknown, vms: unknown[]) => vms,
+  applyRbacInfraFilter: (cluster: unknown) => cluster,
+  filterCandidateConnections: (clusters: unknown) => clusters,
+  pruneEmptyConnections: (clusters: unknown) => clusters,
 }))
 
 let aiSettings: Record<string, unknown>
@@ -29,13 +44,39 @@ vi.mock('@/lib/db/settings', () => ({
 vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: async () => 'tenant-1',
   getSessionPrisma: async () => ({
-    connection: { findMany: async () => [] },
     alert: { findMany: async () => [] },
   }),
 }))
 
-vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn() }))
-vi.mock('@/lib/crypto/secret', () => ({ decryptSecret: vi.fn() }))
+let inventory: any
+
+vi.mock('@/lib/inventory/fetchRawInventory', () => ({
+  getInventorySWR: async () => ({ raw: inventory, cached: false }),
+}))
+
+vi.mock('@/lib/tenant/infraScope', () => ({
+  getTenantInfrastructureScope: async () => ({ kind: 'provider' }),
+  maskingScope: () => null,
+}))
+
+vi.mock('@/lib/vdc/context', () => ({ getVdcContext: async () => null }))
+vi.mock('@/lib/vdc/scope', () => ({ applyVdcFilter: (cluster: unknown) => cluster }))
+
+const rankToolExecute = vi.fn(
+  async (_args: Record<string, unknown>, _ctx: unknown) => ({ ranking: [{ rank: 1, name: 'db-01', vcpus: 16 }] })
+)
+
+vi.mock('@/lib/tools/catalog', () => ({
+  READ_ONLY_TOOLS: [
+    {
+      name: 'rank_guest_hardware',
+      description: 'Rank guests by assigned hardware.',
+      parameters: { type: 'object', properties: { metric: { type: 'string', description: 'metric' } } },
+      execute: rankToolExecute,
+    },
+  ],
+  buildToolContext: (snapshot: unknown, tenantId: string, locale: string) => ({ snapshot, tenantId, locale }),
+}))
 
 let cookieLocale: string | undefined
 let acceptLanguage: string | undefined
@@ -76,11 +117,74 @@ function ollamaStream(chunks: string[]): Response {
   return new Response(body, { status: 200 })
 }
 
+/**
+ * A streaming reply cut at arbitrary byte offsets, NOT on line boundaries.
+ *
+ * This is what the network actually does, and the reader has to buffer across
+ * reads or it silently drops every JSON object that straddles two chunks.
+ */
+function ollamaStreamSplitAt(chunks: string[], pieces: number): Response {
+  const ndjson = chunks.map(c => `${JSON.stringify({ message: { content: c } })}\n`).join('')
+  const size = Math.ceil(ndjson.length / pieces)
+
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const encoder = new TextEncoder()
+
+      for (let i = 0; i < ndjson.length; i += size) {
+        controller.enqueue(encoder.encode(ndjson.slice(i, i + size)))
+      }
+      controller.close()
+    },
+  })
+
+  return new Response(body, { status: 200 })
+}
+
+/** A streamed turn in which the model asks for a tool instead of answering. */
+function ollamaStreamToolCall(name: string, args: Record<string, unknown> = {}): Response {
+  const line = JSON.stringify({
+    message: { role: 'assistant', content: '', tool_calls: [{ function: { name, arguments: args } }] },
+  })
+
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(`${line}\n`))
+      controller.close()
+    },
+  })
+
+  return new Response(body, { status: 200 })
+}
+
 beforeEach(() => {
+  licence.ai = true
   checkPermissionMock.mockReset().mockResolvedValue(null)
+  rankToolExecute.mockClear()
   aiSettings = { ...OLLAMA_SETTINGS }
   cookieLocale = 'en'
   acceptLanguage = undefined
+  inventory = {
+    clusters: [{
+      id: 'conn-1',
+      name: 'prod',
+      type: 'pve',
+      isCluster: true,
+      status: 'online',
+      nodes: [{
+        node: 'pve1',
+        status: 'online',
+        maxcpu: 32,
+        mem: 64 * 1024 ** 3,
+        maxmem: 128 * 1024 ** 3,
+        guests: [{ vmid: 101, name: 'db-01', type: 'qemu', status: 'running', node: 'pve1', maxcpu: 16 }],
+      }],
+    }],
+    pbsServers: [],
+    externalHypervisors: [],
+    storages: [],
+    stats: {},
+  }
   fetchMock = vi.fn().mockResolvedValue(ollamaStream(['ok']))
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -91,10 +195,17 @@ async function importHandler() {
   return mod.POST
 }
 
+/** The body of the first upstream call. */
+function sentBody(): any {
+  return JSON.parse(fetchMock.mock.calls[0][1].body as string)
+}
+
+/** What the model reads for the question: the system message, then the last user turn. */
 function sentMessage(): string {
   const body = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+  const system = body.messages.find((m: any) => m.role === 'system')?.content ?? ''
 
-  return body.messages[body.messages.length - 1].content
+  return `${system}\n${body.messages[body.messages.length - 1].content}`
 }
 
 async function ask(body: Record<string, unknown> = {}) {
@@ -105,11 +216,34 @@ async function ask(body: Record<string, unknown> = {}) {
   })
 }
 
+/**
+ * Split the response into the prose the drawer prints and the activity frames
+ * it decodes (#459). `raw` is kept so a test can check where a frame sits
+ * relative to the text.
+ */
+async function decodeBody(res: Response): Promise<{ raw: string; text: string; frames: StreamFrame[] }> {
+  const raw = await res.text()
+  const decoder = createFrameDecoder()
+  const out = decoder.push(raw)
+  const tail = decoder.flush()
+
+  return { raw, text: out.text + tail.text, frames: [...out.frames, ...tail.frames] }
+}
+
 describe('POST /api/v1/ai/chat/stream', () => {
   it('honours an RBAC denial from checkPermission', async () => {
     const denied = new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 })
 
     checkPermissionMock.mockResolvedValueOnce(denied as any)
+
+    const res = await ask()
+
+    expect(res.status).toBe(403)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses without the Enterprise licence, before any upstream call', async () => {
+    licence.ai = false
 
     const res = await ask()
 
@@ -139,6 +273,292 @@ describe('POST /api/v1/ai/chat/stream', () => {
     await ask()
 
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).stream).toBe(true)
+  })
+
+  it('asks Ollama for the shared context window size', async () => {
+    // Ollama defaults to a window far too small for the system prompt plus a
+    // tool result; the route sends `options: ollamaOptions()` and this pins it.
+    await ask()
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+
+    expect(body.options.num_ctx).toBe(OLLAMA_NUM_CTX)
+  })
+
+  it('reassembles an NDJSON object split across two network reads', async () => {
+    // The previous reader split each chunk on newlines in isolation, so a JSON
+    // object straddling two reads was dropped and its tokens never reached the
+    // browser. Cutting the payload into many small pieces reproduces that.
+    fetchMock.mockResolvedValueOnce(ollamaStreamSplitAt(['pve', '1 ', 'is busiest'], 9))
+
+    const res = await ask()
+
+    expect(await res.text()).toBe('pve1 is busiest')
+  })
+
+  it('rejects a non-Ollama provider before gathering any infrastructure data', async () => {
+    aiSettings = { ...OLLAMA_SETTINGS, provider: 'openai' }
+
+    const res = await ask()
+
+    expect(res.status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  describe('agentic tools (#459)', () => {
+    it('offers the read-only tools on the streamed turn', async () => {
+      await ask()
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+
+      expect(body.tools).toHaveLength(1)
+      expect(body.tools[0]).toMatchObject({ type: 'function', function: { name: 'rank_guest_hardware' } })
+    })
+
+    it('sends the charts the tool results support after the trace, never to the model', async () => {
+      rankToolExecute.mockResolvedValueOnce({
+        metric: 'vcpus',
+        unit: 'vCPU',
+        ranking: [
+          { rank: 1, name: 'db-01', node: 'pve1', cluster: 'PVE-PROD', vcpus: 16 },
+          { rank: 2, name: 'web-01', node: 'pve2', cluster: 'PVE-PROD', vcpus: 8 },
+        ],
+      } as any)
+      fetchMock
+        .mockResolvedValueOnce(ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' }))
+        .mockResolvedValueOnce(ollamaStream(['db-01 has 16 vCPUs']))
+
+      const { frames } = await decodeBody(await ask())
+
+      expect(frames.map(f => f.type)).toEqual(['tool', 'trace', 'charts'])
+      expect(frames.at(-1)).toEqual({
+        type: 'charts',
+        charts: [
+          {
+            kind: 'guest-ranking',
+            metric: 'vcpus',
+            unit: 'vCPU',
+            series: ['vcpus'],
+            rows: [
+              { label: 'db-01', detail: 'pve1 · PVE-PROD', values: [16] },
+              { label: 'web-01', detail: 'pve2 · PVE-PROD', values: [8] },
+            ],
+          },
+        ],
+      })
+
+      // The model reads the tool result, not the chart derived from it.
+      expect(JSON.stringify(JSON.parse(fetchMock.mock.calls[1][1].body as string).messages)).not.toContain('guest-ranking')
+    })
+
+    it('runs the requested tool and streams the answer of the next turn', async () => {
+      fetchMock
+        .mockResolvedValueOnce(ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' }))
+        .mockResolvedValueOnce(ollamaStream(['db-01', ' has 16 vCPUs']))
+
+      const res = await ask()
+      const { raw, text, frames } = await decodeBody(res)
+
+      expect(text).toBe('db-01 has 16 vCPUs')
+      expect(rankToolExecute).toHaveBeenCalledTimes(1)
+      expect(rankToolExecute.mock.calls[0][0]).toEqual({ metric: 'vcpus' })
+
+      // The drawer learns what is being looked up BEFORE any answer text, and
+      // what was consulted once the answer is complete (#459).
+      expect(frames).toEqual([
+        { type: 'tool', names: ['rank_guest_hardware'] },
+        { type: 'trace', calls: [{ name: 'rank_guest_hardware', ok: true }] },
+      ])
+      expect(raw.indexOf('"tool"')).toBeLessThan(raw.indexOf('db-01'))
+      expect(raw.indexOf('db-01')).toBeLessThan(raw.indexOf('"trace"'))
+
+      // The follow-up turn must carry the assistant turn and the tool result.
+      const second = JSON.parse(fetchMock.mock.calls[1][1].body as string)
+      const roles = second.messages.map((m: any) => m.role)
+
+      expect(roles).toContain('assistant')
+      expect(roles).toContain('tool')
+      expect(JSON.stringify(second.messages)).toContain('db-01')
+    })
+
+    /*
+     * The leak seen in recette on llama3.1:8b. Ollama only lifts a call out of
+     * the output when the call IS the whole output, so a model that writes
+     * "Voici la réponse :" before its `{"name": ..., "parameters": {...}}` has
+     * the raw JSON handed back as ordinary content. Relayed token by token, it
+     * printed verbatim in the chat window and there was no taking it back.
+     */
+    it('never prints a tool call the model wrote as prose', async () => {
+      const leak = 'Voici la réponse :\n\n{"name": "rank_guest_hardware", "parameters": {"metric": "vcpus"}}'
+
+      fetchMock
+        .mockResolvedValueOnce(ollamaStream([leak]))
+        .mockResolvedValueOnce(ollamaStream(['db-01, avec 16 vCPU.']))
+
+      const res = await ask()
+      const { text: body } = await decodeBody(res)
+
+      expect(body).toBe('db-01, avec 16 vCPU.')
+      expect(body).not.toContain('"name"')
+      expect(body).not.toContain('parameters')
+      expect(body).not.toContain('Voici la réponse')
+
+      // Recovered as a real call, not merely swallowed.
+      expect(rankToolExecute).toHaveBeenCalledTimes(1)
+      expect(rankToolExecute.mock.calls[0][0]).toEqual({ metric: 'vcpus' })
+    })
+
+    it('holds a tool-bearing turn back, and relays the closing turn live', async () => {
+      // A turn that carries tool definitions cannot be relayed as it arrives,
+      // because it might still turn out to be a text-form call.
+      fetchMock.mockResolvedValueOnce(ollamaStream(['Vous avez ', '12 invités.']))
+
+      const res = await ask()
+
+      expect(await res.text()).toBe('Vous avez 12 invités.')
+      // One call only: a prose turn must not cost a second generation.
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('leaves JSON that is not a call to one of our tools alone', async () => {
+      // A model quoting unrelated JSON must not be mistaken for a tool call.
+      const quoted = 'Exemple de configuration : {"name": "vmbr0", "parameters": {"mtu": 9000}}'
+
+      fetchMock.mockResolvedValueOnce(ollamaStream([quoted]))
+
+      const res = await ask()
+
+      expect(await res.text()).toBe(quoted)
+      expect(rankToolExecute).not.toHaveBeenCalled()
+    })
+
+    it('stops asking for tools once the round budget is spent', async () => {
+      // A model stuck in a tool loop must still stop, and the closing turn must
+      // withhold the tools so it answers from what it already gathered.
+      fetchMock.mockImplementation(async (_url: string, init: any) => {
+        const body = JSON.parse(init.body as string)
+
+        return body.tools
+          ? ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' })
+          : ollamaStream(['best effort answer'])
+      })
+
+      const res = await ask()
+      const { text, frames } = await decodeBody(res)
+
+      expect(text).toBe('best effort answer')
+
+      const lastBody = JSON.parse(fetchMock.mock.calls.at(-1)![1].body as string)
+
+      expect(lastBody.tools).toBeUndefined()
+
+      // One `tool` frame per round, then a single trace covering every round.
+      const toolFrames = frames.filter(f => f.type === 'tool')
+      const traceFrames = frames.filter(f => f.type === 'trace')
+
+      expect(toolFrames.length).toBe(rankToolExecute.mock.calls.length)
+      expect(traceFrames).toHaveLength(1)
+      expect(traceFrames[0]).toEqual({
+        type: 'trace',
+        calls: rankToolExecute.mock.calls.map(() => ({ name: 'rank_guest_hardware', ok: true })),
+      })
+    })
+
+    it('never relays a closing turn that is still a call written as text', async () => {
+      // Out of rounds, llama3.1:8b printed `{"name": "list_ceph_osds", ...}` to
+      // the user. The closing turn is buffered and a call becomes a sentence.
+      fetchMock.mockImplementation(async (_url: string, init: any) => {
+        const body = JSON.parse(init.body as string)
+
+        return body.tools
+          ? ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' })
+          : ollamaStream(['Let me try again: {"name": "rank_guest_hardware", "parameters": {"metric": "memory"}}'])
+      })
+
+      const res = await ask()
+      const { text } = await decodeBody(res)
+
+      expect(text).not.toContain('{')
+      expect(text).toContain('I could not conclude')
+    })
+
+    it('emits no frame at all on a plain answer, so the stream stays as it was', async () => {
+      fetchMock.mockResolvedValueOnce(ollamaStream(['pve', '1 is busiest']))
+
+      const res = await ask()
+      const raw = await res.text()
+
+      expect(raw).toBe('pve1 is busiest')
+      expect(raw).not.toContain(FRAME_MARK)
+    })
+
+    // qwen3.5:9b wrote its answer into Ollama's `thinking` channel and left
+    // `content` empty: the drawer showed a blank bubble.
+    describe('an empty turn', () => {
+      function thinkingOnly(): Response {
+        return new Response(`${JSON.stringify({ message: { content: '', thinking: 'The biggest is pbs-s3manu.' } })}\n`, { status: 200 })
+      }
+
+      it('is replayed once, and the second answer is the one streamed', async () => {
+        fetchMock
+          .mockResolvedValueOnce(thinkingOnly())
+          .mockResolvedValueOnce(ollamaStream(['pbs-s3manu is the biggest storage.']))
+
+        const res = await ask()
+
+        expect(await res.text()).toBe('pbs-s3manu is the biggest storage.')
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+
+        const [first, second] = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body as string))
+
+        expect(second.messages).toEqual(first.messages)
+        // Still the tool-bearing round, not the closing one.
+        expect(second.tools).toBeDefined()
+      })
+
+      it('says so rather than leave the bubble blank when the replay is empty too', async () => {
+        fetchMock.mockResolvedValueOnce(thinkingOnly()).mockResolvedValueOnce(thinkingOnly())
+
+        const res = await ask()
+
+        expect(await res.text()).toBe('The model returned no answer. Ask the question again.')
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+      })
+    })
+
+    it('reports a failed tool as consulted but not ok', async () => {
+      rankToolExecute.mockRejectedValueOnce(new Error('proxmox unreachable'))
+      fetchMock
+        .mockResolvedValueOnce(ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' }))
+        .mockResolvedValueOnce(ollamaStream(['I could not rank the guests.']))
+
+      const res = await ask()
+      const { text, frames } = await decodeBody(res)
+
+      expect(text).toBe('I could not rank the guests.')
+      expect(frames.at(-1)).toEqual({ type: 'trace', calls: [{ name: 'rank_guest_hardware', ok: false }] })
+    })
+  })
+
+  describe('conversation thread (#459)', () => {
+    it('sends the prompt as a system message and the follow-up right after the answer it refers to', async () => {
+      // With the prompt inlined in the last turn, "Can you do that?" lost its
+      // referent and llama3.1:8b invented OSD latencies instead of refusing.
+      await ask({
+        messages: [
+          { role: 'user', content: 'Are there any improvements to Ceph?' },
+          { role: 'assistant', content: 'Remove the noout flag.' },
+          { role: 'user', content: 'Can you do that?' },
+        ],
+      })
+
+      const { messages } = JSON.parse(fetchMock.mock.calls[0][1].body as string)
+
+      expect(messages.map((m: any) => m.role)).toEqual(['system', 'user', 'assistant', 'user'])
+      expect(messages[0].content).toContain('You can read anything and CHANGE nothing')
+      expect(messages[2].content).toBe('Remove the noout flag.')
+      expect(messages[3].content).toBe('Can you do that?')
+    })
   })
 
   describe('answer language (#686)', () => {
@@ -171,13 +591,17 @@ describe('POST /api/v1/ai/chat/stream', () => {
       expect(message).not.toContain('Respond in')
     })
 
-    it('closes the message with the language instruction', async () => {
+    it('closes the system message with the language instruction and leaves the question untouched', async () => {
       await ask({ locale: 'de' })
 
-      const message = sentMessage()
+      const { messages } = sentBody()
 
-      expect(message.trimEnd().endsWith('This overrides any other language mentioned in this prompt.')).toBe(true)
-      expect(message.indexOf('Which node is the busiest?')).toBeLessThan(message.lastIndexOf('written in German'))
+      // Measured on the lab (#459): with the instruction trailing the question,
+      // a follow-up like "Can you do that?" was refused 6 times of 8 instead
+      // of 8, and the German and Korean answers held either way (#686).
+      expect(messages[0].role).toBe('system')
+      expect(messages[0].content.trimEnd().endsWith('This overrides any other language mentioned in this prompt.')).toBe(true)
+      expect(messages.at(-1).content).toBe('Which node is the busiest?')
     })
 
     it('falls back to the NEXT_LOCALE cookie when the body carries no locale', async () => {

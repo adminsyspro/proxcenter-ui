@@ -110,3 +110,17 @@ export async function getRequestLocale(): Promise<Locale> {
     return defaultLocale
   }
 }
+
+/**
+ * The reader's IANA time zone as the widget sends it, or undefined when it is
+ * not one. Untrusted input: only a name the runtime itself knows survives.
+ */
+export function normalizeTimeZone(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length > 64 || !/^[A-Za-z0-9_+\-/]+$/.test(value)) return undefined
+
+  try {
+    return new Intl.DateTimeFormat('en', { timeZone: value }).resolvedOptions().timeZone
+  } catch {
+    return undefined
+  }
+}

@@ -26,6 +26,7 @@ import {
   MenuItem,
   Select,
   FormControl,
+  FormHelperText,
   InputLabel,
   Switch,
   Tab,
@@ -53,6 +54,7 @@ import LicenseTab from '@/components/settings/license/LicenseTab'
 import SettingsNav from '@/components/settings/SettingsNav'
 import { useConnectionsManagement } from '@/hooks/useConnectionsManagement'
 import { useAISettings } from '@/hooks/useAISettings'
+import { isQualifiedOllamaModel, QUALIFIED_OLLAMA_MODELS } from '@/lib/ai/qualifiedModels'
 import { useGreenSettings } from '@/hooks/useGreenSettings'
 
 // Import dynamique pour éviter les erreurs SSR
@@ -1820,6 +1822,7 @@ function AITab() {
     setTestResult,
     saving,
     availableModels,
+    modelToolCalling,
     loadingModels,
     saveSettings: hookSaveSettings,
     testConnection: hookTestConnection,
@@ -1836,11 +1839,44 @@ function AITab() {
     }
   }
 
+  // #459: what the probe measured on the Ollama server, one line per finding.
+  const preflightLines = preflight => {
+    if (!preflight) return []
+
+    const lines = []
+    const gpu = preflight.gpuShare === null ? null : Math.round(preflight.gpuShare * 100)
+    const speed = preflight.tokensPerSecond
+
+    if (gpu !== null && speed !== null) lines.push(t('settings.preflightMeasured', { gpu, speed }))
+    if (preflight.issues.includes('cpu-offload')) lines.push(t('settings.preflightCpuOffload', { gpu }))
+    if (preflight.issues.includes('slow')) lines.push(t('settings.preflightSlow', { speed }))
+    if (preflight.issues.includes('not-qualified')) lines.push(t('settings.preflightNotQualified'))
+
+    if (preflight.issues.length > 0) {
+      lines.push(preflight.fits.length > 0
+        ? t('settings.preflightFits', { models: preflight.fits.join(', ') })
+        : t('settings.preflightNoneFits'))
+    }
+
+    return lines
+  }
+
   const testConnection = async () => {
     const result = await hookTestConnection()
 
     if (result.success) {
-      setTestResult({ type: 'success', message: `${t('settings.connectionOk')} "${result.response?.substring(0, 100)}..."` })
+      const message = `${t('settings.connectionOk')} "${result.response?.substring(0, 100)}..."`
+      const details = preflightLines(result.preflight)
+
+      // #459: connected, but the model cannot call tools, so the assistant will
+      // only see the live snapshot. Worth a warning, not an error: it still works.
+      if (result.toolCalling === false) {
+        setTestResult({ type: 'warning', message: `${message} ${t('settings.testNoToolCalling')}`, details })
+      } else {
+        setTestResult({ type: result.preflight?.issues.length > 0 ? 'warning' : 'success', message, details })
+      }
+    } else if (result.code === 'probe-timeout') {
+      setTestResult({ type: 'warning', message: t('settings.preflightTimeout') })
     } else {
       setTestResult({ type: 'error', message: result.error || t('settings.connectionError') })
     }
@@ -1978,15 +2014,17 @@ function AITab() {
                     >
                       {availableModels.length > 0
                         ? availableModels.map(m => (
-                          <MenuItem key={m} value={m}>{m}</MenuItem>
+                          <MenuItem key={m} value={m}>
+                            {m}
+                            {isQualifiedOllamaModel(m) ? ` (${t('settings.recommended')})` : ''}
+                            {modelToolCalling[m] === false ? ` (${t('settings.modelNoToolCalling')})` : ''}
+                          </MenuItem>
                         ))
-                        : [
-                          <MenuItem key='mistral:7b' value='mistral:7b'>mistral:7b ({t('settings.recommended')})</MenuItem>,
-                          <MenuItem key='llama3.1:8b' value='llama3.1:8b'>llama3.1:8b</MenuItem>,
-                          <MenuItem key='qwen2.5:7b' value='qwen2.5:7b'>qwen2.5:7b</MenuItem>,
-                          <MenuItem key='phi3:14b' value='phi3:14b'>phi3:14b</MenuItem>,
-                        ]}
+                        : QUALIFIED_OLLAMA_MODELS.map(q => (
+                          <MenuItem key={q.model} value={q.model}>{q.model} ({t('settings.recommended')})</MenuItem>
+                        ))}
                     </Select>
+                    <FormHelperText>{t('settings.ollamaToolModelHelp')}</FormHelperText>
                   </FormControl>
 
                   {loadingModels && <LinearProgress sx={{ mb: 2 }} />}
@@ -2147,6 +2185,13 @@ function AITab() {
               {testResult && (
                 <Alert severity={testResult.type} sx={{ mt: 2 }}>
                   {testResult.message}
+                  {testResult.details?.length > 0 && (
+                    <Box component='ul' sx={{ m: 0, mt: 1, pl: 2.5 }}>
+                      {testResult.details.map(line => (
+                        <Typography key={line} component='li' variant='body2'>{line}</Typography>
+                      ))}
+                    </Box>
+                  )}
                 </Alert>
               )}
             </CardContent>

@@ -112,7 +112,7 @@ export default function GlobalHealthScore({
 
   if (loading) {
     return (
-      <Card sx={{ background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`, border: '1px solid', borderColor: 'divider' }}>
+      <Card sx={{ height: '100%', background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`, border: '1px solid', borderColor: 'divider' }}>
         <CardContent sx={{ p: 3 }}>
           <Stack direction="row" spacing={4} alignItems="center">
             <Skeleton variant="circular" width={140} height={140} />
@@ -130,6 +130,10 @@ export default function GlobalHealthScore({
 
   return (
     <Card sx={{
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
       background: `linear-gradient(135deg, ${alpha(color, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 50%, ${alpha(color, 0.03)} 100%)`,
       border: '1px solid',
       borderColor: alpha(color, 0.3),

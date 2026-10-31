@@ -6,10 +6,28 @@ import { formatBytes } from '@/utils/format'
 
 import { getMetricIcon } from '../helpers'
 
+const GRADIENT_STOPS: Array<[number, [number, number, number]]> = [[0, [0x22, 0xc5, 0x5e]], [50, [0xea, 0xb3, 0x08]], [100, [0xef, 0x44, 0x44]]]
 const GRADIENT_BAR = 'linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%)'
-const GRADIENT_GLASS = 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 45%, transparent 50%)'
 
-function gradientSx(pct: number) {
+/** The colour of the usage gradient at `pct`, for a gauge that cannot paint the gradient itself (an arc). */
+export function gradientColorAt(pct: number): string {
+  const p = Math.min(100, Math.max(0, pct))
+  const upper = GRADIENT_STOPS.findIndex(([at]) => at >= p)
+  if (upper <= 0) return `rgb(${GRADIENT_STOPS[0][1].join(', ')})`
+
+  const [fromAt, from] = GRADIENT_STOPS[upper - 1]
+  const [toAt, to] = GRADIENT_STOPS[upper]
+  const k = (p - fromAt) / (toAt - fromAt)
+
+  return `rgb(${from.map((c, i) => Math.round(c + (to[i] - c) * k)).join(', ')})`
+}
+export const GRADIENT_GLASS = 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 45%, transparent 50%)'
+
+/**
+ * The green to red gradient of every usage gauge, laid over the whole 0 to 100
+ * axis: a fill of `pct` shows only its start, so the colour says how far it went.
+ */
+export function gradientSx(pct: number) {
   return {
     background: GRADIENT_BAR,
     backgroundSize: pct > 0 ? `${(100 / pct) * 100}% 100%` : '100% 100%',

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 
 // RBAC allows by default; the route gates on VM_MIGRATE like its preflight sibling.
 vi.mock("@/lib/rbac", () => ({
+  getCurrentRbacInfraScope: vi.fn(async () => null),
   checkPermission: vi.fn(async () => null),
   PERMISSIONS: { VM_MIGRATE: "vm.migrate" },
 }))

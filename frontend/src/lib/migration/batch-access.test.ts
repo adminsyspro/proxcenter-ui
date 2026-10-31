@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/lib/rbac', () => ({ checkPermission: vi.fn(), PERMISSIONS: {} }))
+vi.mock('@/lib/rbac', () => ({ getCurrentRbacInfraScope: vi.fn(async () => null), checkPermission: vi.fn(), PERMISSIONS: {} }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: vi.fn(), getSessionPrisma: vi.fn() }))
 vi.mock('@/lib/tenant/infraScope', () => ({ canMigrateConnections: vi.fn(), getTenantInfrastructureScope: vi.fn() }))
 

@@ -14,7 +14,7 @@ vi.mock('@/lib/orchestrator', () => ({
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn<(...args: any[]) => Promise<any>>(),
-  PERMISSIONS: { CONNECTION_MANAGE: 'connection.manage' },
+  PERMISSIONS: { CONNECTION_MANAGE: 'connection.manage', CONNECTION_VIEW: 'connection.view' },
 }))
 
 vi.mock('@/lib/ssh/exec', () => ({
@@ -57,7 +57,12 @@ beforeEach(() => {
   checkPermissionMock.mockResolvedValue(null)
   getCurrentTenantIdMock.mockResolvedValue('tenant-1')
   getSessionPrismaMock.mockResolvedValue({
-    connection: { findMany: vi.fn().mockResolvedValue([{ id: 'conn-1' }]) },
+    connection: {
+      findMany: vi.fn().mockResolvedValue([{
+        id: 'conn-1',
+        hosts: [{ node: 'pve1', ip: '10.0.0.1', enabled: true }, { node: 'pve2', ip: '10.0.0.2', enabled: true }],
+      }]),
+    },
   })
   executeSSHMock.mockResolvedValue(ONE_BRIDGE_OK)
 })
@@ -436,5 +441,79 @@ describe('GET /sflow/agents: node probing and port map push', () => {
     const portmapCalls = orchestratorFetchMock.mock.calls.filter((c: any[]) => c[0] === '/sflow/portmap')
     expect(portmapCalls).toHaveLength(2)
     expect(portmapCalls[0][1].body.guest_macs).toEqual({})
+  })
+})
+
+// roadmap#184: the handler checks only say the caller holds the right
+// SOMEWHERE; every connection read or configured is checked on its own.
+describe('/sflow/agents with a connection-scoped grant', () => {
+  const TWO_CONNECTIONS = [
+    { id: 'conn-1', name: 'A', sshKeyEnc: 'enc', hosts: [{ node: 'pve1', ip: '10.0.0.1', enabled: true }] },
+    { id: 'conn-2', name: 'B', sshKeyEnc: 'enc', hosts: [{ node: 'pve9', ip: '10.0.0.9', enabled: true }] },
+  ]
+  const onlyConn1 = async (_perm: string, type?: string, id?: string) =>
+    type === 'connection' && id !== 'conn-1' ? new Response(null, { status: 403 }) : null
+
+  beforeEach(() => {
+    // Own tenant id: the GET cache is per tenant and the other suites fill it.
+    getCurrentTenantIdMock.mockResolvedValue('tenant-scoped')
+    getSessionPrismaMock.mockResolvedValue({ connection: { findMany: vi.fn().mockResolvedValue(TWO_CONNECTIONS) } })
+    checkPermissionMock.mockImplementation(onlyConn1)
+  })
+
+  it('refuses to configure a connection the caller does not manage, without SSH', async () => {
+    const res = await callRoute(POST as any, {
+      method: 'POST',
+      body: { nodes: [{ node: 'pve9', ip: '10.0.0.9', connectionId: 'conn-2' }], collectorTarget: '10.0.0.5:6343' },
+    })
+
+    expect(res.status).toBe(502)
+    expect((await readJson<any>(res)).results[0]).toMatchObject({ success: false, error: 'Connection not found' })
+    expect(executeSSHMock).not.toHaveBeenCalled()
+  })
+
+  it('never opens SSH to an address the connection does not list', async () => {
+    const res = await callRoute(POST as any, {
+      method: 'POST',
+      body: { nodes: [{ node: 'ghost', ip: '203.0.113.7', connectionId: 'conn-1' }], collectorTarget: '10.0.0.5:6343' },
+    })
+
+    expect(res.status).toBe(502)
+    expect((await readJson<any>(res)).results[0]).toMatchObject({ success: false, error: 'Unknown node for this connection' })
+    expect(executeSSHMock).not.toHaveBeenCalled()
+  })
+
+  it('reaches a listed node on its own address, never the posted one', async () => {
+    const res = await callRoute(POST as any, {
+      method: 'POST',
+      body: { nodes: [{ node: 'pve1', ip: '203.0.113.7', connectionId: 'conn-1' }], collectorTarget: '10.0.0.5:6343' },
+    })
+
+    expect(res.status).toBe(200)
+    const [connId, target, cmd] = executeSSHMock.mock.calls[0]
+    expect(connId).toBe('conn-1')
+    expect(JSON.stringify(target)).toContain('10.0.0.1')
+    expect(JSON.stringify(target)).not.toContain('203.0.113.7')
+    expect(cmd).toContain(`agent='"10.0.0.1"'`)
+  })
+
+  it('does not store the tenant-wide config the reconciler re-applies everywhere', async () => {
+    await callRoute(POST as any, {
+      method: 'POST',
+      body: { nodes: [{ node: 'pve1', ip: '10.0.0.1', connectionId: 'conn-1' }], collectorTarget: '10.0.0.5:6343' },
+    })
+
+    expect(saveDesiredSFlowConfigMock).not.toHaveBeenCalled()
+  })
+
+  it('lists the agents of the granted connection only', async () => {
+    executeSSHMock.mockResolvedValue({ success: false, output: '' })
+    orchestratorFetchMock.mockResolvedValue({})
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const body = await readJson<any>(res)
+
+    expect(res.status).toBe(200)
+    expect(body.data.map((n: any) => n.connectionId)).toEqual(['conn-1'])
   })
 })

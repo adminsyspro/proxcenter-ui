@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { migrateScope, scopedJobWhere } from "@/lib/migration/authorize"
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { getTenantInfrastructureScope, inventoryConnectionPlan } from "@/lib/tenant/infraScope"
 import { aggregateMigrationStats, type MigrationStatsRow } from "@/lib/migration/migration-stats"
@@ -31,7 +32,7 @@ export async function GET() {
 
     const rows = await prisma.migrationJob.groupBy({
       by: ["sourceConnectionId", "status"],
-      where: { sourceConnectionId: { in: sources.map(s => s.id) } },
+      where: scopedJobWhere({ sourceConnectionId: { in: sources.map(s => s.id) } }, await migrateScope()),
       _count: { _all: true },
       _sum: { bytesTransferred: true },
     })

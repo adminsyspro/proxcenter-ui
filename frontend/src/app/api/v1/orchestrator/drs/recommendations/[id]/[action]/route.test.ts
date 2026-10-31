@@ -16,8 +16,8 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: any[]) => h.checkPermission(...a),
   PERMISSIONS: { VM_MIGRATE: 'vm.migrate', AUTOMATION_MANAGE: 'automation.manage' },
 }))
-vi.mock('@/lib/tenant', () => ({
-  getTenantConnectionIds: async () => new Set(['c1']),
+vi.mock('@/lib/orchestrator/drsRuleScope', () => ({
+  drsConnectionIds: async () => new Set(['c1']),
 }))
 vi.mock('@/lib/orchestrator/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/orchestrator/client')>()

@@ -5,6 +5,7 @@ import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { getSetting, setSetting } from '@/lib/db/settings'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { requireProviderAdmin } from '@/lib/tenant/providerGuard'
 import { defaultDRSSettings } from '@/components/automation/drs/drsSettings'
 import { withAudit } from '@/lib/audit/withAudit'
 
@@ -80,7 +81,8 @@ export async function GET() {
 // PUT /api/v1/orchestrator/drs/settings
 async function handlePut(request: NextRequest) {
   try {
-    const denied = await checkPermission(PERMISSIONS.AUTOMATION_MANAGE)
+    // The orchestrator's DRS settings drive every cluster of the fleet.
+    const denied = await requireProviderAdmin(PERMISSIONS.AUTOMATION_MANAGE)
     if (denied) return denied
 
     const client = getOrchestratorClient()

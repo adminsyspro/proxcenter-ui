@@ -27,6 +27,17 @@ vi.mock('@/lib/ssh/host-key-store', () => ({
   listPinnedHostKeys: () => listPinnedHostKeysMock(),
 }))
 
+const { hostKeyScopeMock } = vi.hoisted(() => ({
+  hostKeyScopeMock: vi.fn<(...a: any[]) => Promise<{ all: boolean; hosts: Set<string> }>>(),
+}))
+
+// Which hosts a caller reaches is hostKeyAccess.test.ts's business; here the
+// route only has to ask it and honour the answer.
+vi.mock('@/lib/ssh/hostKeyAccess', () => ({
+  hostKeyScope: (...a: unknown[]) => hostKeyScopeMock(...a),
+  hostKeyInScope: (scope: { all: boolean; hosts: Set<string> }, host: string) => scope.all || scope.hosts.has(host),
+}))
+
 import { GET } from './route'
 
 /** Frontend store row shape: host carries ":port", timestamps are Dates. */
@@ -40,6 +51,7 @@ function frontendRow(host: string, keyType: string, firstSeen: string) {
 }
 
 beforeEach(() => {
+  hostKeyScopeMock.mockReset().mockResolvedValue({ all: true, hosts: new Set() })
   checkPermissionMock.mockReset().mockResolvedValue(null)
   orchestratorFetchMock.mockReset().mockResolvedValue({ hosts: [] })
   listPinnedHostKeysMock.mockReset().mockResolvedValue([])
@@ -221,5 +233,22 @@ describe('GET /api/v1/ssh/host-keys', () => {
 
     expect(res.status).toBe(500)
     expect(await readJson(res)).toEqual({ error: 'db down' })
+  })
+
+  // roadmap#184: both stores are installation-wide.
+  it('lists only the hosts of the connections the caller may view', async () => {
+    hostKeyScopeMock.mockResolvedValue({ all: false, hosts: new Set(['10.42.0.111']) })
+    orchestratorFetchMock.mockResolvedValue({
+      hosts: [
+        { host: '10.42.0.101', key_type: 'ecdsa-sha2-nistp256', pinned_at: '2026-09-02T16:54:00Z' },
+        { host: '10.42.0.111', key_type: 'ecdsa-sha2-nistp256', pinned_at: '2026-09-02T16:54:00Z' },
+      ],
+    })
+    listPinnedHostKeysMock.mockResolvedValue([frontendRow('10.42.0.101:22', 'ssh-ed25519', '2026-09-03T10:00:00Z')])
+
+    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
+
+    expect((await readJson<any>(res)).hosts.map((h: any) => h.host)).toEqual(['10.42.0.111'])
+    expect(hostKeyScopeMock).toHaveBeenCalledWith('connection.view')
   })
 })

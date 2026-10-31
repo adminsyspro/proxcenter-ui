@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   denied: null as Response | null,
-  prisma: { migrationJob: { findUnique: vi.fn() } },
+  prisma: { migrationJob: { findFirst: vi.fn() } },
 }))
 
-vi.mock('@/lib/rbac', () => ({ checkPermission: vi.fn(async () => h.denied), PERMISSIONS: { VM_MIGRATE: 'vm.migrate' } }))
+vi.mock('@/lib/rbac', () => ({ getCurrentRbacInfraScope: vi.fn(async () => null), checkPermission: vi.fn(async () => h.denied), PERMISSIONS: { VM_MIGRATE: 'vm.migrate' } }))
 vi.mock('@/lib/tenant', () => ({ getSessionPrisma: vi.fn(async () => h.prisma), getCurrentTenantId: vi.fn() }))
 vi.mock('@/lib/tenant/infraScope', () => ({ canMigrateConnections: vi.fn(), getTenantInfrastructureScope: vi.fn() }))
 
@@ -16,7 +16,7 @@ const row = { id: 'j1', status: 'transferring', bytesTransferred: BigInt(10), to
 
 beforeEach(() => {
   h.denied = null
-  h.prisma.migrationJob.findUnique.mockReset().mockResolvedValue(row)
+  h.prisma.migrationJob.findFirst.mockReset().mockResolvedValue(row)
 })
 
 describe('GET /api/v1/migrations/[id]', () => {
@@ -35,7 +35,7 @@ describe('GET /api/v1/migrations/[id]', () => {
   })
 
   it('answers 404 for an unknown job and passes a refusal through', async () => {
-    h.prisma.migrationJob.findUnique.mockResolvedValue(null)
+    h.prisma.migrationJob.findFirst.mockResolvedValue(null)
     expect((await callRoute(GET, { params: { id: 'nope' } })).status).toBe(404)
 
     h.denied = new Response('no', { status: 403 })

@@ -5,6 +5,7 @@ import { getConnectionById, type PveConn } from "@/lib/connections/getConnection
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { groupGuestsByConnection, visibleRequestedGuests } from "@/lib/vdc/bulkGuests"
 import { buildBridgeVlanMap } from "@/lib/proxmox/hostVlanMap"
 import { buildSdnVnets, type SdnVnet } from "@/lib/proxmox/sdnVnetMap"
 import { buildVnetIndex, resolveNicSegment, type NicSegment } from "@/lib/proxmox/nicSegment"
@@ -182,18 +183,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ data: {} })
     }
 
-    // Group by connection
-    const byConnection = new Map<string, Array<{ type: string; node: string; vmid: string }>>()
-
-    for (const vm of vms) {
-      if (!vm.connId || !vm.type || !vm.node || !vm.vmid) continue
-
-      if (!byConnection.has(vm.connId)) {
-        byConnection.set(vm.connId, [])
-      }
-
-      byConnection.get(vm.connId)!.push({ type: vm.type, node: vm.node, vmid: vm.vmid })
-    }
+    // Group by connection; a malformed entry is dropped, it would reach the PVE URL.
+    const byConnection = groupGuestsByConnection(vms)
 
     const data: Record<string, { networks: VmNic[] }> = {}
 
@@ -202,8 +193,12 @@ export async function POST(req: Request) {
         try {
           const connData = await getConnectionById(connId)
 
+          // A vDC session only gets the guests of its own pools.
+          const visibleVms = await visibleRequestedGuests(connId, connData, connVms)
+          if (!visibleVms || visibleVms.length === 0) return
+
           // Segment context, fetched once per connection rather than per guest.
-          const nodeNames = [...new Set(connVms.map((vm) => vm.node))]
+          const nodeNames = [...new Set(visibleVms.map((vm) => vm.node))]
           const [sdnVnets, bridgeVlanByNode] = await Promise.all([
             isProviderScope ? fetchSdnVnets(connData) : Promise.resolve([] as SdnVnet[]),
             fetchBridgeVlanMaps(connData, nodeNames),
@@ -211,7 +206,7 @@ export async function POST(req: Request) {
           const vnetById = buildVnetIndex(sdnVnets)
 
           const results = await Promise.allSettled(
-            connVms.map(async (vm) => {
+            visibleVms.map(async (vm) => {
               const config = await pveFetch<Record<string, unknown>>(
                 connData,
                 `/nodes/${encodeURIComponent(vm.node)}/${vm.type}/${vm.vmid}/config`

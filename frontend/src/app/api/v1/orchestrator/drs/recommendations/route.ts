@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getTenantConnectionIds } from "@/lib/tenant"
+import { drsConnectionIds } from "@/lib/orchestrator/drsRuleScope"
 
 export const runtime = "nodejs"
 
@@ -15,7 +15,8 @@ export async function GET(request: NextRequest) {
 
     const validate = request.nextUrl.searchParams.get('validate') === 'true'
 
-    const tenantConnectionIds = await getTenantConnectionIds()
+    // Recommendations of the clusters the tenant owns (see drsRuleScope).
+    const tenantConnectionIds = await drsConnectionIds()
     const client = getOrchestratorClient()
     const response = await client.getRecommendations(validate)
 

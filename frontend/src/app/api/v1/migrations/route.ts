@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { migrateScope, scopedJobWhere } from "@/lib/migration/authorize"
 import { NicConfigError } from "@/lib/rbac/nicPermissions"
 import { authOptions } from "@/lib/auth/config"
 import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
@@ -80,10 +81,10 @@ export async function GET(req: Request) {
     const sourceConnectionId = searchParams.get("sourceConnectionId")
 
     const jobs = await prisma.migrationJob.findMany({
-      where: {
+      where: scopedJobWhere({
         ...(sourceVmId ? { sourceVmId } : {}),
         ...(sourceConnectionId ? { sourceConnectionId } : {}),
-      },
+      }, await migrateScope()),
       omit: { logs: true },
       orderBy: { createdAt: "desc" },
       take: 50,

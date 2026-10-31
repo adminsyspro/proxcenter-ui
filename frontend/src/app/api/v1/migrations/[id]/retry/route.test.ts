@@ -5,7 +5,7 @@ const h = vi.hoisted(() => ({
   afterCbs: [] as Array<() => Promise<void>>,
   infra: { kind: "provider" } as any,
   prisma: {
-    migrationJob: { findUnique: vi.fn(), create: vi.fn(async () => ({ id: "job-2" })) },
+    migrationJob: { findFirst: vi.fn(), create: vi.fn(async () => ({ id: "job-2" })) },
     connection: { findUnique: vi.fn() },
   },
 }))
@@ -16,7 +16,7 @@ vi.mock("next/server", async (io) => {
 })
 vi.mock("next-auth", () => ({ getServerSession: vi.fn(async () => ({ user: { id: "u1" } })) }))
 vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
-vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
+vi.mock("@/lib/rbac", () => ({ getCurrentRbacInfraScope: vi.fn(async () => null), checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
 vi.mock("@/lib/tenant/infraScope", async (orig) => ({
   ...(await orig<typeof import("@/lib/tenant/infraScope")>()),
   getTenantInfrastructureScope: vi.fn(async () => h.infra),
@@ -62,14 +62,14 @@ beforeEach(() => {
   xcpngCold.mockReset()
   warm.mockReset()
   xcpngWarm.mockReset()
-  h.prisma.migrationJob.findUnique.mockReset()
+  h.prisma.migrationJob.findFirst.mockReset()
   h.prisma.migrationJob.create.mockReset().mockResolvedValue({ id: "job-2" })
   h.prisma.connection.findUnique.mockReset()
 })
 
 describe("POST /api/v1/migrations/[id]/retry", () => {
   it("creates the retry job tagged with this server's instance id and dispatches it", async () => {
-    h.prisma.migrationJob.findUnique.mockResolvedValueOnce(failedJob)
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce(failedJob)
 
     const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
     expect(res.status).toBe(200)
@@ -85,7 +85,7 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
   })
 
   it("refuses to retry a job that is still running", async () => {
-    h.prisma.migrationJob.findUnique.mockResolvedValueOnce({ ...failedJob, status: "transferring" })
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce({ ...failedJob, status: "transferring" })
 
     const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
     expect(res.status).toBe(400)
@@ -94,7 +94,7 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
 
   it("re-dispatches an XCP-ng warm job to the XCP-ng warm pipeline", async () => {
     const job = { ...failedJob, config: { ...failedJob.config, migrationType: "warm" } }
-    h.prisma.migrationJob.findUnique.mockResolvedValueOnce(job)
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce(job)
     h.prisma.connection.findUnique.mockResolvedValueOnce({ type: "xcpng" })
 
     const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
@@ -113,7 +113,7 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
 
   it("re-dispatches a VMware warm job to the VMware warm pipeline", async () => {
     const job = { ...failedJob, config: { ...failedJob.config, migrationType: "warm" } }
-    h.prisma.migrationJob.findUnique.mockResolvedValueOnce(job)
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce(job)
     h.prisma.connection.findUnique.mockResolvedValueOnce({ type: "vmware" })
 
     const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
@@ -131,7 +131,7 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
       ...failedJob,
       config: { ...failedJob.config, migrationType: "warm", sourceType: "xcpng" },
     }
-    h.prisma.migrationJob.findUnique.mockResolvedValueOnce(job)
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce(job)
     h.prisma.connection.findUnique.mockResolvedValueOnce(null)
 
     const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
@@ -154,7 +154,7 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
         sourceVmName: "2025-test",
       },
     }
-    h.prisma.migrationJob.findUnique.mockResolvedValueOnce(job)
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce(job)
     h.prisma.connection.findUnique.mockResolvedValueOnce({ type: "hyperv", subType: null })
 
     const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
@@ -173,7 +173,7 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
 
   it("uses the live connection type for a legacy Hyper-V job", async () => {
     const job = { ...failedJob, config: { ...failedJob.config, migrationType: "cold" } }
-    h.prisma.migrationJob.findUnique.mockResolvedValueOnce(job)
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce(job)
     h.prisma.connection.findUnique.mockResolvedValueOnce({ type: "hyperv", subType: null })
 
     const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
@@ -190,7 +190,7 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
 
   it("re-dispatches an XCP-ng cold job to the XCP-ng pipeline", async () => {
     const job = { ...failedJob, config: { sourceType: "xcpng", migrationType: "cold" } }
-    h.prisma.migrationJob.findUnique.mockResolvedValueOnce(job)
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce(job)
     h.prisma.connection.findUnique.mockResolvedValueOnce({ type: "xcpng", subType: null })
 
     const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
@@ -203,7 +203,7 @@ describe("POST /api/v1/migrations/[id]/retry", () => {
 
   it("preserves live mode when retrying a vCenter job through v2v", async () => {
     const job = { ...failedJob, config: { sourceType: "vcenter", migrationType: "live" } }
-    h.prisma.migrationJob.findUnique.mockResolvedValueOnce(job)
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce(job)
     h.prisma.connection.findUnique.mockResolvedValueOnce({ type: "vmware", subType: "vcenter" })
 
     const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
@@ -224,7 +224,7 @@ describe("POST /api/v1/migrations/[id]/retry, the retrying user is checked again
     vi.mocked(getCurrentTenantId).mockResolvedValueOnce("tenant-1")
     h.infra = { kind: "iaas", vdcScope: {} }
     try {
-      h.prisma.migrationJob.findUnique.mockResolvedValueOnce(failedJob)
+      h.prisma.migrationJob.findFirst.mockResolvedValueOnce(failedJob)
       const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST" })
       expect(res.status).toBe(404)
       expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
@@ -242,7 +242,7 @@ describe("POST /api/v1/migrations/[id]/retry, the retrying user is checked again
       .mockImplementationOnce(async () => null) // vm.migrate
       .mockImplementationOnce(async () => Response.json({ error: "denied" }, { status: 403 }) as any) // VLAN on the saved NIC
     try {
-      h.prisma.migrationJob.findUnique.mockResolvedValueOnce({
+      h.prisma.migrationJob.findFirst.mockResolvedValueOnce({
         ...failedJob,
         config: { ...failedJob.config, networkBridge: "vmbr0", nics: [{ index: 1, bridge: "vmbr1", vlanTag: 42 }] },
       })

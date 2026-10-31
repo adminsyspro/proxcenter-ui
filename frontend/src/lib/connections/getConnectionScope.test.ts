@@ -188,4 +188,23 @@ describe("getPbsConnectionById tenant isolation", () => {
 
     await expect(getPbsConnectionById("pbs1")).rejects.toThrow(/Connection not found/)
   })
+
+  it("a vDC namespace binding does not open the whole provider PBS (roadmap#184)", async () => {
+    currentTenantId = "iaas-1"
+    findUniqueMock.mockResolvedValue(connRow({ id: "pbs1", type: "pbs", tenantId: "default" }))
+    getVdcScopeMock.mockResolvedValue({ pbsConnectionIds: new Set(["pbs1"]), connectionIds: new Set() })
+
+    await expect(getPbsConnectionById("pbs1")).rejects.toThrow(/PBS Connection not found/)
+    expect(getVdcScopeMock).not.toHaveBeenCalled()
+  })
+
+  it("a non-provider tenant resolves the PBS it owns", async () => {
+    currentTenantId = "msp-1"
+    findUniqueMock.mockResolvedValue(connRow({ id: "pbs1", type: "pbs", tenantId: "msp-1" }))
+
+    const conn = await getPbsConnectionById("pbs1")
+
+    expect(conn.id).toBe("pbs1")
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+  })
 })

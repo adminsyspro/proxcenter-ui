@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 
 import { demoResponse } from "@/lib/demo/demo-api"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
-import { getPbsConnectionById } from "@/lib/connections/getConnection"
+import { getPbsConnectionById, isConnectionNotFoundError } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { PbsJobRequestError, type PbsJobSpec } from "@/lib/proxmox/pbsJobSpecs"
 
@@ -26,6 +26,21 @@ export type PbsJobCollectionContext = {
 /** Message d'erreur reduit a une seule ligne avant d'entrer dans le journal. */
 function logLine(e: unknown): string {
   return String((e as any)?.message || e).replace(/[\r\n]/g, "")
+}
+
+/**
+ * Reponse d'echec commune : un PBS absent ou hors du tenant (une liaison de
+ * namespace vDC ne donne pas acces a la configuration des jobs) repond 404,
+ * comme un id inconnu, sans entrer dans le journal d'erreur.
+ */
+function failure(spec: PbsJobSpec, verb: string, e: any): Response {
+  if (isConnectionNotFoundError(e)) {
+    return NextResponse.json({ error: "PBS connection not found" }, { status: 404 })
+  }
+
+  console.error(`[${spec.logTag}] ${verb} Error:`, logLine(e))
+
+  return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
 }
 
 function itemPath(spec: PbsJobSpec, jobId: string): string {
@@ -66,9 +81,7 @@ export async function createPbsJobConfig(
       return NextResponse.json({ error: e.message }, { status: 400 })
     }
 
-    console.error(`[${spec.logTag}] POST Error:`, logLine(e))
-
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+    return failure(spec, "POST", e)
   }
 }
 
@@ -102,9 +115,7 @@ export async function updatePbsJobConfig(
 
     return NextResponse.json({ data: result, message: `${spec.label} updated successfully` })
   } catch (e: any) {
-    console.error(`[${spec.logTag}] PUT Error:`, logLine(e))
-
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+    return failure(spec, "PUT", e)
   }
 }
 
@@ -133,8 +144,6 @@ export async function deletePbsJobConfig(
 
     return NextResponse.json({ message: `${spec.label} deleted successfully` })
   } catch (e: any) {
-    console.error(`[${spec.logTag}] DELETE Error:`, logLine(e))
-
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+    return failure(spec, "DELETE", e)
   }
 }

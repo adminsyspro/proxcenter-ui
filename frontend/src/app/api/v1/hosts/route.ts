@@ -4,7 +4,8 @@ import { getSessionPrisma } from "@/lib/tenant"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes, formatUptime } from "@/utils/format"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, getCurrentRbacInfraScope, mayHaveVisibleGuests, PERMISSIONS } from "@/lib/rbac"
+import { listableNodes } from "@/lib/rbac/nodeList"
 
 export const runtime = "nodejs"
 
@@ -31,9 +32,13 @@ export async function GET(req: Request) {
       return NextResponse.json({ data: { hosts: [], stats: { total: 0, online: 0, offline: 0 } } })
     }
 
-    const targetConnections = connIdFilter && connIdFilter !== '*'
+    // node.view passes on a grant scoped to any node: list only the nodes
+    // the caller's grants name (lib/rbac/nodeList).
+    const scope = await getCurrentRbacInfraScope(PERMISSIONS.NODE_VIEW)
+    const targetConnections = (connIdFilter && connIdFilter !== '*'
       ? connections.filter(c => c.id === connIdFilter)
       : connections
+    ).filter(c => !scope || mayHaveVisibleGuests(scope, c.id))
 
     const connectionPromises = targetConnections.map(async (conn) => {
       try {
@@ -45,8 +50,10 @@ export async function GET(req: Request) {
         // au lieu de faire N appels à /nodes/{node}/status
         const resources = await pveFetch<any[]>(connData, "/cluster/resources")
         
-        const nodes = resources.filter((r: any) => r?.type === 'node')
-        const isCluster = nodes.length > 1
+        const allNodes = resources.filter((r: any) => r?.type === 'node')
+        const isCluster = allNodes.length > 1
+        const allowed = await listableNodes(scope, conn.id)
+        const nodes = allowed ? allNodes.filter((r: any) => allowed.has(r.node)) : allNodes
 
         const nodeDetails = nodes.map((node: any) => {
           if (!node?.node) return null

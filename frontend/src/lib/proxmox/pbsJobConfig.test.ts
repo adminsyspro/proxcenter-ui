@@ -21,6 +21,7 @@ vi.mock("@/lib/proxmox/pbs-client", () => ({ pbsFetch: (...a: any[]) => pbsFetch
 
 vi.mock("@/lib/connections/getConnection", () => ({
   getPbsConnectionById: (...a: any[]) => getPbsConnectionByIdMock(...a),
+  isConnectionNotFoundError: (e: any) => /connection not found/i.test(e?.message || ""),
 }))
 
 vi.mock("@/lib/rbac", () => ({
@@ -313,4 +314,27 @@ describe("deletePbsJobConfig", () => {
       "PBS 404 /config/demo/j1"
     )
   })
+})
+
+// roadmap#184 : un PBS hors du tenant (une liaison de namespace vDC ne suffit
+// pas pour la configuration des jobs) repond comme un id inconnu.
+describe("PBS absent ou hors du tenant", () => {
+  const cases = [
+    ["POST", () => createPbsJobConfig(jsonRequest({ id: "j1" }), { params: Promise.resolve({ id: "pbs-1" }) }, SPEC)],
+    ["PUT", () => updatePbsJobConfig(jsonRequest({ schedule: "daily" }), ctx({ id: "pbs-1", jobId: "j1" }), SPEC)],
+    ["DELETE", () => deletePbsJobConfig(new Request("http://test.local/_", { method: "DELETE" }), ctx({ id: "pbs-1", jobId: "j1" }), SPEC)],
+  ] as const
+
+  for (const [verb, call] of cases) {
+    it(`${verb} : 404 sans appel PBS ni journal d'erreur`, async () => {
+      getPbsConnectionByIdMock.mockRejectedValue(new Error("PBS Connection not found: pbs-1"))
+
+      const res = await call()
+
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual({ error: "PBS connection not found" })
+      expect(pbsFetchMock).not.toHaveBeenCalled()
+      expect(console.error).not.toHaveBeenCalled()
+    })
+  }
 })

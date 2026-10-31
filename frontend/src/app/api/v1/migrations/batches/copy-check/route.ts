@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { denyMigrationEnds } from "@/lib/migration/authorize"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { checkBatchCopyNetwork } from "@/lib/migration/batch-copy-reach"
@@ -49,6 +50,8 @@ export async function POST(req: Request) {
       const deniedView = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
       if (deniedView) return deniedView
     }
+    const deniedEnds = await denyMigrationEnds(sourceConnectionId, targetConnectionId, nodes as string[])
+    if (deniedEnds) return deniedEnds
     const plan = await checkBatchCopyNetwork({
       tenantId, sourceConnectionId, targetConnectionId,
       pinnedDevice: typeof copyVmk === "string" && copyVmk ? copyVmk : undefined,

@@ -6,7 +6,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { authOptions } from "@/lib/auth/config"
 import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
 import { startMigrationJob } from "@/lib/migration/start-job"
-import { authorizeMigrationTarget } from "@/lib/migration/authorize"
+import { authorizeMigrationTarget, migrateScope, scopedJobWhere } from "@/lib/migration/authorize"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -26,7 +26,7 @@ async function handlePost(
 
     const session = await getServerSession(authOptions)
     const { id } = await params
-    const job = await prisma.migrationJob.findUnique({ where: { id } })
+    const job = await prisma.migrationJob.findFirst({ where: scopedJobWhere({ id }, await migrateScope()) })
 
     if (!job) {
       return NextResponse.json({ error: "Migration job not found" }, { status: 404 })

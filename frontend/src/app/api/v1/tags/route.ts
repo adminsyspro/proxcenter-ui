@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 
 import { getSessionPrisma } from "@/lib/tenant"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, getCurrentRbacInfraScope, isConnectionVisible, PERMISSIONS } from "@/lib/rbac"
+import { isNodeInScope } from "@/lib/rbac/nodeList"
 
 export const runtime = "nodejs"
 
@@ -18,17 +19,22 @@ export async function GET() {
     const [connRows, hostRows] = await Promise.all([
       prisma.connection.findMany({
         where: { tags: { not: null } },
-        select: { tags: true },
+        select: { id: true, tags: true },
       }),
       prisma.managedHost.findMany({
         where: { tags: { not: null } },
-        select: { tags: true },
+        select: { connectionId: true, node: true, tags: true },
       }),
     ])
+    // connection.view passes on a grant scoped to any connection: only the
+    // tags of the clusters and nodes the caller's grants name.
+    const scope = await getCurrentRbacInfraScope(PERMISSIONS.CONNECTION_VIEW)
+    const visibleConns = connRows.filter(c => !scope || isConnectionVisible(scope, c.id))
+    const visibleHosts = hostRows.filter(h => (h.connectionId ? isNodeInScope(scope, h.connectionId, h.node) : !scope))
 
     const tagSet = new Set<string>()
 
-    for (const row of [...connRows, ...hostRows]) {
+    for (const row of [...visibleConns, ...visibleHosts]) {
       if (row.tags) {
         for (const t of String(row.tags).split(';')) {
           const trimmed = t.trim()

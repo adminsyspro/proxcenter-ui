@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const h = vi.hoisted(() => ({
-  prisma: { migrationJob: { findUnique: vi.fn(), update: vi.fn(async () => ({})) } },
+  prisma: { migrationJob: { findFirst: vi.fn(), update: vi.fn(async () => ({})) } },
 }))
 
-vi.mock("@/lib/rbac", () => ({ checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
+vi.mock("@/lib/rbac", () => ({ getCurrentRbacInfraScope: vi.fn(async () => null), checkPermission: vi.fn(async () => null), PERMISSIONS: { VM_MIGRATE: "vm.migrate" } }))
 vi.mock("@/lib/tenant", () => ({ getSessionPrisma: vi.fn(async () => h.prisma) }))
 vi.mock("@/lib/migration/v2v-pipeline", () => ({ requestV2vRootChoice: vi.fn(() => true) }))
 
@@ -29,7 +29,7 @@ const parkedJob = (overrides: Record<string, unknown> = {}) => ({
 })
 
 beforeEach(() => {
-  h.prisma.migrationJob.findUnique.mockReset()
+  h.prisma.migrationJob.findFirst.mockReset()
   h.prisma.migrationJob.update.mockReset()
   h.prisma.migrationJob.update.mockResolvedValue({})
   signal.mockReset()
@@ -38,7 +38,7 @@ beforeEach(() => {
 
 describe("POST /api/v1/migrations/[id]/root-choice", () => {
   it("signals the chosen root and reports it back", async () => {
-    h.prisma.migrationJob.findUnique.mockResolvedValue(parkedJob())
+    h.prisma.migrationJob.findFirst.mockResolvedValue(parkedJob())
     const res = await callRoute(POST, { params: { id: "j1" }, body: { root: " /dev/sda1 " } })
     expect(res.status).toBe(200)
     expect(await readJson<any>(res)).toEqual({ data: { status: "root_choice_requested", root: "/dev/sda1" } })
@@ -52,7 +52,7 @@ describe("POST /api/v1/migrations/[id]/root-choice", () => {
   })
 
   it("400s when the root is missing from the body", async () => {
-    h.prisma.migrationJob.findUnique.mockResolvedValue(parkedJob())
+    h.prisma.migrationJob.findFirst.mockResolvedValue(parkedJob())
     const res = await callRoute(POST, { params: { id: "j1" }, body: {} })
     expect(res.status).toBe(400)
     expect((await readJson<any>(res))?.error).toMatch(/root/i)
@@ -61,14 +61,14 @@ describe("POST /api/v1/migrations/[id]/root-choice", () => {
   })
 
   it("400s when the root is not a string", async () => {
-    h.prisma.migrationJob.findUnique.mockResolvedValue(parkedJob())
+    h.prisma.migrationJob.findFirst.mockResolvedValue(parkedJob())
     const res = await callRoute(POST, { params: { id: "j1" }, body: { root: 42 } })
     expect(res.status).toBe(400)
     expect(signal).not.toHaveBeenCalled()
   })
 
   it("400s when the root is not one of the recorded candidates", async () => {
-    h.prisma.migrationJob.findUnique.mockResolvedValue(parkedJob())
+    h.prisma.migrationJob.findFirst.mockResolvedValue(parkedJob())
     const res = await callRoute(POST, { params: { id: "j1" }, body: { root: "/dev/sdb1" } })
     expect(res.status).toBe(400)
     expect((await readJson<any>(res))?.error).toMatch(/candidates/i)
@@ -83,7 +83,7 @@ describe("POST /api/v1/migrations/[id]/root-choice", () => {
   ])("refuses shell metacharacters via the allowlist: %s", async (payload) => {
     // The value ends up on a shell command line on the Proxmox node; none of
     // these match a recorded candidate, so they must die here, not downstream.
-    h.prisma.migrationJob.findUnique.mockResolvedValue(parkedJob())
+    h.prisma.migrationJob.findFirst.mockResolvedValue(parkedJob())
     const res = await callRoute(POST, { params: { id: "j1" }, body: { root: payload } })
     expect(res.status).toBe(400)
     expect(signal).not.toHaveBeenCalled()
@@ -91,14 +91,14 @@ describe("POST /api/v1/migrations/[id]/root-choice", () => {
 
   it("400s when the pipeline recorded no candidates", async () => {
     // A parked step with no list means the allowlist is empty: nothing passes.
-    h.prisma.migrationJob.findUnique.mockResolvedValue(parkedJob({ config: {} }))
+    h.prisma.migrationJob.findFirst.mockResolvedValue(parkedJob({ config: {} }))
     const res = await callRoute(POST, { params: { id: "j1" }, body: { root: "/dev/sda1" } })
     expect(res.status).toBe(400)
     expect(signal).not.toHaveBeenCalled()
   })
 
   it("400s when the job is not waiting for a root choice", async () => {
-    h.prisma.migrationJob.findUnique.mockResolvedValue(parkedJob({ currentStep: "converting_disks" }))
+    h.prisma.migrationJob.findFirst.mockResolvedValue(parkedJob({ currentStep: "converting_disks" }))
     const res = await callRoute(POST, { params: { id: "j1" }, body: { root: "/dev/sda1" } })
     expect(res.status).toBe(400)
     expect((await readJson<any>(res))?.error).toMatch(/not waiting/i)
@@ -107,14 +107,14 @@ describe("POST /api/v1/migrations/[id]/root-choice", () => {
 
   it("400s when the registry rejects the value on its own sanitization", async () => {
     signal.mockReturnValue(false)
-    h.prisma.migrationJob.findUnique.mockResolvedValue(parkedJob())
+    h.prisma.migrationJob.findFirst.mockResolvedValue(parkedJob())
     const res = await callRoute(POST, { params: { id: "j1" }, body: { root: "/dev/sda1" } })
     expect(res.status).toBe(400)
     expect((await readJson<any>(res))?.error).toMatch(/root/i)
   })
 
   it("404s when the job is missing", async () => {
-    h.prisma.migrationJob.findUnique.mockResolvedValue(null)
+    h.prisma.migrationJob.findFirst.mockResolvedValue(null)
     const res = await callRoute(POST, { params: { id: "nope" }, body: { root: "/dev/sda1" } })
     expect(res.status).toBe(404)
     expect(signal).not.toHaveBeenCalled()
@@ -126,7 +126,7 @@ describe("POST /api/v1/migrations/[id]/root-choice", () => {
     )
     const res = await callRoute(POST, { params: { id: "j1" }, body: { root: "/dev/sda1" } })
     expect(res.status).toBe(403)
-    expect(h.prisma.migrationJob.findUnique).not.toHaveBeenCalled()
+    expect(h.prisma.migrationJob.findFirst).not.toHaveBeenCalled()
     expect(signal).not.toHaveBeenCalled()
   })
 })

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { denyMigrationEnds } from "@/lib/migration/authorize"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { assertStorageName } from "@/lib/ssh/validate"
@@ -46,6 +47,8 @@ export async function POST(req: Request) {
       const deniedView = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
       if (deniedView) return deniedView
     }
+    const deniedEnds = await denyMigrationEnds(sourceConnectionId, targetConnectionId, vms.map(vm => vm.targetNode as string))
+    if (deniedEnds) return deniedEnds
     const result = await checkBatchSpaceForRequest({
       tenantId, sourceConnectionId, targetConnectionId, storage: targetStorage,
       vms: vms.map(vm => ({ sourceVmId: String(vm.sourceVmId ?? ""), targetNode: vm.targetNode as string, estimatedBytes: requestDiskBytes(vm.diskBytes) })),

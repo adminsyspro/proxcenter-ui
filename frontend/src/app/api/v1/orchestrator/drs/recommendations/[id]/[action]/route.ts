@@ -4,7 +4,7 @@ import { NextResponse } from "next/server"
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { relayOrchestratorError } from "@/lib/orchestrator/relayError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getTenantConnectionIds } from "@/lib/tenant"
+import { drsConnectionIds } from "@/lib/orchestrator/drsRuleScope"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -29,9 +29,11 @@ async function handlePost(req: Request, ctx: Params) {
     const recsRes = await client.getRecommendations(false)
     const recs = Array.isArray(recsRes.data) ? recsRes.data : []
     const rec = recs.find((r: any) => r.id === id)
+    // A vDC binding lends a slice of the cluster: acting on its recommendations
+    // would move guests of other tenants. Owned clusters only.
     if (rec?.connection_id) {
-      const tenantConnectionIds = await getTenantConnectionIds()
-      if (!tenantConnectionIds.has(rec.connection_id)) {
+      const ownedConnectionIds = await drsConnectionIds()
+      if (!ownedConnectionIds.has(rec.connection_id)) {
         return NextResponse.json({ error: 'Recommendation not found' }, { status: 404 })
       }
     }

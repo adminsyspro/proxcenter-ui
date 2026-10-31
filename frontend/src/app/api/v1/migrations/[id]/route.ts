@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { migrateScope, scopedJobWhere } from "@/lib/migration/authorize"
 import { serializeMigrationJob } from "@/lib/migration/batch-access"
 import { parseLogOffset } from "@/lib/migration/jobLogs"
 
@@ -22,7 +23,7 @@ export async function GET(
     if (denied) return denied
 
     const { id } = await params
-    const job = await prisma.migrationJob.findUnique({ where: { id } })
+    const job = await prisma.migrationJob.findFirst({ where: scopedJobWhere({ id }, await migrateScope()) })
 
     if (!job) {
       return NextResponse.json({ error: "Migration job not found" }, { status: 404 })

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { denyMigrationEnds } from "@/lib/migration/authorize"
 import { runV2vPreflight, installV2vPackages, installVirtV2vBackport, startVirtioWinDownload, checkVirtioWinProgress } from "@/lib/migration/v2v-preflight"
 import { runWarmNodePreflight } from "@/lib/migration/warm/vddk-preflight"
 import { runXcpngWarmNodePreflight } from "@/lib/migration/warm/xcpng-node-preflight"
@@ -64,6 +65,8 @@ export async function POST(req: Request) {
   if (!canMigrateConnections(infra, targetConnectionId, ...(sourceConnectionId ? [sourceConnectionId] : []))) {
     return NextResponse.json({ error: "Connection not found" }, { status: 404 })
   }
+  const deniedEnds = await denyMigrationEnds(sourceConnectionId, targetConnectionId, [targetNode])
+  if (deniedEnds) return deniedEnds
 
   try {
     if (action === "install") {

@@ -58,6 +58,7 @@ import { conversionNotAppliedMessage, convertGuestAtCutover, GUEST_CONVERSION_ES
 import { guestNicsFromNets } from "./guest-network"
 import { warnIfEl10OnLowCpu } from "../el10-check"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
+import { OPENVDDK_DEFAULT_LIBDIR, OPENVDDK_KIT } from "./vddk-library"
 
 // ── Pure convergence planning (unit-tested) ──
 
@@ -225,7 +226,8 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
   const prisma = getTenantPrisma(tenantId)
   await registerJob(jobId, prisma)
 
-  const libdir = config.vddkLibdir || "/usr/lib/vmware-vix-disklib"
+  // OpenVDDK (roadmap#177), unless the job was created with an explicit vddkLibdir.
+  const libdir = config.vddkLibdir || OPENVDDK_DEFAULT_LIBDIR
   const budget = config.downtimeBudgetSec ?? 300
   const maxPasses = config.maxPasses ?? 5
   const cutoverMode = config.cutoverMode === "manual" ? "manual" : "auto"
@@ -349,7 +351,8 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // VDDK preflight on the PVE node — actionable error before we touch anything.
     const pf = await checkVddkPreflight(config.targetConnectionId, nodeIp, libdir)
     if (!pf.ok) throw new Error(pf.error || "VDDK preflight failed")
-    await appendLog(jobId, "VDDK preflight OK on Proxmox node", "success")
+    const libLabel = libdir === OPENVDDK_DEFAULT_LIBDIR ? `OpenVDDK ${OPENVDDK_KIT.version}` : "VDDK"
+    await appendLog(jobId, `VDDK preflight OK on Proxmox node (${libLabel} in ${libdir})`, "success")
 
     // Leftover nbdkit readers of finished jobs hold a VMware snapshot and a
     // kernel NBD slot for nothing (roadmap#45: one sat idle for nine days).

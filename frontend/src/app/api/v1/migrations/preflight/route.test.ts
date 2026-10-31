@@ -44,16 +44,10 @@ vi.mock("@/lib/migration/warm/nfc-reachability", async (io) => {
 vi.mock("@/lib/db/prisma", () => ({
   prisma: { connection: { findUnique: vi.fn(async () => ({ type: "vmware" })) } },
 }))
-// Only the boolean flag is consumed here; mocking also keeps the module's
-// ssh2/prisma import chain out of this test.
-vi.mock("@/lib/migration/warm/vddk-provision", () => ({
-  isVddkPackageTokenConfigured: vi.fn(() => false),
-}))
 
 import { POST } from "./route"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 import { runWarmNodePreflight } from "@/lib/migration/warm/vddk-preflight"
-import { isVddkPackageTokenConfigured } from "@/lib/migration/warm/vddk-provision"
 import { installVirtV2vBackport, runV2vPreflight } from "@/lib/migration/v2v-preflight"
 import { runXcpngWarmNodePreflight } from "@/lib/migration/warm/xcpng-node-preflight"
 import { checkTargetStorageSpace, type TargetSpaceResult } from "@/lib/migration/warm/target-space"
@@ -63,7 +57,6 @@ import { prisma } from "@/lib/db/prisma"
 
 const mockWarm = runWarmNodePreflight as unknown as ReturnType<typeof vi.fn>
 const mockV2v = runV2vPreflight as unknown as ReturnType<typeof vi.fn>
-const mockTokenConfigured = isVddkPackageTokenConfigured as unknown as ReturnType<typeof vi.fn>
 const mockSpace = vi.mocked(checkTargetStorageSpace)
 const mockSource = prisma.connection.findUnique as unknown as ReturnType<typeof vi.fn>
 const spaceVerdict: TargetSpaceResult = {
@@ -90,7 +83,7 @@ describe("POST /api/v1/migrations/preflight — warm-check action", () => {
     expect(res.status).toBe(200)
     expect(mockSource).toHaveBeenCalledWith({ where: { id: "src" }, select: { type: true } })
     expect(mockSpace).toHaveBeenCalledExactlyOnceWith("c1", "pve1", "ZFS-Pool", spaceVerdict.requiredBytes)
-    expect(await res.json()).toEqual({ ok: true, missing: [], kind: "vddk", vddkTokenConfigured: false, space: spaceVerdict, guestConversion: { linux: [], windows: ["the VirtIO drivers for Windows (/usr/share/virtio-win/virtio-win.iso)"] } })
+    expect(await res.json()).toEqual({ ok: true, missing: [], kind: "vddk", vddkSetupAvailable: true, space: spaceVerdict, guestConversion: { linux: [], windows: ["the VirtIO drivers for Windows (/usr/share/virtio-win/virtio-win.iso)"] } })
     expect(runXcpngWarmNodePreflight).not.toHaveBeenCalled()
   })
 
@@ -124,7 +117,7 @@ describe("POST /api/v1/migrations/preflight — warm-check action", () => {
     expect(runXcpngWarmNodePreflight).toHaveBeenCalledExactlyOnceWith("c1", "pve1")
     expect(mockWarm).not.toHaveBeenCalled()
     expect(await res.json()).toEqual({
-      ok: true, missing: [], kind: "nbd", vddkTokenConfigured: false, space: spaceVerdict,
+      ok: true, missing: [], kind: "nbd", vddkSetupAvailable: false, space: spaceVerdict,
       // #1000: the guest conversion is offered on XCP-ng warm too
       guestConversion: { linux: [], windows: ["the VirtIO drivers for Windows (/usr/share/virtio-win/virtio-win.iso)"] },
     })
@@ -248,21 +241,21 @@ describe("POST /api/v1/migrations/preflight — warm-check action", () => {
     expect(mockWarm).not.toHaveBeenCalled()
   })
 
-  it("reports whether the Enterprise VDDK package token is configured — boolean only, never the token", async () => {
-    mockTokenConfigured.mockReturnValueOnce(true)
-    mockWarm.mockResolvedValueOnce({ ok: false, missing: ["vddk-lib"], error: "node not prepared" })
+  // roadmap#177: "Prepare this node" installs OpenVDDK in its own directory, no token involved.
+  it("offers the automated setup for OpenVDDK's directory", async () => {
+    mockWarm.mockResolvedValueOnce({ ok: false, missing: ["vddk-lib"], error: "node not prepared", libdir: "/usr/lib/openvddk" })
     const res = await callRoute(POST, { body: { action: "warm-check", targetConnectionId: "c1", targetNode: "pve1" } })
-    const json = await readJson<{ ok: boolean; vddkTokenConfigured?: boolean }>(res)
-    expect(json?.vddkTokenConfigured).toBe(true)
-    // The flag is route-layer only: the preflight helper itself is untouched.
+    const json = await readJson<{ vddkSetupAvailable?: boolean; libdir?: string }>(res)
+    expect(json?.vddkSetupAvailable).toBe(true)
+    expect(json?.libdir).toBe("/usr/lib/openvddk")
     expect(mockWarm).toHaveBeenCalledWith("c1", "pve1", undefined)
   })
 
-  it("hides the automated-setup offer when no token is configured", async () => {
-    mockTokenConfigured.mockReturnValueOnce(false)
-    const res = await callRoute(POST, { body: { action: "warm-check", targetConnectionId: "c1", targetNode: "pve1" } })
-    const json = await readJson<{ vddkTokenConfigured?: boolean }>(res)
-    expect(json?.vddkTokenConfigured).toBe(false)
+  it("never offers the setup for an explicit libdir, which may be a Broadcom VDDK", async () => {
+    mockWarm.mockResolvedValueOnce({ ok: false, missing: ["vddk-lib"], libdir: "/opt/vddk" })
+    const res = await callRoute(POST, { body: { action: "warm-check", targetConnectionId: "c1", targetNode: "pve1", vddkLibdir: "/opt/vddk" } })
+    const json = await readJson<{ vddkSetupAvailable?: boolean }>(res)
+    expect(json?.vddkSetupAvailable).toBe(false)
   })
 
   it("leaves the default v2v preflight path intact", async () => {

@@ -12,12 +12,12 @@ export const runtime = "nodejs"
 
 /**
  * Automated warm-migration node provisioning: install the VDDK runtime
- * (nbdkit + vddk plugin + nbd-client + the VDDK from the private Enterprise
- * GHCR package + the nbd kernel module) on the target Proxmox node, then
- * return the post-provision preflight verdict — the same shape the dialog's
- * warm-check already consumes. Sibling of /api/v1/migrations/preflight and
- * gated the same way, plus the vmware_migration feature (the VDDK package is
- * an Enterprise deliverable).
+ * (nbdkit + vddk plugin + nbd-client + OpenVDDK + the nbd kernel module) on
+ * the target Proxmox node, then return the post-provision preflight verdict,
+ * the same shape the dialog's warm-check already consumes. OpenVDDK is the
+ * public kit, pinned and checksum-verified on the node (roadmap#177). Sibling
+ * of /api/v1/migrations/preflight and gated the same way, plus the
+ * vmware_migration feature (warm VMware migration is an Enterprise capability).
  */
 async function handlePost(req: Request) {
   const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)

@@ -42,6 +42,15 @@ export const NBDKIT_RETRY_FILTER = ["--filter=retry"] as const
 export const NBDKIT_RETRY_PARAMS = ["retries=5", "retry-delay=2"] as const
 
 /**
+ * Network transports only, NBDSSL first. nbdkit runs on the Proxmox node, which
+ * is never a VMware VM, so HotAdd can never succeed there: left to the default
+ * list, OpenVDDK tries it first and writes "error: ... hotadd needs a VMware
+ * virtual machine" into the reader's log before falling back (roadmap#177), and
+ * Broadcom tries file/san/hotadd before landing on NBDSSL anyway.
+ */
+export const NBDKIT_VDDK_TRANSPORTS = "transports=nbdssl:nbd"
+
+/**
  * Build the `nbdkit -U <sock> vddk ...` command validated on the lab spike.
  * Every interpolated value is shell-escaped: the disk path carries a space and
  * brackets that would otherwise split into multiple arguments, and the other
@@ -67,6 +76,7 @@ export function buildNbdkitVddkCmd(o: VddkOpts): string {
     `password=+${shellEscape(o.passwordFile)}`,
     `thumbprint=${shellEscape(o.thumbprint)}`,
     `vm=moref=${shellEscape(o.moref)}`,
+    NBDKIT_VDDK_TRANSPORTS,
   ]
   if (o.snapshot) parts.push(`snapshot=${shellEscape(o.snapshot)}`)
   parts.push(`file=${shellEscape(o.diskPath)}`)

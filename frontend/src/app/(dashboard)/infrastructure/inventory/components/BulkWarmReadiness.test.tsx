@@ -9,13 +9,13 @@ import { cleanup } from '@testing-library/react'
 import { renderWithProviders, screen, waitFor, fireEvent } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
-import BulkWarmReadinessAlert, { useBulkWarmReadiness } from './BulkWarmReadiness'
+import BulkWarmReadinessAlert, { installGuestConversion, useBulkWarmReadiness } from './BulkWarmReadiness'
 
-const READY = { ok: true, missing: [], kind: 'vddk', vddkTokenConfigured: true }
-const NO_VDDK = { ok: false, missing: ['nbdkit', 'vddk-lib'], kind: 'vddk', vddkTokenConfigured: true, error: 'VDDK warm-migration preflight failed' }
+const READY = { ok: true, missing: [], kind: 'vddk', vddkSetupAvailable: true }
+const NO_VDDK = { ok: false, missing: ['nbdkit', 'vddk-lib'], kind: 'vddk', vddkSetupAvailable: true, error: 'VDDK warm-migration preflight failed' }
 
-function Harness({ nodes, kind = 'vddk' }: Readonly<{ nodes: string[]; kind?: 'nbd' | 'vddk' }>) {
-  const readiness = useBulkWarmReadiness({ sourceConnectionId: 'vc', targetConnectionId: 'pve', nodes, kind })
+function Harness({ nodes, kind = 'vddk', conversion }: Readonly<{ nodes: string[]; kind?: 'nbd' | 'vddk'; conversion?: { enabled: boolean; guestsByNode: Record<string, { linux: boolean; windows: boolean }> } }>) {
+  const readiness = useBulkWarmReadiness({ sourceConnectionId: 'vc', targetConnectionId: 'pve', nodes, kind, conversion })
   return (
     <>
       <span data-testid="blocked">{String(readiness.blocked)}</span>
@@ -109,8 +109,44 @@ describe('BulkWarmReadiness', () => {
     expect(screen.getByTestId('blocked').textContent).toBe('true')
   })
 
-  it('offers no preparation without the VDDK package, only the guide', async () => {
-    mockPreflight({ pve1: { ...NO_VDDK, vddkTokenConfigured: false } })
+  // roadmap#177: the confirmation says what lands where.
+  it('confirms an OpenVDDK install into its own directory', async () => {
+    mockPreflight({ pve1: { ...NO_VDDK, libdir: '/usr/lib/openvddk' } })
+
+    renderWithProviders(<Harness nodes={['pve1']} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Prepare this node' }))
+    expect(screen.getByText(/download OpenVDDK 0\.7\.4 \(Apache 2\.0, 17 MB\), check its SHA-256 and install it into \/usr\/lib\/openvddk/)).toBeTruthy()
+    expect(screen.getByText(/A Broadcom VDDK already on the node is left untouched/)).toBeTruthy()
+  })
+
+  // Guest conversion switched on: a ready node that cannot convert the guests
+  // landing on it holds the launch, like the single VM dialog.
+  it('holds the launch when the conversion is on and the node cannot convert the guests it receives', async () => {
+    const GC = { linux: ['virt-v2v-in-place (package virt-v2v)'], windows: ['the VirtIO drivers for Windows (/usr/share/virtio-win/virtio-win.iso)'] }
+    mockPreflight({ pve1: { ...READY, guestConversion: GC } })
+
+    renderWithProviders(<Harness nodes={['pve1']} conversion={{ enabled: true, guestsByNode: { pve1: { linux: true, windows: false } } }} />)
+
+    const row = await screen.findByTestId('bulk-warm-conversion-pve1')
+    expect(row.textContent).toContain('virt-v2v-in-place (package virt-v2v)')
+    expect(row.textContent).not.toContain('VirtIO drivers')
+    expect(screen.getByTestId('blocked').textContent).toBe('true')
+    expect(screen.getByRole('button', { name: 'Install' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Prepare this node' })).toBeNull()
+  })
+
+  it('does not hold the launch on conversion when the conversion is off', async () => {
+    mockPreflight({ pve1: { ...READY, guestConversion: { linux: ['virt-v2v-in-place (package virt-v2v)'], windows: [] } } })
+
+    renderWithProviders(<Harness nodes={['pve1']} conversion={{ enabled: false, guestsByNode: { pve1: { linux: true, windows: false } } }} />)
+
+    await waitFor(() => expect(screen.getByTestId('blocked').textContent).toBe('false'))
+    expect(screen.queryByTestId('bulk-warm-conversion-pve1')).toBeNull()
+  })
+
+  it('offers no preparation when the server says it cannot, only the guide', async () => {
+    mockPreflight({ pve1: { ...NO_VDDK, vddkSetupAvailable: false } })
 
     renderWithProviders(<Harness nodes={['pve1']} />)
 
@@ -138,7 +174,7 @@ describe('BulkWarmReadiness', () => {
   })
 
   it('gives the apt hint for an XCP-ng source', async () => {
-    mockPreflight({ pve1: { ok: false, missing: ['nbdinfo'], kind: 'nbd', vddkTokenConfigured: false } })
+    mockPreflight({ pve1: { ok: false, missing: ['nbdinfo'], kind: 'nbd', vddkSetupAvailable: false } })
 
     renderWithProviders(<Harness nodes={['pve1']} kind="nbd" />)
 
@@ -162,3 +198,43 @@ describe('BulkWarmReadiness', () => {
     expect(screen.queryByTestId('bulk-warm-checking')).toBeNull()
   })
 })
+
+// Shared by the single VM and the bulk dialogs: what the node lacks for the
+// guest conversion, installed through the existing preflight actions.
+describe('installGuestConversion', () => {
+  type Answer = Record<string, string | boolean>
+  function mockActions(answers: Record<string, Answer[]>) {
+    const seen: string[] = []
+    server.use(http.post('*/api/v1/migrations/preflight', async ({ request }) => {
+      const body: any = await request.json()
+      seen.push(`${body.targetNode}:${body.action}`)
+      const queue: Answer[] = answers[body.action] || [{}]
+      const answer: Answer = (queue.length > 1 ? queue.shift() : queue[0]) ?? {}
+      return HttpResponse.json(answer)
+    }))
+    return seen
+  }
+
+  it('installs the packages only when only packages are missing', async () => {
+    const seen = mockActions({ install: [{ success: true }] })
+    await installGuestConversion('pve', 'pve2', ['virt-v2v-in-place (package virt-v2v)'])
+    expect(seen).toEqual(['pve2:install'])
+  })
+
+  it('downloads the VirtIO drivers and waits for the background job', async () => {
+    const seen = mockActions({ 'install-virtio-win': [{ started: true }], 'check-virtio-win': [{ done: true }] })
+    await installGuestConversion('pve', 'pve2', ['the VirtIO drivers for Windows (/usr/share/virtio-win/virtio-win.iso)'])
+    expect(seen).toEqual(['pve2:install-virtio-win', 'pve2:check-virtio-win'])
+  }, 10_000)
+
+  it('throws the reason when the package install fails', async () => {
+    mockActions({ install: [{ success: false, error: 'apt: unable to locate virt-v2v' }] })
+    await expect(installGuestConversion('pve', 'pve2', ['virt-v2v-in-place (package virt-v2v)'])).rejects.toThrow(/unable to locate virt-v2v/)
+  })
+
+  it('throws the reason when the drivers download fails', async () => {
+    mockActions({ 'install-virtio-win': [{ started: true }], 'check-virtio-win': [{ done: true, error: 'download failed' }] })
+    await expect(installGuestConversion('pve', 'pve2', ['the VirtIO drivers for Windows (x)'])).rejects.toThrow(/download failed/)
+  }, 10_000)
+})
+

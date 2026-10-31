@@ -33,6 +33,18 @@ describe("buildNbdkitVddkCmd", () => {
     expect(cmd).toContain("file='[ds] vm/vm.vmdk'")
   })
 
+  // roadmap#177: the node is never a VMware VM, so HotAdd can only fail there;
+  // naming the network transports keeps OpenVDDK from logging a HotAdd error.
+  it("asks for the network transports only, NBDSSL first", () => {
+    const cmd = buildNbdkitVddkCmd({
+      sock: "/tmp/v.sock", libdir: "/opt/vddk", server: "10.0.0.9", user: "root",
+      passwordFile: "/tmp/pw", thumbprint: "AB:CD", moref: "vm-9", diskPath: "[ds] vm/vm.vmdk",
+    })
+    expect(cmd).toContain(" transports=nbdssl:nbd ")
+    expect(cmd).not.toContain("hotadd")
+    expect(cmd.indexOf("transports=")).toBeLessThan(cmd.indexOf("file="))
+  })
+
   it("appends the snapshot moref when reading a snapshot's logical view (CBT delta read)", () => {
     const cmd = buildNbdkitVddkCmd({
       sock: "/tmp/v.sock", libdir: "/opt/vddk", server: "10.0.0.9", user: "root",

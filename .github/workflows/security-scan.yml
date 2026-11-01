@@ -23,7 +23,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -60,7 +60,7 @@ jobs:
           vuln-type: 'os'
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         if: success() || (failure() && hashFiles('trivy-frontend.sarif') != '')
         with:
           sarif_file: 'trivy-frontend.sarif'
@@ -75,12 +75,12 @@ jobs:
       security-events: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Checkout backend repo
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           repository: adminsyspro/proxcenter-backend
@@ -113,7 +113,7 @@ jobs:
           limit-severities-for-sarif: true
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         if: success() || (failure() && hashFiles('trivy-orchestrator.sarif') != '')
         with:
           sarif_file: 'trivy-orchestrator.sarif'
@@ -130,7 +130,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -146,8 +146,49 @@ jobs:
           limit-severities-for-sarif: true
 
       - name: Upload results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         if: always()
         with:
           sarif_file: 'trivy-fs.sarif'
           category: 'trivy-filesystem'
+
+  # ========================================
+  # zizmor: GitHub Actions workflows
+  # ========================================
+  zizmor:
+    name: zizmor — Workflows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install zizmor
+        env:
+          ZIZMOR_VERSION: 1.31.1
+          ZIZMOR_SHA256: d185f726bdaf92df78273217dfdd24ebcd6b0ef48cf3ce776ff5762b6e138c99
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/zizmor.tar.gz" \
+            "https://github.com/zizmorcore/zizmor/releases/download/v${ZIZMOR_VERSION}/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${ZIZMOR_SHA256}  $RUNNER_TEMP/zizmor.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/zizmor.tar.gz" -C "$RUNNER_TEMP" zizmor
+
+      # Findings go to code scanning, where a pull request sees the ones it
+      # adds. The token lets the online audits (known vulnerable actions,
+      # impostor commits) resolve the pinned SHAs.
+      - name: Audit the workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          "$RUNNER_TEMP/zizmor" --format sarif --no-exit-codes .github/workflows > zizmor.sarif
+
+      - name: Upload zizmor results to GitHub Security
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        if: success() || (failure() && hashFiles('zizmor.sarif') != '')
+        with:
+          sarif_file: 'zizmor.sarif'
+          category: 'zizmor'

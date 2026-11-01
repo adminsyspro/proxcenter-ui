@@ -46,3 +46,42 @@ describe('GET /api/v1/version/check in air-gapped mode', () => {
     expect(body).toMatchObject({ latestVersion: null, updateAvailable: false, error: 'Failed to check for updates' })
   })
 })
+
+describe('GET /api/v1/version/check on a build that is not a release', () => {
+  const latestRelease = (tag: string) =>
+    vi.fn().mockResolvedValue(new Response(JSON.stringify({ tag_name: tag, html_url: 'https://example.test/r' }), { status: 200 }))
+
+  const getWithVersion = async (version: string) => {
+    vi.resetModules()
+    vi.stubEnv('NEXT_PUBLIC_APP_VERSION', version)
+    const { GET: get } = await import('./route')
+
+    return (await get()).json()
+  }
+
+  it.each(['staging', 'dev'])('announces no update and skips GitHub for a %s build', async (version) => {
+    const fetchMock = latestRelease('v1.4.12')
+    vi.stubGlobal('fetch', fetchMock)
+
+    const body = await getWithVersion(version)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(body).toMatchObject({ currentVersion: version, updateAvailable: false, latestVersion: null })
+  })
+
+  it('compares a pre-release build on its X.Y.Z', async () => {
+    vi.stubGlobal('fetch', latestRelease('v1.4.12'))
+    expect(await getWithVersion('1.4.13-staging')).toMatchObject({ latestVersion: '1.4.12', updateAvailable: false })
+
+    vi.stubGlobal('fetch', latestRelease('v1.4.14'))
+    expect(await getWithVersion('1.4.13-staging')).toMatchObject({ latestVersion: '1.4.14', updateAvailable: true })
+  })
+
+  it('announces only a newer release', async () => {
+    vi.stubGlobal('fetch', latestRelease('v1.4.12'))
+    expect(await getWithVersion('1.4.13')).toMatchObject({ updateAvailable: false })
+
+    vi.stubGlobal('fetch', latestRelease('v1.10.0'))
+    expect(await getWithVersion('1.9.3')).toMatchObject({ updateAvailable: true })
+  })
+})

@@ -22,13 +22,22 @@ interface VersionCheckResponse {
   error: string | null
 }
 
-function semverCompare(a: string, b: string): number {
-  const pa = a.split('.').map(Number)
-  const pb = b.split('.').map(Number)
+// X.Y.Z with an optional pre-release suffix (1.4.13-staging). Anything else,
+// such as "dev" or "staging", is not a release and has nothing to compare.
+const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/
+
+function semverCore(version: string): number[] | null {
+  const m = SEMVER.exec(version)
+
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+}
+
+function semverCompare(a: number[], b: number[]): number {
   for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) > (pb[i] || 0)) return 1
-    if ((pa[i] || 0) < (pb[i] || 0)) return -1
+    if (a[i] > b[i]) return 1
+    if (a[i] < b[i]) return -1
   }
+
   return 0
 }
 
@@ -49,8 +58,11 @@ export async function GET() {
     return NextResponse.json({ ...base, error: 'offline' })
   }
 
-  // Dev build — no version to compare, skip check
-  if (APP_VERSION === 'dev') {
+  // A dev or staging build has no release number to compare: a plain
+  // "staging" read as 0.0.0 announced the last release as an update.
+  const current = semverCore(APP_VERSION)
+
+  if (!current) {
     return NextResponse.json(base)
   }
 
@@ -73,7 +85,9 @@ export async function GET() {
     base.releaseDate = release.published_at || null
 
     // Compare versions: update available if latest > current
-    if (latestTag && semverCompare(latestTag, APP_VERSION) > 0) {
+    const latest = semverCore(latestTag)
+
+    if (latest && semverCompare(latest, current) > 0) {
       base.updateAvailable = true
     }
 

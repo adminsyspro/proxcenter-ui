@@ -454,7 +454,7 @@ write_env_file() {
             echo "ORCHESTRATOR_URL=http://orchestrator:8080"
             echo "ORCHESTRATOR_API_KEY=$(gen_secret 32)"
             echo ""
-            echo "# No registry access on this host: the warm-migration VDDK package needs a mirror"
+            echo "# No registry access on this host: images come from the offline bundle"
             echo "GHCR_TOKEN="
         fi
     } > "$INSTALL_DIR/.env"

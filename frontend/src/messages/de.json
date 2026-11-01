@@ -5236,6 +5236,7 @@
     "maintenance": "Wartung",
     "reports": "Berichte",
     "replication": "Replikation",
+    "updates": "Verfügbare Updates",
     "filtersAndLimits": "Filter und Limits",
     "minSeverity": "minimal severity",
     "allNotifications": "All Benachrichtigungen",
@@ -5327,7 +5328,8 @@
         "replication": "Replikation",
         "maintenance": "Wartung",
         "report": "Berichte",
-        "sla": "SLA"
+        "sla": "SLA",
+        "updates": "Updates"
       },
       "severities": {
         "info": "Info und höher",
@@ -5353,7 +5355,8 @@
       "backup": "Proxmox-Sicherungsaufträge, Erfolg oder Fehler je Auftrag, und die Wiederherstellungsübungen.",
       "replication": "Site Recovery: erfolgreiche oder fehlgeschlagene Replikationsaufträge sowie Failover, Failback oder Test eines Wiederherstellungsplans.",
       "maintenance": "Ein Knoten, der den Wartungsmodus betritt oder verlässt, und das Ende seiner Evakuierung.",
-      "report": "Geplante Berichte, nach der Erstellung per E-Mail versendet."
+      "report": "Geplante Berichte, nach der Erstellung per E-Mail versendet.",
+      "updates": "Neue Paketversionen auf den Proxmox-VE-Knoten, alle 6 Stunden geprüft. Eine Benachrichtigung pro Cluster, jede Version wird nur einmal gemeldet."
     }
   },
   "audit": {

@@ -5247,6 +5247,7 @@
     "maintenance": "Maintenance",
     "reports": "Reports",
     "replication": "Replication",
+    "updates": "Available updates",
     "filtersAndLimits": "Filters and limits",
     "minSeverity": "Minimum severity",
     "allNotifications": "All notifications",
@@ -5338,7 +5339,8 @@
         "replication": "Replication",
         "maintenance": "Maintenance",
         "report": "Reports",
-        "sla": "SLA"
+        "sla": "SLA",
+        "updates": "Updates"
       },
       "severities": {
         "info": "Info and above",
@@ -5364,7 +5366,8 @@
       "backup": "Proxmox backup jobs, success or failure per job, and the restore drills.",
       "replication": "Site Recovery: replication jobs that succeed or fail, and the failover, failback or test of a recovery plan.",
       "maintenance": "A node entering or leaving maintenance mode, and the end of its evacuation.",
-      "report": "Scheduled reports, sent by email once generated."
+      "report": "Scheduled reports, sent by email once generated.",
+      "updates": "New package versions available on the Proxmox VE nodes, checked every 6 hours. One notification per cluster, each version is reported once."
     }
   },
   "audit": {

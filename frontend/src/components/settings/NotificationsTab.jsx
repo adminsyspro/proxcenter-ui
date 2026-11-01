@@ -243,7 +243,7 @@ return
     </FormControl>
   )
 
-  const renderCategoryRow = ({ typeKey, enabled, onToggle, icon, iconColor, label, help }) => (
+  const renderCategoryRow = ({ typeKey, enabled, onToggle, icon, iconColor, label, help, withSeverity = true }) => (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
       <FormControlLabel
         sx={{ minWidth: 240, mr: 0 }}
@@ -256,7 +256,7 @@ return
           </Box>
         }
       />
-      {enabled && renderCategorySeverity(typeKey)}
+      {enabled && withSeverity && renderCategorySeverity(typeKey)}
     </Box>
   )
 
@@ -602,6 +602,16 @@ return
               iconColor: '#8b5cf6',
               label: t('notifications.maintenance'),
               help: t('notifications.help.maintenance')
+            })}
+            {renderCategoryRow({
+              typeKey: 'updates',
+              enabled: settings.enable_updates ?? false,
+              onToggle: e => setSettings(s => ({ ...s, enable_updates: e.target.checked })),
+              icon: 'ri-download-cloud-2-line',
+              iconColor: '#0ea5e9',
+              label: t('notifications.updates'),
+              help: t('notifications.help.updates'),
+              withSeverity: false
             })}
             {hasFeature(Features.SLA_MONITORING) && (
               <NotificationSlaRow

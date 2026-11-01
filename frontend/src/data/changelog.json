@@ -1,5 +1,40 @@
 [
   {
+    "version": "1.4.13",
+    "date": "2026-11-01",
+    "title": "Built-in HTTPS, an AI assistant, Availability & SLA, a capacity cockpit and configuration backup",
+    "summary": [
+      "ProxCenter now serves itself over HTTPS, with self-signed, uploaded or ACME certificates managed from Settings. The whole configuration can be backed up and restored from the settings page, which moves to a grouped side navigation, and every action that goes through ProxCenter is audited.",
+      "New views help you run the estate. The Availability & SLA page draws uptime per node and cluster, evaluates SLA policies with maintenance windows and budget notifications, and keeps an incident register. The Resources page becomes a capacity cockpit with a forecast drawn from up to a year of history, and the AI assistant answers with charts and proposes actions, guided plans and choices you approve.",
+      "The change journal shows readable diffs, who made each change, and firewall, access, storage and network changes. Warm VMware migration runs on OpenVDDK and survives network blips, Windows Server 2025 converts on PVE 9, local passwords are hashed with argon2id, and protected Proxmox calls are capped per node."
+    ],
+    "items": [
+      { "type": "new", "text": "Built-in HTTPS with self-signed, uploaded or ACME certificates" },
+      { "type": "new", "text": "AI assistant with charts and scoped tools, proposing actions you approve" },
+      { "type": "new", "text": "Availability & SLA page: uptime timelines, SLA policies, maintenance windows and an incident register" },
+      { "type": "new", "text": "Capacity cockpit on the Resources page, with a forecast from up to a year of history" },
+      { "type": "new", "text": "Back up and restore the whole configuration from the settings page" },
+      { "type": "new", "text": "Every action that goes through ProxCenter is audited" },
+      { "type": "new", "text": "Task archive on the Events page and search in the taskbar" },
+      { "type": "new", "text": "Migrate a hand-picked selection of guests through the drain planner" },
+      { "type": "new", "text": "vDC tenants create blank VMs and install them from their own ISO" },
+      { "type": "new", "text": "Several RBAC roles for one user in the same tenant" },
+      { "type": "improved", "text": "The change journal shows readable diffs, who made each change, and firewall, access, storage and network changes" },
+      { "type": "improved", "text": "Warm VMware migration runs on OpenVDDK, installed by Prepare this node, and survives network blips" },
+      { "type": "improved", "text": "Windows Server 2025 converts on PVE 9 nodes, with its data disks online at first boot" },
+      { "type": "improved", "text": "Hyper-V and Nutanix migrations keep every network card and MAC address" },
+      { "type": "improved", "text": "Node maintenance keeps Ceph OSDs in and manages Ceph daemons" },
+      { "type": "improved", "text": "The VM creation wizard adds Multiqueue, bridge MTU, machine version and CPU flags" },
+      { "type": "improved", "text": "Settings move to a grouped side navigation" },
+      { "type": "improved", "text": "Local passwords are hashed with argon2id, and published images are attested" },
+      { "type": "improved", "text": "Protected Proxmox calls are capped per node, and inventory polls run one cycle at a time" },
+      { "type": "fix", "text": "Hyper-V migrates only the disks attached to the VM" },
+      { "type": "fix", "text": "The DRS page no longer rejects evacuation and affinity recommendations" },
+      { "type": "fix", "text": "A disabled tenant is cut off and sign-out ends the session" },
+      { "type": "fix", "text": "The firewall log is read from the end of the file, without stacking scans on a node" }
+    ]
+  },
+  {
     "version": "1.4.12",
     "date": "2026-10-19",
     "title": "Backup restore drills, alert notifications to Slack, Teams and webhooks, host drain, per VM failover and write access for API tokens",

@@ -102,8 +102,9 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          # No dependency cache in a workflow that publishes images: a
+          # poisoned cache entry would reach the release run.
+          package-manager-cache: false
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps --ignore-scripts
@@ -604,6 +605,9 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
+          # The Go build cache is kept for branch runs, where it saves minutes,
+          # and skipped on the tag runs that publish a release.
+          cache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           cache-dependency-path: backend/go.sum
 
       - name: Run backend tests

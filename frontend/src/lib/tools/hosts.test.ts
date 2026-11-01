@@ -3,7 +3,7 @@
  * that nothing outside the snapshot comes back.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import { invokeTool } from './invoke'
 import type { ToolContext } from './types'
@@ -55,6 +55,10 @@ const ctx = (nodes = [node('pve1'), node('pve2'), node('pve3', { status: 'offlin
 const inDays = (d: number) => Math.floor(Date.now() / 1000) + d * 86_400
 
 beforeEach(() => {
+  // A frozen clock on a whole second: certificate dates are whole seconds, so
+  // a running clock made the remaining days flip between 11 and 12.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-01T12:00:00Z'))
   clearHostsCache()
   h.licensed = true
   h.denied = false
@@ -83,6 +87,10 @@ beforeEach(() => {
   })
 })
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe('get_host_maintenance', () => {
   it('reads updates, subscription and certificates of the online hosts, three GETs each', async () => {
     const res = (await getHostMaintenanceTool.execute({}, ctx())) as any
@@ -92,7 +100,7 @@ describe('get_host_maintenance', () => {
       host: 'pve1',
       updates: { pending: 2, security: 1, proxmoxPackages: ['pve-manager 9.2.21 -> 9.2.24'] },
       subscription: { status: 'notfound' },
-      certificateExpiresInDays: 11,
+      certificateExpiresInDays: 12,
       certificateExpiresSoon: true,
     })
     expect(res).toMatchObject({ hostsWithUpdates: 2, hostsWithSecurityUpdates: 2 })

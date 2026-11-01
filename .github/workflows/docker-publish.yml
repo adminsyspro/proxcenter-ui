@@ -137,7 +137,7 @@ jobs:
   # ========================================
   build-frontend:
     needs: [test, test-backend]
-    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
+    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -275,7 +275,7 @@ jobs:
   # ========================================
   build-demo:
     needs: [test, test-backend]
-    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
+    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -322,7 +322,7 @@ jobs:
   # locally on every `docker-compose up`.
   build-weasyprint:
     needs: [test, test-backend]
-    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
+    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -419,7 +419,7 @@ jobs:
   # (Enterprise-only); nodes authenticate with GHCR_TOKEN from .env.
   build-ha-images:
     needs: [test, test-backend]
-    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.actor == 'dependabot[bot]') }}
+    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -538,7 +538,7 @@ jobs:
   # and don't modify backend code.
   # ========================================
   test-backend:
-    if: github.actor != 'dependabot[bot]'
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     needs: [dispatch-guard]
     runs-on: ubuntu-latest
     # Replication tests open a per-run schema on this Postgres via
@@ -620,7 +620,7 @@ jobs:
   # Build Orchestrator Image
   # ========================================
   build-orchestrator:
-    if: github.actor != 'dependabot[bot]'
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     needs: [test, test-backend]
     runs-on: ubuntu-latest
     permissions:

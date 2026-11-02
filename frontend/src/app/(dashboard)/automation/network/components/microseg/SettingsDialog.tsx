@@ -89,6 +89,7 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
 
   const busy = save.busy
   const shown = problemText()
+  const errorLine = shown || save.error
 
   return (
     <>
@@ -121,7 +122,7 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            {shown ? <DialogErrorLine message={shown} /> : save.error ? <DialogErrorLine message={save.error} /> : null}
+            {errorLine ? <DialogErrorLine message={errorLine} /> : null}
           </Box>
           <Button onClick={onClose} disabled={busy}>{tc('cancel')}</Button>
           <Button onClick={() => (prefixChanged ? setConfirmingPrefix(true) : void submit())} variant='contained' disabled={busy || !update || !!firstProblem}>{tc('save')}</Button>

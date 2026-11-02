@@ -29,6 +29,12 @@ const PENDING_OBSERVED: ListSuggestionsParams = { status: 'pending', limit: PEND
 
 type Selection = { kind: 'zone' | 'guest' | 'edge'; id: string }
 
+/** The node the selection lights: the circle of the selected zone, or the selected guest. */
+function selectedNodeOf(selectedZone: { id: string } | null, selection: Selection | null): string | null {
+  if (selectedZone) return zoneNodeId(selectedZone.id)
+  return selection?.kind === 'guest' ? selection.id : null
+}
+
 const toMapMember = (m: ZoneMember): MapMember => ({
   key: guestKey(m.ref),
   name: m.guest?.name ?? `${m.ref.type}/${m.ref.vmid}`,
@@ -102,7 +108,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   // A zone deleted from the draft (or an edge gone after a reload) simply closes its panel.
   const selectedZone = selection?.kind === 'zone' ? zones.find(z => z.id === selection.id) ?? null : null
   const selectedEdge = selection?.kind === 'edge' ? graph.edges.find(e => e.id === selection.id) ?? null : null
-  const selectedNode = selectedZone ? zoneNodeId(selectedZone.id) : selection?.kind === 'guest' ? selection.id : null
+  const selectedNode = selectedNodeOf(selectedZone, selection)
   const selectedFocus = selectedNode ?? (selection?.kind === 'edge' ? selection.id : null)
   const focusId = hover ?? keyFocus ?? selectedFocus
   const lit = useMemo(() => focusSets(graph, focusId), [graph, focusId])
@@ -127,7 +133,9 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     end: nameOf,
     short: (nodeId: string) => {
       const d = graph.nodes.find(n => n.id === nodeId)?.data as unknown as MapNodeData | undefined
-      return d?.kind === 'guest' ? d.member.name : d?.kind === 'more' ? `+${d.count}` : nameOf(nodeId)
+      if (d?.kind === 'guest') return d.member.name
+      if (d?.kind === 'more') return `+${d.count}`
+      return nameOf(nodeId)
     },
   }), [zonesById, nameOf, graph.nodes])
 

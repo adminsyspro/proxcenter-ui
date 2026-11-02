@@ -95,7 +95,10 @@ export type MapInput = {
 
 export type ZoneGraph = { nodes: Node[]; edges: Edge[] }
 
-const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+function byText(a: string, b: string): number {
+  if (a < b) return -1
+  return a > b ? 1 : 0
+}
 const KIND_RANK: Record<MapEdgeKind, number> = { allowed: 0, outside: 1, unprotected: 2, blocked: 3 }
 
 /** The 8 groups of an IPv6 address, or null when it is not one. An IPv4 tail ("::ffff:10.0.0.5") counts for two. */
@@ -107,14 +110,15 @@ function ipv6Groups(text: string): number[] | null {
     if (b.some(n => n > 255)) return null
     hexText = `${text.slice(0, v4.index)}${(b[0] * 256 + b[1]).toString(16)}:${(b[2] * 256 + b[3]).toString(16)}`
   }
-  const parse = (part: string) => (part === '' ? [] : part.split(':').map(g => (/^[0-9a-f]{1,4}$/.test(g) ? Number.parseInt(g, 16) : Number.NaN)))
+  const hexGroup = (g: string) => (/^[0-9a-f]{1,4}$/.test(g) ? Number.parseInt(g, 16) : Number.NaN)
+  const parse = (part: string) => (part === '' ? [] : part.split(':').map(hexGroup))
   const halves = hexText.split('::')
   if (halves.length > 2) return null
   const left = parse(halves[0])
   const right = halves.length === 2 ? parse(halves[1]) : []
   const missing = 8 - left.length - right.length
   if (halves.length === 2 ? missing < 1 : missing !== 0) return null
-  const groups = [...left, ...Array<number>(halves.length === 2 ? missing : 0).fill(0), ...right]
+  const groups = [...left, ...new Array<number>(halves.length === 2 ? missing : 0).fill(0), ...right]
   return groups.every(g => Number.isInteger(g) && g >= 0 && g <= 0xffff) ? groups : null
 }
 
@@ -185,6 +189,18 @@ function groupOf(id: string, members: MapMember[] | null, data: Group['data']): 
   return { id, radius, all: list, shown: list.slice(0, shown), more, data }
 }
 
+/** An end of an allowed flow: the box for a CIDR, the circle of a known zone, nothing for a zone that is gone. */
+function allowedEnd(cidr: string, zoneId: string, box: string, known: ReadonlyMap<string, MicrosegZone>): string | null {
+  if (cidr) return box
+  return known.has(zoneId) ? zoneNodeId(zoneId) : null
+}
+
+/** Unprotected and Outside edges are dashed, a draft-only edge dotted, the others solid. */
+function edgeDash(kind: MapEdgeKind, draft: boolean): string | undefined {
+  if (kind === 'unprotected' || kind === 'outside') return '6 4'
+  return draft ? '1 5' : undefined
+}
+
 /**
  * Where an address of a group's members is drawn: its guest node, or the "+N" node when it is not drawn. An address
  * two guests share goes to the first by name (whatever the order of the inventory).
@@ -240,8 +256,8 @@ export function buildZoneGraph({ zones, flows, suggestions, members = null, unzo
     pairs.set(key, pair)
   }
   for (const f of flows) {
-    const source = f.src_cidr ? EXTERNAL_ID : known.has(f.src_zone_id) ? zoneNodeId(f.src_zone_id) : null
-    const target = f.dst_cidr ? OUTSIDE_ID : known.has(f.dst_zone_id) ? zoneNodeId(f.dst_zone_id) : null
+    const source = allowedEnd(f.src_cidr, f.src_zone_id, EXTERNAL_ID, known)
+    const target = allowedEnd(f.dst_cidr, f.dst_zone_id, OUTSIDE_ID, known)
     if (!source || !target || (source === EXTERNAL_ID && target === OUTSIDE_ID)) continue
     add(target === OUTSIDE_ID ? 'outside' : 'allowed', source, target, flowService(f), f)
   }
@@ -332,7 +348,7 @@ export function buildZoneGraph({ zones, flows, suggestions, members = null, unzo
     const observed = p.kind === 'unprotected' || p.kind === 'blocked'
     const draft = !!unapplied && p.flows.length > 0 && p.flows.every(f => unapplied.has(f.id))
     const color = EDGE_COLORS[p.kind]
-    const dash = p.kind === 'unprotected' || p.kind === 'outside' ? '6 4' : draft ? '1 5' : undefined
+    const dash = edgeDash(p.kind, draft)
     return [{
       id,
       type: 'flow',
@@ -371,13 +387,12 @@ export function buildZoneGraph({ zones, flows, suggestions, members = null, unzo
 
 export type FlowFilters = { allowed: boolean; unprotected: boolean; blocked: boolean }
 export const ALL_FLOWS: FlowFilters = { allowed: true, unprotected: true, blocked: true }
+/** The checkbox of the toolbar each kind of edge follows. */
+const FILTER_OF_KIND: Record<MapEdgeKind, keyof FlowFilters> = { allowed: 'allowed', outside: 'allowed', unprotected: 'unprotected', blocked: 'blocked' }
 
 /** The edges the three checkboxes of the toolbar let through (the flows to Outside are allowed flows). */
 export function filterEdges(edges: Edge[], filters: FlowFilters): Edge[] {
-  return edges.filter(e => {
-    const kind = (e.data as unknown as MapEdgeData).kind
-    return kind === 'unprotected' ? filters.unprotected : kind === 'blocked' ? filters.blocked : filters.allowed
-  })
+  return edges.filter(e => filters[FILTER_OF_KIND[(e.data as unknown as MapEdgeData).kind] ?? 'allowed'])
 }
 
 /**

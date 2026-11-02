@@ -80,8 +80,8 @@ function Revisions({ connectionId, policy, reloadPolicy, startRun }: MicrosegSub
       <SectionHeader title={t('title')} />
       {error && !data && <MicrosegErrorAlert error={error} onRetry={reload} />}
       {!data && !error && loading && <Loading text={t('loading')} />}
-      {data && data.length === 0 && <Typography color='text.secondary' sx={{ py: 2 }}>{t('empty')}</Typography>}
-      {data && data.length > 0 && (
+      {data?.length === 0 && <Typography color='text.secondary' sx={{ py: 2 }}>{t('empty')}</Typography>}
+      {data?.length ? (
         <>
           <Box role='list'>
             {paged.rows.map(revision => (
@@ -98,7 +98,7 @@ function Revisions({ connectionId, policy, reloadPolicy, startRun }: MicrosegSub
             <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('capped', { count: REVISIONS_LIMIT })}</Typography>
           )}
         </>
-      )}
+      ) : null}
       <MicrosegConfirmDialog
         open={restoring !== null}
         title={t('restoreTitle', { version: restoring?.version ?? 0 })}

@@ -12773,7 +12773,11 @@
           "enforce": "적용"
         },
         "assign": "게스트 할당",
-        "removeMember": "영역에서 제거"
+        "removeMember": "영역에서 제거",
+        "memberRemoval": "제거 대기 중",
+        "memberRemovalHint": "제거 대기 중이며 다음 적용 시 영역 태그가 제거됩니다.",
+        "memberMove": "{zone}(으)로 이동 중",
+        "memberMoveHint": "다음 적용 시 {zone}(으)로 이동하도록 대기 중입니다."
       },
       "flow": {
         "notApplied": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",
@@ -12856,8 +12860,8 @@
         "draftNote": "계획이 적용될 때까지 Proxmox에는 아무것도 기록되지 않습니다.",
         "search": "이름 또는 VMID로 검색",
         "selectAll": "일치하는 모든 게스트",
-        "selectAllCount": "일치하는 모든 게스트 ({count})",
-        "selected": "{count}개 선택됨",
+        "selectAllCount": "일치하는 모든 게스트 ({count, number})",
+        "selected": "{count, number}개 선택됨",
         "member": "구성원",
         "pending": "대기 중",
         "pendingHint": "이 영역에 대기 중이며 다음 적용 시 태그가 지정됩니다.",
@@ -12867,7 +12871,11 @@
         "loading": "게스트를 불러오는 중...",
         "loadFailed": "게스트 목록을 읽을 수 없습니다.",
         "confirm": "{count, plural, other {#개 게스트 할당}}",
-        "tooMany": "한 번에 최대 {max}개의 게스트를 할당할 수 있습니다 (선택됨: {count})."
+        "tooMany": "한 번에 최대 {max, number}개의 게스트를 할당할 수 있습니다 (선택됨: {count, number}).",
+        "pendingRemoval": "제거 대기 중",
+        "removalHint": "제거 대기 중입니다. 이 영역에 유지하려면 다시 선택하세요.",
+        "pendingMove": "{zone}(으)로 이동 중",
+        "moveHint": "{zone}(으)로 이동 대기 중입니다. 이 영역에 유지하려면 다시 선택하세요."
       }
     },
     "plan": {

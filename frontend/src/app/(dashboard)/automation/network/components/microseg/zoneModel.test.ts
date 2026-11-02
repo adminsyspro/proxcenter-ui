@@ -35,6 +35,23 @@ describe('zoneMembers', () => {
     expect(members[1].guest?.name).toBe('vm200')
   })
 
+  it('reports the removal or the move queued for a tagged member, and matches by type and vmid', () => {
+    const other = zone('z2', { name: 'db' })
+    const pending: PendingMember[] = [
+      { id: 'p1', policy_id: 'p', node: 'pve-old', type: 'qemu', vmid: 100, zone_id: '' },
+      { id: 'p2', policy_id: 'p', node: 'pve1', type: 'qemu', vmid: 101, zone_id: 'z2' },
+      { id: 'p3', policy_id: 'p', node: 'pve1', type: 'qemu', vmid: 102, zone_id: 'z1' },
+      { id: 'p4', policy_id: 'p', node: 'pve1', type: 'lxc', vmid: 103, zone_id: '' },
+    ]
+    const members = zoneMembers(z, 'zone-', [guest(100, ['zone-web']), guest(101, ['zone-web']), guest(102, ['zone-web']), guest(103, ['zone-web'])], pending, [z, other])
+    expect(members.map(m => [m.ref.vmid, m.pending, m.change])).toEqual([
+      [100, false, { kind: 'removal' }],
+      [101, false, { kind: 'move', zoneName: 'db' }],
+      [102, false, undefined],
+      [103, false, undefined],
+    ])
+  })
+
   it('keeps a pending member whose guest is not in the inventory', () => {
     const pending: PendingMember[] = [{ id: 'p1', policy_id: 'p', node: 'pve9', type: 'qemu', vmid: 900, zone_id: 'z1' }]
     const members = zoneMembers(z, 'zone-', [], pending)

@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
-import { calls, mock, reply } from './microsegTestKit'
+import { calls, mock, policy, reply, REVISION_HEAD } from './microsegTestKit'
 import { body, db, installFreshMocks, setup, vm, web } from './policyTestKit'
 
 installFreshMocks()
@@ -162,7 +162,7 @@ describe('assign guests dialog: selection', () => {
     await within(dialog).findByText('guest-000')
     fireEvent.click(selectAll(dialog))
 
-    expect(await within(dialog).findByText('At most 1000 guests can be assigned at once (selected: 1200).')).toBeTruthy()
+    expect(await within(dialog).findByText('At most 1,000 guests can be assigned at once (selected: 1,200).')).toBeTruthy()
     const button = assignButton(dialog, 'Assign 1,200 guests') as HTMLButtonElement
     expect(button.disabled).toBe(true)
     fireEvent.click(button)
@@ -173,7 +173,7 @@ describe('assign guests dialog: selection', () => {
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'guest-002' }))
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'guest-003' }))
     fireEvent.click(within(dialog).getByRole('checkbox', { name: 'guest-004' }))
-    expect(within(dialog).getByText('At most 1000 guests can be assigned at once (selected: 1195).')).toBeTruthy()
+    expect(within(dialog).getByText('At most 1,000 guests can be assigned at once (selected: 1,195).')).toBeTruthy()
   })
 })
 
@@ -275,5 +275,86 @@ describe('remove from zone', () => {
     fireEvent.click(await within(row).findByRole('button', { name: 'Remove from zone' }))
     await waitFor(() => expect(calls('GET /policy').length).toBeGreaterThan(before))
     expect(await screen.findByText(/Reload/i)).toBeTruthy()
+  })
+})
+
+describe('queued removals and moves of tagged members', () => {
+  const queued = (zoneId: string, node = 'pve1') => [{ id: 'p1', policy_id: 'p1', node, type: 'qemu' as const, vmid: 100, zone_id: zoneId }]
+
+  it('shows the removal after "Remove from zone" once the policy reloads with the pending row', async () => {
+    let pendingRows: ReturnType<typeof queued> = []
+    mock.routes['POST /members'] = () => { pendingRows = queued(''); return reply(200, { version: 4 }) }
+    setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])] })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web()], pending_members: pendingRows, last_revision: REVISION_HEAD, pending_changes: pendingRows.length > 0 }))
+    const row = await screen.findByRole('listitem', { name: 'web' })
+    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    const member = (await within(row).findByText('web-1')).closest('div') as HTMLElement
+    fireEvent.click(within(member).getByRole('button', { name: 'Remove from zone' }))
+
+    expect(await within(member).findByText('Pending removal')).toBeTruthy()
+    expect((within(member).getByRole('button', { name: 'Remove from zone' }) as HTMLButtonElement).disabled).toBe(true)
+    const other = (within(row).getByText('web-2')).closest('div') as HTMLElement
+    expect(within(other).queryByText('Pending removal')).toBeNull()
+  })
+
+  it('shows a tagged member queued for another zone as moving', async () => {
+    setup({ zones: [web(), db()], vms: [vm(100, 'web-1', ['zone-web'])], pending_members: queued('zd') })
+    const row = await screen.findByRole('listitem', { name: 'web' })
+    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    expect(await within(row).findByText('Moving to db')).toBeTruthy()
+    expect(within(row).queryByText('Pending')).toBeNull()
+  })
+
+  it('matches the pending row by type and vmid, whatever the node', async () => {
+    setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web'])], pending_members: queued('', 'pve-old') })
+    const row = await screen.findByRole('listitem', { name: 'web' })
+    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    expect(await within(row).findByText('Pending removal')).toBeTruthy()
+    expect(within(row).getAllByText('web-1')).toHaveLength(1)
+  })
+
+  it('lets the dialog undo a queued removal: the guest is selectable and re-queued for the zone', async () => {
+    mock.routes['POST /members'] = () => reply(200, { version: 4 })
+    setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])], pending_members: queued('') })
+    const dialog = await openDialog()
+    const leaving = await within(dialog).findByRole('listitem', { name: 'web-1' })
+    expect(within(leaving).getByText('Pending removal')).toBeTruthy()
+    expect(within(leaving).queryByText('Member')).toBeNull()
+    const box = within(leaving).getByRole('checkbox') as HTMLInputElement
+    expect(box.disabled).toBe(false)
+    expect(box.checked).toBe(false)
+    expect((within(dialog).getByRole('checkbox', { name: 'web-2' }) as HTMLInputElement).disabled).toBe(true)
+
+    fireEvent.click(box)
+    fireEvent.click(assignButton(dialog, 'Assign 1 guest'))
+    await waitFor(() => expect(calls('POST /members')).toHaveLength(1))
+    expect(body(calls('POST /members')[0][1] as RequestInit)).toEqual({
+      version: 3, zone_id: 'zw', guests: [{ node: 'pve1', type: 'qemu', vmid: 100 }],
+    })
+  })
+
+  it('lets the dialog take back a queued move too', async () => {
+    setup({ zones: [web(), db()], vms: [vm(100, 'web-1', ['zone-web'])], pending_members: queued('zd') })
+    const dialog = await openDialog()
+    const row = await within(dialog).findByRole('listitem', { name: 'web-1' })
+    expect(within(row).getByText('Moving to db')).toBeTruthy()
+    expect((within(row).getByRole('checkbox') as HTMLInputElement).disabled).toBe(false)
+  })
+
+  it('disables the remove buttons while a removal is in flight', async () => {
+    let release: (v: unknown) => void = () => undefined
+    mock.routes['POST /members'] = () => new Promise(resolve => { release = resolve })
+    setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])] })
+    const row = await screen.findByRole('listitem', { name: 'web' })
+    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    await within(row).findByText('web-2')
+    const buttons = () => within(row).getAllByRole('button', { name: 'Remove from zone' }) as HTMLButtonElement[]
+    fireEvent.click(buttons()[0])
+    await waitFor(() => expect(buttons().every(b => b.disabled)).toBe(true))
+    fireEvent.click(buttons()[1])
+    expect(calls('POST /members')).toHaveLength(1)
+
+    release(reply(200, { version: 4 }))
+    await waitFor(() => expect(buttons().every(b => !b.disabled)).toBe(true))
   })
 })

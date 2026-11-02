@@ -26,6 +26,8 @@ export type ZoneRowProps = {
   onSetState: (zone: MicrosegZone, state: ZoneState) => void
   onAssign: (zone: MicrosegZone) => void
   onRemoveMember: (ref: GuestRef) => void
+  /** A member removal is in flight: the remove buttons wait. */
+  removeBusy?: boolean
 }
 
 /** The shield of the zone in its color, with a dot for its state. */
@@ -46,7 +48,7 @@ function ZoneGlyph({ zone, label }: { zone: MicrosegZone; label: string }) {
   )
 }
 
-function MemberLine({ member, onRemove }: { member: ZoneMember; onRemove: () => void }) {
+function MemberLine({ member, busy, onRemove }: { member: ZoneMember; busy: boolean; onRemove: () => void }) {
   const t = useTranslations('microsegPilot.policy.zone')
   const { guest, ref } = member
   const name = guest?.name ?? `${ref.type}/${ref.vmid}`
@@ -59,8 +61,22 @@ function MemberLine({ member, onRemove }: { member: ZoneMember; onRemove: () => 
       <Tooltip title={name}><Typography noWrap sx={{ flex: '0 1 auto' }}>{name}</Typography></Tooltip>
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{where}</Typography>
       {member.pending && <Chip size='small' color='warning' variant='outlined' label={t('memberPending')} sx={{ flexShrink: 0 }} />}
+      {member.change?.kind === 'removal' && (
+        <Tooltip title={t('memberRemovalHint')}>
+          <Chip size='small' color='warning' variant='outlined' label={t('memberRemoval')} sx={{ flexShrink: 0 }} />
+        </Tooltip>
+      )}
+      {member.change?.kind === 'move' && (
+        <Tooltip title={t('memberMoveHint', { zone: member.change.zoneName })}>
+          <Chip size='small' color='warning' variant='outlined' label={t('memberMove', { zone: member.change.zoneName })} sx={{ flexShrink: 1, minWidth: 0, maxWidth: 200 }} />
+        </Tooltip>
+      )}
       <Tooltip title={t('removeMember')}>
-        <IconButton size='small' aria-label={t('removeMember')} onClick={onRemove} sx={{ flexShrink: 0 }}><i className='ri-close-line' /></IconButton>
+        <span>
+          <IconButton size='small' aria-label={t('removeMember')} disabled={busy || member.change?.kind === 'removal'} onClick={onRemove} sx={{ flexShrink: 0 }}>
+            <i className='ri-close-line' />
+          </IconButton>
+        </span>
       </Tooltip>
     </Box>
   )
@@ -80,7 +96,7 @@ function FlowLines({ title, flows, zonesById }: { title: string; flows: Microseg
   )
 }
 
-function ZoneDetails({ zone, members, membersKnown, flows, zonesById, onRemoveMember }: Pick<ZoneRowProps, 'zone' | 'members' | 'membersKnown' | 'flows' | 'zonesById' | 'onRemoveMember'>) {
+function ZoneDetails({ zone, members, membersKnown, flows, zonesById, onRemoveMember, removeBusy }: Pick<ZoneRowProps, 'zone' | 'members' | 'membersKnown' | 'flows' | 'zonesById' | 'onRemoveMember' | 'removeBusy'>) {
   const t = useTranslations('microsegPilot.policy.zone')
   const paged = usePaged(members)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
@@ -90,7 +106,7 @@ function ZoneDetails({ zone, members, membersKnown, flows, zonesById, onRemoveMe
       <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('membersTitle')}</Typography>
       {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
       {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
-      {paged.rows.map(m => <MemberLine key={`${m.ref.node}/${m.ref.type}/${m.ref.vmid}`} member={m} onRemove={() => onRemoveMember(m.ref)} />)}
+      {paged.rows.map(m => <MemberLine key={`${m.ref.node}/${m.ref.type}/${m.ref.vmid}`} member={m} busy={!!removeBusy} onRemove={() => onRemoveMember(m.ref)} />)}
       <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
       <FlowLines title={t('incoming')} flows={incoming} zonesById={zonesById} />
       <FlowLines title={t('outgoing')} flows={outgoing} zonesById={zonesById} />
@@ -99,7 +115,7 @@ function ZoneDetails({ zone, members, membersKnown, flows, zonesById, onRemoveMe
 }
 
 /** One zone on one line: chevron, colored shield with its state dot, name, label, state, members, actions. */
-export default function ZoneRow({ zone, members, membersKnown, flows, zonesById, onEdit, onDelete, onSetState, onAssign, onRemoveMember }: ZoneRowProps) {
+export default function ZoneRow({ zone, members, membersKnown, flows, zonesById, onEdit, onDelete, onSetState, onAssign, onRemoveMember, removeBusy }: ZoneRowProps) {
   const t = useTranslations('microsegPilot.policy.zone')
   const tp = useTranslations('microsegPilot.policy')
   const [open, setOpen] = useState(false)
@@ -145,7 +161,7 @@ export default function ZoneRow({ zone, members, membersKnown, flows, zonesById,
         </Menu>
       </Box>
       <Collapse in={open} unmountOnExit>
-        <ZoneDetails zone={zone} members={members} membersKnown={membersKnown} flows={flows} zonesById={zonesById} onRemoveMember={onRemoveMember} />
+        <ZoneDetails zone={zone} members={members} membersKnown={membersKnown} flows={flows} zonesById={zonesById} onRemoveMember={onRemoveMember} removeBusy={removeBusy} />
       </Collapse>
     </Box>
   )

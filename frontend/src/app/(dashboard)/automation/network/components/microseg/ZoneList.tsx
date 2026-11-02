@@ -9,7 +9,7 @@ import PolicyPager, { usePaged } from './PolicyPager'
 import ZoneRow, { type ZoneRowProps } from './ZoneRow'
 import { zoneMembers, type PolicyGuest } from './zoneModel'
 
-type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onAssign' | 'onRemoveMember'> & {
+type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onAssign' | 'onRemoveMember' | 'removeBusy'> & {
   zones: MicrosegZone[]
   flows: MicrosegFlow[]
   tagPrefix: string
@@ -40,7 +40,7 @@ export default function ZoneList({ zones, flows, tagPrefix, guests, guestsStatus
               <ZoneRow
                 key={zone.id}
                 zone={zone}
-                members={zoneMembers(zone, tagPrefix, guests, pendingMembers)}
+                members={zoneMembers(zone, tagPrefix, guests, pendingMembers, zones)}
                 membersKnown={guestsStatus === 'ready'}
                 flows={flows}
                 zonesById={zonesById}

@@ -10,7 +10,7 @@ import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/component
 import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegPolicy, MicrosegZone } from '@/lib/microseg/types'
 
-import { assignRows, filterRows, GUESTS_PAGE_SIZE, MAX_ASSIGN, type AssignRow } from './assignModel'
+import { assignRows, filterRows, GUESTS_PAGE_SIZE, isSelectable, MAX_ASSIGN, type AssignRow } from './assignModel'
 import { DialogErrorLine, isVersionConflict, ONE_LINE_SX, OneLine, useDialogAction } from './dialogParts'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { useZoneGuests } from './useZoneGuests'
@@ -33,8 +33,8 @@ function GuestLine({ row, zoneName, checked, onToggle }: { row: AssignRow; zoneN
     <Box role='listitem' aria-label={guest.name} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 36 }}>
       <Checkbox
         size='small'
-        checked={checked || row.member !== null}
-        disabled={row.member !== null}
+        checked={checked || !isSelectable(row)}
+        disabled={!isSelectable(row)}
         onChange={onToggle}
         slotProps={{ input: { 'aria-label': guest.name } }}
         sx={{ p: 0.5 }}
@@ -42,7 +42,17 @@ function GuestLine({ row, zoneName, checked, onToggle }: { row: AssignRow; zoneN
       <StatusIcon type='vm' vmType={guest.type} status={guest.status} />
       <Tooltip title={guest.name}><Typography noWrap sx={{ flex: '0 1 auto' }}>{guest.name}</Typography></Tooltip>
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{`${guest.vmid} · ${guest.node}`}</Typography>
-      {row.member === 'tag' && <Chip size='small' variant='outlined' label={t('member')} sx={{ flexShrink: 0 }} />}
+      {row.member === 'tag' && !row.change && <Chip size='small' variant='outlined' label={t('member')} sx={{ flexShrink: 0 }} />}
+      {row.change?.kind === 'removal' && (
+        <Tooltip title={t('removalHint')}>
+          <Chip size='small' color='warning' variant='outlined' label={t('pendingRemoval')} sx={{ flexShrink: 0 }} />
+        </Tooltip>
+      )}
+      {row.change?.kind === 'move' && (
+        <Tooltip title={t('moveHint', { zone: row.change.zoneName })}>
+          <Chip size='small' color='warning' variant='outlined' label={t('pendingMove', { zone: row.change.zoneName })} sx={{ flexShrink: 1, minWidth: 0, maxWidth: 200 }} />
+        </Tooltip>
+      )}
       {row.member === 'pending' && (
         <Tooltip title={t('pendingHint')}>
           <Chip size='small' color='warning' variant='outlined' label={t('pending')} sx={{ flexShrink: 0 }} />
@@ -86,8 +96,8 @@ export default function AssignGuestsDialog({ open, connectionId, zone, policy, r
   const paged = usePaged(filtered, GUESTS_PAGE_SIZE)
 
   // A guest that became a member (after a reload) drops out of the selection.
-  const chosen = useMemo(() => rows.filter(r => r.member === null && selected.has(r.key)), [rows, selected])
-  const selectable = filtered.filter(r => r.member === null)
+  const chosen = useMemo(() => rows.filter(r => isSelectable(r) && selected.has(r.key)), [rows, selected])
+  const selectable = filtered.filter(isSelectable)
   const selectedInFilter = selectable.filter(r => selected.has(r.key)).length
   const allChecked = selectable.length > 0 && selectedInFilter === selectable.length
   const tooMany = chosen.length > MAX_ASSIGN

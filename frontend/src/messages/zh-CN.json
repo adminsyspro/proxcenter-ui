@@ -12773,7 +12773,11 @@
           "enforce": "强制执行"
         },
         "assign": "分配客户机",
-        "removeMember": "从区域中移除"
+        "removeMember": "从区域中移除",
+        "memberRemoval": "待移除",
+        "memberRemovalHint": "已排队移除，下次应用时将移除区域标签。",
+        "memberMove": "正在移动到 {zone}",
+        "memberMoveHint": "已排队，下次应用时移动到 {zone}。"
       },
       "flow": {
         "notApplied": "未应用（v1 不管理出站）",
@@ -12856,8 +12860,8 @@
         "draftNote": "在应用计划之前，不会向 Proxmox 写入任何内容。",
         "search": "按名称或 VMID 搜索",
         "selectAll": "所有匹配的客户机",
-        "selectAllCount": "所有匹配的客户机（{count}）",
-        "selected": "已选择 {count} 个",
+        "selectAllCount": "所有匹配的客户机（{count, number}）",
+        "selected": "已选择 {count, number} 个",
         "member": "成员",
         "pending": "待处理",
         "pendingHint": "已为此区域排队，下次应用时打标签。",
@@ -12867,7 +12871,11 @@
         "loading": "正在加载客户机...",
         "loadFailed": "无法读取客户机列表。",
         "confirm": "分配 {count, plural, other {# 个客户机}}",
-        "tooMany": "一次最多可分配 {max} 个客户机（已选择：{count}）。"
+        "tooMany": "一次最多可分配 {max, number} 个客户机（已选择：{count, number}）。",
+        "pendingRemoval": "待移除",
+        "removalHint": "已排队移除，再次选择可将其保留在此区域。",
+        "pendingMove": "正在移动到 {zone}",
+        "moveHint": "已排队移动到 {zone}，再次选择可将其保留在此区域。"
       }
     },
     "plan": {

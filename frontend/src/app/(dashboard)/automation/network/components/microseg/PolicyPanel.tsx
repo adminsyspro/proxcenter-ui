@@ -42,6 +42,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
   const [enforcing, setEnforcing] = useState<MicrosegZone | null>(null)
   const [assigning, setAssigning] = useState<MicrosegZone | null>(null)
   const [actionError, setActionError] = useState<unknown>(null)
+  const [removingMember, setRemovingMember] = useState(false)
   const removal = useDialogAction()
 
   const readyAfterHours = policy.policy.settings?.ready_after_hours || DEFAULT_READY_AFTER_HOURS
@@ -87,8 +88,12 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
 
   /** Takes a guest out of every zone: a draft change, the next apply removes the zone tag. */
   const removeMember = (ref: GuestRef) => {
+    if (removingMember) return
     setActionError(null)
-    write(() => api.setMembers({ version: policy.version, zone_id: '', guests: [ref] })).catch(setActionError)
+    setRemovingMember(true)
+    write(() => api.setMembers({ version: policy.version, zone_id: '', guests: [ref] }))
+      .catch(setActionError)
+      .finally(() => setRemovingMember(false))
   }
 
   const startState = (zone: MicrosegZone, state: ZoneState) => write(async () => {
@@ -122,6 +127,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
         onSetState={onSetState}
         onAssign={setAssigning}
         onRemoveMember={removeMember}
+        removeBusy={removingMember}
       />
       <FlowList
         flows={policy.flows}

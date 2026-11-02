@@ -12441,7 +12441,11 @@
           "enforce": "Durchsetzen"
         },
         "assign": "Gäste zuweisen",
-        "removeMember": "Aus der Zone entfernen"
+        "removeMember": "Aus der Zone entfernen",
+        "memberRemoval": "Entfernung ausstehend",
+        "memberRemovalHint": "Zur Entfernung vorgemerkt, das Zonen-Tag wird bei der nächsten Anwendung entfernt.",
+        "memberMove": "Wechsel nach {zone}",
+        "memberMoveHint": "Für den Wechsel nach {zone} bei der nächsten Anwendung vorgemerkt."
       },
       "flow": {
         "notApplied": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",
@@ -12524,8 +12528,8 @@
         "draftNote": "In Proxmox wird nichts geschrieben, bevor der Plan angewendet wird.",
         "search": "Nach Name oder VMID suchen",
         "selectAll": "Alle passenden Gäste",
-        "selectAllCount": "Alle passenden Gäste ({count})",
-        "selected": "Ausgewählt: {count}",
+        "selectAllCount": "Alle passenden Gäste ({count, number})",
+        "selected": "Ausgewählt: {count, number}",
         "member": "Mitglied",
         "pending": "Ausstehend",
         "pendingHint": "Für diese Zone vorgemerkt, wird bei der nächsten Anwendung getaggt.",
@@ -12535,7 +12539,11 @@
         "loading": "Gäste werden geladen...",
         "loadFailed": "Die Gästeliste konnte nicht gelesen werden.",
         "confirm": "{count, plural, one {# Gast} other {# Gäste}} zuweisen",
-        "tooMany": "Es können höchstens {max} Gäste auf einmal zugewiesen werden (ausgewählt: {count})."
+        "tooMany": "Es können höchstens {max, number} Gäste auf einmal zugewiesen werden (ausgewählt: {count, number}).",
+        "pendingRemoval": "Entfernung ausstehend",
+        "removalHint": "Zur Entfernung vorgemerkt, erneut auswählen, um ihn in dieser Zone zu behalten.",
+        "pendingMove": "Wechsel nach {zone}",
+        "moveHint": "Für den Wechsel nach {zone} vorgemerkt, erneut auswählen, um ihn in dieser Zone zu behalten."
       }
     },
     "plan": {

@@ -12774,7 +12774,11 @@
           "enforce": "Appliquer"
         },
         "assign": "Affecter des invités",
-        "removeMember": "Retirer de la zone"
+        "removeMember": "Retirer de la zone",
+        "memberRemoval": "Retrait en attente",
+        "memberRemovalHint": "Retrait en file, l'étiquette de zone est retirée à la prochaine application.",
+        "memberMove": "Déplacement vers {zone}",
+        "memberMoveHint": "Déplacement vers {zone} en file pour la prochaine application."
       },
       "flow": {
         "notApplied": "Non appliqué (sortie non gérée en v1)",
@@ -12857,8 +12861,8 @@
         "draftNote": "Rien n'est écrit dans Proxmox tant que le plan n'est pas appliqué.",
         "search": "Rechercher par nom ou VMID",
         "selectAll": "Tous les invités correspondants",
-        "selectAllCount": "Tous les invités correspondants ({count})",
-        "selected": "Sélection : {count}",
+        "selectAllCount": "Tous les invités correspondants ({count, number})",
+        "selected": "Sélection : {count, number}",
         "member": "Membre",
         "pending": "En attente",
         "pendingHint": "En file pour cette zone, étiqueté à la prochaine application.",
@@ -12868,7 +12872,11 @@
         "loading": "Chargement des invités...",
         "loadFailed": "La liste des invités n'a pas pu être lue.",
         "confirm": "Affecter {count, plural, one {# invité} other {# invités}}",
-        "tooMany": "Au plus {max} invités peuvent être affectés à la fois (sélectionnés : {count})."
+        "tooMany": "Au plus {max, number} invités peuvent être affectés à la fois (sélectionnés : {count, number}).",
+        "pendingRemoval": "Retrait en attente",
+        "removalHint": "Retrait en file, sélectionnez-le à nouveau pour le garder dans cette zone.",
+        "pendingMove": "Déplacement vers {zone}",
+        "moveHint": "Déplacement vers {zone} en file, sélectionnez-le à nouveau pour le garder dans cette zone."
       }
     },
     "plan": {

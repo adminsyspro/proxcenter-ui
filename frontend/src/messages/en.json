@@ -12773,7 +12773,11 @@
           "enforce": "Enforce"
         },
         "assign": "Assign guests",
-        "removeMember": "Remove from zone"
+        "removeMember": "Remove from zone",
+        "memberRemoval": "Pending removal",
+        "memberRemovalHint": "Queued for removal, the zone tag is removed on the next apply.",
+        "memberMove": "Moving to {zone}",
+        "memberMoveHint": "Queued to move to {zone} on the next apply."
       },
       "flow": {
         "notApplied": "Not applied (egress not managed in v1)",
@@ -12856,8 +12860,8 @@
         "draftNote": "Nothing is written to Proxmox until the plan is applied.",
         "search": "Search by name or VMID",
         "selectAll": "All matching guests",
-        "selectAllCount": "All matching guests ({count})",
-        "selected": "Selected: {count}",
+        "selectAllCount": "All matching guests ({count, number})",
+        "selected": "Selected: {count, number}",
         "member": "Member",
         "pending": "Pending",
         "pendingHint": "Queued for this zone, tagged on the next apply.",
@@ -12867,7 +12871,11 @@
         "loading": "Loading guests...",
         "loadFailed": "The guest list could not be read.",
         "confirm": "Assign {count, plural, one {# guest} other {# guests}}",
-        "tooMany": "At most {max} guests can be assigned at once (selected: {count})."
+        "tooMany": "At most {max, number} guests can be assigned at once (selected: {count, number}).",
+        "pendingRemoval": "Pending removal",
+        "removalHint": "Queued for removal, select it again to keep it in this zone.",
+        "pendingMove": "Moving to {zone}",
+        "moveHint": "Queued to move to {zone}, select it again to keep it in this zone."
       }
     },
     "plan": {

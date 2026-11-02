@@ -12773,7 +12773,11 @@
           "enforce": "Aplicar"
         },
         "assign": "Asignar invitados",
-        "removeMember": "Quitar de la zona"
+        "removeMember": "Quitar de la zona",
+        "memberRemoval": "Retirada pendiente",
+        "memberRemovalHint": "En cola para retirarse, la etiqueta de zona se quita en la próxima aplicación.",
+        "memberMove": "Moviendo a {zone}",
+        "memberMoveHint": "En cola para moverse a {zone} en la próxima aplicación."
       },
       "flow": {
         "notApplied": "No aplicado (salida no gestionada en v1)",
@@ -12856,8 +12860,8 @@
         "draftNote": "No se escribe nada en Proxmox hasta que se aplique el plan.",
         "search": "Buscar por nombre o VMID",
         "selectAll": "Todos los invitados coincidentes",
-        "selectAllCount": "Todos los invitados coincidentes ({count})",
-        "selected": "Selección: {count}",
+        "selectAllCount": "Todos los invitados coincidentes ({count, number})",
+        "selected": "Selección: {count, number}",
         "member": "Miembro",
         "pending": "Pendiente",
         "pendingHint": "En cola para esta zona, se etiquetará en la próxima aplicación.",
@@ -12867,7 +12871,11 @@
         "loading": "Cargando invitados...",
         "loadFailed": "No se pudo leer la lista de invitados.",
         "confirm": "Asignar {count, plural, one {# invitado} other {# invitados}}",
-        "tooMany": "Se pueden asignar como máximo {max} invitados a la vez (seleccionados: {count})."
+        "tooMany": "Se pueden asignar como máximo {max, number} invitados a la vez (seleccionados: {count, number}).",
+        "pendingRemoval": "Retirada pendiente",
+        "removalHint": "En cola para retirarse, selecciónelo de nuevo para mantenerlo en esta zona.",
+        "pendingMove": "Moviendo a {zone}",
+        "moveHint": "En cola para moverse a {zone}, selecciónelo de nuevo para mantenerlo en esta zona."
       }
     },
     "plan": {

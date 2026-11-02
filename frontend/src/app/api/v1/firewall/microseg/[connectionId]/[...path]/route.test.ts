@@ -7,6 +7,7 @@ const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
 const relayMock = vi.fn<(...args: any[]) => Promise<Response>>()
+const auditMock = vi.fn<(...args: any[]) => Promise<string>>()
 
 vi.mock('@/lib/tenant', () => ({
   verifyConnectionOwnership: verifyConnectionOwnershipMock,
@@ -19,6 +20,7 @@ vi.mock('@/lib/rbac', () => ({
 vi.mock('@/lib/tenant/infraScope', () => ({
   getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
 }))
+vi.mock('@/lib/audit', () => ({ audit: auditMock }))
 vi.mock('@/lib/orchestrator/client', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/orchestrator/client')>()),
   orchestratorRelay: relayMock,
@@ -38,6 +40,7 @@ beforeEach(() => {
   checkPermissionMock.mockResolvedValue(null)
   getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
   relayMock.mockResolvedValue(upstream(200, { ok: true }))
+  auditMock.mockResolvedValue('row-1')
 })
 
 describe('microseg proxy route', () => {
@@ -299,9 +302,140 @@ describe('microseg proxy route', () => {
     expect(relayMock).not.toHaveBeenCalled()
   })
 
-  it('does not audit from Next (the orchestrator does)', async () => {
+  it('keeps the plain method exports, audited inline rather than through withAudit', async () => {
     const mod = await import('./route')
 
     expect(Object.keys(mod).sort()).toEqual(['DELETE', 'GET', 'POST', 'PUT', 'dynamic'])
+  })
+})
+
+describe('microseg proxy route audit', () => {
+  it('records a draft write the relay owns, with its action and the version of the body', async () => {
+    relayMock.mockResolvedValue(upstream(200, { version: 5, zone: { id: 'z1' } }))
+    const { PUT } = await import('./route')
+    const res = await callRoute(PUT as any, { ...ctx(['zones', 'z1']), method: 'PUT', body: { version: 4, name: 'web' } })
+
+    expect(res.status).toBe(200)
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toEqual({
+      category: 'firewall',
+      action: 'microseg.zone.update',
+      resourceType: 'microseg_policy',
+      resourceId: 'c1',
+      status: 'success',
+      errorMessage: undefined,
+      details: { path: 'zones/z1', method: 'PUT', status: 200, version: 4 },
+    })
+  })
+
+  it('records a draft write without a body, version absent', async () => {
+    const { POST } = await import('./route')
+
+    await callRoute(POST as any, { ...ctx(['confirm-writes']), method: 'POST' })
+
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      action: 'microseg.confirm_writes',
+      status: 'success',
+      details: { path: 'confirm-writes', method: 'POST', status: 200, version: undefined },
+    })
+  })
+
+  it('records nothing for a lifecycle write the orchestrator handled, success or refusal', async () => {
+    const { POST } = await import('./route')
+
+    relayMock.mockResolvedValue(upstream(202, { run_id: 'r-1' }))
+    await callRoute(POST as any, { ...ctx(['apply']), body: { version: 3 } })
+    relayMock.mockResolvedValue(upstream(409, { code: 'VERSION_CONFLICT', error: 'version conflict' }))
+    await callRoute(POST as any, { ...ctx(['emergency-stop']), body: { active: true } })
+
+    expect(relayMock).toHaveBeenCalledTimes(2)
+    expect(auditMock).not.toHaveBeenCalled()
+  })
+
+  it('records a lifecycle write that Next refused before the orchestrator saw it, under the orchestrator action', async () => {
+    checkPermissionMock.mockResolvedValue(new Response('{"error":"Forbidden"}', { status: 403, headers: { 'Content-Type': 'application/json' } }))
+    const { POST } = await import('./route')
+
+    await callRoute(POST as any, { ...ctx(['remove']), body: { version: 2 } })
+
+    expect(relayMock).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      action: 'microseg.remove',
+      status: 'failure',
+      errorMessage: 'Forbidden',
+      details: { path: 'remove', method: 'POST', status: 403 },
+    })
+  })
+
+  it('records nothing for a read or the plan preview', async () => {
+    const { GET, POST } = await import('./route')
+
+    await callRoute(GET as any, ctx(['policy']))
+    await callRoute(POST as any, { ...ctx(['plan']), method: 'POST' })
+    checkPermissionMock.mockResolvedValue(new Response('{"error":"Forbidden"}', { status: 403 }))
+    await callRoute(GET as any, ctx(['status']))
+
+    expect(auditMock).not.toHaveBeenCalled()
+  })
+
+  it('records a failure for a draft write the orchestrator refused, with its error', async () => {
+    relayMock.mockResolvedValue(upstream(409, { code: 'VERSION_CONFLICT', error: 'version conflict' }))
+    const { POST } = await import('./route')
+    const res = await callRoute(POST as any, { ...ctx(['flows']), body: { version: 7, from: 'web', to: 'db' } })
+
+    expect(res.status).toBe(409)
+    expect(await readJson(res)).toEqual({ code: 'VERSION_CONFLICT', error: 'version conflict' })
+    expect(auditMock.mock.calls[0][0]).toMatchObject({
+      action: 'microseg.flow.create',
+      status: 'failure',
+      errorMessage: 'version conflict',
+      details: { path: 'flows', method: 'POST', status: 409, version: 7 },
+    })
+  })
+
+  it('records a failure for a draft write refused by RBAC or by size, and nothing behind a 401', async () => {
+    const { POST } = await import('./route')
+
+    checkPermissionMock.mockResolvedValueOnce(new Response('{"error":"Forbidden"}', { status: 403 }))
+    await callRoute(POST as any, { ...ctx(['members']), body: { version: 1, add: [] } })
+    const big = 'x'.repeat(1024 * 1024 + 1)
+
+    await callRoute(POST as any, { ...ctx(['members']), body: big, headers: { 'content-length': String(big.length) } })
+    getCurrentTenantIdMock.mockRejectedValueOnce(new Error('Invalid or expired API token'))
+    await callRoute(POST as any, { ...ctx(['members']), body: { version: 1, add: [] } })
+
+    expect(auditMock.mock.calls.map(c => [c[0].status, c[0].details.status])).toEqual([
+      ['failure', 403],
+      ['failure', 413],
+    ])
+  })
+
+  it('records a lifecycle write that hit an unreachable orchestrator, but not one that timed out', async () => {
+    const unavailable: any = new Error('Orchestrator unavailable')
+
+    unavailable.code = 'ORCHESTRATOR_UNAVAILABLE'
+    const { POST } = await import('./route')
+
+    relayMock.mockRejectedValueOnce(unavailable)
+    await callRoute(POST as any, { ...ctx(['apply']), body: { version: 3 } })
+    relayMock.mockRejectedValueOnce(new Error('Orchestrator request timeout'))
+    await callRoute(POST as any, { ...ctx(['apply']), body: { version: 3 } })
+
+    expect(auditMock).toHaveBeenCalledTimes(1)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({ action: 'microseg.apply', status: 'failure', details: { status: 503, version: 3 } })
+  })
+
+  it('answers unchanged when the audit row cannot be written', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    auditMock.mockRejectedValue(new Error('db down'))
+    const { PUT } = await import('./route')
+    const res = await callRoute(PUT as any, { ...ctx(['policy']), method: 'PUT', body: { version: 1 } })
+
+    expect(res.status).toBe(200)
+    expect(await readJson(res)).toEqual({ ok: true })
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('[audit]'), 'db down')
+    errorSpy.mockRestore()
   })
 })

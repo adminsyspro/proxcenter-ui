@@ -5,39 +5,59 @@
 // nothing else: an unknown path or verb answers 404 here, before the
 // orchestrator is called. `write` decides the permission the caller needs
 // (node.manage for a write, node.view for a read).
+//
+// `audit` says who writes the audit row of a call, so that every write leaves
+// exactly one: the orchestrator audits the five lifecycle actions itself
+// (apply, zone state, emergency stop, restore, remove, see
+// internal/microseg/audit.go of the backend), the relay audits the draft writes
+// under `auditAction`, and a read (or the plan preview) is audited by nobody.
+// A lifecycle call that Next refuses before it reaches the orchestrator (RBAC,
+// ownership, body size) is audited by the relay under the orchestrator's own
+// action name, since the orchestrator never sees it.
 
-export type MicrosegRoute = {
+import type { AuditAction } from '@/lib/audit'
+
+export type MicrosegAuditBy = 'orchestrator' | 'relay' | 'none'
+
+type RouteBase = {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   /** Tested against the path segments after the connection id, joined with "/". */
   pattern: RegExp
   write: boolean
 }
 
+export type MicrosegRoute =
+  | (RouteBase & { audit: 'none' })
+  | (RouteBase & { audit: 'orchestrator' | 'relay'; auditAction: AuditAction })
+
+const read = (pattern: RegExp): MicrosegRoute => ({ method: 'GET', pattern, write: false, audit: 'none' })
+
 export const MICROSEG_ROUTES: MicrosegRoute[] = [
-  { method: 'GET', pattern: /^policy$/, write: false },
-  { method: 'PUT', pattern: /^policy$/, write: true },
-  { method: 'POST', pattern: /^zones$/, write: true },
-  { method: 'PUT', pattern: /^zones\/[^/]+$/, write: true },
-  { method: 'DELETE', pattern: /^zones\/[^/]+$/, write: true },
-  { method: 'POST', pattern: /^zones\/[^/]+\/state$/, write: true },
-  { method: 'POST', pattern: /^flows$/, write: true },
-  { method: 'PUT', pattern: /^flows\/[^/]+$/, write: true },
-  { method: 'DELETE', pattern: /^flows\/[^/]+$/, write: true },
-  { method: 'POST', pattern: /^members$/, write: true },
-  { method: 'POST', pattern: /^plan$/, write: true },
-  { method: 'POST', pattern: /^apply$/, write: true },
-  { method: 'GET', pattern: /^revisions$/, write: false },
-  { method: 'POST', pattern: /^revisions\/[^/]+\/restore$/, write: true },
-  { method: 'GET', pattern: /^suggestions$/, write: false },
-  { method: 'POST', pattern: /^suggestions\/resolve$/, write: true },
-  { method: 'GET', pattern: /^drifts$/, write: false },
-  { method: 'GET', pattern: /^preflight$/, write: false },
-  { method: 'POST', pattern: /^confirm-writes$/, write: true },
-  { method: 'POST', pattern: /^emergency-stop$/, write: true },
-  { method: 'POST', pattern: /^remove$/, write: true },
-  { method: 'GET', pattern: /^runs$/, write: false },
-  { method: 'GET', pattern: /^runs\/[^/]+$/, write: false },
-  { method: 'GET', pattern: /^status$/, write: false },
+  read(/^policy$/),
+  { method: 'PUT', pattern: /^policy$/, write: true, audit: 'relay', auditAction: 'microseg.policy.update' },
+  { method: 'POST', pattern: /^zones$/, write: true, audit: 'relay', auditAction: 'microseg.zone.create' },
+  { method: 'PUT', pattern: /^zones\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.zone.update' },
+  { method: 'DELETE', pattern: /^zones\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.zone.delete' },
+  { method: 'POST', pattern: /^zones\/[^/]+\/state$/, write: true, audit: 'orchestrator', auditAction: 'microseg.state' },
+  { method: 'POST', pattern: /^flows$/, write: true, audit: 'relay', auditAction: 'microseg.flow.create' },
+  { method: 'PUT', pattern: /^flows\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.flow.update' },
+  { method: 'DELETE', pattern: /^flows\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.flow.delete' },
+  { method: 'POST', pattern: /^members$/, write: true, audit: 'relay', auditAction: 'microseg.members.set' },
+  // A dry run: it computes the plan and changes nothing.
+  { method: 'POST', pattern: /^plan$/, write: true, audit: 'none' },
+  { method: 'POST', pattern: /^apply$/, write: true, audit: 'orchestrator', auditAction: 'microseg.apply' },
+  read(/^revisions$/),
+  { method: 'POST', pattern: /^revisions\/[^/]+\/restore$/, write: true, audit: 'orchestrator', auditAction: 'microseg.restore' },
+  read(/^suggestions$/),
+  { method: 'POST', pattern: /^suggestions\/resolve$/, write: true, audit: 'relay', auditAction: 'microseg.suggestions.resolve' },
+  read(/^drifts$/),
+  read(/^preflight$/),
+  { method: 'POST', pattern: /^confirm-writes$/, write: true, audit: 'relay', auditAction: 'microseg.confirm_writes' },
+  { method: 'POST', pattern: /^emergency-stop$/, write: true, audit: 'orchestrator', auditAction: 'microseg.emergency_stop' },
+  { method: 'POST', pattern: /^remove$/, write: true, audit: 'orchestrator', auditAction: 'microseg.remove' },
+  read(/^runs$/),
+  read(/^runs\/[^/]+$/),
+  read(/^status$/),
 ]
 
 // Every segment is a plain identifier or a route word: no dot, no slash, no

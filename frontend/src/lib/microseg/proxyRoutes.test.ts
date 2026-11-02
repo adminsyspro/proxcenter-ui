@@ -51,6 +51,35 @@ describe('matchMicrosegRoute', () => {
     }
   })
 
+  it('names who audits each route: the orchestrator its five lifecycle actions, the relay every other write, nobody a read', () => {
+    const owner = (method: string, path: string[]) => {
+      const route = matchMicrosegRoute(method, path)
+
+      return route?.audit === 'none' ? 'none' : `${route?.audit} ${route?.auditAction}`
+    }
+
+    expect(owner('POST', ['apply'])).toBe('orchestrator microseg.apply')
+    expect(owner('POST', ['zones', 'z1', 'state'])).toBe('orchestrator microseg.state')
+    expect(owner('POST', ['emergency-stop'])).toBe('orchestrator microseg.emergency_stop')
+    expect(owner('POST', ['revisions', '7', 'restore'])).toBe('orchestrator microseg.restore')
+    expect(owner('POST', ['remove'])).toBe('orchestrator microseg.remove')
+
+    expect(owner('PUT', ['policy'])).toBe('relay microseg.policy.update')
+    expect(owner('POST', ['zones'])).toBe('relay microseg.zone.create')
+    expect(owner('PUT', ['zones', 'z1'])).toBe('relay microseg.zone.update')
+    expect(owner('DELETE', ['zones', 'z1'])).toBe('relay microseg.zone.delete')
+    expect(owner('POST', ['flows'])).toBe('relay microseg.flow.create')
+    expect(owner('PUT', ['flows', 'f1'])).toBe('relay microseg.flow.update')
+    expect(owner('DELETE', ['flows', 'f1'])).toBe('relay microseg.flow.delete')
+    expect(owner('POST', ['members'])).toBe('relay microseg.members.set')
+    expect(owner('POST', ['suggestions', 'resolve'])).toBe('relay microseg.suggestions.resolve')
+    expect(owner('POST', ['confirm-writes'])).toBe('relay microseg.confirm_writes')
+
+    expect(owner('POST', ['plan'])).toBe('none')
+    for (const route of MICROSEG_ROUTES.filter(r => !r.write)) expect(route.audit).toBe('none')
+    expect(MICROSEG_ROUTES.filter(r => r.audit === 'orchestrator')).toHaveLength(5)
+  })
+
   it('refuses a verb the orchestrator does not serve on a known path', () => {
     expect(matchMicrosegRoute('POST', ['flows', 'f1'])).toBeNull()
     expect(matchMicrosegRoute('PUT', ['zones'])).toBeNull()

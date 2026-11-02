@@ -177,6 +177,23 @@ export type AuditAction =
   | "replication.sync"
   | "replication.fix"
   | "drill.run"
+  // Micro-segmentation lifecycle, written by the orchestrator (internal/microseg/audit.go)
+  | "microseg.apply"
+  | "microseg.state"
+  | "microseg.emergency_stop"
+  | "microseg.restore"
+  | "microseg.remove"
+  // Micro-segmentation draft writes, written by the Next relay (lib/microseg/proxyRoutes.ts)
+  | "microseg.policy.update"
+  | "microseg.zone.create"
+  | "microseg.zone.update"
+  | "microseg.zone.delete"
+  | "microseg.flow.create"
+  | "microseg.flow.update"
+  | "microseg.flow.delete"
+  | "microseg.members.set"
+  | "microseg.suggestions.resolve"
+  | "microseg.confirm_writes"
 
 export type AuditStatus = "success" | "failure" | "warning"
 

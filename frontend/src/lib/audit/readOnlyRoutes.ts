@@ -51,7 +51,7 @@ export const READ_ONLY_MUTATION_ROUTES: Readonly<Record<string, string>> = {
   'v1/orchestrator/rolling-updates/preflight': 'Rolling update preflight, read-only',
   'v1/orchestrator/sflow/health/check': 'sFlow health check, read-only',
   'v1/settings/syslog/test': 'Sends a test message to a syslog destination',
-  'v1/firewall/microseg/[connectionId]/[...path]': 'Pure relay to the orchestrator, which audits each micro-segmentation write itself in the shared audit_logs table (a second row here would duplicate it)',
+  'v1/firewall/microseg/[connectionId]/[...path]': 'Not read-only, audited without withAudit(): the lifecycle actions are audited by the orchestrator, the draft writes (and lifecycle calls refused before the orchestrator) inline by the relay through audit(), per the audit flag of lib/microseg/proxyRoutes.ts',
   'v1/vms/ips': 'Bulk read of guest IP addresses (POST for a large body)',
   'v1/vms/networks': 'Bulk read of guest network config (POST for a large body)',
 }

@@ -44,7 +44,7 @@ describe('keyboard', () => {
   it('leaves the focus to the zone button, not to the wrapper of the canvas library, and the edges unfocusable but named', async () => {
     setup({ flows: [flowOf('f1')] })
     expect((await node('zone:zw')).getAttribute('data-focusable')).toBe('false')
-    const edge = await screen.findByTestId('edge-flow:zone:zw>zone:zd')
+    const edge = await screen.findByTestId('edge-allowed:zone:zw>zone:zd')
     expect(edge.getAttribute('data-focusable')).toBe('false')
     expect(edge.getAttribute('aria-label')).toBe('web to db: tcp/443')
   })
@@ -53,15 +53,18 @@ describe('keyboard', () => {
     setup({
       flows: [flowOf('f1', { src_zone_id: '', src_cidr: '10.0.0.0/8' }), flowOf('f2', { dst_zone_id: '', dst_cidr: '8.8.8.0/24', proto: 'udp', dport: '53' })],
     })
-    expect((await screen.findByTestId('edge-flow:external>zone:zd')).getAttribute('aria-label')).toBe('External to db: tcp/443')
+    expect((await screen.findByTestId('edge-allowed:external>zone:zd')).getAttribute('aria-label')).toBe('Unknown / External to db: tcp/443')
     expect((await screen.findByTestId('edge-outside:zone:zw>outside')).getAttribute('aria-label')).toBe('web to Outside: udp/53')
   })
 })
 
 describe('map notes', () => {
-  it('says in the legend that an allowed flow has the colour of its source zone', async () => {
+  it('names the three kinds of flows in the toolbar, with the draft and Outside lines', async () => {
     setup()
-    expect(await screen.findByText('Allowed flow (colour of the source zone)')).toBeTruthy()
+    const group = await screen.findByRole('group', { name: 'Flows:' })
+    expect(within(group).getAllByRole('checkbox').map(c => c.closest('label')?.textContent)).toEqual(['Unprotected', 'Blocked', 'Allowed'])
+    expect(screen.getByText('Allowed, not applied yet')).toBeTruthy()
+    expect(screen.getByText('To Outside: not applied in v1')).toBeTruthy()
   })
 
   it('says the map is partial when the suggestions page is full', async () => {
@@ -72,7 +75,7 @@ describe('map notes', () => {
 
   it('does not say it with fewer than 200 suggestions', async () => {
     setup({ suggestions: Array.from({ length: 199 }, (_, i) => wouldBlock(`s${i}`)) })
-    await pathOf('pending:zone:zw>zone:zd')
+    await pathOf('unprotected:zone:zw>zone:zd')
     expect(screen.queryByText(/Partial:/)).toBeNull()
   })
 

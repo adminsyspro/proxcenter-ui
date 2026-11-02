@@ -12672,25 +12672,39 @@
       "mapLabel": "Karte der Zonen und ihrer Flüsse",
       "suggestionsError": "Die ausstehenden Flüsse konnten nicht gelesen werden. Die Karte zeigt nur die erlaubten Flüsse.",
       "legend": {
-        "flow": "Erlaubter Fluss (Farbe der Quellzone)",
-        "pending": "Würde blockiert",
-        "outside": "In v1 nicht angewendet"
+        "outside": "Nach außen: in v1 nicht angewendet",
+        "allowed": "Erlaubt",
+        "unprotected": "Ungeschützt",
+        "blocked": "Blockiert",
+        "draft": "Erlaubt, noch nicht angewendet"
       },
       "node": {
         "members": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
-        "external": "Extern",
-        "externalHint": "Quellen außerhalb jeder Zone: eine IP-Adresse oder ein Netz (CIDR)",
+        "external": "Unbekannt / Extern",
+        "externalHint": "Quellen, die zu keinem Gast passen: eine IP-Adresse oder ein Netz (CIDR)",
         "outside": "Außerhalb",
         "outsideHint": "Ziele außerhalb der Zonen (ein CIDR). Flüsse dorthin werden in v1 nicht angewendet.",
         "notApplied": "in v1 nicht angewendet",
         "aria": "Zone {name}: {state}, {members}",
-        "membersUnknown": "Mitglieder unbekannt"
+        "membersUnknown": "Mitglieder unbekannt",
+        "unzoned": "Gäste ohne Zone ({count, number})",
+        "unzonedHint": "Laufende Gäste in keiner Zone. Abweichungen listet sie auch.",
+        "guestAria": "{name}, Gast {vmid}",
+        "guestWhere": "Gast {vmid} auf {node}",
+        "guestIps": "IP-Adressen: {ips}",
+        "guestNoIp": "Keine IP-Adresse bekannt",
+        "guestPending": "Für die Zone vorgemerkt, mit dem nächsten Plan angewendet",
+        "moreHint": "{count, plural, one {# weiteres Mitglied} other {# weitere Mitglieder}}: der Zonenbereich listet alle",
+        "moreUnzonedHint": "{count, plural, one {# weiterer Gast} other {# weitere Gäste}} ohne Zone: Abweichungen listet alle"
       },
       "edge": {
-        "flow": "Erlaubt: {services}",
-        "pending": "{count, plural, one {# beobachteter Fluss würde blockiert} other {# beobachtete Flüsse würden blockiert}}: {services}",
         "outside": "In v1 nicht angewendet: {services}",
-        "aria": "{from} nach {to}: {services}"
+        "aria": "{from} nach {to}: {services}",
+        "allowed": "Erlaubt: {services}",
+        "unprotected": "{count, plural, one {# beobachteter Fluss} other {# beobachtete Flüsse}}, die kein Fluss erlaubt (ungeschützt)",
+        "blocked": "{count, plural, one {# Fluss} other {# Flüsse}} von einer erzwungenen Zone blockiert",
+        "draft": "Im Entwurf: mit dem nächsten Plan angewendet",
+        "more": "+{count, number} weitere"
       },
       "panel": {
         "label": "Zone {name}",
@@ -12703,7 +12717,23 @@
         "pending": "Ausstehend",
         "noFlows": "Keine"
       },
-      "partial": "Teilweise: Nur die ersten {count, number} ausstehenden Flüsse werden gezeichnet."
+      "partial": "Teilweise: Nur die ersten {count, number} ausstehenden Flüsse werden gezeichnet.",
+      "filters": {
+        "title": "Flüsse:"
+      },
+      "toolbar": {
+        "refreshedAt": "Aktualisiert um {time}",
+        "refresh": "Karte aktualisieren"
+      },
+      "flowPanel": {
+        "label": "Fluss {from} nach {to}",
+        "observed": "Beobachtete Flüsse",
+        "allowed": "Erlaubte Flüsse",
+        "acceptAs": "Als Fluss {from} → {to} {service} annehmen",
+        "draft": "Entwurf"
+      },
+      "controls": "Zoom- und Anpassungssteuerung",
+      "minimap": "Übersicht der Karte"
     },
     "preflight": {
       "title": "Vorabprüfungen",

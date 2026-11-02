@@ -13004,25 +13004,39 @@
       "mapLabel": "Mapa de las zonas y sus flujos",
       "suggestionsError": "No se pudieron leer los flujos pendientes. El mapa solo muestra los flujos permitidos.",
       "legend": {
-        "flow": "Flujo permitido (color de la zona de origen)",
-        "pending": "Sería bloqueado",
-        "outside": "No aplicado en v1"
+        "outside": "Hacia el exterior: no aplicado en v1",
+        "allowed": "Permitido",
+        "unprotected": "Sin protección",
+        "blocked": "Bloqueado",
+        "draft": "Permitido, aún no aplicado"
       },
       "node": {
         "members": "{count, plural, one {# miembro} other {# miembros}}",
-        "external": "Externo",
-        "externalHint": "Orígenes fuera de toda zona: una dirección IP o una red (CIDR)",
+        "external": "Desconocido / Externo",
+        "externalHint": "Orígenes que no corresponden a ningún invitado: una dirección IP o una red (CIDR)",
         "outside": "Exterior",
         "outsideHint": "Destinos fuera de las zonas (un CIDR). Los flujos hacia ellos no se aplican en v1.",
         "notApplied": "no aplicado en v1",
         "aria": "Zona {name}, {state}, {members}",
-        "membersUnknown": "miembros desconocidos"
+        "membersUnknown": "miembros desconocidos",
+        "unzoned": "Invitados sin zona ({count, number})",
+        "unzonedHint": "Invitados en ejecución sin zona. Desviaciones también los lista.",
+        "guestAria": "{name}, invitado {vmid}",
+        "guestWhere": "Invitado {vmid} en {node}",
+        "guestIps": "Direcciones IP: {ips}",
+        "guestNoIp": "Ninguna dirección IP conocida",
+        "guestPending": "En cola para la zona, se aplica con el próximo plan",
+        "moreHint": "{count, plural, one {# miembro más} other {# miembros más}}: el panel de la zona los lista todos",
+        "moreUnzonedHint": "{count, plural, one {# invitado más} other {# invitados más}} sin zona: Desviaciones los lista todos"
       },
       "edge": {
-        "flow": "Permitido: {services}",
-        "pending": "{count, plural, one {# flujo observado sería bloqueado} other {# flujos observados serían bloqueados}}: {services}",
         "outside": "No aplicado en v1: {services}",
-        "aria": "{from} a {to}: {services}"
+        "aria": "{from} a {to}: {services}",
+        "allowed": "Permitido: {services}",
+        "unprotected": "{count, plural, one {# flujo observado} other {# flujos observados}} que ningún flujo permite (sin protección)",
+        "blocked": "{count, plural, one {# flujo bloqueado} other {# flujos bloqueados}} por una zona aplicada",
+        "draft": "En el borrador: se aplica con el próximo plan",
+        "more": "+{count, number} más"
       },
       "panel": {
         "label": "Zona {name}",
@@ -13035,7 +13049,23 @@
         "pending": "Pendiente",
         "noFlows": "Ninguno"
       },
-      "partial": "Parcial: solo se dibujan los primeros {count, number} flujos pendientes."
+      "partial": "Parcial: solo se dibujan los primeros {count, number} flujos pendientes.",
+      "filters": {
+        "title": "Flujos:"
+      },
+      "toolbar": {
+        "refreshedAt": "Actualizado a las {time}",
+        "refresh": "Actualizar el mapa"
+      },
+      "flowPanel": {
+        "label": "Flujo {from} hacia {to}",
+        "observed": "Flujos observados",
+        "allowed": "Flujos permitidos",
+        "acceptAs": "Aceptar como flujo {from} → {to} {service}",
+        "draft": "Borrador"
+      },
+      "controls": "Controles de zoom y ajuste",
+      "minimap": "Vista general del mapa"
     },
     "preflight": {
       "title": "Comprobaciones previas",

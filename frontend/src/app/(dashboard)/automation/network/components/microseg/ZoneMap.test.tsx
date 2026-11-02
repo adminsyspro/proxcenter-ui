@@ -55,33 +55,37 @@ describe('zone nodes', () => {
 })
 
 describe('edges', () => {
-  it('draws the flows of a pair as one solid edge labelled with the protocols and ports', async () => {
-    setup({ flows: [flowOf('f1'), flowOf('f2', { proto: 'udp', dport: '53' })] })
-    const path = await pathOf('flow:zone:zw>zone:zd')
+  it('draws the flows of a pair as one solid green edge labelled with the ports grouped per protocol', async () => {
+    setup({ flows: [flowOf('f1'), flowOf('f2', { proto: 'udp', dport: '53' }), flowOf('f3', { dport: '22' })] })
+    const path = await pathOf('allowed:zone:zw>zone:zd')
     expect(path.getAttribute('data-dash')).toBe('')
+    expect(path.getAttribute('data-stroke')).toBe('#2e7d32')
     expect(screen.getAllByTestId(/^edge-/)).toHaveLength(1)
-    expect(await screen.findByText('tcp/443, udp/53')).toBeTruthy()
+    expect(await screen.findByText('tcp 22, 443 · udp 53')).toBeTruthy()
   })
 
-  it('draws the pending would_block suggestions as a dashed red edge', async () => {
-    setup({ suggestions: [wouldBlock('s1'), wouldBlock('s2', { dport: '22' })] })
-    const path = await pathOf('pending:zone:zw>zone:zd')
+  it('draws the pending would_block flows as a dashed red edge and the blocked ones as a solid blue edge', async () => {
+    setup({ suggestions: [wouldBlock('s1'), wouldBlock('s2', { dport: '22' }), wouldBlock('s3', { kind: 'blocked', dport: '3389' })] })
+    const path = await pathOf('unprotected:zone:zw>zone:zd')
     expect(path.getAttribute('data-dash')).not.toBe('')
-    expect(path.getAttribute('data-stroke')).toBe('#f44336')
-    expect(await screen.findByText('tcp/22, tcp/80')).toBeTruthy()
+    expect(path.getAttribute('data-stroke')).toBe('#e53935')
+    expect(await screen.findByText('tcp/22, 80')).toBeTruthy()
+    const blocked = await pathOf('blocked:zone:zw>zone:zd')
+    expect(blocked.getAttribute('data-dash')).toBe('')
+    expect(blocked.getAttribute('data-stroke')).toBe('#1565c0')
   })
 
   it('shows the draft: a flow that is not applied yet is on the map', async () => {
     setup({ flows: [flowOf('f1')], pending_changes: true })
-    expect(await pathOf('flow:zone:zw>zone:zd')).toBeTruthy()
+    expect(await pathOf('allowed:zone:zw>zone:zd')).toBeTruthy()
   })
 
   it('adds an External node for a CIDR source and for a source in no zone', async () => {
     setup({ flows: [flowOf('f1', { src_zone_id: '', src_cidr: '203.0.113.0/24' })], suggestions: [wouldBlock('s1', { src_zone_id: '' })] })
     const ext = await node('external')
-    expect(within(ext).getByText('External')).toBeTruthy()
-    expect(await pathOf('flow:external>zone:zd')).toBeTruthy()
-    expect(await pathOf('pending:external>zone:zd')).toBeTruthy()
+    expect(within(ext).getByText('Unknown / External')).toBeTruthy()
+    expect(await pathOf('allowed:external>zone:zd')).toBeTruthy()
+    expect(await pathOf('unprotected:external>zone:zd')).toBeTruthy()
   })
 
   it('draws a CIDR destination as a dashed grey edge to an Outside node labelled not applied in v1', async () => {
@@ -96,37 +100,37 @@ describe('edges', () => {
 
   it('has no External or Outside node when every end is a zone', async () => {
     setup({ flows: [flowOf('f1')] })
-    await pathOf('flow:zone:zw>zone:zd')
+    await pathOf('allowed:zone:zw>zone:zd')
     expect(screen.queryByTestId('node-external')).toBeNull()
     expect(screen.queryByTestId('node-outside')).toBeNull()
   })
 
   it('animates an allowed flow with a particle that follows the edge', async () => {
     setup({ flows: [flowOf('f1')], suggestions: [wouldBlock('s1')] })
-    const g = await screen.findByTestId('edge-flow:zone:zw>zone:zd')
+    const g = await screen.findByTestId('edge-allowed:zone:zw>zone:zd')
     expect(g.querySelector('animateMotion')).toBeTruthy()
-    expect(screen.getByTestId('edge-pending:zone:zw>zone:zd').querySelector('animateMotion')).toBeNull()
+    expect(screen.getByTestId('edge-unprotected:zone:zw>zone:zd').querySelector('animateMotion')).toBeNull()
   })
 
   it('stops every animation under prefers-reduced-motion', async () => {
     reduceMotion()
     setup({ flows: [flowOf('f1')], suggestions: [wouldBlock('s1')] })
-    await pathOf('flow:zone:zw>zone:zd')
+    await pathOf('allowed:zone:zw>zone:zd')
     expect(document.querySelector('animateMotion')).toBeNull()
     expect(document.querySelector('animate')).toBeNull()
   })
 
   it('keeps the allowed flows on the map when the suggestions cannot be read, and says so', async () => {
     setup({ flows: [flowOf('f1')], suggestions: 'error' })
-    expect(await pathOf('flow:zone:zw>zone:zd')).toBeTruthy()
+    expect(await pathOf('allowed:zone:zw>zone:zd')).toBeTruthy()
     expect(await screen.findByText(/pending flows could not be read/i)).toBeTruthy()
   })
 })
 
 describe('requests', () => {
-  it('reads the pending would_block suggestions with ONE call, and nothing per zone', async () => {
-    setup({ zones: [web(), db(), { ...db(), id: 'zx', name: 'cache' }], flows: [flowOf('f1')], suggestions: [wouldBlock('s1')] })
-    await pathOf('pending:zone:zw>zone:zd')
+  it('reads the pending observed flows with ONE call, and nothing per zone or per guest', async () => {
+    setup({ zones: [web(), db(), { ...db(), id: 'zx', name: 'cache' }], flows: [flowOf('f1')], suggestions: [wouldBlock('s1')], vms: [vm(100, 'web-1', ['zone-web'], { ips: ['10.0.0.1'] })] })
+    await pathOf('unprotected:guest:zw:qemu/100>zone:zd')
     fireEvent.click(await node('zone:zw'))
     await screen.findByRole('complementary', { name: 'Zone web' })
     const suggestionCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/suggestions'))

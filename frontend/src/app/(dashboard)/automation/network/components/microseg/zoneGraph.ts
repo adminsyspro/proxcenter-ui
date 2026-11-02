@@ -2,28 +2,39 @@ import { MarkerType, type Edge, type Node } from '@xyflow/react'
 
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
-import { crossesBox, edgeGeometry, type Point } from './edgeGeometry'
 import { flowService } from './FlowSummary'
+import { placeEdges, type EdgeEnds, type Obstacle } from './zoneGraphEdges'
+import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, circleRadius, layerZones, memberSlots, orderLayers, slotPositions, type Point } from './zoneLayout'
 
-/** Size of every node of the map: one line. The edges clip their ends on it. */
+/** Size of the External and Outside boxes. */
 export const NODE_W = 200
 export const NODE_H = 44
-
-/** Gap between two parallel edges of the same pair of nodes: the label of an edge is about 22 px high. */
-const LANE_GAP = 28
-/** Room kept between an edge end and its box, and between an edge and the boxes it must not touch. */
-const EDGE_GAP = 4
-const CLEARANCE = 6
-/** The bows tried for the edges of a pair, as a part of the distance between the two nodes: straight first. */
-const BOWS = [0, 0.2, -0.2, 0.4, -0.4, 0.6, -0.6, 0.8, -0.8]
-/** Room between the ring of zones and the External / Outside nodes. */
-const SIDE_GAP = 120
+/** Room between two columns of circles (rim to rim) and between two circles of a column. */
+export const COL_GAP = 240
+export const ROW_GAP = 90
 
 export const EXTERNAL_ID = 'external'
 export const OUTSIDE_ID = 'outside'
+export const UNZONED_ID = 'unzoned'
 export const zoneNodeId = (zoneId: string) => `zone:${zoneId}`
+export const guestNodeId = (groupId: string, key: string) => `guest:${groupId}:${key}`
+export const moreNodeId = (groupId: string) => `more:${groupId}`
 
-export const EDGE_COLORS = { pending: '#f44336', outside: '#9e9e9e', flow: '#4caf50' } as const
+/** One green for every allowed flow (the zone colour stays on its circle), blue for blocked, dashed red for unprotected. */
+export const EDGE_COLORS = { allowed: '#2e7d32', blocked: '#1565c0', unprotected: '#e53935', outside: '#9e9e9e' } as const
+
+/** A guest drawn on the map. */
+export type MapMember = {
+  key: string
+  name: string
+  vmid: number
+  node: string
+  type: 'qemu' | 'lxc'
+  status: string
+  ips: string[]
+  /** Queued for the zone, not tagged yet. */
+  pending: boolean
+}
 
 export type ZoneNodeData = {
   kind: 'zone'
@@ -31,215 +42,323 @@ export type ZoneNodeData = {
   /** Null while the guests of the connection are not known. */
   members: number | null
   state: ZoneState
+  radius: number
 }
-
+export type UnzonedNodeData = { kind: 'unzoned'; count: number; radius: number }
+export type GuestNodeData = { kind: 'guest'; member: MapMember; groupId: string }
+export type MoreNodeData = { kind: 'more'; count: number; groupId: string }
 export type BoundaryNodeData = { kind: 'external' | 'outside' }
+export type MapNodeData = ZoneNodeData | UnzonedNodeData | GuestNodeData | MoreNodeData | BoundaryNodeData
 
-export type MapEdgeKind = 'flow' | 'pending' | 'outside'
+export type MapEdgeKind = 'allowed' | 'unprotected' | 'blocked' | 'outside'
 
 export type MapEdgeData = {
   kind: MapEdgeKind
-  /** protocol/ports tokens of the flows (or suggestions) the edge stands for, sorted. */
+  /** protocol/ports tokens of the flows (or observed flows) the edge stands for, sorted. */
   services: string[]
-  /** How many flows (or suggestions) it stands for. */
+  /** The label: the ports grouped per protocol. */
+  label: string
   count: number
-  /** Shift along the normal of the edge, so parallel edges of a pair do not overlap. */
-  offset: number
-  /** How far the middle of the edge bows along the same normal, to stay clear of the other nodes (0: straight). */
-  bow: number
-  /** Where the label sits along the edge (0 to 1), staggered between the edges of a pair. */
-  labelAt: number
-  /** Only an allowed flow carries the animated particle. */
+  /** The allowed flows of the edge (allowed and outside edges). */
+  flows: MicrosegFlow[]
+  /** The observed flows of the edge (unprotected and blocked edges). */
+  observed: MicrosegSuggestion[]
+  /** Every flow of the edge is in the draft only (not applied yet). */
+  draft: boolean
+  /** The ends, and the circles (or boxes) they belong to: the focus mode keeps them lit. */
+  fromGroup: string
+  toGroup: string
+  path: string
+  /** The visible edge as a polyline. */
+  points: Point[]
+  label_x: number
+  label_y: number
+  label_w: number
+  label_h: number
+  /** A guest-to-guest edge has a smaller label. */
+  small: boolean
   particle: boolean
   color: string
 }
 
-type Pair = { source: string; target: string; kind: MapEdgeKind; services: Set<string>; count: number }
+export type MapInput = {
+  zones: MicrosegZone[]
+  flows: MicrosegFlow[]
+  suggestions: MicrosegSuggestion[]
+  /** The members of each zone; null while the guests are unknown (no guest drawn, counts unknown). */
+  members?: ReadonlyMap<string, MapMember[]> | null
+  /** The running guests in no zone. */
+  unzoned?: MapMember[] | null
+  /** Ids of the flows of the draft that are not applied yet. */
+  unapplied?: ReadonlySet<string> | null
+}
 
-const KIND_RANK: Record<MapEdgeKind, number> = { flow: 0, pending: 1, outside: 2 }
+export type ZoneGraph = { nodes: Node[]; edges: Edge[] }
+
 const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+const KIND_RANK: Record<MapEdgeKind, number> = { allowed: 0, outside: 1, unprotected: 2, blocked: 3 }
+
+/** "10.0.0.5/24" and "10.0.0.5" are the same guest address. */
+export const bareIp = (ip: string) => ip.trim().replace(/\/\d+$/, '').toLowerCase()
+
+/** Ports of a protocol in order: numbers first by value, then the rest. */
+const portOrder = (a: string, b: string) => (Number.parseInt(a, 10) - Number.parseInt(b, 10)) || byText(a, b)
 
 /**
- * Zones on an ellipse, clockwise from the top, sorted by name, the ring turned by half a step so that no zone sits
- * on its horizontal axis. External is above left and Outside below right, off that axis too.
+ * The ports grouped per protocol: "tcp/22, 8080" for one protocol, "tcp 5432 · udp 53" for several; a protocol
+ * without port is its name alone ("icmp").
  */
-function layout(zones: MicrosegZone[], withExternal: boolean, withOutside: boolean) {
-  const n = zones.length
-  const rx = Math.max(280, n * 45)
-  const ry = Math.round(rx * 0.55)
-  const spot = (cx: number, cy: number) => ({ x: Math.round(cx - NODE_W / 2), y: Math.round(cy - NODE_H / 2) })
-  const positions = new Map<string, { x: number; y: number }>()
-  zones.forEach((z, i) => {
-    if (n === 1) {
-      positions.set(z.id, spot(0, 0))
-      return
-    }
-    const angle = -Math.PI / 2 + Math.PI / n + (2 * Math.PI * i) / n
-    positions.set(z.id, spot(rx * Math.cos(angle), ry * Math.sin(angle)))
-  })
-  const side = rx + NODE_W + SIDE_GAP
-  const rise = Math.round(ry * 0.6)
-  return {
-    zone: (id: string) => positions.get(id)!,
-    external: withExternal ? spot(-side, -rise) : null,
-    outside: withOutside ? spot(side, rise) : null,
+export function groupServices(services: string[]): string {
+  const ports = new Map<string, Set<string>>()
+  for (const token of services) {
+    const slash = token.indexOf('/')
+    const proto = slash < 0 ? token : token.slice(0, slash)
+    const set = ports.get(proto) ?? new Set<string>()
+    if (slash >= 0) for (const p of token.slice(slash + 1).split(',')) if (p.trim()) set.add(p.trim())
+    ports.set(proto, set)
   }
+  const protos = [...ports.keys()].sort(byText)
+  const part = (proto: string, sep: string) => {
+    const list = [...ports.get(proto)!].sort(portOrder)
+    return list.length ? `${proto}${sep}${list.join(', ')}` : proto
+  }
+  return protos.length === 1 ? part(protos[0], '/') : protos.map(p => part(p, ' ')).join(' · ')
 }
 
-function edgeStyle(kind: MapEdgeKind, color: string): Edge['style'] {
-  return kind === 'flow'
-    ? { stroke: color, strokeWidth: 2 }
-    : { stroke: color, strokeWidth: 2, strokeDasharray: '6 4' }
+type Group = { id: string; radius: number; shown: MapMember[]; more: number; data: ZoneNodeData | UnzonedNodeData }
+type Pair = { kind: MapEdgeKind; source: string; target: string; services: Set<string>; flows: MicrosegFlow[]; observed: MicrosegSuggestion[] }
+
+function groupOf(id: string, members: MapMember[] | null, data: Group['data']): Group {
+  const list = [...(members ?? [])].sort((a, b) => byText(a.name, b.name) || byText(a.key, b.key))
+  const { shown, more } = memberSlots(list.length)
+  const radius = circleRadius(shown + (more ? 1 : 0))
+  data.radius = radius
+  return { id, radius, shown: list.slice(0, shown), more, data }
+}
+
+/** Where an address of a group's members is drawn: its guest node, or the "+N" node when it is not drawn. */
+function addressBook(group: Group, all: MapMember[]): Map<string, string> {
+  const book = new Map<string, string>()
+  const shownKeys = new Set(group.shown.map(m => m.key))
+  const groupId = group.id === UNZONED_ID ? UNZONED_ID : group.id.replace(/^zone:/, '')
+  for (const m of all) {
+    const id = shownKeys.has(m.key) ? guestNodeId(groupId, m.key) : moreNodeId(groupId)
+    for (const ip of m.ips) if (!book.has(bareIp(ip))) book.set(bareIp(ip), id)
+  }
+  return book
 }
 
 /**
- * The map of the draft: a node per zone, an External node for the sources that
- * are in no zone (a CIDR, an unknown IP), an Outside node for the CIDR
- * destinations (not applied in v1), a solid edge per pair of nodes with at
- * least one flow, a dashed red one per pair with pending would-block
- * suggestions, a dashed grey one to Outside. Pure and deterministic: the same
- * input gives the same graph, whatever the order of the lists.
- *
- * `memberCounts` maps a zone id to its member count; without it the counts are
- * unknown (null).
+ * The map: a circle per zone holding its guests (11 and a "+N" past 12), a dashed circle of the running guests in
+ * no zone, an "Unknown / External" box for the sources in no zone and an Outside box for the CIDR destinations.
+ * Allowed flows go circle to circle, one green edge per ordered pair; observed flows (unprotected, blocked) go guest
+ * to guest, resolved from their addresses (the circle when the address is no drawn guest's). Circles on a grid:
+ * longest-path layer as the column, barycenter order as the row. Pure and deterministic.
  */
-export function buildZoneGraph(
-  zones: MicrosegZone[],
-  flows: MicrosegFlow[],
-  suggestions: MicrosegSuggestion[],
-  memberCounts?: ReadonlyMap<string, number> | null,
-): { nodes: Node[]; edges: Edge[] } {
+export function buildZoneGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null }: MapInput): ZoneGraph {
   const sorted = [...zones].sort((a, b) => byText(a.name, b.name) || byText(a.id, b.id))
   const known = new Map(sorted.map(z => [z.id, z]))
-  const pairs = new Map<string, Pair>()
+  const zoneFlows = flows.filter(f => !f.src_cidr && !f.dst_cidr && known.has(f.src_zone_id) && known.has(f.dst_zone_id))
+  const layerEdges = zoneFlows.map(f => [f.src_zone_id, f.dst_zone_id] as [string, string])
 
-  const add = (kind: MapEdgeKind, source: string, target: string, service: string) => {
-    if (source === target) return
-    const key = `${kind}|${source}>${target}`
-    const pair = pairs.get(key) ?? { source, target, kind, services: new Set<string>(), count: 0 }
-    pair.services.add(service)
-    pair.count += 1
-    pairs.set(key, pair)
+  const groups = new Map<string, Group>()
+  const books = new Map<string, Map<string, string>>()
+  for (const z of sorted) {
+    const list = members ? (members.get(z.id) ?? []) : null
+    const g = groupOf(zoneNodeId(z.id), list, { kind: 'zone', zone: z, members: list ? list.length : null, state: z.state, radius: 0 })
+    groups.set(g.id, g)
+    books.set(z.id, addressBook(g, list ?? []))
+  }
+  const unzonedList = members && unzoned && unzoned.length > 0 ? unzoned : null
+  if (unzonedList) {
+    const g = groupOf(UNZONED_ID, unzonedList, { kind: 'unzoned', count: unzonedList.length, radius: 0 })
+    groups.set(UNZONED_ID, g)
+    books.set(UNZONED_ID, addressBook(g, unzonedList))
   }
 
+  // Edges, by their ends.
+  const pairs = new Map<string, Pair>()
+  const add = (kind: MapEdgeKind, source: string, target: string, service: string, flow?: MicrosegFlow, seen?: MicrosegSuggestion) => {
+    if (source === target) return
+    const key = `${kind}:${source}>${target}`
+    const pair = pairs.get(key) ?? { kind, source, target, services: new Set<string>(), flows: [], observed: [] }
+    pair.services.add(service)
+    if (flow) pair.flows.push(flow)
+    if (seen) pair.observed.push(seen)
+    pairs.set(key, pair)
+  }
   for (const f of flows) {
     const source = f.src_cidr ? EXTERNAL_ID : known.has(f.src_zone_id) ? zoneNodeId(f.src_zone_id) : null
     const target = f.dst_cidr ? OUTSIDE_ID : known.has(f.dst_zone_id) ? zoneNodeId(f.dst_zone_id) : null
     if (!source || !target || (source === EXTERNAL_ID && target === OUTSIDE_ID)) continue
-    add(target === OUTSIDE_ID ? 'outside' : 'flow', source, target, flowService(f))
+    add(target === OUTSIDE_ID ? 'outside' : 'allowed', source, target, flowService(f), f)
   }
   for (const s of suggestions) {
-    if (s.kind !== 'would_block' || s.status !== 'pending' || !known.has(s.dst_zone_id)) continue
-    add('pending', known.has(s.src_zone_id) ? zoneNodeId(s.src_zone_id) : EXTERNAL_ID, zoneNodeId(s.dst_zone_id), flowService(s))
+    if (s.status !== 'pending' || !known.has(s.dst_zone_id)) continue
+    const kind: MapEdgeKind = s.kind === 'blocked' ? 'blocked' : 'unprotected'
+    const srcIp = bareIp(s.src_ip || '')
+    const source = known.has(s.src_zone_id)
+      ? (books.get(s.src_zone_id)!.get(srcIp) ?? zoneNodeId(s.src_zone_id))
+      : (books.get(UNZONED_ID)?.get(srcIp) ?? EXTERNAL_ID)
+    const target = books.get(s.dst_zone_id)!.get(bareIp(s.dst_ip || '')) ?? zoneNodeId(s.dst_zone_id)
+    add(kind, source, target, flowService(s), undefined, s)
   }
-
-  const ordered = [...pairs.values()].sort((a, b) => (
-    byText(a.source, b.source) || byText(a.target, b.target) || KIND_RANK[a.kind] - KIND_RANK[b.kind]
-  ))
+  const ordered = [...pairs.values()].sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind] || byText(a.source, b.source) || byText(a.target, b.target))
   const hasExternal = ordered.some(p => p.source === EXTERNAL_ID)
   const hasOutside = ordered.some(p => p.target === OUTSIDE_ID)
-  const places = layout(sorted, hasExternal, hasOutside)
 
-  const nodes: Node[] = sorted.map(z => ({
-    id: zoneNodeId(z.id),
-    type: 'zone',
-    position: places.zone(z.id),
-    width: NODE_W,
-    height: NODE_H,
-    // The zone button inside the node takes the focus and the keys: the wrapper of the library has no action of its own.
-    focusable: false,
-    data: { kind: 'zone', zone: z, members: memberCounts ? (memberCounts.get(z.id) ?? 0) : null, state: z.state } satisfies ZoneNodeData,
-  }))
-  if (places.external) {
-    nodes.push({ id: EXTERNAL_ID, type: 'boundary', position: places.external, width: NODE_W, height: NODE_H, focusable: false, data: { kind: 'external' } satisfies BoundaryNodeData })
+  // Grid: column 0 holds External and the guests in no zone, the zone columns follow, Outside is last.
+  const fromExternal = flows.filter(f => f.src_cidr && known.has(f.dst_zone_id) && !f.dst_cidr).map(f => f.dst_zone_id)
+  const layer = layerZones(sorted.map(z => z.id), layerEdges, fromExternal)
+  const columns = orderLayers(layer, layerEdges, id => known.get(id)!.name)
+  type Cell = { id: string; w: number; h: number }
+  const grid: Cell[][] = []
+  const first: Cell[] = []
+  if (hasExternal) first.push({ id: EXTERNAL_ID, w: NODE_W, h: NODE_H })
+  if (unzonedList) first.push({ id: UNZONED_ID, w: 2 * groups.get(UNZONED_ID)!.radius, h: 2 * groups.get(UNZONED_ID)!.radius })
+  if (first.length) grid.push(first)
+  for (const column of columns.slice(1)) {
+    if (column.length) grid.push(column.map(id => ({ id: zoneNodeId(id), w: 2 * groups.get(zoneNodeId(id))!.radius, h: 2 * groups.get(zoneNodeId(id))!.radius })))
   }
-  if (places.outside) {
-    nodes.push({ id: OUTSIDE_ID, type: 'boundary', position: places.outside, width: NODE_W, height: NODE_H, focusable: false, data: { kind: 'outside' } satisfies BoundaryNodeData })
-  }
+  if (hasOutside) grid.push([{ id: OUTSIDE_ID, w: NODE_W, h: NODE_H }])
 
-  // Lanes: the edges between the same two nodes keep side by side. Each direction drives on its own side of the
-  // pair (the offset is along the normal of the edge, which flips with the direction), and the edges of one
-  // direction spread around the middle line when the other direction is empty. Their labels sit at different places
-  // along the edge too: 0.4 of the way from the source for the two directions (so 0.4 and 0.6 on the pair), then
-  // 0.6 for the second edge of a direction.
-  const lanes = new Map<string, Pair[]>()
-  for (const p of ordered) {
-    const key = `${p.source}>${p.target}`
-    lanes.set(key, [...(lanes.get(key) ?? []), p])
-  }
-  const lane = (p: Pair) => {
-    const same = lanes.get(`${p.source}>${p.target}`)!
-    const k = same.indexOf(p)
-    const hasReverse = lanes.has(`${p.target}>${p.source}`)
-    const offset = (hasReverse ? k + 0.5 : k - (same.length - 1) / 2) * LANE_GAP
-    const labelAt = !hasReverse && same.length === 1 ? 0.5 : 0.4 + 0.2 * (k % 2)
-    return { offset, labelAt }
+  const centers = new Map<string, Point>()
+  let left = 0
+  for (const column of grid) {
+    const width = Math.max(...column.map(c => c.w))
+    const height = column.reduce((s, c) => s + c.h, 0) + ROW_GAP * (column.length - 1)
+    let top = -height / 2
+    for (const c of column) {
+      centers.set(c.id, { x: Math.round(left + width / 2), y: Math.round(top + c.h / 2) })
+      top += c.h + ROW_GAP
+    }
+    left += width + COL_GAP
   }
 
-  const centers = new Map<string, Point>(nodes.map(n => [n.id, { x: n.position.x + NODE_W / 2, y: n.position.y + NODE_H / 2 }]))
-  const bows = chooseBows(ordered, lane, centers)
+  // Nodes: each circle before its guests (React Flow wants a parent before its children).
+  const nodes: Node[] = []
+  const obstacles: Obstacle[] = []
+  const endShapes = new Map<string, EdgeEnds>()
+  const boxShape = { kind: 'box' as const, halfW: NODE_W / 2, halfH: NODE_H / 2 }
+  for (const cell of grid.flat()) {
+    const c = centers.get(cell.id)!
+    const group = groups.get(cell.id)
+    if (!group) {
+      nodes.push({
+        id: cell.id, type: 'boundary', position: { x: c.x - NODE_W / 2, y: c.y - NODE_H / 2 }, width: NODE_W, height: NODE_H, focusable: false,
+        data: { kind: cell.id === EXTERNAL_ID ? 'external' : 'outside' } satisfies BoundaryNodeData,
+      })
+      obstacles.push({ id: cell.id, center: c, shape: boxShape })
+      endShapes.set(cell.id, { center: c, shape: boxShape, group: cell.id })
+      continue
+    }
+    const r = group.radius
+    const origin = { x: c.x - r, y: c.y - r }
+    nodes.push({ id: group.id, type: group.data.kind, position: origin, width: 2 * r, height: 2 * r, focusable: false, data: group.data })
+    obstacles.push({ id: group.id, center: c, shape: { kind: 'circle', r } })
+    endShapes.set(group.id, { center: c, shape: { kind: 'circle', r }, group: group.id })
+    const groupId = group.id === UNZONED_ID ? UNZONED_ID : group.id.replace(/^zone:/, '')
+    const spots = slotPositions(group.shown.length + (group.more ? 1 : 0), r)
+    const child = (id: string, spot: Point, data: GuestNodeData | MoreNodeData) => {
+      nodes.push({ id, type: data.kind, parentId: group.id, position: spot, width: GUEST_W, height: GUEST_H, focusable: false, data })
+      endShapes.set(id, { center: { x: origin.x + spot.x + GUEST_W / 2, y: origin.y + spot.y + GLYPH_Y }, shape: { kind: 'circle', r: GUEST_R }, group: group.id })
+    }
+    group.shown.forEach((m, i) => child(guestNodeId(groupId, m.key), spots[i], { kind: 'guest', member: m, groupId }))
+    if (group.more) child(moreNodeId(groupId), spots[spots.length - 1], { kind: 'more', count: group.more, groupId })
+  }
 
-  const edges: Edge[] = ordered.map(p => {
-    const sourceZone = p.kind === 'pending' || p.kind === 'flow' ? known.get(p.source.replace(/^zone:/, '')) : undefined
-    const color = p.kind === 'flow' ? (sourceZone?.color || EDGE_COLORS.flow) : EDGE_COLORS[p.kind]
-    const { offset, labelAt } = lane(p)
-    return {
-      id: `${p.kind}:${p.source}>${p.target}`,
+  const placed = placeEdges(
+    ordered.map(p => ({ id: `${p.kind}:${p.source}>${p.target}`, source: p.source, target: p.target, label: groupServices([...p.services]), small: p.kind === 'unprotected' || p.kind === 'blocked' })),
+    endShapes,
+    obstacles,
+  )
+
+  const edges: Edge[] = ordered.flatMap(p => {
+    const id = `${p.kind}:${p.source}>${p.target}`
+    const place = placed.get(id)
+    if (!place) return []
+    const observed = p.kind === 'unprotected' || p.kind === 'blocked'
+    const draft = !!unapplied && p.flows.length > 0 && p.flows.every(f => unapplied.has(f.id))
+    const color = EDGE_COLORS[p.kind]
+    const dash = p.kind === 'unprotected' || p.kind === 'outside' ? '6 4' : draft ? '1 5' : undefined
+    return [{
+      id,
       type: 'flow',
       source: p.source,
       target: p.target,
-      // The map is read with the pointer or with the zone buttons: the edges take no focus (the panel lists the flows).
+      // The map is read with the pointer or with the zone buttons: the edges take no focus (the panels list the flows).
       focusable: false,
-      style: edgeStyle(p.kind, color),
+      zIndex: observed ? 2 : 1,
+      style: { stroke: color, strokeWidth: observed ? 1.75 : 2, ...(dash ? { strokeDasharray: dash, strokeLinecap: draft ? 'round' : undefined } : {}) },
       markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
       data: {
-        kind: p.kind, services: [...p.services].sort(byText), count: p.count, offset, labelAt, bow: bows.get(p) ?? 0,
-        particle: p.kind === 'flow', color,
+        kind: p.kind,
+        services: [...p.services].sort(byText),
+        label: groupServices([...p.services]),
+        count: observed ? p.observed.length : p.flows.length,
+        flows: [...p.flows].sort((a, b) => byText(a.id, b.id)),
+        observed: [...p.observed].sort((a, b) => byText(a.id, b.id)),
+        draft,
+        fromGroup: endShapes.get(p.source)!.group,
+        toGroup: endShapes.get(p.target)!.group,
+        path: place.path,
+        points: place.points,
+        label_x: place.label.x,
+        label_y: place.label.y,
+        label_w: place.label.w,
+        label_h: place.label.h,
+        small: observed,
+        particle: p.kind === 'allowed' && !draft,
+        color,
       } satisfies MapEdgeData,
-    }
+    }]
   })
 
   return { nodes, edges }
 }
 
+export type FlowFilters = { allowed: boolean; unprotected: boolean; blocked: boolean }
+export const ALL_FLOWS: FlowFilters = { allowed: true, unprotected: true, blocked: true }
+
+/** The edges the three checkboxes of the toolbar let through (the flows to Outside are allowed flows). */
+export function filterEdges(edges: Edge[], filters: FlowFilters): Edge[] {
+  return edges.filter(e => {
+    const kind = (e.data as unknown as MapEdgeData).kind
+    return kind === 'unprotected' ? filters.unprotected : kind === 'blocked' ? filters.blocked : filters.allowed
+  })
+}
+
 /**
- * The bow of every edge: for each pair of nodes the first bow of BOWS (straight first) with which none of its edges
- * (with their lane) enters an unrelated node. The bow is chosen once per pair in the frame of the lesser node, so that
- * the two directions follow the same curve; with no clear bow the one that touches the fewest nodes is kept.
+ * What stays lit when a node or an edge has the focus: for a circle its guests, its edges and their other ends;
+ * for a guest (or a box) its own edges and their ends; for an edge its two ends. The circle of a lit guest stays lit.
+ * Null when nothing has the focus (or the id is unknown).
  */
-function chooseBows(
-  ordered: Pair[],
-  lane: (p: Pair) => { offset: number; labelAt: number },
-  centers: Map<string, Point>,
-): Map<Pair, number> {
-  const groups = new Map<string, Pair[]>()
-  for (const p of ordered) {
-    const key = p.source < p.target ? `${p.source}|${p.target}` : `${p.target}|${p.source}`
-    groups.set(key, [...(groups.get(key) ?? []), p])
+export function focusSets(graph: ZoneGraph, id: string | null): { nodes: Set<string>; edges: Set<string> } | null {
+  if (!id) return null
+  const parent = new Map(graph.nodes.map(n => [n.id, n.parentId]))
+  const lit = new Set<string>()
+  const edges = new Set<string>()
+  const light = (nodeId: string) => {
+    lit.add(nodeId)
+    const p = parent.get(nodeId)
+    if (p) lit.add(p)
   }
-  const result = new Map<Pair, number>()
-  for (const [key, group] of groups) {
-    const [first] = key.split('|')
-    const [a, b] = [centers.get(group[0].source)!, centers.get(group[0].target)!]
-    const reach = Math.hypot(b.x - a.x, b.y - a.y)
-    const bowOf = (p: Pair, canonical: number) => (p.source === first ? canonical : -canonical) * reach
-    let best = { canonical: 0, hits: Infinity }
-    for (const canonical of BOWS) {
-      let hits = 0
-      for (const p of group) {
-        const { offset, labelAt } = lane(p)
-        const shape = edgeGeometry(centers.get(p.source)!, centers.get(p.target)!, {
-          halfW: NODE_W / 2, halfH: NODE_H / 2, gap: EDGE_GAP, offset, bow: bowOf(p, canonical), at: labelAt,
-        })
-        if (!shape) continue
-        for (const [id, center] of centers) {
-          if (id !== p.source && id !== p.target && crossesBox(shape.points, center, NODE_W / 2, NODE_H / 2, CLEARANCE)) hits++
-        }
-      }
-      if (hits < best.hits) best = { canonical, hits }
-      if (hits === 0) break
+  const edge = graph.edges.find(e => e.id === id)
+  if (edge) {
+    edges.add(edge.id)
+    light(edge.source)
+    light(edge.target)
+    return { nodes: lit, edges }
+  }
+  if (!parent.has(id)) return null
+  const own = new Set([id, ...graph.nodes.filter(n => n.parentId === id).map(n => n.id)])
+  own.forEach(light)
+  for (const e of graph.edges) {
+    if (own.has(e.source) || own.has(e.target)) {
+      edges.add(e.id)
+      light(e.source)
+      light(e.target)
     }
-    for (const p of group) result.set(p, bowOf(p, best.canonical))
   }
-  return result
+  return { nodes: lit, edges }
 }

@@ -1,67 +1,129 @@
 'use client'
 
-import { useCallback, useEffect } from 'react'
-import { Background, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type Node, type NodeMouseHandler } from '@xyflow/react'
+import { useCallback, useEffect, useMemo } from 'react'
+import {
+  Background, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type EdgeMouseHandler, type Node, type NodeMouseHandler,
+} from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { Box, alpha, useTheme } from '@mui/material'
+import { useTranslations } from 'next-intl'
 
-import { FlowEdge } from './FlowEdge'
-import { BoundaryNode, ZoneActivateContext, ZoneNode } from './ZoneNode'
-import type { ZoneNodeData } from './zoneGraph'
+import { EdgeClickContext, FlowEdge } from './FlowEdge'
+import { BoundaryNode, GuestNode, MapActionsContext, MoreNode, UnzonedNode, ZoneNode, type MapActions } from './ZoneNode'
+import { UNZONED_ID, type MapNodeData } from './zoneGraph'
 
-const nodeTypes = { zone: ZoneNode, boundary: BoundaryNode }
+const nodeTypes = { zone: ZoneNode, unzoned: UnzonedNode, guest: GuestNode, more: MoreNode, boundary: BoundaryNode }
 const edgeTypes = { flow: FlowEdge }
 
 type Props = {
   nodes: Node[]
   edges: Edge[]
-  /** A zone node was clicked. */
+  /** A zone circle (or its "+N" node) was clicked, or activated with the keyboard. */
   onSelectZone: (zoneId: string) => void
+  /** A guest was clicked, or activated with the keyboard. */
+  onSelectGuest: (nodeId: string) => void
+  /** An edge (or its label) was clicked. */
+  onSelectEdge: (edgeId: string) => void
+  /** The pointer or the keyboard focus is on a node or an edge (null: on nothing). */
+  onHover: (id: string | null) => void
+  onFocusNode: (id: string | null) => void
   /** The canvas itself was clicked. */
   onClear: () => void
   /** The side panel is open: the canvas changes width, so it fits the graph again when this flips. */
   panelOpen?: boolean
 }
 
-function Canvas({ nodes, edges, onSelectZone, onClear, panelOpen }: Props) {
+function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHover, onFocusNode, onClear, panelOpen }: Props) {
   const { fitView } = useReactFlow()
+  const theme = useTheme()
+  const t = useTranslations('microsegPilot.overview')
 
   // Refit when the graph reshapes (a zone added) or when the side panel opens or closes, like the topology view.
-  const shape = nodes.map(n => n.id).join(',')
+  const shape = nodes.filter(n => !n.parentId).map(n => n.id).join(',')
   useEffect(() => {
     if (!shape) return
-    const timer = setTimeout(() => { void fitView({ padding: 0.15, duration: 300, maxZoom: 1 }) }, 100)
+    const timer = setTimeout(() => { void fitView({ padding: 0.1, duration: 300, maxZoom: 1 }) }, 100)
     return () => clearTimeout(timer)
   }, [shape, fitView, panelOpen])
 
   const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
-    if (node.type === 'zone') onSelectZone((node.data as unknown as ZoneNodeData).zone.id)
-  }, [onSelectZone])
+    const d = node.data as unknown as MapNodeData
+    if (d.kind === 'zone') onSelectZone(d.zone.id)
+    else if (d.kind === 'guest') onSelectGuest(node.id)
+    else if (d.kind === 'more' && d.groupId !== UNZONED_ID) onSelectZone(d.groupId)
+  }, [onSelectZone, onSelectGuest])
+  const onEdgeClick: EdgeMouseHandler = useCallback((_event, edge) => onSelectEdge(edge.id), [onSelectEdge])
+  const onNodeMouseEnter: NodeMouseHandler = useCallback((_event, node) => onHover(node.id), [onHover])
+  const onEdgeMouseEnter: EdgeMouseHandler = useCallback((_event, edge) => onHover(edge.id), [onHover])
+  const leave = useCallback(() => onHover(null), [onHover])
+  const actions = useMemo<MapActions>(() => ({ openZone: onSelectZone, selectGuest: onSelectGuest, setFocus: onFocusNode }), [onSelectZone, onSelectGuest, onFocusNode])
+
+  const minimapColor = useCallback((node: Node) => {
+    const d = node.data as unknown as MapNodeData
+    if (d.kind === 'zone') return d.zone.color || theme.palette.text.disabled
+    return d.kind === 'guest' || d.kind === 'more' ? theme.palette.text.secondary : theme.palette.text.disabled
+  }, [theme])
 
   return (
-    <ZoneActivateContext.Provider value={onSelectZone}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodeClick={onNodeClick}
-        onPaneClick={onClear}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        fitView
-        fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
-        minZoom={0.1}
-        maxZoom={2}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background gap={24} size={1} />
-      </ReactFlow>
-    </ZoneActivateContext.Provider>
+    <MapActionsContext.Provider value={actions}>
+      <EdgeClickContext.Provider value={onSelectEdge}>
+        <Box
+          sx={{
+            width: '100%', height: '100%',
+            '& .microseg-dim': { opacity: 0.25 },
+            '& .react-flow__node, & .react-flow__edge, & .react-flow__edgelabel-renderer > div': { transition: 'opacity 150ms' },
+            '@media (prefers-reduced-motion: reduce)': { '& *': { transition: 'none !important' } },
+            '& .react-flow__controls': { boxShadow: theme.shadows[1], borderRadius: 1, overflow: 'hidden' },
+            '& .react-flow__controls-button': {
+              bgcolor: 'background.paper', color: 'text.primary', borderBottom: `1px solid ${theme.palette.divider}`,
+              '& svg': { fill: 'currentColor' }, '&:hover': { bgcolor: 'action.hover' },
+            },
+            '& .react-flow__minimap': { bgcolor: 'background.paper', border: `1px solid ${theme.palette.divider}`, borderRadius: 1 },
+          }}
+        >
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
+            onNodeMouseEnter={onNodeMouseEnter}
+            onNodeMouseLeave={leave}
+            onEdgeMouseEnter={onEdgeMouseEnter}
+            onEdgeMouseLeave={leave}
+            onPaneClick={onClear}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            panOnDrag
+            fitView
+            fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
+            minZoom={0.1}
+            maxZoom={2}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background gap={24} size={1} />
+            <Controls showInteractive={false} position='bottom-left' aria-label={t('controls')} />
+            <MiniMap
+              pannable
+              zoomable
+              position='bottom-right'
+              ariaLabel={t('minimap')}
+              nodeColor={minimapColor}
+              nodeStrokeWidth={0}
+              bgColor={theme.palette.background.paper}
+              maskColor={alpha(theme.palette.text.primary, 0.08)}
+              style={{ width: 160, height: 100 }}
+            />
+          </ReactFlow>
+        </Box>
+      </EdgeClickContext.Provider>
+    </MapActionsContext.Provider>
   )
 }
 
-/** The React Flow canvas of the zone map: pan and zoom, no dragging, no connecting. */
+/** The React Flow canvas of the zone map: pan by drag, zoom, fit, mini-map; no dragging of nodes, no connecting. */
 export default function ZoneCanvas(props: Props) {
   return (
     <ReactFlowProvider>

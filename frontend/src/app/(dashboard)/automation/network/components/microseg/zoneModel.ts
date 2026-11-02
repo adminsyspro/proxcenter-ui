@@ -8,6 +8,8 @@ export type PolicyGuest = {
   type: 'qemu' | 'lxc'
   status: string
   tags: string[]
+  /** Addresses known for the guest (the map resolves observed flows with them). */
+  ips?: string[]
 }
 
 /** A change queued for a guest that still carries the tag of the zone: its removal, or its move to another zone. */

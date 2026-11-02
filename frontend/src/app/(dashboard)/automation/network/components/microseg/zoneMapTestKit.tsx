@@ -10,7 +10,8 @@ import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, PendingMember } fr
 import { flow, mock, policy, renderTab, reply, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
 import { db, suggestion, web } from './policyTestKit'
 
-export const SUGGESTIONS = 'GET /suggestions?kind=would_block&status=pending&limit=200'
+/** The map reads every pending observed flow (unprotected and blocked) at once. */
+export const SUGGESTIONS = 'GET /suggestions?status=pending&limit=200'
 const originalMatchMedia = window.matchMedia
 afterEach(() => { window.matchMedia = originalMatchMedia })
 
@@ -26,11 +27,12 @@ export function setup(opts: {
   vms?: unknown[]
   pending_members?: PendingMember[]
   pending_changes?: boolean
+  last_revision?: typeof REVISION_HEAD | null
 } = {}) {
   window.localStorage.setItem('microseg.subTab', 'overview')
   mock.routes['GET /policy'] = () => reply(200, policy({
     zones: opts.zones ?? [web(), db()], flows: opts.flows ?? [], pending_members: opts.pending_members ?? [],
-    pending_changes: opts.pending_changes ?? false, last_revision: REVISION_HEAD,
+    pending_changes: opts.pending_changes ?? false, last_revision: opts.last_revision === undefined ? REVISION_HEAD : opts.last_revision,
   }))
   mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: opts.vms ?? [] } })
   mock.routes[SUGGESTIONS] = () => (opts.suggestions === 'error'

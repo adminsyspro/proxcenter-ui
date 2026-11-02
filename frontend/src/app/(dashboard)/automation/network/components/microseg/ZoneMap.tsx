@@ -1,56 +1,68 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Box, Button, Chip, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { ListSuggestionsParams } from '@/lib/microseg/api'
+import type { MicrosegFlow, SuggestionAction } from '@/lib/microseg/types'
+import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
+import EdgePanel from './EdgePanel'
+import MapToolbar, { useFlowFilters } from './MapToolbar'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import { useZoneGuests } from './useZoneGuests'
 import ZoneCanvas from './ZoneCanvas'
-import { buildZoneGraph, EDGE_COLORS, EXTERNAL_ID, OUTSIDE_ID, zoneNodeId, type MapEdgeData } from './zoneGraph'
-import { zoneMembers } from './zoneModel'
+import {
+  EXTERNAL_ID, OUTSIDE_ID, UNZONED_ID, buildZoneGraph, filterEdges, focusSets, zoneNodeId,
+  type MapEdgeData, type MapMember, type MapNodeData,
+} from './zoneGraph'
+import { guestKey, zoneMembers, type PolicyGuest, type ZoneMember } from './zoneModel'
 import ZonePanel from './ZonePanel'
 
-/** The whole map reads the pending would-block suggestions once (the API caps a page at 200). */
+/** The whole map reads the pending observed flows (unprotected and blocked) once; the API caps a page at 200. */
 const PENDING_LIMIT = 200
-const PENDING_WOULD_BLOCK: ListSuggestionsParams = { kind: 'would_block', status: 'pending', limit: PENDING_LIMIT }
+const PENDING_OBSERVED: ListSuggestionsParams = { status: 'pending', limit: PENDING_LIMIT }
 
-function Legend() {
-  const t = useTranslations('microsegPilot.overview.legend')
-  const items = [
-    { key: 'flow', color: 'currentColor', dashed: false },
-    { key: 'pending', color: EDGE_COLORS.pending, dashed: true },
-    { key: 'outside', color: EDGE_COLORS.outside, dashed: true },
-  ] as const
-  return (
-    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-      {items.map(item => (
-        <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: 'text.secondary' }}>
-          <Box component='span' sx={{ width: 22, borderTop: `2px ${item.dashed ? 'dashed' : 'solid'} ${item.color}` }} />
-          <Typography variant='caption' color='text.secondary'>{t(item.key)}</Typography>
-        </Box>
-      ))}
-    </Box>
-  )
-}
+type Selection = { kind: 'zone' | 'guest' | 'edge'; id: string }
+
+const toMapMember = (m: ZoneMember): MapMember => ({
+  key: guestKey(m.ref),
+  name: m.guest?.name ?? `${m.ref.type}/${m.ref.vmid}`,
+  vmid: m.ref.vmid,
+  node: m.ref.node,
+  type: m.ref.type,
+  status: m.guest?.status ?? 'unknown',
+  ips: m.guest?.ips ?? [],
+  pending: m.pending,
+})
+const guestToMember = (g: PolicyGuest): MapMember => ({ key: guestKey(g), name: g.name, vmid: g.vmid, node: g.node, type: g.type, status: g.status, ips: g.ips ?? [], pending: false })
+
+const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_zone_id && a.src_cidr === b.src_cidr
+  && a.dst_zone_id === b.dst_zone_id && a.dst_cidr === b.dst_cidr && a.proto === b.proto && a.dport === b.dport
 
 /**
- * The Overview sub-tab: the draft as a map. A node per zone (and External /
- * Outside when a flow or a suggestion reaches beyond the zones), an edge per
- * pair with flows, a dashed red one per pair with pending would-block
- * suggestions. A click on a zone opens its panel. Nothing polls beyond the
- * shared hooks (one inventory read, one suggestions read).
+ * The Overview sub-tab: the draft as a map, like the security groups view of NSX. A circle per zone holding its
+ * guests, the running guests in no zone in a dashed circle, the allowed flows circle to circle, the observed ones
+ * (unprotected, blocked) guest to guest. Hover or select something to light it and its flows; click a circle for
+ * its panel, an edge for its flows. Nothing polls beyond the shared hooks (one inventory read, one suggestions read).
  */
 export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.overview')
-  const { guests, status: guestsStatus } = useZoneGuests(connectionId)
-  const suggestions = useMicrosegSuggestions(connectionId, PENDING_WOULD_BLOCK)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const tObs = useTranslations('microsegPilot.observation')
+  const { guests, status: guestsStatus, reload: reloadGuests } = useZoneGuests(connectionId)
+  const suggestions = useMicrosegSuggestions(connectionId, PENDING_OBSERVED)
+  const { revision } = useLastRevisionSnapshot(connectionId, policy.pending_changes ? policy.last_revision?.id : null)
+  const [selection, setSelection] = useState<Selection | null>(null)
+  const [hover, setHover] = useState<string | null>(null)
+  const [keyFocus, setKeyFocus] = useState<string | null>(null)
   const [assigning, setAssigning] = useState(false)
+  const [resolved, setResolved] = useState<SuggestionAction | null>(null)
+  const [filters, setFilters] = useFlowFilters()
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null)
 
   const { zones, flows, pending_members: pendingMembers } = policy
   const tagPrefix = policy.policy.tag_prefix
@@ -59,25 +71,82 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     [zones, tagPrefix, guests, pendingMembers],
   )
   const membersKnown = guestsStatus === 'ready'
-  const graph = useMemo(() => {
-    const counts = membersKnown ? new Map([...membersByZone].map(([id, list]) => [id, list.length])) : null
-    return buildZoneGraph(zones, flows, suggestions.data ?? [], counts)
-  }, [zones, flows, suggestions.data, membersByZone, membersKnown])
-
-  // A zone deleted from the draft while its panel is open simply closes it.
-  const selected = zones.find(z => z.id === selectedId) ?? null
-  const nodes = useMemo(
-    () => (selected ? graph.nodes.map(n => (n.id === zoneNodeId(selected.id) ? { ...n, selected: true } : n)) : graph.nodes),
-    [graph.nodes, selected],
-  )
   const zonesById = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
 
-  // The edges take no focus, but a screen reader names them: "web to db: tcp/443".
+  // The flows of the draft that the last applied revision does not have (null: not known yet, nothing marked).
+  const unapplied = useMemo<ReadonlySet<string> | null>(() => {
+    if (!policy.pending_changes) return null
+    if (!policy.last_revision) return new Set(flows.map(f => f.id))
+    const snapshot = revision?.snapshot
+    if (!snapshot) return null
+    const before = new Map(snapshot.flows.map(f => [f.id, f]))
+    return new Set(flows.filter(f => !before.has(f.id) || !sameFlow(before.get(f.id)!, f)).map(f => f.id))
+  }, [policy.pending_changes, policy.last_revision, revision, flows])
+
+  const graph = useMemo(() => {
+    const members = membersKnown ? new Map([...membersByZone].map(([id, list]) => [id, list.map(toMapMember)])) : null
+    const zoned = new Set([...membersByZone.values()].flatMap(list => list.map(m => guestKey(m.ref))))
+    const unzoned = membersKnown ? guests.filter(g => g.status === 'running' && !zoned.has(guestKey(g))).map(guestToMember) : null
+    return buildZoneGraph({ zones, flows, suggestions: suggestions.data ?? [], members, unzoned, unapplied })
+  }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied])
+
+  // The time of the last answer: the observed flows, the guests or the draft changed.
+  useEffect(() => {
+    if (!suggestions.data && !membersKnown) return
+    const timer = setTimeout(() => setRefreshedAt(new Date()), 0)
+    return () => clearTimeout(timer)
+  }, [suggestions.data, membersKnown, guests, policy])
+
+  // A zone deleted from the draft (or an edge gone after a reload) simply closes its panel.
+  const selectedZone = selection?.kind === 'zone' ? zones.find(z => z.id === selection.id) ?? null : null
+  const selectedEdge = selection?.kind === 'edge' ? graph.edges.find(e => e.id === selection.id) ?? null : null
+  const selectedNode = selectedZone ? zoneNodeId(selectedZone.id) : selection?.kind === 'guest' ? selection.id : null
+  const selectedFocus = selectedNode ?? (selection?.kind === 'edge' ? selection.id : null)
+  const focusId = hover ?? keyFocus ?? selectedFocus
+  const lit = useMemo(() => focusSets(graph, focusId), [graph, focusId])
+
   const tNode = useTranslations('microsegPilot.overview.node')
-  const edges = useMemo(() => {
-    const nameOf = (nodeId: string) => (nodeId === EXTERNAL_ID ? tNode('external') : nodeId === OUTSIDE_ID ? tNode('outside') : (zonesById.get(nodeId.replace(/^zone:/, ''))?.name ?? nodeId))
-    return graph.edges.map(e => ({ ...e, ariaLabel: t('edge.aria', { from: nameOf(e.source), to: nameOf(e.target), services: (e.data as unknown as MapEdgeData).services.join(', ') }) }))
-  }, [graph.edges, zonesById, t, tNode])
+  const nameOf = useCallback((nodeId: string) => {
+    if (nodeId === EXTERNAL_ID) return tNode('external')
+    if (nodeId === OUTSIDE_ID) return tNode('outside')
+    const node = graph.nodes.find(n => n.id === nodeId)
+    const d = node?.data as unknown as MapNodeData | undefined
+    if (!d) return nodeId
+    const groupName = (groupId: string) => (groupId === UNZONED_ID ? tNode('unzoned', { count: (graph.nodes.find(n => n.id === UNZONED_ID)?.data as { count?: number } | undefined)?.count ?? 0 }) : zonesById.get(groupId)?.name ?? groupId)
+    if (d.kind === 'zone') return d.zone.name
+    if (d.kind === 'guest') return `${d.member.name} (${groupName(d.groupId)})`
+    if (d.kind === 'more') return `+${d.count} (${groupName(d.groupId)})`
+    if (d.kind === 'unzoned') return tNode('unzoned', { count: d.count })
+    return nodeId
+  }, [graph.nodes, zonesById, tNode])
+
+  const nodes = useMemo(() => graph.nodes.map(n => {
+    const selected = n.id === selectedNode
+    const dimmed = !!lit && !lit.nodes.has(n.id)
+    return selected || dimmed ? { ...n, selected, className: dimmed ? 'microseg-dim' : undefined } : n
+  }), [graph.nodes, selectedNode, lit])
+
+  // The edges take no focus, but a screen reader names them: "web to db: tcp/443".
+  const edges = useMemo(() => filterEdges(graph.edges, filters).map(e => {
+    const d = e.data as unknown as MapEdgeData
+    const dimmed = !!lit && !lit.edges.has(e.id)
+    return {
+      ...e,
+      className: dimmed ? 'microseg-dim' : undefined,
+      ariaLabel: t('edge.aria', { from: nameOf(e.source), to: nameOf(e.target), services: d.services.join(', ') }),
+      data: dimmed ? { ...e.data, dimmed } : e.data,
+    }
+  }), [graph.edges, filters, lit, t, nameOf])
+
+  const selectZone = useCallback((zoneId: string) => { setSelection({ kind: 'zone', id: zoneId }); setResolved(null) }, [])
+  const selectGuest = useCallback((nodeId: string) => setSelection({ kind: 'guest', id: nodeId }), [])
+  const selectEdge = useCallback((edgeId: string) => { setSelection({ kind: 'edge', id: edgeId }); setResolved(null) }, [])
+  const clear = useCallback(() => setSelection(null), [])
+  const refresh = useCallback(async () => {
+    setRefreshing(true)
+    await Promise.all([reloadPolicy().catch(() => undefined), suggestions.reload().catch(() => undefined), reloadGuests().catch(() => undefined)])
+    setRefreshing(false)
+  }, [reloadPolicy, suggestions, reloadGuests])
 
   if (zones.length === 0) {
     return (
@@ -88,10 +157,13 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     )
   }
 
+  const panelOpen = !!selectedZone || !!selectedEdge
   return (
     <Box sx={{ px: 3, pb: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, flexWrap: 'wrap', minHeight: 28 }}>
-        <Legend />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, flexWrap: 'wrap' }}>
+        <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
+          <MapToolbar filters={filters} onFilters={setFilters} refreshedAt={refreshedAt} refreshing={refreshing} onRefresh={refresh} />
+        </Box>
         {policy.pending_changes && (
           <Tooltip title={t('unappliedHint')}>
             <Chip size='small' color='warning' variant='outlined' icon={<i className='ri-edit-circle-line' />} label={t('unapplied')} />
@@ -104,33 +176,66 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
       {(suggestions.data?.length ?? 0) >= PENDING_LIMIT && (
         <Alert severity='info' sx={{ mb: 1 }}>{t('partial', { count: PENDING_LIMIT })}</Alert>
       )}
+      {resolved && (
+        <Alert severity='success' onClose={() => setResolved(null)} sx={{ mb: 1 }}>
+          {tObs(resolved === 'dismiss' ? 'resolvedDismiss' : 'resolvedAccept', { count: 1 })}
+        </Alert>
+      )}
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: { xs: 'wrap', lg: 'nowrap' } }}>
         <Box
           role='region'
           aria-label={t('mapLabel')}
           sx={{ flex: '1 1 0', minWidth: 0, width: '100%', height: 560, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
         >
-          <ZoneCanvas nodes={nodes} edges={edges} onSelectZone={setSelectedId} onClear={() => setSelectedId(null)} panelOpen={!!selected} />
+          <ZoneCanvas
+            nodes={nodes}
+            edges={edges}
+            onSelectZone={selectZone}
+            onSelectGuest={selectGuest}
+            onSelectEdge={selectEdge}
+            onHover={setHover}
+            onFocusNode={setKeyFocus}
+            onClear={clear}
+            panelOpen={panelOpen}
+          />
         </Box>
-        {selected && (
+        {selectedZone && (
           <ZonePanel
-            key={selected.id}
-            zone={selected}
-            members={membersByZone.get(selected.id) ?? []}
+            key={selectedZone.id}
+            zone={selectedZone}
+            members={membersByZone.get(selectedZone.id) ?? []}
             membersKnown={membersKnown}
             flows={flows}
             zonesById={zonesById}
-            onClose={() => setSelectedId(null)}
+            onClose={clear}
             onEdit={() => goToSubTab('policy')}
             onAssign={() => setAssigning(true)}
           />
         )}
+        {selectedEdge && (
+          <EdgePanel
+            key={selectedEdge.id}
+            edgeId={selectedEdge.id}
+            data={selectedEdge.data as unknown as MapEdgeData}
+            from={nameOf(selectedEdge.source)}
+            to={nameOf(selectedEdge.target)}
+            zonesById={zonesById}
+            unapplied={unapplied}
+            connectionId={connectionId}
+            version={policy.version}
+            reloadPolicy={reloadPolicy}
+            reloadSuggestions={suggestions.reload}
+            onResolved={setResolved}
+            onClose={clear}
+            onEdit={() => goToSubTab('policy')}
+          />
+        )}
       </Box>
-      {assigning && selected && (
+      {assigning && selectedZone && (
         <AssignGuestsDialog
           open
           connectionId={connectionId}
-          zone={selected}
+          zone={selectedZone}
           policy={policy}
           reloadPolicy={reloadPolicy}
           onClose={() => setAssigning(false)}

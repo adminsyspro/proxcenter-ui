@@ -13005,25 +13005,39 @@
       "mapLabel": "Carte des zones et de leurs flux",
       "suggestionsError": "Les flux en attente n'ont pas pu être lus. La carte ne montre que les flux autorisés.",
       "legend": {
-        "flow": "Flux autorisé (couleur de la zone source)",
-        "pending": "Serait bloqué",
-        "outside": "Non appliqué en v1"
+        "outside": "Vers l'extérieur : non appliqué en v1",
+        "allowed": "Autorisé",
+        "unprotected": "Non protégé",
+        "blocked": "Bloqué",
+        "draft": "Autorisé, pas encore appliqué"
       },
       "node": {
         "members": "{count, plural, one {# membre} other {# membres}}",
-        "external": "Externe",
-        "externalHint": "Sources hors de toute zone : une adresse IP ou un réseau (CIDR)",
+        "external": "Inconnu / Externe",
+        "externalHint": "Sources qui ne correspondent à aucun invité : une adresse IP ou un réseau (CIDR)",
         "outside": "Extérieur",
         "outsideHint": "Destinations hors des zones (un CIDR). Les flux vers elles ne sont pas appliqués en v1.",
         "notApplied": "non appliqué en v1",
         "aria": "Zone {name} : {state}, {members}",
-        "membersUnknown": "membres inconnus"
+        "membersUnknown": "membres inconnus",
+        "unzoned": "Invités sans zone ({count, number})",
+        "unzonedHint": "Invités en marche dans aucune zone. Écarts les liste aussi.",
+        "guestAria": "{name}, invité {vmid}",
+        "guestWhere": "Invité {vmid} sur {node}",
+        "guestIps": "Adresses IP : {ips}",
+        "guestNoIp": "Aucune adresse IP connue",
+        "guestPending": "En attente pour la zone, appliqué avec le prochain plan",
+        "moreHint": "{count, plural, one {# membre de plus} other {# membres de plus}} : le panneau de la zone les liste tous",
+        "moreUnzonedHint": "{count, plural, one {# invité de plus} other {# invités de plus}} sans zone : Écarts les liste tous"
       },
       "edge": {
-        "flow": "Autorisé : {services}",
-        "pending": "{count, plural, one {# flux observé serait bloqué} other {# flux observés seraient bloqués}} : {services}",
         "outside": "Non appliqué en v1 : {services}",
-        "aria": "{from} vers {to} : {services}"
+        "aria": "{from} vers {to} : {services}",
+        "allowed": "Autorisé : {services}",
+        "unprotected": "{count, plural, one {# flux observé} other {# flux observés}} qu'aucun flux n'autorise (non protégé)",
+        "blocked": "{count, plural, one {# flux bloqué} other {# flux bloqués}} par une zone appliquée",
+        "draft": "Dans le brouillon : appliqué avec le prochain plan",
+        "more": "+{count, number} de plus"
       },
       "panel": {
         "label": "Zone {name}",
@@ -13036,7 +13050,23 @@
         "pending": "En attente",
         "noFlows": "Aucun"
       },
-      "partial": "Partiel : seuls les {count, number} premiers flux en attente sont dessinés."
+      "partial": "Partiel : seuls les {count, number} premiers flux en attente sont dessinés.",
+      "filters": {
+        "title": "Flux :"
+      },
+      "toolbar": {
+        "refreshedAt": "Actualisé à {time}",
+        "refresh": "Actualiser la carte"
+      },
+      "flowPanel": {
+        "label": "Flux {from} vers {to}",
+        "observed": "Flux observés",
+        "allowed": "Flux autorisés",
+        "acceptAs": "Accepter comme flux {from} → {to} {service}",
+        "draft": "Brouillon"
+      },
+      "controls": "Zoom et ajustement à la vue",
+      "minimap": "Vue d'ensemble de la carte"
     },
     "preflight": {
       "title": "Vérifications préalables",

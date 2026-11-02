@@ -12771,7 +12771,9 @@
           "disabled": "Desactivar",
           "observe": "Observar",
           "enforce": "Aplicar"
-        }
+        },
+        "assign": "Asignar invitados",
+        "removeMember": "Quitar de la zona"
       },
       "flow": {
         "notApplied": "No aplicado (salida no gestionada en v1)",
@@ -12848,6 +12850,24 @@
         "done": "{label}: {done} hechos, {failed} fallidos, {notRun} sin ejecutar",
         "failed": "{label}: la ejecución ha fallado",
         "unavailable": "{label}: el progreso no está disponible"
+      },
+      "assign": {
+        "title": "Asignar invitados a {zone}",
+        "draftNote": "No se escribe nada en Proxmox hasta que se aplique el plan.",
+        "search": "Buscar por nombre o VMID",
+        "selectAll": "Todos los invitados coincidentes",
+        "selectAllCount": "Todos los invitados coincidentes ({count})",
+        "selected": "Selección: {count}",
+        "member": "Miembro",
+        "pending": "Pendiente",
+        "pendingHint": "En cola para esta zona, se etiquetará en la próxima aplicación.",
+        "movedHint": "Actualmente en {zones}: la asignación lo mueve a {zone}.",
+        "noGuests": "Ningún invitado en esta conexión.",
+        "noMatch": "Ningún invitado coincide.",
+        "loading": "Cargando invitados...",
+        "loadFailed": "No se pudo leer la lista de invitados.",
+        "confirm": "Asignar {count, plural, one {# invitado} other {# invitados}}",
+        "tooMany": "Se pueden asignar como máximo {max} invitados a la vez (seleccionados: {count})."
       }
     },
     "plan": {

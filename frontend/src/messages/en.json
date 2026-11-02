@@ -12771,7 +12771,9 @@
           "disabled": "Disable",
           "observe": "Observe",
           "enforce": "Enforce"
-        }
+        },
+        "assign": "Assign guests",
+        "removeMember": "Remove from zone"
       },
       "flow": {
         "notApplied": "Not applied (egress not managed in v1)",
@@ -12848,6 +12850,24 @@
         "done": "{label}: {done} done, {failed} failed, {notRun} not run",
         "failed": "{label}: the run failed",
         "unavailable": "{label}: progress is not available"
+      },
+      "assign": {
+        "title": "Assign guests to {zone}",
+        "draftNote": "Nothing is written to Proxmox until the plan is applied.",
+        "search": "Search by name or VMID",
+        "selectAll": "All matching guests",
+        "selectAllCount": "All matching guests ({count})",
+        "selected": "Selected: {count}",
+        "member": "Member",
+        "pending": "Pending",
+        "pendingHint": "Queued for this zone, tagged on the next apply.",
+        "movedHint": "Currently in {zones}: assigning moves it to {zone}.",
+        "noGuests": "No guest in this connection.",
+        "noMatch": "No guest matches.",
+        "loading": "Loading guests...",
+        "loadFailed": "The guest list could not be read.",
+        "confirm": "Assign {count, plural, one {# guest} other {# guests}}",
+        "tooMany": "At most {max} guests can be assigned at once (selected: {count})."
       }
     },
     "plan": {

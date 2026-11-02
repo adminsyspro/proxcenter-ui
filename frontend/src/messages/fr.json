@@ -12772,7 +12772,9 @@
           "disabled": "Désactiver",
           "observe": "Observer",
           "enforce": "Appliquer"
-        }
+        },
+        "assign": "Affecter des invités",
+        "removeMember": "Retirer de la zone"
       },
       "flow": {
         "notApplied": "Non appliqué (sortie non gérée en v1)",
@@ -12849,6 +12851,24 @@
         "done": "{label} : {done} faites, {failed} en échec, {notRun} non exécutées",
         "failed": "{label} : l'exécution a échoué",
         "unavailable": "{label} : la progression n'est pas disponible"
+      },
+      "assign": {
+        "title": "Affecter des invités à {zone}",
+        "draftNote": "Rien n'est écrit dans Proxmox tant que le plan n'est pas appliqué.",
+        "search": "Rechercher par nom ou VMID",
+        "selectAll": "Tous les invités correspondants",
+        "selectAllCount": "Tous les invités correspondants ({count})",
+        "selected": "Sélection : {count}",
+        "member": "Membre",
+        "pending": "En attente",
+        "pendingHint": "En file pour cette zone, étiqueté à la prochaine application.",
+        "movedHint": "Actuellement dans {zones} : l'affectation le déplace vers {zone}.",
+        "noGuests": "Aucun invité sur cette connexion.",
+        "noMatch": "Aucun invité ne correspond.",
+        "loading": "Chargement des invités...",
+        "loadFailed": "La liste des invités n'a pas pu être lue.",
+        "confirm": "Affecter {count, plural, one {# invité} other {# invités}}",
+        "tooMany": "Au plus {max} invités peuvent être affectés à la fois (sélectionnés : {count})."
       }
     },
     "plan": {

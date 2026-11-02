@@ -5,8 +5,9 @@ import { Box } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { MicrosegApiError, microsegApi } from '@/lib/microseg/api'
-import type { MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import type { GuestRef, MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
+import AssignGuestsDialog from './AssignGuestsDialog'
 import { useDialogAction } from './dialogParts'
 import FlowDialog, { type FlowSaveValues } from './FlowDialog'
 import FlowList from './FlowList'
@@ -39,6 +40,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
   const [flowDialog, setFlowDialog] = useState<Editing<MicrosegFlow>>(null)
   const [deleting, setDeleting] = useState<Deleting>(null)
   const [enforcing, setEnforcing] = useState<MicrosegZone | null>(null)
+  const [assigning, setAssigning] = useState<MicrosegZone | null>(null)
   const [actionError, setActionError] = useState<unknown>(null)
   const removal = useDialogAction()
 
@@ -83,6 +85,12 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
     if (ok) setDeleting(null)
   }
 
+  /** Takes a guest out of every zone: a draft change, the next apply removes the zone tag. */
+  const removeMember = (ref: GuestRef) => {
+    setActionError(null)
+    write(() => api.setMembers({ version: policy.version, zone_id: '', guests: [ref] })).catch(setActionError)
+  }
+
   const startState = (zone: MicrosegZone, state: ZoneState) => write(async () => {
     const started = await api.setZoneState(zone.id, state, policy.version)
     startRun({ runId: started.run_id, kind: 'zoneState', label: zone.name, runningText: t(`run.running.${state}`, { label: zone.name }) })
@@ -112,6 +120,8 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
         onEdit={zone => setZoneDialog({ item: zone })}
         onDelete={zone => { removal.reset(); setDeleting({ kind: 'zone', zone }) }}
         onSetState={onSetState}
+        onAssign={setAssigning}
+        onRemoveMember={removeMember}
       />
       <FlowList
         flows={policy.flows}
@@ -123,6 +133,16 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
 
       {zoneDialog && <ZoneDialog zone={zoneDialog.item} onSave={saveZone(zoneDialog.item)} onClose={() => setZoneDialog(null)} />}
       {flowDialog && <FlowDialog flow={flowDialog.item} zones={policy.zones} onSave={saveFlow(flowDialog.item)} onClose={() => setFlowDialog(null)} />}
+      {assigning && (
+        <AssignGuestsDialog
+          open
+          connectionId={connectionId}
+          zone={assigning}
+          policy={policy}
+          reloadPolicy={reloadPolicy}
+          onClose={() => setAssigning(null)}
+        />
+      )}
       {enforcing && (
         <ZoneEnforceDialog
           connectionId={connectionId}

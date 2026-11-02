@@ -12771,7 +12771,9 @@
           "disabled": "비활성화",
           "observe": "관찰",
           "enforce": "적용"
-        }
+        },
+        "assign": "게스트 할당",
+        "removeMember": "영역에서 제거"
       },
       "flow": {
         "notApplied": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",
@@ -12848,6 +12850,24 @@
         "done": "{label}: 완료 {done}, 실패 {failed}, 미실행 {notRun}",
         "failed": "{label}: 실행에 실패했습니다",
         "unavailable": "{label}: 진행 상황을 확인할 수 없습니다"
+      },
+      "assign": {
+        "title": "{zone}에 게스트 할당",
+        "draftNote": "계획이 적용될 때까지 Proxmox에는 아무것도 기록되지 않습니다.",
+        "search": "이름 또는 VMID로 검색",
+        "selectAll": "일치하는 모든 게스트",
+        "selectAllCount": "일치하는 모든 게스트 ({count})",
+        "selected": "{count}개 선택됨",
+        "member": "구성원",
+        "pending": "대기 중",
+        "pendingHint": "이 영역에 대기 중이며 다음 적용 시 태그가 지정됩니다.",
+        "movedHint": "현재 {zones}에 있음: 할당하면 {zone}(으)로 이동합니다.",
+        "noGuests": "이 연결에 게스트가 없습니다.",
+        "noMatch": "일치하는 게스트가 없습니다.",
+        "loading": "게스트를 불러오는 중...",
+        "loadFailed": "게스트 목록을 읽을 수 없습니다.",
+        "confirm": "{count, plural, other {#개 게스트 할당}}",
+        "tooMany": "한 번에 최대 {max}개의 게스트를 할당할 수 있습니다 (선택됨: {count})."
       }
     },
     "plan": {

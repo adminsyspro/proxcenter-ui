@@ -5,7 +5,7 @@ import { Box, Chip, Collapse, IconButton, Menu, MenuItem, Tooltip, Typography } 
 import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
-import type { MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import type { GuestRef, MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
 import FlowSummary from './FlowSummary'
 import PolicyPager, { usePaged } from './PolicyPager'
@@ -24,6 +24,8 @@ export type ZoneRowProps = {
   onEdit: (zone: MicrosegZone) => void
   onDelete: (zone: MicrosegZone) => void
   onSetState: (zone: MicrosegZone, state: ZoneState) => void
+  onAssign: (zone: MicrosegZone) => void
+  onRemoveMember: (ref: GuestRef) => void
 }
 
 /** The shield of the zone in its color, with a dot for its state. */
@@ -44,7 +46,7 @@ function ZoneGlyph({ zone, label }: { zone: MicrosegZone; label: string }) {
   )
 }
 
-function MemberLine({ member }: { member: ZoneMember }) {
+function MemberLine({ member, onRemove }: { member: ZoneMember; onRemove: () => void }) {
   const t = useTranslations('microsegPilot.policy.zone')
   const { guest, ref } = member
   const name = guest?.name ?? `${ref.type}/${ref.vmid}`
@@ -57,6 +59,9 @@ function MemberLine({ member }: { member: ZoneMember }) {
       <Tooltip title={name}><Typography noWrap sx={{ flex: '0 1 auto' }}>{name}</Typography></Tooltip>
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{where}</Typography>
       {member.pending && <Chip size='small' color='warning' variant='outlined' label={t('memberPending')} sx={{ flexShrink: 0 }} />}
+      <Tooltip title={t('removeMember')}>
+        <IconButton size='small' aria-label={t('removeMember')} onClick={onRemove} sx={{ flexShrink: 0 }}><i className='ri-close-line' /></IconButton>
+      </Tooltip>
     </Box>
   )
 }
@@ -75,7 +80,7 @@ function FlowLines({ title, flows, zonesById }: { title: string; flows: Microseg
   )
 }
 
-function ZoneDetails({ zone, members, membersKnown, flows, zonesById }: Pick<ZoneRowProps, 'zone' | 'members' | 'membersKnown' | 'flows' | 'zonesById'>) {
+function ZoneDetails({ zone, members, membersKnown, flows, zonesById, onRemoveMember }: Pick<ZoneRowProps, 'zone' | 'members' | 'membersKnown' | 'flows' | 'zonesById' | 'onRemoveMember'>) {
   const t = useTranslations('microsegPilot.policy.zone')
   const paged = usePaged(members)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
@@ -85,7 +90,7 @@ function ZoneDetails({ zone, members, membersKnown, flows, zonesById }: Pick<Zon
       <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('membersTitle')}</Typography>
       {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
       {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
-      {paged.rows.map(m => <MemberLine key={`${m.ref.node}/${m.ref.type}/${m.ref.vmid}`} member={m} />)}
+      {paged.rows.map(m => <MemberLine key={`${m.ref.node}/${m.ref.type}/${m.ref.vmid}`} member={m} onRemove={() => onRemoveMember(m.ref)} />)}
       <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
       <FlowLines title={t('incoming')} flows={incoming} zonesById={zonesById} />
       <FlowLines title={t('outgoing')} flows={outgoing} zonesById={zonesById} />
@@ -94,7 +99,7 @@ function ZoneDetails({ zone, members, membersKnown, flows, zonesById }: Pick<Zon
 }
 
 /** One zone on one line: chevron, colored shield with its state dot, name, label, state, members, actions. */
-export default function ZoneRow({ zone, members, membersKnown, flows, zonesById, onEdit, onDelete, onSetState }: ZoneRowProps) {
+export default function ZoneRow({ zone, members, membersKnown, flows, zonesById, onEdit, onDelete, onSetState, onAssign, onRemoveMember }: ZoneRowProps) {
   const t = useTranslations('microsegPilot.policy.zone')
   const tp = useTranslations('microsegPilot.policy')
   const [open, setOpen] = useState(false)
@@ -118,6 +123,9 @@ export default function ZoneRow({ zone, members, membersKnown, flows, zonesById,
             <i className='ri-toggle-line' />
           </IconButton>
         </Tooltip>
+        <Tooltip title={t('assign')}>
+          <IconButton size='small' aria-label={t('assign')} onClick={() => onAssign(zone)}><i className='ri-add-circle-line' /></IconButton>
+        </Tooltip>
         <Tooltip title={t('edit')}>
           <IconButton size='small' aria-label={t('edit')} onClick={() => onEdit(zone)}><i className='ri-pencil-line' /></IconButton>
         </Tooltip>
@@ -137,7 +145,7 @@ export default function ZoneRow({ zone, members, membersKnown, flows, zonesById,
         </Menu>
       </Box>
       <Collapse in={open} unmountOnExit>
-        <ZoneDetails zone={zone} members={members} membersKnown={membersKnown} flows={flows} zonesById={zonesById} />
+        <ZoneDetails zone={zone} members={members} membersKnown={membersKnown} flows={flows} zonesById={zonesById} onRemoveMember={onRemoveMember} />
       </Collapse>
     </Box>
   )

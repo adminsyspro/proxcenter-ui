@@ -12439,7 +12439,9 @@
           "disabled": "Deaktivieren",
           "observe": "Beobachten",
           "enforce": "Durchsetzen"
-        }
+        },
+        "assign": "Gäste zuweisen",
+        "removeMember": "Aus der Zone entfernen"
       },
       "flow": {
         "notApplied": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",
@@ -12516,6 +12518,24 @@
         "done": "{label}: {done} erledigt, {failed} fehlgeschlagen, {notRun} nicht ausgeführt",
         "failed": "{label}: der Lauf ist fehlgeschlagen",
         "unavailable": "{label}: Fortschritt nicht verfügbar"
+      },
+      "assign": {
+        "title": "Gäste der Zone {zone} zuweisen",
+        "draftNote": "In Proxmox wird nichts geschrieben, bevor der Plan angewendet wird.",
+        "search": "Nach Name oder VMID suchen",
+        "selectAll": "Alle passenden Gäste",
+        "selectAllCount": "Alle passenden Gäste ({count})",
+        "selected": "Ausgewählt: {count}",
+        "member": "Mitglied",
+        "pending": "Ausstehend",
+        "pendingHint": "Für diese Zone vorgemerkt, wird bei der nächsten Anwendung getaggt.",
+        "movedHint": "Aktuell in {zones}: Die Zuweisung verschiebt ihn nach {zone}.",
+        "noGuests": "Kein Gast in dieser Verbindung.",
+        "noMatch": "Kein Gast passt.",
+        "loading": "Gäste werden geladen...",
+        "loadFailed": "Die Gästeliste konnte nicht gelesen werden.",
+        "confirm": "{count, plural, one {# Gast} other {# Gäste}} zuweisen",
+        "tooMany": "Es können höchstens {max} Gäste auf einmal zugewiesen werden (ausgewählt: {count})."
       }
     },
     "plan": {

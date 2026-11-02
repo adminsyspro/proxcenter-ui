@@ -12771,7 +12771,9 @@
           "disabled": "停用",
           "observe": "观察",
           "enforce": "强制执行"
-        }
+        },
+        "assign": "分配客户机",
+        "removeMember": "从区域中移除"
       },
       "flow": {
         "notApplied": "未应用（v1 不管理出站）",
@@ -12848,6 +12850,24 @@
         "done": "{label}：{done} 个已完成，{failed} 个失败，{notRun} 个未执行",
         "failed": "{label}：运行失败",
         "unavailable": "{label}：无法获取进度"
+      },
+      "assign": {
+        "title": "将客户机分配到 {zone}",
+        "draftNote": "在应用计划之前，不会向 Proxmox 写入任何内容。",
+        "search": "按名称或 VMID 搜索",
+        "selectAll": "所有匹配的客户机",
+        "selectAllCount": "所有匹配的客户机（{count}）",
+        "selected": "已选择 {count} 个",
+        "member": "成员",
+        "pending": "待处理",
+        "pendingHint": "已为此区域排队，下次应用时打标签。",
+        "movedHint": "当前位于 {zones}：分配将把它移动到 {zone}。",
+        "noGuests": "此连接中没有客户机。",
+        "noMatch": "没有匹配的客户机。",
+        "loading": "正在加载客户机...",
+        "loadFailed": "无法读取客户机列表。",
+        "confirm": "分配 {count, plural, other {# 个客户机}}",
+        "tooMany": "一次最多可分配 {max} 个客户机（已选择：{count}）。"
       }
     },
     "plan": {

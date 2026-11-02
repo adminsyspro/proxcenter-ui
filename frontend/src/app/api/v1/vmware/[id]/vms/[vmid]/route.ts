@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { soapLogin, soapLogout, soapRequest, extractProp, soapResolveHostInventoryPaths, parseNicDevices, hasVirtualTpm, soapGetGuestIdentities } from "@/lib/vmware/soap"
+import { soapLogin, soapLogout, soapRequest, extractProp, soapResolveHostInventoryPaths, parseNicDevices, nicDeviceRegex, hasVirtualTpm, soapGetGuestIdentities } from "@/lib/vmware/soap"
 import { isEl10Guest } from "@/lib/migration/cpu-level"
 
 export const runtime = "nodejs"
@@ -150,10 +150,10 @@ export async function GET(
       }
 
       // Parse VirtualEthernetCard (network adapters)
-      const netRegex = /xsi:type="Virtual(?:Vmxnet3|E1000e?|Vmxnet2?)">([\s\S]*?)(?=<VirtualDevice|$)/g
+      const netRegex = nicDeviceRegex()
       let netMatch
       while ((netMatch = netRegex.exec(devicesXml)) !== null) {
-        const n = netMatch[1]
+        const n = netMatch[2]
         const label = n.match(/<label>([^<]*)<\/label>/)?.[1] || ''
         const mac = n.match(/<macAddress>([^<]*)<\/macAddress>/)?.[1] || ''
         const network = n.match(/<summary>([^<]*)<\/summary>/)?.[1] || ''

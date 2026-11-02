@@ -145,6 +145,17 @@ describe("GET /api/v1/vmware/[id]/vms/[vmid]: source NICs for the review step (#
       { label: "Network adapter 2", type: "Vmxnet3", macAddress: "00:50:56:aa:00:02", network: "i317-net" },
     ])
   })
+
+  it("lists a Flexible (PCNet32) adapter in both nics and networks, with its MAC", async () => {
+    const devices =
+      `<VirtualDevice xsi:type="VirtualPCNet32"><deviceInfo><label>Network adapter 1</label><summary>vlan111</summary></deviceInfo><connectable><connected>true</connected></connectable><macAddress>00:50:56:99:20:bd</macAddress></VirtualDevice>`
+    h.soapText = [prop("name", "pbx"), prop("config.hardware.numCPU", "1"), prop("config.hardware.device", devices)].join("")
+    const res = await callRoute(GET, { params: { id: "conn-1", vmid: "42" } })
+    expect(res.status).toBe(200)
+    const data = (await readJson<any>(res)).data
+    expect(data.nics).toEqual([{ label: "Network adapter 1", type: "PCNet32", macAddress: "00:50:56:99:20:bd", network: "vlan111" }])
+    expect(data.networks).toEqual([{ label: "Network adapter 1", macAddress: "00:50:56:99:20:bd", network: "vlan111", connected: true }])
+  })
 })
 
 describe("GET /api/v1/vmware/[id]/vms/[vmid] — EL10 guests (#1000)", () => {

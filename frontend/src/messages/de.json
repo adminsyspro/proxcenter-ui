@@ -12608,8 +12608,10 @@
         },
         "foreign_accept": {
           "title": "Nicht von ProxCenter verwaltete Regel",
-          "detail": "Die Accept-Regel an Position {pos} wurde nicht von ProxCenter angelegt und bleibt unverändert.",
-          "detailGroup": "Die Accept-Regel an Position {pos} der Gruppe {object} wurde nicht von ProxCenter angelegt und bleibt unverändert."
+          "detail": "Die Accept-Regel an Position {pos} ({rule}) wurde nicht von ProxCenter angelegt und bleibt unverändert.",
+          "detailGroup": "Die Accept-Regel an Position {pos} der Gruppe {object} wurde nicht von ProxCenter angelegt und bleibt unverändert.",
+          "hint": "Eine außerhalb der Mikrosegmentierung hinzugefügte ACCEPT-Regel öffnet diesen Gast: in Proxmox prüfen.",
+          "hintGroup": "Eine außerhalb der Mikrosegmentierung hinzugefügte ACCEPT-Regel öffnet diese Gruppe: in Proxmox prüfen."
         },
         "ipset_out_of_sync": {
           "title": "IP-Set nicht synchron",
@@ -12617,7 +12619,8 @@
         },
         "member_without_ip": {
           "title": "Mitglied ohne bekannte IP",
-          "detail": "Dieses Mitglied von {zone} hat noch keine IP: Seine Regeln können nicht geschrieben werden."
+          "detail": "Dieses Mitglied von {zone} hat noch keine IP: Seine Regeln können nicht geschrieben werden.",
+          "hint": "Keine IP bekannt: Installieren Sie den QEMU-Gast-Agenten oder legen Sie eine IP in cloud-init / im Container-Netzwerk fest."
         },
         "ambiguous_zone": {
           "title": "Gast in mehreren Zonen",
@@ -12625,7 +12628,8 @@
         },
         "object_collision": {
           "title": "Name in Proxmox bereits vergeben",
-          "detail": "{object} existiert bereits in Proxmox und wurde nicht von ProxCenter angelegt: Es bleibt unberührt."
+          "detail": "{object} existiert bereits in Proxmox und wurde nicht von ProxCenter angelegt: Es bleibt unberührt.",
+          "hint": "Ein Objekt namens pcz-* existiert in Proxmox ohne die Markierung der Mikrosegmentierung: in Proxmox umbenennen oder löschen."
         }
       }
     },

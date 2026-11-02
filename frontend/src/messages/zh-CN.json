@@ -12940,8 +12940,10 @@
         },
         "foreign_accept": {
           "title": "非 ProxCenter 管理的规则",
-          "detail": "第 {pos} 位的放行规则不是由 ProxCenter 创建的，将保持原样。",
-          "detailGroup": "组 {object} 中第 {pos} 位的放行规则不是由 ProxCenter 创建的，将保持原样。"
+          "detail": "第 {pos} 位的放行规则（{rule}）不是由 ProxCenter 创建的，将保持原样。",
+          "detailGroup": "组 {object} 中第 {pos} 位的放行规则不是由 ProxCenter 创建的，将保持原样。",
+          "hint": "在微分段之外添加的 ACCEPT 规则放行了此客户机：请在 Proxmox 中检查。",
+          "hintGroup": "在微分段之外添加的 ACCEPT 规则放行了此组：请在 Proxmox 中检查。"
         },
         "ipset_out_of_sync": {
           "title": "IP 集未同步",
@@ -12949,7 +12951,8 @@
         },
         "member_without_ip": {
           "title": "IP 未知的成员",
-          "detail": "{zone} 的这个成员还没有 IP，无法写入其规则。"
+          "detail": "{zone} 的这个成员还没有 IP，无法写入其规则。",
+          "hint": "未知 IP：请安装 QEMU 客户机代理，或在 cloud-init / 容器网络中设置 IP。"
         },
         "ambiguous_zone": {
           "title": "属于多个区域的客户机",
@@ -12957,7 +12960,8 @@
         },
         "object_collision": {
           "title": "名称已在 Proxmox 中使用",
-          "detail": "{object} 已存在于 Proxmox 中，不是由 ProxCenter 创建的，不会被改动。"
+          "detail": "{object} 已存在于 Proxmox 中，不是由 ProxCenter 创建的，不会被改动。",
+          "hint": "Proxmox 中存在名为 pcz-* 且没有微分段标记的对象：请在 Proxmox 中重命名或删除。"
         }
       }
     },

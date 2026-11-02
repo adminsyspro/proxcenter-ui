@@ -18,7 +18,8 @@ import PolicyPager, { usePaged } from './PolicyPager'
 import { useZoneGuests } from './useZoneGuests'
 import { guestKey } from './zoneModel'
 
-type Assigning = { zone: MicrosegZone; guest: string }
+/** `preselect` is built once per opening: the dialog compares it by identity. */
+type Assigning = { zone: MicrosegZone; preselect: string[] }
 
 /**
  * The Drifts sub-tab: what the engine's last full run found different between
@@ -65,7 +66,7 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
   const pickZone = (zone: MicrosegZone) => {
     const guest = menu?.drift.guest
     setMenu(null)
-    if (guest) setAssigning({ zone, guest: guestKey(guest) })
+    if (guest) setAssigning({ zone, preselect: [guestKey(guest)] })
   }
 
   if (!drifts) {
@@ -128,7 +129,7 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
           zone={assigning.zone}
           policy={policy}
           reloadPolicy={reloadPolicy}
-          preselect={[assigning.guest]}
+          preselect={assigning.preselect}
           onClose={() => setAssigning(null)}
         />
       )}

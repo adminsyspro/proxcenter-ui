@@ -4,7 +4,7 @@
  * by one or in bulk.
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { within } from '@testing-library/react'
 
 import { screen, fireEvent, renderWithProviders, waitFor } from '@/__tests__/setup/renderWithProviders'
@@ -15,6 +15,14 @@ import ObservationPanel from './ObservationPanel'
 import { body, installFreshMocks } from './policyTestKit'
 
 installFreshMocks()
+
+// Dates are formatted in the zone of the process: pin it so the expected strings do not depend on the machine.
+const originalTZ = process.env.TZ
+beforeAll(() => { process.env.TZ = 'UTC' })
+afterAll(() => {
+  if (originalTZ === undefined) delete process.env.TZ
+  else process.env.TZ = originalTZ
+})
 
 const web = zone('zw', { name: 'web' })
 const db = zone('zd', { name: 'db' })
@@ -46,7 +54,7 @@ describe('observation list', () => {
     expect(within(line).getByText('db')).toBeTruthy()
     expect(within(line).getByText('tcp/443')).toBeTruthy()
     expect(within(line).getByText('12 hits')).toBeTruthy()
-    expect(within(line).getByText(/Last seen .*Nov 2, 2026/)).toBeTruthy()
+    expect(within(line).getByText(/Last seen Nov 2, 2026, 12:00\sPM/)).toBeTruthy()
     expect(line.querySelector('i.ri-eye-line')).toBeTruthy()
   })
 
@@ -81,7 +89,7 @@ describe('observation list', () => {
     const line = await row('192.168.1.50 to db')
     expect(within(line).queryByText(/First seen/)).toBeNull()
     fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
-    expect(within(line).getByText(/First seen .*Nov 1, 2026/)).toBeTruthy()
+    expect(within(line).getByText(/First seen Nov 1, 2026, 10:00\sAM/)).toBeTruthy()
     expect(within(line).getByText('Source: 192.168.1.50')).toBeTruthy()
     expect(within(line).getByText('Destination: db (10.0.0.9)')).toBeTruthy()
   })
@@ -243,6 +251,36 @@ describe('server side filters and pagination', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Previous page' }))
     await waitFor(() => expect(screen.getByText('Page 1')).toBeTruthy())
+  })
+
+  it('goes back one page when the last page has nothing left to show', async () => {
+    const full = Array.from({ length: 26 }, (_, i) => sug(`p${i}`, { dst_ip: `10.1.0.${i}` }))
+    setup(full)
+    let resolved = false
+    mock.routes['GET /suggestions?limit=26&offset=25&status=pending'] = () => reply(200, { suggestions: resolved ? [] : [sug('p25')], limit: 26, offset: 25 })
+    mock.routes['POST /suggestions/resolve'] = () => { resolved = true; return reply(200, { version: 4 }) }
+    await screen.findAllByRole('listitem')
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    await waitFor(() => expect(screen.getByText('Page 2')).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1))
+
+    fireEvent.click(within(screen.getAllByRole('listitem')[0]).getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(screen.getByText('Page 1')).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(25))
+    expect(screen.queryByText('No observed flow matches these filters.')).toBeNull()
+  })
+
+  it('stays on the page when the rows resolved are not the last of it', async () => {
+    const full = Array.from({ length: 26 }, (_, i) => sug(`p${i}`, { dst_ip: `10.1.0.${i}` }))
+    setup(full)
+    mock.routes['GET /suggestions?limit=26&offset=25&status=pending'] = () => reply(200, { suggestions: [sug('p25'), sug('p26', { dst_ip: '10.1.0.99' })], limit: 26, offset: 25 })
+    await screen.findAllByRole('listitem')
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2))
+    fireEvent.click(within(screen.getAllByRole('listitem')[0]).getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
+    await waitFor(() => expect(screen.getByText('1 flow dismissed')).toBeTruthy())
+    expect(screen.getByText('Page 2')).toBeTruthy()
   })
 
   it('drops the selection when the page changes', async () => {

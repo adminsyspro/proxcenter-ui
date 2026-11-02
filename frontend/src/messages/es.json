@@ -12940,8 +12940,10 @@
         },
         "foreign_accept": {
           "title": "Regla no gestionada por ProxCenter",
-          "detail": "La regla de aceptación en la posición {pos} no fue creada por ProxCenter y se conserva tal cual.",
-          "detailGroup": "La regla de aceptación en la posición {pos} del grupo {object} no fue creada por ProxCenter y se conserva tal cual."
+          "detail": "La regla de aceptación en la posición {pos} ({rule}) no fue creada por ProxCenter y se conserva tal cual.",
+          "detailGroup": "La regla de aceptación en la posición {pos} del grupo {object} no fue creada por ProxCenter y se conserva tal cual.",
+          "hint": "Una regla ACCEPT añadida fuera de la microsegmentación abre este invitado: revísela en Proxmox.",
+          "hintGroup": "Una regla ACCEPT añadida fuera de la microsegmentación abre este grupo: revísela en Proxmox."
         },
         "ipset_out_of_sync": {
           "title": "IP set desincronizado",
@@ -12949,7 +12951,8 @@
         },
         "member_without_ip": {
           "title": "Miembro sin IP conocida",
-          "detail": "Este miembro de {zone} aún no tiene IP: sus reglas no se pueden escribir."
+          "detail": "Este miembro de {zone} aún no tiene IP: sus reglas no se pueden escribir.",
+          "hint": "No se conoce ninguna IP: instale el agente invitado de QEMU o defina una IP en cloud-init / la red del contenedor."
         },
         "ambiguous_zone": {
           "title": "Invitado en varias zonas",
@@ -12957,7 +12960,8 @@
         },
         "object_collision": {
           "title": "Nombre ya usado en Proxmox",
-          "detail": "{object} ya existe en Proxmox y no fue creado por ProxCenter: no se toca."
+          "detail": "{object} ya existe en Proxmox y no fue creado por ProxCenter: no se toca.",
+          "hint": "Existe en Proxmox un objeto llamado pcz-* sin la marca de la microsegmentación: renómbrelo o elimínelo en Proxmox."
         }
       }
     },

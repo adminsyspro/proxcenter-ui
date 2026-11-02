@@ -61,11 +61,13 @@ describe('microsegPilot i18n parity across the 6 served locales', () => {
   }
 
   it('is translated, not copied from English', () => {
-    const sameAsEnglish = ['fr', 'de', 'es', 'ko', 'zh-CN'].map(locale => {
+    // Proper nouns and words that are the same in a language (Plan, Zones, Type, Page, Observation...) may coincide:
+    // each locale has its own ceiling, set just above what it legitimately shares.
+    const ceilings: Record<string, number> = { fr: 14, de: 10, es: 5, ko: 3, 'zh-CN': 3 }
+    for (const [locale, ceiling] of Object.entries(ceilings)) {
       const flat = flatten(locales[locale].microsegPilot)
-      return Object.keys(reference).filter(key => flat[key] === reference[key]).length
-    })
-    // Proper nouns and words that are the same in French (Plan, Zones, Type, Page, Observation...) may coincide.
-    for (const n of sameAsEnglish) expect(n).toBeLessThan(16)
+      const same = Object.keys(reference).filter(key => flat[key] === reference[key])
+      expect(same.length, `${locale}: ${same.join(', ')}`).toBeLessThanOrEqual(ceiling)
+    }
   })
 })

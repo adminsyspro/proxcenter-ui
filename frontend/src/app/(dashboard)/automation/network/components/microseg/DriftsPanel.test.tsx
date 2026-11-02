@@ -3,7 +3,7 @@
  * to the assign dialog or the plan, and the local "Ignore".
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { cleanup, within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
@@ -13,6 +13,14 @@ import { calls, mock, policy, renderTab, reply, status, zone, REVISION_HEAD, GUE
 import { installFreshMocks, vm } from './policyTestKit'
 
 installFreshMocks()
+
+// Dates are formatted in the zone of the process: pin it so the expected strings do not depend on the machine.
+const originalTZ = process.env.TZ
+beforeAll(() => { process.env.TZ = 'UTC' })
+afterAll(() => {
+  if (originalTZ === undefined) delete process.env.TZ
+  else process.env.TZ = originalTZ
+})
 
 const g = (vmid: number, type: 'qemu' | 'lxc' = 'qemu') => ({ node: 'pve1', type, vmid })
 
@@ -88,7 +96,7 @@ describe('drift list', () => {
 
   it('says it reads the last full run, with its time', async () => {
     setup()
-    expect(await screen.findByText(/As of the last full run, .*Nov 2, 2026/)).toBeTruthy()
+    expect(await screen.findByText(/As of the last full run, Nov 2, 2026, 12:00\sPM/)).toBeTruthy()
   })
 
   it('says so when no full run happened yet', async () => {
@@ -117,6 +125,39 @@ describe('drift list', () => {
     mock.routes['GET /drifts'] = () => reply(502, { code: 'ORCHESTRATOR_ERROR', error: 'x' })
     expect(await screen.findByText(/orchestrator/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+  })
+})
+
+describe('drifts without a fix', () => {
+  const NO_FIX = [
+    ['Rule not managed by ProxCenter: db-1', 'An ACCEPT rule added outside micro-segmentation opens this guest: review it in Proxmox.'],
+    ['Rule not managed by ProxCenter: pcz-web', 'An ACCEPT rule added outside micro-segmentation opens this group: review it in Proxmox.'],
+    ['Member without a known IP: app-1', 'No IP known: install the QEMU guest agent or set an IP in cloud-init / the container network.'],
+    ['Name already used in Proxmox: pcz-db', 'An object named pcz-* exists in Proxmox without the micro-segmentation marker: rename or delete it in Proxmox.'],
+  ]
+
+  it.each(NO_FIX)('shows %s with its hint in the row and no Fix button', async (name, hint) => {
+    setup()
+    const line = await row(name)
+    expect(within(line).getByText(hint)).toBeTruthy()
+    expect(within(line).queryByRole('button', { name: 'Open the plan' })).toBeNull()
+    expect(within(line).queryByRole('button', { name: 'Assign to a zone' })).toBeNull()
+    expect(within(line).getByRole('button', { name: 'Ignore' })).toBeTruthy()
+  })
+
+  it('keeps the plan fix for the NIC and ipset drifts, and the assign fix for the guests without a zone', async () => {
+    setup()
+    expect(within(await row('Network card firewall off: db-1')).getByRole('button', { name: 'Open the plan' })).toBeTruthy()
+    expect(within(await row('IP set out of sync: pcz-web')).getByRole('button', { name: 'Open the plan' })).toBeTruthy()
+    expect(within(await row('Running guest without a zone: web-1')).getByRole('button', { name: 'Assign to a zone' })).toBeTruthy()
+    expect(within(await row('Guest in several zones: dual-1')).getByRole('button', { name: 'Assign to a zone' })).toBeTruthy()
+  })
+
+  it('writes the rule of a foreign accept in its detail', async () => {
+    setup()
+    const line = await row('Rule not managed by ProxCenter: db-1')
+    fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
+    expect(within(line).getByText(/position 3 \(10\.0\.0\.0\/8 tcp\/22\)/)).toBeTruthy()
   })
 })
 

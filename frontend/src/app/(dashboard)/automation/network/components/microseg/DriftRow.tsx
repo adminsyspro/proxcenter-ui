@@ -65,9 +65,16 @@ export default function DriftRow({ drift, label, subject, guest, ignored, hasZon
         </IconButton>
         <DriftGlyph drift={drift} guest={guest} />
         <Tooltip title={label.title}><Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', maxWidth: 260 }}>{label.title}</Typography></Tooltip>
-        <Tooltip title={subject}><Typography noWrap color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{subject}</Typography></Tooltip>
+        <Tooltip title={subject}>
+          <Typography noWrap color={label.hint ? 'text.primary' : 'text.secondary'} sx={label.hint ? { flex: '0 1 auto', maxWidth: 200 } : { flex: '1 1 0', minWidth: 0 }}>{subject}</Typography>
+        </Tooltip>
+        {label.hint && (
+          <Tooltip title={label.hint}>
+            <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{label.hint}</Typography>
+          </Tooltip>
+        )}
         {ignored && <Chip size='small' variant='outlined' label={t('ignoredChip')} sx={{ flexShrink: 0 }} />}
-        {!ignored && label.fixable && label.fix && (
+        {!ignored && label.fix && (
           <Tooltip title={noZone ? t('noZone') : ''}>
             <span>
               <Button

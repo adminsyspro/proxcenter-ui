@@ -12940,8 +12940,10 @@
         },
         "foreign_accept": {
           "title": "ProxCenter가 관리하지 않는 규칙",
-          "detail": "{pos}번 위치의 허용 규칙은 ProxCenter가 만든 것이 아니므로 그대로 유지됩니다.",
-          "detailGroup": "그룹 {object}의 {pos}번 위치 허용 규칙은 ProxCenter가 만든 것이 아니므로 그대로 유지됩니다."
+          "detail": "{pos}번 위치의 허용 규칙({rule})은 ProxCenter가 만든 것이 아니므로 그대로 유지됩니다.",
+          "detailGroup": "그룹 {object}의 {pos}번 위치 허용 규칙은 ProxCenter가 만든 것이 아니므로 그대로 유지됩니다.",
+          "hint": "마이크로 세분화 외부에서 추가된 ACCEPT 규칙이 이 게스트를 열어 둡니다. Proxmox에서 검토하세요.",
+          "hintGroup": "마이크로 세분화 외부에서 추가된 ACCEPT 규칙이 이 그룹을 열어 둡니다. Proxmox에서 검토하세요."
         },
         "ipset_out_of_sync": {
           "title": "IP 세트 동기화 안 됨",
@@ -12949,7 +12951,8 @@
         },
         "member_without_ip": {
           "title": "IP를 알 수 없는 구성원",
-          "detail": "{zone}의 이 구성원은 아직 IP가 없어 규칙을 쓸 수 없습니다."
+          "detail": "{zone}의 이 구성원은 아직 IP가 없어 규칙을 쓸 수 없습니다.",
+          "hint": "알려진 IP가 없습니다. QEMU 게스트 에이전트를 설치하거나 cloud-init / 컨테이너 네트워크에서 IP를 설정하세요."
         },
         "ambiguous_zone": {
           "title": "여러 영역에 속한 게스트",
@@ -12957,7 +12960,8 @@
         },
         "object_collision": {
           "title": "Proxmox에서 이미 사용 중인 이름",
-          "detail": "{object}은(는) 이미 Proxmox에 있고 ProxCenter가 만든 것이 아니므로 건드리지 않습니다."
+          "detail": "{object}은(는) 이미 Proxmox에 있고 ProxCenter가 만든 것이 아니므로 건드리지 않습니다.",
+          "hint": "마이크로 세분화 표시가 없는 pcz-* 이름의 개체가 Proxmox에 있습니다. Proxmox에서 이름을 바꾸거나 삭제하세요."
         }
       }
     },

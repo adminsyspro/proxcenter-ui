@@ -12941,8 +12941,10 @@
         },
         "foreign_accept": {
           "title": "Règle non gérée par ProxCenter",
-          "detail": "La règle d'acceptation en position {pos} n'a pas été créée par ProxCenter et est conservée telle quelle.",
-          "detailGroup": "La règle d'acceptation en position {pos} du groupe {object} n'a pas été créée par ProxCenter et est conservée telle quelle."
+          "detail": "La règle d'acceptation en position {pos} ({rule}) n'a pas été créée par ProxCenter et est conservée telle quelle.",
+          "detailGroup": "La règle d'acceptation en position {pos} du groupe {object} n'a pas été créée par ProxCenter et est conservée telle quelle.",
+          "hint": "Une règle ACCEPT ajoutée hors de la micro-segmentation ouvre cet invité : à examiner dans Proxmox.",
+          "hintGroup": "Une règle ACCEPT ajoutée hors de la micro-segmentation ouvre ce groupe : à examiner dans Proxmox."
         },
         "ipset_out_of_sync": {
           "title": "IP set désynchronisé",
@@ -12950,7 +12952,8 @@
         },
         "member_without_ip": {
           "title": "Membre sans IP connue",
-          "detail": "Ce membre de {zone} n'a pas encore d'IP : ses règles ne peuvent pas être écrites."
+          "detail": "Ce membre de {zone} n'a pas encore d'IP : ses règles ne peuvent pas être écrites.",
+          "hint": "Aucune IP connue : installez l'agent invité QEMU ou définissez une IP dans cloud-init / le réseau du conteneur."
         },
         "ambiguous_zone": {
           "title": "Invité dans plusieurs zones",
@@ -12958,7 +12961,8 @@
         },
         "object_collision": {
           "title": "Nom déjà utilisé dans Proxmox",
-          "detail": "{object} existe déjà dans Proxmox et n'a pas été créé par ProxCenter : il n'est pas touché."
+          "detail": "{object} existe déjà dans Proxmox et n'a pas été créé par ProxCenter : il n'est pas touché.",
+          "hint": "Un objet nommé pcz-* existe dans Proxmox sans le marqueur de la micro-segmentation : renommez-le ou supprimez-le dans Proxmox."
         }
       }
     },

@@ -86,7 +86,9 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
         return
       }
     }
-    await Promise.all([reloadPolicy().catch(() => undefined), reload().catch(() => undefined)])
+    const [, fresh] = await Promise.all([reloadPolicy().catch(() => undefined), reload().catch(() => undefined)])
+    // Everything of the last page was resolved: the page no longer exists, show the one before.
+    if (page > 0 && fresh && fresh.length === 0) goToPage(page - 1)
     setBusy(false)
   }
 

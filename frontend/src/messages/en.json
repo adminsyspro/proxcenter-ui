@@ -12940,8 +12940,10 @@
         },
         "foreign_accept": {
           "title": "Rule not managed by ProxCenter",
-          "detail": "The accept rule at position {pos} was not created by ProxCenter and is kept as it is.",
-          "detailGroup": "The accept rule at position {pos} of the group {object} was not created by ProxCenter and is kept as it is."
+          "detail": "The accept rule at position {pos} ({rule}) was not created by ProxCenter and is kept as it is.",
+          "detailGroup": "The accept rule at position {pos} of the group {object} was not created by ProxCenter and is kept as it is.",
+          "hint": "An ACCEPT rule added outside micro-segmentation opens this guest: review it in Proxmox.",
+          "hintGroup": "An ACCEPT rule added outside micro-segmentation opens this group: review it in Proxmox."
         },
         "ipset_out_of_sync": {
           "title": "IP set out of sync",
@@ -12949,7 +12951,8 @@
         },
         "member_without_ip": {
           "title": "Member without a known IP",
-          "detail": "This member of {zone} has no IP yet: its rules cannot be written."
+          "detail": "This member of {zone} has no IP yet: its rules cannot be written.",
+          "hint": "No IP known: install the QEMU guest agent or set an IP in cloud-init / the container network."
         },
         "ambiguous_zone": {
           "title": "Guest in several zones",
@@ -12957,7 +12960,8 @@
         },
         "object_collision": {
           "title": "Name already used in Proxmox",
-          "detail": "{object} already exists in Proxmox and was not created by ProxCenter: it is left untouched."
+          "detail": "{object} already exists in Proxmox and was not created by ProxCenter: it is left untouched.",
+          "hint": "An object named pcz-* exists in Proxmox without the micro-segmentation marker: rename or delete it in Proxmox."
         }
       }
     },

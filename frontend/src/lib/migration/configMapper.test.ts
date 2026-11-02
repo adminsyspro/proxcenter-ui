@@ -70,6 +70,14 @@ describe("mapEsxiToPveConfig — NIC MAC preservation", () => {
     )
     expect(p.nets.net0).toMatch(/^e1000,bridge=vmbr0,macaddr=00:50:56:aa:bb:cc$/)
   })
+
+  it.each(["PCNet32", "Vmxnet3Vrdma", "SriovEthernetCard"])("preserves the MAC of a %s adapter on a VirtIO NIC (Linux guest)", (type) => {
+    const p = mapEsxiToPveConfig(
+      makeConfig({ nics: [{ label: "Network adapter 1", type, macAddress: "00:50:56:99:2c:80", network: "vlan111" }] }),
+      100, "local-lvm", "vlan111",
+    )
+    expect(p.nets).toEqual({ net0: "virtio,bridge=vlan111,macaddr=00:50:56:99:2c:80" })
+  })
 })
 
 describe("mapEsxiToPveConfig — controller and boot disk bus (#653)", () => {

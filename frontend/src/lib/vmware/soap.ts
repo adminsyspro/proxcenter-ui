@@ -1003,7 +1003,23 @@ export function vmwareToolsState(c: Pick<EsxiVmConfig, "toolsStatus" | "toolsRun
   return "unknown"
 }
 
-/** Parse full VM config from SOAP XML */
+/**
+ * Every subtype of VirtualEthernetCard in the vSphere API, `PCNet32` being the
+ * "Flexible" adapter. An adapter missing from this list is invisible to the
+ * migration: its MAC is lost and the next adapters shift to a lower netN.
+ */
+export const VMWARE_NIC_TYPES = ["Vmxnet3Vrdma", "Vmxnet3", "Vmxnet2", "Vmxnet", "E1000e", "E1000", "PCNet32", "SriovEthernetCard"] as const
+
+/**
+ * One match per network adapter of a `config.hardware.device` property:
+ * group 1 is the model (a VMWARE_NIC_TYPES entry), group 2 the device body.
+ * The closing quote makes the model exact (VirtualVmxnet3 is not
+ * VirtualVmxnet3Vrdma), and the element may carry more attributes than its type.
+ */
+export function nicDeviceRegex(): RegExp {
+  return new RegExp(`xsi:type="Virtual(${VMWARE_NIC_TYPES.join("|")})"[^>]*>([\\s\\S]*?)(?=<VirtualDevice|$)`, "g")
+}
+
 /**
  * Network adapters of a `config.hardware.device` property, in device order.
  *
@@ -1014,7 +1030,7 @@ export function vmwareToolsState(c: Pick<EsxiVmConfig, "toolsStatus" | "toolsRun
  */
 export function parseNicDevices(devicesXml: string): EsxiNicInfo[] {
   const nics: EsxiNicInfo[] = []
-  const nicRegex = /xsi:type="Virtual(Vmxnet3|E1000e|E1000|Vmxnet2|Vmxnet)">([\s\S]*?)(?=<VirtualDevice|$)/g
+  const nicRegex = nicDeviceRegex()
   let nicMatch
   while ((nicMatch = nicRegex.exec(devicesXml)) !== null) {
     const n = nicMatch[2]
@@ -1030,6 +1046,7 @@ export function parseNicDevices(devicesXml: string): EsxiNicInfo[] {
   return nics
 }
 
+/** Parse full VM config from SOAP XML */
 export function parseVmConfig(xml: string): EsxiVmConfig {
   const name = extractTextProp(xml, "name")
   const guestOS = extractTextProp(xml, "config.guestFullName")

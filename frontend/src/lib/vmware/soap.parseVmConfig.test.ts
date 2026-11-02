@@ -73,6 +73,43 @@ describe("parseVmConfig NICs (#317)", () => {
     const cfg = parseVmConfig(answer(slotted + nic("E1000", "Network adapter 2", "00:50:56:aa:00:02", "dmz")))
     expect(cfg.nics.map(n => n.pciSlot)).toEqual([192, undefined])
   })
+
+  it("reads every adapter model vSphere has, Flexible (PCNet32), VMXNET3 RDMA and SR-IOV included", () => {
+    const cfg = parseVmConfig(answer(
+      nic("PCNet32", "Network adapter 1", "00:50:56:99:2c:80", "vlan111") +
+      nic("Vmxnet3Vrdma", "Network adapter 2", "00:50:56:99:2c:81", "rdma") +
+      nic("SriovEthernetCard", "Network adapter 3", "00:50:56:99:2c:82", "sriov") +
+      nic("Vmxnet", "Network adapter 4", "00:50:56:99:2c:83", "legacy"),
+    ))
+    expect(cfg.nics.map(n => [n.type, n.macAddress])).toEqual([
+      ["PCNet32", "00:50:56:99:2c:80"],
+      ["Vmxnet3Vrdma", "00:50:56:99:2c:81"],
+      ["SriovEthernetCard", "00:50:56:99:2c:82"],
+      ["Vmxnet", "00:50:56:99:2c:83"],
+    ])
+  })
+
+  it("keeps the device order when a Flexible adapter comes first, so netN keeps its own MAC", () => {
+    const cfg = parseVmConfig(answer(
+      nic("PCNet32", "Network adapter 1", "00:50:56:9c:90:ed", "VM Network") +
+      nic("Vmxnet2", "Network adapter 2", "00:50:56:9c:29:f9", "VM Network"),
+    ))
+    expect(cfg.nics.map(n => n.label)).toEqual(["Network adapter 1", "Network adapter 2"])
+  })
+
+  it("reads an adapter whose device element carries more attributes than its type", () => {
+    const cfg = parseVmConfig(answer(nic("Vmxnet3", "Network adapter 1", "00:50:56:aa:00:01", "VM Network")
+      .replace('xsi:type="VirtualVmxnet3"', 'xsi:type="VirtualVmxnet3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"')))
+    expect(cfg.nics.map(n => n.macAddress)).toEqual(["00:50:56:aa:00:01"])
+  })
+
+  it("does not read a non-network device as an adapter", () => {
+    const cfg = parseVmConfig(answer(
+      `<VirtualDevice xsi:type="VirtualVmxnet3Controller"><key>1</key><macAddress>00:50:56:aa:00:09</macAddress></VirtualDevice>` +
+      nic("E1000", "Network adapter 1", "00:50:56:aa:00:01", "VM Network"),
+    ))
+    expect(cfg.nics.map(n => n.macAddress)).toEqual(["00:50:56:aa:00:01"])
+  })
 })
 
 describe("parseVmConfig vTPM (roadmap#1)", () => {

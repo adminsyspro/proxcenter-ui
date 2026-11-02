@@ -5,7 +5,7 @@ import {
   Background, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type EdgeMouseHandler, type Node, type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Box, alpha, useTheme } from '@mui/material'
+import { Box, alpha, useTheme, type Theme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { EdgeClickContext, FlowEdge } from './FlowEdge'
@@ -14,6 +14,31 @@ import { UNZONED_ID, type MapNodeData } from './zoneGraph'
 
 const nodeTypes = { zone: ZoneNode, unzoned: UnzonedNode, guest: GuestNode, more: MoreNode, boundary: BoundaryNode }
 const edgeTypes = { flow: FlowEdge }
+
+/** What the fit-to-view follows: the top-level nodes (circles and boxes) and their size, which grows with the guests. */
+export function fitKey(nodes: Node[]): string {
+  return nodes.filter(n => !n.parentId).map(n => `${n.id}:${n.width ?? 0}`).join(',')
+}
+
+/** Above every edge (their z-index stays under 10) and every node: a label is never painted over by a line or a circle. */
+export const LABEL_LAYER_Z = 1000
+
+/** The look of the canvas: dimmed items, the label layer on top, the controls and the mini-map in the theme. */
+export function canvasSx(theme: Theme) {
+  return {
+    width: '100%', height: '100%',
+    '& .microseg-dim': { opacity: 0.25 },
+    '& .react-flow__edgelabel-renderer': { zIndex: LABEL_LAYER_Z },
+    '& .react-flow__node, & .react-flow__edge, & .react-flow__edgelabel-renderer > div': { transition: 'opacity 150ms' },
+    '@media (prefers-reduced-motion: reduce)': { '& *': { transition: 'none !important' } },
+    '& .react-flow__controls': { boxShadow: theme.shadows[1], borderRadius: 1, overflow: 'hidden' },
+    '& .react-flow__controls-button': {
+      bgcolor: 'background.paper', color: 'text.primary', borderBottom: `1px solid ${theme.palette.divider}`,
+      '& svg': { fill: 'currentColor' }, '&:hover': { bgcolor: 'action.hover' },
+    },
+    '& .react-flow__minimap': { bgcolor: 'background.paper', border: `1px solid ${theme.palette.divider}`, borderRadius: 1 },
+  }
+}
 
 type Props = {
   nodes: Node[]
@@ -38,8 +63,9 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
   const theme = useTheme()
   const t = useTranslations('microsegPilot.overview')
 
-  // Refit when the graph reshapes (a zone added) or when the side panel opens or closes, like the topology view.
-  const shape = nodes.filter(n => !n.parentId).map(n => n.id).join(',')
+  // Refit when the graph reshapes (a zone added, a circle grown once its guests are known) or when the side panel
+  // opens or closes, like the topology view.
+  const shape = fitKey(nodes)
   useEffect(() => {
     if (!shape) return
     const timer = setTimeout(() => { void fitView({ padding: 0.1, duration: 300, maxZoom: 1 }) }, 100)
@@ -67,20 +93,7 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
   return (
     <MapActionsContext.Provider value={actions}>
       <EdgeClickContext.Provider value={onSelectEdge}>
-        <Box
-          sx={{
-            width: '100%', height: '100%',
-            '& .microseg-dim': { opacity: 0.25 },
-            '& .react-flow__node, & .react-flow__edge, & .react-flow__edgelabel-renderer > div': { transition: 'opacity 150ms' },
-            '@media (prefers-reduced-motion: reduce)': { '& *': { transition: 'none !important' } },
-            '& .react-flow__controls': { boxShadow: theme.shadows[1], borderRadius: 1, overflow: 'hidden' },
-            '& .react-flow__controls-button': {
-              bgcolor: 'background.paper', color: 'text.primary', borderBottom: `1px solid ${theme.palette.divider}`,
-              '& svg': { fill: 'currentColor' }, '&:hover': { bgcolor: 'action.hover' },
-            },
-            '& .react-flow__minimap': { bgcolor: 'background.paper', border: `1px solid ${theme.palette.divider}`, borderRadius: 1 },
-          }}
-        >
+        <Box sx={canvasSx(theme)}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -97,6 +110,7 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
             nodesConnectable={false}
             elementsSelectable={false}
             panOnDrag
+            elevateNodesOnSelect={false}
             fitView
             fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
             minZoom={0.1}

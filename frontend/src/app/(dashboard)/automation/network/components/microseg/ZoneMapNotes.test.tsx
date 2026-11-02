@@ -92,6 +92,20 @@ describe('map notes', () => {
     await waitFor(() => expect(fitView).toHaveBeenCalledTimes(1))
   })
 
+  it('refits the canvas when the guests arrive and the circles grow', async () => {
+    let release: () => void = () => undefined
+    const arrived = new Promise<void>(resolve => { release = resolve })
+    const members = Array.from({ length: 9 }, (_, i) => vm(100 + i, `web-${i}`, ['zone-web']))
+    setup()
+    mock.routes[`GET ${GUESTS_ROUTE}`] = async () => { await arrived; return reply(200, { data: { vms: members } }) }
+    await node('zone:zw')
+    await waitFor(() => expect(fitView).toHaveBeenCalled())
+    fitView.mockClear()
+    release()
+    await screen.findByTestId('node-guest:zw:qemu/100')
+    await waitFor(() => expect(fitView).toHaveBeenCalledTimes(1))
+  })
+
   it('starts the panel of another zone on its first page', async () => {
     const guests = (tag: string, prefix: string) => Array.from({ length: 12 }, (_, i) => vm(100 + i + (tag === 'zone-db' ? 100 : 0), `${prefix}-${String(i).padStart(2, '0')}`, [tag]))
     setup({ vms: [...guests('zone-web', 'web'), ...guests('zone-db', 'db')] })

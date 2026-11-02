@@ -3,7 +3,7 @@
  * to guest, the three flow checkboxes, the focus mode, the panel of a clicked edge, the canvas controls, the refresh.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
@@ -45,6 +45,7 @@ describe('guests on the map', () => {
     setup({ vms: [...withIps, vm(900, 'lost-1', []), vm(901, 'lost-2', ['other']), vm(902, 'off', [], { status: 'stopped' })] })
     const unzoned = await node('unzoned')
     expect(within(unzoned).getByText('Unzoned guests (2)')).toBeTruthy()
+    expect(within(unzoned).getByRole('group', { name: 'Unzoned guests (2)' })).toBeTruthy()
     expect(await node('guest:unzoned:qemu/900')).toBeTruthy()
     expect(screen.queryByTestId('node-guest:unzoned:qemu/902')).toBeNull()
     fireEvent.click(unzoned)
@@ -56,7 +57,7 @@ describe('guests on the map', () => {
     const path = await pathOf('unprotected:guest:zw:qemu/100>guest:zd:qemu/200')
     expect(path.getAttribute('data-dash')).not.toBe('')
     expect(await screen.findByText('tcp/5432')).toBeTruthy()
-    expect(screen.getByTestId('edge-unprotected:guest:zw:qemu/100>guest:zd:qemu/200').getAttribute('aria-label')).toBe('web-1 (web) to db-1 (db): tcp/5432')
+    expect(screen.getByTestId('edge-unprotected:guest:zw:qemu/100>guest:zd:qemu/200').getAttribute('aria-label')).toBe('web-1 (web) to db-1 (db): 1 unprotected flow')
   })
 
   it('highlights the flows of a clicked guest without opening a panel', async () => {
@@ -164,16 +165,50 @@ describe('panel of an edge', () => {
     return screen.findByRole('complementary', { name: 'Flow web-1 (web) to db-1 (db)' })
   }
 
-  it('shows the details of an observed flow: ends, addresses, port, hits, status', async () => {
+  it('says the guest pair is an example of the zone pair, one line per flow, the details under the chevron', async () => {
     observed()
-    const row = within(await open()).getByRole('listitem')
+    const panel = await open()
+    expect(within(panel).getByText('Example: web-1 → db-1')).toBeTruthy()
+    expect(within(panel).getByText('The engine keeps one sample pair of guests per observed flow: the hits count the whole zone pair.')).toBeTruthy()
+    const row = within(panel).getByRole('listitem', { name: 'web to db' })
+    expect(within(row).getByText('web → db')).toBeTruthy()
     expect(within(row).getByText('tcp/80')).toBeTruthy()
     expect(within(row).getByText('14 hits')).toBeTruthy()
-    const panel = row
-    expect(within(panel).getByText('Pending')).toBeTruthy()
-    expect(within(panel).getByText('Source: web-1 (web) (10.0.0.1)')).toBeTruthy()
-    expect(within(panel).getByText('Destination: db-1 (db) (10.0.0.2)')).toBeTruthy()
-    expect(within(panel).getByText(/^First seen/)).toBeTruthy()
+    expect(within(row).queryByText('Pending')).toBeNull()
+    expect(within(row).queryByText(/^First seen/)).toBeNull()
+    fireEvent.click(within(row).getByRole('button', { name: 'Show details' }))
+    expect(await within(row).findByText('14 hits between zone web and zone db on tcp/80 (sample pair shown)')).toBeTruthy()
+    expect(within(row).getByText('Example: web-1 → db-1')).toBeTruthy()
+    expect(within(row).getByText('Sample addresses: 10.0.0.1 → 10.0.0.2')).toBeTruthy()
+    expect(within(row).getByText(/^First seen/)).toBeTruthy()
+    expect(within(row).getByText(/^Last seen/)).toBeTruthy()
+    expect(within(row).getByText('Status: Pending')).toBeTruthy()
+  })
+
+  it('says where an unknown source came from, without a sample pair of guests', async () => {
+    setup({ suggestions: [wouldBlock('s1', { src_zone_id: '', src_ip: '203.0.113.9', hits: 2 })] })
+    fireEvent.click(await screen.findByTestId('edge-unprotected:external>zone:zd'))
+    const panel = await screen.findByRole('complementary', { name: 'Flow Unknown / External to db' })
+    expect(within(panel).queryByText(/^Example:/)).toBeNull()
+    const row = within(panel).getByRole('listitem', { name: '203.0.113.9 to db' })
+    fireEvent.click(within(row).getByRole('button', { name: 'Show details' }))
+    expect(await within(row).findByText('2 hits from 203.0.113.9 to zone db on tcp/80 (sample pair shown)')).toBeTruthy()
+  })
+
+  it('opens from the keyboard: the label of an edge is a button named after the flow', async () => {
+    observed()
+    const label = await screen.findByRole('button', { name: 'web-1 (web) to db-1 (db): 1 unprotected flow' })
+    expect(label.getAttribute('tabindex')).toBe('0')
+    fireEvent.keyDown(label, { key: 'a' })
+    expect(screen.queryByRole('complementary')).toBeNull()
+    fireEvent.keyDown(label, { key: 'Enter' })
+    expect(await screen.findByRole('complementary', { name: 'Flow web-1 (web) to db-1 (db)' })).toBeTruthy()
+  })
+
+  it('opens the panel of an allowed edge with Space on its label', async () => {
+    setup({ flows: [flowOf('f1')] })
+    fireEvent.keyDown(await screen.findByRole('button', { name: 'web to db: tcp/443' }), { key: ' ' })
+    expect(await screen.findByRole('complementary', { name: 'Flow web to db' })).toBeTruthy()
   })
 
   it('accepts it as a flow of the zones, reloads, then says so once the edge is gone', async () => {
@@ -254,9 +289,12 @@ describe('canvas tools', () => {
   })
 
   it('says when it was refreshed and reads the policy, the observed flows and the guests again on Refresh', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-02T10:00:00Z'))
     setup({ flows: [flowOf('f1')] })
     await pathOf('allowed:zone:zw>zone:zd')
-    expect(await screen.findByText(/^Refreshed at /)).toBeTruthy()
+    const first = (await screen.findByText(/^Refreshed at /)).textContent
+    vi.setSystemTime(new Date('2026-11-02T10:07:30Z'))
     const count = (route: string) => fetchMock.mock.calls.filter(([url]) => String(url).endsWith(route)).length
     const before = [calls('GET /policy').length, calls(SUGGESTIONS).length, count(GUESTS_ROUTE)]
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web(), db()], flows: [flowOf('f1')], last_revision: REVISION_HEAD }))
@@ -266,5 +304,8 @@ describe('canvas tools', () => {
       expect(calls(SUGGESTIONS).length).toBeGreaterThan(before[1])
       expect(count(GUESTS_ROUTE)).toBeGreaterThan(before[2])
     })
+    // Nothing changed in the answers, the time still moves.
+    await waitFor(() => expect(screen.getByText(/^Refreshed at /).textContent).not.toBe(first))
+    vi.useRealTimers()
   })
 })

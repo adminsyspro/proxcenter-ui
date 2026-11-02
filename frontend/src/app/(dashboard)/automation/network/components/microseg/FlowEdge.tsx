@@ -5,6 +5,8 @@ import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react'
 import { Box, Tooltip, Typography, useMediaQuery } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
+import type { MicrosegSuggestion } from '@/lib/microseg/types'
+
 import type { MapEdgeData } from './zoneGraph'
 
 /** At most this many observed flows are listed in the tooltip of an edge; the panel lists them all. */
@@ -13,9 +15,35 @@ const TOOLTIP_ROWS = 5
 /** A click on the label of an edge does what a click on the edge does (ZoneCanvas provides it). */
 export const EdgeClickContext = createContext<(edgeId: string) => void>(() => undefined)
 
-function EdgeDetails({ d }: { d: MapEdgeData }) {
+/** How the map names a zone and the end of an edge, long ("web-1 (web)") and short ("web-1"). ZoneMap provides it. */
+export type MapNames = { zone: (zoneId: string) => string; end: (nodeId: string) => string; short: (nodeId: string) => string }
+export const MapNamesContext = createContext<MapNames>({ zone: id => id, end: id => id, short: id => id })
+
+export type EdgeT = (key: string, values?: Record<string, string | number>) => string
+
+/** An observed edge between guests (or a "+N" node) shows the sample pair the engine kept, not every pair that talked. */
+export const isSampled = (source: string, target: string) => /^(guest|more):/.test(source) || /^(guest|more):/.test(target)
+
+/** What an edge says to a screen reader: "web to db: tcp/443", "web-1 (web) to db-1 (db): 2 unprotected flows". */
+export function edgeAria(t: EdgeT, names: MapNames, source: string, target: string, d: MapEdgeData): string {
+  const what = d.kind === 'unprotected' ? t('countUnprotected', { count: d.count })
+    : d.kind === 'blocked' ? t('countBlocked', { count: d.count })
+      : d.services.join(', ')
+  return t('aria', { from: names.end(source), to: names.end(target), services: what })
+}
+
+/** "14 hits between zone web and zone db on tcp/22 (sample pair shown)": the hits are the zone pair's, not the guests'. */
+export function observedHits(t: EdgeT, names: MapNames, s: MicrosegSuggestion, unknown: string): string {
+  const service = s.dport ? `${s.proto}/${s.dport}` : s.proto
+  return s.src_zone_id
+    ? t('zoneHits', { count: s.hits, from: names.zone(s.src_zone_id), to: names.zone(s.dst_zone_id), service })
+    : t('sourceHits', { count: s.hits, from: s.src_ip || unknown, to: names.zone(s.dst_zone_id), service })
+}
+
+function EdgeDetails({ d, source, target }: { d: MapEdgeData; source: string; target: string }) {
   const t = useTranslations('microsegPilot.overview.edge')
   const to = useTranslations('microsegPilot.observation')
+  const names = useContext(MapNamesContext)
   const format = useFormatter()
   const when = (iso: string) => {
     const date = new Date(iso)
@@ -32,9 +60,12 @@ function EdgeDetails({ d }: { d: MapEdgeData }) {
   return (
     <Box>
       <Typography variant='caption' fontWeight={600} sx={{ display: 'block' }}>{t(d.kind, { count: d.count })}</Typography>
+      {isSampled(source, target) && (
+        <Typography variant='caption' sx={{ display: 'block' }}>{t('example', { from: names.short(source), to: names.short(target) })}</Typography>
+      )}
       {d.observed.slice(0, TOOLTIP_ROWS).map(s => (
         <Typography key={s.id} variant='caption' sx={{ display: 'block' }}>
-          {`${s.dport ? `${s.proto}/${s.dport}` : s.proto} · ${to('hits', { count: s.hits })} · ${to('detail.firstSeen', { time: when(s.first_seen) })} · ${to('detail.lastSeen', { time: when(s.last_seen) })}`}
+          {`${observedHits(t as EdgeT, names, s, to('unknownEndpoint'))} · ${to('detail.lastSeen', { time: when(s.last_seen) })}`}
         </Typography>
       ))}
       {d.observed.length > TOOLTIP_ROWS && <Typography variant='caption' sx={{ display: 'block' }}>{t('more', { count: d.observed.length - TOOLTIP_ROWS })}</Typography>}
@@ -48,9 +79,11 @@ function EdgeDetails({ d }: { d: MapEdgeData }) {
  * flow only, a particle that follows the edge (not drawn under prefers-reduced-motion). A dimmed edge (focus mode)
  * dims its label too.
  */
-function FlowEdgeComponent({ id, style, markerEnd, data }: EdgeProps) {
+function FlowEdgeComponent({ id, source, target, style, markerEnd, data }: EdgeProps) {
   const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)', { noSsr: true })
   const onClick = useContext(EdgeClickContext)
+  const names = useContext(MapNamesContext)
+  const t = useTranslations('microsegPilot.overview.edge')
   const d = data as unknown as MapEdgeData & { dimmed?: boolean }
   const dim = d.dimmed ? 'microseg-dim' : undefined
 
@@ -65,10 +98,21 @@ function FlowEdgeComponent({ id, style, markerEnd, data }: EdgeProps) {
       <EdgeLabelRenderer>
         <Box
           className={['nodrag', 'nopan', dim].filter(Boolean).join(' ')}
+          role='button'
+          tabIndex={0}
+          aria-label={edgeAria(t as EdgeT, names, source, target, d)}
           onClick={event => { event.stopPropagation(); onClick(id) }}
-          sx={{ position: 'absolute', transform: `translate(-50%, -50%) translate(${d.label_x}px, ${d.label_y}px)`, pointerEvents: 'all', maxWidth: d.label_w, cursor: 'pointer' }}
+          onKeyDown={event => {
+            if (event.key !== 'Enter' && event.key !== ' ') return
+            event.preventDefault()
+            onClick(id)
+          }}
+          sx={theme => ({
+            position: 'absolute', transform: `translate(-50%, -50%) translate(${d.label_x}px, ${d.label_y}px)`, pointerEvents: 'all', maxWidth: d.label_w,
+            cursor: 'pointer', borderRadius: 1, '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 2 },
+          })}
         >
-          <Tooltip title={<EdgeDetails d={d} />}>
+          <Tooltip title={<EdgeDetails d={d} source={source} target={target} />}>
             <Typography
               noWrap
               variant='caption'

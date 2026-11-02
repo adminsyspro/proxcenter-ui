@@ -10,7 +10,7 @@ import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/micro
 
 import { crossesBox, crossesCircle, rectAround, rectHitsCircle, rectsOverlap, type Rect } from './edgeGeometry'
 import {
-  ALL_FLOWS, EDGE_COLORS, NODE_H, NODE_W, buildZoneGraph, filterEdges, focusSets, groupServices,
+  ALL_FLOWS, EDGE_COLORS, NODE_H, NODE_W, bareIp, buildZoneGraph, filterEdges, focusSets, groupServices,
   type GuestNodeData, type MapEdgeData, type MapMember, type MoreNodeData, type ZoneNodeData,
 } from './zoneGraph'
 import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, MIN_R } from './zoneLayout'
@@ -194,6 +194,44 @@ describe('observed flows, guest to guest', () => {
   it('ignores observed flows that are not pending, or whose destination is not a zone', () => {
     const { edges } = buildZoneGraph({ zones: [web, db], flows: [], suggestions: [seen('s1', { status: 'accepted' }), seen('s2', { status: 'dismissed' }), seen('s3', { dst_zone_id: '' })] })
     expect(edges).toHaveLength(0)
+  })
+})
+
+describe('guest addresses', () => {
+  it('writes one address one way: no prefix length, IPv6 lowercased and zero-compressed, IPv4-mapped as IPv4', () => {
+    expect(bareIp(' 10.0.0.5/24 ')).toBe('10.0.0.5')
+    expect(bareIp('2001:DB8:0:0:0:0:0:1/64')).toBe('2001:db8::1')
+    expect(bareIp('2001:db8::0:1')).toBe('2001:db8::1')
+    expect(bareIp('2001:0db8:0000:0001:0000:0000:0000:0001')).toBe('2001:db8:0:1::1')
+    expect(bareIp('fe80::1%eth0')).toBe('fe80::1')
+    expect(bareIp('::FFFF:10.0.0.5')).toBe('10.0.0.5')
+    expect(bareIp('::ffff:a00:5')).toBe('10.0.0.5')
+    expect(bareIp('64:ff9b::192.0.2.33')).toBe('64:ff9b::c000:221')
+    expect(bareIp('::')).toBe('::')
+    expect(bareIp('not:an:ip::x')).toBe('not:an:ip::x')
+  })
+
+  const twoZones = (zw: MapMember[]) => buildZoneGraph({
+    zones: [web, db], flows: [], members: new Map([['zw', zw], ['zd', [member(200, 'db-1', ['fd00::2'])]]]),
+    suggestions: [seen('s1', { src_ip: '10.0.1.9', dst_ip: 'FD00:0:0::2' })],
+  })
+
+  it('gives an address two guests share to the first by name, whatever the order of the inventory', () => {
+    const a = member(101, 'alpha', ['10.0.1.9'])
+    const b = member(100, 'beta', ['10.0.1.9'])
+    expect(twoZones([b, a]).edges[0].source).toBe('guest:zw:qemu/101')
+    expect(twoZones([a, b]).edges[0].source).toBe('guest:zw:qemu/101')
+  })
+
+  it('finds a guest by any of its addresses, IPv6 written another way included', () => {
+    const { edges } = twoZones([member(100, 'web-1', ['192.168.1.1', '10.0.1.9/16', '2001:db8::5'])])
+    expect(edges[0].source).toBe('guest:zw:qemu/100')
+    expect(edges[0].target).toBe('guest:zd:qemu/200')
+    const v6 = buildZoneGraph({
+      zones: [web, db], flows: [], members: new Map([['zw', [member(100, 'web-1', ['2001:db8::5'])]], ['zd', []]]),
+      suggestions: [seen('s1', { src_ip: '2001:DB8:0:0::5' })],
+    })
+    expect(v6.edges[0].source).toBe('guest:zw:qemu/100')
   })
 })
 

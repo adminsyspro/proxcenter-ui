@@ -13036,7 +13036,12 @@
         "unprotected": "{count, plural, other {관찰된 흐름 #개}}, 이를 허용하는 흐름 없음(보호되지 않음)",
         "blocked": "{count, plural, other {흐름 #개}}, 적용된 영역에서 차단됨",
         "draft": "초안에 있음: 다음 계획으로 적용됨",
-        "more": "+{count, number}개 더"
+        "more": "+{count, number}개 더",
+        "example": "예: {from} → {to}",
+        "zoneHits": "{service}에서 영역 {from}과(와) 영역 {to} 사이 {count, plural, other {#회}} (예시 쌍 표시)",
+        "sourceHits": "{service}에서 {from}에서 영역 {to}(으)로 {count, plural, other {#회}} (예시 쌍 표시)",
+        "countUnprotected": "{count, plural, other {보호되지 않은 흐름 #개}}",
+        "countBlocked": "{count, plural, other {차단된 흐름 #개}}"
       },
       "panel": {
         "label": "영역 {name}",
@@ -13062,7 +13067,10 @@
         "observed": "관찰된 흐름",
         "allowed": "허용된 흐름",
         "acceptAs": "흐름으로 수락 {from} → {to} {service}",
-        "draft": "초안"
+        "draft": "초안",
+        "sampleNote": "엔진은 관찰된 흐름마다 게스트 예시 쌍 하나만 보관합니다. 횟수는 영역 쌍 전체를 셉니다.",
+        "addresses": "예시 주소: {from} → {to}",
+        "status": "상태: {status}"
       },
       "controls": "확대 및 맞춤 컨트롤",
       "minimap": "지도 개요"

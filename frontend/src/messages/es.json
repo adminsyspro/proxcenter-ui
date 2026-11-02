@@ -13036,7 +13036,12 @@
         "unprotected": "{count, plural, one {# flujo observado} other {# flujos observados}} que ningún flujo permite (sin protección)",
         "blocked": "{count, plural, one {# flujo bloqueado} other {# flujos bloqueados}} por una zona aplicada",
         "draft": "En el borrador: se aplica con el próximo plan",
-        "more": "+{count, number} más"
+        "more": "+{count, number} más",
+        "example": "Ejemplo: {from} → {to}",
+        "zoneHits": "{count, plural, one {# coincidencia} other {# coincidencias}} entre la zona {from} y la zona {to} en {service} (se muestra un par de ejemplo)",
+        "sourceHits": "{count, plural, one {# coincidencia} other {# coincidencias}} de {from} a la zona {to} en {service} (se muestra un par de ejemplo)",
+        "countUnprotected": "{count, plural, one {# flujo sin protección} other {# flujos sin protección}}",
+        "countBlocked": "{count, plural, one {# flujo bloqueado} other {# flujos bloqueados}}"
       },
       "panel": {
         "label": "Zona {name}",
@@ -13062,7 +13067,10 @@
         "observed": "Flujos observados",
         "allowed": "Flujos permitidos",
         "acceptAs": "Aceptar como flujo {from} → {to} {service}",
-        "draft": "Borrador"
+        "draft": "Borrador",
+        "sampleNote": "El motor guarda un par de invitados de ejemplo por flujo observado: las coincidencias cuentan todo el par de zonas.",
+        "addresses": "Direcciones de ejemplo: {from} → {to}",
+        "status": "Estado: {status}"
       },
       "controls": "Controles de zoom y ajuste",
       "minimap": "Vista general del mapa"

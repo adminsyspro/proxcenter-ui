@@ -11,6 +11,7 @@ import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
 import EdgePanel from './EdgePanel'
+import { MapNamesContext, edgeAria, type EdgeT, type MapNames } from './FlowEdge'
 import MapToolbar, { useFlowFilters } from './MapToolbar'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import { useZoneGuests } from './useZoneGuests'
@@ -90,12 +91,13 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     return buildZoneGraph({ zones, flows, suggestions: suggestions.data ?? [], members, unzoned, unapplied })
   }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied])
 
-  // The time of the last answer: the observed flows, the guests or the draft changed.
+  // "Refreshed at": the first answer, then the end of every refresh (a refresh that changes nothing still moves it).
+  const loaded = !!suggestions.data || membersKnown
   useEffect(() => {
-    if (!suggestions.data && !membersKnown) return
+    if (!loaded || refreshedAt) return
     const timer = setTimeout(() => setRefreshedAt(new Date()), 0)
     return () => clearTimeout(timer)
-  }, [suggestions.data, membersKnown, guests, policy])
+  }, [loaded, refreshedAt])
 
   // A zone deleted from the draft (or an edge gone after a reload) simply closes its panel.
   const selectedZone = selection?.kind === 'zone' ? zones.find(z => z.id === selection.id) ?? null : null
@@ -106,6 +108,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const lit = useMemo(() => focusSets(graph, focusId), [graph, focusId])
 
   const tNode = useTranslations('microsegPilot.overview.node')
+  const tEdge = useTranslations('microsegPilot.overview.edge')
   const nameOf = useCallback((nodeId: string) => {
     if (nodeId === EXTERNAL_ID) return tNode('external')
     if (nodeId === OUTSIDE_ID) return tNode('outside')
@@ -119,6 +122,14 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     if (d.kind === 'unzoned') return tNode('unzoned', { count: d.count })
     return nodeId
   }, [graph.nodes, zonesById, tNode])
+  const names = useMemo<MapNames>(() => ({
+    zone: id => zonesById.get(id)?.name ?? id,
+    end: nameOf,
+    short: (nodeId: string) => {
+      const d = graph.nodes.find(n => n.id === nodeId)?.data as unknown as MapNodeData | undefined
+      return d?.kind === 'guest' ? d.member.name : d?.kind === 'more' ? `+${d.count}` : nameOf(nodeId)
+    },
+  }), [zonesById, nameOf, graph.nodes])
 
   const nodes = useMemo(() => graph.nodes.map(n => {
     const selected = n.id === selectedNode
@@ -133,10 +144,10 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     return {
       ...e,
       className: dimmed ? 'microseg-dim' : undefined,
-      ariaLabel: t('edge.aria', { from: nameOf(e.source), to: nameOf(e.target), services: d.services.join(', ') }),
+      ariaLabel: edgeAria(tEdge as EdgeT, names, e.source, e.target, d),
       data: dimmed ? { ...e.data, dimmed } : e.data,
     }
-  }), [graph.edges, filters, lit, t, nameOf])
+  }), [graph.edges, filters, lit, tEdge, names])
 
   const selectZone = useCallback((zoneId: string) => { setSelection({ kind: 'zone', id: zoneId }); setResolved(null) }, [])
   const selectGuest = useCallback((nodeId: string) => setSelection({ kind: 'guest', id: nodeId }), [])
@@ -145,6 +156,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const refresh = useCallback(async () => {
     setRefreshing(true)
     await Promise.all([reloadPolicy().catch(() => undefined), suggestions.reload().catch(() => undefined), reloadGuests().catch(() => undefined)])
+    setRefreshedAt(new Date())
     setRefreshing(false)
   }, [reloadPolicy, suggestions, reloadGuests])
 
@@ -181,56 +193,60 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           {tObs(resolved === 'dismiss' ? 'resolvedDismiss' : 'resolvedAccept', { count: 1 })}
         </Alert>
       )}
-      <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: { xs: 'wrap', lg: 'nowrap' } }}>
-        <Box
-          role='region'
-          aria-label={t('mapLabel')}
-          sx={{ flex: '1 1 0', minWidth: 0, width: '100%', height: 560, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
-        >
-          <ZoneCanvas
-            nodes={nodes}
-            edges={edges}
-            onSelectZone={selectZone}
-            onSelectGuest={selectGuest}
-            onSelectEdge={selectEdge}
-            onHover={setHover}
-            onFocusNode={setKeyFocus}
-            onClear={clear}
-            panelOpen={panelOpen}
-          />
+      <MapNamesContext.Provider value={names}>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: { xs: 'wrap', lg: 'nowrap' } }}>
+          <Box
+            role='region'
+            aria-label={t('mapLabel')}
+            sx={{ flex: '1 1 0', minWidth: 0, width: '100%', height: 560, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
+          >
+            <ZoneCanvas
+              nodes={nodes}
+              edges={edges}
+              onSelectZone={selectZone}
+              onSelectGuest={selectGuest}
+              onSelectEdge={selectEdge}
+              onHover={setHover}
+              onFocusNode={setKeyFocus}
+              onClear={clear}
+              panelOpen={panelOpen}
+            />
+          </Box>
+          {selectedZone && (
+            <ZonePanel
+              key={selectedZone.id}
+              zone={selectedZone}
+              members={membersByZone.get(selectedZone.id) ?? []}
+              membersKnown={membersKnown}
+              flows={flows}
+              zonesById={zonesById}
+              onClose={clear}
+              onEdit={() => goToSubTab('policy')}
+              onAssign={() => setAssigning(true)}
+            />
+          )}
+          {selectedEdge && (
+            <EdgePanel
+              key={selectedEdge.id}
+              edgeId={selectedEdge.id}
+              source={selectedEdge.source}
+              target={selectedEdge.target}
+              data={selectedEdge.data as unknown as MapEdgeData}
+              from={nameOf(selectedEdge.source)}
+              to={nameOf(selectedEdge.target)}
+              zonesById={zonesById}
+              unapplied={unapplied}
+              connectionId={connectionId}
+              version={policy.version}
+              reloadPolicy={reloadPolicy}
+              reloadSuggestions={suggestions.reload}
+              onResolved={setResolved}
+              onClose={clear}
+              onEdit={() => goToSubTab('policy')}
+            />
+          )}
         </Box>
-        {selectedZone && (
-          <ZonePanel
-            key={selectedZone.id}
-            zone={selectedZone}
-            members={membersByZone.get(selectedZone.id) ?? []}
-            membersKnown={membersKnown}
-            flows={flows}
-            zonesById={zonesById}
-            onClose={clear}
-            onEdit={() => goToSubTab('policy')}
-            onAssign={() => setAssigning(true)}
-          />
-        )}
-        {selectedEdge && (
-          <EdgePanel
-            key={selectedEdge.id}
-            edgeId={selectedEdge.id}
-            data={selectedEdge.data as unknown as MapEdgeData}
-            from={nameOf(selectedEdge.source)}
-            to={nameOf(selectedEdge.target)}
-            zonesById={zonesById}
-            unapplied={unapplied}
-            connectionId={connectionId}
-            version={policy.version}
-            reloadPolicy={reloadPolicy}
-            reloadSuggestions={suggestions.reload}
-            onResolved={setResolved}
-            onClose={clear}
-            onEdit={() => goToSubTab('policy')}
-          />
-        )}
-      </Box>
+      </MapNamesContext.Provider>
       {assigning && selectedZone && (
         <AssignGuestsDialog
           open

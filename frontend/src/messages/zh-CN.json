@@ -13036,7 +13036,12 @@
         "unprotected": "{count, plural, other {# 个观察到的流量}}没有任何流量规则允许（未受保护）",
         "blocked": "{count, plural, other {# 个流量}}被已强制的区域阻止",
         "draft": "在草稿中：随下一个计划应用",
-        "more": "还有 {count, number} 个"
+        "more": "还有 {count, number} 个",
+        "example": "示例：{from} → {to}",
+        "zoneHits": "区域 {from} 与区域 {to} 之间在 {service} 上 {count, plural, other {# 次命中}}（显示示例对）",
+        "sourceHits": "从 {from} 到区域 {to} 在 {service} 上 {count, plural, other {# 次命中}}（显示示例对）",
+        "countUnprotected": "{count, plural, other {# 个未受保护的流量}}",
+        "countBlocked": "{count, plural, other {# 个已阻止的流量}}"
       },
       "panel": {
         "label": "区域 {name}",
@@ -13062,7 +13067,10 @@
         "observed": "观察到的流量",
         "allowed": "允许的流量",
         "acceptAs": "接受为流量 {from} → {to} {service}",
-        "draft": "草稿"
+        "draft": "草稿",
+        "sampleNote": "引擎为每个观察到的流量只保留一对示例客户机：命中次数统计整个区域对。",
+        "addresses": "示例地址：{from} → {to}",
+        "status": "状态：{status}"
       },
       "controls": "缩放和适配控件",
       "minimap": "地图概览"

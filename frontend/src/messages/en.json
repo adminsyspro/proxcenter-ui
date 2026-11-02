@@ -13036,7 +13036,12 @@
         "unprotected": "{count, plural, one {# observed flow} other {# observed flows}} that no flow allows (unprotected)",
         "blocked": "{count, plural, one {# flow} other {# flows}} blocked by an enforced zone",
         "draft": "In the draft: applied with the next plan",
-        "more": "+{count, number} more"
+        "more": "+{count, number} more",
+        "example": "Example: {from} → {to}",
+        "zoneHits": "{count, plural, one {# hit} other {# hits}} between zone {from} and zone {to} on {service} (sample pair shown)",
+        "sourceHits": "{count, plural, one {# hit} other {# hits}} from {from} to zone {to} on {service} (sample pair shown)",
+        "countUnprotected": "{count, plural, one {# unprotected flow} other {# unprotected flows}}",
+        "countBlocked": "{count, plural, one {# blocked flow} other {# blocked flows}}"
       },
       "panel": {
         "label": "Zone {name}",
@@ -13062,7 +13067,10 @@
         "observed": "Observed flows",
         "allowed": "Allowed flows",
         "acceptAs": "Accept as flow {from} → {to} {service}",
-        "draft": "Draft"
+        "draft": "Draft",
+        "sampleNote": "The engine keeps one sample pair of guests per observed flow: the hits count the whole zone pair.",
+        "addresses": "Sample addresses: {from} → {to}",
+        "status": "Status: {status}"
       },
       "controls": "Zoom and fit controls",
       "minimap": "Overview of the map"

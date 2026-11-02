@@ -110,6 +110,7 @@ function UnzonedNodeComponent({ data }: NodeProps) {
   return (
     <Tooltip title={t('unzonedHint')} placement='top'>
       <Box
+        role='group'
         aria-label={t('unzoned', { count: d.count })}
         sx={{ position: 'relative', width: 2 * d.radius, height: 2 * d.radius, boxSizing: 'border-box', borderRadius: '50%', border: '2px dashed', borderColor: 'text.disabled' }}
       >

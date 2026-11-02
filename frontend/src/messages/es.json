@@ -12849,6 +12849,38 @@
         "failed": "{label}: la ejecución ha fallado",
         "unavailable": "{label}: el progreso no está disponible"
       }
+    },
+    "plan": {
+      "title": "Plan de microsegmentación",
+      "computing": "Calculando el plan a partir de Proxmox...",
+      "applying": "Aplicando el plan en Proxmox...",
+      "stripRunning": "Aplicación del plan en curso",
+      "applyLabel": "Aplicación",
+      "apply": "Aplicar",
+      "close": "Cerrar",
+      "recompute": "Recalcular",
+      "failed": "No se pudo calcular el plan.",
+      "failedWith": "No se pudo calcular el plan: {error}",
+      "stale": "Este plan procede de un borrador anterior (versión {planned}, ahora {current}). Recalcúlelo antes de aplicar.",
+      "conflict": "El borrador cambió durante su revisión. Recalcule el plan.",
+      "summary": "{writes, plural, one {# escritura prevista} other {# escrituras previstas}}, {guests, plural, one {# invitado afectado} other {# invitados afectados}}",
+      "nothing": "Nada que cambiar: Proxmox ya coincide con el borrador.",
+      "clusterGroup": "Objetos del clúster",
+      "stepCount": "{count, plural, one {# paso} other {# pasos}}",
+      "collisions": "Bloqueado: estos objetos de Proxmox usan nuestros nombres sin ser nuestros, renómbrelos o elimínelos: {names}",
+      "foreignRules": "Las reglas añadidas a mano en nuestros grupos de seguridad se conservan, sin tocarlas: {names}",
+      "unread": "{count, plural, one {# invitado no se pudo leer y se omitirá} other {# invitados no se pudieron leer y se omitirán}}: {names}",
+      "ambiguous": "{count, plural, one {# invitado está en varias zonas y se omitirá} other {# invitados están en varias zonas y se omitirán}}: {names}",
+      "resultSummary": "{done} hechos, {failed} fallidos, {notRun} sin ejecutar",
+      "truncated": "La ejecución se detuvo en su límite de escrituras, los pasos restantes no se ejecutaron.",
+      "interrupted": "La ejecución se interrumpió, los pasos restantes no se ejecutaron.",
+      "held": "No se escribió nada: las escrituras están en espera. Confírmelas en el banner y vuelva a aplicar.",
+      "failedSection": "Pasos fallidos",
+      "notRunSection": "Pasos sin ejecutar",
+      "applyFailed": "La aplicación falló.",
+      "applyFailedWith": "La aplicación falló: {error}",
+      "errors": "Errores: {list}",
+      "notes": "Notas: {list}"
     }
   }
 }

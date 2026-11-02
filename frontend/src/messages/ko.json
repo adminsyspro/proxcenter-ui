@@ -12849,6 +12849,38 @@
         "failed": "{label}: 실행에 실패했습니다",
         "unavailable": "{label}: 진행 상황을 확인할 수 없습니다"
       }
+    },
+    "plan": {
+      "title": "마이크로 세분화 계획",
+      "computing": "Proxmox 기준으로 계획을 계산하는 중...",
+      "applying": "계획을 Proxmox에 적용하는 중...",
+      "stripRunning": "계획 적용 진행 중",
+      "applyLabel": "적용",
+      "apply": "적용",
+      "close": "닫기",
+      "recompute": "다시 계산",
+      "failed": "계획을 계산하지 못했습니다.",
+      "failedWith": "계획을 계산하지 못했습니다: {error}",
+      "stale": "이 계획은 이전 초안(버전 {planned}, 현재 {current})에서 만든 것입니다. 적용하기 전에 다시 계산하세요.",
+      "conflict": "검토하는 동안 초안이 변경되었습니다. 계획을 다시 계산하세요.",
+      "summary": "{writes, plural, one {쓰기 #건 예정} other {쓰기 #건 예정}}, {guests, plural, one {게스트 #개 영향} other {게스트 #개 영향}}",
+      "nothing": "변경할 내용이 없습니다. Proxmox가 이미 초안과 일치합니다.",
+      "clusterGroup": "클러스터 객체",
+      "stepCount": "{count, plural, one {#단계} other {#단계}}",
+      "collisions": "차단됨: 다음 Proxmox 객체가 우리 이름을 쓰지만 우리 것이 아닙니다. 이름을 바꾸거나 삭제하세요: {names}",
+      "foreignRules": "우리 보안 그룹에 수동으로 추가된 규칙은 그대로 유지되며 변경되지 않습니다: {names}",
+      "unread": "{count, plural, one {게스트 #개를 읽지 못해 제외됩니다} other {게스트 #개를 읽지 못해 제외됩니다}}: {names}",
+      "ambiguous": "{count, plural, one {게스트 #개가 여러 영역에 속해 제외됩니다} other {게스트 #개가 여러 영역에 속해 제외됩니다}}: {names}",
+      "resultSummary": "완료 {done}, 실패 {failed}, 미실행 {notRun}",
+      "truncated": "쓰기 한도에서 실행이 멈췄습니다. 나머지 단계는 실행되지 않았습니다.",
+      "interrupted": "실행이 중단되었습니다. 나머지 단계는 실행되지 않았습니다.",
+      "held": "아무것도 기록되지 않았습니다. 쓰기가 보류 중입니다. 배너에서 확인한 뒤 다시 적용하세요.",
+      "failedSection": "실패한 단계",
+      "notRunSection": "실행되지 않은 단계",
+      "applyFailed": "적용에 실패했습니다.",
+      "applyFailedWith": "적용에 실패했습니다: {error}",
+      "errors": "오류: {list}",
+      "notes": "참고: {list}"
     }
   }
 }

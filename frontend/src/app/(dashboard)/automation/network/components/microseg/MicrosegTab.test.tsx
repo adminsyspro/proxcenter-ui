@@ -7,7 +7,6 @@ import { cleanup } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
-import MicrosegTab from './MicrosegTab'
 import { calls, mock, policy, renderTab, reply, resetMocks, status, zone, REVISION_HEAD } from './microsegTestKit'
 
 beforeEach(resetMocks)
@@ -46,15 +45,8 @@ describe('first run guide', () => {
     expect(screen.queryByText('Set up micro-segmentation')).toBeNull()
   })
 
-  it('disables the plan step while no handler opens the plan', async () => {
-    renderTab()
-    await screen.findByText('Set up micro-segmentation')
-    expect((screen.getByRole('button', { name: 'View plan' }) as HTMLButtonElement).disabled).toBe(true)
-  })
-
   it('switches to the relevant sub-tab, or opens the plan, from its buttons', async () => {
-    const onOpenPlan = vi.fn()
-    renderTab(<MicrosegTab connectionId="c1" onOpenPlan={onOpenPlan} />)
+    renderTab()
     await screen.findByText('Set up micro-segmentation')
 
     fireEvent.click(screen.getByRole('button', { name: 'Open the policy' }))
@@ -64,7 +56,7 @@ describe('first run guide', () => {
     expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true')
 
     fireEvent.click(screen.getByRole('button', { name: 'View plan' }))
-    expect(onOpenPlan).toHaveBeenCalledTimes(1)
+    expect(await screen.findByRole('dialog', { name: 'Micro-segmentation plan' })).toBeTruthy()
   })
 })
 

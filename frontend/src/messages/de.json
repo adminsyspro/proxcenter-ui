@@ -12517,6 +12517,38 @@
         "failed": "{label}: der Lauf ist fehlgeschlagen",
         "unavailable": "{label}: Fortschritt nicht verfügbar"
       }
+    },
+    "plan": {
+      "title": "Mikrosegmentierungsplan",
+      "computing": "Der Plan wird anhand von Proxmox berechnet...",
+      "applying": "Der Plan wird auf Proxmox angewendet...",
+      "stripRunning": "Plan wird angewendet",
+      "applyLabel": "Anwenden",
+      "apply": "Anwenden",
+      "close": "Schließen",
+      "recompute": "Neu berechnen",
+      "failed": "Der Plan konnte nicht berechnet werden.",
+      "failedWith": "Der Plan konnte nicht berechnet werden: {error}",
+      "stale": "Dieser Plan stammt aus einem älteren Entwurf (Version {planned}, jetzt {current}). Berechnen Sie ihn vor dem Anwenden neu.",
+      "conflict": "Der Entwurf hat sich während Ihrer Prüfung geändert. Berechnen Sie den Plan neu.",
+      "summary": "{writes, plural, one {# Schreibvorgang geplant} other {# Schreibvorgänge geplant}}, {guests, plural, one {# Gast betroffen} other {# Gäste betroffen}}",
+      "nothing": "Nichts zu ändern: Proxmox entspricht bereits dem Entwurf.",
+      "clusterGroup": "Cluster-Objekte",
+      "stepCount": "{count, plural, one {# Schritt} other {# Schritte}}",
+      "collisions": "Blockiert: Diese Proxmox-Objekte tragen unsere Namen, gehören aber nicht uns. Benennen Sie sie um oder entfernen Sie sie: {names}",
+      "foreignRules": "Von Hand in unseren Sicherheitsgruppen hinzugefügte Regeln bleiben erhalten und werden nicht angetastet: {names}",
+      "unread": "{count, plural, one {# Gast konnte nicht gelesen werden und wird ausgelassen} other {# Gäste konnten nicht gelesen werden und werden ausgelassen}}: {names}",
+      "ambiguous": "{count, plural, one {# Gast liegt in mehreren Zonen und wird ausgelassen} other {# Gäste liegen in mehreren Zonen und werden ausgelassen}}: {names}",
+      "resultSummary": "{done} erledigt, {failed} fehlgeschlagen, {notRun} nicht ausgeführt",
+      "truncated": "Der Lauf hat sein Schreiblimit erreicht und angehalten, die übrigen Schritte wurden nicht ausgeführt.",
+      "interrupted": "Der Lauf wurde unterbrochen, die übrigen Schritte wurden nicht ausgeführt.",
+      "held": "Es wurde nichts geschrieben: Schreibvorgänge sind angehalten. Bestätigen Sie sie im Banner und wenden Sie dann erneut an.",
+      "failedSection": "Fehlgeschlagene Schritte",
+      "notRunSection": "Nicht ausgeführte Schritte",
+      "applyFailed": "Die Anwendung ist fehlgeschlagen.",
+      "applyFailedWith": "Die Anwendung ist fehlgeschlagen: {error}",
+      "errors": "Fehler: {list}",
+      "notes": "Hinweise: {list}"
     }
   }
 }

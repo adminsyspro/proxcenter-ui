@@ -12849,6 +12849,38 @@
         "failed": "{label}：运行失败",
         "unavailable": "{label}：无法获取进度"
       }
+    },
+    "plan": {
+      "title": "微分段计划",
+      "computing": "正在根据 Proxmox 计算计划...",
+      "applying": "正在将计划应用到 Proxmox...",
+      "stripRunning": "计划应用中",
+      "applyLabel": "应用",
+      "apply": "应用",
+      "close": "关闭",
+      "recompute": "重新计算",
+      "failed": "无法计算计划。",
+      "failedWith": "无法计算计划：{error}",
+      "stale": "此计划来自较早的草稿（版本 {planned}，当前为 {current}）。应用前请重新计算。",
+      "conflict": "您审阅期间草稿已更改。请重新计算计划。",
+      "summary": "{writes, plural, one {计划写入 # 次} other {计划写入 # 次}}，{guests, plural, one {影响 # 个客户机} other {影响 # 个客户机}}",
+      "nothing": "无需更改：Proxmox 已与草稿一致。",
+      "clusterGroup": "集群对象",
+      "stepCount": "{count, plural, one {# 个步骤} other {# 个步骤}}",
+      "collisions": "已阻止：以下 Proxmox 对象使用了我们的名称但并非我们创建，请重命名或删除：{names}",
+      "foreignRules": "手动添加到我们安全组中的规则将被保留，不会被改动：{names}",
+      "unread": "{count, plural, one {# 个客户机无法读取，将被跳过} other {# 个客户机无法读取，将被跳过}}：{names}",
+      "ambiguous": "{count, plural, one {# 个客户机位于多个区域，将被跳过} other {# 个客户机位于多个区域，将被跳过}}：{names}",
+      "resultSummary": "完成 {done}，失败 {failed}，未执行 {notRun}",
+      "truncated": "运行在写入上限处停止，其余步骤未执行。",
+      "interrupted": "运行已中断，其余步骤未执行。",
+      "held": "未写入任何内容：写入已暂停。请在横幅中确认，然后重新应用。",
+      "failedSection": "失败的步骤",
+      "notRunSection": "未执行的步骤",
+      "applyFailed": "应用失败。",
+      "applyFailedWith": "应用失败：{error}",
+      "errors": "错误：{list}",
+      "notes": "备注：{list}"
     }
   }
 }

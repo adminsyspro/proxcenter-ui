@@ -12849,6 +12849,38 @@
         "failed": "{label}: the run failed",
         "unavailable": "{label}: progress is not available"
       }
+    },
+    "plan": {
+      "title": "Micro-segmentation plan",
+      "computing": "Computing the plan from Proxmox...",
+      "applying": "Applying the plan to Proxmox...",
+      "stripRunning": "Plan apply in progress",
+      "applyLabel": "Apply",
+      "apply": "Apply",
+      "close": "Close",
+      "recompute": "Recompute",
+      "failed": "The plan could not be computed.",
+      "failedWith": "The plan could not be computed: {error}",
+      "stale": "This plan comes from an older draft (version {planned}, now {current}). Recompute it before applying.",
+      "conflict": "The draft changed while you were reviewing. Recompute the plan.",
+      "summary": "{writes, plural, one {# write} other {# writes}} planned, {guests, plural, one {# guest} other {# guests}} affected",
+      "nothing": "Nothing to change: Proxmox already matches the draft.",
+      "clusterGroup": "Cluster objects",
+      "stepCount": "{count, plural, one {# step} other {# steps}}",
+      "collisions": "Blocked: these Proxmox objects use our names without being ours, rename or remove them: {names}",
+      "foreignRules": "Rules added by hand in our security groups are kept, not touched: {names}",
+      "unread": "{count, plural, one {# guest} other {# guests}} could not be read and will be left out: {names}",
+      "ambiguous": "{count, plural, one {# guest is} other {# guests are}} in several zones and will be left out: {names}",
+      "resultSummary": "{done} done, {failed} failed, {notRun} not run",
+      "truncated": "The run stopped at its write limit, the remaining steps were not run.",
+      "interrupted": "The run was interrupted, the remaining steps were not run.",
+      "held": "Nothing was written: writes are on hold. Confirm them in the banner, then apply again.",
+      "failedSection": "Failed steps",
+      "notRunSection": "Steps not run",
+      "applyFailed": "The apply run failed.",
+      "applyFailedWith": "The apply run failed: {error}",
+      "errors": "Errors: {list}",
+      "notes": "Notes: {list}"
     }
   }
 }

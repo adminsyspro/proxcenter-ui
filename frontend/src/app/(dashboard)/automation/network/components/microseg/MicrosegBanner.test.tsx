@@ -8,7 +8,6 @@ import { cleanup, within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
-import MicrosegTab from './MicrosegTab'
 import {
   calls, flow, mock, policy, renderTab, reply, resetMocks, revisionWithSnapshot, status, zone, REVISION_HEAD,
 } from './microsegTestKit'
@@ -271,13 +270,12 @@ describe('banner: pending changes', () => {
   it('shows the pending changes bar with its count once the last revision snapshot is loaded', async () => {
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: draftZones, flows: [flow('f1')], last_revision: REVISION_HEAD, pending_changes: true }))
     mock.routes['GET /revisions?limit=1'] = () => reply(200, { revisions: [revisionWithSnapshot([zone('a')], [])] })
-    const onOpenPlan = vi.fn()
-    renderTab(<MicrosegTab connectionId="c1" onOpenPlan={onOpenPlan} />)
+    renderTab()
 
     // 2 zones added + 1 flow added
     expect(await screen.findByText('3 unapplied changes')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'View plan' }))
-    expect(onOpenPlan).toHaveBeenCalledTimes(1)
+    expect(await screen.findByRole('dialog', { name: 'Micro-segmentation plan' })).toBeTruthy()
   })
 
   it('shows "unapplied changes" without a number while the snapshot is not loaded, or when it cannot be', async () => {
@@ -296,13 +294,6 @@ describe('banner: pending changes', () => {
     renderTab()
     expect(await screen.findByText('2 unapplied changes')).toBeTruthy()
     expect(calls('GET /revisions?limit=1')).toHaveLength(0)
-  })
-
-  it('disables View plan while no handler opens the plan', async () => {
-    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: null, pending_changes: true }))
-    renderTab()
-    const button = await screen.findByRole('button', { name: 'View plan' })
-    expect((button as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('shows no bar when nothing is pending', async () => {

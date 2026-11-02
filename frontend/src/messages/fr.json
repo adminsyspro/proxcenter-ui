@@ -12850,6 +12850,38 @@
         "failed": "{label} : l'exécution a échoué",
         "unavailable": "{label} : la progression n'est pas disponible"
       }
+    },
+    "plan": {
+      "title": "Plan de micro-segmentation",
+      "computing": "Calcul du plan à partir de Proxmox...",
+      "applying": "Application du plan sur Proxmox...",
+      "stripRunning": "Application du plan en cours",
+      "applyLabel": "Application",
+      "apply": "Appliquer",
+      "close": "Fermer",
+      "recompute": "Recalculer",
+      "failed": "Le plan n'a pas pu être calculé.",
+      "failedWith": "Le plan n'a pas pu être calculé : {error}",
+      "stale": "Ce plan vient d'un brouillon plus ancien (version {planned}, maintenant {current}). Recalculez-le avant d'appliquer.",
+      "conflict": "Le brouillon a changé pendant votre revue. Recalculez le plan.",
+      "summary": "{writes, plural, one {# écriture prévue} other {# écritures prévues}}, {guests, plural, one {# invité concerné} other {# invités concernés}}",
+      "nothing": "Rien à modifier : Proxmox correspond déjà au brouillon.",
+      "clusterGroup": "Objets du cluster",
+      "stepCount": "{count, plural, one {# étape} other {# étapes}}",
+      "collisions": "Bloqué : ces objets Proxmox portent nos noms sans être les nôtres, renommez-les ou supprimez-les : {names}",
+      "foreignRules": "Les règles ajoutées à la main dans nos groupes de sécurité sont conservées, sans y toucher : {names}",
+      "unread": "{count, plural, one {# invité n'a pas pu être lu et sera ignoré} other {# invités n'ont pas pu être lus et seront ignorés}} : {names}",
+      "ambiguous": "{count, plural, one {# invité est dans plusieurs zones et sera ignoré} other {# invités sont dans plusieurs zones et seront ignorés}} : {names}",
+      "resultSummary": "{done} faites, {failed} en échec, {notRun} non exécutées",
+      "truncated": "L'exécution s'est arrêtée à sa limite d'écritures, les étapes restantes n'ont pas été exécutées.",
+      "interrupted": "L'exécution a été interrompue, les étapes restantes n'ont pas été exécutées.",
+      "held": "Rien n'a été écrit : les écritures sont suspendues. Confirmez-les dans le bandeau, puis appliquez à nouveau.",
+      "failedSection": "Étapes en échec",
+      "notRunSection": "Étapes non exécutées",
+      "applyFailed": "L'application a échoué.",
+      "applyFailedWith": "L'application a échoué : {error}",
+      "errors": "Erreurs : {list}",
+      "notes": "Remarques : {list}"
     }
   }
 }

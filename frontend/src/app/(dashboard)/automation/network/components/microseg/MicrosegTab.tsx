@@ -11,6 +11,7 @@ import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import FirstRunGuide from './FirstRunGuide'
 import MicrosegBanner from './MicrosegBanner'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
+import PlanDialog from './PlanDialog'
 import PolicyPanel from './PolicyPanel'
 import RunStrip from './RunStrip'
 import { MICROSEG_SUBTABS, isMicrosegSubTab, type MicrosegSubTab, type MicrosegSubTabProps, type TrackedRun } from './microsegTabTypes'
@@ -50,12 +51,10 @@ function SubTabContent({ tab, ...props }: { tab: MicrosegSubTab } & MicrosegSubT
 
 type Props = {
   connectionId: string
-  /** Opens the plan view (wired by the plan task); the banner and the first run guide call it. */
-  onOpenPlan?: () => void
 }
 
 /** The Micro-segmentation tab of /automation/network: banner, first run guide and the five sub-tabs. */
-export default function MicrosegTab({ connectionId, onOpenPlan }: Props) {
+export default function MicrosegTab({ connectionId }: Props) {
   const t = useTranslations('microsegPilot')
   const { data: policy, loading, error, reload } = useMicrosegPolicy(connectionId || null)
   // Read once: nothing of the sub-tab shows before the policy has loaded, so this never differs from a server render.
@@ -63,6 +62,9 @@ export default function MicrosegTab({ connectionId, onOpenPlan }: Props) {
 
   // The runs live here, not in a sub-tab: switching sub-tab must not lose them.
   const [runs, setRuns] = useState<TrackedRun[]>([])
+  // The plan window is opened by the banner, the pending changes bar and the first run guide.
+  const [planOpen, setPlanOpen] = useState(false)
+  const onOpenPlan = useCallback(() => setPlanOpen(true), [])
   const { mutate } = useSWRConfig()
 
   const startRun = useCallback((run: TrackedRun) => {
@@ -117,6 +119,14 @@ export default function MicrosegTab({ connectionId, onOpenPlan }: Props) {
         ))}
       </Tabs>
       <SubTabContent tab={subTab} {...contentProps} />
+      <PlanDialog
+        open={planOpen}
+        connectionId={connectionId}
+        policy={policy}
+        reloadPolicy={reload}
+        startRun={startRun}
+        onClose={() => setPlanOpen(false)}
+      />
     </Box>
   )
 }

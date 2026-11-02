@@ -26,8 +26,8 @@ export type MicrosegSubTabProps = {
   /** Re-reads the draft (after a write, or on a VERSION_CONFLICT). */
   reloadPolicy: () => Promise<unknown>
   goToSubTab: (tab: MicrosegSubTab) => void
-  /** Undefined until the plan view is wired: buttons that open it must be disabled. */
-  onOpenPlan?: () => void
+  /** Opens the plan window (computes the plan, then applies it). */
+  onOpenPlan: () => void
   /** Follow a run in the strip under the banner; the policy and the status are refreshed when it ends. */
   startRun: (run: TrackedRun) => void
 }

@@ -163,6 +163,42 @@ describe('useFirewallData', () => {
     }
   })
 
+  it('reports a node list that cannot be loaded instead of silently going standalone', async () => {
+    mockNodes('throw')
+
+    const thrown = renderHook(() => useFirewallData('conn-1', true))
+
+    await waitFor(() => expect(thrown.result.current.connectionInfo).not.toBeNull())
+    expect(thrown.result.current.loadError).toBe('network down')
+    thrown.unmount()
+
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 502, json: async () => ({ error: 'Bad gateway' }) }) as Response))
+
+    const refused = renderHook(() => useFirewallData('conn-1', true))
+
+    await waitFor(() => expect(refused.result.current.connectionInfo).not.toBeNull())
+    expect(refused.result.current.firewallMode).toBe('standalone')
+    expect(refused.result.current.loadError).toBe('Bad gateway')
+    refused.unmount()
+
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => { throw new Error('not json') } }) as unknown as Response))
+
+    const opaque = renderHook(() => useFirewallData('conn-1', true))
+
+    await waitFor(() => expect(opaque.result.current.connectionInfo).not.toBeNull())
+    expect(opaque.result.current.loadError).toBe('HTTP 500')
+  })
+
+  it('keeps the node list error next to the other load errors', async () => {
+    mockNodes('throw')
+    api.getClusterRules.mockRejectedValueOnce(new Error('HTTP 500'))
+
+    const { result } = renderHook(() => useFirewallData('conn-1', true))
+
+    await waitFor(() => expect(result.current.connectionInfo).not.toBeNull())
+    expect(result.current.loadError).toBe('HTTP 500 · network down')
+  })
+
   it('loads nothing without a connection or an Enterprise license', async () => {
     mockNodes(['pve1', 'pve2'])
 

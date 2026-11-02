@@ -87,6 +87,8 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
       // Fetch nodes list from dedicated nodes API (includes nodes without VMs)
       let nodes: string[] = []
 
+      // A node list that cannot be read must not pass for a one-node host: the mode below falls back to
+      // standalone, and the failure is kept in loadError like every other fetch of this load.
       try {
         const nodesResp = await fetch(`/api/v1/connections/${connectionId}/nodes`)
 
@@ -96,8 +98,13 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
 
           nodes = nodesData.map((n: any) => n.node || n.name).filter(Boolean)
           if (isLatest()) setNodesList(nodes)
+        } else {
+          const body = await nodesResp.json().catch(() => null)
+
+          errors.add(typeof body?.error === 'string' && body.error ? body.error : `HTTP ${nodesResp.status}`)
         }
-      } catch {
+      } catch (err) {
+        errors.add(errorMessage(err))
         if (isLatest()) setNodesList([])
       }
 

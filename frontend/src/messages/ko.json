@@ -12869,7 +12869,7 @@
       "stepCount": "{count, plural, one {#단계} other {#단계}}",
       "collisions": "차단됨: 다음 Proxmox 객체가 우리 이름을 쓰지만 우리 것이 아닙니다. 이름을 바꾸거나 삭제하세요: {names}",
       "foreignRules": "우리 보안 그룹에 수동으로 추가된 규칙은 그대로 유지되며 변경되지 않습니다: {names}",
-      "unread": "{count, plural, one {게스트 #개를 읽지 못해 제외됩니다} other {게스트 #개를 읽지 못해 제외됩니다}}: {names}",
+      "unread": "{count, plural, one {게스트 #개를 읽지 못했으며 다음 실행에서 처리됩니다} other {게스트 #개를 읽지 못했으며 다음 실행에서 처리됩니다}}: {names}",
       "ambiguous": "{count, plural, one {게스트 #개가 여러 영역에 속해 제외됩니다} other {게스트 #개가 여러 영역에 속해 제외됩니다}}: {names}",
       "resultSummary": "완료 {done}, 실패 {failed}, 미실행 {notRun}",
       "truncated": "쓰기 한도에서 실행이 멈췄습니다. 나머지 단계는 실행되지 않았습니다.",
@@ -12880,7 +12880,8 @@
       "applyFailed": "적용에 실패했습니다.",
       "applyFailedWith": "적용에 실패했습니다: {error}",
       "errors": "오류: {list}",
-      "notes": "참고: {list}"
+      "notes": "참고: {list}",
+      "nothingRecord": "Proxmox에 기록할 내용이 없습니다. 적용하면 리비전이 기록됩니다."
     }
   }
 }

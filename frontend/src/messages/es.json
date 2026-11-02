@@ -12869,7 +12869,7 @@
       "stepCount": "{count, plural, one {# paso} other {# pasos}}",
       "collisions": "Bloqueado: estos objetos de Proxmox usan nuestros nombres sin ser nuestros, renómbrelos o elimínelos: {names}",
       "foreignRules": "Las reglas añadidas a mano en nuestros grupos de seguridad se conservan, sin tocarlas: {names}",
-      "unread": "{count, plural, one {# invitado no se pudo leer y se omitirá} other {# invitados no se pudieron leer y se omitirán}}: {names}",
+      "unread": "{count, plural, one {# invitado no se pudo leer y se tratará} other {# invitados no se pudieron leer y se tratarán}} en la próxima pasada: {names}",
       "ambiguous": "{count, plural, one {# invitado está en varias zonas y se omitirá} other {# invitados están en varias zonas y se omitirán}}: {names}",
       "resultSummary": "{done} hechos, {failed} fallidos, {notRun} sin ejecutar",
       "truncated": "La ejecución se detuvo en su límite de escrituras, los pasos restantes no se ejecutaron.",
@@ -12880,7 +12880,8 @@
       "applyFailed": "La aplicación falló.",
       "applyFailedWith": "La aplicación falló: {error}",
       "errors": "Errores: {list}",
-      "notes": "Notas: {list}"
+      "notes": "Notas: {list}",
+      "nothingRecord": "Nada que escribir en Proxmox: aplicar registra la revisión."
     }
   }
 }

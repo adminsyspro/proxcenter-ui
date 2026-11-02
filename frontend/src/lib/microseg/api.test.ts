@@ -150,10 +150,11 @@ describe('microsegApi requests', () => {
 })
 
 describe('isPlanStale', () => {
-  it('is stale only when the plan was computed from another draft version', () => {
+  it('is stale when the plan was computed from another draft version, or has none while the draft has one (Go omits version 0)', () => {
     expect(isPlanStale({ result: { version: 4 } as any }, 5)).toBe(true)
     expect(isPlanStale({ result: { version: 5 } as any }, 5)).toBe(false)
-    expect(isPlanStale({ result: {} as any }, 5)).toBe(false)
+    expect(isPlanStale({ result: {} as any }, 5)).toBe(true)
+    expect(isPlanStale({ result: {} as any }, 0)).toBe(false)
     expect(isPlanStale({ result: null }, 5)).toBe(false)
     expect(isPlanStale(null, 5)).toBe(false)
   })

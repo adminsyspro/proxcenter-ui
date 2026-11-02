@@ -12870,7 +12870,7 @@
       "stepCount": "{count, plural, one {# étape} other {# étapes}}",
       "collisions": "Bloqué : ces objets Proxmox portent nos noms sans être les nôtres, renommez-les ou supprimez-les : {names}",
       "foreignRules": "Les règles ajoutées à la main dans nos groupes de sécurité sont conservées, sans y toucher : {names}",
-      "unread": "{count, plural, one {# invité n'a pas pu être lu et sera ignoré} other {# invités n'ont pas pu être lus et seront ignorés}} : {names}",
+      "unread": "{count, plural, one {# invité n'a pas pu être lu et sera traité} other {# invités n'ont pas pu être lus et seront traités}} au prochain passage : {names}",
       "ambiguous": "{count, plural, one {# invité est dans plusieurs zones et sera ignoré} other {# invités sont dans plusieurs zones et seront ignorés}} : {names}",
       "resultSummary": "{done} faites, {failed} en échec, {notRun} non exécutées",
       "truncated": "L'exécution s'est arrêtée à sa limite d'écritures, les étapes restantes n'ont pas été exécutées.",
@@ -12881,7 +12881,8 @@
       "applyFailed": "L'application a échoué.",
       "applyFailedWith": "L'application a échoué : {error}",
       "errors": "Erreurs : {list}",
-      "notes": "Remarques : {list}"
+      "notes": "Remarques : {list}",
+      "nothingRecord": "Rien à écrire dans Proxmox : l'application enregistre la révision."
     }
   }
 }

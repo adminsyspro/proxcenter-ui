@@ -85,6 +85,17 @@ describe('run strip', () => {
     expect(within(line).queryByRole('button', { name: /close/i })).toBeNull()
   })
 
+  it('shows the counts of a failed run that carries its result', async () => {
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1' })
+    mock.routes['GET /runs/r1'] = () => reply(200, {
+      ...run('failed', { guests: 1, members: 1, steps: 2, drifts: 0, done: [], failed: [{ index: 0, kind: 'guest.tags', object: 'g', summary: 's', error: 'locked' }], not_run: [{ index: 1, kind: 'guest.nic', object: 'g', summary: 's' }] }),
+      error: '1 step(s) failed, 1 not run',
+    })
+    setup({ zones: [web({ state: 'disabled' })] })
+    await chooseState('web', 'Observe')
+    expect(await screen.findByText('web: 0 done, 1 failed, 1 not run')).toBeTruthy()
+  })
+
   it('dismisses a failed run with its close button', async () => {
     mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1' })
     mock.routes['GET /runs/r1'] = () => reply(200, run('failed'))

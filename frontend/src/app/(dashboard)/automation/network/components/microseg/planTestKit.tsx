@@ -39,6 +39,9 @@ export const applyRun = (over: Partial<MicrosegRunResult> = {}, status: Microseg
   ...planRun(over, status), id: 'a1', kind: 'apply', writes: 6,
 })
 
+/** A lifecycle run the backend marked failed (it did not complete its plan) that still carries its result. */
+export const failedWith = (run: MicrosegRun, error: string): MicrosegRun => ({ ...run, status: 'failed', error })
+
 export const VMS = [vm(101, 'web1', ['zone-web']), vm(200, 'db1', ['zone-db'], { node: 'pve2', type: 'lxc', status: 'stopped' })]
 
 /** Healthy defaults of a draft with unapplied changes, a plan route and the guests. */

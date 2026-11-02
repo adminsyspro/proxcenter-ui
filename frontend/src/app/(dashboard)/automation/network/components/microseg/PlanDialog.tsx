@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { isPlanStale, microsegApi } from '@/lib/microseg/api'
+import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegPolicy } from '@/lib/microseg/types'
 import { useMicrosegRun } from '@/lib/microseg/useMicroseg'
 
@@ -16,6 +16,7 @@ import RunProgress from './RunProgress'
 import { isVersionConflict } from './dialogParts'
 import type { TrackedRun } from './microsegTabTypes'
 import { groupPlanSteps } from './planGroups'
+import { planState } from './planState'
 import { useZoneGuests } from './useZoneGuests'
 
 type BodyProps = {
@@ -53,6 +54,7 @@ function PlanBody({ connectionId, policy, reloadPolicy, startRun, onClose }: Bod
   }, [api, attempt])
 
   const recompute = () => {
+    void reloadPolicy()
     setError(null)
     setConflict(false)
     setPlanRunId(null)
@@ -81,30 +83,27 @@ function PlanBody({ connectionId, policy, reloadPolicy, startRun, onClose }: Bod
 
   const run = planRun.run
   const result = run?.result
-  const steps = result?.plan ?? []
-  const planFailed = run?.status === 'failed'
-  const planReady = !!run && run.status === 'done' && !!result
-  const stale = conflict || (!!run && isPlanStale(run, policy.version))
-  const blocked = (result?.collisions?.length ?? 0) > 0
-  const canApply = planReady && !stale && !blocked && steps.length > 0 && !busy && !applyRunId
+  const state = planState(run, policy.version, policy.pending_changes, conflict)
+  const { steps } = state
+  const canApply = state.applicable && !state.stale && !busy && !applyRunId
 
   const recomputeButton = <Button color='inherit' size='small' onClick={recompute}>{t('recompute')}</Button>
 
   return (
     <>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 0 }}>
-        {!!error && <MicrosegErrorAlert error={error} onRetry={planRunId ? undefined : recompute} onClose={() => setError(null)} />}
+        {!!error && <MicrosegErrorAlert error={error} onRetry={planRunId ? undefined : recompute} />}
 
-        {!applyRunId && !planReady && !planFailed && !error && (
+        {!applyRunId && !state.showDiff && !state.failure && !error && (
           <RunProgress run={run} error={planRun.error} runningText={t('computing')} />
         )}
-        {!applyRunId && planFailed && (
+        {!applyRunId && state.failure && (
           <Notice severity='error' text={run?.error ? t('failedWith', { error: run.error }) : t('failed')} action={recomputeButton} />
         )}
 
-        {!applyRunId && planReady && result && (
+        {!applyRunId && state.showDiff && result && (
           <>
-            {stale && (
+            {state.stale && (
               <Notice
                 severity='warning'
                 text={conflict ? t('conflict') : t('stale', { planned: result.version ?? 0, current: policy.version })}
@@ -113,7 +112,7 @@ function PlanBody({ connectionId, policy, reloadPolicy, startRun, onClose }: Bod
             )}
             <PlanNotices result={result} guests={guests} />
             {steps.length === 0
-              ? <Notice severity='info' text={t('nothing')} />
+              ? <Notice severity='info' text={policy.pending_changes ? t('nothingRecord') : t('nothing')} />
               : (
                 <>
                   <Notice severity='info' text={t('summary', { writes: steps.length, guests: groupPlanSteps(steps).byGuest.length })} />

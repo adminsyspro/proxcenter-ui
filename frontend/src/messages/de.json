@@ -12537,7 +12537,7 @@
       "stepCount": "{count, plural, one {# Schritt} other {# Schritte}}",
       "collisions": "Blockiert: Diese Proxmox-Objekte tragen unsere Namen, gehören aber nicht uns. Benennen Sie sie um oder entfernen Sie sie: {names}",
       "foreignRules": "Von Hand in unseren Sicherheitsgruppen hinzugefügte Regeln bleiben erhalten und werden nicht angetastet: {names}",
-      "unread": "{count, plural, one {# Gast konnte nicht gelesen werden und wird ausgelassen} other {# Gäste konnten nicht gelesen werden und werden ausgelassen}}: {names}",
+      "unread": "{count, plural, one {# Gast konnte nicht gelesen werden und wird} other {# Gäste konnten nicht gelesen werden und werden}} beim nächsten Durchlauf behandelt: {names}",
       "ambiguous": "{count, plural, one {# Gast liegt in mehreren Zonen und wird ausgelassen} other {# Gäste liegen in mehreren Zonen und werden ausgelassen}}: {names}",
       "resultSummary": "{done} erledigt, {failed} fehlgeschlagen, {notRun} nicht ausgeführt",
       "truncated": "Der Lauf hat sein Schreiblimit erreicht und angehalten, die übrigen Schritte wurden nicht ausgeführt.",
@@ -12548,7 +12548,8 @@
       "applyFailed": "Die Anwendung ist fehlgeschlagen.",
       "applyFailedWith": "Die Anwendung ist fehlgeschlagen: {error}",
       "errors": "Fehler: {list}",
-      "notes": "Hinweise: {list}"
+      "notes": "Hinweise: {list}",
+      "nothingRecord": "Nichts in Proxmox zu schreiben: Das Anwenden speichert die Revision."
     }
   }
 }

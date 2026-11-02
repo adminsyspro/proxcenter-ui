@@ -164,8 +164,14 @@ export function microsegApi(connId: string) {
   }
 }
 
-/** A plan computed from an older draft than the current one must be recomputed (UA6). */
+/**
+ * A plan computed from an older draft than the current one must be recomputed (UA6).
+ * The Go side omits a version of 0, so a plan without a version is the plan of
+ * draft 0: stale as soon as the draft has a version.
+ */
 export function isPlanStale(run: Pick<MicrosegRun, 'result'> | null | undefined, draftVersion: number): boolean {
-  const version = run?.result?.version
-  return typeof version === 'number' && version !== draftVersion
+  const result = run?.result
+  if (!result) return false
+  if (typeof result.version === 'number') return result.version !== draftVersion
+  return draftVersion > 0
 }

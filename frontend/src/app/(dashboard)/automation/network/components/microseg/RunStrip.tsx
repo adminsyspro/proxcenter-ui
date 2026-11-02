@@ -40,7 +40,10 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps
   let icon: ReactNode = <CircularProgress size={16} />
 
   if (run?.status === 'failed') {
-    text = t('failed', { label })
+    // A lifecycle run that did not complete its plan is `failed` and still carries its result.
+    text = run.result
+      ? t('done', { label, done: run.result.done?.length ?? 0, failed: run.result.failed?.length ?? 0, notRun: run.result.not_run?.length ?? 0 })
+      : t('failed', { label })
     severity = 'error'
     icon = undefined
   } else if (run?.status === 'done') {

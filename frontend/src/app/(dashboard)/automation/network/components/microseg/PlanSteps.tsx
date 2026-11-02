@@ -73,28 +73,30 @@ export default function PlanSteps({ steps, guests }: Props) {
   const paged = usePaged(byGuest, GUESTS_PER_PAGE)
 
   return (
-    <Box role='list'>
-      {cluster.length > 0 && (
-        <StepGroup
-          label={t('clusterGroup')}
-          header={<><i className='ri-server-line' /><Typography noWrap fontWeight={600}>{t('clusterGroup')}</Typography></>}
-          count={cluster.length}
-          steps={cluster}
-          defaultOpen
-        />
-      )}
-      {paged.rows.map(group => {
-        const inventory = findGuest(guests, group.guest)
-        return (
+    <Box>
+      <Box role='list'>
+        {cluster.length > 0 && (
           <StepGroup
-            key={guestKey(group.guest)}
-            label={inventory?.name ?? `${group.guest.type}/${group.guest.vmid}`}
-            header={<GuestHeader guest={group.guest} inventory={inventory} />}
-            count={group.steps.length}
-            steps={group.steps}
+            label={t('clusterGroup')}
+            header={<><i className='ri-server-line' /><Typography noWrap fontWeight={600}>{t('clusterGroup')}</Typography></>}
+            count={cluster.length}
+            steps={cluster}
+            defaultOpen
           />
-        )
-      })}
+        )}
+        {paged.rows.map(group => {
+          const inventory = findGuest(guests, group.guest)
+          return (
+            <StepGroup
+              key={guestKey(group.guest)}
+              label={inventory?.name ?? `${group.guest.type}/${group.guest.vmid}`}
+              header={<GuestHeader guest={group.guest} inventory={inventory} />}
+              count={group.steps.length}
+              steps={group.steps}
+            />
+          )
+        })}
+      </Box>
       <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
     </Box>
   )

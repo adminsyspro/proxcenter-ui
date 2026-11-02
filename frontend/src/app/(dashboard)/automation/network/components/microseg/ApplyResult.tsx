@@ -18,10 +18,9 @@ export default function ApplyResult({ run, guests }: Props) {
   const failed = result?.failed ?? []
   const notRun = result?.not_run ?? []
 
-  if (run.status === 'failed') {
-    return <Notice severity='error' text={run.error ? t('applyFailedWith', { error: run.error }) : t('applyFailed')} />
-  }
-  if (!result) return null
+  // A run that did not complete its plan is `failed` and still carries its whole result.
+  const failure = run.status === 'failed' ? <Notice severity='error' text={run.error ? t('applyFailedWith', { error: run.error }) : t('applyFailed')} /> : null
+  if (!result) return failure
 
   const summary = t('resultSummary', { done: result.done?.length ?? 0, failed: failed.length, notRun: notRun.length })
   const errors = result.errors ?? []
@@ -29,6 +28,7 @@ export default function ApplyResult({ run, guests }: Props) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {failure}
       <Notice severity={failed.length > 0 ? 'warning' : 'success'} text={summary} />
       {result.truncated && <Notice severity='warning' text={t('truncated')} />}
       {result.interrupted && <Notice severity='warning' text={t('interrupted')} />}

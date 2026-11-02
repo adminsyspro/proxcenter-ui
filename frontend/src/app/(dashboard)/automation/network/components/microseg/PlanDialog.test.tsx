@@ -8,8 +8,8 @@ import { cleanup, act, within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
-import { calls, mock, policy, renderTab, reply } from './microsegTestKit'
-import { g101, openPlanDialog, planRun, resetPlanMocks, step } from './planTestKit'
+import { calls, mock, policy, renderTab, reply, zone, REVISION_HEAD } from './microsegTestKit'
+import { failedWith, g101, openPlanDialog, planRun, resetPlanMocks, step } from './planTestKit'
 
 beforeEach(() => resetPlanMocks())
 
@@ -56,12 +56,29 @@ describe('opening the plan', () => {
     expect(calls('POST /plan')).toHaveLength(2)
   })
 
-  it('shows a failed plan run with a recompute', async () => {
-    mock.routes['GET /runs/p1'] = () => reply(200, { ...planRun({}, 'failed'), error: 'cluster unreachable' })
+  it('shows a failed plan run with its plan, the failure and a recompute, and blocks Apply', async () => {
+    mock.routes['GET /runs/p1'] = () => reply(200, failedWith(planRun(), 'cluster unreachable'))
     const dialog = await openPlanDialog()
     expect(await within(dialog).findByText('The plan could not be computed: cluster unreachable')).toBeTruthy()
     expect(within(dialog).getByRole('button', { name: 'Recompute' })).toBeTruthy()
+    expect(within(dialog).getByText('6 writes planned, 2 guests affected')).toBeTruthy()
     expect(applyButton(dialog).disabled).toBe(true)
+  })
+
+  it('shows only the failure when the failed run has no plan', async () => {
+    mock.routes['GET /runs/p1'] = () => reply(200, { ...failedWith(planRun(), 'cluster unreachable'), result: null })
+    const dialog = await openPlanDialog()
+    expect(await within(dialog).findByText('The plan could not be computed: cluster unreachable')).toBeTruthy()
+    expect(within(dialog).queryByText('Cluster objects')).toBeNull()
+    expect(applyButton(dialog).disabled).toBe(true)
+  })
+
+  it('keeps Retry on screen after a start error (the error cannot be dismissed into a blank window)', async () => {
+    mock.routes['POST /plan'] = () => reply(503, { code: 'NOT_LEADER', error: 'x' })
+    const dialog = await openPlanDialog()
+    const alert = (await within(dialog).findByText('This orchestrator node is not the leader. Try again in a moment.')).closest('[role="alert"]') as HTMLElement
+    expect(within(alert).queryByRole('button', { name: /close/i })).toBeNull()
+    expect(within(dialog).getByRole('button', { name: 'Retry' })).toBeTruthy()
   })
 })
 
@@ -100,15 +117,27 @@ describe('the diff', () => {
 
     expect(within(dialog).getAllByRole('button', { name: /qemu\/10\d\d/ })).toHaveLength(20)
     expect(within(dialog).getByText('1-20 of 25')).toBeTruthy()
+    expect(dialog.querySelector('[role="list"]')?.textContent).not.toContain('1-20 of 25')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Next page' }))
     expect(await within(dialog).findAllByRole('button', { name: /qemu\/10\d\d/ })).toHaveLength(5)
   })
 
-  it('says there is nothing to change and disables Apply for an empty plan', async () => {
+  it('says there is nothing to change and disables Apply for an empty plan without pending changes', async () => {
+    // nothing pending: the plan is opened from the first run guide
+    mock.routes['GET /policy'] = () => reply(200, policy())
     mock.routes['GET /runs/p1'] = () => reply(200, planRun({ plan: [], steps: 0 }))
     const dialog = await openPlanDialog()
     expect(await within(dialog).findByText('Nothing to change: Proxmox already matches the draft.')).toBeTruthy()
     expect(applyButton(dialog).disabled).toBe(true)
+  })
+})
+
+describe('an empty plan with pending changes', () => {
+  it('can still be applied: it records the revision', async () => {
+    mock.routes['GET /runs/p1'] = () => reply(200, planRun({ plan: [], steps: 0 }))
+    const dialog = await openPlanDialog()
+    expect(await within(dialog).findByText('Nothing to write in Proxmox: applying records the revision.')).toBeTruthy()
+    expect(applyButton(dialog).disabled).toBe(false)
   })
 })
 
@@ -121,16 +150,30 @@ describe('warnings and collisions', () => {
   })
 
   it('warns about foreign rules, unread and ambiguous guests without blocking Apply', async () => {
-    mock.routes['GET /runs/p1'] = () => reply(200, planRun({
+    mock.routes['GET /runs/p1'] = () => reply(200, failedWith(planRun({
       foreign_rules: ['pcz-web:2'],
       unread: [g101],
       ambiguous: [{ node: 'pve2', type: 'lxc', vmid: 200 }],
-    }))
+    }), '1 guest(s) could not be read'))
     const dialog = await openPlanDialog()
     expect(await within(dialog).findByText(/not touched: pcz-web:2/)).toBeTruthy()
-    expect(within(dialog).getByText(/1 guest could not be read and will be left out: web1/)).toBeTruthy()
+    expect(within(dialog).getByText(/1 guest could not be read, they will be handled on the next pass: web1/)).toBeTruthy()
     expect(within(dialog).getByText(/1 guest is in several zones and will be left out: db1/)).toBeTruthy()
+    expect(within(dialog).queryByText(/could not be computed/)).toBeNull()
     expect(applyButton(dialog).disabled).toBe(false)
+  })
+
+  it('keeps Apply blocked when unread guests come with a collision or another failure', async () => {
+    mock.routes['GET /runs/p1'] = () => reply(200, failedWith(planRun({ unread: [g101], collisions: ['pcz-web'] }), '1 guest(s) could not be read'))
+    const dialog = await openPlanDialog()
+    await within(dialog).findByText(/Blocked/)
+    expect(applyButton(dialog).disabled).toBe(true)
+    cleanup()
+
+    mock.routes['GET /runs/p1'] = () => reply(200, failedWith(planRun({ unread: [g101] }), 'save failed'))
+    const again = await openPlanDialog()
+    await within(again).findByText('The plan could not be computed: save failed')
+    expect(applyButton(again).disabled).toBe(true)
   })
 
   it('shows no warning for a clean plan', async () => {
@@ -158,12 +201,27 @@ describe('a plan of an older draft', () => {
     expect(calls('POST /plan')).toHaveLength(2)
   })
 
-  it('keeps a plan without a version usable', async () => {
+  it('reloads the policy when recomputing', async () => {
+    mock.routes['GET /runs/p1'] = () => reply(200, planRun({ version: 2 }))
+    const dialog = await openPlanDialog()
+    await within(dialog).findByText(/older draft/)
+    const reads = calls('GET /policy').length
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Recompute' }))
+    await waitFor(() => expect(calls('GET /policy').length).toBeGreaterThan(reads))
+  })
+
+  it('treats a plan without a version as stale once the draft has one, and usable for draft 0', async () => {
     mock.routes['GET /runs/p1'] = () => reply(200, planRun({ version: undefined }))
     const dialog = await openPlanDialog()
-    await within(dialog).findByText('Cluster objects')
-    expect(within(dialog).queryByText(/older draft/)).toBeNull()
-    expect(applyButton(dialog).disabled).toBe(false)
+    expect(await within(dialog).findByText(/older draft/)).toBeTruthy()
+    expect(applyButton(dialog).disabled).toBe(true)
+    cleanup()
+
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: REVISION_HEAD, pending_changes: true, version: 0 }))
+    const draftZero = await openPlanDialog()
+    await within(draftZero).findByText('Cluster objects')
+    expect(within(draftZero).queryByText(/older draft/)).toBeNull()
+    expect(applyButton(draftZero).disabled).toBe(false)
   })
 })
 

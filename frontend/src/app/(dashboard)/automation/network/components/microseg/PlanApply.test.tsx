@@ -9,7 +9,7 @@ import { cleanup, act, within } from '@testing-library/react'
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
 import { calls, mock, reply } from './microsegTestKit'
-import { applyRun, g101, g200, openPlanDialog, resetPlanMocks, step } from './planTestKit'
+import { applyRun, failedWith, g101, g200, openPlanDialog, planRun, resetPlanMocks, step } from './planTestKit'
 import { body } from './policyTestKit'
 
 beforeEach(() => resetPlanMocks())
@@ -122,14 +122,15 @@ describe('applying: errors', () => {
 describe('applying: the result', () => {
   it('shows failed steps per guest with their reasons, and the steps not run', async () => {
     mock.routes['POST /apply'] = () => reply(202, { run_id: 'a1' })
-    mock.routes['GET /runs/a1'] = () => reply(200, applyRun({
+    mock.routes['GET /runs/a1'] = () => reply(200, failedWith(applyRun({
       done: [step(0, 'ipset.create', 'Create ipset pcz-web'), step(1, 'group.create', 'Create security group pcz-web')],
       failed: [step(2, 'guest.tags', 'Tag web1 with zone-web', g101, 'guest is locked')],
       not_run: [step(5, 'guest.tags', 'Tag db1 with zone-db', g200, 'skipped after the failure on this node')],
-    }))
+    }), '1 step(s) failed, 1 not run'))
     const dialog = await openPlanDialog()
     await clickApply(dialog)
 
+    expect(await within(dialog).findByText('The apply run failed: 1 step(s) failed, 1 not run')).toBeTruthy()
     expect(await within(dialog).findByText('2 done, 1 failed, 1 not run')).toBeTruthy()
     expect(within(dialog).getByText('Failed steps')).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: /web1/ }))
@@ -143,19 +144,38 @@ describe('applying: the result', () => {
 
   it('shows the truncated notice when the write cap stopped the run', async () => {
     mock.routes['POST /apply'] = () => reply(202, { run_id: 'a1' })
-    mock.routes['GET /runs/a1'] = () => reply(200, applyRun({ truncated: true, not_run: [step(5, 'guest.tags', 'Tag db1', g200)] }))
+    mock.routes['GET /runs/a1'] = () => reply(200, failedWith(applyRun({ truncated: true, not_run: [step(5, 'guest.tags', 'Tag db1', g200)] }), '0 step(s) failed, 1 not run'))
     const dialog = await openPlanDialog()
     await clickApply(dialog)
     expect(await within(dialog).findByText('The run stopped at its write limit, the remaining steps were not run.')).toBeTruthy()
   })
 
-  it('shows the interrupted and held notices', async () => {
+  it('shows the interrupted notice of a run stopped by the emergency stop', async () => {
     mock.routes['POST /apply'] = () => reply(202, { run_id: 'a1' })
-    mock.routes['GET /runs/a1'] = () => reply(200, applyRun({ interrupted: true, held: true }))
+    mock.routes['GET /runs/a1'] = () => reply(200, failedWith(applyRun({ interrupted: true, not_run: [step(5, 'guest.tags', 'Tag db1', g200)] }), 'interrupted by the emergency stop'))
     const dialog = await openPlanDialog()
     await clickApply(dialog)
-    expect(await within(dialog).findByText('The run was interrupted, the remaining steps were not run.')).toBeTruthy()
-    expect(within(dialog).getByText('Nothing was written: writes are on hold. Confirm them in the banner, then apply again.')).toBeTruthy()
+    expect(await within(dialog).findByText('The apply run failed: interrupted by the emergency stop')).toBeTruthy()
+    expect(within(dialog).getByText('The run was interrupted, the remaining steps were not run.')).toBeTruthy()
+    expect(within(dialog).getByText('0 done, 0 failed, 1 not run')).toBeTruthy()
+  })
+
+  it('shows the held notice', async () => {
+    mock.routes['POST /apply'] = () => reply(202, { run_id: 'a1' })
+    mock.routes['GET /runs/a1'] = () => reply(200, applyRun({ held: true }))
+    const dialog = await openPlanDialog()
+    await clickApply(dialog)
+    expect(await within(dialog).findByText('Nothing was written: writes are on hold. Confirm them in the banner, then apply again.')).toBeTruthy()
+  })
+
+  it('applies an empty plan to record the revision', async () => {
+    mock.routes['GET /runs/p1'] = () => reply(200, planRun({ plan: [], steps: 0 }))
+    mock.routes['POST /apply'] = () => reply(202, { run_id: 'a1' })
+    mock.routes['GET /runs/a1'] = () => reply(200, applyRun({ plan: [], steps: 0 }))
+    const dialog = await openPlanDialog()
+    await clickApply(dialog)
+    expect(await within(dialog).findByText('0 done, 0 failed, 0 not run')).toBeTruthy()
+    expect(body(calls('POST /apply')[0][1] as RequestInit)).toEqual({ version: 3 })
   })
 
   it('shows no notice for a clean run', async () => {

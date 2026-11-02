@@ -12869,7 +12869,7 @@
       "stepCount": "{count, plural, one {# step} other {# steps}}",
       "collisions": "Blocked: these Proxmox objects use our names without being ours, rename or remove them: {names}",
       "foreignRules": "Rules added by hand in our security groups are kept, not touched: {names}",
-      "unread": "{count, plural, one {# guest} other {# guests}} could not be read and will be left out: {names}",
+      "unread": "{count, plural, one {# guest} other {# guests}} could not be read, they will be handled on the next pass: {names}",
       "ambiguous": "{count, plural, one {# guest is} other {# guests are}} in several zones and will be left out: {names}",
       "resultSummary": "{done} done, {failed} failed, {notRun} not run",
       "truncated": "The run stopped at its write limit, the remaining steps were not run.",
@@ -12880,7 +12880,8 @@
       "applyFailed": "The apply run failed.",
       "applyFailedWith": "The apply run failed: {error}",
       "errors": "Errors: {list}",
-      "notes": "Notes: {list}"
+      "notes": "Notes: {list}",
+      "nothingRecord": "Nothing to write in Proxmox: applying records the revision."
     }
   }
 }

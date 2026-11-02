@@ -12869,7 +12869,7 @@
       "stepCount": "{count, plural, one {# 个步骤} other {# 个步骤}}",
       "collisions": "已阻止：以下 Proxmox 对象使用了我们的名称但并非我们创建，请重命名或删除：{names}",
       "foreignRules": "手动添加到我们安全组中的规则将被保留，不会被改动：{names}",
-      "unread": "{count, plural, one {# 个客户机无法读取，将被跳过} other {# 个客户机无法读取，将被跳过}}：{names}",
+      "unread": "{count, plural, one {# 个客户机无法读取，将在下一轮处理} other {# 个客户机无法读取，将在下一轮处理}}：{names}",
       "ambiguous": "{count, plural, one {# 个客户机位于多个区域，将被跳过} other {# 个客户机位于多个区域，将被跳过}}：{names}",
       "resultSummary": "完成 {done}，失败 {failed}，未执行 {notRun}",
       "truncated": "运行在写入上限处停止，其余步骤未执行。",
@@ -12880,7 +12880,8 @@
       "applyFailed": "应用失败。",
       "applyFailedWith": "应用失败：{error}",
       "errors": "错误：{list}",
-      "notes": "备注：{list}"
+      "notes": "备注：{list}",
+      "nothingRecord": "无需写入 Proxmox：应用只会记录该修订。"
     }
   }
 }

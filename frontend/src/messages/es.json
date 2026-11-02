@@ -12737,6 +12737,7 @@
       "flowsTitle": "Flujos",
       "addZone": "Nueva zona",
       "addFlow": "Nuevo flujo",
+      "addFlowNeedsZone": "Cree primero una zona: un flujo une zonas, o una zona y un CIDR.",
       "zonesEmpty": "Aún no hay ninguna zona. Cree la primera para agrupar los invitados que se comunican entre sí.",
       "flowsEmpty": "Aún no hay ningún flujo. Añada uno para permitir el tráfico entre zonas.",
       "showDetails": "Mostrar detalles",
@@ -12755,8 +12756,6 @@
         "membersUnknown": "No se pudo leer la lista de invitados.",
         "memberSummary": "{count, plural, one {# miembro} other {# miembros}}, {running} en ejecución",
         "memberPending": "Pendiente",
-        "showAll": "Mostrar los {count}",
-        "showLess": "Mostrar menos",
         "incoming": "Flujos entrantes",
         "outgoing": "Flujos salientes",
         "noFlows": "Ninguno",
@@ -12842,13 +12841,13 @@
       },
       "run": {
         "running": {
-          "disabled": "{zone}: cambio a desactivada en curso",
-          "observe": "{zone}: cambio a observación en curso",
-          "enforce": "{zone}: cambio a aplicación en curso"
+          "disabled": "{label}: cambio a desactivada en curso",
+          "observe": "{label}: cambio a observación en curso",
+          "enforce": "{label}: cambio a aplicación en curso"
         },
-        "done": "{zone}: {done} hechos, {failed} fallidos, {notRun} sin ejecutar",
-        "failed": "{zone}: la ejecución ha fallado",
-        "unavailable": "{zone}: el progreso no está disponible"
+        "done": "{label}: {done} hechos, {failed} fallidos, {notRun} sin ejecutar",
+        "failed": "{label}: la ejecución ha fallado",
+        "unavailable": "{label}: el progreso no está disponible"
       }
     }
   }

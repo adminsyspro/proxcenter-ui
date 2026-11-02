@@ -18,6 +18,11 @@ describe('zoneMembers', () => {
     expect(members.every(m => !m.pending)).toBe(true)
   })
 
+  it('matches the tag whatever the case of the prefix, the zone name and the guest tags', () => {
+    const members = zoneMembers(zone('z1', { name: 'Web' }), 'Zone-', [guest(100, ['ZONE-WEB']), guest(101, ['zone-web']), guest(102, ['zone-db'])], [])
+    expect(members.map(m => m.ref.vmid)).toEqual([100, 101])
+  })
+
   it('adds the pending members of the zone that carry no tag yet, once', () => {
     const pending: PendingMember[] = [
       { id: 'p1', policy_id: 'p', node: 'pve1', type: 'qemu', vmid: 100, zone_id: 'z1' },

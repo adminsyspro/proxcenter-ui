@@ -12737,6 +12737,7 @@
       "flowsTitle": "플로우",
       "addZone": "새 영역",
       "addFlow": "새 플로우",
+      "addFlowNeedsZone": "먼저 영역을 만드세요. 플로우는 영역끼리 또는 영역과 CIDR을 연결합니다.",
       "zonesEmpty": "아직 영역이 없습니다. 서로 통신하는 게스트를 묶으려면 첫 영역을 만드세요.",
       "flowsEmpty": "아직 플로우가 없습니다. 영역 간 트래픽을 허용하려면 플로우를 추가하세요.",
       "showDetails": "세부 정보 보기",
@@ -12755,8 +12756,6 @@
         "membersUnknown": "게스트 목록을 읽을 수 없습니다.",
         "memberSummary": "{count, plural, other {구성원 #개}}, 실행 중 {running}개",
         "memberPending": "대기 중",
-        "showAll": "{count}개 모두 보기",
-        "showLess": "간략히 보기",
         "incoming": "수신 플로우",
         "outgoing": "송신 플로우",
         "noFlows": "없음",
@@ -12842,13 +12841,13 @@
       },
       "run": {
         "running": {
-          "disabled": "{zone}: 비활성으로 변경 중",
-          "observe": "{zone}: 관찰로 변경 중",
-          "enforce": "{zone}: 적용으로 변경 중"
+          "disabled": "{label}: 비활성으로 변경 중",
+          "observe": "{label}: 관찰로 변경 중",
+          "enforce": "{label}: 적용으로 변경 중"
         },
-        "done": "{zone}: 완료 {done}, 실패 {failed}, 미실행 {notRun}",
-        "failed": "{zone}: 실행에 실패했습니다",
-        "unavailable": "{zone}: 진행 상황을 확인할 수 없습니다"
+        "done": "{label}: 완료 {done}, 실패 {failed}, 미실행 {notRun}",
+        "failed": "{label}: 실행에 실패했습니다",
+        "unavailable": "{label}: 진행 상황을 확인할 수 없습니다"
       }
     }
   }

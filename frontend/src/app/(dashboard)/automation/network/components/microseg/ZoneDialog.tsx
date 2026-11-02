@@ -53,7 +53,7 @@ export default function ZoneDialog({ zone, onSave, onClose }: Props) {
   const t = useTranslations()
   const editing = zone !== null
   const [values, setValues] = useState<ZoneFormValues>({
-    name: zone?.name ?? '', label: zone?.label ?? '', color: zone?.color || ZONE_COLORS[0], isolate_members: zone?.isolate_members ?? false,
+    name: zone?.name ?? '', label: zone?.label ?? '', color: zone ? zone.color : ZONE_COLORS[0], isolate_members: zone?.isolate_members ?? false,
   })
   const [touched, setTouched] = useState(false)
   const { busy, error, run } = useDialogAction()
@@ -82,7 +82,7 @@ export default function ZoneDialog({ zone, onSave, onClose }: Props) {
             disabled={editing || busy}
             error={!!nameError}
             helperText={nameError ? t(nameError) : t('microsegPilot.policy.zoneDialog.nameHint')}
-            slotProps={{ htmlInput: { maxLength: 40 }, formHelperText: { sx: HELPER_SX } }}
+            slotProps={{ htmlInput: { maxLength: 14 }, formHelperText: { sx: HELPER_SX } }}
             size='small'
             fullWidth
             autoFocus={!editing}

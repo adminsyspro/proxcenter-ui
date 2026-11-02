@@ -25,9 +25,10 @@ const sameGuest = (g: PolicyGuest, r: GuestRef) => g.vmid === r.vmid && g.node =
  * plus the pending members queued for the zone that are not tagged yet.
  */
 export function zoneMembers(zone: MicrosegZone, tagPrefix: string, guests: PolicyGuest[], pending: PendingMember[]): ZoneMember[] {
-  const tag = `${tagPrefix}${zone.name}`
+  // PVE lowercases tags; the prefix and the zone name are compared the same way.
+  const tag = `${tagPrefix}${zone.name}`.toLowerCase()
   const tagged: ZoneMember[] = guests
-    .filter(g => g.tags.includes(tag))
+    .filter(g => g.tags.some(candidate => candidate.toLowerCase() === tag))
     .map(g => ({ ref: { node: g.node, type: g.type, vmid: g.vmid }, guest: g, pending: false }))
 
   const queued: ZoneMember[] = []

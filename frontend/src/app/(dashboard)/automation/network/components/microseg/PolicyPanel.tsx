@@ -17,21 +17,20 @@ import ZoneDialog from './ZoneDialog'
 import ZoneEnforceDialog from './ZoneEnforceDialog'
 import type { ZoneFormValues } from './zoneForm'
 import ZoneList from './ZoneList'
-import ZoneRunLine from './ZoneRunLine'
 import { useZoneGuests } from './useZoneGuests'
 
 const DEFAULT_READY_AFTER_HOURS = 24
 
 type Editing<T> = { item: T | null } | null
 type Deleting = { kind: 'zone'; zone: MicrosegZone } | { kind: 'flow'; flow: MicrosegFlow } | null
-type StateRun = { runId: string; zoneName: string; state: ZoneState }
 
 /**
  * The Policy sub-tab: zones and flows of the draft. Every write carries the
  * draft version; a VERSION_CONFLICT reloads the policy and keeps the dialog
- * (and its input) open. A zone state change starts a run, followed on one line.
+ * (and its input) open. A zone state change starts a run, followed in the strip
+ * of the tab (it survives a switch of sub-tab).
  */
-export default function PolicyPanel({ connectionId, policy, reloadPolicy }: MicrosegSubTabProps) {
+export default function PolicyPanel({ connectionId, policy, reloadPolicy, startRun }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.policy')
   const api = microsegApi(connectionId)
   const { guests, status: guestsStatus } = useZoneGuests(connectionId)
@@ -40,7 +39,6 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy }: Micr
   const [flowDialog, setFlowDialog] = useState<Editing<MicrosegFlow>>(null)
   const [deleting, setDeleting] = useState<Deleting>(null)
   const [enforcing, setEnforcing] = useState<MicrosegZone | null>(null)
-  const [stateRun, setStateRun] = useState<StateRun | null>(null)
   const [actionError, setActionError] = useState<unknown>(null)
   const removal = useDialogAction()
 
@@ -87,7 +85,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy }: Micr
 
   const startState = (zone: MicrosegZone, state: ZoneState) => write(async () => {
     const started = await api.setZoneState(zone.id, state, policy.version)
-    setStateRun({ runId: started.run_id, zoneName: zone.name, state })
+    startRun({ runId: started.run_id, kind: 'zoneState', label: zone.name, runningText: t(`run.running.${state}`, { label: zone.name }) })
   })
 
   const onSetState = (zone: MicrosegZone, state: ZoneState) => {
@@ -102,17 +100,6 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy }: Micr
   return (
     <Box>
       {actionError != null && <MicrosegErrorAlert error={actionError} onClose={() => setActionError(null)} />}
-      {stateRun && (
-        <ZoneRunLine
-          key={stateRun.runId}
-          connectionId={connectionId}
-          runId={stateRun.runId}
-          zoneName={stateRun.zoneName}
-          state={stateRun.state}
-          onFinished={refresh}
-          onDismiss={() => setStateRun(null)}
-        />
-      )}
 
       <ZoneList
         zones={policy.zones}

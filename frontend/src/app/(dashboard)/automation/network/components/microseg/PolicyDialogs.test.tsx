@@ -69,6 +69,22 @@ describe('zone dialog', () => {
     expect((within(dialog).getByLabelText('Name') as HTMLInputElement).value).toBe('db')
   })
 
+  it('limits the name input to 14 characters', async () => {
+    const dialog = await open()
+    expect(within(dialog).getByLabelText('Name').getAttribute('maxlength')).toBe('14')
+  })
+
+  it('keeps an empty color empty when a zone is edited', async () => {
+    mock.routes['PUT /zones/zd'] = () => reply(200, { version: 4, zone: db() })
+    setup({ zones: [db({ color: '', label: 'Data' })] })
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit zone' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Label'), { target: { value: 'Databases' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(calls('PUT /zones/zd')).toHaveLength(1))
+    expect(body(calls('PUT /zones/zd')[0][1] as RequestInit).color).toBe('')
+  })
+
   it('edits a zone through PUT and does not offer to rename the state', async () => {
     mock.routes['PUT /zones/zd'] = () => reply(200, { version: 4, zone: db() })
     setup({ zones: [db({ state: 'observe', label: 'Data' })] })

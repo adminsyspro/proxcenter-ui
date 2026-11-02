@@ -12738,6 +12738,7 @@
       "flowsTitle": "Flux",
       "addZone": "Nouvelle zone",
       "addFlow": "Nouveau flux",
+      "addFlowNeedsZone": "Créez d'abord une zone : un flux relie des zones, ou une zone et un CIDR.",
       "zonesEmpty": "Aucune zone pour l'instant. Créez la première pour regrouper les invités qui communiquent entre eux.",
       "flowsEmpty": "Aucun flux pour l'instant. Ajoutez-en un pour autoriser le trafic entre des zones.",
       "showDetails": "Afficher les détails",
@@ -12756,8 +12757,6 @@
         "membersUnknown": "La liste des invités n'a pas pu être lue.",
         "memberSummary": "{count, plural, one {# membre} other {# membres}}, {running} en marche",
         "memberPending": "En attente",
-        "showAll": "Tout afficher ({count})",
-        "showLess": "Afficher moins",
         "incoming": "Flux entrants",
         "outgoing": "Flux sortants",
         "noFlows": "Aucun",
@@ -12843,13 +12842,13 @@
       },
       "run": {
         "running": {
-          "disabled": "{zone} : passage en désactivé en cours",
-          "observe": "{zone} : passage en observation en cours",
-          "enforce": "{zone} : passage en application en cours"
+          "disabled": "{label} : passage en désactivé en cours",
+          "observe": "{label} : passage en observation en cours",
+          "enforce": "{label} : passage en application en cours"
         },
-        "done": "{zone} : {done} faites, {failed} en échec, {notRun} non exécutées",
-        "failed": "{zone} : l'exécution a échoué",
-        "unavailable": "{zone} : la progression n'est pas disponible"
+        "done": "{label} : {done} faites, {failed} en échec, {notRun} non exécutées",
+        "failed": "{label} : l'exécution a échoué",
+        "unavailable": "{label} : la progression n'est pas disponible"
       }
     }
   }

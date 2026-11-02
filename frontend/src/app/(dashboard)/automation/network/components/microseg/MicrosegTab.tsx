@@ -1,16 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Alert, Box, CircularProgress, Tab, Tabs, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
+import { useSWRConfig } from 'swr'
 
+import { microsegBaseUrl } from '@/lib/microseg/api'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 
 import FirstRunGuide from './FirstRunGuide'
 import MicrosegBanner from './MicrosegBanner'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PolicyPanel from './PolicyPanel'
-import { MICROSEG_SUBTABS, isMicrosegSubTab, type MicrosegSubTab, type MicrosegSubTabProps } from './microsegTabTypes'
+import RunStrip from './RunStrip'
+import { MICROSEG_SUBTABS, isMicrosegSubTab, type MicrosegSubTab, type MicrosegSubTabProps, type TrackedRun } from './microsegTabTypes'
 
 const STORAGE_KEY = 'microseg.subTab'
 
@@ -58,6 +61,19 @@ export default function MicrosegTab({ connectionId, onOpenPlan }: Props) {
   // Read once: nothing of the sub-tab shows before the policy has loaded, so this never differs from a server render.
   const [subTab, setSubTab] = useState<MicrosegSubTab>(() => readStoredSubTab() ?? 'overview')
 
+  // The runs live here, not in a sub-tab: switching sub-tab must not lose them.
+  const [runs, setRuns] = useState<TrackedRun[]>([])
+  const { mutate } = useSWRConfig()
+
+  const startRun = useCallback((run: TrackedRun) => {
+    setRuns(prev => (prev.some(r => r.runId === run.runId) ? prev : [...prev, run]))
+  }, [])
+  const removeRun = useCallback((runId: string) => setRuns(prev => prev.filter(r => r.runId !== runId)), [])
+  const refreshAfterRun = useCallback(() => {
+    void reload()
+    void mutate(`${microsegBaseUrl(connectionId)}/status`)
+  }, [reload, mutate, connectionId])
+
   const goToSubTab = (tab: MicrosegSubTab) => {
     setSubTab(tab)
     storeSubTab(tab)
@@ -81,11 +97,12 @@ export default function MicrosegTab({ connectionId, onOpenPlan }: Props) {
   }
 
   const firstRun = !policy.last_revision && policy.zones.length === 0
-  const contentProps: MicrosegSubTabProps = { connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan }
+  const contentProps: MicrosegSubTabProps = { connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun }
 
   return (
     <Box sx={{ p: 3 }}>
       <MicrosegBanner connectionId={connectionId} policy={policy} onOpenPlan={onOpenPlan} />
+      <RunStrip connectionId={connectionId} runs={runs} onFinished={refreshAfterRun} onRemove={removeRun} />
       {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={onOpenPlan} />}
       <Tabs value={subTab} onChange={(_, v: MicrosegSubTab) => goToSubTab(v)} variant='scrollable' scrollButtons='auto' aria-label={t('subTabs.label')}>
         {MICROSEG_SUBTABS.map(tab => (

@@ -58,6 +58,25 @@ describe('zone list', () => {
     expect(row.querySelector('i.ri-instance-fill')).toBeTruthy()
   })
 
+  it('paginates the members under the chevron', async () => {
+    const vms = Array.from({ length: 12 }, (_, i) => vm(100 + i, `web-${String(i).padStart(2, '0')}`, ['zone-web']))
+    setup({ zones: [web()], vms })
+    const row = await screen.findByRole('listitem', { name: 'web' })
+    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    expect(await within(row).findByText('web-09')).toBeTruthy()
+    expect(within(row).queryByText('web-10')).toBeNull()
+    expect(within(row).queryByRole('button', { name: /show all/i })).toBeNull()
+    fireEvent.click(within(row).getByRole('button', { name: /next page/i }))
+    expect(await within(row).findByText('web-10')).toBeTruthy()
+    expect(within(row).queryByText('web-00')).toBeNull()
+  })
+
+  it('matches the zone tag whatever the case', async () => {
+    setup({ zones: [web()], vms: [vm(100, 'upper', ['Zone-Web']), vm(101, 'lower', ['zone-web'])] })
+    const row = await screen.findByRole('listitem', { name: 'web' })
+    expect(await within(row).findByText(/2 members/)).toBeTruthy()
+  })
+
   it('lists the incoming and outgoing flows of a zone under the chevron', async () => {
     const out: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: 'zd' }
     const inn: MicrosegFlow = { ...flow('f2'), src_zone_id: 'zd', dst_zone_id: 'zw', dport: '8080' }
@@ -72,6 +91,14 @@ describe('zone list', () => {
 })
 
 describe('flow list', () => {
+  it('explains why New flow is disabled while there is no zone', async () => {
+    setup()
+    const button = await screen.findByRole('button', { name: 'New flow' })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.mouseOver(button.parentElement as HTMLElement)
+    expect(await screen.findByText('Create a zone first: a flow links zones or a zone and a CIDR.')).toBeTruthy()
+  })
+
   it('shows the pill "not applied" on a flow whose destination is a CIDR, in the list and under the zone', async () => {
     const toCidr: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: '', dst_cidr: '10.0.0.0/8', dport: '53', proto: 'udp' }
     const toZone: MicrosegFlow = { ...flow('f2'), src_zone_id: 'zw', dst_zone_id: 'zd' }

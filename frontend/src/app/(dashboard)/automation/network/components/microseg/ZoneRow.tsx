@@ -1,18 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { Box, Button, Chip, Collapse, IconButton, Menu, MenuItem, Tooltip, Typography } from '@mui/material'
+import { Box, Chip, Collapse, IconButton, Menu, MenuItem, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import type { MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
 import FlowSummary from './FlowSummary'
+import PolicyPager, { usePaged } from './PolicyPager'
 import { flowsOfZone, type ZoneMember } from './zoneModel'
 
 const STATES: ZoneState[] = ['observe', 'enforce', 'disabled']
 const STATE_DOT: Record<ZoneState, string> = { disabled: '#9e9e9e', observe: '#ed6c02', enforce: '#4caf50' }
-const MEMBER_PREVIEW = 10
 
 export type ZoneRowProps = {
   zone: MicrosegZone
@@ -77,21 +77,16 @@ function FlowLines({ title, flows, zonesById }: { title: string; flows: Microseg
 
 function ZoneDetails({ zone, members, membersKnown, flows, zonesById }: Pick<ZoneRowProps, 'zone' | 'members' | 'membersKnown' | 'flows' | 'zonesById'>) {
   const t = useTranslations('microsegPilot.policy.zone')
-  const [all, setAll] = useState(false)
+  const paged = usePaged(members)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
-  const shown = all ? members : members.slice(0, MEMBER_PREVIEW)
 
   return (
     <Box sx={{ pl: 7, pr: 2, pb: 1.5, minWidth: 0 }}>
       <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('membersTitle')}</Typography>
       {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
       {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
-      {shown.map(m => <MemberLine key={`${m.ref.node}/${m.ref.type}/${m.ref.vmid}`} member={m} />)}
-      {members.length > MEMBER_PREVIEW && (
-        <Button size='small' onClick={() => setAll(v => !v)} sx={{ textTransform: 'none' }}>
-          {all ? t('showLess') : t('showAll', { count: members.length })}
-        </Button>
-      )}
+      {paged.rows.map(m => <MemberLine key={`${m.ref.node}/${m.ref.type}/${m.ref.vmid}`} member={m} />)}
+      <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
       <FlowLines title={t('incoming')} flows={incoming} zonesById={zonesById} />
       <FlowLines title={t('outgoing')} flows={outgoing} zonesById={zonesById} />
     </Box>

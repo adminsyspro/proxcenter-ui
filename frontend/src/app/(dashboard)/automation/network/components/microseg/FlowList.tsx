@@ -58,9 +58,14 @@ export default function FlowList({ flows, zones, onAdd, onEdit, onDelete }: Prop
     <Box component='section' aria-label={t('flowsTitle')} sx={{ mt: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
         <Typography variant='subtitle1' fontWeight={600} sx={{ flex: 1 }}>{t('flowsTitle')}</Typography>
-        <Button size='small' variant='outlined' startIcon={<i className='ri-add-line' />} onClick={onAdd} disabled={zones.length === 0}>
-          {t('addFlow')}
-        </Button>
+        {/* A disabled button fires no hover: the tooltip sits on a wrapper. */}
+        <Tooltip title={zones.length === 0 ? t('addFlowNeedsZone') : ''}>
+          <Box component='span'>
+            <Button size='small' variant='outlined' startIcon={<i className='ri-add-line' />} onClick={onAdd} disabled={zones.length === 0}>
+              {t('addFlow')}
+            </Button>
+          </Box>
+        </Tooltip>
       </Box>
       {flows.length === 0 ? (
         <Typography color='text.secondary' sx={{ py: 2 }}>{t('flowsEmpty')}</Typography>

@@ -12737,6 +12737,7 @@
       "flowsTitle": "Flows",
       "addZone": "New zone",
       "addFlow": "New flow",
+      "addFlowNeedsZone": "Create a zone first: a flow links zones or a zone and a CIDR.",
       "zonesEmpty": "No zone yet. Create the first one to group the guests that talk to each other.",
       "flowsEmpty": "No flow yet. Add one to allow traffic between zones.",
       "showDetails": "Show details",
@@ -12755,8 +12756,6 @@
         "membersUnknown": "The guest list could not be read.",
         "memberSummary": "{count, plural, one {# member} other {# members}}, {running} running",
         "memberPending": "Pending",
-        "showAll": "Show all {count}",
-        "showLess": "Show less",
         "incoming": "Incoming flows",
         "outgoing": "Outgoing flows",
         "noFlows": "None",
@@ -12842,13 +12841,13 @@
       },
       "run": {
         "running": {
-          "disabled": "{zone}: change to disabled in progress",
-          "observe": "{zone}: change to observation in progress",
-          "enforce": "{zone}: change to enforcement in progress"
+          "disabled": "{label}: change to disabled in progress",
+          "observe": "{label}: change to observation in progress",
+          "enforce": "{label}: change to enforcement in progress"
         },
-        "done": "{zone}: {done} done, {failed} failed, {notRun} not run",
-        "failed": "{zone}: the run failed",
-        "unavailable": "{zone}: progress is not available"
+        "done": "{label}: {done} done, {failed} failed, {notRun} not run",
+        "failed": "{label}: the run failed",
+        "unavailable": "{label}: progress is not available"
       }
     }
   }

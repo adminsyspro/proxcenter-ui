@@ -8,6 +8,17 @@ export function isMicrosegSubTab(value: unknown): value is MicrosegSubTab {
   return typeof value === 'string' && (MICROSEG_SUBTABS as readonly string[]).includes(value)
 }
 
+/** A run followed in the strip under the banner, whatever sub-tab is shown. */
+export type TrackedRun = {
+  runId: string
+  /** What started it ("zoneState" today; the plan and apply runs of the plan window reuse the strip). */
+  kind: string
+  /** Names the run in its finished messages (a zone name, "Plan"...). */
+  label: string
+  /** The translated line shown while it runs. */
+  runningText: string
+}
+
 /** What MicrosegTab hands to the content of each sub-tab. */
 export type MicrosegSubTabProps = {
   connectionId: string
@@ -17,4 +28,6 @@ export type MicrosegSubTabProps = {
   goToSubTab: (tab: MicrosegSubTab) => void
   /** Undefined until the plan view is wired: buttons that open it must be disabled. */
   onOpenPlan?: () => void
+  /** Follow a run in the strip under the banner; the policy and the status are refreshed when it ends. */
+  startRun: (run: TrackedRun) => void
 }

@@ -12405,6 +12405,7 @@
       "flowsTitle": "Flüsse",
       "addZone": "Neue Zone",
       "addFlow": "Neuer Fluss",
+      "addFlowNeedsZone": "Legen Sie zuerst eine Zone an: Ein Fluss verbindet Zonen oder eine Zone und ein CIDR.",
       "zonesEmpty": "Noch keine Zone. Legen Sie die erste an, um die Gäste zu gruppieren, die miteinander kommunizieren.",
       "flowsEmpty": "Noch kein Fluss. Fügen Sie einen hinzu, um Verkehr zwischen Zonen zu erlauben.",
       "showDetails": "Details anzeigen",
@@ -12423,8 +12424,6 @@
         "membersUnknown": "Die Gästeliste konnte nicht gelesen werden.",
         "memberSummary": "{count, plural, one {# Mitglied} other {# Mitglieder}}, {running} laufend",
         "memberPending": "Ausstehend",
-        "showAll": "Alle {count} anzeigen",
-        "showLess": "Weniger anzeigen",
         "incoming": "Eingehende Flüsse",
         "outgoing": "Ausgehende Flüsse",
         "noFlows": "Keine",
@@ -12510,13 +12509,13 @@
       },
       "run": {
         "running": {
-          "disabled": "{zone}: Wechsel zu deaktiviert läuft",
-          "observe": "{zone}: Wechsel zu Beobachtung läuft",
-          "enforce": "{zone}: Wechsel zu Durchsetzung läuft"
+          "disabled": "{label}: Wechsel zu deaktiviert läuft",
+          "observe": "{label}: Wechsel zu Beobachtung läuft",
+          "enforce": "{label}: Wechsel zu Durchsetzung läuft"
         },
-        "done": "{zone}: {done} erledigt, {failed} fehlgeschlagen, {notRun} nicht ausgeführt",
-        "failed": "{zone}: der Lauf ist fehlgeschlagen",
-        "unavailable": "{zone}: Fortschritt nicht verfügbar"
+        "done": "{label}: {done} erledigt, {failed} fehlgeschlagen, {notRun} nicht ausgeführt",
+        "failed": "{label}: der Lauf ist fehlgeschlagen",
+        "unavailable": "{label}: Fortschritt nicht verfügbar"
       }
     }
   }

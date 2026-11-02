@@ -12737,6 +12737,7 @@
       "flowsTitle": "流量规则",
       "addZone": "新建区域",
       "addFlow": "新建流量规则",
+      "addFlowNeedsZone": "请先创建区域：流量规则连接区域之间，或区域与 CIDR 之间。",
       "zonesEmpty": "还没有区域。创建第一个区域，把相互通信的客户机归为一组。",
       "flowsEmpty": "还没有流量规则。添加一条以允许区域之间的流量。",
       "showDetails": "显示详情",
@@ -12755,8 +12756,6 @@
         "membersUnknown": "无法读取客户机列表。",
         "memberSummary": "{count, plural, other {# 个成员}}，{running} 个运行中",
         "memberPending": "待处理",
-        "showAll": "显示全部 {count} 项",
-        "showLess": "收起",
         "incoming": "入站流量规则",
         "outgoing": "出站流量规则",
         "noFlows": "无",
@@ -12842,13 +12841,13 @@
       },
       "run": {
         "running": {
-          "disabled": "{zone}：正在切换到停用",
-          "observe": "{zone}：正在切换到观察",
-          "enforce": "{zone}：正在切换到强制执行"
+          "disabled": "{label}：正在切换到停用",
+          "observe": "{label}：正在切换到观察",
+          "enforce": "{label}：正在切换到强制执行"
         },
-        "done": "{zone}：{done} 个已完成，{failed} 个失败，{notRun} 个未执行",
-        "failed": "{zone}：运行失败",
-        "unavailable": "{zone}：无法获取进度"
+        "done": "{label}：{done} 个已完成，{failed} 个失败，{notRun} 个未执行",
+        "failed": "{label}：运行失败",
+        "unavailable": "{label}：无法获取进度"
       }
     }
   }

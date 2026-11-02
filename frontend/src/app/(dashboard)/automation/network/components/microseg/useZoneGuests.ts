@@ -14,7 +14,7 @@ type VmsResponse = {
  * Zone members are the guests tagged `<tag_prefix><zone name>`.
  */
 export function useZoneGuests(connectionId: string) {
-  const { data, error } = useSWRFetch<VmsResponse>(`/api/v1/vms?connId=${encodeURIComponent(connectionId)}`)
+  const { data, error } = useSWRFetch<VmsResponse>(`/api/v1/vms?connId=${encodeURIComponent(connectionId)}`, { revalidateOnFocus: false })
 
   const guests = useMemo<PolicyGuest[]>(
     () => (data?.data?.vms ?? [])

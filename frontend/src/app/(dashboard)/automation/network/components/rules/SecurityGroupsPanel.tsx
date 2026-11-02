@@ -16,6 +16,7 @@ import { ruleToFormData } from './shared/ruleToFormData'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
 import { PolicySection } from '../../types'
+import FirewallLoadAlert from '../FirewallLoadAlert'
 import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
 import RulesTableHead from './shared/RulesTableHead'
 import SecurityGroupMembersDialog from './shared/SecurityGroupMembersDialog'
@@ -37,6 +38,8 @@ interface SecurityGroupsPanelProps {
   totalRules: number
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
+  /** What failed on the last load of the firewall data, null when it all loaded. */
+  loadError?: string | null
   reload: () => void
   reloadVMFirewallRules: (vm: VMFirewallInfo) => Promise<void>
 }
@@ -79,7 +82,7 @@ function computeScopeRefs(
 
 export default function SecurityGroupsPanel({
   securityGroups, vmFirewallData, loadingVMRules, guestsNotScanned, clusterRules, hostRulesByNode,
-  firewallMode, selectedConnection, totalRules, aliases, ipsets, reload, reloadVMFirewallRules
+  firewallMode, selectedConnection, totalRules, aliases, ipsets, loadError, reload, reloadVMFirewallRules
 }: SecurityGroupsPanelProps) {
   const theme = useTheme()
   const t = useTranslations()
@@ -508,6 +511,8 @@ export default function SecurityGroupsPanel({
 
   return (
     <Box sx={{ p: 3 }}>
+      <FirewallLoadAlert error={loadError} onRetry={reload} />
+
       {/* Toolbar */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>

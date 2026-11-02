@@ -12,16 +12,20 @@ import {
 import * as firewallAPI from '@/lib/api/firewall'
 import { useToast } from '@/contexts/ToastContext'
 
+import FirewallLoadAlert from './FirewallLoadAlert'
+
 interface ObjectsTabProps {
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
   selectedConnection: string
   loading: boolean
+  /** What failed on the last load of the firewall data, null when it all loaded. */
+  loadError?: string | null
   reload: () => void
   view?: 'aliases' | 'ipsets'
 }
 
-export default function ObjectsTab({ aliases, ipsets, selectedConnection, loading, reload, view }: ObjectsTabProps) {
+export default function ObjectsTab({ aliases, ipsets, selectedConnection, loading, loadError, reload, view }: ObjectsTabProps) {
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
@@ -140,6 +144,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
 
   return (
     <Box sx={{ p: 3 }}>
+      <FirewallLoadAlert error={loadError} onRetry={reload} />
+
       {/* ── Aliases Section ── */}
       {(!view || view === 'aliases') && <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.15)}`, mb: 3 }}>
         <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>

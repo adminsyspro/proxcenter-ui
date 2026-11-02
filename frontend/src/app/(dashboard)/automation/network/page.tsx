@@ -113,26 +113,6 @@ export default function NetworkAutomationPage() {
     <EnterpriseGuard requiredFeature={Features.MICROSEGMENTATION} featureName="Microsegmentation / Firewall">
       <Box sx={{ p: 3 }}>
 
-        {/* Connection Selector */}
-        <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            <FormControl size="small" sx={{ minWidth: 200 }}>
-              <InputLabel>{t('firewall.connection')}</InputLabel>
-              <Select value={selectedConnection} label={t('firewall.connection')} onChange={(e) => {
-                setSelectedConnection(e.target.value)
-                setVMFirewallData([])
-              }}>
-                {connections.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <IconButton onClick={loadFirewallData} disabled={loading || !selectedConnection} size="small">
-              <i className={`ri-refresh-line ${loading ? 'animate-spin' : ''}`} />
-            </IconButton>
-          </Box>
-        </Box>
-
         {!selectedConnection && (
           <Alert severity="info" sx={{ mb: 3 }}>
             {t('networkPage.noPveConnection')}
@@ -141,7 +121,8 @@ export default function NetworkAutomationPage() {
 
         {/* Main Content Card */}
         <Card sx={{ background: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(10px)', border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 3 }}>
-          <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+          <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, flex: '1 1 460px', minWidth: 0 }}>
             <Tab icon={<i className="ri-dashboard-line" />} iconPosition="start" label={t('firewall.dashboard')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-shield-flash-line" />} iconPosition="start" label={t('networkPage.tabFirewalling')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-price-tag-3-line" />} iconPosition="start" label={t('networkPage.tabAliases')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
@@ -150,6 +131,24 @@ export default function NetworkAutomationPage() {
             <Tab icon={<i className="ri-terminal-box-line" />} iconPosition="start" label={t('networkPage.tabLogging')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-shield-keyhole-line" />} iconPosition="start" label={t('microsegPilot.tab.title')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
           </Tabs>
+            {/* Connection selector: right end of the tabs row, below the tabs on a narrow width */}
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0, ml: 'auto', px: 2, py: 1 }}>
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel>{t('firewall.connection')}</InputLabel>
+                <Select value={selectedConnection} label={t('firewall.connection')} onChange={(e) => {
+                  setSelectedConnection(e.target.value)
+                  setVMFirewallData([])
+                }}>
+                  {connections.map((c) => (
+                    <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <IconButton onClick={loadFirewallData} disabled={loading || !selectedConnection} size="small">
+                <i className={`ri-refresh-line ${loading ? 'animate-spin' : ''}`} />
+              </IconButton>
+            </Box>
+          </Box>
 
           {/* Tab 0: Dashboard */}
           {activeTab === 0 && (
@@ -167,6 +166,7 @@ export default function NetworkAutomationPage() {
               totalRules={totalRules}
               totalIPSetEntries={totalIPSetEntries}
               nodesList={nodesList}
+              loadError={firewallLoadError || null}
               reload={loadFirewallData}
               onNavigateTab={setActiveTab}
               onNavigateRulesSubTab={setRulesSubTab}
@@ -197,6 +197,7 @@ export default function NetworkAutomationPage() {
               firewallMode={firewallMode}
               totalRules={totalRules}
               selectedConnection={selectedConnection}
+              loadError={firewallLoadError || null}
               reload={loadFirewallData}
             />
           )}
@@ -208,6 +209,7 @@ export default function NetworkAutomationPage() {
               ipsets={ipsets}
               selectedConnection={selectedConnection}
               loading={loading}
+              loadError={firewallLoadError || null}
               reload={loadFirewallData}
               view="aliases"
             />
@@ -220,6 +222,7 @@ export default function NetworkAutomationPage() {
               ipsets={ipsets}
               selectedConnection={selectedConnection}
               loading={loading}
+              loadError={firewallLoadError || null}
               reload={loadFirewallData}
               view="ipsets"
             />
@@ -239,6 +242,7 @@ export default function NetworkAutomationPage() {
               totalRules={totalRules}
               aliases={aliases}
               ipsets={ipsets}
+              loadError={firewallLoadError || null}
               reload={loadFirewallData}
               reloadVMFirewallRules={reloadVMFirewallRules}
             />

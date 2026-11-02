@@ -39,10 +39,10 @@ vi.mock('@/hooks/useHostFirewallRules', () => ({
     reloadHostRulesForNode: vi.fn(), setHostRulesByNode: vi.fn(),
   }),
 }))
-vi.mock('./components/DashboardTab', () => ({ default: () => <div>dashboard tab</div> }))
-vi.mock('./components/RulesTab', () => ({ default: () => <div>rules tab</div> }))
-vi.mock('./components/ObjectsTab', () => ({ default: () => <div>objects tab</div> }))
-vi.mock('./components/rules/SecurityGroupsPanel', () => ({ default: () => <div>groups tab</div> }))
+vi.mock('./components/DashboardTab', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>dashboard tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
+vi.mock('./components/RulesTab', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>rules tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
+vi.mock('./components/ObjectsTab', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>objects tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
+vi.mock('./components/rules/SecurityGroupsPanel', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>groups tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
 vi.mock('./components/LoggingTab', () => ({ default: () => <div>logging tab</div> }))
 vi.mock('./components/microseg/MicrosegTab', () => ({ default: () => <div>microseg tab</div> }))
 
@@ -55,18 +55,40 @@ const STAT_SUBVALUES = [/named networks/i, /entries$/i, /Firewall (active|inacti
 const expectNoSummary = () => {
   for (const subvalue of STAT_SUBVALUES) expect(screen.queryByText(subvalue)).not.toBeInTheDocument()
   expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument()
-  expect(screen.queryByText(/cluster rules unreadable/)).not.toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 }
 
 describe('network page header', () => {
+  it('puts the connection selector on the row of the tabs, at its right end', async () => {
+    renderWithProviders(<NetworkAutomationPage />)
+    await screen.findByText(/dashboard tab/)
+
+    const tablist = screen.getByRole('tablist')
+    const selector = screen.getByRole('combobox')
+    const row = tablist.closest('.MuiTabs-root')!.parentElement!
+    expect(row.contains(selector)).toBe(true)
+    expect(row.contains(screen.getByRole('button', { name: '' }))).toBe(true)
+    const children = [...row.children]
+    expect(children[0]).toBe(tablist.closest('.MuiTabs-root'))
+    expect(children[children.length - 1].contains(selector)).toBe(true)
+  })
+
+  it('still selects the connection and refreshes from the selector', async () => {
+    renderWithProviders(<NetworkAutomationPage />)
+    await screen.findByText(/dashboard tab/)
+
+    expect(screen.getByRole('combobox')).toHaveTextContent('lab')
+    expect(screen.getByRole('button', { name: '' })).toBeEnabled()
+  })
+
   it('shows no StatCard and no firewall load error above the tabs, on any tab', async () => {
     renderWithProviders(<NetworkAutomationPage />)
-    expect(await screen.findByText('dashboard tab')).toBeInTheDocument()
+    expect(await screen.findByText(/dashboard tab/)).toBeInTheDocument()
     expectNoSummary()
 
     for (const [tab, content] of [['Logging', 'logging tab'], ['Micro-segmentation', 'microseg tab'], ['Aliases', 'objects tab']] as const) {
       fireEvent.click(screen.getByRole('tab', { name: tab }))
-      expect(await screen.findByText(content)).toBeInTheDocument()
+      expect(await screen.findByText(new RegExp(content))).toBeInTheDocument()
       expectNoSummary()
     }
   })
@@ -74,8 +96,20 @@ describe('network page header', () => {
   it('logs the load error to the console so a broken backend stays diagnosable', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     renderWithProviders(<NetworkAutomationPage />)
-    await screen.findByText('dashboard tab')
+    await screen.findByText(/dashboard tab/)
     expect(log).toHaveBeenCalledWith('Network security: firewall data could not be loaded:', 'cluster rules unreadable')
     log.mockRestore()
+  })
+})
+
+describe('network page load error', () => {
+  it('hands the load error to the tabs that list firewall data', async () => {
+    renderWithProviders(<NetworkAutomationPage />)
+    expect(await screen.findByText('dashboard tab (error: cluster rules unreadable)')).toBeInTheDocument()
+
+    for (const [tab, content] of [['Firewalling', 'rules tab'], ['Aliases', 'objects tab'], ['IP Sets', 'objects tab'], ['Security Groups', 'groups tab']] as const) {
+      fireEvent.click(screen.getByRole('tab', { name: tab }))
+      expect(await screen.findByText(`${content} (error: cluster rules unreadable)`)).toBeInTheDocument()
+    }
   })
 })

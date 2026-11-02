@@ -13,6 +13,7 @@ import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 import DeploymentWizard from './DeploymentWizard'
+import FirewallLoadAlert from './FirewallLoadAlert'
 import MicrosegSummaryCard from './microseg/MicrosegSummaryCard'
 
 interface DashboardTabProps {
@@ -30,6 +31,8 @@ interface DashboardTabProps {
   totalRules: number
   totalIPSetEntries: number
   nodesList: string[]
+  /** What failed on the last load of the firewall data, null when it all loaded. */
+  loadError?: string | null
   // Handlers
   reload: () => void
   // Navigation
@@ -67,7 +70,7 @@ const BreakdownRow = ({ icon, label, points, reason }: {
 export default function DashboardTab({
   vmFirewallData, loadingVMRules, firewallMode, currentOptions,
   selectedConnection, clusterOptions, clusterRules, nodesList,
-  securityGroups, totalRules,
+  securityGroups, totalRules, loadError,
   reload, onNavigateTab, onNavigateRulesSubTab
 }: DashboardTabProps) {
   const theme = useTheme()
@@ -75,8 +78,10 @@ export default function DashboardTab({
   const [deployWizardOpen, setDeployWizardOpen] = useState(false)
   const [showBreakdown, setShowBreakdown] = useState(false)
 
-  // Virgin cluster detection (works for both cluster and standalone — PVE always has cluster-level firewall)
-  const isVirginCluster = clusterOptions?.enable !== 1
+  // Virgin cluster detection (works for both cluster and standalone — PVE always has cluster-level firewall).
+  // Never on a failed load: missing options would read as a cluster nobody configured, and offer to deploy over it.
+  const isVirginCluster = !loadError
+    && clusterOptions?.enable !== 1
     && clusterRules.length === 0
 
   // Compute shared metrics
@@ -102,6 +107,8 @@ export default function DashboardTab({
 
   return (
     <Box sx={{ p: 3 }}>
+      <FirewallLoadAlert error={loadError} onRetry={reload} />
+
       {/* Virgin cluster banner */}
       {isVirginCluster && selectedConnection && (
         <Paper sx={{

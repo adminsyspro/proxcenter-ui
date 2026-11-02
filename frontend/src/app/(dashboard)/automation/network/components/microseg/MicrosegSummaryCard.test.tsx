@@ -121,6 +121,14 @@ describe('engine', () => {
     expect(await screen.findByText(/^Paused until /)).toBeTruthy()
   })
 
+  it('shows both the hold and the pause when both are true', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ engine: engine({ held: true, paused_until: '2099-01-01T10:00:00Z' }) }))
+    renderCard()
+    expect(await screen.findByText('Waiting for your confirmation (write cap reached)')).toBeTruthy()
+    expect(screen.getByText(/^Paused until /)).toBeTruthy()
+    expect(screen.queryByText(/^Last check/)).toBeNull()
+  })
+
   it('ignores a pause that is over', async () => {
     mock.routes['GET /status'] = () => reply(200, status({ engine: engine({ paused_until: '2020-01-01T10:00:00Z' }) }))
     renderCard()

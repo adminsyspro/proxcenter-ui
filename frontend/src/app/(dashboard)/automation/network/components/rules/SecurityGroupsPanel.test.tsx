@@ -427,3 +427,27 @@ describe('SecurityGroupsPanel', () => {
     expect(screen.getByText('Create Security Group')).toBeInTheDocument()
   })
 })
+
+describe('SecurityGroupsPanel load error', () => {
+  afterEach(cleanup)
+
+  it('warns on top when the firewall data could not be loaded, and retries with reload', () => {
+    const p = renderPanel({ loadError: 'HTTP 502' })
+
+    expect(screen.getByText(/Some firewall data could not be loaded.*HTTP 502/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(p.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('warns when there is no group because the load failed, instead of offering to create the first one only', () => {
+    renderPanel({ securityGroups: [], loadError: 'HTTP 502' })
+
+    expect(screen.getByText(/Some firewall data could not be loaded/)).toBeInTheDocument()
+  })
+
+  it('shows nothing when it loaded', () => {
+    renderPanel()
+
+    expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument()
+  })
+})

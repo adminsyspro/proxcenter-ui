@@ -38,7 +38,10 @@ function stubMicrosegRelay() {
   }))
 }
 
-function renderDashboard(clusterOptions: firewallAPIType.ClusterOptions, over: { selectedConnection?: string; onNavigateTab?: (tab: number) => void } = {}) {
+function renderDashboard(
+  clusterOptions: firewallAPIType.ClusterOptions | null,
+  over: { selectedConnection?: string; onNavigateTab?: (tab: number) => void; loadError?: string | null; reload?: () => void } = {},
+) {
   // The shared test provider does not read on mount; the page does.
   renderWithProviders(
     <SWRConfig value={{ revalidateOnMount: true, dedupingInterval: 0, errorRetryCount: 0, refreshInterval: 0 }}>
@@ -56,7 +59,8 @@ function renderDashboard(clusterOptions: firewallAPIType.ClusterOptions, over: {
       totalRules={0}
       totalIPSetEntries={0}
       nodesList={['pve1']}
-      reload={vi.fn()}
+      reload={over.reload ?? vi.fn()}
+      loadError={over.loadError}
       onNavigateTab={over.onNavigateTab ?? vi.fn()}
       onNavigateRulesSubTab={vi.fn()}
     />
@@ -112,5 +116,35 @@ describe('DashboardTab micro-segmentation card', () => {
     await waitFor(() => expect(screen.getByText('IN: DROP')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: 'Open Micro-segmentation' })).not.toBeInTheDocument()
     expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+})
+
+describe('DashboardTab load error', () => {
+  it('warns instead of offering the deployment wizard when the load failed and left no cluster options', () => {
+    stubMicrosegRelay()
+    const reload = vi.fn()
+    renderDashboard(null, { loadError: 'HTTP 502', reload })
+
+    expect(screen.getByText(/Some firewall data could not be loaded.*HTTP 502/)).toBeInTheDocument()
+    expect(screen.queryByText('Cluster firewall not configured')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not offer the wizard either when the options loaded but another list failed', () => {
+    stubMicrosegRelay()
+    renderDashboard({ enable: 0 }, { loadError: 'HTTP 502' })
+
+    expect(screen.getByText(/Some firewall data could not be loaded/)).toBeInTheDocument()
+    expect(screen.queryByText('Cluster firewall not configured')).not.toBeInTheDocument()
+  })
+
+  it('still offers the wizard on a virgin cluster that loaded', () => {
+    stubMicrosegRelay()
+    renderDashboard({ enable: 0 })
+
+    expect(screen.getByText('Cluster firewall not configured')).toBeInTheDocument()
+    expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument()
   })
 })

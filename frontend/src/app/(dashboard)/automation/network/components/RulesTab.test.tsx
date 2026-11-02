@@ -161,3 +161,21 @@ describe('RulesTab', () => {
     expect(document.querySelector('img')).toHaveAttribute('src', '/images/proxmox-logo-dark.svg')
   })
 })
+
+describe('RulesTab load error', () => {
+  afterEach(cleanup)
+
+  it('warns on top when the firewall data could not be loaded, and retries with reload', () => {
+    const p = renderTab({ loadError: 'HTTP 502' })
+
+    expect(screen.getByText(/Some firewall data could not be loaded.*HTTP 502/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(p.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows nothing when it loaded', () => {
+    renderTab({ loadError: null })
+
+    expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument()
+  })
+})

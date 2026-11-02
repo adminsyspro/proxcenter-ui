@@ -11,6 +11,7 @@ import type { MicrosegPolicy } from '@/lib/microseg/types'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PendingChangesBar from './PendingChangesBar'
+import { formatWhen, stillPaused } from './summaryModel'
 
 type Props = {
   connectionId: string
@@ -22,11 +23,6 @@ type Action = 'stop' | 'resume' | 'confirmWrites'
 
 /** What the banner tells after an action went through. `stop` is the emergency stop flag the answer was sent against. */
 type Notice = { type: 'leader'; stop: boolean | undefined } | { type: 'confirmed' }
-
-/** A pause whose end is past is over (the engine clears the field on its next pass). */
-function stillPaused(pausedUntil: string | null | undefined): boolean {
-  return !!pausedUntil && !(Date.parse(pausedUntil) <= Date.now())
-}
 
 /**
  * Always visible above the sub-tabs: the Emergency stop, the writes held by the cap, the pause and the
@@ -44,11 +40,6 @@ export default function MicrosegBanner({ connectionId, policy, onOpenPlan }: Pro
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<unknown>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
-
-  const when = (iso: string) => {
-    const d = new Date(iso)
-    return Number.isNaN(d.getTime()) ? iso : format.dateTime(d, { dateStyle: 'medium', timeStyle: 'short' })
-  }
 
   const run = async () => {
     const api = microsegApi(connectionId)
@@ -119,7 +110,7 @@ export default function MicrosegBanner({ connectionId, policy, onOpenPlan }: Pro
             size='small'
             color='warning'
             icon={<i className='ri-pause-circle-line' />}
-            label={t('microsegPilot.banner.pausedUntil', { time: when(pausedUntil) })}
+            label={t('microsegPilot.banner.pausedUntil', { time: formatWhen(format, pausedUntil) })}
           />
         )}
 

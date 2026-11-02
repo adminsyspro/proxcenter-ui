@@ -320,3 +320,21 @@ describe('ObjectsTab', () => {
     for (const button of screen.getAllByRole('button', { name: 'New' })) expect(button).toBeDisabled()
   })
 })
+
+describe('ObjectsTab load error', () => {
+  afterEach(cleanup)
+
+  it.each(['aliases', 'ipsets'] as const)('warns on top of the %s view when the firewall data could not be loaded, and retries', view => {
+    const p = renderTab({ view, loadError: 'HTTP 502' })
+
+    expect(screen.getByText(/Some firewall data could not be loaded.*HTTP 502/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(p.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows nothing when it loaded', () => {
+    renderTab({ view: 'aliases' })
+
+    expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument()
+  })
+})

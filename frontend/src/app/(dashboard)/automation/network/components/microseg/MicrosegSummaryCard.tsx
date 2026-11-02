@@ -12,7 +12,7 @@ import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 import { coverage } from './coverage'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import { useDialogAction } from './dialogParts'
-import { deployedCounts, lastCheckAt } from './summaryModel'
+import { deployedCounts, formatWhen, lastCheckAt, stillPaused } from './summaryModel'
 
 type Props = {
   connectionId: string
@@ -24,11 +24,6 @@ const GREEN = '#22c55e'
 const AMBER = '#f59e0b'
 const RED = '#ef4444'
 const GREY = '#94a3b8'
-
-/** A pause whose end is past is over (the engine clears the field on its next pass). */
-function stillPaused(pausedUntil: string | null | undefined): boolean {
-  return !!pausedUntil && !(Date.parse(pausedUntil) <= Date.now())
-}
 
 function Row({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
   return (
@@ -67,11 +62,6 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
     if (ok) setConfirmOpen(false)
   }
 
-  const when = (iso: string) => {
-    const d = new Date(iso)
-    return Number.isNaN(d.getTime()) ? iso : format.dateTime(d, { dateStyle: 'medium', timeStyle: 'short' })
-  }
-
   const stopped = status?.emergency_stop ?? policy?.policy.emergency_stop ?? false
   const cov = status ? coverage(status) : null
   const unzoned = cov ? cov.running - cov.zoned : 0
@@ -102,32 +92,39 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
     )
   })()
 
+  const paused = stillPaused(pausedUntil) && !!pausedUntil
+
   const engineLine = (() => {
     if (!status) return statusError ? <Typography variant='body2'>{t('dashboard.unavailable')}</Typography> : <Skeleton width={180} />
-    if (held) {
-      return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Typography variant='body2' color='warning.main'>{t('dashboard.engine.held')}</Typography>
-          <Button
-            size='small'
-            variant='outlined'
-            color='warning'
-            onClick={e => { e.stopPropagation(); reset(); setConfirmOpen(true) }}
-          >
-            {t('banner.confirmWrites')}
-          </Button>
-        </Box>
-      )
-    }
-    if (stillPaused(pausedUntil) && pausedUntil) return <Typography variant='body2' color='warning.main'>{t('banner.pausedUntil', { time: when(pausedUntil) })}</Typography>
-    if (checkedAt) return <Typography variant='body2'>{t('dashboard.engine.lastCheck', { time: format.relativeTime(checkedAt, Date.now()) })}</Typography>
-    return <Typography variant='body2'>{t('dashboard.engine.noCheck')}</Typography>
+    return (
+      <>
+        {held && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant='body2' color='warning.main'>{t('dashboard.engine.held')}</Typography>
+            <Button
+              size='small'
+              variant='outlined'
+              color='warning'
+              onClick={e => { e.stopPropagation(); reset(); setConfirmOpen(true) }}
+            >
+              {t('banner.confirmWrites')}
+            </Button>
+          </Box>
+        )}
+        {paused && pausedUntil && <Typography variant='body2' color='warning.main'>{t('banner.pausedUntil', { time: formatWhen(format, pausedUntil) })}</Typography>}
+        {!held && !paused && (
+          <Typography variant='body2'>
+            {checkedAt ? t('dashboard.engine.lastCheck', { time: format.relativeTime(checkedAt, Date.now()) }) : t('dashboard.engine.noCheck')}
+          </Typography>
+        )}
+      </>
+    )
   })()
 
   let accent = GREY
   if (stopped) accent = RED
   else if (statusError && !status) accent = AMBER
-  else if (held || stillPaused(pausedUntil)) accent = AMBER
+  else if (held || paused) accent = AMBER
   else if (policy?.last_revision) accent = GREEN
 
   return (

@@ -8,6 +8,7 @@ import { Box, Chip, ToggleButton, ToggleButtonGroup, useTheme, alpha } from '@mu
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 
+import FirewallLoadAlert from './FirewallLoadAlert'
 import FirewallPolicyTable from './rules/FirewallPolicyTable'
 import HostRulesPanel from './rules/HostRulesPanel'
 import VMRulesPanel from './rules/VMRulesPanel'
@@ -40,11 +41,13 @@ interface RulesTabProps {
   totalRules: number
   // Common
   selectedConnection: string
+  /** What failed on the last load of the firewall data, null when it all loaded. */
+  loadError?: string | null
   reload: () => void
 }
 
 /**
- * Map legacy sub-tab indices (used by StatCards / DashboardTab) to new ones:
+ * Map legacy sub-tab indices (still passed by the Dashboard's links and older callers) to new ones:
  *   Old 0 (Cluster) / 3 (SGs) → New 0 (Cluster Firewall)
  *   Old 1 (Nodes)              → New 1 (Host Rules)
  *   Old 2 (VMs)                → New 2 (VM Rules)
@@ -63,7 +66,7 @@ export default function RulesTab({
   hostRulesByNode, nodesList, loadingHostRules, loadHostRules, reloadHostRulesForNode,
   vmFirewallData, loadingVMRules, loadVMFirewallData, reloadVMFirewallRules,
   securityGroups, aliases, ipsets, firewallMode, totalRules,
-  selectedConnection, reload
+  selectedConnection, loadError, reload
 }: RulesTabProps) {
   const theme = useTheme()
   const t = useTranslations()
@@ -83,6 +86,7 @@ export default function RulesTab({
 
   return (
     <Box sx={{ p: 3 }}>
+      <FirewallLoadAlert error={loadError} onRetry={reload} />
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
         <ToggleButtonGroup
           value={currentTab}

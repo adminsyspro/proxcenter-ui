@@ -11,6 +11,7 @@ import { Agent, setGlobalDispatcher } from 'undici'
 
 import { startAuditRetentionSweeper } from '@/lib/audit/retentionSweeper'
 import { startSessionSweeper } from '@/lib/auth/sessionSweeper'
+import { backfillEmailLogos } from '@/lib/branding/emailLogo'
 import { importDiskAssets } from '@/lib/branding/importDiskAssets'
 import { prisma } from '@/lib/db/prisma'
 import { startBatchPump } from '@/lib/migration/batch-scheduler'
@@ -43,6 +44,17 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this import: the assets are also served
     // from disk on node 1, and the next boot retries.
     console.error('[startup] disk-asset import failed (non-fatal):', err)
+  }
+
+  try {
+    // After the disk import, so imported logos get their copy too: logos
+    // uploaded before the emails carried one get the PNG copy they need.
+    const created = await backfillEmailLogos()
+    if (created > 0) console.log(`[startup] email logo copies created: ${created}`)
+  } catch (err) {
+    // Boot must never depend on this: until a copy exists the emails show
+    // the brand name, and the next boot retries.
+    console.error('[startup] email logo backfill failed (non-fatal):', err)
   }
 
   try {

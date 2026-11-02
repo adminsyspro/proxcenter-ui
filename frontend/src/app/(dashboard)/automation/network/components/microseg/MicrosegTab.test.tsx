@@ -46,6 +46,12 @@ describe('first run guide', () => {
     expect(screen.queryByText('Set up micro-segmentation')).toBeNull()
   })
 
+  it('disables the plan step while no handler opens the plan', async () => {
+    renderTab()
+    await screen.findByText('Set up micro-segmentation')
+    expect((screen.getByRole('button', { name: 'View plan' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('switches to the relevant sub-tab, or opens the plan, from its buttons', async () => {
     const onOpenPlan = vi.fn()
     renderTab(<MicrosegTab connectionId="c1" onOpenPlan={onOpenPlan} />)
@@ -82,6 +88,13 @@ describe('errors', () => {
     renderTab()
     expect(await screen.findByText('ProxCenter cannot be reached. Check your network connection.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+  })
+
+  it('offers no retry for an error that trying again cannot cure', async () => {
+    mock.routes['GET /policy'] = () => reply(403, { code: 'FEATURE_REQUIRED', error: 'x' })
+    renderTab()
+    expect(await screen.findByText('Micro-segmentation requires an Enterprise license.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
   })
 
   it('shows the generic message for an unknown code', async () => {

@@ -61,7 +61,6 @@ export default function MicrosegTab({ connectionId, onOpenPlan }: Props) {
     setSubTab(tab)
     storeSubTab(tab)
   }
-  const openPlan = () => onOpenPlan?.()
 
   if (!connectionId) return <Alert severity='info' sx={{ m: 3 }}>{t('noConnection')}</Alert>
 
@@ -81,12 +80,12 @@ export default function MicrosegTab({ connectionId, onOpenPlan }: Props) {
   }
 
   const firstRun = !policy.last_revision && policy.zones.length === 0
-  const contentProps: MicrosegSubTabProps = { connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan: openPlan }
+  const contentProps: MicrosegSubTabProps = { connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan }
 
   return (
     <Box sx={{ p: 3 }}>
-      <MicrosegBanner connectionId={connectionId} policy={policy} onOpenPlan={openPlan} />
-      {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={openPlan} />}
+      <MicrosegBanner connectionId={connectionId} policy={policy} onOpenPlan={onOpenPlan} />
+      {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={onOpenPlan} />}
       <Tabs value={subTab} onChange={(_, v: MicrosegSubTab) => goToSubTab(v)} variant='scrollable' scrollButtons='auto' aria-label={t('subTabs.label')}>
         {MICROSEG_SUBTABS.map(tab => (
           <Tab

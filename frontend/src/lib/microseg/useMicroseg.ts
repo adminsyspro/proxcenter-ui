@@ -10,7 +10,7 @@ import type { MicrosegPolicy, MicrosegRun } from './types'
 export const RUN_POLL_MS = 2000
 
 // An error that trying again cannot cure.
-const FATAL_CODES = new Set(['NOT_FOUND', 'UNAUTHORIZED', 'FORBIDDEN', 'FEATURE_REQUIRED'])
+export const FATAL_CODES = new Set(['NOT_FOUND', 'UNAUTHORIZED', 'FORBIDDEN', 'FEATURE_REQUIRED'])
 
 /** The draft of a connection: zones, flows, pending members, last revision. */
 export function useMicrosegPolicy(connId: string | null | undefined) {

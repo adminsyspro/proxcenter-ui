@@ -12344,6 +12344,12 @@
         "disabled": "Deaktiviert: {count}",
         "observe": "Beobachtung: {count}",
         "enforce": "Durchgesetzt: {count}"
+      },
+      "statusStale": "Status nicht aktualisiert, neuer Versuch",
+      "runStatus": {
+        "done": "Abgeschlossen",
+        "failed": "Fehlgeschlagen",
+        "running": "Läuft"
       }
     },
     "stop": {

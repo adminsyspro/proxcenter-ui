@@ -50,6 +50,45 @@ describe('banner: engine, coverage and zones', () => {
   })
 })
 
+describe('banner: run states and refresh', () => {
+  it('labels the status icon of each run, and shows a neutral icon for an unknown status', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({
+      engine: {
+        paused_until: null, held: false, last_log: null,
+        last_runs: {
+          plan: { started_at: '2026-11-02T10:00:00Z', status: 'failed', api_calls: 1, writes: 0 },
+          apply: { started_at: '2026-11-02T10:00:00Z', status: 'weird' as never, api_calls: 2, writes: 0 },
+        },
+      },
+    }))
+    renderTab()
+    const failed = await screen.findByRole('img', { name: 'Failed' })
+    expect(failed.className).toContain('ri-error-warning-line')
+    const unknown = screen.getByRole('img', { name: 'weird' })
+    expect(unknown.className).toContain('ri-question-line')
+    expect(screen.queryByRole('img', { name: 'Done' })).toBeNull()
+  })
+
+  it('hides the pause once paused_until is in the past', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: '2020-01-01T10:00:00Z', held: false, last_runs: {}, last_log: null } }))
+    renderTab()
+    await screen.findByText('No run yet')
+    expect(screen.queryByText(/^Paused until /)).toBeNull()
+  })
+
+  it('warns that the status was not refreshed when a refresh fails after a first success', async () => {
+    let down = false
+    mock.routes['GET /status'] = () => (down ? reply(502, { code: 'ORCHESTRATOR_ERROR', error: 'x' }) : reply(200, status()))
+    mock.routes['POST /emergency-stop'] = () => { down = true; return reply(200, { accepted: true, applied_by: 'self', on: true }) }
+    renderTab()
+    fireEvent.click(await screen.findByRole('button', { name: 'Emergency stop' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Emergency stop' }))
+    expect(await screen.findByText('Status not refreshed, retrying')).toBeTruthy()
+    expect(screen.getByText('3 of 5 running guests in a zone')).toBeTruthy()
+  })
+})
+
 describe('banner: held writes', () => {
   beforeEach(() => {
     let held = true
@@ -70,6 +109,7 @@ describe('banner: held writes', () => {
     await waitFor(() => expect(calls('POST /confirm-writes')).toHaveLength(1))
     await waitFor(() => expect(screen.queryByText('Writes on hold')).toBeNull())
     expect(calls('GET /status').length).toBeGreaterThanOrEqual(2)
+    expect(await screen.findByText('Writes confirmed')).toBeTruthy()
   })
 
   it('does nothing when the confirmation is cancelled', async () => {
@@ -161,6 +201,60 @@ describe('banner: emergency stop', () => {
     expect(await screen.findByText('Request accepted: the leader orchestrator applies it within a minute.')).toBeTruthy()
   })
 
+  it('reaches the stop while /status is still loading', async () => {
+    mock.routes['GET /status'] = () => new Promise(() => {})
+    mock.routes['POST /emergency-stop'] = () => reply(200, { accepted: true, applied_by: 'self', on: true })
+    renderTab()
+    const button = await screen.findByRole('button', { name: 'Emergency stop' })
+    expect((button as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(button)
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Emergency stop' }))
+    await waitFor(() => expect(calls('POST /emergency-stop')).toHaveLength(1))
+    expect(JSON.parse(calls('POST /emergency-stop')[0][1]!.body as string)).toEqual({ on: true })
+  })
+
+  it('reaches the stop while /status fails, with Resume still waiting for the state', async () => {
+    mock.routes['GET /status'] = () => reply(504, { code: 'ORCHESTRATOR_TIMEOUT', error: 't' })
+    mock.routes['POST /emergency-stop'] = () => reply(200, { accepted: true, applied_by: 'self', on: true })
+    renderTab()
+    expect(await screen.findByText('The orchestrator did not answer in time.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Emergency stop' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Emergency stop' }))
+    await waitFor(() => expect(calls('POST /emergency-stop')).toHaveLength(1))
+  })
+
+  it('drops the leader message once the status shows the stop', async () => {
+    let on = false
+    mock.routes['GET /status'] = () => reply(200, status({ emergency_stop: on }))
+    mock.routes['POST /emergency-stop'] = () => { on = true; return reply(202, { accepted: true, applied_by: 'leader', on: true }) }
+    renderTab()
+    fireEvent.click(await screen.findByRole('button', { name: 'Emergency stop' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Emergency stop' }))
+    await screen.findByText('Emergency stop active: every zone is in observation')
+    expect(screen.queryByText('Request accepted: the leader orchestrator applies it within a minute.')).toBeNull()
+  })
+
+  it('clears the leader message when the next action starts', async () => {
+    let answer = reply(202, { accepted: true, applied_by: 'leader', on: true })
+    mock.routes['POST /emergency-stop'] = () => answer
+    renderTab()
+    fireEvent.click(await screen.findByRole('button', { name: 'Emergency stop' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Emergency stop' }))
+    const message = 'Request accepted: the leader orchestrator applies it within a minute.'
+    expect(await screen.findByText(message)).toBeTruthy()
+
+    answer = reply(200, { accepted: true, applied_by: 'self', on: true })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Emergency stop' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Emergency stop' }))
+    await waitFor(() => expect(calls('POST /emergency-stop')).toHaveLength(2))
+    await waitFor(() => expect(screen.queryByText(message)).toBeNull())
+  })
+
   it('shows a translated error when the stop is refused', async () => {
     mock.routes['POST /emergency-stop'] = () => reply(403, { code: 'FORBIDDEN', error: 'no' })
     renderTab()
@@ -202,6 +296,13 @@ describe('banner: pending changes', () => {
     renderTab()
     expect(await screen.findByText('2 unapplied changes')).toBeTruthy()
     expect(calls('GET /revisions?limit=1')).toHaveLength(0)
+  })
+
+  it('disables View plan while no handler opens the plan', async () => {
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: null, pending_changes: true }))
+    renderTab()
+    const button = await screen.findByRole('button', { name: 'View plan' })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('shows no bar when nothing is pending', async () => {

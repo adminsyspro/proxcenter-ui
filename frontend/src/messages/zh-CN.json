@@ -12676,6 +12676,12 @@
         "disabled": "已禁用：{count}",
         "observe": "观察：{count}",
         "enforce": "强制：{count}"
+      },
+      "statusStale": "状态未刷新，正在重试",
+      "runStatus": {
+        "done": "已完成",
+        "failed": "失败",
+        "running": "运行中"
       }
     },
     "stop": {

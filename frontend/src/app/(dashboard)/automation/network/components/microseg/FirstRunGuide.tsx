@@ -7,14 +7,14 @@ import type { MicrosegSubTab } from './microsegTabTypes'
 
 type Props = {
   goToSubTab: (tab: MicrosegSubTab) => void
-  onOpenPlan: () => void
+  onOpenPlan?: () => void
 }
 
 /** Three steps from an empty policy to a first plan. Buttons only navigate. */
 export default function FirstRunGuide({ goToSubTab, onOpenPlan }: Props) {
   const t = useTranslations('microsegPilot.firstRun')
 
-  const steps: Array<{ id: string; icon: string; action: () => void }> = [
+  const steps: Array<{ id: string; icon: string; action?: () => void }> = [
     { id: 'step1', icon: 'ri-heart-pulse-line', action: () => goToSubTab('overview') },
     { id: 'step2', icon: 'ri-shape-line', action: () => goToSubTab('policy') },
     { id: 'step3', icon: 'ri-file-list-3-line', action: onOpenPlan },
@@ -32,7 +32,7 @@ export default function FirstRunGuide({ goToSubTab, onOpenPlan }: Props) {
             <StepLabel>{t(`${step.id}Title`)}</StepLabel>
             <StepContent>
               <Typography variant='body2' color='text.secondary' sx={{ mb: 1 }}>{t(`${step.id}Body`)}</Typography>
-              <Button size='small' variant='outlined' startIcon={<i className={step.icon} />} onClick={step.action}>
+              <Button size='small' variant='outlined' startIcon={<i className={step.icon} />} onClick={step.action} disabled={!step.action}>
                 {t(`${step.id}Action`)}
               </Button>
             </StepContent>

@@ -16,7 +16,7 @@ import PendingChangesBar from './PendingChangesBar'
 type Props = {
   connectionId: string
   policy: MicrosegPolicy
-  onOpenPlan: () => void
+  onOpenPlan?: () => void
 }
 
 type Action = 'stop' | 'resume' | 'confirmWrites'
@@ -29,6 +29,15 @@ const RUN_ICON: Record<MicrosegRunSummary['status'], { icon: string; color: stri
   done: { icon: 'ri-checkbox-circle-line', color: 'success.main' },
   failed: { icon: 'ri-error-warning-line', color: 'error.main' },
   running: { icon: 'ri-loader-4-line', color: 'info.main' },
+}
+const UNKNOWN_RUN_ICON = { icon: 'ri-question-line', color: 'text.secondary' }
+
+/** What the banner tells after an action went through. `stop` is the emergency stop flag the answer was sent against. */
+type Notice = { type: 'leader'; stop: boolean | undefined } | { type: 'confirmed' }
+
+/** A pause whose end is past is over (the engine clears the field on its next pass). */
+function stillPaused(pausedUntil: string | null | undefined): boolean {
+  return !!pausedUntil && !(Date.parse(pausedUntil) <= Date.now())
 }
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
@@ -57,7 +66,7 @@ export default function MicrosegBanner({ connectionId, policy, onOpenPlan }: Pro
   const ask = (a: Action) => { setAction(a); setOpen(true) }
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<unknown>(null)
-  const [leaderNotice, setLeaderNotice] = useState(false)
+  const [notice, setNotice] = useState<Notice | null>(null)
 
   const when = (iso: string) => {
     const d = new Date(iso)
@@ -68,12 +77,14 @@ export default function MicrosegBanner({ connectionId, policy, onOpenPlan }: Pro
     const api = microsegApi(connectionId)
     setBusy(true)
     setActionError(null)
+    setNotice(null)
     try {
       if (action === 'confirmWrites') {
         await api.confirmWrites()
+        setNotice({ type: 'confirmed' })
       } else {
         const result = await api.emergencyStop(action === 'stop')
-        setLeaderNotice(result.applied_by === 'leader')
+        if (result.applied_by === 'leader') setNotice({ type: 'leader', stop: status?.emergency_stop })
       }
       await reload()
     } catch (e) {
@@ -99,6 +110,11 @@ export default function MicrosegBanner({ connectionId, policy, onOpenPlan }: Pro
       })
     : []
   const cov = status ? coverage(status) : null
+  // "Applied by the leader within a minute" is over once the status has moved.
+  const shownNotice = notice?.type === 'leader' && notice.stop !== undefined && status && notice.stop !== status.emergency_stop ? null : notice
+  const pausedUntil = status?.engine.paused_until
+  const paused = stillPaused(pausedUntil)
+  const runStatusLabel = (st: string) => (t.has(`microsegPilot.banner.runStatus.${st}`) ? t(`microsegPilot.banner.runStatus.${st}`) : st)
 
   return (
     <Paper variant='outlined' sx={{ p: 2, mb: 2 }}>
@@ -124,31 +140,32 @@ export default function MicrosegBanner({ connectionId, policy, onOpenPlan }: Pro
         </Alert>
       )}
 
-      {leaderNotice && <Alert severity='info' sx={{ mb: 2 }} onClose={() => setLeaderNotice(false)}>{t('microsegPilot.stop.appliedByLeader')}</Alert>}
+      {shownNotice?.type === 'leader' && <Alert severity='info' sx={{ mb: 2 }} onClose={() => setNotice(null)}>{t('microsegPilot.stop.appliedByLeader')}</Alert>}
+      {shownNotice?.type === 'confirmed' && <Alert severity='success' sx={{ mb: 2 }} onClose={() => setNotice(null)}>{t('microsegPilot.banner.writesConfirmed')}</Alert>}
       {actionError != null && <MicrosegErrorAlert error={actionError} onClose={() => setActionError(null)} />}
       {statusError && !status && <MicrosegErrorAlert error={statusError} onRetry={reload} />}
-      {!status && !statusError && <CircularProgress size={20} aria-label={t('microsegPilot.loading')} />}
 
-      {status && cov && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 4 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 4 }}>
+        {!status && !statusError && <CircularProgress size={20} aria-label={t('microsegPilot.loading')} />}
+        {status && cov && (<>
           <Section label={t('microsegPilot.banner.engine')}>
             {runs.length === 0 && <Typography variant='body2'>{t('microsegPilot.banner.noRun')}</Typography>}
             {runs.map(([kind, last]) => {
-              const { icon, color } = RUN_ICON[last.status] ?? RUN_ICON.done
+              const { icon, color } = RUN_ICON[last.status] ?? UNKNOWN_RUN_ICON
               const line = t('microsegPilot.banner.run', { kind: kindLabel(kind), time: when(last.started_at), calls: last.api_calls })
               return (
                 <Box key={kind} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <Box component='i' className={icon} sx={{ color, fontSize: 16 }} />
+                  <Box component='i' role='img' aria-label={runStatusLabel(last.status)} title={runStatusLabel(last.status)} className={icon} sx={{ color, fontSize: 16 }} />
                   <Tooltip title={line}><Typography variant='body2' noWrap>{line}</Typography></Tooltip>
                 </Box>
               )
             })}
-            {status.engine.paused_until && (
+            {paused && pausedUntil && (
               <Chip
                 size='small'
                 color='warning'
                 icon={<i className='ri-pause-circle-line' />}
-                label={t('microsegPilot.banner.pausedUntil', { time: when(status.engine.paused_until) })}
+                label={t('microsegPilot.banner.pausedUntil', { time: when(pausedUntil) })}
                 sx={{ mt: 0.5 }}
               />
             )}
@@ -173,20 +190,26 @@ export default function MicrosegBanner({ connectionId, policy, onOpenPlan }: Pro
             </Box>
           </Section>
 
-          {!status.emergency_stop && (
-            <Button
-              sx={{ ml: 'auto' }}
-              size='small'
-              variant='outlined'
-              color='error'
-              startIcon={<i className='ri-stop-circle-line' />}
-              onClick={() => ask('stop')}
-            >
-              {t('microsegPilot.stop.button')}
-            </Button>
-          )}
-        </Box>
-      )}
+        </>)}
+
+        {statusError && status && (
+          <Chip size='small' color='warning' variant='outlined' icon={<i className='ri-wifi-off-line' />} label={t('microsegPilot.banner.statusStale')} />
+        )}
+
+        {/* Reachable whatever the status: the stop is idempotent, and it is needed most when the engine misbehaves. */}
+        {!status?.emergency_stop && (
+          <Button
+            sx={{ ml: 'auto' }}
+            size='small'
+            variant='outlined'
+            color='error'
+            startIcon={<i className='ri-stop-circle-line' />}
+            onClick={() => ask('stop')}
+          >
+            {t('microsegPilot.stop.button')}
+          </Button>
+        )}
+      </Box>
 
       <PendingChangesBar connectionId={connectionId} policy={policy} onOpenPlan={onOpenPlan} />
 

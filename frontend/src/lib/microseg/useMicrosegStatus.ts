@@ -4,12 +4,11 @@ import { useMemo } from 'react'
 import useSWR from 'swr'
 
 import { MicrosegApiError, microsegApi, microsegBaseUrl } from './api'
+import { FATAL_CODES } from './useMicroseg'
 import type { MicrosegStatus } from './types'
 
 /** The engine state is read from the orchestrator's memory, so a slow refresh is cheap. */
 export const STATUS_REFRESH_MS = 15_000
-
-const FATAL_CODES = new Set(['NOT_FOUND', 'UNAUTHORIZED', 'FORBIDDEN', 'FEATURE_REQUIRED'])
 
 /** GET /status of a connection: engine state, coverage, zones by state, emergency stop. */
 export function useMicrosegStatus(connId: string | null | undefined) {

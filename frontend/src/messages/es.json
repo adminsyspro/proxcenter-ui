@@ -12676,6 +12676,12 @@
         "disabled": "Desactivadas: {count}",
         "observe": "Observación: {count}",
         "enforce": "Aplicadas: {count}"
+      },
+      "statusStale": "Estado sin actualizar, reintentando",
+      "runStatus": {
+        "done": "Terminado",
+        "failed": "Fallido",
+        "running": "En curso"
       }
     },
     "stop": {

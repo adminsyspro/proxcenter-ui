@@ -48,6 +48,17 @@ describe('microsegApi errors', () => {
     expect(await microsegApi('c1').getStatus().catch(e => e)).toMatchObject({ status: 401, code: 'UNAUTHORIZED' })
   })
 
+  it('wraps a network failure as NETWORK but lets an abort through', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+    const err = await microsegApi('c1').getPolicy().catch(e => e)
+    expect(err).toBeInstanceOf(MicrosegApiError)
+    expect(err).toMatchObject({ status: 0, code: 'NETWORK', serverMessage: 'Failed to fetch' })
+    expect(microsegErrorKeyOf(err)).toBe('microsegPilot.errors.NETWORK')
+    const abort = new DOMException('aborted', 'AbortError')
+    fetchMock.mockRejectedValue(abort)
+    expect(await microsegApi('c1').getRun('r1').catch(e => e)).toBe(abort)
+  })
+
   it('maps codes to i18n keys with a generic fallback', () => {
     expect(microsegErrorKey('VERSION_CONFLICT')).toBe('microsegPilot.errors.VERSION_CONFLICT')
     expect(microsegErrorKey('ORCHESTRATOR_TIMEOUT')).toBe('microsegPilot.errors.ORCHESTRATOR_TIMEOUT')

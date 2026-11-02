@@ -139,6 +139,27 @@ describe('useMicrosegPolicy', () => {
     expect(result.current.data?.version).toBe(3)
   })
 
+  it('retries a transient error but not a fatal one', async () => {
+    vi.useFakeTimers()
+    try {
+      fetchMock.mockResolvedValue(reply(502, { code: 'ORCHESTRATOR_ERROR', error: 'x' }))
+      const transient = renderHook(() => useMicrosegPolicy('c1'), { wrapper })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(1)
+      transient.unmount()
+
+      fetchMock.mockReset()
+      fetchMock.mockResolvedValue(reply(403, { code: 'FEATURE_REQUIRED', error: 'licence' }))
+      renderHook(() => useMicrosegPolicy('c2'), { wrapper })
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('surfaces a MicrosegApiError and does not fetch without a connection', async () => {
     fetchMock.mockResolvedValue(reply(403, { code: 'FEATURE_REQUIRED', error: 'licence' }))
     const { result } = renderHook(() => useMicrosegPolicy('c1'), { wrapper })

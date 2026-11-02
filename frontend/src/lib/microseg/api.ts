@@ -34,7 +34,7 @@ export class MicrosegConflictError extends MicrosegApiError {
 const KNOWN_CODES = new Set([
   'VERSION_CONFLICT', 'BUSY', 'ZONE_NAME_TAKEN', 'IN_USE', 'CONFLICT', 'INVALID', 'FEATURE_REQUIRED',
   'FORBIDDEN', 'NOT_FOUND', 'UNAUTHORIZED', 'NOT_LEADER', 'MICROSEG_UNAVAILABLE', 'ENGINE_STOPPED',
-  'ORCHESTRATOR_ERROR', 'ORCHESTRATOR_TIMEOUT', 'PVE_ERROR',
+  'ORCHESTRATOR_ERROR', 'ORCHESTRATOR_TIMEOUT', 'PVE_ERROR', 'NETWORK',
 ])
 
 /** i18n key of an error code (the strings live in the microsegPilot catalogue). */
@@ -109,7 +109,13 @@ export function microsegApi(connId: string) {
       init.headers = { 'Content-Type': 'application/json' }
       init.body = JSON.stringify(body)
     }
-    const res = await fetch(`${base}/${route}`, init)
+    let res: Response
+    try {
+      res = await fetch(`${base}/${route}`, init)
+    } catch (e) {
+      if ((e as { name?: string })?.name === 'AbortError') throw e
+      throw new MicrosegApiError(0, 'NETWORK', e instanceof Error ? e.message : undefined)
+    }
     if (!res.ok) throw await toError(res)
     return (await parseBody(res)) as T
   }

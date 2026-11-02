@@ -53,7 +53,7 @@ export type MicrosegZone = {
   observe_since: string | null
 }
 
-export type FlowOrigin = 'manual' | 'suggestion' | string
+export type FlowOrigin = 'manual' | 'learned' | (string & {})
 
 export type MicrosegFlow = {
   id: string

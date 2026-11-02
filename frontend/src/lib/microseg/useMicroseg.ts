@@ -9,6 +9,9 @@ import type { MicrosegPolicy, MicrosegRun } from './types'
 
 export const RUN_POLL_MS = 2000
 
+// An error that trying again cannot cure.
+const FATAL_CODES = new Set(['NOT_FOUND', 'UNAUTHORIZED', 'FORBIDDEN', 'FEATURE_REQUIRED'])
+
 /** The draft of a connection: zones, flows, pending members, last revision. */
 export function useMicrosegPolicy(connId: string | null | undefined) {
   const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
@@ -16,7 +19,7 @@ export function useMicrosegPolicy(connId: string | null | undefined) {
   const { data, error, isLoading, mutate } = useSWR<MicrosegPolicy, MicrosegApiError>(
     key,
     () => api!.getPolicy(),
-    { compare: dequal },
+    { compare: dequal, shouldRetryOnError: (e: MicrosegApiError) => !FATAL_CODES.has(e?.code) },
   )
   return {
     data,
@@ -30,9 +33,6 @@ export function useMicrosegPolicy(connId: string | null | undefined) {
 export function isRunFinished(run: Pick<MicrosegRun, 'status'> | null | undefined): boolean {
   return run?.status === 'done' || run?.status === 'failed'
 }
-
-// An error that polling again cannot cure.
-const FATAL_CODES = new Set(['NOT_FOUND', 'UNAUTHORIZED', 'FORBIDDEN', 'FEATURE_REQUIRED'])
 
 /**
  * Follows a run: reads it at once, then every 2 s until it is `done` or

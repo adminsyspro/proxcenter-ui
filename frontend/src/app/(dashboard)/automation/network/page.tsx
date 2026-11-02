@@ -19,7 +19,6 @@ import { useFirewallData, Connection } from '@/hooks/useFirewallData'
 import { useVMFirewallRules } from '@/hooks/useVMFirewallRules'
 import { useHostFirewallRules } from '@/hooks/useHostFirewallRules'
 
-import StatCard from './components/StatCard'
 import DashboardTab from './components/DashboardTab'
 import RulesTab from './components/RulesTab'
 import ObjectsTab from './components/ObjectsTab'
@@ -69,6 +68,11 @@ export default function NetworkAutomationPage() {
   const firewallLoadError = [...new Set([loadError, hostRulesError, vmRulesError].filter(Boolean))].join(' · ')
 
   // ── Effects ──
+  // No summary strip or alert above the tabs any more: a broken backend must still leave a trace to diagnose.
+  useEffect(() => {
+    if (selectedConnection && firewallLoadError) console.error('Network security: firewall data could not be loaded:', firewallLoadError)
+  }, [selectedConnection, firewallLoadError])
+
   useEffect(() => {
     setPageInfo(t('network.title'), t('microseg.subtitle'), 'ri-shield-flash-fill')
     return () => setPageInfo('', '', '')
@@ -134,24 +138,6 @@ export default function NetworkAutomationPage() {
             {t('networkPage.noPveConnection')}
           </Alert>
         )}
-
-        {selectedConnection && firewallLoadError && (
-          <Alert severity="error" sx={{ mb: 3 }}>
-            {t('networkPage.loadError', { error: firewallLoadError })}
-          </Alert>
-        )}
-
-        {/* Stats Grid */}
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
-          gap: 2, mb: 3, width: '100%'
-        }}>
-          <StatCard icon="ri-shield-check-line" label={t('firewall.securityGroups')} value={securityGroups.length} subvalue={t('networkPage.totalRules', { count: totalRules })} color="#22c55e" loading={loading} onClick={() => setActiveTab(4)} />
-          <StatCard icon="ri-database-2-line" label={t('firewall.ipSets')} value={ipsets.length} subvalue={`${totalIPSetEntries} ${t('networkPage.entries')}`} color="#3b82f6" loading={loading} onClick={() => setActiveTab(3)} />
-          <StatCard icon="ri-price-tag-3-line" label={t('firewall.aliases')} value={aliases.length} subvalue={t('networkPage.namedNetworks')} color="#8b5cf6" loading={loading} onClick={() => setActiveTab(2)} />
-          <StatCard icon="ri-cloud-line" label={t('network.clusterRules')} value={clusterRules.length} subvalue={clusterOptions?.enable === 1 ? t('network.firewallActive') : t('network.firewallInactive')} color={clusterOptions?.enable === 1 ? '#06b6d4' : '#94a3b8'} loading={loading} onClick={() => { setActiveTab(1); setRulesSubTab(0) }} />
-        </Box>
 
         {/* Main Content Card */}
         <Card sx={{ background: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(10px)', border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 3 }}>

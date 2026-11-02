@@ -7,6 +7,7 @@ import { useFormatter, useTranslations } from 'next-intl'
 import type { MicrosegRevision } from '@/lib/microseg/types'
 
 import { OneLine } from './dialogParts'
+import { formatWhen } from './summaryModel'
 
 type Props = {
   revision: MicrosegRevision
@@ -22,7 +23,7 @@ export default function RevisionRow({ revision, latest, onRestore }: Props) {
   const format = useFormatter()
   const [open, setOpen] = useState(false)
 
-  const when = format.dateTime(new Date(revision.created_at), { dateStyle: 'medium', timeStyle: 'short' })
+  const when = formatWhen(format, revision.created_at)
   const zones = revision.snapshot?.zones ?? []
   const flows = revision.snapshot?.flows ?? []
   const counts = revision.snapshot ? t('counts', { zones: zones.length, flows: flows.length }) : ''

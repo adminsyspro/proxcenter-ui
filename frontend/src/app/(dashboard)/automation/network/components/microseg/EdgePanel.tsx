@@ -12,6 +12,7 @@ import FlowSummary from './FlowSummary'
 import { ObservedKindGlyph, ResolveActions, useResolveSuggestions } from './observationParts'
 import PolicyPager, { usePaged } from './PolicyPager'
 import type { MapEdgeData } from './zoneGraph'
+import { formatWhen } from './summaryModel'
 
 const ROWS_PER_PAGE = 5
 
@@ -49,10 +50,7 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
   const names = useContext(MapNamesContext)
   const format = useFormatter()
   const [open, setOpen] = useState(false)
-  const when = (iso: string) => {
-    const d = new Date(iso)
-    return Number.isNaN(d.getTime()) ? iso : format.dateTime(d, { dateStyle: 'medium', timeStyle: 'short' })
-  }
+  const when = (iso: string) => formatWhen(format, iso)
   const service = s.dport ? `${s.proto}/${s.dport}` : s.proto
   const zoneName = (id: string) => zonesById.get(id)?.name ?? to('deletedZone')
   const source = s.src_zone_id ? zoneName(s.src_zone_id) : s.src_ip || to('unknownEndpoint')

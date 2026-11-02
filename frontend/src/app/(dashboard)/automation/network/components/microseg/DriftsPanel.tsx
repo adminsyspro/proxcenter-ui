@@ -17,6 +17,7 @@ import type { MicrosegSubTabProps } from './microsegTabTypes'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { useZoneGuests } from './useZoneGuests'
 import { guestKey } from './zoneModel'
+import { formatWhen } from './summaryModel'
 
 /** `preselect` is built once per opening: the dialog compares it by identity. */
 type Assigning = { zone: MicrosegZone; preselect: string[] }
@@ -48,10 +49,8 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
   const paged = usePaged(visible)
 
   const lastFull = status?.engine.last_runs?.full?.started_at
-  const lastFullDate = lastFull ? new Date(lastFull) : null
-  const asOf = lastFullDate && !Number.isNaN(lastFullDate.getTime())
-    ? t('asOf', { time: format.dateTime(lastFullDate, { dateStyle: 'medium', timeStyle: 'short' }) })
-    : status ? t('asOfNone') : ''
+  let asOf = status ? t('asOfNone') : ''
+  if (lastFull && !Number.isNaN(Date.parse(lastFull))) asOf = t('asOf', { time: formatWhen(format, lastFull) })
 
   const subjectOf = (d: MicrosegDrift) => {
     if (d.guest) return guestsByKey.get(guestKey(d.guest))?.name ?? (typeof d.detail?.name === 'string' && d.detail.name ? d.detail.name : `${d.guest.type}/${d.guest.vmid}`)

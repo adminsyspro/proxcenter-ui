@@ -8,6 +8,7 @@ import { useFormatter, useTranslations } from 'next-intl'
 import type { MicrosegSuggestion } from '@/lib/microseg/types'
 
 import type { MapEdgeData } from './zoneGraph'
+import { formatWhen } from './summaryModel'
 
 /** At most this many observed flows are listed in the tooltip of an edge; the panel lists them all. */
 const TOOLTIP_ROWS = 5
@@ -49,10 +50,7 @@ function EdgeDetails({ d, source, target }: { d: MapEdgeData; source: string; ta
   const to = useTranslations('microsegPilot.observation')
   const names = useContext(MapNamesContext)
   const format = useFormatter()
-  const when = (iso: string) => {
-    const date = new Date(iso)
-    return Number.isNaN(date.getTime()) ? iso : format.dateTime(date, { dateStyle: 'medium', timeStyle: 'short' })
-  }
+  const when = (iso: string) => formatWhen(format, iso)
   if (d.kind === 'allowed' || d.kind === 'outside') {
     return (
       <Box>

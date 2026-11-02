@@ -8,6 +8,7 @@ import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/m
 
 import { OneLine } from './dialogParts'
 import { ObservedKindGlyph, ResolveActions } from './observationParts'
+import { formatWhen } from './summaryModel'
 
 /** What a zone-less endpoint is called: its IP, or "Unknown". */
 function endpoint(zoneId: string, ip: string, zones: Map<string, MicrosegZone>, t: (key: string) => string): string {
@@ -37,10 +38,7 @@ export default function ObservationRow({ suggestion: s, zones, checked, busy, on
   const format = useFormatter()
   const [open, setOpen] = useState(false)
 
-  const when = (iso: string) => {
-    const d = new Date(iso)
-    return Number.isNaN(d.getTime()) ? iso : format.dateTime(d, { dateStyle: 'medium', timeStyle: 'short' })
-  }
+  const when = (iso: string) => formatWhen(format, iso)
   const source = endpoint(s.src_zone_id, s.src_ip, zones, t)
   const destination = endpoint(s.dst_zone_id, s.dst_ip, zones, t)
   const service = s.dport ? `${s.proto}/${s.dport}` : s.proto

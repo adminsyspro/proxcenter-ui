@@ -7,6 +7,7 @@ import { useFormatter, useTranslations } from 'next-intl'
 import type { MicrosegRun } from '@/lib/microseg/types'
 
 import RunDetail from './RunDetail'
+import { formatWhen } from './summaryModel'
 
 const KNOWN_KINDS = new Set(['light', 'ips', 'full', 'log', 'targeted', 'plan', 'apply', 'remove'])
 const STATUS_COLOR: Record<string, 'success' | 'error' | 'info'> = { done: 'success', failed: 'error', running: 'info' }
@@ -22,7 +23,7 @@ export default function RunRow({ connectionId, run }: Props) {
   const [open, setOpen] = useState(false)
 
   const kind = KNOWN_KINDS.has(run.kind) ? t(`kind.${run.kind}`) : run.kind
-  const started = format.dateTime(new Date(run.started_at), { dateStyle: 'medium', timeStyle: 'short' })
+  const started = formatWhen(format, run.started_at)
   const duration = format.number(run.duration_ms / 1000, { style: 'unit', unit: 'second', unitDisplay: 'narrow', maximumFractionDigits: 1 })
 
   return (

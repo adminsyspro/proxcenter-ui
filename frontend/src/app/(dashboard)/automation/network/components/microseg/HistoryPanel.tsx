@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, CircularProgress, IconButton, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -45,6 +45,14 @@ function Revisions({ connectionId, policy, reloadPolicy, startRun }: MicrosegSub
   const [restoring, setRestoring] = useState<MicrosegRevision | null>(null)
   const restore = useDialogAction()
   const latestId = policy.last_revision?.id
+
+  // The draft is re-read when a run ends (the tab does it); a new head there means a revision was recorded.
+  const seenLatest = useRef(latestId)
+  useEffect(() => {
+    if (seenLatest.current === latestId) return
+    seenLatest.current = latestId
+    void reload()
+  }, [latestId, reload])
 
   const confirm = async () => {
     if (!restoring) return

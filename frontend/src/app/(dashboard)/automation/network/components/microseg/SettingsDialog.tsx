@@ -9,6 +9,7 @@ import type { MicrosegPolicy } from '@/lib/microseg/types'
 
 import { DialogErrorLine, ONE_LINE_SX, isVersionConflict, useDialogAction } from './dialogParts'
 import RemoveDialog from './RemoveDialog'
+import TypedConfirmDialog from './TypedConfirmDialog'
 import SettingsFields, { SectionTitle } from './SettingsFields'
 import {
   SETTING_UNITS, changedUpdate, formFromSettings, validateSettingsForm, type SettingNumberKey, type SettingsForm,
@@ -42,8 +43,9 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
   const [baseline] = useState(() => formFromSettings(policy.policy.tag_prefix, policy.policy.settings))
   const [form, setForm] = useState<SettingsForm>(baseline)
   const [removing, setRemoving] = useState(false)
+  const [confirmingPrefix, setConfirmingPrefix] = useState(false)
 
-  const problems = validateSettingsForm(form)
+  const problems = validateSettingsForm(form, baseline)
   const firstProblem = Object.entries(problems)[0]
   const update = changedUpdate(baseline, form)
 
@@ -58,8 +60,12 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
     return t(`validation.${problem.key}`, values)
   }
 
+  // Zones find their members by tag: other tags would take every guest out of its zone at the next apply.
+  const prefixChanged = update?.tag_prefix !== undefined && policy.zones.length > 0
+
   const submit = async () => {
     if (!update || firstProblem) return
+    setConfirmingPrefix(false)
     const ok = await save.run(async () => {
       try {
         await api.savePolicy({ version: policy.version, ...update })
@@ -93,6 +99,7 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
             form={form}
             problems={problems}
             busy={busy}
+            prefixWarning={prefixChanged}
             onChange={(key, value) => setForm(prev => ({ ...prev, [key]: value }))}
           />
           <SectionTitle>{t('sections.removal')}</SectionTitle>
@@ -117,9 +124,20 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
             {shown ? <DialogErrorLine message={shown} /> : save.error ? <DialogErrorLine message={save.error} /> : null}
           </Box>
           <Button onClick={onClose} disabled={busy}>{tc('cancel')}</Button>
-          <Button onClick={() => void submit()} variant='contained' disabled={busy || !update || !!firstProblem}>{tc('save')}</Button>
+          <Button onClick={() => (prefixChanged ? setConfirmingPrefix(true) : void submit())} variant='contained' disabled={busy || !update || !!firstProblem}>{tc('save')}</Button>
         </DialogActions>
       </Dialog>
+      {confirmingPrefix && (
+        <TypedConfirmDialog
+          title={t('prefixChange.title')}
+          lines={[t('prefixChange.body')]}
+          inputLabel={t('prefixChange.typeName', { prefix: form.tagPrefix })}
+          expected={form.tagPrefix}
+          confirmLabel={t('prefixChange.confirm')}
+          onConfirm={() => void submit()}
+          onCancel={() => setConfirmingPrefix(false)}
+        />
+      )}
       {removing && (
         <RemoveDialog
           connectionName={connectionName}

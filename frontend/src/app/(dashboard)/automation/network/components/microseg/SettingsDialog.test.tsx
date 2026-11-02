@@ -10,7 +10,7 @@ import { cleanup, within } from '@testing-library/react'
 import { screen, fireEvent, renderWithProviders, waitFor } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegSettings } from '@/lib/microseg/types'
 
-import { calls, mock, policy, reply, resetMocks } from './microsegTestKit'
+import { calls, mock, policy, reply, resetMocks, zone } from './microsegTestKit'
 import { body } from './policyTestKit'
 import SettingsDialog from './SettingsDialog'
 
@@ -26,8 +26,8 @@ const SETTINGS: MicrosegSettings = {
   notify_unprotected: true, notify_blocked: true,
 }
 
-function open(settings: Partial<MicrosegSettings> = {}, props: Partial<Parameters<typeof SettingsDialog>[0]> = {}) {
-  const base = policy()
+function open(settings: Partial<MicrosegSettings> = {}, props: Partial<Parameters<typeof SettingsDialog>[0]> = {}, withZones = false) {
+  const base = policy(withZones ? { zones: [zone('web')] } : {})
   const current = { ...base, policy: { ...base.policy, settings: { ...SETTINGS, ...settings } } }
   const handlers = { reloadPolicy: vi.fn(async () => undefined), startRun: vi.fn(), onClose: vi.fn() }
   renderWithProviders(<SettingsDialog connectionId='c1' connectionName='prod-cluster' policy={current} {...handlers} {...props} />)
@@ -214,6 +214,86 @@ describe('saving', () => {
     conflict = false
     fireEvent.click(save())
     await waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+})
+
+describe('tag prefix change', () => {
+  const confirmButton = () => within(screen.getByRole('dialog', { name: 'Change the tag prefix?' })).getByRole('button', { name: 'Change the prefix' }) as HTMLButtonElement
+
+  it('warns, and asks to type the new prefix, when the policy has zones', async () => {
+    mock.routes['PUT /policy'] = () => reply(200, { version: 4, policy: policy().policy })
+    const { onClose } = open({}, {}, true)
+    expect(screen.queryByText(/leave their zones at the next apply\.$/)).toBeNull()
+
+    type('Tag prefix', 'seg-')
+    expect(screen.getByText('Guests tagged with the old prefix leave their zones at the next apply.')).toBeTruthy()
+    fireEvent.click(save())
+
+    const dialog = await screen.findByRole('dialog', { name: 'Change the tag prefix?' })
+    expect(put()).toHaveLength(0)
+    expect(confirmButton().disabled).toBe(true)
+    const input = within(dialog).getByRole('textbox', { name: 'Type seg- to confirm' })
+    fireEvent.change(input, { target: { value: 'seg' } })
+    expect(confirmButton().disabled).toBe(true)
+    fireEvent.change(input, { target: { value: 'seg-' } })
+    fireEvent.click(confirmButton())
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(body(put()[0][1])).toEqual({ version: 3, tag_prefix: 'seg-' })
+  })
+
+  it('saves nothing when the confirmation is cancelled', async () => {
+    open({}, {}, true)
+    type('Tag prefix', 'seg-')
+    fireEvent.click(save())
+    const dialog = await screen.findByRole('dialog', { name: 'Change the tag prefix?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change the tag prefix?' })).toBeNull())
+    expect(put()).toHaveLength(0)
+    expect(field('Tag prefix').value).toBe('seg-')
+  })
+
+  it('does not ask for another field, nor warn when the prefix is not touched', async () => {
+    mock.routes['PUT /policy'] = () => reply(200, { version: 4, policy: policy().policy })
+    const { onClose } = open({}, {}, true)
+    type('Write cap per run', '20')
+    expect(screen.queryByText(/Guests tagged with the old prefix/)).toBeNull()
+    fireEvent.click(save())
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(screen.queryByRole('dialog', { name: 'Change the tag prefix?' })).toBeNull()
+  })
+
+  it('neither warns nor asks when the policy has no zone', async () => {
+    mock.routes['PUT /policy'] = () => reply(200, { version: 4, policy: policy().policy })
+    const { onClose } = open()
+    type('Tag prefix', 'seg-')
+    expect(screen.queryByText(/Guests tagged with the old prefix/)).toBeNull()
+    fireEvent.click(save())
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(body(put()[0][1])).toEqual({ version: 3, tag_prefix: 'seg-' })
+  })
+})
+
+describe('a stored value the form cannot show', () => {
+  it('does not block Save: a rate without burst reads as leave as is', async () => {
+    mock.routes['PUT /policy'] = () => reply(200, { version: 4, policy: policy().policy })
+    const { onClose } = open({ observe_log_rate_limit: 'enable=1,rate=5/minute' })
+    expect(field('Log rate limit').value).toBe('')
+    type('Write cap per run', '20')
+    expect(save().disabled).toBe(false)
+    fireEvent.click(save())
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(body(put()[0][1])).toEqual({ version: 3, settings: { write_cap: 20 } })
+  })
+
+  it('does not block Save for a stored interval out of the bounds while another field is edited', async () => {
+    mock.routes['PUT /policy'] = () => reply(200, { version: 4, policy: policy().policy })
+    const { onClose } = open({ light_interval_sec: 30 })
+    type('Write cap per run', '20')
+    expect(screen.queryByText(/must be between/)).toBeNull()
+    fireEvent.click(save())
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(body(put()[0][1]).settings).toEqual({ write_cap: 20 })
   })
 })
 

@@ -100,6 +100,7 @@ describe('restore', () => {
     const dialog = await ask()
 
     expect(calls('POST /revisions/rev-8/restore')).toHaveLength(0)
+    expect(within(dialog).getByText(/queued member changes are dropped/)).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Restore' }))
 
     await waitFor(() => expect(startRun).toHaveBeenCalledTimes(1))

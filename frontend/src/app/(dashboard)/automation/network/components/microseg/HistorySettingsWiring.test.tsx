@@ -164,6 +164,30 @@ describe('history', () => {
   })
 })
 
+describe('revisions after a run', () => {
+  it('lists the revision a restore recorded, with the Latest chip, once the run has ended', async () => {
+    window.localStorage.setItem('microseg.subTab', 'history')
+    const head = { ...REVISION_HEAD, id: 'r2', version: 3 }
+    let restored = false
+    const older = { ...REVISION_HEAD, snapshot: { tag_prefix: 'zone-', zones: [zone('a')], flows: [] } }
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: restored ? head : REVISION_HEAD }))
+    mock.routes['GET /revisions?limit=100'] = () => reply(200, { revisions: restored ? [{ ...head, snapshot: older.snapshot }, older] : [older] })
+    mock.routes['GET /runs?limit=11'] = () => reply(200, { runs: [], limit: 11, offset: 0 })
+    mock.routes['POST /revisions/r1/restore'] = () => { restored = true; return reply(202, { run_id: 'rs1' }) }
+    mock.routes['GET /runs/rs1'] = () => reply(200, { ...run('done', { guests: 1, members: 1, steps: 0, drifts: 0 }), id: 'rs1' })
+    renderConfigured()
+
+    const line = await screen.findByRole('listitem', { name: 'Version 2' })
+    expect(within(line).getByText('Latest')).toBeTruthy()
+    fireEvent.click(within(line).getByRole('button', { name: 'Restore' }))
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Restore version 2?' })).getByRole('button', { name: 'Restore' }))
+
+    const added = await screen.findByRole('listitem', { name: 'Version 3' })
+    expect(within(added).getByText('Latest')).toBeTruthy()
+    expect(within(screen.getByRole('listitem', { name: 'Version 2' })).queryByText('Latest')).toBeNull()
+  })
+})
+
 describe('sub-tab', () => {
   it('shows the History panel instead of the placeholder', async () => {
     window.localStorage.setItem('microseg.subTab', 'history')

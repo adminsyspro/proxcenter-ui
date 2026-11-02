@@ -6,6 +6,8 @@ import { useTranslations } from 'next-intl'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
 
+import { Notice } from './PlanNotices'
+
 import {
   NOTIFY_KEYS, RATE_UNITS, SETTING_NUMBER_KEYS, SETTING_UNITS, type RateUnit, type SettingNumberKey, type SettingsForm, type SettingsProblems,
 } from './settingsModel'
@@ -76,11 +78,13 @@ type Props = {
   form: SettingsForm
   problems: SettingsProblems
   busy: boolean
+  /** The tag prefix was changed on a policy that has zones: say what that does. */
+  prefixWarning: boolean
   onChange: <K extends keyof SettingsForm>(key: K, value: SettingsForm[K]) => void
 }
 
 /** The inputs of the Settings dialog, grouped under small headings, every setting on one line. */
-export default function SettingsFields({ form, problems, busy, onChange }: Props) {
+export default function SettingsFields({ form, problems, busy, prefixWarning, onChange }: Props) {
   const t = useTranslations('microsegPilot.settings')
 
   return (
@@ -94,6 +98,7 @@ export default function SettingsFields({ form, problems, busy, onChange }: Props
         disabled={busy}
         onChange={v => onChange('tagPrefix', v)}
       />
+      {prefixWarning && <Notice severity='warning' text={t('prefixChange.warning')} />}
 
       {NUMBER_SECTIONS.map(section => (
         <Box key={section.title}>

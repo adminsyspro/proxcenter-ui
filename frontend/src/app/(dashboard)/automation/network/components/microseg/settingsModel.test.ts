@@ -110,6 +110,28 @@ describe('self IPs', () => {
   })
 })
 
+describe('a stored value the form cannot show', () => {
+  it('reads a rate without burst, or a burst alone, as leave as is', () => {
+    expect(parseRateLimit('enable=1,rate=5/minute')).toEqual({ rate: '', rateUnit: 'second', burst: '' })
+    expect(parseRateLimit('enable=1,burst=4')).toEqual({ rate: '', rateUnit: 'second', burst: '' })
+  })
+
+  it('validates only the fields that differ from the baseline', () => {
+    const odd = formFromSettings('Odd Prefix', { ...base, light_interval_sec: 30, observe_log_rate_limit: 'enable=1,rate=5/minute' })
+    expect(validateSettingsForm(odd).tagPrefix).toBeDefined()
+    expect(validateSettingsForm(odd, odd)).toEqual({})
+    const edited = { ...odd, write_cap: '9999' }
+    expect(Object.keys(validateSettingsForm(edited, odd))).toEqual(['write_cap'])
+    expect(validateSettingsForm({ ...odd, light_interval_sec: '60' }, odd).light_interval_sec).toBeUndefined()
+    expect(validateSettingsForm({ ...odd, light_interval_sec: '20' }, odd).light_interval_sec).toBeDefined()
+  })
+
+  it('checks the whole log rate group as soon as one of its fields is edited', () => {
+    const baseline = formFromSettings('zone-', base)
+    expect(validateSettingsForm({ ...baseline, rate: '5' }, baseline).burst).toEqual({ key: 'rateBoth' })
+  })
+})
+
 describe('changed fields', () => {
   const baseline = formFromSettings('zone-', { ...base, self_ips: ['10.0.0.5'], observe_log_rate_limit: 'enable=1,rate=10/second,burst=20' })
 

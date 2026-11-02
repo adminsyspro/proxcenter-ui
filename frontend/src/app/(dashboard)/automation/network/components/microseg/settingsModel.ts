@@ -63,9 +63,10 @@ export function parseRateLimit(value: string): RateLimitForm {
     (value || '').split(',').map(p => p.trim().split('=') as [string, string | undefined]).filter(([, v]) => v !== undefined),
   )
   const rate = /^([1-9]\d{0,8})\/(second|minute|hour|day)$/.exec(parts.get('rate') ?? '')
-  if (!rate) return { ...EMPTY_RATE }
   const burst = /^(0|[1-9]\d{0,8})$/.exec(parts.get('burst') ?? '')
-  return { rate: rate[1], rateUnit: rate[2] as RateUnit, burst: burst ? burst[1] : '' }
+  // A rate without burst (or a burst alone) is not what the form builds: it reads as "leave as is".
+  if (!rate || !burst) return { ...EMPTY_RATE }
+  return { rate: rate[1], rateUnit: rate[2] as RateUnit, burst: burst[1] }
 }
 
 /** The PVE property string of the form; empty when both numbers are empty (the cluster option is left alone). */
@@ -93,6 +94,10 @@ export function formFromSettings(tagPrefix: string, settings: Partial<MicrosegSe
 
 const isWhole = (value: string) => /^\d+$/.test(value.trim())
 
+function sameRate(a: RateLimitForm, b: RateLimitForm) {
+  return a.rate.trim() === b.rate.trim() && a.rateUnit === b.rateUnit && a.burst.trim() === b.burst.trim()
+}
+
 function validateRate(form: SettingsForm, problems: SettingsProblems) {
   const rate = form.rate.trim()
   const burst = form.burst.trim()
@@ -109,16 +114,23 @@ function validateSelfIps(text: string, problems: SettingsProblems) {
   else if (ips.length > MAX_SELF_IPS) problems.selfIps = { key: 'selfIpTooMany', values: { max: MAX_SELF_IPS } }
 }
 
-export function validateSettingsForm(form: SettingsForm): SettingsProblems {
+/**
+ * What is wrong with the form. With a `baseline`, a field that still holds the
+ * value it opened with is not checked: a stored value the form cannot judge
+ * (an older setting, a rate without burst) must not block saving the others.
+ */
+export function validateSettingsForm(form: SettingsForm, baseline?: SettingsForm): SettingsProblems {
   const problems: SettingsProblems = {}
-  if (!TAG_PREFIX_RE.test(form.tagPrefix)) problems.tagPrefix = { key: 'tagPrefix' }
+  const edited = (same: boolean) => !baseline || !same
+  if (edited(baseline?.tagPrefix === form.tagPrefix) && !TAG_PREFIX_RE.test(form.tagPrefix)) problems.tagPrefix = { key: 'tagPrefix' }
   for (const key of SETTING_NUMBER_KEYS) {
+    if (!edited(baseline?.[key].trim() === form[key].trim())) continue
     const [min, max] = SETTING_BOUNDS[key]
     const value = form[key].trim()
     if (!isWhole(value) || Number(value) < min || Number(value) > max) problems[key] = { key: 'range', values: { min, max } }
   }
-  validateRate(form, problems)
-  validateSelfIps(form.selfIps, problems)
+  if (edited(!!baseline && sameRate(baseline, form))) validateRate(form, problems)
+  if (edited(baseline?.selfIps === form.selfIps)) validateSelfIps(form.selfIps, problems)
   return problems
 }
 

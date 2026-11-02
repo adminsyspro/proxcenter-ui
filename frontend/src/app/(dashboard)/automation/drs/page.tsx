@@ -8,7 +8,9 @@ import { getDateLocale } from '@/lib/i18n/date'
 import { useDRSStatus, useDRSRecommendations as useDRSRecsHook, useDRSMigrations, useDRSAllMigrations, useDRSMetrics, useDRSSettings, useDRSRules, useMigrationProgress } from '@/hooks/useDRS'
 import useSWR from 'swr'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Cell } from 'recharts'
+import type { XAxisTickContentProps } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
+import { computeNodeAxisLayout, createTextMeasurer, truncateToWidth, NODE_AXIS_ANGLE, NODE_AXIS_FONT_SIZE } from './nodeAxisLayout'
 
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import ProviderTenantGuard from '@/components/guards/ProviderTenantGuard'
@@ -2087,6 +2089,35 @@ return next
     )
   }, [clusters])
 
+  // Width of the bar chart, to decide whether node names fit side by side
+  const [nodeChartWidth, setNodeChartWidth] = useState(0)
+  const nodeChartObserver = useRef<ResizeObserver | null>(null)
+
+  const nodeChartRef = useCallback((el: HTMLDivElement | null) => {
+    nodeChartObserver.current?.disconnect()
+    nodeChartObserver.current = null
+    if (!el) return
+    setNodeChartWidth(el.getBoundingClientRect().width)
+    if (typeof ResizeObserver === 'undefined') return
+    nodeChartObserver.current = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width
+
+      if (w) setNodeChartWidth(w)
+    })
+    nodeChartObserver.current.observe(el)
+  }, [])
+
+  const measureNodeLabel = useMemo(
+    () => createTextMeasurer(`${NODE_AXIS_FONT_SIZE}px ${theme.typography.fontFamily}`),
+    [theme.typography.fontFamily]
+  )
+
+  // Y axis (40px) and right margin (8px) are not part of the bar area
+  const nodeAxisLayout = useMemo(
+    () => computeNodeAxisLayout(nodeBarData.map(d => measureNodeLabel(d.name)), nodeChartWidth - 48, 40),
+    [nodeBarData, nodeChartWidth, measureNodeLabel]
+  )
+
   // The level DRS balances each cluster towards, shown in the chart tooltip
   const clusterAverages = useMemo(() => clusters.map(c => ({
     RAM: c.metrics?.summary?.avg_memory_usage ?? 0,
@@ -2307,18 +2338,38 @@ return next
                   </Typography>
                   {nodeBarData.length > 0 ? (
                     <>
-                      <Box sx={{ height: 200 }}>
+                      <Box ref={nodeChartRef} sx={{ height: 170 + nodeAxisLayout.height }}>
                         <ChartContainer>
-                          <BarChart data={nodeBarData} barCategoryGap="20%" barGap={2} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                          <BarChart data={nodeBarData} barCategoryGap="20%" barGap={2} margin={{ top: 8, right: 8, bottom: 0, left: nodeAxisLayout.mode === 'tilted' ? nodeAxisLayout.leftPad : 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} vertical={false} />
                             <XAxis
                               dataKey="key"
-                              tickFormatter={(key: string) => key.slice(key.indexOf(':') + 1)}
-                              hide={nodeBarData.length > 24}
                               interval={0}
-                              tick={{ fontSize: 10, fill: theme.palette.text.secondary }}
+                              height={nodeAxisLayout.height}
                               tickLine={false}
                               axisLine={{ stroke: theme.palette.divider }}
+                              tick={(props: XAxisTickContentProps) => {
+                                const x = Number(props.x)
+                                const y = Number(props.y)
+                                const { payload } = props
+                                const key = String(payload.value)
+                                const name = key.slice(key.indexOf(':') + 1)
+                                const common = { fontSize: NODE_AXIS_FONT_SIZE, fill: theme.palette.text.secondary }
+
+                                if (nodeAxisLayout.mode === 'hidden') return <g />
+                                if (nodeAxisLayout.mode === 'horizontal') {
+                                  return <text x={x} y={y + 4} dy="0.71em" textAnchor="middle" {...common}>{name}</text>
+                                }
+
+                                const label = truncateToWidth(name, nodeAxisLayout.maxLabelWidth, measureNodeLabel)
+
+                                return (
+                                  <text x={x} y={y + 4} dy="0.71em" textAnchor="end" transform={`rotate(${NODE_AXIS_ANGLE}, ${x}, ${y + 4})`} {...common}>
+                                    {label !== name && <title>{name}</title>}
+                                    {label}
+                                  </text>
+                                )
+                              }}
                             />
                             <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 10, fill: theme.palette.text.secondary }} axisLine={false} tickLine={false} width={40} />
                             <RechartsTooltip

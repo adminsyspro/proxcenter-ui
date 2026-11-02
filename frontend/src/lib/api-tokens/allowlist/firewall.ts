@@ -15,7 +15,6 @@ const READ_NOTE = "Needs node.view on the connection (scope nodes:read or firewa
 const WRITE_NOTE = "Needs node.manage on the connection."
 const TENANT_NOTE = "Not available to a vDC tenant token."
 const GUEST_NOTE = "A vDC tenant token reaches the guests of its own vDC pools only."
-const ORCHESTRATOR_NOTE = "Runs on the orchestrator only (no direct Proxmox fallback)."
 const MOVE_NOTE = "`moveto` moves the rule to that position; an empty optional field clears it."
 const TYPE_QUERY: AllowlistQueryParam[] = [
   { name: "type", description: "`options` (default) or `rules`" },
@@ -323,30 +322,6 @@ export const FIREWALL_ENTRIES: AllowlistEntry[] = [
     summary: "Delete a node firewall rule",
     description: `Removes the node rule at position {pos}. ${WRITE_NOTE}`,
     responseSchemaRef: "FirewallStatusResponse",
-  }),
-
-  // Micro-segmentation
-  clusterFwEntry({
-    id: "fw-microseg-base-generate",
-    method: "POST",
-    file: "firewall/microseg/[connectionId]/generate-base",
-    pattern: `${FW}/microseg/{connectionId}/generate-base`,
-    summary: "Generate the base micro-segmentation security groups",
-    description:
-      `Creates one base security group (sg-base-*) per network alias (net-*), and with \`create_gateways\` the missing gateway aliases (gw-*). \`dry_run\` only returns the plan. ${ORCHESTRATOR_NOTE} ${WRITE_NOTE}`,
-    requestSchemaRef: "FirewallMicrosegBaseGenerateRequest",
-    responseSchemaRef: "FirewallMicrosegBaseGenerateResponse",
-  }),
-  guestFwEntry({
-    id: "fw-vm-isolate",
-    method: "POST",
-    file: "firewall/microseg/[connectionId]/vm/[node]/[vmType]/[vmid]/isolate",
-    pattern: `${FW}/microseg/{connectionId}/vm/{node}/{vmType}/{vmid}/isolate`,
-    summary: "Isolate a guest",
-    description:
-      `Applies micro-segmentation to the guest: enables its firewall, sets DROP policies, applies the base security groups of its networks (creating a missing one) and \`additional_sgs\`, and enables the firewall on its NICs, as the flags ask. {vmType} is qemu or lxc. ${ORCHESTRATOR_NOTE} ${WRITE_NOTE} ${GUEST_NOTE} \`apply_base_sgs\` is refused to a vDC tenant token (it may create cluster-level groups and aliases): 403.`,
-    requestSchemaRef: "FirewallVmIsolateRequest",
-    responseSchemaRef: "FirewallVmIsolateResponse",
   }),
 
   // Guest firewall

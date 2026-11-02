@@ -90,8 +90,6 @@
     "src/app/api/v1/firewall/ipsets/[connectionId]/[ipsetName]/entries/route.ts": 1,
     "src/app/api/v1/firewall/ipsets/[connectionId]/[ipsetName]/route.ts": 1,
     "src/app/api/v1/firewall/ipsets/[connectionId]/route.ts": 2,
-    "src/app/api/v1/firewall/microseg/[connectionId]/generate-base/route.ts": 1,
-    "src/app/api/v1/firewall/microseg/[connectionId]/vm/[node]/[vmType]/[vmid]/isolate/route.ts": 1,
     "src/app/api/v1/firewall/nodes/[connectionId]/[node]/route.ts": 3,
     "src/app/api/v1/firewall/nodes/[connectionId]/[node]/rules/[pos]/route.ts": 2,
     "src/app/api/v1/firewall/nodes/[connectionId]/[node]/rules/route.ts": 1,

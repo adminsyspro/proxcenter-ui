@@ -8,10 +8,8 @@ export const dynamic = "force-dynamic"
 // UI reads the error code. The orchestrator audits its own writes, from the
 // actor headers, so nothing is audited here.
 //
-// Next resolves the static folders of this directory (analyze, generate-base,
-// vm, vms: the previous endpoints, removed in a later task) before this
-// catch-all, and none of their names is a route of MICROSEG_ROUTES, so the
-// two sets cannot shadow each other.
+// This is the only route of the directory: the previous per-endpoint routes (analysis, guests, isolation)
+// are gone, and the public API allowlist no longer lists any micro-segmentation entry.
 import { NextRequest, NextResponse } from 'next/server'
 
 import { OrchestratorPathError, orchestratorRelay, orchestratorSegment } from '@/lib/orchestrator/client'

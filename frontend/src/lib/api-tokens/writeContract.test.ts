@@ -59,7 +59,6 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
     'fw-group-create', 'fw-group-delete', 'fw-group-rule-create', 'fw-group-rule-update', 'fw-group-rule-delete',
     'fw-ipset-create', 'fw-ipset-delete', 'fw-ipset-entry-create', 'fw-ipset-entry-delete',
     'fw-node-options-update', 'fw-node-rule-add', 'fw-node-rule-create', 'fw-node-rule-update', 'fw-node-rule-delete',
-    'fw-microseg-base-generate', 'fw-vm-isolate',
     'fw-vm-rule-create', 'fw-vm-options-update', 'fw-vm-rule-update', 'fw-vm-rule-delete', 'fw-vm-nic-firewall-update',
   ],
 }

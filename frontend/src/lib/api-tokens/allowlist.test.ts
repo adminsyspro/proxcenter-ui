@@ -210,8 +210,6 @@ describe('shared canonical matcher', () => {
       'fw-node-rule-create': '/api/v1/firewall/nodes/c1/pve1/rules',
       'fw-node-rule-update': '/api/v1/firewall/nodes/c1/pve1/rules/2',
       'fw-node-rule-delete': '/api/v1/firewall/nodes/c1/pve1/rules/2',
-      'fw-microseg-base-generate': '/api/v1/firewall/microseg/c1/generate-base',
-      'fw-vm-isolate': '/api/v1/firewall/microseg/c1/vm/pve1/qemu/100/isolate',
       'fw-vm-get': '/api/v1/firewall/vms/c1/pve1/qemu/100',
       'fw-vm-rule-create': '/api/v1/firewall/vms/c1/pve1/qemu/100',
       'fw-vm-options-update': '/api/v1/firewall/vms/c1/pve1/qemu/100',

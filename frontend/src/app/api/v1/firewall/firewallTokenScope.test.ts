@@ -56,7 +56,6 @@ vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => h.audit(...a) }))
 import { DELETE as ALIAS_DELETE } from './aliases/[connectionId]/[name]/route'
 import { POST as CLUSTER_RULE_ADD } from './cluster/[connectionId]/route'
 import { DELETE as CLUSTER_RULE_DELETE } from './cluster/[connectionId]/rules/[pos]/route'
-import { POST as VM_ISOLATE } from './microseg/[connectionId]/vm/[node]/[vmType]/[vmid]/isolate/route'
 import { DELETE as IPSET_ENTRY_DELETE } from './ipsets/[connectionId]/[ipsetName]/entries/[cidr]/route'
 import { POST as VM_RULE_CREATE } from './vms/[connectionId]/[node]/[vmType]/[vmid]/route'
 
@@ -96,10 +95,6 @@ const addClusterRule = (conn: string) => CLUSTER_RULE_ADD(
   tokenRequest('POST', `/api/v1/firewall/cluster/${conn}`, 'fw-cluster-rule-add', RULE) as any,
   { params: Promise.resolve({ connectionId: conn }) },
 )
-const isolate = (body: Record<string, unknown>) => VM_ISOLATE(
-  tokenRequest('POST', '/api/v1/firewall/microseg/c1/vm/pve1/qemu/100/isolate', 'fw-vm-isolate', body) as any,
-  { params: Promise.resolve({ connectionId: 'c1', node: 'pve1', vmType: 'qemu', vmid: '100' }) },
-)
 const addVmRule = (vmid: string) => VM_RULE_CREATE(
   tokenRequest('POST', `/api/v1/firewall/vms/c1/pve1/qemu/${vmid}`, 'fw-vm-rule-create', RULE) as any,
   { params: Promise.resolve({ connectionId: 'c1', node: 'pve1', vmType: 'qemu', vmid }) },
@@ -113,9 +108,7 @@ beforeEach(() => {
   h.checkPermission.mockResolvedValue(null)
   h.audit.mockResolvedValue('audit-1')
   h.pveFetch.mockImplementation(async (_conn, path: string) => (path === '/cluster/resources?type=vm' ? GUESTS : null))
-  h.orchPost.mockImplementation(async (path: string) => (
-    path.endsWith('/isolate') ? { data: { success: true, applied_sgs: [], enabled_nics: [], actions: [] } } : { data: { status: 'created' } }
-  ))
+  h.orchPost.mockResolvedValue({ data: { status: 'created' } })
   h.orchDelete.mockResolvedValue({ data: { status: 'deleted' } })
 })
 
@@ -182,80 +175,6 @@ describe('firewall routes with an API token', () => {
 
     expect(res.status).toBe(200)
     expect(h.orchDelete).toHaveBeenCalledWith('/firewall/ipsets/c1/blocklist/entries/10.0.0.0%2F24')
-  })
-
-  it('isolating its own guest with apply_base_sgs from a vDC tenant token: 403 cluster object, nothing reached', async () => {
-    h.getPrincipal.mockResolvedValue({ ok: true, principal: IAAS_TOKEN })
-    h.infra.mockResolvedValue({ kind: 'iaas', vdcScope: VDC_SCOPE })
-
-    const res = await isolate({ enable_firewall: true, apply_base_sgs: true })
-
-    expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'Cluster-level object not available to a vDC tenant token' })
-    expect(h.orchPost).not.toHaveBeenCalled()
-  })
-
-  it('isolating its own guest without apply_base_sgs from a vDC tenant token reaches the orchestrator', async () => {
-    h.getPrincipal.mockResolvedValue({ ok: true, principal: IAAS_TOKEN })
-    h.infra.mockResolvedValue({ kind: 'iaas', vdcScope: VDC_SCOPE })
-    const body = { enable_firewall: true, set_policy_in_drop: true, apply_base_sgs: false, enable_nic_fw: true }
-
-    const res = await isolate(body)
-
-    expect(res.status).toBe(200)
-    expect(h.checkPermission).toHaveBeenCalledWith('node.manage', 'connection', 'c1')
-    expect(h.orchPost).toHaveBeenCalledWith('/firewall/microseg/c1/vm/pve1/qemu/100/isolate', body)
-  })
-
-  it('a provider token keeps apply_base_sgs', async () => {
-    const res = await isolate({ apply_base_sgs: true })
-
-    expect(res.status).toBe(200)
-    expect(h.orchPost).toHaveBeenCalledWith('/firewall/microseg/c1/vm/pve1/qemu/100/isolate', { apply_base_sgs: true })
-  })
-
-  it.each(['Apply_Base_SGs', 'APPLY_BASE_SGS', 'apply_baſe_sgs'])(
-    'a vDC tenant token spelling %s (the orchestrator folds key case): 403, nothing reached',
-    async key => {
-      h.getPrincipal.mockResolvedValue({ ok: true, principal: IAAS_TOKEN })
-      h.infra.mockResolvedValue({ kind: 'iaas', vdcScope: VDC_SCOPE })
-
-      const res = await isolate({ enable_firewall: true, [key]: true })
-
-      expect(res.status).toBe(403)
-      expect(await res.json()).toEqual({ error: 'Cluster-level object not available to a vDC tenant token' })
-      expect(h.orchPost).not.toHaveBeenCalled()
-    },
-  )
-
-  it('a token isolate forwards only the known fields, exactly spelled', async () => {
-    const res = await isolate({
-      enable_firewall: true, additional_sgs: ['sg-web'], Apply_Base_SGs: true, ENABLE_NIC_FW: true, extra: 1,
-    })
-
-    expect(res.status).toBe(200)
-    expect(h.orchPost).toHaveBeenCalledWith(
-      '/firewall/microseg/c1/vm/pve1/qemu/100/isolate', { enable_firewall: true, additional_sgs: ['sg-web'] },
-    )
-  })
-
-  it.each([
-    [{ apply_base_sgs: 'true' }], [{ additional_sgs: 'sg-web' }], [{ additional_sgs: [1] }], [['enable_firewall']],
-  ])('a token isolate with a mistyped body %j: 400, nothing reached', async body => {
-    const res = await isolate(body as any)
-
-    expect(res.status).toBe(400)
-    expect(h.orchPost).not.toHaveBeenCalled()
-  })
-
-  it('a session isolate forwards its body unchanged', async () => {
-    h.getPrincipal.mockResolvedValue({ ok: true, principal: { kind: 'session', userId: 'u-a', tenantId: 'default' } })
-    const body = { enable_firewall: true, Apply_Base_SGs: true, extra: 1 }
-
-    const res = await isolate(body)
-
-    expect(res.status).toBe(200)
-    expect(h.orchPost).toHaveBeenCalledWith('/firewall/microseg/c1/vm/pve1/qemu/100/isolate', body)
   })
 
   it('a double-encoded rule position or alias name is refused 401 before the handler', async () => {

@@ -578,3 +578,15 @@ describe('NotificationChannelsCard SLA type', () => {
     expect(await typeOptions(await openEdit('SLA Teams'))).toContain('SLA')
   })
 })
+
+describe('NotificationChannelsCard updates type', () => {
+  it('offers the Updates type without any feature', async () => {
+    mockFetch([channel()])
+    renderCard()
+
+    const dialog = await openEdit('Ops Slack')
+
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Notification types' }))
+    expect((await screen.findAllByRole('option')).map(o => o.textContent)).toContain('Updates')
+  })
+})

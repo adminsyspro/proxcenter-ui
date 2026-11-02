@@ -5247,6 +5247,7 @@
     "maintenance": "Maintenance",
     "reports": "Rapports",
     "replication": "Réplication",
+    "updates": "Mises à jour disponibles",
     "filtersAndLimits": "Filtres et limites",
     "minSeverity": "Sévérité minimale",
     "allNotifications": "Toutes les notifications",
@@ -5338,7 +5339,8 @@
         "replication": "Réplication",
         "maintenance": "Maintenance",
         "report": "Rapports",
-        "sla": "SLA"
+        "sla": "SLA",
+        "updates": "Mises à jour"
       },
       "severities": {
         "info": "Info et plus",
@@ -5364,7 +5366,8 @@
       "backup": "Tâches de sauvegarde Proxmox, réussite ou échec par tâche, et exercices de restauration.",
       "replication": "Site Recovery : tâches de réplication réussies ou en échec, et bascule, retour ou test d'un plan de reprise.",
       "maintenance": "Un nœud qui entre en mode maintenance ou en sort, et la fin de son évacuation.",
-      "report": "Rapports programmés, envoyés par e-mail une fois générés."
+      "report": "Rapports programmés, envoyés par e-mail une fois générés.",
+      "updates": "Nouvelles versions de paquets disponibles sur les nœuds Proxmox VE, relevées toutes les 6 heures. Une notification par cluster, chaque version n'est signalée qu'une fois."
     }
   },
   "audit": {

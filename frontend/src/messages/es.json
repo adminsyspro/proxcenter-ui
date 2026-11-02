@@ -5247,6 +5247,7 @@
     "maintenance": "Mantenimiento",
     "reports": "Informes",
     "replication": "Replicación",
+    "updates": "Actualizaciones disponibles",
     "filtersAndLimits": "Filtros y límites",
     "minSeverity": "Severidad mínima",
     "allNotifications": "Todas las notificaciones",
@@ -5338,7 +5339,8 @@
         "replication": "Replicación",
         "maintenance": "Mantenimiento",
         "report": "Informes",
-        "sla": "SLA"
+        "sla": "SLA",
+        "updates": "Actualizaciones"
       },
       "severities": {
         "info": "Info y superiores",
@@ -5364,7 +5366,8 @@
       "backup": "Tareas de copia de seguridad de Proxmox, éxito o fallo por tarea, y los simulacros de restauración.",
       "replication": "Site Recovery: tareas de replicación correctas o fallidas, y la conmutación, reversión o prueba de un plan de recuperación.",
       "maintenance": "Un nodo que entra en modo mantenimiento o sale de él, y el fin de su evacuación.",
-      "report": "Informes programados, enviados por correo una vez generados."
+      "report": "Informes programados, enviados por correo una vez generados.",
+      "updates": "Nuevas versiones de paquetes disponibles en los nodos Proxmox VE, comprobadas cada 6 horas. Una notificación por clúster, cada versión se notifica una sola vez."
     }
   },
   "audit": {

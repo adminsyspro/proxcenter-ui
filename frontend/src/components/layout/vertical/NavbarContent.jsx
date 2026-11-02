@@ -71,6 +71,7 @@ import { useRBAC } from '@/contexts/RBACContext'
 import { useTenant } from '@/contexts/TenantContext'
 
 import { useActiveAlerts, useVersionCheck, useOrchestratorHealth, useHaClusterHealth } from '@/hooks/useNavbarNotifications'
+import { getAlertIcon, severityLabelKey } from '@/lib/alerts/bellAlertStyle'
 import { useDRSRecommendations, useDRSSettings } from '@/hooks/useDRS'
 import { useAlertsSummary } from '@/hooks/useAlerts'
 import { useHaConfig } from '@/components/settings/ha/useHaConfig'
@@ -140,40 +141,6 @@ const createTimeAgo = (t) => (date) => {
   if (diff < 86400) return t('time.hoursAgo', { count: Math.floor(diff / 3600) })
   
 return t('time.daysAgo', { count: Math.floor(diff / 86400) })
-}
-
-// Icônes et couleurs selon le type d'alerte
-const getAlertIcon = (alert) => {
-  const msg = alert.message?.toLowerCase() || ''
-  
-  if (msg.includes('offline') || msg.includes('quorum')) {
-    return { icon: 'ri-server-line', color: 'error' }
-  }
-
-  if (msg.includes('ceph')) {
-    return { icon: 'ri-database-2-line', color: alert.severity === 'crit' ? 'error' : 'warning' }
-  }
-
-  if (msg.includes('pbs') || msg.includes('backup')) {
-    return { icon: 'ri-shield-check-line', color: alert.severity === 'crit' ? 'error' : 'warning' }
-  }
-
-  if (msg.includes('cpu')) {
-    return { icon: 'ri-cpu-line', color: alert.severity === 'crit' ? 'error' : 'warning' }
-  }
-
-  if (msg.includes('ram') || msg.includes('memory')) {
-    return { icon: 'ri-ram-line', color: alert.severity === 'crit' ? 'error' : 'warning' }
-  }
-
-  if (msg.includes('stockage') || msg.includes('storage')) {
-    return { icon: 'ri-hard-drive-2-line', color: alert.severity === 'crit' ? 'error' : 'warning' }
-  }
-  
-  return { 
-    icon: alert.severity === 'crit' ? 'ri-error-warning-line' : 'ri-alarm-warning-line', 
-    color: alert.severity === 'crit' ? 'error' : 'warning' 
-  }
 }
 
 const NavbarContent = ({ targetLayout } = {}) => {
@@ -271,6 +238,7 @@ const NavbarContent = ({ targetLayout } = {}) => {
       id: a.id,
       message: a.message,
       severity: a.severity === 'critical' ? 'crit' : a.severity === 'warning' ? 'warn' : 'info',
+      type: a.type,
       source: a.resource_name ? `${a.resource_name} (${a.resource})` : (a.resource || a.connection_id),
       lastSeenAt: a.last_seen_at,
       firstSeenAt: a.first_seen_at,
@@ -1227,7 +1195,7 @@ return () => window.removeEventListener('keydown', onKeyDown)
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
                       <Chip
                         size='small'
-                        label={(notif.severity === 'crit' ? t('alerts.critical') : t('alerts.warning')).toUpperCase()}
+                        label={t(severityLabelKey(notif.severity)).toUpperCase()}
                         color={color}
                         sx={{ height: 16, fontSize: '0.55rem', fontWeight: 700 }}
                       />

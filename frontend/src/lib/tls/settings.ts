@@ -6,6 +6,7 @@
 import { getSetting, setSetting } from '@/lib/db/settings'
 import { findDnsProvider } from '@/lib/tls/dns/catalog'
 import { DEFAULT_TLS_SETTINGS, TLS_SETTINGS_KEY, type TlsSettings, tlsSettingsSchema } from '@/lib/tls/schema'
+import { checkPublicUrlCoherence } from '@/lib/tls/urlCoherence'
 
 const PROVIDER_TENANT_ID = 'default'
 
@@ -33,7 +34,13 @@ export async function loadTlsSettings(): Promise<TlsSettings> {
     // it on a fresh install so HTTPS is on from the first request, and it is
     // never consulted again — the UI is the source of truth afterwards.
     const enabled = process.env.TLS_ENABLED === 'true'
-    const seeded = { ...DEFAULT_TLS_SETTINGS, enabled }
+    // The installers also write APP_URL and NEXTAUTH_URL as https, which marks
+    // the session cookie Secure. A browser on plain http://IP then drops that
+    // cookie and sign-in bounces back to /login without a word, so a fresh
+    // install that serves HTTPS also sends plain HTTP there. Only when both
+    // URLs are https: anything else keeps the HTTP port as it was.
+    const redirectHttp = enabled && checkPublicUrlCoherence().ok
+    const seeded = { ...DEFAULT_TLS_SETTINGS, enabled, redirectHttp }
 
     // "Exactly once" only holds if the seed is written down. Without this the
     // row stays absent until someone saves the settings page, so every boot

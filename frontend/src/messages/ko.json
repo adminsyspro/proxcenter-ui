@@ -181,6 +181,7 @@
     "logout": "로그아웃",
     "loggingOut": "로그아웃 중...",
     "loginError": "로그인 오류",
+    "httpsRequired": "이 설치는 HTTPS를 통한 로그인만 허용하지만 이 페이지는 HTTP로 열렸습니다. 대신 {url}을(를) 여십시오.",
     "notAuthenticated": "인증되지 않음",
     "notAuthorized": "권한 없음",
     "sessionExpired": "세션이 만료되었습니다",

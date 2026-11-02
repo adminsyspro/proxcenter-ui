@@ -181,6 +181,7 @@
     "logout": "Cerrar sesión",
     "loggingOut": "Cerrando sesión...",
     "loginError": "Error de inicio de sesión",
+    "httpsRequired": "Esta instalación solo admite el inicio de sesión por HTTPS, pero esta página se abrió por HTTP. Abra {url} en su lugar.",
     "notAuthenticated": "No autenticado",
     "notAuthorized": "No autorizado",
     "sessionExpired": "Sesión caducada",

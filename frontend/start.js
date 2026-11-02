@@ -106,6 +106,25 @@ async function main() {
     return host.split(':')[0] || null
   }
 
+  // A reverse proxy that already terminated TLS relays plain HTTP here with
+  // X-Forwarded-Proto: https. Redirecting that request would bounce the
+  // browser back to the proxy forever. Mirrors the tested `forwardedFromHttps`
+  // in src/lib/tls/policy.ts; keep the two in sync by hand.
+  function forwardedFromHttps(forwardedProto, forwardedSsl) {
+    const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto
+
+    if (proto) {
+      const first = String(proto).split(',')[0]?.trim().toLowerCase()
+
+      if (first === 'https') return true
+      if (first === 'http') return false
+    }
+
+    const ssl = Array.isArray(forwardedSsl) ? forwardedSsl[0] : forwardedSsl
+
+    return String(ssl ?? '').trim().toLowerCase() === 'on'
+  }
+
   // An open console (an upgraded WebSocket) or an SSE stream such as
   // /api/v1/inventory/stream never lets a server's close() callback fire on
   // its own, so close() alone can hang forever. Give idle connections a
@@ -145,7 +164,9 @@ async function main() {
         pathname === INTERNAL_PREFIX ||
         pathname.startsWith(`${INTERNAL_PREFIX}/`)
 
-      if (!secure && httpPolicy.redirect && !isExempt) {
+      const viaHttpsProxy = forwardedFromHttps(req.headers['x-forwarded-proto'], req.headers['x-forwarded-ssl'])
+
+      if (!secure && httpPolicy.redirect && !isExempt && !viaHttpsProxy) {
         const host = redirectHost(req.headers.host)
 
         if (host) {

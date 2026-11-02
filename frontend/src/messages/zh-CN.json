@@ -181,6 +181,7 @@
     "logout": "退出登录",
     "loggingOut": "退出中...",
     "loginError": "登录错误",
+    "httpsRequired": "此安装仅允许通过 HTTPS 登录，但当前页面是通过 HTTP 打开的。请改为打开 {url}。",
     "notAuthenticated": "未认证",
     "notAuthorized": "未授权",
     "sessionExpired": "会话已过期",

@@ -46,6 +46,49 @@ describe('loadTlsSettings', () => {
     await expect(loadTlsSettings()).resolves.toEqual({ ...DEFAULT_TLS_SETTINGS, enabled: true })
   })
 
+  describe('redirect of plain HTTP on a fresh install', () => {
+    let savedUrls: { app?: string; auth?: string }
+
+    beforeEach(() => {
+      savedUrls = { app: process.env.APP_URL, auth: process.env.NEXTAUTH_URL }
+    })
+
+    afterEach(() => {
+      if (savedUrls.app === undefined) delete process.env.APP_URL
+      else process.env.APP_URL = savedUrls.app
+      if (savedUrls.auth === undefined) delete process.env.NEXTAUTH_URL
+      else process.env.NEXTAUTH_URL = savedUrls.auth
+    })
+
+    it('REGRESSION: turns it on when the installer wrote https URLs, or http://IP sign-in silently loops', async () => {
+      process.env.TLS_ENABLED = 'true'
+      process.env.APP_URL = 'https://172.17.0.188'
+      process.env.NEXTAUTH_URL = 'https://172.17.0.188'
+
+      await expect(loadTlsSettings()).resolves.toEqual({ ...DEFAULT_TLS_SETTINGS, enabled: true, redirectHttp: true })
+      expect(setSettingMock).toHaveBeenCalledWith(TLS_SETTINGS_KEY, PROVIDER_TENANT_ID, {
+        ...DEFAULT_TLS_SETTINGS,
+        enabled: true,
+        redirectHttp: true,
+      })
+    })
+
+    it('leaves it off while either URL is still http', async () => {
+      process.env.TLS_ENABLED = 'true'
+      process.env.APP_URL = 'https://172.17.0.188'
+      process.env.NEXTAUTH_URL = 'http://172.17.0.188:3000'
+
+      await expect(loadTlsSettings()).resolves.toEqual({ ...DEFAULT_TLS_SETTINGS, enabled: true })
+    })
+
+    it('leaves it off when HTTPS itself is off, whatever the URLs say', async () => {
+      process.env.APP_URL = 'https://proxcenter.example'
+      process.env.NEXTAUTH_URL = 'https://proxcenter.example'
+
+      await expect(loadTlsSettings()).resolves.toEqual(DEFAULT_TLS_SETTINGS)
+    })
+  })
+
   it('writes the seed down, so TLS_ENABLED really is read once and not once per boot', async () => {
     process.env.TLS_ENABLED = 'true'
 

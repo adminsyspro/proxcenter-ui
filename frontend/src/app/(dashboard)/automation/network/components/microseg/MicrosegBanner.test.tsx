@@ -25,6 +25,65 @@ const bannerReady = async () => {
   await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull())
 }
 
+describe('banner: nothing to say, nothing drawn (UA27)', () => {
+  /** The row of the sub-tabs, where the Emergency stop button lives. */
+  const tabsRow = async () => (await screen.findByRole('button', { name: 'Emergency stop' })).parentElement as HTMLElement
+
+  it('draws no strip above the sub-tabs when there is no stop, no held writes, no pause, no stale status and nothing pending', async () => {
+    renderTab()
+    const row = await tabsRow()
+    await waitFor(() => expect(calls('GET /status').length).toBeGreaterThan(0))
+
+    expect(row.parentElement!.firstElementChild).toBe(row)
+  })
+
+  it('keeps the Emergency stop in the sub-tabs row, next to the tabs', async () => {
+    renderTab()
+    const row = await tabsRow()
+
+    expect(within(row).getByRole('tablist')).toBeTruthy()
+  })
+
+  it.each([
+    ['the writes are held', () => status({ engine: { paused_until: null, held: true, last_runs: {}, last_log: null } })],
+    ['the engine is paused', () => status({ engine: { paused_until: '2099-01-01T10:00:00Z', held: false, last_runs: {}, last_log: null } })],
+    ['the emergency stop is on', () => status({ emergency_stop: true })],
+  ])('draws the strip when %s', async (_name, body) => {
+    mock.routes['GET /status'] = () => reply(200, body())
+    renderTab()
+    const row = (await screen.findByRole('tablist')).closest('.MuiTabs-root')!.parentElement as HTMLElement
+    await waitFor(() => expect(row.parentElement!.firstElementChild).not.toBe(row))
+  })
+
+  it('draws the strip when the status cannot be read', async () => {
+    mock.routes['GET /status'] = () => reply(504, { code: 'ORCHESTRATOR_TIMEOUT', error: 't' })
+    renderTab()
+    expect(await screen.findByText('The orchestrator did not answer in time.')).toBeTruthy()
+  })
+
+  it('draws the strip for the pending changes alone', async () => {
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: null, pending_changes: true }))
+    renderTab()
+    expect(await screen.findByText('1 unapplied change')).toBeTruthy()
+  })
+
+  it('draws the outcome of an action, then nothing once it is dismissed', async () => {
+    mock.routes['POST /emergency-stop'] = () => reply(202, { accepted: true, applied_by: 'leader', on: true })
+    renderTab()
+    fireEvent.click(await screen.findByRole('button', { name: 'Emergency stop' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Emergency stop' }))
+    const message = await screen.findByText('Request accepted: the leader orchestrator applies it within a minute.')
+
+    const row = document.querySelector('.MuiTabs-root')!.parentElement as HTMLElement
+    expect(row.parentElement!.firstElementChild).not.toBe(row)
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    fireEvent.click(within(message.closest('[role="alert"]') as HTMLElement).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByText(message.textContent!)).toBeNull())
+    expect(row.parentElement!.firstElementChild).toBe(row)
+  })
+})
+
 describe('banner: only what needs an action', () => {
   it('shows neither the engine runs, the API calls, the coverage nor the zones by state (they are on the Dashboard tab)', async () => {
     mock.routes['GET /status'] = () => reply(200, status({

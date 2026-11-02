@@ -13,6 +13,7 @@ import DriftsPanel from './DriftsPanel'
 import FirstRunGuide from './FirstRunGuide'
 import HistoryPanel from './HistoryPanel'
 import MicrosegBanner from './MicrosegBanner'
+import EmergencyStopButton from './EmergencyStopButton'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import ObservationPanel from './ObservationPanel'
 import PlanDialog from './PlanDialog'
@@ -20,6 +21,7 @@ import PolicyPanel from './PolicyPanel'
 import PreflightPanel from './PreflightPanel'
 import RunStrip from './RunStrip'
 import SettingsDialog from './SettingsDialog'
+import { useMicrosegControls } from './useMicrosegControls'
 import ZoneMap from './ZoneMap'
 import {
   MICROSEG_SUBTABS, isMicrosegSubTab, type FirewallWizardData, type MicrosegSubTab, type MicrosegSubTabProps, type TrackedRun,
@@ -74,6 +76,7 @@ type Props = {
 export default function MicrosegTab({ connectionId, connectionName, firewall }: Props) {
   const t = useTranslations('microsegPilot')
   const { data: policy, loading, error, reload } = useMicrosegPolicy(connectionId || null)
+  const controls = useMicrosegControls(connectionId)
   // Read once: nothing of the sub-tab shows before the policy has loaded, so this never differs from a server render.
   const [subTab, setSubTab] = useState<MicrosegSubTab>(() => readStoredSubTab() ?? 'overview')
 
@@ -129,7 +132,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
 
   return (
     <Box sx={{ p: 3 }}>
-      <MicrosegBanner connectionId={connectionId} policy={policy} onOpenPlan={onOpenPlan} />
+      <MicrosegBanner connectionId={connectionId} policy={policy} controls={controls} onOpenPlan={onOpenPlan} />
       <RunStrip connectionId={connectionId} runs={runs} onFinished={refreshAfterRun} onRemove={removeRun} />
       {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={onOpenPlan} onOpenPreflight={onOpenPreflight} />}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -152,6 +155,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
             />
           ))}
         </Tabs>
+        <EmergencyStopButton controls={controls} />
         <Tooltip title={t('settings.open')}>
           <IconButton aria-label={t('settings.open')} onClick={onOpenSettings} sx={{ flexShrink: 0 }}>
             <i className='ri-settings-3-line' />

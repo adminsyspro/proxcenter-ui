@@ -38,7 +38,6 @@ export default function PendingChangesBar({ connectionId, policy, onOpenPlan }: 
     <Alert
       severity='warning'
       icon={<i className='ri-draft-line' />}
-      sx={{ mt: 2 }}
       action={<Button color='inherit' size='small' onClick={onOpenPlan} disabled={!onOpenPlan}>{t('microsegPilot.pending.viewPlan')}</Button>}
     >
       {count ? t('microsegPilot.pending.withCount', { count }) : t('microsegPilot.pending.noCount')}

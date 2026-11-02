@@ -12731,6 +12731,125 @@
       "CONFLICT": "Esto entra en conflicto con un elemento existente.",
       "NETWORK": "No se puede contactar con ProxCenter. Compruebe su conexión de red.",
       "generic": "Algo salió mal. Inténtelo de nuevo."
+    },
+    "policy": {
+      "zonesTitle": "Zonas",
+      "flowsTitle": "Flujos",
+      "addZone": "Nueva zona",
+      "addFlow": "Nuevo flujo",
+      "zonesEmpty": "Aún no hay ninguna zona. Cree la primera para agrupar los invitados que se comunican entre sí.",
+      "flowsEmpty": "Aún no hay ningún flujo. Añada uno para permitir el tráfico entre zonas.",
+      "showDetails": "Mostrar detalles",
+      "hideDetails": "Ocultar detalles",
+      "conflictReloaded": "La política cambió en otro lugar y se ha recargado. Revísela e inténtelo de nuevo.",
+      "pager": {
+        "previous": "Página anterior",
+        "next": "Página siguiente",
+        "first": "Primera página",
+        "last": "Última página",
+        "range": "{from}-{to} de {count}"
+      },
+      "zone": {
+        "membersTitle": "Miembros",
+        "noMembers": "Sin miembros",
+        "membersUnknown": "No se pudo leer la lista de invitados.",
+        "memberSummary": "{count, plural, one {# miembro} other {# miembros}}, {running} en ejecución",
+        "memberPending": "Pendiente",
+        "showAll": "Mostrar los {count}",
+        "showLess": "Mostrar menos",
+        "incoming": "Flujos entrantes",
+        "outgoing": "Flujos salientes",
+        "noFlows": "Ninguno",
+        "changeState": "Cambiar el estado",
+        "edit": "Editar zona",
+        "delete": "Eliminar zona",
+        "state": {
+          "disabled": "Desactivada",
+          "observe": "Observación",
+          "enforce": "Aplicada"
+        },
+        "setState": {
+          "disabled": "Desactivar",
+          "observe": "Observar",
+          "enforce": "Aplicar"
+        }
+      },
+      "flow": {
+        "notApplied": "No aplicado (salida no gestionada en v1)",
+        "learned": "Aprendido",
+        "edit": "Editar flujo",
+        "delete": "Eliminar flujo",
+        "createdBy": "Creado por {user}"
+      },
+      "zoneDialog": {
+        "createTitle": "Nueva zona",
+        "editTitle": "Editar zona",
+        "name": "Nombre",
+        "nameHint": "Letras minúsculas, dígitos y guiones, hasta 14 caracteres",
+        "label": "Etiqueta",
+        "color": "Color",
+        "isolate": "Aislar los miembros entre sí",
+        "create": "Crear",
+        "save": "Guardar"
+      },
+      "flowDialog": {
+        "createTitle": "Nuevo flujo",
+        "editTitle": "Editar flujo",
+        "srcKind": "Tipo de origen",
+        "dstKind": "Tipo de destino",
+        "kindZone": "Zona",
+        "kindCidr": "CIDR",
+        "srcZone": "Zona de origen",
+        "dstZone": "Zona de destino",
+        "srcCidr": "CIDR de origen",
+        "dstCidr": "CIDR de destino",
+        "proto": "Protocolo",
+        "dport": "Puerto(s)",
+        "dportHint": "80, 443 u 8000:8100. Vacío: todos los puertos",
+        "comment": "Comentario",
+        "useMasked": "Usar {masked}",
+        "create": "Crear",
+        "save": "Guardar"
+      },
+      "validation": {
+        "nameRequired": "Introduzca un nombre",
+        "nameInvalid": "Use una letra minúscula, seguida de hasta 13 letras minúsculas, dígitos o guiones.",
+        "colorInvalid": "Elija un color",
+        "sideRequired": "Elija una zona o introduzca un CIDR",
+        "sideBoth": "Elija una zona o introduzca un CIDR, no ambos",
+        "cidrInvalid": "CIDR no válido, por ejemplo 10.0.0.0/24",
+        "cidrHostBits": "CIDR no válido: los bits de host están activos, use {masked}",
+        "cidrBoth": "Un flujo no puede tener un CIDR en ambos lados.",
+        "protoInvalid": "Protocolo no válido",
+        "portInvalid": "Puerto no válido. Use 80, 80,443 u 8000:8100 (de 1 a 65535).",
+        "portNotAllowed": "No se permite un puerto con este protocolo."
+      },
+      "delete": {
+        "zoneTitle": "¿Eliminar la zona {name}?",
+        "flowTitle": "¿Eliminar este flujo?",
+        "zoneBody": "La zona se quita del borrador. Nada cambia en Proxmox hasta que aplique.",
+        "flowBody": "El flujo se quita del borrador. Nada cambia en Proxmox hasta que aplique.",
+        "confirm": "Eliminar"
+      },
+      "enforce": {
+        "title": "¿Aplicar la zona {name}?",
+        "checking": "Comprobando la observación...",
+        "ready": "No se habría bloqueado nada en las últimas {hours} horas.",
+        "notReady": "Esta zona no está lista: necesita {hours} horas de observación sin tráfico pendiente que se bloquearía.",
+        "unchecked": "No se pudo comprobar la observación, la zona se considera no lista.",
+        "typeName": "Escriba {name} para confirmar",
+        "confirm": "Aplicar"
+      },
+      "run": {
+        "running": {
+          "disabled": "{zone}: cambio a desactivada en curso",
+          "observe": "{zone}: cambio a observación en curso",
+          "enforce": "{zone}: cambio a aplicación en curso"
+        },
+        "done": "{zone}: {done} hechos, {failed} fallidos, {notRun} sin ejecutar",
+        "failed": "{zone}: la ejecución ha fallado",
+        "unavailable": "{zone}: el progreso no está disponible"
+      }
     }
   }
 }

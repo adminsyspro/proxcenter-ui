@@ -12731,6 +12731,125 @@
       "CONFLICT": "This conflicts with an item that already exists.",
       "NETWORK": "ProxCenter cannot be reached. Check your network connection.",
       "generic": "Something went wrong. Try again."
+    },
+    "policy": {
+      "zonesTitle": "Zones",
+      "flowsTitle": "Flows",
+      "addZone": "New zone",
+      "addFlow": "New flow",
+      "zonesEmpty": "No zone yet. Create the first one to group the guests that talk to each other.",
+      "flowsEmpty": "No flow yet. Add one to allow traffic between zones.",
+      "showDetails": "Show details",
+      "hideDetails": "Hide details",
+      "conflictReloaded": "The policy changed elsewhere and was reloaded. Check it, then try again.",
+      "pager": {
+        "previous": "Previous page",
+        "next": "Next page",
+        "first": "First page",
+        "last": "Last page",
+        "range": "{from}-{to} of {count}"
+      },
+      "zone": {
+        "membersTitle": "Members",
+        "noMembers": "No members",
+        "membersUnknown": "The guest list could not be read.",
+        "memberSummary": "{count, plural, one {# member} other {# members}}, {running} running",
+        "memberPending": "Pending",
+        "showAll": "Show all {count}",
+        "showLess": "Show less",
+        "incoming": "Incoming flows",
+        "outgoing": "Outgoing flows",
+        "noFlows": "None",
+        "changeState": "Change state",
+        "edit": "Edit zone",
+        "delete": "Delete zone",
+        "state": {
+          "disabled": "Disabled",
+          "observe": "Observation",
+          "enforce": "Enforced"
+        },
+        "setState": {
+          "disabled": "Disable",
+          "observe": "Observe",
+          "enforce": "Enforce"
+        }
+      },
+      "flow": {
+        "notApplied": "Not applied (egress not managed in v1)",
+        "learned": "Learned",
+        "edit": "Edit flow",
+        "delete": "Delete flow",
+        "createdBy": "Created by {user}"
+      },
+      "zoneDialog": {
+        "createTitle": "New zone",
+        "editTitle": "Edit zone",
+        "name": "Name",
+        "nameHint": "Lowercase letters, digits and dashes, up to 14 characters",
+        "label": "Label",
+        "color": "Color",
+        "isolate": "Isolate members from each other",
+        "create": "Create",
+        "save": "Save"
+      },
+      "flowDialog": {
+        "createTitle": "New flow",
+        "editTitle": "Edit flow",
+        "srcKind": "Source type",
+        "dstKind": "Destination type",
+        "kindZone": "Zone",
+        "kindCidr": "CIDR",
+        "srcZone": "Source zone",
+        "dstZone": "Destination zone",
+        "srcCidr": "Source CIDR",
+        "dstCidr": "Destination CIDR",
+        "proto": "Protocol",
+        "dport": "Port(s)",
+        "dportHint": "80, 443 or 8000:8100. Empty: all ports",
+        "comment": "Comment",
+        "useMasked": "Use {masked}",
+        "create": "Create",
+        "save": "Save"
+      },
+      "validation": {
+        "nameRequired": "Enter a name",
+        "nameInvalid": "Use a lowercase letter, then up to 13 lowercase letters, digits or dashes.",
+        "colorInvalid": "Pick a color",
+        "sideRequired": "Choose a zone or enter a CIDR",
+        "sideBoth": "Choose a zone or enter a CIDR, not both",
+        "cidrInvalid": "Invalid CIDR, for example 10.0.0.0/24",
+        "cidrHostBits": "Invalid CIDR: host bits are set, use {masked}",
+        "cidrBoth": "A flow cannot have a CIDR on both sides.",
+        "protoInvalid": "Invalid protocol",
+        "portInvalid": "Invalid port. Use 80, 80,443 or 8000:8100 (1 to 65535).",
+        "portNotAllowed": "A port is not allowed with this protocol."
+      },
+      "delete": {
+        "zoneTitle": "Delete zone {name}?",
+        "flowTitle": "Delete this flow?",
+        "zoneBody": "The zone is removed from the draft. Nothing changes on Proxmox until you apply.",
+        "flowBody": "The flow is removed from the draft. Nothing changes on Proxmox until you apply.",
+        "confirm": "Delete"
+      },
+      "enforce": {
+        "title": "Enforce zone {name}?",
+        "checking": "Checking the observation...",
+        "ready": "Nothing would have been blocked in the last {hours} hours.",
+        "notReady": "This zone is not ready: it needs {hours} hours of observation with no pending traffic that would be blocked.",
+        "unchecked": "The observation could not be checked, the zone is treated as not ready.",
+        "typeName": "Type {name} to confirm",
+        "confirm": "Enforce"
+      },
+      "run": {
+        "running": {
+          "disabled": "{zone}: change to disabled in progress",
+          "observe": "{zone}: change to observation in progress",
+          "enforce": "{zone}: change to enforcement in progress"
+        },
+        "done": "{zone}: {done} done, {failed} failed, {notRun} not run",
+        "failed": "{zone}: the run failed",
+        "unavailable": "{zone}: progress is not available"
+      }
     }
   }
 }

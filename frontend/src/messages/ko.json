@@ -12731,6 +12731,125 @@
       "CONFLICT": "이미 있는 항목과 충돌합니다.",
       "NETWORK": "ProxCenter에 연결할 수 없습니다. 네트워크 연결을 확인하세요.",
       "generic": "문제가 발생했습니다. 다시 시도하세요."
+    },
+    "policy": {
+      "zonesTitle": "영역",
+      "flowsTitle": "플로우",
+      "addZone": "새 영역",
+      "addFlow": "새 플로우",
+      "zonesEmpty": "아직 영역이 없습니다. 서로 통신하는 게스트를 묶으려면 첫 영역을 만드세요.",
+      "flowsEmpty": "아직 플로우가 없습니다. 영역 간 트래픽을 허용하려면 플로우를 추가하세요.",
+      "showDetails": "세부 정보 보기",
+      "hideDetails": "세부 정보 숨기기",
+      "conflictReloaded": "정책이 다른 곳에서 변경되어 다시 불러왔습니다. 확인한 후 다시 시도하세요.",
+      "pager": {
+        "previous": "이전 페이지",
+        "next": "다음 페이지",
+        "first": "첫 페이지",
+        "last": "마지막 페이지",
+        "range": "{count}개 중 {from}-{to}"
+      },
+      "zone": {
+        "membersTitle": "구성원",
+        "noMembers": "구성원 없음",
+        "membersUnknown": "게스트 목록을 읽을 수 없습니다.",
+        "memberSummary": "{count, plural, other {구성원 #개}}, 실행 중 {running}개",
+        "memberPending": "대기 중",
+        "showAll": "{count}개 모두 보기",
+        "showLess": "간략히 보기",
+        "incoming": "수신 플로우",
+        "outgoing": "송신 플로우",
+        "noFlows": "없음",
+        "changeState": "상태 변경",
+        "edit": "영역 편집",
+        "delete": "영역 삭제",
+        "state": {
+          "disabled": "비활성",
+          "observe": "관찰",
+          "enforce": "적용됨"
+        },
+        "setState": {
+          "disabled": "비활성화",
+          "observe": "관찰",
+          "enforce": "적용"
+        }
+      },
+      "flow": {
+        "notApplied": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",
+        "learned": "학습됨",
+        "edit": "플로우 편집",
+        "delete": "플로우 삭제",
+        "createdBy": "작성자: {user}"
+      },
+      "zoneDialog": {
+        "createTitle": "새 영역",
+        "editTitle": "영역 편집",
+        "name": "이름",
+        "nameHint": "소문자, 숫자, 하이픈, 최대 14자",
+        "label": "레이블",
+        "color": "색상",
+        "isolate": "구성원 간 격리",
+        "create": "만들기",
+        "save": "저장"
+      },
+      "flowDialog": {
+        "createTitle": "새 플로우",
+        "editTitle": "플로우 편집",
+        "srcKind": "출발지 유형",
+        "dstKind": "목적지 유형",
+        "kindZone": "영역",
+        "kindCidr": "CIDR",
+        "srcZone": "출발지 영역",
+        "dstZone": "목적지 영역",
+        "srcCidr": "출발지 CIDR",
+        "dstCidr": "목적지 CIDR",
+        "proto": "프로토콜",
+        "dport": "포트",
+        "dportHint": "80, 443 또는 8000:8100. 비우면 모든 포트",
+        "comment": "설명",
+        "useMasked": "{masked} 사용",
+        "create": "만들기",
+        "save": "저장"
+      },
+      "validation": {
+        "nameRequired": "이름을 입력하세요",
+        "nameInvalid": "소문자로 시작하고, 이어서 소문자, 숫자 또는 하이픈을 최대 13자까지 사용하세요.",
+        "colorInvalid": "색상을 선택하세요",
+        "sideRequired": "영역을 선택하거나 CIDR을 입력하세요",
+        "sideBoth": "영역을 선택하거나 CIDR을 입력하세요. 둘 다는 안 됩니다",
+        "cidrInvalid": "잘못된 CIDR입니다. 예: 10.0.0.0/24",
+        "cidrHostBits": "잘못된 CIDR: 호스트 비트가 설정되어 있습니다. {masked}을(를) 사용하세요",
+        "cidrBoth": "플로우는 양쪽 모두 CIDR일 수 없습니다.",
+        "protoInvalid": "잘못된 프로토콜",
+        "portInvalid": "잘못된 포트입니다. 80, 80,443 또는 8000:8100 (1~65535)을 사용하세요.",
+        "portNotAllowed": "이 프로토콜에서는 포트를 사용할 수 없습니다."
+      },
+      "delete": {
+        "zoneTitle": "영역 {name}을(를) 삭제할까요?",
+        "flowTitle": "이 플로우를 삭제할까요?",
+        "zoneBody": "영역이 초안에서 제거됩니다. 적용하기 전에는 Proxmox에서 아무것도 바뀌지 않습니다.",
+        "flowBody": "플로우가 초안에서 제거됩니다. 적용하기 전에는 Proxmox에서 아무것도 바뀌지 않습니다.",
+        "confirm": "삭제"
+      },
+      "enforce": {
+        "title": "영역 {name}을(를) 적용할까요?",
+        "checking": "관찰 내용을 확인하는 중...",
+        "ready": "최근 {hours}시간 동안 차단되었을 트래픽이 없습니다.",
+        "notReady": "이 영역은 준비되지 않았습니다. 차단될 대기 트래픽 없이 {hours}시간 동안 관찰해야 합니다.",
+        "unchecked": "관찰 내용을 확인할 수 없어 영역을 준비되지 않은 것으로 간주합니다.",
+        "typeName": "확인하려면 {name}을(를) 입력하세요",
+        "confirm": "적용"
+      },
+      "run": {
+        "running": {
+          "disabled": "{zone}: 비활성으로 변경 중",
+          "observe": "{zone}: 관찰로 변경 중",
+          "enforce": "{zone}: 적용으로 변경 중"
+        },
+        "done": "{zone}: 완료 {done}, 실패 {failed}, 미실행 {notRun}",
+        "failed": "{zone}: 실행에 실패했습니다",
+        "unavailable": "{zone}: 진행 상황을 확인할 수 없습니다"
+      }
     }
   }
 }

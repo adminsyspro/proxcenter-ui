@@ -12731,6 +12731,125 @@
       "CONFLICT": "这与已存在的项目冲突。",
       "NETWORK": "无法连接到 ProxCenter。请检查网络连接。",
       "generic": "出了点问题。请重试。"
+    },
+    "policy": {
+      "zonesTitle": "区域",
+      "flowsTitle": "流量规则",
+      "addZone": "新建区域",
+      "addFlow": "新建流量规则",
+      "zonesEmpty": "还没有区域。创建第一个区域，把相互通信的客户机归为一组。",
+      "flowsEmpty": "还没有流量规则。添加一条以允许区域之间的流量。",
+      "showDetails": "显示详情",
+      "hideDetails": "隐藏详情",
+      "conflictReloaded": "策略已在别处更改并已重新加载。请检查后再试一次。",
+      "pager": {
+        "previous": "上一页",
+        "next": "下一页",
+        "first": "第一页",
+        "last": "最后一页",
+        "range": "第 {from}-{to} 项，共 {count} 项"
+      },
+      "zone": {
+        "membersTitle": "成员",
+        "noMembers": "没有成员",
+        "membersUnknown": "无法读取客户机列表。",
+        "memberSummary": "{count, plural, other {# 个成员}}，{running} 个运行中",
+        "memberPending": "待处理",
+        "showAll": "显示全部 {count} 项",
+        "showLess": "收起",
+        "incoming": "入站流量规则",
+        "outgoing": "出站流量规则",
+        "noFlows": "无",
+        "changeState": "更改状态",
+        "edit": "编辑区域",
+        "delete": "删除区域",
+        "state": {
+          "disabled": "已停用",
+          "observe": "观察",
+          "enforce": "已强制执行"
+        },
+        "setState": {
+          "disabled": "停用",
+          "observe": "观察",
+          "enforce": "强制执行"
+        }
+      },
+      "flow": {
+        "notApplied": "未应用（v1 不管理出站）",
+        "learned": "已学习",
+        "edit": "编辑流量规则",
+        "delete": "删除流量规则",
+        "createdBy": "创建者：{user}"
+      },
+      "zoneDialog": {
+        "createTitle": "新建区域",
+        "editTitle": "编辑区域",
+        "name": "名称",
+        "nameHint": "小写字母、数字和连字符，最多 14 个字符",
+        "label": "标签",
+        "color": "颜色",
+        "isolate": "使成员之间相互隔离",
+        "create": "创建",
+        "save": "保存"
+      },
+      "flowDialog": {
+        "createTitle": "新建流量规则",
+        "editTitle": "编辑流量规则",
+        "srcKind": "源类型",
+        "dstKind": "目标类型",
+        "kindZone": "区域",
+        "kindCidr": "CIDR",
+        "srcZone": "源区域",
+        "dstZone": "目标区域",
+        "srcCidr": "源 CIDR",
+        "dstCidr": "目标 CIDR",
+        "proto": "协议",
+        "dport": "端口",
+        "dportHint": "80、443 或 8000:8100。留空表示所有端口",
+        "comment": "备注",
+        "useMasked": "使用 {masked}",
+        "create": "创建",
+        "save": "保存"
+      },
+      "validation": {
+        "nameRequired": "请输入名称",
+        "nameInvalid": "以小写字母开头，后面最多 13 个小写字母、数字或连字符。",
+        "colorInvalid": "请选择颜色",
+        "sideRequired": "请选择区域或输入 CIDR",
+        "sideBoth": "请选择区域或输入 CIDR，不能同时使用",
+        "cidrInvalid": "CIDR 无效，例如 10.0.0.0/24",
+        "cidrHostBits": "CIDR 无效：设置了主机位，请使用 {masked}",
+        "cidrBoth": "流量规则不能两侧都是 CIDR。",
+        "protoInvalid": "协议无效",
+        "portInvalid": "端口无效。请使用 80、80,443 或 8000:8100（1 到 65535）。",
+        "portNotAllowed": "此协议不允许指定端口。"
+      },
+      "delete": {
+        "zoneTitle": "删除区域 {name}？",
+        "flowTitle": "删除此流量规则？",
+        "zoneBody": "该区域将从草稿中移除。在应用之前，Proxmox 上不会有任何变化。",
+        "flowBody": "该流量规则将从草稿中移除。在应用之前，Proxmox 上不会有任何变化。",
+        "confirm": "删除"
+      },
+      "enforce": {
+        "title": "强制执行区域 {name}？",
+        "checking": "正在检查观察结果...",
+        "ready": "最近 {hours} 小时内没有任何流量会被阻止。",
+        "notReady": "此区域尚未就绪：需要观察 {hours} 小时，且没有待处理的会被阻止的流量。",
+        "unchecked": "无法检查观察结果，该区域按未就绪处理。",
+        "typeName": "输入 {name} 以确认",
+        "confirm": "强制执行"
+      },
+      "run": {
+        "running": {
+          "disabled": "{zone}：正在切换到停用",
+          "observe": "{zone}：正在切换到观察",
+          "enforce": "{zone}：正在切换到强制执行"
+        },
+        "done": "{zone}：{done} 个已完成，{failed} 个失败，{notRun} 个未执行",
+        "failed": "{zone}：运行失败",
+        "unavailable": "{zone}：无法获取进度"
+      }
     }
   }
 }

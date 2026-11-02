@@ -13,6 +13,8 @@ import type { MicrosegFlow, MicrosegPolicy, MicrosegRevision, MicrosegStatus, Mi
 import MicrosegTab from './MicrosegTab'
 
 export const BASE = '/api/v1/firewall/microseg/c1'
+/** The guest list of the connection, as the inventory route answers it. */
+export const GUESTS_ROUTE = '/api/v1/vms?connId=c1'
 
 export const zone = (id: string, over: Partial<MicrosegZone> = {}): MicrosegZone => ({
   id, policy_id: 'p1', name: id, label: '', color: '#3b82f6', enforcement: 'guest', vnet_id: '', state: 'observe',
@@ -69,6 +71,7 @@ export function resetMocks() {
     'GET /policy': () => reply(200, policy({ zones: [zone('a')], last_revision: REVISION_HEAD })),
     'GET /status': () => reply(200, status()),
     'GET /revisions?limit=1': () => reply(200, { revisions: [revisionWithSnapshot([zone('a')], [])] }),
+    [`GET ${GUESTS_ROUTE}`]: () => reply(200, { data: { vms: [] } }),
   }
 }
 

@@ -12399,6 +12399,125 @@
       "CONFLICT": "Dies kollidiert mit einem bereits vorhandenen Element.",
       "NETWORK": "ProxCenter ist nicht erreichbar. Prüfen Sie Ihre Netzwerkverbindung.",
       "generic": "Etwas ist schiefgelaufen. Versuchen Sie es erneut."
+    },
+    "policy": {
+      "zonesTitle": "Zonen",
+      "flowsTitle": "Flüsse",
+      "addZone": "Neue Zone",
+      "addFlow": "Neuer Fluss",
+      "zonesEmpty": "Noch keine Zone. Legen Sie die erste an, um die Gäste zu gruppieren, die miteinander kommunizieren.",
+      "flowsEmpty": "Noch kein Fluss. Fügen Sie einen hinzu, um Verkehr zwischen Zonen zu erlauben.",
+      "showDetails": "Details anzeigen",
+      "hideDetails": "Details ausblenden",
+      "conflictReloaded": "Die Richtlinie wurde anderswo geändert und neu geladen. Prüfen Sie sie und versuchen Sie es erneut.",
+      "pager": {
+        "previous": "Vorherige Seite",
+        "next": "Nächste Seite",
+        "first": "Erste Seite",
+        "last": "Letzte Seite",
+        "range": "{from}-{to} von {count}"
+      },
+      "zone": {
+        "membersTitle": "Mitglieder",
+        "noMembers": "Keine Mitglieder",
+        "membersUnknown": "Die Gästeliste konnte nicht gelesen werden.",
+        "memberSummary": "{count, plural, one {# Mitglied} other {# Mitglieder}}, {running} laufend",
+        "memberPending": "Ausstehend",
+        "showAll": "Alle {count} anzeigen",
+        "showLess": "Weniger anzeigen",
+        "incoming": "Eingehende Flüsse",
+        "outgoing": "Ausgehende Flüsse",
+        "noFlows": "Keine",
+        "changeState": "Status ändern",
+        "edit": "Zone bearbeiten",
+        "delete": "Zone löschen",
+        "state": {
+          "disabled": "Deaktiviert",
+          "observe": "Beobachtung",
+          "enforce": "Durchgesetzt"
+        },
+        "setState": {
+          "disabled": "Deaktivieren",
+          "observe": "Beobachten",
+          "enforce": "Durchsetzen"
+        }
+      },
+      "flow": {
+        "notApplied": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",
+        "learned": "Gelernt",
+        "edit": "Fluss bearbeiten",
+        "delete": "Fluss löschen",
+        "createdBy": "Erstellt von {user}"
+      },
+      "zoneDialog": {
+        "createTitle": "Neue Zone",
+        "editTitle": "Zone bearbeiten",
+        "name": "Name",
+        "nameHint": "Kleinbuchstaben, Ziffern und Bindestriche, höchstens 14 Zeichen",
+        "label": "Bezeichnung",
+        "color": "Farbe",
+        "isolate": "Mitglieder voneinander isolieren",
+        "create": "Erstellen",
+        "save": "Speichern"
+      },
+      "flowDialog": {
+        "createTitle": "Neuer Fluss",
+        "editTitle": "Fluss bearbeiten",
+        "srcKind": "Quelltyp",
+        "dstKind": "Zieltyp",
+        "kindZone": "Zone",
+        "kindCidr": "CIDR",
+        "srcZone": "Quellzone",
+        "dstZone": "Zielzone",
+        "srcCidr": "Quell-CIDR",
+        "dstCidr": "Ziel-CIDR",
+        "proto": "Protokoll",
+        "dport": "Port(s)",
+        "dportHint": "80, 443 oder 8000:8100. Leer: alle Ports",
+        "comment": "Kommentar",
+        "useMasked": "{masked} verwenden",
+        "create": "Erstellen",
+        "save": "Speichern"
+      },
+      "validation": {
+        "nameRequired": "Geben Sie einen Namen ein",
+        "nameInvalid": "Verwenden Sie einen Kleinbuchstaben, dann bis zu 13 Kleinbuchstaben, Ziffern oder Bindestriche.",
+        "colorInvalid": "Wählen Sie eine Farbe",
+        "sideRequired": "Wählen Sie eine Zone oder geben Sie ein CIDR ein",
+        "sideBoth": "Wählen Sie eine Zone oder geben Sie ein CIDR ein, nicht beides",
+        "cidrInvalid": "Ungültiges CIDR, zum Beispiel 10.0.0.0/24",
+        "cidrHostBits": "Ungültiges CIDR: Host-Bits sind gesetzt, verwenden Sie {masked}",
+        "cidrBoth": "Ein Fluss darf nicht auf beiden Seiten ein CIDR haben.",
+        "protoInvalid": "Ungültiges Protokoll",
+        "portInvalid": "Ungültiger Port. Verwenden Sie 80, 80,443 oder 8000:8100 (1 bis 65535).",
+        "portNotAllowed": "Ein Port ist bei diesem Protokoll nicht erlaubt."
+      },
+      "delete": {
+        "zoneTitle": "Zone {name} löschen?",
+        "flowTitle": "Diesen Fluss löschen?",
+        "zoneBody": "Die Zone wird aus dem Entwurf entfernt. Auf Proxmox ändert sich nichts, bis Sie anwenden.",
+        "flowBody": "Der Fluss wird aus dem Entwurf entfernt. Auf Proxmox ändert sich nichts, bis Sie anwenden.",
+        "confirm": "Löschen"
+      },
+      "enforce": {
+        "title": "Zone {name} durchsetzen?",
+        "checking": "Beobachtung wird geprüft...",
+        "ready": "In den letzten {hours} Stunden wäre nichts blockiert worden.",
+        "notReady": "Diese Zone ist nicht bereit: Sie braucht {hours} Stunden Beobachtung ohne ausstehenden Verkehr, der blockiert würde.",
+        "unchecked": "Die Beobachtung konnte nicht geprüft werden, die Zone gilt als nicht bereit.",
+        "typeName": "Geben Sie {name} zur Bestätigung ein",
+        "confirm": "Durchsetzen"
+      },
+      "run": {
+        "running": {
+          "disabled": "{zone}: Wechsel zu deaktiviert läuft",
+          "observe": "{zone}: Wechsel zu Beobachtung läuft",
+          "enforce": "{zone}: Wechsel zu Durchsetzung läuft"
+        },
+        "done": "{zone}: {done} erledigt, {failed} fehlgeschlagen, {notRun} nicht ausgeführt",
+        "failed": "{zone}: der Lauf ist fehlgeschlagen",
+        "unavailable": "{zone}: Fortschritt nicht verfügbar"
+      }
     }
   }
 }

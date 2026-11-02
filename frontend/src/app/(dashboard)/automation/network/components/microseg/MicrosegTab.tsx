@@ -9,6 +9,7 @@ import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import FirstRunGuide from './FirstRunGuide'
 import MicrosegBanner from './MicrosegBanner'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
+import PolicyPanel from './PolicyPanel'
 import { MICROSEG_SUBTABS, isMicrosegSubTab, type MicrosegSubTab, type MicrosegSubTabProps } from './microsegTabTypes'
 
 const STORAGE_KEY = 'microseg.subTab'
@@ -35,12 +36,12 @@ function storeSubTab(tab: MicrosegSubTab) {
  * own sub-tab here: overview (preflight, T9), policy (zones and flows, T4),
  * observation (suggestions, T7), drifts (T9), history (T8).
  */
-function SubTabContent({ tab }: { tab: MicrosegSubTab } & MicrosegSubTabProps) {
+function SubTabContent({ tab, ...props }: { tab: MicrosegSubTab } & MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.subTabs')
   return (
-    <Typography role='tabpanel' id={`microseg-panel-${tab}`} aria-labelledby={`microseg-tab-${tab}`} color='text.secondary' sx={{ p: 3 }}>
-      {t('placeholder')}
-    </Typography>
+    <Box role='tabpanel' id={`microseg-panel-${tab}`} aria-labelledby={`microseg-tab-${tab}`} sx={{ pt: 3 }}>
+      {tab === 'policy' ? <PolicyPanel {...props} /> : <Typography color='text.secondary' sx={{ px: 3, pb: 3 }}>{t('placeholder')}</Typography>}
+    </Box>
   )
 }
 

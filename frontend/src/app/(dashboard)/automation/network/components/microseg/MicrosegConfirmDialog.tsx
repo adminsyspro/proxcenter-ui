@@ -3,6 +3,8 @@
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
+import { DialogErrorLine } from './dialogParts'
+
 type Props = {
   open: boolean
   title: string
@@ -11,12 +13,14 @@ type Props = {
   confirmLabel: string
   color?: 'primary' | 'warning' | 'error'
   busy?: boolean
+  /** A failed confirmation, shown on one line under the body; the dialog stays open. */
+  error?: string | null
   onConfirm: () => void
   onCancel: () => void
 }
 
 /** Themed confirmation of an action of the Micro-segmentation tab (never a native confirm). */
-export default function MicrosegConfirmDialog({ open, title, body, confirmLabel, color = 'primary', busy = false, onConfirm, onCancel }: Props) {
+export default function MicrosegConfirmDialog({ open, title, body, confirmLabel, color = 'primary', busy = false, error = null, onConfirm, onCancel }: Props) {
   const t = useTranslations()
 
   return (
@@ -28,6 +32,7 @@ export default function MicrosegConfirmDialog({ open, title, body, confirmLabel,
         <Tooltip title={body}>
           <Typography noWrap>{body}</Typography>
         </Tooltip>
+        {error && <DialogErrorLine message={error} />}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onCancel} disabled={busy} autoFocus>

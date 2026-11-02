@@ -13014,6 +13014,43 @@
       "resolvedAccept": "{count, plural, one {# flow accepted into the draft} other {# flows accepted into the draft}}",
       "resolvedDismiss": "{count, plural, one {# flow dismissed} other {# flows dismissed}}",
       "page": "Page {page, number}"
+    },
+    "overview": {
+      "empty": "No zone to draw yet.",
+      "createZone": "Create a zone",
+      "unapplied": "Draft with unapplied changes",
+      "unappliedHint": "The map shows the draft. These changes are not applied to Proxmox yet.",
+      "mapLabel": "Map of the zones and their flows",
+      "suggestionsError": "The pending flows could not be read. The map shows the allowed flows only.",
+      "legend": {
+        "flow": "Allowed flow",
+        "pending": "Would be blocked",
+        "outside": "Not applied in v1"
+      },
+      "node": {
+        "members": "{count, plural, one {# member} other {# members}}",
+        "external": "External",
+        "externalHint": "Sources in no zone: an IP address or a network (CIDR)",
+        "outside": "Outside",
+        "outsideHint": "Destinations outside the zones (a CIDR). Flows to them are not applied in v1.",
+        "notApplied": "not applied in v1"
+      },
+      "edge": {
+        "flow": "Allowed: {services}",
+        "pending": "{count, plural, one {# observed flow} other {# observed flows}} would be blocked: {services}",
+        "outside": "Not applied in v1: {services}"
+      },
+      "panel": {
+        "label": "Zone {name}",
+        "close": "Close",
+        "editInPolicy": "Edit in Policy",
+        "assign": "Assign guests",
+        "members": "Members",
+        "noMembers": "No members",
+        "membersUnknown": "The guest list could not be read.",
+        "pending": "Pending",
+        "noFlows": "None"
+      }
     }
   }
 }

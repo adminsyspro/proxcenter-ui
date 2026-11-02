@@ -13015,6 +13015,43 @@
       "resolvedAccept": "{count, plural, one {# flux accepté dans le brouillon} other {# flux acceptés dans le brouillon}}",
       "resolvedDismiss": "{count, plural, one {# flux écarté} other {# flux écartés}}",
       "page": "Page {page, number}"
+    },
+    "overview": {
+      "empty": "Aucune zone à dessiner pour l'instant.",
+      "createZone": "Créer une zone",
+      "unapplied": "Brouillon avec changements non appliqués",
+      "unappliedHint": "La carte montre le brouillon. Ces changements ne sont pas encore appliqués à Proxmox.",
+      "mapLabel": "Carte des zones et de leurs flux",
+      "suggestionsError": "Les flux en attente n'ont pas pu être lus. La carte ne montre que les flux autorisés.",
+      "legend": {
+        "flow": "Flux autorisé",
+        "pending": "Serait bloqué",
+        "outside": "Non appliqué en v1"
+      },
+      "node": {
+        "members": "{count, plural, one {# membre} other {# membres}}",
+        "external": "Externe",
+        "externalHint": "Sources hors de toute zone : une adresse IP ou un réseau (CIDR)",
+        "outside": "Extérieur",
+        "outsideHint": "Destinations hors des zones (un CIDR). Les flux vers elles ne sont pas appliqués en v1.",
+        "notApplied": "non appliqué en v1"
+      },
+      "edge": {
+        "flow": "Autorisé : {services}",
+        "pending": "{count, plural, one {# flux observé serait bloqué} other {# flux observés seraient bloqués}} : {services}",
+        "outside": "Non appliqué en v1 : {services}"
+      },
+      "panel": {
+        "label": "Zone {name}",
+        "close": "Fermer",
+        "editInPolicy": "Modifier dans Politique",
+        "assign": "Affecter des invités",
+        "members": "Membres",
+        "noMembers": "Aucun membre",
+        "membersUnknown": "La liste des invités n'a pas pu être lue.",
+        "pending": "En attente",
+        "noFlows": "Aucun"
+      }
     }
   }
 }

@@ -12,7 +12,7 @@ import PolicyPager, { usePaged } from './PolicyPager'
 import { flowsOfZone, type ZoneMember } from './zoneModel'
 
 const STATES: ZoneState[] = ['observe', 'enforce', 'disabled']
-const STATE_DOT: Record<ZoneState, string> = { disabled: '#9e9e9e', observe: '#ed6c02', enforce: '#4caf50' }
+export const STATE_DOT: Record<ZoneState, string> = { disabled: '#9e9e9e', observe: '#ed6c02', enforce: '#4caf50' }
 
 export type ZoneRowProps = {
   zone: MicrosegZone

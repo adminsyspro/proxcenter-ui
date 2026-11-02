@@ -12,6 +12,11 @@ import type { MicrosegFlow, MicrosegPolicy, MicrosegRevision, MicrosegStatus, Mi
 
 import MicrosegTab from './MicrosegTab'
 
+// The Overview sub-tab draws with @xyflow/react, which measures nothing in jsdom (no edge would be drawn) and
+// whose stylesheet cannot go through the PostCSS config of the test run: every test that renders the tab gets this stand-in.
+vi.mock('@xyflow/react/dist/style.css', () => ({}))
+vi.mock('@xyflow/react', async () => (await import('./xyflowTestMock')).xyflowMock)
+
 export const BASE = '/api/v1/firewall/microseg/c1'
 /** The guest list of the connection, as the inventory route answers it. */
 export const GUESTS_ROUTE = '/api/v1/vms?connId=c1'

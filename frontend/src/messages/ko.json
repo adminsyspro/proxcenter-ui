@@ -13014,6 +13014,43 @@
       "resolvedAccept": "{count, plural, other {#개 흐름을 초안에 수락했습니다}}",
       "resolvedDismiss": "{count, plural, other {#개 흐름을 무시했습니다}}",
       "page": "{page, number}페이지"
+    },
+    "overview": {
+      "empty": "아직 그릴 영역이 없습니다.",
+      "createZone": "영역 만들기",
+      "unapplied": "적용되지 않은 변경이 있는 초안",
+      "unappliedHint": "지도는 초안을 보여 줍니다. 이 변경 사항은 아직 Proxmox에 적용되지 않았습니다.",
+      "mapLabel": "영역과 플로우 지도",
+      "suggestionsError": "대기 중인 플로우를 읽을 수 없습니다. 지도에는 허용된 플로우만 표시됩니다.",
+      "legend": {
+        "flow": "허용된 플로우",
+        "pending": "차단될 플로우",
+        "outside": "v1에서 적용되지 않음"
+      },
+      "node": {
+        "members": "{count, plural, other {구성원 #개}}",
+        "external": "외부",
+        "externalHint": "어느 영역에도 속하지 않는 출발지: IP 주소 또는 네트워크(CIDR)",
+        "outside": "영역 밖",
+        "outsideHint": "영역 밖의 목적지(CIDR). 해당 목적지로 가는 플로우는 v1에서 적용되지 않습니다.",
+        "notApplied": "v1에서 적용되지 않음"
+      },
+      "edge": {
+        "flow": "허용: {services}",
+        "pending": "{count, plural, other {관찰된 플로우 #건이 차단될 예정}}: {services}",
+        "outside": "v1에서 적용되지 않음: {services}"
+      },
+      "panel": {
+        "label": "영역 {name}",
+        "close": "닫기",
+        "editInPolicy": "정책에서 편집",
+        "assign": "게스트 할당",
+        "members": "구성원",
+        "noMembers": "구성원 없음",
+        "membersUnknown": "게스트 목록을 읽을 수 없습니다.",
+        "pending": "대기 중",
+        "noFlows": "없음"
+      }
     }
   }
 }

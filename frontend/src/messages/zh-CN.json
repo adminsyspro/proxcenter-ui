@@ -13014,6 +13014,43 @@
       "resolvedAccept": "{count, plural, other {已将 # 条流量接受到草稿}}",
       "resolvedDismiss": "{count, plural, other {已忽略 # 条流量}}",
       "page": "第 {page, number} 页"
+    },
+    "overview": {
+      "empty": "还没有可绘制的区域。",
+      "createZone": "创建区域",
+      "unapplied": "含未应用更改的草稿",
+      "unappliedHint": "地图显示的是草稿。这些更改尚未应用到 Proxmox。",
+      "mapLabel": "区域及其流量规则地图",
+      "suggestionsError": "无法读取待处理的流量。地图仅显示已允许的流量。",
+      "legend": {
+        "flow": "已允许的流量",
+        "pending": "将被拦截",
+        "outside": "v1 中未应用"
+      },
+      "node": {
+        "members": "{count, plural, other {# 个成员}}",
+        "external": "外部",
+        "externalHint": "不属于任何区域的来源：IP 地址或网络（CIDR）",
+        "outside": "区域之外",
+        "outsideHint": "区域之外的目标（CIDR）。发往这些目标的流量在 v1 中不会被应用。",
+        "notApplied": "v1 中未应用"
+      },
+      "edge": {
+        "flow": "已允许：{services}",
+        "pending": "{count, plural, other {已观察到 # 条流量将被拦截}}：{services}",
+        "outside": "v1 中未应用：{services}"
+      },
+      "panel": {
+        "label": "区域 {name}",
+        "close": "关闭",
+        "editInPolicy": "在策略中编辑",
+        "assign": "分配客户机",
+        "members": "成员",
+        "noMembers": "没有成员",
+        "membersUnknown": "无法读取客户机列表。",
+        "pending": "待处理",
+        "noFlows": "无"
+      }
     }
   }
 }

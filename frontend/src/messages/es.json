@@ -13014,6 +13014,43 @@
       "resolvedAccept": "{count, plural, one {# flujo aceptado en el borrador} other {# flujos aceptados en el borrador}}",
       "resolvedDismiss": "{count, plural, one {# flujo descartado} other {# flujos descartados}}",
       "page": "Página {page, number}"
+    },
+    "overview": {
+      "empty": "Aún no hay ninguna zona que dibujar.",
+      "createZone": "Crear una zona",
+      "unapplied": "Borrador con cambios sin aplicar",
+      "unappliedHint": "El mapa muestra el borrador. Estos cambios todavía no se han aplicado a Proxmox.",
+      "mapLabel": "Mapa de las zonas y sus flujos",
+      "suggestionsError": "No se pudieron leer los flujos pendientes. El mapa solo muestra los flujos permitidos.",
+      "legend": {
+        "flow": "Flujo permitido",
+        "pending": "Sería bloqueado",
+        "outside": "No aplicado en v1"
+      },
+      "node": {
+        "members": "{count, plural, one {# miembro} other {# miembros}}",
+        "external": "Externo",
+        "externalHint": "Orígenes fuera de toda zona: una dirección IP o una red (CIDR)",
+        "outside": "Exterior",
+        "outsideHint": "Destinos fuera de las zonas (un CIDR). Los flujos hacia ellos no se aplican en v1.",
+        "notApplied": "no aplicado en v1"
+      },
+      "edge": {
+        "flow": "Permitido: {services}",
+        "pending": "{count, plural, one {# flujo observado sería bloqueado} other {# flujos observados serían bloqueados}}: {services}",
+        "outside": "No aplicado en v1: {services}"
+      },
+      "panel": {
+        "label": "Zona {name}",
+        "close": "Cerrar",
+        "editInPolicy": "Editar en Política",
+        "assign": "Asignar invitados",
+        "members": "Miembros",
+        "noMembers": "Sin miembros",
+        "membersUnknown": "No se pudo leer la lista de invitados.",
+        "pending": "Pendiente",
+        "noFlows": "Ninguno"
+      }
     }
   }
 }

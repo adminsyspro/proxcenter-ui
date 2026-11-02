@@ -12682,6 +12682,43 @@
       "resolvedAccept": "{count, plural, one {# Fluss in den Entwurf übernommen} other {# Flüsse in den Entwurf übernommen}}",
       "resolvedDismiss": "{count, plural, one {# Fluss verworfen} other {# Flüsse verworfen}}",
       "page": "Seite {page, number}"
+    },
+    "overview": {
+      "empty": "Noch keine Zone zum Zeichnen.",
+      "createZone": "Zone anlegen",
+      "unapplied": "Entwurf mit nicht angewendeten Änderungen",
+      "unappliedHint": "Die Karte zeigt den Entwurf. Diese Änderungen sind noch nicht auf Proxmox angewendet.",
+      "mapLabel": "Karte der Zonen und ihrer Flüsse",
+      "suggestionsError": "Die ausstehenden Flüsse konnten nicht gelesen werden. Die Karte zeigt nur die erlaubten Flüsse.",
+      "legend": {
+        "flow": "Erlaubter Fluss",
+        "pending": "Würde blockiert",
+        "outside": "In v1 nicht angewendet"
+      },
+      "node": {
+        "members": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
+        "external": "Extern",
+        "externalHint": "Quellen außerhalb jeder Zone: eine IP-Adresse oder ein Netz (CIDR)",
+        "outside": "Außerhalb",
+        "outsideHint": "Ziele außerhalb der Zonen (ein CIDR). Flüsse dorthin werden in v1 nicht angewendet.",
+        "notApplied": "in v1 nicht angewendet"
+      },
+      "edge": {
+        "flow": "Erlaubt: {services}",
+        "pending": "{count, plural, one {# beobachteter Fluss würde blockiert} other {# beobachtete Flüsse würden blockiert}}: {services}",
+        "outside": "In v1 nicht angewendet: {services}"
+      },
+      "panel": {
+        "label": "Zone {name}",
+        "close": "Schließen",
+        "editInPolicy": "In Richtlinie bearbeiten",
+        "assign": "Gäste zuweisen",
+        "members": "Mitglieder",
+        "noMembers": "Keine Mitglieder",
+        "membersUnknown": "Die Gästeliste konnte nicht gelesen werden.",
+        "pending": "Ausstehend",
+        "noFlows": "Keine"
+      }
     }
   }
 }

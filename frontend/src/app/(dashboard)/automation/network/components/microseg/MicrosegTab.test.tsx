@@ -107,7 +107,7 @@ describe('errors', () => {
 
     ok = true
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
-    expect(await screen.findByText('3 of 5 running guests in a zone')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByText('The orchestrator did not answer in time.')).toBeNull())
   })
 })
 

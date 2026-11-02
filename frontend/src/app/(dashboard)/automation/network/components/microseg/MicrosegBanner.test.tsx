@@ -1,6 +1,6 @@
 /**
- * Micro-segmentation banner: engine, coverage, zones, held writes, emergency
- * stop and the pending changes bar (rendered through the tab).
+ * Micro-segmentation banner: held writes, pause, emergency stop and the pending
+ * changes bar (rendered through the tab). The engine state and the coverage live on the Dashboard tab.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,26 +19,30 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('banner: engine, coverage and zones', () => {
-  it('shows coverage, zones by state and the last run of each kind', async () => {
+/** The status was read and the banner drew itself: the stop button is there and the spinner is gone. */
+const bannerReady = async () => {
+  await screen.findByRole('button', { name: 'Emergency stop' })
+  await waitFor(() => expect(screen.queryByRole('progressbar')).toBeNull())
+}
+
+describe('banner: only what needs an action', () => {
+  it('shows neither the engine runs, the API calls, the coverage nor the zones by state (they are on the Dashboard tab)', async () => {
     mock.routes['GET /status'] = () => reply(200, status({
       engine: {
         paused_until: null, held: false, last_log: null,
-        last_runs: { apply: { started_at: '2026-11-02T10:00:00Z', status: 'done', api_calls: 42, writes: 7 } },
+        last_runs: {
+          apply: { started_at: '2026-11-02T10:00:00Z', status: 'done', api_calls: 42, writes: 7 },
+          full: { started_at: '2026-11-02T10:05:00Z', status: 'done', api_calls: 9, writes: 0 },
+        },
       },
     }))
     renderTab()
-    expect(await screen.findByText('3 of 5 running guests in a zone')).toBeTruthy()
-    expect(screen.getByText('2 of 3 members protected')).toBeTruthy()
-    expect(screen.getByText('Disabled: 1')).toBeTruthy()
-    expect(screen.getByText('Observation: 2')).toBeTruthy()
-    expect(screen.getByText('Enforced: 0')).toBeTruthy()
-    expect(screen.getByText(/^Apply: .*42 API calls$/)).toBeTruthy()
-  })
-
-  it('says so when no run happened yet', async () => {
-    renderTab()
-    expect(await screen.findByText('No run yet')).toBeTruthy()
+    await bannerReady()
+    const text = document.body.textContent ?? ''
+    expect(text).not.toMatch(/API call/)
+    expect(text).not.toMatch(/running guests in a zone|members protected|No run yet|Coverage/)
+    expect(screen.queryByText(/^(Disabled|Observation|Enforced): \d/)).toBeNull()
+    expect(screen.queryByRole('img', { name: 'Done' })).toBeNull()
   })
 
   it('shows the pause as a warning chip', async () => {
@@ -47,31 +51,11 @@ describe('banner: engine, coverage and zones', () => {
     const chip = await screen.findByText(/^Paused until /)
     expect(chip.closest('.MuiChip-root')).toBeTruthy()
   })
-})
-
-describe('banner: run states and refresh', () => {
-  it('labels the status icon of each run, and shows a neutral icon for an unknown status', async () => {
-    mock.routes['GET /status'] = () => reply(200, status({
-      engine: {
-        paused_until: null, held: false, last_log: null,
-        last_runs: {
-          plan: { started_at: '2026-11-02T10:00:00Z', status: 'failed', api_calls: 1, writes: 0 },
-          apply: { started_at: '2026-11-02T10:00:00Z', status: 'weird' as never, api_calls: 2, writes: 0 },
-        },
-      },
-    }))
-    renderTab()
-    const failed = await screen.findByRole('img', { name: 'Failed' })
-    expect(failed.className).toContain('ri-error-warning-line')
-    const unknown = screen.getByRole('img', { name: 'weird' })
-    expect(unknown.className).toContain('ri-question-line')
-    expect(screen.queryByRole('img', { name: 'Done' })).toBeNull()
-  })
 
   it('hides the pause once paused_until is in the past', async () => {
     mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: '2020-01-01T10:00:00Z', held: false, last_runs: {}, last_log: null } }))
     renderTab()
-    await screen.findByText('No run yet')
+    await bannerReady()
     expect(screen.queryByText(/^Paused until /)).toBeNull()
   })
 
@@ -84,7 +68,6 @@ describe('banner: run states and refresh', () => {
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Emergency stop' }))
     expect(await screen.findByText('Status not refreshed, retrying')).toBeTruthy()
-    expect(screen.getByText('3 of 5 running guests in a zone')).toBeTruthy()
   })
 })
 
@@ -298,13 +281,13 @@ describe('banner: pending changes', () => {
 
   it('shows no bar when nothing is pending', async () => {
     renderTab()
-    await screen.findByText('3 of 5 running guests in a zone')
+    await bannerReady()
     expect(screen.queryByText(/unapplied change/i)).toBeNull()
   })
 
   it('does not read revisions when nothing is pending', async () => {
     renderTab()
-    await screen.findByText('3 of 5 running guests in a zone')
+    await bannerReady()
     expect(calls('GET /revisions?limit=1')).toHaveLength(0)
   })
 })

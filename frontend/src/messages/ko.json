@@ -12653,14 +12653,6 @@
     "noConnection": "Proxmox 연결을 선택하여 마이크로 세분화를 관리하세요.",
     "loading": "마이크로 세분화를 불러오는 중...",
     "banner": {
-      "engine": "엔진",
-      "noRun": "아직 실행 없음",
-      "run": "{kind}: {time}, API 호출 {calls}회",
-      "kind": {
-        "plan": "계획",
-        "apply": "적용",
-        "remove": "제거"
-      },
       "pausedUntil": "{time}까지 일시 중지",
       "held": "쓰기 보류됨",
       "heldBody": "엔진이 쓰기 한도에 도달하여 확인할 때까지 이후 변경을 보류합니다.",
@@ -12668,15 +12660,6 @@
       "confirmWritesTitle": "보류된 쓰기를 확인하시겠습니까?",
       "confirmWritesBody": "엔진이 Proxmox에 다시 쓰기를 시작합니다.",
       "writesConfirmed": "쓰기가 확인되었습니다",
-      "coverage": "적용 범위",
-      "coverageZoned": "실행 중인 게스트 {running}개 중 {zoned}개가 영역에 속함",
-      "coverageProtected": "구성원 {members}개 중 {protected}개 보호됨",
-      "zones": "영역",
-      "zoneState": {
-        "disabled": "비활성: {count}",
-        "observe": "관찰: {count}",
-        "enforce": "적용: {count}"
-      },
       "statusStale": "상태를 새로 고치지 못했습니다. 다시 시도하는 중",
       "runStatus": {
         "done": "완료",
@@ -13217,6 +13200,31 @@
           "removeComplete": "제거가 완료되었습니다.",
           "removeIncomplete": "제거가 완료되지 않았습니다. 다시 실행하세요."
         }
+      }
+    },
+    "dashboard": {
+      "open": "마이크로 세분화 열기",
+      "openShort": "열기",
+      "unavailable": "사용할 수 없음",
+      "deployment": {
+        "label": "배포",
+        "none": "배포되지 않음",
+        "deployed": "배포됨",
+        "counts": "배포됨: 적용 영역 {enforced, number}개, 관찰 중 {observing, number}개",
+        "stopped": "긴급 중지 활성"
+      },
+      "protection": {
+        "label": "게스트 보호",
+        "protected": "게스트 {members, number}개 중 {protected, number}개 보호됨",
+        "unzoned": "실행 중인 게스트 {count, number}개가 어느 영역에도 속하지 않음",
+        "allZoned": "실행 중인 모든 게스트가 영역에 속해 있습니다",
+        "none": "아직 측정되지 않음"
+      },
+      "engine": {
+        "label": "엔진",
+        "lastCheck": "마지막 점검 {time}",
+        "noCheck": "아직 점검 없음",
+        "held": "확인 대기 중 (쓰기 한도 도달)"
       }
     }
   }

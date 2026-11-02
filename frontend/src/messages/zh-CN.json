@@ -12653,14 +12653,6 @@
     "noConnection": "请选择一个 Proxmox 连接以管理其微分段。",
     "loading": "正在加载微分段...",
     "banner": {
-      "engine": "引擎",
-      "noRun": "尚未运行",
-      "run": "{kind}：{time}，{calls} 次 API 调用",
-      "kind": {
-        "plan": "计划",
-        "apply": "应用",
-        "remove": "移除"
-      },
       "pausedUntil": "暂停至 {time}",
       "held": "写入已暂挂",
       "heldBody": "引擎已达到写入上限，在您确认之前将暂挂后续更改。",
@@ -12668,15 +12660,6 @@
       "confirmWritesTitle": "确认已暂挂的写入吗？",
       "confirmWritesBody": "引擎将恢复向 Proxmox 写入。",
       "writesConfirmed": "写入已确认",
-      "coverage": "覆盖率",
-      "coverageZoned": "{running} 个运行中的客户机中有 {zoned} 个在区域内",
-      "coverageProtected": "{members} 个成员中有 {protected} 个受保护",
-      "zones": "区域",
-      "zoneState": {
-        "disabled": "已禁用：{count}",
-        "observe": "观察：{count}",
-        "enforce": "强制：{count}"
-      },
       "statusStale": "状态未刷新，正在重试",
       "runStatus": {
         "done": "已完成",
@@ -13217,6 +13200,31 @@
           "removeComplete": "移除完成。",
           "removeIncomplete": "移除未完成：请重新运行。"
         }
+      }
+    },
+    "dashboard": {
+      "open": "打开微分段",
+      "openShort": "打开",
+      "unavailable": "不可用",
+      "deployment": {
+        "label": "部署",
+        "none": "未部署",
+        "deployed": "已部署",
+        "counts": "已部署：{enforced, number} 个区域已强制，{observing, number} 个在观察",
+        "stopped": "紧急停止已启用"
+      },
+      "protection": {
+        "label": "客户机保护",
+        "protected": "{members, number} 个客户机中有 {protected, number} 个受保护",
+        "unzoned": "{count, number} 个运行中的客户机不在任何区域内",
+        "allZoned": "所有运行中的客户机都在区域内",
+        "none": "尚未测量"
+      },
+      "engine": {
+        "label": "引擎",
+        "lastCheck": "上次检查 {time}",
+        "noCheck": "尚无检查",
+        "held": "等待您的确认（已达写入上限）"
       }
     }
   }

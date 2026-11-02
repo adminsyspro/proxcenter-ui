@@ -12653,14 +12653,6 @@
     "noConnection": "Seleccione una conexión de Proxmox para gestionar su microsegmentación.",
     "loading": "Cargando la microsegmentación...",
     "banner": {
-      "engine": "Motor",
-      "noRun": "Aún sin ejecuciones",
-      "run": "{kind}: {time}, {calls, plural, one {# llamada API} other {# llamadas API}}",
-      "kind": {
-        "plan": "Plan",
-        "apply": "Aplicación",
-        "remove": "Retirada"
-      },
       "pausedUntil": "En pausa hasta {time}",
       "held": "Escrituras retenidas",
       "heldBody": "El motor alcanzó su límite de escrituras y retiene los cambios siguientes hasta que usted confirme.",
@@ -12668,15 +12660,6 @@
       "confirmWritesTitle": "¿Confirmar las escrituras retenidas?",
       "confirmWritesBody": "El motor reanuda las escrituras en Proxmox.",
       "writesConfirmed": "Escrituras confirmadas",
-      "coverage": "Cobertura",
-      "coverageZoned": "{zoned} de {running} invitados en marcha en una zona",
-      "coverageProtected": "{protected} de {members} miembros protegidos",
-      "zones": "Zonas",
-      "zoneState": {
-        "disabled": "Desactivadas: {count}",
-        "observe": "Observación: {count}",
-        "enforce": "Aplicadas: {count}"
-      },
       "statusStale": "Estado sin actualizar, reintentando",
       "runStatus": {
         "done": "Terminado",
@@ -13217,6 +13200,31 @@
           "removeComplete": "Retirada completa.",
           "removeIncomplete": "Retirada incompleta: vuelva a ejecutarla."
         }
+      }
+    },
+    "dashboard": {
+      "open": "Abrir la microsegmentación",
+      "openShort": "Abrir",
+      "unavailable": "No disponible",
+      "deployment": {
+        "label": "Despliegue",
+        "none": "No desplegada",
+        "deployed": "Desplegada",
+        "counts": "Desplegada: {enforced, plural, one {# zona aplicada} other {# zonas aplicadas}}, {observing, number} en observación",
+        "stopped": "Parada de emergencia activa"
+      },
+      "protection": {
+        "label": "Protección de invitados",
+        "protected": "{protected, number} de {members, number} invitados protegidos",
+        "unzoned": "{count, plural, one {# invitado en marcha} other {# invitados en marcha}} en ninguna zona",
+        "allZoned": "Todos los invitados en marcha están en una zona",
+        "none": "Aún sin medir"
+      },
+      "engine": {
+        "label": "Motor",
+        "lastCheck": "Última comprobación {time}",
+        "noCheck": "Aún sin comprobaciones",
+        "held": "A la espera de su confirmación (límite de escrituras alcanzado)"
       }
     }
   }

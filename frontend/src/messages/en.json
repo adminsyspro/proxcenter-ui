@@ -12653,14 +12653,6 @@
     "noConnection": "Select a Proxmox connection to manage its micro-segmentation.",
     "loading": "Loading micro-segmentation...",
     "banner": {
-      "engine": "Engine",
-      "noRun": "No run yet",
-      "run": "{kind}: {time}, {calls, plural, one {# API call} other {# API calls}}",
-      "kind": {
-        "plan": "Plan",
-        "apply": "Apply",
-        "remove": "Removal"
-      },
       "pausedUntil": "Paused until {time}",
       "held": "Writes on hold",
       "heldBody": "The engine reached its write cap and holds further changes until you confirm.",
@@ -12668,15 +12660,6 @@
       "confirmWritesTitle": "Confirm the held writes?",
       "confirmWritesBody": "The engine resumes writing to Proxmox.",
       "writesConfirmed": "Writes confirmed",
-      "coverage": "Coverage",
-      "coverageZoned": "{zoned} of {running} running guests in a zone",
-      "coverageProtected": "{protected} of {members} members protected",
-      "zones": "Zones",
-      "zoneState": {
-        "disabled": "Disabled: {count}",
-        "observe": "Observation: {count}",
-        "enforce": "Enforced: {count}"
-      },
       "statusStale": "Status not refreshed, retrying",
       "runStatus": {
         "done": "Done",
@@ -13217,6 +13200,31 @@
           "removeComplete": "Removal complete.",
           "removeIncomplete": "Removal incomplete: run it again."
         }
+      }
+    },
+    "dashboard": {
+      "open": "Open Micro-segmentation",
+      "openShort": "Open",
+      "unavailable": "Not available",
+      "deployment": {
+        "label": "Deployment",
+        "none": "Not deployed",
+        "deployed": "Deployed",
+        "counts": "Deployed: {enforced, plural, one {# zone enforced} other {# zones enforced}}, {observing, number} observing",
+        "stopped": "Emergency stop active"
+      },
+      "protection": {
+        "label": "Guest protection",
+        "protected": "{protected, number} of {members, number} guests protected",
+        "unzoned": "{count, plural, one {# running guest} other {# running guests}} in no zone",
+        "allZoned": "Every running guest is in a zone",
+        "none": "Not measured yet"
+      },
+      "engine": {
+        "label": "Engine",
+        "lastCheck": "Last check {time}",
+        "noCheck": "No check yet",
+        "held": "Waiting for your confirmation (write cap reached)"
       }
     }
   }

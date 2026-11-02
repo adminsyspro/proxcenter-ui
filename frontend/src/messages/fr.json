@@ -12654,14 +12654,6 @@
     "noConnection": "Sélectionnez une connexion Proxmox pour gérer sa micro-segmentation.",
     "loading": "Chargement de la micro-segmentation...",
     "banner": {
-      "engine": "Moteur",
-      "noRun": "Aucun passage pour l'instant",
-      "run": "{kind} : {time}, {calls, plural, one {# appel API} other {# appels API}}",
-      "kind": {
-        "plan": "Plan",
-        "apply": "Application",
-        "remove": "Retrait"
-      },
       "pausedUntil": "En pause jusqu'à {time}",
       "held": "Écritures retenues",
       "heldBody": "Le moteur a atteint son plafond d'écritures et retient les changements suivants jusqu'à votre confirmation.",
@@ -12669,15 +12661,6 @@
       "confirmWritesTitle": "Confirmer les écritures retenues ?",
       "confirmWritesBody": "Le moteur reprend ses écritures sur Proxmox.",
       "writesConfirmed": "Écritures confirmées",
-      "coverage": "Couverture",
-      "coverageZoned": "{zoned} invités en marche sur {running} dans une zone",
-      "coverageProtected": "{protected} membres protégés sur {members}",
-      "zones": "Zones",
-      "zoneState": {
-        "disabled": "Désactivées : {count}",
-        "observe": "Observation : {count}",
-        "enforce": "Appliquées : {count}"
-      },
       "statusStale": "État non actualisé, nouvelle tentative",
       "runStatus": {
         "done": "Terminé",
@@ -13218,6 +13201,31 @@
           "removeComplete": "Retrait terminé.",
           "removeIncomplete": "Retrait incomplet : relancez-le."
         }
+      }
+    },
+    "dashboard": {
+      "open": "Ouvrir la micro-segmentation",
+      "openShort": "Ouvrir",
+      "unavailable": "Indisponible",
+      "deployment": {
+        "label": "Déploiement",
+        "none": "Non déployée",
+        "deployed": "Déployée",
+        "counts": "Déployée : {enforced, plural, one {# zone appliquée} other {# zones appliquées}}, {observing, number} en observation",
+        "stopped": "Arrêt d'urgence actif"
+      },
+      "protection": {
+        "label": "Protection des invités",
+        "protected": "{protected, number} invités protégés sur {members, number}",
+        "unzoned": "{count, plural, one {# invité en marche} other {# invités en marche}} dans aucune zone",
+        "allZoned": "Tous les invités en marche sont dans une zone",
+        "none": "Pas encore mesurée"
+      },
+      "engine": {
+        "label": "Moteur",
+        "lastCheck": "Dernier contrôle {time}",
+        "noCheck": "Aucun contrôle pour l'instant",
+        "held": "En attente de votre confirmation (plafond d'écritures atteint)"
       }
     }
   }

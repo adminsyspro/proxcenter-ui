@@ -13,6 +13,7 @@ import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 import DeploymentWizard from './DeploymentWizard'
+import MicrosegSummaryCard from './microseg/MicrosegSummaryCard'
 
 interface DashboardTabProps {
   // Data
@@ -286,6 +287,11 @@ export default function DashboardTab({
           )}
         </CardContent>
       </Card>
+
+      {/* Micro-segmentation at a glance: one click opens its tab (6) */}
+      {selectedConnection && (
+        <MicrosegSummaryCard key={selectedConnection} connectionId={selectedConnection} onOpen={() => onNavigateTab(6)} />
+      )}
 
       {/* Section 2: VM Coverage (simplified) */}
       <Paper sx={{ p: 3, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, mb: 3 }}>

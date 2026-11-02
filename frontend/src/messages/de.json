@@ -12321,14 +12321,6 @@
     "noConnection": "Wählen Sie eine Proxmox-Verbindung, um ihre Mikrosegmentierung zu verwalten.",
     "loading": "Mikrosegmentierung wird geladen...",
     "banner": {
-      "engine": "Engine",
-      "noRun": "Noch kein Lauf",
-      "run": "{kind}: {time}, {calls, plural, one {# API-Aufruf} other {# API-Aufrufe}}",
-      "kind": {
-        "plan": "Plan",
-        "apply": "Anwenden",
-        "remove": "Entfernen"
-      },
       "pausedUntil": "Pausiert bis {time}",
       "held": "Schreibvorgänge angehalten",
       "heldBody": "Die Engine hat ihre Schreibgrenze erreicht und hält weitere Änderungen bis zu Ihrer Bestätigung zurück.",
@@ -12336,15 +12328,6 @@
       "confirmWritesTitle": "Angehaltene Schreibvorgänge bestätigen?",
       "confirmWritesBody": "Die Engine schreibt wieder nach Proxmox.",
       "writesConfirmed": "Schreibvorgänge bestätigt",
-      "coverage": "Abdeckung",
-      "coverageZoned": "{zoned} von {running} laufenden Gästen in einer Zone",
-      "coverageProtected": "{protected} von {members} Mitgliedern geschützt",
-      "zones": "Zonen",
-      "zoneState": {
-        "disabled": "Deaktiviert: {count}",
-        "observe": "Beobachtung: {count}",
-        "enforce": "Durchgesetzt: {count}"
-      },
       "statusStale": "Status nicht aktualisiert, neuer Versuch",
       "runStatus": {
         "done": "Abgeschlossen",
@@ -12885,6 +12868,31 @@
           "removeComplete": "Entfernung abgeschlossen.",
           "removeIncomplete": "Entfernung unvollständig: erneut ausführen."
         }
+      }
+    },
+    "dashboard": {
+      "open": "Mikrosegmentierung öffnen",
+      "openShort": "Öffnen",
+      "unavailable": "Nicht verfügbar",
+      "deployment": {
+        "label": "Bereitstellung",
+        "none": "Nicht bereitgestellt",
+        "deployed": "Bereitgestellt",
+        "counts": "Bereitgestellt: {enforced, plural, one {# Zone durchgesetzt} other {# Zonen durchgesetzt}}, {observing, number} in Beobachtung",
+        "stopped": "Notfall-Stopp aktiv"
+      },
+      "protection": {
+        "label": "Schutz der Gäste",
+        "protected": "{protected, number} von {members, number} Gästen geschützt",
+        "unzoned": "{count, plural, one {# laufender Gast} other {# laufende Gäste}} in keiner Zone",
+        "allZoned": "Jeder laufende Gast befindet sich in einer Zone",
+        "none": "Noch nicht gemessen"
+      },
+      "engine": {
+        "label": "Engine",
+        "lastCheck": "Letzte Prüfung {time}",
+        "noCheck": "Noch keine Prüfung",
+        "held": "Wartet auf Ihre Bestätigung (Schreibgrenze erreicht)"
       }
     }
   }

@@ -125,16 +125,12 @@ export async function getNodeIps(
   const hit = nodeIpCache.get(connectionId)
   if (hit && now - hit.at < NODE_IP_TTL_MS) return hit.ips
   const pending = nodeIpInflight.get(connectionId)
-  if (pending) return pending
+  if (pending !== undefined) return pending
   // A purge (clearNodeIpCache) during the read drops this promise from the map: the read then
   // neither fills the cache with addresses of the old configuration nor removes a newer read.
-  // load() runs now; a synchronous throw becomes a rejection awaited below, after the promise is registered.
-  let loading: Promise<unknown>
-  try {
-    loading = Promise.resolve(load())
-  } catch (e) {
-    loading = Promise.reject(e)
-  }
+  // load() runs now (the executor is synchronous); a synchronous throw becomes a rejection awaited below,
+  // after the promise is registered.
+  const loading = new Promise<unknown>(resolve => resolve(load()))
   // Token of this read: compared with the registered entry once the read settles.
   const self: { promise?: Promise<Map<string, string>> } = {}
   const promise: Promise<Map<string, string>> = (async () => {

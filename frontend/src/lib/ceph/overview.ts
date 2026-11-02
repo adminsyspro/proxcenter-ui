@@ -39,7 +39,7 @@ export function osdLatency(osds: LatencyOsd[]): { avg: number; max: number; maxO
 
   if (up.length === 0) return null
 
-  const slowest = up.reduce((a, b) => (b.ms > a.ms ? b : a))
+  const slowest = up.reduce((a, b) => (b.ms > a.ms ? b : a), up[0])
   const avg = up.reduce((s, o) => s + o.ms, 0) / up.length
 
   return { avg: Math.round(avg * 100) / 100, max: slowest.ms, maxOsd: slowest.id }

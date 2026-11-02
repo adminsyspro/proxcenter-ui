@@ -430,6 +430,14 @@ describe('leader routing (ui#803 defect 2)', () => {
     return localFetch.mock.calls[0][0] as string
   }
 
+  it('routes /microseg to the leader URL when set, and only /microseg', async () => {
+    const leader = 'http://127.0.0.1:8081'
+    expect(await fetchPathWithLeaderUrl('/microseg/c1/policy', leader)).toBe(`${leader}/api/v1/microseg/c1/policy`)
+    expect(await fetchPathWithLeaderUrl('/microseg/c1/runs?limit=5', leader)).toBe(`${leader}/api/v1/microseg/c1/runs?limit=5`)
+    expect(await fetchPathWithLeaderUrl('/microsegment', leader)).toBe('http://localhost:8080/api/v1/microsegment')
+    expect(await fetchPathWithLeaderUrl('/firewall/microseg/c1/vms', leader)).toBe('http://localhost:8080/api/v1/firewall/microseg/c1/vms')
+  })
+
   it('routes /metrics and /drs to the leader URL when set', async () => {
     const leader = 'http://127.0.0.1:8081'
     expect(await fetchPathWithLeaderUrl('/metrics', leader)).toBe(`${leader}/api/v1/metrics`)
@@ -639,5 +647,42 @@ describe('Ceph history calls', () => {
     const urls = fetchMock.mock.calls.map(([url]: any) => String(url).replace('http://localhost:8080/api/v1', ''))
     expect(urls[0]).toBe('/ceph/c1/history?from=F&to=T&step=60&top=1&osds=0%2C4%2C7')
     expect(urls[1]).toBe('/ceph/c1/history?from=F&to=T&step=60')
+  })
+})
+
+describe('orchestratorRelay', () => {
+  it('sends the method, the raw body and the headers, and returns the response untouched', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('t-1')
+    getPrincipalMock.mockResolvedValue({ principal: { kind: 'session', userId: 'u1', userEmail: 'a@b.c' } })
+    fetchMock.mockResolvedValue(new Response('{"version":4}', { status: 409 }))
+    const { orchestratorRelay } = await import('./client')
+
+    const res = await orchestratorRelay('/microseg/c1/zones/z1', { method: 'DELETE', body: '{"version":3}' })
+
+    expect(res.status).toBe(409)
+    expect(await res.text()).toBe('{"version":4}')
+    const [url, init] = fetchMock.mock.calls[0]
+
+    expect(url).toBe('http://localhost:8080/api/v1/microseg/c1/zones/z1')
+    expect(init.method).toBe('DELETE')
+    expect(init.body).toBe('{"version":3}')
+    expect(init.headers['Content-Type']).toBe('application/json')
+    expect(init.headers['X-Tenant-ID']).toBe('t-1')
+    expect(init.headers['X-ProxCenter-Actor-Id']).toBe('u1')
+    expect(init.headers['X-ProxCenter-Actor-Email']).toBe('a@b.c')
+  })
+
+  it('refuses a path that would be re-interpreted, before any call', async () => {
+    const { orchestratorRelay, OrchestratorPathError } = await import('./client')
+
+    await expect(orchestratorRelay('/microseg/../drs')).rejects.toBeInstanceOf(OrchestratorPathError)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('tags a refused connection as ORCHESTRATOR_UNAVAILABLE', async () => {
+    fetchMock.mockRejectedValue(Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }))
+    const { orchestratorRelay } = await import('./client')
+
+    await expect(orchestratorRelay('/microseg/c1/policy')).rejects.toMatchObject({ code: 'ORCHESTRATOR_UNAVAILABLE' })
   })
 })

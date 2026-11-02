@@ -3,6 +3,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { executeSSH } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -14,6 +15,9 @@ type Ctx = { params: Promise<{ id: string; node: string }> }
  * Returns { installed: boolean }
  */
 export async function GET(_req: Request, ctx: Ctx) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   const { id, node } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)

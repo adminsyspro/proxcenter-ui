@@ -9,6 +9,9 @@ import { invalidateInventoryCache } from '@/lib/cache/inventoryCache'
 import { prisma } from '@/lib/db/prisma'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from '@/lib/audit/withAudit'
+import { maskingScope } from '@/lib/tenant/infraScope'
+import { denyIaasTenant, resolveCallerInfraScope } from '@/lib/tenant/iaasGuard'
+import { iaasPoolsView } from '@/lib/connections/iaasView'
 
 export const runtime = 'nodejs'
 
@@ -41,12 +44,19 @@ async function getHandler(_req: Request, ctx: Ctx) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
 
+    // An IaaS tenant only ever sees the pools of its own vDCs on this
+    // cluster, never the other customers' (lib/connections/iaasView).
+    const caller = await resolveCallerInfraScope()
+    if (caller.ok === false) return caller.response
+    const vdcScope = maskingScope(caller.infra)
+
     // Récupérer la liste des pools - pveFetch retourne directement data
     const pools = await pveFetch<any[]>(conn, '/pools')
 
-    const visiblePools = perimeter?.restricted
+    let visiblePools = perimeter?.restricted
       ? (pools || []).filter((p: any) => p?.poolid && perimeter.pools.has(p.poolid))
       : pools || []
+    if (vdcScope) visiblePools = iaasPoolsView(visiblePools, vdcScope, connId)
 
     return NextResponse.json({
       data: visiblePools.map((p: any) => ({
@@ -56,7 +66,7 @@ async function getHandler(_req: Request, ctx: Ctx) {
       // Tells the provisioning wizards that this list IS the caller's scope,
       // so they surface the pool choice (and drop the "no pool" option) even
       // for a non-admin: their guest has to land in one of these.
-      restricted: !!perimeter?.restricted,
+      restricted: !!perimeter?.restricted || !!vdcScope,
     })
   } catch (error: any) {
     console.error('Error fetching pools:', error)
@@ -73,6 +83,10 @@ return NextResponse.json(
  * a well-formed pool id, and the connection itself.
  */
 async function resolveWrite(ctx: Ctx, poolid: unknown) {
+  // Pools are the provider's cluster layout: an IaaS tenant never writes them.
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return { error: iaasDenied }
+
   const params = await Promise.resolve(ctx.params)
   const connId = (params as any)?.id
 

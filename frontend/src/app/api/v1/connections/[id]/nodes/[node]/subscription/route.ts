@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -46,6 +47,9 @@ export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, node } = await ctx.params
 
@@ -80,6 +84,9 @@ async function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, node } = await ctx.params
 
@@ -126,6 +133,9 @@ async function handlePut(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, node } = await ctx.params
     const body = await req.json()
@@ -177,6 +187,9 @@ async function handleDelete(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, node } = await ctx.params
 

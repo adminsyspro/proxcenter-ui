@@ -4,6 +4,8 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant, resolveCallerInfraScope } from "@/lib/tenant/iaasGuard"
+import { iaasClusterOptionsView } from "@/lib/connections/iaasView"
 
 export const runtime = "nodejs"
 
@@ -18,13 +20,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
     if (denied) return denied
 
+    // An IaaS tenant colours its guests' tags with the datacenter tag style
+    // and reads nothing else of the datacenter options (lib/connections/iaasView).
+    const caller = await resolveCallerInfraScope()
+    if (caller.ok === false) return caller.response
+
     const conn = await getConnectionById(id)
 
     // Récupérer les options du datacenter
     const options = await pveFetch<any>(conn, "/cluster/options")
 
     return NextResponse.json({
-      data: options || {}
+      data: caller.infra.kind === "iaas" ? iaasClusterOptionsView(options) : options || {}
     })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
@@ -33,6 +40,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
 // PUT - Mettre a jour les options du datacenter
 async function handlePut(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id

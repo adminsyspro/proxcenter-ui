@@ -5,6 +5,8 @@ import type { Prisma } from "@prisma/client"
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { resolveCallerInfraScope } from "@/lib/tenant/iaasGuard"
+import { iaasConnectionView } from "@/lib/connections/iaasView"
 import { cephVisibleTo } from "@/lib/ceph/tenantVisibility"
 import { encryptSecret, decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS, getRBACContext, getRbacInfraScope, filterVisibleConnections, getGuestVisibleConnectionIds } from "@/lib/rbac"
@@ -49,9 +51,12 @@ export async function GET(req: Request) {
     if (hasCephFilter === 'true') where.hasCeph = true
 
     // Tenant scope: provider sees all; iaas sees its vDC-referenced connections;
-    // msp sees the connections it directly owns (Connection.tenant_id).
-    const tenantId = await getCurrentTenantId()
-    const infra = await getTenantInfrastructureScope(tenantId)
+    // msp sees the connections it directly owns (Connection.tenant_id). Taken
+    // from the tenant the principal carries, never getCurrentTenantId() and
+    // its silent fallback to the provider tenant.
+    const caller = await resolveCallerInfraScope({ ignoreVdcContext: false })
+    if (caller.ok === false) return caller.response
+    const infra = caller.infra
 
     // RBAC infra-scope: resolve once before the query so post-fetch filtering
     // is O(1). Null means unrestricted (admin or global-scope grant).
@@ -218,6 +223,12 @@ export async function GET(req: Request) {
         sshPassConfigured: !!sshPassEnc,
       }
     })
+
+    // An IaaS tenant rents a vDC slice of these provider clusters: it gets
+    // their name and type, never their address, nodes or SSH settings.
+    if (infra.kind === "iaas") {
+      return NextResponse.json({ data: connectionsWithSSHStatus.map(c => iaasConnectionView(c)) })
+    }
 
     return NextResponse.json({ data: connectionsWithSSHStatus })
   } catch (e: any) {

@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -12,6 +13,9 @@ type Ctx = { params: Promise<{ id: string; node: string; iface: string }> }
 
 // GET /api/v1/connections/{id}/nodes/{node}/network/{iface}
 async function getHandler(req: Request, ctx: Ctx) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, node, iface } = await ctx.params
     const resourceId = buildNodeResourceId(id, node)
@@ -30,6 +34,9 @@ async function getHandler(req: Request, ctx: Ctx) {
 
 // PUT /api/v1/connections/{id}/nodes/{node}/network/{iface}
 async function putHandler(req: Request, ctx: Ctx) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, node, iface } = await ctx.params
     const resourceId = buildNodeResourceId(id, node)
@@ -117,6 +124,9 @@ async function putHandler(req: Request, ctx: Ctx) {
 
 // DELETE /api/v1/connections/{id}/nodes/{node}/network/{iface}
 async function deleteHandler(req: Request, ctx: Ctx) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, node, iface } = await ctx.params
     const resourceId = buildNodeResourceId(id, node)

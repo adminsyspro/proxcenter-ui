@@ -8,8 +8,20 @@ import { applyRrdWindow, presetRangeMeta, resolveRrdRequest } from "@/lib/metric
 import { RRD_BATCH_MAX_PATHS } from "@/lib/metrics/rrdBatchLimit"
 import { canonicalRrdPath } from "@/lib/metrics/rrdPath"
 import { guardSessionGuest } from "@/lib/vdc/guestGuard"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
+
+/**
+ * Node and storage graphs are the load of whole provider nodes: an IaaS
+ * tenant (or a caller whose tenant cannot be resolved) keeps its guest paths
+ * only (lib/tenant/iaasGuard). The gate is asked only when a node path is there.
+ */
+async function withoutNodeGraphsForIaas<T extends { target: { guest?: unknown } }>(paths: T[]): Promise<T[]> {
+  if (!paths.some((p) => !p.target.guest)) return paths
+
+  return (await denyIaasTenant()) === null ? paths : paths.filter((p) => p.target.guest)
+}
 
 /**
  * POST /api/v1/connections/:id/rrd/batch
@@ -71,7 +83,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       )
     ).filter((p) => p !== null)
 
-    if (allowedPaths.length === 0) {
+    const tenantPaths = await withoutNodeGraphsForIaas(allowedPaths)
+
+    if (tenantPaths.length === 0) {
       return NextResponse.json({ data: {} })
     }
 
@@ -80,7 +94,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // Guest paths outside the vDC are dropped like paths without the permission.
     const scopedPaths = (
       await Promise.all(
-        allowedPaths.map(async (entry) => {
+        tenantPaths.map(async (entry) => {
           if (!entry.target.guest) return entry
           const refused = await guardSessionGuest({ connectionId: id, conn, ...entry.target.guest, allowMovedNode: true })
           return refused ? null : entry

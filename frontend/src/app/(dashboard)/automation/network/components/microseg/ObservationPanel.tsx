@@ -4,15 +4,14 @@ import { useMemo, useState } from 'react'
 import { Alert, Box, Button, Checkbox, CircularProgress, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegSuggestion, SuggestionAction } from '@/lib/microseg/types'
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
-import { isVersionConflict, writeErrorMessage } from './dialogParts'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import ObservationFilters, { type ObservationFilterValues } from './ObservationFilters'
 import ObservationRow from './ObservationRow'
+import { useResolveSuggestions } from './observationParts'
 import { Notice } from './PlanNotices'
 
 /** Flows per page. The request asks for one more, which tells whether a next page exists. */
@@ -31,8 +30,6 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
   const [filters, setFilters] = useState<ObservationFilterValues>({ kind: '', status: 'pending', zone: '' })
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
-  const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<string | null>(null)
   const [resolved, setResolved] = useState<Resolved | null>(null)
 
   const { data, loading, error, reload } = useMicrosegSuggestions(connectionId, {
@@ -42,6 +39,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
     status: filters.status || undefined,
     zone: filters.zone || undefined,
   })
+  const { busy, failure, clearFailure, resolve: resolveIds } = useResolveSuggestions(connectionId, policy.version, reloadPolicy, reload)
   const zonesById = useMemo(() => new Map(policy.zones.map(z => [z.id, z])), [policy.zones])
   const rows = useMemo(() => (data ?? []).slice(0, OBSERVATION_PAGE_SIZE), [data])
   const hasNext = (data?.length ?? 0) > OBSERVATION_PAGE_SIZE
@@ -71,25 +69,16 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
 
   async function resolve(ids: string[], action: SuggestionAction) {
     if (busy || ids.length === 0) return
-    setBusy(true)
-    setFailure(null)
     setResolved(null)
-    try {
-      await microsegApi(connectionId).resolveSuggestions({ version: policy.version, ids, action })
+    // A 409 (the draft moved) re-reads the list and the draft; the selection stays for the next try.
+    const outcome = await resolveIds(ids, action)
+    if (!outcome) return
+    if (outcome.resolved) {
       setSelected(prev => new Set([...prev].filter(id => !ids.includes(id))))
       setResolved({ action, count: ids.length })
-    } catch (e) {
-      // 409: the draft moved. The list and the draft are re-read, the selection stays for the next try.
-      setFailure(writeErrorMessage(tAll as (key: string) => string, e))
-      if (!isVersionConflict(e)) {
-        setBusy(false)
-        return
-      }
     }
-    const [, fresh] = await Promise.all([reloadPolicy().catch(() => undefined), reload().catch(() => undefined)])
     // Everything of the last page was resolved: the page no longer exists, show the one before.
-    if (page > 0 && fresh && fresh.length === 0) goToPage(page - 1)
-    setBusy(false)
+    if (page > 0 && outcome.fresh && outcome.fresh.length === 0) goToPage(page - 1)
   }
 
   const one = (s: MicrosegSuggestion, action: SuggestionAction) => resolve([s.id], action)
@@ -107,7 +96,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
       <ObservationFilters values={filters} zones={policy.zones} onChange={changeFilters} />
 
       {error && <MicrosegErrorAlert error={error} onRetry={reload} />}
-      {failure && <Alert severity='error' onClose={() => setFailure(null)} sx={{ mb: 1.5 }}>{failure}</Alert>}
+      {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1.5 }}>{failure}</Alert>}
       {resolved && (
         <Alert severity='success' onClose={() => setResolved(null)} sx={{ mb: 1.5 }}>
           {t(resolved.action === 'dismiss' ? 'resolvedDismiss' : 'resolvedAccept', { count: resolved.count })}

@@ -4,12 +4,12 @@ import { useContext, useState } from 'react'
 import { Alert, Box, Button, Chip, Collapse, IconButton, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
-import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 
-import { OneLine, isVersionConflict, writeErrorMessage } from './dialogParts'
+import { OneLine } from './dialogParts'
 import { MapNamesContext, isSampled, observedHits, type EdgeT } from './FlowEdge'
 import FlowSummary from './FlowSummary'
+import { ObservedKindGlyph, ResolveActions, useResolveSuggestions } from './observationParts'
 import PolicyPager, { usePaged } from './PolicyPager'
 import type { MapEdgeData } from './zoneGraph'
 
@@ -57,7 +57,6 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
   const zoneName = (id: string) => zonesById.get(id)?.name ?? to('deletedZone')
   const source = s.src_zone_id ? zoneName(s.src_zone_id) : s.src_ip || to('unknownEndpoint')
   const destination = zoneName(s.dst_zone_id)
-  const blocked = s.kind === 'blocked'
   const accept = t('flowPanel.acceptAs', { from: s.src_zone_id ? source : to('unknownEndpoint'), to: destination, service })
 
   return (
@@ -66,32 +65,13 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
         <IconButton size='small' aria-expanded={open} aria-label={open ? tp('hideDetails') : tp('showDetails')} onClick={() => setOpen(v => !v)}>
           <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
         </IconButton>
-        <Tooltip title={to(`kind.${s.kind}`)}>
-          <Box component='span' sx={{ position: 'relative', display: 'inline-flex', width: 16, height: 16, flexShrink: 0 }}>
-            <i className={blocked ? 'ri-forbid-line' : 'ri-eye-line'} style={{ fontSize: 16 }} />
-            <Box
-              component='span'
-              sx={{
-                position: 'absolute', bottom: -2, right: -3, width: 8, height: 8, borderRadius: '50%', border: '1.5px solid', borderColor: 'background.paper',
-                bgcolor: blocked ? 'info.main' : 'error.main',
-              }}
-            />
-          </Box>
-        </Tooltip>
+        <ObservedKindGlyph kind={s.kind} />
         <Tooltip title={`${source} → ${destination}`}>
           <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{`${source} → ${destination}`}</Typography>
         </Tooltip>
         <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{service}</Typography>
         <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{to('hits', { count: s.hits })}</Typography>
-        <Tooltip title={s.src_zone_id ? accept : to('acceptNoZone')}>
-          <span><IconButton size='small' aria-label={accept} disabled={busy || !s.src_zone_id} onClick={() => onResolve('accept')}><i className='ri-check-line' /></IconButton></span>
-        </Tooltip>
-        <Tooltip title={s.src_ip ? to('acceptCidr') : to('acceptCidrNoIp')}>
-          <span><IconButton size='small' aria-label={to('acceptCidr')} disabled={busy || !s.src_ip} onClick={() => onResolve('accept_cidr')}><i className='ri-checkbox-multiple-line' /></IconButton></span>
-        </Tooltip>
-        <Tooltip title={to('dismiss')}>
-          <span><IconButton size='small' aria-label={to('dismiss')} disabled={busy} onClick={() => onResolve('dismiss')}><i className='ri-close-line' /></IconButton></span>
-        </Tooltip>
+        <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptLabel={accept} />
       </Box>
       <Collapse in={open} unmountOnExit>
         <Box sx={{ pl: 5, pb: 1, minWidth: 0 }}>
@@ -114,32 +94,17 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
  */
 export default function EdgePanel({ edgeId, source, target, data, from, to, zonesById, unapplied, connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onClose, onEdit }: Props) {
   const t = useTranslations('microsegPilot.overview')
-  const tAll = useTranslations()
-  const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<string | null>(null)
   const observed = data.kind === 'unprotected' || data.kind === 'blocked'
   const names = useContext(MapNamesContext)
   const example = observed && isSampled(source, target) ? t('edge.example', { from: names.short(source), to: names.short(target) }) : null
   const title = example ?? `${from} → ${to}`
   const observedPage = usePaged(data.observed, ROWS_PER_PAGE)
   const flowsPage = usePaged(data.flows, ROWS_PER_PAGE)
+  const { busy, failure, clearFailure, resolve: resolveIds } = useResolveSuggestions(connectionId, version, reloadPolicy, reloadSuggestions)
 
   async function resolve(id: string, action: SuggestionAction) {
-    if (busy) return
-    setBusy(true)
-    setFailure(null)
-    try {
-      await microsegApi(connectionId).resolveSuggestions({ version, ids: [id], action })
-      onResolved(action)
-    } catch (e) {
-      setFailure(writeErrorMessage(tAll as (key: string) => string, e))
-      if (!isVersionConflict(e)) {
-        setBusy(false)
-        return
-      }
-    }
-    await Promise.all([reloadPolicy().catch(() => undefined), reloadSuggestions().catch(() => undefined)])
-    setBusy(false)
+    const outcome = await resolveIds([id], action)
+    if (outcome?.resolved) onResolved(action)
   }
 
   return (
@@ -160,7 +125,7 @@ export default function EdgePanel({ edgeId, source, target, data, from, to, zone
       <Tooltip title={data.label}>
         <Typography noWrap variant='body2' color='text.secondary'>{data.label}</Typography>
       </Tooltip>
-      {failure && <Alert severity='error' onClose={() => setFailure(null)} sx={{ mt: 1.5 }}>{failure}</Alert>}
+      {failure && <Alert severity='error' onClose={clearFailure} sx={{ mt: 1.5 }}>{failure}</Alert>}
 
       {observed ? (
         <>

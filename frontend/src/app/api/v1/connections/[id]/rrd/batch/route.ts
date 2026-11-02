@@ -13,6 +13,17 @@ import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 export const runtime = "nodejs"
 
 /**
+ * Node and storage graphs are the load of whole provider nodes: an IaaS
+ * tenant (or a caller whose tenant cannot be resolved) keeps its guest paths
+ * only (lib/tenant/iaasGuard). The gate is asked only when a node path is there.
+ */
+async function withoutNodeGraphsForIaas<T extends { target: { guest?: unknown } }>(paths: T[]): Promise<T[]> {
+  if (!paths.some((p) => !p.target.guest)) return paths
+
+  return (await denyIaasTenant()) === null ? paths : paths.filter((p) => p.target.guest)
+}
+
+/**
  * POST /api/v1/connections/:id/rrd/batch
  * Body: { paths: ["/nodes/pve1", "/nodes/pve2", ...], timeframe: "hour" }
  *       or { paths: [...], from: <epoch s>, to: <epoch s> } for a custom window
@@ -72,12 +83,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       )
     ).filter((p) => p !== null)
 
-    // Node and storage graphs are the load of whole provider nodes: an IaaS
-    // tenant (or a caller whose tenant cannot be resolved) keeps its guest
-    // paths only (lib/tenant/iaasGuard).
-    const nodeLevel = allowedPaths.some((p) => !p.target.guest)
-    const guestOnly = nodeLevel && (await denyIaasTenant()) !== null
-    const tenantPaths = guestOnly ? allowedPaths.filter((p) => p.target.guest) : allowedPaths
+    const tenantPaths = await withoutNodeGraphsForIaas(allowedPaths)
 
     if (tenantPaths.length === 0) {
       return NextResponse.json({ data: {} })

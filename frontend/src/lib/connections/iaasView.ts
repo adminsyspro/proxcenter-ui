@@ -82,7 +82,7 @@ export function iaasMappingsView(mappings: readonly Row[], scope: VdcScope, conn
   for (const m of mappings) {
     const entries = Array.isArray(m?.map) ? (m.map as unknown[]) : []
     const kept = entries
-      .map(e => /(?:^|,)node=([^,]+)/.exec(String(e))?.[1])
+      .map(e => (typeof e === "string" ? /(?:^|,)node=([^,]+)/.exec(e)?.[1] : undefined))
       .filter((n): n is string => !!n && nodes.has(n))
     if (kept.length === 0) continue
     out.push({ ...pick(m, ["id", "description", "checks", "errors", "error"]), map: [...new Set(kept)].map(n => `node=${n}`) })

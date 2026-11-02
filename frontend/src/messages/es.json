@@ -5254,6 +5254,7 @@
     "reports": "Informes",
     "replication": "Replicación",
     "updates": "Actualizaciones disponibles",
+    "microseg": "Microsegmentación",
     "filtersAndLimits": "Filtros y límites",
     "minSeverity": "Severidad mínima",
     "allNotifications": "Todas las notificaciones",
@@ -5346,7 +5347,8 @@
         "maintenance": "Mantenimiento",
         "report": "Informes",
         "sla": "SLA",
-        "updates": "Actualizaciones"
+        "updates": "Actualizaciones",
+        "microseg": "Microsegmentación"
       },
       "severities": {
         "info": "Info y superiores",
@@ -5373,7 +5375,8 @@
       "replication": "Site Recovery: tareas de replicación correctas o fallidas, y la conmutación, reversión o prueba de un plan de recuperación.",
       "maintenance": "Un nodo que entra en modo mantenimiento o sale de él, y el fin de su evacuación.",
       "report": "Informes programados, enviados por correo una vez generados.",
-      "updates": "Nuevas versiones de paquetes disponibles en los nodos Proxmox VE, comprobadas cada 6 horas. Una notificación por clúster, cada versión se notifica una sola vez."
+      "updates": "Nuevas versiones de paquetes disponibles en los nodos Proxmox VE, comprobadas cada 6 horas. Una notificación por clúster, cada versión se notifica una sola vez.",
+      "microseg": "El motor de microsegmentación de un clúster: una desviación entre las zonas y el firewall de Proxmox, la pausa del motor, un invitado que se quedó sin protección y los paquetes bloqueados por una regla de zona."
     }
   },
   "audit": {

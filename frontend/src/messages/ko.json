@@ -5254,6 +5254,7 @@
     "reports": "보고서",
     "replication": "복제",
     "updates": "사용 가능한 업데이트",
+    "microseg": "마이크로 세분화",
     "filtersAndLimits": "필터 및 제한",
     "minSeverity": "최소 심각도",
     "allNotifications": "모든 알림",
@@ -5346,7 +5347,8 @@
         "maintenance": "유지보수",
         "report": "보고서",
         "sla": "SLA",
-        "updates": "업데이트"
+        "updates": "업데이트",
+        "microseg": "마이크로 세분화"
       },
       "severities": {
         "info": "정보 이상",
@@ -5373,7 +5375,8 @@
       "replication": "Site Recovery: 성공하거나 실패한 복제 작업, 복구 계획의 장애 조치, 장애 복구 또는 테스트.",
       "maintenance": "노드의 유지보수 모드 진입 또는 해제, 그리고 대피 완료.",
       "report": "생성된 후 이메일로 전송되는 예약 보고서.",
-      "updates": "Proxmox VE 노드에서 사용할 수 있는 새 패키지 버전을 6시간마다 확인합니다. 클러스터당 알림 한 건이며, 각 버전은 한 번만 보고됩니다."
+      "updates": "Proxmox VE 노드에서 사용할 수 있는 새 패키지 버전을 6시간마다 확인합니다. 클러스터당 알림 한 건이며, 각 버전은 한 번만 보고됩니다.",
+      "microseg": "클러스터의 마이크로 세분화 엔진: 영역과 Proxmox 방화벽 간의 불일치, 엔진 일시 중지, 보호되지 않은 채 남은 게스트, 영역 규칙에 의해 차단된 패킷."
     }
   },
   "audit": {

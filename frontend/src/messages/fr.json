@@ -5254,6 +5254,7 @@
     "reports": "Rapports",
     "replication": "Réplication",
     "updates": "Mises à jour disponibles",
+    "microseg": "Micro-segmentation",
     "filtersAndLimits": "Filtres et limites",
     "minSeverity": "Sévérité minimale",
     "allNotifications": "Toutes les notifications",
@@ -5346,7 +5347,8 @@
         "maintenance": "Maintenance",
         "report": "Rapports",
         "sla": "SLA",
-        "updates": "Mises à jour"
+        "updates": "Mises à jour",
+        "microseg": "Micro-segmentation"
       },
       "severities": {
         "info": "Info et plus",
@@ -5373,7 +5375,8 @@
       "replication": "Site Recovery : tâches de réplication réussies ou en échec, et bascule, retour ou test d'un plan de reprise.",
       "maintenance": "Un nœud qui entre en mode maintenance ou en sort, et la fin de son évacuation.",
       "report": "Rapports programmés, envoyés par e-mail une fois générés.",
-      "updates": "Nouvelles versions de paquets disponibles sur les nœuds Proxmox VE, relevées toutes les 6 heures. Une notification par cluster, chaque version n'est signalée qu'une fois."
+      "updates": "Nouvelles versions de paquets disponibles sur les nœuds Proxmox VE, relevées toutes les 6 heures. Une notification par cluster, chaque version n'est signalée qu'une fois.",
+      "microseg": "Le moteur de micro-segmentation d'un cluster : un écart entre les zones et le pare-feu Proxmox, la mise en pause du moteur, un invité resté sans protection et les paquets bloqués par une règle de zone."
     }
   },
   "audit": {

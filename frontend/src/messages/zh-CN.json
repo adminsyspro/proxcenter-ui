@@ -5254,6 +5254,7 @@
     "reports": "报告",
     "replication": "复制",
     "updates": "可用更新",
+    "microseg": "微分段",
     "filtersAndLimits": "过滤与限制",
     "minSeverity": "最低严重级别",
     "allNotifications": "所有通知",
@@ -5346,7 +5347,8 @@
         "maintenance": "维护",
         "report": "报告",
         "sla": "SLA",
-        "updates": "更新"
+        "updates": "更新",
+        "microseg": "微分段"
       },
       "severities": {
         "info": "信息及以上",
@@ -5373,7 +5375,8 @@
       "replication": "Site Recovery：成功或失败的复制任务，以及恢复计划的故障转移、回切或测试。",
       "maintenance": "节点进入或退出维护模式，以及其疏散完成。",
       "report": "计划报告，生成后通过电子邮件发送。",
-      "updates": "Proxmox VE 节点上可用的新软件包版本，每 6 小时检查一次。每个集群发送一条通知，每个版本只报告一次。"
+      "updates": "Proxmox VE 节点上可用的新软件包版本，每 6 小时检查一次。每个集群发送一条通知，每个版本只报告一次。",
+      "microseg": "集群的微分段引擎：区域与 Proxmox 防火墙之间的偏差、引擎被暂停、未受保护的客户机，以及被区域规则拦截的数据包。"
     }
   },
   "audit": {

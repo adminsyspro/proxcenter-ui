@@ -5254,6 +5254,7 @@
     "reports": "Reports",
     "replication": "Replication",
     "updates": "Available updates",
+    "microseg": "Micro-segmentation",
     "filtersAndLimits": "Filters and limits",
     "minSeverity": "Minimum severity",
     "allNotifications": "All notifications",
@@ -5346,7 +5347,8 @@
         "maintenance": "Maintenance",
         "report": "Reports",
         "sla": "SLA",
-        "updates": "Updates"
+        "updates": "Updates",
+        "microseg": "Micro-segmentation"
       },
       "severities": {
         "info": "Info and above",
@@ -5373,7 +5375,8 @@
       "replication": "Site Recovery: replication jobs that succeed or fail, and the failover, failback or test of a recovery plan.",
       "maintenance": "A node entering or leaving maintenance mode, and the end of its evacuation.",
       "report": "Scheduled reports, sent by email once generated.",
-      "updates": "New package versions available on the Proxmox VE nodes, checked every 6 hours. One notification per cluster, each version is reported once."
+      "updates": "New package versions available on the Proxmox VE nodes, checked every 6 hours. One notification per cluster, each version is reported once.",
+      "microseg": "The micro-segmentation engine of a cluster: a drift between the zones and the Proxmox firewall, the engine being paused, a guest left unprotected, and packets blocked by a zone rule."
     }
   },
   "audit": {

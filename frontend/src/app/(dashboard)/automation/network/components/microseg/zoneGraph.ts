@@ -6,7 +6,8 @@ import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, ZoneState } from '
 
 import { flowService } from './FlowSummary'
 import { placeEdges, type EdgeEnds, type Obstacle, type PlacedEdge } from './zoneGraphEdges'
-import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, circleRadius, layerZones, memberSlots, orderLayers, slotPositions, type Point } from './zoneLayout'
+import type { Point } from './edgeGeometry'
+import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, byText, circleRadius, layerZones, memberSlots, orderLayers, slotPositions } from './zoneLayout'
 
 /** Size of the External and Outside boxes. */
 export const NODE_W = 200
@@ -97,10 +98,6 @@ export type MapInput = {
 
 export type ZoneGraph = { nodes: Node[]; edges: Edge[] }
 
-function byText(a: string, b: string): number {
-  if (a < b) return -1
-  return a > b ? 1 : 0
-}
 const KIND_RANK: Record<MapEdgeKind, number> = { allowed: 0, outside: 1, unprotected: 2, blocked: 3 }
 
 /** The 8 groups of an IPv6 address, or null when it is not one. An IPv4 tail ("::ffff:10.0.0.5") counts for two. */

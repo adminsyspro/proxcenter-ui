@@ -4,11 +4,11 @@ import { useState } from 'react'
 import { Box, Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { MicrosegApiError, microsegApi } from '@/lib/microseg/api'
+import { microsegApi } from '@/lib/microseg/api'
 import type { GuestRef, MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
-import { useDialogAction } from './dialogParts'
+import { isVersionConflict, useDialogAction } from './dialogParts'
 import FlowDialog, { type FlowSaveValues } from './FlowDialog'
 import FlowList from './FlowList'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
@@ -53,7 +53,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
     try {
       await action()
     } catch (e) {
-      if (e instanceof MicrosegApiError && e.code === 'VERSION_CONFLICT') await refresh()
+      if (isVersionConflict(e)) await refresh()
       throw e
     }
     await refresh()

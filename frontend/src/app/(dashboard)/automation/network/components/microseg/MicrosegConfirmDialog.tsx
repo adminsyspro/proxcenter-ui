@@ -3,7 +3,7 @@
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { DialogErrorLine } from './dialogParts'
+import { DialogErrorLine, ONE_LINE_SX } from './dialogParts'
 
 type Props = {
   open: boolean
@@ -25,7 +25,7 @@ export default function MicrosegConfirmDialog({ open, title, body, confirmLabel,
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onCancel} maxWidth='sm' fullWidth aria-labelledby='microseg-confirm-title'>
-      <DialogTitle id='microseg-confirm-title' sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <DialogTitle id='microseg-confirm-title' sx={ONE_LINE_SX}>
         {title}
       </DialogTitle>
       <DialogContent>

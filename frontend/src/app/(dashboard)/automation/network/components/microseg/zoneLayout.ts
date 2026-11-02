@@ -3,7 +3,7 @@
  * columns (longest-path layers) and rows (barycenter order) of the zones on the grid.
  */
 
-export type Point = { x: number; y: number }
+import type { Point } from './edgeGeometry'
 
 /** A zone circle never gets smaller or larger than this. */
 export const MIN_R = 110
@@ -22,7 +22,11 @@ export const GLYPH_Y = 15
 const GRID_DROP = 12
 const RIM = 12
 
-const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+/** Plain code-unit order of two strings, the same on every machine (no locale). */
+export function byText(a: string, b: string): number {
+  if (a < b) return -1
+  return a > b ? 1 : 0
+}
 
 /** How many guests are drawn and how many the "+N" node stands for. */
 export function memberSlots(count: number): { shown: number; more: number } {

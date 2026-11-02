@@ -13,7 +13,7 @@ import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PlanNotices, { Notice } from './PlanNotices'
 import PlanSteps from './PlanSteps'
 import RunProgress from './RunProgress'
-import { isVersionConflict } from './dialogParts'
+import { ONE_LINE_SX, isVersionConflict } from './dialogParts'
 import type { TrackedRun } from './microsegTabTypes'
 import { groupPlanSteps } from './planGroups'
 import { planState } from './planState'
@@ -146,7 +146,7 @@ export default function PlanDialog({ open, onClose, ...body }: Props) {
   const t = useTranslations('microsegPilot.plan')
   return (
     <Dialog open={open} onClose={onClose} maxWidth='md' fullWidth aria-labelledby='microseg-plan-title'>
-      <DialogTitle id='microseg-plan-title' sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t('title')}</DialogTitle>
+      <DialogTitle id='microseg-plan-title' sx={ONE_LINE_SX}>{t('title')}</DialogTitle>
       <PlanBody {...body} onClose={onClose} />
     </Dialog>
   )

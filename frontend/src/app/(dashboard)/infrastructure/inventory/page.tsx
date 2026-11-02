@@ -115,6 +115,7 @@ export default function InventoryPage() {
 
   // Données brutes des VMs (depuis InventoryTree) et données enrichies (IP, snapshots, OS)
   const [rawVms, setRawVms] = useState<AllVmItem[]>([])
+  const [inventoryLoaded, setInventoryLoaded] = useState(false)
   const [enrichedData, setEnrichedData] = useState<Record<string, EnrichedGuest>>({})
 
   // A node/cluster/pbs deep-link owns both the view and the selection, and it
@@ -628,6 +629,7 @@ return () => setPageInfo('', '', '')
               viewMode={viewMode}
               onViewModeChange={setViewMode}
               onAllVmsChange={setRawVms}
+              onInventoryLoadedChange={setInventoryLoaded}
               onHostsChange={setHosts}
               onPoolsChange={setPools}
               onTagsChange={setTags}
@@ -710,6 +712,7 @@ return () => setPageInfo('', '', '')
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             allVms={allVms}
+            inventoryLoaded={inventoryLoaded}
             hosts={hosts}
             pools={pools}
             tags={tags}

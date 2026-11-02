@@ -111,6 +111,7 @@ import { useGuestSelection, GuestSelectionBar } from '@/components/GuestSelectio
 import { useMyVdcs } from '@/hooks/useMyVdcs'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { blankVmVdcs } from '@/lib/vdc/blankVms'
+import { showRootGuestList } from './rootGuestList'
 import { useRouter } from 'next/navigation'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import GuestOsLogo from '@/components/ui/GuestOsLogo'
@@ -184,6 +185,7 @@ export default function InventoryDetails({
   viewMode = 'tree',
   onViewModeChange,
   allVms = [],
+  inventoryLoaded = false,
   hosts = [],
   pools = [],
   tags = [],
@@ -213,6 +215,7 @@ export default function InventoryDetails({
   viewMode?: ViewMode
   onViewModeChange?: (mode: ViewMode) => void
   allVms?: AllVmItem[]
+  inventoryLoaded?: boolean  // the first inventory stream has ended (an empty allVms is then really empty)
   hosts?: HostItem[]
   pools?: PoolItem[]
   tags?: TagItem[]
@@ -2908,7 +2911,7 @@ return vm?.isCluster ?? false
           externalHypervisors={externalHypervisors}
         />
       ) : !selection || selection?.type === 'root' ? (
-        viewMode === 'vms' && displayVms.length > 0 ? (
+        showRootGuestList(viewMode, displayVms.length, inventoryLoaded) ? (
           <Box sx={{ height: 'calc(100vh - 76px - var(--taskbar-height, 0px) - var(--top-banner-height, 0px))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <Card variant="outlined" sx={{ width: '100%', borderRadius: 0, flex: 1, minHeight: 0, border: 'none', display: 'flex', flexDirection: 'column' }}>
               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>

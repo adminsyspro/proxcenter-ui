@@ -10,6 +10,7 @@ import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PendingChangesBar from './PendingChangesBar'
 import { formatWhen, stillPaused } from './summaryModel'
 import type { ControlAction, MicrosegControls } from './useMicrosegControls'
+import { NOW_REFRESH_MS, useNow } from './useNow'
 
 type Props = {
   connectionId: string
@@ -37,8 +38,9 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
 
   // "Applied by the leader within a minute" is over once the status has moved.
   const shownNotice = notice?.type === 'leader' && notice.stop !== undefined && status && notice.stop !== status.emergency_stop ? null : notice
+  const now = useNow(NOW_REFRESH_MS, status)
   const pausedUntil = status?.engine.paused_until
-  const pausedShown = !!pausedUntil && stillPaused(pausedUntil)
+  const pausedShown = !!pausedUntil && stillPaused(pausedUntil, now)
   const stale = !!statusError && !!status
   const statusFailed = !!statusError && !status
 

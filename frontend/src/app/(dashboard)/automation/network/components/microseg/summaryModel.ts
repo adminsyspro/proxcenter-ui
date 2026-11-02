@@ -2,9 +2,9 @@ import type { useFormatter } from 'next-intl'
 
 import type { MicrosegSnapshot, MicrosegStatus } from '@/lib/microseg/types'
 
-/** A pause whose end is past is over (the engine clears the field on its next pass). */
-export function stillPaused(pausedUntil: string | null | undefined): boolean {
-  return !!pausedUntil && !(Date.parse(pausedUntil) <= Date.now())
+/** A pause whose end is past `now` is over (the engine clears the field on its next pass). */
+export function stillPaused(pausedUntil: string | null | undefined, now: number = Date.now()): boolean {
+  return !!pausedUntil && !(Date.parse(pausedUntil) <= now)
 }
 
 /** A date for a line of text: medium date and short time, or the raw text when it is not a date. */

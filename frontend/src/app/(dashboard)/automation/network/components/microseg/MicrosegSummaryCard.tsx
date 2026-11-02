@@ -13,6 +13,7 @@ import { coverage } from './coverage'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import { useDialogAction } from './dialogParts'
 import { deployedCounts, formatWhen, lastCheckAt, stillPaused } from './summaryModel'
+import { NOW_REFRESH_MS, useNow } from './useNow'
 
 type Props = {
   connectionId: string
@@ -50,6 +51,7 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
   const { data: policy, error: policyError } = useMicrosegPolicy(connectionId)
   const lastId = policy?.last_revision?.id
   const { revision } = useLastRevisionSnapshot(connectionId, lastId)
+  const now = useNow(NOW_REFRESH_MS, status)
 
   const [confirmOpen, setConfirmOpen] = useState(false)
   const { busy, error: confirmError, run, reset } = useDialogAction()
@@ -92,7 +94,7 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
     )
   })()
 
-  const paused = stillPaused(pausedUntil) && !!pausedUntil
+  const paused = stillPaused(pausedUntil, now) && !!pausedUntil
 
   const engineLine = (() => {
     if (!status) return statusError ? <Typography variant='body2'>{t('dashboard.unavailable')}</Typography> : <Skeleton width={180} />
@@ -114,7 +116,7 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
         {paused && pausedUntil && <Typography variant='body2' color='warning.main'>{t('banner.pausedUntil', { time: formatWhen(format, pausedUntil) })}</Typography>}
         {!held && !paused && (
           <Typography variant='body2'>
-            {checkedAt ? t('dashboard.engine.lastCheck', { time: format.relativeTime(checkedAt, Date.now()) }) : t('dashboard.engine.noCheck')}
+            {checkedAt ? t('dashboard.engine.lastCheck', { time: format.relativeTime(checkedAt, now) }) : t('dashboard.engine.noCheck')}
           </Typography>
         )}
       </>

@@ -12636,5 +12636,95 @@
         "slow": "느림"
       }
     }
+  },
+  "microsegPilot": {
+    "tab": {
+      "title": "마이크로 세분화"
+    },
+    "subTabs": {
+      "label": "마이크로 세분화 섹션",
+      "overview": "개요",
+      "policy": "정책",
+      "observation": "관찰",
+      "drifts": "편차",
+      "history": "기록",
+      "placeholder": "이 섹션은 아직 사용할 수 없습니다."
+    },
+    "noConnection": "Proxmox 연결을 선택하여 마이크로 세분화를 관리하세요.",
+    "loading": "마이크로 세분화를 불러오는 중...",
+    "banner": {
+      "engine": "엔진",
+      "noRun": "아직 실행 없음",
+      "run": "{kind}: {time}, API 호출 {calls}회",
+      "kind": {
+        "plan": "계획",
+        "apply": "적용",
+        "remove": "제거"
+      },
+      "pausedUntil": "{time}까지 일시 중지",
+      "held": "쓰기 보류됨",
+      "heldBody": "엔진이 쓰기 한도에 도달하여 확인할 때까지 이후 변경을 보류합니다.",
+      "confirmWrites": "쓰기 확인",
+      "confirmWritesTitle": "보류된 쓰기를 확인하시겠습니까?",
+      "confirmWritesBody": "엔진이 Proxmox에 다시 쓰기를 시작합니다.",
+      "writesConfirmed": "쓰기가 확인되었습니다",
+      "coverage": "적용 범위",
+      "coverageZoned": "실행 중인 게스트 {running}개 중 {zoned}개가 영역에 속함",
+      "coverageProtected": "구성원 {members}개 중 {protected}개 보호됨",
+      "zones": "영역",
+      "zoneState": {
+        "disabled": "비활성: {count}",
+        "observe": "관찰: {count}",
+        "enforce": "적용: {count}"
+      }
+    },
+    "stop": {
+      "button": "긴급 중지",
+      "title": "마이크로 세분화를 중지하시겠습니까?",
+      "body": "이 연결의 모든 영역이 관찰 모드로 전환됩니다.",
+      "active": "긴급 중지 활성: 모든 영역이 관찰 중입니다",
+      "resume": "재개",
+      "resumeTitle": "마이크로 세분화를 재개하시겠습니까?",
+      "resumeBody": "엔진이 다시 영역을 관리합니다.",
+      "appliedByLeader": "요청이 수락되었습니다. 리더 오케스트레이터가 1분 이내에 적용합니다."
+    },
+    "pending": {
+      "withCount": "적용되지 않은 변경 {count}건",
+      "noCount": "적용되지 않은 변경",
+      "viewPlan": "계획 보기"
+    },
+    "firstRun": {
+      "title": "마이크로 세분화 설정",
+      "intro": "세 단계로 빈 정책에서 첫 번째 보호 영역까지 설정할 수 있습니다.",
+      "step1Title": "사전 점검 실행",
+      "step1Body": "클러스터와 방화벽이 준비되었는지 확인합니다.",
+      "step1Action": "개요 열기",
+      "step2Title": "첫 번째 영역 만들기",
+      "step2Body": "서로 통신하는 게스트를 묶습니다.",
+      "step2Action": "정책 열기",
+      "step3Title": "계획 미리 보기",
+      "step3Body": "아무것도 쓰기 전에 Proxmox에서 무엇이 바뀔지 확인합니다.",
+      "step3Action": "계획 보기"
+    },
+    "errors": {
+      "VERSION_CONFLICT": "정책이 다른 곳에서 변경되었습니다. 최신 버전을 받으려면 새로 고치세요. 입력한 내용은 유지됩니다.",
+      "BUSY": "이 연결에서 다른 작업이 실행 중입니다. 잠시 후 다시 시도하세요.",
+      "ZONE_NAME_TAKEN": "이 이름의 영역이 이미 있습니다.",
+      "IN_USE": "이 영역은 아직 플로우에서 사용 중입니다. 먼저 플로우를 삭제하세요.",
+      "INVALID": "서버가 요청을 유효하지 않다고 거부했습니다.",
+      "FEATURE_REQUIRED": "마이크로 세분화에는 Enterprise 라이선스가 필요합니다.",
+      "FORBIDDEN": "이 작업을 수행할 권한이 없습니다.",
+      "NOT_FOUND": "찾을 수 없습니다. 삭제되었을 수 있습니다.",
+      "UNAUTHORIZED": "오케스트레이터가 이 요청을 수락하지 않았습니다. 오케스트레이터 연결 설정을 확인하세요.",
+      "NOT_LEADER": "이 오케스트레이터 노드는 리더가 아닙니다. 잠시 후 다시 시도하세요.",
+      "MICROSEG_UNAVAILABLE": "오케스트레이터에서 마이크로 세분화 엔진을 사용할 수 없습니다. 나중에 다시 시도하세요.",
+      "ENGINE_STOPPED": "마이크로 세분화 엔진이 종료되는 중입니다. 잠시 후 다시 시도하세요.",
+      "ORCHESTRATOR_ERROR": "오케스트레이터가 오류를 반환했습니다.",
+      "ORCHESTRATOR_TIMEOUT": "오케스트레이터가 제시간에 응답하지 않았습니다.",
+      "PVE_ERROR": "Proxmox가 오류를 반환했습니다.",
+      "CONFLICT": "이미 있는 항목과 충돌합니다.",
+      "NETWORK": "ProxCenter에 연결할 수 없습니다. 네트워크 연결을 확인하세요.",
+      "generic": "문제가 발생했습니다. 다시 시도하세요."
+    }
   }
 }

@@ -12636,5 +12636,95 @@
         "slow": "Slow"
       }
     }
+  },
+  "microsegPilot": {
+    "tab": {
+      "title": "Micro-segmentation"
+    },
+    "subTabs": {
+      "label": "Micro-segmentation sections",
+      "overview": "Overview",
+      "policy": "Policy",
+      "observation": "Observation",
+      "drifts": "Drifts",
+      "history": "History",
+      "placeholder": "This section is not available yet."
+    },
+    "noConnection": "Select a Proxmox connection to manage its micro-segmentation.",
+    "loading": "Loading micro-segmentation...",
+    "banner": {
+      "engine": "Engine",
+      "noRun": "No run yet",
+      "run": "{kind}: {time}, {calls, plural, one {# API call} other {# API calls}}",
+      "kind": {
+        "plan": "Plan",
+        "apply": "Apply",
+        "remove": "Removal"
+      },
+      "pausedUntil": "Paused until {time}",
+      "held": "Writes on hold",
+      "heldBody": "The engine reached its write cap and holds further changes until you confirm.",
+      "confirmWrites": "Confirm writes",
+      "confirmWritesTitle": "Confirm the held writes?",
+      "confirmWritesBody": "The engine resumes writing to Proxmox.",
+      "writesConfirmed": "Writes confirmed",
+      "coverage": "Coverage",
+      "coverageZoned": "{zoned} of {running} running guests in a zone",
+      "coverageProtected": "{protected} of {members} members protected",
+      "zones": "Zones",
+      "zoneState": {
+        "disabled": "Disabled: {count}",
+        "observe": "Observation: {count}",
+        "enforce": "Enforced: {count}"
+      }
+    },
+    "stop": {
+      "button": "Emergency stop",
+      "title": "Stop micro-segmentation?",
+      "body": "Every zone of this connection moves to observation.",
+      "active": "Emergency stop active: every zone is in observation",
+      "resume": "Resume",
+      "resumeTitle": "Resume micro-segmentation?",
+      "resumeBody": "The engine takes over the zones again.",
+      "appliedByLeader": "Request accepted: the leader orchestrator applies it within a minute."
+    },
+    "pending": {
+      "withCount": "{count, plural, one {# unapplied change} other {# unapplied changes}}",
+      "noCount": "Unapplied changes",
+      "viewPlan": "View plan"
+    },
+    "firstRun": {
+      "title": "Set up micro-segmentation",
+      "intro": "Three steps take you from an empty policy to your first protected zone.",
+      "step1Title": "Run the pre-flight checks",
+      "step1Body": "Check that the cluster and its firewall are ready.",
+      "step1Action": "Open the overview",
+      "step2Title": "Create your first zone",
+      "step2Body": "Group the guests that talk to each other.",
+      "step2Action": "Open the policy",
+      "step3Title": "Preview the plan",
+      "step3Body": "See what would change on Proxmox before anything is written.",
+      "step3Action": "View plan"
+    },
+    "errors": {
+      "VERSION_CONFLICT": "The policy changed elsewhere. Reload to get the latest version; your input is kept.",
+      "BUSY": "Another operation is running on this connection. Try again in a moment.",
+      "ZONE_NAME_TAKEN": "A zone with this name already exists.",
+      "IN_USE": "This zone is still used by a flow. Remove the flow first.",
+      "INVALID": "The server refused the request as invalid.",
+      "FEATURE_REQUIRED": "Micro-segmentation requires an Enterprise license.",
+      "FORBIDDEN": "You do not have permission to do this.",
+      "NOT_FOUND": "Not found. It may have been deleted.",
+      "UNAUTHORIZED": "The orchestrator did not accept this request. Check the orchestrator connection settings.",
+      "NOT_LEADER": "This orchestrator node is not the leader. Try again in a moment.",
+      "MICROSEG_UNAVAILABLE": "The micro-segmentation engine is not available on the orchestrator. Try again later.",
+      "ENGINE_STOPPED": "The micro-segmentation engine is stopping. Try again in a moment.",
+      "ORCHESTRATOR_ERROR": "The orchestrator returned an error.",
+      "ORCHESTRATOR_TIMEOUT": "The orchestrator did not answer in time.",
+      "PVE_ERROR": "Proxmox returned an error.",
+      "CONFLICT": "This conflicts with an item that already exists.",
+      "NETWORK": "ProxCenter cannot be reached. Check your network connection.",
+      "generic": "Something went wrong. Try again."
+    }
   }
 }

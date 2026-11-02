@@ -25,9 +25,10 @@ import RulesTab from './components/RulesTab'
 import ObjectsTab from './components/ObjectsTab'
 import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
 import LoggingTab from './components/LoggingTab'
+import MicrosegTab from './components/microseg/MicrosegTab'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN PAGE — 6 tabs: Dashboard, Firewalling, Aliases, IP Sets, Security Groups, Logging
+   MAIN PAGE — 7 tabs: Dashboard, Firewalling, Aliases, IP Sets, Security Groups, Logging, Micro-segmentation
 ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function NetworkAutomationPage() {
@@ -161,6 +162,7 @@ export default function NetworkAutomationPage() {
             <Tab icon={<i className="ri-database-2-line" />} iconPosition="start" label={t('networkPage.tabIpSets')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-shield-check-line" />} iconPosition="start" label={t('networkPage.tabSecurityGroups')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-terminal-box-line" />} iconPosition="start" label={t('networkPage.tabLogging')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-shield-keyhole-line" />} iconPosition="start" label={t('microsegPilot.tab.title')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
           </Tabs>
 
           {/* Tab 0: Dashboard */}
@@ -265,6 +267,11 @@ export default function NetworkAutomationPage() {
               securityGroups={securityGroups}
               firewallMode={firewallMode}
             />
+          )}
+
+          {/* Tab 6: Micro-segmentation (keyed: another connection starts from no state) */}
+          {activeTab === 6 && (
+            <MicrosegTab key={selectedConnection} connectionId={selectedConnection} />
           )}
 
         </Card>

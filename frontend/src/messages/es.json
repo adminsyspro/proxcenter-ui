@@ -12636,5 +12636,95 @@
         "slow": "Lento"
       }
     }
+  },
+  "microsegPilot": {
+    "tab": {
+      "title": "Microsegmentación"
+    },
+    "subTabs": {
+      "label": "Secciones de la microsegmentación",
+      "overview": "Resumen",
+      "policy": "Política",
+      "observation": "Observación",
+      "drifts": "Desviaciones",
+      "history": "Historial",
+      "placeholder": "Esta sección aún no está disponible."
+    },
+    "noConnection": "Seleccione una conexión de Proxmox para gestionar su microsegmentación.",
+    "loading": "Cargando la microsegmentación...",
+    "banner": {
+      "engine": "Motor",
+      "noRun": "Aún sin ejecuciones",
+      "run": "{kind}: {time}, {calls, plural, one {# llamada API} other {# llamadas API}}",
+      "kind": {
+        "plan": "Plan",
+        "apply": "Aplicación",
+        "remove": "Retirada"
+      },
+      "pausedUntil": "En pausa hasta {time}",
+      "held": "Escrituras retenidas",
+      "heldBody": "El motor alcanzó su límite de escrituras y retiene los cambios siguientes hasta que usted confirme.",
+      "confirmWrites": "Confirmar escrituras",
+      "confirmWritesTitle": "¿Confirmar las escrituras retenidas?",
+      "confirmWritesBody": "El motor reanuda las escrituras en Proxmox.",
+      "writesConfirmed": "Escrituras confirmadas",
+      "coverage": "Cobertura",
+      "coverageZoned": "{zoned} de {running} invitados en marcha en una zona",
+      "coverageProtected": "{protected} de {members} miembros protegidos",
+      "zones": "Zonas",
+      "zoneState": {
+        "disabled": "Desactivadas: {count}",
+        "observe": "Observación: {count}",
+        "enforce": "Aplicadas: {count}"
+      }
+    },
+    "stop": {
+      "button": "Parada de emergencia",
+      "title": "¿Detener la microsegmentación?",
+      "body": "Todas las zonas de esta conexión pasan a observación.",
+      "active": "Parada de emergencia activa: todas las zonas están en observación",
+      "resume": "Reanudar",
+      "resumeTitle": "¿Reanudar la microsegmentación?",
+      "resumeBody": "El motor vuelve a gestionar las zonas.",
+      "appliedByLeader": "Solicitud aceptada: el orquestador líder la aplica en menos de un minuto."
+    },
+    "pending": {
+      "withCount": "{count, plural, one {# cambio sin aplicar} other {# cambios sin aplicar}}",
+      "noCount": "Cambios sin aplicar",
+      "viewPlan": "Ver el plan"
+    },
+    "firstRun": {
+      "title": "Configurar la microsegmentación",
+      "intro": "Tres pasos le llevan de una política vacía a su primera zona protegida.",
+      "step1Title": "Ejecutar las comprobaciones previas",
+      "step1Body": "Compruebe que el clúster y su cortafuegos están listos.",
+      "step1Action": "Abrir el resumen",
+      "step2Title": "Crear su primera zona",
+      "step2Body": "Agrupe los invitados que se comunican entre sí.",
+      "step2Action": "Abrir la política",
+      "step3Title": "Previsualizar el plan",
+      "step3Body": "Vea qué cambiaría en Proxmox antes de escribir nada.",
+      "step3Action": "Ver el plan"
+    },
+    "errors": {
+      "VERSION_CONFLICT": "La política cambió en otro lugar. Recargue para obtener la última versión; su entrada se conserva.",
+      "BUSY": "Hay otra operación en curso en esta conexión. Inténtelo de nuevo en un momento.",
+      "ZONE_NAME_TAKEN": "Ya existe una zona con este nombre.",
+      "IN_USE": "Esta zona todavía la usa un flujo. Elimine primero el flujo.",
+      "INVALID": "El servidor rechazó la solicitud por no ser válida.",
+      "FEATURE_REQUIRED": "La microsegmentación requiere una licencia Enterprise.",
+      "FORBIDDEN": "No tiene permiso para hacer esto.",
+      "NOT_FOUND": "No encontrado. Puede que se haya eliminado.",
+      "UNAUTHORIZED": "El orquestador no aceptó esta solicitud. Compruebe los ajustes de conexión del orquestador.",
+      "NOT_LEADER": "Este nodo orquestador no es el líder. Inténtelo de nuevo en un momento.",
+      "MICROSEG_UNAVAILABLE": "El motor de microsegmentación no está disponible en el orquestador. Inténtelo de nuevo más tarde.",
+      "ENGINE_STOPPED": "El motor de microsegmentación se está deteniendo. Inténtelo de nuevo en un momento.",
+      "ORCHESTRATOR_ERROR": "El orquestador devolvió un error.",
+      "ORCHESTRATOR_TIMEOUT": "El orquestador no respondió a tiempo.",
+      "PVE_ERROR": "Proxmox devolvió un error.",
+      "CONFLICT": "Esto entra en conflicto con un elemento existente.",
+      "NETWORK": "No se puede contactar con ProxCenter. Compruebe su conexión de red.",
+      "generic": "Algo salió mal. Inténtelo de nuevo."
+    }
   }
 }

@@ -12636,5 +12636,95 @@
         "slow": "较慢"
       }
     }
+  },
+  "microsegPilot": {
+    "tab": {
+      "title": "微分段"
+    },
+    "subTabs": {
+      "label": "微分段分区",
+      "overview": "概览",
+      "policy": "策略",
+      "observation": "观察",
+      "drifts": "偏差",
+      "history": "历史",
+      "placeholder": "此部分暂不可用。"
+    },
+    "noConnection": "请选择一个 Proxmox 连接以管理其微分段。",
+    "loading": "正在加载微分段...",
+    "banner": {
+      "engine": "引擎",
+      "noRun": "尚未运行",
+      "run": "{kind}：{time}，{calls} 次 API 调用",
+      "kind": {
+        "plan": "计划",
+        "apply": "应用",
+        "remove": "移除"
+      },
+      "pausedUntil": "暂停至 {time}",
+      "held": "写入已暂挂",
+      "heldBody": "引擎已达到写入上限，在您确认之前将暂挂后续更改。",
+      "confirmWrites": "确认写入",
+      "confirmWritesTitle": "确认已暂挂的写入吗？",
+      "confirmWritesBody": "引擎将恢复向 Proxmox 写入。",
+      "writesConfirmed": "写入已确认",
+      "coverage": "覆盖率",
+      "coverageZoned": "{running} 个运行中的客户机中有 {zoned} 个在区域内",
+      "coverageProtected": "{members} 个成员中有 {protected} 个受保护",
+      "zones": "区域",
+      "zoneState": {
+        "disabled": "已禁用：{count}",
+        "observe": "观察：{count}",
+        "enforce": "强制：{count}"
+      }
+    },
+    "stop": {
+      "button": "紧急停止",
+      "title": "停止微分段吗？",
+      "body": "此连接的所有区域都将转为观察模式。",
+      "active": "紧急停止已启用：所有区域均处于观察模式",
+      "resume": "恢复",
+      "resumeTitle": "恢复微分段吗？",
+      "resumeBody": "引擎将重新接管这些区域。",
+      "appliedByLeader": "请求已接受：主节点编排器将在一分钟内应用。"
+    },
+    "pending": {
+      "withCount": "{count} 项未应用的更改",
+      "noCount": "未应用的更改",
+      "viewPlan": "查看计划"
+    },
+    "firstRun": {
+      "title": "设置微分段",
+      "intro": "三个步骤即可从空策略到第一个受保护的区域。",
+      "step1Title": "运行预检",
+      "step1Body": "检查集群及其防火墙是否就绪。",
+      "step1Action": "打开概览",
+      "step2Title": "创建第一个区域",
+      "step2Body": "将相互通信的客户机分为一组。",
+      "step2Action": "打开策略",
+      "step3Title": "预览计划",
+      "step3Body": "在写入任何内容之前，先查看 Proxmox 上将发生的更改。",
+      "step3Action": "查看计划"
+    },
+    "errors": {
+      "VERSION_CONFLICT": "策略已在别处被修改。请重新加载以获取最新版本；您的输入会被保留。",
+      "BUSY": "此连接上正在执行另一项操作。请稍后重试。",
+      "ZONE_NAME_TAKEN": "已存在同名区域。",
+      "IN_USE": "此区域仍被某个流量规则使用。请先删除该规则。",
+      "INVALID": "服务器因请求无效而拒绝了它。",
+      "FEATURE_REQUIRED": "微分段需要企业版许可证。",
+      "FORBIDDEN": "您没有执行此操作的权限。",
+      "NOT_FOUND": "未找到。它可能已被删除。",
+      "UNAUTHORIZED": "编排器未接受此请求。请检查编排器连接设置。",
+      "NOT_LEADER": "此编排器节点不是主节点。请稍后重试。",
+      "MICROSEG_UNAVAILABLE": "编排器上的微分段引擎不可用。请稍后重试。",
+      "ENGINE_STOPPED": "微分段引擎正在停止。请稍后重试。",
+      "ORCHESTRATOR_ERROR": "编排器返回了错误。",
+      "ORCHESTRATOR_TIMEOUT": "编排器未在时限内响应。",
+      "PVE_ERROR": "Proxmox 返回了错误。",
+      "CONFLICT": "这与已存在的项目冲突。",
+      "NETWORK": "无法连接到 ProxCenter。请检查网络连接。",
+      "generic": "出了点问题。请重试。"
+    }
   }
 }

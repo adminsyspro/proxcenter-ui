@@ -12637,5 +12637,95 @@
         "slow": "Lent"
       }
     }
+  },
+  "microsegPilot": {
+    "tab": {
+      "title": "Micro-segmentation"
+    },
+    "subTabs": {
+      "label": "Sections de la micro-segmentation",
+      "overview": "Vue d'ensemble",
+      "policy": "Politique",
+      "observation": "Observation",
+      "drifts": "Écarts",
+      "history": "Historique",
+      "placeholder": "Cette section n'est pas encore disponible."
+    },
+    "noConnection": "Sélectionnez une connexion Proxmox pour gérer sa micro-segmentation.",
+    "loading": "Chargement de la micro-segmentation...",
+    "banner": {
+      "engine": "Moteur",
+      "noRun": "Aucun passage pour l'instant",
+      "run": "{kind} : {time}, {calls, plural, one {# appel API} other {# appels API}}",
+      "kind": {
+        "plan": "Plan",
+        "apply": "Application",
+        "remove": "Retrait"
+      },
+      "pausedUntil": "En pause jusqu'à {time}",
+      "held": "Écritures retenues",
+      "heldBody": "Le moteur a atteint son plafond d'écritures et retient les changements suivants jusqu'à votre confirmation.",
+      "confirmWrites": "Confirmer les écritures",
+      "confirmWritesTitle": "Confirmer les écritures retenues ?",
+      "confirmWritesBody": "Le moteur reprend ses écritures sur Proxmox.",
+      "writesConfirmed": "Écritures confirmées",
+      "coverage": "Couverture",
+      "coverageZoned": "{zoned} invités en marche sur {running} dans une zone",
+      "coverageProtected": "{protected} membres protégés sur {members}",
+      "zones": "Zones",
+      "zoneState": {
+        "disabled": "Désactivées : {count}",
+        "observe": "Observation : {count}",
+        "enforce": "Appliquées : {count}"
+      }
+    },
+    "stop": {
+      "button": "Arrêt d'urgence",
+      "title": "Arrêter la micro-segmentation ?",
+      "body": "Toutes les zones de cette connexion passent en observation.",
+      "active": "Arrêt d'urgence actif : toutes les zones sont en observation",
+      "resume": "Reprendre",
+      "resumeTitle": "Reprendre la micro-segmentation ?",
+      "resumeBody": "Le moteur reprend la main sur les zones.",
+      "appliedByLeader": "Demande acceptée : l'orchestrateur leader l'applique en moins d'une minute."
+    },
+    "pending": {
+      "withCount": "{count, plural, one {# changement non appliqué} other {# changements non appliqués}}",
+      "noCount": "Changements non appliqués",
+      "viewPlan": "Voir le plan"
+    },
+    "firstRun": {
+      "title": "Mettre en place la micro-segmentation",
+      "intro": "Trois étapes vous mènent d'une politique vide à votre première zone protégée.",
+      "step1Title": "Lancer les vérifications préalables",
+      "step1Body": "Vérifiez que le cluster et son pare-feu sont prêts.",
+      "step1Action": "Ouvrir la vue d'ensemble",
+      "step2Title": "Créer votre première zone",
+      "step2Body": "Regroupez les invités qui communiquent entre eux.",
+      "step2Action": "Ouvrir la politique",
+      "step3Title": "Prévisualiser le plan",
+      "step3Body": "Voyez ce qui changerait sur Proxmox avant toute écriture.",
+      "step3Action": "Voir le plan"
+    },
+    "errors": {
+      "VERSION_CONFLICT": "La politique a changé ailleurs. Rechargez pour obtenir la dernière version ; votre saisie est conservée.",
+      "BUSY": "Une autre opération est en cours sur cette connexion. Réessayez dans un instant.",
+      "ZONE_NAME_TAKEN": "Une zone portant ce nom existe déjà.",
+      "IN_USE": "Cette zone est encore utilisée par un flux. Supprimez d'abord le flux.",
+      "INVALID": "Le serveur a refusé la demande comme invalide.",
+      "FEATURE_REQUIRED": "La micro-segmentation nécessite une licence Enterprise.",
+      "FORBIDDEN": "Vous n'avez pas l'autorisation d'effectuer cette action.",
+      "NOT_FOUND": "Introuvable. Il a peut-être été supprimé.",
+      "UNAUTHORIZED": "L'orchestrateur n'a pas accepté cette demande. Vérifiez les paramètres de connexion à l'orchestrateur.",
+      "NOT_LEADER": "Ce nœud orchestrateur n'est pas le leader. Réessayez dans un instant.",
+      "MICROSEG_UNAVAILABLE": "Le moteur de micro-segmentation n'est pas disponible sur l'orchestrateur. Réessayez plus tard.",
+      "ENGINE_STOPPED": "Le moteur de micro-segmentation s'arrête. Réessayez dans un instant.",
+      "ORCHESTRATOR_ERROR": "L'orchestrateur a renvoyé une erreur.",
+      "ORCHESTRATOR_TIMEOUT": "L'orchestrateur n'a pas répondu à temps.",
+      "PVE_ERROR": "Proxmox a renvoyé une erreur.",
+      "CONFLICT": "Cela entre en conflit avec un élément existant.",
+      "NETWORK": "ProxCenter est injoignable. Vérifiez votre connexion réseau.",
+      "generic": "Une erreur est survenue. Réessayez."
+    }
   }
 }

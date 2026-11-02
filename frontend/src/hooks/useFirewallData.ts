@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import * as firewallAPI from '@/lib/api/firewall'
 import { errorMessage } from '@/lib/firewall/loadError'
 
@@ -42,7 +42,14 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  // Each load takes a number; only the latest one may write state. Without it, a slow load of the
+  // connection that was just left finishes after the switch and puts its error or its data on the new one.
+  const latestLoad = useRef(0)
+
   const loadFirewallData = useCallback(async () => {
+    const loadId = ++latestLoad.current
+    const isLatest = () => latestLoad.current === loadId
+
     if (!connectionId) return
 
     setLoading(true)
@@ -69,6 +76,8 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
         firewallAPI.getClusterRules(connectionId).catch(keep([])),
       ])
 
+      if (!isLatest()) return
+
       setAliases(Array.isArray(aliasesData) ? aliasesData : [])
       setIPSets(Array.isArray(ipsetsData) ? ipsetsData : [])
       setSecurityGroups(Array.isArray(groupsData) ? groupsData : [])
@@ -86,11 +95,13 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
           const nodesData = nodesJson?.data || []
 
           nodes = nodesData.map((n: any) => n.node || n.name).filter(Boolean)
-          setNodesList(nodes)
+          if (isLatest()) setNodesList(nodes)
         }
       } catch {
-        setNodesList([])
+        if (isLatest()) setNodesList([])
       }
+
+      if (!isLatest()) return
 
       // Detect mode: standalone if only 1 node, cluster if multiple nodes
       const isStandalone = nodes.length <= 1
@@ -121,11 +132,14 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
           try {
             const nodeOpts = await firewallAPI.getNodeOptions(connectionId, standaloneNode)
 
+            if (!isLatest()) return
             setNodeOptions(nodeOpts)
             const nodeRulesData = await firewallAPI.getNodeRules(connectionId, standaloneNode)
 
+            if (!isLatest()) return
             setNodeRules(Array.isArray(nodeRulesData) ? nodeRulesData : [])
           } catch (err) {
+            if (!isLatest()) return
             errors.add(errorMessage(err))
             setNodeOptions(null)
             setNodeRules([])
@@ -133,16 +147,23 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
         }
       }
     } catch (err: any) {
-      console.error('Failed to load firewall data:', err)
-      errors.add(errorMessage(err))
+      if (isLatest()) {
+        console.error('Failed to load firewall data:', err)
+        errors.add(errorMessage(err))
+      }
     } finally {
-      setLoadError(errors.size > 0 ? [...errors].join(' · ') : null)
-      setLoading(false)
+      if (isLatest()) {
+        setLoadError(errors.size > 0 ? [...errors].join(' · ') : null)
+        setLoading(false)
+      }
     }
   }, [connectionId])
 
   // Reset data when connection changes
   useEffect(() => {
+    // A load still in flight belongs to the connection that was just left (or to none).
+    latestLoad.current += 1
+    setLoading(false)
     setAliases([])
     setIPSets([])
     setSecurityGroups([])

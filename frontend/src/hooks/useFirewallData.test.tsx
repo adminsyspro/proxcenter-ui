@@ -196,4 +196,97 @@ describe('useFirewallData', () => {
     await waitFor(() => expect(result.current.clusterRules).toHaveLength(2))
     expect(result.current.loadError).toBeNull()
   })
+  describe('a load that is no longer the latest', () => {
+    function deferred<T>() {
+      let resolve!: (v: T) => void
+      let reject!: (e: unknown) => void
+      const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+
+      return { promise, resolve, reject }
+    }
+
+    it('does not let the late failure of the previous connection set the error of the new one', async () => {
+      mockNodes(['pve1', 'pve2'])
+      const late = deferred<FirewallRule[]>()
+      api.getClusterRules.mockImplementation(((id: string) => (id === 'conn-1' ? late.promise : Promise.resolve([rule(0), rule(1)]))) as never)
+
+      const { result, rerender } = renderHook(({ id }: { id: string }) => useFirewallData(id, true), {
+        initialProps: { id: 'conn-1' },
+      })
+
+      rerender({ id: 'conn-2' })
+      await waitFor(() => expect(result.current.clusterRules).toHaveLength(2))
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        late.reject(new Error('HTTP 500 from conn-1'))
+        await late.promise.catch(() => undefined)
+      })
+
+      expect(result.current.loadError).toBeNull()
+      expect(result.current.clusterRules).toHaveLength(2)
+      expect(result.current.loading).toBe(false)
+    })
+
+    it('does not let the late success of the previous connection replace the data of the new one', async () => {
+      mockNodes(['pve1', 'pve2'])
+      const late = deferred<FirewallRule[]>()
+      api.getClusterRules.mockImplementation(((id: string) => (id === 'conn-1' ? late.promise : Promise.resolve([rule(0), rule(1)]))) as never)
+
+      const { result, rerender } = renderHook(({ id }: { id: string }) => useFirewallData(id, true), {
+        initialProps: { id: 'conn-1' },
+      })
+
+      rerender({ id: 'conn-2' })
+      await waitFor(() => expect(result.current.clusterRules).toHaveLength(2))
+
+      await act(async () => {
+        late.resolve([rule(0), rule(1), rule(2), rule(3), rule(4)])
+        await late.promise
+      })
+
+      expect(result.current.clusterRules).toHaveLength(2)
+      expect(result.current.loadError).toBeNull()
+    })
+
+    it('keeps the answer of the latest reload of the same connection', async () => {
+      mockNodes(['pve1', 'pve2'])
+      const first = deferred<FirewallRule[]>()
+      api.getClusterRules.mockReset().mockReturnValueOnce(first.promise).mockResolvedValue([rule(0), rule(1)])
+
+      const { result } = renderHook(() => useFirewallData('conn-1', true))
+
+      await act(async () => { await result.current.reload() })
+      expect(result.current.clusterRules).toHaveLength(2)
+
+      await act(async () => {
+        first.reject(new Error('HTTP 500 first'))
+        await first.promise.catch(() => undefined)
+      })
+
+      expect(result.current.loadError).toBeNull()
+      expect(result.current.clusterRules).toHaveLength(2)
+    })
+
+    it('stops loading and ignores the late answer when the connection is dropped', async () => {
+      mockNodes(['pve1', 'pve2'])
+      const late = deferred<FirewallRule[]>()
+      api.getClusterRules.mockReturnValue(late.promise)
+
+      const { result, rerender } = renderHook(
+        ({ id }: { id: string | null }) => useFirewallData(id, true),
+        { initialProps: { id: 'conn-1' as string | null } },
+      )
+      await waitFor(() => expect(result.current.loading).toBe(true))
+
+      rerender({ id: null })
+      await act(async () => {
+        late.reject(new Error('HTTP 500 late'))
+        await late.promise.catch(() => undefined)
+      })
+
+      expect(result.current.loadError).toBeNull()
+      expect(result.current.loading).toBe(false)
+    })
+  })
 })

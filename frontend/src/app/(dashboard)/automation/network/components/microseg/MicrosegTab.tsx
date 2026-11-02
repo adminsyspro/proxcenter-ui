@@ -8,15 +8,20 @@ import { useSWRConfig } from 'swr'
 import { microsegBaseUrl } from '@/lib/microseg/api'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 
+import DriftsPanel from './DriftsPanel'
 import FirstRunGuide from './FirstRunGuide'
 import MicrosegBanner from './MicrosegBanner'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
+import ObservationPanel from './ObservationPanel'
 import PlanDialog from './PlanDialog'
 import PolicyPanel from './PolicyPanel'
 import RunStrip from './RunStrip'
 import { MICROSEG_SUBTABS, isMicrosegSubTab, type MicrosegSubTab, type MicrosegSubTabProps, type TrackedRun } from './microsegTabTypes'
 
 const STORAGE_KEY = 'microseg.subTab'
+
+/** The sub-tabs that have their content; the others still show the placeholder. */
+const PANELS = new Set<MicrosegSubTab>(['policy', 'observation', 'drifts'])
 
 function readStoredSubTab(): MicrosegSubTab | null {
   try {
@@ -44,7 +49,10 @@ function SubTabContent({ tab, ...props }: { tab: MicrosegSubTab } & MicrosegSubT
   const t = useTranslations('microsegPilot.subTabs')
   return (
     <Box role='tabpanel' id={`microseg-panel-${tab}`} aria-labelledby={`microseg-tab-${tab}`} sx={{ pt: 3 }}>
-      {tab === 'policy' ? <PolicyPanel {...props} /> : <Typography color='text.secondary' sx={{ px: 3, pb: 3 }}>{t('placeholder')}</Typography>}
+      {tab === 'policy' && <PolicyPanel {...props} />}
+      {tab === 'observation' && <ObservationPanel {...props} />}
+      {tab === 'drifts' && <DriftsPanel {...props} />}
+      {!PANELS.has(tab) && <Typography color='text.secondary' sx={{ px: 3, pb: 3 }}>{t('placeholder')}</Typography>}
     </Box>
   )
 }

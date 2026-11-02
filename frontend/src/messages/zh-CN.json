@@ -12910,6 +12910,106 @@
       "errors": "错误：{list}",
       "notes": "备注：{list}",
       "nothingRecord": "无需写入 Proxmox：应用只会记录该修订。"
+    },
+    "drifts": {
+      "asOf": "截至最近一次完整运行，{time}",
+      "asOfNone": "尚无完整运行：首次运行后才会出现偏差。",
+      "empty": "无偏差：Proxmox 与策略一致。",
+      "loading": "正在加载偏差...",
+      "ignore": "忽略",
+      "restore": "重新显示",
+      "ignoredChip": "已忽略",
+      "showIgnored": "显示已忽略项（{count, number}）",
+      "hideIgnored": "隐藏已忽略项",
+      "fixAssign": "分配到区域",
+      "fixPlan": "打开计划",
+      "assignMenu": "要将客户机分配到的区域",
+      "noZone": "请先创建一个区域。",
+      "kind": {
+        "generic": {
+          "title": "偏差：{kind}",
+          "detail": "此版本的 ProxCenter 不识别这类偏差。"
+        },
+        "unzoned_running": {
+          "title": "运行中但没有区域的客户机",
+          "detail": "{name} 正在运行，但不属于任何区域。"
+        },
+        "nic_firewall_off": {
+          "title": "网卡防火墙已关闭",
+          "detail": "{nics} 上的防火墙已关闭，规则在此不生效。"
+        },
+        "foreign_accept": {
+          "title": "非 ProxCenter 管理的规则",
+          "detail": "第 {pos} 位的放行规则不是由 ProxCenter 创建的，将保持原样。",
+          "detailGroup": "组 {object} 中第 {pos} 位的放行规则不是由 ProxCenter 创建的，将保持原样。"
+        },
+        "ipset_out_of_sync": {
+          "title": "IP 集未同步",
+          "detail": "{object} 包含 {actual}，应为 {desired}。"
+        },
+        "member_without_ip": {
+          "title": "IP 未知的成员",
+          "detail": "{zone} 的这个成员还没有 IP，无法写入其规则。"
+        },
+        "ambiguous_zone": {
+          "title": "属于多个区域的客户机",
+          "detail": "该客户机带有多个区域的标签，在分配到单一区域之前不会处理。"
+        },
+        "object_collision": {
+          "title": "名称已在 Proxmox 中使用",
+          "detail": "{object} 已存在于 Proxmox 中，不是由 ProxCenter 创建的，不会被改动。"
+        }
+      }
+    },
+    "observation": {
+      "sampling": "Proxmox 默认每条链每秒最多记录一行日志，因此繁忙的流量可能被少计。",
+      "openSettings": "打开设置",
+      "loading": "正在加载观察到的流量...",
+      "empty": "没有符合这些筛选条件的观察流量。",
+      "filters": {
+        "kind": "类型",
+        "kindAll": "所有类型",
+        "status": "状态",
+        "statusAll": "所有状态",
+        "zone": "区域",
+        "zoneAll": "所有区域"
+      },
+      "kind": {
+        "would_block": "将被阻止",
+        "blocked": "已阻止"
+      },
+      "status": {
+        "pending": "待处理",
+        "accepted": "已接受",
+        "dismissed": "已忽略"
+      },
+      "selectPage": "选择本页全部",
+      "selectRow": "选择 {source} 到 {destination}",
+      "selected": "已选择 {count, number} 项",
+      "rowLabel": "{source} 到 {destination}",
+      "bulkAccept": "接受所选项",
+      "bulkAcceptCidr": "将所选项以 CIDR 接受",
+      "bulkDismiss": "忽略所选项",
+      "accept": "接受",
+      "acceptCidr": "以 CIDR 接受",
+      "dismiss": "忽略",
+      "acceptNoZone": "来源不属于任何区域：请改为以 CIDR 接受。",
+      "acceptCidrNoIp": "没有可作为 CIDR 接受的来源 IP。",
+      "bulkAcceptBlocked": "所选的部分来源不属于任何区域：请将这些以 CIDR 接受。",
+      "bulkCidrBlocked": "所选的部分流量没有来源 IP。",
+      "hits": "{count, plural, other {# 次命中}}",
+      "lastSeen": "最后出现 {time}",
+      "deletedZone": "已删除的区域",
+      "unknownEndpoint": "未知",
+      "detail": {
+        "firstSeen": "首次出现 {time}",
+        "lastSeen": "最后出现 {time}",
+        "source": "来源：{value}",
+        "destination": "目标：{value}"
+      },
+      "resolvedAccept": "{count, plural, other {已将 # 条流量接受到草稿}}",
+      "resolvedDismiss": "{count, plural, other {已忽略 # 条流量}}",
+      "page": "第 {page, number} 页"
     }
   }
 }

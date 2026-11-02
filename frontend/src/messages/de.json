@@ -12578,6 +12578,106 @@
       "errors": "Fehler: {list}",
       "notes": "Hinweise: {list}",
       "nothingRecord": "Nichts in Proxmox zu schreiben: Das Anwenden speichert die Revision."
+    },
+    "drifts": {
+      "asOf": "Stand des letzten vollständigen Durchlaufs, {time}",
+      "asOfNone": "Noch kein vollständiger Durchlauf: Abweichungen erscheinen nach dem ersten.",
+      "empty": "Keine Abweichung: Proxmox entspricht der Richtlinie.",
+      "loading": "Abweichungen werden geladen...",
+      "ignore": "Ignorieren",
+      "restore": "Wieder anzeigen",
+      "ignoredChip": "Ignoriert",
+      "showIgnored": "Ignorierte anzeigen ({count, number})",
+      "hideIgnored": "Ignorierte ausblenden",
+      "fixAssign": "Einer Zone zuweisen",
+      "fixPlan": "Plan öffnen",
+      "assignMenu": "Zone, der der Gast zugewiesen wird",
+      "noZone": "Legen Sie zuerst eine Zone an.",
+      "kind": {
+        "generic": {
+          "title": "Abweichung: {kind}",
+          "detail": "Diese Version von ProxCenter kennt diese Art von Abweichung nicht."
+        },
+        "unzoned_running": {
+          "title": "Laufender Gast ohne Zone",
+          "detail": "{name} läuft, gehört aber zu keiner Zone."
+        },
+        "nic_firewall_off": {
+          "title": "Firewall der Netzwerkkarte aus",
+          "detail": "Die Firewall ist auf {nics} aus: Die Regeln gelten dort nicht."
+        },
+        "foreign_accept": {
+          "title": "Nicht von ProxCenter verwaltete Regel",
+          "detail": "Die Accept-Regel an Position {pos} wurde nicht von ProxCenter angelegt und bleibt unverändert.",
+          "detailGroup": "Die Accept-Regel an Position {pos} der Gruppe {object} wurde nicht von ProxCenter angelegt und bleibt unverändert."
+        },
+        "ipset_out_of_sync": {
+          "title": "IP-Set nicht synchron",
+          "detail": "{object} enthält {actual} statt {desired}."
+        },
+        "member_without_ip": {
+          "title": "Mitglied ohne bekannte IP",
+          "detail": "Dieses Mitglied von {zone} hat noch keine IP: Seine Regeln können nicht geschrieben werden."
+        },
+        "ambiguous_zone": {
+          "title": "Gast in mehreren Zonen",
+          "detail": "Der Gast trägt die Tags mehrerer Zonen und bleibt unberührt, bis er einer einzigen Zone zugewiesen wird."
+        },
+        "object_collision": {
+          "title": "Name in Proxmox bereits vergeben",
+          "detail": "{object} existiert bereits in Proxmox und wurde nicht von ProxCenter angelegt: Es bleibt unberührt."
+        }
+      }
+    },
+    "observation": {
+      "sampling": "Proxmox protokolliert standardmäßig höchstens eine Zeile pro Sekunde und Kette, daher können stark ausgelastete Flüsse zu niedrig gezählt werden.",
+      "openSettings": "Einstellungen öffnen",
+      "loading": "Beobachtete Flüsse werden geladen...",
+      "empty": "Kein beobachteter Fluss passt zu diesen Filtern.",
+      "filters": {
+        "kind": "Typ",
+        "kindAll": "Alle Typen",
+        "status": "Status",
+        "statusAll": "Alle Status",
+        "zone": "Zone",
+        "zoneAll": "Alle Zonen"
+      },
+      "kind": {
+        "would_block": "Würde blockiert",
+        "blocked": "Blockiert"
+      },
+      "status": {
+        "pending": "Ausstehend",
+        "accepted": "Akzeptiert",
+        "dismissed": "Verworfen"
+      },
+      "selectPage": "Alle auf dieser Seite auswählen",
+      "selectRow": "{source} nach {destination} auswählen",
+      "selected": "{count, number} ausgewählt",
+      "rowLabel": "{source} nach {destination}",
+      "bulkAccept": "Auswahl akzeptieren",
+      "bulkAcceptCidr": "Auswahl als CIDR akzeptieren",
+      "bulkDismiss": "Auswahl verwerfen",
+      "accept": "Akzeptieren",
+      "acceptCidr": "Als CIDR akzeptieren",
+      "dismiss": "Verwerfen",
+      "acceptNoZone": "Die Quelle gehört zu keiner Zone: Akzeptieren Sie sie stattdessen als CIDR.",
+      "acceptCidrNoIp": "Es gibt keine Quell-IP, die als CIDR akzeptiert werden könnte.",
+      "bulkAcceptBlocked": "Einige ausgewählte Quellen gehören zu keiner Zone: Akzeptieren Sie diese als CIDR.",
+      "bulkCidrBlocked": "Einige ausgewählte Flüsse haben keine Quell-IP.",
+      "hits": "{count, plural, one {# Treffer} other {# Treffer}}",
+      "lastSeen": "Zuletzt gesehen {time}",
+      "deletedZone": "Gelöschte Zone",
+      "unknownEndpoint": "Unbekannt",
+      "detail": {
+        "firstSeen": "Erstmals gesehen {time}",
+        "lastSeen": "Zuletzt gesehen {time}",
+        "source": "Quelle: {value}",
+        "destination": "Ziel: {value}"
+      },
+      "resolvedAccept": "{count, plural, one {# Fluss in den Entwurf übernommen} other {# Flüsse in den Entwurf übernommen}}",
+      "resolvedDismiss": "{count, plural, one {# Fluss verworfen} other {# Flüsse verworfen}}",
+      "page": "Seite {page, number}"
     }
   }
 }

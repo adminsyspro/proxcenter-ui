@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, InputAdornment, TextField, Tooltip, Typography,
 } from '@mui/material'
@@ -22,10 +22,15 @@ type Props = {
   policy: MicrosegPolicy
   /** Re-reads the draft: after a save, and on a VERSION_CONFLICT. */
   reloadPolicy: () => Promise<unknown>
+  /**
+   * Guests (`type/vmid`) ticked when the dialog opens. A preselected guest that already carries the tag of
+   * the zone stays selectable: sending it makes the zone its only one (a guest tagged with several zones).
+   */
+  preselect?: string[]
   onClose: () => void
 }
 
-function GuestLine({ row, zoneName, checked, onToggle }: { row: AssignRow; zoneName: string; checked: boolean; onToggle: () => void }) {
+function GuestLine({ row, zoneName, checked, selectable, onToggle }: { row: AssignRow; zoneName: string; checked: boolean; selectable: boolean; onToggle: () => void }) {
   const t = useTranslations('microsegPilot.policy.assign')
   const { guest } = row
   const others = row.otherZones.join(', ')
@@ -33,8 +38,8 @@ function GuestLine({ row, zoneName, checked, onToggle }: { row: AssignRow; zoneN
     <Box role='listitem' aria-label={guest.name} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 36 }}>
       <Checkbox
         size='small'
-        checked={checked || !isSelectable(row)}
-        disabled={!isSelectable(row)}
+        checked={checked || !selectable}
+        disabled={!selectable}
         onChange={onToggle}
         slotProps={{ input: { 'aria-label': guest.name } }}
         sx={{ p: 0.5 }}
@@ -80,13 +85,13 @@ function GuestLine({ row, zoneName, checked, onToggle }: { row: AssignRow; zoneN
  * of another zone is flagged and will be moved. Select-all covers every
  * filtered guest, across pages.
  */
-export default function AssignGuestsDialog({ open, connectionId, zone, policy, reloadPolicy, onClose }: Props) {
+export default function AssignGuestsDialog({ open, connectionId, zone, policy, reloadPolicy, preselect, onClose }: Props) {
   const t = useTranslations('microsegPilot.policy.assign')
   const tc = useTranslations('common')
   const { guests, status } = useZoneGuests(connectionId)
   const { busy, error, run } = useDialogAction()
   const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(preselect))
 
   const rows = useMemo(
     () => assignRows(zone, policy.zones, policy.policy.tag_prefix, guests, policy.pending_members),
@@ -96,8 +101,9 @@ export default function AssignGuestsDialog({ open, connectionId, zone, policy, r
   const paged = usePaged(filtered, GUESTS_PAGE_SIZE)
 
   // A guest that became a member (after a reload) drops out of the selection.
-  const chosen = useMemo(() => rows.filter(r => isSelectable(r) && selected.has(r.key)), [rows, selected])
-  const selectable = filtered.filter(isSelectable)
+  const canTick = useCallback((r: AssignRow) => isSelectable(r) || (r.member === 'tag' && !!preselect?.includes(r.key)), [preselect])
+  const chosen = useMemo(() => rows.filter(r => canTick(r) && selected.has(r.key)), [rows, selected, canTick])
+  const selectable = filtered.filter(canTick)
   const selectedInFilter = selectable.filter(r => selected.has(r.key)).length
   const allChecked = selectable.length > 0 && selectedInFilter === selectable.length
   const tooMany = chosen.length > MAX_ASSIGN
@@ -176,7 +182,7 @@ export default function AssignGuestsDialog({ open, connectionId, zone, policy, r
               <>
                 <Box role='list'>
                   {paged.rows.map(row => (
-                    <GuestLine key={row.key} row={row} zoneName={zone.name} checked={selected.has(row.key)} onToggle={() => toggle(row.key)} />
+                    <GuestLine key={row.key} row={row} zoneName={zone.name} checked={selected.has(row.key)} selectable={canTick(row)} onToggle={() => toggle(row.key)} />
                   ))}
                 </Box>
                 <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />

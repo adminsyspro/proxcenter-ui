@@ -30,4 +30,6 @@ export type MicrosegSubTabProps = {
   onOpenPlan: () => void
   /** Follow a run in the strip under the banner; the policy and the status are refreshed when it ends. */
   startRun: (run: TrackedRun) => void
+  /** Opens the Settings of the tab (Observation links to it); the link is disabled when absent. */
+  onOpenSettings?: () => void
 }

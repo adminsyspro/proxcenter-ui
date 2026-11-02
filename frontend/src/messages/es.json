@@ -12910,6 +12910,106 @@
       "errors": "Errores: {list}",
       "notes": "Notas: {list}",
       "nothingRecord": "Nada que escribir en Proxmox: aplicar registra la revisión."
+    },
+    "drifts": {
+      "asOf": "Al último ciclo completo, {time}",
+      "asOfNone": "Aún no hay un ciclo completo: las desviaciones aparecen tras el primero.",
+      "empty": "Sin desviaciones: Proxmox coincide con la política.",
+      "loading": "Cargando desviaciones...",
+      "ignore": "Ignorar",
+      "restore": "Mostrar de nuevo",
+      "ignoredChip": "Ignorada",
+      "showIgnored": "Mostrar ignoradas ({count, number})",
+      "hideIgnored": "Ocultar ignoradas",
+      "fixAssign": "Asignar a una zona",
+      "fixPlan": "Abrir el plan",
+      "assignMenu": "Zona a la que asignar el invitado",
+      "noZone": "Cree primero una zona.",
+      "kind": {
+        "generic": {
+          "title": "Desviación: {kind}",
+          "detail": "Esta versión de ProxCenter no conoce este tipo de desviación."
+        },
+        "unzoned_running": {
+          "title": "Invitado en ejecución sin zona",
+          "detail": "{name} está en ejecución pero no pertenece a ninguna zona."
+        },
+        "nic_firewall_off": {
+          "title": "Cortafuegos de la tarjeta de red desactivado",
+          "detail": "El cortafuegos está desactivado en {nics}: las reglas no se aplican allí."
+        },
+        "foreign_accept": {
+          "title": "Regla no gestionada por ProxCenter",
+          "detail": "La regla de aceptación en la posición {pos} no fue creada por ProxCenter y se conserva tal cual.",
+          "detailGroup": "La regla de aceptación en la posición {pos} del grupo {object} no fue creada por ProxCenter y se conserva tal cual."
+        },
+        "ipset_out_of_sync": {
+          "title": "IP set desincronizado",
+          "detail": "{object} contiene {actual} en lugar de {desired}."
+        },
+        "member_without_ip": {
+          "title": "Miembro sin IP conocida",
+          "detail": "Este miembro de {zone} aún no tiene IP: sus reglas no se pueden escribir."
+        },
+        "ambiguous_zone": {
+          "title": "Invitado en varias zonas",
+          "detail": "El invitado lleva las etiquetas de más de una zona y se deja sin tocar hasta que se asigne a una sola."
+        },
+        "object_collision": {
+          "title": "Nombre ya usado en Proxmox",
+          "detail": "{object} ya existe en Proxmox y no fue creado por ProxCenter: no se toca."
+        }
+      }
+    },
+    "observation": {
+      "sampling": "Por defecto Proxmox registra como máximo una línea por segundo y por cadena, por lo que los flujos muy activos pueden contarse de menos.",
+      "openSettings": "Abrir ajustes",
+      "loading": "Cargando flujos observados...",
+      "empty": "Ningún flujo observado coincide con estos filtros.",
+      "filters": {
+        "kind": "Tipo",
+        "kindAll": "Todos los tipos",
+        "status": "Estado",
+        "statusAll": "Todos los estados",
+        "zone": "Zona",
+        "zoneAll": "Todas las zonas"
+      },
+      "kind": {
+        "would_block": "Se bloquearía",
+        "blocked": "Bloqueado"
+      },
+      "status": {
+        "pending": "Pendiente",
+        "accepted": "Aceptado",
+        "dismissed": "Descartado"
+      },
+      "selectPage": "Seleccionar toda la página",
+      "selectRow": "Seleccionar {source} hacia {destination}",
+      "selected": "{count, number} seleccionados",
+      "rowLabel": "{source} hacia {destination}",
+      "bulkAccept": "Aceptar la selección",
+      "bulkAcceptCidr": "Aceptar la selección como CIDR",
+      "bulkDismiss": "Descartar la selección",
+      "accept": "Aceptar",
+      "acceptCidr": "Aceptar como CIDR",
+      "dismiss": "Descartar",
+      "acceptNoZone": "El origen no pertenece a ninguna zona: acéptelo como CIDR.",
+      "acceptCidrNoIp": "No hay IP de origen que aceptar como CIDR.",
+      "bulkAcceptBlocked": "Algunos orígenes seleccionados no pertenecen a ninguna zona: acéptelos como CIDR.",
+      "bulkCidrBlocked": "Algunos flujos seleccionados no tienen IP de origen.",
+      "hits": "{count, plural, one {# coincidencia} other {# coincidencias}}",
+      "lastSeen": "Visto por última vez {time}",
+      "deletedZone": "Zona eliminada",
+      "unknownEndpoint": "Desconocido",
+      "detail": {
+        "firstSeen": "Visto por primera vez {time}",
+        "lastSeen": "Visto por última vez {time}",
+        "source": "Origen: {value}",
+        "destination": "Destino: {value}"
+      },
+      "resolvedAccept": "{count, plural, one {# flujo aceptado en el borrador} other {# flujos aceptados en el borrador}}",
+      "resolvedDismiss": "{count, plural, one {# flujo descartado} other {# flujos descartados}}",
+      "page": "Página {page, number}"
     }
   }
 }

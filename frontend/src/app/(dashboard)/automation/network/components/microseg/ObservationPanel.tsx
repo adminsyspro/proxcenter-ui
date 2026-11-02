@@ -1,0 +1,176 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import { Alert, Box, Button, Checkbox, CircularProgress, IconButton, Tooltip, Typography } from '@mui/material'
+import { useTranslations } from 'next-intl'
+
+import { microsegApi } from '@/lib/microseg/api'
+import type { MicrosegSuggestion, SuggestionAction } from '@/lib/microseg/types'
+import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
+
+import { isVersionConflict, writeErrorMessage } from './dialogParts'
+import MicrosegErrorAlert from './MicrosegErrorAlert'
+import type { MicrosegSubTabProps } from './microsegTabTypes'
+import ObservationFilters, { type ObservationFilterValues } from './ObservationFilters'
+import ObservationRow from './ObservationRow'
+import { Notice } from './PlanNotices'
+
+/** Flows per page. The request asks for one more, which tells whether a next page exists. */
+export const OBSERVATION_PAGE_SIZE = 25
+
+type Resolved = { action: SuggestionAction; count: number }
+
+/**
+ * The Observation sub-tab: what the engine saw cross the zones, as suggestions.
+ * Filtering and paging are the server's. Accepting turns a flow into a learned
+ * flow of the draft (the plan applies it); dismissing hides it for good.
+ */
+export default function ObservationPanel({ connectionId, policy, reloadPolicy, onOpenSettings }: MicrosegSubTabProps) {
+  const t = useTranslations('microsegPilot.observation')
+  const tAll = useTranslations()
+  const [filters, setFilters] = useState<ObservationFilterValues>({ kind: '', status: 'pending', zone: '' })
+  const [page, setPage] = useState(0)
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  const [resolved, setResolved] = useState<Resolved | null>(null)
+
+  const { data, loading, error, reload } = useMicrosegSuggestions(connectionId, {
+    kind: filters.kind || undefined,
+    limit: OBSERVATION_PAGE_SIZE + 1,
+    offset: page > 0 ? page * OBSERVATION_PAGE_SIZE : undefined,
+    status: filters.status || undefined,
+    zone: filters.zone || undefined,
+  })
+  const zonesById = useMemo(() => new Map(policy.zones.map(z => [z.id, z])), [policy.zones])
+  const rows = useMemo(() => (data ?? []).slice(0, OBSERVATION_PAGE_SIZE), [data])
+  const hasNext = (data?.length ?? 0) > OBSERVATION_PAGE_SIZE
+
+  // Select-all covers the current page, the pending flows of it (the others cannot be resolved).
+  const pending = rows.filter(r => r.status === 'pending')
+  const chosen = pending.filter(r => selected.has(r.id))
+  const allChecked = pending.length > 0 && chosen.length === pending.length
+  const noZoneAmongChosen = chosen.some(r => !r.src_zone_id)
+  const noIpAmongChosen = chosen.some(r => !r.src_ip)
+
+  const changeFilters = (next: ObservationFilterValues) => {
+    setFilters(next)
+    setPage(0)
+    setSelected(new Set())
+  }
+  const goToPage = (next: number) => {
+    setPage(next)
+    setSelected(new Set())
+  }
+  const toggle = (id: string) => setSelected(prev => {
+    const next = new Set(prev)
+    if (!next.delete(id)) next.add(id)
+    return next
+  })
+  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(pending.map(r => r.id)))
+
+  async function resolve(ids: string[], action: SuggestionAction) {
+    if (busy || ids.length === 0) return
+    setBusy(true)
+    setFailure(null)
+    setResolved(null)
+    try {
+      await microsegApi(connectionId).resolveSuggestions({ version: policy.version, ids, action })
+      setSelected(prev => new Set([...prev].filter(id => !ids.includes(id))))
+      setResolved({ action, count: ids.length })
+    } catch (e) {
+      // 409: the draft moved. The list and the draft are re-read, the selection stays for the next try.
+      setFailure(writeErrorMessage(tAll as (key: string) => string, e))
+      if (!isVersionConflict(e)) {
+        setBusy(false)
+        return
+      }
+    }
+    await Promise.all([reloadPolicy().catch(() => undefined), reload().catch(() => undefined)])
+    setBusy(false)
+  }
+
+  const one = (s: MicrosegSuggestion, action: SuggestionAction) => resolve([s.id], action)
+  const bulk = (action: SuggestionAction) => resolve(chosen.map(r => r.id), action)
+
+  return (
+    <Box sx={{ px: 3, pb: 3 }}>
+      <Box sx={{ mb: 1.5 }}>
+        <Notice
+          severity='info'
+          text={t('sampling')}
+          action={<Button color='inherit' size='small' disabled={!onOpenSettings} onClick={onOpenSettings}>{t('openSettings')}</Button>}
+        />
+      </Box>
+      <ObservationFilters values={filters} zones={policy.zones} onChange={changeFilters} />
+
+      {error && <MicrosegErrorAlert error={error} onRetry={reload} />}
+      {failure && <Alert severity='error' onClose={() => setFailure(null)} sx={{ mb: 1.5 }}>{failure}</Alert>}
+      {resolved && (
+        <Alert severity='success' onClose={() => setResolved(null)} sx={{ mb: 1.5 }}>
+          {t(resolved.action === 'dismiss' ? 'resolvedDismiss' : 'resolvedAccept', { count: resolved.count })}
+        </Alert>
+      )}
+
+      {!data && !error && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <CircularProgress size={20} />
+          <Typography color='text.secondary'>{loading ? t('loading') : ''}</Typography>
+        </Box>
+      )}
+
+      {data && (
+        <>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40, borderBottom: 1, borderColor: 'divider' }}>
+            <Checkbox
+              size='small'
+              checked={allChecked}
+              indeterminate={chosen.length > 0 && !allChecked}
+              disabled={pending.length === 0 || busy}
+              onChange={toggleAll}
+              slotProps={{ input: { 'aria-label': t('selectPage') } }}
+              sx={{ p: 0.5 }}
+            />
+            {chosen.length > 0 ? (
+              <>
+                <Typography noWrap variant='body2' sx={{ flexShrink: 0 }}>{t('selected', { count: chosen.length })}</Typography>
+                <Box sx={{ flex: 1 }} />
+                <Tooltip title={noZoneAmongChosen ? t('bulkAcceptBlocked') : ''}>
+                  <span><Button size='small' disabled={busy || noZoneAmongChosen} onClick={() => bulk('accept')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkAccept')}</Button></span>
+                </Tooltip>
+                <Tooltip title={noIpAmongChosen ? t('bulkCidrBlocked') : ''}>
+                  <span><Button size='small' disabled={busy || noIpAmongChosen} onClick={() => bulk('accept_cidr')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkAcceptCidr')}</Button></span>
+                </Tooltip>
+                <Button size='small' color='inherit' disabled={busy} onClick={() => bulk('dismiss')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkDismiss')}</Button>
+              </>
+            ) : <Box sx={{ flex: 1 }} />}
+            <Typography noWrap variant='body2' color='text.secondary' sx={{ flexShrink: 0 }}>{t('page', { page: page + 1 })}</Typography>
+            <IconButton size='small' aria-label={tAll('microsegPilot.policy.pager.previous')} disabled={page === 0} onClick={() => goToPage(page - 1)}>
+              <i className='ri-arrow-left-s-line' />
+            </IconButton>
+            <IconButton size='small' aria-label={tAll('microsegPilot.policy.pager.next')} disabled={!hasNext} onClick={() => goToPage(page + 1)}>
+              <i className='ri-arrow-right-s-line' />
+            </IconButton>
+          </Box>
+          {rows.length === 0 ? (
+            <Typography color='text.secondary' sx={{ py: 2 }}>{t('empty')}</Typography>
+          ) : (
+            <Box role='list'>
+              {rows.map(s => (
+                <ObservationRow
+                  key={s.id}
+                  suggestion={s}
+                  zones={zonesById}
+                  checked={selected.has(s.id)}
+                  busy={busy}
+                  onToggle={() => toggle(s.id)}
+                  onResolve={action => one(s, action)}
+                />
+              ))}
+            </Box>
+          )}
+        </>
+      )}
+    </Box>
+  )
+}

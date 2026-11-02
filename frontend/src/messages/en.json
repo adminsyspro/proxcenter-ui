@@ -12910,6 +12910,106 @@
       "errors": "Errors: {list}",
       "notes": "Notes: {list}",
       "nothingRecord": "Nothing to write in Proxmox: applying records the revision."
+    },
+    "drifts": {
+      "asOf": "As of the last full run, {time}",
+      "asOfNone": "No full run yet: drifts appear after the first one.",
+      "empty": "No drift: Proxmox matches the policy.",
+      "loading": "Loading drifts...",
+      "ignore": "Ignore",
+      "restore": "Show again",
+      "ignoredChip": "Ignored",
+      "showIgnored": "Show ignored ({count, number})",
+      "hideIgnored": "Hide ignored",
+      "fixAssign": "Assign to a zone",
+      "fixPlan": "Open the plan",
+      "assignMenu": "Zone to assign the guest to",
+      "noZone": "Create a zone first.",
+      "kind": {
+        "generic": {
+          "title": "Drift: {kind}",
+          "detail": "This version of ProxCenter does not know this kind of drift."
+        },
+        "unzoned_running": {
+          "title": "Running guest without a zone",
+          "detail": "{name} is running but belongs to no zone."
+        },
+        "nic_firewall_off": {
+          "title": "Network card firewall off",
+          "detail": "The firewall is off on {nics}: the rules do not apply there."
+        },
+        "foreign_accept": {
+          "title": "Rule not managed by ProxCenter",
+          "detail": "The accept rule at position {pos} was not created by ProxCenter and is kept as it is.",
+          "detailGroup": "The accept rule at position {pos} of the group {object} was not created by ProxCenter and is kept as it is."
+        },
+        "ipset_out_of_sync": {
+          "title": "IP set out of sync",
+          "detail": "{object} holds {actual} instead of {desired}."
+        },
+        "member_without_ip": {
+          "title": "Member without a known IP",
+          "detail": "This member of {zone} has no IP yet: its rules cannot be written."
+        },
+        "ambiguous_zone": {
+          "title": "Guest in several zones",
+          "detail": "The guest carries the tags of more than one zone and is left alone until it is assigned to a single one."
+        },
+        "object_collision": {
+          "title": "Name already used in Proxmox",
+          "detail": "{object} already exists in Proxmox and was not created by ProxCenter: it is left untouched."
+        }
+      }
+    },
+    "observation": {
+      "sampling": "Proxmox logs at most one line per second per chain by default, so busy flows may be under-counted.",
+      "openSettings": "Open settings",
+      "loading": "Loading observed flows...",
+      "empty": "No observed flow matches these filters.",
+      "filters": {
+        "kind": "Type",
+        "kindAll": "All types",
+        "status": "Status",
+        "statusAll": "All statuses",
+        "zone": "Zone",
+        "zoneAll": "All zones"
+      },
+      "kind": {
+        "would_block": "Would be blocked",
+        "blocked": "Blocked"
+      },
+      "status": {
+        "pending": "Pending",
+        "accepted": "Accepted",
+        "dismissed": "Dismissed"
+      },
+      "selectPage": "Select all on this page",
+      "selectRow": "Select {source} to {destination}",
+      "selected": "{count, number} selected",
+      "rowLabel": "{source} to {destination}",
+      "bulkAccept": "Accept selected",
+      "bulkAcceptCidr": "Accept selected as CIDR",
+      "bulkDismiss": "Dismiss selected",
+      "accept": "Accept",
+      "acceptCidr": "Accept as CIDR",
+      "dismiss": "Dismiss",
+      "acceptNoZone": "The source belongs to no zone: accept it as a CIDR instead.",
+      "acceptCidrNoIp": "There is no source IP to accept as a CIDR.",
+      "bulkAcceptBlocked": "Some selected sources belong to no zone: accept those as a CIDR.",
+      "bulkCidrBlocked": "Some selected flows have no source IP.",
+      "hits": "{count, plural, one {# hit} other {# hits}}",
+      "lastSeen": "Last seen {time}",
+      "deletedZone": "Deleted zone",
+      "unknownEndpoint": "Unknown",
+      "detail": {
+        "firstSeen": "First seen {time}",
+        "lastSeen": "Last seen {time}",
+        "source": "Source: {value}",
+        "destination": "Destination: {value}"
+      },
+      "resolvedAccept": "{count, plural, one {# flow accepted into the draft} other {# flows accepted into the draft}}",
+      "resolvedDismiss": "{count, plural, one {# flow dismissed} other {# flows dismissed}}",
+      "page": "Page {page, number}"
     }
   }
 }

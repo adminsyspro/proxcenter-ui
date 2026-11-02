@@ -12911,6 +12911,106 @@
       "errors": "Erreurs : {list}",
       "notes": "Remarques : {list}",
       "nothingRecord": "Rien à écrire dans Proxmox : l'application enregistre la révision."
+    },
+    "drifts": {
+      "asOf": "Au dernier passage complet, {time}",
+      "asOfNone": "Aucun passage complet pour l'instant : les écarts apparaissent après le premier.",
+      "empty": "Aucun écart : Proxmox correspond à la politique.",
+      "loading": "Chargement des écarts...",
+      "ignore": "Ignorer",
+      "restore": "Réafficher",
+      "ignoredChip": "Ignoré",
+      "showIgnored": "Afficher les ignorés ({count, number})",
+      "hideIgnored": "Masquer les ignorés",
+      "fixAssign": "Affecter à une zone",
+      "fixPlan": "Ouvrir le plan",
+      "assignMenu": "Zone à laquelle affecter l'invité",
+      "noZone": "Créez d'abord une zone.",
+      "kind": {
+        "generic": {
+          "title": "Écart : {kind}",
+          "detail": "Cette version de ProxCenter ne connaît pas ce type d'écart."
+        },
+        "unzoned_running": {
+          "title": "Invité en marche sans zone",
+          "detail": "{name} est en marche mais n'appartient à aucune zone."
+        },
+        "nic_firewall_off": {
+          "title": "Pare-feu de la carte réseau désactivé",
+          "detail": "Le pare-feu est désactivé sur {nics} : les règles n'y sont pas appliquées."
+        },
+        "foreign_accept": {
+          "title": "Règle non gérée par ProxCenter",
+          "detail": "La règle d'acceptation en position {pos} n'a pas été créée par ProxCenter et est conservée telle quelle.",
+          "detailGroup": "La règle d'acceptation en position {pos} du groupe {object} n'a pas été créée par ProxCenter et est conservée telle quelle."
+        },
+        "ipset_out_of_sync": {
+          "title": "IP set désynchronisé",
+          "detail": "{object} contient {actual} au lieu de {desired}."
+        },
+        "member_without_ip": {
+          "title": "Membre sans IP connue",
+          "detail": "Ce membre de {zone} n'a pas encore d'IP : ses règles ne peuvent pas être écrites."
+        },
+        "ambiguous_zone": {
+          "title": "Invité dans plusieurs zones",
+          "detail": "L'invité porte les étiquettes de plusieurs zones et reste ignoré tant qu'il n'est pas affecté à une seule."
+        },
+        "object_collision": {
+          "title": "Nom déjà utilisé dans Proxmox",
+          "detail": "{object} existe déjà dans Proxmox et n'a pas été créé par ProxCenter : il n'est pas touché."
+        }
+      }
+    },
+    "observation": {
+      "sampling": "Par défaut, Proxmox journalise au plus une ligne par seconde et par chaîne : les flux très actifs peuvent être sous-comptés.",
+      "openSettings": "Ouvrir les réglages",
+      "loading": "Chargement des flux observés...",
+      "empty": "Aucun flux observé ne correspond à ces filtres.",
+      "filters": {
+        "kind": "Type",
+        "kindAll": "Tous les types",
+        "status": "Statut",
+        "statusAll": "Tous les statuts",
+        "zone": "Zone",
+        "zoneAll": "Toutes les zones"
+      },
+      "kind": {
+        "would_block": "Serait bloqué",
+        "blocked": "Bloqué"
+      },
+      "status": {
+        "pending": "En attente",
+        "accepted": "Accepté",
+        "dismissed": "Écarté"
+      },
+      "selectPage": "Sélectionner toute la page",
+      "selectRow": "Sélectionner {source} vers {destination}",
+      "selected": "{count, number} sélectionné(s)",
+      "rowLabel": "{source} vers {destination}",
+      "bulkAccept": "Accepter la sélection",
+      "bulkAcceptCidr": "Accepter la sélection en CIDR",
+      "bulkDismiss": "Écarter la sélection",
+      "accept": "Accepter",
+      "acceptCidr": "Accepter en CIDR",
+      "dismiss": "Écarter",
+      "acceptNoZone": "La source n'appartient à aucune zone : acceptez-la plutôt en CIDR.",
+      "acceptCidrNoIp": "Il n'y a pas d'IP source à accepter en CIDR.",
+      "bulkAcceptBlocked": "Certaines sources sélectionnées n'appartiennent à aucune zone : acceptez-les en CIDR.",
+      "bulkCidrBlocked": "Certains flux sélectionnés n'ont pas d'IP source.",
+      "hits": "{count, plural, one {# occurrence} other {# occurrences}}",
+      "lastSeen": "Vu pour la dernière fois {time}",
+      "deletedZone": "Zone supprimée",
+      "unknownEndpoint": "Inconnu",
+      "detail": {
+        "firstSeen": "Vu pour la première fois {time}",
+        "lastSeen": "Vu pour la dernière fois {time}",
+        "source": "Source : {value}",
+        "destination": "Destination : {value}"
+      },
+      "resolvedAccept": "{count, plural, one {# flux accepté dans le brouillon} other {# flux acceptés dans le brouillon}}",
+      "resolvedDismiss": "{count, plural, one {# flux écarté} other {# flux écartés}}",
+      "page": "Page {page, number}"
     }
   }
 }

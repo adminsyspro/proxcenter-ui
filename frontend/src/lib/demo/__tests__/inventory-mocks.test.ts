@@ -150,20 +150,6 @@ describe('inventory demo mocks: firewall and CVE', () => {
     expect([...body.rows].sort((a: any, b: any) => b.ts - a.ts)).toEqual(body.rows)
   })
 
-  it('microsegmentation analysis, VM list, status and simulation', async () => {
-    const analysis = await demoGet('/api/v1/firewall/microseg/demo-pve-cluster-001/analyze?gateway_offset=1')
-    const vms = await demoGet('/api/v1/firewall/microseg/demo-pve-cluster-001/vms')
-    const status = await demoGet('/api/v1/firewall/microseg/demo-pve-cluster-001/vm/pve-node-01/qemu/100')
-    const sim = await demoGet('/api/v1/firewall/microseg/demo-pve-cluster-001/vm/pve-node-01/qemu/100/simulate')
-
-    expect(Array.isArray(analysis.networks)).toBe(true)
-    expect(Array.isArray(analysis.missing_base_sgs)).toBe(true)
-    expect(vms.total_vms).toBe(vms.vms.length)
-    expect(status.networks[0].interface).toBe('net0')
-    expect(Array.isArray(sim.blocked_flows)).toBe(true)
-    expect(sim.simulated_state.is_isolated).toBe(true)
-  })
-
   it('CVE scan answers GET and POST with nodes', async () => {
     const get = await demoGet('/api/v1/cve/demo-pve-cluster-001?node=pve-node-02')
     const post = await demoGet('/api/v1/cve/demo-pve-cluster-001', 'POST')

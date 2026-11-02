@@ -53,7 +53,6 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
             <Alert
               severity='error'
               variant='filled'
-              
               action={<Button color='inherit' size='small' onClick={() => controls.ask('resume')}>{t('microsegPilot.stop.resume')}</Button>}
             >
               {t('microsegPilot.stop.active')}
@@ -63,7 +62,6 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
           {status?.engine.held && (
             <Alert
               severity='warning'
-              
               action={<Button color='inherit' size='small' onClick={() => controls.ask('confirmWrites')}>{t('microsegPilot.banner.confirmWrites')}</Button>}
             >
               <Typography variant='body2' component='span' sx={{ fontWeight: 600, mr: 1 }}>{t('microsegPilot.banner.held')}</Typography>

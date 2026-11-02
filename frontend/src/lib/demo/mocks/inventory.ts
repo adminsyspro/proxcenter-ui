@@ -663,20 +663,11 @@ function networkChoices(connId: string): any {
 }
 
 // ---------------------------------------------------------------------------
-// Firewall, microsegmentation, CVE
+// Firewall, CVE
 // ---------------------------------------------------------------------------
 
 // Same rule as demo-api.ts: a guest is firewalled when its vmid is not a multiple of 3.
 const isFirewalled = (vmid: number) => vmid % 3 !== 0
-
-const MICROSEG_NETWORKS = [
-  { name: 'prod-servers', cidr: '10.30.20.0/24', comment: 'VLAN 20, production servers', gateway: '10.30.20.1', base_sg: 'sg-base-prod-servers', has_base_sg: true },
-  { name: 'prod-apps', cidr: '10.30.10.0/24', comment: 'Untagged application guests', gateway: '10.30.10.1', base_sg: 'sg-base-prod-apps', has_base_sg: false },
-]
-
-const guestNetwork = (vmid: number) => (vmid % 4 === 0 ? MICROSEG_NETWORKS[0] : MICROSEG_NETWORKS[1])
-// Isolated: firewalled and on the network that has its base security group.
-const isIsolated = (vmid: number) => isFirewalled(vmid) && guestNetwork(vmid).has_base_sg
 
 function firewallStatus(connId: string): any {
   const guests = guestsOf(connId)
@@ -747,101 +738,6 @@ function firewallLog(connId: string, url: URL): any {
   }
 
   return { rows, warnings: [], truncated: false }
-}
-
-function microsegAnalysis(connId: string): any {
-  const guests = guestsOf(connId)
-  const vdcNets = VDC_VNETS.slice(0, 2).map(v => ({ name: `${v.vdcSlug}-${v.alias.toLowerCase().replace(/\s+/g, '-')}`, cidr: v.subnet.cidr, comment: `${v.alias} (vDC ${v.vdcSlug})`, gateway: v.subnet.gateway, has_gateway: false, has_base_sg: false }))
-  const networks = [...MICROSEG_NETWORKS.map(({ base_sg: _b, ...n }) => ({ ...n, has_gateway: true })), ...vdcNets]
-
-  return {
-    networks,
-    gateway_aliases: MICROSEG_NETWORKS.map(n => `gw-${n.name}`),
-    base_sgs: ['sg-base-prod-servers'],
-    missing_gateways: vdcNets.map(n => ({ network_name: n.name, alias_name: `gw-${n.name}`, gateway_ip: n.gateway })),
-    missing_base_sgs: networks.filter(n => !n.has_base_sg).map(n => ({ network_name: n.name, sg_name: `sg-base-${n.name}`, gateway_name: `gw-${n.name}` })),
-    total_vms: guests.length,
-    isolated_vms: guests.filter(g => isIsolated(Number(g.vmid))).length,
-    unprotected_vms: guests.filter(g => !isFirewalled(Number(g.vmid))).length,
-    segmentation_ready: false,
-  }
-}
-
-function microsegVmSummary(g: any): any {
-  const vmid = Number(g.vmid)
-  const net = guestNetwork(vmid)
-
-  return {
-    vmid,
-    name: g.name,
-    node: g.node,
-    type: g.type,
-    status: g.status,
-    network: net.name,
-    networks: [net.name],
-    firewall_enabled: isFirewalled(vmid),
-    is_isolated: isIsolated(vmid),
-    missing_base_sgs: isIsolated(vmid) ? [] : [net.base_sg],
-    applied_sgs: isIsolated(vmid) ? [net.base_sg, ...(/^web/.test(g.name) || /nginx|haproxy/.test(g.name) ? ['web-servers'] : /^db-/.test(g.name) ? ['db-servers'] : [])] : [],
-  }
-}
-
-function microsegVms(connId: string, network: string | null): any {
-  const vms = guestsOf(connId).map(microsegVmSummary).filter(v => !network || v.networks.includes(network))
-
-  return {
-    total_vms: vms.length,
-    isolated_vms: vms.filter(v => v.is_isolated).length,
-    unprotected_vms: vms.filter(v => !v.firewall_enabled).length,
-    vms,
-  }
-}
-
-function microsegVmStatus(connId: string, vmid: number): any {
-  const g = findGuest(connId, vmid) || { vmid, name: `vm-${vmid}`, node: hostsOf(connId)[0]?.node, type: 'qemu', status: 'running' }
-  const s = microsegVmSummary(g)
-  const net = guestNetwork(vmid)
-  const recommendations: string[] = []
-
-  if (!s.firewall_enabled) recommendations.push('Enable the firewall on net0')
-  if (!s.is_isolated) recommendations.push(`Apply the base security group ${net.base_sg}`)
-
-  return {
-    vmid,
-    name: s.name,
-    node: s.node,
-    firewall_enabled: s.firewall_enabled,
-    policy_in: s.is_isolated ? 'DROP' : 'ACCEPT',
-    policy_out: 'ACCEPT',
-    networks: [{ interface: 'net0', bridge: 'vmbr0', ip_address: guestIp(vmid), network: net.name, gateway: net.gateway, base_sg: net.base_sg, firewall: s.firewall_enabled }],
-    is_isolated: s.is_isolated,
-    applied_base_sgs: s.is_isolated ? [net.base_sg] : [],
-    applied_sgs: s.applied_sgs,
-    direct_rules: s.firewall_enabled ? 2 + (vmid % 2) : 0,
-    recommendations,
-  }
-}
-
-function microsegSimulation(connId: string, vmid: number): any {
-  const st = microsegVmStatus(connId, vmid)
-  const net = guestNetwork(vmid)
-  const peers = guestsOf(connId).filter(g => Number(g.vmid) !== vmid && guestNetwork(Number(g.vmid)).name === net.name && g.status === 'running').slice(0, 3)
-  const state = (isolated: boolean) => ({ firewall_enabled: isolated || st.firewall_enabled, policy_in: isolated ? 'DROP' : st.policy_in, policy_out: 'ACCEPT', is_isolated: isolated, applied_sgs: isolated ? [net.base_sg, ...st.applied_sgs.filter((x: string) => x !== net.base_sg)] : st.applied_sgs })
-
-  return {
-    vmid,
-    name: st.name,
-    current_state: state(st.is_isolated),
-    simulated_state: state(true),
-    allowed_flows: [
-      { direction: 'out', protocol: 'any', port: '*', source: guestIp(vmid), destination: net.gateway, reason: `Gateway alias gw-${net.name}`, critical: true },
-      { direction: 'in', protocol: 'tcp', port: '22', source: '+management', destination: guestIp(vmid), reason: 'Management ipset', critical: false },
-    ],
-    blocked_flows: peers.map(p => ({ direction: 'in', protocol: 'any', port: '*', source: guestIp(Number(p.vmid)), destination: guestIp(vmid), reason: `Same network ${net.name}, no rule allows it`, critical: false })),
-    affected_vms: peers.map(p => ({ vmid: Number(p.vmid), name: p.name, node: p.node, network: net.name, ip_address: guestIp(Number(p.vmid)), impact: 'Can no longer reach this VM directly', can_resolve: true, resolution: 'Add an allow rule in a security group' })),
-    warnings: st.is_isolated ? [] : ['Existing sessions from the same network will be dropped'],
-    required_actions: st.firewall_enabled ? [] : ['Enable the firewall on net0'],
-  }
 }
 
 const CVE_CATALOG = [
@@ -1264,10 +1160,6 @@ const GET_ROUTES: [RegExp, Handler][] = [
   [/^\/api\/v1\/connections\/[^/]+\/nodes\/[^/]+\/check-sshfs$/, () => ({ data: { installed: true } })],
   [/^\/api\/v1\/firewall$/, (_m, url) => firewallStatus(url.searchParams.get('connectionId') || PROD)],
   [/^\/api\/v1\/firewall\/logs\/([^/]+)$/, (m, url) => firewallLog(m[1], url)],
-  [/^\/api\/v1\/firewall\/microseg\/([^/]+)\/analyze$/, m => microsegAnalysis(m[1])],
-  [/^\/api\/v1\/firewall\/microseg\/([^/]+)\/vms$/, (m, url) => microsegVms(m[1], url.searchParams.get('network'))],
-  [/^\/api\/v1\/firewall\/microseg\/([^/]+)\/vm\/[^/]+\/(?:qemu|lxc)\/(\d+)$/, m => microsegVmStatus(m[1], Number(m[2]))],
-  [/^\/api\/v1\/firewall\/microseg\/([^/]+)\/vm\/[^/]+\/(?:qemu|lxc)\/(\d+)\/simulate$/, m => microsegSimulation(m[1], Number(m[2]))],
   // lib/api/firewall getVMFirewallLog: PVE log lines { n, t }.
   [/^\/api\/v1\/firewall\/vms\/([^/]+)\/[^/]+\/(?:qemu|lxc)\/(\d+)\/log$/, (m, url) => firewallLog(m[1], new URL(`http://demo/?scope=vm&vmid=${m[2]}&window=3600`)).rows
     .slice(0, Number(url.searchParams.get('limit')) || 50)

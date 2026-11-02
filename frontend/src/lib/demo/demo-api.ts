@@ -20,6 +20,7 @@ import { demoAvailabilityResponse, demoSettings } from './availabilityDemo'
 import { demoCephCrush, demoCephExporterFailures, demoCephExporterNodes, demoCephExporterOsd, demoCephHistory, demoCephLive, demoCephOkToStop, demoCephStatus, demoCrushRules, demoCrushTree, parseDemoHistoryOsds } from './cephCockpitDemo'
 import mockDataJson from './mock-data.json'
 import { domainMock, resolveDomainMock } from './mocks'
+import { microsegGuestOverlay } from './mocks/microseg'
 import cloudImagesJson from '@/data/cloudImages.json'
 
 // ---------------------------------------------------------------------------
@@ -2737,8 +2738,10 @@ export const EXTRA_MOCKS: MockDataMap = {
   // --- VMs list ---
   get 'GET:/api/v1/vms'() {
     const resources = demoResources('demo-pve-cluster-001')
+    // The guests of the demo micro-segmentation zones carry their zone tag and an address, as the map reads them.
     const vms = resources.map((r: any) => ({
       ...r,
+      ...microsegGuestOverlay(Number(r.vmid), r.tags),
       connId: 'demo-pve-cluster-001',
       connName: 'Production Cluster',
     }))

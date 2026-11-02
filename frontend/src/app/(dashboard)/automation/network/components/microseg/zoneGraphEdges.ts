@@ -25,11 +25,18 @@ const BOWS = [0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45, 0.6, -0.6]
 const AT = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82, 0.12, 0.88]
 const LABEL_MARGIN = 3
 
+/** The two label sizes: a guest-to-guest edge has the smaller one. */
+export type LabelSize = 'small' | 'regular'
+
+const LABEL_BOXES: Record<LabelSize, { perChar: number; pad: number; maxW: number; h: number }> = {
+  small: { perChar: 6.4, pad: 14, maxW: 110, h: 18 },
+  regular: { perChar: 7.2, pad: 16, maxW: 150, h: 22 },
+}
+
 /** The size of a label: an upper bound of the text width (the label ellipsizes past it). */
-export function labelSize(text: string, small: boolean): { w: number; h: number } {
-  return small
-    ? { w: Math.min(110, Math.ceil(text.length * 6.4 + 14)), h: 18 }
-    : { w: Math.min(150, Math.ceil(text.length * 7.2 + 16)), h: 22 }
+export function labelSize(text: string, size: LabelSize): { w: number; h: number } {
+  const box = LABEL_BOXES[size]
+  return { w: Math.min(box.maxW, Math.ceil(text.length * box.perChar + box.pad)), h: box.h }
 }
 
 function crosses(points: Point[], o: Obstacle): boolean {
@@ -43,53 +50,91 @@ function covers(rect: Rect, o: Obstacle): boolean {
   return rectsOverlap(rect, rectAround(o.center, 2 * o.shape.halfW, 2 * o.shape.halfH), 2)
 }
 
-export function placeEdges(specs: EdgeSpec[], ends: Map<string, EdgeEnds>, obstacles: Obstacle[]): Map<string, PlacedEdge> {
-  // Lanes: each direction of a pair on its own side (the offset follows the normal of the edge, which flips with the
-  // direction), the edges of one direction spread around the middle line when the other direction is empty.
-  const byDirection = new Map<string, EdgeSpec[]>()
-  for (const s of specs) byDirection.set(`${s.source}>${s.target}`, [...(byDirection.get(`${s.source}>${s.target}`) ?? []), s])
-  const lane = (s: EdgeSpec) => {
-    const same = byDirection.get(`${s.source}>${s.target}`)!
-    const k = same.indexOf(s)
-    const reverse = byDirection.has(`${s.target}>${s.source}`)
-    return {
-      offset: (reverse ? k + 0.5 : k - (same.length - 1) / 2) * LANE_GAP,
-      at: !reverse && same.length === 1 ? 0.5 : 0.42 + 0.16 * (k % 2),
-    }
-  }
+type Lane = { offset: number; at: number }
+type BowTry = { hits: number; shapes: Map<string, EdgeShape> }
 
-  // One bow per pair of ends, in the frame of the lesser end, so that both directions follow the same curve.
-  const pairs = new Map<string, EdgeSpec[]>()
-  for (const s of specs) {
-    const key = s.source < s.target ? `${s.source}|${s.target}` : `${s.target}|${s.source}`
-    pairs.set(key, [...(pairs.get(key) ?? []), s])
+/** The specs under each key, in their order. */
+function groupBy(specs: EdgeSpec[], key: (s: EdgeSpec) => string): Map<string, EdgeSpec[]> {
+  const groups = new Map<string, EdgeSpec[]>()
+  for (const s of specs) groups.set(key(s), [...(groups.get(key(s)) ?? []), s])
+  return groups
+}
+
+const directionKey = (s: EdgeSpec) => `${s.source}>${s.target}`
+/** The two ends of an edge in a fixed order, so that both directions of a pair share the key. */
+const endsKey = (s: EdgeSpec) => (s.source < s.target ? `${s.source}|${s.target}` : `${s.target}|${s.source}`)
+
+/**
+ * Lanes: each direction of a pair on its own side (the offset follows the normal of the edge, which flips with the
+ * direction), the edges of one direction spread around the middle line when the other direction is empty.
+ */
+function laneMap(specs: EdgeSpec[]): Map<EdgeSpec, Lane> {
+  const byDirection = groupBy(specs, directionKey)
+  const lanes = new Map<EdgeSpec, Lane>()
+  for (const same of byDirection.values()) {
+    const reverse = byDirection.has(`${same[0].target}>${same[0].source}`)
+    same.forEach((s, k) => {
+      lanes.set(s, {
+        offset: (reverse ? k + 0.5 : k - (same.length - 1) / 2) * LANE_GAP,
+        at: !reverse && same.length === 1 ? 0.5 : 0.42 + 0.16 * (k % 2),
+      })
+    })
   }
+  return lanes
+}
+
+/** The shapes of the edges of a pair for one bow, and how many foreign circles or boxes they cross. */
+function tryBow(group: EdgeSpec[], lesser: string, bow: { canonical: number; reach: number }, ends: Map<string, EdgeEnds>, lanes: Map<EdgeSpec, Lane>, others: Obstacle[]): BowTry {
+  let hits = 0
   const shapes = new Map<string, EdgeShape>()
-  for (const [key, group] of pairs) {
-    const [lesser] = key.split('|')
-    const a = ends.get(group[0].source)!
-    const b = ends.get(group[0].target)!
-    const reach = Math.hypot(b.center.x - a.center.x, b.center.y - a.center.y)
-    const own = new Set([a.group, b.group])
-    const others = obstacles.filter(o => !own.has(o.id))
-    let best: { hits: number; shapes: Map<string, EdgeShape> } = { hits: Infinity, shapes: new Map() }
-    for (const canonical of BOWS) {
-      let hits = 0
-      const tried = new Map<string, EdgeShape>()
-      for (const s of group) {
-        const from = ends.get(s.source)!
-        const to = ends.get(s.target)!
-        const { offset, at } = lane(s)
-        const bow = (s.source === lesser ? canonical : -canonical) * reach
-        const shape = edgeGeometry(from.center, to.center, { fromShape: from.shape, toShape: to.shape, gap: GAP, offset, bow, at })
-        if (!shape) continue
-        tried.set(s.id, shape)
-        hits += others.filter(o => crosses(shape.points, o)).length
-      }
-      if (hits < best.hits) best = { hits, shapes: tried }
-      if (hits === 0) break
-    }
-    for (const [id, shape] of best.shapes) shapes.set(id, shape)
+  for (const s of group) {
+    const from = ends.get(s.source)!
+    const to = ends.get(s.target)!
+    const { offset, at } = lanes.get(s)!
+    const shape = edgeGeometry(from.center, to.center, { fromShape: from.shape, toShape: to.shape, gap: GAP, offset, bow: (s.source === lesser ? bow.canonical : -bow.canonical) * bow.reach, at })
+    if (!shape) continue
+    shapes.set(s.id, shape)
+    hits += others.filter(o => crosses(shape.points, o)).length
+  }
+  return { hits, shapes }
+}
+
+/** One bow per pair of ends, in the frame of the lesser end, so that both directions follow the same curve. */
+function pairShapes(key: string, group: EdgeSpec[], ends: Map<string, EdgeEnds>, obstacles: Obstacle[], lanes: Map<EdgeSpec, Lane>): Map<string, EdgeShape> {
+  const [lesser] = key.split('|')
+  const a = ends.get(group[0].source)!
+  const b = ends.get(group[0].target)!
+  const reach = Math.hypot(b.center.x - a.center.x, b.center.y - a.center.y)
+  const own = new Set([a.group, b.group])
+  const others = obstacles.filter(o => !own.has(o.id))
+  let best: BowTry = { hits: Infinity, shapes: new Map() }
+  for (const canonical of BOWS) {
+    const tried = tryBow(group, lesser, { canonical, reach }, ends, lanes, others)
+    if (tried.hits < best.hits) best = tried
+    if (tried.hits === 0) break
+  }
+  return best.shapes
+}
+
+/** The first place along the edge, from `start`, where a label covers nothing (else the one that covers least). */
+function placeLabel(shape: EdgeShape, w: number, h: number, start: number, labels: Rect[], obstacles: Obstacle[]): { point: Point; rect: Rect } {
+  const candidates = [start, ...AT.filter(t => t !== start)]
+  let chosen: { point: Point; rect: Rect; bad: number } | null = null
+  for (const t of candidates) {
+    const point = shape.pointAt(t)
+    const rect = rectAround(point, w, h)
+    const bad = labels.filter(l => rectsOverlap(l, rect, LABEL_MARGIN)).length + obstacles.filter(o => covers(rect, o)).length
+    if (!chosen || bad < chosen.bad) chosen = { point, rect, bad }
+    if (bad === 0) break
+  }
+  return chosen!
+}
+
+export function placeEdges(specs: EdgeSpec[], ends: Map<string, EdgeEnds>, obstacles: Obstacle[]): Map<string, PlacedEdge> {
+  const lanes = laneMap(specs)
+  const shapes = new Map<string, EdgeShape>()
+  for (const [key, group] of groupBy(specs, endsKey)) {
+    for (const [id, shape] of pairShapes(key, group, ends, obstacles, lanes)) shapes.set(id, shape)
   }
 
   // Labels: the allowed edges first (they come first in `specs`), each at the first free place along its edge.
@@ -98,19 +143,10 @@ export function placeEdges(specs: EdgeSpec[], ends: Map<string, EdgeEnds>, obsta
   for (const s of specs) {
     const shape = shapes.get(s.id)
     if (!shape) continue
-    const { w, h } = labelSize(s.label, s.small)
-    const start = lane(s).at
-    const candidates = [start, ...AT.filter(t => t !== start)]
-    let chosen: { point: Point; rect: Rect; bad: number } | null = null
-    for (const t of candidates) {
-      const point = shape.pointAt(t)
-      const rect = rectAround(point, w, h)
-      const bad = labels.filter(l => rectsOverlap(l, rect, LABEL_MARGIN)).length + obstacles.filter(o => covers(rect, o)).length
-      if (!chosen || bad < chosen.bad) chosen = { point, rect, bad }
-      if (bad === 0) break
-    }
-    labels.push(chosen!.rect)
-    result.set(s.id, { path: shape.path, points: shape.points, label: { x: chosen!.point.x, y: chosen!.point.y, w, h } })
+    const { w, h } = labelSize(s.label, s.small ? 'small' : 'regular')
+    const { point, rect } = placeLabel(shape, w, h, lanes.get(s)!.at, labels, obstacles)
+    labels.push(rect)
+    result.set(s.id, { path: shape.path, points: shape.points, label: { x: point.x, y: point.y, w, h } })
   }
   return result
 }

@@ -1,9 +1,11 @@
+import type { CSSProperties } from 'react'
+
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
 
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
 import { flowService } from './FlowSummary'
-import { placeEdges, type EdgeEnds, type Obstacle } from './zoneGraphEdges'
+import { placeEdges, type EdgeEnds, type Obstacle, type PlacedEdge } from './zoneGraphEdges'
 import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, circleRadius, layerZones, memberSlots, orderLayers, slotPositions, type Point } from './zoneLayout'
 
 /** Size of the External and Outside boxes. */
@@ -180,6 +182,11 @@ export function groupServices(services: string[]): string {
 /** `all` is every member in name order, `shown` the ones drawn. */
 type Group = { id: string; radius: number; all: MapMember[]; shown: MapMember[]; more: number; data: ZoneNodeData | UnzonedNodeData }
 type Pair = { kind: MapEdgeKind; source: string; target: string; services: Set<string>; flows: MicrosegFlow[]; observed: MicrosegSuggestion[] }
+type Cell = { id: string; w: number; h: number }
+type AddressBooks = Map<string, Map<string, string>>
+type Placement = { nodes: Node[]; obstacles: Obstacle[]; endShapes: Map<string, EdgeEnds> }
+
+const BOX_SHAPE = { kind: 'box' as const, halfW: NODE_W / 2, halfH: NODE_H / 2 }
 
 function groupOf(id: string, members: MapMember[] | null, data: Group['data']): Group {
   const list = [...(members ?? [])].sort((a, b) => byText(a.name, b.name) || byText(a.key, b.key))
@@ -189,17 +196,8 @@ function groupOf(id: string, members: MapMember[] | null, data: Group['data']): 
   return { id, radius, all: list, shown: list.slice(0, shown), more, data }
 }
 
-/** An end of an allowed flow: the box for a CIDR, the circle of a known zone, nothing for a zone that is gone. */
-function allowedEnd(cidr: string, zoneId: string, box: string, known: ReadonlyMap<string, MicrosegZone>): string | null {
-  if (cidr) return box
-  return known.has(zoneId) ? zoneNodeId(zoneId) : null
-}
-
-/** Unprotected and Outside edges are dashed, a draft-only edge dotted, the others solid. */
-function edgeDash(kind: MapEdgeKind, draft: boolean): string | undefined {
-  if (kind === 'unprotected' || kind === 'outside') return '6 4'
-  return draft ? '1 5' : undefined
-}
+/** The id a group's guest nodes carry: the zone id, or "unzoned". */
+const groupKey = (group: Group) => (group.id === UNZONED_ID ? UNZONED_ID : group.id.replace(/^zone:/, ''))
 
 /**
  * Where an address of a group's members is drawn: its guest node, or the "+N" node when it is not drawn. An address
@@ -208,12 +206,200 @@ function edgeDash(kind: MapEdgeKind, draft: boolean): string | undefined {
 function addressBook(group: Group): Map<string, string> {
   const book = new Map<string, string>()
   const shownKeys = new Set(group.shown.map(m => m.key))
-  const groupId = group.id === UNZONED_ID ? UNZONED_ID : group.id.replace(/^zone:/, '')
+  const groupId = groupKey(group)
   for (const m of group.all) {
     const id = shownKeys.has(m.key) ? guestNodeId(groupId, m.key) : moreNodeId(groupId)
     for (const ip of m.ips) if (!book.has(bareIp(ip))) book.set(bareIp(ip), id)
   }
   return book
+}
+
+/** A circle per zone, and one for the running guests in no zone when there are some, with their address books. */
+function buildGroups(sorted: MicrosegZone[], members: MapInput['members'], unzoned: MapInput['unzoned']): { groups: Map<string, Group>; books: AddressBooks } {
+  const groups = new Map<string, Group>()
+  const books: AddressBooks = new Map()
+  for (const z of sorted) {
+    const list = members ? (members.get(z.id) ?? []) : null
+    const g = groupOf(zoneNodeId(z.id), list, { kind: 'zone', zone: z, members: list ? list.length : null, state: z.state, radius: 0 })
+    groups.set(g.id, g)
+    books.set(z.id, addressBook(g))
+  }
+  const unzonedList = members && unzoned && unzoned.length > 0 ? unzoned : null
+  if (unzonedList) {
+    const g = groupOf(UNZONED_ID, unzonedList, { kind: 'unzoned', count: unzonedList.length, radius: 0 })
+    groups.set(UNZONED_ID, g)
+    books.set(UNZONED_ID, addressBook(g))
+  }
+  return { groups, books }
+}
+
+const pairKey = (p: Pick<Pair, 'kind' | 'source' | 'target'>) => `${p.kind}:${p.source}>${p.target}`
+const isObserved = (kind: MapEdgeKind) => kind === 'unprotected' || kind === 'blocked'
+
+function addPair(pairs: Map<string, Pair>, kind: MapEdgeKind, source: string, target: string, service: string, flow?: MicrosegFlow, seen?: MicrosegSuggestion) {
+  if (source === target) return
+  const key = pairKey({ kind, source, target })
+  const pair = pairs.get(key) ?? { kind, source, target, services: new Set<string>(), flows: [], observed: [] }
+  pair.services.add(service)
+  if (flow) pair.flows.push(flow)
+  if (seen) pair.observed.push(seen)
+  pairs.set(key, pair)
+}
+
+/** An end of an allowed flow: the box for a CIDR, the circle of a known zone, nothing for a zone that is gone. */
+function allowedEnd(cidr: string, zoneId: string, box: string, known: ReadonlyMap<string, MicrosegZone>): string | null {
+  if (cidr) return box
+  return known.has(zoneId) ? zoneNodeId(zoneId) : null
+}
+
+/** The allowed flows, circle to circle (a CIDR source from External, a CIDR destination to Outside). */
+function addAllowedPairs(pairs: Map<string, Pair>, flows: MicrosegFlow[], known: ReadonlyMap<string, MicrosegZone>) {
+  for (const f of flows) {
+    const source = allowedEnd(f.src_cidr, f.src_zone_id, EXTERNAL_ID, known)
+    const target = allowedEnd(f.dst_cidr, f.dst_zone_id, OUTSIDE_ID, known)
+    if (!source || !target || (source === EXTERNAL_ID && target === OUTSIDE_ID)) continue
+    addPair(pairs, target === OUTSIDE_ID ? 'outside' : 'allowed', source, target, flowService(f), f)
+  }
+}
+
+/** The source of an observed flow: its guest (or its zone's circle), a guest in no zone, or External. */
+function observedSource(s: MicrosegSuggestion, known: ReadonlyMap<string, MicrosegZone>, books: AddressBooks): string {
+  const srcIp = bareIp(s.src_ip || '')
+  if (known.has(s.src_zone_id)) return books.get(s.src_zone_id)!.get(srcIp) ?? zoneNodeId(s.src_zone_id)
+  return books.get(UNZONED_ID)?.get(srcIp) ?? EXTERNAL_ID
+}
+
+/** The pending observed flows into a known zone, guest to guest. */
+function addObservedPairs(pairs: Map<string, Pair>, suggestions: MicrosegSuggestion[], known: ReadonlyMap<string, MicrosegZone>, books: AddressBooks) {
+  for (const s of suggestions) {
+    if (s.status !== 'pending' || !known.has(s.dst_zone_id)) continue
+    const kind: MapEdgeKind = s.kind === 'blocked' ? 'blocked' : 'unprotected'
+    const source = observedSource(s, known, books)
+    const target = books.get(s.dst_zone_id)!.get(bareIp(s.dst_ip || '')) ?? zoneNodeId(s.dst_zone_id)
+    addPair(pairs, kind, source, target, flowService(s), undefined, s)
+  }
+}
+
+const comparePairs = (a: Pair, b: Pair) => KIND_RANK[a.kind] - KIND_RANK[b.kind] || byText(a.source, b.source) || byText(a.target, b.target)
+
+const circleCell = (group: Group): Cell => ({ id: group.id, w: 2 * group.radius, h: 2 * group.radius })
+
+/** Column 0 holds External and the guests in no zone, the zone columns follow, Outside is last. */
+function buildGrid(columns: string[][], groups: Map<string, Group>, hasExternal: boolean, hasOutside: boolean): Cell[][] {
+  const grid: Cell[][] = []
+  const first: Cell[] = []
+  if (hasExternal) first.push({ id: EXTERNAL_ID, w: NODE_W, h: NODE_H })
+  const unzonedGroup = groups.get(UNZONED_ID)
+  if (unzonedGroup) first.push(circleCell(unzonedGroup))
+  if (first.length) grid.push(first)
+  for (const column of columns.slice(1)) {
+    if (column.length) grid.push(column.map(id => circleCell(groups.get(zoneNodeId(id))!)))
+  }
+  if (hasOutside) grid.push([{ id: OUTSIDE_ID, w: NODE_W, h: NODE_H }])
+  return grid
+}
+
+/** The center of every cell: the columns side by side, each centered on y = 0. */
+function cellCenters(grid: Cell[][]): Map<string, Point> {
+  const centers = new Map<string, Point>()
+  let left = 0
+  for (const column of grid) {
+    const width = Math.max(...column.map(c => c.w))
+    const height = column.reduce((s, c) => s + c.h, 0) + ROW_GAP * (column.length - 1)
+    let top = -height / 2
+    for (const c of column) {
+      centers.set(c.id, { x: Math.round(left + width / 2), y: Math.round(top + c.h / 2) })
+      top += c.h + ROW_GAP
+    }
+    left += width + COL_GAP
+  }
+  return centers
+}
+
+function placeBoundary(out: Placement, id: string, c: Point) {
+  out.nodes.push({
+    id, type: 'boundary', position: { x: c.x - NODE_W / 2, y: c.y - NODE_H / 2 }, width: NODE_W, height: NODE_H, focusable: false,
+    data: { kind: id === EXTERNAL_ID ? 'external' : 'outside' } satisfies BoundaryNodeData,
+  })
+  out.obstacles.push({ id, center: c, shape: BOX_SHAPE })
+  out.endShapes.set(id, { center: c, shape: BOX_SHAPE, group: id })
+}
+
+/** A circle, then its guests and its "+N" node (React Flow wants a parent before its children). */
+function placeGroup(out: Placement, group: Group, c: Point) {
+  const r = group.radius
+  const origin = { x: c.x - r, y: c.y - r }
+  out.nodes.push({ id: group.id, type: group.data.kind, position: origin, width: 2 * r, height: 2 * r, focusable: false, data: group.data })
+  out.obstacles.push({ id: group.id, center: c, shape: { kind: 'circle', r } })
+  out.endShapes.set(group.id, { center: c, shape: { kind: 'circle', r }, group: group.id })
+  const groupId = groupKey(group)
+  const spots = slotPositions(group.shown.length + (group.more ? 1 : 0), r)
+  const child = (id: string, spot: Point, data: GuestNodeData | MoreNodeData) => {
+    out.nodes.push({ id, type: data.kind, parentId: group.id, position: spot, width: GUEST_W, height: GUEST_H, focusable: false, data })
+    out.endShapes.set(id, { center: { x: origin.x + spot.x + GUEST_W / 2, y: origin.y + spot.y + GLYPH_Y }, shape: { kind: 'circle', r: GUEST_R }, group: group.id })
+  }
+  group.shown.forEach((m, i) => child(guestNodeId(groupId, m.key), spots[i], { kind: 'guest', member: m, groupId }))
+  if (group.more) child(moreNodeId(groupId), spots[spots.length - 1], { kind: 'more', count: group.more, groupId })
+}
+
+/** The nodes in grid order, with the obstacles the edges avoid and the outline every edge end clips on. */
+function buildNodes(grid: Cell[][], centers: Map<string, Point>, groups: Map<string, Group>): Placement {
+  const out: Placement = { nodes: [], obstacles: [], endShapes: new Map() }
+  for (const cell of grid.flat()) {
+    const c = centers.get(cell.id)!
+    const group = groups.get(cell.id)
+    if (group) placeGroup(out, group, c)
+    else placeBoundary(out, cell.id, c)
+  }
+  return out
+}
+
+/** Unprotected and Outside edges are dashed, a draft-only edge dotted, the others solid. */
+function edgeDash(kind: MapEdgeKind, draft: boolean): string | undefined {
+  if (kind === 'unprotected' || kind === 'outside') return '6 4'
+  return draft ? '1 5' : undefined
+}
+
+function dashStyle(dash: string | undefined, draft: boolean): Pick<CSSProperties, 'strokeDasharray' | 'strokeLinecap'> {
+  if (!dash) return {}
+  return { strokeDasharray: dash, strokeLinecap: draft ? 'round' : undefined }
+}
+
+function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, unapplied: ReadonlySet<string> | null): Edge {
+  const observed = isObserved(p.kind)
+  const draft = !!unapplied && p.flows.length > 0 && p.flows.every(f => unapplied.has(f.id))
+  const color = EDGE_COLORS[p.kind]
+  return {
+    id: pairKey(p),
+    type: 'flow',
+    source: p.source,
+    target: p.target,
+    // The map is read with the pointer or with the zone buttons: the edges take no focus (the panels list the flows).
+    focusable: false,
+    zIndex: observed ? 2 : 1,
+    style: { stroke: color, strokeWidth: observed ? 1.75 : 2, ...dashStyle(edgeDash(p.kind, draft), draft) },
+    markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
+    data: {
+      kind: p.kind,
+      services: [...p.services].sort(byText),
+      label: groupServices([...p.services]),
+      count: observed ? p.observed.length : p.flows.length,
+      flows: [...p.flows].sort((a, b) => byText(a.id, b.id)),
+      observed: [...p.observed].sort((a, b) => byText(a.id, b.id)),
+      draft,
+      fromGroup: endShapes.get(p.source)!.group,
+      toGroup: endShapes.get(p.target)!.group,
+      path: place.path,
+      points: place.points,
+      label_x: place.label.x,
+      label_y: place.label.y,
+      label_w: place.label.w,
+      label_h: place.label.h,
+      small: observed,
+      particle: p.kind === 'allowed' && !draft,
+      color,
+    } satisfies MapEdgeData,
+  }
 }
 
 /**
@@ -228,158 +414,29 @@ export function buildZoneGraph({ zones, flows, suggestions, members = null, unzo
   const known = new Map(sorted.map(z => [z.id, z]))
   const zoneFlows = flows.filter(f => !f.src_cidr && !f.dst_cidr && known.has(f.src_zone_id) && known.has(f.dst_zone_id))
   const layerEdges = zoneFlows.map(f => [f.src_zone_id, f.dst_zone_id] as [string, string])
-
-  const groups = new Map<string, Group>()
-  const books = new Map<string, Map<string, string>>()
-  for (const z of sorted) {
-    const list = members ? (members.get(z.id) ?? []) : null
-    const g = groupOf(zoneNodeId(z.id), list, { kind: 'zone', zone: z, members: list ? list.length : null, state: z.state, radius: 0 })
-    groups.set(g.id, g)
-    books.set(z.id, addressBook(g))
-  }
-  const unzonedList = members && unzoned && unzoned.length > 0 ? unzoned : null
-  if (unzonedList) {
-    const g = groupOf(UNZONED_ID, unzonedList, { kind: 'unzoned', count: unzonedList.length, radius: 0 })
-    groups.set(UNZONED_ID, g)
-    books.set(UNZONED_ID, addressBook(g))
-  }
+  const { groups, books } = buildGroups(sorted, members, unzoned)
 
   // Edges, by their ends.
   const pairs = new Map<string, Pair>()
-  const add = (kind: MapEdgeKind, source: string, target: string, service: string, flow?: MicrosegFlow, seen?: MicrosegSuggestion) => {
-    if (source === target) return
-    const key = `${kind}:${source}>${target}`
-    const pair = pairs.get(key) ?? { kind, source, target, services: new Set<string>(), flows: [], observed: [] }
-    pair.services.add(service)
-    if (flow) pair.flows.push(flow)
-    if (seen) pair.observed.push(seen)
-    pairs.set(key, pair)
-  }
-  for (const f of flows) {
-    const source = allowedEnd(f.src_cidr, f.src_zone_id, EXTERNAL_ID, known)
-    const target = allowedEnd(f.dst_cidr, f.dst_zone_id, OUTSIDE_ID, known)
-    if (!source || !target || (source === EXTERNAL_ID && target === OUTSIDE_ID)) continue
-    add(target === OUTSIDE_ID ? 'outside' : 'allowed', source, target, flowService(f), f)
-  }
-  for (const s of suggestions) {
-    if (s.status !== 'pending' || !known.has(s.dst_zone_id)) continue
-    const kind: MapEdgeKind = s.kind === 'blocked' ? 'blocked' : 'unprotected'
-    const srcIp = bareIp(s.src_ip || '')
-    const source = known.has(s.src_zone_id)
-      ? (books.get(s.src_zone_id)!.get(srcIp) ?? zoneNodeId(s.src_zone_id))
-      : (books.get(UNZONED_ID)?.get(srcIp) ?? EXTERNAL_ID)
-    const target = books.get(s.dst_zone_id)!.get(bareIp(s.dst_ip || '')) ?? zoneNodeId(s.dst_zone_id)
-    add(kind, source, target, flowService(s), undefined, s)
-  }
-  const ordered = [...pairs.values()].sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind] || byText(a.source, b.source) || byText(a.target, b.target))
-  const hasExternal = ordered.some(p => p.source === EXTERNAL_ID)
-  const hasOutside = ordered.some(p => p.target === OUTSIDE_ID)
+  addAllowedPairs(pairs, flows, known)
+  addObservedPairs(pairs, suggestions, known, books)
+  const ordered = [...pairs.values()].sort(comparePairs)
 
-  // Grid: column 0 holds External and the guests in no zone, the zone columns follow, Outside is last.
+  // Grid: longest-path layer as the column, barycenter order as the row.
   const fromExternal = flows.filter(f => f.src_cidr && known.has(f.dst_zone_id) && !f.dst_cidr).map(f => f.dst_zone_id)
   const layer = layerZones(sorted.map(z => z.id), layerEdges, fromExternal)
   const columns = orderLayers(layer, layerEdges, id => known.get(id)!.name)
-  type Cell = { id: string; w: number; h: number }
-  const grid: Cell[][] = []
-  const first: Cell[] = []
-  if (hasExternal) first.push({ id: EXTERNAL_ID, w: NODE_W, h: NODE_H })
-  if (unzonedList) first.push({ id: UNZONED_ID, w: 2 * groups.get(UNZONED_ID)!.radius, h: 2 * groups.get(UNZONED_ID)!.radius })
-  if (first.length) grid.push(first)
-  for (const column of columns.slice(1)) {
-    if (column.length) grid.push(column.map(id => ({ id: zoneNodeId(id), w: 2 * groups.get(zoneNodeId(id))!.radius, h: 2 * groups.get(zoneNodeId(id))!.radius })))
-  }
-  if (hasOutside) grid.push([{ id: OUTSIDE_ID, w: NODE_W, h: NODE_H }])
-
-  const centers = new Map<string, Point>()
-  let left = 0
-  for (const column of grid) {
-    const width = Math.max(...column.map(c => c.w))
-    const height = column.reduce((s, c) => s + c.h, 0) + ROW_GAP * (column.length - 1)
-    let top = -height / 2
-    for (const c of column) {
-      centers.set(c.id, { x: Math.round(left + width / 2), y: Math.round(top + c.h / 2) })
-      top += c.h + ROW_GAP
-    }
-    left += width + COL_GAP
-  }
-
-  // Nodes: each circle before its guests (React Flow wants a parent before its children).
-  const nodes: Node[] = []
-  const obstacles: Obstacle[] = []
-  const endShapes = new Map<string, EdgeEnds>()
-  const boxShape = { kind: 'box' as const, halfW: NODE_W / 2, halfH: NODE_H / 2 }
-  for (const cell of grid.flat()) {
-    const c = centers.get(cell.id)!
-    const group = groups.get(cell.id)
-    if (!group) {
-      nodes.push({
-        id: cell.id, type: 'boundary', position: { x: c.x - NODE_W / 2, y: c.y - NODE_H / 2 }, width: NODE_W, height: NODE_H, focusable: false,
-        data: { kind: cell.id === EXTERNAL_ID ? 'external' : 'outside' } satisfies BoundaryNodeData,
-      })
-      obstacles.push({ id: cell.id, center: c, shape: boxShape })
-      endShapes.set(cell.id, { center: c, shape: boxShape, group: cell.id })
-      continue
-    }
-    const r = group.radius
-    const origin = { x: c.x - r, y: c.y - r }
-    nodes.push({ id: group.id, type: group.data.kind, position: origin, width: 2 * r, height: 2 * r, focusable: false, data: group.data })
-    obstacles.push({ id: group.id, center: c, shape: { kind: 'circle', r } })
-    endShapes.set(group.id, { center: c, shape: { kind: 'circle', r }, group: group.id })
-    const groupId = group.id === UNZONED_ID ? UNZONED_ID : group.id.replace(/^zone:/, '')
-    const spots = slotPositions(group.shown.length + (group.more ? 1 : 0), r)
-    const child = (id: string, spot: Point, data: GuestNodeData | MoreNodeData) => {
-      nodes.push({ id, type: data.kind, parentId: group.id, position: spot, width: GUEST_W, height: GUEST_H, focusable: false, data })
-      endShapes.set(id, { center: { x: origin.x + spot.x + GUEST_W / 2, y: origin.y + spot.y + GLYPH_Y }, shape: { kind: 'circle', r: GUEST_R }, group: group.id })
-    }
-    group.shown.forEach((m, i) => child(guestNodeId(groupId, m.key), spots[i], { kind: 'guest', member: m, groupId }))
-    if (group.more) child(moreNodeId(groupId), spots[spots.length - 1], { kind: 'more', count: group.more, groupId })
-  }
+  const grid = buildGrid(columns, groups, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID))
+  const { nodes, obstacles, endShapes } = buildNodes(grid, cellCenters(grid), groups)
 
   const placed = placeEdges(
-    ordered.map(p => ({ id: `${p.kind}:${p.source}>${p.target}`, source: p.source, target: p.target, label: groupServices([...p.services]), small: p.kind === 'unprotected' || p.kind === 'blocked' })),
+    ordered.map(p => ({ id: pairKey(p), source: p.source, target: p.target, label: groupServices([...p.services]), small: isObserved(p.kind) })),
     endShapes,
     obstacles,
   )
-
   const edges: Edge[] = ordered.flatMap(p => {
-    const id = `${p.kind}:${p.source}>${p.target}`
-    const place = placed.get(id)
-    if (!place) return []
-    const observed = p.kind === 'unprotected' || p.kind === 'blocked'
-    const draft = !!unapplied && p.flows.length > 0 && p.flows.every(f => unapplied.has(f.id))
-    const color = EDGE_COLORS[p.kind]
-    const dash = edgeDash(p.kind, draft)
-    return [{
-      id,
-      type: 'flow',
-      source: p.source,
-      target: p.target,
-      // The map is read with the pointer or with the zone buttons: the edges take no focus (the panels list the flows).
-      focusable: false,
-      zIndex: observed ? 2 : 1,
-      style: { stroke: color, strokeWidth: observed ? 1.75 : 2, ...(dash ? { strokeDasharray: dash, strokeLinecap: draft ? 'round' : undefined } : {}) },
-      markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
-      data: {
-        kind: p.kind,
-        services: [...p.services].sort(byText),
-        label: groupServices([...p.services]),
-        count: observed ? p.observed.length : p.flows.length,
-        flows: [...p.flows].sort((a, b) => byText(a.id, b.id)),
-        observed: [...p.observed].sort((a, b) => byText(a.id, b.id)),
-        draft,
-        fromGroup: endShapes.get(p.source)!.group,
-        toGroup: endShapes.get(p.target)!.group,
-        path: place.path,
-        points: place.points,
-        label_x: place.label.x,
-        label_y: place.label.y,
-        label_w: place.label.w,
-        label_h: place.label.h,
-        small: observed,
-        particle: p.kind === 'allowed' && !draft,
-        color,
-      } satisfies MapEdgeData,
-    }]
+    const place = placed.get(pairKey(p))
+    return place ? [toEdge(p, place, endShapes, unapplied)] : []
   })
 
   return { nodes, edges }

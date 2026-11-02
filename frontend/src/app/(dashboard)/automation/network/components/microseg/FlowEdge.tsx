@@ -26,10 +26,14 @@ export const isSampled = (source: string, target: string) => /^(guest|more):/.te
 
 /** What an edge says to a screen reader: "web to db: tcp/443", "web-1 (web) to db-1 (db): 2 unprotected flows". */
 export function edgeAria(t: EdgeT, names: MapNames, source: string, target: string, d: MapEdgeData): string {
-  const what = d.kind === 'unprotected' ? t('countUnprotected', { count: d.count })
-    : d.kind === 'blocked' ? t('countBlocked', { count: d.count })
-      : d.services.join(', ')
-  return t('aria', { from: names.end(source), to: names.end(target), services: what })
+  return t('aria', { from: names.end(source), to: names.end(target), services: edgeContent(t, d) })
+}
+
+/** What an edge carries, for its name: the count of an observed edge, the services of an allowed one. */
+function edgeContent(t: EdgeT, d: MapEdgeData): string {
+  if (d.kind === 'unprotected') return t('countUnprotected', { count: d.count })
+  if (d.kind === 'blocked') return t('countBlocked', { count: d.count })
+  return d.services.join(', ')
 }
 
 /** "14 hits between zone web and zone db on tcp/22 (sample pair shown)": the hits are the zone pair's, not the guests'. */

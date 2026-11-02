@@ -28,13 +28,15 @@ const seen = (id: string, over: Partial<MicrosegSuggestion> = {}): MicrosegSugge
   proto: 'tcp', dport: '22', hits: 14, first_seen: '2026-11-02T10:00:00Z', last_seen: '2026-11-02T11:00:00Z', status: 'pending', ...over,
 })
 
-const edgeData = (kind: MapEdgeKind, over: Partial<MapEdgeData> = {}): MapEdgeData => ({
+type EdgeData = MapEdgeData & { dimmed?: boolean }
+
+const edgeData = (kind: MapEdgeKind, over: Partial<EdgeData> = {}): EdgeData => ({
   kind, services: ['tcp/22', 'tcp/443'], label: 'tcp/22, 443', count: 1, flows: [] as MicrosegFlow[], observed: [], draft: false,
   fromGroup: 'zone:zw', toGroup: 'zone:zd', path: 'M0 0 L400 0', points: [{ x: 0, y: 0 }, { x: 400, y: 0 }],
   label_x: 200, label_y: 0, label_w: 150, label_h: 22, small: false, particle: false, color: '#2e7d32', ...over,
 })
 
-function renderEdge(source: string, target: string, data: MapEdgeData & { dimmed?: boolean }, onClick = vi.fn()) {
+function renderEdge(source: string, target: string, data: EdgeData, onClick = vi.fn()) {
   const props = { id: 'e1', source, target, data, style: { stroke: data.color }, markerEnd: 'url(#arrow)' } as unknown as EdgeProps
   renderWithProviders(
     <EdgeClickContext.Provider value={onClick}>

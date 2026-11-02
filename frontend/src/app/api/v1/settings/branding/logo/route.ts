@@ -4,6 +4,7 @@ import { scopedBrandingUrl } from '@/lib/branding/urls'
 import { requireBrandingAdmin } from '@/lib/branding/guard'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { putAsset, deleteAsset } from '@/lib/branding/assetStore'
+import { LOGO_SLOT, EMAIL_LOGO_SLOT, syncEmailLogo } from '@/lib/branding/emailLogo'
 import { withAudit } from '@/lib/audit/withAudit'
 
 const SERVE_PATH = '/api/v1/settings/branding/uploads'
@@ -31,6 +32,13 @@ async function handlePost(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer())
     await putAsset(tenantId, 'branding', type, ext, file.type, buffer)
 
+    // The emails need a PNG of the logo (clients do not display SVG, WEBP or
+    // ICO). The upload itself has succeeded: a failure here only costs the
+    // emails their logo, so it is logged rather than returned.
+    if (type === LOGO_SLOT) {
+      await syncEmailLogo(tenantId, buffer).catch(err => console.error('[branding] email logo copy failed:', err))
+    }
+
     const imageUrl = scopedBrandingUrl(`${SERVE_PATH}/${type}.${ext}?t=${Date.now()}`, tenantId, tenantId)
     return NextResponse.json({ success: true, imageUrl })
   } catch (error: any) {
@@ -48,6 +56,7 @@ async function handleDelete(req: Request) {
     if (!SLOTS.includes(type)) return NextResponse.json({ error: 'Invalid type' }, { status: 400 })
 
     await deleteAsset(tenantId, 'branding', type)
+    if (type === LOGO_SLOT) await deleteAsset(tenantId, 'branding', EMAIL_LOGO_SLOT)
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

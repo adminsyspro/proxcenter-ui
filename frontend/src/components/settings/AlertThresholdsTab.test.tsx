@@ -3,9 +3,14 @@ import { cleanup } from '@testing-library/react'
 
 import { renderWithProviders, screen, userEvent, waitFor, within } from '@/__tests__/setup/renderWithProviders'
 
+import { useLicense } from '@/contexts/LicenseContext'
 import AlertThresholdsTab, { formatCalm, formatSeconds } from './AlertThresholdsTab'
 
 const { fetchMock } = vi.hoisted(() => ({ fetchMock: vi.fn() }))
+
+vi.mock('@/contexts/LicenseContext', () => ({
+  useLicense: vi.fn(() => ({ isEnterprise: false, loading: false })),
+}))
 
 const endpoint = '/api/v1/settings/alerts/thresholds'
 
@@ -336,5 +341,65 @@ describe('AlertThresholdsTab sFlow telemetry', () => {
     await telemetryCard()
     await user.click(screen.getByRole('button', { name: /save/i }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/orchestrator/sflow/health/check', { method: 'POST' }))
+  })
+})
+
+describe('AlertThresholdsTab Ceph history retention', () => {
+  const savedBody = (): Record<string, unknown> => {
+    const call = fetchMock.mock.calls.find((c: unknown[]) => (c[1] as RequestInit | undefined)?.method === 'PUT')
+
+    return JSON.parse((call?.[1] as RequestInit).body as string)
+  }
+
+  const retention = () => screen.findByRole('spinbutton', { name: 'days of Ceph history kept for the cockpit' })
+
+  it('retention field saved with thresholds', async () => {
+    vi.mocked(useLicense).mockReturnValue({ isEnterprise: true, loading: false } as any)
+    const user = userEvent.setup()
+
+    renderWithProviders(<AlertThresholdsTab />)
+    await openSection('Performance & replication')
+    const field = await retention()
+
+    expect(field).toHaveValue(30)
+    await user.clear(field)
+    await user.type(field, '45')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(true))
+
+    expect(savedBody()).toMatchObject({ ceph_metrics_retention_days: 45 })
+  })
+
+  it('caps the retention at 365 days', async () => {
+    vi.mocked(useLicense).mockReturnValue({ isEnterprise: true, loading: false } as any)
+    const user = userEvent.setup()
+
+    renderWithProviders(<AlertThresholdsTab />)
+    await openSection('Performance & replication')
+    const field = await retention()
+
+    await user.clear(field)
+    await user.type(field, '900')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(true))
+    expect(savedBody()).toMatchObject({ ceph_metrics_retention_days: 365 })
+  })
+
+  it('retention field hidden in community, yet carried unchanged on save', async () => {
+    vi.mocked(useLicense).mockReturnValue({ isEnterprise: false, loading: false } as any)
+    const user = userEvent.setup()
+
+    renderWithProviders(<AlertThresholdsTab />)
+    await openSection('Performance & replication')
+    await screen.findByText('Guest disk latency')
+
+    expect(screen.queryByRole('spinbutton', { name: 'days of Ceph history kept for the cockpit' })).not.toBeInTheDocument()
+    expect(screen.queryByText('days of Ceph history kept for the cockpit')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(true))
+    expect(savedBody()).toMatchObject({ ceph_metrics_retention_days: 30 })
   })
 })

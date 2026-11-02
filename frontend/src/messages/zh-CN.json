@@ -828,6 +828,8 @@
     "diskLatencyRetention": "为 Disk I/O 图表保留的延迟历史天数",
     "metricsRetention": "指标历史保留天数",
     "metricsRetentionDesc": "限制仪表板的资源消耗排行和图表可回溯的时间范围。更早的采集数据由编排器删除。",
+    "cephMetricsRetention": "为 Ceph 驾驶舱保留的 Ceph 历史天数",
+    "cephMetricsRetentionDesc": "限制 Ceph 驾驶舱图表可回溯的时间范围(1 到 365)。仅限 Enterprise。",
     "metricsInterval": "采集间隔",
     "snapshots": "快照",
     "collectionRecovery": "采集与恢复",
@@ -4491,6 +4493,9 @@
     "sshUseSudoHelper": "当 SSH 用户不是 root 时，在命令前加 sudo",
     "replicationNetwork": "复制网络 (CIDR)",
     "replicationNetworkHelper": "复制流将通过此集群节点在该网络中的地址到达节点，而不是管理地址。留空则继续使用管理网络；对端集群的节点必须有到达该网络的路由。",
+    "cephExporterPort": "ceph-exporter 端口",
+    "cephExporterPortHelper": "此集群各节点上 ceph-exporter 的 TCP 端口。ProxCenter 通过该端口读取每个 OSD 的 I/O 计数器，用于 Ceph 驾驶舱（默认 9926）。",
+    "errorCephExporterPortInvalid": "ceph-exporter 端口必须是 1 到 65535 之间的数字",
     "errorReplicationNetworkInvalid": "复制网络必须是 CIDR 格式，例如 10.10.50.0/24",
     "siteRecovery": "站点恢复",
     "siteRecoveryInfo": "当此集群是复制作业的源或目标时，站点恢复使用的设置。复制流依赖上方的 SSH 访问，请先启用。",
@@ -8309,7 +8314,8 @@
     "osdOkToStopHint": "会先查询 ceph osd ok-to-stop：仅当没有归置组会离线时才会操作该 OSD。",
     "notOkToStop": "现在停止 {service} 并不安全",
     "notOkToStopPgs": "{count, plural, other {OSD 停止期间将有 # 个归置组离线：这些数据将不可用。}}",
-    "notOkToStopUnknown": "无法评估 ceph osd ok-to-stop：{error}",
+    "notOkToStopBare": "Ceph 报告当前停止此 OSD 并不安全。",
+    "notOkToStopUnknown": "无法询问 Ceph，因此停止被视为不安全。",
     "acknowledge": "我已了解，仍然继续",
     "startStarted": "任务已启动：正在 {host} 上启动 {service}",
     "stopStarted": "任务已启动：正在 {host} 上停止 {service}",
@@ -8324,71 +8330,6 @@
     "monCreateStarted": "任务已启动：正在 {node} 上创建监视器",
     "mgrCreateStarted": "任务已启动：正在 {node} 上创建管理器",
     "createFailed": "创建失败：{error}"
-  },
-  "cephPage": {
-    "sevenDays": "7天",
-    "performance": "性能",
-    "osd": "OSD",
-    "host": "主机",
-    "latencyHeader": "延迟",
-    "pool": "池",
-    "replication": "副本",
-    "pgs": "PGs",
-    "objects": "对象",
-    "monitor": "监视器",
-    "address": "地址",
-    "quorum": "仲裁",
-    "leader": "领导者",
-    "inQuorum": "在仲裁中",
-    "out": "Out",
-    "upIn": "UP / IN",
-    "upOut": "UP / OUT",
-    "downIn": "DOWN / IN",
-    "downOut": "DOWN / OUT",
-    "iops": "IOPS",
-    "throughput": "吞吐量",
-    "readLabel": "读取",
-    "writeLabel": "写入",
-    "readIops": "读 IOPS",
-    "writeIops": "写 IOPS",
-    "commitLatency": "提交延迟",
-    "deviceClass": "设备类别",
-    "applyLatency": "应用延迟",
-    "reweight": "重新加权",
-    "pgTarget": "目标归置组",
-    "autoscale": "PG 自动伸缩",
-    "crushRule": "CRUSH 规则",
-    "application": "应用",
-    "rank": "排名",
-    "storeSize": "存储大小",
-    "recovery": "恢复",
-    "recoveryObjects": "{count} 对象/秒",
-    "totalLabel": "总计",
-    "upLabel": "Up",
-    "inLabel": "In",
-    "downLabel": "Down",
-    "totalInQuorum": "在仲裁中",
-    "quorumPrefix": "仲裁",
-    "placementGroups": "归置组",
-    "totalPgs": "总 PGs",
-    "poolsLabel": "池",
-    "osdsTab": "OSDs",
-    "poolsTab": "池",
-    "monitorsTab": "监视器",
-    "mdsTab": "MDS",
-    "osdsTitle": "OSDs",
-    "monitorsTitle": "监视器",
-    "healthOk": "健康正常",
-    "healthWarning": "警告",
-    "healthError": "错误",
-    "healthUnknown": "未知",
-    "rShort": "读",
-    "wShort": "写",
-    "live": "实时",
-    "iopsCeph": "Ceph IOPS",
-    "osdsAndPools": "OSDs 和池",
-    "livePerformance": "实时性能",
-    "monitorHealth": "健康监控"
   },
   "storageOverview": {
     "latency": "延迟",
@@ -10009,9 +9950,7 @@
     "noDrs": "暂无 DRS 集群",
     "noDrsDesc": "未找到支持 DRS 的 Proxmox 集群。连接一个多节点集群以使用 DRS。",
     "noStorage": "暂无存储",
-    "noStorageDesc": "未找到存储卷。连接集群后存储将显示在此处。",
-    "noCeph": "暂无 Ceph 集群",
-    "noCephDesc": "在您的连接中未检测到 Ceph 集群。在 Proxmox 集群上启用 Ceph 即可在此查看详情。"
+    "noStorageDesc": "未找到存储卷。连接集群后存储将显示在此处。"
   },
   "commandPalette": {
     "placeholder": "搜索页面、虚拟机、节点、IP、MAC 地址...",
@@ -10119,6 +10058,7 @@
     "noNotes": "暂无备注",
     "noWarningsErrors": "无警告/错误",
     "cephVersion": "Ceph 版本",
+    "openCephCockpit": "打开 Ceph 驾驶舱",
     "services": "服务",
     "monitors": "监视器",
     "managers": "管理器",
@@ -12158,6 +12098,543 @@
       "open": "创建事件",
       "view": "查看事件",
       "availability": "查看可用性"
+    }
+  },
+  "cephCockpit": {
+    "tabs": {
+      "overview": "概览",
+      "osd": "OSD",
+      "pools": "存储池",
+      "crush": "CRUSH",
+      "services": "服务",
+      "perf": "性能"
+    },
+    "header": {
+      "cluster": "Ceph 集群",
+      "updated": "{age}前更新",
+      "range": "时段",
+      "refresh": "刷新"
+    },
+    "range": {
+      "live": "实时",
+      "1h": "1 小时",
+      "24h": "24 小时",
+      "7d": "7 天",
+      "30d": "30 天"
+    },
+    "age": {
+      "seconds": "{count} 秒",
+      "minutes": "{count} 分钟",
+      "hours": "{count} 小时",
+      "days": "{count} 天"
+    },
+    "health": {
+      "HEALTH_OK": "正常",
+      "HEALTH_WARN": "警告",
+      "HEALTH_ERR": "错误",
+      "unknown": "未知"
+    },
+    "rail": {
+      "title": "集群健康",
+      "errors": "错误",
+      "warnings": "警告",
+      "sevErr": "ERR",
+      "sevWarn": "WARN",
+      "showDetail": "显示详情",
+      "hideDetail": "隐藏详情",
+      "open": "打开 {target}",
+      "flags": "OSD 标志",
+      "flagsNone": "OSD 标志：无",
+      "editFlags": "编辑",
+      "showChecks": "显示告警",
+      "hideChecks": "隐藏告警"
+    },
+    "target": {
+      "flags": "标志"
+    },
+    "stale": {
+      "title": "集群无法访问",
+      "body": "上次成功读取于 {age}前。显示的数值为最后收到的数据。",
+      "inventory": "清单已 {age}未刷新"
+    },
+    "error": {
+      "title": "无法读取此 Ceph 集群",
+      "retry": "重试",
+      "connections": "无法列出 Proxmox 连接"
+    },
+    "empty": {
+      "title": "没有 Ceph 集群",
+      "description": "在您的 Proxmox 连接中未发现 Ceph 集群。在集群上启用 Ceph 后，即可在此查看其健康状况、OSD 和存储池。",
+      "clusterTitle": "此集群没有 Ceph",
+      "clusterDescription": "此连接可以访问，但没有运行 Ceph 集群。请在上方选择其他集群。",
+      "hintOsds": "OSD 和存储池",
+      "hintLive": "实时性能",
+      "hintHealth": "健康监控",
+      "storages": "存储"
+    },
+    "ui": {
+      "noData": "无数据",
+      "separator": " · ",
+      "listSeparator": "、",
+      "thresholdBar": "已用 {used}%，nearfull 为 {nearfull}%，full 为 {full}%"
+    },
+    "overview": {
+      "tiles": {
+        "raw": "原始容量",
+        "rawUsed": "{used} / {total}",
+        "trend": "{period}内 {delta} 个百分点",
+        "iops": "客户端 IOPS",
+        "throughput": "客户端吞吐量",
+        "latency": "OSD 延迟",
+        "latencyUnit": "ms 平均",
+        "latencyMax": "最大 {ms} ms（osd.{osd}）",
+        "read": "读 {value}",
+        "write": "写 {value}",
+        "readLabel": "读取",
+        "writeLabel": "写入"
+      },
+      "recovery": {
+        "title": "正在恢复",
+        "waiting": "数据已降级，尚未开始恢复",
+        "objectsRate": "每秒 {count} 个对象",
+        "degraded": "{count, plural, other {# 个降级对象}}",
+        "misplaced": "{count, plural, other {# 个错位对象}}",
+        "showPerf": "恢复曲线"
+      },
+      "hostMap": {
+        "title": "主机和 OSD",
+        "legendCards": "圆环 = 使用率，边框 = 状态",
+        "problemOnly": "仅显示有问题的主机",
+        "hiddenHealthy": "{count, plural, other {已隐藏 # 台主机，均正常}}",
+        "noProblemHost": "没有有问题的主机",
+        "crush": "CRUSH 图",
+        "osdCount": "{count, plural, other {# 个 OSD}}",
+        "mon": "mon",
+        "monLeader": "主监视器",
+        "monOutOfQuorum": "监视器不在仲裁中",
+        "mgrActive": "活动 mgr",
+        "mgrStandby": "mgr",
+        "mds": "mds",
+        "up": "up",
+        "down": "down",
+        "in": "in",
+        "out": "out",
+        "flag": "标志",
+        "latency": "{ms} ms",
+        "pgs": "{count} 个 PG",
+        "open": "打开 osd.{id}",
+        "avg": "平均 {pct}",
+        "max": "最大 {pct}",
+        "downCount": "{count} 个 down",
+        "legendLow": "< {pct}",
+        "legendMid": "{from}~{to}",
+        "legendAbove": "≥ {pct}",
+        "flags": "标志：{flags}",
+        "fill": "已用 {pct}",
+        "empty": "清单中没有 OSD",
+        "view": {
+          "label": "主机图视图",
+          "compact": "紧凑",
+          "dense": "密集"
+        }
+      },
+      "trend": {
+        "unavailable": "历史数据不可用",
+        "notEnough": "{period}内暂无数据"
+      },
+      "missing": "–"
+    },
+    "osd": {
+      "search": "搜索 OSD 或主机",
+      "hostFilter": "主机",
+      "allHosts": "所有主机",
+      "classFilter": "类别",
+      "allClasses": "所有类别",
+      "filters": {
+        "all": "全部",
+        "problem": "有问题",
+        "down": "Down",
+        "out": "Out"
+      },
+      "columns": {
+        "osd": "OSD",
+        "state": "状态",
+        "class": "类别",
+        "fill": "使用率",
+        "latency": "延迟",
+        "iops": "IOPS",
+        "throughput": "吞吐量",
+        "pgs": "PG"
+      },
+      "group": {
+        "osdCount": "{count, plural, other {# 个 OSD}}",
+        "fold": "折叠 {host}",
+        "unfold": "展开 {host}"
+      },
+      "state": {
+        "up": "up",
+        "down": "down",
+        "in": "in",
+        "out": "out"
+      },
+      "latency": "{ms} ms",
+      "issues": "{count, plural, other {# 项健康检查指向此 OSD}}",
+      "empty": "清单中没有 OSD",
+      "emptyFiltered": "没有 OSD 符合这些筛选条件",
+      "open": "打开 osd.{id}",
+      "pager": {
+        "range": "第 {from} 到 {to} 项，共 {total} 项",
+        "prev": "上一页",
+        "next": "下一页"
+      },
+      "drawer": {
+        "close": "关闭",
+        "prev": "上一个 OSD（向上箭头）",
+        "next": "下一个 OSD（向下箭头）",
+        "subtitle": "{host} · {class} · Ceph {version}",
+        "subtitleNoVersion": "{host} · {class}",
+        "state": "状态",
+        "actions": "操作",
+        "fill": "使用率",
+        "fillDetail": "已用 {used} / 共 {total}，剩余 {free}",
+        "fillPct": "已用 {pct}",
+        "latency": "提交 / 应用延迟",
+        "latencyValue": "{commit} / {apply} ms",
+        "pgs": "放置组",
+        "weights": "重新加权 / CRUSH 权重",
+        "device": "设备类别",
+        "pools": "放置在此的存储池",
+        "poolsNone": "无",
+        "version": "版本",
+        "checks": "健康检查",
+        "unknown": "未知",
+        "osdType": "对象存储",
+        "dataDevice": "数据设备",
+        "dbDevice": "DB 设备",
+        "walDevice": "WAL 设备",
+        "onDataDevice": "位于数据设备上"
+      },
+      "actions": {
+        "scrub": "Scrub",
+        "deepScrub": "深度 scrub",
+        "in": "标记为 in",
+        "out": "标记为 out",
+        "stop": "停止",
+        "restart": "重启",
+        "noPermission": "操作 OSD 需要 storage.admin 权限",
+        "alreadyIn": "osd.{id} 已处于 in 状态",
+        "alreadyOut": "osd.{id} 已处于 out 状态",
+        "notRunning": "osd.{id} 已 down",
+        "scrubStarted": "已请求对 osd.{id} 执行 scrub",
+        "deepScrubStarted": "已请求对 osd.{id} 执行深度 scrub",
+        "inStarted": "正在将 osd.{id} 标记为 in",
+        "outStarted": "正在将 osd.{id} 标记为 out",
+        "stopStarted": "任务已启动：正在停止 osd.{id}",
+        "restartStarted": "任务已启动：正在重启 osd.{id}",
+        "failed": "对 osd.{id} 的操作失败：{error}",
+        "start": "启动",
+        "startStarted": "任务已启动：正在启动 osd.{id}",
+        "nodeUnknown": "此连接中没有与 CRUSH 主机 {host} 匹配的节点，无法发送操作",
+        "alreadyRunning": "osd.{id} 已在运行"
+      },
+      "confirm": {
+        "title": {
+          "out": "将 osd.{id} 标记为 out？",
+          "stop": "停止 osd.{id}？",
+          "restart": "重启 osd.{id}？"
+        },
+        "body": {
+          "out": "Ceph 会将 osd.{id} 的数据（{pgs} 个放置组）迁移到集群中的其他 OSD。",
+          "stop": "osd.{id} 将在 {host} 上停止。停止期间其放置组的副本数会减少。",
+          "restart": "osd.{id} 将在 {host} 上重启，数秒内不可用。"
+        },
+        "impactTitle": "其他 OSD 的预计使用率",
+        "before": "之前",
+        "after": "之后",
+        "moved": "约 {size} 将迁移到另外 {count} 个 OSD。",
+        "moveNothing": "osd.{id} 已处于 out 状态，无需迁移。",
+        "noReceiver": "没有其他 {class} 类 OSD 可以接收这些数据。",
+        "projectedUnder": "最满的接收 OSD 将达到 {pct}，低于 nearfull（{nearfull}）。",
+        "projectedOver": "最满的接收 OSD 将达到 {pct}，超过 nearfull（{nearfull}）。",
+        "stopNote": "停止本身不会迁移数据：Ceph 会在 down-out 延迟后将该 OSD 标记为 out，此估算即对应那一时刻。",
+        "verdictChecking": "正在询问 Ceph（ceph osd ok-to-stop）...",
+        "verdictOk": "ceph osd ok-to-stop：安全，不会有放置组离线。",
+        "verdictRefused": "ceph osd ok-to-stop：被拒绝，将有 {count} 个放置组离线。",
+        "verdictRefusedBare": "ceph osd ok-to-stop：被拒绝。",
+        "verdictUnknown": "ceph osd ok-to-stop 未给出结论：{error}",
+        "verdictUnknownBare": "ceph osd ok-to-stop 未给出结论。",
+        "typeIntro": "需要输入 OSD 名称，原因：",
+        "reasonRefused": "Ceph 拒绝了该操作。",
+        "reasonUnknown": "Ceph 未给出结论。",
+        "reasonNearfull": "预计使用率超过 nearfull。",
+        "typePrompt": "输入 {name} 以确认",
+        "typeLabel": "OSD 名称",
+        "cancel": "取消",
+        "action": {
+          "out": "标记为 out",
+          "stop": "停止",
+          "restart": "重启"
+        },
+        "forceAction": {
+          "out": "仍然标记为 out",
+          "stop": "仍然停止",
+          "restart": "仍然重启"
+        },
+        "error": "操作失败：{error}",
+        "refusedNow": "Ceph 现在拒绝该操作。输入 OSD 名称以强制执行。",
+        "estimateUnknown": "无法估算：无法读取 osd.{id} 的使用率（已 down、大小未知或未上报使用率），因此不知道会迁移多少数据。",
+        "reasonLoadUnknown": "无法估算要迁移的数据量。"
+      },
+      "glyph": {
+        "upIn": "up 且 in",
+        "upOut": "up 但 out",
+        "down": "down",
+        "unknown": "状态未知"
+      },
+      "trend": {
+        "collecting": "正在收集…",
+        "tooltip": "{min} / {avg} / {max} ms(所选时间段内最低平均值 / 平均 / 观测到的最差值)",
+        "tooltipSession": "{min} / {avg} / {max} ms(自打开此页面以来的最低 / 平均 / 最差读数)"
+      },
+      "activity": {
+        "title": "活动",
+        "iops": "IOPS",
+        "throughput": "吞吐量",
+        "read": "读取",
+        "write": "写入",
+        "measuring": "测量中…",
+        "captionSession": "实时，最近 5 分钟",
+        "captionHistoryLive": "最近 1 小时历史，然后为实时",
+        "captionHistory": "{period} 历史",
+        "unreachable": "要查看更精确的指标（每个 OSD 的 IOPS 和吞吐量），请在 Ceph 节点上安装 ceph-exporter 软件包，并向 ProxCenter 开放端口 {port}。",
+        "unreachableRefused": "{node} 的端口 {port} 上没有任何服务在监听：ceph-exporter 软件包未安装，或其服务已停止。",
+        "unreachableTimeout": "{node} 在端口 {port} 上没有响应：请在防火墙中向 ProxCenter 开放此端口。",
+        "unreachableInvalid": "{node} 的端口 {port} 未返回 ceph-exporter 指标：请检查连接上设置的端口。",
+        "showSteps": "显示安装步骤",
+        "hideSteps": "隐藏安装步骤",
+        "stepsIntro": "在每个 Ceph 节点上以 root 身份执行：",
+        "copy": "复制",
+        "copied": "步骤已复制",
+        "copyFailed": "复制失败",
+        "notExported": "节点 {node} 的 exporter 有响应，但未上报 osd.{id}。请确认该 OSD 运行在此节点上。",
+        "noNode": "活动不可用：没有与主机 {host} 对应的 Proxmox 节点。",
+        "unavailable": "无法读取"
+      },
+      "io": {
+        "readShort": "读",
+        "writeShort": "写",
+        "measuring": "测量中…",
+        "unavailable": "无法读取导出器数据",
+        "noNode": "此主机不对应任何 Proxmox 节点：无法读取",
+        "tooltip": "读 {read}，写 {write}",
+        "tooltipSession": "读 {read}，写 {write}（自打开此页面起的曲线）"
+      }
+    },
+    "pools": {
+      "columns": {
+        "pool": "存储池",
+        "usage": "用途",
+        "protection": "保护",
+        "rule": "CRUSH 规则",
+        "pg": "PG",
+        "fill": "净使用率",
+        "used": "已用",
+        "avail": "净可用",
+        "objects": "对象"
+      },
+      "open": "打开存储池 {name}",
+      "empty": "没有存储池",
+      "protection": "副本 {size} / 最小 {min}",
+      "autoscale": "自动 {mode}",
+      "ruleOpen": "打开 CRUSH 选项卡,规则 {rule}",
+      "pager": {
+        "range": "第 {from} 到 {to} 项,共 {total} 项",
+        "prev": "上一页",
+        "next": "下一页"
+      },
+      "drawer": {
+        "close": "关闭",
+        "prev": "上一个存储池(向上箭头)",
+        "next": "下一个存储池(向下箭头)",
+        "subtitle": "{app} · {type}",
+        "fill": "净使用率",
+        "fillDetail": "已用 {used},净可用 {free}",
+        "storages": "PVE 存储",
+        "storagesNone": "没有 PVE 存储使用此存储池",
+        "protection": "保护",
+        "rule": "CRUSH 规则",
+        "pgs": "归置组",
+        "pgTarget": "目标 PG 数",
+        "pgTargetValue": "{target}(当前 {current})",
+        "autoscale": "PG 自动扩缩",
+        "used": "已用",
+        "avail": "净可用",
+        "objects": "对象",
+        "quotaBytes": "容量配额",
+        "quotaObjects": "对象配额",
+        "storagesUnavailable": "无法读取 PVE 存储",
+        "pgRecommended": "自动扩缩建议",
+        "pgRecommendedValue": "{final}(理想值 {ideal})"
+      },
+      "storageUnavailable": "PVE 存储不可用"
+    },
+    "crush": {
+      "error": "无法读取此集群的 CRUSH 映射",
+      "tree": {
+        "title": "层级结构",
+        "meta": "{type} · {count} 个 OSD",
+        "upCount": "{up}/{total} up",
+        "openOsd": "打开 {name}",
+        "monLeader": "mon ★",
+        "foldAll": "全部折叠",
+        "unfoldAll": "全部展开",
+        "empty": "CRUSH 映射中没有此类别的 OSD"
+      },
+      "rules": {
+        "title": "规则与容错能力",
+        "source": "来源：反编译的 CRUSH 映射",
+        "empty": "CRUSH 映射中没有规则",
+        "type": {
+          "replicated": "副本",
+          "erasure": "纠删码"
+        },
+        "class": "类别 {class}",
+        "pools": "存储池：",
+        "noPool": "无",
+        "openPool": "打开存储池 {name}"
+      },
+      "domain": {
+        "osd": "{count, plural, other {OSD}}",
+        "host": "{count, plural, other {主机}}",
+        "chassis": "{count, plural, other {机箱}}",
+        "rack": "{count, plural, other {机架}}",
+        "row": "{count, plural, other {机列}}",
+        "pdu": "{count, plural, other {PDU}}",
+        "pod": "{count, plural, other {Pod}}",
+        "room": "{count, plural, other {机房}}",
+        "datacenter": "{count, plural, other {数据中心}}",
+        "zone": "{count, plural, other {区域}}",
+        "region": "{count, plural, other {地域}}",
+        "root": "{count, plural, other {根}}"
+      },
+      "step": {
+        "take": "{class, select, none {取 {item}} other {取 {item}，类别 {class}}}",
+        "emit": "输出",
+        "choose_firstn": "{kind, select, all {每个副本选一个{type}} less {除 {num} 个外的所有副本，每个{type}一个} other {选 {num} 个{type}}}",
+        "choose_indep": "{kind, select, all {每个副本选一个{type}（indep）} less {除 {num} 个外的所有副本，每个{type}一个（indep）} other {选 {num} 个{type}（indep）}}",
+        "chooseleaf_firstn": "{kind, select, all {每个副本选一个{type}，再在其中各选一个 OSD} less {除 {num} 个外的所有副本，每个{type}一个，再在其中各选一个 OSD} other {选 {num} 个{type}，再在其中各选一个 OSD}}",
+        "chooseleaf_indep": "{kind, select, all {每个副本选一个{type}，再在其中各选一个 OSD（indep）} less {除 {num} 个外的所有副本，每个{type}一个，再在其中各选一个 OSD（indep）} other {选 {num} 个{type}，再在其中各选一个 OSD（indep）}}",
+        "set": "调优：{op}",
+        "other": "步骤 {op}"
+      },
+      "tolerance": {
+        "tolerates": "可承受丢失 {count} 个{domain}而不中断。",
+        "blocks": "一旦丢失一个{domain}，I/O 即阻塞，直到重建完成。",
+        "insufficient": "需要 {needed} 个带有正确类别 OSD 的{domain}，仅找到 {domains} 个。",
+        "unknown": "无法计算此规则的容错能力。"
+      }
+    },
+    "services": {
+      "title": "Ceph 服务",
+      "select": "高亮 {service}",
+      "noNode": "没有与主机 {host} 对应的 PVE 节点：无法执行操作",
+      "group": {
+        "mon": "监视器",
+        "mgr": "管理器",
+        "mds": "元数据服务器（CephFS）",
+        "monMeta": "{total} 个中 {inQuorum} 个在仲裁中",
+        "mgrMeta": "{active} 个活动，{standby} 个备用",
+        "mgrMetaStopped": "{active} 个活动，{standby} 个备用，{stopped} 个已停止",
+        "mdsMeta": "{total} 个中 {active} 个活动",
+        "none": "无"
+      },
+      "col": {
+        "daemon": "守护进程",
+        "host": "主机",
+        "state": "状态",
+        "role": "角色",
+        "address": "地址",
+        "version": "版本",
+        "actions": "操作"
+      },
+      "state": {
+        "quorum": "在仲裁中",
+        "outOfQuorum": "不在仲裁中",
+        "active": "活动",
+        "standby": "备用",
+        "standbyReplay": "备用重放",
+        "stopped": "已停止",
+        "other": "未知"
+      },
+      "role": {
+        "leader": "领导者",
+        "peon": "普通成员",
+        "active": "活动",
+        "standby": "备用",
+        "rank": "排名 {rank}"
+      },
+      "empty": {
+        "mon": "未报告监视器",
+        "mgr": "未报告管理器",
+        "mds": "此集群没有 CephFS，因此没有元数据服务器"
+      },
+      "versions": {
+        "title": "Ceph 版本",
+        "mixed": "版本混用",
+        "mixedHint": "升级未完成：第一个版本运行在大多数守护进程上。",
+        "unknown": "未报告版本",
+        "item": "{version}：{count} 个守护进程"
+      },
+      "create": {
+        "button": "创建守护进程",
+        "title": "创建守护进程",
+        "kind": "守护进程",
+        "mon": "监视器",
+        "mgr": "管理器",
+        "node": "节点",
+        "noNode": "每个节点都已运行一个",
+        "noPermission": "管理 Ceph 服务需要 storage.admin 权限",
+        "cancel": "取消",
+        "next": "下一步"
+      }
+    },
+    "perf": {
+      "iops": {
+        "title": "客户端 IOPS"
+      },
+      "throughput": {
+        "title": "客户端吞吐量"
+      },
+      "recovery": {
+        "title": "恢复与未清理的 PG",
+        "idle": "没有正在进行的恢复，所有 PG 均已清理"
+      },
+      "series": {
+        "read": "读取",
+        "write": "写入",
+        "recovery": "恢复",
+        "unclean": "未清理的 PG"
+      },
+      "live": {
+        "waiting": "正在收集实时数据，几秒后将显示曲线",
+        "captionHistory": "最近 1 小时历史，然后为实时"
+      },
+      "chartLabel": "{title}，{period}",
+      "slowest": {
+        "title": "最慢的 OSD",
+        "subtitleLive": "清单中的当前延迟",
+        "subtitlePeriod": "该时段平均值",
+        "all": "全部（{count}）",
+        "allPlain": "全部",
+        "mean": "集群平均 {ms} ms",
+        "empty": "暂无延迟读数",
+        "open": "打开 OSD {id}",
+        "max": "最大 {ms} ms",
+        "value": "{ms} ms",
+        "threshold": "从 {ms} ms 起视为慢",
+        "openSlow": "打开 OSD {id}，较慢",
+        "slow": "较慢"
+      }
     }
   }
 }

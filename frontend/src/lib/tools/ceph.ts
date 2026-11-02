@@ -485,6 +485,11 @@ function pickQueryNode(ctx: ToolContext, connId: string): string {
 type LoadedCeph = { nodeQueried: string; payload: CephPayload; topology: CephTopology }
 
 async function loadCeph(ctx: ToolContext, connection: ResolvedConnection): Promise<LoadedCeph | null> {
+  // Ceph is a whole-cluster object: a caller the Ceph gate did not let
+  // through (IaaS tenant, unresolved verdict) gets the answer of a cluster
+  // without Ceph, which confirms nothing, and Proxmox is never asked.
+  if (ctx.cephVisible !== true) return null
+
   const nodeQueried = pickQueryNode(ctx, connection.id)
   const conn = await getConnectionById(connection.id, ctx.tenantId)
   const payload = await gatherCephPayload(conn, nodeQueried)
@@ -676,6 +681,30 @@ function buildObservations(payload: CephPayload, topology: CephTopology): string
 }
 
 /* ------------------------------------------------------------------ */
+/* Cockpit links                                                      */
+/* ------------------------------------------------------------------ */
+
+/** Tabs and objects the Ceph cockpit page opens on, in its own URL format (useCockpitUrlState). */
+export type CephCockpitTab = 'overview' | 'osd' | 'pools' | 'crush' | 'services' | 'perf'
+export type CephCockpitItem = { kind: 'osd'; id: number } | { kind: 'pool'; name: string } | { kind: 'service'; name: string }
+
+/**
+ * Where the assistant sends the user for a cluster: `/storage/ceph?conn=<id>&tab=<tab>&item=<item>`.
+ * `item` is `osd.N`, `pool:<name>` or `svc:<name>`; the page reads the tab and the item from the URL.
+ */
+export function cephCockpitLink(connId: string, tab: CephCockpitTab = 'overview', item?: CephCockpitItem): string {
+  const params = [`conn=${encodeURIComponent(connId)}`, `tab=${tab}`]
+
+  if (item) {
+    const value = item.kind === 'osd' ? `osd.${item.id}` : `${item.kind === 'pool' ? 'pool' : 'svc'}:${encodeURIComponent(item.name)}`
+
+    params.push(`item=${value}`)
+  }
+
+  return `/storage/ceph?${params.join('&')}`
+}
+
+/* ------------------------------------------------------------------ */
 /* Tool 1: get_ceph_status                                            */
 /* ------------------------------------------------------------------ */
 
@@ -797,6 +826,7 @@ export const getCephStatusTool: CatalogTool = {
     + 'it returns a short list of measured findings and nothing else, and you must then report every finding it contains. '
     + 'Use focus=\'capacity\' for "how much space is left?", focus=\'devices\' for "how many NVMe devices are there?", '
     + 'and omit focus for a general "how is Ceph doing?". '
+    + 'Every result carries a cockpitLink (and each pool its own): when you point the user to a cluster or a pool, give that link as is. '
     + "Example: focus='improvements'",
   parameters: {
     type: 'object',
@@ -845,6 +875,7 @@ export const getCephStatusTool: CatalogTool = {
           hasCeph: true,
           cluster: connection.name,
           healthStatus: payload.health.status,
+          cockpitLink: cephCockpitLink(connection.id),
           findingCount: observations.length,
           findings: observations,
           // An empty list is an answer, and one the model states badly if left to
@@ -857,9 +888,11 @@ export const getCephStatusTool: CatalogTool = {
         return {
           hasCeph: true,
           cluster: connection.name,
+          cockpitLink: cephCockpitLink(connection.id, 'pools'),
           capacity: payload.capacity,
           pools: payload.pools.list.map(p => ({
             name: p.name,
+            cockpitLink: cephCockpitLink(connection.id, 'pools', { kind: 'pool', name: p.name }),
             usedGb: gb(p.usedBytes),
             maxAvailGb: gb(p.maxAvailBytes),
             percentUsed: round1(p.percentUsed),
@@ -871,6 +904,7 @@ export const getCephStatusTool: CatalogTool = {
         return {
           hasCeph: true,
           cluster: connection.name,
+          cockpitLink: cephCockpitLink(connection.id, 'osd'),
           deviceClassCounts,
           osdTotal: payload.osdCounts.total,
           osdUp: payload.osdCounts.up,
@@ -881,6 +915,7 @@ export const getCephStatusTool: CatalogTool = {
         hasCeph: true,
         cluster: connection.name,
         nodeQueried,
+        cockpitLink: cephCockpitLink(connection.id),
         // First on purpose. A 7B model weighs the head of a payload most, and
         // with this last it transcribed health, capacity, pools and monitors in
         // order and never reached the answer to "what can be improved?".
@@ -901,6 +936,7 @@ export const getCephStatusTool: CatalogTool = {
         },
         pools: payload.pools.list.map(p => ({
           name: p.name,
+          cockpitLink: cephCockpitLink(connection.id, 'pools', { kind: 'pool', name: p.name }),
           size: p.size,
           minSize: p.minSize,
           pgNum: p.pgNum,
@@ -1005,6 +1041,7 @@ export const listCephOsdsTool: CatalogTool = {
     'Ceph OSD inventory: how many OSDs each host carries, their device class, usage, and disk latency. '
     + 'Answers "how many OSDs are on each host?", "what is the highest disk latency seen?" and "which OSD is the slowest or the fullest?". '
     + 'Latency figures exclude OSDs that are down, which report a misleading 0 ms. '
+    + 'Each OSD carries a cockpitLink to its page in the Ceph cockpit: give it as is when you name that OSD. '
     + "Example: groupBy='host', sortBy='latency'",
   parameters: {
     type: 'object',
@@ -1092,6 +1129,7 @@ export const listCephOsdsTool: CatalogTool = {
         hasCeph: true,
         cluster: connection.name,
         nodeQueried,
+        cockpitLink: cephCockpitLink(connection.id, 'osd'),
         osdTotal: payload.osdCounts.total || osds.length,
         groupBy,
         sortBy,
@@ -1103,11 +1141,12 @@ export const listCephOsdsTool: CatalogTool = {
         // just as much a missing disk as a down one, only quieter.
         downOsds: osds
           .filter(o => !o.up || !o.in)
-          .map(o => ({ id: o.id, host: o.host, status: o.up ? 'out' : 'down' })),
+          .map(o => ({ id: o.id, host: o.host, status: o.up ? 'out' : 'down', cockpitLink: cephCockpitLink(connection.id, 'osd', { kind: 'osd', id: o.id }) })),
         osdsListed: Math.min(limit, osds.length),
         osds: orderOsds(osds, groupBy, sortBy).slice(0, limit).map(o => ({
           id: o.id,
           name: o.name,
+          cockpitLink: cephCockpitLink(connection.id, 'osd', { kind: 'osd', id: o.id }),
           host: o.host,
           deviceClass: o.deviceClass,
           up: o.up,

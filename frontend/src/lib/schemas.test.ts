@@ -115,3 +115,33 @@ describe('connection schemas warmZeroRateLimitMBps (roadmap#45)', () => {
     }
   })
 })
+
+describe('connection schemas cephExporterPort', () => {
+  const pveBody = { name: 'p', type: 'pve', baseUrl: 'https://10.0.0.1:8006', apiToken: 'root@pam!t=s' }
+
+  it('defaults to 9926 on create when absent', () => {
+    const r = createConnectionSchema.safeParse(pveBody)
+    expect(r.success && r.data.cephExporterPort).toBe(9926)
+  })
+
+  it('accepts 1..65535 on create and update', () => {
+    for (const port of [1, 9100, 65535]) {
+      const c = createConnectionSchema.safeParse({ ...pveBody, cephExporterPort: port })
+      expect(c.success && c.data.cephExporterPort).toBe(port)
+      const u = updateConnectionSchema.safeParse({ cephExporterPort: port })
+      expect(u.success && u.data.cephExporterPort).toBe(port)
+    }
+  })
+
+  it('refuses 0, 65536, 1.5 and the string "9926" on create and update', () => {
+    for (const bad of [0, 65536, 1.5, -1, '9926', null]) {
+      expect(createConnectionSchema.safeParse({ ...pveBody, cephExporterPort: bad }).success, `create ${String(bad)}`).toBe(false)
+      expect(updateConnectionSchema.safeParse({ cephExporterPort: bad }).success, `update ${String(bad)}`).toBe(false)
+    }
+  })
+
+  it('stays absent on update when not sent', () => {
+    const u = updateConnectionSchema.safeParse({ name: 'x' })
+    expect(u.success && 'cephExporterPort' in u.data).toBe(false)
+  })
+})

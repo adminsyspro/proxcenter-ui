@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { Box, ButtonBase, Typography } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import type { TargetChoice } from '@/lib/tools/types'
 
 type Translate = (key: string, values?: Record<string, string>) => string

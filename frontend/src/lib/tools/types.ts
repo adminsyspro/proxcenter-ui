@@ -45,6 +45,14 @@ export type ToolContext = {
   /** The reader's IANA time zone, so a tool can say "14:05" rather than a UTC instant. */
   timeZone?: string
   /**
+   * The Ceph gate's verdict for the caller (`cephAllowedForCaller` in
+   * `@/lib/ceph/tenantGuard`), taken by the chat routes in the request scope,
+   * on the raw principal. Only `true` lets the Ceph tools read Proxmox: an
+   * IaaS tenant (vDC slice of a provider cluster), an unresolvable tenant or a
+   * context built without it gets the answer of a cluster without Ceph.
+   */
+  cephVisible?: boolean
+  /**
    * What this question has spent on the tools that cost a Proxmox call, shared
    * by every round of one request. A tool past its budget refuses: the model
    * then answers from what it already has.

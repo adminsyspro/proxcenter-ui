@@ -30,7 +30,7 @@ import { useTheme } from '@mui/material/styles'
 
 import NumericTextField from '@/components/ui/NumericTextField'
 import CephNooutOption from '@/components/ceph/CephNooutOption'
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import { useToast } from '@/contexts/ToastContext'
 import { useCephNoout } from '@/hooks/useCephNoout'
 

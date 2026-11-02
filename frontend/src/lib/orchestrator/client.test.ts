@@ -628,3 +628,16 @@ describe('restore drill schedules (roadmap#35)', () => {
     ])
   })
 })
+
+describe('Ceph history calls', () => {
+  it('getCephHistory sends osds as a comma list only when given', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ points: [], slowest_osds: [] }))
+    const { getOrchestratorClient } = await import('./client')
+    const c = getOrchestratorClient()
+    await c.getCephHistory('c1', { from: 'F', to: 'T', step: 60, top: 1, osds: [0, 4, 7] })
+    await c.getCephHistory('c1', { from: 'F', to: 'T', step: 60 })
+    const urls = fetchMock.mock.calls.map(([url]: any) => String(url).replace('http://localhost:8080/api/v1', ''))
+    expect(urls[0]).toBe('/ceph/c1/history?from=F&to=T&step=60&top=1&osds=0%2C4%2C7')
+    expect(urls[1]).toBe('/ceph/c1/history?from=F&to=T&step=60')
+  })
+})

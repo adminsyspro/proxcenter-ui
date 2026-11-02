@@ -1,0 +1,114 @@
+{
+  "fsid": "3f1b2c4a-7d5e-4a8b-9c10-aa11bb22cc33",
+  "health": {
+    "status": "HEALTH_ERR",
+    "checks": {
+      "OSD_SCRUB_ERRORS": {
+        "severity": "HEALTH_ERR",
+        "summary": {
+          "message": "2 scrub errors",
+          "count": 2
+        },
+        "muted": false,
+        "detail": [
+          {
+            "message": "2 scrub errors"
+          }
+        ]
+      },
+      "PG_DAMAGED": {
+        "severity": "HEALTH_ERR",
+        "summary": {
+          "message": "Possible data damage: 1 pg inconsistent",
+          "count": 1
+        },
+        "muted": false,
+        "detail": [
+          {
+            "message": "pg 2.1f is active+clean+inconsistent, acting [1,0,2]"
+          }
+        ]
+      }
+    },
+    "mutes": []
+  },
+  "election_epoch": 42,
+  "quorum": [
+    0,
+    1,
+    2
+  ],
+  "quorum_names": [
+    "pve1",
+    "pve2",
+    "pve3"
+  ],
+  "quorum_age": 86400,
+  "monmap": {
+    "epoch": 3,
+    "min_mon_release_name": "tentacle",
+    "num_mons": 3
+  },
+  "osdmap": {
+    "epoch": 120,
+    "num_osds": 3,
+    "num_up_osds": 3,
+    "osd_up_since": 1790000000,
+    "num_in_osds": 3,
+    "osd_in_since": 1790000000,
+    "num_remapped_pgs": 0
+  },
+  "pgmap": {
+    "pgs_by_state": [
+      {
+        "state_name": "active+clean",
+        "count": 32
+      },
+      {
+        "state_name": "active+clean+inconsistent",
+        "count": 1
+      }
+    ],
+    "num_pgs": 33,
+    "num_pools": 2,
+    "num_objects": 12000,
+    "data_bytes": 48318382080,
+    "bytes_used": 144955146240,
+    "bytes_avail": 855044853760,
+    "bytes_total": 1000000000000,
+    "read_bytes_sec": 1048576,
+    "write_bytes_sec": 2097152,
+    "read_op_per_sec": 120,
+    "write_op_per_sec": 240
+  },
+  "fsmap": {
+    "epoch": 1,
+    "btime": "2026-10-01T08:00:00:000000+0000",
+    "by_rank": [],
+    "up:standby": 0
+  },
+  "mgrmap": {
+    "available": true,
+    "num_standbys": 2,
+    "modules": [
+      "iostat",
+      "nfs"
+    ],
+    "services": {},
+    "active_name": "pve1",
+    "standbys": [
+      {
+        "name": "pve2"
+      },
+      {
+        "name": "pve3"
+      }
+    ]
+  },
+  "servicemap": {
+    "epoch": 10,
+    "modified": "2026-10-30T10:00:00.000000+0000",
+    "services": {}
+  },
+  "progress_events": {}
+}

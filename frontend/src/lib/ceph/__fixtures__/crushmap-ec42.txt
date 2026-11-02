@@ -1,0 +1,97 @@
+# begin crush map
+tunable choose_total_tries 50
+
+# devices
+device 0 osd.0 class hdd
+device 1 osd.1 class hdd
+device 2 osd.2 class hdd
+device 3 osd.3 class hdd
+device 4 osd.4 class hdd
+device 5 osd.5 class hdd
+
+# types
+type 0 osd
+type 1 host
+type 2 chassis
+type 3 rack
+type 4 row
+type 5 pdu
+type 6 pod
+type 7 room
+type 8 datacenter
+type 9 zone
+type 10 region
+type 11 root
+
+# buckets
+host pve1 {
+	id -3		# do not change unnecessarily
+	id -4 class hdd		# do not change unnecessarily
+	# weight 0.09769
+	alg straw2
+	hash 0	# rjenkins1
+	item osd.0 weight 0.09769
+}
+host pve2 {
+	id -5		# do not change unnecessarily
+	id -6 class hdd		# do not change unnecessarily
+	# weight 0.09769
+	alg straw2
+	hash 0	# rjenkins1
+	item osd.1 weight 0.09769
+}
+host pve3 {
+	id -7		# do not change unnecessarily
+	id -8 class hdd		# do not change unnecessarily
+	# weight 0.09769
+	alg straw2
+	hash 0	# rjenkins1
+	item osd.2 weight 0.09769
+}
+host pve4 {
+	id -9		# do not change unnecessarily
+	id -10 class hdd		# do not change unnecessarily
+	# weight 0.09769
+	alg straw2
+	hash 0	# rjenkins1
+	item osd.3 weight 0.09769
+}
+host pve5 {
+	id -11		# do not change unnecessarily
+	id -12 class hdd		# do not change unnecessarily
+	# weight 0.09769
+	alg straw2
+	hash 0	# rjenkins1
+	item osd.4 weight 0.09769
+}
+host pve6 {
+	id -13		# do not change unnecessarily
+	id -14 class hdd		# do not change unnecessarily
+	# weight 0.09769
+	alg straw2
+	hash 0	# rjenkins1
+	item osd.5 weight 0.09769
+}
+root default {
+	id -1		# do not change unnecessarily
+	# weight 0.5
+	alg straw2
+	hash 0	# rjenkins1
+	item pve1 weight 0.09769
+	item pve2 weight 0.09769
+	item pve3 weight 0.09769
+	item pve4 weight 0.09769
+	item pve5 weight 0.09769
+	item pve6 weight 0.09769
+}
+
+# rules
+rule ec42_rule {
+	id 4
+	type erasure
+	step take default
+	step chooseleaf indep 0 type host
+	step emit
+}
+
+# end crush map

@@ -824,6 +824,8 @@
     "diskLatencyRetention": "jours d'historique de latence conservés pour les graphes Disk I/O",
     "metricsRetention": "jours d'historique de métriques conservés",
     "metricsRetentionDesc": "Borne jusqu'où les top consommateurs et les graphes du tableau de bord peuvent remonter. L'orchestrateur supprime les collectes plus anciennes.",
+    "cephMetricsRetention": "jours d'historique Ceph conservés pour le cockpit",
+    "cephMetricsRetentionDesc": "Borne la période consultable dans les graphiques du cockpit Ceph (1 à 365). Enterprise uniquement.",
     "metricsInterval": "Intervalle de collecte",
     "snapshots": "Snapshots",
     "collectionRecovery": "Collecte et rétablissement",
@@ -4491,6 +4493,9 @@
     "sshUseSudoHelper": "Préfixe les commandes avec sudo quand l'utilisateur SSH n'est pas root",
     "replicationNetwork": "Réseau de réplication (CIDR)",
     "replicationNetworkHelper": "Les flux de réplication atteignent les nœuds de ce cluster sur leur adresse dans ce réseau plutôt que sur l'adresse de management. Laissez vide pour rester sur le réseau de management ; les nœuds de l'autre cluster doivent avoir une route vers ce réseau.",
+    "cephExporterPort": "Port du ceph-exporter",
+    "cephExporterPortHelper": "Port TCP du ceph-exporter sur chaque nœud de ce cluster. ProxCenter y lit les compteurs d'E/S par OSD pour le cockpit Ceph (9926 par défaut).",
+    "errorCephExporterPortInvalid": "Le port du ceph-exporter doit être un nombre compris entre 1 et 65535",
     "errorReplicationNetworkInvalid": "Le réseau de réplication doit être un CIDR, par exemple 10.10.50.0/24",
     "siteRecovery": "Site Recovery",
     "siteRecoveryInfo": "Réglages utilisés par Site Recovery quand ce cluster est la source ou la cible d'un job de réplication. Le flux de réplication s'appuie sur l'accès SSH ci-dessus, activez-le d'abord.",
@@ -8309,7 +8314,8 @@
     "osdOkToStopHint": "ceph osd ok-to-stop est interrogé d'abord : l'OSD n'est touché que si aucun groupe de placement ne passerait hors ligne.",
     "notOkToStop": "Arrêter {service} n'est pas sûr pour le moment",
     "notOkToStopPgs": "{count, plural, one {# groupe de placement passerait} other {# groupes de placement passeraient}} hors ligne pendant l'arrêt de l'OSD : ces données deviendraient indisponibles.",
-    "notOkToStopUnknown": "ceph osd ok-to-stop n'a pas pu être évalué : {error}",
+    "notOkToStopBare": "Ceph indique que l'arrêt de cet OSD n'est pas sûr pour le moment.",
+    "notOkToStopUnknown": "Ceph n'a pas pu être interrogé : l'arrêt est donc considéré comme non sûr.",
     "acknowledge": "Je comprends, continuer quand même",
     "startStarted": "Tâche lancée : démarrage de {service} sur {host}",
     "stopStarted": "Tâche lancée : arrêt de {service} sur {host}",
@@ -8324,71 +8330,6 @@
     "monCreateStarted": "Tâche lancée : création d'un moniteur sur {node}",
     "mgrCreateStarted": "Tâche lancée : création d'un manager sur {node}",
     "createFailed": "La création a échoué : {error}"
-  },
-  "cephPage": {
-    "sevenDays": "7J",
-    "performance": "Performance",
-    "osd": "OSD",
-    "host": "Host",
-    "latencyHeader": "Latence",
-    "pool": "Pool",
-    "replication": "Réplication",
-    "pgs": "PGs",
-    "objects": "Objets",
-    "monitor": "Moniteur",
-    "address": "Adresse",
-    "quorum": "Quorum",
-    "leader": "Leader",
-    "inQuorum": "In Quorum",
-    "out": "Out",
-    "upIn": "UP / IN",
-    "upOut": "UP / OUT",
-    "downIn": "DOWN / IN",
-    "downOut": "DOWN / OUT",
-    "iops": "IOPS",
-    "throughput": "Débit",
-    "readLabel": "Lecture",
-    "writeLabel": "Écriture",
-    "readIops": "IOPS Lecture",
-    "writeIops": "IOPS Écriture",
-    "commitLatency": "Latence Commit",
-    "deviceClass": "Classe de disque",
-    "applyLatency": "Latence Apply",
-    "reweight": "Reweight",
-    "pgTarget": "PGs cibles",
-    "autoscale": "Autoscale des PGs",
-    "crushRule": "Règle CRUSH",
-    "application": "Application",
-    "rank": "Rang",
-    "storeSize": "Taille du store",
-    "recovery": "Reconstruction",
-    "recoveryObjects": "{count} objets/s",
-    "totalLabel": "Total",
-    "upLabel": "Up",
-    "inLabel": "In",
-    "downLabel": "Down",
-    "totalInQuorum": "In Quorum",
-    "quorumPrefix": "Quorum",
-    "placementGroups": "Placement Groups",
-    "totalPgs": "Total PGs",
-    "poolsLabel": "Pools",
-    "osdsTab": "OSDs",
-    "poolsTab": "Pools",
-    "monitorsTab": "Moniteurs",
-    "mdsTab": "MDS",
-    "osdsTitle": "OSDs",
-    "monitorsTitle": "Moniteurs",
-    "healthOk": "HEALTH OK",
-    "healthWarning": "WARNING",
-    "healthError": "ERREUR",
-    "healthUnknown": "INCONNU",
-    "rShort": "Read",
-    "wShort": "Write",
-    "live": "LIVE",
-    "iopsCeph": "IOPS Ceph",
-    "osdsAndPools": "OSDs & Pools",
-    "livePerformance": "Performance live",
-    "monitorHealth": "Surveillance santé"
   },
   "storageOverview": {
     "latency": "Latence",
@@ -10010,9 +9951,7 @@
     "noDrs": "Aucun cluster DRS",
     "noDrsDesc": "Aucun cluster Proxmox avec support DRS trouvé. Connectez un cluster avec plusieurs nœuds pour utiliser le DRS.",
     "noStorage": "Aucun stockage",
-    "noStorageDesc": "Aucun volume de stockage trouvé. Le stockage apparaîtra ici une fois vos clusters connectés.",
-    "noCeph": "Aucun cluster Ceph",
-    "noCephDesc": "Aucun cluster Ceph détecté sur vos connexions. Activez Ceph sur un cluster Proxmox pour voir les détails ici."
+    "noStorageDesc": "Aucun volume de stockage trouvé. Le stockage apparaîtra ici une fois vos clusters connectés."
   },
   "commandPalette": {
     "placeholder": "Rechercher pages, VMs, nœuds, IP, adresses MAC...",
@@ -10120,6 +10059,7 @@
     "noNotes": "Aucune note",
     "noWarningsErrors": "Aucun avertissement/erreur",
     "cephVersion": "Version Ceph",
+    "openCephCockpit": "Ouvrir le cockpit Ceph",
     "services": "Services",
     "monitors": "Moniteurs",
     "managers": "Gestionnaires",
@@ -12159,6 +12099,543 @@
       "open": "Ouvrir un incident",
       "view": "Voir l'incident",
       "availability": "Voir la disponibilité"
+    }
+  },
+  "cephCockpit": {
+    "tabs": {
+      "overview": "Vue d'ensemble",
+      "osd": "OSD",
+      "pools": "Pools",
+      "crush": "CRUSH",
+      "services": "Services",
+      "perf": "Performance"
+    },
+    "header": {
+      "cluster": "Cluster Ceph",
+      "updated": "Mis à jour il y a {age}",
+      "range": "Période",
+      "refresh": "Rafraîchir"
+    },
+    "range": {
+      "live": "Live",
+      "1h": "1 h",
+      "24h": "24 h",
+      "7d": "7 j",
+      "30d": "30 j"
+    },
+    "age": {
+      "seconds": "{count} s",
+      "minutes": "{count} min",
+      "hours": "{count} h",
+      "days": "{count} j"
+    },
+    "health": {
+      "HEALTH_OK": "OK",
+      "HEALTH_WARN": "Avertissement",
+      "HEALTH_ERR": "Erreur",
+      "unknown": "Inconnu"
+    },
+    "rail": {
+      "title": "Santé du cluster",
+      "errors": "Erreurs",
+      "warnings": "Avertissements",
+      "sevErr": "ERR",
+      "sevWarn": "WARN",
+      "showDetail": "Afficher le détail",
+      "hideDetail": "Masquer le détail",
+      "open": "Ouvrir {target}",
+      "flags": "Flags OSD",
+      "flagsNone": "Flags OSD : aucun",
+      "editFlags": "Modifier",
+      "showChecks": "Afficher les alertes",
+      "hideChecks": "Masquer les alertes"
+    },
+    "target": {
+      "flags": "Flags"
+    },
+    "stale": {
+      "title": "Cluster injoignable",
+      "body": "Dernière lecture réussie il y a {age}. Les chiffres affichés sont les derniers reçus.",
+      "inventory": "Inventaire non actualisé depuis {age}"
+    },
+    "error": {
+      "title": "Impossible de lire ce cluster Ceph",
+      "retry": "Réessayer",
+      "connections": "Impossible de lister les connexions Proxmox"
+    },
+    "empty": {
+      "title": "Aucun cluster Ceph",
+      "description": "Aucun cluster Ceph n'a été trouvé sur vos connexions Proxmox. Activez Ceph sur un cluster pour suivre ici sa santé, ses OSD et ses pools.",
+      "clusterTitle": "Pas de Ceph sur ce cluster",
+      "clusterDescription": "Cette connexion répond, mais elle n'héberge aucun cluster Ceph. Choisissez un autre cluster ci-dessus.",
+      "hintOsds": "OSD et pools",
+      "hintLive": "Performances en direct",
+      "hintHealth": "Suivi de la santé",
+      "storages": "Stockage"
+    },
+    "ui": {
+      "noData": "Aucune donnée",
+      "separator": " · ",
+      "listSeparator": ", ",
+      "thresholdBar": "{used} % utilisés, nearfull à {nearfull} %, full à {full} %"
+    },
+    "overview": {
+      "tiles": {
+        "raw": "Capacité brute",
+        "rawUsed": "{used} sur {total}",
+        "trend": "{delta} pt sur {period}",
+        "iops": "IOPS client",
+        "throughput": "Débit client",
+        "latency": "Latence OSD",
+        "latencyUnit": "ms moy.",
+        "latencyMax": "max {ms} ms sur osd.{osd}",
+        "read": "L {value}",
+        "write": "É {value}",
+        "readLabel": "Lecture",
+        "writeLabel": "Écriture"
+      },
+      "recovery": {
+        "title": "Reconstruction en cours",
+        "waiting": "Données dégradées, aucune reconstruction lancée pour l’instant",
+        "objectsRate": "{count} objets/s",
+        "degraded": "{count, plural, one {# objet dégradé} other {# objets dégradés}}",
+        "misplaced": "{count, plural, one {# objet mal placé} other {# objets mal placés}}",
+        "showPerf": "Courbe de reconstruction"
+      },
+      "hostMap": {
+        "title": "Hôtes et OSD",
+        "legendCards": "anneau = remplissage, bordure = état",
+        "problemOnly": "Hôtes à problème seulement",
+        "hiddenHealthy": "{count, plural, one {# hôte masqué, tous sains} other {# hôtes masqués, tous sains}}",
+        "noProblemHost": "Aucun hôte à problème",
+        "crush": "Carte CRUSH",
+        "osdCount": "{count, plural, one {# OSD} other {# OSD}}",
+        "mon": "mon",
+        "monLeader": "Moniteur leader",
+        "monOutOfQuorum": "Moniteur hors quorum",
+        "mgrActive": "mgr actif",
+        "mgrStandby": "mgr",
+        "mds": "mds",
+        "up": "up",
+        "down": "down",
+        "in": "in",
+        "out": "out",
+        "flag": "flag",
+        "latency": "{ms} ms",
+        "pgs": "{count} PG",
+        "open": "Ouvrir osd.{id}",
+        "avg": "moy. {pct}",
+        "max": "max {pct}",
+        "downCount": "{count} down",
+        "legendLow": "< {pct}",
+        "legendMid": "{from} à {to}",
+        "legendAbove": "≥ {pct}",
+        "flags": "Flags : {flags}",
+        "fill": "{pct} utilisés",
+        "empty": "Aucun OSD dans l’inventaire",
+        "view": {
+          "label": "Affichage de la carte des hôtes",
+          "compact": "Compact",
+          "dense": "Dense"
+        }
+      },
+      "trend": {
+        "unavailable": "Historique indisponible",
+        "notEnough": "Pas encore de données sur {period}"
+      },
+      "missing": "–"
+    },
+    "osd": {
+      "search": "Rechercher un OSD ou un hôte",
+      "hostFilter": "Hôte",
+      "allHosts": "Tous les hôtes",
+      "classFilter": "Classe",
+      "allClasses": "Toutes les classes",
+      "filters": {
+        "all": "Tous",
+        "problem": "À problème",
+        "down": "Down",
+        "out": "Out"
+      },
+      "columns": {
+        "osd": "OSD",
+        "state": "État",
+        "class": "Classe",
+        "fill": "Remplissage",
+        "latency": "Latence",
+        "iops": "IOPS",
+        "throughput": "Débit",
+        "pgs": "PG"
+      },
+      "group": {
+        "osdCount": "{count, plural, one {# OSD} other {# OSD}}",
+        "fold": "Replier {host}",
+        "unfold": "Déplier {host}"
+      },
+      "state": {
+        "up": "up",
+        "down": "down",
+        "in": "in",
+        "out": "out"
+      },
+      "latency": "{ms} ms",
+      "issues": "{count, plural, one {# alerte de santé cite cet OSD} other {# alertes de santé citent cet OSD}}",
+      "empty": "Aucun OSD dans l'inventaire",
+      "emptyFiltered": "Aucun OSD ne correspond à ces filtres",
+      "open": "Ouvrir osd.{id}",
+      "pager": {
+        "range": "{from} à {to} sur {total}",
+        "prev": "Page précédente",
+        "next": "Page suivante"
+      },
+      "drawer": {
+        "close": "Fermer",
+        "prev": "OSD précédent (flèche haut)",
+        "next": "OSD suivant (flèche bas)",
+        "subtitle": "{host} · {class} · Ceph {version}",
+        "subtitleNoVersion": "{host} · {class}",
+        "state": "État",
+        "actions": "Actions",
+        "fill": "Remplissage",
+        "fillDetail": "{used} utilisés sur {total}, {free} libres",
+        "fillPct": "{pct} utilisés",
+        "latency": "Latence commit / apply",
+        "latencyValue": "{commit} / {apply} ms",
+        "pgs": "Placement groups",
+        "weights": "Reweight / poids CRUSH",
+        "device": "Classe du périphérique",
+        "pools": "Pools placés ici",
+        "poolsNone": "Aucun",
+        "version": "Version",
+        "checks": "Alertes de santé",
+        "unknown": "inconnue",
+        "osdType": "Moteur de stockage",
+        "dataDevice": "Périphérique de données",
+        "dbDevice": "Périphérique DB",
+        "walDevice": "Périphérique WAL",
+        "onDataDevice": "sur le périphérique de données"
+      },
+      "actions": {
+        "scrub": "Scrub",
+        "deepScrub": "Deep-scrub",
+        "in": "Rentrer (in)",
+        "out": "Sortir (out)",
+        "stop": "Arrêter",
+        "restart": "Redémarrer",
+        "noPermission": "Agir sur les OSD demande la permission storage.admin",
+        "alreadyIn": "osd.{id} est déjà in",
+        "alreadyOut": "osd.{id} est déjà out",
+        "notRunning": "osd.{id} est down",
+        "scrubStarted": "Scrub de osd.{id} demandé",
+        "deepScrubStarted": "Deep-scrub de osd.{id} demandé",
+        "inStarted": "osd.{id} est en cours de réintégration (in)",
+        "outStarted": "osd.{id} est en cours de sortie (out)",
+        "stopStarted": "Tâche lancée : arrêt de osd.{id}",
+        "restartStarted": "Tâche lancée : redémarrage de osd.{id}",
+        "failed": "L'action sur osd.{id} a échoué : {error}",
+        "start": "Démarrer",
+        "startStarted": "Tâche lancée : démarrage de osd.{id}",
+        "nodeUnknown": "Aucun nœud de cette connexion ne correspond à l'hôte CRUSH {host} : les actions ne peuvent pas être envoyées",
+        "alreadyRunning": "osd.{id} est déjà démarré"
+      },
+      "confirm": {
+        "title": {
+          "out": "Sortir osd.{id} du cluster ?",
+          "stop": "Arrêter osd.{id} ?",
+          "restart": "Redémarrer osd.{id} ?"
+        },
+        "body": {
+          "out": "Ceph va déplacer les données de osd.{id} ({pgs} placement groups) vers les autres OSD du cluster.",
+          "stop": "osd.{id} sera arrêté sur {host}. Ses placement groups tournent avec moins de copies tant qu'il est down.",
+          "restart": "osd.{id} sera redémarré sur {host}. Il est indisponible quelques secondes."
+        },
+        "impactTitle": "Remplissage estimé des autres OSD",
+        "before": "avant",
+        "after": "après",
+        "moved": "Environ {size} seraient déplacés vers {count, plural, one {# autre OSD} other {# autres OSD}}.",
+        "moveNothing": "osd.{id} est déjà out : rien ne bouge.",
+        "noReceiver": "Aucun autre OSD de classe {class} ne peut recevoir ces données.",
+        "projectedUnder": "L'OSD le plus chargé finirait à {pct}, sous nearfull ({nearfull}).",
+        "projectedOver": "L'OSD le plus chargé finirait à {pct}, au-delà de nearfull ({nearfull}).",
+        "stopNote": "L'arrêt ne déplace rien en soi : Ceph sort l'OSD après son délai down-out, et cette estimation décrit ce moment.",
+        "verdictChecking": "Question posée à Ceph (ceph osd ok-to-stop)...",
+        "verdictOk": "ceph osd ok-to-stop : sûr, aucun placement group ne passerait hors ligne.",
+        "verdictRefused": "ceph osd ok-to-stop : refusé, {count, plural, one {# placement group passerait} other {# placement groups passeraient}} hors ligne.",
+        "verdictRefusedBare": "ceph osd ok-to-stop : refusé.",
+        "verdictUnknown": "ceph osd ok-to-stop n'a rendu aucun verdict : {error}",
+        "verdictUnknownBare": "ceph osd ok-to-stop n'a rendu aucun verdict.",
+        "typeIntro": "La saisie du nom de l'OSD est exigée car :",
+        "reasonRefused": "Ceph a refusé l'action.",
+        "reasonUnknown": "Ceph n'a rendu aucun verdict.",
+        "reasonNearfull": "Le remplissage projeté dépasse nearfull.",
+        "typePrompt": "Saisissez {name} pour confirmer",
+        "typeLabel": "Nom de l'OSD",
+        "cancel": "Annuler",
+        "action": {
+          "out": "Sortir",
+          "stop": "Arrêter",
+          "restart": "Redémarrer"
+        },
+        "forceAction": {
+          "out": "Sortir quand même",
+          "stop": "Arrêter quand même",
+          "restart": "Redémarrer quand même"
+        },
+        "error": "L'action a échoué : {error}",
+        "refusedNow": "Ceph refuse maintenant cette action. Saisissez le nom de l'OSD pour la forcer.",
+        "estimateUnknown": "Estimation impossible : le remplissage de osd.{id} n'a pas pu être lu (OSD down, taille inconnue ou remplissage non rapporté), la quantité de données déplacées est donc inconnue.",
+        "reasonLoadUnknown": "La quantité de données à déplacer ne peut pas être estimée."
+      },
+      "glyph": {
+        "upIn": "actif et dans le cluster",
+        "upOut": "actif et hors du cluster",
+        "down": "arrêté",
+        "unknown": "état inconnu"
+      },
+      "trend": {
+        "collecting": "collecte…",
+        "tooltip": "{min} / {avg} / {max} ms (plus basse moyenne / moy. / pire valeur observée, sur la période)",
+        "tooltipSession": "{min} / {avg} / {max} ms (plus basse lecture / moy. / pire lecture, depuis l’ouverture de cette page)"
+      },
+      "activity": {
+        "title": "Activité",
+        "iops": "IOPS",
+        "throughput": "Débit",
+        "read": "Lecture",
+        "write": "Écriture",
+        "measuring": "mesure en cours…",
+        "captionSession": "Temps réel, 5 dernières minutes",
+        "captionHistoryLive": "Dernière heure d'historique, puis temps réel",
+        "captionHistory": "Historique sur {period}",
+        "unreachable": "Pour voir des métriques plus précises (IOPS et débit par OSD), installez le paquet ceph-exporter sur les nœuds Ceph et ouvrez le port {port} vers ProxCenter.",
+        "unreachableRefused": "Rien n'écoute sur le port {port} de {node} : le paquet ceph-exporter n'est pas installé ou son service est arrêté.",
+        "unreachableTimeout": "{node} ne répond pas sur le port {port} : ouvrez ce port depuis ProxCenter dans le pare-feu.",
+        "unreachableInvalid": "Le port {port} de {node} ne renvoie pas de métriques ceph-exporter : vérifiez le port réglé sur la connexion.",
+        "showSteps": "Afficher la procédure d'installation",
+        "hideSteps": "Masquer la procédure d'installation",
+        "stepsIntro": "À exécuter en root sur chaque nœud Ceph :",
+        "copy": "Copier",
+        "copied": "Procédure copiée",
+        "copyFailed": "Échec de la copie",
+        "notExported": "L'exporteur du nœud {node} répond mais ne remonte pas osd.{id}. Vérifiez que cet OSD tourne bien sur ce nœud.",
+        "noNode": "L'activité n'est pas disponible : aucun nœud Proxmox ne correspond à l'hôte {host}.",
+        "unavailable": "Relevé indisponible"
+      },
+      "io": {
+        "readShort": "L",
+        "writeShort": "É",
+        "measuring": "Mesure en cours…",
+        "unavailable": "Relevé de l’exporteur indisponible",
+        "noNode": "Cet hôte ne correspond à aucun nœud Proxmox : pas de relevé",
+        "tooltip": "Lecture {read}, écriture {write}",
+        "tooltipSession": "Lecture {read}, écriture {write} (courbe depuis l’ouverture de cette page)"
+      }
+    },
+    "pools": {
+      "columns": {
+        "pool": "Pool",
+        "usage": "Usage",
+        "protection": "Protection",
+        "rule": "Règle CRUSH",
+        "pg": "PG",
+        "fill": "Remplissage net",
+        "used": "Utilisé",
+        "avail": "Net disponible",
+        "objects": "Objets"
+      },
+      "open": "Ouvrir le pool {name}",
+      "empty": "Aucun pool",
+      "protection": "Réplica {size} / min {min}",
+      "autoscale": "auto {mode}",
+      "ruleOpen": "Ouvrir l'onglet CRUSH, règle {rule}",
+      "pager": {
+        "range": "{from} à {to} sur {total}",
+        "prev": "Page précédente",
+        "next": "Page suivante"
+      },
+      "drawer": {
+        "close": "Fermer",
+        "prev": "Pool précédent (flèche haut)",
+        "next": "Pool suivant (flèche bas)",
+        "subtitle": "{app} · {type}",
+        "fill": "Remplissage net",
+        "fillDetail": "{used} utilisés, {free} nets disponibles",
+        "storages": "Stockages PVE",
+        "storagesNone": "Aucun stockage PVE n'utilise ce pool",
+        "protection": "Protection",
+        "rule": "Règle CRUSH",
+        "pgs": "Groupes de placement",
+        "pgTarget": "Nombre de PG cible",
+        "pgTargetValue": "{target} (actuellement {current})",
+        "autoscale": "Autoscale des PG",
+        "used": "Utilisé",
+        "avail": "Net disponible",
+        "objects": "Objets",
+        "quotaBytes": "Quota de taille",
+        "quotaObjects": "Quota d'objets",
+        "storagesUnavailable": "Les stockages PVE n'ont pas pu être lus",
+        "pgRecommended": "Recommandation de l'autoscaler",
+        "pgRecommendedValue": "{final} (idéal {ideal})"
+      },
+      "storageUnavailable": "Stockages PVE indisponibles"
+    },
+    "crush": {
+      "error": "Impossible de lire la CRUSH map de ce cluster",
+      "tree": {
+        "title": "Hiérarchie",
+        "meta": "{type} · {count, plural, one {# OSD} other {# OSD}}",
+        "upCount": "{up}/{total} up",
+        "openOsd": "Ouvrir {name}",
+        "monLeader": "mon ★",
+        "foldAll": "Tout replier",
+        "unfoldAll": "Tout déplier",
+        "empty": "Aucun OSD de cette classe dans la CRUSH map"
+      },
+      "rules": {
+        "title": "Règles et tolérance aux pannes",
+        "source": "source : CRUSH map décompilée",
+        "empty": "Aucune règle dans la CRUSH map",
+        "type": {
+          "replicated": "répliquée",
+          "erasure": "erasure coding"
+        },
+        "class": "classe {class}",
+        "pools": "pools :",
+        "noPool": "aucun",
+        "openPool": "Ouvrir le pool {name}"
+      },
+      "domain": {
+        "osd": "{count, plural, other {OSD}}",
+        "host": "{count, plural, one {hôte} other {hôtes}}",
+        "chassis": "{count, plural, other {châssis}}",
+        "rack": "{count, plural, one {baie} other {baies}}",
+        "row": "{count, plural, one {rangée} other {rangées}}",
+        "pdu": "{count, plural, other {PDU}}",
+        "pod": "{count, plural, one {pod} other {pods}}",
+        "room": "{count, plural, one {salle} other {salles}}",
+        "datacenter": "{count, plural, one {datacenter} other {datacenters}}",
+        "zone": "{count, plural, one {zone} other {zones}}",
+        "region": "{count, plural, one {région} other {régions}}",
+        "root": "{count, plural, one {racine} other {racines}}"
+      },
+      "step": {
+        "take": "{class, select, none {prendre {item}} other {prendre {item}, classe {class}}}",
+        "emit": "émettre",
+        "choose_firstn": "{kind, select, all {choisir un(e) {type} par réplica} less {choisir tous les réplicas sauf {num}, un(e) par {type}} other {choisir {num} × {type}}}",
+        "choose_indep": "{kind, select, all {choisir un(e) {type} par réplica (indep)} less {choisir tous les réplicas sauf {num}, un(e) par {type} (indep)} other {choisir {num} × {type} (indep)}}",
+        "chooseleaf_firstn": "{kind, select, all {choisir un(e) {type} par réplica, puis un OSD dans chacun(e)} less {choisir tous les réplicas sauf {num}, un(e) par {type}, puis un OSD dans chacun(e)} other {choisir {num} × {type}, puis un OSD dans chacun(e)}}",
+        "chooseleaf_indep": "{kind, select, all {choisir un(e) {type} par réplica, puis un OSD dans chacun(e) (indep)} less {choisir tous les réplicas sauf {num}, un(e) par {type}, puis un OSD dans chacun(e) (indep)} other {choisir {num} × {type}, puis un OSD dans chacun(e) (indep)}}",
+        "set": "réglage : {op}",
+        "other": "étape {op}"
+      },
+      "tolerance": {
+        "tolerates": "supporte la perte de {count} {domain} sans interruption.",
+        "blocks": "les I/O se bloquent dès la première perte de {domain}, jusqu'à la reconstruction.",
+        "insufficient": "demande {needed} {domain} portant un OSD de la bonne classe, {domains} trouvé(s).",
+        "unknown": "Tolérance non calculable pour cette règle."
+      }
+    },
+    "services": {
+      "title": "Services Ceph",
+      "select": "Mettre en évidence {service}",
+      "noNode": "Aucun nœud PVE ne correspond à l'hôte {host} : actions indisponibles",
+      "group": {
+        "mon": "Moniteurs",
+        "mgr": "Managers",
+        "mds": "Serveurs de métadonnées (CephFS)",
+        "monMeta": "{inQuorum} sur {total} en quorum",
+        "mgrMeta": "{active, plural, one {# actif} other {# actifs}}, {standby} en veille",
+        "mgrMetaStopped": "{active, plural, one {# actif} other {# actifs}}, {standby} en veille, {stopped} à l'arrêt",
+        "mdsMeta": "{active} actif sur {total}",
+        "none": "aucun"
+      },
+      "col": {
+        "daemon": "Démon",
+        "host": "Hôte",
+        "state": "État",
+        "role": "Rôle",
+        "address": "Adresse",
+        "version": "Version",
+        "actions": "Actions"
+      },
+      "state": {
+        "quorum": "En quorum",
+        "outOfQuorum": "Hors quorum",
+        "active": "Actif",
+        "standby": "En veille",
+        "standbyReplay": "Veille en relecture",
+        "stopped": "À l'arrêt",
+        "other": "Inconnu"
+      },
+      "role": {
+        "leader": "leader",
+        "peon": "peon",
+        "active": "actif",
+        "standby": "en veille",
+        "rank": "rang {rank}"
+      },
+      "empty": {
+        "mon": "Aucun moniteur remonté",
+        "mgr": "Aucun manager remonté",
+        "mds": "Pas de CephFS sur ce cluster, donc pas de serveur de métadonnées"
+      },
+      "versions": {
+        "title": "Versions Ceph",
+        "mixed": "Versions mélangées",
+        "mixedHint": "Mise à jour incomplète : la première version tourne sur la plupart des démons.",
+        "unknown": "Aucune version remontée",
+        "item": "{version} sur {count, plural, one {# démon} other {# démons}}"
+      },
+      "create": {
+        "button": "Créer un démon",
+        "title": "Créer un démon",
+        "kind": "Démon",
+        "mon": "Moniteur",
+        "mgr": "Manager",
+        "node": "Nœud",
+        "noNode": "Chaque nœud en exécute déjà un",
+        "noPermission": "La gestion des services Ceph demande la permission storage.admin",
+        "cancel": "Annuler",
+        "next": "Suivant"
+      }
+    },
+    "perf": {
+      "iops": {
+        "title": "IOPS client"
+      },
+      "throughput": {
+        "title": "Débit client"
+      },
+      "recovery": {
+        "title": "Reconstruction et PG non propres",
+        "idle": "Aucune reconstruction, tous les PG sont propres"
+      },
+      "series": {
+        "read": "Lecture",
+        "write": "Écriture",
+        "recovery": "Reconstruction",
+        "unclean": "PG non propres"
+      },
+      "live": {
+        "waiting": "Collecte du Live en cours, la courbe apparaît dans quelques secondes",
+        "captionHistory": "Dernière heure d'historique, puis temps réel"
+      },
+      "chartLabel": "{title}, {period}",
+      "slowest": {
+        "title": "OSD les plus lents",
+        "subtitleLive": "Latence du moment, d'après l'inventaire",
+        "subtitlePeriod": "Moyenne sur la période",
+        "all": "Toutes ({count})",
+        "allPlain": "Toutes",
+        "mean": "Moyenne du cluster {ms} ms",
+        "empty": "Aucune latence mesurée pour l'instant",
+        "open": "Ouvrir l'OSD {id}",
+        "max": "max {ms} ms",
+        "value": "{ms} ms",
+        "threshold": "Lent à partir de {ms} ms",
+        "openSlow": "Ouvrir l'OSD {id}, lent",
+        "slow": "Lent"
+      }
     }
   }
 }

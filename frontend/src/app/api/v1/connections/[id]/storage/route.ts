@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { isSharedStorage, vmDiskFormats } from "@/lib/proxmox/storage"
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { cephAllowedForCaller } from "@/lib/ceph/tenantGuard"
 import { resolveStorageCaller, storageVisibilityFilter } from "@/lib/storage/storageVisibility"
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
@@ -165,6 +166,13 @@ async function getHandler(_req: Request, ctx: { params: Promise<{ id: string }> 
     const visible = await storageVisibilityFilter(id, await getCurrentTenantId(), caller)
 
     result = result.filter((s: any) => visible(s))
+
+    // Les adresses des moniteurs Ceph sont un objet de tout le cluster : un
+    // appelant que le garde Ceph refuse (tenant IaaS) ne les reçoit jamais,
+    // le reste de la ligne est inchangé.
+    if (!(await cephAllowedForCaller())) {
+      result = result.map((s: any) => ({ ...s, monhost: null }))
+    }
 
     // Trier: partagés d'abord, puis par utilisation décroissante
     result.sort((a, b) => {

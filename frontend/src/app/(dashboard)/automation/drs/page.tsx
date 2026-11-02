@@ -85,7 +85,7 @@ import PlacementConstraintsCard, {
   type ExcludedGuest
 } from '@/components/automation/drs/PlacementConstraintsCard'
 import MigrationHistoryTab from '@/components/automation/drs/MigrationHistoryTab'
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import { migrationProgressMessage } from '@/components/automation/drs/migrationProgress'
 import { drsReasonText } from '@/components/automation/drs/drsReason'
 import { excessRecommendations, firstRejections, keptRecommendations, staleRecommendations } from '@/components/automation/drs/recommendationPruning'

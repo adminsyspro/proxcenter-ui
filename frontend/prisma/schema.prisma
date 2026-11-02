@@ -24,6 +24,9 @@ model Connection {
   behindProxy      Boolean @default(false)
   insecureTLS      Boolean @default(false)
   hasCeph          Boolean @default(false)
+  // TCP port of the ceph-exporter on each node of this cluster (per-OSD I/O
+  // counters for the Ceph cockpit). Upstream default.
+  cephExporterPort Int     @default(9926)
   latitude         Float?
   longitude        Float?
   locationLabel    String?

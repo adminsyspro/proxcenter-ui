@@ -53,6 +53,8 @@ const DEFAULT_THRESHOLDS = {
   // Days of per-disk latency history kept for the charts, and the collection
   // switch itself (1 = on): one PVE call per running VM per collection.
   disk_latency_retention_days: 7,
+  // Days of Ceph cockpit history kept (Enterprise), an int on the Go side.
+  ceph_metrics_retention_days: 30,
   disk_latency_collection: 1,
   // Days of metrics collections kept (#1129): what the dashboard top consumers
   // and charts can look back on. The orchestrator prunes older rows.
@@ -116,6 +118,8 @@ function coerceThresholds(raw: any): Thresholds {
   // Days of metrics history the orchestrator keeps (#1129), the bounds of the
   // settings field: a request outside them would purge the whole history.
   t.metrics_retention_days = Math.min(365, Math.max(1, Math.trunc(t.metrics_retention_days as number)))
+  // Same bounds for the Ceph cockpit history (Enterprise).
+  t.ceph_metrics_retention_days = Math.min(365, Math.max(1, Math.trunc(t.ceph_metrics_retention_days as number)))
   return t as Thresholds
 }
 

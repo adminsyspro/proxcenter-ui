@@ -494,6 +494,7 @@ function ConnectionsTab() {
       baseUrl: formData.baseUrl.trim(),
       behindProxy: isExtHypervisor ? false : !!formData.behindProxy,
       insecureTLS: !!formData.insecureTLS,
+      ...(addConnType === 'pve' && { cephExporterPort: formData.cephExporterPort }),
       // Location fields
       latitude: formData.latitude !== '' && !Number.isNaN(Number.parseFloat(formData.latitude)) ? Number.parseFloat(formData.latitude) : null,
       longitude: formData.longitude !== '' && !Number.isNaN(Number.parseFloat(formData.longitude)) ? Number.parseFloat(formData.longitude) : null,

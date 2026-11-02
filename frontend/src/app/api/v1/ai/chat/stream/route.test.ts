@@ -118,6 +118,15 @@ const rankToolExecute = vi.fn(
   async (_args: Record<string, unknown>, _ctx: unknown) => ({ ranking: [{ rank: 1, name: 'db-01', vcpus: 16 }] })
 )
 
+// G20: the Ceph verdict the route hands the tools, taken in the request scope.
+const cephGate = vi.hoisted(() => ({ allowed: true, calls: 0 }))
+vi.mock('@/lib/ceph/tenantGuard', () => ({
+  cephAllowedForCaller: async () => {
+    cephGate.calls++
+    return cephGate.allowed
+  },
+}))
+
 vi.mock('@/lib/tools/catalog', () => ({
   READ_ONLY_TOOLS: [
     {
@@ -883,5 +892,23 @@ describe('POST /api/v1/ai/chat/stream, approved actions (roadmap#188)', () => {
       expect(proposeExecute).not.toHaveBeenCalled()
       expect(frames.some(f => f.type === 'actions')).toBe(false)
     })
+  })
+})
+
+describe('Ceph verdict in the tool context (G20)', () => {
+  it.each([[true], [false]])('hands the tools cephVisible=%s, read before the tools run', async (allowed) => {
+    cephGate.allowed = allowed
+    cephGate.calls = 0
+    fetchMock
+      .mockResolvedValueOnce(ollamaStreamToolCall('rank_guest_hardware', { metric: 'vcpus' }))
+      .mockResolvedValueOnce(ollamaStream(['ok']))
+
+    const res = await ask()
+    await decodeBody(res)
+
+    expect(cephGate.calls).toBe(1)
+    expect(rankToolExecute).toHaveBeenCalledTimes(1)
+    expect((rankToolExecute.mock.calls[0][1] as any).cephVisible).toBe(allowed)
+    cephGate.allowed = true
   })
 })

@@ -138,3 +138,42 @@ describe("GET /api/v1/connections/[id] ownership gate", () => {
     expect(res.status).toBe(200)
   })
 })
+
+describe("GET /api/v1/connections/[id] Ceph fields", () => {
+  const CEPH_CONNECTION = { ...MSP_OWNED_CONNECTION, tenantId: "default", hasCeph: true, cephExporterPort: 9926 }
+  const iaasScope = {
+    connectionIds: new Set(["conn-msp-1"]),
+    pbsConnectionIds: new Set<string>(),
+    nodesByConnection: new Map<string, Set<string>>(),
+    poolsByConnection: new Map<string, Set<string>>(),
+  }
+
+  async function read() {
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const res = await callRoute(GET, { method: "GET", params: { id: "conn-msp-1" } })
+    expect(res.status).toBe(200)
+    return (await res.json()).data
+  }
+
+  it("iaas: a shared provider cluster reads as no Ceph, without its exporter port", async () => {
+    currentTenantId = "iaas-tenant"
+    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope: iaasScope })
+    findUniqueGlobalMock.mockResolvedValue(CEPH_CONNECTION)
+
+    const data = await read()
+
+    expect(data.hasCeph).toBe(false)
+    expect(data).not.toHaveProperty("cephExporterPort")
+  })
+
+  it("provider and msp keep hasCeph and the exporter port", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    findUniqueGlobalMock.mockResolvedValue(CEPH_CONNECTION)
+    expect(await read()).toMatchObject({ hasCeph: true, cephExporterPort: 9926 })
+
+    currentTenantId = "msp-1"
+    getInfraMock.mockResolvedValue({ kind: "msp", connectionIds: new Set(["conn-msp-1"]) })
+    findUniqueGlobalMock.mockResolvedValue({ ...CEPH_CONNECTION, tenantId: "msp-1" })
+    expect(await read()).toMatchObject({ hasCeph: true, cephExporterPort: 9926 })
+  })
+})

@@ -3,10 +3,12 @@ import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById, isConnectionNotFoundError } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { denyIaasTenantCeph } from "@/lib/ceph/tenantGuard"
 import { assertNodeName } from "@/lib/ssh/validate"
 import { withAudit } from "@/lib/audit/withAudit"
-import { pickOnlineNode } from "@/lib/ceph/nodeNoout"
-import { okToStopPayload, runOkToStop } from "@/lib/ceph/okToStopSsh"
+import { pickOnlineNode, type OkToStopVerdict } from "@/lib/ceph/nodeNoout"
+import { runOkToStopApi } from "@/lib/ceph/okToStopApi"
+import { clientOkToStopPayload, OK_TO_STOP_UNAVAILABLE } from "@/lib/ceph/okToStopClient"
 import { isCephServiceAction, osdIdOf, parseCephService } from "@/lib/ceph/service"
 
 export const runtime = "nodejs"
@@ -18,12 +20,19 @@ export const runtime = "nodejs"
    name (`osd.2`, `mon.pve1`, `mgr.pve1`, `mds.pve1`; the whole-node targets
    PVE also knows are refused here); the call must reach the node that hosts
    the daemon, which is the `[node]` of this URL. Stopping or restarting an OSD first asks Ceph whether
-   that is safe (`ceph osd ok-to-stop`, over SSH like the noout route): when
+   that is safe (PVE `GET /nodes/{node}/ceph/cmd-safety`, no SSH): when
    placement groups would go offline the answer is 409 `not_ok_to_stop` and
    nothing happens, unless the body says `force: true`.
 */
 
 type Ctx = { params: Promise<{ id: string; node: string }> }
+
+/** The 409 text: the PG count only when Ceph gave one, a fixed text when no verdict could be obtained. */
+function refusalText(serviceName: string, verdict: OkToStopVerdict | null): string {
+  if (!verdict) return OK_TO_STOP_UNAVAILABLE
+  if (verdict.numNotOkPgs > 0) return `Stopping ${serviceName} would take ${verdict.numNotOkPgs} PG(s) offline`
+  return `Stopping ${serviceName} is not safe right now`
+}
 
 function serviceError(e: any): NextResponse {
   const excluded = licenseExcludedResponse(e)
@@ -53,6 +62,9 @@ async function handlePost(req: Request, ctx: Ctx) {
     // Like the OSD flags: a daemon of the cluster's storage, a storage.admin action.
     const denied = await checkPermission(PERMISSIONS.STORAGE_ADMIN, "connection", id)
     if (denied) return denied
+    // Ceph is a whole-cluster object: an IaaS tenant gets 404, before any PVE call.
+    const cephDenied = await denyIaasTenantCeph()
+    if (cephDenied) return cephDenied
 
     const body = await req.json().catch(() => ({}))
     const action = body?.action
@@ -72,12 +84,12 @@ async function handlePost(req: Request, ctx: Ctx) {
     if (action !== "start" && osdId !== null && !force) {
       const clusterStatus = await pveFetch<any[]>(conn, "/cluster/status").catch(() => null)
       const viaNode = pickOnlineNode(clusterStatus, safeNode) ?? safeNode
-      const check = await runOkToStop(id, conn, viaNode, [osdId], "ceph/service")
+      const check = await runOkToStopApi(conn, viaNode, osdId, "ceph/service")
       if (!check.verdict?.ok) {
         return NextResponse.json({
-          error: check.error || `Stopping ${serviceName} would take ${check.verdict?.numNotOkPgs ?? 0} PG(s) offline`,
+          error: refusalText(serviceName, check.verdict),
           code: "not_ok_to_stop",
-          okToStop: okToStopPayload(check, [osdId]),
+          okToStop: clientOkToStopPayload(check, [osdId], "ceph/service"),
         }, { status: 409 })
       }
     }

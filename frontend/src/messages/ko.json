@@ -824,6 +824,8 @@
     "diskLatencyRetention": "Disk I/O 그래프용 지연 시간 기록 보관 일수",
     "metricsRetention": "지표 기록 보관 일수",
     "metricsRetentionDesc": "대시보드의 상위 소비 게스트와 그래프가 되돌아볼 수 있는 범위를 제한합니다. 더 오래된 수집 데이터는 오케스트레이터가 삭제합니다.",
+    "cephMetricsRetention": "Ceph 콕핏용으로 보관하는 Ceph 기록 일수",
+    "cephMetricsRetentionDesc": "Ceph 콕핏 그래프가 거슬러 볼 수 있는 기간을 제한합니다(1~365). Enterprise 전용.",
     "metricsInterval": "수집 간격",
     "snapshots": "스냅샷",
     "collectionRecovery": "수집 및 정상 복귀",
@@ -4491,6 +4493,9 @@
     "sshUseSudoHelper": "SSH 사용자가 root가 아닌 경우 명령 앞에 sudo를 붙입니다",
     "replicationNetwork": "복제 네트워크 (CIDR)",
     "replicationNetworkHelper": "복제 스트림은 관리 주소 대신 이 네트워크에 속한 노드 주소로 이 클러스터의 노드에 도달합니다. 비워 두면 관리 네트워크를 사용하며, 상대 클러스터의 노드에는 이 네트워크로 가는 경로가 필요합니다.",
+    "cephExporterPort": "ceph-exporter 포트",
+    "cephExporterPortHelper": "이 클러스터의 각 노드에서 ceph-exporter가 사용하는 TCP 포트입니다. ProxCenter는 Ceph 콕핏을 위해 이 포트에서 OSD별 I/O 카운터를 읽습니다(기본값 9926).",
+    "errorCephExporterPortInvalid": "ceph-exporter 포트는 1에서 65535 사이의 숫자여야 합니다",
     "errorReplicationNetworkInvalid": "복제 네트워크는 CIDR 형식이어야 합니다. 예: 10.10.50.0/24",
     "siteRecovery": "사이트 복구",
     "siteRecoveryInfo": "이 클러스터가 복제 작업의 원본 또는 대상일 때 사이트 복구가 사용하는 설정입니다. 복제 스트림은 위의 SSH 접근을 사용하므로 먼저 활성화하세요.",
@@ -8309,7 +8314,8 @@
     "osdOkToStopHint": "먼저 ceph osd ok-to-stop을 확인합니다. 오프라인이 될 배치 그룹이 없을 때만 OSD를 조작합니다.",
     "notOkToStop": "지금 {service}을(를) 중지하는 것은 안전하지 않습니다",
     "notOkToStopPgs": "{count, plural, other {OSD가 중지된 동안 배치 그룹 #개가 오프라인이 되어 해당 데이터를 사용할 수 없게 됩니다.}}",
-    "notOkToStopUnknown": "ceph osd ok-to-stop을 평가할 수 없습니다: {error}",
+    "notOkToStopBare": "Ceph에 따르면 지금 이 OSD를 중지하는 것은 안전하지 않습니다.",
+    "notOkToStopUnknown": "Ceph에 문의할 수 없어 중지는 안전하지 않은 것으로 간주됩니다.",
     "acknowledge": "이해했습니다. 그래도 진행합니다",
     "startStarted": "작업 시작됨: {host}에서 {service} 시작 중",
     "stopStarted": "작업 시작됨: {host}에서 {service} 중지 중",
@@ -8324,71 +8330,6 @@
     "monCreateStarted": "작업 시작됨: {node}에 모니터 생성 중",
     "mgrCreateStarted": "작업 시작됨: {node}에 매니저 생성 중",
     "createFailed": "생성 실패: {error}"
-  },
-  "cephPage": {
-    "sevenDays": "7일",
-    "performance": "성능",
-    "osd": "OSD",
-    "host": "호스트",
-    "latencyHeader": "지연 시간",
-    "pool": "풀",
-    "replication": "복제",
-    "pgs": "PG",
-    "objects": "객체",
-    "monitor": "모니터",
-    "address": "주소",
-    "quorum": "쿼럼",
-    "leader": "리더",
-    "inQuorum": "쿼럼 참여",
-    "out": "Out",
-    "upIn": "UP / IN",
-    "upOut": "UP / OUT",
-    "downIn": "DOWN / IN",
-    "downOut": "DOWN / OUT",
-    "iops": "IOPS",
-    "throughput": "처리량",
-    "readLabel": "읽기",
-    "writeLabel": "쓰기",
-    "readIops": "읽기 IOPS",
-    "writeIops": "쓰기 IOPS",
-    "commitLatency": "커밋 지연",
-    "deviceClass": "디바이스 클래스",
-    "applyLatency": "적용 지연",
-    "reweight": "Reweight",
-    "pgTarget": "목표 PG",
-    "autoscale": "PG 자동 확장",
-    "crushRule": "CRUSH 규칙",
-    "application": "애플리케이션",
-    "rank": "순위",
-    "storeSize": "저장소 크기",
-    "recovery": "복구",
-    "recoveryObjects": "{count} 오브젝트/s",
-    "totalLabel": "전체",
-    "upLabel": "Up",
-    "inLabel": "In",
-    "downLabel": "Down",
-    "totalInQuorum": "쿼럼 참여",
-    "quorumPrefix": "쿼럼",
-    "placementGroups": "배치 그룹(PG)",
-    "totalPgs": "전체 PG",
-    "poolsLabel": "풀",
-    "osdsTab": "OSD",
-    "poolsTab": "풀",
-    "monitorsTab": "모니터",
-    "mdsTab": "MDS",
-    "osdsTitle": "OSD",
-    "monitorsTitle": "모니터",
-    "healthOk": "HEALTH OK",
-    "healthWarning": "경고",
-    "healthError": "오류",
-    "healthUnknown": "알 수 없음",
-    "rShort": "R",
-    "wShort": "W",
-    "live": "LIVE",
-    "iopsCeph": "Ceph IOPS",
-    "osdsAndPools": "OSD 및 풀",
-    "livePerformance": "실시간 성능",
-    "monitorHealth": "상태 모니터링"
   },
   "storageOverview": {
     "latency": "지연 시간",
@@ -10009,9 +9950,7 @@
     "noDrs": "DRS 클러스터 없음",
     "noDrsDesc": "DRS를 지원하는 Proxmox 클러스터가 없습니다. DRS를 사용하려면 여러 노드가 있는 클러스터를 연결하세요.",
     "noStorage": "스토리지 없음",
-    "noStorageDesc": "스토리지 볼륨이 없습니다. 클러스터가 연결되면 스토리지가 여기에 표시됩니다.",
-    "noCeph": "Ceph 클러스터 없음",
-    "noCephDesc": "연결에서 감지된 Ceph 클러스터가 없습니다. 세부 정보를 보려면 Proxmox 클러스터에서 Ceph를 활성화하세요."
+    "noStorageDesc": "스토리지 볼륨이 없습니다. 클러스터가 연결되면 스토리지가 여기에 표시됩니다."
   },
   "commandPalette": {
     "placeholder": "페이지, VM, 노드, IP, MAC 주소 검색...",
@@ -10119,6 +10058,7 @@
     "noNotes": "노트 없음",
     "noWarningsErrors": "경고/오류 없음",
     "cephVersion": "Ceph 버전",
+    "openCephCockpit": "Ceph 콕핏 열기",
     "services": "서비스",
     "monitors": "모니터",
     "managers": "매니저",
@@ -12158,6 +12098,543 @@
       "open": "인시던트 열기",
       "view": "인시던트 보기",
       "availability": "가용성 보기"
+    }
+  },
+  "cephCockpit": {
+    "tabs": {
+      "overview": "개요",
+      "osd": "OSD",
+      "pools": "풀",
+      "crush": "CRUSH",
+      "services": "서비스",
+      "perf": "성능"
+    },
+    "header": {
+      "cluster": "Ceph 클러스터",
+      "updated": "{age} 전 업데이트됨",
+      "range": "기간",
+      "refresh": "새로 고침"
+    },
+    "range": {
+      "live": "실시간",
+      "1h": "1시간",
+      "24h": "24시간",
+      "7d": "7일",
+      "30d": "30일"
+    },
+    "age": {
+      "seconds": "{count}초",
+      "minutes": "{count}분",
+      "hours": "{count}시간",
+      "days": "{count}일"
+    },
+    "health": {
+      "HEALTH_OK": "정상",
+      "HEALTH_WARN": "경고",
+      "HEALTH_ERR": "오류",
+      "unknown": "알 수 없음"
+    },
+    "rail": {
+      "title": "클러스터 상태",
+      "errors": "오류",
+      "warnings": "경고",
+      "sevErr": "ERR",
+      "sevWarn": "WARN",
+      "showDetail": "세부 정보 표시",
+      "hideDetail": "세부 정보 숨기기",
+      "open": "{target} 열기",
+      "flags": "OSD 플래그",
+      "flagsNone": "OSD 플래그: 없음",
+      "editFlags": "편집",
+      "showChecks": "알림 표시",
+      "hideChecks": "알림 숨기기"
+    },
+    "target": {
+      "flags": "플래그"
+    },
+    "stale": {
+      "title": "클러스터에 연결할 수 없음",
+      "body": "마지막으로 성공한 읽기는 {age} 전입니다. 표시된 수치는 마지막으로 받은 값입니다.",
+      "inventory": "인벤토리가 {age} 동안 새로 고쳐지지 않았습니다"
+    },
+    "error": {
+      "title": "이 Ceph 클러스터를 읽을 수 없습니다",
+      "retry": "다시 시도",
+      "connections": "Proxmox 연결 목록을 가져올 수 없습니다"
+    },
+    "empty": {
+      "title": "Ceph 클러스터 없음",
+      "description": "Proxmox 연결에서 Ceph 클러스터를 찾지 못했습니다. 클러스터에서 Ceph를 활성화하면 여기에서 상태, OSD, 풀을 확인할 수 있습니다.",
+      "clusterTitle": "이 클러스터에는 Ceph가 없습니다",
+      "clusterDescription": "이 연결은 응답하지만 Ceph 클러스터를 실행하지 않습니다. 위에서 다른 클러스터를 선택하세요.",
+      "hintOsds": "OSD 및 풀",
+      "hintLive": "실시간 성능",
+      "hintHealth": "상태 모니터링",
+      "storages": "스토리지"
+    },
+    "ui": {
+      "noData": "데이터 없음",
+      "separator": " · ",
+      "listSeparator": ", ",
+      "thresholdBar": "{used}% 사용, nearfull {nearfull}%, full {full}%"
+    },
+    "overview": {
+      "tiles": {
+        "raw": "원시 용량",
+        "rawUsed": "{total} 중 {used}",
+        "trend": "{period} 동안 {delta}pt",
+        "iops": "클라이언트 IOPS",
+        "throughput": "클라이언트 처리량",
+        "latency": "OSD 지연 시간",
+        "latencyUnit": "ms 평균",
+        "latencyMax": "최대 {ms} ms (osd.{osd})",
+        "read": "읽기 {value}",
+        "write": "쓰기 {value}",
+        "readLabel": "읽기",
+        "writeLabel": "쓰기"
+      },
+      "recovery": {
+        "title": "복구 진행 중",
+        "waiting": "데이터 저하, 아직 진행 중인 복구 없음",
+        "objectsRate": "초당 {count}개 객체",
+        "degraded": "{count, plural, other {저하된 객체 #개}}",
+        "misplaced": "{count, plural, other {잘못 배치된 객체 #개}}",
+        "showPerf": "복구 추이"
+      },
+      "hostMap": {
+        "title": "호스트 및 OSD",
+        "legendCards": "링 = 사용률, 테두리 = 상태",
+        "problemOnly": "문제 있는 호스트만",
+        "hiddenHealthy": "{count, plural, other {호스트 #개 숨김, 모두 정상}}",
+        "noProblemHost": "문제 있는 호스트 없음",
+        "crush": "CRUSH 맵",
+        "osdCount": "{count, plural, other {OSD #개}}",
+        "mon": "mon",
+        "monLeader": "리더 모니터",
+        "monOutOfQuorum": "쿼럼 밖 모니터",
+        "mgrActive": "활성 mgr",
+        "mgrStandby": "mgr",
+        "mds": "mds",
+        "up": "up",
+        "down": "down",
+        "in": "in",
+        "out": "out",
+        "flag": "플래그",
+        "latency": "{ms} ms",
+        "pgs": "PG {count}개",
+        "open": "osd.{id} 열기",
+        "avg": "평균 {pct}",
+        "max": "최대 {pct}",
+        "downCount": "{count}개 down",
+        "legendLow": "< {pct}",
+        "legendMid": "{from}~{to}",
+        "legendAbove": "≥ {pct}",
+        "flags": "플래그: {flags}",
+        "fill": "{pct} 사용",
+        "empty": "인벤토리에 OSD 없음",
+        "view": {
+          "label": "호스트 맵 보기",
+          "compact": "간결",
+          "dense": "밀집"
+        }
+      },
+      "trend": {
+        "unavailable": "기록을 사용할 수 없음",
+        "notEnough": "{period} 동안 아직 데이터 없음"
+      },
+      "missing": "–"
+    },
+    "osd": {
+      "search": "OSD 또는 호스트 검색",
+      "hostFilter": "호스트",
+      "allHosts": "모든 호스트",
+      "classFilter": "클래스",
+      "allClasses": "모든 클래스",
+      "filters": {
+        "all": "전체",
+        "problem": "문제 있음",
+        "down": "Down",
+        "out": "Out"
+      },
+      "columns": {
+        "osd": "OSD",
+        "state": "상태",
+        "class": "클래스",
+        "fill": "사용률",
+        "latency": "지연 시간",
+        "iops": "IOPS",
+        "throughput": "처리량",
+        "pgs": "PG"
+      },
+      "group": {
+        "osdCount": "{count, plural, other {OSD #개}}",
+        "fold": "{host} 접기",
+        "unfold": "{host} 펼치기"
+      },
+      "state": {
+        "up": "up",
+        "down": "down",
+        "in": "in",
+        "out": "out"
+      },
+      "latency": "{ms} ms",
+      "issues": "{count, plural, other {상태 점검 #건이 이 OSD를 지목합니다}}",
+      "empty": "인벤토리에 OSD가 없습니다",
+      "emptyFiltered": "이 필터에 맞는 OSD가 없습니다",
+      "open": "osd.{id} 열기",
+      "pager": {
+        "range": "{total}개 중 {from}-{to}",
+        "prev": "이전 페이지",
+        "next": "다음 페이지"
+      },
+      "drawer": {
+        "close": "닫기",
+        "prev": "이전 OSD (위쪽 화살표)",
+        "next": "다음 OSD (아래쪽 화살표)",
+        "subtitle": "{host} · {class} · Ceph {version}",
+        "subtitleNoVersion": "{host} · {class}",
+        "state": "상태",
+        "actions": "작업",
+        "fill": "사용률",
+        "fillDetail": "{total} 중 {used} 사용, {free} 여유",
+        "fillPct": "{pct} 사용",
+        "latency": "커밋 / 적용 지연 시간",
+        "latencyValue": "{commit} / {apply} ms",
+        "pgs": "배치 그룹",
+        "weights": "재가중치 / CRUSH 가중치",
+        "device": "장치 클래스",
+        "pools": "여기에 배치되는 풀",
+        "poolsNone": "없음",
+        "version": "버전",
+        "checks": "상태 점검",
+        "unknown": "알 수 없음",
+        "osdType": "오브젝트 스토어",
+        "dataDevice": "데이터 장치",
+        "dbDevice": "DB 장치",
+        "walDevice": "WAL 장치",
+        "onDataDevice": "데이터 장치에 있음"
+      },
+      "actions": {
+        "scrub": "스크럽",
+        "deepScrub": "딥 스크럽",
+        "in": "in 처리",
+        "out": "out 처리",
+        "stop": "중지",
+        "restart": "재시작",
+        "noPermission": "OSD 작업에는 storage.admin 권한이 필요합니다",
+        "alreadyIn": "osd.{id}는 이미 in 상태입니다",
+        "alreadyOut": "osd.{id}는 이미 out 상태입니다",
+        "notRunning": "osd.{id}는 down 상태입니다",
+        "scrubStarted": "osd.{id} 스크럽을 요청했습니다",
+        "deepScrubStarted": "osd.{id} 딥 스크럽을 요청했습니다",
+        "inStarted": "osd.{id}를 in 처리하는 중입니다",
+        "outStarted": "osd.{id}를 out 처리하는 중입니다",
+        "stopStarted": "작업 시작됨: osd.{id} 중지",
+        "restartStarted": "작업 시작됨: osd.{id} 재시작",
+        "failed": "osd.{id} 작업 실패: {error}",
+        "start": "시작",
+        "startStarted": "작업 시작됨: osd.{id} 시작",
+        "nodeUnknown": "이 연결의 노드 중 CRUSH 호스트 {host}와 일치하는 노드가 없어 작업을 보낼 수 없습니다",
+        "alreadyRunning": "osd.{id}는 이미 실행 중입니다"
+      },
+      "confirm": {
+        "title": {
+          "out": "osd.{id}를 out 처리할까요?",
+          "stop": "osd.{id}를 중지할까요?",
+          "restart": "osd.{id}를 재시작할까요?"
+        },
+        "body": {
+          "out": "Ceph가 osd.{id}의 데이터(배치 그룹 {pgs}개)를 클러스터의 다른 OSD로 옮깁니다.",
+          "stop": "osd.{id}가 {host}에서 중지됩니다. down 상태인 동안 배치 그룹의 복제본이 줄어듭니다.",
+          "restart": "osd.{id}가 {host}에서 재시작됩니다. 몇 초 동안 사용할 수 없습니다."
+        },
+        "impactTitle": "다른 OSD의 예상 사용률",
+        "before": "이전",
+        "after": "이후",
+        "moved": "약 {size}가 다른 OSD {count}개로 이동합니다.",
+        "moveNothing": "osd.{id}는 이미 out 상태여서 이동할 데이터가 없습니다.",
+        "noReceiver": "클래스 {class}의 다른 OSD가 이 데이터를 받을 수 없습니다.",
+        "projectedUnder": "가장 찬 OSD는 {pct}가 되어 nearfull({nearfull}) 미만입니다.",
+        "projectedOver": "가장 찬 OSD는 {pct}가 되어 nearfull({nearfull})을 넘습니다.",
+        "stopNote": "중지 자체는 데이터를 옮기지 않습니다. Ceph는 down-out 지연 후 OSD를 out 처리하며, 이 추정치는 그때의 상황입니다.",
+        "verdictChecking": "Ceph에 확인하는 중 (ceph osd ok-to-stop)...",
+        "verdictOk": "ceph osd ok-to-stop: 안전합니다. 오프라인이 되는 배치 그룹이 없습니다.",
+        "verdictRefused": "ceph osd ok-to-stop: 거부됨. 배치 그룹 {count}개가 오프라인이 됩니다.",
+        "verdictRefusedBare": "ceph osd ok-to-stop: 거부됨.",
+        "verdictUnknown": "ceph osd ok-to-stop이 판정을 내리지 않았습니다: {error}",
+        "verdictUnknownBare": "ceph osd ok-to-stop이 판정을 내리지 않았습니다.",
+        "typeIntro": "OSD 이름 입력이 필요한 이유:",
+        "reasonRefused": "Ceph가 작업을 거부했습니다.",
+        "reasonUnknown": "Ceph가 판정을 내리지 않았습니다.",
+        "reasonNearfull": "예상 사용률이 nearfull을 넘습니다.",
+        "typePrompt": "확인하려면 {name}을(를) 입력하세요",
+        "typeLabel": "OSD 이름",
+        "cancel": "취소",
+        "action": {
+          "out": "out 처리",
+          "stop": "중지",
+          "restart": "재시작"
+        },
+        "forceAction": {
+          "out": "그래도 out 처리",
+          "stop": "그래도 중지",
+          "restart": "그래도 재시작"
+        },
+        "error": "작업 실패: {error}",
+        "refusedNow": "Ceph가 이제 이 작업을 거부합니다. 강제하려면 OSD 이름을 입력하세요.",
+        "estimateUnknown": "추정 불가: osd.{id}의 사용률을 읽을 수 없어(down, 크기 미상 또는 사용률 미보고) 이동할 데이터 양을 알 수 없습니다.",
+        "reasonLoadUnknown": "이동할 데이터 양을 추정할 수 없습니다."
+      },
+      "glyph": {
+        "upIn": "up 및 in",
+        "upOut": "up 및 out",
+        "down": "down",
+        "unknown": "상태 알 수 없음"
+      },
+      "trend": {
+        "collecting": "수집 중…",
+        "tooltip": "{min} / {avg} / {max} ms (기간 내 가장 낮은 평균 / 평균 / 관측된 최악 값)",
+        "tooltipSession": "{min} / {avg} / {max} ms (이 페이지를 연 이후 최저 / 평균 / 최악 값)"
+      },
+      "activity": {
+        "title": "활동",
+        "iops": "IOPS",
+        "throughput": "처리량",
+        "read": "읽기",
+        "write": "쓰기",
+        "measuring": "측정 중…",
+        "captionSession": "실시간, 최근 5분",
+        "captionHistoryLive": "최근 1시간 기록 후 실시간",
+        "captionHistory": "{period} 기록",
+        "unreachable": "OSD별 더 정확한 지표(IOPS 및 처리량)를 보려면 Ceph 노드에 ceph-exporter 패키지를 설치하고 ProxCenter에서 접근할 수 있도록 포트 {port}를 여십시오.",
+        "unreachableRefused": "{node}의 포트 {port}에서 수신 대기 중인 것이 없습니다. ceph-exporter 패키지가 설치되지 않았거나 서비스가 중지되었습니다.",
+        "unreachableTimeout": "{node}이(가) 포트 {port}에서 응답하지 않습니다. 방화벽에서 ProxCenter에 대해 이 포트를 여십시오.",
+        "unreachableInvalid": "{node}의 포트 {port}가 ceph-exporter 지표를 반환하지 않습니다. 연결에 설정된 포트를 확인하십시오.",
+        "showSteps": "설치 절차 표시",
+        "hideSteps": "설치 절차 숨기기",
+        "stepsIntro": "각 Ceph 노드에서 root로 실행하십시오:",
+        "copy": "복사",
+        "copied": "절차를 복사했습니다",
+        "copyFailed": "복사하지 못했습니다",
+        "notExported": "노드 {node}의 exporter는 응답하지만 osd.{id}를 보고하지 않습니다. 이 OSD가 이 노드에서 실행 중인지 확인하십시오.",
+        "noNode": "활동을 사용할 수 없습니다: 호스트 {host}에 해당하는 Proxmox 노드가 없습니다.",
+        "unavailable": "측정값을 읽을 수 없습니다"
+      },
+      "io": {
+        "readShort": "R",
+        "writeShort": "W",
+        "measuring": "측정 중…",
+        "unavailable": "익스포터 값을 읽을 수 없습니다",
+        "noNode": "이 호스트는 어떤 Proxmox 노드와도 일치하지 않아 측정할 수 없습니다",
+        "tooltip": "읽기 {read}, 쓰기 {write}",
+        "tooltipSession": "읽기 {read}, 쓰기 {write} (이 페이지를 연 이후의 곡선)"
+      }
+    },
+    "pools": {
+      "columns": {
+        "pool": "풀",
+        "usage": "용도",
+        "protection": "보호",
+        "rule": "CRUSH 규칙",
+        "pg": "PG",
+        "fill": "순 사용률",
+        "used": "사용량",
+        "avail": "순 사용 가능",
+        "objects": "오브젝트"
+      },
+      "open": "풀 {name} 열기",
+      "empty": "풀 없음",
+      "protection": "복제 {size} / 최소 {min}",
+      "autoscale": "자동 {mode}",
+      "ruleOpen": "CRUSH 탭 열기, 규칙 {rule}",
+      "pager": {
+        "range": "{total}개 중 {from}~{to}",
+        "prev": "이전 페이지",
+        "next": "다음 페이지"
+      },
+      "drawer": {
+        "close": "닫기",
+        "prev": "이전 풀 (위쪽 화살표)",
+        "next": "다음 풀 (아래쪽 화살표)",
+        "subtitle": "{app} · {type}",
+        "fill": "순 사용률",
+        "fillDetail": "{used} 사용, 순 {free} 사용 가능",
+        "storages": "PVE 스토리지",
+        "storagesNone": "이 풀을 사용하는 PVE 스토리지가 없습니다",
+        "protection": "보호",
+        "rule": "CRUSH 규칙",
+        "pgs": "배치 그룹",
+        "pgTarget": "목표 PG 수",
+        "pgTargetValue": "{target} (현재 {current})",
+        "autoscale": "PG 자동 확장",
+        "used": "사용량",
+        "avail": "순 사용 가능",
+        "objects": "오브젝트",
+        "quotaBytes": "크기 할당량",
+        "quotaObjects": "오브젝트 할당량",
+        "storagesUnavailable": "PVE 스토리지를 읽을 수 없습니다",
+        "pgRecommended": "오토스케일러 권장값",
+        "pgRecommendedValue": "{final} (이상값 {ideal})"
+      },
+      "storageUnavailable": "PVE 스토리지를 사용할 수 없음"
+    },
+    "crush": {
+      "error": "이 클러스터의 CRUSH 맵을 읽지 못했습니다",
+      "tree": {
+        "title": "계층 구조",
+        "meta": "{type} · OSD {count}개",
+        "upCount": "{up}/{total} up",
+        "openOsd": "{name} 열기",
+        "monLeader": "mon ★",
+        "foldAll": "모두 접기",
+        "unfoldAll": "모두 펼치기",
+        "empty": "이 클래스의 OSD가 CRUSH 맵에 없습니다"
+      },
+      "rules": {
+        "title": "규칙 및 장애 내성",
+        "source": "출처: 디컴파일된 CRUSH 맵",
+        "empty": "CRUSH 맵에 규칙이 없습니다",
+        "type": {
+          "replicated": "복제",
+          "erasure": "이레이저 코딩"
+        },
+        "class": "클래스 {class}",
+        "pools": "풀:",
+        "noPool": "없음",
+        "openPool": "풀 {name} 열기"
+      },
+      "domain": {
+        "osd": "{count, plural, other {OSD}}",
+        "host": "{count, plural, other {호스트}}",
+        "chassis": "{count, plural, other {샌시}}",
+        "rack": "{count, plural, other {랙}}",
+        "row": "{count, plural, other {열}}",
+        "pdu": "{count, plural, other {PDU}}",
+        "pod": "{count, plural, other {파드}}",
+        "room": "{count, plural, other {실}}",
+        "datacenter": "{count, plural, other {데이터센터}}",
+        "zone": "{count, plural, other {존}}",
+        "region": "{count, plural, other {리전}}",
+        "root": "{count, plural, other {루트}}"
+      },
+      "step": {
+        "take": "{class, select, none {{item} 선택} other {{item} 선택, 클래스 {class}}}",
+        "emit": "출력",
+        "choose_firstn": "{kind, select, all {복제본마다 {type} 하나 선택} less {{num}개를 제외한 모든 복제본, {type}당 하나씩 선택} other {{type} {num}개 선택}}",
+        "choose_indep": "{kind, select, all {복제본마다 {type} 하나 선택 (indep)} less {{num}개를 제외한 모든 복제본, {type}당 하나씩 선택 (indep)} other {{type} {num}개 선택 (indep)}}",
+        "chooseleaf_firstn": "{kind, select, all {복제본마다 {type} 하나 선택 후 각각에서 OSD 하나 선택} less {{num}개를 제외한 모든 복제본, {type}당 하나씩 선택 후 각각에서 OSD 하나 선택} other {{type} {num}개 선택 후 각각에서 OSD 하나 선택}}",
+        "chooseleaf_indep": "{kind, select, all {복제본마다 {type} 하나 선택 후 각각에서 OSD 하나 선택 (indep)} less {{num}개를 제외한 모든 복제본, {type}당 하나씩 선택 후 각각에서 OSD 하나 선택 (indep)} other {{type} {num}개 선택 후 각각에서 OSD 하나 선택 (indep)}}",
+        "set": "튜닝: {op}",
+        "other": "단계 {op}"
+      },
+      "tolerance": {
+        "tolerates": "{domain} {count}개가 손실되어도 중단 없이 유지됩니다.",
+        "blocks": "{domain} 하나만 손실되어도 재구축될 때까지 I/O가 차단됩니다.",
+        "insufficient": "올바른 클래스의 OSD를 가진 {domain} {needed}개가 필요하지만 {domains}개만 있습니다.",
+        "unknown": "이 규칙의 내성을 계산할 수 없습니다."
+      }
+    },
+    "services": {
+      "title": "Ceph 서비스",
+      "select": "{service} 강조",
+      "noNode": "호스트 {host}에 해당하는 PVE 노드가 없습니다: 작업을 사용할 수 없습니다",
+      "group": {
+        "mon": "모니터",
+        "mgr": "매니저",
+        "mds": "메타데이터 서버(CephFS)",
+        "monMeta": "{total}개 중 {inQuorum}개 쿼럼 참여",
+        "mgrMeta": "활성 {active}개, 대기 {standby}개",
+        "mgrMetaStopped": "활성 {active}개, 대기 {standby}개, 중지 {stopped}개",
+        "mdsMeta": "{total}개 중 {active}개 활성",
+        "none": "없음"
+      },
+      "col": {
+        "daemon": "데몬",
+        "host": "호스트",
+        "state": "상태",
+        "role": "역할",
+        "address": "주소",
+        "version": "버전",
+        "actions": "작업"
+      },
+      "state": {
+        "quorum": "쿼럼 참여",
+        "outOfQuorum": "쿼럼 이탈",
+        "active": "활성",
+        "standby": "대기",
+        "standbyReplay": "대기 리플레이",
+        "stopped": "중지됨",
+        "other": "알 수 없음"
+      },
+      "role": {
+        "leader": "리더",
+        "peon": "피온",
+        "active": "활성",
+        "standby": "대기",
+        "rank": "랭크 {rank}"
+      },
+      "empty": {
+        "mon": "보고된 모니터 없음",
+        "mgr": "보고된 매니저 없음",
+        "mds": "이 클러스터에는 CephFS가 없어 메타데이터 서버도 없습니다"
+      },
+      "versions": {
+        "title": "Ceph 버전",
+        "mixed": "버전 혼재",
+        "mixedHint": "업그레이드 미완료: 첫 번째 버전이 대부분의 데몬에서 실행 중입니다.",
+        "unknown": "보고된 버전 없음",
+        "item": "{version}: 데몬 {count}개"
+      },
+      "create": {
+        "button": "데몬 생성",
+        "title": "데몬 생성",
+        "kind": "데몬",
+        "mon": "모니터",
+        "mgr": "매니저",
+        "node": "노드",
+        "noNode": "모든 노드에서 이미 실행 중입니다",
+        "noPermission": "Ceph 서비스를 관리하려면 storage.admin 권한이 필요합니다",
+        "cancel": "취소",
+        "next": "다음"
+      }
+    },
+    "perf": {
+      "iops": {
+        "title": "클라이언트 IOPS"
+      },
+      "throughput": {
+        "title": "클라이언트 처리량"
+      },
+      "recovery": {
+        "title": "복구 및 비정상 PG",
+        "idle": "진행 중인 복구가 없으며 모든 PG가 정상입니다"
+      },
+      "series": {
+        "read": "읽기",
+        "write": "쓰기",
+        "recovery": "복구",
+        "unclean": "비정상 PG"
+      },
+      "live": {
+        "waiting": "실시간 데이터를 수집하는 중입니다. 몇 초 후 곡선이 표시됩니다",
+        "captionHistory": "최근 1시간 기록 후 실시간"
+      },
+      "chartLabel": "{title}, {period}",
+      "slowest": {
+        "title": "가장 느린 OSD",
+        "subtitleLive": "인벤토리 기준 현재 지연 시간",
+        "subtitlePeriod": "기간 평균",
+        "all": "전체 ({count})",
+        "allPlain": "전체",
+        "mean": "클러스터 평균 {ms} ms",
+        "empty": "아직 측정된 지연 시간이 없습니다",
+        "open": "OSD {id} 열기",
+        "max": "최대 {ms} ms",
+        "value": "{ms} ms",
+        "threshold": "{ms} ms부터 느림",
+        "openSlow": "OSD {id} 열기, 느림",
+        "slow": "느림"
+      }
     }
   }
 }

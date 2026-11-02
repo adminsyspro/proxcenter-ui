@@ -3,6 +3,7 @@ import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById, isConnectionNotFoundError } from "@/lib/connections/getConnection"
 import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { denyIaasTenantCeph } from "@/lib/ceph/tenantGuard"
 import { executeSSH } from "@/lib/ssh/exec"
 import { assertNodeName } from "@/lib/ssh/validate"
 import { safeLog } from "@/lib/log/sanitize"
@@ -19,7 +20,8 @@ import {
   type CephHealthSummary,
   type NodeOsd,
 } from "@/lib/ceph/nodeNoout"
-import { okToStopPayload, runOkToStop as runOkToStopOver, type OkToStopResult } from "@/lib/ceph/okToStopSsh"
+import { runOkToStop as runOkToStopOver, type OkToStopResult } from "@/lib/ceph/okToStopSsh"
+import { clientOkToStopPayload, OK_TO_STOP_UNAVAILABLE } from "@/lib/ceph/okToStopClient"
 
 export const runtime = "nodejs"
 
@@ -116,7 +118,7 @@ function runOkToStop(connId: string, conn: any, ceph: NodeCeph): Promise<OkToSto
 }
 
 function okToStopView(result: OkToStopResult, ceph: NodeCeph) {
-  return okToStopPayload(result, ceph.osds.map(o => o.id))
+  return clientOkToStopPayload(result, ceph.osds.map(o => o.id), "ceph/noout")
 }
 
 function publicView(ceph: NodeCeph) {
@@ -144,6 +146,9 @@ export async function GET(req: Request, ctx: Ctx) {
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", buildNodeResourceId(id, safeNode))
     if (denied) return denied
+    // Ceph is a whole-cluster object: an IaaS tenant gets 404, before any PVE call.
+    const cephDenied = await denyIaasTenantCeph()
+    if (cephDenied) return cephDenied
 
     const conn = await getConnectionById(id)
     const ceph = await loadNodeCeph(conn, safeNode)
@@ -178,6 +183,9 @@ async function prepareWrite(ctx: Ctx, enable: boolean): Promise<
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "node", buildNodeResourceId(id, safeNode))
   if (denied) return { response: denied }
+  // Ceph is a whole-cluster object: an IaaS tenant gets 404, before any PVE call.
+  const cephDenied = await denyIaasTenantCeph()
+  if (cephDenied) return { response: cephDenied }
 
   const conn = await getConnectionById(id)
   const ceph = await loadNodeCeph(conn, safeNode)
@@ -203,7 +211,9 @@ async function runGroupCommand(id: string, conn: any, ceph: NodeCeph, command: s
   if (result.success) {
     return NextResponse.json({ success: true, crushHost: ceph.crushHost, osds: ceph.osds.map(o => o.id), output: result.output, ...extra })
   }
-  return NextResponse.json({ error: result.error, hint: `Run manually on a PVE node: ${command}` }, { status: 500 })
+  // The raw SSH error names hosts and addresses: it goes to the log, the browser gets a fixed text.
+  console.error("[ceph/noout] command failed:", String(result.error).replace(/[\r\n]/g, ""))
+  return NextResponse.json({ error: "The Ceph command failed on the node", hint: `Run manually on a PVE node: ${command}` }, { status: 500 })
 }
 
 /**
@@ -225,7 +235,7 @@ async function handlePost(req: Request, ctx: Ctx) {
       const check = await runOkToStop(id, conn, ceph)
       if (!check.verdict?.ok) {
         return NextResponse.json({
-          error: check.error || `Stopping the OSDs of this node would take ${check.verdict?.numNotOkPgs ?? 0} PG(s) offline`,
+          error: check.verdict ? `Stopping the OSDs of this node would take ${check.verdict.numNotOkPgs} PG(s) offline` : OK_TO_STOP_UNAVAILABLE,
           code: "not_ok_to_stop",
           okToStop: okToStopView(check, ceph),
         }, { status: 409 })

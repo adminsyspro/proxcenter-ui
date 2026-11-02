@@ -40,6 +40,7 @@ const DEFAULT_THRESHOLDS = {
   disk_latency_peak_warning: 0,
   disk_latency_peak_critical: 500,
   disk_latency_retention_days: 7,
+  ceph_metrics_retention_days: 30,
   disk_latency_collection: 1,
   // Metrics collection cadence in seconds (#881), an int on the Go side too.
   metrics_interval_seconds: 60,
@@ -67,6 +68,7 @@ const INT_THRESHOLD_KEYS: ReadonlySet<keyof Thresholds> = new Set([
   'recovery_confirmations',
   'disk_latency_window_minutes',
   'disk_latency_retention_days',
+  'ceph_metrics_retention_days',
   'metrics_interval_seconds',
   'metrics_retention_days',
   'backup_coverage_grace_hours',

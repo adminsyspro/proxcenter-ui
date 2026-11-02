@@ -54,7 +54,9 @@ async function generateIconsCSS() {
             'simple-icons:openai',
             // Provider picker of the AI settings.
             'simple-icons:anthropic',
-            'simple-icons:ibm'
+            'simple-icons:ibm',
+            // Monochrome Ceph mark of the side menu (follows the text colour).
+            'simple-icons:ceph'
         ],
         svg: [
         /* {

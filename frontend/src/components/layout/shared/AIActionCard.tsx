@@ -18,7 +18,7 @@ import {
 } from '@mui/material'
 import { alpha, useTheme } from '@mui/material/styles'
 
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import { ACTION_KIND_ICONS, actionTier, type ActionCard, type ActionKind } from '@/lib/ai/actions/types'
 
 import type { ActionRun } from './useActionExecution'

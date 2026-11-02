@@ -17,6 +17,19 @@ const { globalFindMany, sessionFindMany, alertFindUniqueMock, alertUpdateManyMoc
   fetchOrchAlertsMock: vi.fn(),
 }))
 
+// G20: the bell's tenant filter (isAlertVisibleToTenant) runs on the merged
+// orchestrator alerts; its inputs are driven per test.
+const alertTenant = vi.hoisted(() => ({
+  current: "default",
+  connectionIds: new Set<string>(["p1", "p2"]),
+  vdcVmids: new Map<string, Set<string>>(),
+  ruleOwners: new Map<string, string>(),
+}))
+vi.mock("@/lib/alerts/vdcVmids", () => ({ getVdcVmidsByConnection: async () => alertTenant.vdcVmids }))
+vi.mock("@/lib/alerts/ruleOwners", () => ({
+  ruleVisibleToTenant: async (ruleId: string, tenantId: string) => (alertTenant.ruleOwners.get(ruleId) ?? "default") === tenantId,
+}))
+
 // Keep REAL inventoryConnectionPlan + maskingScope; only mock getTenantInfrastructureScope
 vi.mock("@/lib/tenant/infraScope", async (orig) => ({
   ...(await orig<typeof import("@/lib/tenant/infraScope")>()),
@@ -34,7 +47,9 @@ vi.mock("@/lib/tenant", () => ({
       updateMany: alertUpdateManyMock,
     },
   }),
-  getCurrentTenantId: async () => "default",
+  getCurrentTenantId: async () => alertTenant.current,
+  getTenantConnectionIds: async () => alertTenant.connectionIds,
+  DEFAULT_TENANT_ID: "default",
 }))
 
 // Global prisma -- also stubs alert table used by syncAlertsToDatabase
@@ -83,9 +98,10 @@ vi.mock("@/lib/rbac", () => ({
   filterNodesByPermission: (_uid: any, list: any[]) => Promise.resolve(list),
   checkPermission: vi.fn().mockResolvedValue(null),
   getCurrentRbacInfraScope: rbacScopeMock,
-  PERMISSIONS: { VM_VIEW: "vm.view", NODE_VIEW: "node.view" },
+  PERMISSIONS: { VM_VIEW: "vm.view", NODE_VIEW: "node.view", ALERTS_VIEW: "alerts.view" },
 }))
-vi.mock("@/lib/alerts/visibility", () => ({
+vi.mock("@/lib/alerts/visibility", async (orig) => ({
+  ...(await orig<typeof import("@/lib/alerts/visibility")>()),
   isAlertInRbacScope: vi.fn().mockReturnValue(true),
 }))
 
@@ -125,6 +141,10 @@ beforeEach(() => {
   // Default namespace snapshot fetch: return empty
   mockListSnapshotsInNamespace.mockResolvedValue([])
   fetchOrchAlertsMock.mockResolvedValue({})
+  alertTenant.current = "default"
+  alertTenant.connectionIds = new Set(["p1", "p2"])
+  alertTenant.vdcVmids = new Map()
+  alertTenant.ruleOwners = new Map()
 })
 
 describe("RBAC infra scope (issue #525)", () => {
@@ -532,5 +552,149 @@ describe("orchestrator alerts (#1012)", () => {
     await callRoute(GET, { method: "GET" })
 
     expect(fetchOrchAlertsMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("Ceph of a shared cluster (IaaS tenant)", () => {
+  const conn = { id: "p1", name: "PVE 1", type: "pve", hasCeph: true, tenantId: "default" }
+  const cephStatus = {
+    health: { status: "HEALTH_WARN", checks: { OSD_DOWN: {} } },
+    pgmap: { num_pgs: 128, bytes_total: 1000, bytes_used: 500, read_bytes_sec: 10, write_bytes_sec: 20 },
+    osdmap: { num_osds: 3, num_up_osds: 2, num_in_osds: 3 },
+  }
+
+  async function run() {
+    const { pveFetch } = await import("@/lib/proxmox/client")
+    vi.mocked(pveFetch).mockImplementation((async (_c: any, path: string) => {
+      if (path === "/nodes") return [{ node: "n1", status: "online" }, { node: "n2", status: "online" }]
+      if (path === "/cluster/status") return [{ type: "cluster", name: "shared" }]
+      if (path === "/cluster/ceph/status") return cephStatus
+      if (path.endsWith("/ceph/osd")) return { root: { children: [] } }
+      if (path.endsWith("/status")) return {}
+      return []
+    }) as any)
+    getConnByIdMock.mockResolvedValue({ baseUrl: "https://pve.invalid:8006", apiToken: "t" })
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    const { mergeAndFilterDashboardAlerts } = await import("@/lib/alerts/dashboardAlertMerge")
+    const baseAlerts = vi.mocked(mergeAndFilterDashboardAlerts).mock.calls.at(-1)?.[0]?.baseAlerts ?? []
+    const cephPaths = vi.mocked(pveFetch).mock.calls.map(c => String(c[1])).filter(p => p.includes("ceph"))
+    return { body, baseAlerts, cephPaths }
+  }
+
+  it("iaas: Ceph is never read and no Ceph field, cluster health or alert comes back", async () => {
+    mockGetServerSession.mockResolvedValue({ user: { id: "u1", tenantId: "tenant-iaas" } })
+    getInfraMock.mockResolvedValue({
+      kind: "iaas",
+      vdcScope: {
+        connectionIds: new Set(["p1"]),
+        pbsConnectionIds: new Set(),
+        nodesByConnection: new Map([["p1", new Set(["n1"])]]),
+        poolsByConnection: new Map([["p1", new Set(["pool-a"])]]),
+        pbsNamespacesByConnection: new Map(),
+      },
+    })
+    globalFindMany.mockResolvedValue([conn])
+
+    const { body, baseAlerts, cephPaths } = await run()
+
+    expect(cephPaths).toEqual([])
+    expect(body.data.ceph).toBeNull()
+    expect(body.data.cephClusters).toEqual([])
+    expect(body.data.clusters.map((c: any) => c.cephHealth)).toEqual([null])
+    expect(baseAlerts.filter((a: any) => a.sourceType === "ceph")).toEqual([])
+  })
+
+  it("provider: the same cluster keeps its Ceph block, health and alert", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    globalFindMany.mockResolvedValue([conn])
+
+    const { body, baseAlerts, cephPaths } = await run()
+
+    expect(cephPaths).toContain("/cluster/ceph/status")
+    expect(body.data.ceph).toMatchObject({ available: true, health: "HEALTH_WARN", osdsTotal: 3 })
+    expect(body.data.cephClusters).toHaveLength(1)
+    expect(body.data.clusters[0].cephHealth).toBe("HEALTH_WARN")
+    expect(baseAlerts.filter((a: any) => a.sourceType === "ceph")).toHaveLength(1)
+  })
+
+  it("msp: its own cluster keeps its Ceph block", async () => {
+    mockGetServerSession.mockResolvedValue({ user: { id: "u1", tenantId: "tenant-msp" } })
+    getInfraMock.mockResolvedValue({ kind: "msp", connectionIds: new Set(["p1"]) })
+    sessionFindMany.mockResolvedValue([{ ...conn, tenantId: "tenant-msp" }])
+
+    const { body, cephPaths } = await run()
+
+    expect(cephPaths).toContain("/cluster/ceph/status")
+    expect(body.data.cephClusters).toHaveLength(1)
+    expect(body.data.clusters[0].cephHealth).toBe("HEALTH_WARN")
+  })
+})
+
+describe("orchestrator alerts filtered like the bell (G20)", () => {
+  // Built-in alerts of the shared cluster: Ceph noout on a CRUSH host, OSD latency, node CPU.
+  const cephNoout = { connection_id: "p1", type: "ceph_noout", resource_type: "ceph", resource: "host:pve3", message: "noout set on pve3" }
+  const osdLatency = { connection_id: "p1", type: "osd_latency", resource_type: "osd", resource: "osd.3" }
+  const nodeCpu = { connection_id: "p1", type: "cpu", resource_type: "node", resource: "n1", node: "n1" }
+  // Alerts of a rule the IaaS tenant owns: one on a guest of its vDC, one on a connection outside its scope.
+  const ownGuest = { connection_id: "p1", rule_id: "r-iaas", type: "cpu", resource_type: "qemu", resource_id: 100, node: "n1" }
+  const foreignConn = { connection_id: "p2", rule_id: "r-iaas", type: "cpu", resource_type: "qemu", resource_id: 200, node: "n9" }
+
+  beforeEach(() => {
+    vi.stubEnv("ORCHESTRATOR_URL", "http://orchestrator:8080")
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  async function mergedOrchAlerts() {
+    const { mergeAndFilterDashboardAlerts } = await import("@/lib/alerts/dashboardAlertMerge")
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+    return vi.mocked(mergeAndFilterDashboardAlerts).mock.calls.at(-1)?.[0]?.orchAlerts
+  }
+
+  it("iaas: no Ceph alert of the shared cluster, no alert of a connection outside its scope, its own guest alert kept", async () => {
+    mockGetServerSession.mockResolvedValue({ user: { id: "u1", tenantId: "tenant-iaas" } })
+    alertTenant.current = "tenant-iaas"
+    alertTenant.connectionIds = new Set(["p1"])
+    alertTenant.vdcVmids = new Map([["p1", new Set(["100"])]])
+    alertTenant.ruleOwners = new Map([["r-iaas", "tenant-iaas"]])
+    getInfraMock.mockResolvedValue({
+      kind: "iaas",
+      vdcScope: {
+        connectionIds: new Set(["p1"]),
+        pbsConnectionIds: new Set(),
+        nodesByConnection: new Map([["p1", new Set(["n1"])]]),
+        poolsByConnection: new Map([["p1", new Set(["pool-a"])]]),
+        pbsNamespacesByConnection: new Map(),
+      },
+    })
+    fetchOrchAlertsMock.mockResolvedValue({ active: [cephNoout, osdLatency, nodeCpu, ownGuest, foreignConn], acknowledged: [] })
+
+    expect(await mergedOrchAlerts()).toEqual([ownGuest])
+  })
+
+  it("provider: every alert of its fleet still reaches the merge", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    const providerRule = { ...foreignConn, rule_id: "r-provider" }
+    fetchOrchAlertsMock.mockResolvedValue({ active: [cephNoout, osdLatency, nodeCpu, providerRule], acknowledged: [] })
+
+    expect(await mergedOrchAlerts()).toEqual([cephNoout, osdLatency, nodeCpu, providerRule])
+  })
+
+  it("msp: the built-in alerts of its own connection reach the merge, not those of another connection", async () => {
+    mockGetServerSession.mockResolvedValue({ user: { id: "u1", tenantId: "tenant-msp" } })
+    alertTenant.current = "tenant-msp"
+    alertTenant.connectionIds = new Set(["p1"])
+    getInfraMock.mockResolvedValue({ kind: "msp", connectionIds: new Set(["p1"]) })
+    const otherCpu = { ...nodeCpu, connection_id: "p2" }
+    fetchOrchAlertsMock.mockResolvedValue({ active: [cephNoout, nodeCpu, otherCpu], acknowledged: [] })
+
+    expect(await mergedOrchAlerts()).toEqual([cephNoout, nodeCpu])
   })
 })

@@ -1,0 +1,16 @@
+# HELP ceph_osd_op_r Client read operations
+# TYPE ceph_osd_op_r counter
+ceph_osd_op_r{ceph_daemon="osd.0"} 2135449
+ceph_osd_op_r{ceph_daemon="osd.3"} 100
+# HELP ceph_osd_op_r_out_bytes Client data read
+# TYPE ceph_osd_op_r_out_bytes counter
+ceph_osd_op_r_out_bytes{ceph_daemon="osd.0"} 6270944348
+ceph_osd_op_r_out_bytes{ceph_daemon="osd.3"} 4096
+# HELP ceph_osd_op_w Client write operations
+# TYPE ceph_osd_op_w counter
+ceph_osd_op_w{ceph_daemon="osd.0"} 301519
+# HELP ceph_osd_op_w_in_bytes Client data written
+# TYPE ceph_osd_op_w_in_bytes counter
+ceph_osd_op_w_in_bytes{ceph_daemon="osd.0"} 11259148746
+ceph_osd_op_w_in_bytes{ceph_daemon="osd.3"} 8192
+ceph_osd_op_rw{ceph_daemon="osd.0"} 7

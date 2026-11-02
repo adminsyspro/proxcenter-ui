@@ -19,7 +19,7 @@ import {
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import ActivityTimeline from '@/components/changes/ActivityTimeline'
 import { AuthorCell, AuthorEvidence } from '@/components/changes/AuthorCell'
 import ChangeDetails, { FieldDiff } from '@/components/changes/ChangeDetails'

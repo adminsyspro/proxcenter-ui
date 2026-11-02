@@ -47,7 +47,7 @@ export const menuData = (t = (key) => key) => [
       },
       {
         label: t('navigation.ceph'),
-        icon: 'ri-stack-line',
+        icon: 'simple-icons-ceph',
         href: '/storage/ceph',
         permissions: ['storage.admin']
       },

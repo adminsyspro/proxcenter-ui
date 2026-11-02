@@ -16,7 +16,7 @@ import {
   TextField, Tooltip, Typography, useTheme, alpha,
 } from '@mui/material'
 
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import * as firewallAPI from '@/lib/api/firewall'
 import { errorMessage } from '@/lib/firewall/loadError'
 

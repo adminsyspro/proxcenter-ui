@@ -15,6 +15,7 @@ import { collectCharts } from '@/lib/ai/charts'
 import { collectTargetChoices, consultedOk } from '@/lib/ai/choices'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
 import { buildToolContext } from '@/lib/tools/catalog'
+import { cephAllowedForCaller } from '@/lib/ceph/tenantGuard'
 import { toolsForProvider, type AiProvider } from '@/lib/ai/tools/adapters'
 import { runToolRounds, userTextOf, type SendTurn, type ToolMode } from '@/lib/ai/tools/loop'
 import { requireFeature } from '@/lib/auth/requireEnterprise'
@@ -91,6 +92,8 @@ export async function POST(request: Request) {
     })
     const toolCtx = {
       ...buildToolContext(snapshot, tenantId, uiLocale, normalizeTimeZone(timeZone)),
+      // Ceph verdict taken here, in the request scope, on the raw principal.
+      cephVisible: await cephAllowedForCaller(),
       ...(assistant.actions ? { actions: assistant.actions } : {}),
     }
     const wireTools = toolsForProvider(provider, assistant.tools)

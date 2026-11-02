@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react'
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 
 import { drsReasonText } from '@/components/automation/drs/drsReason'
@@ -2317,6 +2318,20 @@ export default function ClusterTabs(props: any) {
                       </Box>
                     ) : clusterCephData ? (
                       <Stack spacing={3}>
+                        {/* The cockpit page is gated by storage.admin: no link to a page the user cannot open. */}
+                        {canSetCephFlags && connId && (
+                          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <Button
+                              component={Link}
+                              href={`/storage/ceph?conn=${encodeURIComponent(connId)}`}
+                              size="small"
+                              variant="text"
+                              startIcon={<i className="ri-dashboard-3-line" style={{ fontSize: 16 }} />}
+                            >
+                              {t('cluster.openCephCockpit')}
+                            </Button>
+                          </Box>
+                        )}
                         {/* Health & Status */}
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                           {/* Health Card - avec Summary comme Proxmox */}

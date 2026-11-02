@@ -422,7 +422,6 @@
     "src/app/(dashboard)/security/audit/page.jsx",
     "src/app/(dashboard)/security/users/page.jsx",
     "src/app/(dashboard)/settings/page.jsx",
-    "src/app/(dashboard)/storage/ceph/page.jsx",
     "src/app/(dashboard)/storage/overview/page.jsx",
     "src/app/(fullscreen)/console/[type]/[node]/[vmid]/page.jsx",
     "src/app/(fullscreen)/layout.jsx",

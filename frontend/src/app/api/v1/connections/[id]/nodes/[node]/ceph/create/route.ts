@@ -3,6 +3,7 @@ import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById, isConnectionNotFoundError } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { denyIaasTenantCeph } from "@/lib/ceph/tenantGuard"
 import { assertNodeName } from "@/lib/ssh/validate"
 import { withAudit } from "@/lib/audit/withAudit"
 import { isDaemonId, parseCreateMonBody } from "@/lib/ceph/service"
@@ -65,6 +66,9 @@ async function handlePost(req: Request, ctx: Ctx) {
 
     const denied = await checkPermission(PERMISSIONS.STORAGE_ADMIN, "connection", id)
     if (denied) return denied
+    // Ceph is a whole-cluster object: an IaaS tenant gets 404, before any PVE call.
+    const cephDenied = await denyIaasTenantCeph()
+    if (cephDenied) return cephDenied
 
     const body = await req.json().catch(() => ({}))
     const kind = body?.kind

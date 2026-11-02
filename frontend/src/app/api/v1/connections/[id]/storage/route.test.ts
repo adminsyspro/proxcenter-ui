@@ -52,6 +52,10 @@ vi.mock('@/lib/storage/attachPbsStorage', () => ({
   },
 }))
 
+// G20: the Ceph verdict of the caller; `allowed` flips it per test.
+const cephGate = vi.hoisted(() => ({ allowed: true }))
+vi.mock('@/lib/ceph/tenantGuard', () => ({ cephAllowedForCaller: async () => cephGate.allowed }))
+
 vi.mock('@/lib/tenant/infraScope', () => ({
   getTenantInfrastructureScope: vi.fn<(tenantId: string) => Promise<any>>(),
   maskingScope: vi.fn<(infra: any) => any>(),
@@ -433,5 +437,47 @@ describe('GET /api/v1/connections/[id]/storage: node- and storage-scoped callers
     getCurrentRbacInfraScopeMock.mockResolvedValue(deriveRbacInfraScope({ superAdmin: false, byScope: [{ scopeType: 'vm', scopeTarget: 'c1:n1:qemu:100' }] }))
     expect((await rows()).status).toBe(403)
     expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+})
+
+// G20: the monitor addresses of a Ceph storage never reach a caller the Ceph
+// gate refuses (IaaS tenant on a shared provider cluster); everything else of
+// the row is unchanged.
+describe('GET /api/v1/connections/[id]/storage, monhost (G20)', () => {
+  beforeEach(() => {
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (path === '/cluster/resources') {
+        return Promise.resolve([
+          { type: 'storage', storage: 'rbd-ext', node: 'n1', disk: 1, maxdisk: 2, status: 'available' },
+        ])
+      }
+      if (path === '/storage') {
+        return Promise.resolve([{ storage: 'rbd-ext', type: 'rbd', content: 'images', pool: 'vm', monhost: '192.0.2.11 192.0.2.12' }])
+      }
+      return Promise.resolve([])
+    })
+  })
+
+  async function rows() {
+    const res = await callRoute(GET, { method: 'GET', params: { id: 'c1' } })
+    expect(res.status).toBe(200)
+    return (await readJson<any>(res)).data
+  }
+
+  it('provider or msp (gate passes): the monitor addresses are listed', async () => {
+    cephGate.allowed = true
+    const data = await rows()
+    expect(data).toHaveLength(1)
+    expect(data[0].monhost).toBe('192.0.2.11 192.0.2.12')
+  })
+
+  it('iaas (gate refuses): monhost is null, the rest of the row unchanged', async () => {
+    cephGate.allowed = true
+    const before = await rows()
+    cephGate.allowed = false
+    const after = await rows()
+    expect(after[0].monhost).toBeNull()
+    expect({ ...after[0], monhost: before[0].monhost }).toEqual(before[0])
+    expect(JSON.stringify(after)).not.toContain('192.0.2.')
   })
 })

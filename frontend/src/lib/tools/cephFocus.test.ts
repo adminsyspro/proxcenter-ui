@@ -63,7 +63,7 @@ function labCeph(path: string) {
   return []
 }
 
-function ctx(): ToolContext {
+function ctx(cephVisible: boolean | null = true): ToolContext {
   const snapshot: InventorySnapshot = {
     clusters: [{ id: 'conn-1', name: 'PVE-CLUSTER', nodeCount: 3, guestCount: 0 }],
     nodes: ['pve1', 'pve2', 'pve3'].map(name => ({
@@ -75,7 +75,7 @@ function ctx(): ToolContext {
     cached: false,
   }
 
-  return { snapshot, tenantId: 'tenant-1', locale: 'fr' }
+  return { snapshot, tenantId: 'tenant-1', locale: 'fr', ...(cephVisible === null ? {} : { cephVisible }) }
 }
 
 async function run(args: Record<string, unknown>) {
@@ -256,5 +256,66 @@ describe('list_ceph_osds ordering arguments', () => {
 
     expect(res.groupBy).toBe('device_class')
     expect(res.argumentNotes).toBeUndefined()
+  })
+})
+
+describe('cockpit links', () => {
+  it('ceph tool link targets cockpit with item', async () => {
+    const { cephCockpitLink, listCephOsdsTool } = await import('./ceph')
+
+    expect(cephCockpitLink('conn-1')).toBe('/storage/ceph?conn=conn-1&tab=overview')
+    expect(cephCockpitLink('conn-1', 'osd', { kind: 'osd', id: 2 })).toBe('/storage/ceph?conn=conn-1&tab=osd&item=osd.2')
+    expect(cephCockpitLink('conn-1', 'pools', { kind: 'pool', name: 'Ceph Pool' })).toBe('/storage/ceph?conn=conn-1&tab=pools&item=pool:Ceph%20Pool')
+    expect(cephCockpitLink('a&b', 'services', { kind: 'service', name: 'mon.pve1' })).toBe('/storage/ceph?conn=a%26b&tab=services&item=svc:mon.pve1')
+
+    const status = await run({})
+
+    expect(status.cockpitLink).toBe('/storage/ceph?conn=conn-1&tab=overview')
+    expect(status.pools.map((p: any) => p.cockpitLink)).toContain('/storage/ceph?conn=conn-1&tab=pools&item=pool:CephPool')
+    expect((await run({ focus: 'improvements' })).cockpitLink).toBe('/storage/ceph?conn=conn-1&tab=overview')
+    expect((await run({ focus: 'capacity' })).cockpitLink).toBe('/storage/ceph?conn=conn-1&tab=pools')
+    expect((await run({ focus: 'devices' })).cockpitLink).toBe('/storage/ceph?conn=conn-1&tab=osd')
+
+    const osds = await listCephOsdsTool.execute({}, ctx()) as any
+
+    expect(osds.cockpitLink).toBe('/storage/ceph?conn=conn-1&tab=osd')
+    expect(osds.osds.map((o: any) => o.cockpitLink).sort()).toEqual([
+      '/storage/ceph?conn=conn-1&tab=osd&item=osd.1',
+      '/storage/ceph?conn=conn-1&tab=osd&item=osd.2',
+      '/storage/ceph?conn=conn-1&tab=osd&item=osd.3',
+    ])
+  })
+})
+
+/*
+ * G20: an IaaS tenant only rents a vDC slice of a provider cluster. The chat
+ * routes take the Ceph gate's verdict in the request scope (ctx.cephVisible);
+ * anything but `true` gets the answer of a cluster without Ceph, explicit
+ * cluster included, without a single Proxmox call.
+ */
+describe('Ceph tools of a caller the Ceph gate refuses', () => {
+  it.each([
+    ['refused (iaas)', false],
+    ['never resolved', null],
+  ])('%s: answers as a cluster without Ceph and reads nothing from Proxmox', async (_label, cephVisible) => {
+    const { getCephStatusTool, listCephOsdsTool } = await import('./ceph')
+
+    for (const tool of [getCephStatusTool, listCephOsdsTool]) {
+      for (const args of [{}, { cluster: 'PVE-CLUSTER' }, { cluster: 'PVE-CLUSTER', focus: 'improvements' }]) {
+        const res = await tool.execute(args, ctx(cephVisible as boolean | null))
+
+        expect(res).toEqual({ hasCeph: false, cluster: 'PVE-CLUSTER' })
+      }
+    }
+    expect(pveFetch).not.toHaveBeenCalled()
+  })
+
+  it('the same cluster reports its Ceph once the gate let the caller through', async () => {
+    const { getCephStatusTool } = await import('./ceph')
+
+    const res = await getCephStatusTool.execute({ cluster: 'PVE-CLUSTER' }, ctx(true)) as any
+
+    expect(res.hasCeph).toBe(true)
+    expect(pveFetch).toHaveBeenCalled()
   })
 })

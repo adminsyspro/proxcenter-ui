@@ -8,6 +8,8 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
    measured on the lab (Ceph 20.2.2 / PVE 9.2).
 */
 
+// Provider or MSP tenant: the IaaS Ceph gate lets the caller through (its own tests: lib/ceph/tenantGuard*.test.ts).
+vi.mock('@/lib/ceph/tenantGuard', () => ({ denyIaasTenantCeph: async () => null }))
 vi.mock('@/lib/connections/getConnection', () => ({
   getConnectionById: vi.fn<(id: string) => Promise<any>>(),
   isConnectionNotFoundError: (err: unknown) =>
@@ -216,15 +218,17 @@ describe('GET /api/v1/connections/[id]/nodes/[node]/ceph/noout', () => {
   it('?precheck=1 never turns an SSH failure or an empty answer into a safe verdict', async () => {
     executeSSHMock.mockResolvedValueOnce({ success: false, error: 'ssh: connect refused' })
     let body = await readJson<any>(await callRoute(GET, { params, searchParams: { precheck: '1' } }))
-    expect(body.data.okToStop).toEqual({ ok: false, osds: [2, 5], numOkPgs: 0, numNotOkPgs: 0, message: 'ssh: connect refused' })
+    expect(body.data.okToStop).toEqual({ ok: false, osds: [2, 5], numOkPgs: 0, numNotOkPgs: 0, message: 'Ceph could not be asked whether stopping is safe' })
+    expect(JSON.stringify(body)).not.toContain('connect refused')
 
     executeSSHMock.mockResolvedValueOnce({ success: true, output: '' })
     body = await readJson<any>(await callRoute(GET, { params, searchParams: { precheck: '1' } }))
-    expect(body.data.okToStop).toMatchObject({ ok: false, message: 'ceph osd ok-to-stop returned no verdict' })
+    expect(body.data.okToStop).toMatchObject({ ok: false, message: 'Ceph could not be asked whether stopping is safe' })
 
     executeSSHMock.mockRejectedValueOnce(new Error('No SSH credentials'))
     body = await readJson<any>(await callRoute(GET, { params, searchParams: { precheck: '1' } }))
-    expect(body.data.okToStop).toMatchObject({ ok: false, message: 'No SSH credentials' })
+    expect(body.data.okToStop).toMatchObject({ ok: false, message: 'Ceph could not be asked whether stopping is safe' })
+    expect(JSON.stringify(body)).not.toContain('SSH credentials')
   })
 
   it('400 on a node name outside the hostname grammar, 403 without node.view, 404 and 500 on connection errors', async () => {
@@ -271,7 +275,9 @@ describe('POST /api/v1/connections/[id]/nodes/[node]/ceph/noout', () => {
     executeSSHMock.mockResolvedValueOnce({ success: false, error: 'ssh timeout' })
     const res = await callRoute(POST, { params, method: 'POST', body: {} })
     expect(res.status).toBe(409)
-    expect(await readJson<any>(res)).toMatchObject({ code: 'not_ok_to_stop', error: 'ssh timeout' })
+    const refused = await readJson<any>(res)
+    expect(refused).toMatchObject({ code: 'not_ok_to_stop', error: 'Ceph could not be asked whether stopping is safe', okToStop: { message: 'Ceph could not be asked whether stopping is safe' } })
+    expect(JSON.stringify(refused)).not.toContain('ssh timeout')
   })
 
   it('force: true skips the precheck and sets the flag', async () => {
@@ -307,7 +313,9 @@ describe('POST /api/v1/connections/[id]/nodes/[node]/ceph/noout', () => {
     executeSSHMock.mockResolvedValueOnce({ success: false, error: 'Error EINVAL: unable to parse osd id or crush node' })
     let res = await callRoute(POST, { params, method: 'POST', body: { force: true } })
     expect(res.status).toBe(500)
-    expect(await readJson<any>(res)).toMatchObject({ error: expect.stringMatching(/EINVAL/), hint: 'Run manually on a PVE node: ceph osd set-group noout pve3' })
+    const failed = await readJson<any>(res)
+    expect(failed).toMatchObject({ error: 'The Ceph command failed on the node', hint: 'Run manually on a PVE node: ceph osd set-group noout pve3' })
+    expect(JSON.stringify(failed)).not.toContain('EINVAL')
 
     executeSSHMock.mockRejectedValueOnce(new PveLicenseExcludedError(CONN_ID))
     res = await callRoute(POST, { params, method: 'POST', body: { force: true } })
@@ -360,7 +368,7 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/ceph/noout', () => {
     executeSSHMock.mockResolvedValueOnce({ success: false, error: 'boom' })
     res = await callRoute(DELETE, { params, method: 'DELETE' })
     expect(res.status).toBe(500)
-    expect(await readJson<any>(res)).toMatchObject({ error: 'boom', hint: 'Run manually on a PVE node: ceph osd unset-group noout pve3' })
+    expect(await readJson<any>(res)).toMatchObject({ error: 'The Ceph command failed on the node', hint: 'Run manually on a PVE node: ceph osd unset-group noout pve3' })
   })
 
   it('400 on a bad node name, 403 without node.manage, 404 and 500 on connection errors', async () => {

@@ -150,6 +150,8 @@ export type AuditAction =
   | "ceph_noout"
   // Ceph daemon started, stopped or restarted, and OSD / monitor / manager created from the node Ceph tab (ui#1164)
   | "ceph_service"
+  // OSD in, out, scrub or deep-scrub from the Ceph cockpit; the details name which one
+  | "ceph_osd"
   | "ceph_create"
   | "execute"
   | "apply"

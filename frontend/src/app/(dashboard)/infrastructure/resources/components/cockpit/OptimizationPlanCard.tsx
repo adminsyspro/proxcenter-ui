@@ -7,7 +7,7 @@ import { alpha } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 
 import PagedRows from '@/components/ui/PagedRows'
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import type { OptimizationPlan, PlanGuest, PlanItem, PlanKind, PlanNode, PlanPriority } from '@/lib/resources/optimizationPlan'
 
 import type { VmIdentity } from '../../types'

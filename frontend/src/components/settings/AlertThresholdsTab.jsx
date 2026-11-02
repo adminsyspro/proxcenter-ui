@@ -20,6 +20,7 @@ import {
 } from '@mui/material'
 
 import NumericTextField from '@/components/ui/NumericTextField'
+import { useLicense } from '@/contexts/LicenseContext'
 
 const DEFAULTS = {
   cpu_warning: 80,
@@ -45,6 +46,8 @@ const DEFAULTS = {
   disk_latency_peak_critical: 500,
   disk_latency_retention_days: 7,
   disk_latency_collection: 1,
+  // Days of Ceph cockpit history kept (Enterprise), 1 to 365.
+  ceph_metrics_retention_days: 30,
   metrics_interval_seconds: 60,
   metrics_retention_days: 14,
   replication_rpo_grace_percent: 25,
@@ -74,6 +77,9 @@ const SECTIONS = [
 
 export default function AlertThresholdsTab() {
   const t = useTranslations()
+  // Fail-closed: the Ceph history exists in Enterprise only, so Community never sees its setting.
+  const { isEnterprise, loading: licenseLoading } = useLicense()
+  const showCephRetention = !licenseLoading && isEnterprise === true
   const [thresholds, setThresholds] = useState(DEFAULTS)
   const [section, setSection] = useState(SECTIONS[0].id)
   const [loading, setLoading] = useState(true)
@@ -228,6 +234,26 @@ export default function AlertThresholdsTab() {
             : { ...th, osd_latency_warning: 0 }
           ))}
           tDisabled={t('alerts.snapshotDisabled')}
+          footer={showCephRetention ? (
+            <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <NumericTextField
+                  type='number'
+                  size='small'
+                  value={thresholds.ceph_metrics_retention_days}
+                  onChange={(days) => setThresholds(th => ({ ...th, ceph_metrics_retention_days: Math.min(365, Math.max(1, Math.trunc(days))) }))}
+                  fallback={30}
+                  min={1}
+                  slotProps={{ htmlInput: { min: 1, max: 365, 'aria-label': t('alerts.cephMetricsRetention') } }}
+                  sx={{ width: 80 }}
+                />
+                <Typography variant='body2' color='text.secondary'>{t('alerts.cephMetricsRetention')}</Typography>
+              </Box>
+              <Typography variant='caption' color='text.secondary' display='block' sx={{ mt: 0.5 }}>
+                {t('alerts.cephMetricsRetentionDesc')}
+              </Typography>
+            </Box>
+          ) : null}
         />
 
         {/* Per-host Ceph noout (ui#1164): a flag set for a maintenance and

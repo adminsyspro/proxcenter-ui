@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { cephAllowedForCaller } from "@/lib/ceph/tenantGuard"
 
 export const runtime = "nodejs"
 
@@ -62,13 +63,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       // OK: standalone ou endpoint indispo
     }
 
-    // 2) Ceph status (si disponible)
-    try {
-      const ceph = await pveFetch<any>(conn, "/cluster/ceph/status")
+    // 2) Ceph status (si disponible). Ceph est un objet de tout le cluster : un
+    // tenant IaaS (tranche vDC d'un cluster du fournisseur) ne le lit jamais.
+    if (await cephAllowedForCaller()) {
+      try {
+        const ceph = await pveFetch<any>(conn, "/cluster/ceph/status")
 
-      cephHealth = ceph?.health?.status || null
-    } catch {
-      // Ceph non configuré ou non disponible
+        cephHealth = ceph?.health?.status || null
+      } catch {
+        // Ceph non configuré ou non disponible
+      }
     }
 
     // 3) KPI via /nodes/<node>/status

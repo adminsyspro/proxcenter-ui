@@ -61,6 +61,8 @@ export type ConnectionFormData = {
   behindProxy: boolean
   insecureTLS: boolean
   hasCeph: boolean
+  /** TCP port of the ceph-exporter on the nodes of this PVE cluster (per-OSD I/O in the Ceph cockpit). */
+  cephExporterPort: number
   apiToken: string
   // VMware fields
   subType: string
@@ -119,6 +121,7 @@ const defaultFormData: ConnectionFormData = {
   behindProxy: false,
   insecureTLS: true,
   hasCeph: false,
+  cephExporterPort: 9926,
   apiToken: '',
   subType: '',
   vmwareUser: 'root',
@@ -274,6 +277,7 @@ export default function ConnectionDialog({
           sshAuthMethod: initialData.sshAuthMethod || '',
           // The list payload hands back null when no replication network is set
           replicationNetwork: (initialData as any).replicationNetwork || '',
+          cephExporterPort: Number.isInteger((initialData as any).cephExporterPort) ? (initialData as any).cephExporterPort : 9926,
           warmZeroRateLimitMBps: (initialData as any).warmZeroRateLimitMBps ? String((initialData as any).warmZeroRateLimitMBps) : '',
           ...(() => {
             const i = integritySettingsFromConnection(initialData as any)
@@ -566,6 +570,11 @@ export default function ConnectionDialog({
 
     if (type === 'pve' && migrationAvailable && !isZeroRateLimitValid(form.warmZeroRateLimitMBps)) {
       setError(t('settings.warmZeroRateLimitInvalid', { max: ZERO_RATE_LIMIT_MAX_MBPS }))
+      return
+    }
+
+    if (type === 'pve' && !(Number.isInteger(form.cephExporterPort) && form.cephExporterPort >= 1 && form.cephExporterPort <= 65535)) {
+      setError(t('settings.errorCephExporterPortInvalid'))
       return
     }
 
@@ -945,6 +954,26 @@ export default function ConnectionDialog({
               </Box>
             }
           />
+        )}
+
+        {type === 'pve' && (
+          <Box sx={{ mt: 2 }}>
+            <NumericTextField
+              label={t('settings.cephExporterPort')}
+              type="number"
+              value={form.cephExporterPort}
+              onChange={port => handleChange('cephExporterPort', port)}
+              fallback={9926}
+              min={1}
+              max={65535}
+              sx={{ width: 200 }}
+              InputProps={{
+                inputProps: { min: 1, max: 65535 },
+                endAdornment: <InfoTooltip text={t('settings.cephExporterPortHelper')} />,
+              }}
+              data-testid="connection-ceph-exporter-port"
+            />
+          </Box>
         )}
 
         </Box>

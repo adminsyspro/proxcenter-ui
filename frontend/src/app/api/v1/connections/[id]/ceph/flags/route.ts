@@ -3,6 +3,7 @@ import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { denyIaasTenantCeph } from "@/lib/ceph/tenantGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 import { executeSSH } from "@/lib/ssh/exec"
 import { assertNodeName } from "@/lib/ssh/validate"
@@ -30,6 +31,9 @@ export async function GET(
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
     if (denied) return denied
+    // Ceph is a whole-cluster object: an IaaS tenant gets 404, before any PVE call.
+    const cephDenied = await denyIaasTenantCeph()
+    if (cephDenied) return cephDenied
 
     const conn = await getConnectionById(id)
     if (!conn) {
@@ -102,6 +106,9 @@ async function setCephFlag(
   // OSD flags act on the whole Ceph cluster: a storage.admin action (#920).
   const denied = await checkPermission(PERMISSIONS.STORAGE_ADMIN, "connection", id)
   if (denied) return denied
+  // Ceph is a whole-cluster object: an IaaS tenant gets 404, before any PVE call.
+  const cephDenied = await denyIaasTenantCeph()
+  if (cephDenied) return cephDenied
 
   const body = await req.json().catch(() => ({}))
   const flag = body?.flag

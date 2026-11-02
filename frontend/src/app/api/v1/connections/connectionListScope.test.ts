@@ -174,3 +174,40 @@ describe("GET /api/v1/connections scope", () => {
     expect(getRbacInfraScopeMock).not.toHaveBeenCalled()
   })
 })
+
+describe("GET /api/v1/connections Ceph fields", () => {
+  const cephRow = (id: string) => ({ ...connRow(id), hasCeph: true, cephExporterPort: 9926 })
+  const iaas = { kind: "iaas", vdcScope: { connectionIds: new Set(["p1"]), pbsConnectionIds: new Set<string>() } }
+
+  it("iaas: a shared provider cluster reads as no Ceph, without its exporter port", async () => {
+    getInfraMock.mockResolvedValue(iaas)
+    findManyGlobalMock.mockResolvedValue([cephRow("p1")])
+    const { GET } = await import("./route")
+    const body = await (await callRoute(GET, { method: "GET" })).json()
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0].hasCeph).toBe(false)
+    expect(body.data[0]).not.toHaveProperty("cephExporterPort")
+  })
+
+  it("iaas: ?hasCeph=true lists nothing, so the Ceph page shows its empty state", async () => {
+    getInfraMock.mockResolvedValue(iaas)
+    findManyGlobalMock.mockResolvedValue([cephRow("p1")])
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET", searchParams: { type: "pve", hasCeph: "true" } })
+    expect(res.status).toBe(200)
+    expect((await res.json()).data).toEqual([])
+  })
+
+  it("provider and msp keep hasCeph, the exporter port and the ?hasCeph=true list", async () => {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    findManyGlobalMock.mockResolvedValue([cephRow("p1")])
+    const { GET } = await import("./route")
+    const provider = await (await callRoute(GET, { method: "GET", searchParams: { hasCeph: "true" } })).json()
+    expect(provider.data).toEqual([expect.objectContaining({ id: "p1", hasCeph: true, cephExporterPort: 9926 })])
+
+    getInfraMock.mockResolvedValue({ kind: "msp", connectionIds: new Set(["p1"]) })
+    findManySessionMock.mockResolvedValue([cephRow("p1")])
+    const msp = await (await callRoute(GET, { method: "GET", searchParams: { hasCeph: "true" } })).json()
+    expect(msp.data).toEqual([expect.objectContaining({ id: "p1", hasCeph: true, cephExporterPort: 9926 })])
+  })
+})

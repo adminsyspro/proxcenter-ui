@@ -5,8 +5,10 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { MarkerType } from '@xyflow/react'
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
+import { crossesBox, edgeGeometry } from './edgeGeometry'
 import { NODE_H, NODE_W, buildZoneGraph, type BoundaryNodeData, type MapEdgeData, type ZoneNodeData } from './zoneGraph'
 
 const zone = (id: string, name: string, over: Partial<MicrosegZone> = {}): MicrosegZone => ({
@@ -204,5 +206,95 @@ describe('buildZoneGraph layout', () => {
   it('leaves a lone edge in the middle', () => {
     const { edges } = buildZoneGraph([web, db], [flow('f1')], [])
     expect(edgeData(edges[0]).offset).toBe(0)
+  })
+})
+
+const GEOMETRY = { halfW: NODE_W / 2, halfH: NODE_H / 2, gap: 4 }
+const centerOf = (n: { position: { x: number; y: number } }) => ({ x: n.position.x + NODE_W / 2, y: n.position.y + NODE_H / 2 })
+
+describe('buildZoneGraph parallel edges', () => {
+  const pair = () => {
+    const { nodes, edges } = buildZoneGraph(
+      [web, db],
+      [flow('f1'), flow('f2', { src_zone_id: 'zd', dst_zone_id: 'zw' })],
+      [suggestion('s1'), suggestion('s2', { src_zone_id: 'zd', dst_zone_id: 'zw' })],
+    )
+    const centers = new Map(nodes.map(n => [n.id, centerOf(n)]))
+    return { edges, centers }
+  }
+
+  it('keeps the labels of a pair at least 28 px apart across the edges', () => {
+    const { edges } = pair()
+    expect(edges).toHaveLength(4)
+    // Physical position across the pair (the offset is along the normal of each edge, which flips with the direction).
+    const across = edges.map(e => (e.source === 'zone:zd' ? -1 : 1) * edgeData(e).offset).sort((a, b) => a - b)
+    for (let i = 1; i < across.length; i++) expect(across[i] - across[i - 1]).toBeGreaterThanOrEqual(28)
+  })
+
+  it('staggers the labels of the two directions along the edge', () => {
+    const { edges, centers } = pair()
+    const label = (e: (typeof edges)[number]) => {
+      const d = edgeData(e)
+      return edgeGeometry(centers.get(e.source)!, centers.get(e.target)!, { ...GEOMETRY, offset: d.offset, bow: d.bow, at: d.labelAt })!.mid
+    }
+    const labels = edges.map(label)
+    for (const [i, a] of labels.entries()) {
+      for (const b of labels.slice(i + 1)) expect(Math.hypot(a.x - b.x, a.y - b.y), `${JSON.stringify(a)} ${JSON.stringify(b)}`).toBeGreaterThanOrEqual(24)
+    }
+    const forward = edges.filter(e => e.source === 'zone:zw').map(label)
+    const backward = edges.filter(e => e.source === 'zone:zd').map(label)
+    expect(new Set([...forward, ...backward].map(p => Math.round(p.x))).size).toBeGreaterThan(1)
+  })
+})
+
+describe('buildZoneGraph edges that cross no other node', () => {
+  const ring = (count: number) => Array.from({ length: count }, (_, i) => zone(`z${String(i).padStart(2, '0')}`, `zone-${String(i).padStart(2, '0')}`))
+
+  it.each([4, 8, 12])('does not draw an edge through an unrelated node with %i zones, all pairs talking, plus External and Outside', count => {
+    const zs = ring(count)
+    const flows: MicrosegFlow[] = []
+    for (const a of zs) {
+      for (const b of zs) {
+        if (a.id !== b.id) flows.push(flow(`${a.id}>${b.id}`, { src_zone_id: a.id, dst_zone_id: b.id }))
+      }
+      flows.push(flow(`ext>${a.id}`, { src_zone_id: '', src_cidr: '10.0.0.0/8', dst_zone_id: a.id }))
+      flows.push(flow(`${a.id}>out`, { src_zone_id: a.id, dst_zone_id: '', dst_cidr: '8.8.8.8/32' }))
+    }
+    const { nodes, edges } = buildZoneGraph(zs, flows, [])
+    expect(edges.length).toBeGreaterThan(count * count)
+    const centers = new Map(nodes.map(n => [n.id, centerOf(n)]))
+    const crossings: string[] = []
+    for (const e of edges) {
+      const d = edgeData(e)
+      const shape = edgeGeometry(centers.get(e.source)!, centers.get(e.target)!, { ...GEOMETRY, offset: d.offset, bow: d.bow, at: d.labelAt })
+      if (!shape) continue
+      for (const n of nodes) {
+        if (n.id === e.source || n.id === e.target) continue
+        if (crossesBox(shape.points, centers.get(n.id)!, NODE_W / 2, NODE_H / 2, 0)) crossings.push(`${e.id} through ${n.id}`)
+      }
+    }
+    expect(crossings).toEqual([])
+  })
+
+  it('puts External and Outside off the horizontal axis of the ring, above left and below right', () => {
+    const { nodes } = buildZoneGraph(ring(8), [flow('a', { src_zone_id: '', src_cidr: '10.0.0.0/8', dst_zone_id: 'z00' }), flow('b', { src_zone_id: 'z00', dst_zone_id: '', dst_cidr: '1.1.1.1/32' })], [])
+    const ext = centerOf(nodes.find(n => n.id === 'external')!)
+    const out = centerOf(nodes.find(n => n.id === 'outside')!)
+    expect(ext.y).toBeLessThan(0)
+    expect(out.y).toBeGreaterThan(0)
+    expect(ext.x).toBeLessThan(0)
+    expect(out.x).toBeGreaterThan(0)
+  })
+
+  it('does not put a zone on the horizontal axis through the center of the ring', () => {
+    for (const count of [4, 8, 12]) {
+      const { nodes } = buildZoneGraph(ring(count), [], [])
+      expect(nodes.some(n => Math.abs(centerOf(n).y) < 1)).toBe(false)
+    }
+  })
+
+  it('draws the arrowhead with the library marker type', () => {
+    const { edges } = buildZoneGraph([web, db], [flow('f1')], [])
+    expect((edges[0].markerEnd as { type: string }).type).toBe(MarkerType.ArrowClosed)
   })
 })

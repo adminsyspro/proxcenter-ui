@@ -11,24 +11,25 @@ import AssignGuestsDialog from './AssignGuestsDialog'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import { useZoneGuests } from './useZoneGuests'
 import ZoneCanvas from './ZoneCanvas'
-import { buildZoneGraph, EDGE_COLORS, zoneNodeId } from './zoneGraph'
+import { buildZoneGraph, EDGE_COLORS, EXTERNAL_ID, OUTSIDE_ID, zoneNodeId, type MapEdgeData } from './zoneGraph'
 import { zoneMembers } from './zoneModel'
 import ZonePanel from './ZonePanel'
 
 /** The whole map reads the pending would-block suggestions once (the API caps a page at 200). */
-const PENDING_WOULD_BLOCK: ListSuggestionsParams = { kind: 'would_block', status: 'pending', limit: 200 }
+const PENDING_LIMIT = 200
+const PENDING_WOULD_BLOCK: ListSuggestionsParams = { kind: 'would_block', status: 'pending', limit: PENDING_LIMIT }
 
 function Legend() {
   const t = useTranslations('microsegPilot.overview.legend')
   const items = [
-    { key: 'flow', color: EDGE_COLORS.flow, dashed: false },
+    { key: 'flow', color: 'currentColor', dashed: false },
     { key: 'pending', color: EDGE_COLORS.pending, dashed: true },
     { key: 'outside', color: EDGE_COLORS.outside, dashed: true },
   ] as const
   return (
     <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
       {items.map(item => (
-        <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: 'text.secondary' }}>
           <Box component='span' sx={{ width: 22, borderTop: `2px ${item.dashed ? 'dashed' : 'solid'} ${item.color}` }} />
           <Typography variant='caption' color='text.secondary'>{t(item.key)}</Typography>
         </Box>
@@ -71,6 +72,13 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   )
   const zonesById = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
 
+  // The edges take no focus, but a screen reader names them: "web to db: tcp/443".
+  const tNode = useTranslations('microsegPilot.overview.node')
+  const edges = useMemo(() => {
+    const nameOf = (nodeId: string) => (nodeId === EXTERNAL_ID ? tNode('external') : nodeId === OUTSIDE_ID ? tNode('outside') : (zonesById.get(nodeId.replace(/^zone:/, ''))?.name ?? nodeId))
+    return graph.edges.map(e => ({ ...e, ariaLabel: t('edge.aria', { from: nameOf(e.source), to: nameOf(e.target), services: (e.data as unknown as MapEdgeData).services.join(', ') }) }))
+  }, [graph.edges, zonesById, t, tNode])
+
   if (zones.length === 0) {
     return (
       <Box sx={{ px: 3, pb: 3 }}>
@@ -93,16 +101,20 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
       {suggestions.error && !suggestions.data && (
         <Alert severity='warning' sx={{ mb: 1 }}>{t('suggestionsError')}</Alert>
       )}
+      {(suggestions.data?.length ?? 0) >= PENDING_LIMIT && (
+        <Alert severity='info' sx={{ mb: 1 }}>{t('partial', { count: PENDING_LIMIT })}</Alert>
+      )}
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: { xs: 'wrap', lg: 'nowrap' } }}>
         <Box
           role='region'
           aria-label={t('mapLabel')}
           sx={{ flex: '1 1 0', minWidth: 0, width: '100%', height: 560, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
         >
-          <ZoneCanvas nodes={nodes} edges={graph.edges} onSelectZone={setSelectedId} onClear={() => setSelectedId(null)} />
+          <ZoneCanvas nodes={nodes} edges={edges} onSelectZone={setSelectedId} onClear={() => setSelectedId(null)} panelOpen={!!selected} />
         </Box>
         {selected && (
           <ZonePanel
+            key={selected.id}
             zone={selected}
             members={membersByZone.get(selected.id) ?? []}
             membersKnown={membersKnown}

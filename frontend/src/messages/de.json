@@ -12691,7 +12691,7 @@
       "mapLabel": "Karte der Zonen und ihrer Flüsse",
       "suggestionsError": "Die ausstehenden Flüsse konnten nicht gelesen werden. Die Karte zeigt nur die erlaubten Flüsse.",
       "legend": {
-        "flow": "Erlaubter Fluss",
+        "flow": "Erlaubter Fluss (Farbe der Quellzone)",
         "pending": "Würde blockiert",
         "outside": "In v1 nicht angewendet"
       },
@@ -12701,12 +12701,15 @@
         "externalHint": "Quellen außerhalb jeder Zone: eine IP-Adresse oder ein Netz (CIDR)",
         "outside": "Außerhalb",
         "outsideHint": "Ziele außerhalb der Zonen (ein CIDR). Flüsse dorthin werden in v1 nicht angewendet.",
-        "notApplied": "in v1 nicht angewendet"
+        "notApplied": "in v1 nicht angewendet",
+        "aria": "Zone {name}: {state}, {members}",
+        "membersUnknown": "Mitglieder unbekannt"
       },
       "edge": {
         "flow": "Erlaubt: {services}",
         "pending": "{count, plural, one {# beobachteter Fluss würde blockiert} other {# beobachtete Flüsse würden blockiert}}: {services}",
-        "outside": "In v1 nicht angewendet: {services}"
+        "outside": "In v1 nicht angewendet: {services}",
+        "aria": "{from} nach {to}: {services}"
       },
       "panel": {
         "label": "Zone {name}",
@@ -12718,7 +12721,8 @@
         "membersUnknown": "Die Gästeliste konnte nicht gelesen werden.",
         "pending": "Ausstehend",
         "noFlows": "Keine"
-      }
+      },
+      "partial": "Teilweise: Nur die ersten {count, number} ausstehenden Flüsse werden gezeichnet."
     }
   }
 }

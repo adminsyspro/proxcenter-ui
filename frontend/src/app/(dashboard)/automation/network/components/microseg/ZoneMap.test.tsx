@@ -4,54 +4,16 @@
  * real nodes and edges: jsdom measures nothing, so the real one draws no edge.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
-import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
-import { calls, fetchMock, flow, mock, policy, renderTab, reply, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
-import { db, installFreshMocks, suggestion, vm, web } from './policyTestKit'
+import { calls, fetchMock, mock, policy, reply, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
+import { db, installFreshMocks, vm, web } from './policyTestKit'
+import { flowOf, node, pathOf, reduceMotion, setup, SUGGESTIONS, wouldBlock } from './zoneMapTestKit'
 
 installFreshMocks()
-
-const SUGGESTIONS = 'GET /suggestions?kind=would_block&status=pending&limit=200'
-const originalMatchMedia = window.matchMedia
-afterEach(() => { window.matchMedia = originalMatchMedia })
-
-const flowOf = (id: string, over: Partial<MicrosegFlow> = {}): MicrosegFlow => ({ ...flow(id), src_zone_id: 'zw', dst_zone_id: 'zd', ...over })
-const wouldBlock = (id: string, over: Partial<MicrosegSuggestion> = {}): MicrosegSuggestion => ({
-  ...suggestion('2026-11-02T10:00:00Z'), id, src_zone_id: 'zw', dst_zone_id: 'zd', ...over,
-})
-
-function setup(opts: {
-  zones?: MicrosegZone[]
-  flows?: MicrosegFlow[]
-  suggestions?: MicrosegSuggestion[] | 'error'
-  vms?: unknown[]
-  pending_members?: PendingMember[]
-  pending_changes?: boolean
-} = {}) {
-  window.localStorage.setItem('microseg.subTab', 'overview')
-  mock.routes['GET /policy'] = () => reply(200, policy({
-    zones: opts.zones ?? [web(), db()], flows: opts.flows ?? [], pending_members: opts.pending_members ?? [],
-    pending_changes: opts.pending_changes ?? false, last_revision: REVISION_HEAD,
-  }))
-  mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: opts.vms ?? [] } })
-  mock.routes[SUGGESTIONS] = () => (opts.suggestions === 'error'
-    ? reply(500, { code: 'ORCHESTRATOR_ERROR', error: 'boom' })
-    : reply(200, { suggestions: opts.suggestions ?? [], limit: 200, offset: 0 }))
-  return renderTab()
-}
-
-const node = (id: string) => screen.findByTestId(`node-${id}`)
-const pathOf = (id: string) => screen.findByTestId(`path-${id}`)
-const reduceMotion = () => {
-  window.matchMedia = ((query: string) => ({
-    matches: query.includes('prefers-reduced-motion'), media: query, onchange: null,
-    addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
-  })) as unknown as typeof window.matchMedia
-}
 
 describe('zone nodes', () => {
   it('draws one node per zone on one line, with its name and its member count', async () => {
@@ -284,3 +246,4 @@ describe('side panel', () => {
     expect(screen.queryByTestId('node-zone:zw')).toBeNull()
   })
 })
+

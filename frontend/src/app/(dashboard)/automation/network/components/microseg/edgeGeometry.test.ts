@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { edgeGeometry } from './FlowEdge'
+import { crossesBox, edgeGeometry } from './edgeGeometry'
 
 const box = { halfW: 100, halfH: 22, gap: 4 }
 
@@ -37,5 +37,32 @@ describe('edgeGeometry', () => {
 
   it('draws nothing when the nodes touch', () => {
     expect(edgeGeometry({ x: 0, y: 0 }, { x: 150, y: 0 }, { ...box, offset: 0 })).toBeNull()
+  })
+})
+
+describe('edgeGeometry curves and labels', () => {
+  it('bows the middle of the edge along its normal', () => {
+    const straight = edgeGeometry({ x: 0, y: 0 }, { x: 400, y: 0 }, { ...box, offset: 0 })!
+    const bowed = edgeGeometry({ x: 0, y: 0 }, { x: 400, y: 0 }, { ...box, offset: 0, bow: 60 })!
+    expect(straight.mid.y).toBe(0)
+    expect(bowed.mid.y).toBeGreaterThan(50)
+    expect(bowed.path).toMatch(/^M .* Q .*/)
+    // It leaves the first box and reaches the second one from outside them.
+    expect(Math.abs(bowed.start.x) >= 104 || Math.abs(bowed.start.y) >= 26).toBe(true)
+    expect(Math.abs(bowed.end.x - 400) >= 104 || Math.abs(bowed.end.y) >= 26).toBe(true)
+  })
+
+  it('puts the label at the asked place along the edge', () => {
+    const at = (fraction: number) => edgeGeometry({ x: 0, y: 0 }, { x: 400, y: 0 }, { ...box, offset: 0, at: fraction })!.mid.x
+    expect(at(0.5)).toBe(200)
+    expect(at(0.4)).toBeCloseTo(104 + 0.4 * 192, 1)
+    expect(at(0.6)).toBeCloseTo(104 + 0.6 * 192, 1)
+  })
+
+  it('gives the points of the visible edge, to check it against other boxes', () => {
+    const g = edgeGeometry({ x: 0, y: 0 }, { x: 800, y: 0 }, { ...box, offset: 0 })!
+    expect(crossesBox(g.points, { x: 400, y: 0 }, 100, 22, 0)).toBe(true)
+    expect(crossesBox(g.points, { x: 400, y: 200 }, 100, 22, 0)).toBe(false)
+    expect(g.points.length).toBeGreaterThan(10)
   })
 })

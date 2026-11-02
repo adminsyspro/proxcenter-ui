@@ -13024,7 +13024,7 @@
       "mapLabel": "Carte des zones et de leurs flux",
       "suggestionsError": "Les flux en attente n'ont pas pu être lus. La carte ne montre que les flux autorisés.",
       "legend": {
-        "flow": "Flux autorisé",
+        "flow": "Flux autorisé (couleur de la zone source)",
         "pending": "Serait bloqué",
         "outside": "Non appliqué en v1"
       },
@@ -13034,12 +13034,15 @@
         "externalHint": "Sources hors de toute zone : une adresse IP ou un réseau (CIDR)",
         "outside": "Extérieur",
         "outsideHint": "Destinations hors des zones (un CIDR). Les flux vers elles ne sont pas appliqués en v1.",
-        "notApplied": "non appliqué en v1"
+        "notApplied": "non appliqué en v1",
+        "aria": "Zone {name} : {state}, {members}",
+        "membersUnknown": "membres inconnus"
       },
       "edge": {
         "flow": "Autorisé : {services}",
         "pending": "{count, plural, one {# flux observé serait bloqué} other {# flux observés seraient bloqués}} : {services}",
-        "outside": "Non appliqué en v1 : {services}"
+        "outside": "Non appliqué en v1 : {services}",
+        "aria": "{from} vers {to} : {services}"
       },
       "panel": {
         "label": "Zone {name}",
@@ -13051,7 +13054,8 @@
         "membersUnknown": "La liste des invités n'a pas pu être lue.",
         "pending": "En attente",
         "noFlows": "Aucun"
-      }
+      },
+      "partial": "Partiel : seuls les {count, number} premiers flux en attente sont dessinés."
     }
   }
 }

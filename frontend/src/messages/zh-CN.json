@@ -13023,7 +13023,7 @@
       "mapLabel": "区域及其流量规则地图",
       "suggestionsError": "无法读取待处理的流量。地图仅显示已允许的流量。",
       "legend": {
-        "flow": "已允许的流量",
+        "flow": "已允许的流量（来源区域的颜色）",
         "pending": "将被拦截",
         "outside": "v1 中未应用"
       },
@@ -13033,12 +13033,15 @@
         "externalHint": "不属于任何区域的来源：IP 地址或网络（CIDR）",
         "outside": "区域之外",
         "outsideHint": "区域之外的目标（CIDR）。发往这些目标的流量在 v1 中不会被应用。",
-        "notApplied": "v1 中未应用"
+        "notApplied": "v1 中未应用",
+        "aria": "区域 {name}，{state}，{members}",
+        "membersUnknown": "成员数未知"
       },
       "edge": {
         "flow": "已允许：{services}",
         "pending": "{count, plural, other {已观察到 # 条流量将被拦截}}：{services}",
-        "outside": "v1 中未应用：{services}"
+        "outside": "v1 中未应用：{services}",
+        "aria": "{from} 到 {to}：{services}"
       },
       "panel": {
         "label": "区域 {name}",
@@ -13050,7 +13053,8 @@
         "membersUnknown": "无法读取客户机列表。",
         "pending": "待处理",
         "noFlows": "无"
-      }
+      },
+      "partial": "部分显示：仅绘制前 {count, number} 条待处理流量。"
     }
   }
 }

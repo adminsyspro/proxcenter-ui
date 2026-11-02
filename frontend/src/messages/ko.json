@@ -13023,7 +13023,7 @@
       "mapLabel": "영역과 플로우 지도",
       "suggestionsError": "대기 중인 플로우를 읽을 수 없습니다. 지도에는 허용된 플로우만 표시됩니다.",
       "legend": {
-        "flow": "허용된 플로우",
+        "flow": "허용된 플로우 (출발 영역의 색)",
         "pending": "차단될 플로우",
         "outside": "v1에서 적용되지 않음"
       },
@@ -13033,12 +13033,15 @@
         "externalHint": "어느 영역에도 속하지 않는 출발지: IP 주소 또는 네트워크(CIDR)",
         "outside": "영역 밖",
         "outsideHint": "영역 밖의 목적지(CIDR). 해당 목적지로 가는 플로우는 v1에서 적용되지 않습니다.",
-        "notApplied": "v1에서 적용되지 않음"
+        "notApplied": "v1에서 적용되지 않음",
+        "aria": "영역 {name}, {state}, {members}",
+        "membersUnknown": "구성원 수 알 수 없음"
       },
       "edge": {
         "flow": "허용: {services}",
         "pending": "{count, plural, other {관찰된 플로우 #건이 차단될 예정}}: {services}",
-        "outside": "v1에서 적용되지 않음: {services}"
+        "outside": "v1에서 적용되지 않음: {services}",
+        "aria": "{from}에서 {to}: {services}"
       },
       "panel": {
         "label": "영역 {name}",
@@ -13050,7 +13053,8 @@
         "membersUnknown": "게스트 목록을 읽을 수 없습니다.",
         "pending": "대기 중",
         "noFlows": "없음"
-      }
+      },
+      "partial": "일부만 표시: 대기 중인 처음 {count, number}개 플로우만 그려집니다."
     }
   }
 }

@@ -13023,7 +13023,7 @@
       "mapLabel": "Mapa de las zonas y sus flujos",
       "suggestionsError": "No se pudieron leer los flujos pendientes. El mapa solo muestra los flujos permitidos.",
       "legend": {
-        "flow": "Flujo permitido",
+        "flow": "Flujo permitido (color de la zona de origen)",
         "pending": "Sería bloqueado",
         "outside": "No aplicado en v1"
       },
@@ -13033,12 +13033,15 @@
         "externalHint": "Orígenes fuera de toda zona: una dirección IP o una red (CIDR)",
         "outside": "Exterior",
         "outsideHint": "Destinos fuera de las zonas (un CIDR). Los flujos hacia ellos no se aplican en v1.",
-        "notApplied": "no aplicado en v1"
+        "notApplied": "no aplicado en v1",
+        "aria": "Zona {name}, {state}, {members}",
+        "membersUnknown": "miembros desconocidos"
       },
       "edge": {
         "flow": "Permitido: {services}",
         "pending": "{count, plural, one {# flujo observado sería bloqueado} other {# flujos observados serían bloqueados}}: {services}",
-        "outside": "No aplicado en v1: {services}"
+        "outside": "No aplicado en v1: {services}",
+        "aria": "{from} a {to}: {services}"
       },
       "panel": {
         "label": "Zona {name}",
@@ -13050,7 +13053,8 @@
         "membersUnknown": "No se pudo leer la lista de invitados.",
         "pending": "Pendiente",
         "noFlows": "Ninguno"
-      }
+      },
+      "partial": "Parcial: solo se dibujan los primeros {count, number} flujos pendientes."
     }
   }
 }

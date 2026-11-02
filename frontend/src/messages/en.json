@@ -13023,7 +13023,7 @@
       "mapLabel": "Map of the zones and their flows",
       "suggestionsError": "The pending flows could not be read. The map shows the allowed flows only.",
       "legend": {
-        "flow": "Allowed flow",
+        "flow": "Allowed flow (colour of the source zone)",
         "pending": "Would be blocked",
         "outside": "Not applied in v1"
       },
@@ -13033,12 +13033,15 @@
         "externalHint": "Sources in no zone: an IP address or a network (CIDR)",
         "outside": "Outside",
         "outsideHint": "Destinations outside the zones (a CIDR). Flows to them are not applied in v1.",
-        "notApplied": "not applied in v1"
+        "notApplied": "not applied in v1",
+        "aria": "Zone {name}, {state}, {members}",
+        "membersUnknown": "members unknown"
       },
       "edge": {
         "flow": "Allowed: {services}",
         "pending": "{count, plural, one {# observed flow} other {# observed flows}} would be blocked: {services}",
-        "outside": "Not applied in v1: {services}"
+        "outside": "Not applied in v1: {services}",
+        "aria": "{from} to {to}: {services}"
       },
       "panel": {
         "label": "Zone {name}",
@@ -13050,7 +13053,8 @@
         "membersUnknown": "The guest list could not be read.",
         "pending": "Pending",
         "noFlows": "None"
-      }
+      },
+      "partial": "Partial: only the first {count, number} pending flows are drawn."
     }
   }
 }

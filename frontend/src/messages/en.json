@@ -12575,8 +12575,7 @@
       "policy": "Policy",
       "observation": "Observation",
       "drifts": "Drifts",
-      "history": "History",
-      "placeholder": "This section is not available yet."
+      "history": "History"
     },
     "noConnection": "Select a Proxmox connection to manage its micro-segmentation.",
     "loading": "Loading micro-segmentation...",

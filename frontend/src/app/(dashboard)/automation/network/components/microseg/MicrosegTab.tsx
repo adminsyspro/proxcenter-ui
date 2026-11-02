@@ -29,9 +29,6 @@ import {
 
 const STORAGE_KEY = 'microseg.subTab'
 
-/** The sub-tabs that have their content; the others still show the placeholder. */
-const PANELS = new Set<MicrosegSubTab>(['overview', 'policy', 'observation', 'drifts', 'history'])
-
 function readStoredSubTab(): MicrosegSubTab | null {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY)
@@ -49,9 +46,8 @@ function storeSubTab(tab: MicrosegSubTab) {
   }
 }
 
-/** Content of one sub-tab; a sub-tab without a panel still shows the placeholder. */
+/** Content of one sub-tab. */
 function SubTabContent({ tab, ...props }: { tab: MicrosegSubTab } & MicrosegSubTabProps) {
-  const t = useTranslations('microsegPilot.subTabs')
   return (
     <Box role='tabpanel' id={`microseg-panel-${tab}`} aria-labelledby={`microseg-tab-${tab}`} sx={{ pt: 3 }}>
       {tab === 'overview' && <ZoneMap {...props} />}
@@ -59,7 +55,6 @@ function SubTabContent({ tab, ...props }: { tab: MicrosegSubTab } & MicrosegSubT
       {tab === 'observation' && <ObservationPanel {...props} />}
       {tab === 'drifts' && <DriftsPanel {...props} />}
       {tab === 'history' && <HistoryPanel {...props} />}
-      {!PANELS.has(tab) && <Typography color='text.secondary' sx={{ px: 3, pb: 3 }}>{t('placeholder')}</Typography>}
     </Box>
   )
 }

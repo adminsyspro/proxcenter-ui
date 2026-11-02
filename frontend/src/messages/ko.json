@@ -12575,8 +12575,7 @@
       "policy": "정책",
       "observation": "관찰",
       "drifts": "편차",
-      "history": "기록",
-      "placeholder": "이 섹션은 아직 사용할 수 없습니다."
+      "history": "기록"
     },
     "noConnection": "Proxmox 연결을 선택하여 마이크로 세분화를 관리하세요.",
     "loading": "마이크로 세분화를 불러오는 중...",

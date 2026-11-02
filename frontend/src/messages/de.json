@@ -12243,8 +12243,7 @@
       "policy": "Richtlinie",
       "observation": "Beobachtung",
       "drifts": "Abweichungen",
-      "history": "Verlauf",
-      "placeholder": "Dieser Bereich ist noch nicht verfügbar."
+      "history": "Verlauf"
     },
     "noConnection": "Wählen Sie eine Proxmox-Verbindung, um ihre Mikrosegmentierung zu verwalten.",
     "loading": "Mikrosegmentierung wird geladen...",

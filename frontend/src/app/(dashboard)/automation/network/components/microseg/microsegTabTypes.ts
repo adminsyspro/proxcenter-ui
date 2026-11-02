@@ -12,7 +12,7 @@ export function isMicrosegSubTab(value: unknown): value is MicrosegSubTab {
 /** A run followed in the strip under the banner, whatever sub-tab is shown. */
 export type TrackedRun = {
   runId: string
-  /** What started it ("zoneState" today; the plan and apply runs of the plan window reuse the strip). */
+  /** What started it: "zoneState" (Policy), "apply" (plan window), "restore" (History) or "remove" (Settings). */
   kind: string
   /** Names the run in its finished messages (a zone name, "Plan"...). */
   label: string

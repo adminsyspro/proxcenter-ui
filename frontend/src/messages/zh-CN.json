@@ -12575,8 +12575,7 @@
       "policy": "策略",
       "observation": "观察",
       "drifts": "偏差",
-      "history": "历史",
-      "placeholder": "此部分暂不可用。"
+      "history": "历史"
     },
     "noConnection": "请选择一个 Proxmox 连接以管理其微分段。",
     "loading": "正在加载微分段...",

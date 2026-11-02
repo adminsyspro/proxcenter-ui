@@ -161,3 +161,25 @@ describe("POST /api/v1/connections (create-with-owner)", () => {
     expect(body.error).toMatch(/PVE and PBS/)
   })
 })
+
+describe("POST /api/v1/connections ceph-exporter port", () => {
+  it("writes the port of a PVE connection, 9926 when not sent", async () => {
+    expect((await callRoute(POST, { body: { ...PVE_BODY, cephExporterPort: 9100 } })).status).toBe(201)
+    expect(connectionCreateMock.mock.calls[0][0].data.cephExporterPort).toBe(9100)
+    expect((await callRoute(POST, { body: PVE_BODY })).status).toBe(201)
+    expect(connectionCreateMock.mock.calls[1][0].data.cephExporterPort).toBe(9926)
+  })
+
+  it("400 on an invalid port, nothing created", async () => {
+    for (const bad of [0, 65536, 1.5, "9926"]) {
+      expect((await callRoute(POST, { body: { ...PVE_BODY, cephExporterPort: bad } })).status, String(bad)).toBe(400)
+    }
+    expect(connectionCreateMock).not.toHaveBeenCalled()
+  })
+
+  it("ignores the port of a non-PVE connection", async () => {
+    const res = await callRoute(POST, { body: { name: "backup", type: "pbs", baseUrl: "https://10.0.0.9:8007", apiToken: "root@pam!t:s", cephExporterPort: 9100 } })
+    expect(res.status).toBe(201)
+    expect(connectionCreateMock.mock.calls[0][0].data).not.toHaveProperty("cephExporterPort")
+  })
+})

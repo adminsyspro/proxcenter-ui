@@ -7,7 +7,7 @@ import { alpha, useTheme } from '@mui/material/styles'
 import { Area, CartesianGrid, ComposedChart, Line, Tooltip as RTooltip, XAxis, YAxis } from 'recharts'
 
 import ChartContainer from '@/components/ChartContainer'
-import { NodeGlyph } from '@/components/automation/drs/glyphs'
+import { NodeGlyph } from '@/components/ui/glyphs'
 import {
   addThroughputSample,
   axisTicks,

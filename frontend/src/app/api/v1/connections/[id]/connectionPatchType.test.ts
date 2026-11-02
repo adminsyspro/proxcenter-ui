@@ -95,3 +95,27 @@ describe('PATCH /api/v1/connections/[id] integrity settings (roadmap#1)', () => 
     expect(updateMock.mock.calls[1][0].data).not.toHaveProperty('integrityCheckEnabled')
   })
 })
+
+describe('PATCH /api/v1/connections/[id] ceph-exporter port', () => {
+  const patch = async (id: string, body: any) => {
+    const { PATCH } = await import('./route')
+    return callRoute(PATCH, { method: 'PATCH', params: { id }, body })
+  }
+
+  it('writes the port of a PVE connection and forgets its cached node addresses', async () => {
+    const exporter = await import('@/lib/ceph/exporter')
+    await exporter.getNodeIps('pve-1', async () => [{ type: 'node', name: 'n1', ip: '10.0.0.1' }])
+    const load = vi.fn().mockResolvedValue([{ type: 'node', name: 'n1', ip: '10.0.0.2' }])
+    findUniqueMock.mockResolvedValue({ type: 'pve' })
+    expect((await patch('pve-1', { cephExporterPort: 9100 })).status).toBe(200)
+    expect(updateMock.mock.calls[0][0].data.cephExporterPort).toBe(9100)
+    expect((await exporter.getNodeIps('pve-1', load)).get('n1')).toBe('10.0.0.2')
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not write it on a connection that is not PVE', async () => {
+    findUniqueMock.mockResolvedValue({ type: 'pbs' })
+    expect((await patch('pbs-1', { cephExporterPort: 9100, name: 'x' })).status).toBe(200)
+    expect(updateMock.mock.calls[0][0].data).not.toHaveProperty('cephExporterPort')
+  })
+})

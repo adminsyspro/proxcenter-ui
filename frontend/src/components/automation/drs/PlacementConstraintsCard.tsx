@@ -13,7 +13,7 @@ import Typography from '@mui/material/Typography'
 import { useTheme } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 
-import { GuestGlyph, NodeGlyph } from './glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import { pinnedReasonText } from './drsReason'
 
 /** One guest that no node other than its own can run. */

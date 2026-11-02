@@ -1,0 +1,207 @@
+{
+  "fsid": "00000000-0000-4000-8000-000000000001",
+  "health": {
+    "checks": {
+      "AUTH_INSECURE_CLIENT_KEY_TYPE": {
+        "blocks-restart": {
+          "mds": 0,
+          "mgr": 0,
+          "mon": 0,
+          "osd": 0
+        },
+        "detail": [
+          {
+            "message": "entity client.admin using insecure key type: aes"
+          },
+          {
+            "message": "entity client.bootstrap-mds using insecure key type: aes"
+          },
+          {
+            "message": "entity client.bootstrap-mgr using insecure key type: aes"
+          },
+          {
+            "message": "entity client.bootstrap-osd using insecure key type: aes"
+          },
+          {
+            "message": "entity client.bootstrap-rbd using insecure key type: aes"
+          },
+          {
+            "message": "entity client.bootstrap-rbd-mirror using insecure key type: aes"
+          },
+          {
+            "message": "entity client.bootstrap-rgw using insecure key type: aes"
+          },
+          {
+            "message": "entity client.crash using insecure key type: aes"
+          }
+        ],
+        "muted": false,
+        "severity": "HEALTH_WARN",
+        "summary": {
+          "count": 8,
+          "message": "8 auth client entities with insecure key types"
+        }
+      },
+      "AUTH_INSECURE_KEYS_ALLOWED": {
+        "blocks-restart": {
+          "mds": 0,
+          "mgr": 0,
+          "mon": 0,
+          "osd": 0
+        },
+        "detail": [
+          {
+            "message": "insecure cipher aes allowed for auth"
+          }
+        ],
+        "muted": false,
+        "severity": "HEALTH_WARN",
+        "summary": {
+          "count": 1,
+          "message": "Monitors are configured to allow auth using insecure key types"
+        }
+      },
+      "AUTH_INSECURE_KEYS_CREATABLE": {
+        "blocks-restart": {
+          "mds": 0,
+          "mgr": 0,
+          "mon": 0,
+          "osd": 0
+        },
+        "detail": [],
+        "muted": false,
+        "severity": "HEALTH_WARN",
+        "summary": {
+          "count": 1,
+          "message": "Monitors are configured to allow creation of insecure key types"
+        }
+      },
+      "AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE": {
+        "blocks-restart": {
+          "mds": 0,
+          "mgr": 0,
+          "mon": 0,
+          "osd": 0
+        },
+        "detail": [
+          {
+            "message": "rotating service keys for mon using insecure key type: aes"
+          },
+          {
+            "message": "rotating service keys for mds using insecure key type: aes"
+          },
+          {
+            "message": "rotating service keys for osd using insecure key type: aes"
+          },
+          {
+            "message": "rotating service keys for mgr using insecure key type: aes"
+          }
+        ],
+        "muted": false,
+        "severity": "HEALTH_WARN",
+        "summary": {
+          "count": 4,
+          "message": "4 rotating auth service keys using insecure key types"
+        }
+      },
+      "AUTH_INSECURE_SERVICE_KEY_TYPE": {
+        "blocks-restart": {
+          "mds": 0,
+          "mgr": 0,
+          "mon": 0,
+          "osd": 0
+        },
+        "detail": [
+          {
+            "message": "entity osd.0 using insecure key type: aes"
+          },
+          {
+            "message": "entity osd.1 using insecure key type: aes"
+          },
+          {
+            "message": "entity osd.2 using insecure key type: aes"
+          },
+          {
+            "message": "entity mgr.pve1 using insecure key type: aes"
+          },
+          {
+            "message": "entity mgr.pve2 using insecure key type: aes"
+          },
+          {
+            "message": "entity mgr.pve3 using insecure key type: aes"
+          }
+        ],
+        "muted": false,
+        "severity": "HEALTH_ERR",
+        "summary": {
+          "count": 6,
+          "message": "6 auth service entities with insecure key types"
+        }
+      },
+      "AUTH_INSECURE_SERVICE_TICKETS": {
+        "blocks-restart": {
+          "mds": 0,
+          "mgr": 0,
+          "mon": 0,
+          "osd": 0
+        },
+        "detail": [],
+        "muted": false,
+        "severity": "HEALTH_ERR",
+        "summary": {
+          "count": 1,
+          "message": "Monitors are configured to issue insecure service tickets"
+        }
+      },
+      "MON_DISK_LOW": {
+        "blocks-restart": {
+          "mds": 1,
+          "mgr": 1,
+          "mon": 1,
+          "osd": 1
+        },
+        "detail": [
+          {
+            "message": "mon.pve3 has 18% avail"
+          }
+        ],
+        "muted": false,
+        "severity": "HEALTH_WARN",
+        "summary": {
+          "count": 1,
+          "message": "mon pve3 is low on available space"
+        }
+      }
+    },
+    "mutes": [],
+    "status": "HEALTH_ERR"
+  },
+  "osdmap": {
+    "epoch": 65130,
+    "num_in_osds": 3,
+    "num_osds": 3,
+    "num_remapped_pgs": 0,
+    "num_up_osds": 3,
+    "osd_in_since": 1792658086,
+    "osd_up_since": 1793302480
+  },
+  "pgmap": {
+    "bytes_avail": 57443213312,
+    "bytes_total": 322109964288,
+    "bytes_used": 264666750976,
+    "data_bytes": 91745300881,
+    "num_objects": 23034,
+    "num_pgs": 129,
+    "num_pools": 2,
+    "pgs_by_state": [
+      {
+        "count": 129,
+        "state_name": "active+clean"
+      }
+    ],
+    "read_bytes_sec": 0,
+    "read_op_per_sec": 0,
+    "write_bytes_sec": 24741,
+    "write_op_per_sec": 5
+  }
+}

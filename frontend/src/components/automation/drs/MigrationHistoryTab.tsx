@@ -28,7 +28,7 @@ import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCard
 import { formatDate, formatTime } from '@/lib/i18n/date'
 
 import { drsReasonText } from './drsReason'
-import { GuestGlyph, NodeGlyph } from './glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import {
   filterMigrations,
   formatDurationMs,

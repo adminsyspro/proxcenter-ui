@@ -1,0 +1,1 @@
+ALTER TABLE "Connection" ADD COLUMN "cephExporterPort" INTEGER NOT NULL DEFAULT 9926;

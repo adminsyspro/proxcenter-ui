@@ -10,7 +10,7 @@ import { useLocale, useTranslations } from 'next-intl'
 
 import { Box, IconButton, Tooltip, Typography, useTheme, alpha } from '@mui/material'
 
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import { logLevelName, parseFirewallLogLine } from '@/lib/firewall/logParse'
 
 import type { FirewallLogRow } from '@/lib/api/firewall'

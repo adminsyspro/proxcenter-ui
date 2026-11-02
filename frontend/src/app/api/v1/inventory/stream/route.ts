@@ -27,6 +27,7 @@ import {
 import { applyVdcFilter, type VdcScope } from "@/lib/vdc/scope"
 import { getVdcContext } from "@/lib/vdc/context"
 import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope, type InfraScope } from "@/lib/tenant/infraScope"
+import { cephVisibleTo } from "@/lib/ceph/tenantVisibility"
 
 export const runtime = "nodejs"
 
@@ -191,7 +192,7 @@ async function fetchOneCluster(conn: {
   latitude?: number | null; longitude?: number | null;
   locationLabel?: string | null; sshEnabled?: boolean | null;
   tenantId?: string | null
-}): Promise<ClusterData> {
+}, readCeph: boolean): Promise<ClusterData> {
   try {
     const connConfig = await getConnectionById(conn.id, conn.tenantId || undefined)
 
@@ -214,7 +215,9 @@ async function fetchOneCluster(conn: {
     const [guestsResult, haResult, cephResult, nodeResourcesResult, poolsResult] = await Promise.allSettled([
       pveFetch<GuestData[]>(connConfig, '/cluster/resources?type=vm'),
       pveFetch<HaResource[]>(connConfig, '/cluster/ha/resources'),
-      pveFetch<any>(connConfig, '/cluster/ceph/status'),
+      // Ceph is a whole-cluster object: never read for an IaaS tenant (vDC
+      // slice of a provider cluster), so no cephHealth reaches its cache.
+      readCeph ? pveFetch<any>(connConfig, '/cluster/ceph/status') : Promise.resolve(null),
       pveFetch<any[]>(connConfig, '/cluster/resources?type=node'),
       // #978: an empty pool is named by no member, so no `type=` projection
       // above ever mentions it. `/pools` is the only list that does.
@@ -790,6 +793,7 @@ function inventoryProducer(prisma: SessionPrisma, infra: InfraScope): InventoryP
   return async emit => {
     const startTime = Date.now()
     const [pveConnections, pbsConnections, externalConnections] = await findScopeConnections(prisma, infra)
+    const readCeph = cephVisibleTo(infra)
 
     emit({ kind: 'connections', pve: pveConnections, pbs: pbsConnections, external: externalConnections })
 
@@ -800,7 +804,7 @@ function inventoryProducer(prisma: SessionPrisma, infra: InfraScope): InventoryP
     const allStorageResources: AggregatedStorage[] = []
 
     const clusterPromises = pveConnections.map(async (conn) => {
-      const cluster = await fetchOneCluster(conn)
+      const cluster = await fetchOneCluster(conn, readCeph)
       allClusters.push(cluster)
       emit({ kind: 'cluster', data: cluster })
 

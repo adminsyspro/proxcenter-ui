@@ -33,6 +33,7 @@ function ctxWith(clusters: InventorySnapshot['clusters']): ToolContext {
     },
     tenantId: 't',
     locale: 'en',
+    cephVisible: true,
   }
 }
 

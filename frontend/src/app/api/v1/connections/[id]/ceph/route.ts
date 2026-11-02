@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server"
 
 import { flattenOsdTree, osdUpIn } from "@/lib/ceph/osdList"
+import { resolvePveNode } from "@/lib/ceph/osdTable"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { denyIaasTenantCeph } from "@/lib/ceph/tenantGuard"
 
 export const runtime = "nodejs"
 
@@ -18,6 +20,10 @@ function formatBytesPerSec(bytes: number): string {
 return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
+/** A byte count from PVE: a finite number >= 0, else 0. */
+const bytesOf = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0)
+const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null)
+
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const params = await Promise.resolve(ctx.params)
@@ -27,6 +33,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
     if (denied) return denied
+    // Ceph is a whole-cluster object: an IaaS tenant gets 404, before any PVE call.
+    const cephDenied = await denyIaasTenantCeph()
+    if (cephDenied) return cephDenied
 
     const conn = await getConnectionById(id)
 
@@ -42,23 +51,58 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const nodeName = onlineNode.node
 
     // Récupérer les données Ceph en parallèle
-    const [statusResult, osdResult, monResult, poolsResult, mdsResult, rulesResult, fsResult] = await Promise.allSettled([
+    // The nodes that carry a monitor are only known once the monitor list is read: their /status follows it inside the same settled batch.
+    const monWithDisk = pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/mon`).then(async list => {
+      const mons = (Array.isArray(list) ? list : []).filter((m: any) => typeof m?.name === 'string')
+      const pveNodes = nodes.map((n: any) => n?.node).filter((n: unknown): n is string => typeof n === 'string')
+      const online = new Set(nodes.filter((n: any) => n?.status === 'online').map((n: any) => n.node))
+      // The PVE node of a monitor: its host, else its name, matched tolerantly (short name against FQDN) like the OSD hosts.
+      const monNode = (m: any): string | null => (typeof m.host === 'string' ? resolvePveNode(m.host, pveNodes) : null) ?? resolvePveNode(m.name, pveNodes)
+      const statuses = await Promise.allSettled(
+        mons.map(async m => {
+          const node = monNode(m)
+
+          if (!node || !online.has(node)) throw new Error('node not readable')
+
+          return pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/status`)
+        }),
+      )
+
+      return { list, statuses, mons, monNode }
+    })
+
+    const [statusResult, osdResult, monResult, poolsResult, mdsResult, rulesResult, fsResult, mgrResult] = await Promise.allSettled([
       pveFetch<any>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/status`),
       pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/osd`),
-      pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/mon`),
+      monWithDisk,
       pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/pool`),
       pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/mds`),
       pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/rules`),
       pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/fs`),
+      pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(nodeName)}/ceph/mgr`),
     ])
 
     const status = statusResult.status === 'fulfilled' ? statusResult.value : null
     const osdList = osdResult.status === 'fulfilled' ? osdResult.value : []
-    const monList = monResult.status === 'fulfilled' ? monResult.value : []
+    const monList = monResult.status === 'fulfilled' ? monResult.value.list : []
     const poolList = poolsResult.status === 'fulfilled' ? poolsResult.value : []
     const mdsList = mdsResult.status === 'fulfilled' ? mdsResult.value : []
     const rulesList = rulesResult.status === 'fulfilled' ? rulesResult.value : []
     const fsList = fsResult.status === 'fulfilled' ? fsResult.value : []
+    // Version and address of the managers by daemon name; the list is only read for that, so a failure leaves them null.
+    const mgrInfo = new Map<string, { version: string | null; addr: string | null }>()
+    // Exact name first, else the one daemon whose name matches by first label (short name against FQDN).
+    const mgrOf = (name: string) => {
+      const exact = mgrInfo.get(name)
+      if (exact) return exact
+      const label = (n: string) => n.split('.')[0].toLowerCase()
+      const hits = [...mgrInfo.entries()].filter(([k]) => label(k) === label(name))
+
+      return hits.length === 1 ? hits[0][1] : undefined
+    }
+    for (const m of (mgrResult.status === 'fulfilled' && Array.isArray(mgrResult.value) ? mgrResult.value : [])) {
+      if (m?.name) mgrInfo.set(String(m.name), { version: m.ceph_version_short || m.version || null, addr: m.addr || null })
+    }
 
     // Build set of CephFS pool names (data + metadata pools) to distinguish from RBD pools
     const cephFSPoolNames = new Set<string>()
@@ -84,6 +128,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     for (const [checkName, checkData] of Object.entries(healthChecks)) {
       const data = checkData as any
+
+      // A muted check is already left out of the state of Ceph.
+      if (data?.muted === true) continue
 
       healthIssues.push({
         name: checkName,
@@ -143,12 +190,29 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     // the hostname (possibly FQDN), so host = name before the first dot.
     const mgrmap = status.mgrmap || {}
     const mgrHost = (n: any) => String(n || "").split(".")[0]
+    const mgrLabel = (n: string) => n.split('.')[0].toLowerCase()
+    const mgrmapNames = [
+      ...(mgrmap.active_name ? [String(mgrmap.active_name)] : []),
+      ...(Array.isArray(mgrmap.standbys) ? mgrmap.standbys : []).map((s: any) => String(s?.name ?? s)),
+    ]
+    const mgrmapLabels = new Set(mgrmapNames.map(mgrLabel))
+    // A manager that is stopped is not in the mgrmap (the cluster forgets it after a few seconds) but PVE still lists it, with state "stopped":
+    // it is kept so that it can be started again from the cockpit. With no mgrmap to compare to, only the state that PVE reports counts.
+    const pveMgrs: any[] = mgrResult.status === 'fulfilled' && Array.isArray(mgrResult.value) ? mgrResult.value : []
+    const stoppedMgrs = pveMgrs
+      .filter(m => typeof m?.name === 'string' && m.name !== '')
+      .filter(m => String(m.state).toLowerCase() === 'stopped' || (mgrmapLabels.size > 0 && !mgrmapLabels.has(mgrLabel(m.name))))
+    const stoppedLabels = new Set(stoppedMgrs.map(m => mgrLabel(m.name)))
+    const mgrEntry = (name: string) => ({ name, host: mgrHost(name), version: mgrOf(name)?.version ?? null, addr: mgrOf(name)?.addr ?? null })
     const managers = {
-      active: mgrmap.active_name ? { name: mgrmap.active_name, host: mgrHost(mgrmap.active_name) } : null,
-      standbys: (Array.isArray(mgrmap.standbys) ? mgrmap.standbys : []).map((s: any) => {
-        const name = s?.name ?? String(s)
-        return { name, host: mgrHost(name) }
-      }),
+      active: mgrmap.active_name && !stoppedLabels.has(mgrLabel(String(mgrmap.active_name))) ? mgrEntry(mgrmap.active_name) : null,
+      standbys: (Array.isArray(mgrmap.standbys) ? mgrmap.standbys : [])
+        .map((s: any) => s?.name ?? String(s))
+        .filter((name: string) => !stoppedLabels.has(mgrLabel(name)))
+        .map(mgrEntry),
+      stopped: stoppedMgrs
+        .map(m => ({ name: String(m.name), host: strOrNull(m.host) ?? mgrHost(m.name), version: m.ceph_version_short || m.version || null, addr: m.addr || null }))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })),
     }
 
     // Mapper les OSDs avec plus de détails
@@ -219,8 +283,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
           // Taille
           totalBytes: osd.crush_weight ? osd.crush_weight * 1024 * 1024 * 1024 * 1024 : 0,
-          usedBytes: osd.kb_used ? osd.kb_used * 1024 : 0,
-          availBytes: osd.kb_avail ? osd.kb_avail * 1024 : 0,
+          // kb_* first; PVE 9 (Ceph 20) reports bytes_used and total_space instead
+          usedBytes: osd.kb_used ? osd.kb_used * 1024 : bytesOf(osd.bytes_used),
+          availBytes: osd.kb_avail
+            ? osd.kb_avail * 1024
+            : Math.max(0, bytesOf(osd.total_space) - bytesOf(osd.bytes_used)),
           usedPct: osd.percent_used || 0,
 
           // Stats
@@ -229,6 +296,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           reweight: osd.reweight,
           pgs: osd.pgs ?? osd.num_pgs,
           version: osd.ceph_version_short || osd.version || null,
+          osdType: strOrNull(osd.osdtype),
+          dataDevice: strOrNull(osd.blfsdev),
+          dbDevice: strOrNull(osd.dbdev),
+          walDevice: strOrNull(osd.waldev),
         }
       })
       .sort((a: any, b: any) => a.id - b.id)
@@ -245,11 +316,32 @@ return {
         rank: mon.rank,
         inQuorum: isInQuorum,
         leader: quorum[0] === mon.name,
+        version: mon.ceph_version_short || null,
+        // "running" or "stopped" as PVE reports the service: a stopped monitor stays listed so that it can be started again.
+        state: strOrNull(mon.state),
 
         // Stats si disponibles
         storeStats: mon.store_stats || null,
       }
     })
+
+    // Free space of each monitor's node: rootfs.avail / rootfs.total is the base Ceph uses (/nodes disk and maxdisk differ by the reserved blocks).
+    const monDisk: { mon: string; node: string; availBytes: number; totalBytes: number; availPct: number }[] = []
+
+    if (monResult.status === 'fulfilled') {
+      const { mons, statuses, monNode } = monResult.value
+
+      mons.forEach((m: any, i: number) => {
+        const st = statuses[i]
+
+        if (st.status !== 'fulfilled') return
+        const total = bytesOf(st.value?.rootfs?.total)
+        const avail = bytesOf(st.value?.rootfs?.avail)
+
+        if (total === 0) return
+        monDisk.push({ mon: String(m.name), node: monNode(m) as string, availBytes: avail, totalBytes: total, availPct: Math.round((avail / total) * 1000) / 10 })
+      })
+    }
 
     // Mapper les pools
     const pools = (Array.isArray(poolList) ? poolList : []).map((pool: any) => {
@@ -263,7 +355,12 @@ return {
         size: pool.size || 3,
         minSize: pool.min_size || 2,
         pgNum: pool.pg_num || 0,
-        pgNumTarget: pool.pg_num_target || pool.pg_num || 0,
+        // pg_num_target is the PG count the cluster is moving to (it differs from pg_num while a
+        // split or merge is under way). PVE puts it in autoscale_status. pg_num_ideal is what the
+        // autoscaler would pick and pg_num_final is what it will settle on: recommendations, not targets.
+        pgNumTarget: pool.autoscale_status?.pg_num_target || pool.pg_num_target || pool.pg_num || 0,
+        pgNumIdeal: pool.autoscale_status?.pg_num_ideal ?? null,
+        pgNumFinal: pool.autoscale_status?.pg_num_final ?? pool.pg_num_final ?? null,
 
         // Type
         type: pool.type || 'replicated',
@@ -300,6 +397,7 @@ return {
         addr: mds.addr || '',
         state: mds.state || 'unknown',
         rank: mds.rank,
+        version: mds.ceph_version_short || null,
       }
     })
 
@@ -307,6 +405,11 @@ return {
     const cephData = {
       hasCeph: true,
       nodeName,
+      pveNodes: nodes.map((n: any) => n?.node).filter((n: unknown): n is string => typeof n === 'string'),
+      // Status PVE de chaque noeud (online, offline, unknown...), lu dans le meme /nodes : pastille des glyphes du cockpit.
+      pveNodeStatus: Object.fromEntries(
+        nodes.filter((n: any) => typeof n?.node === 'string').map((n: any) => [n.node, typeof n.status === 'string' ? n.status : 'unknown']),
+      ) as Record<string, string>,
       
       // Santé
       health: {
@@ -366,6 +469,8 @@ return {
         list: monitors,
       },
 
+      monDisk,
+
       // Pools
       pools: {
         total: pools.length,
@@ -394,7 +499,7 @@ return {
       }, { status: 404 })
     }
 
-    
-return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+    console.error("[ceph] GET Error:", String(e?.message).replace(/[\r\n]/g, ""))
+    return NextResponse.json({ error: "Failed to read the Ceph data" }, { status: 500 })
   }
 }

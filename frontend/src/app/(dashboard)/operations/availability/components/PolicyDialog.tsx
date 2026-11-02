@@ -22,7 +22,7 @@ import {
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 
-import { GuestGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph } from '@/components/ui/glyphs'
 
 import { useInventoryOptions, useMeasuredConnections } from '../hooks/useSlaLists'
 

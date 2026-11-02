@@ -5,6 +5,7 @@ import type { Prisma } from "@prisma/client"
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { cephVisibleTo } from "@/lib/ceph/tenantVisibility"
 import { encryptSecret, decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS, getRBACContext, getRbacInfraScope, filterVisibleConnections, getGuestVisibleConnectionIds } from "@/lib/rbac"
 import { createConnectionSchema } from "@/lib/schemas"
@@ -87,6 +88,7 @@ export async function GET(req: Request) {
       behindProxy: boolean
       insecureTLS: boolean
       hasCeph: boolean
+      cephExporterPort: number
       latitude: number | null
       longitude: number | null
       locationLabel: string | null
@@ -129,6 +131,7 @@ export async function GET(req: Request) {
         behindProxy: true,
         insecureTLS: true,
         hasCeph: true,
+        cephExporterPort: true,
         latitude: true,
         longitude: true,
         locationLabel: true,
@@ -173,7 +176,18 @@ export async function GET(req: Request) {
       for (const connId of guestConnIds) visibleIds.add(connId)
     }
 
-    const visibleConnections = connections.filter(c => visibleIds.has(c.id))
+    // Ceph is a whole-cluster object: for an IaaS tenant (vDC slice of a
+    // provider cluster) every connection reads as having no Ceph, so a
+    // ?hasCeph=true listing is empty.
+    const cephVisible = cephVisibleTo(infra)
+    const visibleConnections = connections
+      .filter(c => visibleIds.has(c.id))
+      .filter(() => cephVisible || hasCephFilter !== 'true')
+      .map(c => {
+        if (cephVisible) return c
+        const { cephExporterPort: _port, ...noCeph } = c
+        return { ...noCeph, hasCeph: false }
+      })
 
     // Calculer sshConfigured en mémoire sans N+1 queries
     // External hypervisors keep their credentials as "user:password" inside
@@ -233,7 +247,7 @@ async function handlePost(req: Request) {
     }
 
     const {
-      name, type, baseUrl, behindProxy, insecureTLS, hasCeph, apiToken,
+      name, type, baseUrl, behindProxy, insecureTLS, hasCeph, cephExporterPort, apiToken,
       subType, vmwareUser, vmwarePassword, vmwareDatacenter, hypervShareName,
       latitude, longitude, locationLabel, country,
       sshEnabled, sshPort, sshUser, sshAuthMethod,
@@ -309,6 +323,9 @@ async function handlePost(req: Request) {
       locationLabel: locationLabel ?? null,
       country: country ?? null,
     }
+
+    // ceph-exporter port: PVE only; the column default (9926) covers the rest.
+    if (type === 'pve') data.cephExporterPort = cephExporterPort
 
     // XCP-ng mode: "xapi" (direct pool master) or "xo" (Xen Orchestra, the legacy default).
     // The schema types subType after the VMware enum, hence the widening.
@@ -497,7 +514,7 @@ async function handlePost(req: Request) {
         data: { ...data, tenantId },
         select: {
           id: true, name: true, type: true, baseUrl: true, behindProxy: true,
-          insecureTLS: true, hasCeph: true, latitude: true, longitude: true,
+          insecureTLS: true, hasCeph: true, cephExporterPort: true, latitude: true, longitude: true,
           locationLabel: true, country: true, sshEnabled: true, sshPort: true,
           sshUser: true, sshAuthMethod: true, sshUseSudo: true, replicationNetwork: true,
           warmZeroRateLimitMBps: true,

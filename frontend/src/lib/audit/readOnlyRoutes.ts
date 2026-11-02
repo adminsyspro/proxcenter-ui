@@ -4,6 +4,7 @@
 // Every other mutating route must be wrapped; routeCoverage.test.ts enforces it.
 // Keys are route directories relative to src/app/api.
 export const READ_ONLY_MUTATION_ROUTES: Readonly<Record<string, string>> = {
+  'v1/connections/[id]/nodes/[node]/ceph/osd/[osdid]/ok-to-stop': 'Read-only precheck (ceph osd ok-to-stop), changes nothing',
   'internal/console/consume': 'One-time console ticket redeemed by the WebSocket proxy; opening the console is audited',
   'internal/shell/consume': 'One-time shell ticket redeemed by the WebSocket proxy; opening the shell is audited',
   'internal/spice/consume': 'One-time SPICE ticket redeemed by the WebSocket proxy; opening the console is audited',

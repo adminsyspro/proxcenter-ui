@@ -27,6 +27,7 @@ import {
   type CachedInventory,
 } from "@/lib/cache/inventoryCache"
 import { inventoryConnectionPlan, type InfraScope } from "@/lib/tenant/infraScope"
+import { cephVisibleTo } from "@/lib/ceph/tenantVisibility"
 
 export type NodeData = {
   node: string
@@ -186,6 +187,7 @@ export type RawInventory = {
 export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory> {
   const sessionPrisma = await getSessionPrisma()
   const plan = inventoryConnectionPlan(infra)
+  const readCeph = cephVisibleTo(infra)
   const pveClient = plan.pveClient === 'global' ? globalPrisma : sessionPrisma
   const pbsExtClient = plan.pbsExtClient === 'global' ? globalPrisma : sessionPrisma
   const pveWhere = plan.pveConnectionIds
@@ -235,7 +237,9 @@ export async function fetchRawInventory(infra: InfraScope): Promise<RawInventory
         pveFetch<NodeData[]>(connConfig, '/nodes'),
         pveFetch<GuestData[]>(connConfig, '/cluster/resources?type=vm'),
         pveFetch<HaResource[]>(connConfig, '/cluster/ha/resources'),
-        pveFetch<any>(connConfig, '/cluster/ceph/status'),
+        // Ceph is a whole-cluster object: never read for an IaaS tenant (vDC
+        // slice of a provider cluster), so no cephHealth reaches its cache.
+        readCeph ? pveFetch<any>(connConfig, '/cluster/ceph/status') : Promise.resolve(null),
         pveFetch<any[]>(connConfig, '/cluster/resources?type=node'),
         // #925: the ONE call this module gains. `storages` has been declared on
         // RawInventory since the beginning and never filled, and

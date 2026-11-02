@@ -24,7 +24,7 @@ import EmptyState from '@/components/EmptyState'
 import TaskDetailDialog from '@/components/TaskDetailDialog'
 import TaskHistoryRetention from '@/components/events/TaskHistoryRetention'
 import { DonutStatCard, DonutTotalCard } from '@/components/charts/DonutStatCards'
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { formatDate, formatTime } from '@/lib/i18n/date'
 import {

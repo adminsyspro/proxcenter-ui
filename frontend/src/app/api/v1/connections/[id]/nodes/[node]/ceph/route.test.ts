@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 // RBAC allows; the route gates on NODE_VIEW.
+// Provider or MSP tenant: the IaaS Ceph gate lets the caller through (its own tests: lib/ceph/tenantGuard*.test.ts).
+vi.mock("@/lib/ceph/tenantGuard", () => ({ denyIaasTenantCeph: async () => null }))
 vi.mock("@/lib/rbac", () => ({
   checkPermission: vi.fn(async () => null),
   PERMISSIONS: { NODE_VIEW: "node.view" },

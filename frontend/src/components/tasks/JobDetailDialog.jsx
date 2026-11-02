@@ -28,7 +28,7 @@ import { extractLogs, jobActions, jobDetailUrl, normalizeLog, syntheticLogs } fr
 import { HOST_DRAIN_JOB_TYPE, hostDrainJobRows } from '@/lib/tasks/hostDrainRows'
 import { useCopyToClipboard } from '@/lib/clipboard'
 import LiveLogBox from '@/components/ui/LiveLogBox'
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import WarmCutoverButton, { canRequestCutover } from '@/app/(dashboard)/infrastructure/inventory/components/WarmCutoverButton'
 
 import { StatusChip, TypeChip } from './JobChips'

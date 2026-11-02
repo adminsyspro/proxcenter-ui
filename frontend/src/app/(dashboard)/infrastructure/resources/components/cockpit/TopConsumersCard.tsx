@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { Box, ButtonBase, Stack, ToggleButton, ToggleButtonGroup, Typography, useTheme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 
 import type { ResourceThresholds, TopVm, VmIdentity } from '../../types'
 import { formatBytes, parseResourceVmId } from '../../helpers'

@@ -322,6 +322,57 @@ export interface DiskLatencySeries {
   points: DiskLatencySeriesPoint[]
 }
 
+/** One bucket of the Ceph history (Enterprise); `time` is the bucket start in Unix seconds. Latencies are null when the bucket has no OSD sample. */
+export interface CephHistoryPoint {
+  time: number
+  /** Worst health of the bucket: 0 OK, 1 WARN, 2 ERR. */
+  health: 0 | 1 | 2
+  read_ops: number
+  write_ops: number
+  read_bytes: number
+  write_bytes: number
+  recovering_bytes: number
+  degraded_objects: number
+  misplaced_objects: number
+  pgs_total: number
+  pgs_clean: number
+  raw_used_bytes: number
+  raw_total_bytes: number
+  osd_total: number
+  osd_up: number
+  osd_in: number
+  osd_lat_avg_ms: number | null
+  osd_lat_max_ms: number | null
+}
+
+export interface CephHistory {
+  from: string
+  to: string
+  step: number
+  points: CephHistoryPoint[]
+  slowest_osds: { osd_id: number; avg_ms: number; max_ms: number }[]
+  /** Latency curve per OSD (<= 60 points, `time` in Unix seconds), only when `osds` was asked; an OSD with no sample is absent. */
+  osd_series?: Record<string, CephOsdSeriesPoint[]>
+  /** I/O rates per OSD (<= 60 points, `time` in Unix seconds), only when `osd_io` and `osds` were asked (ceph-exporter). */
+  osd_io_series?: Record<string, CephOsdIoPoint[]>
+  /** State of the ceph-exporter of each node, only with `osd_io`. */
+  exporter?: { nodes: Record<string, { ok: boolean; last_ok: number | null }> }
+}
+
+export interface CephOsdIoPoint {
+  time: number
+  read_ops: number
+  write_ops: number
+  read_bytes: number
+  write_bytes: number
+}
+
+export interface CephOsdSeriesPoint {
+  time: number
+  avg_ms: number
+  max_ms: number
+}
+
 /** Latency of a storage, aggregated over the guest disks it backs (#881). */
 export interface StorageLatency {
   storage: string
@@ -604,6 +655,17 @@ return this.get<DRSRecommendation[]>(`/drs/recommendations${query}`)
     const query = params.toString()
 
     return this.get<DiskLatencySeries>(`${orchestratorPath`/metrics/${connectionId}/vms/${vmid}/disk-latency`}${query ? `?${query}` : ''}`)
+  }
+
+  /** Ceph history of a connection (Enterprise): cluster series per step and the slowest OSDs. */
+  getCephHistory(connectionId: string, opts: { from: string; to: string; step: number; top?: number; osds?: number[]; osdIo?: boolean }) {
+    const params = new URLSearchParams({ from: opts.from, to: opts.to, step: String(opts.step) })
+
+    if (opts.top !== undefined) params.set('top', String(opts.top))
+    if (opts.osds !== undefined) params.set('osds', opts.osds.join(','))
+    if (opts.osdIo) params.set('osd_io', '1')
+
+    return this.get<CephHistory>(`${orchestratorPath`/ceph/${connectionId}/history`}?${params.toString()}`)
   }
 
   /**
@@ -1092,6 +1154,8 @@ export interface AlertThresholds {
   disk_latency_peak_critical: number
   /** Days of per-disk latency history kept for the Disk I/O charts (#881). */
   disk_latency_retention_days: number
+  /** Days of Ceph cockpit history kept (Enterprise), 1 to 365; 0 or less falls back to 30 on the Go side. */
+  ceph_metrics_retention_days: number
   /** Days of metrics collections kept, the history the dashboard top consumers and charts can look back on (#1129), 1 to 365. */
   metrics_retention_days: number
   /** 1 = the orchestrator reads QEMU block statistics of every running VM (#881); 0 stops the collection, charts and alert included. */

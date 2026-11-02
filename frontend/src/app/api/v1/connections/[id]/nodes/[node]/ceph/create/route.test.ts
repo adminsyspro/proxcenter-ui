@@ -7,6 +7,8 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
    answered by a task UPID. No OSD: PVE keeps that to root@pam.
 */
 
+// Provider or MSP tenant: the IaaS Ceph gate lets the caller through (its own tests: lib/ceph/tenantGuard*.test.ts).
+vi.mock('@/lib/ceph/tenantGuard', () => ({ denyIaasTenantCeph: async () => null }))
 vi.mock('@/lib/connections/getConnection', () => ({
   getConnectionById: vi.fn<(id: string) => Promise<any>>(),
   isConnectionNotFoundError: (err: unknown) =>

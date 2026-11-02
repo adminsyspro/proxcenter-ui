@@ -15,6 +15,7 @@ import { collectCharts } from '@/lib/ai/charts'
 import { collectTargetChoices, consultedOk } from '@/lib/ai/choices'
 import { buildAiSystemPrompt } from '@/lib/ai/context'
 import { buildToolContext } from '@/lib/tools/catalog'
+import { cephAllowedForCaller } from '@/lib/ceph/tenantGuard'
 import { coerceToolArgs, extractTextToolCall, toolResultTurns, toolsForProvider, type ToolCallRequest } from '@/lib/ai/tools/adapters'
 import { budgetFallbackText, CLOSING_NUDGE, emptyClosingText, executeToolCalls, MAX_TOOL_ROUNDS, userTextOf, type ToolTraceEntry } from '@/lib/ai/tools/loop'
 import type { CatalogTool, ToolContext } from '@/lib/tools/types'
@@ -358,6 +359,8 @@ export async function POST(request: Request) {
     })
     const toolCtx = {
       ...buildToolContext(snapshot, tenantId, uiLocale, normalizeTimeZone(timeZone)),
+      // Ceph verdict taken here, in the request scope, on the raw principal.
+      cephVisible: await cephAllowedForCaller(),
       ...(assistant.actions ? { actions: assistant.actions } : {}),
     }
     const wireTools = toolsForProvider('ollama', assistant.tools)

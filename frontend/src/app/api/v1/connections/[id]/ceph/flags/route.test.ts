@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const checkPermission = vi.fn<(...args: unknown[]) => Promise<Response | null>>(async () => null)
+// Provider or MSP tenant: the IaaS Ceph gate lets the caller through (its own tests: lib/ceph/tenantGuard*.test.ts).
+vi.mock("@/lib/ceph/tenantGuard", () => ({ denyIaasTenantCeph: async () => null }))
 vi.mock("@/lib/rbac", () => ({
   checkPermission: (...args: unknown[]) => checkPermission(...args),
   PERMISSIONS: { NODE_VIEW: "node.view", NODE_MANAGE: "node.manage", STORAGE_ADMIN: "storage.admin" },

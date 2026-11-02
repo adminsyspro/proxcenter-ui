@@ -5,8 +5,13 @@ import {
   Box, Card, CardContent, CircularProgress, Stack, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Tooltip as MuiTooltip, Typography, useTheme,
 } from '@mui/material'
+import { useTranslations } from 'next-intl'
 import { buildCrushTopology, capacityColor, crushNodeFlags, type CrushFlags, type CrushNode } from './cephCrushTopology'
 import { useCephOsdFlags } from '@/components/ceph/CephOsdFlags'
+import OsdIoCell, { OSD_IO_CELL_WIDTH } from '@/components/ceph/cockpit/OsdIoCell'
+import { useOsdIoColumns, useOsdIoStore, type OsdIoColumns, type OsdIoRef } from '@/components/ceph/cockpit/hooks/useOsdIoColumns'
+import { useCockpitLicense } from '@/components/ceph/cockpit/hooks/useCockpitLicense'
+import { resolvePveNode } from '@/lib/ceph/osdTable'
 import { formatBytes } from '@/utils/format'
 
 // Theme-aware tooltip styling, mirroring InventoryTree's tooltipSlotProps.
@@ -72,9 +77,44 @@ function FlagText({ flags }: Readonly<{ flags: string[] }>) {
   )
 }
 
-function TreeRow({ node, depth, expanded, toggle, onSelect, selectedId, logoSrc, crushFlags }: Readonly<{
+/** The OSD leaves on screen (their parents are open), with the PVE node whose exporter carries them. */
+function visibleOsdRefs(tree: CrushNode[], expanded: Set<string>, pveNodes: readonly string[]): OsdIoRef[] {
+  const out: OsdIoRef[] = []
+  const walk = (n: CrushNode) => {
+    if (n.osd) {
+      const id = Number(n.id)
+
+      if (Number.isInteger(id) && id >= 0) out.push({ id, node: n.osd.host ? resolvePveNode(n.osd.host, pveNodes) : null })
+
+      return
+    }
+
+    if (expanded.has(`${n.type}:${n.id}:${n.name}`)) n.children?.forEach(walk)
+  }
+
+  tree.forEach(walk)
+
+  return out
+}
+
+/** IOPS and throughput of an OSD leaf, right-aligned so the columns line up from one depth to the next. */
+function OsdIoCells({ node, pveNodes, io }: Readonly<{ node: CrushNode; pveNodes: readonly string[]; io: OsdIoColumns }>) {
+  const id = Number(node.id)
+  const pve = node.osd?.host ? resolvePveNode(node.osd.host, pveNodes) : null
+
+  return (
+    <Box data-testid="crush-osd-io" sx={{ ml: 'auto', pl: 2, display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+      {(['ops', 'bytes'] as const).map((kind) => (
+        <OsdIoCell key={kind} kind={kind} current={io.currentOf(id)} series={io.seriesOf(id)} state={io.stateOf(pve)} reason={io.reasonOf(pve)} node={pve} noNode={pve === null} up={node.osd?.up} port={io.port} session={io.source === 'session'} />
+      ))}
+    </Box>
+  )
+}
+
+function TreeRow({ node, depth, expanded, toggle, onSelect, selectedId, logoSrc, crushFlags, io, pveNodes }: Readonly<{
   node: CrushNode; depth: number; expanded: Set<string>; toggle: (k: string) => void
   onSelect: (n: CrushNode) => void; selectedId: string; logoSrc: string; crushFlags: CrushFlags
+  io: OsdIoColumns; pveNodes: readonly string[]
 }>) {
   const key = `${node.type}:${node.id}:${node.name}`
   const hasChildren = !!node.children && node.children.length > 0
@@ -110,9 +150,10 @@ function TreeRow({ node, depth, expanded, toggle, onSelect, selectedId, logoSrc,
         {node.type === 'host' && node.daemons && <DaemonChips d={node.daemons} />}
         <FlagText flags={crushNodeFlags(node, crushFlags)} />
         {node.totalBytes > 0 && <CapacityBar pct={node.usedPct} />}
+        {node.osd && <OsdIoCells node={node} pveNodes={pveNodes} io={io} />}
       </Box>
       {hasChildren && isOpen && node.children!.map((c) => (
-        <TreeRow key={`${c.type}:${c.id}:${c.name}`} node={c} depth={depth + 1} expanded={expanded} toggle={toggle} onSelect={onSelect} selectedId={selectedId} logoSrc={logoSrc} crushFlags={crushFlags} />
+        <TreeRow key={`${c.type}:${c.id}:${c.name}`} node={c} depth={depth + 1} expanded={expanded} toggle={toggle} onSelect={onSelect} selectedId={selectedId} logoSrc={logoSrc} crushFlags={crushFlags} io={io} pveNodes={pveNodes} />
       ))}
     </Box>
   )
@@ -158,6 +199,7 @@ function DetailsPanel({ node, crushFlags }: Readonly<{ node: CrushNode | null; c
 }
 
 export default function CephTopology({ connId }: Readonly<{ connId: string }>) {
+  const t = useTranslations('cephCockpit')
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -186,6 +228,7 @@ export default function CephTopology({ connId }: Readonly<{ connId: string }>) {
   }, [connId])
 
   const { tree, poolRules } = useMemo(() => buildCrushTopology(data ?? {}), [data])
+  const pveNodes = useMemo<string[]>(() => (Array.isArray(data?.pveNodes) ? data.pveNodes.filter((n: unknown) => typeof n === 'string') : []), [data])
 
   // Expand the first two levels by default once data arrives.
   useEffect(() => {
@@ -197,6 +240,12 @@ export default function CephTopology({ connId }: Readonly<{ connId: string }>) {
     }
     setExpanded(next)
   }, [tree])
+
+  // IOPS and throughput of the OSDs on screen: the exporter of their nodes, polled while the tree is shown.
+  const { enterprise, resolved } = useCockpitLicense()
+  const ioStore = useOsdIoStore()
+  const ioRefs = useMemo(() => visibleOsdRefs(tree, expanded, pveNodes), [tree, expanded, pveNodes])
+  const io = useOsdIoColumns(connId, 'live', enterprise, ioRefs, resolved && ioRefs.length > 0, ioStore)
 
   const toggle = (k: string) => setExpanded((prev) => {
     const next = new Set(prev)
@@ -215,9 +264,21 @@ export default function CephTopology({ connId }: Readonly<{ connId: string }>) {
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.6fr 1fr' }, gap: 2 }}>
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>CRUSH tree</Typography>
-          {tree.map((n) => (
-            <TreeRow key={`${n.type}:${n.id}:${n.name}`} node={n} depth={0} expanded={expanded} toggle={toggle} onSelect={setSelected} selectedId={selectedId} logoSrc={logoSrc} crushFlags={crushFlags} />
-          ))}
+          <Box sx={{ overflowX: 'auto' }}>
+            <Box sx={{ minWidth: 'max-content' }}>
+              {ioRefs.length > 0 && (
+                <Box sx={{ display: 'flex', mb: 0.5 }}>
+                  <Box sx={{ ml: 'auto', pl: 2, display: 'flex', gap: 2, flexShrink: 0, fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'text.secondary' }}>
+                    <Box sx={{ width: OSD_IO_CELL_WIDTH.ops }}>{t('osd.columns.iops')}</Box>
+                    <Box sx={{ width: OSD_IO_CELL_WIDTH.bytes }}>{t('osd.columns.throughput')}</Box>
+                  </Box>
+                </Box>
+              )}
+              {tree.map((n) => (
+                <TreeRow key={`${n.type}:${n.id}:${n.name}`} node={n} depth={0} expanded={expanded} toggle={toggle} onSelect={setSelected} selectedId={selectedId} logoSrc={logoSrc} crushFlags={crushFlags} io={io} pveNodes={pveNodes} />
+              ))}
+            </Box>
+          </Box>
         </CardContent></Card>
         <Card variant="outlined"><CardContent>
           <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>Details</Typography>

@@ -180,6 +180,14 @@ describe('PUT /api/v1/settings/alerts/thresholds', () => {
     }
   })
 
+  it('keeps the Ceph history retention within 1 to 365 whole days', async () => {
+    for (const [sent, kept] of [[0, 1], [-5, 1], [45.9, 45], [9999, 365]]) {
+      updateThresholdsMock.mockClear()
+      await callRoute(PUT as any, { method: 'PUT', body: { ceph_metrics_retention_days: sent } })
+      expect(updateThresholdsMock).toHaveBeenCalledWith(expect.objectContaining({ ceph_metrics_retention_days: kept }))
+    }
+  })
+
   it('skips the orchestrator entirely without ORCHESTRATOR_URL', async () => {
     delete process.env.ORCHESTRATOR_URL
     const res = await callRoute(PUT as any, { method: 'PUT', body: { cpu_warning: 75 } })

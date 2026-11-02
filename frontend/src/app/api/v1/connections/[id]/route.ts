@@ -6,6 +6,7 @@ import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 import { tenantBaseUrlRefusal } from "@/lib/net/base-url-guard"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { cephVisibleTo } from "@/lib/ceph/tenantVisibility"
 import { encryptSecret, decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { invalidateConnectionCache } from "@/lib/connections/getConnection"
@@ -14,6 +15,7 @@ import { invalidateGuestIpIndex } from "@/lib/cache/guestIpCache"
 import { updateConnectionSchema } from "@/lib/schemas"
 import { orchestratorFetch } from "@/lib/orchestrator/client"
 import { pveFetch } from "@/lib/proxmox/client"
+import { clearNodeIpCache } from "@/lib/ceph/exporter"
 import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
 import { xcpngSubTypeOf } from "@/lib/xcpng/source"
 import { normalizeXapiBaseUrl } from "@/lib/xcpng/xapi-client"
@@ -64,6 +66,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const { sshKeyEnc, sshPassEnc, apiTokenEnc, ...rest } = connection as any
+    // Ceph is a whole-cluster object: for an IaaS tenant (vDC slice of a
+    // provider cluster) the connection reads as having no Ceph at all.
+    if (!cephVisibleTo(infra)) {
+      rest.hasCeph = false
+      delete rest.cephExporterPort
+    }
 
     return NextResponse.json({
       data: {
@@ -134,6 +142,11 @@ async function handlePatch(req: Request, ctx: { params: Promise<{ id: string }> 
     if (body.baseUrl !== undefined) data.baseUrl = body.baseUrl
     if (body.behindProxy !== undefined) data.behindProxy = !!body.behindProxy
     if (body.insecureTLS !== undefined) data.insecureTLS = body.insecureTLS
+    if (body.cephExporterPort !== undefined) {
+      // PVE only, like the create: the exporter runs on Ceph nodes.
+      const row = await prisma.connection.findUnique({ where: { id }, select: { type: true } })
+      if (row?.type === 'pve') data.cephExporterPort = body.cephExporterPort
+    }
     if (body.latitude !== undefined) data.latitude = body.latitude
     if (body.longitude !== undefined) data.longitude = body.longitude
     if (body.locationLabel !== undefined) data.locationLabel = body.locationLabel || null
@@ -293,6 +306,7 @@ async function handlePatch(req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Invalidate caches after update
     invalidateConnectionCache(id)
+    clearNodeIpCache(id)
     invalidateInventoryCache()
     invalidateGuestIpIndex(id)
 
@@ -394,6 +408,7 @@ async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }
 
     // Invalidate caches after deletion
     invalidateConnectionCache(id)
+    clearNodeIpCache(id)
     invalidateInventoryCache()
     invalidateGuestIpIndex(id)
 

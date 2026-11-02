@@ -59,6 +59,21 @@ describe('CephServiceActionsCell', () => {
     expect(button('Restart osd.2')).toBeEnabled()
   })
 
+  it('colours the available actions (stop red, restart in the theme colour) and leaves the unavailable one plain', () => {
+    renderWithProviders(<Cell />)
+    expect(button('Start osd.2')).toHaveAttribute('data-available', 'false')
+    expect(button('Stop osd.2')).toHaveAttribute('data-available', 'true')
+    expect(button('Stop osd.2').className).toMatch(/MuiIconButton-colorError/)
+    expect(button('Restart osd.2').className).toMatch(/MuiIconButton-colorPrimary/)
+  })
+
+  it('a stopped daemon offers start in green', () => {
+    renderWithProviders(<Cell target={{ ...OSD, running: false }} />)
+    expect(button('Start osd.2')).toHaveAttribute('data-available', 'true')
+    expect(button('Start osd.2').className).toMatch(/MuiIconButton-colorSuccess/)
+    expect(button('Stop osd.2')).toHaveAttribute('data-available', 'false')
+  })
+
   it('stop and restart are disabled while the daemon is down, and everything without the permission', () => {
     const { unmount } = renderWithProviders(<Cell target={{ ...OSD, running: false }} />)
     expect(button('Start osd.2')).toBeEnabled()
@@ -121,14 +136,30 @@ describe('CephServiceActionsCell', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
-  it('a verdict that could not be obtained is shown with its reason', async () => {
-    fetchMock.mockResolvedValueOnce(json({ error: 'ssh timeout', code: 'not_ok_to_stop', okToStop: { ok: false, osds: [2], numOkPgs: 0, numNotOkPgs: 0, message: 'ssh timeout' } }, 409))
+  it('a verdict that could not be obtained says so once, without repeating the fixed server text', async () => {
+    fetchMock.mockResolvedValueOnce(json({ error: 'Ceph could not be asked whether stopping is safe', code: 'not_ok_to_stop', okToStop: { ok: false, osds: [2], numOkPgs: 0, numNotOkPgs: 0, message: 'Ceph could not be asked whether stopping is safe' } }, 409))
     renderWithProviders(<Cell />)
     fireEvent.click(button('Restart osd.2'))
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('Restart osd.2')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Restart' }))
-    expect(await screen.findByTestId('ceph-not-ok-to-stop')).toHaveTextContent('ceph osd ok-to-stop could not be evaluated: ssh timeout')
+    const refusal = await screen.findByTestId('ceph-not-ok-to-stop')
+    expect(refusal).toHaveTextContent('Ceph could not be asked, so stopping is treated as not safe.')
+    expect(refusal).not.toHaveTextContent('could not be evaluated')
+    expect(refusal).not.toHaveTextContent('Ceph could not be asked whether stopping is safe')
+  })
+
+  it('a refusal without a number of PGs shows a bare text, never 0 placement groups', async () => {
+    fetchMock.mockResolvedValueOnce(json({ error: 'Stopping osd.2 is not safe', code: 'not_ok_to_stop', okToStop: { ok: false, osds: [2], numOkPgs: 0, numNotOkPgs: 0, message: null } }, 409))
+    renderWithProviders(<Cell />)
+    fireEvent.click(button('Stop osd.2'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Stop' }))
+    const refusal = await screen.findByTestId('ceph-not-ok-to-stop')
+    expect(refusal).toHaveTextContent('Stopping osd.2 is not safe right now')
+    expect(refusal).toHaveTextContent('Ceph reports that stopping this OSD now is not safe.')
+    expect(refusal).not.toHaveTextContent('0 placement')
+    expect(refusal).not.toHaveTextContent('placement group')
   })
 
   it('stopping a monitor warns about the quorum, confirms once and closes', async () => {

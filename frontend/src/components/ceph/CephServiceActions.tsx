@@ -32,7 +32,7 @@ import { cephServiceUrl, postCephTask, type CephOkToStopView } from '@/lib/ceph/
    acknowledgement before forcing.
 */
 
-export type CephDaemonKind = 'osd' | 'mon' | 'mgr'
+export type CephDaemonKind = 'osd' | 'mon' | 'mgr' | 'mds'
 export type CephDaemonAction = 'start' | 'stop' | 'restart'
 
 export interface CephDaemonTarget {
@@ -51,6 +51,13 @@ const ACTION_ICON: Record<CephDaemonAction, string> = {
   start: 'ri-play-line',
   stop: 'ri-stop-line',
   restart: 'ri-restart-line',
+}
+
+/** An available action is coloured (start green, stop red, restart in the theme colour); an unavailable one stays faded. */
+const ACTION_COLOR: Record<CephDaemonAction, 'success' | 'error' | 'primary'> = {
+  start: 'success',
+  stop: 'error',
+  restart: 'primary',
 }
 
 /** The refresh and create buttons of a Ceph card header. */
@@ -119,7 +126,9 @@ function ActionButton({
           aria-label={label}
           disabled={disabledReason !== null}
           onClick={onClick}
-          sx={{ p: 0.5 }}
+          color={ACTION_COLOR[action]}
+          data-available={disabledReason === null ? 'true' : 'false'}
+          sx={{ p: 0.5, '&.Mui-disabled': { color: 'action.disabled' } }}
         >
           {busy ? <CircularProgress size={14} /> : <i className={ACTION_ICON[action]} style={{ fontSize: 16 }} />}
         </IconButton>
@@ -230,9 +239,9 @@ export function CephServiceActionsCell({
             <Alert severity="error" data-testid="ceph-not-ok-to-stop">
               <Typography variant="body2" fontWeight={600}>{t('cephService.notOkToStop', { service })}</Typography>
               <Typography variant="body2">
-                {okToStop?.message
-                  ? t('cephService.notOkToStopUnknown', { error: okToStop.message })
-                  : t('cephService.notOkToStopPgs', { count: pgCount })}
+                {okToStop?.message && t('cephService.notOkToStopUnknown')}
+                {!okToStop?.message && pgCount > 0 && t('cephService.notOkToStopPgs', { count: pgCount })}
+                {!okToStop?.message && pgCount === 0 && t('cephService.notOkToStopBare')}
               </Typography>
               <FormControlLabel
                 sx={{ mt: 0.5 }}

@@ -2,26 +2,20 @@ import { executeSSH } from "@/lib/ssh/exec"
 import { safeLog } from "@/lib/log/sanitize"
 import { formatSshEndpoint, resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 
-import { okToStopCommand, parseOkToStop, type OkToStopVerdict } from "./nodeNoout"
+import { okToStopCommand, parseOkToStop } from "./nodeNoout"
+import type { OkToStopResult } from "./okToStop"
+
+export { okToStopPayload, type OkToStopPayload, type OkToStopResult } from "./okToStop"
 
 /*
-   `ceph osd ok-to-stop` over SSH (ui#1164), shared by the per-host noout
-   route (every OSD of a node) and the service route (one OSD about to be
-   stopped or restarted). The command is read-only, so it may run on a cluster
-   outside the license; it exits 16 when stopping is unsafe but still prints
-   its JSON, which is what is read. An SSH failure or an answer without JSON
-   is "no verdict", never a safe one.
+   `ceph osd ok-to-stop` over SSH (ui#1164), now only for the per-host noout
+   route (every OSD of a host at once, next to `ceph osd set-group`, which
+   needs SSH anyway). One OSD (cockpit precheck, out guard, service guard) is
+   asked through the PVE API instead, see okToStopApi.ts. The command is
+   read-only, so it may run on a cluster outside the license; it exits 16
+   when stopping is unsafe but still prints its JSON, which is what is read.
+   An SSH failure or an answer without JSON is "no verdict", never a safe one.
 */
-
-export interface OkToStopResult {
-  verdict: OkToStopVerdict | null
-  error?: string
-}
-
-export interface OkToStopPayload extends OkToStopVerdict {
-  /** Why no verdict could be obtained (SSH failure); null when it was. */
-  message: string | null
-}
 
 /**
  * Run the precheck for a set of OSDs on `viaNode` (an online node of the
@@ -46,10 +40,4 @@ export async function runOkToStop(
   } catch (e: any) {
     return { verdict: null, error: e?.message || "ceph osd ok-to-stop failed" }
   }
-}
-
-/** The verdict as the API answers it: the OSDs asked about when none came back. */
-export function okToStopPayload(result: OkToStopResult, osdIds: number[]): OkToStopPayload {
-  if (result.verdict) return { ...result.verdict, message: null }
-  return { ok: false, osds: osdIds, numOkPgs: 0, numNotOkPgs: 0, message: result.error || null }
 }

@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { osdUpInList } from "@/lib/ceph/osdList"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { denyIaasTenantCeph } from "@/lib/ceph/tenantGuard"
 
 export const runtime = "nodejs"
 
@@ -17,6 +18,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", id)
     if (denied) return denied
+    // Ceph is a whole-cluster object: an IaaS tenant gets 404, before any PVE call.
+    const cephDenied = await denyIaasTenantCeph()
+    if (cephDenied) return cephDenied
 
     const conn = await getConnectionById(id)
 

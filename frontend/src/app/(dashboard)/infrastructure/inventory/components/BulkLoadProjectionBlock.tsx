@@ -6,7 +6,7 @@ import { Alert, Box, Tooltip, Typography } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 
 import { LoadBar } from '@/components/HostDrainDialog'
-import { NodeGlyph } from '@/components/automation/drs/glyphs'
+import { NodeGlyph } from '@/components/ui/glyphs'
 import { BULK_PROJECTION_MEM_ALERT, bulkProjectionMemAlerts, type BulkNodeProjection } from '../bulkLoadProjection'
 
 const GB = 1024 ** 3

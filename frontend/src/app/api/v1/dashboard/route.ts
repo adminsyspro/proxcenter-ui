@@ -23,6 +23,8 @@ import { fetchDashboardOrchAlerts } from "@/lib/alerts/dashboardOrchAlerts"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { getSetting } from "@/lib/db/settings"
 import { osdUpInList } from '@/lib/ceph/osdList'
+import { cephVisibleTo } from '@/lib/ceph/tenantVisibility'
+import { filterAlertsVisibleToTenant } from '@/lib/alerts/tenantAlertFilter'
 
 export const runtime = "nodejs"
 
@@ -139,6 +141,10 @@ export async function GET(req: Request) {
     const infra = await getTenantInfrastructureScope(tenantId)
     const plan = inventoryConnectionPlan(infra)
     const vdcScope = maskingScope(infra)
+    // Ceph is a whole-cluster object: an IaaS tenant only rents a vDC slice of
+    // a provider cluster, so its Ceph is never read nor reported (no health,
+    // OSD, capacity, throughput or alert).
+    const cephVisible = cephVisibleTo(infra)
 
     // Thresholds configurés par l'utilisateur (via Settings > Alert thresholds)
     // Stockés localement en SQLite, fonctionne sans orchestrator (Community + Enterprise).
@@ -218,7 +224,7 @@ export async function GET(req: Request) {
             pveFetch<any[]>(connData, "/nodes", {}, pveTimeout),
             pveFetch<any[]>(connData, "/cluster/resources", {}, pveTimeout),
             pveFetch<any[]>(connData, "/cluster/status", {}, pveTimeout),
-            conn.hasCeph ? pveFetch<any>(connData, "/cluster/ceph/status", {}, pveTimeout) : Promise.resolve(null),
+            conn.hasCeph && cephVisible ? pveFetch<any>(connData, "/cluster/ceph/status", {}, pveTimeout) : Promise.resolve(null),
             pveFetch<any[]>(connData, "/storage", {}, pveTimeout),
           ])
 
@@ -886,9 +892,15 @@ return null
 
     // Merge orchestrator alerts in (Enterprise only) + drop muted entries.
     // All logic lives in lib/alerts/dashboardAlertMerge.ts for testability.
-    const { active: orchAlerts, acknowledged: acknowledgedAlerts } = process.env.ORCHESTRATOR_URL
+    const { active: fetchedOrchAlerts, acknowledged: acknowledgedAlerts } = process.env.ORCHESTRATOR_URL
       ? await fetchDashboardOrchAlerts(rbacScope ? (a: any) => isAlertInRbacScope(a, rbacScope, tenantId) : undefined)
       : {}
+    // The orchestrator answers the alerts of the whole fleet: the ones merged
+    // and shown go through the bell's tenant rule (isAlertVisibleToTenant), so
+    // an IaaS tenant gets none of the shared cluster's built-in alerts (Ceph
+    // noout, OSD latency) nor those of another connection (G20). The
+    // acknowledged ones are never shown, they only hide local copies.
+    const orchAlerts = fetchedOrchAlerts ? await filterAlertsVisibleToTenant(fetchedOrchAlerts) : fetchedOrchAlerts
     const visibleNodeNames = new Set<string>(filteredNodes.map((n: any) => n.name))
     const filteredAlerts = mergeAndFilterDashboardAlerts({
       baseAlerts: alerts,

@@ -38,7 +38,7 @@ import { useTheme } from '@mui/material/styles'
 
 import type { ReplicationJob, RecoveryPlan, RecoveryPlanGuestState, VMRestorePoints } from '@/lib/orchestrator/site-recovery.types'
 import { countGuestsFailedOver, guestStateOf } from '@/lib/site-recovery/emergencyActions'
-import { GuestGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph } from '@/components/ui/glyphs'
 
 /** The title of the first case that holds: the reason a row action reads as it does. */
 const firstReason = (...cases: Array<[boolean, string]>) => cases.find(([holds]) => holds)?.[1] ?? ''

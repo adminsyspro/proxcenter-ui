@@ -11,7 +11,7 @@ import {
 import { useTheme } from '@mui/material/styles'
 
 import type { RecoveryExecution, RecoveryPlanGuestState, VMRestorePoints } from '@/lib/orchestrator/site-recovery.types'
-import { GuestGlyph, NodeGlyph } from '@/components/automation/drs/glyphs'
+import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 
 import ExecutionTrace, { CUTOVER_STEPS, FAILOVER_STEPS } from './ExecutionTrace'
 

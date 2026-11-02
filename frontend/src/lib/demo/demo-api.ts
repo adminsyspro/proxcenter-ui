@@ -17,6 +17,7 @@ import { applyRrdWindow, presetRangeMeta, resolveRrdRequest } from '@/lib/metric
 import { buildClusterCapacity, buildNodeCapacities, buildStoragePools, computeStoppedAllocation, storageEntryKey, type ConnectionSnapshot } from '@/lib/resources/capacity'
 
 import { demoAvailabilityResponse, demoSettings } from './availabilityDemo'
+import { demoCephCrush, demoCephExporterFailures, demoCephExporterNodes, demoCephExporterOsd, demoCephHistory, demoCephLive, demoCephOkToStop, demoCephStatus, demoCrushRules, demoCrushTree, parseDemoHistoryOsds } from './cephCockpitDemo'
 import mockDataJson from './mock-data.json'
 import { domainMock, resolveDomainMock } from './mocks'
 import cloudImagesJson from '@/data/cloudImages.json'
@@ -420,12 +421,13 @@ function generateBackupEntries(count: number, prefix: string, datastore: string)
 // ---------------------------------------------------------------------------
 // Helper: build a /connections/<id>/ceph payload
 //
-// The Ceph screen consumes the shape produced by
-// src/app/api/v1/connections/[id]/ceph/route.ts, NOT the raw PVE status. Two
-// differences bite: the route turns `health.checks` into a LIST (page.jsx does
-// `(cephData.health?.checks || []).map`, and an object literal is truthy, so a
-// raw `{}` throws instead of falling back), and it derives `capacity`,
-// `performance`, `pgs` and `mds`, which the raw status does not carry.
+// The Ceph cockpit consumes the shape produced by
+// src/app/api/v1/connections/[id]/ceph/route.ts, NOT the raw PVE status: a
+// LIST of `health.checks` with `{ message }` detail lines, `pgs.states` as
+// `[{ state_name, count }]`, `managers` as `{ active, standbys }`, camelCase
+// pool fields, plus the derived `capacity`, `performance` and `mds`. The
+// cockpit's shape guard (src/lib/ceph/shape.ts) refuses anything else, so a
+// drift here shows as an error on the demo instead of a broken screen.
 // ---------------------------------------------------------------------------
 
 const TiB = 1024 ** 4
@@ -455,8 +457,10 @@ function buildCephData(opts: {
   pools: any[]
   monitorHosts: { name: string, addr: string }[]
   mds?: any[]
+  /** Managers PVE lists but the mgrmap does not carry (stopped daemons). */
+  stoppedManagers?: string[]
 }): any {
-  const checks = opts.checks || []
+  const checks = (opts.checks || []).map(c => ({ ...c, detail: (c.detail || []).map(message => ({ message })) }))
   const availBytes = opts.totalBytes - opts.usedBytes
   const osds = Array.from({ length: opts.osdCount }, (_, i) => {
     const up = i < opts.osdUp
@@ -480,19 +484,31 @@ function buildCephData(opts: {
       reweight: up ? 1 : 0,
       pgs: up ? Math.round((opts.pgTotal * opts.replication) / opts.osdUp) : 0,
       version: '19.2.1',
+      osdType: 'bluestore',
+      dataDevice: `/dev/${i % 2 === 0 ? 'nvme' : 'sd'}${String.fromCharCode(97 + (i % 12))}`,
+      dbDevice: i < 24 ? null : `/dev/nvme0n1p${(i % 6) + 1}`,
+      walDevice: null,
     }
   })
+  // The demo nodes are named after their CRUSH host: the cockpit resolves an OSD's host to a node from this list.
+  const pveNodes = [...new Set(osds.map(o => o.host))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
   const monitors = opts.monitorHosts.map((m, rank) => ({
     name: m.name,
     host: m.name,
     addr: m.addr,
     rank,
     status: rank === 0 ? 'leader' : 'peon',
+    inQuorum: true,
+    leader: rank === 0,
+    version: '19.2.3',
+    storeStats: null,
   }))
   const quorumNames = monitors.map(m => m.name)
   return {
     hasCeph: true,
     nodeName: opts.nodeName,
+    pveNodes,
+    pveNodeStatus: Object.fromEntries(pveNodes.map(n => [n, 'online'])),
     health: {
       status: opts.healthStatus,
       checks,
@@ -520,7 +536,7 @@ function buildCephData(opts: {
       writeFormatted: formatBytesPerSecUtil(opts.writeBytesSec),
       totalIops: opts.readOpsSec + opts.writeOpsSec,
     },
-    pgs: { total: opts.pgTotal, states: opts.pgStates },
+    pgs: { total: opts.pgTotal, states: Object.entries(opts.pgStates).map(([state_name, count]) => ({ state_name, count })) },
     osds: {
       total: opts.osdCount,
       up: opts.osdUp,
@@ -535,11 +551,40 @@ function buildCephData(opts: {
       quorumNames,
       list: monitors,
     },
-    pools: { total: opts.pools.length, list: opts.pools },
-    mds: { total: (opts.mds || []).length, list: opts.mds || [] },
-    crushTree: null,
-    crushRules: [],
-    managers: [],
+    // Free space of each monitor's node, all comfortably above the Ceph thresholds.
+    monDisk: monitors.map((m, i) => {
+      const totalBytes = 120 * 1024 ** 3
+      const availPct = [68.4, 61.2, 73.9][i % 3]
+
+      return { mon: m.name, node: m.host, totalBytes, availBytes: Math.round(totalBytes * availPct / 100), availPct }
+    }),
+    pools: {
+      total: opts.pools.length,
+      list: opts.pools.map(pool => ({
+        ...pool,
+        minSize: pool.min_size,
+        pgNum: pool.pg_num,
+        pgNumTarget: pool.pg_num,
+        crushRule: pool.crush_rule,
+        crushRuleName: 'replicated_rule',
+        crushRootId: null,
+        pgAutoscaleMode: 'on',
+        bytesUsed: pool.bytes_used,
+        maxAvail: pool.max_avail,
+        objects: Math.round(pool.bytes_used / (4 * 1024 * 1024)),
+        bytesUsedFormatted: formatBytesUtil(pool.bytes_used),
+        maxAvailFormatted: formatBytesUtil(pool.max_avail),
+        percentUsed: pool.percent_used,
+      })),
+    },
+    mds: { total: (opts.mds || []).length, list: (opts.mds || []).map(m => ({ version: '19.2.3', ...m })) },
+    crushTree: demoCrushTree(osds),
+    crushRules: demoCrushRules(osds),
+    managers: {
+      active: opts.monitorHosts[0] ? { name: opts.monitorHosts[0].name, host: opts.monitorHosts[0].name, version: '19.2.3' } : null,
+      standbys: opts.monitorHosts.slice(1).map(m => ({ name: m.name, host: m.name, version: '19.2.3' })),
+      stopped: (opts.stoppedManagers || []).map(name => ({ name, host: name, version: '19.2.3', addr: null })),
+    },
   }
 }
 
@@ -1495,74 +1540,6 @@ function generateAuditEntries(): any[] {
   })
 }
 
-/**
- * Build the /connections/<id>/ceph/rrd body. The route maps raw PVE RRD rows
- * into chart-ready keys (cpu in %, memUsed/netIn/diskRead...), so the mock has
- * to emit the MAPPED shape, not what generateRrdData() returns. Without it the
- * Ceph page shows "No RRD data available" under both node charts.
- */
-function buildCephRrd(ceph: any, nodeName: string, timeframe: string): any {
-  const rrd = generateRrdData(timeframe, undefined, `ceph:${nodeName}`).map(d => ({
-    time: d.time,
-    cpu: Math.round(d.cpu * 100 * 10) / 10,
-    iowait: Math.round(d.iowait * 100 * 10) / 10,
-    memUsed: d.memused,
-    memTotal: d.memtotal,
-    memPct: Math.round((d.memused / d.memtotal) * 100 * 10) / 10,
-    netIn: d.netin,
-    netOut: d.netout,
-    diskRead: d.diskread,
-    diskWrite: d.diskwrite,
-    loadAvg: d.loadavg,
-    swapUsed: d.swapused,
-    swapTotal: d.swaptotal,
-  }))
-  const osds = ceph.osds.list.map((o: any) => ({
-    id: o.id, name: o.name, host: o.host, status: o.status, up: o.up, in: o.in,
-    deviceClass: o.deviceClass, commitLatencyMs: o.commitLatencyMs,
-    applyLatencyMs: o.applyLatencyMs, usedPct: o.usedPct,
-  }))
-  const avg = (f: (o: any) => number) => osds.length
-    ? Math.round((osds.reduce((acc: number, o: any) => acc + f(o), 0) / osds.length) * 10) / 10
-    : 0
-  const current = {
-    readBytesSec: ceph.performance.readBytesSec,
-    writeBytesSec: ceph.performance.writeBytesSec,
-    readOpsSec: ceph.performance.readOpsSec,
-    writeOpsSec: ceph.performance.writeOpsSec,
-    recoveringBytesPerSec: 0,
-    recoveringKeysPerSec: 0,
-    recoveringObjectsPerSec: 0,
-  }
-  return {
-    data: {
-      timeframe,
-      nodeName,
-      rrd,
-      current,
-      pools: ceph.pools.list.map((pool: any) => ({
-        name: pool.name, id: pool.id, bytesUsed: pool.bytes_used,
-        percentUsed: pool.percent_used, maxAvail: pool.max_avail,
-        objects: Math.round(pool.bytes_used / (4 * 1024 * 1024)),
-      })),
-      osds,
-      latency: {
-        avgCommit: avg(o => o.commitLatencyMs),
-        avgApply: avg(o => o.applyLatencyMs),
-        maxCommit: Math.max(...osds.map((o: any) => o.commitLatencyMs), 0),
-        maxApply: Math.max(...osds.map((o: any) => o.applyLatencyMs), 0),
-      },
-      iops: {
-        read: current.readOpsSec,
-        write: current.writeOpsSec,
-        total: current.readOpsSec + current.writeOpsSec,
-        readThroughput: current.readBytesSec,
-        writeThroughput: current.writeBytesSec,
-      },
-    },
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Helper: health score history (30 days)
 // ---------------------------------------------------------------------------
@@ -1700,7 +1677,7 @@ const DEMO_CEPH_DR = buildCephData({
     {
       name: 'PG_DEGRADED',
       severity: 'HEALTH_WARN',
-      summary: 'Degraded data redundancy: 10 pgs undersized',
+      summary: 'Degraded data redundancy: 1240/98304 objects degraded (1.261%), 10 pgs degraded, 10 pgs undersized',
       detail: ['pg 1.3f is stuck undersized for 41m, acting [2,5]'],
     },
   ],
@@ -1725,6 +1702,7 @@ const DEMO_CEPH_DR = buildCephData({
     { name: 'pve-dr-02', addr: '10.20.10.2:6789/0' },
     { name: 'pve-dr-03', addr: '10.20.10.3:6789/0' },
   ],
+  stoppedManagers: ['pve-dr-04'],
 })
 
 const DEMO_APP_VERSION = '1.4.9'
@@ -2106,6 +2084,7 @@ export const EXTRA_MOCKS: MockDataMap = {
     disk_latency_peak_warning: 0,
     disk_latency_peak_critical: 500,
     disk_latency_retention_days: 7,
+    ceph_metrics_retention_days: 30,
     disk_latency_collection: 1,
     metrics_interval_seconds: 60,
     metrics_retention_days: 14,
@@ -2647,13 +2626,13 @@ export const EXTRA_MOCKS: MockDataMap = {
             cephHealth: 'HEALTH_OK',
           },
           {
-            id: 'demo-pve-cluster-002',
+            id: 'demo-pve-dr-001',
             name: 'DR Cluster (GRA)',
             nodes: 4,
             onlineNodes: 4,
             isCluster: true,
             quorum: { quorate: true, votes: 4, expected_votes: 4 },
-            cephHealth: 'HEALTH_OK',
+            cephHealth: 'HEALTH_ERR',
           },
         ],
         ceph: {
@@ -2678,7 +2657,7 @@ export const EXTRA_MOCKS: MockDataMap = {
             readBps: 52428800, writeBps: 31457280,
           },
           {
-            connId: 'demo-pve-cluster-002',
+            connId: 'demo-pve-dr-001',
             name: 'DR Cluster (GRA)',
             health: 'HEALTH_ERR',
             osdsTotal: 12, osdsUp: 10, osdsIn: 10,
@@ -3321,14 +3300,28 @@ export const EXTRA_MOCKS: MockDataMap = {
   get 'GET:/api/v1/connections/demo-pve-dr-001/resources'() {
     return { data: generateDrResources() }
   },
-  'GET:/api/v1/connections/demo-pve-dr-001/ceph/status': {
-    data: { health: { status: 'HEALTH_OK' }, osdmap: { num_osds: 12, num_up_osds: 12, num_in_osds: 12 } },
+  // Raw `ceph status` of the inventory Ceph tab, derived from the inventory below and moving with the clock: a
+  // getter, evaluated at every request (a constant would draw a flat Performance History).
+  get 'GET:/api/v1/connections/demo-pve-dr-001/ceph/status'() {
+    return { data: demoCephStatus(DEMO_CEPH_DR, Date.now()) }
+  },
+  get 'GET:/api/v1/connections/demo-pve-cluster-001/ceph/status'() {
+    return { data: demoCephStatus(DEMO_CEPH_PROD, Date.now()) }
   },
   'GET:/api/v1/connections/demo-pve-dr-001/ceph': { data: DEMO_CEPH_DR },
   'GET:/api/v1/connections/demo-pve-cluster-001/ceph-vms': {
     data: Array.from({ length: 24 }, (_, i) => ({ vmid: 100 + i, cephDiskGb: 50 + Math.floor(Math.random() * 200) })),
   },
   'GET:/api/v1/connections/demo-pve-cluster-001/ceph': { data: DEMO_CEPH_PROD },
+  // Ceph cockpit reads, derived from the same inventories (lib/demo/cephCockpitDemo.ts).
+  get 'GET:/api/v1/connections/demo-pve-cluster-001/ceph/live'() {
+    return { data: demoCephLive(DEMO_CEPH_PROD, Date.now()) }
+  },
+  get 'GET:/api/v1/connections/demo-pve-dr-001/ceph/live'() {
+    return { data: demoCephLive(DEMO_CEPH_DR, Date.now()) }
+  },
+  'GET:/api/v1/connections/demo-pve-cluster-001/ceph/crush': { data: demoCephCrush(DEMO_CEPH_PROD) },
+  'GET:/api/v1/connections/demo-pve-dr-001/ceph/crush': { data: demoCephCrush(DEMO_CEPH_DR) },
   'GET:/api/v1/connections/demo-pve-cluster-001/ceph/flags': { data: { flags: [] } },
   'GET:/api/v1/connections/demo-pve-dr-001/ceph/flags': { data: { flags: ['noout', 'norebalance'] } },
   'GET:/api/v1/connections/demo-pve-dr-001/ceph-vms': { data: [] },
@@ -3485,6 +3478,51 @@ function lookupMock(method: string, urlPath: string, url?: URL): any | Response 
     }
   }
 
+  // --- 4d. Ceph cockpit history (Enterprise, as the demo announces): depends on ?range= ---
+  const cephHistoryMatch = method === 'GET' ? /^\/api\/v1\/orchestrator\/ceph\/([^/]+)\/history$/.exec(cleanPath) : null
+  if (cephHistoryMatch) {
+    // Any other id reads as the production cluster, like normaliseConnectionId does for the other routes.
+    const inventory = cephHistoryMatch[1] === 'demo-pve-dr-001' ? DEMO_CEPH_DR : DEMO_CEPH_PROD
+    const params = url?.searchParams ?? new URL(`http://demo${urlPath}`).searchParams
+    const top = Number(params.get('top') || 8)
+    // `osds=` and `osd_io=1` add the per-OSD curves; they are refused like the real route does, after the range.
+    const extras = parseDemoHistoryOsds(params)
+    const history = demoCephHistory(
+      inventory,
+      params.get('range') ?? '',
+      Date.now(),
+      Number.isInteger(top) && top > 0 ? Math.min(top, 50) : 8,
+      'error' in extras ? {} : { ...extras, failures: demoCephExporterFailures(cephHistoryMatch[1], inventory) },
+    )
+    if (!history) return NextResponse.json({ error: 'range must be 1h, 24h, 7d or 30d' }, { status: 400 })
+    if ('error' in extras) return NextResponse.json({ error: extras.error }, { status: 400 })
+    return { data: history }
+  }
+
+  // --- 4e. Ceph exporter readings (per-OSD I/O counters), growing with time ---
+  const exporterOsdMatch = method === 'GET' ? /^\/api\/v1\/connections\/([^/]+)\/nodes\/([^/]+)\/ceph\/exporter$/.exec(cleanPath) : null
+  const exporterNodesMatch = method === 'GET' ? /^\/api\/v1\/connections\/([^/]+)\/ceph\/exporter$/.exec(cleanPath) : null
+  if (exporterOsdMatch || exporterNodesMatch) {
+    const connId = (exporterOsdMatch ?? exporterNodesMatch)![1]
+    const inventory = connId === 'demo-pve-dr-001' ? DEMO_CEPH_DR : DEMO_CEPH_PROD
+    const params = url?.searchParams ?? new URL(`http://demo${urlPath}`).searchParams
+    if (exporterOsdMatch) {
+      const raw = params.get('osd') ?? ''
+      if (!/^\d{1,9}$/.test(raw)) return NextResponse.json({ error: 'osd must be a non-negative integer' }, { status: 400 })
+      const node = decodeURIComponent(exporterOsdMatch[2])
+      const reason = demoCephExporterFailures(connId, inventory)[node]
+      if (reason) return NextResponse.json({ code: 'exporter_unreachable', error: 'The Ceph exporter of this node is not reachable', reason }, { status: 503 })
+      const reading = demoCephExporterOsd(inventory, node, Number(raw), Date.now())
+      if (!reading) return NextResponse.json({ code: 'osd_not_exported', error: 'This OSD is not reported by the exporter of this node' }, { status: 404 })
+      return { data: reading }
+    }
+    const nodes = [...new Set((params.get('nodes') ?? '').split(',').map(n => n.trim()).filter(Boolean))]
+    if (nodes.length === 0 || nodes.length > 20) return NextResponse.json({ error: 'nodes must list between 1 and 20 node names' }, { status: 400 })
+    const reading = demoCephExporterNodes(inventory, nodes, Date.now(), demoCephExporterFailures(connId, inventory))
+    if (!reading) return NextResponse.json({ error: 'Node not found in this connection' }, { status: 404 })
+    return { data: reading }
+  }
+
   // --- 5. Wildcard: /api/v1/monitoring/* ---
   if (method === 'GET' && cleanPath.startsWith('/api/v1/monitoring')) {
     return { data: {} }
@@ -3534,8 +3572,7 @@ function buildInventorySSE(): Response {
   const buildClusterEvent = (conn: any) => {
     const nodesData = dataFor(`/api/v1/connections/${conn.id}/nodes`)
     const resources = dataFor(`/api/v1/connections/${conn.id}/resources`)
-    const cephStatus = ((EXTRA_MOCKS as any)[`GET:/api/v1/connections/${conn.id}/ceph`]?.data)
-      || ((MOCK_DATA[`/api/v1/connections/${conn.id}/ceph/status`] as any)?.data)
+    const cephStatus = (EXTRA_MOCKS as any)[`GET:/api/v1/connections/${conn.id}/ceph`]?.data
 
     const nodesWithGuests = nodesData.map((n: any) => {
       const nodeGuests = resources.filter((r: any) => r.node === n.node)
@@ -3948,6 +3985,20 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
 
         return NextResponse.json({ data: dataMap, meta: batchMeta }, { headers: demoHeaders })
       })()
+    }
+
+    // --- POST: OSD precheck of the Ceph cockpit ---
+    // `ok-to-stop` only asks Ceph whether stopping the OSD is safe: a read behind a POST. The actions themselves
+    // (out, stop, restart...) stay disabled by the generic answer below.
+    const okToStopMatch = cleanPath.match(/^\/api\/v1\/connections\/([^/]+)\/nodes\/([^/]+)\/ceph\/osd\/([^/]+)\/ok-to-stop$/)
+    if (method === 'POST' && okToStopMatch) {
+      if (!/^\d+$/.test(okToStopMatch[3])) return NextResponse.json({ error: 'Invalid OSD id' }, { status: 400, headers: demoHeaders })
+      const inventory = okToStopMatch[1] === 'demo-pve-dr-001' ? DEMO_CEPH_DR : DEMO_CEPH_PROD
+      const verdict = demoCephOkToStop(inventory, decodeURIComponent(okToStopMatch[2]), Number(okToStopMatch[3]))
+      if ('error' in verdict) {
+        return NextResponse.json({ error: verdict.error === 'node' ? 'Node not found in this connection' : 'OSD not found on this node' }, { status: 404, headers: demoHeaders })
+      }
+      return NextResponse.json({ data: verdict.payload }, { headers: demoHeaders })
     }
 
     // --- POST: node/guest trends ---
@@ -4452,19 +4503,8 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
   }
 
   // --- Dynamic RRD endpoints ---
-  if (cleanPath.match(/\/api\/v1\/connections\/[^/]+\/rrd/) || cleanPath.match(/\/api\/v1\/connections\/[^/]+\/ceph\/rrd/)) {
+  if (cleanPath.match(/\/api\/v1\/connections\/[^/]+\/rrd/)) {
     const timeframe = urlObj.searchParams.get('timeframe') || 'hour'
-    if (cleanPath.includes('/ceph/rrd')) {
-      // The Ceph screen reads `rrd`, `current`, `pools`, `osds` and `latency`
-      // (the shape of src/app/api/v1/connections/[id]/ceph/rrd/route.ts). The
-      // iops_read/bandwidth_* series this used to return matched nothing, so
-      // both node charts sat on "No RRD data available".
-      const isDr = cleanPath.includes('demo-pve-dr-001')
-      return NextResponse.json(
-        buildCephRrd(isDr ? DEMO_CEPH_DR : DEMO_CEPH_PROD, isDr ? 'pve-dr-01' : 'pve-node-01', timeframe),
-        { headers: demoHeaders },
-      )
-    }
     const rrdConnId = cleanPath.match(/\/api\/v1\/connections\/([^/]+)\//)?.[1] || DEMO_CONNECTION_ID
     const rrdPath = urlObj.searchParams.get('path') || '/'
 

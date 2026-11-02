@@ -94,7 +94,7 @@ function ZoneNodeComponent({ id, data, selected }: NodeProps) {
             />
           </Box>
           <Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', minWidth: 0, fontSize: '0.85rem' }}>{zone.name}</Typography>
-          <Typography noWrap variant='caption' color='text.secondary' sx={{ flexShrink: 0 }}>{d.members === null ? '—' : members}</Typography>
+          <Typography noWrap variant='caption' color='text.secondary' sx={{ flexShrink: 0 }}>{d.members === null ? '-' : members}</Typography>
         </CircleTitle>
       </Box>
     </Tooltip>

@@ -121,7 +121,7 @@ export default function ZoneRow({ zone, members, membersKnown, flows, zonesById,
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const running = members.filter(m => m.guest?.status === 'running').length
-  const summary = membersKnown ? t('memberSummary', { count: members.length, running }) : '—'
+  const summary = membersKnown ? t('memberSummary', { count: members.length, running }) : '-'
 
   return (
     <Box role='listitem' aria-label={zone.name} sx={{ borderBottom: 1, borderColor: 'divider' }}>

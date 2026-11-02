@@ -685,4 +685,38 @@ describe('orchestratorRelay', () => {
 
     await expect(orchestratorRelay('/microseg/c1/policy')).rejects.toMatchObject({ code: 'ORCHESTRATOR_UNAVAILABLE' })
   })
+
+  it('sends the server API key', async () => {
+    const orig = process.env.ORCHESTRATOR_API_KEY
+
+    process.env.ORCHESTRATOR_API_KEY = 'srv-key'
+    vi.resetModules()
+    try {
+      fetchMock.mockResolvedValue(new Response('{}', { status: 200 }))
+      const { orchestratorRelay } = await import('./client')
+
+      await orchestratorRelay('/microseg/c1/policy')
+      expect(fetchMock.mock.calls[0][1].headers['X-API-Key']).toBe('srv-key')
+    } finally {
+      if (orig === undefined) delete process.env.ORCHESTRATOR_API_KEY
+      else process.env.ORCHESTRATOR_API_KEY = orig
+      vi.resetModules()
+    }
+  })
+
+  it('aborts the fetch when the caller signal fires, and when it already fired', async () => {
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }))
+    const { orchestratorRelay } = await import('./client')
+    const caller = new AbortController()
+
+    await orchestratorRelay('/microseg/c1/policy', { signal: caller.signal })
+    const sent = fetchMock.mock.calls[0][1].signal as AbortSignal
+
+    expect(sent.aborted).toBe(false)
+    caller.abort()
+    expect(sent.aborted).toBe(true)
+
+    await orchestratorRelay('/microseg/c1/policy', { signal: caller.signal })
+    expect((fetchMock.mock.calls[1][1].signal as AbortSignal).aborted).toBe(true)
+  })
 })

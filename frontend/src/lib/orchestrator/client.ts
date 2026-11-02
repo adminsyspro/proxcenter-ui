@@ -200,6 +200,8 @@ export interface OrchestratorRelayOptions {
   /** Sent as is: a relay does not re-serialise what the caller sent. */
   body?: string
   timeout?: number
+  /** Aborts the call when it fires (the caller's own request being dropped). */
+  signal?: AbortSignal
 }
 
 /**
@@ -212,13 +214,17 @@ export async function orchestratorRelay(
   path: string,
   options: OrchestratorRelayOptions = {}
 ): Promise<Response> {
-  const { method = 'GET', body, timeout = 30000 } = options
+  const { method = 'GET', body, timeout = 30000, signal } = options
 
   assertOrchestratorPath(path)
   const url = `${orchestratorBaseUrlForPath(path)}/api/v1${path}`
   const headers = await orchestratorRequestHeaders()
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
+  const onCallerAbort = () => controller.abort()
+
+  if (signal?.aborted) controller.abort()
+  else signal?.addEventListener('abort', onCallerAbort, { once: true })
 
   try {
     return await fetch(url, { method, headers, body, signal: controller.signal, cache: 'no-store' })

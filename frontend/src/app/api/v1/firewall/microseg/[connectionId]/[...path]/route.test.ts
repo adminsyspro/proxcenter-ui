@@ -215,6 +215,90 @@ describe('microseg proxy route', () => {
     expect(res.status).toBe(504)
   })
 
+  it('maps an orchestrator 401 to 502 ORCHESTRATOR_ERROR so the UI does not loop on login', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    relayMock.mockResolvedValue(upstream(401, { error: 'invalid api key' }))
+    const { GET } = await import('./route')
+    const res = await callRoute(GET as any, ctx(['status']))
+
+    expect(res.status).toBe(502)
+    expect(await readJson<any>(res)).toMatchObject({ code: 'ORCHESTRATOR_ERROR' })
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('401'))
+    errorSpy.mockRestore()
+  })
+
+  it('maps a non-JSON body on an error status to 502 ORCHESTRATOR_ERROR (empty included)', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { GET } = await import('./route')
+
+    relayMock.mockResolvedValue(new Response('<html>Bad Gateway</html>', { status: 502, headers: { 'Content-Type': 'text/html' } }))
+    const res = await callRoute(GET as any, ctx(['status']))
+
+    expect(res.status).toBe(502)
+    expect(await readJson<any>(res)).toMatchObject({ code: 'ORCHESTRATOR_ERROR' })
+
+    relayMock.mockResolvedValue(new Response('', { status: 503 }))
+    expect((await callRoute(GET as any, ctx(['status']))).status).toBe(502)
+    errorSpy.mockRestore()
+  })
+
+  it('refuses a body above 1 MiB with 413, declared or streamed, without calling the orchestrator', async () => {
+    const { POST } = await import('./route')
+    const big = 'x'.repeat(1024 * 1024 + 1)
+
+    const declared = await callRoute(POST as any, { ...ctx(['members']), body: big, headers: { 'content-length': String(big.length) } })
+
+    expect(declared.status).toBe(413)
+    expect(await readJson<any>(declared)).toMatchObject({ code: 'INVALID' })
+
+    const streamed = await callRoute(POST as any, { ...ctx(['members']), body: big, headers: { 'content-length': '10' } })
+
+    expect(streamed.status).toBe(413)
+    expect(relayMock).not.toHaveBeenCalled()
+
+    const ok = await callRoute(POST as any, { ...ctx(['members']), body: 'x'.repeat(1024 * 1024) })
+
+    expect(ok.status).toBe(200)
+    expect(relayMock.mock.calls[0][1].body).toHaveLength(1024 * 1024)
+  })
+
+  it('hands the request abort signal to the relay', async () => {
+    const { GET } = await import('./route')
+    const controller = new AbortController()
+    const req = new Request('http://test.local/_', { signal: controller.signal })
+
+    await GET(req as any, { params: Promise.resolve({ connectionId: 'c1', path: ['status'] }) })
+
+    const signal = relayMock.mock.calls[0][1].signal as AbortSignal
+
+    expect(signal.aborted).toBe(false)
+    controller.abort()
+    expect(signal.aborted).toBe(true)
+  })
+
+  it('answers 401 UNAUTHORIZED for a dead or invalid API token', async () => {
+    getCurrentTenantIdMock.mockRejectedValue(new Error('Invalid or expired API token'))
+    const { GET } = await import('./route')
+    const res = await callRoute(GET as any, ctx(['status']))
+
+    expect(res.status).toBe(401)
+    expect(await readJson<any>(res)).toMatchObject({ code: 'UNAUTHORIZED' })
+    expect(relayMock).not.toHaveBeenCalled()
+  })
+
+  it('answers 403 when the session tenant is not available', async () => {
+    const err = new Error('Tenant not available for this session')
+
+    err.name = 'TenantAccessError'
+    getCurrentTenantIdMock.mockRejectedValue(err)
+    const { GET } = await import('./route')
+    const res = await callRoute(GET as any, ctx(['status']))
+
+    expect(res.status).toBe(403)
+    expect(relayMock).not.toHaveBeenCalled()
+  })
+
   it('does not audit from Next (the orchestrator does)', async () => {
     const mod = await import('./route')
 

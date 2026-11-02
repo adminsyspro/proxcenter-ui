@@ -13165,6 +13165,13 @@
         "running": "{label}：正在移除微分段...",
         "complete": "{label}：移除完成，区域标签仍保留在客户机上",
         "incomplete": "{label}：移除未完成，请重新运行"
+      },
+      "prefixChange": {
+        "warning": "带有旧前缀标签的客户机会在下次应用时离开其区域。",
+        "title": "更改标签前缀？",
+        "body": "客户机仍保留旧标签，因此在重新打标签之前，它们会在下次应用时离开所在区域。",
+        "typeName": "输入 {prefix} 以确认",
+        "confirm": "更改前缀"
       }
     },
     "history": {
@@ -13178,7 +13185,7 @@
         "latest": "最新",
         "restore": "恢复",
         "restoreTitle": "恢复版本 {version}？",
-        "restoreBody": "草稿将被替换为此版本，然后应用到 Proxmox。",
+        "restoreBody": "草稿将被替换为此版本（排队中的成员变更会被丢弃），然后应用到 Proxmox。",
         "restoreLabel": "恢复版本 {version}",
         "restoreRunning": "正在恢复版本 {version}...",
         "capped": "仅列出最近 {count} 个修订。",

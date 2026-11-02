@@ -13165,6 +13165,13 @@
         "running": "{label}: 마이크로 세그멘테이션을 제거하는 중...",
         "complete": "{label}: 제거 완료, 영역 태그는 게스트에 남습니다",
         "incomplete": "{label}: 제거가 완료되지 않았습니다. 다시 실행하세요"
+      },
+      "prefixChange": {
+        "warning": "이전 접두사로 태그된 게스트는 다음 적용 때 영역에서 빠집니다.",
+        "title": "태그 접두사를 변경하시겠습니까?",
+        "body": "게스트에는 이전 태그가 그대로 남아 있으므로, 다시 태그하기 전까지 다음 적용 때 영역에서 빠집니다.",
+        "typeName": "확인하려면 {prefix}을(를) 입력하세요",
+        "confirm": "접두사 변경"
       }
     },
     "history": {
@@ -13178,7 +13185,7 @@
         "latest": "최신",
         "restore": "복원",
         "restoreTitle": "버전 {version}을(를) 복원하시겠습니까?",
-        "restoreBody": "초안이 이 버전으로 교체된 뒤 Proxmox에 적용됩니다.",
+        "restoreBody": "초안이 이 버전으로 교체되고(대기 중인 멤버 변경은 버려짐) Proxmox에 적용됩니다.",
         "restoreLabel": "버전 {version} 복원",
         "restoreRunning": "버전 {version}을(를) 복원하는 중...",
         "capped": "최근 리비전 {count}개만 표시됩니다.",

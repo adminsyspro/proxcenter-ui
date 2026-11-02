@@ -13165,6 +13165,13 @@
         "running": "{label}: removing micro-segmentation...",
         "complete": "{label}: removal complete, the zone tags stay on the guests",
         "incomplete": "{label}: removal incomplete, run it again"
+      },
+      "prefixChange": {
+        "warning": "Guests tagged with the old prefix leave their zones at the next apply.",
+        "title": "Change the tag prefix?",
+        "body": "Guests keep their old tags, so they leave their zones at the next apply until they are tagged again.",
+        "typeName": "Type {prefix} to confirm",
+        "confirm": "Change the prefix"
       }
     },
     "history": {
@@ -13178,7 +13185,7 @@
         "latest": "Latest",
         "restore": "Restore",
         "restoreTitle": "Restore version {version}?",
-        "restoreBody": "The draft is replaced by this version, then applied to Proxmox.",
+        "restoreBody": "The draft is replaced by this version (queued member changes are dropped), then applied to Proxmox.",
         "restoreLabel": "Restore of version {version}",
         "restoreRunning": "Restoring version {version}...",
         "capped": "Only the latest {count} revisions are listed.",

@@ -13165,6 +13165,13 @@
         "running": "{label}: retirando la microsegmentación...",
         "complete": "{label}: retirada completa, las etiquetas de zona permanecen en los invitados",
         "incomplete": "{label}: retirada incompleta, vuelva a ejecutarla"
+      },
+      "prefixChange": {
+        "warning": "Los invitados con la etiqueta del prefijo antiguo salen de su zona en la próxima aplicación.",
+        "title": "¿Cambiar el prefijo de etiqueta?",
+        "body": "Los invitados conservan sus etiquetas antiguas, así que salen de su zona en la próxima aplicación hasta que se vuelvan a etiquetar.",
+        "typeName": "Escriba {prefix} para confirmar",
+        "confirm": "Cambiar el prefijo"
       }
     },
     "history": {
@@ -13178,7 +13185,7 @@
         "latest": "Última",
         "restore": "Restaurar",
         "restoreTitle": "¿Restaurar la versión {version}?",
-        "restoreBody": "El borrador se sustituye por esta versión y luego se aplica a Proxmox.",
+        "restoreBody": "El borrador se sustituye por esta versión (los cambios de miembros en cola se descartan) y luego se aplica a Proxmox.",
         "restoreLabel": "Restauración de la versión {version}",
         "restoreRunning": "Restaurando la versión {version}...",
         "capped": "Solo se listan las últimas {count} revisiones.",

@@ -13166,6 +13166,13 @@
         "running": "{label} : retrait de la micro-segmentation en cours...",
         "complete": "{label} : retrait terminé, les tags de zone restent sur les invités",
         "incomplete": "{label} : retrait incomplet, relancez-le"
+      },
+      "prefixChange": {
+        "warning": "Les invités taggés avec l'ancien préfixe quittent leur zone à la prochaine application.",
+        "title": "Changer le préfixe de tag ?",
+        "body": "Les invités gardent leurs anciens tags : ils quittent leur zone à la prochaine application tant qu'ils ne sont pas retaggés.",
+        "typeName": "Saisissez {prefix} pour confirmer",
+        "confirm": "Changer le préfixe"
       }
     },
     "history": {
@@ -13179,7 +13186,7 @@
         "latest": "Dernière",
         "restore": "Restaurer",
         "restoreTitle": "Restaurer la version {version} ?",
-        "restoreBody": "Le brouillon est remplacé par cette version, puis appliqué à Proxmox.",
+        "restoreBody": "Le brouillon est remplacé par cette version (les changements de membres en attente sont abandonnés), puis appliqué à Proxmox.",
         "restoreLabel": "Restauration de la version {version}",
         "restoreRunning": "Restauration de la version {version} en cours...",
         "capped": "Seules les {count} dernières révisions sont listées.",

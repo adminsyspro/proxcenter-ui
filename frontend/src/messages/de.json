@@ -12833,6 +12833,13 @@
         "running": "{label}: Mikrosegmentierung wird entfernt...",
         "complete": "{label}: Entfernung abgeschlossen, die Zonen-Tags bleiben an den Gästen",
         "incomplete": "{label}: Entfernung unvollständig, führen Sie sie erneut aus"
+      },
+      "prefixChange": {
+        "warning": "Gäste mit dem alten Präfix verlassen ihre Zonen bei der nächsten Anwendung.",
+        "title": "Tag-Präfix ändern?",
+        "body": "Die Gäste behalten ihre alten Tags und verlassen ihre Zonen daher bei der nächsten Anwendung, bis sie neu getaggt sind.",
+        "typeName": "Geben Sie {prefix} zur Bestätigung ein",
+        "confirm": "Präfix ändern"
       }
     },
     "history": {
@@ -12846,7 +12853,7 @@
         "latest": "Neueste",
         "restore": "Wiederherstellen",
         "restoreTitle": "Version {version} wiederherstellen?",
-        "restoreBody": "Der Entwurf wird durch diese Version ersetzt und dann auf Proxmox angewendet.",
+        "restoreBody": "Der Entwurf wird durch diese Version ersetzt (vorgemerkte Mitgliederänderungen entfallen) und dann auf Proxmox angewendet.",
         "restoreLabel": "Wiederherstellung von Version {version}",
         "restoreRunning": "Version {version} wird wiederhergestellt...",
         "capped": "Es werden nur die neuesten {count} Revisionen aufgelistet.",

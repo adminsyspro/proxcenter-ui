@@ -25,6 +25,8 @@ export type MicrosegSettings = {
   notify_paused: boolean
   notify_unprotected: boolean
   notify_blocked: boolean
+  /** Optional: the addresses ProxCenter reaches the guests from, instead of the detected one (max 16). */
+  self_ips?: string[]
 }
 
 /** The policy row of a connection (Go `Policy`). */

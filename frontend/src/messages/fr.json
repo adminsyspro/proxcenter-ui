@@ -12705,7 +12705,7 @@
       "intro": "Trois étapes vous mènent d'une politique vide à votre première zone protégée.",
       "step1Title": "Lancer les vérifications préalables",
       "step1Body": "Vérifiez que le cluster et son pare-feu sont prêts.",
-      "step1Action": "Ouvrir la vue d'ensemble",
+      "step1Action": "Lancer les vérifications",
       "step2Title": "Créer votre première zone",
       "step2Body": "Regroupez les invités qui communiquent entre eux.",
       "step2Action": "Ouvrir la politique",
@@ -12877,7 +12877,8 @@
         "removalHint": "Retrait en file, sélectionnez-le à nouveau pour le garder dans cette zone.",
         "pendingMove": "Déplacement vers {zone}",
         "moveHint": "Déplacement vers {zone} en file, sélectionnez-le à nouveau pour le garder dans cette zone."
-      }
+      },
+      "preflightButton": "Vérifications préalables"
     },
     "plan": {
       "title": "Plan de micro-segmentation",
@@ -13056,6 +13057,161 @@
         "noFlows": "Aucun"
       },
       "partial": "Partiel : seuls les {count, number} premiers flux en attente sont dessinés."
+    },
+    "preflight": {
+      "title": "Vérifications préalables",
+      "checking": "Vérification du cluster...",
+      "runAgain": "Relancer",
+      "openWizard": "Ouvrir l'assistant de déploiement",
+      "busy": "Une application est en cours, réessayez dans un instant.",
+      "noClient": "Aucun client Proxmox n'est disponible pour cette connexion.",
+      "readFailed": "Proxmox n'a pas pu être lu : {error}",
+      "status": {
+        "pass": "réussie",
+        "warn": "avertissement",
+        "fail": "échouée"
+      },
+      "checks": {
+        "cluster_firewall": {
+          "title": "Pare-feu du cluster",
+          "pass": "Le pare-feu du cluster est activé.",
+          "off": "Le pare-feu du cluster est désactivé. L'assistant de déploiement ajoute les règles d'administration, puis l'active."
+        },
+        "socle_rules": {
+          "title": "Accès d'administration",
+          "pass": "Le web (8006) et SSH (22) restent accessibles.",
+          "nodesOff": "Les pare-feu des nœuds sont désactivés, rien ne peut être coupé.",
+          "missing": "Aucune règle ne laisse le port {ports} ouvert depuis n'importe où : activer le pare-feu pourrait couper votre accès."
+        },
+        "log_ratelimit": {
+          "title": "Limite du débit de journal",
+          "default": "PVE journalise à son débit par défaut ({rate}), l'observation manque donc des flux. Relevez-le dans les réglages.",
+          "pass": "PVE journalise jusqu'à {rate}.",
+          "disabled": "PVE ne limite pas le journal du pare-feu."
+        },
+        "self_in_zone": {
+          "title": "Adresse de ProxCenter",
+          "pass": "ProxCenter est hors des zones actives.",
+          "unknown": "L'adresse de ProxCenter n'a pas pu être détectée, cette vérification ne peut donc pas conclure. Renseignez-la dans les réglages.",
+          "inZone": "ProxCenter ({self_ip}) est dans la zone {zone} : l'appliquer pourrait couper la connexion."
+        }
+      }
+    },
+    "settings": {
+      "open": "Réglages",
+      "title": "Réglages de la micro-segmentation",
+      "sections": {
+        "general": "Général",
+        "load": "Charge sur Proxmox",
+        "enforcement": "Application",
+        "observation": "Observation",
+        "address": "Adresse de ProxCenter",
+        "notifications": "Me notifier de",
+        "removal": "Retrait"
+      },
+      "fields": {
+        "tagPrefix": "Préfixe de tag",
+        "light_interval_sec": "Intervalle de la vérification légère",
+        "ips_interval_sec": "Intervalle de lecture des IP des invités",
+        "full_interval_sec": "Intervalle de la vérification complète",
+        "log_interval_sec": "Intervalle de lecture du journal du pare-feu",
+        "ready_after_hours": "Observation avant application",
+        "write_cap": "Plafond d'écritures par passage",
+        "rate": "Débit maximal du journal",
+        "rateUnit": "Unité du débit du journal",
+        "burst": "Rafale du journal",
+        "selfIps": "Adresses de ProxCenter",
+        "notify_drift": "Écarts",
+        "notify_paused": "Moteur en pause",
+        "notify_unprotected": "Invités non protégés",
+        "notify_blocked": "Flux bloqués"
+      },
+      "hints": {
+        "tagPrefix": "Les tags de zone des invités sont ce préfixe suivi du nom de la zone.",
+        "write_cap": "Écritures vers Proxmox permises en un passage. Au-delà, le moteur se met en attente et demande votre confirmation.",
+        "rate": "Vide : la limite de débit du journal de Proxmox n'est pas touchée. Sinon elle est posée tant qu'une zone est observée.",
+        "selfIps": "Les adresses depuis lesquelles ProxCenter joint les invités, séparées par des virgules. Vide : détection automatique."
+      },
+      "unitsLong": {
+        "seconds": "secondes",
+        "hours": "heures",
+        "writes": "écritures"
+      },
+      "rateUnit": {
+        "second": "par seconde",
+        "minute": "par minute",
+        "hour": "par heure",
+        "day": "par jour"
+      },
+      "leaveAsIs": "Ne pas toucher",
+      "detectedAutomatically": "Détectée automatiquement",
+      "validation": {
+        "tagPrefix": "Le préfixe de tag fait de 1 à 16 caractères : minuscules, chiffres, . _ + -",
+        "range": "{label} doit être compris entre {min} et {max} {unit}.",
+        "rateNumber": "Le débit du journal est un nombre entier, 1 ou plus.",
+        "burstNumber": "La rafale du journal est un nombre entier, 0 ou plus.",
+        "rateBoth": "Renseignez le débit et la rafale du journal, ou laissez les deux vides.",
+        "selfIpInvalid": "{ip} n'est pas une adresse IP valide.",
+        "selfIpTooMany": "{max} adresses au plus."
+      },
+      "remove": {
+        "row": "Retirer la micro-segmentation",
+        "hint": "Libère tous les invités, supprime les objets créés par ProxCenter dans Proxmox et rétablit la limite de débit du journal. Les tags de zone restent sur les invités.",
+        "button": "Retirer…",
+        "title": "Retirer la micro-segmentation ?",
+        "body": "Cela annule tout ce que ProxCenter a écrit dans Proxmox sur cette connexion.",
+        "tagsKept": "Les tags de zone restent sur les invités et le brouillon est conservé.",
+        "typeName": "Saisissez {name} pour confirmer",
+        "confirm": "Retirer",
+        "running": "{label} : retrait de la micro-segmentation en cours...",
+        "complete": "{label} : retrait terminé, les tags de zone restent sur les invités",
+        "incomplete": "{label} : retrait incomplet, relancez-le"
+      }
+    },
+    "history": {
+      "revisions": {
+        "title": "Révisions",
+        "loading": "Chargement des révisions...",
+        "empty": "Aucune révision : la première application en enregistre une.",
+        "version": "Version {version}",
+        "by": "par {author}",
+        "counts": "{zones, plural, one {# zone} other {# zones}}, {flows, plural, one {# flux} other {# flux}}",
+        "latest": "Dernière",
+        "restore": "Restaurer",
+        "restoreTitle": "Restaurer la version {version} ?",
+        "restoreBody": "Le brouillon est remplacé par cette version, puis appliqué à Proxmox.",
+        "restoreLabel": "Restauration de la version {version}",
+        "restoreRunning": "Restauration de la version {version} en cours...",
+        "capped": "Seules les {count} dernières révisions sont listées.",
+        "detail": {
+          "tagPrefix": "Préfixe de tag : {prefix}",
+          "zones": "Zones : {names}",
+          "none": "aucune"
+        }
+      },
+      "runs": {
+        "title": "Passages",
+        "loading": "Chargement des passages...",
+        "empty": "Aucun passage pour le moment.",
+        "rowLabel": "{kind}, démarré {time}",
+        "kind": {
+          "light": "Vérification légère",
+          "ips": "Lecture des IP",
+          "full": "Vérification complète",
+          "log": "Lecture du journal",
+          "targeted": "Passage ciblé",
+          "plan": "Plan",
+          "apply": "Application",
+          "remove": "Retrait"
+        },
+        "calls": "{count, plural, one {# appel API} other {# appels API}}",
+        "writes": "{count, plural, one {# écriture} other {# écritures}}",
+        "detail": {
+          "stats": "{guests, plural, one {# invité} other {# invités}}, {members, plural, one {# membre} other {# membres}}, {steps, plural, one {# étape} other {# étapes}}",
+          "removeComplete": "Retrait terminé.",
+          "removeIncomplete": "Retrait incomplet : relancez-le."
+        }
+      }
     }
   }
 }

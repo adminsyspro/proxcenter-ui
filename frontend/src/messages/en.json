@@ -12704,7 +12704,7 @@
       "intro": "Three steps take you from an empty policy to your first protected zone.",
       "step1Title": "Run the pre-flight checks",
       "step1Body": "Check that the cluster and its firewall are ready.",
-      "step1Action": "Open the overview",
+      "step1Action": "Run the checks",
       "step2Title": "Create your first zone",
       "step2Body": "Group the guests that talk to each other.",
       "step2Action": "Open the policy",
@@ -12876,7 +12876,8 @@
         "removalHint": "Queued for removal, select it again to keep it in this zone.",
         "pendingMove": "Moving to {zone}",
         "moveHint": "Queued to move to {zone}, select it again to keep it in this zone."
-      }
+      },
+      "preflightButton": "Pre-flight checks"
     },
     "plan": {
       "title": "Micro-segmentation plan",
@@ -13055,6 +13056,161 @@
         "noFlows": "None"
       },
       "partial": "Partial: only the first {count, number} pending flows are drawn."
+    },
+    "preflight": {
+      "title": "Pre-flight checks",
+      "checking": "Checking the cluster...",
+      "runAgain": "Run again",
+      "openWizard": "Open the deployment wizard",
+      "busy": "An apply is running, retry in a moment.",
+      "noClient": "No Proxmox client is available for this connection.",
+      "readFailed": "Proxmox could not be read: {error}",
+      "status": {
+        "pass": "passed",
+        "warn": "warning",
+        "fail": "failed"
+      },
+      "checks": {
+        "cluster_firewall": {
+          "title": "Cluster firewall",
+          "pass": "The cluster firewall is on.",
+          "off": "The cluster firewall is off. The deployment wizard adds the management rules, then turns it on."
+        },
+        "socle_rules": {
+          "title": "Management access",
+          "pass": "Web (8006) and SSH (22) stay reachable.",
+          "nodesOff": "The node firewalls are off, so nothing can be cut.",
+          "missing": "No rule keeps port {ports} open from anywhere: turning the firewall on could cut your access."
+        },
+        "log_ratelimit": {
+          "title": "Log rate limit",
+          "default": "PVE logs at its default rate ({rate}), so the observation misses flows. Raise it in the settings.",
+          "pass": "PVE logs up to {rate}.",
+          "disabled": "PVE does not limit the firewall log."
+        },
+        "self_in_zone": {
+          "title": "ProxCenter address",
+          "pass": "ProxCenter is outside the active zones.",
+          "unknown": "The address of ProxCenter could not be detected, so this check cannot tell. Set it in the settings.",
+          "inZone": "ProxCenter ({self_ip}) is inside the zone {zone}: enforcing it could cut the connection."
+        }
+      }
+    },
+    "settings": {
+      "open": "Settings",
+      "title": "Micro-segmentation settings",
+      "sections": {
+        "general": "General",
+        "load": "Load on Proxmox",
+        "enforcement": "Enforcement",
+        "observation": "Observation",
+        "address": "ProxCenter address",
+        "notifications": "Notify me about",
+        "removal": "Removal"
+      },
+      "fields": {
+        "tagPrefix": "Tag prefix",
+        "light_interval_sec": "Light check interval",
+        "ips_interval_sec": "Guest IP read interval",
+        "full_interval_sec": "Full check interval",
+        "log_interval_sec": "Firewall log read interval",
+        "ready_after_hours": "Observation before enforcing",
+        "write_cap": "Write cap per run",
+        "rate": "Log rate limit",
+        "rateUnit": "Log rate unit",
+        "burst": "Log burst",
+        "selfIps": "ProxCenter addresses",
+        "notify_drift": "Drifts",
+        "notify_paused": "Engine paused",
+        "notify_unprotected": "Unprotected guests",
+        "notify_blocked": "Blocked flows"
+      },
+      "hints": {
+        "tagPrefix": "The zone tags on the guests are this prefix followed by the zone name.",
+        "write_cap": "Writes to Proxmox allowed in one run. Past it the engine holds and asks you to confirm.",
+        "rate": "Empty leaves the Proxmox log rate limit untouched. Otherwise it is set while a zone is observed.",
+        "selfIps": "The addresses ProxCenter reaches the guests from, separated by commas. Empty: detected automatically."
+      },
+      "unitsLong": {
+        "seconds": "seconds",
+        "hours": "hours",
+        "writes": "writes"
+      },
+      "rateUnit": {
+        "second": "per second",
+        "minute": "per minute",
+        "hour": "per hour",
+        "day": "per day"
+      },
+      "leaveAsIs": "Leave as is",
+      "detectedAutomatically": "Detected automatically",
+      "validation": {
+        "tagPrefix": "The tag prefix is 1 to 16 characters: lowercase letters, digits, . _ + -",
+        "range": "{label} must be between {min} and {max} {unit}.",
+        "rateNumber": "The log rate is a whole number, 1 or more.",
+        "burstNumber": "The log burst is a whole number, 0 or more.",
+        "rateBoth": "Give both the log rate and the log burst, or leave both empty.",
+        "selfIpInvalid": "{ip} is not a valid IP address.",
+        "selfIpTooMany": "At most {max} addresses."
+      },
+      "remove": {
+        "row": "Remove micro-segmentation",
+        "hint": "Releases every guest, deletes the objects ProxCenter created in Proxmox and restores the log rate limit. The zone tags stay on the guests.",
+        "button": "Remove…",
+        "title": "Remove micro-segmentation?",
+        "body": "This undoes everything ProxCenter wrote to Proxmox on this connection.",
+        "tagsKept": "The zone tags stay on the guests, and the draft is kept.",
+        "typeName": "Type {name} to confirm",
+        "confirm": "Remove",
+        "running": "{label}: removing micro-segmentation...",
+        "complete": "{label}: removal complete, the zone tags stay on the guests",
+        "incomplete": "{label}: removal incomplete, run it again"
+      }
+    },
+    "history": {
+      "revisions": {
+        "title": "Revisions",
+        "loading": "Loading revisions...",
+        "empty": "No revision yet: the first apply records one.",
+        "version": "Version {version}",
+        "by": "by {author}",
+        "counts": "{zones, plural, one {# zone} other {# zones}}, {flows, plural, one {# flow} other {# flows}}",
+        "latest": "Latest",
+        "restore": "Restore",
+        "restoreTitle": "Restore version {version}?",
+        "restoreBody": "The draft is replaced by this version, then applied to Proxmox.",
+        "restoreLabel": "Restore of version {version}",
+        "restoreRunning": "Restoring version {version}...",
+        "capped": "Only the latest {count} revisions are listed.",
+        "detail": {
+          "tagPrefix": "Tag prefix: {prefix}",
+          "zones": "Zones: {names}",
+          "none": "none"
+        }
+      },
+      "runs": {
+        "title": "Runs",
+        "loading": "Loading runs...",
+        "empty": "No run yet.",
+        "rowLabel": "{kind}, started {time}",
+        "kind": {
+          "light": "Light check",
+          "ips": "IP read",
+          "full": "Full check",
+          "log": "Log read",
+          "targeted": "Targeted pass",
+          "plan": "Plan",
+          "apply": "Apply",
+          "remove": "Removal"
+        },
+        "calls": "{count, plural, one {# API call} other {# API calls}}",
+        "writes": "{count, plural, one {# write} other {# writes}}",
+        "detail": {
+          "stats": "{guests, plural, one {# guest} other {# guests}}, {members, plural, one {# member} other {# members}}, {steps, plural, one {# step} other {# steps}}",
+          "removeComplete": "Removal complete.",
+          "removeIncomplete": "Removal incomplete: run it again."
+        }
+      }
     }
   }
 }

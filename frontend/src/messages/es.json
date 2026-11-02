@@ -12704,7 +12704,7 @@
       "intro": "Tres pasos le llevan de una política vacía a su primera zona protegida.",
       "step1Title": "Ejecutar las comprobaciones previas",
       "step1Body": "Compruebe que el clúster y su cortafuegos están listos.",
-      "step1Action": "Abrir el resumen",
+      "step1Action": "Ejecutar las comprobaciones",
       "step2Title": "Crear su primera zona",
       "step2Body": "Agrupe los invitados que se comunican entre sí.",
       "step2Action": "Abrir la política",
@@ -12876,7 +12876,8 @@
         "removalHint": "En cola para retirarse, selecciónelo de nuevo para mantenerlo en esta zona.",
         "pendingMove": "Moviendo a {zone}",
         "moveHint": "En cola para moverse a {zone}, selecciónelo de nuevo para mantenerlo en esta zona."
-      }
+      },
+      "preflightButton": "Comprobaciones previas"
     },
     "plan": {
       "title": "Plan de microsegmentación",
@@ -13055,6 +13056,161 @@
         "noFlows": "Ninguno"
       },
       "partial": "Parcial: solo se dibujan los primeros {count, number} flujos pendientes."
+    },
+    "preflight": {
+      "title": "Comprobaciones previas",
+      "checking": "Comprobando el clúster...",
+      "runAgain": "Repetir",
+      "openWizard": "Abrir el asistente de despliegue",
+      "busy": "Hay una aplicación en curso, inténtelo de nuevo en un momento.",
+      "noClient": "No hay ningún cliente de Proxmox disponible para esta conexión.",
+      "readFailed": "No se pudo leer Proxmox: {error}",
+      "status": {
+        "pass": "superada",
+        "warn": "aviso",
+        "fail": "fallida"
+      },
+      "checks": {
+        "cluster_firewall": {
+          "title": "Cortafuegos del clúster",
+          "pass": "El cortafuegos del clúster está activado.",
+          "off": "El cortafuegos del clúster está desactivado. El asistente de despliegue añade las reglas de administración y luego lo activa."
+        },
+        "socle_rules": {
+          "title": "Acceso de administración",
+          "pass": "La web (8006) y SSH (22) siguen accesibles.",
+          "nodesOff": "Los cortafuegos de los nodos están desactivados, no se puede cortar nada.",
+          "missing": "Ninguna regla mantiene abierto el puerto {ports} desde cualquier origen: activar el cortafuegos podría cortar su acceso."
+        },
+        "log_ratelimit": {
+          "title": "Límite de tasa del registro",
+          "default": "PVE registra a su tasa por defecto ({rate}), así que la observación pierde flujos. Súbala en los ajustes.",
+          "pass": "PVE registra hasta {rate}.",
+          "disabled": "PVE no limita el registro del cortafuegos."
+        },
+        "self_in_zone": {
+          "title": "Dirección de ProxCenter",
+          "pass": "ProxCenter está fuera de las zonas activas.",
+          "unknown": "No se pudo detectar la dirección de ProxCenter, así que esta comprobación no puede concluir. Indíquela en los ajustes.",
+          "inZone": "ProxCenter ({self_ip}) está dentro de la zona {zone}: aplicarla podría cortar la conexión."
+        }
+      }
+    },
+    "settings": {
+      "open": "Ajustes",
+      "title": "Ajustes de la microsegmentación",
+      "sections": {
+        "general": "General",
+        "load": "Carga sobre Proxmox",
+        "enforcement": "Aplicación",
+        "observation": "Observación",
+        "address": "Dirección de ProxCenter",
+        "notifications": "Avisarme de",
+        "removal": "Retirada"
+      },
+      "fields": {
+        "tagPrefix": "Prefijo de etiqueta",
+        "light_interval_sec": "Intervalo de la comprobación ligera",
+        "ips_interval_sec": "Intervalo de lectura de las IP de los invitados",
+        "full_interval_sec": "Intervalo de la comprobación completa",
+        "log_interval_sec": "Intervalo de lectura del registro del cortafuegos",
+        "ready_after_hours": "Observación antes de aplicar",
+        "write_cap": "Tope de escrituras por pasada",
+        "rate": "Límite de tasa del registro",
+        "rateUnit": "Unidad de la tasa del registro",
+        "burst": "Ráfaga del registro",
+        "selfIps": "Direcciones de ProxCenter",
+        "notify_drift": "Desviaciones",
+        "notify_paused": "Motor en pausa",
+        "notify_unprotected": "Invitados sin proteger",
+        "notify_blocked": "Flujos bloqueados"
+      },
+      "hints": {
+        "tagPrefix": "Las etiquetas de zona de los invitados son este prefijo seguido del nombre de la zona.",
+        "write_cap": "Escrituras hacia Proxmox permitidas en una pasada. Superado el tope, el motor se detiene y pide su confirmación.",
+        "rate": "Vacío deja intacto el límite de tasa del registro de Proxmox. Si no, se fija mientras se observa una zona.",
+        "selfIps": "Las direcciones desde las que ProxCenter alcanza a los invitados, separadas por comas. Vacío: detección automática."
+      },
+      "unitsLong": {
+        "seconds": "segundos",
+        "hours": "horas",
+        "writes": "escrituras"
+      },
+      "rateUnit": {
+        "second": "por segundo",
+        "minute": "por minuto",
+        "hour": "por hora",
+        "day": "por día"
+      },
+      "leaveAsIs": "No tocar",
+      "detectedAutomatically": "Detectada automáticamente",
+      "validation": {
+        "tagPrefix": "El prefijo de etiqueta tiene de 1 a 16 caracteres: minúsculas, dígitos, . _ + -",
+        "range": "{label} debe estar entre {min} y {max} {unit}.",
+        "rateNumber": "La tasa del registro es un número entero, 1 o más.",
+        "burstNumber": "La ráfaga del registro es un número entero, 0 o más.",
+        "rateBoth": "Indique la tasa y la ráfaga del registro, o deje ambas vacías.",
+        "selfIpInvalid": "{ip} no es una dirección IP válida.",
+        "selfIpTooMany": "Como máximo {max} direcciones."
+      },
+      "remove": {
+        "row": "Retirar la microsegmentación",
+        "hint": "Libera todos los invitados, elimina los objetos que ProxCenter creó en Proxmox y restablece el límite de tasa del registro. Las etiquetas de zona permanecen en los invitados.",
+        "button": "Retirar…",
+        "title": "¿Retirar la microsegmentación?",
+        "body": "Esto deshace todo lo que ProxCenter escribió en Proxmox en esta conexión.",
+        "tagsKept": "Las etiquetas de zona permanecen en los invitados y el borrador se conserva.",
+        "typeName": "Escriba {name} para confirmar",
+        "confirm": "Retirar",
+        "running": "{label}: retirando la microsegmentación...",
+        "complete": "{label}: retirada completa, las etiquetas de zona permanecen en los invitados",
+        "incomplete": "{label}: retirada incompleta, vuelva a ejecutarla"
+      }
+    },
+    "history": {
+      "revisions": {
+        "title": "Revisiones",
+        "loading": "Cargando las revisiones...",
+        "empty": "Aún no hay revisiones: la primera aplicación registra una.",
+        "version": "Versión {version}",
+        "by": "por {author}",
+        "counts": "{zones, plural, one {# zona} other {# zonas}}, {flows, plural, one {# flujo} other {# flujos}}",
+        "latest": "Última",
+        "restore": "Restaurar",
+        "restoreTitle": "¿Restaurar la versión {version}?",
+        "restoreBody": "El borrador se sustituye por esta versión y luego se aplica a Proxmox.",
+        "restoreLabel": "Restauración de la versión {version}",
+        "restoreRunning": "Restaurando la versión {version}...",
+        "capped": "Solo se listan las últimas {count} revisiones.",
+        "detail": {
+          "tagPrefix": "Prefijo de etiqueta: {prefix}",
+          "zones": "Zonas: {names}",
+          "none": "ninguna"
+        }
+      },
+      "runs": {
+        "title": "Pasadas",
+        "loading": "Cargando las pasadas...",
+        "empty": "Aún no hay pasadas.",
+        "rowLabel": "{kind}, iniciada {time}",
+        "kind": {
+          "light": "Comprobación ligera",
+          "ips": "Lectura de IP",
+          "full": "Comprobación completa",
+          "log": "Lectura del registro",
+          "targeted": "Pasada dirigida",
+          "plan": "Plan",
+          "apply": "Aplicación",
+          "remove": "Retirada"
+        },
+        "calls": "{count, plural, one {# llamada API} other {# llamadas API}}",
+        "writes": "{count, plural, one {# escritura} other {# escrituras}}",
+        "detail": {
+          "stats": "{guests, plural, one {# invitado} other {# invitados}}, {members, plural, one {# miembro} other {# miembros}}, {steps, plural, one {# paso} other {# pasos}}",
+          "removeComplete": "Retirada completa.",
+          "removeIncomplete": "Retirada incompleta: vuelva a ejecutarla."
+        }
+      }
     }
   }
 }

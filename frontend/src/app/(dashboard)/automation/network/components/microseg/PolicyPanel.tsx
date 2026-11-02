@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Box } from '@mui/material'
+import { Box, Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { MicrosegApiError, microsegApi } from '@/lib/microseg/api'
@@ -31,7 +31,7 @@ type Deleting = { kind: 'zone'; zone: MicrosegZone } | { kind: 'flow'; flow: Mic
  * (and its input) open. A zone state change starts a run, followed in the strip
  * of the tab (it survives a switch of sub-tab).
  */
-export default function PolicyPanel({ connectionId, policy, reloadPolicy, startRun }: MicrosegSubTabProps) {
+export default function PolicyPanel({ connectionId, policy, reloadPolicy, startRun, onOpenPreflight }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.policy')
   const api = microsegApi(connectionId)
   const { guests, status: guestsStatus } = useZoneGuests(connectionId)
@@ -112,6 +112,11 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
 
   return (
     <Box>
+      {onOpenPreflight && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+          <Button size='small' variant='outlined' startIcon={<i className='ri-heart-pulse-line' />} onClick={onOpenPreflight}>{t('preflightButton')}</Button>
+        </Box>
+      )}
       {actionError != null && <MicrosegErrorAlert error={actionError} onClose={() => setActionError(null)} />}
 
       <ZoneList

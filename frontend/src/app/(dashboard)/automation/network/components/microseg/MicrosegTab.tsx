@@ -1,28 +1,34 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { Alert, Box, CircularProgress, Tab, Tabs, Typography } from '@mui/material'
+import { Alert, Box, CircularProgress, IconButton, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { useSWRConfig } from 'swr'
 
 import { microsegBaseUrl } from '@/lib/microseg/api'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 
+import DeploymentWizard from '../DeploymentWizard'
 import DriftsPanel from './DriftsPanel'
 import FirstRunGuide from './FirstRunGuide'
+import HistoryPanel from './HistoryPanel'
 import MicrosegBanner from './MicrosegBanner'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import ObservationPanel from './ObservationPanel'
 import PlanDialog from './PlanDialog'
 import PolicyPanel from './PolicyPanel'
+import PreflightPanel from './PreflightPanel'
 import RunStrip from './RunStrip'
+import SettingsDialog from './SettingsDialog'
 import ZoneMap from './ZoneMap'
-import { MICROSEG_SUBTABS, isMicrosegSubTab, type MicrosegSubTab, type MicrosegSubTabProps, type TrackedRun } from './microsegTabTypes'
+import {
+  MICROSEG_SUBTABS, isMicrosegSubTab, type FirewallWizardData, type MicrosegSubTab, type MicrosegSubTabProps, type TrackedRun,
+} from './microsegTabTypes'
 
 const STORAGE_KEY = 'microseg.subTab'
 
 /** The sub-tabs that have their content; the others still show the placeholder. */
-const PANELS = new Set<MicrosegSubTab>(['overview', 'policy', 'observation', 'drifts'])
+const PANELS = new Set<MicrosegSubTab>(['overview', 'policy', 'observation', 'drifts', 'history'])
 
 function readStoredSubTab(): MicrosegSubTab | null {
   try {
@@ -41,11 +47,7 @@ function storeSubTab(tab: MicrosegSubTab) {
   }
 }
 
-/**
- * Content of one sub-tab. The later tasks replace the placeholder of their
- * own sub-tab here: overview (preflight, T9), policy (zones and flows, T4),
- * observation (suggestions, T7), drifts (T9), history (T8).
- */
+/** Content of one sub-tab; a sub-tab without a panel still shows the placeholder. */
 function SubTabContent({ tab, ...props }: { tab: MicrosegSubTab } & MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.subTabs')
   return (
@@ -54,6 +56,7 @@ function SubTabContent({ tab, ...props }: { tab: MicrosegSubTab } & MicrosegSubT
       {tab === 'policy' && <PolicyPanel {...props} />}
       {tab === 'observation' && <ObservationPanel {...props} />}
       {tab === 'drifts' && <DriftsPanel {...props} />}
+      {tab === 'history' && <HistoryPanel {...props} />}
       {!PANELS.has(tab) && <Typography color='text.secondary' sx={{ px: 3, pb: 3 }}>{t('placeholder')}</Typography>}
     </Box>
   )
@@ -61,10 +64,14 @@ function SubTabContent({ tab, ...props }: { tab: MicrosegSubTab } & MicrosegSubT
 
 type Props = {
   connectionId: string
+  /** Typed to confirm the removal; the id when the page does not know the name. */
+  connectionName?: string
+  /** What the deployment wizard needs; without it a failed pre-flight check has no wizard to open. */
+  firewall?: FirewallWizardData
 }
 
 /** The Micro-segmentation tab of /automation/network: banner, first run guide and the five sub-tabs. */
-export default function MicrosegTab({ connectionId }: Props) {
+export default function MicrosegTab({ connectionId, connectionName, firewall }: Props) {
   const t = useTranslations('microsegPilot')
   const { data: policy, loading, error, reload } = useMicrosegPolicy(connectionId || null)
   // Read once: nothing of the sub-tab shows before the policy has loaded, so this never differs from a server render.
@@ -75,6 +82,13 @@ export default function MicrosegTab({ connectionId }: Props) {
   // The plan window is opened by the banner, the pending changes bar and the first run guide.
   const [planOpen, setPlanOpen] = useState(false)
   const onOpenPlan = useCallback(() => setPlanOpen(true), [])
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const onOpenSettings = useCallback(() => setSettingsOpen(true), [])
+  const [preflightOpen, setPreflightOpen] = useState(false)
+  const onOpenPreflight = useCallback(() => setPreflightOpen(true), [])
+  const [wizardOpen, setWizardOpen] = useState(false)
+  // The wizard changes the cluster: the pre-flight checks are read again once it is done.
+  const [preflightRound, setPreflightRound] = useState(0)
   const { mutate } = useSWRConfig()
 
   const startRun = useCallback((run: TrackedRun) => {
@@ -109,25 +123,41 @@ export default function MicrosegTab({ connectionId }: Props) {
   }
 
   const firstRun = !policy.last_revision && policy.zones.length === 0
-  const contentProps: MicrosegSubTabProps = { connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun }
+  const contentProps: MicrosegSubTabProps = {
+    connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun, onOpenSettings, onOpenPreflight,
+  }
 
   return (
     <Box sx={{ p: 3 }}>
       <MicrosegBanner connectionId={connectionId} policy={policy} onOpenPlan={onOpenPlan} />
       <RunStrip connectionId={connectionId} runs={runs} onFinished={refreshAfterRun} onRemove={removeRun} />
-      {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={onOpenPlan} />}
-      <Tabs value={subTab} onChange={(_, v: MicrosegSubTab) => goToSubTab(v)} variant='scrollable' scrollButtons='auto' aria-label={t('subTabs.label')}>
-        {MICROSEG_SUBTABS.map(tab => (
-          <Tab
-            key={tab}
-            value={tab}
-            id={`microseg-tab-${tab}`}
-            aria-controls={`microseg-panel-${tab}`}
-            label={t(`subTabs.${tab}`)}
-            sx={{ textTransform: 'none', fontWeight: 600 }}
-          />
-        ))}
-      </Tabs>
+      {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={onOpenPlan} onOpenPreflight={onOpenPreflight} />}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Tabs
+          value={subTab}
+          onChange={(_, v: MicrosegSubTab) => goToSubTab(v)}
+          variant='scrollable'
+          scrollButtons='auto'
+          aria-label={t('subTabs.label')}
+          sx={{ flex: 1, minWidth: 0 }}
+        >
+          {MICROSEG_SUBTABS.map(tab => (
+            <Tab
+              key={tab}
+              value={tab}
+              id={`microseg-tab-${tab}`}
+              aria-controls={`microseg-panel-${tab}`}
+              label={t(`subTabs.${tab}`)}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            />
+          ))}
+        </Tabs>
+        <Tooltip title={t('settings.open')}>
+          <IconButton aria-label={t('settings.open')} onClick={onOpenSettings} sx={{ flexShrink: 0 }}>
+            <i className='ri-settings-3-line' />
+          </IconButton>
+        </Tooltip>
+      </Box>
       <SubTabContent tab={subTab} {...contentProps} />
       <PlanDialog
         open={planOpen}
@@ -137,6 +167,37 @@ export default function MicrosegTab({ connectionId }: Props) {
         startRun={startRun}
         onClose={() => setPlanOpen(false)}
       />
+      {settingsOpen && (
+        <SettingsDialog
+          connectionId={connectionId}
+          connectionName={connectionName || connectionId}
+          policy={policy}
+          reloadPolicy={reload}
+          startRun={startRun}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {preflightOpen && (
+        <PreflightPanel
+          open
+          connectionId={connectionId}
+          refreshKey={preflightRound}
+          onClose={() => setPreflightOpen(false)}
+          onOpenWizard={firewall ? () => setWizardOpen(true) : undefined}
+        />
+      )}
+      {firewall && (
+        <DeploymentWizard
+          open={wizardOpen}
+          onClose={() => setWizardOpen(false)}
+          selectedConnection={connectionId}
+          clusterOptions={firewall.clusterOptions}
+          clusterRules={firewall.clusterRules}
+          nodesList={firewall.nodesList}
+          firewallMode={firewall.firewallMode}
+          onComplete={() => { firewall.onComplete(); setPreflightRound(n => n + 1) }}
+        />
+      )}
     </Box>
   )
 }

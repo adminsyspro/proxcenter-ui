@@ -61,6 +61,11 @@ function parseV6(addr: string): number[] | null {
   return [...head, ...zeros, ...tail].map(g => (typeof g === 'number' ? g : Number.parseInt(g, 16)))
 }
 
+/** True for a plain IPv4 or IPv6 address (no zone, no prefix), as the orchestrator's netip.ParseAddr takes it. */
+export function isIpAddress(value: string): boolean {
+  return parseV4(value) !== null || (value.includes(':') && parseV6(value) !== null)
+}
+
 function parsePrefix(cidr: string): Prefix | null {
   const [addr, len, extra] = cidr.split('/')
   if (extra !== undefined || len === undefined || !/^(0|[1-9]\d{0,2})$/.test(len)) return null

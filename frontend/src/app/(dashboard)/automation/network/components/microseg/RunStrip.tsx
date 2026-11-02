@@ -22,6 +22,7 @@ type LineProps = {
 /** One run on one line: running, then the counts of steps done, failed and not run (UA13). */
 function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps) {
   const t = useTranslations('microsegPilot.policy.run')
+  const tr = useTranslations('microsegPilot.settings.remove')
   const { run, done, error } = useMicrosegRun(connectionId, tracked.runId)
   const lost = !!error && !run
 
@@ -39,7 +40,16 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps
   let severity: 'info' | 'success' | 'warning' | 'error' = 'info'
   let icon: ReactNode = <CircularProgress size={16} />
 
-  if (run?.status === 'failed') {
+  let notes = ''
+
+  if (tracked.kind === 'remove' && run?.result && done) {
+    // A removal says whether it undid everything (`complete`); the engine keeps the zone tags either way.
+    const complete = !!run.result.complete
+    text = tr(complete ? 'complete' : 'incomplete', { label })
+    severity = complete ? 'success' : run.status === 'failed' ? 'error' : 'warning'
+    icon = undefined
+    notes = (run.result.notes ?? []).join('; ')
+  } else if (run?.status === 'failed') {
     // A lifecycle run that did not complete its plan is `failed` and still carries its result.
     text = run.result
       ? t('done', { label, done: run.result.done?.length ?? 0, failed: run.result.failed?.length ?? 0, notRun: run.result.not_run?.length ?? 0 })
@@ -57,7 +67,8 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps
     icon = undefined
   }
 
-  const detail = run?.status === 'failed' && run.error ? `${text} ${run.error}` : text
+  const extra = [notes, run?.status === 'failed' ? run.error : ''].filter(Boolean).join(' ')
+  const detail = extra ? `${text} ${extra}` : text
 
   return (
     <Alert

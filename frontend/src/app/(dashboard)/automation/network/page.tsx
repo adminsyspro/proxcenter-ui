@@ -271,7 +271,12 @@ export default function NetworkAutomationPage() {
 
           {/* Tab 6: Micro-segmentation (keyed: another connection starts from no state) */}
           {activeTab === 6 && (
-            <MicrosegTab key={selectedConnection} connectionId={selectedConnection} />
+            <MicrosegTab
+              key={selectedConnection}
+              connectionId={selectedConnection}
+              connectionName={connections.find(c => c.id === selectedConnection)?.name}
+              firewall={{ clusterOptions, clusterRules, nodesList, firewallMode, onComplete: loadFirewallData }}
+            />
           )}
 
         </Card>

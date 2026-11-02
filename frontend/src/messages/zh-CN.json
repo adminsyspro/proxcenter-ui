@@ -12704,7 +12704,7 @@
       "intro": "三个步骤即可从空策略到第一个受保护的区域。",
       "step1Title": "运行预检",
       "step1Body": "检查集群及其防火墙是否就绪。",
-      "step1Action": "打开概览",
+      "step1Action": "运行检查",
       "step2Title": "创建第一个区域",
       "step2Body": "将相互通信的客户机分为一组。",
       "step2Action": "打开策略",
@@ -12876,7 +12876,8 @@
         "removalHint": "已排队移除，再次选择可将其保留在此区域。",
         "pendingMove": "正在移动到 {zone}",
         "moveHint": "已排队移动到 {zone}，再次选择可将其保留在此区域。"
-      }
+      },
+      "preflightButton": "预检"
     },
     "plan": {
       "title": "微分段计划",
@@ -13055,6 +13056,161 @@
         "noFlows": "无"
       },
       "partial": "部分显示：仅绘制前 {count, number} 条待处理流量。"
+    },
+    "preflight": {
+      "title": "预检",
+      "checking": "正在检查集群...",
+      "runAgain": "重新检查",
+      "openWizard": "打开部署向导",
+      "busy": "正在应用，请稍后重试。",
+      "noClient": "此连接没有可用的 Proxmox 客户端。",
+      "readFailed": "无法读取 Proxmox：{error}",
+      "status": {
+        "pass": "通过",
+        "warn": "警告",
+        "fail": "失败"
+      },
+      "checks": {
+        "cluster_firewall": {
+          "title": "集群防火墙",
+          "pass": "集群防火墙已开启。",
+          "off": "集群防火墙已关闭。部署向导会先添加管理规则，再将其开启。"
+        },
+        "socle_rules": {
+          "title": "管理访问",
+          "pass": "Web（8006）和 SSH（22）仍可访问。",
+          "nodesOff": "节点防火墙已关闭，不会切断任何访问。",
+          "missing": "没有任何规则允许从任意来源访问端口 {ports}：开启防火墙可能会切断您的访问。"
+        },
+        "log_ratelimit": {
+          "title": "日志速率限制",
+          "default": "PVE 以默认速率（{rate}）记录日志，观察会漏掉部分流量。请在设置中调高。",
+          "pass": "PVE 最多记录 {rate}。",
+          "disabled": "PVE 不限制防火墙日志。"
+        },
+        "self_in_zone": {
+          "title": "ProxCenter 地址",
+          "pass": "ProxCenter 不在任何活动区域内。",
+          "unknown": "无法检测 ProxCenter 的地址，此项检查无法判断。请在设置中指定。",
+          "inZone": "ProxCenter（{self_ip}）位于区域 {zone} 内：强制执行可能会切断连接。"
+        }
+      }
+    },
+    "settings": {
+      "open": "设置",
+      "title": "微分段设置",
+      "sections": {
+        "general": "常规",
+        "load": "Proxmox 负载",
+        "enforcement": "强制执行",
+        "observation": "观察",
+        "address": "ProxCenter 地址",
+        "notifications": "通知我",
+        "removal": "移除"
+      },
+      "fields": {
+        "tagPrefix": "标签前缀",
+        "light_interval_sec": "轻量检查间隔",
+        "ips_interval_sec": "客户机 IP 读取间隔",
+        "full_interval_sec": "完整检查间隔",
+        "log_interval_sec": "防火墙日志读取间隔",
+        "ready_after_hours": "强制执行前的观察时长",
+        "write_cap": "每次运行的写入上限",
+        "rate": "日志速率限制",
+        "rateUnit": "日志速率单位",
+        "burst": "日志突发量",
+        "selfIps": "ProxCenter 地址列表",
+        "notify_drift": "偏差",
+        "notify_paused": "引擎已暂停",
+        "notify_unprotected": "未受保护的客户机",
+        "notify_blocked": "被阻止的流量"
+      },
+      "hints": {
+        "tagPrefix": "客户机上的区域标签由此前缀加上区域名称组成。",
+        "write_cap": "单次运行允许向 Proxmox 写入的次数。超过后引擎会暂停并请您确认。",
+        "rate": "留空则不改动 Proxmox 的日志速率限制。否则在观察区域期间设置该值。",
+        "selfIps": "ProxCenter 连接客户机所用的地址，以逗号分隔。留空则自动检测。"
+      },
+      "unitsLong": {
+        "seconds": "秒",
+        "hours": "小时",
+        "writes": "次写入"
+      },
+      "rateUnit": {
+        "second": "每秒",
+        "minute": "每分钟",
+        "hour": "每小时",
+        "day": "每天"
+      },
+      "leaveAsIs": "保持不变",
+      "detectedAutomatically": "自动检测",
+      "validation": {
+        "tagPrefix": "标签前缀为 1 到 16 个字符：小写字母、数字、. _ + -",
+        "range": "{label}必须在 {min} 到 {max} {unit}之间。",
+        "rateNumber": "日志速率必须是不小于 1 的整数。",
+        "burstNumber": "日志突发量必须是不小于 0 的整数。",
+        "rateBoth": "请同时填写日志速率和突发量，或都留空。",
+        "selfIpInvalid": "{ip} 不是有效的 IP 地址。",
+        "selfIpTooMany": "最多 {max} 个地址。"
+      },
+      "remove": {
+        "row": "移除微分段",
+        "hint": "释放所有客户机，删除 ProxCenter 在 Proxmox 中创建的对象，并恢复日志速率限制。区域标签会保留在客户机上。",
+        "button": "移除…",
+        "title": "移除微分段？",
+        "body": "这会撤销 ProxCenter 在此连接上写入 Proxmox 的所有内容。",
+        "tagsKept": "区域标签会保留在客户机上，草稿也会保留。",
+        "typeName": "输入 {name} 以确认",
+        "confirm": "移除",
+        "running": "{label}：正在移除微分段...",
+        "complete": "{label}：移除完成，区域标签仍保留在客户机上",
+        "incomplete": "{label}：移除未完成，请重新运行"
+      }
+    },
+    "history": {
+      "revisions": {
+        "title": "修订",
+        "loading": "正在加载修订...",
+        "empty": "尚无修订：首次应用时会生成一个。",
+        "version": "版本 {version}",
+        "by": "作者 {author}",
+        "counts": "{zones} 个区域，{flows} 条流量规则",
+        "latest": "最新",
+        "restore": "恢复",
+        "restoreTitle": "恢复版本 {version}？",
+        "restoreBody": "草稿将被替换为此版本，然后应用到 Proxmox。",
+        "restoreLabel": "恢复版本 {version}",
+        "restoreRunning": "正在恢复版本 {version}...",
+        "capped": "仅列出最近 {count} 个修订。",
+        "detail": {
+          "tagPrefix": "标签前缀：{prefix}",
+          "zones": "区域：{names}",
+          "none": "无"
+        }
+      },
+      "runs": {
+        "title": "运行记录",
+        "loading": "正在加载运行记录...",
+        "empty": "尚无运行记录。",
+        "rowLabel": "{kind}，开始于 {time}",
+        "kind": {
+          "light": "轻量检查",
+          "ips": "读取 IP",
+          "full": "完整检查",
+          "log": "读取日志",
+          "targeted": "定向运行",
+          "plan": "计划",
+          "apply": "应用",
+          "remove": "移除"
+        },
+        "calls": "{count} 次 API 调用",
+        "writes": "{count} 次写入",
+        "detail": {
+          "stats": "{guests} 台客户机，{members} 个成员，{steps} 个步骤",
+          "removeComplete": "移除完成。",
+          "removeIncomplete": "移除未完成：请重新运行。"
+        }
+      }
     }
   }
 }

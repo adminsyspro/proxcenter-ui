@@ -99,10 +99,13 @@ describe('observation list', () => {
     expect(await screen.findByText('No observed flow matches these filters.')).toBeTruthy()
   })
 
-  it('shows the sampling notice with a link to the settings, disabled until the settings can be opened', async () => {
+  it('shows the sampling notice with a link that opens the settings of the tab', async () => {
     setup([])
     expect(await screen.findByText(/at most one line per second per chain by default/)).toBeTruthy()
-    expect((screen.getByRole('button', { name: 'Open settings' }) as HTMLButtonElement).disabled).toBe(true)
+    const link = screen.getByRole('button', { name: 'Open settings' }) as HTMLButtonElement
+    expect(link.disabled).toBe(false)
+    fireEvent.click(link)
+    expect(await screen.findByRole('dialog', { name: 'Micro-segmentation settings' })).toBeTruthy()
   })
 })
 
@@ -321,5 +324,20 @@ describe('settings link', () => {
     expect((link as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(link)
     expect(onOpenSettings).toHaveBeenCalledTimes(1)
+  })
+
+  it('is disabled while the panel has no way to open the settings', async () => {
+    mock.routes[ROUTE] = () => reply(200, { suggestions: [], limit: 26, offset: 0 })
+    renderWithProviders(
+      <ObservationPanel
+        connectionId='c1'
+        policy={policy({ zones: [web, db] })}
+        reloadPolicy={async () => undefined}
+        goToSubTab={() => undefined}
+        onOpenPlan={() => undefined}
+        startRun={() => undefined}
+      />,
+    )
+    expect(((await screen.findByRole('button', { name: 'Open settings' })) as HTMLButtonElement).disabled).toBe(true)
   })
 })

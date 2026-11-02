@@ -12704,7 +12704,7 @@
       "intro": "세 단계로 빈 정책에서 첫 번째 보호 영역까지 설정할 수 있습니다.",
       "step1Title": "사전 점검 실행",
       "step1Body": "클러스터와 방화벽이 준비되었는지 확인합니다.",
-      "step1Action": "개요 열기",
+      "step1Action": "점검 실행",
       "step2Title": "첫 번째 영역 만들기",
       "step2Body": "서로 통신하는 게스트를 묶습니다.",
       "step2Action": "정책 열기",
@@ -12876,7 +12876,8 @@
         "removalHint": "제거 대기 중입니다. 이 영역에 유지하려면 다시 선택하세요.",
         "pendingMove": "{zone}(으)로 이동 중",
         "moveHint": "{zone}(으)로 이동 대기 중입니다. 이 영역에 유지하려면 다시 선택하세요."
-      }
+      },
+      "preflightButton": "사전 점검"
     },
     "plan": {
       "title": "마이크로 세분화 계획",
@@ -13055,6 +13056,161 @@
         "noFlows": "없음"
       },
       "partial": "일부만 표시: 대기 중인 처음 {count, number}개 플로우만 그려집니다."
+    },
+    "preflight": {
+      "title": "사전 점검",
+      "checking": "클러스터를 점검하는 중...",
+      "runAgain": "다시 실행",
+      "openWizard": "배포 마법사 열기",
+      "busy": "적용이 진행 중입니다. 잠시 후 다시 시도하세요.",
+      "noClient": "이 연결에 사용할 수 있는 Proxmox 클라이언트가 없습니다.",
+      "readFailed": "Proxmox를 읽을 수 없습니다: {error}",
+      "status": {
+        "pass": "통과",
+        "warn": "경고",
+        "fail": "실패"
+      },
+      "checks": {
+        "cluster_firewall": {
+          "title": "클러스터 방화벽",
+          "pass": "클러스터 방화벽이 켜져 있습니다.",
+          "off": "클러스터 방화벽이 꺼져 있습니다. 배포 마법사가 관리 규칙을 추가한 뒤 방화벽을 켭니다."
+        },
+        "socle_rules": {
+          "title": "관리 접근",
+          "pass": "웹(8006)과 SSH(22)에 계속 접근할 수 있습니다.",
+          "nodesOff": "노드 방화벽이 꺼져 있어 차단될 것이 없습니다.",
+          "missing": "어디에서든 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 접근이 차단될 수 있습니다."
+        },
+        "log_ratelimit": {
+          "title": "로그 속도 제한",
+          "default": "PVE가 기본 속도({rate})로 기록하므로 관찰에서 플로우가 누락됩니다. 설정에서 높이세요.",
+          "pass": "PVE가 최대 {rate}까지 기록합니다.",
+          "disabled": "PVE가 방화벽 로그를 제한하지 않습니다."
+        },
+        "self_in_zone": {
+          "title": "ProxCenter 주소",
+          "pass": "ProxCenter는 활성 영역 밖에 있습니다.",
+          "unknown": "ProxCenter 주소를 감지하지 못해 이 점검은 판단할 수 없습니다. 설정에서 지정하세요.",
+          "inZone": "ProxCenter({self_ip})가 {zone} 영역 안에 있습니다. 강제 적용하면 연결이 끊길 수 있습니다."
+        }
+      }
+    },
+    "settings": {
+      "open": "설정",
+      "title": "마이크로 세그멘테이션 설정",
+      "sections": {
+        "general": "일반",
+        "load": "Proxmox 부하",
+        "enforcement": "강제 적용",
+        "observation": "관찰",
+        "address": "ProxCenter 주소",
+        "notifications": "알림 받기",
+        "removal": "제거"
+      },
+      "fields": {
+        "tagPrefix": "태그 접두사",
+        "light_interval_sec": "간단 점검 간격",
+        "ips_interval_sec": "게스트 IP 읽기 간격",
+        "full_interval_sec": "전체 점검 간격",
+        "log_interval_sec": "방화벽 로그 읽기 간격",
+        "ready_after_hours": "강제 적용 전 관찰 시간",
+        "write_cap": "실행당 쓰기 상한",
+        "rate": "로그 속도 제한",
+        "rateUnit": "로그 속도 단위",
+        "burst": "로그 버스트",
+        "selfIps": "ProxCenter 주소 목록",
+        "notify_drift": "드리프트",
+        "notify_paused": "엔진 일시 중지",
+        "notify_unprotected": "보호되지 않은 게스트",
+        "notify_blocked": "차단된 플로우"
+      },
+      "hints": {
+        "tagPrefix": "게스트의 영역 태그는 이 접두사 뒤에 영역 이름이 붙은 형태입니다.",
+        "write_cap": "한 번의 실행에서 Proxmox에 허용되는 쓰기 수입니다. 초과하면 엔진이 멈추고 확인을 요청합니다.",
+        "rate": "비워 두면 Proxmox의 로그 속도 제한을 건드리지 않습니다. 값을 넣으면 영역을 관찰하는 동안 적용됩니다.",
+        "selfIps": "ProxCenter가 게스트에 접속할 때 사용하는 주소를 쉼표로 구분해 입력합니다. 비워 두면 자동으로 감지합니다."
+      },
+      "unitsLong": {
+        "seconds": "초",
+        "hours": "시간",
+        "writes": "회"
+      },
+      "rateUnit": {
+        "second": "초당",
+        "minute": "분당",
+        "hour": "시간당",
+        "day": "일당"
+      },
+      "leaveAsIs": "변경 안 함",
+      "detectedAutomatically": "자동 감지",
+      "validation": {
+        "tagPrefix": "태그 접두사는 1~16자입니다: 소문자, 숫자, . _ + -",
+        "range": "{label}은(는) {min}~{max}{unit} 범위여야 합니다.",
+        "rateNumber": "로그 속도는 1 이상의 정수여야 합니다.",
+        "burstNumber": "로그 버스트는 0 이상의 정수여야 합니다.",
+        "rateBoth": "로그 속도와 버스트를 모두 입력하거나 둘 다 비워 두세요.",
+        "selfIpInvalid": "{ip}은(는) 올바른 IP 주소가 아닙니다.",
+        "selfIpTooMany": "주소는 최대 {max}개입니다."
+      },
+      "remove": {
+        "row": "마이크로 세그멘테이션 제거",
+        "hint": "모든 게스트를 해제하고, ProxCenter가 Proxmox에 만든 개체를 삭제하며, 로그 속도 제한을 복원합니다. 영역 태그는 게스트에 남습니다.",
+        "button": "제거…",
+        "title": "마이크로 세그멘테이션을 제거하시겠습니까?",
+        "body": "이 연결에서 ProxCenter가 Proxmox에 기록한 모든 내용을 되돌립니다.",
+        "tagsKept": "영역 태그는 게스트에 남고 초안은 유지됩니다.",
+        "typeName": "확인하려면 {name}을(를) 입력하세요",
+        "confirm": "제거",
+        "running": "{label}: 마이크로 세그멘테이션을 제거하는 중...",
+        "complete": "{label}: 제거 완료, 영역 태그는 게스트에 남습니다",
+        "incomplete": "{label}: 제거가 완료되지 않았습니다. 다시 실행하세요"
+      }
+    },
+    "history": {
+      "revisions": {
+        "title": "리비전",
+        "loading": "리비전을 불러오는 중...",
+        "empty": "아직 리비전이 없습니다. 첫 적용 때 기록됩니다.",
+        "version": "버전 {version}",
+        "by": "작성자 {author}",
+        "counts": "영역 {zones}개, 플로우 {flows}개",
+        "latest": "최신",
+        "restore": "복원",
+        "restoreTitle": "버전 {version}을(를) 복원하시겠습니까?",
+        "restoreBody": "초안이 이 버전으로 교체된 뒤 Proxmox에 적용됩니다.",
+        "restoreLabel": "버전 {version} 복원",
+        "restoreRunning": "버전 {version}을(를) 복원하는 중...",
+        "capped": "최근 리비전 {count}개만 표시됩니다.",
+        "detail": {
+          "tagPrefix": "태그 접두사: {prefix}",
+          "zones": "영역: {names}",
+          "none": "없음"
+        }
+      },
+      "runs": {
+        "title": "실행 기록",
+        "loading": "실행 기록을 불러오는 중...",
+        "empty": "아직 실행 기록이 없습니다.",
+        "rowLabel": "{kind}, 시작 {time}",
+        "kind": {
+          "light": "간단 점검",
+          "ips": "IP 읽기",
+          "full": "전체 점검",
+          "log": "로그 읽기",
+          "targeted": "대상 지정 실행",
+          "plan": "계획",
+          "apply": "적용",
+          "remove": "제거"
+        },
+        "calls": "API 호출 {count}회",
+        "writes": "쓰기 {count}회",
+        "detail": {
+          "stats": "게스트 {guests}개, 멤버 {members}개, 단계 {steps}개",
+          "removeComplete": "제거가 완료되었습니다.",
+          "removeIncomplete": "제거가 완료되지 않았습니다. 다시 실행하세요."
+        }
+      }
     }
   }
 }

@@ -8,14 +8,15 @@ import type { MicrosegSubTab } from './microsegTabTypes'
 type Props = {
   goToSubTab: (tab: MicrosegSubTab) => void
   onOpenPlan?: () => void
+  onOpenPreflight?: () => void
 }
 
 /** Three steps from an empty policy to a first plan. Buttons only navigate. */
-export default function FirstRunGuide({ goToSubTab, onOpenPlan }: Props) {
+export default function FirstRunGuide({ goToSubTab, onOpenPlan, onOpenPreflight }: Props) {
   const t = useTranslations('microsegPilot.firstRun')
 
   const steps: Array<{ id: string; icon: string; action?: () => void }> = [
-    { id: 'step1', icon: 'ri-heart-pulse-line', action: () => goToSubTab('overview') },
+    { id: 'step1', icon: 'ri-heart-pulse-line', action: onOpenPreflight },
     { id: 'step2', icon: 'ri-shape-line', action: () => goToSubTab('policy') },
     { id: 'step3', icon: 'ri-file-list-3-line', action: onOpenPlan },
   ]

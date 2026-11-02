@@ -45,15 +45,18 @@ describe('first run guide', () => {
     expect(screen.queryByText('Set up micro-segmentation')).toBeNull()
   })
 
-  it('switches to the relevant sub-tab, or opens the plan, from its buttons', async () => {
+  it('switches to the relevant sub-tab, or opens the pre-flight checks or the plan, from its buttons', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: [] })
     renderTab()
     await screen.findByText('Set up micro-segmentation')
 
     fireEvent.click(screen.getByRole('button', { name: 'Open the policy' }))
     expect(screen.getByRole('tab', { name: 'Policy' }).getAttribute('aria-selected')).toBe('true')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open the overview' }))
-    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Run the checks' }))
+    expect(await screen.findByRole('dialog', { name: 'Pre-flight checks' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pre-flight checks' })).toBeNull())
 
     fireEvent.click(screen.getByRole('button', { name: 'View plan' }))
     expect(await screen.findByRole('dialog', { name: 'Micro-segmentation plan' })).toBeTruthy()

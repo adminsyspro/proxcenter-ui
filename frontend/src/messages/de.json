@@ -12372,7 +12372,7 @@
       "intro": "Drei Schritte führen Sie von einer leeren Richtlinie zur ersten geschützten Zone.",
       "step1Title": "Vorabprüfungen ausführen",
       "step1Body": "Prüfen Sie, ob der Cluster und seine Firewall bereit sind.",
-      "step1Action": "Übersicht öffnen",
+      "step1Action": "Prüfungen ausführen",
       "step2Title": "Erste Zone erstellen",
       "step2Body": "Fassen Sie die Gäste zusammen, die miteinander kommunizieren.",
       "step2Action": "Richtlinie öffnen",
@@ -12544,7 +12544,8 @@
         "removalHint": "Zur Entfernung vorgemerkt, erneut auswählen, um ihn in dieser Zone zu behalten.",
         "pendingMove": "Wechsel nach {zone}",
         "moveHint": "Für den Wechsel nach {zone} vorgemerkt, erneut auswählen, um ihn in dieser Zone zu behalten."
-      }
+      },
+      "preflightButton": "Vorabprüfungen"
     },
     "plan": {
       "title": "Mikrosegmentierungsplan",
@@ -12723,6 +12724,161 @@
         "noFlows": "Keine"
       },
       "partial": "Teilweise: Nur die ersten {count, number} ausstehenden Flüsse werden gezeichnet."
+    },
+    "preflight": {
+      "title": "Vorabprüfungen",
+      "checking": "Cluster wird geprüft...",
+      "runAgain": "Erneut prüfen",
+      "openWizard": "Bereitstellungsassistent öffnen",
+      "busy": "Eine Anwendung läuft, versuchen Sie es gleich noch einmal.",
+      "noClient": "Für diese Verbindung ist kein Proxmox-Client verfügbar.",
+      "readFailed": "Proxmox konnte nicht gelesen werden: {error}",
+      "status": {
+        "pass": "bestanden",
+        "warn": "Warnung",
+        "fail": "fehlgeschlagen"
+      },
+      "checks": {
+        "cluster_firewall": {
+          "title": "Cluster-Firewall",
+          "pass": "Die Cluster-Firewall ist aktiv.",
+          "off": "Die Cluster-Firewall ist aus. Der Bereitstellungsassistent fügt die Verwaltungsregeln hinzu und schaltet sie dann ein."
+        },
+        "socle_rules": {
+          "title": "Verwaltungszugriff",
+          "pass": "Web (8006) und SSH (22) bleiben erreichbar.",
+          "nodesOff": "Die Node-Firewalls sind aus, es kann also nichts abgeschnitten werden.",
+          "missing": "Keine Regel hält Port {ports} von überall offen: Das Einschalten der Firewall könnte Ihren Zugriff abschneiden."
+        },
+        "log_ratelimit": {
+          "title": "Protokoll-Ratenlimit",
+          "default": "PVE protokolliert mit der Standardrate ({rate}), die Beobachtung verpasst daher Flüsse. Erhöhen Sie sie in den Einstellungen.",
+          "pass": "PVE protokolliert bis zu {rate}.",
+          "disabled": "PVE begrenzt das Firewall-Protokoll nicht."
+        },
+        "self_in_zone": {
+          "title": "ProxCenter-Adresse",
+          "pass": "ProxCenter liegt außerhalb der aktiven Zonen.",
+          "unknown": "Die Adresse von ProxCenter konnte nicht erkannt werden, diese Prüfung kann daher nichts aussagen. Legen Sie sie in den Einstellungen fest.",
+          "inZone": "ProxCenter ({self_ip}) liegt in der Zone {zone}: Sie durchzusetzen könnte die Verbindung abschneiden."
+        }
+      }
+    },
+    "settings": {
+      "open": "Einstellungen",
+      "title": "Einstellungen der Mikrosegmentierung",
+      "sections": {
+        "general": "Allgemein",
+        "load": "Last auf Proxmox",
+        "enforcement": "Durchsetzung",
+        "observation": "Beobachtung",
+        "address": "ProxCenter-Adresse",
+        "notifications": "Benachrichtigen bei",
+        "removal": "Entfernung"
+      },
+      "fields": {
+        "tagPrefix": "Tag-Präfix",
+        "light_interval_sec": "Intervall der leichten Prüfung",
+        "ips_interval_sec": "Intervall des Lesens der Gast-IPs",
+        "full_interval_sec": "Intervall der vollständigen Prüfung",
+        "log_interval_sec": "Intervall des Lesens des Firewall-Protokolls",
+        "ready_after_hours": "Beobachtung vor der Durchsetzung",
+        "write_cap": "Schreiblimit pro Durchlauf",
+        "rate": "Protokoll-Ratenlimit",
+        "rateUnit": "Einheit des Protokoll-Ratenlimits",
+        "burst": "Protokoll-Burst",
+        "selfIps": "ProxCenter-Adressen",
+        "notify_drift": "Abweichungen",
+        "notify_paused": "Engine pausiert",
+        "notify_unprotected": "Ungeschützte Gäste",
+        "notify_blocked": "Blockierte Flüsse"
+      },
+      "hints": {
+        "tagPrefix": "Die Zonen-Tags der Gäste sind dieses Präfix gefolgt vom Zonennamen.",
+        "write_cap": "Schreibvorgänge nach Proxmox, die in einem Durchlauf erlaubt sind. Darüber hält die Engine an und bittet um Bestätigung.",
+        "rate": "Leer lässt das Protokoll-Ratenlimit von Proxmox unberührt. Sonst wird es gesetzt, solange eine Zone beobachtet wird.",
+        "selfIps": "Die Adressen, von denen ProxCenter die Gäste erreicht, durch Kommas getrennt. Leer: automatisch erkannt."
+      },
+      "unitsLong": {
+        "seconds": "Sekunden",
+        "hours": "Stunden",
+        "writes": "Schreibvorgänge"
+      },
+      "rateUnit": {
+        "second": "pro Sekunde",
+        "minute": "pro Minute",
+        "hour": "pro Stunde",
+        "day": "pro Tag"
+      },
+      "leaveAsIs": "Unverändert lassen",
+      "detectedAutomatically": "Automatisch erkannt",
+      "validation": {
+        "tagPrefix": "Das Tag-Präfix hat 1 bis 16 Zeichen: Kleinbuchstaben, Ziffern, . _ + -",
+        "range": "{label} muss zwischen {min} und {max} {unit} liegen.",
+        "rateNumber": "Das Protokoll-Ratenlimit ist eine ganze Zahl ab 1.",
+        "burstNumber": "Der Protokoll-Burst ist eine ganze Zahl ab 0.",
+        "rateBoth": "Geben Sie Ratenlimit und Burst an oder lassen Sie beide leer.",
+        "selfIpInvalid": "{ip} ist keine gültige IP-Adresse.",
+        "selfIpTooMany": "Höchstens {max} Adressen."
+      },
+      "remove": {
+        "row": "Mikrosegmentierung entfernen",
+        "hint": "Gibt alle Gäste frei, löscht die von ProxCenter in Proxmox angelegten Objekte und stellt das Protokoll-Ratenlimit wieder her. Die Zonen-Tags bleiben an den Gästen.",
+        "button": "Entfernen…",
+        "title": "Mikrosegmentierung entfernen?",
+        "body": "Das macht alles rückgängig, was ProxCenter auf dieser Verbindung in Proxmox geschrieben hat.",
+        "tagsKept": "Die Zonen-Tags bleiben an den Gästen, der Entwurf bleibt erhalten.",
+        "typeName": "Geben Sie {name} zur Bestätigung ein",
+        "confirm": "Entfernen",
+        "running": "{label}: Mikrosegmentierung wird entfernt...",
+        "complete": "{label}: Entfernung abgeschlossen, die Zonen-Tags bleiben an den Gästen",
+        "incomplete": "{label}: Entfernung unvollständig, führen Sie sie erneut aus"
+      }
+    },
+    "history": {
+      "revisions": {
+        "title": "Revisionen",
+        "loading": "Revisionen werden geladen...",
+        "empty": "Noch keine Revision: Die erste Anwendung legt eine an.",
+        "version": "Version {version}",
+        "by": "von {author}",
+        "counts": "{zones, plural, one {# Zone} other {# Zonen}}, {flows, plural, one {# Fluss} other {# Flüsse}}",
+        "latest": "Neueste",
+        "restore": "Wiederherstellen",
+        "restoreTitle": "Version {version} wiederherstellen?",
+        "restoreBody": "Der Entwurf wird durch diese Version ersetzt und dann auf Proxmox angewendet.",
+        "restoreLabel": "Wiederherstellung von Version {version}",
+        "restoreRunning": "Version {version} wird wiederhergestellt...",
+        "capped": "Es werden nur die neuesten {count} Revisionen aufgelistet.",
+        "detail": {
+          "tagPrefix": "Tag-Präfix: {prefix}",
+          "zones": "Zonen: {names}",
+          "none": "keine"
+        }
+      },
+      "runs": {
+        "title": "Durchläufe",
+        "loading": "Durchläufe werden geladen...",
+        "empty": "Noch kein Durchlauf.",
+        "rowLabel": "{kind}, gestartet {time}",
+        "kind": {
+          "light": "Leichte Prüfung",
+          "ips": "IP-Lesen",
+          "full": "Vollständige Prüfung",
+          "log": "Protokoll lesen",
+          "targeted": "Gezielter Durchlauf",
+          "plan": "Plan",
+          "apply": "Anwenden",
+          "remove": "Entfernen"
+        },
+        "calls": "{count, plural, one {# API-Aufruf} other {# API-Aufrufe}}",
+        "writes": "{count, plural, one {# Schreibvorgang} other {# Schreibvorgänge}}",
+        "detail": {
+          "stats": "{guests, plural, one {# Gast} other {# Gäste}}, {members, plural, one {# Mitglied} other {# Mitglieder}}, {steps, plural, one {# Schritt} other {# Schritte}}",
+          "removeComplete": "Entfernung abgeschlossen.",
+          "removeIncomplete": "Entfernung unvollständig: erneut ausführen."
+        }
+      }
     }
   }
 }

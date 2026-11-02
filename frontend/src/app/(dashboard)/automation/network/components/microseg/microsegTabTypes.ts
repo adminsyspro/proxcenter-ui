@@ -1,3 +1,4 @@
+import type { ClusterOptions, FirewallMode, FirewallRule } from '@/lib/api/firewall'
 import type { MicrosegPolicy } from '@/lib/microseg/types'
 
 export const MICROSEG_SUBTABS = ['overview', 'policy', 'observation', 'drifts', 'history'] as const
@@ -32,4 +33,16 @@ export type MicrosegSubTabProps = {
   startRun: (run: TrackedRun) => void
   /** Opens the Settings of the tab (Observation links to it); the link is disabled when absent. */
   onOpenSettings?: () => void
+  /** Opens the pre-flight checks. */
+  onOpenPreflight?: () => void
+}
+
+/** What the deployment wizard (opened from a failed pre-flight check) needs from the firewall page. */
+export type FirewallWizardData = {
+  clusterOptions: ClusterOptions | null
+  clusterRules: FirewallRule[]
+  nodesList: string[]
+  firewallMode: FirewallMode
+  /** The page reloads its firewall data once the wizard has written. */
+  onComplete: () => void
 }

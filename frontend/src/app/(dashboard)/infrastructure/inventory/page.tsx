@@ -17,6 +17,7 @@ import { extractTaskVmid } from '@/lib/tasks/scope'
 import { findDeepLinkedVm, hasDeepLinkSelection } from './deepLink'
 import InventoryTree, { InventorySelection, ViewMode, AllVmItem, HostItem, PoolItem, TagItem, TreePbsServer, TreeClusterStorage } from './InventoryTree'
 import InventoryDetails from './InventoryDetails'
+import { InventoryLoadedContext } from './inventoryLoadedContext'
 
 type Connection = {
   id: string
@@ -620,37 +621,38 @@ return () => setPageInfo('', '', '')
           ) : err ? (
             <Typography color='error'>{err}</Typography>
           ) : (
-            <InventoryTree
-              selected={selection}
-              onSelect={(sel) => setSelection(sel)}
-              onRefreshRef={handleRefreshRef}
-              onOptimisticVmStatusRef={handleOptimisticRef}
-              onOptimisticVmTagsRef={(fn) => { treeOptimisticVmTagsRef.current = fn }}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-              onAllVmsChange={setRawVms}
-              onInventoryLoadedChange={setInventoryLoaded}
-              onHostsChange={setHosts}
-              onPoolsChange={setPools}
-              onTagsChange={setTags}
-              onPbsServersChange={setPbsServers}
-              favorites={favorites}
-              onToggleFavorite={toggleFavorite}
-              migratingVmIds={migratingVmIds}
-              pendingActionVmIds={pendingActionVmIds}
-              onRefresh={() => refreshTree?.()}
-              refreshLoading={loading}
-              onCollapse={() => setIsTreeCollapsed(!isTreeCollapsed)}
-              isCollapsed={isTreeCollapsed}
-              allowedViewModes={allowedViewModes}
-              onCreateVm={(connId, node) => setCreateDialogRequest({ type: 'createVm', connId, node, ts: Date.now() })}
-              onCreateLxc={(connId, node) => setCreateDialogRequest({ type: 'createLxc', connId, node, ts: Date.now() })}
-              onNodeAction={(connId, node, action) => setNodeActionRequest({ action, connId, node, ts: Date.now() })}
-              onStoragesChange={setClusterStorages}
-              onExternalHypervisorsChange={setExternalHypervisors}
-              showVmId={showVmId}
-              onToggleShowVmId={toggleShowVmId}
-            />
+            <InventoryLoadedContext.Provider value={setInventoryLoaded}>
+              <InventoryTree
+                selected={selection}
+                onSelect={(sel) => setSelection(sel)}
+                onRefreshRef={handleRefreshRef}
+                onOptimisticVmStatusRef={handleOptimisticRef}
+                onOptimisticVmTagsRef={(fn) => { treeOptimisticVmTagsRef.current = fn }}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                onAllVmsChange={setRawVms}
+                onHostsChange={setHosts}
+                onPoolsChange={setPools}
+                onTagsChange={setTags}
+                onPbsServersChange={setPbsServers}
+                favorites={favorites}
+                onToggleFavorite={toggleFavorite}
+                migratingVmIds={migratingVmIds}
+                pendingActionVmIds={pendingActionVmIds}
+                onRefresh={() => refreshTree?.()}
+                refreshLoading={loading}
+                onCollapse={() => setIsTreeCollapsed(!isTreeCollapsed)}
+                isCollapsed={isTreeCollapsed}
+                allowedViewModes={allowedViewModes}
+                onCreateVm={(connId, node) => setCreateDialogRequest({ type: 'createVm', connId, node, ts: Date.now() })}
+                onCreateLxc={(connId, node) => setCreateDialogRequest({ type: 'createLxc', connId, node, ts: Date.now() })}
+                onNodeAction={(connId, node, action) => setNodeActionRequest({ action, connId, node, ts: Date.now() })}
+                onStoragesChange={setClusterStorages}
+                onExternalHypervisorsChange={setExternalHypervisors}
+                showVmId={showVmId}
+                onToggleShowVmId={toggleShowVmId}
+              />
+            </InventoryLoadedContext.Provider>
           )}
         </Box>
         )}

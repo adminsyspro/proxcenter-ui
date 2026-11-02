@@ -73,6 +73,7 @@ import { VmItem } from './components/VmItem'
 import TreeDialogs from './components/TreeDialogs'
 import { waitForNodeMaintenance } from '@/lib/inventory/waitForNodeMaintenance'
 import PoolDialog, { type PoolDialogState, type PoolOwner } from './components/PoolDialog'
+import { InventoryLoadedContext } from './inventoryLoadedContext'
 
 // Re-export for external consumers (e.g. InventoryDetails.tsx)
 export { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
@@ -190,7 +191,6 @@ type Props = {
   onExternalHypervisorsChange?: (hypervisors: { id: string; name: string; type: string; vms?: { vmid: string; name: string; status: string; cpu?: number; memory_size_MiB?: number; guest_OS?: string }[] }[]) => void
   showVmId?: boolean
   onToggleShowVmId?: () => void
-  onInventoryLoadedChange?: (loaded: boolean) => void  // true once the first inventory stream has ended
 }
 
 type Connection = {
@@ -466,7 +466,7 @@ function safeJson<T>(x: any): T {
   return (x?.data ?? x) as T
 }
 
-export default function InventoryTree({ selected, onSelect, onRefreshRef, onOptimisticVmStatusRef, onOptimisticVmTagsRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange, showVmId, onToggleShowVmId, onInventoryLoadedChange }: Props) {
+export default function InventoryTree({ selected, onSelect, onRefreshRef, onOptimisticVmStatusRef, onOptimisticVmTagsRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange, showVmId, onToggleShowVmId }: Props) {
   const t = useTranslations()
   const theme = useTheme()
   const { isAdmin, scopeTypes, hasPermission } = useRBAC()
@@ -536,6 +536,7 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   // `loading` drops at the first streamed item, before the other servers
   // answered: an empty guest list only means "no guest" once the stream ended.
   const [inventoryLoaded, setInventoryLoaded] = useState(false)
+  const onInventoryLoadedChange = React.useContext(InventoryLoadedContext)
   const [error, setError] = useState<string | null>(null)
   const [clusters, setClusters] = useState<TreeCluster[]>([])
   const [pbsServers, setPbsServers] = useState<TreePbsServer[]>([])

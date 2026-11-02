@@ -73,6 +73,7 @@ import { VmItem } from './components/VmItem'
 import TreeDialogs from './components/TreeDialogs'
 import { waitForNodeMaintenance } from '@/lib/inventory/waitForNodeMaintenance'
 import PoolDialog, { type PoolDialogState, type PoolOwner } from './components/PoolDialog'
+import { InventoryLoadedContext } from './inventoryLoadedContext'
 
 // Re-export for external consumers (e.g. InventoryDetails.tsx)
 export { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
@@ -532,6 +533,10 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onOpti
   const { trackTask } = useTaskTracker()
   const { getColor: getTagColor, loadConnection } = useTagColors()
   const [loading, setLoading] = useState(true)
+  // `loading` drops at the first streamed item, before the other servers
+  // answered: an empty guest list only means "no guest" once the stream ended.
+  const [inventoryLoaded, setInventoryLoaded] = useState(false)
+  const onInventoryLoadedChange = React.useContext(InventoryLoadedContext)
   const [error, setError] = useState<string | null>(null)
   const [clusters, setClusters] = useState<TreeCluster[]>([])
   const [pbsServers, setPbsServers] = useState<TreePbsServer[]>([])
@@ -1629,6 +1634,7 @@ return next
         setExternalHypervisors([])
         setClusterStorages([])
         setLoading(true)
+        setInventoryLoaded(false)
       }
 
       eventSource.addEventListener('cluster', (e) => {
@@ -1739,6 +1745,7 @@ return next
         if (!alive) return
         setRefreshing(false)
         if (!gotFirstData) setLoading(false)
+        setInventoryLoaded(true)
         // On refresh, swap all data at once to avoid flicker
         if (isRefresh) {
           setClusters(sortClusters([...accClusters]))
@@ -3056,6 +3063,10 @@ return favorites.has(vmKey)
   useEffect(() => {
     onExternalHypervisorsChange?.(externalHypervisors)
   }, [externalHypervisors, onExternalHypervisorsChange])
+
+  useEffect(() => {
+    onInventoryLoadedChange?.(inventoryLoaded)
+  }, [inventoryLoaded, onInventoryLoadedChange])
 
   type VdcHeaderRow = { __vdcHeader: { vdcId: string; vdcName: string; count: number } }
 

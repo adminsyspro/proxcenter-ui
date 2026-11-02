@@ -17,6 +17,7 @@ import { extractTaskVmid } from '@/lib/tasks/scope'
 import { findDeepLinkedVm, hasDeepLinkSelection } from './deepLink'
 import InventoryTree, { InventorySelection, ViewMode, AllVmItem, HostItem, PoolItem, TagItem, TreePbsServer, TreeClusterStorage } from './InventoryTree'
 import InventoryDetails from './InventoryDetails'
+import { InventoryLoadedContext } from './inventoryLoadedContext'
 
 type Connection = {
   id: string
@@ -115,6 +116,7 @@ export default function InventoryPage() {
 
   // Données brutes des VMs (depuis InventoryTree) et données enrichies (IP, snapshots, OS)
   const [rawVms, setRawVms] = useState<AllVmItem[]>([])
+  const [inventoryLoaded, setInventoryLoaded] = useState(false)
   const [enrichedData, setEnrichedData] = useState<Record<string, EnrichedGuest>>({})
 
   // A node/cluster/pbs deep-link owns both the view and the selection, and it
@@ -619,36 +621,38 @@ return () => setPageInfo('', '', '')
           ) : err ? (
             <Typography color='error'>{err}</Typography>
           ) : (
-            <InventoryTree
-              selected={selection}
-              onSelect={(sel) => setSelection(sel)}
-              onRefreshRef={handleRefreshRef}
-              onOptimisticVmStatusRef={handleOptimisticRef}
-              onOptimisticVmTagsRef={(fn) => { treeOptimisticVmTagsRef.current = fn }}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-              onAllVmsChange={setRawVms}
-              onHostsChange={setHosts}
-              onPoolsChange={setPools}
-              onTagsChange={setTags}
-              onPbsServersChange={setPbsServers}
-              favorites={favorites}
-              onToggleFavorite={toggleFavorite}
-              migratingVmIds={migratingVmIds}
-              pendingActionVmIds={pendingActionVmIds}
-              onRefresh={() => refreshTree?.()}
-              refreshLoading={loading}
-              onCollapse={() => setIsTreeCollapsed(!isTreeCollapsed)}
-              isCollapsed={isTreeCollapsed}
-              allowedViewModes={allowedViewModes}
-              onCreateVm={(connId, node) => setCreateDialogRequest({ type: 'createVm', connId, node, ts: Date.now() })}
-              onCreateLxc={(connId, node) => setCreateDialogRequest({ type: 'createLxc', connId, node, ts: Date.now() })}
-              onNodeAction={(connId, node, action) => setNodeActionRequest({ action, connId, node, ts: Date.now() })}
-              onStoragesChange={setClusterStorages}
-              onExternalHypervisorsChange={setExternalHypervisors}
-              showVmId={showVmId}
-              onToggleShowVmId={toggleShowVmId}
-            />
+            <InventoryLoadedContext.Provider value={setInventoryLoaded}>
+              <InventoryTree
+                selected={selection}
+                onSelect={(sel) => setSelection(sel)}
+                onRefreshRef={handleRefreshRef}
+                onOptimisticVmStatusRef={handleOptimisticRef}
+                onOptimisticVmTagsRef={(fn) => { treeOptimisticVmTagsRef.current = fn }}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                onAllVmsChange={setRawVms}
+                onHostsChange={setHosts}
+                onPoolsChange={setPools}
+                onTagsChange={setTags}
+                onPbsServersChange={setPbsServers}
+                favorites={favorites}
+                onToggleFavorite={toggleFavorite}
+                migratingVmIds={migratingVmIds}
+                pendingActionVmIds={pendingActionVmIds}
+                onRefresh={() => refreshTree?.()}
+                refreshLoading={loading}
+                onCollapse={() => setIsTreeCollapsed(!isTreeCollapsed)}
+                isCollapsed={isTreeCollapsed}
+                allowedViewModes={allowedViewModes}
+                onCreateVm={(connId, node) => setCreateDialogRequest({ type: 'createVm', connId, node, ts: Date.now() })}
+                onCreateLxc={(connId, node) => setCreateDialogRequest({ type: 'createLxc', connId, node, ts: Date.now() })}
+                onNodeAction={(connId, node, action) => setNodeActionRequest({ action, connId, node, ts: Date.now() })}
+                onStoragesChange={setClusterStorages}
+                onExternalHypervisorsChange={setExternalHypervisors}
+                showVmId={showVmId}
+                onToggleShowVmId={toggleShowVmId}
+              />
+            </InventoryLoadedContext.Provider>
           )}
         </Box>
         )}
@@ -710,6 +714,7 @@ return () => setPageInfo('', '', '')
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             allVms={allVms}
+            inventoryLoaded={inventoryLoaded}
             hosts={hosts}
             pools={pools}
             tags={tags}

@@ -1,36 +1,12 @@
-import { NextResponse } from "next/server"
-
-import { pveFetch } from "@/lib/proxmox/client"
-import { getConnectionById } from "@/lib/connections/getConnection"
-import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
-import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
+import { PERMISSIONS } from "@/lib/rbac"
+import { providerPveRead } from "@/lib/connections/providerPveRead"
 
 export const runtime = "nodejs"
 
-export async function GET(
-  _req: Request,
-  ctx: { params: Promise<{ id: string; node: string }> }
-) {
-  const iaasDenied = await denyIaasTenant()
-  if (iaasDenied) return iaasDenied
-
-  try {
-    const { id, node } = await ctx.params
-
-    const resourceId = buildNodeResourceId(id, node)
-    const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", resourceId)
-    if (denied) return denied
-
-    const conn = await getConnectionById(id)
-
-    const data = await pveFetch<any>(
-      conn,
-      `/nodes/${encodeURIComponent(node)}/hardware/pci`,
-      { method: "GET" }
-    )
-
-    return NextResponse.json({ data: Array.isArray(data) ? data : [] })
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
-  }
-}
+// GET - PCI devices of a node (closed to an IaaS tenant).
+export const GET = providerPveRead({
+  permission: PERMISSIONS.NODE_VIEW,
+  on: "node",
+  path: ({ node }) => `/nodes/${encodeURIComponent(String(node))}/hardware/pci`,
+  shape: "list",
+})

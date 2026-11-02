@@ -268,12 +268,13 @@ describe("connection routes: every file is classified for IaaS tenants", () => {
     }
   })
 
-  it("each denied file asks the guard in every handler it exports", async () => {
+  it("each denied file asks the guard in every handler it exports (directly or through providerPveRead)", async () => {
     for (const file of DENIED_FILES) {
       const source = readFileSync(join(CONNECTIONS, file), "utf8")
       const mod = await load(file)
       const handlers = METHODS.filter(m => typeof mod[m] === "function").length
-      const guards = source.match(/await denyIaasTenant\(\)/g)?.length ?? 0
+      // A handler built by providerPveRead (lib/connections) asks the gate itself.
+      const guards = (source.match(/await denyIaasTenant\(\)/g)?.length ?? 0) + (source.match(/= providerPveRead\(/g)?.length ?? 0)
       expect(guards, file).toBeGreaterThanOrEqual(handlers)
     }
   })

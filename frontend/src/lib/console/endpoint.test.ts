@@ -1,6 +1,10 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+// The IaaS tenant gate of the routes driven here is covered by lib/tenant/iaasGuard.routes.test.ts (roadmap#189).
+vi.mock("@/lib/tenant/iaasGuard", () => ({ denyIaasTenant: async () => null }))
+
 import { pveFetch } from '../proxmox/client'
 import { setNodeIps, incrementFailures } from '../cache/nodeIpCache'
 import { POST as consolePost, consumeConsoleSession } from '@/app/api/v1/connections/[id]/guests/[type]/[node]/[vmid]/console/route'

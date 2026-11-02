@@ -3,11 +3,15 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
 // GET - List all matchers
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id } = await ctx.params
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })
@@ -23,6 +27,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
 // POST - Create a matcher
 async function handlePost(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id } = await ctx.params
     if (!id) return NextResponse.json({ error: "Missing params.id" }, { status: 400 })

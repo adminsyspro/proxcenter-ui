@@ -3,11 +3,15 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
 // GET - Get a specific endpoint
 export async function GET(req: Request, ctx: { params: Promise<{ id: string; type: string; name: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, type, name } = await ctx.params
     if (!id || !type || !name) return NextResponse.json({ error: "Missing params" }, { status: 400 })
@@ -23,6 +27,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; typ
 
 // POST - Create an endpoint
 async function handlePost(req: Request, ctx: { params: Promise<{ id: string; type: string; name: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, type } = await ctx.params
     if (!id || !type) return NextResponse.json({ error: "Missing params" }, { status: 400 })
@@ -49,6 +56,9 @@ async function handlePost(req: Request, ctx: { params: Promise<{ id: string; typ
 
 // PUT - Update an endpoint
 async function handlePut(req: Request, ctx: { params: Promise<{ id: string; type: string; name: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, type, name } = await ctx.params
     if (!id || !type || !name) return NextResponse.json({ error: "Missing params" }, { status: 400 })
@@ -75,6 +85,9 @@ async function handlePut(req: Request, ctx: { params: Promise<{ id: string; type
 
 // DELETE - Delete an endpoint
 async function handleDelete(req: Request, ctx: { params: Promise<{ id: string; type: string; name: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, type, name } = await ctx.params
     if (!id || !type || !name) return NextResponse.json({ error: "Missing params" }, { status: 400 })

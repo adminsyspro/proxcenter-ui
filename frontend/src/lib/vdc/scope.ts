@@ -5,6 +5,7 @@
 // their vDC assignments, and provides a filter function for cluster data.
 
 import { prisma } from '@/lib/db/prisma'
+import { iaasInventoryClusterView, iaasInventoryNodeView } from "@/lib/connections/iaasView"
 import { isSharedStorage } from '@/lib/proxmox/storage'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
@@ -352,6 +353,11 @@ export function applyVdcFilter(cluster: any, scope: VdcScope | null): any {
   const connId: string = cluster.id
   const allowedNodes = scope.nodesByConnection.get(connId)
 
+  // The cluster and node addressing of the provider (API and node IPs, TLS
+  // certificates, SSH settings) is none of a vDC tenant's business
+  // (roadmap#189, lib/connections/iaasView).
+  cluster = iaasInventoryClusterView(cluster)
+
   // Tenant has no vDC on this connection - hide everything
   if (!allowedNodes) {
     return { ...cluster, nodes: [], ...(cluster.pools ? { pools: [] } : {}) }
@@ -371,7 +377,7 @@ export function applyVdcFilter(cluster: any, scope: VdcScope | null): any {
         return allowedPools.has(pool)
       })
 
-      return { ...node, guests: filteredGuests }
+      return { ...iaasInventoryNodeView(node), guests: filteredGuests }
     })
 
   const filteredPools = cluster.pools

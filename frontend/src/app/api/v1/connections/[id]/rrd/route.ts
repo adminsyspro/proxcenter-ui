@@ -8,6 +8,7 @@ import { demoResponse } from "@/lib/demo/demo-api"
 import { applyRrdWindow, presetRangeMeta, resolveRrdRequest } from "@/lib/metrics/rrdRange"
 import { canonicalRrdPath } from "@/lib/metrics/rrdPath"
 import { guardSessionGuest } from "@/lib/vdc/guestGuard"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -50,6 +51,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     // The PVE URL is rebuilt from validated segments, never from the raw query value.
     const target = canonicalRrdPath(path)
     if (!target) return NextResponse.json({ error: "Invalid path" }, { status: 400 })
+
+    // A node or storage graph is the load of a whole provider node: closed to
+    // an IaaS tenant, which only graphs its own guests (lib/tenant/iaasGuard).
+    if (!target.guest) {
+      const iaasDenied = await denyIaasTenant()
+      if (iaasDenied) return iaasDenied
+    }
 
     const { timeframe: tf, window, truncated } = resolveRrdRequest(timeframe, from, to)
 

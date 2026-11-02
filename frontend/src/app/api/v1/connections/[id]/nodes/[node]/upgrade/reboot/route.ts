@@ -6,6 +6,7 @@ import { executeSSH, type SSHResult } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
 import { verifyNodeTarget, sshTargetError } from "@/lib/ssh/verify-node-target"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -15,6 +16,9 @@ type Ctx = { params: Promise<{ id: string; node: string }> }
  * POST — Reboot a node after upgrade.
  */
 async function handlePost(_req: Request, ctx: Ctx) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   const { id, node } = await ctx.params
 
   const denied = await checkPermission(

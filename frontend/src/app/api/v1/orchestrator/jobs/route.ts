@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 
 import { prisma as globalPrisma } from "@/lib/db/prisma"
-import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
-import { canMigrateConnections, getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { getTenantConnectionIds } from "@/lib/tenant"
+import { canMigrateConnections, maskingScope } from "@/lib/tenant/infraScope"
+import { resolveCallerInfraScope } from "@/lib/tenant/iaasGuard"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { TERMINAL_STATUSES, sourceTypeLabel } from "@/lib/tasks/sharedTask"
@@ -80,8 +81,12 @@ export async function GET(req: Request) {
     // returns connections owned DIRECTLY by the tenant, which is empty for
     // iaas tenants (provider-pool connections via vDC binding) and
     // under-inclusive for the provider (excludes MSP-owned connections).
-    const tenantId = await getCurrentTenantId()
-    const infra = await getTenantInfrastructureScope(tenantId)
+    //
+    // The tenant is the one the principal carries (lib/tenant/iaasGuard),
+    // never getCurrentTenantId() and its silent fallback to the provider.
+    const caller = await resolveCallerInfraScope({ ignoreVdcContext: false })
+    if (caller.ok === false) return caller.response
+    const { infra, tenantId } = caller
     const vdcScope = maskingScope(infra)
     const tenantConnectionIds = await getTenantConnectionIds()
     const perimeterConnectionIds = vdcScope ? vdcScope.connectionIds : tenantConnectionIds
@@ -98,8 +103,10 @@ export async function GET(req: Request) {
     const connById = new Map<string, string>()
     const connByName = new Map<string, string>()
 
+    // An IaaS tenant is told the cluster by its name, never by the address of
+    // the provider's API (roadmap#189).
     for (const c of connections) {
-      const host = extractHostname(c.baseUrl)
+      const host = infra.kind === "iaas" ? c.name : extractHostname(c.baseUrl)
       connById.set(c.id, host)
       connByName.set(c.name, host)
     }
@@ -312,10 +319,15 @@ export async function GET(req: Request) {
     // owns, so also requiring it inside the perimeter would hide every
     // migration from iaas tenants. Provider keeps the fleet view.
     try {
+      // An IaaS tenant shares the target cluster with other customers and
+      // the provider: it lists the migrations of its own tenant only
+      // (roadmap#189), never every migration landing on that cluster.
+      const inPerimeterTarget = { targetConnectionId: { in: Array.from(perimeterConnectionIds) } }
+      let migrationWhere = {}
+      if (infra.kind === "iaas") migrationWhere = { tenantId, ...inPerimeterTarget }
+      else if (infra.kind === "msp") migrationWhere = inPerimeterTarget
       const migrationJobs = await globalPrisma.migrationJob.findMany({
-        where: infra.kind === "provider"
-          ? {}
-          : { targetConnectionId: { in: Array.from(perimeterConnectionIds) } },
+        where: migrationWhere,
         omit: { logs: true },
         orderBy: { createdAt: "desc" },
         take: 50,
@@ -500,9 +512,14 @@ export async function GET(req: Request) {
       [j.metadata?.connectionId, j.metadata?.sourceCluster, j.metadata?.targetCluster].filter(Boolean)
     const inPerimeter = (ref: string) => tenantConnIds.has(ref) || connByName.has(ref)
 
+    // An IaaS tenant rents a vDC slice of shared provider clusters: rolling
+    // updates, DRS moves (other customers' guests among them), Site Recovery
+    // replications and failovers are the provider's operations on the whole
+    // cluster, so it keeps its own migrations only (roadmap#189).
     const tenantJobs = infra.kind === "provider"
       ? jobs
       : jobs.filter((j: any) => {
+          if (infra.kind === "iaas" && j.type !== "migration") return false
           const refs = jobConnectionRefs(j)
           if (refs.length === 0) return false
           return refs.every(inPerimeter)

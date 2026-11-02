@@ -5,7 +5,9 @@ import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 import { tenantBaseUrlRefusal } from "@/lib/net/base-url-guard"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
-import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { maskingScope } from "@/lib/tenant/infraScope"
+import { resolveCallerInfraScope } from "@/lib/tenant/iaasGuard"
+import { iaasConnectionView } from "@/lib/connections/iaasView"
 import { cephVisibleTo } from "@/lib/ceph/tenantVisibility"
 import { encryptSecret, decryptSecret } from "@/lib/crypto/secret"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
@@ -44,10 +46,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     // provider-owned connection referenced by their vDC scope (PVE via
     // vdcs.connection_id, PBS via vdc_pbs_namespaces). Mutations stay
     // tenant-scoped via getSessionPrisma() in PATCH/DELETE below.
-    const tenantId = await getCurrentTenantId()
     // Object route (design ruling §5): full union — a deep link to another
-    // vDC's resource must keep working in any view context.
-    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
+    // vDC's resource must keep working in any view context. The scope is the
+    // one of the tenant the principal carries (lib/tenant/iaasGuard).
+    const caller = await resolveCallerInfraScope()
+    if (caller.ok === false) return caller.response
+    const { infra, tenantId } = caller
     const vdcScope = maskingScope(infra)
 
     const connection = await globalPrisma.connection.findUnique({
@@ -63,6 +67,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const allowedByProvider = infra.kind === 'provider'
     if (!ownsConnection && !allowedByVdc && !allowedByProvider) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+    }
+
+    // An IaaS tenant reaches this provider connection through its vDC: it
+    // gets the name and type, never the address or the SSH settings.
+    if (infra.kind === "iaas") {
+      return NextResponse.json({ data: iaasConnectionView(connection as any) })
     }
 
     const { sshKeyEnc, sshPassEnc, apiTokenEnc, ...rest } = connection as any

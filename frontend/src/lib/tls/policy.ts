@@ -53,6 +53,35 @@ export function buildHttpPolicy(settings: TlsSettings, appUrl = process.env.APP_
 }
 
 /**
+ * True when a plain-HTTP request was relayed by a reverse proxy that already
+ * terminated TLS for the browser. Redirecting it would send the browser to
+ * https:// on the proxy, which relays plain HTTP again: an endless loop. Only
+ * the first hop of X-Forwarded-Proto is client-facing. A spoofed header only
+ * spares its sender the redirect, which is why no TRUST_PROXY_HEADERS opt-in
+ * is needed (same reasoning as requestPrefersSecure in lib/auth/cookies.ts).
+ *
+ * This is the tested source of truth for the identical, hand-mirrored
+ * function in start.js.
+ */
+export function forwardedFromHttps(
+  forwardedProto: string | string[] | undefined,
+  forwardedSsl: string | string[] | undefined
+): boolean {
+  const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto
+
+  if (proto) {
+    const first = proto.split(',')[0]?.trim().toLowerCase()
+
+    if (first === 'https') return true
+    if (first === 'http') return false
+  }
+
+  const ssl = Array.isArray(forwardedSsl) ? forwardedSsl[0] : forwardedSsl
+
+  return ssl?.trim().toLowerCase() === 'on'
+}
+
+/**
  * Strips the port from a `Host` header while keeping IPv6 brackets, since
  * `[2001:db8::1]:3000`.split(':')[0] truncates the address itself and
  * produces a Location header `new URL()` rejects outright. Returns null

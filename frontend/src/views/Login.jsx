@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { signIn } from 'next-auth/react'
+import { getSession, signIn } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -18,6 +18,13 @@ import {
 import LoginShell from '@components/login/LoginShell'
 import { useBranding } from '@/contexts/BrandingContext'
 import { safeCallbackUrl } from '@/lib/auth/safeCallbackUrl'
+import { droppedSessionHttpsAddress } from '@/lib/auth/insecureLogin'
+
+// signIn() reports success even when the browser refused the Secure session
+// cookie of an https install opened over plain HTTP; the page would then bounce
+// back to /login without a word. Returns the HTTPS address to show, or null.
+const droppedSessionAddress = () =>
+  droppedSessionHttpsAddress(window.isSecureContext, window.location, () => getSession())
 
 export default function LoginPage({ forceLocal = false }) {
   const router = useRouter()
@@ -124,6 +131,14 @@ export default function LoginPage({ forceLocal = false }) {
       } else if (result?.error) {
         setError(result.error)
       } else if (result?.ok) {
+        const httpsUrl = await droppedSessionAddress()
+
+        if (httpsUrl) {
+          setError(t('auth.httpsRequired', { url: httpsUrl }))
+
+          return
+        }
+
         router.push(callbackUrl)
         router.refresh()
       }
@@ -152,6 +167,14 @@ export default function LoginPage({ forceLocal = false }) {
       if (result?.error) {
         setTotpError(t('twoFactor.loginTotpInvalid'))
       } else if (result?.ok) {
+        const httpsUrl = await droppedSessionAddress()
+
+        if (httpsUrl) {
+          setTotpError(t('auth.httpsRequired', { url: httpsUrl }))
+
+          return
+        }
+
         router.push(callbackUrl)
         router.refresh()
       }

@@ -185,6 +185,7 @@
     "logout": "Abmelden",
     "loggingOut": "Abmeldung läuft...",
     "loginError": "Login Fehler",
+    "httpsRequired": "Diese Installation erlaubt die Anmeldung nur über HTTPS, diese Seite wurde jedoch über HTTP geöffnet. Öffnen Sie stattdessen {url}.",
     "notAuthenticated": "Nicht authentifiziert",
     "notAuthorized": "Nicht autorisiert",
     "sessionExpired": "Sitzung abgelaufen",

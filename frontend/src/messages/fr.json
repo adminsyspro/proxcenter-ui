@@ -181,6 +181,7 @@
     "logout": "Déconnexion",
     "loggingOut": "Déconnexion en cours...",
     "loginError": "Erreur de connexion",
+    "httpsRequired": "Cette installation n'accepte la connexion qu'en HTTPS, or cette page a été ouverte en HTTP. Ouvrez plutôt {url}.",
     "notAuthenticated": "Non authentifié",
     "notAuthorized": "Non autorisé",
     "sessionExpired": "Session expirée",

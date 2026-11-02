@@ -181,6 +181,7 @@
     "logout": "Sign out",
     "loggingOut": "Signing out...",
     "loginError": "Login error",
+    "httpsRequired": "This installation only accepts sign-in over HTTPS, but this page was opened over HTTP. Open {url} instead.",
     "notAuthenticated": "Not authenticated",
     "notAuthorized": "Not authorized",
     "sessionExpired": "Session expired",

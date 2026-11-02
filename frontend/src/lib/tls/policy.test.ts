@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildHttpPolicy, hstsHeaderValue, redirectHost } from '@/lib/tls/policy'
+import { buildHttpPolicy, forwardedFromHttps, hstsHeaderValue, redirectHost } from '@/lib/tls/policy'
 import { DEFAULT_TLS_SETTINGS } from '@/lib/tls/schema'
 
 describe('hstsHeaderValue', () => {
@@ -76,5 +76,31 @@ describe('redirectHost', () => {
 
   it('returns null for an unterminated IPv6 literal instead of throwing', () => {
     expect(redirectHost('[2001:db8::1')).toBeNull()
+  })
+})
+
+describe('forwardedFromHttps', () => {
+  it('REGRESSION: is true behind a proxy that terminated TLS, so the HTTP redirect never loops through it', () => {
+    expect(forwardedFromHttps('https', undefined)).toBe(true)
+    expect(forwardedFromHttps('HTTPS, http', undefined)).toBe(true)
+    expect(forwardedFromHttps(['https', 'http'], undefined)).toBe(true)
+  })
+
+  it('reads only the client-facing first hop', () => {
+    expect(forwardedFromHttps('http, https', undefined)).toBe(false)
+  })
+
+  it('lets an explicit http proto win over X-Forwarded-Ssl', () => {
+    expect(forwardedFromHttps('http', 'on')).toBe(false)
+  })
+
+  it('falls back to X-Forwarded-Ssl: on', () => {
+    expect(forwardedFromHttps(undefined, 'on')).toBe(true)
+    expect(forwardedFromHttps('', [' ON '])).toBe(true)
+    expect(forwardedFromHttps(undefined, 'off')).toBe(false)
+  })
+
+  it('is false for a direct request without forwarding headers', () => {
+    expect(forwardedFromHttps(undefined, undefined)).toBe(false)
   })
 })

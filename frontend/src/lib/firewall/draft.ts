@@ -8,7 +8,7 @@
 // rule added then deleted costs nothing, and a rule dragged back where it was is no move.
 
 import type { DraftScope, PublishOp, RuleExpect, RuleFields, ScopeOptions } from './publishOps'
-import { EXPECT_FIELDS, RULE_TEXT_FIELDS, isEngineComment, scopeKey } from './publishOps'
+import { EXPECT_FIELDS, RULE_TEXT_FIELDS, engineBounds, isEngineComment, pveText, scopeKey } from './publishOps'
 
 export type DraftEntry = { id: string; rule: RuleFields }
 
@@ -37,16 +37,17 @@ export function toFields(rule: RuleLike): RuleFields {
     type: rule.type || 'in',
     action: rule.action || 'ACCEPT',
     enable: Number(rule.enable) === 1 ? 1 : 0,
-    source: rule.source ?? '',
-    dest: rule.dest ?? '',
-    proto: rule.proto ?? '',
-    dport: rule.dport ?? '',
-    sport: rule.sport ?? '',
-    macro: rule.macro ?? '',
-    iface: rule.iface ?? '',
-    log: rule.log || 'nolog',
-    comment: rule.comment ?? '',
-    'icmp-type': rule['icmp-type'] ?? '',
+    // Trimmed as Proxmox stores them: what is sent is what is read back (the expected rule and the created one).
+    source: pveText(rule.source),
+    dest: pveText(rule.dest),
+    proto: pveText(rule.proto),
+    dport: pveText(rule.dport),
+    sport: pveText(rule.sport),
+    macro: pveText(rule.macro),
+    iface: pveText(rule.iface),
+    log: pveText(rule.log) || 'nolog',
+    comment: pveText(rule.comment),
+    'icmp-type': pveText(rule['icmp-type']),
   }
 }
 
@@ -122,17 +123,8 @@ export function editRules(
 /** Rules owned by the engine (its marker in the comment) are never edited, moved or deleted from the draft. */
 const editable = (e: DraftEntry) => !isEngineComment(e.rule.comment)
 
-/**
- * Where the user's rules may go in a list holding the engine's: after its leading rules (the zone group on top of a
- * guest) and before its trailing ones (the final observe rule), as insertion indexes [lo, hi].
- */
-export function userRange(rules: DraftEntry[]): [number, number] {
-  let lo = 0
-  while (lo < rules.length && !editable(rules[lo])) lo++
-  let hi = rules.length
-  while (hi > lo && !editable(rules[hi - 1])) hi--
-  return [lo, hi]
-}
+/** Where the user's rules may go in a list holding the engine's (publishOps.engineBounds). */
+export const userRange = (rules: DraftEntry[]): [number, number] => engineBounds(rules.map(e => e.rule.comment))
 
 /** The insertion indexes around position `at` that cross no rule of the engine (the segment it sits in). */
 function segmentAround(rules: DraftEntry[], at: number): [number, number] {

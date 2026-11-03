@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   EMPTY_DRAFT, addRule, cloneRules, currentEntries, deriveOps, enableGuestFirewall, entryStates, moveRule, moveRulesToScope,
-  deriveScopeOps, parseStoredDraft, pendingCount, rebaseDraft, removeRules, serializeDraft, setScopeOptions, shiftRules, toFields, updateRules,
+  deriveScopeOps, parseStoredDraft, userRange, pendingCount, rebaseDraft, removeRules, serializeDraft, setScopeOptions, shiftRules, toFields, updateRules,
 } from './draft'
 import type { DraftScope, RuleFields } from './publishOps'
 
@@ -219,6 +219,27 @@ describe('draft: the engine block of a guest stays where the engine put it', () 
     const d = moveRulesToScope(EMPTY_DRAFT, { scope: CLUSTER, baseRules: BASE }, ['b0'], { scope: GUEST, baseRules: ZONED })
     expect(order(d)).toEqual(['[pc-microseg]', 'u1', 'u2', 'a', '[pc-microseg] observe'])
     expect(deriveOps(d).ops.at(-1)).toMatchObject({ kind: 'rule.add', index: 3 })
+  })
+
+  it('Up of the whole user block stays put', () => {
+    expect(shiftRules(EMPTY_DRAFT, GUEST, ZONED, ['b1', 'b2'], -1).scopes).toEqual({})
+    expect(shiftRules(EMPTY_DRAFT, GUEST, ZONED, ['b1', 'b2'], 1).scopes).toEqual({})
+  })
+
+  it('a fresh guest of a zone, [group, observe] or [group]: an add and a Move to section land right below the group', () => {
+    const fresh = [ZONED[0], ZONED[3]]
+    expect(order(addRule(EMPTY_DRAFT, GUEST, fresh, rule('new')))).toEqual(['[pc-microseg]', 'new', '[pc-microseg] observe'])
+    expect(deriveOps(addRule(EMPTY_DRAFT, GUEST, fresh, rule('new'))).ops[0]).toMatchObject({ kind: 'rule.add', index: 1 })
+    const moved = moveRulesToScope(EMPTY_DRAFT, { scope: CLUSTER, baseRules: BASE }, ['b0'], { scope: GUEST, baseRules: fresh })
+    expect(currentEntries(moved, GUEST, fresh).map(e => e.rule.comment)).toEqual(['[pc-microseg]', 'a', '[pc-microseg] observe'])
+    const groupOnly = [ZONED[0]]
+    expect(currentEntries(addRule(EMPTY_DRAFT, GUEST, groupOnly, rule('new')), GUEST, groupOnly).map(e => e.rule.comment)).toEqual(['[pc-microseg]', 'new'])
+    expect(userRange(currentEntries(EMPTY_DRAFT, GUEST, fresh))).toEqual([1, 1])
+    expect(userRange(currentEntries(EMPTY_DRAFT, GUEST, groupOnly))).toEqual([1, 1])
+  })
+
+  it('trims what Proxmox trims: a comment typed with spaces is the comment it will read back', () => {
+    expect(toFields({ type: 'in', action: 'ACCEPT', comment: '  web  ', source: ' 10.0.0.1 ' })).toMatchObject({ comment: 'web', source: '10.0.0.1' })
   })
 
   it('never moves a rule of the engine, even where the longest run would rather move it', () => {

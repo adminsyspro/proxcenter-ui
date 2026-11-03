@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { EMPTY_DRAFT, addRule, cloneRules, currentEntries, deriveOps, enableGuestFirewall, moveRule, rebaseDraft, removeRules, toFields, updateRules, type FirewallDraft } from './draft'
+import { EMPTY_DRAFT, addRule, cloneRules, currentEntries, deriveOps, enableGuestFirewall, moveRule, rebaseDraft, removeRules, shiftRules, toFields, updateRules, type FirewallDraft } from './draft'
 import { executePublish, publishStatus, publishSummary, type PublishIO } from './publish'
 import { type DraftScope, type RuleFields, parsePublishBody, isFail } from './publishOps'
 
@@ -62,14 +62,14 @@ class FakePve implements PublishIO {
     this.bump(target)
     if (method === 'POST') {
       const r: Stored = { type: form!.get('type')!, action: form!.get('action')! }
-      for (const k of RULE_KEYS) if (form!.has(k)) (r as any)[k] = k === 'enable' ? Number(form!.get(k)) : form!.get(k)
+      for (const k of RULE_KEYS) if (form!.has(k)) (r as any)[k] = k === 'enable' ? Number(form!.get(k)) : form!.get(k)!.trim()
       list.unshift(r)
       return
     }
     const pos = Number(m[2])
     if (method === 'DELETE') return void list.splice(pos, 1)
     if (form!.has('moveto')) return pveMove(list, pos, Number(form!.get('moveto')))
-    for (const k of RULE_KEYS) if (form!.has(k)) (list[pos] as any)[k] = k === 'enable' ? Number(form!.get(k)) : form!.get(k)
+    for (const k of RULE_KEYS) if (form!.has(k)) (list[pos] as any)[k] = k === 'enable' ? Number(form!.get(k)) : form!.get(k)!.trim()
     for (const k of (form!.get('delete') ?? '').split(',').filter(Boolean)) delete (list[pos] as any)[k]
   }
 
@@ -324,6 +324,90 @@ describe('executePublish: what Proxmox ends with is what the user wanted', () =>
   }
 })
 
+describe('executePublish on a guest of a zone: never refuses what the draft produces', () => {
+  const G = () => stored('[pc-microseg]', { type: 'group', action: 'pcz-db' })
+  const O = () => stored('[pc-microseg] observe', { log: 'info' })
+  const guestOn = (rules: Stored[]) => {
+    const pve = new FakePve()
+    pve.lists.set(GUEST_PATH, rules)
+    return pve
+  }
+  const comments = (pve: FakePve) => pve.rules(GUEST_PATH).map(r => r.comment)
+  const newRule = (comment: string) => toFields({ type: 'in', action: 'ACCEPT', comment, enable: 1 })
+
+  it('[group, observe]: an add lands between them', async () => {
+    const pve = guestOn([G(), O()])
+    const d = addRule(EMPTY_DRAFT, GUEST, await pve.get<any[]>(GUEST_PATH), newRule('n'))
+    expect((await publish(pve, d)).failed).toBeUndefined()
+    expect(comments(pve)).toEqual(['[pc-microseg]', 'n', '[pc-microseg] observe'])
+  })
+
+  it('[group]: an add lands below it', async () => {
+    const pve = guestOn([G()])
+    const d = addRule(EMPTY_DRAFT, GUEST, await pve.get<any[]>(GUEST_PATH), newRule('n'))
+    expect((await publish(pve, d)).failed).toBeUndefined()
+    expect(comments(pve)).toEqual(['[pc-microseg]', 'n'])
+  })
+
+  it('[group, u1, observe]: add n then delete u1 (delete pos 1, then add at 1) goes through', async () => {
+    const pve = guestOn([G(), stored('u1'), O()])
+    const base = await pve.get<any[]>(GUEST_PATH)
+    let d = addRule(EMPTY_DRAFT, GUEST, base, newRule('n'))
+    d = removeRules(d, GUEST, base, ['b1'])
+    expect(deriveOps(d).ops.map(o => [o.kind, 'pos' in o ? o.pos : (o as { index: number }).index])).toEqual([['rule.delete', 1], ['rule.add', 1]])
+    expect((await publish(pve, d)).failed).toBeUndefined()
+    expect(comments(pve)).toEqual(['[pc-microseg]', 'n', '[pc-microseg] observe'])
+  })
+
+  it('a comment typed with spaces: the rule created lower is moved, not left on top of the zone group', async () => {
+    const pve = guestOn([G(), stored('u1'), O()])
+    const d = addRule(EMPTY_DRAFT, GUEST, await pve.get<any[]>(GUEST_PATH), { ...newRule('x'), comment: '  spaced  ' })
+    const result = await publish(pve, d)
+    expect(result.failed).toBeUndefined()
+    expect(comments(pve)).toEqual(['[pc-microseg]', 'u1', 'spaced', '[pc-microseg] observe'])
+  })
+
+  it('an expected rule read with spaces matches the trimmed one', async () => {
+    const pve = setup(['a'])
+    const d = updateRules(EMPTY_DRAFT, CLUSTER, [{ type: 'in', action: 'ACCEPT', enable: 1, comment: ' a ', digest: 'd0' }], ['b0'], { enable: 0 })
+    expect((await publish(pve, d)).failed).toBeUndefined()
+  })
+
+  function rng(seed: number) {
+    let s = seed
+    return (n: number) => {
+      s = (s * 1103515245 + 12345) % 2147483648
+      return s % n
+    }
+  }
+
+  for (let seed = 1; seed <= 40; seed++) {
+    it(`random guest draft ${seed}`, async () => {
+      const r = rng(seed * 7919)
+      const users = Array.from({ length: r(4) }, (_, i) => stored(`u${i}`))
+      const pve = guestOn([G(), ...users, ...(r(3) > 0 ? [O()] : [])])
+      const base = await pve.get<any[]>(GUEST_PATH)
+      let d = EMPTY_DRAFT
+      for (let step = 0; step < 1 + r(8); step++) {
+        const entries = currentEntries(d, GUEST, base)
+        const pick = entries.length > 0 ? entries[r(entries.length)].id : ''
+        switch (r(6)) {
+          case 0: d = addRule(d, GUEST, base, newRule(`n${seed}-${step}`), r(2) ? undefined : r(entries.length + 1)); break
+          case 1: d = removeRules(d, GUEST, base, [pick]); break
+          case 2: d = moveRule(d, GUEST, base, pick, r(entries.length)); break
+          case 3: d = shiftRules(d, GUEST, base, [pick], r(2) ? -1 : 1); break
+          case 4: d = cloneRules(d, GUEST, base, [pick]); break
+          default: d = updateRules(d, GUEST, base, [pick], { action: 'DROP', type: 'in' })
+        }
+      }
+      const wanted = currentEntries(d, GUEST, base).map(e => [e.rule.comment, e.rule.action])
+      const result = await publish(pve, d)
+      expect(result.failed).toBeUndefined()
+      expect(pve.rules(GUEST_PATH).map(x => [x.comment, x.action])).toEqual(wanted)
+    })
+  }
+})
+
 describe('parsePublishBody', () => {
   const scope = { kind: 'cluster' }
   it('accepts the operations of a draft and refuses anything else', () => {
@@ -349,6 +433,7 @@ describe('parsePublishBody', () => {
       // 101 creations below the top are 202 writes.
       { ops: Array.from({ length: 101 }, () => ({ kind: 'rule.add', scope, index: 1, rule: { type: 'in', action: 'ACCEPT' } })) },
       { ops: [{ kind: 'rule.add', scope, index: 0, rule: { type: 'group', action: 'pcz-db' } }] },
+      { ops: [{ kind: 'rule.add', scope, index: 0, rule: { type: 'group', action: 'PCZ-db' } }] },
       { ops: [{ kind: 'rule.delete', scope, pos: 0, expect: { comment: 'a\nb' } }] },
     ]
     for (const body of bad) expect(isFail(parsePublishBody(body)), JSON.stringify(body).slice(0, 80)).toBe(true)

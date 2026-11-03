@@ -20,7 +20,7 @@
 
 import type { DraftScope, PublishFailureCode, PublishOp, PublishResult, RuleExpect, RuleFields, ScopeOptions } from './publishOps'
 import {
-  ENGINE_GUEST_OPTIONS, EXPECT_FIELDS, RULE_TEXT_FIELDS, configPath, isEngineComment, opCalls, optionsKey, optionsPath, rulesPath, scopeKey,
+  ENGINE_GUEST_OPTIONS, EXPECT_FIELDS, RULE_TEXT_FIELDS, configPath, engineBounds, isEngineComment, opCalls, optionsKey, optionsPath, pveText, rulesPath, scopeKey,
 } from './publishOps'
 
 /** What the executor needs from Proxmox: a read, and a write that sends `form` (urlencoded) or nothing. */
@@ -145,7 +145,7 @@ class Executor {
     const rule = (await this.list(scope))[pos]
     if (!rule) throw new PublishError('STALE_POSITION', `There is no rule at position ${pos} any more`)
     if (isEngineComment(rule.comment)) throw new PublishError('MANAGED_RULE', 'This rule belongs to the micro-segmentation engine')
-    if (expect && EXPECT_FIELDS.some(k => String(rule[k] ?? '') !== String(expect[k] ?? ''))) {
+    if (expect && EXPECT_FIELDS.some(k => pveText(rule[k]) !== pveText(expect[k]))) {
       throw new PublishError('STALE_POSITION', `The rule at position ${pos} is not the one the draft was made on`)
     }
     return rule
@@ -192,17 +192,14 @@ class Executor {
 
   private async add(scope: DraftScope, rule: RuleFields, index: number) {
     const before = await this.list(scope)
-    // Never among the engine's leading rules (its zone group on top) or trailing ones (its final observe rule).
-    let lead = 0
-    while (lead < before.length && isEngineComment(before[lead].comment)) lead++
-    let trail = 0
-    while (trail < before.length - lead && isEngineComment(before[before.length - 1 - trail].comment)) trail++
-    if (index < lead || index > before.length - trail) throw new PublishError('MANAGED_RULE', 'A rule cannot be put among the rules of the micro-segmentation engine')
+    // Never above the engine's leading rules (its zone group) nor below its trailing observe rules.
+    const [lo, hi] = engineBounds(before.map(r => r.comment))
+    if (index < lo || index > hi) throw new PublishError('MANAGED_RULE', 'A rule cannot be put among the rules of the micro-segmentation engine')
     await this.io.write('POST', rulesPath(scope), createForm(rule))
     const after = await this.read(scope)
     if (index <= 0) return
     const top = after[0]
-    const same = (k: (typeof EXPECT_FIELDS)[number]) => String(top?.[k] ?? '') === String(rule[k] ?? '')
+    const same = (k: (typeof EXPECT_FIELDS)[number]) => pveText(top?.[k]) === pveText(rule[k])
     if (!top || !EXPECT_FIELDS.every(same)) {
       throw new PublishError('NOT_OURS', `Rule created at the top, not moved to position ${index}: the rule at the top is not the one just created`)
     }
@@ -258,14 +255,18 @@ export async function executePublish(
   const deadline = opts.deadlineMs ?? PUBLISH_DEADLINE_MS
   const perCall = opts.callEstimateMs ?? PUBLISH_CALL_ESTIMATE_MS
   const exec = new Executor(io, digests)
+  const listRead = new Set<string>()
   let applied = 0
   for (const [index, op] of ops.entries()) {
     const key = scopeKey(op.scope)
+    // The first operation of a scope reads its list first (one call more).
+    const calls = opCalls(op) + (listRead.has(key) ? 0 : 1)
+    listRead.add(key)
     const failedAt = (code: PublishFailureCode, message: string): PublishResult => ({
       applied, total: ops.length, scopes: exec.scopes,
       failed: { index, kind: op.kind, scope: key, code, message },
     })
-    if (now() - started + opCalls(op) * perCall > deadline) {
+    if (now() - started + calls * perCall > deadline) {
       return failedAt('TIME_BUDGET', 'The publish stopped before running out of time: publish again for the remaining changes')
     }
     // A failure inside an operation (a creation done, its move refused) leaves a list the draft does not know: the
@@ -300,9 +301,10 @@ export function publishStatus(result: PublishResult): number {
   }
 }
 
-/** The audit details of a publish: how many operations of each kind, on how many scopes of each kind. */
 /** At most this many scope keys in an audit row. */
 const AUDIT_SCOPE_KEYS = 20
+
+/** The audit details of a publish: how many operations of each kind, on how many scopes of each kind, which scopes. */
 
 export function publishSummary(ops: PublishOp[]): { kinds: Record<string, number>; scopes: Record<string, number>; scopeKeys: string[]; moreScopes: number } {
   const kinds: Record<string, number> = {}

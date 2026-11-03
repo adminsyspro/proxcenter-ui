@@ -109,7 +109,26 @@ export const ENGINE_MARKER = '[pc-microseg]'
 /** The security groups of the engine's zones (Go: microseg.ObjectName). */
 export const ZONE_GROUP_PREFIX = 'pcz-'
 
-export const isEngineComment = (comment: unknown): boolean => typeof comment === 'string' && comment.startsWith(ENGINE_MARKER)
+export const isEngineComment = (comment: unknown): boolean => typeof comment === 'string' && comment.trim().startsWith(ENGINE_MARKER)
+
+/** The comment of the engine's final observe rule of a guest (Go: microseg.ObserveComment). */
+export const OBSERVE_COMMENT = `${ENGINE_MARKER} observe`
+
+/** A text field as Proxmox keeps it: it trims what it stores (a comment written ' x ' reads back 'x'). */
+export const pveText = (value: unknown): string => String(value ?? '').trim()
+
+/**
+ * Where the user's rules may go in a list holding the engine's, as insertion indexes [lo, hi]: before the engine's
+ * trailing observe rules, counted first from the bottom, and after its leading rules (the zone group) among the rest.
+ * A fresh guest of a zone [group, observe] or [group] gives [1, 1]: between the group and the observe rule.
+ */
+export function engineBounds(comments: unknown[]): [number, number] {
+  let hi = comments.length
+  while (hi > 0 && pveText(comments[hi - 1]) === OBSERVE_COMMENT) hi--
+  let lo = 0
+  while (lo < hi && isEngineComment(comments[lo])) lo++
+  return [lo, hi]
+}
 
 export function scopeKey(scope: DraftScope): string {
   if (scope.kind === 'cluster') return 'cluster'
@@ -173,7 +192,7 @@ function checkTypeAction(type: unknown, action: unknown): string | null {
   if (type !== 'in' && type !== 'out' && type !== 'group') return 'rule.type must be in, out or group'
   if (typeof action !== 'string') return 'rule.action is missing'
   if (type === 'group') {
-    if (action.startsWith(ZONE_GROUP_PREFIX)) return 'the zone groups of the micro-segmentation are attached by its engine only'
+    if (action.toLowerCase().startsWith(ZONE_GROUP_PREFIX)) return 'the zone groups of the micro-segmentation are attached by its engine only'
     return GROUP_RE.test(action) ? null : 'rule.action is not a security group name'
   }
   return ACTIONS.has(action) ? null : 'rule.action must be ACCEPT, DROP or REJECT'

@@ -142,7 +142,7 @@ export default function NetworkAutomationPage() {
   return (
     <ProviderTenantGuard>
     <EnterpriseGuard requiredFeature={Features.MICROSEGMENTATION} featureName="Microsegmentation / Firewall">
-      <Box sx={{ p: 3, minHeight: 'calc(100vh - 130px)', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ minHeight: 'calc(100vh - 130px)', display: 'flex', flexDirection: 'column' }}>
 
         {!selectedConnection && !waitingForVm && (
           <Alert severity="info" sx={{ mb: 3 }}>

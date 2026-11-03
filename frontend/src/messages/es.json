@@ -13234,6 +13234,87 @@
       }
     },
     "waitingFirstCheck": "A la espera de la primera comprobación completa",
-    "readOnly": "Solo lectura: necesita el permiso de gestión de nodos"
+    "readOnly": "Solo lectura: necesita el permiso de gestión de nodos",
+    "check": {
+      "button": "Comprobar ahora",
+      "pending": "Comprobación solicitada",
+      "notDeployed": "No desplegado: aplique primero un plan, el motor solo comprueba una política desplegada.",
+      "title": "Comprobación completa",
+      "runningText": "Comprobación completa en curso",
+      "queued": "Esperando al motor (hasta 60 s)",
+      "inProgress": "En curso, {seconds, number} s transcurridos",
+      "progress": "{calls, plural, one {# llamada API} other {# llamadas API}}, {writes, plural, one {# escritura} other {# escrituras}}, {seconds, number} s",
+      "doneSummary": "Comprobado en {seconds, number} s con {calls, plural, one {# llamada API} other {# llamadas API}}",
+      "failed": "La comprobación ha fallado: {error}",
+      "failedNoError": "La comprobación ha fallado.",
+      "lost": "No se encuentra la ejecución de la comprobación: la subpestaña Historial lista todas las ejecuciones.",
+      "status": {
+        "pass": "correcto",
+        "warn": "advertencia",
+        "fail": "fallido",
+        "info": "no medido",
+        "pending": "leyendo..."
+      },
+      "rows": {
+        "inventory": {
+          "label": "Lectura del inventario",
+          "figure": "{guests, plural, one {# invitado} other {# invitados}}",
+          "pass": "{guests, plural, one {# invitado leído} other {# invitados leídos}}, {members, plural, one {# miembro} other {# miembros}} de una zona comparados con la política."
+        },
+        "ips": {
+          "label": "Recogida de direcciones IP",
+          "figure": "{withIps, number} de {members, number} miembros activos con una IP",
+          "pass": "Cada miembro activo tiene una dirección IP.",
+          "warn": "{missing, plural, one {# miembro activo no tiene} other {# miembros activos no tienen}} aún dirección IP: las reglas por dirección no los cubren.",
+          "none": "Las direcciones IP no se recogieron durante esta comprobación.",
+          "pending": "Leyendo la recogida de IP..."
+        },
+        "objects": {
+          "label": "Objetos de Proxmox comparados",
+          "figure": "{steps, plural, one {# paso previsto} other {# pasos previstos}}, {writes, plural, one {# escritura hecha} other {# escrituras hechas}}",
+          "pass": "Proxmox coincidía con la política: no se escribió nada.",
+          "warn": "Proxmox difería de la política: el motor lo realineó.",
+          "fail": "{failed, plural, one {# paso ha fallado} other {# pasos han fallado}}:"
+        },
+        "drifts": {
+          "label": "Desviaciones",
+          "figure": "{count, plural, one {# desviación} other {# desviaciones}}",
+          "pass": "Ninguna desviación: Proxmox coincide con la política.",
+          "warn": "{count, plural, one {# diferencia sigue} other {# diferencias siguen}} entre la política y Proxmox.",
+          "open": "Abrir desviaciones"
+        },
+        "observation": {
+          "label": "Observación",
+          "figure": "{events, plural, one {# evento leído} other {# eventos leídos}}, {suggestions, plural, one {# sugerencia} other {# sugerencias}}",
+          "pass": "{events, plural, one {# evento leído} other {# eventos leídos}} en los registros del cortafuegos, {dropped, plural, one {# paquete inundado ignorado} other {# paquetes inundados ignorados}}.",
+          "none": "Ningún evento nuevo en los registros del cortafuegos.",
+          "pending": "Leyendo los registros..."
+        },
+        "unread": {
+          "label": "Invitados no leídos",
+          "figure": "{count, plural, one {# invitado} other {# invitados}}",
+          "fail": "No se pudo leer su cortafuegos: se quedan como están hasta la próxima pasada."
+        },
+        "truncated": {
+          "label": "Escrituras interrumpidas",
+          "fail": "La ejecución se detuvo en el límite de escrituras: el resto se escribe en la próxima pasada.",
+          "held": "Las escrituras están en espera: confírmelas en el banner."
+        },
+        "errors": {
+          "label": "Errores",
+          "figure": "{count, plural, one {# error} other {# errores}}",
+          "fail": "El motor no pudo leer ni guardar todo:"
+        }
+      },
+      "log": "Registro",
+      "logEmpty": "Ningún paso: no había nada que escribir.",
+      "logLater": "Los pasos se muestran cuando termina la ejecución.",
+      "outcome": {
+        "done": "hecho",
+        "failed": "fallido",
+        "notRun": "no ejecutado"
+      },
+      "runAgain": "Volver a ejecutar"
+    }
   }
 }

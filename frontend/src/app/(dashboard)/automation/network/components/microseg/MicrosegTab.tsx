@@ -5,10 +5,12 @@ import { Alert, Box, CircularProgress, IconButton, Tab, Tabs, Tooltip, Typograph
 import { useTranslations } from 'next-intl'
 import { useSWRConfig } from 'swr'
 
+import { microsegBaseUrl } from '@/lib/microseg/api'
 import { isRunAffectedKey } from '@/lib/microseg/runRefresh'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 
 import DeploymentWizard from '../DeploymentWizard'
+import CheckNowButton from './CheckNowButton'
 import DriftsPanel from './DriftsPanel'
 import FirstRunGuide from './FirstRunGuide'
 import HistoryPanel from './HistoryPanel'
@@ -104,6 +106,12 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
     void reload()
     void mutate(isRunAffectedKey(connectionId))
   }, [reload, mutate, connectionId])
+  // A check also reads the logs: the suggestions it learnt are read again with the rest.
+  const refreshAfterCheck = useCallback(() => {
+    refreshAfterRun()
+    const suggestions = `${microsegBaseUrl(connectionId)}/suggestions`
+    void mutate((key: unknown) => Array.isArray(key) && key[0] === suggestions)
+  }, [refreshAfterRun, mutate, connectionId])
 
   const goToSubTab = (tab: MicrosegSubTab) => {
     setSubTab(tab)
@@ -160,6 +168,14 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
           ))}
         </Tabs>
         <Box ref={setActionsSlot} data-testid='microseg-actions-slot' sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }} />
+        <CheckNowButton
+          connectionId={connectionId}
+          deployed={!!policy.last_revision}
+          pending={!!controls.status?.engine.check_pending}
+          startRun={startRun}
+          onDone={refreshAfterCheck}
+          onOpenDrifts={() => goToSubTab('drifts')}
+        />
         <EmergencyStopButton controls={controls} />
         <Tooltip title={t('settings.open')}>
           <IconButton aria-label={t('settings.open')} onClick={onOpenSettings} sx={{ flexShrink: 0 }}>

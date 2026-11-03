@@ -13234,6 +13234,87 @@
       }
     },
     "waitingFirstCheck": "첫 번째 전체 점검을 기다리는 중",
-    "readOnly": "읽기 전용: 노드 관리 권한이 필요합니다"
+    "readOnly": "읽기 전용: 노드 관리 권한이 필요합니다",
+    "check": {
+      "button": "지금 점검",
+      "pending": "점검 요청됨",
+      "notDeployed": "배포되지 않음: 먼저 계획을 적용하세요. 엔진은 배포된 정책만 점검합니다.",
+      "title": "전체 점검",
+      "runningText": "전체 점검 진행 중",
+      "queued": "엔진 대기 중 (최대 60초)",
+      "inProgress": "진행 중, {seconds, number}초 경과",
+      "progress": "API 호출 {calls, plural, other {#회}}, 쓰기 {writes, plural, other {#회}}, {seconds, number}초",
+      "doneSummary": "{seconds, number}초 동안 API 호출 {calls, plural, other {#회}}로 점검 완료",
+      "failed": "점검 실패: {error}",
+      "failedNoError": "점검에 실패했습니다.",
+      "lost": "점검 실행을 찾을 수 없습니다. 기록 하위 탭에서 모든 실행을 볼 수 있습니다.",
+      "status": {
+        "pass": "통과",
+        "warn": "경고",
+        "fail": "실패",
+        "info": "측정 안 됨",
+        "pending": "읽는 중..."
+      },
+      "rows": {
+        "inventory": {
+          "label": "인벤토리 읽기",
+          "figure": "게스트 {guests, plural, other {#개}}",
+          "pass": "게스트 {guests, plural, other {#개}}를 읽고, 영역 구성원 {members, plural, other {#개}}를 정책과 비교했습니다."
+        },
+        "ips": {
+          "label": "IP 주소 수집",
+          "figure": "실행 중인 구성원 {members, number}개 중 {withIps, number}개에 IP 있음",
+          "pass": "실행 중인 모든 구성원에 IP 주소가 있습니다.",
+          "warn": "실행 중인 구성원 {missing, plural, other {#개}}에 아직 IP 주소가 없습니다. 주소 기반 규칙이 이들을 보호하지 않습니다.",
+          "none": "이번 점검에서는 IP 주소를 수집하지 않았습니다.",
+          "pending": "IP 수집 결과를 읽는 중..."
+        },
+        "objects": {
+          "label": "비교한 Proxmox 개체",
+          "figure": "계획된 단계 {steps, plural, other {#개}}, 완료된 쓰기 {writes, plural, other {#회}}",
+          "pass": "Proxmox가 정책과 일치했습니다. 아무것도 쓰지 않았습니다.",
+          "warn": "Proxmox가 정책과 달랐습니다. 엔진이 다시 맞췄습니다.",
+          "fail": "단계 {failed, plural, other {#개}} 실패:"
+        },
+        "drifts": {
+          "label": "드리프트",
+          "figure": "드리프트 {count, plural, other {#개}}",
+          "pass": "드리프트 없음: Proxmox가 정책과 일치합니다.",
+          "warn": "정책과 Proxmox 사이에 차이 {count, plural, other {#개}}가 남아 있습니다.",
+          "open": "드리프트 열기"
+        },
+        "observation": {
+          "label": "관찰",
+          "figure": "읽은 이벤트 {events, plural, other {#개}}, 제안 {suggestions, plural, other {#개}}",
+          "pass": "방화벽 로그에서 이벤트 {events, plural, other {#개}}를 읽고, 플러딩된 패킷 {dropped, plural, other {#개}}를 무시했습니다.",
+          "none": "방화벽 로그에 새 이벤트가 없습니다.",
+          "pending": "로그를 읽는 중..."
+        },
+        "unread": {
+          "label": "읽지 못한 게스트",
+          "figure": "게스트 {count, plural, other {#개}}",
+          "fail": "방화벽을 읽을 수 없었습니다. 다음 실행까지 그대로 둡니다."
+        },
+        "truncated": {
+          "label": "중단된 쓰기",
+          "fail": "실행이 쓰기 한도에서 멈췄습니다. 나머지는 다음 실행 때 씁니다.",
+          "held": "쓰기가 보류 중입니다. 배너에서 확인하세요."
+        },
+        "errors": {
+          "label": "오류",
+          "figure": "오류 {count, plural, other {#개}}",
+          "fail": "엔진이 모든 것을 읽거나 저장하지 못했습니다:"
+        }
+      },
+      "log": "로그",
+      "logEmpty": "단계 없음: 쓸 내용이 없었습니다.",
+      "logLater": "실행이 끝나면 단계가 표시됩니다.",
+      "outcome": {
+        "done": "완료",
+        "failed": "실패",
+        "notRun": "실행 안 됨"
+      },
+      "runAgain": "다시 실행"
+    }
   }
 }

@@ -12902,6 +12902,87 @@
       }
     },
     "waitingFirstCheck": "Warten auf die erste vollständige Prüfung",
-    "readOnly": "Nur Lesezugriff: Sie benötigen das Recht zur Knotenverwaltung"
+    "readOnly": "Nur Lesezugriff: Sie benötigen das Recht zur Knotenverwaltung",
+    "check": {
+      "button": "Jetzt prüfen",
+      "pending": "Prüfung angefordert",
+      "notDeployed": "Nicht bereitgestellt: wenden Sie zuerst einen Plan an, die Engine prüft nur eine bereitgestellte Richtlinie.",
+      "title": "Vollständige Prüfung",
+      "runningText": "Vollständige Prüfung läuft",
+      "queued": "Warten auf die Engine (bis zu 60 s)",
+      "inProgress": "Läuft, {seconds, number} s vergangen",
+      "progress": "{calls, plural, one {# API-Aufruf} other {# API-Aufrufe}}, {writes, plural, one {# Schreibvorgang} other {# Schreibvorgänge}}, {seconds, number} s",
+      "doneSummary": "Geprüft in {seconds, number} s mit {calls, plural, one {# API-Aufruf} other {# API-Aufrufen}}",
+      "failed": "Die Prüfung ist fehlgeschlagen: {error}",
+      "failedNoError": "Die Prüfung ist fehlgeschlagen.",
+      "lost": "Der Lauf der Prüfung wurde nicht gefunden: der Unterreiter Verlauf listet alle Läufe.",
+      "status": {
+        "pass": "bestanden",
+        "warn": "Warnung",
+        "fail": "fehlgeschlagen",
+        "info": "nicht gemessen",
+        "pending": "wird gelesen..."
+      },
+      "rows": {
+        "inventory": {
+          "label": "Inventar gelesen",
+          "figure": "{guests, plural, one {# Gast} other {# Gäste}}",
+          "pass": "{guests, plural, one {# Gast gelesen} other {# Gäste gelesen}}, {members, plural, one {# Mitglied} other {# Mitglieder}} einer Zone mit der Richtlinie verglichen."
+        },
+        "ips": {
+          "label": "IP-Erfassung",
+          "figure": "{withIps, number} von {members, number} laufenden Mitgliedern mit IP",
+          "pass": "Jedes laufende Mitglied hat eine IP-Adresse.",
+          "warn": "{missing, plural, one {# laufendes Mitglied hat} other {# laufende Mitglieder haben}} noch keine IP-Adresse: die Regeln nach Adresse decken sie nicht ab.",
+          "none": "Die IP-Adressen wurden bei dieser Prüfung nicht erfasst.",
+          "pending": "IP-Erfassung wird gelesen..."
+        },
+        "objects": {
+          "label": "Verglichene Proxmox-Objekte",
+          "figure": "{steps, plural, one {# Schritt geplant} other {# Schritte geplant}}, {writes, plural, one {# Schreibvorgang} other {# Schreibvorgänge}} ausgeführt",
+          "pass": "Proxmox entsprach der Richtlinie: nichts wurde geschrieben.",
+          "warn": "Proxmox wich von der Richtlinie ab: die Engine hat es angeglichen.",
+          "fail": "{failed, plural, one {# Schritt ist} other {# Schritte sind}} fehlgeschlagen:"
+        },
+        "drifts": {
+          "label": "Abweichungen",
+          "figure": "{count, plural, one {# Abweichung} other {# Abweichungen}}",
+          "pass": "Keine Abweichung: Proxmox entspricht der Richtlinie.",
+          "warn": "{count, plural, one {# Unterschied bleibt} other {# Unterschiede bleiben}} zwischen der Richtlinie und Proxmox.",
+          "open": "Abweichungen öffnen"
+        },
+        "observation": {
+          "label": "Beobachtung",
+          "figure": "{events, plural, one {# Ereignis gelesen} other {# Ereignisse gelesen}}, {suggestions, plural, one {# Vorschlag} other {# Vorschläge}}",
+          "pass": "{events, plural, one {# Ereignis gelesen} other {# Ereignisse gelesen}} in den Firewall-Protokollen, {dropped, plural, one {# geflutetes Paket ignoriert} other {# geflutete Pakete ignoriert}}.",
+          "none": "Kein neues Ereignis in den Firewall-Protokollen.",
+          "pending": "Protokolle werden gelesen..."
+        },
+        "unread": {
+          "label": "Nicht gelesene Gäste",
+          "figure": "{count, plural, one {# Gast} other {# Gäste}}",
+          "fail": "Ihre Firewall konnte nicht gelesen werden: sie bleiben bis zum nächsten Durchlauf unverändert."
+        },
+        "truncated": {
+          "label": "Schreibvorgänge abgebrochen",
+          "fail": "Der Lauf hat an der Schreibgrenze angehalten: der Rest wird beim nächsten Durchlauf geschrieben.",
+          "held": "Schreibvorgänge sind angehalten: bestätigen Sie sie im Banner."
+        },
+        "errors": {
+          "label": "Fehler",
+          "figure": "{count, plural, one {# Fehler} other {# Fehler}}",
+          "fail": "Die Engine konnte nicht alles lesen oder speichern:"
+        }
+      },
+      "log": "Protokoll",
+      "logEmpty": "Kein Schritt: es gab nichts zu schreiben.",
+      "logLater": "Die Schritte erscheinen, sobald der Lauf beendet ist.",
+      "outcome": {
+        "done": "erledigt",
+        "failed": "fehlgeschlagen",
+        "notRun": "nicht ausgeführt"
+      },
+      "runAgain": "Erneut ausführen"
+    }
   }
 }

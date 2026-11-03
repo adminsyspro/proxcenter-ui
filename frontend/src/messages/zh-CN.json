@@ -13234,6 +13234,87 @@
       }
     },
     "waitingFirstCheck": "正在等待首次完整检查",
-    "readOnly": "只读：您需要节点管理权限"
+    "readOnly": "只读：您需要节点管理权限",
+    "check": {
+      "button": "立即检查",
+      "pending": "已请求检查",
+      "notDeployed": "未部署：请先应用计划，引擎只检查已部署的策略。",
+      "title": "完整检查",
+      "runningText": "完整检查进行中",
+      "queued": "等待引擎（最多 60 秒）",
+      "inProgress": "进行中，已用 {seconds, number} 秒",
+      "progress": "{calls, plural, other {# 次 API 调用}}，{writes, plural, other {# 次写入}}，{seconds, number} 秒",
+      "doneSummary": "用时 {seconds, number} 秒完成检查，{calls, plural, other {# 次 API 调用}}",
+      "failed": "检查失败：{error}",
+      "failedNoError": "检查失败。",
+      "lost": "找不到这次检查的运行：历史子标签页列出了所有运行。",
+      "status": {
+        "pass": "通过",
+        "warn": "警告",
+        "fail": "失败",
+        "info": "未测量",
+        "pending": "读取中..."
+      },
+      "rows": {
+        "inventory": {
+          "label": "读取清单",
+          "figure": "{guests, plural, other {# 个虚拟机}}",
+          "pass": "已读取 {guests, plural, other {# 个虚拟机}}，已将区域中的 {members, plural, other {# 个成员}}与策略比较。"
+        },
+        "ips": {
+          "label": "收集 IP 地址",
+          "figure": "{members, number} 个运行中成员里 {withIps, number} 个有 IP",
+          "pass": "每个运行中的成员都有 IP 地址。",
+          "warn": "{missing, plural, other {# 个运行中的成员}}还没有 IP 地址：按地址的规则无法覆盖它们。",
+          "none": "这次检查没有收集 IP 地址。",
+          "pending": "正在读取 IP 收集结果..."
+        },
+        "objects": {
+          "label": "已比较的 Proxmox 对象",
+          "figure": "计划 {steps, plural, other {# 个步骤}}，完成 {writes, plural, other {# 次写入}}",
+          "pass": "Proxmox 与策略一致：没有写入任何内容。",
+          "warn": "Proxmox 与策略不一致：引擎已重新对齐。",
+          "fail": "{failed, plural, other {# 个步骤}}失败："
+        },
+        "drifts": {
+          "label": "偏差",
+          "figure": "{count, plural, other {# 个偏差}}",
+          "pass": "没有偏差：Proxmox 与策略一致。",
+          "warn": "策略与 Proxmox 之间仍有 {count, plural, other {# 处差异}}。",
+          "open": "打开偏差"
+        },
+        "observation": {
+          "label": "观察",
+          "figure": "读取 {events, plural, other {# 个事件}}，{suggestions, plural, other {# 条建议}}",
+          "pass": "从防火墙日志读取了 {events, plural, other {# 个事件}}，忽略了 {dropped, plural, other {# 个泛洪数据包}}。",
+          "none": "防火墙日志中没有新事件。",
+          "pending": "正在读取日志..."
+        },
+        "unread": {
+          "label": "未读取的虚拟机",
+          "figure": "{count, plural, other {# 个虚拟机}}",
+          "fail": "无法读取它们的防火墙：在下一轮运行前保持不变。"
+        },
+        "truncated": {
+          "label": "写入被中断",
+          "fail": "运行在写入上限处停止：其余部分将在下一轮运行时写入。",
+          "held": "写入已暂停：请在横幅中确认。"
+        },
+        "errors": {
+          "label": "错误",
+          "figure": "{count, plural, other {# 个错误}}",
+          "fail": "引擎未能读取或保存全部内容："
+        }
+      },
+      "log": "日志",
+      "logEmpty": "没有步骤：没有需要写入的内容。",
+      "logLater": "运行结束后会显示步骤。",
+      "outcome": {
+        "done": "完成",
+        "failed": "失败",
+        "notRun": "未运行"
+      },
+      "runAgain": "重新运行"
+    }
   }
 }

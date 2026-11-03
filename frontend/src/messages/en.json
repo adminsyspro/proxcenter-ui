@@ -13234,6 +13234,87 @@
       }
     },
     "waitingFirstCheck": "Waiting for the first full check",
-    "readOnly": "Read-only: you need node management rights"
+    "readOnly": "Read-only: you need node management rights",
+    "check": {
+      "button": "Check now",
+      "pending": "Check requested",
+      "notDeployed": "Not deployed: apply a plan first, the engine only checks a deployed policy.",
+      "title": "Full check",
+      "runningText": "Full check in progress",
+      "queued": "Waiting for the engine (up to 60 s)",
+      "inProgress": "In progress, {seconds, number} s elapsed",
+      "progress": "{calls, plural, one {# API call} other {# API calls}}, {writes, plural, one {# write} other {# writes}}, {seconds, number} s",
+      "doneSummary": "Checked in {seconds, number} s with {calls, plural, one {# API call} other {# API calls}}",
+      "failed": "The check failed: {error}",
+      "failedNoError": "The check failed.",
+      "lost": "The run of the check could not be found: the History sub-tab lists every run.",
+      "status": {
+        "pass": "passed",
+        "warn": "warning",
+        "fail": "failed",
+        "info": "not measured",
+        "pending": "reading..."
+      },
+      "rows": {
+        "inventory": {
+          "label": "Inventory read",
+          "figure": "{guests, plural, one {# guest} other {# guests}}",
+          "pass": "{guests, plural, one {# guest} other {# guests}} read, {members, plural, one {# member} other {# members}} of a zone compared with the policy."
+        },
+        "ips": {
+          "label": "IP collection",
+          "figure": "{withIps, number} of {members, number} running members with an IP",
+          "pass": "Every running member has an IP address.",
+          "warn": "{missing, plural, one {# running member has} other {# running members have}} no IP address yet: the rules by address do not cover them.",
+          "none": "The IP addresses were not collected during this check.",
+          "pending": "Reading the IP collection..."
+        },
+        "objects": {
+          "label": "Proxmox objects compared",
+          "figure": "{steps, plural, one {# step} other {# steps}} planned, {writes, plural, one {# write} other {# writes}} done",
+          "pass": "Proxmox matched the policy: nothing was written.",
+          "warn": "Proxmox differed from the policy: the engine realigned it.",
+          "fail": "{failed, plural, one {# step} other {# steps}} failed:"
+        },
+        "drifts": {
+          "label": "Drifts",
+          "figure": "{count, plural, one {# drift} other {# drifts}}",
+          "pass": "No drift: Proxmox matches the policy.",
+          "warn": "{count, plural, one {# difference remains} other {# differences remain}} between the policy and Proxmox.",
+          "open": "Open Drifts"
+        },
+        "observation": {
+          "label": "Observation",
+          "figure": "{events, plural, one {# event read} other {# events read}}, {suggestions, plural, one {# suggestion} other {# suggestions}}",
+          "pass": "{events, plural, one {# event read} other {# events read}} in the firewall logs, {dropped, plural, one {# flooded packet ignored} other {# flooded packets ignored}}.",
+          "none": "No new event in the firewall logs.",
+          "pending": "Reading the logs..."
+        },
+        "unread": {
+          "label": "Guests not read",
+          "figure": "{count, plural, one {# guest} other {# guests}}",
+          "fail": "Their firewall could not be read: they are left as they are until the next pass."
+        },
+        "truncated": {
+          "label": "Writes cut short",
+          "fail": "The run stopped at the write cap: the rest is written at the next pass.",
+          "held": "Writes are on hold: confirm them in the banner."
+        },
+        "errors": {
+          "label": "Errors",
+          "figure": "{count, plural, one {# error} other {# errors}}",
+          "fail": "The engine could not read or save everything:"
+        }
+      },
+      "log": "Log",
+      "logEmpty": "No step: there was nothing to write.",
+      "logLater": "The steps show once the run has ended.",
+      "outcome": {
+        "done": "done",
+        "failed": "failed",
+        "notRun": "not run"
+      },
+      "runAgain": "Run again"
+    }
   }
 }

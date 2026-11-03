@@ -13235,6 +13235,87 @@
       }
     },
     "waitingFirstCheck": "En attente du premier contrôle complet",
-    "readOnly": "Lecture seule : il vous faut le droit de gérer les nœuds"
+    "readOnly": "Lecture seule : il vous faut le droit de gérer les nœuds",
+    "check": {
+      "button": "Vérifier maintenant",
+      "pending": "Vérification demandée",
+      "notDeployed": "Non déployé : appliquez d'abord un plan, le moteur ne vérifie qu'une politique déployée.",
+      "title": "Vérification complète",
+      "runningText": "Vérification complète en cours",
+      "queued": "En attente du moteur (jusqu'à 60 s)",
+      "inProgress": "En cours, {seconds, number} s écoulées",
+      "progress": "{calls, plural, one {# appel API} other {# appels API}}, {writes, plural, one {# écriture} other {# écritures}}, {seconds, number} s",
+      "doneSummary": "Vérifié en {seconds, number} s avec {calls, plural, one {# appel API} other {# appels API}}",
+      "failed": "La vérification a échoué : {error}",
+      "failedNoError": "La vérification a échoué.",
+      "lost": "L'exécution de la vérification est introuvable : le sous-onglet Historique liste toutes les exécutions.",
+      "status": {
+        "pass": "réussi",
+        "warn": "avertissement",
+        "fail": "échec",
+        "info": "non mesuré",
+        "pending": "lecture..."
+      },
+      "rows": {
+        "inventory": {
+          "label": "Lecture de l'inventaire",
+          "figure": "{guests, plural, one {# invité} other {# invités}}",
+          "pass": "{guests, plural, one {# invité lu} other {# invités lus}}, {members, plural, one {# membre} other {# membres}} d'une zone comparés à la politique."
+        },
+        "ips": {
+          "label": "Collecte des adresses IP",
+          "figure": "{withIps, number} membres actifs sur {members, number} avec une IP",
+          "pass": "Chaque membre actif a une adresse IP.",
+          "warn": "{missing, plural, one {# membre actif n'a} other {# membres actifs n'ont}} pas encore d'adresse IP : les règles par adresse ne les couvrent pas.",
+          "none": "Les adresses IP n'ont pas été collectées pendant cette vérification.",
+          "pending": "Lecture de la collecte des IP..."
+        },
+        "objects": {
+          "label": "Objets Proxmox comparés",
+          "figure": "{steps, plural, one {# étape prévue} other {# étapes prévues}}, {writes, plural, one {# écriture faite} other {# écritures faites}}",
+          "pass": "Proxmox correspondait à la politique : rien n'a été écrit.",
+          "warn": "Proxmox s'écartait de la politique : le moteur l'a réaligné.",
+          "fail": "{failed, plural, one {# étape a échoué} other {# étapes ont échoué}} :"
+        },
+        "drifts": {
+          "label": "Écarts",
+          "figure": "{count, plural, one {# écart} other {# écarts}}",
+          "pass": "Aucun écart : Proxmox correspond à la politique.",
+          "warn": "{count, plural, one {# différence subsiste} other {# différences subsistent}} entre la politique et Proxmox.",
+          "open": "Ouvrir les écarts"
+        },
+        "observation": {
+          "label": "Observation",
+          "figure": "{events, plural, one {# événement lu} other {# événements lus}}, {suggestions, plural, one {# suggestion} other {# suggestions}}",
+          "pass": "{events, plural, one {# événement lu} other {# événements lus}} dans les journaux du pare-feu, {dropped, plural, one {# paquet inondé ignoré} other {# paquets inondés ignorés}}.",
+          "none": "Aucun nouvel événement dans les journaux du pare-feu.",
+          "pending": "Lecture des journaux..."
+        },
+        "unread": {
+          "label": "Invités non lus",
+          "figure": "{count, plural, one {# invité} other {# invités}}",
+          "fail": "Leur pare-feu n'a pas pu être lu : ils restent en l'état jusqu'au prochain passage."
+        },
+        "truncated": {
+          "label": "Écritures interrompues",
+          "fail": "L'exécution s'est arrêtée au plafond d'écritures : le reste est écrit au prochain passage.",
+          "held": "Les écritures sont suspendues : confirmez-les dans le bandeau."
+        },
+        "errors": {
+          "label": "Erreurs",
+          "figure": "{count, plural, one {# erreur} other {# erreurs}}",
+          "fail": "Le moteur n'a pas pu tout lire ou tout enregistrer :"
+        }
+      },
+      "log": "Journal",
+      "logEmpty": "Aucune étape : il n'y avait rien à écrire.",
+      "logLater": "Les étapes s'affichent une fois l'exécution terminée.",
+      "outcome": {
+        "done": "fait",
+        "failed": "échec",
+        "notRun": "non exécuté"
+      },
+      "runAgain": "Relancer"
+    }
   }
 }

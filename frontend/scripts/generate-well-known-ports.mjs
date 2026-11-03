@@ -17,11 +17,10 @@ const ALIASES = {
 }
 
 // What the table keeps: every IANA entry of the well-known range (port below 1024), and above it only the services
-// admins recognise (this list, which also overrides the IANA name of a port below 1024). Ports from 49152 up (the
-// dynamic range) are never named. [port or [from, to], name, protocols]
+// admins recognise (this list, which also overrides the IANA name of a port below 1024, and may name a dynamic port
+// such as WireGuard's); the IANA bulk is never kept above 1024. [port or [from, to], name, protocols]
 const T = ['tcp'], U = ['udp'], TU = ['tcp', 'udp']
 const WELL_KNOWN_LIMIT = 1024
-const DYNAMIC_FROM = 49152
 const CURATED = [
   [20, 'FTP data', T], [21, 'FTP', T], [22, 'SSH', T], [23, 'Telnet', T], [25, 'SMTP', T], [53, 'DNS', TU], [67, 'DHCP', U], [68, 'DHCP', U], [69, 'TFTP', U],
   [80, 'HTTP', T], [88, 'Kerberos', TU], [110, 'POP3', T], [111, 'RPC', TU], [123, 'NTP', U], [135, 'MS RPC', T], [139, 'NetBIOS', T], [143, 'IMAP', T],
@@ -38,7 +37,7 @@ const CURATED = [
   [8443, 'HTTPS-alt', T], [8472, 'VXLAN', U], [8500, 'Consul', T], [8600, 'Consul DNS', TU], [8883, 'MQTT TLS', T], [8888, 'HTTP-alt', T], [9000, 'HTTP-alt', T],
   [9042, 'Cassandra', T], [9090, 'Prometheus', T], [9092, 'Kafka', T], [9093, 'Alertmanager', T], [9100, 'node-exporter', T], [9200, 'Elasticsearch', T],
   [9300, 'Elasticsearch', T], [9418, 'Git', T], [10000, 'Webmin', T], [10250, 'kubelet', T], [11211, 'Memcached', TU], [15672, 'RabbitMQ management', T],
-  [16509, 'libvirt', T], [[27017, 27019], 'MongoDB', T],
+  [16509, 'libvirt', T], [[27017, 27019], 'MongoDB', T], [51820, 'WireGuard', U],
 ]
 
 /** RFC 4180 rows (quoted fields may hold commas, quotes and line breaks). */
@@ -79,7 +78,7 @@ for (const key of [...points.keys()]) if (Number(key.split('/')[1]) >= WELL_KNOW
 for (const [port, name, protos] of CURATED) {
   for (const proto of protos) {
     if (Array.isArray(port)) ranges.push([proto, port[0], port[1], name])
-    else if (port < DYNAMIC_FROM) points.set(`${proto}/${port}`, name)
+    else points.set(`${proto}/${port}`, name)
   }
 }
 

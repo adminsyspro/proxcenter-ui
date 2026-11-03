@@ -35,6 +35,7 @@ describe('serviceLabel', () => {
     expect(serviceLabel('udp', 4789)).toBe('VXLAN')
     expect(serviceLabel('tcp', 3389)).toBe('RDP')
     expect(serviceLabel('tcp', 9092)).toBe('Kafka')
+    expect(serviceLabel('udp', 51820)).toBe('WireGuard')
   })
 
   it('names a port of a range and leaves a port outside it', () => {
@@ -49,7 +50,6 @@ describe('serviceLabel', () => {
     expect(serviceLabel('tcp', 2000)).toBe('tcp/2000')
     expect(serviceLabel('tcp', 5555)).toBe('tcp/5555')
     expect(serviceLabel('tcp', 42001)).toBe('tcp/42001')
-    expect(serviceLabel('udp', 51820)).toBe('udp/51820')
     expect(serviceLabel('tcp', 60000)).toBe('tcp/60000')
   })
 
@@ -88,10 +88,9 @@ describe('serviceTitle and the tokens of the flows', () => {
 })
 
 describe('the generated table', () => {
-  it('stays small, has no name from the dynamic range and keeps a range as a range', () => {
+  it('stays small, keeps no IANA bulk above 1024 and keeps a range as a range', () => {
     const ports = Object.keys(WELL_KNOWN_PORTS).map(k => Number(k.split('/')[1]))
     expect(ports.length).toBeGreaterThan(1000)
-    expect(Math.max(...ports)).toBeLessThan(49152)
     expect(WELL_KNOWN_RANGES.some(r => r[0] === 'tcp' && r[1] === 5900 && r[2] === 5999 && r[3] === 'VNC')).toBe(true)
     expect(ports.filter(p => p >= 1024).length).toBeLessThan(250)
   })

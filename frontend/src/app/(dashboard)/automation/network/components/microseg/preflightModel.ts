@@ -8,7 +8,7 @@ export type PreflightMessage = {
   /** Under microsegPilot.preflight.checks, or null for an unknown id (shown as the id). */
   title: string | null
   /** Under microsegPilot.preflight, with its values, or null when the check says nothing more. */
-  detail: { key: string; values?: Record<string, string> } | null
+  detail: { key: string; values?: Record<string, string | number> } | null
 }
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
@@ -36,6 +36,10 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
       return rate ? { key: 'checks.log_ratelimit.pass', values: { rate } } : { key: 'checks.log_ratelimit.disabled' }
     }
     case 'self_in_zone':
+      if (check.status === 'warn' && typeof detail.unchecked === 'number') {
+        const key = detail.reason === 'collect_cap' ? 'checks.self_in_zone.uncheckedCap' : 'checks.self_in_zone.uncheckedTimeout'
+        return { key, values: { count: detail.unchecked } }
+      }
       if (check.status === 'warn') return { key: 'checks.self_in_zone.inZone', values: { zone: text(detail.zone), self_ip: text(detail.self_ip) } }
       return { key: detail.self_ip === 'unknown' ? 'checks.self_in_zone.unknown' : 'checks.self_in_zone.pass' }
     default:

@@ -13333,7 +13333,9 @@
           "title": "ProxCenter address",
           "pass": "ProxCenter is outside the active zones.",
           "unknown": "The address of ProxCenter could not be detected, so this check cannot tell. Set it in the settings.",
-          "inZone": "ProxCenter ({self_ip}) is inside the zone {zone}: enforcing it could cut the connection."
+          "inZone": "ProxCenter ({self_ip}) is inside the zone {zone}: enforcing it could cut the connection.",
+          "uncheckedTimeout": "{count, plural, one {# member} other {# members}} could not be checked (collection cut short): ProxCenter may be inside one of them.",
+          "uncheckedCap": "{count, plural, one {# member} other {# members}} could not be checked (more than the collection cap): ProxCenter may be inside one of them."
         }
       },
       "rateUnits": {

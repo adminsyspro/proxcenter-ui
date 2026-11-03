@@ -13333,7 +13333,9 @@
           "title": "ProxCenter 주소",
           "pass": "ProxCenter는 활성 영역 밖에 있습니다.",
           "unknown": "ProxCenter 주소를 감지하지 못해 이 점검은 판단할 수 없습니다. 설정에서 지정하세요.",
-          "inZone": "ProxCenter({self_ip})가 {zone} 영역 안에 있습니다. 강제 적용하면 연결이 끊길 수 있습니다."
+          "inZone": "ProxCenter({self_ip})가 {zone} 영역 안에 있습니다. 강제 적용하면 연결이 끊길 수 있습니다.",
+          "uncheckedTimeout": "{count, plural, other {#개 멤버를 확인하지 못했습니다}} (수집이 중단됨). ProxCenter가 그중 하나에 속해 있을 수 있습니다.",
+          "uncheckedCap": "{count, plural, other {#개 멤버를 확인하지 못했습니다}} (수집 한도 초과). ProxCenter가 그중 하나에 속해 있을 수 있습니다."
         }
       },
       "rateUnits": {

@@ -22,7 +22,8 @@ function CheckRow({ check, onOpenWizard, onResume }: { check: PreflightCheck; on
   const { title, detail } = preflightMessage(check)
   const name = title ? t(`checks.${title}.title`) : check.id
   // The rate PVE writes ("20/second") is said with a translated unit; any other wording is shown as PVE wrote it.
-  const rate = parseRate(detail?.values?.rate)
+  const rawRate = detail?.values?.rate
+  const rate = parseRate(typeof rawRate === 'string' ? rawRate : undefined)
   const values = rate ? { ...detail?.values, rate: t(`rateUnits.${rate.unit}`, { count: rate.count }) } : detail?.values
   const message = detail ? t(detail.key, values) : ''
   const icon = STATUS_ICON[check.status] ?? STATUS_ICON.warn

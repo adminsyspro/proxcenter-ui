@@ -40,3 +40,17 @@ describe('a cluster firewall the emergency stop holds off', () => {
     expect(opensWizard(off)).toBe(true)
   })
 })
+
+describe('the ProxCenter address check that could not look at every member', () => {
+  const unchecked = (reason: string, n = 3) => ({ id: 'self_in_zone', status: 'warn' as const, detail: { unchecked: n, reason } })
+
+  it('says how many members were not checked, and why', () => {
+    expect(preflightMessage(unchecked('collect_timeout')).detail).toEqual({ key: 'checks.self_in_zone.uncheckedTimeout', values: { count: 3 } })
+    expect(preflightMessage(unchecked('collect_cap', 1)).detail).toEqual({ key: 'checks.self_in_zone.uncheckedCap', values: { count: 1 } })
+  })
+
+  it('keeps the zone wording when the address was found in a zone', () => {
+    const hit = { id: 'self_in_zone', status: 'warn' as const, detail: { zone: 'web', self_ip: '10.0.0.5' } }
+    expect(preflightMessage(hit).detail).toEqual({ key: 'checks.self_in_zone.inZone', values: { zone: 'web', self_ip: '10.0.0.5' } })
+  })
+})

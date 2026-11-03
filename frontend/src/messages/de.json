@@ -13001,7 +13001,9 @@
           "title": "ProxCenter-Adresse",
           "pass": "ProxCenter liegt außerhalb der aktiven Zonen.",
           "unknown": "Die Adresse von ProxCenter konnte nicht erkannt werden, diese Prüfung kann daher nichts aussagen. Legen Sie sie in den Einstellungen fest.",
-          "inZone": "ProxCenter ({self_ip}) liegt in der Zone {zone}: Sie durchzusetzen könnte die Verbindung abschneiden."
+          "inZone": "ProxCenter ({self_ip}) liegt in der Zone {zone}: Sie durchzusetzen könnte die Verbindung abschneiden.",
+          "uncheckedTimeout": "{count, plural, one {# Mitglied konnte} other {# Mitglieder konnten}} nicht geprüft werden (Erfassung abgebrochen): ProxCenter könnte in einem davon liegen.",
+          "uncheckedCap": "{count, plural, one {# Mitglied konnte} other {# Mitglieder konnten}} nicht geprüft werden (Erfassungsobergrenze überschritten): ProxCenter könnte in einem davon liegen."
         }
       },
       "rateUnits": {

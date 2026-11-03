@@ -69,6 +69,24 @@ describe('checks', () => {
     expect(within(line).getByText(/web/)).toBeTruthy()
   })
 
+  it('warns, with the count in the right plural, when members could not be checked', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'self_in_zone', status: 'warn', detail: { unchecked: 1, reason: 'collect_cap' } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'ProxCenter address: warning' })
+    expect(within(line).getByText(/1 member could not be checked \(more than the collection cap\)/)).toBeTruthy()
+  })
+
+  it('says the collection was cut short for several members', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'self_in_zone', status: 'warn', detail: { unchecked: 4, reason: 'collect_timeout' } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'ProxCenter address: warning' })
+    expect(within(line).getByText(/4 members could not be checked \(collection cut short\)/)).toBeTruthy()
+  })
+
   it('shows what PVE answered when a check could not read its source', async () => {
     mock.routes['GET /preflight'] = () => reply(200, {
       checks: [{ id: 'cluster_firewall', status: 'fail', detail: { error: 'connection refused' } }],

@@ -13334,7 +13334,9 @@
           "title": "Adresse de ProxCenter",
           "pass": "ProxCenter est hors des zones actives.",
           "unknown": "L'adresse de ProxCenter n'a pas pu être détectée, cette vérification ne peut donc pas conclure. Renseignez-la dans les réglages.",
-          "inZone": "ProxCenter ({self_ip}) est dans la zone {zone} : l'appliquer pourrait couper la connexion."
+          "inZone": "ProxCenter ({self_ip}) est dans la zone {zone} : l'appliquer pourrait couper la connexion.",
+          "uncheckedTimeout": "{count, plural, one {# membre n'a pas pu être vérifié} other {# membres n'ont pas pu être vérifiés}} (collecte interrompue) : ProxCenter peut se trouver dans l'un d'eux.",
+          "uncheckedCap": "{count, plural, one {# membre n'a pas pu être vérifié} other {# membres n'ont pas pu être vérifiés}} (au-delà du plafond de collecte) : ProxCenter peut se trouver dans l'un d'eux."
         }
       },
       "rateUnits": {

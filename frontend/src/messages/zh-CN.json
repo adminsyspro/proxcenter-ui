@@ -13333,7 +13333,9 @@
           "title": "ProxCenter 地址",
           "pass": "ProxCenter 不在任何活动区域内。",
           "unknown": "无法检测 ProxCenter 的地址，此项检查无法判断。请在设置中指定。",
-          "inZone": "ProxCenter（{self_ip}）位于区域 {zone} 内：强制执行可能会切断连接。"
+          "inZone": "ProxCenter（{self_ip}）位于区域 {zone} 内：强制执行可能会切断连接。",
+          "uncheckedTimeout": "{count, plural, other {有 # 个成员无法检查}}（收集被中断）：ProxCenter 可能位于其中之一。",
+          "uncheckedCap": "{count, plural, other {有 # 个成员无法检查}}（超出收集上限）：ProxCenter 可能位于其中之一。"
         }
       },
       "rateUnits": {

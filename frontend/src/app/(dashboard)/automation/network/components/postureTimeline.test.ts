@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import type { LensPair } from '@/lib/microseg/trafficLens'
-import type { MicrosegEvent, MicrosegZone } from '@/lib/microseg/types'
+import type { MicrosegEvent, MicrosegTraffic, MicrosegZone } from '@/lib/microseg/types'
 
 import type { PostureGuest } from './dashboardPosture'
 import {
-  BUCKET_MS, MAX_BUCKETS, MAX_VOLUME_VMIDS, VOLUME_WINDOW_MS, accumulateVmids, areaPaths, bucketXs, busiestVmids, mergeEvents, nearestBucket, postureTimeline, postureVolume, volumeWindow, type TimelineSeries, type VmSeries,
+  BUCKET_MS, MAX_BUCKETS, MAX_VOLUME_VMIDS, RANGE_SPEC, TIMELINE_RANGES, accumulateVmids, areaPaths, asRange, bucketXs, busiestVmids, historyWindow, mergeEvents, nearestBucket, postureHistory, postureTimeline, postureVolume, stepMsOf, volumeWindow, type TimelineRange, type TimelineSeries, type VmSeries,
 } from './postureTimeline'
 
 const NOW = Date.parse('2026-11-03T10:02:00Z')
@@ -56,7 +56,7 @@ describe('postureTimeline: buckets', () => {
   })
 
   it('has no bucket and no window without an event', () => {
-    expect(run()).toEqual({ series: [], buckets: [], max: 0, total: 0, windowMinutes: null })
+    expect(run()).toEqual({ stepMs: BUCKET_MS, series: [], buckets: [], max: 0, total: 0, windowMinutes: null })
   })
 })
 
@@ -127,7 +127,7 @@ describe('mergeEvents', () => {
 })
 
 describe('sFlow volume', () => {
-  const { from, to } = volumeWindow(NOW)
+  const { from, to } = volumeWindow(NOW, '1h')
   /** A point as InfluxDB's aggregateWindow stamps it: at the END of its 5-minute window, `ago` windows before the last. */
   const point = (ago: number, bytes_in: number, bytes_out: number) => ({ time: (to - ago * BUCKET_MS) / 1000, bytes_in, bytes_out })
   const SERIES: VmSeries[] = [
@@ -137,18 +137,27 @@ describe('sFlow volume', () => {
     { vmid: 999, points: [point(0, 1, 7)] },
   ]
   const vol = (over: Partial<Parameters<typeof postureVolume>[0]> = {}) => postureVolume({
-    series: SERIES, groupBy: 'zone', zones: ZONES, tagPrefix: 'zone-', guests: GUESTS, slices: [...ZONE_SLICES, slice('zone:zdb', 'zone', '#444444', 'db')], from, to, ...over,
+    series: SERIES, groupBy: 'zone', zones: ZONES, tagPrefix: 'zone-', guests: GUESTS, slices: [...ZONE_SLICES, slice('zone:zdb', 'zone', '#444444', 'db')], range: '1h', from, to, ...over,
   })
 
-  it('reads the last 2 hours on 5-minute edges', () => {
-    expect(to - from).toBe(VOLUME_WINDOW_MS)
+  it('reads the range, ending on the edge of the InfluxDB window of that range and starting on the step grid', () => {
+    expect(to - from).toBe(RANGE_SPEC['1h'].ms)
     expect(to % BUCKET_MS).toBe(0)
     expect(to).toBeGreaterThan(NOW)
+    for (const range of TIMELINE_RANGES) {
+      const w = volumeWindow(NOW, range)
+      const granularity = { '5m': 300_000, '15m': 900_000, '1h': 3_600_000 }[RANGE_SPEC[range].granularity]
+      expect(w.to % granularity, range).toBe(0)
+      expect(w.to, range).toBeGreaterThan(NOW)
+      expect(w.to - w.from, range).toBeLessThanOrEqual(RANGE_SPEC[range].ms)
+      expect(w.to - w.from, range).toBeGreaterThan(RANGE_SPEC[range].ms - stepMsOf(range))
+      expect(w.from % stepMsOf(range), range).toBe(0)
+    }
   })
 
   it('puts a point in the window it closes: the one stamped with the window end is the last bucket, none is dropped', () => {
-    const v = vol({ series: [{ vmid: 101, points: [point(0, 0, 1), point(23, 0, 2), point(24, 0, 4)] }] })
-    // point(0) closes the last bucket; point(23) closes the first; point(24) closes the window before `from`.
+    const v = vol({ series: [{ vmid: 101, points: [point(0, 0, 1), point(11, 0, 2), point(12, 0, 4)] }] })
+    // point(0) closes the last bucket; point(11) closes the first; point(12) closes the window before `from`.
     expect(v.buckets.at(-1)!.total).toBe(1)
     expect(v.buckets[0].total).toBe(2)
     expect(v.total).toBe(3)
@@ -156,7 +165,7 @@ describe('sFlow volume', () => {
 
   it('stacks by zone the bytes the members sent, per 5-minute bucket, a VM the connection does not hold as Unknown', () => {
     const v = vol()
-    expect(v.buckets).toHaveLength(VOLUME_WINDOW_MS / BUCKET_MS)
+    expect(v.buckets).toHaveLength(RANGE_SPEC['1h'].ms / BUCKET_MS)
     expect(v.buckets.at(-1)!.counts).toEqual({ 'zone:zweb': 1000, 'zone:zdb': 5, unzoned: 300, external: 7 })
     expect(v.buckets.at(-2)!.counts).toEqual({ 'zone:zweb': 2000 })
     expect(v.series.map(s => s.key)).toEqual(['zone:zweb', 'external', 'unzoned', 'zone:zdb'])
@@ -170,7 +179,116 @@ describe('sFlow volume', () => {
   })
 
   it('leaves out the points outside the window', () => {
-    expect(vol({ series: [{ vmid: 101, points: [point(36, 1, 1)] }, { vmid: 102, points: null }] }).total).toBe(0)
+    expect(vol({ series: [{ vmid: 101, points: [point(13, 1, 1)] }, { vmid: 102, points: null }] }).total).toBe(0)
+  })
+})
+
+describe('sFlow volume over a long range', () => {
+  const HOUR = 3_600_000
+  const w = volumeWindow(NOW, '7d')
+  const vol = (range: TimelineRange, series: VmSeries[]) => {
+    const win = volumeWindow(NOW, range)
+    return postureVolume({ series, groupBy: 'zone', zones: ZONES, tagPrefix: 'zone-', guests: GUESTS, slices: ZONE_SLICES, range, ...win })
+  }
+
+  it('sums the 1-hour windows into the 3-hour buckets of a week, by the window each one closes', () => {
+    // Windows closing at w.to, w.to - 1 h, w.to - 2 h are one bucket when they share the same 3-hour step (to is an hour edge).
+    const stepStart = Math.floor((w.to - 1) / (3 * HOUR)) * 3 * HOUR
+    const closes = [w.to, w.to - HOUR].filter(t => t - HOUR >= stepStart)
+    const v = vol('7d', [{ vmid: 101, points: [...closes.map(t => ({ time: t / 1000, bytes_in: 0, bytes_out: 10 })), { time: (stepStart) / 1000, bytes_in: 0, bytes_out: 5 }] }])
+    expect(v.stepMs).toBe(3 * HOUR)
+    expect(v.buckets.every((b, i) => i === 0 || b.start - v.buckets[i - 1].start === 3 * HOUR)).toBe(true)
+    expect(v.buckets.at(-1)!.start).toBe(stepStart)
+    expect(v.buckets.at(-1)!.total).toBe(closes.length * 10)
+    // The window closing at stepStart belongs to the previous bucket.
+    expect(v.buckets.at(-2)!.total).toBe(5)
+    expect(v.windowMinutes).toBe(7 * 24 * 60)
+  })
+
+  it('draws 12 buckets for an hour and 56 or 57 for a week', () => {
+    expect(vol('1h', []).buckets).toHaveLength(12)
+    expect([56, 57]).toContain(vol('7d', []).buckets.length)
+    expect(vol('24h', []).buckets).toHaveLength(48)
+    expect(vol('6h', []).buckets).toHaveLength(24)
+  })
+})
+
+describe('the persisted history (UA55)', () => {
+  const win = (range: TimelineRange) => historyWindow(NOW, range)
+  const at = (ms: number) => new Date(ms).toISOString()
+  const row = (ms: number, over: Partial<MicrosegTraffic['buckets'][number]> = {}) => ({ at: at(ms), zone: 'db', src_zone: 'web', verdict: 'would_block', hits: 1, ...over })
+  const answer = (range: TimelineRange, buckets: MicrosegTraffic['buckets']): MicrosegTraffic => {
+    const { from, to } = win(range)
+    return { step: RANGE_SPEC[range].stepSec, from: at(from), to: at(to), buckets }
+  }
+  const run = (range: TimelineRange, buckets: MicrosegTraffic['buckets'], over: Partial<Parameters<typeof postureHistory>[0]> = {}) =>
+    postureHistory({ history: answer(range, buckets), range, verdict: 'all', zones: ZONES, slices: ZONE_SLICES, ...over })
+
+  it('asks the range up to the next 5-minute edge, starting on the step grid within the range', () => {
+    for (const range of TIMELINE_RANGES) {
+      const { from, to } = win(range)
+      expect(to).toBe(Date.parse('2026-11-03T10:05:00Z'))
+      expect(from % stepMsOf(range), range).toBe(0)
+      expect(to - from, range).toBeLessThanOrEqual(RANGE_SPEC[range].ms)
+      expect(to - from, range).toBeGreaterThan(RANGE_SPEC[range].ms - stepMsOf(range))
+    }
+    expect(RANGE_SPEC['1h'].stepSec).toBe(300)
+    expect(RANGE_SPEC['6h'].stepSec).toBe(900)
+    expect(RANGE_SPEC['24h'].stepSec).toBe(1800)
+    expect(RANGE_SPEC['7d'].stepSec).toBe(10_800)
+    expect(Object.values(RANGE_SPEC).every(r => r.stepSec % 300 === 0 && r.stepSec >= 300 && r.stepSec <= 21_600)).toBe(true)
+    expect(Object.values(RANGE_SPEC).every(r => r.stepSec * 1000 % { '5m': 300_000, '15m': 900_000, '1h': 3_600_000 }[r.granularity] === 0)).toBe(true)
+  })
+
+  it('stacks the hits per 5-minute bucket by source zone, in the donut order and colours', () => {
+    const last = win('1h').to - 300_000
+    const t = run('1h', [
+      row(last, { hits: 3 }), row(last, { hits: 2, zone: 'web', verdict: 'blocked' }),
+      row(last - 300_000, { src_zone: '', hits: 4 }), row(last - 600_000, { src_zone: 'old-name', hits: 1 }),
+    ])
+    expect(t.range).toBe('1h')
+    expect(t.stepMs).toBe(300_000)
+    expect(t.buckets).toHaveLength(12)
+    expect(t.buckets.at(-1)!.counts).toEqual({ 'zone:zweb': 5 })
+    expect(t.buckets.at(-2)!.counts).toEqual({ external: 4 })
+    expect(t.buckets.at(-3)!.counts).toEqual({ other: 1 })
+    expect(t.series.map(s => s.key)).toEqual(['zone:zweb', 'external', 'other'])
+    expect(t).toMatchObject({ total: 10, max: 5, windowMinutes: 60 })
+  })
+
+  it('sums the buckets that fall in the same 3-hour step of a week, and leaves out what is outside the range', () => {
+    const { from, to } = win('7d')
+    const lastStep = Math.floor((to - 1) / 10_800_000) * 10_800_000
+    const t = run('7d', [
+      row(lastStep, { hits: 10 }), row(lastStep, { hits: 5, src_zone: '' }), row(lastStep - 10_800_000, { hits: 7 }),
+      row(from - 10_800_000, { hits: 100 }), row(to + 10_800_000, { hits: 100 }),
+    ])
+    expect(t.stepMs).toBe(10_800_000)
+    expect(t.buckets[0].start).toBe(from)
+    expect(t.buckets.at(-1)!.start).toBe(lastStep)
+    expect(t.buckets.at(-1)!.counts).toEqual({ 'zone:zweb': 10, external: 5 })
+    expect(t.buckets.at(-2)!.total).toBe(7)
+    expect(t.total).toBe(22)
+    expect(t.windowMinutes).toBe(7 * 24 * 60)
+  })
+
+  it('keeps the would-be-blocked or the blocked rows only from the verdict', () => {
+    const last = win('1h').to - 300_000
+    const rows = [row(last, { hits: 3 }), row(last, { hits: 2, verdict: 'blocked' })]
+    expect(run('1h', rows, { verdict: 'blocked' }).total).toBe(2)
+    expect(run('1h', rows, { verdict: 'would_block' }).total).toBe(3)
+    expect(run('1h', rows).total).toBe(5)
+  })
+
+  it('has its buckets and no hit for an empty answer', () => {
+    expect(run('6h', [])).toMatchObject({ total: 0, max: 0, series: [], range: '6h' })
+    expect(run('6h', []).buckets).toHaveLength(24)
+  })
+
+  it('reads a range back from storage, the default for anything else', () => {
+    expect(TIMELINE_RANGES.map(asRange)).toEqual(['1h', '6h', '24h', '7d'])
+    expect(asRange('30d')).toBe('1h')
+    expect(asRange(null)).toBe('1h')
   })
 })
 

@@ -9085,16 +9085,25 @@
       "postureTimelineWindow": "ventana cubierta: {minutes, plural, one {último minuto} other {últimos # min}} (memoria del orquestador)",
       "postureTimelineVerdict": "Veredicto",
       "postureTimelineAll": "Todos",
-      "postureTimelineLabel": "Eventos observados cada 5 minutos, apilados por grupo",
+      "postureTimelineLabel": "Eventos observados a lo largo del tiempo, apilados por grupo",
       "postureTimelineEvents": "{count, plural, one {# evento} other {# eventos}}",
       "postureTimelineUnavailable": "Eventos observados no disponibles",
       "postureTimelineEmpty": "Ningún evento observado en la memoria del orquestador",
       "postureVolumeTab": "Volumen (sFlow)",
-      "postureVolumeCaptionSent": "bytes enviados por grupo, últimas 2 horas (sFlow)",
-      "postureVolumeCaptionReceived": "bytes recibidos por grupo, últimas 2 horas (sFlow)",
-      "postureVolumeEmpty": "Ningún volumen sFlow en las últimas 2 horas",
-      "postureVolumeLabel": "Bytes sFlow cada 5 minutos, apilados por grupo",
-      "postureTimelineWindowHours": "ventana cubierta: {hours, plural, one {última hora} other {últimas # horas}} (memoria del orquestador)"
+      "postureVolumeCaptionSent": "bytes enviados por grupo, periodo de {range} (sFlow)",
+      "postureVolumeCaptionReceived": "bytes recibidos por grupo, periodo de {range} (sFlow)",
+      "postureVolumeEmpty": "Ningún volumen sFlow en un periodo de {range}",
+      "postureVolumeLabel": "Bytes sFlow a lo largo del tiempo, apilados por grupo",
+      "postureTimelineWindowHours": "ventana cubierta: {hours, plural, one {última hora} other {últimas # horas}} (memoria del orquestador)",
+      "postureRange1h": "1 h",
+      "postureRange6h": "6 h",
+      "postureRange24h": "24 h",
+      "postureRange7d": "7 d",
+      "postureRangeLabel": "Periodo",
+      "postureRangeGrouping": "La agrupación por VLAN y por nodo usa la memoria del orquestador (solo los últimos eventos)",
+      "postureRangeUnavailable": "El historial no está disponible en este orquestador: se muestran los últimos eventos de su memoria",
+      "postureTimelineHistory": "historial, periodo de {range}",
+      "postureTimelineEmptyRange": "Ningún evento observado en este periodo"
     },
     "rulesOnDemand": {
       "chip": "Reglas al abrir",
@@ -13744,7 +13753,9 @@
       "hitsOnDefault": "Proxmox no cuenta coincidencias por regla: los flujos bloqueados o que se bloquearían están en la denegación predeterminada de la zona",
       "discardSection": "Descartar esta sección",
       "conflictOptions": "las opciones del cortafuegos de una sección cambiaron en Proxmox desde que se leyeron. Descarte los cambios de esa sección y publique de nuevo: las demás secciones conservan los suyos",
-      "publishAgain": "Publique de nuevo: los cambios no aplicados siguen en el borrador."
+      "publishAgain": "Publique de nuevo: los cambios no aplicados siguen en el borrador.",
+      "summary": "Última publicación: {applied} de {total} cambios aplicados",
+      "summaryStopped": "Última publicación: {applied} de {total} cambios aplicados, detenida en {kind} en {scope}"
     }
   }
 }

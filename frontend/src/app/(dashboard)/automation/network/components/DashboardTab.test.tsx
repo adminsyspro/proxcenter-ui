@@ -17,6 +17,7 @@ import DashboardTab from './DashboardTab'
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  try { window.localStorage.clear() } catch { /* no storage */ }
 })
 
 const row = (vmid: number, status: string, enabled: boolean) => ({
@@ -42,6 +43,8 @@ type Stub = {
   suggestions?: unknown[] | 'pending' | 'error'
   vms?: unknown[] | 'pending'
   events?: unknown[] | 'pending' | 'error'
+  /** The persisted history route; absent = an orchestrator without it (404). */
+  traffic?: { buckets: unknown[] } | 'error' | 'pending'
   pairs?: unknown[]
   sflowSeries?: unknown[] | 'error'
 }
@@ -83,6 +86,13 @@ function stubReads(over: Stub = {}) {
       if (url.includes('endpoint=ip-pairs')) return answer(over.pairs ?? [])
       if (over.sflowSeries === 'error') return answer({ error: 'InfluxDB not configured' }, 500)
       return answer(over.sflowSeries ?? [])
+    }
+    if (url.includes('/traffic?')) {
+      if (over.traffic === 'pending') return pending()
+      if (over.traffic === 'error') return answer({ code: 'NOT_LEADER', error: 'not the leader' }, 503)
+      if (!over.traffic) return answer({ code: 'NOT_FOUND', error: 'no' }, 404)
+      const q = new URL(url, 'http://x').searchParams
+      return answer({ step: Number(q.get('step')), from: q.get('from'), to: q.get('to'), ...over.traffic })
     }
     if (url.includes('/events?')) {
       if (over.events === 'pending') return pending()
@@ -388,6 +398,154 @@ describe('DashboardTab: traffic over time', () => {
   })
 })
 
+describe('DashboardTab: time range (UA55)', () => {
+  const chip = (range: string) => screen.getByTestId(`range-${range}`)
+  const trafficUrls = () => fetchedUrls().filter(u => u.includes('/microseg/conn-1/traffic?'))
+  const eventReads = () => fetchedUrls().filter(u => u.includes('/microseg/conn-1/events?'))
+  /** A row of the history, `buckets` 5-minute buckets before the open one (the window ends at the next 5-minute edge). */
+  const row = (buckets: number, over: Record<string, unknown> = {}) => ({
+    at: new Date((Math.floor(Date.now() / 300_000) - buckets) * 300_000).toISOString(), zone: 'db', src_zone: 'web', verdict: 'would_block', hits: 4, ...over,
+  })
+
+  it('reads the persisted history for the range, 1 h by default in steps of 300 s, and no event of the ring', async () => {
+    postureReads({ traffic: { buckets: [row(0), row(0, { hits: 3, verdict: 'blocked' }), row(2, { src_zone: '', hits: 5 })] } })
+    renderDashboard({ enable: 1 })
+
+    await waitFor(() => expect(screen.getByTestId('timeline-max').textContent).toBe('7'))
+    expect(screen.getByTestId('timeline-caption').textContent).toBe('history, last 1 h')
+    const [url] = trafficUrls()
+    const q = new URL(url, 'http://x').searchParams
+    expect(q.get('step')).toBe('300')
+    expect(Date.parse(q.get('to')!) - Date.parse(q.get('from')!)).toBeLessThanOrEqual(3_600_000)
+    expect(within(screen.getByTestId('timeline')).getAllByTestId(/^area-/).map(g => g.getAttribute('data-testid'))).toEqual(['area-zone:zweb', 'area-external'])
+    expect(eventReads()).toHaveLength(0)
+    // The verdict toggle filters the history rows.
+    fireEvent.click(within(screen.getByTestId('timeline')).getByRole('button', { name: 'Blocked' }))
+    await waitFor(() => expect(screen.getByTestId('timeline-max').textContent).toBe('3'))
+    expect(trafficUrls()).toHaveLength(1)
+  })
+
+  it('reads the steps of each range, and remembers the range per browser', async () => {
+    postureReads({ traffic: { buckets: [row(0)] } })
+    renderDashboard({ enable: 1 })
+    await screen.findByTestId('timeline-caption')
+
+    const steps: Record<string, string> = { '6h': '900', '24h': '1800', '7d': '10800' }
+    for (const [range, step] of Object.entries(steps)) {
+      fireEvent.click(chip(range))
+      await waitFor(() => expect(trafficUrls().some(u => new URL(u, 'http://x').searchParams.get('step') === step)).toBe(true))
+      expect(screen.getByTestId('timeline-caption').textContent).toBe(`history, last ${range === '7d' ? '7 d' : range.replace('h', ' h')}`)
+    }
+    expect(window.localStorage.getItem('proxcenter.microseg.postureRange')).toBe('7d')
+
+    cleanup()
+    renderDashboard({ enable: 1 })
+    await screen.findByTestId('timeline-caption')
+    expect(chip('7d')).toHaveAttribute('aria-pressed', 'true')
+    expect(chip('1h')).toHaveAttribute('aria-pressed', 'false')
+    expect(trafficUrls().at(-1)).toContain('step=10800')
+  })
+
+  it('labels a week with the weekday', async () => {
+    postureReads({ traffic: { buckets: [row(0)] } })
+    renderDashboard({ enable: 1 })
+    await screen.findByTestId('timeline-caption')
+    fireEvent.click(chip('7d'))
+    await waitFor(() => expect(trafficUrls().some(u => u.includes('step=10800'))).toBe(true))
+    await waitFor(() => expect(screen.getByTestId('timeline-caption').textContent).toBe('history, last 7 d'))
+    await waitFor(() => {
+      const labels = [...screen.getByTestId('timeline').querySelectorAll('svg text')].map(n => n.textContent ?? '')
+      expect(labels.some(l => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/.test(l))).toBe(true)
+    })
+  })
+
+  it('starts on an unknown stored value with the default range', async () => {
+    window.localStorage.setItem('proxcenter.microseg.postureRange', '30d')
+    postureReads({ traffic: { buckets: [row(0)] } })
+    renderDashboard({ enable: 1 })
+    await screen.findByTestId('timeline-caption')
+    expect(chip('1h')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('falls back to the events of the ring, with the memory caption, when the history is not served', async () => {
+    postureReads({ events: [ev(0), ev(42)] })
+    renderDashboard({ enable: 1 })
+
+    expect((await screen.findByTestId('timeline-caption')).textContent).toBe('covered window: last 42 min (orchestrator memory)')
+    expect(trafficUrls().length).toBeGreaterThan(0)
+    expect(eventReads().length).toBeGreaterThan(0)
+    expect(chip('6h')).toBeDisabled()
+    cleanup()
+
+    postureReads({ events: [ev(0)], traffic: 'error' })
+    renderDashboard({ enable: 1 })
+    expect((await screen.findByTestId('timeline-caption')).textContent).toBe('covered window: last 1 min (orchestrator memory)')
+    expect(screen.getByTestId('timeline-max').textContent).toBe('1')
+  })
+
+  it('says the history is not served on the disabled chips', async () => {
+    postureReads({ events: [ev(0)] })
+    renderDashboard({ enable: 1 })
+    await screen.findByTestId('timeline-caption')
+    fireEvent.mouseOver(screen.getByTestId('timeline-range-wrap'))
+    expect(await screen.findByText('The history is not available on this orchestrator: showing the last events from its memory')).toBeInTheDocument()
+  })
+
+  it('keeps the events of the ring and disables the chips, with a tooltip, for a grouping by VLAN or node', async () => {
+    postureReads({ traffic: { buckets: [row(0)] }, events: [ev(0)], vms: VMS })
+    renderDashboard({ enable: 1 })
+    await screen.findByTestId('timeline-caption')
+    expect(eventReads()).toHaveLength(0)
+    expect(chip('24h')).toBeEnabled()
+
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Group by' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'VLAN' }))
+    await waitFor(() => expect(screen.getByTestId('timeline-caption').textContent).toBe('covered window: last 1 min (orchestrator memory)'))
+    expect(eventReads().length).toBeGreaterThan(0)
+    for (const range of ['1h', '6h', '24h', '7d']) expect(chip(range)).toBeDisabled()
+    fireEvent.mouseOver(screen.getByTestId('timeline-range-wrap'))
+    expect(await screen.findByText('VLAN and node grouping use the orchestrator memory (last events only)')).toBeInTheDocument()
+
+    // Back to the zones: the history again.
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Group by' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Zone' }))
+    await waitFor(() => expect(screen.getByTestId('timeline-caption').textContent).toBe('history, last 1 h'))
+    expect(chip('24h')).toBeEnabled()
+  })
+
+  it('says when the history holds no event in the range', async () => {
+    postureReads({ traffic: { buckets: [] } })
+    renderDashboard({ enable: 1 })
+    expect((await screen.findByTestId('timeline-empty')).textContent).toBe('No observed event in this range')
+  })
+
+  it('follows the range on the Volume tab, with the InfluxDB window of the range, and keeps the chips on it for any grouping', async () => {
+    const windowEnd = Math.floor(Date.now() / 3_600_000) * 3600 + 3600
+    postureReads({
+      traffic: { buckets: [row(0)] },
+      pairs: [{ src_ip: '10.0.0.1', dst_ip: '10.0.0.2', src_vmid: 101, dst_vmid: 102, bytes: 1000, packets: 10, protocol: 'TCP', dst_port: 5432 }],
+      sflowSeries: [{ vmid: 101, vm_name: 'web1', points: [{ time: windowEnd, bytes_in: 100, bytes_out: 2048 }] }],
+    })
+    renderDashboard({ enable: 1 })
+
+    fireEvent.click(await screen.findByTestId('volume-tab'))
+    expect(screen.getByTestId('timeline-caption').textContent).toBe('bytes sent per group, last 1 h (sFlow)')
+    const series = () => fetchedUrls().filter(u => u.includes('endpoint=timeseries%2Fall-vms'))
+    expect(series().at(-1)).toContain('granularity=5m')
+
+    fireEvent.click(chip('7d'))
+    await waitFor(() => expect(series().some(u => u.includes('granularity=1h'))).toBe(true))
+    const q = new URL(series().at(-1)!, 'http://x').searchParams
+    expect(Date.parse(q.get('to')!) - Date.parse(q.get('from')!)).toBeLessThanOrEqual(7 * 24 * 3_600_000)
+    expect(Date.parse(q.get('to')!) - Date.parse(q.get('from')!)).toBeGreaterThan(7 * 24 * 3_600_000 - 3 * 3_600_000)
+    expect(screen.getByTestId('timeline-caption').textContent).toBe('bytes sent per group, last 7 d (sFlow)')
+    expect(chip('7d')).toBeEnabled()
+
+    fireEvent.click(chip('6h'))
+    await waitFor(() => expect(series().some(u => u.includes('granularity=15m'))).toBe(true))
+  })
+})
+
 describe('DashboardTab: Volume (sFlow)', () => {
   const PAIRS = [{ src_ip: '10.0.0.1', dst_ip: '10.0.0.2', src_vmid: 101, dst_vmid: 102, bytes: 1000, packets: 10, protocol: 'TCP', dst_port: 5432 }]
   // InfluxDB stamps each 5-minute sum with the end of its window: the window holding now ends at the next edge.
@@ -397,14 +555,14 @@ describe('DashboardTab: Volume (sFlow)', () => {
     { vmid: 102, vm_name: 'db1', points: [{ time: windowEnd, bytes_in: 2048, bytes_out: 1024 }] },
   ]
 
-  it('adds the Volume tab when sFlow has data for the connection: bytes sent per zone over the last 2 hours', async () => {
+  it('adds the Volume tab when sFlow has data for the connection: bytes sent per zone over the range (1 h by default)', async () => {
     postureReads({ events: [ev(0)], pairs: PAIRS, sflowSeries: SERIES })
     renderDashboard({ enable: 1 })
 
     fireEvent.click(await screen.findByTestId('volume-tab'))
-    expect(screen.getByTestId('timeline-caption').textContent).toBe('bytes sent per group, last 2 hours (sFlow)')
+    expect(screen.getByTestId('timeline-caption').textContent).toBe('bytes sent per group, last 1 h (sFlow)')
     expect(screen.getByTestId('timeline-max').textContent).toBe('3 KiB')
-    expect(screen.getByRole('img', { name: 'sFlow bytes per 5 minutes, stacked per group' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'sFlow bytes over time, stacked per group' })).toBeInTheDocument()
     const series = fetchedUrls().find(u => u.includes('endpoint=timeseries%2Fall-vms'))!
     expect(series).toContain('vmids=101%2C102')
     expect(series).toContain('granularity=5m')

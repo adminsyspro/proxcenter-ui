@@ -171,6 +171,21 @@ describe('microsegApi events', () => {
   })
 })
 
+describe('microsegApi traffic history', () => {
+  it('asks the persisted history for a window and a step, and fills the envelope', async () => {
+    const api = microsegApi('c1')
+    const body = { step: 300, from: '2026-11-03T09:00:00Z', to: '2026-11-03T10:00:00Z', buckets: [{ at: '2026-11-03T09:55:00Z', zone: 'db', src_zone: 'web', verdict: 'would_block', hits: 4 }] }
+    fetchMock.mockResolvedValue(reply(200, body))
+    expect(await api.getMicrosegTraffic({ from: body.from, to: body.to, step: 300 })).toEqual(body)
+    expect(lastCall().url).toBe('/api/v1/firewall/microseg/c1/traffic?from=2026-11-03T09%3A00%3A00Z&to=2026-11-03T10%3A00%3A00Z&step=300')
+    expect(lastCall().method).toBe('GET')
+    fetchMock.mockResolvedValue(reply(200, { buckets: null }))
+    expect(await api.getMicrosegTraffic({ from: body.from, to: body.to, step: 900 })).toEqual({ step: 900, from: body.from, to: body.to, buckets: [] })
+    fetchMock.mockResolvedValue(reply(503, { code: 'NOT_LEADER', error: 'not the leader' }))
+    expect(await api.getMicrosegTraffic({ from: body.from, to: body.to, step: 300 }).catch(e => e)).toMatchObject({ status: 503, code: 'NOT_LEADER' })
+  })
+})
+
 describe('microsegApi manual check', () => {
   it('posts an empty object to /check and returns the queued answer', async () => {
     fetchMock.mockResolvedValue(reply(202, { queued: true, requested_at: '2026-11-03T10:00:00Z' }))

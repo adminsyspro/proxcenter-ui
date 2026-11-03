@@ -9085,16 +9085,25 @@
       "postureTimelineWindow": "覆盖窗口：{minutes, plural, other {最近 # 分钟}}（编排器内存）",
       "postureTimelineVerdict": "判定",
       "postureTimelineAll": "全部",
-      "postureTimelineLabel": "每 5 分钟观察到的事件，按组堆叠",
+      "postureTimelineLabel": "随时间变化的观察事件，按组堆叠",
       "postureTimelineEvents": "{count, plural, other {# 个事件}}",
       "postureTimelineUnavailable": "观察到的事件不可用",
       "postureTimelineEmpty": "编排器内存中没有观察到的事件",
       "postureVolumeTab": "流量 (sFlow)",
-      "postureVolumeCaptionSent": "每组发送的字节，最近 2 小时（sFlow）",
-      "postureVolumeCaptionReceived": "每组接收的字节，最近 2 小时（sFlow）",
-      "postureVolumeEmpty": "最近 2 小时没有 sFlow 流量",
-      "postureVolumeLabel": "每 5 分钟的 sFlow 字节，按组堆叠",
-      "postureTimelineWindowHours": "覆盖窗口：{hours, plural, other {最近 # 小时}}（编排器内存）"
+      "postureVolumeCaptionSent": "每组发送的字节，最近 {range}（sFlow）",
+      "postureVolumeCaptionReceived": "每组接收的字节，最近 {range}（sFlow）",
+      "postureVolumeEmpty": "最近 {range} 没有 sFlow 流量",
+      "postureVolumeLabel": "随时间变化的 sFlow 字节，按组堆叠",
+      "postureTimelineWindowHours": "覆盖窗口：{hours, plural, other {最近 # 小时}}（编排器内存）",
+      "postureRange1h": "1 小时",
+      "postureRange6h": "6 小时",
+      "postureRange24h": "24 小时",
+      "postureRange7d": "7 天",
+      "postureRangeLabel": "时间范围",
+      "postureRangeGrouping": "按 VLAN 和节点分组使用编排器内存（仅最近的事件）",
+      "postureRangeUnavailable": "此编排器没有历史记录：显示其内存中最近的事件",
+      "postureTimelineHistory": "历史记录，最近 {range}",
+      "postureTimelineEmptyRange": "此时间范围内没有观察到的事件"
     },
     "rulesOnDemand": {
       "chip": "打开时加载规则",
@@ -13744,7 +13753,9 @@
       "hitsOnDefault": "Proxmox 不按规则计数：区域被阻止或将被阻止的流量显示在其默认拒绝行",
       "discardSection": "放弃此部分",
       "conflictOptions": "某部分的防火墙选项在读取后已在 Proxmox 中更改。请放弃该部分的更改后再次发布：其他部分的更改保留",
-      "publishAgain": "请再次发布：未应用的更改仍在草稿中。"
+      "publishAgain": "请再次发布：未应用的更改仍在草稿中。",
+      "summary": "上次发布：已应用 {total} 项中的 {applied} 项",
+      "summaryStopped": "上次发布：已应用 {total} 项中的 {applied} 项，在 {scope} 的 {kind} 处停止"
     }
   }
 }

@@ -338,6 +338,20 @@ export type MicrosegEvent = {
   verdict: SuggestionKind
 }
 
+/** One row of GET /traffic: the hits of a (zone, source zone, verdict) in the bucket that starts at `at`. */
+export type MicrosegTrafficBucket = {
+  at: string
+  /** The zone of the guest that logged the flow. */
+  zone: string
+  /** The zone of the source, empty when the source is in none. */
+  src_zone: string
+  verdict: string
+  hits: number
+}
+
+/** GET /traffic: the persisted history of the flows (7 days), `step` in seconds. */
+export type MicrosegTraffic = { step: number; from: string; to: string; buckets: MicrosegTrafficBucket[] }
+
 /** GET /events: newest first. */
 export type MicrosegEventList = {
   events: MicrosegEvent[]

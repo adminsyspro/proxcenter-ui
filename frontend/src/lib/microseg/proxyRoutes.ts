@@ -63,6 +63,8 @@ export const MICROSEG_ROUTES: MicrosegRoute[] = [
   read(/^status$/),
   // The engine's in-memory ring of flows seen towards zone guests: no Proxmox call.
   read(/^events$/),
+  // The persisted history of those flows per bucket (7 days, the engine's database): no Proxmox call either.
+  read(/^traffic$/),
 ]
 
 // Every segment is a plain identifier or a route word: no dot, no slash, no

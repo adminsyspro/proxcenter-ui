@@ -9085,16 +9085,25 @@
       "postureTimelineWindow": "fenêtre couverte : {minutes, plural, one {la dernière minute} other {les # dernières min}} (mémoire de l'orchestrateur)",
       "postureTimelineVerdict": "Verdict du pare-feu",
       "postureTimelineAll": "Tous",
-      "postureTimelineLabel": "Événements observés par tranche de 5 minutes, empilés par groupe",
+      "postureTimelineLabel": "Événements observés dans le temps, empilés par groupe",
       "postureTimelineEvents": "{count, plural, one {# événement} other {# événements}}",
       "postureTimelineUnavailable": "Événements observés indisponibles",
       "postureTimelineEmpty": "Aucun événement observé dans la mémoire de l'orchestrateur",
       "postureVolumeTab": "Volume de trafic (sFlow)",
-      "postureVolumeCaptionSent": "octets envoyés par groupe, 2 dernières heures (sFlow)",
-      "postureVolumeCaptionReceived": "octets reçus par groupe, 2 dernières heures (sFlow)",
-      "postureVolumeEmpty": "Aucun volume sFlow sur les 2 dernières heures",
-      "postureVolumeLabel": "Octets sFlow par tranche de 5 minutes, empilés par groupe",
-      "postureTimelineWindowHours": "fenêtre couverte : {hours, plural, one {la dernière heure} other {les # dernières heures}} (mémoire de l'orchestrateur)"
+      "postureVolumeCaptionSent": "octets envoyés par groupe, sur {range} (sFlow)",
+      "postureVolumeCaptionReceived": "octets reçus par groupe, sur {range} (sFlow)",
+      "postureVolumeEmpty": "Aucun volume sFlow sur {range}",
+      "postureVolumeLabel": "Octets sFlow dans le temps, empilés par groupe",
+      "postureTimelineWindowHours": "fenêtre couverte : {hours, plural, one {la dernière heure} other {les # dernières heures}} (mémoire de l'orchestrateur)",
+      "postureRange1h": "1 h",
+      "postureRange6h": "6 h",
+      "postureRange24h": "24 h",
+      "postureRange7d": "7 j",
+      "postureRangeLabel": "Période",
+      "postureRangeGrouping": "Le regroupement par VLAN et par nœud lit la mémoire de l'orchestrateur (derniers événements seulement)",
+      "postureRangeUnavailable": "L'historique n'est pas disponible sur cet orchestrateur : derniers événements de sa mémoire affichés",
+      "postureTimelineHistory": "historique, sur {range}",
+      "postureTimelineEmptyRange": "Aucun événement observé sur cette période"
     },
     "rulesOnDemand": {
       "chip": "Règles à l'ouverture",
@@ -13745,7 +13754,9 @@
       "hitsOnDefault": "Proxmox ne compte aucune occurrence par règle : les flux bloqués ou qui le seraient sont sur la ligne de refus par défaut de la zone",
       "discardSection": "Annuler cette section",
       "conflictOptions": "les options du pare-feu d’une section ont changé dans Proxmox depuis leur lecture. Annulez les changements de cette section, puis publiez à nouveau : les autres sections gardent les leurs",
-      "publishAgain": "Publiez à nouveau : les changements non appliqués sont toujours dans le brouillon."
+      "publishAgain": "Publiez à nouveau : les changements non appliqués sont toujours dans le brouillon.",
+      "summary": "Dernière publication : {applied} changements sur {total} appliqués",
+      "summaryStopped": "Dernière publication : {applied} changements sur {total} appliqués, arrêtée sur {kind} dans {scope}"
     }
   }
 }

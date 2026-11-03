@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { Box, Paper, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Typography, alpha, useTheme } from '@mui/material'
+import { Box, Paper, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { formatBytes } from '@/utils/format'
 
 import type { BlockPhase } from './dashboardModel'
-import { BUCKET_MS, areaPaths, bucketXs, nearestBucket, type PostureTimeline, type TimelineVerdict } from './postureTimeline'
+import { TIMELINE_RANGES, areaPaths, bucketXs, nearestBucket, type PostureTimeline, type TimelineRange, type TimelineVerdict } from './postureTimeline'
 import { objectDotSx } from './microseg/objectColour'
 import { useBoxSize } from './microseg/useBoxSize'
 import { useSliceName } from './TrafficByZone'
@@ -21,6 +21,14 @@ type Props = {
   volume?: PostureTimeline | null
   /** By zone the volume is what the members sent, by VLAN or node what the guests received. */
   volumeSent?: boolean
+  /** The range of the chart (UA55), and how it is changed. */
+  range: TimelineRange
+  onRange: (range: TimelineRange) => void
+  /**
+   * Why the events chart cannot follow the range: its grouping needs guest-level events (only the orchestrator's memory
+   * has them), or the history is not served by this orchestrator. Null when the range applies.
+   */
+  rangeLock?: 'grouping' | 'unavailable' | null
 }
 
 type Unit = 'events' | 'bytes'
@@ -37,6 +45,10 @@ const DAY_MINUTES = 24 * 60
 const TIP_WIDTH = 220
 const VERDICTS: readonly TimelineVerdict[] = ['all', 'would_block', 'blocked']
 const VERDICT_LABEL: Record<TimelineVerdict, string> = { all: 'postureTimelineAll', would_block: 'postureWouldBlock', blocked: 'postureBlocked' }
+const RANGE_LABEL: Record<TimelineRange, string> = { '1h': 'postureRange1h', '6h': 'postureRange6h', '24h': 'postureRange24h', '7d': 'postureRange7d' }
+const RANGE_LOCK_MESSAGE = { grouping: 'postureRangeGrouping', unavailable: 'postureRangeUnavailable' } as const
+/** Past a day of buckets the time labels carry the day. */
+const DAY_MS = DAY_MINUTES * 60_000
 
 /** About five time labels under the bars, never two on the same bucket. */
 function tickIndexes(count: number): number[] {
@@ -61,7 +73,10 @@ function Areas({ timeline, measured, unit }: { timeline: PostureTimeline; measur
   const paths = areaPaths(timeline, box)
   const colourOf = new Map(series.map(s => [s.key, s.color]))
   const value = (n: number) => (unit === 'bytes' ? formatBytes(n, 1) : format.number(n))
-  const clock = (at: number) => format.dateTime(new Date(at), { hour: '2-digit', minute: '2-digit' })
+  // Up to a day the labels are times; over a longer range they carry the weekday (the tooltip the date).
+  const longRange = buckets.length > 1 && buckets[buckets.length - 1].start - buckets[0].start > DAY_MS
+  const clock = (at: number) => format.dateTime(new Date(at), longRange ? { weekday: 'short', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' })
+  const stamp = (at: number) => format.dateTime(new Date(at), longRange ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' })
   const hovered = hover === null ? null : buckets[hover]
   const guideX = hover === null ? 0 : xs[buckets.length === 1 ? 0 : hover]
   const tipLeft = Math.min(Math.max(0, guideX - TIP_WIDTH / 2), Math.max(0, width - TIP_WIDTH))
@@ -112,7 +127,7 @@ function Areas({ timeline, measured, unit }: { timeline: PostureTimeline; measur
       {hovered && (
         <Paper data-testid='timeline-tip' elevation={4} sx={{ position: 'absolute', top: 0, left: tipLeft, width: TIP_WIDTH, p: 1, pointerEvents: 'none', zIndex: 1 }}>
           <Typography variant='caption' component='div' sx={{ fontWeight: 700, mb: 0.5 }}>
-            {`${clock(hovered.start)} - ${clock(hovered.start + BUCKET_MS)} · ${unit === 'bytes' ? value(hovered.total) : t('postureTimelineEvents', { count: hovered.total })}`}
+            {`${stamp(hovered.start)} - ${stamp(hovered.start + timeline.stepMs)} · ${unit === 'bytes' ? value(hovered.total) : t('postureTimelineEvents', { count: hovered.total })}`}
           </Typography>
           {series.filter(s => hovered.counts[s.key]).map(s => (
             <Box key={s.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
@@ -128,11 +143,13 @@ function Areas({ timeline, measured, unit }: { timeline: PostureTimeline; measur
 }
 
 /**
- * The observed traffic over time, under the donut: the events of the orchestrator's memory per 5-minute bucket,
- * stacked areas per group of the donut in its colours, a verdict toggle, and the window the memory covers. A second tab,
- * "Volume (sFlow)", shows the sFlow bytes of the same groups, only when sFlow has data for the connection.
+ * The observed traffic over time, under the donut: the persisted history of the flows for the range chosen (by zone), or
+ * the events of the orchestrator's memory per 5-minute bucket (by VLAN or node, or when the history is not served),
+ * stacked areas per group of the donut in its colours, a verdict toggle, the range chips and the window covered. A
+ * second tab, "Volume (sFlow)", shows the sFlow bytes of the same groups over the same range, only when sFlow has data
+ * for the connection.
  */
-export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true }: Props) {
+export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null }: Props) {
   const t = useTranslations('networkPage.dashboard')
   const [ref, size] = useBoxSize<HTMLDivElement>()
   const [chosen, setChosen] = useState<Unit>('events')
@@ -144,15 +161,36 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   if (unit === 'bytes' && volume) body = volume.total > 0 ? <Areas timeline={volume} measured={measured} unit='bytes' /> : <Typography variant='body2' color='text.secondary' data-testid='volume-empty'>{t('postureVolumeEmpty')}</Typography>
   else if (phase === 'loading') body = <Skeleton data-testid='timeline-loading' variant='rounded' height={TIMELINE_HEIGHT} />
   else if (phase === 'unavailable') body = <Typography variant='body2' color='text.secondary' data-testid='timeline-unavailable'>{t('postureTimelineUnavailable')}</Typography>
-  else if (timeline.total === 0) body = <Typography variant='body2' color='text.secondary' data-testid='timeline-empty'>{t('postureTimelineEmpty')}</Typography>
+  else if (timeline.total === 0) body = <Typography variant='body2' color='text.secondary' data-testid='timeline-empty'>{t(timeline.range ? 'postureTimelineEmptyRange' : 'postureTimelineEmpty')}</Typography>
   else body = <Areas timeline={timeline} measured={measured} unit='events' />
 
   let caption: string | null = null
-  if (unit === 'bytes') caption = volumeSent ? t('postureVolumeCaptionSent') : t('postureVolumeCaptionReceived')
+  if (unit === 'bytes') caption = t(volumeSent ? 'postureVolumeCaptionSent' : 'postureVolumeCaptionReceived', { range: t(RANGE_LABEL[range]) })
+  else if (timeline.range) caption = phase === 'ready' ? t('postureTimelineHistory', { range: t(RANGE_LABEL[timeline.range]) }) : null
   else if (timeline.windowMinutes !== null) {
     const minutes = timeline.windowMinutes
     caption = minutes > DAY_MINUTES ? t('postureTimelineWindowHours', { hours: Math.round(minutes / 60) }) : t('postureTimelineWindow', { minutes })
   }
+
+  // The memory chart (a grouping by VLAN or node, or no history served) has one window; the Volume tab follows the range.
+  const locked = unit === 'events' && rangeLock !== null
+  const chips = (
+    <Tooltip title={locked ? t(RANGE_LOCK_MESSAGE[rangeLock]) : ''}>
+      <span data-testid='timeline-range-wrap'>
+        <ToggleButtonGroup
+          size='small'
+          exclusive
+          value={range}
+          disabled={locked}
+          onChange={(_, next: TimelineRange | null) => { if (next) onRange(next) }}
+          aria-label={t('postureRangeLabel')}
+          sx={{ '& .MuiToggleButton-root': { py: 0.25, px: 1, textTransform: 'none', fontSize: 12 } }}
+        >
+          {TIMELINE_RANGES.map(r => <ToggleButton key={r} value={r} data-testid={`range-${r}`}>{t(RANGE_LABEL[r])}</ToggleButton>)}
+        </ToggleButtonGroup>
+      </span>
+    </Tooltip>
+  )
 
   const title = volume ? (
     <Tabs value={unit} onChange={(_, next: Unit) => setChosen(next)} sx={{ minHeight: 32, '& .MuiTab-root': { minHeight: 32, py: 0.5, px: 1.5, textTransform: 'none' } }}>
@@ -168,18 +206,21 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
         {title}
         {caption && <Typography variant='caption' color='text.secondary' data-testid='timeline-caption'>{caption}</Typography>}
-        {unit === 'events' && (
-          <ToggleButtonGroup
-            size='small'
-            exclusive
-            value={verdict}
-            onChange={(_, next: TimelineVerdict | null) => { if (next) onVerdict(next) }}
-            aria-label={t('postureTimelineVerdict')}
-            sx={{ ml: 'auto', '& .MuiToggleButton-root': { py: 0.25, px: 1, textTransform: 'none', fontSize: 12 } }}
-          >
-            {VERDICTS.map(v => <ToggleButton key={v} value={v}>{t(VERDICT_LABEL[v])}</ToggleButton>)}
-          </ToggleButtonGroup>
-        )}
+        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {unit === 'events' && (
+            <ToggleButtonGroup
+              size='small'
+              exclusive
+              value={verdict}
+              onChange={(_, next: TimelineVerdict | null) => { if (next) onVerdict(next) }}
+              aria-label={t('postureTimelineVerdict')}
+              sx={{ '& .MuiToggleButton-root': { py: 0.25, px: 1, textTransform: 'none', fontSize: 12 } }}
+            >
+              {VERDICTS.map(v => <ToggleButton key={v} value={v}>{t(VERDICT_LABEL[v])}</ToggleButton>)}
+            </ToggleButtonGroup>
+          )}
+          {chips}
+        </Box>
       </Box>
       <Box ref={ref} sx={{ position: 'relative', width: '100%', minWidth: 0 }}>{body}</Box>
     </Box>

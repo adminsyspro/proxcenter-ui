@@ -9032,16 +9032,25 @@
       "postureTimelineWindow": "abgedecktes Fenster: {minutes, plural, one {letzte Minute} other {letzte # Min.}} (Speicher des Orchestrators)",
       "postureTimelineVerdict": "Urteil",
       "postureTimelineAll": "Alle",
-      "postureTimelineLabel": "Beobachtete Ereignisse pro 5 Minuten, nach Gruppe gestapelt",
+      "postureTimelineLabel": "Beobachtete Ereignisse im Zeitverlauf, nach Gruppe gestapelt",
       "postureTimelineEvents": "{count, plural, one {# Ereignis} other {# Ereignisse}}",
       "postureTimelineUnavailable": "Beobachtete Ereignisse nicht verfügbar",
       "postureTimelineEmpty": "Kein beobachtetes Ereignis im Speicher des Orchestrators",
       "postureVolumeTab": "Volumen (sFlow)",
-      "postureVolumeCaptionSent": "gesendete Bytes pro Gruppe, letzte 2 Stunden (sFlow)",
-      "postureVolumeCaptionReceived": "empfangene Bytes pro Gruppe, letzte 2 Stunden (sFlow)",
-      "postureVolumeEmpty": "Kein sFlow-Volumen in den letzten 2 Stunden",
-      "postureVolumeLabel": "sFlow-Bytes pro 5 Minuten, nach Gruppe gestapelt",
-      "postureTimelineWindowHours": "abgedecktes Fenster: {hours, plural, one {letzte Stunde} other {letzte # Stunden}} (Speicher des Orchestrators)"
+      "postureVolumeCaptionSent": "gesendete Bytes pro Gruppe, letzte {range} (sFlow)",
+      "postureVolumeCaptionReceived": "empfangene Bytes pro Gruppe, letzte {range} (sFlow)",
+      "postureVolumeEmpty": "Kein sFlow-Volumen in den letzten {range}",
+      "postureVolumeLabel": "sFlow-Bytes im Zeitverlauf, nach Gruppe gestapelt",
+      "postureTimelineWindowHours": "abgedecktes Fenster: {hours, plural, one {letzte Stunde} other {letzte # Stunden}} (Speicher des Orchestrators)",
+      "postureRange1h": "1 Std.",
+      "postureRange6h": "6 Std.",
+      "postureRange24h": "24 Std.",
+      "postureRange7d": "7 T.",
+      "postureRangeLabel": "Zeitraum",
+      "postureRangeGrouping": "Die Gruppierung nach VLAN und Knoten nutzt den Speicher des Orchestrators (nur die letzten Ereignisse)",
+      "postureRangeUnavailable": "Der Verlauf ist auf diesem Orchestrator nicht verfügbar: die letzten Ereignisse aus seinem Speicher werden angezeigt",
+      "postureTimelineHistory": "Verlauf, letzte {range}",
+      "postureTimelineEmptyRange": "Kein beobachtetes Ereignis in diesem Zeitraum"
     },
     "rulesOnDemand": {
       "chip": "Regeln beim Öffnen",
@@ -13412,7 +13421,9 @@
       "hitsOnDefault": "Proxmox zählt keine Treffer pro Regel: Die blockierten oder zu blockierenden Flüsse der Zone stehen in ihrer Standardverweigerung",
       "discardSection": "Diesen Abschnitt verwerfen",
       "conflictOptions": "die Firewall-Optionen eines Abschnitts wurden seit dem Lesen in Proxmox geändert. Verwerfen Sie die Änderungen dieses Abschnitts und veröffentlichen Sie erneut: Die anderen Abschnitte behalten ihre",
-      "publishAgain": "Erneut veröffentlichen: Die nicht angewendeten Änderungen sind noch im Entwurf."
+      "publishAgain": "Erneut veröffentlichen: Die nicht angewendeten Änderungen sind noch im Entwurf.",
+      "summary": "Letzte Veröffentlichung: {applied} von {total} Änderungen angewendet",
+      "summaryStopped": "Letzte Veröffentlichung: {applied} von {total} Änderungen angewendet, gestoppt bei {kind} in {scope}"
     }
   }
 }

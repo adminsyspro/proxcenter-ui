@@ -13,7 +13,7 @@ describe('matchMicrosegRoute', () => {
   it('knows the exact route table of the orchestrator', () => {
     const table = MICROSEG_ROUTES.map(r => `${r.method} ${r.pattern.source}`).sort()
 
-    expect(MICROSEG_ROUTES).toHaveLength(26)
+    expect(MICROSEG_ROUTES).toHaveLength(27)
     expect(table).toHaveLength(new Set(table).size)
 
     const cases: Array<[string, string[], boolean]> = [
@@ -43,6 +43,7 @@ describe('matchMicrosegRoute', () => {
       ['GET', ['runs', 'r-1'], false],
       ['GET', ['status'], false],
       ['GET', ['events'], false],
+      ['GET', ['traffic'], false],
     ]
 
     for (const [method, path, write] of cases) {
@@ -79,6 +80,7 @@ describe('matchMicrosegRoute', () => {
     expect(owner('POST', ['check'])).toBe('relay microseg.check')
 
     expect(owner('POST', ['plan'])).toBe('none')
+    expect(owner('GET', ['traffic'])).toBe('none')
     for (const route of MICROSEG_ROUTES.filter(r => !r.write)) expect(route.audit).toBe('none')
     expect(MICROSEG_ROUTES.filter(r => r.audit === 'orchestrator')).toHaveLength(5)
   })
@@ -89,6 +91,7 @@ describe('matchMicrosegRoute', () => {
     expect(matchMicrosegRoute('GET', ['apply'])).toBeNull()
     expect(matchMicrosegRoute('DELETE', ['runs', 'r1'])).toBeNull()
     expect(matchMicrosegRoute('GET', ['check'])).toBeNull()
+    expect(matchMicrosegRoute('POST', ['traffic'])).toBeNull()
     expect(matchMicrosegRoute('PATCH', ['policy'])).toBeNull()
   })
 

@@ -5,7 +5,7 @@
 
 import type {
   CheckQueued, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegFlow, MicrosegPolicy,
-  MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegZone, PolicyUpdate,
+  MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegTraffic, MicrosegZone, PolicyUpdate,
   PreflightCheck, ResolveSuggestionsInput, SuggestionKind, SuggestionStatus, ZoneInput, ZoneState,
 } from './types'
 
@@ -93,6 +93,8 @@ export type ListEventsParams = {
   /** An IP or a port, as a substring. */
   q?: string
 }
+/** `from` and `to` in RFC3339, `step` in seconds (a multiple of 300, 300 to 21600). */
+export type TrafficParams = { from: string; to: string; step: number }
 export type ListSuggestionsParams = PageParams & {
   kind?: SuggestionKind
   status?: SuggestionStatus
@@ -222,6 +224,11 @@ export function microsegApi(connId: string) {
     getMicrosegEvents: async (params: ListEventsParams = {}, signal?: AbortSignal): Promise<MicrosegEventList> => {
       const body = await call<Partial<MicrosegEventList> | null>('GET', `events${query(params)}`, undefined, signal)
       return { events: body?.events ?? [], truncated: body?.truncated === true, oldest: body?.oldest ?? null }
+    },
+    /** The persisted history of the flows per bucket (the engine's database, no Proxmox call); 503 NOT_LEADER on a follower. */
+    getMicrosegTraffic: async (params: TrafficParams, signal?: AbortSignal): Promise<MicrosegTraffic> => {
+      const body = await call<Partial<MicrosegTraffic> | null>('GET', `traffic${query(params)}`, undefined, signal)
+      return { step: body?.step ?? params.step, from: body?.from ?? params.from, to: body?.to ?? params.to, buckets: body?.buckets ?? [] }
     },
   }
 }

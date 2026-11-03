@@ -10,7 +10,7 @@ import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { useMicrosegDrifts, useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 import type { ListSuggestionsParams } from '@/lib/microseg/api'
-import type { MicrosegEvent, MicrosegPolicy, MicrosegStatus, MicrosegSuggestion } from '@/lib/microseg/types'
+import type { MicrosegPolicy, MicrosegStatus, MicrosegSuggestion } from '@/lib/microseg/types'
 
 import DashboardTodo, { type TodoActions } from './DashboardTodo'
 import { dashboardPhase, missingManagementPorts, todoItems, type BlockPhase } from './dashboardModel'
@@ -23,8 +23,10 @@ import { TopServices, TrafficDistribution } from './ObservedTraffic'
 import PostureChips from './PostureChips'
 import TrafficByZone from './TrafficByZone'
 import TrafficTimeline from './TrafficTimeline'
-import { postureTimeline, postureVolume, type TimelineVerdict } from './postureTimeline'
+import { postureHistory, postureTimeline, postureVolume, type TimelineRange, type TimelineVerdict } from './postureTimeline'
 import { usePostureEvents } from './usePostureEvents'
+import { usePostureHistory } from './usePostureHistory'
+import { useTimelineRange } from './useTimelineRange'
 import { usePostureVolume } from './usePostureVolume'
 import { useNow } from './microseg/useNow'
 import { coverage as microsegCoverage } from './microseg/coverage'
@@ -110,22 +112,36 @@ function usePostureFigures(policy: MicrosegPolicy | undefined, suggestions: Micr
   }, [policy, suggestions, rows, listed, groupBy])
 }
 
-/** The time charts, on the groups of the donut: the events of the ring, and the sFlow bytes when sFlow sees the connection. */
+/**
+ * The time charts, on the groups of the donut. The events chart reads the persisted history of the range chosen when
+ * grouped by zone (the only grouping the history carries), the events of the ring otherwise or when the orchestrator
+ * does not serve the history; the Volume tab reads the sFlow bytes when sFlow sees the connection.
+ */
 function useTimelineFigures(
-  connection: string | null, events: MicrosegEvent[] | undefined, policy: MicrosegPolicy | undefined, posture: ReturnType<typeof usePostureFigures>,
-  groupBy: GroupBy, verdict: TimelineVerdict, addresses: boolean,
+  connection: string | null, policy: MicrosegPolicy | undefined, posture: ReturnType<typeof usePostureFigures>,
+  groupBy: GroupBy, verdict: TimelineVerdict, addresses: boolean, range: TimelineRange,
 ) {
-  // A minute clock: the last bucket follows the time, the sFlow window moves every 5 minutes.
-  const now = useNow(60_000, events)
-  const sflow = usePostureVolume(connection, posture.guests, now)
-  const timeline = useMemo(() => postureTimeline({
-    events: events ?? [], groupBy, verdict, zones: policy?.zones ?? [], guests: posture.guests, addresses, slices: posture.traffic.slices, now,
-  }), [events, groupBy, verdict, policy, posture, addresses, now])
+  const history = usePostureHistory(groupBy === 'zone' ? connection : null, range)
+  // The ring (orchestrator memory) is read only when it is the source: no events read for a history that answered.
+  const memory = groupBy !== 'zone' || !!history.error
+  const ring = usePostureEvents(memory ? connection : null)
+  // A minute clock: the last bucket follows the time, the sFlow window moves at each edge of its windows.
+  const now = useNow(60_000, ring.events)
+  const sflow = usePostureVolume(connection, posture.guests, now, range)
+  const timeline = useMemo(() => (memory ? postureTimeline({
+    events: ring.events ?? [], groupBy, verdict, zones: policy?.zones ?? [], guests: posture.guests, addresses, slices: posture.traffic.slices, now,
+  }) : postureHistory({
+    history: history.history ?? { step: 0, from: '', to: '', buckets: [] }, range: history.range, verdict, zones: policy?.zones ?? [], slices: posture.traffic.slices,
+  })), [memory, ring.events, history.history, history.range, groupBy, verdict, policy, posture, addresses, now])
   const volume = useMemo(() => (sflow.available ? postureVolume({
     series: sflow.series, groupBy, zones: policy?.zones ?? [], tagPrefix: policy?.policy.tag_prefix ?? '', guests: posture.guests,
-    slices: posture.traffic.slices, from: sflow.from, to: sflow.to,
-  }) : null), [sflow.available, sflow.series, sflow.from, sflow.to, groupBy, policy, posture])
-  return { timeline, volume }
+    slices: posture.traffic.slices, range, from: sflow.from, to: sflow.to,
+  }) : null), [sflow.available, sflow.series, sflow.from, sflow.to, range, groupBy, policy, posture])
+  const answer = memory ? { data: ring.events, error: ring.error } : { data: history.history, error: undefined }
+  let rangeLock: 'grouping' | 'unavailable' | null = null
+  if (groupBy !== 'zone') rangeLock = 'grouping'
+  else if (memory) rangeLock = 'unavailable'
+  return { timeline, volume, answer, rangeLock }
 }
 
 /**
@@ -133,7 +149,7 @@ function useTimelineFigures(
  * emergency stop; zones enforced; running guests protected; last check), the observed traffic per zone (donut and
  * chords), its distribution and top services, then the "To do" list. Its reads: the firewall data the page loads, the
  * coverage route (computed and cached on the server), the micro-segmentation status, policy, drifts and pending flows
- * (orchestrator memory), the events ring for the time chart (orchestrator memory, every minute), the sFlow pairs and
+ * (orchestrator memory), the events ring for the time chart (orchestrator memory, every minute, only when grouped by VLAN or node or when the history route is not served), the persisted history of the flows for the zone grouping (the range chosen, remembered per browser), the sFlow pairs and
  * time series for its Volume tab (orchestrator and InfluxDB). The guest list (the inventory route, one guest config per guest on Proxmox) is read only once
  * a grouping by VLAN or node asks for it, shared with the zone map.
  */
@@ -148,6 +164,7 @@ export default function DashboardTab({
   // Once a grouping by VLAN or node asked for the guests, they stay (a zone grouping then tells the unzoned apart).
   const [guestsWanted, setGuestsWanted] = useState(false)
   const [verdict, setVerdict] = useState<TimelineVerdict>('all')
+  const [range, setRange] = useTimelineRange()
   const connection = selectedConnection || null
 
   // Read once when the tab shows (this component mounts with it), computed and cached on the server (UA44).
@@ -158,7 +175,6 @@ export default function DashboardTab({
   const drifts = useMicrosegDrifts(connection)
   const pending = useMicrosegSuggestions(connection, PENDING_OBSERVED)
   const zoneGuests = useZoneGuests(guestsWanted ? connection : null)
-  const ring = usePostureEvents(connection)
 
   // Node options carry no policy: a host follows the cluster's, and an unset policy is PVE's default, not ACCEPT (#1065).
   const policyIn = clusterOptions?.policy_in || PVE_DEFAULT_POLICY_IN
@@ -183,8 +199,8 @@ export default function DashboardTab({
   // A grouping by VLAN or node waits for the guests it is made of.
   const trafficPhase = listsPhase === 'ready' && groupBy !== 'zone' && zoneGuests.status === 'loading' ? 'loading' : listsPhase
   const posture = usePostureFigures(policy, pending.data, coverage?.guests, addresses ? zoneGuests.guests : null, groupBy)
-  const { timeline, volume } = useTimelineFigures(connection, ring.events, policy, posture, groupBy, verdict, addresses)
-  const timelinePhase = microsegPhase([microsegPolicy, { data: ring.events, error: ring.error }])
+  const { timeline, volume, answer, rangeLock } = useTimelineFigures(connection, policy, posture, groupBy, verdict, addresses, range)
+  const timelinePhase = microsegPhase([microsegPolicy, answer])
 
   const items = todoItems({
     firewallOn,
@@ -268,7 +284,7 @@ export default function DashboardTab({
             onGroupBy={changeGroupBy}
             truncated={(pending.data?.length ?? 0) >= POSTURE_SUGGESTIONS_LIMIT}
             addresses={addresses}
-            footer={<TrafficTimeline phase={timelinePhase} timeline={timeline} verdict={verdict} onVerdict={setVerdict} volume={volume} volumeSent={groupBy === 'zone'} />}
+            footer={<TrafficTimeline phase={timelinePhase} timeline={timeline} verdict={verdict} onVerdict={setVerdict} volume={volume} volumeSent={groupBy === 'zone'} range={range} onRange={setRange} rangeLock={rangeLock} />}
           />
         </Box>
         <Box sx={{ gridColumn: { xs: 'span 12', lg: 'span 5' }, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2.5 }}>

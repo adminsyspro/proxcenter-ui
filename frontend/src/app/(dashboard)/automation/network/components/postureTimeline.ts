@@ -1,5 +1,5 @@
 import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, UNZONED_KEY, buildResolver, groupKeyOf, zoneKey, type LensPair } from '@/lib/microseg/trafficLens'
-import type { MicrosegEvent, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
+import type { MicrosegEvent, MicrosegTraffic, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
 
 import { NO_VLAN_KEY, type GroupBy, type PostureGuest, type PostureSlice } from './dashboardPosture'
 import { bareIp } from './microseg/zoneGraph'
@@ -19,6 +19,33 @@ export const BUCKET_MS = 5 * 60_000
 export const MAX_BUCKETS = 288
 
 export type TimelineVerdict = 'all' | SuggestionKind
+
+/** The ranges of the chart (UA55): the persisted history serves each one, the events ring only its last hours. */
+export type TimelineRange = '1h' | '6h' | '24h' | '7d'
+export const TIMELINE_RANGES: readonly TimelineRange[] = ['1h', '6h', '24h', '7d']
+export const DEFAULT_RANGE: TimelineRange = '1h'
+
+/** The InfluxDB window sizes the sFlow route accepts (internal/api/sflow.go): a step is a multiple of one of them. */
+type SflowGranularity = '5m' | '15m' | '1h'
+const GRANULARITY_MS: Record<SflowGranularity, number> = { '5m': 5 * 60_000, '15m': 15 * 60_000, '1h': 60 * 60_000 }
+
+/**
+ * Per range: its length, the bucket size of the history route (seconds, a multiple of 300 between 300 and 21600), and the
+ * largest InfluxDB window the sFlow route accepts that divides that step (it has no 30 m nor 3 h: summed again here).
+ */
+export const RANGE_SPEC: Record<TimelineRange, { ms: number; stepSec: number; granularity: SflowGranularity }> = {
+  '1h': { ms: 60 * 60_000, stepSec: 300, granularity: '5m' },
+  '6h': { ms: 6 * 60 * 60_000, stepSec: 900, granularity: '15m' },
+  '24h': { ms: 24 * 60 * 60_000, stepSec: 1800, granularity: '15m' },
+  '7d': { ms: 7 * 24 * 60 * 60_000, stepSec: 10_800, granularity: '1h' },
+}
+
+export const stepMsOf = (range: TimelineRange) => RANGE_SPEC[range].stepSec * 1000
+
+/** A range read back from storage: anything else is the default. */
+export function asRange(value: unknown): TimelineRange {
+  return TIMELINE_RANGES.find(r => r === value) ?? DEFAULT_RANGE
+}
 
 /**
  * The newest page read on a refresh put on top of the events already held, newest first, the oldest dropped past
@@ -41,6 +68,10 @@ export type TimelineSeries = Pick<PostureSlice, 'key' | 'kind' | 'name' | 'color
 export type TimelineBucket = { start: number; total: number; counts: Record<string, number> }
 
 export type PostureTimeline = {
+  /** The width of a bucket, in ms. */
+  stepMs: number
+  /** Set when the persisted history is the source (the range it covers); absent for the orchestrator's memory. */
+  range?: TimelineRange
   series: TimelineSeries[]
   buckets: TimelineBucket[]
   /** The largest bucket, for the scale. */
@@ -96,30 +127,69 @@ export function postureTimeline(input: {
   const windowMinutes = oldest === null ? null : Math.max(1, Math.round((now - oldest) / 60_000))
 
   const kept = events.filter(e => verdict === 'all' || e.verdict === verdict)
-  if (oldest === null || kept.length === 0) return { series: [], buckets: [], max: 0, total: 0, windowMinutes }
+  if (oldest === null || kept.length === 0) return { stepMs: BUCKET_MS, series: [], buckets: [], max: 0, total: 0, windowMinutes }
 
   const last = Math.floor(now / BUCKET_MS) * BUCKET_MS
   const first = Math.max(Math.floor(oldest / BUCKET_MS) * BUCKET_MS, last - (MAX_BUCKETS - 1) * BUCKET_MS)
   // An event stamped a little ahead of this clock (node clocks drift) counts in the last bucket.
   const clamp = (at: number) => (at >= last + BUCKET_MS && at < now + BUCKET_MS ? last : at)
   const items = kept.map(e => ({ at: clamp(Date.parse(e.ts)), group: groupOfEvent(e, groupBy, zoneByName, guestByKey, guestIps), value: 1 }))
-  return { ...stack(first, last, items, slices), windowMinutes }
+  return { ...stack(first, last, items, slices, BUCKET_MS), windowMinutes }
 }
 
 /**
- * The values per 5-minute bucket from `first` to `last` (bucket starts), one series per slice of the donut that has
+ * The window asked of the history route: up to the next 5-minute edge (the last bucket is in progress), back by the
+ * range, the start on the step grid so the first bucket is whole and the range never reaches past what was asked.
+ */
+export function historyWindow(now: number, range: TimelineRange): { from: number; to: number } {
+  const to = Math.floor(now / BUCKET_MS) * BUCKET_MS + BUCKET_MS
+  const step = stepMsOf(range)
+  return { from: Math.ceil((to - RANGE_SPEC[range].ms) / step) * step, to }
+}
+
+/**
+ * The persisted history as the time chart: the hits per bucket of the range, by SOURCE zone as the donut and the
+ * events path group them (the route does not carry guests, so it serves the zone grouping only). A source in no zone
+ * is "Unknown" (the history does not tell an unzoned guest from a foreign address), a zone renamed or deleted since
+ * is "Other".
+ */
+export function postureHistory(input: {
+  history: MicrosegTraffic
+  range: TimelineRange
+  verdict: TimelineVerdict
+  zones: readonly MicrosegZone[]
+  slices: readonly TimelineSeries[]
+}): PostureTimeline {
+  const { history, range, verdict, slices } = input
+  const stepMs = stepMsOf(range)
+  const zoneByName = new Map(input.zones.map(z => [z.name.toLowerCase(), z]))
+  const groupOf = (srcZone: string) => {
+    if (!srcZone) return EXTERNAL_KEY
+    const zone = zoneByName.get(srcZone.toLowerCase())
+    return zone ? zoneKey(zone.id) : OTHER_KEY
+  }
+  const items = history.buckets
+    .filter(b => verdict === 'all' || b.verdict === verdict)
+    .map(b => ({ at: Date.parse(b.at), group: groupOf(b.src_zone), value: b.hits }))
+  const first = Math.ceil(Date.parse(history.from) / stepMs) * stepMs
+  const last = Math.floor((Date.parse(history.to) - 1) / stepMs) * stepMs
+  return { ...stack(first, last, items, slices, stepMs), stepMs, range, windowMinutes: RANGE_SPEC[range].ms / 60_000 }
+}
+
+/**
+ * The values per bucket of `stepMs` from `first` to `last` (bucket starts), one series per slice of the donut that has
  * a value (in its order and colour), a group the donut does not show in "Other". Values outside the range are left out.
  */
-function stack(first: number, last: number, items: readonly { at: number; group: string; value: number }[], slices: readonly TimelineSeries[]) {
+function stack(first: number, last: number, items: readonly { at: number; group: string; value: number }[], slices: readonly TimelineSeries[], stepMs: number) {
   const shown = new Set(slices.map(s => s.key))
   const buckets: TimelineBucket[] = []
-  for (let start = first; start <= last; start += BUCKET_MS) buckets.push({ start, total: 0, counts: {} })
+  for (let start = first; start <= last; start += stepMs) buckets.push({ start, total: 0, counts: {} })
 
   const used = new Set<string>()
   let total = 0
   for (const item of items) {
-    if (!Number.isFinite(item.at) || item.at < first || item.at >= last + BUCKET_MS || item.value <= 0) continue
-    const bucket = buckets[Math.floor((item.at - first) / BUCKET_MS)]
+    if (!Number.isFinite(item.at) || item.at < first || item.at >= last + stepMs || item.value <= 0) continue
+    const bucket = buckets[Math.floor((item.at - first) / stepMs)]
     const key = shown.has(item.group) ? item.group : OTHER_KEY
     bucket.counts[key] = (bucket.counts[key] ?? 0) + item.value
     bucket.total += item.value
@@ -129,15 +199,18 @@ function stack(first: number, last: number, items: readonly { at: number; group:
 
   const series: TimelineSeries[] = slices.filter(s => used.has(s.key))
   if (used.has(OTHER_KEY) && !shown.has(OTHER_KEY)) series.push({ key: OTHER_KEY, kind: 'other', name: '', color: GROUP_COLORS.other })
-  return { series, buckets, max: Math.max(0, ...buckets.map(b => b.total)), total }
+  return { stepMs, series, buckets, max: Math.max(0, ...buckets.map(b => b.total)), total }
 }
 
-/** The window of the sFlow volume chart: the last 2 hours, on 5-minute bucket edges (the read changes every 5 minutes). */
-export const VOLUME_WINDOW_MS = 2 * 60 * 60_000
-
-export function volumeWindow(now: number): { from: number; to: number } {
-  const to = Math.floor(now / BUCKET_MS) * BUCKET_MS + BUCKET_MS
-  return { from: to - VOLUME_WINDOW_MS, to }
+/**
+ * The window of the sFlow volume chart: the range, ending on the edge of the InfluxDB window of that range (5 m, 15 m
+ * or 1 h, so the last window is whole and stamped on an edge; the read changes at each edge), starting on the step grid.
+ */
+export function volumeWindow(now: number, range: TimelineRange): { from: number; to: number } {
+  const granularity = GRANULARITY_MS[RANGE_SPEC[range].granularity]
+  const to = Math.floor(now / granularity) * granularity + granularity
+  const step = stepMsOf(range)
+  return { from: Math.ceil((to - RANGE_SPEC[range].ms) / step) * step, to }
 }
 
 /** The VMID of a guest key ("qemu/101"). */
@@ -198,10 +271,13 @@ export function postureVolume(input: {
   tagPrefix: string
   guests: readonly PostureGuest[]
   slices: readonly TimelineSeries[]
+  range: TimelineRange
   from: number
   to: number
 }): PostureTimeline {
-  const { groupBy, guests } = input
+  const { groupBy, guests, range } = input
+  const stepMs = stepMsOf(range)
+  const granularityMs = GRANULARITY_MS[RANGE_SPEC[range].granularity]
   const byVmid = new Map(guests.map(g => [vmidOf(g), g]))
   const resolve = buildResolver([...input.zones], input.tagPrefix, guests.map(g => ({ vmid: vmidOf(g), name: g.key, tags: g.tags, ips: [] })))
   const groupOfVm = (vmid: number): string => {
@@ -214,10 +290,11 @@ export function postureVolume(input: {
   const items = input.series.flatMap(vm => {
     const group = groupOfVm(vm.vmid)
     // InfluxDB's aggregateWindow stamps each sum with the END of its window (internal/sflow/influx.go, the
-    // `aggregateWindow(every: ..., fn: sum)` queries): the bucket starts one step before.
-    return (vm.points ?? []).map(p => ({ at: p.time * 1000 - BUCKET_MS, group, value: groupBy === 'zone' ? p.bytes_out : p.bytes_in }))
+    // `aggregateWindow(every: ..., fn: sum)` queries): the window starts one granularity before, and sums with the
+    // others of the same step bucket (a 30 m or 3 h step is made of 15 m or 1 h windows).
+    return (vm.points ?? []).map(p => ({ at: p.time * 1000 - granularityMs, group, value: groupBy === 'zone' ? p.bytes_out : p.bytes_in }))
   })
-  return { ...stack(input.from, input.to - BUCKET_MS, items, input.slices), windowMinutes: VOLUME_WINDOW_MS / 60_000 }
+  return { ...stack(input.from, Math.floor((input.to - 1) / stepMs) * stepMs, items, input.slices, stepMs), windowMinutes: RANGE_SPEC[range].ms / 60_000 }
 }
 
 /** The drawing box of the time chart: the left edge and width of the plot, its top and height. */

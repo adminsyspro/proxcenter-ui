@@ -9085,16 +9085,25 @@
       "postureTimelineWindow": "covered window: last {minutes, plural, one {# min} other {# min}} (orchestrator memory)",
       "postureTimelineVerdict": "Verdict",
       "postureTimelineAll": "All",
-      "postureTimelineLabel": "Observed events per 5 minutes, stacked per group",
+      "postureTimelineLabel": "Observed events over time, stacked per group",
       "postureTimelineEvents": "{count, plural, one {# event} other {# events}}",
       "postureTimelineUnavailable": "Observed events not available",
       "postureTimelineEmpty": "No observed event in the orchestrator memory",
       "postureVolumeTab": "Volume (sFlow)",
-      "postureVolumeCaptionSent": "bytes sent per group, last 2 hours (sFlow)",
-      "postureVolumeCaptionReceived": "bytes received per group, last 2 hours (sFlow)",
-      "postureVolumeEmpty": "No sFlow volume in the last 2 hours",
-      "postureVolumeLabel": "sFlow bytes per 5 minutes, stacked per group",
-      "postureTimelineWindowHours": "covered window: last {hours, plural, one {# hour} other {# hours}} (orchestrator memory)"
+      "postureVolumeCaptionSent": "bytes sent per group, last {range} (sFlow)",
+      "postureVolumeCaptionReceived": "bytes received per group, last {range} (sFlow)",
+      "postureVolumeEmpty": "No sFlow volume in the last {range}",
+      "postureVolumeLabel": "sFlow bytes over time, stacked per group",
+      "postureTimelineWindowHours": "covered window: last {hours, plural, one {# hour} other {# hours}} (orchestrator memory)",
+      "postureRange1h": "1 h",
+      "postureRange6h": "6 h",
+      "postureRange24h": "24 h",
+      "postureRange7d": "7 d",
+      "postureRangeLabel": "Time range",
+      "postureRangeGrouping": "VLAN and node grouping use the orchestrator memory (last events only)",
+      "postureRangeUnavailable": "The history is not available on this orchestrator: showing the last events from its memory",
+      "postureTimelineHistory": "history, last {range}",
+      "postureTimelineEmptyRange": "No observed event in this range"
     },
     "rulesOnDemand": {
       "chip": "Rules on open",
@@ -13744,7 +13753,9 @@
       "hitsOnDefault": "Proxmox counts no hit per rule: the zone's blocked or would-block flows are on its default deny row",
       "discardSection": "Discard this section",
       "conflictOptions": "the firewall options of a section were changed in Proxmox since they were read. Discard this section's changes, then publish again: the other sections keep theirs",
-      "publishAgain": "Publish again: the changes not applied are still in the draft."
+      "publishAgain": "Publish again: the changes not applied are still in the draft.",
+      "summary": "Last publish: {applied} of {total} changes applied",
+      "summaryStopped": "Last publish: {applied} of {total} changes applied, stopped on {kind} in {scope}"
     }
   }
 }

@@ -9085,16 +9085,25 @@
       "postureTimelineWindow": "포함 구간: {minutes, plural, other {최근 #분}} (오케스트레이터 메모리)",
       "postureTimelineVerdict": "판정",
       "postureTimelineAll": "전체",
-      "postureTimelineLabel": "5분 단위 관찰 이벤트, 그룹별 누적",
+      "postureTimelineLabel": "시간에 따른 관찰 이벤트, 그룹별 누적",
       "postureTimelineEvents": "{count, plural, other {이벤트 #개}}",
       "postureTimelineUnavailable": "관찰된 이벤트 정보 없음",
       "postureTimelineEmpty": "오케스트레이터 메모리에 관찰된 이벤트 없음",
       "postureVolumeTab": "볼륨 (sFlow)",
-      "postureVolumeCaptionSent": "그룹별 송신 바이트, 최근 2시간 (sFlow)",
-      "postureVolumeCaptionReceived": "그룹별 수신 바이트, 최근 2시간 (sFlow)",
-      "postureVolumeEmpty": "최근 2시간 동안 sFlow 볼륨 없음",
-      "postureVolumeLabel": "5분 단위 sFlow 바이트, 그룹별 누적",
-      "postureTimelineWindowHours": "포함 구간: {hours, plural, other {최근 #시간}} (오케스트레이터 메모리)"
+      "postureVolumeCaptionSent": "그룹별 송신 바이트, 최근 {range} (sFlow)",
+      "postureVolumeCaptionReceived": "그룹별 수신 바이트, 최근 {range} (sFlow)",
+      "postureVolumeEmpty": "최근 {range} 동안 sFlow 볼륨 없음",
+      "postureVolumeLabel": "시간에 따른 sFlow 바이트, 그룹별 누적",
+      "postureTimelineWindowHours": "포함 구간: {hours, plural, other {최근 #시간}} (오케스트레이터 메모리)",
+      "postureRange1h": "1시간",
+      "postureRange6h": "6시간",
+      "postureRange24h": "24시간",
+      "postureRange7d": "7일",
+      "postureRangeLabel": "기간",
+      "postureRangeGrouping": "VLAN 및 노드별 그룹화는 오케스트레이터 메모리를 사용합니다(최근 이벤트만)",
+      "postureRangeUnavailable": "이 오케스트레이터에서는 기록을 사용할 수 없습니다: 메모리의 최근 이벤트를 표시합니다",
+      "postureTimelineHistory": "기록, 최근 {range}",
+      "postureTimelineEmptyRange": "이 기간에 관찰된 이벤트 없음"
     },
     "rulesOnDemand": {
       "chip": "열 때 규칙 로드",
@@ -13744,7 +13753,9 @@
       "hitsOnDefault": "Proxmox는 규칙별 적중을 세지 않습니다: 영역의 차단(예정) 흐름은 기본 거부 행에 있습니다",
       "discardSection": "이 섹션 취소",
       "conflictOptions": "섹션의 방화벽 옵션이 읽은 이후 Proxmox에서 변경되었습니다. 이 섹션의 변경을 취소한 후 다시 게시하세요: 다른 섹션의 변경은 유지됩니다",
-      "publishAgain": "다시 게시하세요: 적용되지 않은 변경은 초안에 남아 있습니다."
+      "publishAgain": "다시 게시하세요: 적용되지 않은 변경은 초안에 남아 있습니다.",
+      "summary": "마지막 게시: 변경 {total}개 중 {applied}개 적용",
+      "summaryStopped": "마지막 게시: 변경 {total}개 중 {applied}개 적용, {scope}의 {kind}에서 중단"
     }
   }
 }

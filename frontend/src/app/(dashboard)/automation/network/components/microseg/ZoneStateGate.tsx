@@ -1,10 +1,8 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { Box, Button } from '@mui/material'
+import { Box, Button, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
-
-import { OneLine } from './dialogParts'
 
 type Props = {
   /** The draft has unapplied changes: the state change would apply them unseen, so it is refused. */
@@ -25,15 +23,13 @@ export default function ZoneStateGate({ pending, count, onViewPlan, discard }: P
   const t = useTranslations('microsegPilot')
   return (
     <>
-      <OneLine text={t('policy.state.immediate')} />
+      {/* These lines are the reason of the refusal: they wrap rather than hide behind an ellipsis. */}
+      <Typography color='text.secondary'>{t('policy.state.immediate')}</Typography>
       {pending && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-          <Box sx={{ flex: '1 1 0', minWidth: 0 }}>
-            <OneLine
-              color='warning.main'
-              text={count ? t('policy.state.pendingFirst', { count }) : t('policy.state.pendingFirstNoCount')}
-            />
-          </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flexWrap: 'wrap' }}>
+          <Typography color='warning.main' sx={{ flex: '1 1 240px', minWidth: 0 }}>
+            {count ? t('policy.state.pendingFirst', { count }) : t('policy.state.pendingFirstNoCount')}
+          </Typography>
           {discard}
           {onViewPlan && (
             <Button size='small' variant='outlined' color='warning' onClick={onViewPlan} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>

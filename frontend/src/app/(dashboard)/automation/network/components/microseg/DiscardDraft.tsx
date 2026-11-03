@@ -41,7 +41,9 @@ export default function DiscardDraft({ connectionId, policy, count, onDiscarded,
     const ok = await action.run(async () => {
       try {
         const fresh = await api.discardDraft(policy.version)
-        await mutate(`${base}/policy`, fresh, { revalidate: false })
+        // The answer at once, then the draft as GET /policy says it (its pending flag): a dialog gated on the pending
+        // changes (the zone state confirmation) re-evaluates on it and becomes usable.
+        await mutate(`${base}/policy`, fresh, { revalidate: true })
       } catch (e) {
         if (isVersionConflict(e)) await mutate(`${base}/policy`)
         throw e

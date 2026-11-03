@@ -23,7 +23,6 @@ import { useZoneGuests } from './useZoneGuests'
 import ZoneCanvas from './ZoneCanvas'
 import ZoneMatrix from './ZoneMatrix'
 import ZoneSankey from './ZoneSankey'
-import { buildSankey } from './sankeyModel'
 import TargetPanel from './TargetPanel'
 import TargetPicker from './TargetPicker'
 import { targetFocus, targetRing, targetSankey, type TargetGuest } from './targetModel'
@@ -142,7 +141,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   }, [targetKey, targetZone])
   // The matrix holds the pairs of the matrix and of the Sankey diagram (their flow panel).
   const matrix = useMemo(() => (view === 'matrix' || view === 'sankey' ? buildMatrix(input) : null), [view, input])
-  const sankey = useMemo(() => (view === 'sankey' && matrix ? buildSankey(matrix, filters) : null), [view, matrix, filters])
+  // The Sankey diagram lays the pairs out itself, for the size of the map box.
+  const sankey = view === 'sankey' ? matrix : null
   const graph = useMemo(() => mapViewGraph(view, input, centreId), [view, input, centreId])
   const sankeyTarget = useMemo(
     () => (target && matrix && sankey ? targetSankey(matrix, filters, target) : null),
@@ -314,7 +314,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           >
             {sankey && (
               <ZoneSankey
-                layout={sankey}
+                model={sankey}
+                filters={filters}
                 selectedCell={selectedEdge?.id ?? null}
                 selectedZone={selectedZone ? selectedNode : null}
                 onSelectCell={selectEdge}

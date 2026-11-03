@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest'
 
 import { demoInput, flow, seen, zone } from './mapViewsTestKit'
 import { buildMatrix } from './matrixModel'
-import { ALLOWED_W, MAX_W, MIN_PITCH, MIN_W, NODE_GAP, buildSankey, ribbonWidth } from './sankeyModel'
+import {
+  ALLOWED_W, BAR_W, COMPACT_W, FOOT, HEAD, LABEL_W, MAX_FILL_W, MAX_W, MIN_PITCH, MIN_W, NODE_GAP, buildSankey, ribbonWidth, type SankeyLayout,
+} from './sankeyModel'
 import { ALL_FLOWS } from './zoneGraph'
 
 const web = zone('zw', 'web')
@@ -87,7 +89,7 @@ describe('buildSankey', () => {
     const blockedOnly = buildSankey(matrix, { allowed: false, unprotected: false, blocked: true })
     expect(blockedOnly.ribbons.map(r => r.id)).toEqual(['blocked:cell:zone:zw>zone:zd'])
     expect(blockedOnly.ribbons[0].width).toBe(MAX_W)
-    expect(buildSankey(matrix, { allowed: false, unprotected: false, blocked: false })).toEqual({ sources: [], targets: [], ribbons: [], height: 0 })
+    expect(buildSankey(matrix, { allowed: false, unprotected: false, blocked: false })).toEqual({ sources: [], targets: [], ribbons: [], height: 0, width: COMPACT_W, leftX: LABEL_W, rightX: COMPACT_W - LABEL_W - BAR_W, fill: false })
   })
 
   it('is deterministic on the demo-like draft', () => {
@@ -96,5 +98,58 @@ describe('buildSankey', () => {
     const b = buildSankey(buildMatrix({ ...input, zones: [...input.zones].reverse(), flows: [...input.flows].reverse(), suggestions: [...input.suggestions].reverse() }), ALL_FLOWS)
     expect(b).toEqual(a)
     expect(a.sources[0].id).toBe('zone:zw')
+  })
+})
+
+describe('buildSankey filling the map box', () => {
+  const demo = () => buildMatrix(demoInput())
+  const bottom = (layout: SankeyLayout) => Math.max(...[...layout.sources, ...layout.targets].map(n => n.y + Math.max(n.height, MIN_PITCH)))
+  const top = (layout: SankeyLayout) => Math.min(...[...layout.sources, ...layout.targets].map(n => n.y))
+
+  it('puts the bars at about 22 % and 78 % of the width, labels outside, and scales the positions with the box', () => {
+    const small = buildSankey(demo(), ALL_FLOWS, { width: 1200, height: 700 })
+    const large = buildSankey(demo(), ALL_FLOWS, { width: 1600, height: 900 })
+    expect(small).toMatchObject({ fill: true, width: 1200, leftX: 252, rightX: 936 })
+    expect(large).toMatchObject({ fill: true, width: 1600, leftX: 340, rightX: 1248 })
+    // The nodes span the height under the headings: the tallest column from the top to the bottom.
+    expect(small.height).toBe(700 - HEAD - FOOT)
+    expect(large.height).toBe(900 - HEAD - FOOT)
+    expect(bottom(large)).toBeGreaterThan(bottom(small))
+    expect(bottom(small)).toBeLessThanOrEqual(small.height)
+    expect(bottom(small) - top(small)).toBeGreaterThan(small.height * 0.9)
+  })
+
+  it('widens the ribbons with the height, within MIN_W and MAX_FILL_W, the allowed ones unchanged', () => {
+    const compact = buildSankey(demo(), ALL_FLOWS)
+    const tall = buildSankey(demo(), ALL_FLOWS, { width: 1400, height: 1400 })
+    const widest = (layout: SankeyLayout) => Math.max(...layout.ribbons.map(r => r.width))
+    expect(widest(compact)).toBe(MAX_W)
+    expect(widest(tall)).toBeGreaterThan(MAX_W)
+    for (const r of tall.ribbons) {
+      expect(r.width).toBeGreaterThanOrEqual(MIN_W)
+      expect(r.width).toBeLessThanOrEqual(MAX_FILL_W)
+      if (!r.hits) expect(r.width).toBe(ALLOWED_W)
+    }
+    // A huge box: the ribbons stop at MAX_FILL_W, the columns are centred in what is left.
+    const huge = buildSankey(demo(), ALL_FLOWS, { width: 2000, height: 6000 })
+    expect(widest(huge)).toBeLessThanOrEqual(MAX_FILL_W)
+    expect(top(huge)).toBeGreaterThan(0)
+  })
+
+  it('keeps the label room on a narrow box, and the compact drawing under 720 px or without a size', () => {
+    const narrow = buildSankey(demo(), ALL_FLOWS, { width: 800, height: 600 })
+    expect(narrow.leftX).toBe(LABEL_W)
+    expect(narrow.rightX).toBe(800 - LABEL_W - BAR_W)
+    const compact = buildSankey(demo(), ALL_FLOWS)
+    expect(buildSankey(demo(), ALL_FLOWS, { width: 700, height: 900 })).toEqual(compact)
+    expect(buildSankey(demo(), ALL_FLOWS, null)).toEqual(compact)
+    expect(compact).toMatchObject({ fill: false, width: COMPACT_W })
+  })
+
+  it('keeps the least gaps (and scrolls) when the box is too short for the nodes', () => {
+    const short = buildSankey(demo(), ALL_FLOWS, { width: 1200, height: 120 })
+    expect(Math.max(...short.ribbons.map(r => r.width))).toBe(MAX_W)
+    expect(short.height).toBeGreaterThan(120 - HEAD - FOOT)
+    expect(short.sources[1].y - short.sources[0].y - Math.max(short.sources[0].height, MIN_PITCH)).toBeCloseTo(NODE_GAP, 0)
   })
 })

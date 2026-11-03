@@ -397,3 +397,28 @@ describe("rememberGuestConfig (UA46)", () => {
     expect(peekGuestNet(CONN, "lxc", 302)).toBeUndefined()
   })
 })
+
+describe("attachGuestDiskTotals partial list (UA46)", () => {
+  beforeEach(() => resetGuestDiskTotals())
+
+  const fetchConfig = async (_node: string, type: "qemu" | "lxc", vmid: string) => ({
+    [type === "lxc" ? "rootfs" : "scsi0"]: `local:${vmid}/disk,size=1G`,
+    net0: "name=eth0,bridge=vmbr0,firewall=1",
+  })
+
+  it("keeps the cached configs of the guests a vDC session does not list", async () => {
+    await attachGuestDiskTotals(null, CONN, [{ vmid: 1, type: "lxc", node: "pve1" }, { vmid: 2, type: "lxc", node: "pve1" }], { onlineNodes: ONLINE, fetchConfig })
+
+    await attachGuestDiskTotals(null, CONN, [{ vmid: 1, type: "lxc", node: "pve1" }], { onlineNodes: ONLINE, fetchConfig, partial: true })
+
+    expect(peekGuestNet(CONN, "lxc", 2)).toEqual({ nicFirewall: true, vlans: [] })
+  })
+
+  it("still drops a guest gone from the complete list", async () => {
+    await attachGuestDiskTotals(null, CONN, [{ vmid: 1, type: "lxc", node: "pve1" }, { vmid: 2, type: "lxc", node: "pve1" }], { onlineNodes: ONLINE, fetchConfig })
+
+    await attachGuestDiskTotals(null, CONN, [{ vmid: 1, type: "lxc", node: "pve1" }], { onlineNodes: ONLINE, fetchConfig })
+
+    expect(peekGuestNet(CONN, "lxc", 2)).toBeUndefined()
+  })
+})

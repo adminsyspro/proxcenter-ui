@@ -61,6 +61,11 @@ export type DiskTotalOptions = {
    * figures in the background, for routes that must not wait on N config reads.
    */
   blocking?: boolean
+  /**
+   * true: `guests` is a subset of the connection's guests (a vDC session sees its own pools only). The cached figures
+   * of the guests left out are kept: they are not gone, only not listed to this caller.
+   */
+  partial?: boolean
   now?: () => number
   random?: () => number
   fetchConfig?: FetchConfig
@@ -282,7 +287,8 @@ function applyTotals(connId: string, guests: DiskTotalGuest[]): void {
 /**
  * Set `diskTotal` on every qemu/lxc guest of ONE connection that has a figure,
  * in place. `guests` must be the connection's complete list: cached figures of
- * guests absent from it (deleted, or moved to another connection) are dropped.
+ * guests absent from it (deleted, or moved to another connection) are dropped,
+ * unless `partial` says the list is a subset (then nothing is dropped).
  */
 export async function attachGuestDiskTotals(
   connConfig: unknown,
@@ -296,7 +302,7 @@ export async function attachGuestDiskTotals(
 
   const { live, stale } = collectStale(connId, guests, opts.onlineNodes, now())
 
-  if (guests.length > 0) dropDeparted(connId, live)
+  if (guests.length > 0 && !opts.partial) dropDeparted(connId, live)
 
   const refresh = mapWithConcurrency(stale, PVEPROXY_CONCURRENCY, item =>
     refreshOne(item.key, item.guest, item.kind, fetchConfig, now, random))

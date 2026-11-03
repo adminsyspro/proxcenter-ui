@@ -36,6 +36,7 @@ export const KNOWN_CODES: ReadonlySet<string> = new Set([
   'VERSION_CONFLICT', 'BUSY', 'ZONE_NAME_TAKEN', 'IN_USE', 'CONFLICT', 'INVALID', 'FEATURE_REQUIRED',
   'FORBIDDEN', 'NOT_FOUND', 'UNAUTHORIZED', 'NOT_LEADER', 'MICROSEG_UNAVAILABLE', 'ENGINE_STOPPED',
   'ORCHESTRATOR_ERROR', 'ORCHESTRATOR_TIMEOUT', 'PVE_ERROR', 'NETWORK', 'CHECK_PENDING', 'SOCLE_MISSING',
+  'NOT_DEPLOYED',
 ])
 
 /** i18n key of an error code (the strings live in the microsegPilot catalogue). */

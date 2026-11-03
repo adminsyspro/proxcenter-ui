@@ -12617,7 +12617,8 @@
       "resumeInfoReenable": "Réactive le pare-feu de cluster, puis réapplique la dernière révision",
       "resumeInfoSocle": "Refusé si les règles de gestion (SSH 22, web 8006) sont absentes : corrigez-les d'abord dans l'assistant de déploiement du tableau de bord",
       "openWizard": "Ouvrir l'assistant de déploiement",
-      "clusterFirewallOff": "Pare-feu de cluster désactivé"
+      "clusterFirewallOff": "Pare-feu de cluster désactivé",
+      "notDeployed": "Rien de déployé"
     },
     "pending": {
       "withCount": "{count, plural, one {# changement non appliqué} other {# changements non appliqués}}",
@@ -12657,7 +12658,8 @@
       "NETWORK": "ProxCenter est injoignable. Vérifiez votre connexion réseau.",
       "CHECK_PENDING": "Une vérification est déjà en file d'attente : le moteur la lance à son prochain passage.",
       "generic": "Une erreur est survenue. Réessayez.",
-      "SOCLE_MISSING": "Les règles de gestion (SSH 22, web 8006) sont absentes : le pare-feu de cluster n'a pas été réactivé. Ajoutez-les avec l'assistant de déploiement, puis reprenez."
+      "SOCLE_MISSING": "Les règles de gestion (SSH 22, web 8006) sont absentes : le pare-feu de cluster n'a pas été réactivé. Ajoutez-les avec l'assistant de déploiement, puis reprenez.",
+      "NOT_DEPLOYED": "Rien n'est déployé : appliquez d'abord un plan, l'arrêt d'urgence agit sur une politique déployée."
     },
     "policy": {
       "zonesTitle": "Zones",
@@ -12859,7 +12861,8 @@
       "applyFailedWith": "L'application a échoué : {error}",
       "errors": "Erreurs : {list}",
       "notes": "Remarques : {list}",
-      "nothingRecord": "Rien à écrire dans Proxmox : l'application enregistre la révision."
+      "nothingRecord": "Rien à écrire dans Proxmox : l'application enregistre la révision.",
+      "stopActive": "Écrit pendant que l'arrêt d'urgence maintient le pare-feu de cluster désactivé ; prend effet à la levée de l'arrêt"
     },
     "drifts": {
       "asOf": "Au dernier passage complet, {time}",
@@ -13167,7 +13170,8 @@
         "cluster_firewall": {
           "title": "Pare-feu du cluster",
           "pass": "Le pare-feu du cluster est activé.",
-          "off": "Le pare-feu du cluster est désactivé. L'assistant de déploiement ajoute les règles d'administration, puis l'active."
+          "off": "Le pare-feu du cluster est désactivé. L'assistant de déploiement ajoute les règles d'administration, puis l'active.",
+          "heldByStop": "Pare-feu de cluster maintenu désactivé par l'arrêt d'urgence : levez l'arrêt pour le réactiver"
         },
         "socle_rules": {
           "title": "Accès d'administration",

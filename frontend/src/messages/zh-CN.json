@@ -12616,7 +12616,8 @@
       "resumeInfoReenable": "重新启用集群防火墙，然后重新应用最新修订",
       "resumeInfoSocle": "如果缺少管理规则（SSH 22、Web 8006）将被拒绝：请先在仪表板的部署向导中修复",
       "openWizard": "打开部署向导",
-      "clusterFirewallOff": "集群防火墙已禁用"
+      "clusterFirewallOff": "集群防火墙已禁用",
+      "notDeployed": "尚未部署任何内容"
     },
     "pending": {
       "withCount": "{count} 项未应用的更改",
@@ -12656,7 +12657,8 @@
       "NETWORK": "无法连接到 ProxCenter。请检查网络连接。",
       "CHECK_PENDING": "已有一次检查在排队：引擎会在下一轮运行时启动它。",
       "generic": "出了点问题。请重试。",
-      "SOCLE_MISSING": "缺少管理规则（SSH 22、Web 8006），因此未重新启用集群防火墙。请使用部署向导添加后再恢复。"
+      "SOCLE_MISSING": "缺少管理规则（SSH 22、Web 8006），因此未重新启用集群防火墙。请使用部署向导添加后再恢复。",
+      "NOT_DEPLOYED": "尚未部署任何内容：请先应用计划，紧急停止作用于已部署的策略。"
     },
     "policy": {
       "zonesTitle": "区域",
@@ -12858,7 +12860,8 @@
       "applyFailedWith": "应用失败：{error}",
       "errors": "错误：{list}",
       "notes": "备注：{list}",
-      "nothingRecord": "无需写入 Proxmox：应用只会记录该修订。"
+      "nothingRecord": "无需写入 Proxmox：应用只会记录该修订。",
+      "stopActive": "在紧急停止使集群防火墙保持关闭期间写入；解除停止后生效"
     },
     "drifts": {
       "asOf": "截至最近一次完整运行，{time}",
@@ -13166,7 +13169,8 @@
         "cluster_firewall": {
           "title": "集群防火墙",
           "pass": "集群防火墙已开启。",
-          "off": "集群防火墙已关闭。部署向导会先添加管理规则，再将其开启。"
+          "off": "集群防火墙已关闭。部署向导会先添加管理规则，再将其开启。",
+          "heldByStop": "集群防火墙被紧急停止保持关闭：解除停止以重新启用"
         },
         "socle_rules": {
           "title": "管理访问",

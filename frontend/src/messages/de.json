@@ -12284,7 +12284,8 @@
       "resumeInfoReenable": "Aktiviert die Cluster-Firewall wieder und wendet dann die letzte Revision erneut an",
       "resumeInfoSocle": "Abgelehnt, wenn die Verwaltungsregeln (SSH 22, Web 8006) fehlen: Beheben Sie dies zuerst im Bereitstellungsassistenten des Dashboards",
       "openWizard": "Bereitstellungsassistenten öffnen",
-      "clusterFirewallOff": "Cluster-Firewall deaktiviert"
+      "clusterFirewallOff": "Cluster-Firewall deaktiviert",
+      "notDeployed": "Nichts bereitgestellt"
     },
     "pending": {
       "withCount": "{count, plural, one {# nicht angewendete Änderung} other {# nicht angewendete Änderungen}}",
@@ -12324,7 +12325,8 @@
       "NETWORK": "ProxCenter ist nicht erreichbar. Prüfen Sie Ihre Netzwerkverbindung.",
       "CHECK_PENDING": "Eine Prüfung ist bereits eingereiht: die Engine startet sie bei ihrem nächsten Durchlauf.",
       "generic": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
-      "SOCLE_MISSING": "Die Verwaltungsregeln (SSH 22, Web 8006) fehlen, daher wurde die Cluster-Firewall nicht wieder aktiviert. Fügen Sie sie mit dem Bereitstellungsassistenten hinzu und setzen Sie dann fort."
+      "SOCLE_MISSING": "Die Verwaltungsregeln (SSH 22, Web 8006) fehlen, daher wurde die Cluster-Firewall nicht wieder aktiviert. Fügen Sie sie mit dem Bereitstellungsassistenten hinzu und setzen Sie dann fort.",
+      "NOT_DEPLOYED": "Es ist noch nichts bereitgestellt: wenden Sie zuerst einen Plan an, der Notfallstopp wirkt auf eine bereitgestellte Richtlinie."
     },
     "policy": {
       "zonesTitle": "Zonen",
@@ -12526,7 +12528,8 @@
       "applyFailedWith": "Die Anwendung ist fehlgeschlagen: {error}",
       "errors": "Fehler: {list}",
       "notes": "Hinweise: {list}",
-      "nothingRecord": "Nichts in Proxmox zu schreiben: Das Anwenden speichert die Revision."
+      "nothingRecord": "Nichts in Proxmox zu schreiben: Das Anwenden speichert die Revision.",
+      "stopActive": "Geschrieben, während der Notfallstopp die Cluster-Firewall deaktiviert hält; wirkt, sobald der Stopp aufgehoben wird"
     },
     "drifts": {
       "asOf": "Stand des letzten vollständigen Durchlaufs, {time}",
@@ -12834,7 +12837,8 @@
         "cluster_firewall": {
           "title": "Cluster-Firewall",
           "pass": "Die Cluster-Firewall ist aktiv.",
-          "off": "Die Cluster-Firewall ist aus. Der Bereitstellungsassistent fügt die Verwaltungsregeln hinzu und schaltet sie dann ein."
+          "off": "Die Cluster-Firewall ist aus. Der Bereitstellungsassistent fügt die Verwaltungsregeln hinzu und schaltet sie dann ein.",
+          "heldByStop": "Cluster-Firewall vom Notfallstopp deaktiviert gehalten: Heben Sie den Stopp auf, um sie wieder zu aktivieren"
         },
         "socle_rules": {
           "title": "Verwaltungszugriff",

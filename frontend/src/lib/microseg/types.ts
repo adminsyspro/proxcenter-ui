@@ -37,6 +37,8 @@ export type MicrosegPolicyRecord = {
   version: number
   settings: MicrosegSettings
   emergency_stop: boolean
+  /** The stop switched the cluster firewall off (kept by the engine until the stop is lifted). */
+  stop_cluster_disabled?: boolean
   created_at: string
   updated_at: string
   updated_by: string
@@ -180,6 +182,8 @@ export type MicrosegRunResult = {
   pending_applied?: number
   complete?: boolean
   notes?: string[]
+  /** The run was written while the emergency stop holds the cluster firewall off. */
+  stop_active?: boolean
 }
 
 export type RunKind = 'light' | 'ips' | 'full' | 'log' | 'targeted' | 'plan' | 'apply' | 'remove'

@@ -12616,7 +12616,8 @@
       "resumeInfoReenable": "Reactiva el cortafuegos de clúster y después vuelve a aplicar la última revisión",
       "resumeInfoSocle": "Se rechaza si faltan las reglas de gestión (SSH 22, web 8006): corríjalas antes en el asistente de despliegue del panel",
       "openWizard": "Abrir el asistente de despliegue",
-      "clusterFirewallOff": "Cortafuegos de clúster desactivado"
+      "clusterFirewallOff": "Cortafuegos de clúster desactivado",
+      "notDeployed": "Nada desplegado"
     },
     "pending": {
       "withCount": "{count, plural, one {# cambio sin aplicar} other {# cambios sin aplicar}}",
@@ -12656,7 +12657,8 @@
       "NETWORK": "No se puede contactar con ProxCenter. Compruebe su conexión de red.",
       "CHECK_PENDING": "Ya hay una comprobación en cola: el motor la inicia en su próxima pasada.",
       "generic": "Algo salió mal. Inténtelo de nuevo.",
-      "SOCLE_MISSING": "Faltan las reglas de gestión (SSH 22, web 8006), por lo que no se reactivó el cortafuegos de clúster. Añádalas con el asistente de despliegue y reanude."
+      "SOCLE_MISSING": "Faltan las reglas de gestión (SSH 22, web 8006), por lo que no se reactivó el cortafuegos de clúster. Añádalas con el asistente de despliegue y reanude.",
+      "NOT_DEPLOYED": "Aún no hay nada desplegado: aplique antes un plan, la parada de emergencia actúa sobre una política desplegada."
     },
     "policy": {
       "zonesTitle": "Zonas",
@@ -12858,7 +12860,8 @@
       "applyFailedWith": "La aplicación falló: {error}",
       "errors": "Errores: {list}",
       "notes": "Notas: {list}",
-      "nothingRecord": "Nada que escribir en Proxmox: aplicar registra la revisión."
+      "nothingRecord": "Nada que escribir en Proxmox: aplicar registra la revisión.",
+      "stopActive": "Escrito mientras la parada de emergencia mantiene desactivado el cortafuegos de clúster; surte efecto al levantar la parada"
     },
     "drifts": {
       "asOf": "Al último ciclo completo, {time}",
@@ -13166,7 +13169,8 @@
         "cluster_firewall": {
           "title": "Cortafuegos del clúster",
           "pass": "El cortafuegos del clúster está activado.",
-          "off": "El cortafuegos del clúster está desactivado. El asistente de despliegue añade las reglas de administración y luego lo activa."
+          "off": "El cortafuegos del clúster está desactivado. El asistente de despliegue añade las reglas de administración y luego lo activa.",
+          "heldByStop": "Cortafuegos de clúster mantenido desactivado por la parada de emergencia: levante la parada para reactivarlo"
         },
         "socle_rules": {
           "title": "Acceso de administración",

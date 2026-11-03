@@ -13607,6 +13607,150 @@
         "fromUnknown": "来自未知来源",
         "bySourceZone": "按源区域的字节数"
       }
+    },
+    "dfw": {
+      "hits24h": "24 小时命中",
+      "selectAll": "选择显示的所有规则",
+      "any": "任意",
+      "actionLabel": "规则动作",
+      "action": {
+        "ACCEPT": "允许",
+        "DROP": "丢弃",
+        "REJECT": "拒绝"
+      },
+      "managedRule": "由微分段引擎管理：此处只读",
+      "unnamed": "规则 {pos}",
+      "rowAdded": "新建",
+      "rowEdited": "未发布",
+      "rowMoved": "已移动",
+      "rowDisabled": "已禁用",
+      "selectRule": "选择规则 {pos}",
+      "enableLabel": "规则 {pos} 启用",
+      "logLabel": "规则 {pos} 记录日志",
+      "selectSection": "选择 {name} 的规则",
+      "collapse": "折叠 {name}",
+      "expand": "展开 {name}",
+      "lastPublished": "上次成功发布：{date} {time}",
+      "publish": "发布 ({count})",
+      "discard": "放弃更改",
+      "status": {
+        "rules": "{count, plural, other {规则：共 # 条}}",
+        "rulesAtLeast": "{count, plural, other {规则：至少共 # 条}}",
+        "rulesHint": "只计算已读取的部分：主机或虚拟机的规则在展开时读取",
+        "unpublished": "未发布",
+        "disabled": "已禁用 {count}",
+        "sections": "部分：{count}",
+        "managed": "由微分段管理 {count}",
+        "covered": "受保护的虚拟机：{covered} / {running} 运行中",
+        "coveredUnknown": "受保护的虚拟机：尚未读取",
+        "scope": "范围"
+      },
+      "scope": {
+        "cluster": "集群",
+        "hosts": "主机",
+        "vms": "虚拟机",
+        "all": "全部"
+      },
+      "addSection": "添加部分",
+      "bulk": {
+        "enable": "启用",
+        "disable": "禁用",
+        "clone": "克隆",
+        "up": "上移",
+        "down": "下移",
+        "moveTo": "移到部分"
+      },
+      "selection": "{count, plural, =0 {未选择规则} other {已选择 # 条规则}}",
+      "dragHint": "拖动 ⋮⋮ 重新排序",
+      "clearSelection": "清除选择",
+      "filter": "筛选：IP、端口、组、虚拟机",
+      "moveDialog": {
+        "title": "{count, plural, other {将 # 条规则移到}}",
+        "target": "部分",
+        "hint": "发布时在此删除，并在该部分末尾创建",
+        "notRead": "请先展开该部分：其规则尚未读取",
+        "confirm": "移动"
+      },
+      "addSectionDialog": {
+        "title": "添加部分",
+        "target": "主机或虚拟机",
+        "hint": "该部分将以第一条规则打开：接下来是规则编辑器",
+        "confirm": "继续"
+      },
+      "optionsDialog": {
+        "title": "{name} 的防火墙选项",
+        "enable": "防火墙",
+        "policy_in": "入站策略",
+        "policy_out": "出站策略",
+        "log_level_in": "入站日志级别",
+        "log_level_out": "出站日志级别",
+        "on": "开启",
+        "off": "关闭",
+        "hint": "发布时写入 Proxmox"
+      },
+      "confirmPublish": {
+        "title": "发布 {count} 项更改",
+        "body": "{count} 项更改将逐一写入 Proxmox，每项一次调用",
+        "confirm": "发布"
+      },
+      "confirmDiscard": {
+        "title": "放弃更改",
+        "body": "{count} 项未发布的更改将丢失",
+        "confirm": "放弃"
+      },
+      "section": {
+        "cluster": "集群规则",
+        "zone": "微分段 · 区域 {zone}",
+        "host": "主机 {node}"
+      },
+      "appliedTo": {
+        "cluster": "所有主机",
+        "zone": "{count, plural, other {# 台虚拟机}}",
+        "zoneUnknown": "{zone} 的成员"
+      },
+      "hitsNone": "Proxmox 不提供按规则的计数",
+      "hitsZone": "引擎在过去 24 小时内记录的流向该区域该服务的流量",
+      "hitsPartial": "至少：读取的事件未覆盖 24 小时",
+      "managed": "由引擎管理",
+      "unpublishedCount": "{count, plural, other {# 项未发布}}",
+      "changedInProxmox": "已在 Proxmox 中更改",
+      "changedInProxmoxHint": "自本草稿以来 Proxmox 中的规则已更改：发布将在此部分停止。放弃其更改以从 Proxmox 当前内容重新开始",
+      "guestFirewallOff": "虚拟机防火墙关闭",
+      "hostFirewallOff": "主机防火墙关闭",
+      "firewallOnAtPublish": "发布时开启防火墙",
+      "enableFirewall": "启用防火墙",
+      "undo": "撤销",
+      "ruleCount": "{count, plural, other {# 条规则}}",
+      "editInMicroseg": "在微分段中编辑 ›",
+      "object": {
+        "group": "安全组 {group}"
+      },
+      "sectionMenu": "{name} 的操作",
+      "group": {
+        "protected": "{count} 台受微分段保护",
+        "onOpen": "展开虚拟机时读取规则",
+        "page": "第 {page} / {pages} 页"
+      },
+      "noMatch": "没有符合筛选的规则",
+      "zoneState": {
+        "enforce": "强制",
+        "observe": "观察",
+        "disabled": "未部署"
+      },
+      "clusterOptions": "集群防火墙选项",
+      "menu": {
+        "options": "防火墙选项",
+        "discard": "放弃此部分的更改"
+      },
+      "keepInDraft": "保留在草稿中",
+      "published": "{count, plural, other {已发布 # 项更改}}",
+      "publishedPart": "已发布 {total} 项中的 {applied} 项：请再次发布其余更改",
+      "publishFailed": "已应用 {applied} 项更改后发布停止：",
+      "conflict": "某部分的规则在读取后已在 Proxmox 中更改。请刷新后再次发布：未发布的更改保留在草稿中",
+      "mode": {
+        "cluster": "{count, plural, other {集群 · # 个节点}}",
+        "standalone": "单节点"
+      }
     }
   }
 }

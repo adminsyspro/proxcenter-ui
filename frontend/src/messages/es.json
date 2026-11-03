@@ -13607,6 +13607,150 @@
         "fromUnknown": "Desde lo desconocido",
         "bySourceZone": "Bytes por zona de origen"
       }
+    },
+    "dfw": {
+      "hits24h": "Coincidencias 24 h",
+      "selectAll": "Seleccionar todas las reglas mostradas",
+      "any": "cualquiera",
+      "actionLabel": "Acción de la regla",
+      "action": {
+        "ACCEPT": "Permitir",
+        "DROP": "Descartar",
+        "REJECT": "Rechazar"
+      },
+      "managedRule": "Gestionada por el motor de microsegmentación: solo lectura aquí",
+      "unnamed": "Regla {pos}",
+      "rowAdded": "nueva",
+      "rowEdited": "sin publicar",
+      "rowMoved": "movida",
+      "rowDisabled": "desactivada",
+      "selectRule": "Seleccionar la regla {pos}",
+      "enableLabel": "Regla {pos} activa",
+      "logLabel": "Regla {pos} registrada",
+      "selectSection": "Seleccionar las reglas de {name}",
+      "collapse": "Contraer {name}",
+      "expand": "Expandir {name}",
+      "lastPublished": "Última publicación correcta el {date} a las {time}",
+      "publish": "Publicar ({count})",
+      "discard": "Descartar cambios",
+      "status": {
+        "rules": "{count, plural, one {Reglas: # en total} other {Reglas: # en total}}",
+        "rulesAtLeast": "{count, plural, one {Reglas: al menos # en total} other {Reglas: al menos # en total}}",
+        "rulesHint": "Cuenta las secciones leídas: las reglas de un host o invitado se leen al abrirlo",
+        "unpublished": "Sin publicar",
+        "disabled": "Desactivadas {count}",
+        "sections": "Secciones: {count}",
+        "managed": "Gestionadas por la microsegmentación {count}",
+        "covered": "VM cubiertas: {covered} / {running} en ejecución",
+        "coveredUnknown": "VM cubiertas: aún sin leer",
+        "scope": "Ámbito"
+      },
+      "scope": {
+        "cluster": "Clúster",
+        "hosts": "Nodos",
+        "vms": "VM",
+        "all": "Todo"
+      },
+      "addSection": "Añadir sección",
+      "bulk": {
+        "enable": "Activar",
+        "disable": "Desactivar",
+        "clone": "Clonar",
+        "up": "Subir",
+        "down": "Bajar",
+        "moveTo": "Mover a una sección"
+      },
+      "selection": "{count, plural, =0 {Ninguna regla seleccionada} one {# regla seleccionada} other {# reglas seleccionadas}}",
+      "dragHint": "arrastrar ⋮⋮ para reordenar",
+      "clearSelection": "Quitar la selección",
+      "filter": "Filtrar: IP, puerto, grupo, VM",
+      "moveDialog": {
+        "title": "{count, plural, one {Mover # regla a} other {Mover # reglas a}}",
+        "target": "Sección",
+        "hint": "Se eliminan aquí y se crean al final de esa sección al publicar",
+        "notRead": "Abra primero esa sección: sus reglas aún no se han leído",
+        "confirm": "Mover"
+      },
+      "addSectionDialog": {
+        "title": "Añadir una sección",
+        "target": "Host o invitado",
+        "hint": "La sección se abre con su primera regla: sigue el editor de reglas",
+        "confirm": "Continuar"
+      },
+      "optionsDialog": {
+        "title": "Opciones del cortafuegos de {name}",
+        "enable": "Cortafuegos",
+        "policy_in": "Política de entrada",
+        "policy_out": "Política de salida",
+        "log_level_in": "Nivel de registro de entrada",
+        "log_level_out": "Nivel de registro de salida",
+        "on": "Activado",
+        "off": "Desactivado",
+        "hint": "Se escribe en Proxmox al publicar"
+      },
+      "confirmPublish": {
+        "title": "Publicar {count} cambios",
+        "body": "{count} cambios se escriben en Proxmox uno tras otro, una llamada cada uno",
+        "confirm": "Publicar"
+      },
+      "confirmDiscard": {
+        "title": "Descartar los cambios",
+        "body": "Se pierden los {count} cambios sin publicar",
+        "confirm": "Descartar"
+      },
+      "section": {
+        "cluster": "Reglas del clúster",
+        "zone": "Microsegmentación · zona {zone}",
+        "host": "Nodo {node}"
+      },
+      "appliedTo": {
+        "cluster": "Todos los hosts",
+        "zone": "{count, plural, one {# VM} other {# VM}}",
+        "zoneUnknown": "miembros de {zone}"
+      },
+      "hitsNone": "Proxmox no expone contadores por regla",
+      "hitsZone": "Flujos registrados por el motor hacia esta zona para este servicio, últimas 24 h",
+      "hitsPartial": "Como mínimo: los eventos leídos no llegan a 24 h atrás",
+      "managed": "gestionada por el motor",
+      "unpublishedCount": "{count, plural, one {# sin publicar} other {# sin publicar}}",
+      "changedInProxmox": "cambiada en Proxmox",
+      "changedInProxmoxHint": "Las reglas cambiaron en Proxmox desde este borrador: la publicación se detendrá en esta sección. Descarte sus cambios para empezar de nuevo desde lo que tiene Proxmox",
+      "guestFirewallOff": "cortafuegos del invitado APAGADO",
+      "hostFirewallOff": "cortafuegos del host APAGADO",
+      "firewallOnAtPublish": "cortafuegos activado al publicar",
+      "enableFirewall": "activar el cortafuegos",
+      "undo": "deshacer",
+      "ruleCount": "{count, plural, one {# regla} other {# reglas}}",
+      "editInMicroseg": "editar en Microsegmentación ›",
+      "object": {
+        "group": "grupo de seguridad {group}"
+      },
+      "sectionMenu": "Acciones de {name}",
+      "group": {
+        "protected": "{count} protegidas por la microsegmentación",
+        "onOpen": "reglas leídas al abrir un invitado",
+        "page": "página {page} / {pages}"
+      },
+      "noMatch": "Ninguna regla coincide con el filtro",
+      "zoneState": {
+        "enforce": "Aplicar",
+        "observe": "Observar",
+        "disabled": "No desplegada"
+      },
+      "clusterOptions": "Opciones del cortafuegos del clúster",
+      "menu": {
+        "options": "Opciones del cortafuegos",
+        "discard": "Descartar los cambios de esta sección"
+      },
+      "keepInDraft": "Guardar en el borrador",
+      "published": "{count, plural, one {# cambio publicado} other {# cambios publicados}}",
+      "publishedPart": "{applied} de {total} cambios publicados: publique de nuevo para el resto",
+      "publishFailed": "Publicación detenida tras aplicar {applied} cambios:",
+      "conflict": "las reglas de una sección cambiaron en Proxmox desde que se leyeron. Actualice y publique de nuevo: los cambios no publicados quedan en el borrador",
+      "mode": {
+        "cluster": "{count, plural, one {clúster · # nodo} other {clúster · # nodos}}",
+        "standalone": "nodo único"
+      }
     }
   }
 }

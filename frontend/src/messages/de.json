@@ -13275,6 +13275,150 @@
         "fromUnknown": "Von unbekannt",
         "bySourceZone": "Bytes pro Quellzone"
       }
+    },
+    "dfw": {
+      "hits24h": "Treffer 24 Std.",
+      "selectAll": "Alle angezeigten Regeln auswählen",
+      "any": "alle",
+      "actionLabel": "Regelaktion",
+      "action": {
+        "ACCEPT": "Erlauben",
+        "DROP": "Verwerfen",
+        "REJECT": "Ablehnen"
+      },
+      "managedRule": "Von der Mikrosegmentierungs-Engine verwaltet: hier nur lesbar",
+      "unnamed": "Regel {pos}",
+      "rowAdded": "neu",
+      "rowEdited": "unveröffentlicht",
+      "rowMoved": "verschoben",
+      "rowDisabled": "deaktiviert",
+      "selectRule": "Regel {pos} auswählen",
+      "enableLabel": "Regel {pos} aktiv",
+      "logLabel": "Regel {pos} protokolliert",
+      "selectSection": "Regeln von {name} auswählen",
+      "collapse": "{name} einklappen",
+      "expand": "{name} ausklappen",
+      "lastPublished": "Letzte erfolgreiche Veröffentlichung am {date} um {time}",
+      "publish": "Veröffentlichen ({count})",
+      "discard": "Änderungen verwerfen",
+      "status": {
+        "rules": "{count, plural, one {Regeln: # insgesamt} other {Regeln: # insgesamt}}",
+        "rulesAtLeast": "{count, plural, one {Regeln: mindestens # insgesamt} other {Regeln: mindestens # insgesamt}}",
+        "rulesHint": "Zählt die gelesenen Abschnitte: Die Regeln eines Hosts oder Gasts werden beim Öffnen gelesen",
+        "unpublished": "Unveröffentlicht",
+        "disabled": "Deaktiviert {count}",
+        "sections": "Abschnitte: {count}",
+        "managed": "Von der Mikrosegmentierung verwaltet {count}",
+        "covered": "Geschützte VMs: {covered} / {running} laufend",
+        "coveredUnknown": "Geschützte VMs: noch nicht gelesen",
+        "scope": "Bereich"
+      },
+      "scope": {
+        "cluster": "Cluster-Ebene",
+        "hosts": "Knoten",
+        "vms": "Gäste",
+        "all": "Alle"
+      },
+      "addSection": "Abschnitt hinzufügen",
+      "bulk": {
+        "enable": "Aktivieren",
+        "disable": "Deaktivieren",
+        "clone": "Klonen",
+        "up": "Nach oben",
+        "down": "Nach unten",
+        "moveTo": "In Abschnitt verschieben"
+      },
+      "selection": "{count, plural, =0 {Keine Regel ausgewählt} one {# Regel ausgewählt} other {# Regeln ausgewählt}}",
+      "dragHint": "⋮⋮ ziehen zum Umordnen",
+      "clearSelection": "Auswahl aufheben",
+      "filter": "Filtern: IP, Port, Gruppe, VM",
+      "moveDialog": {
+        "title": "{count, plural, one {# Regel verschieben nach} other {# Regeln verschieben nach}}",
+        "target": "Abschnitt",
+        "hint": "Hier gelöscht und beim Veröffentlichen am Ende dieses Abschnitts erstellt",
+        "notRead": "Öffnen Sie zuerst diesen Abschnitt: Seine Regeln sind noch nicht gelesen",
+        "confirm": "Verschieben"
+      },
+      "addSectionDialog": {
+        "title": "Abschnitt hinzufügen",
+        "target": "Host oder Gast",
+        "hint": "Der Abschnitt öffnet sich mit seiner ersten Regel: Danach folgt der Regeleditor",
+        "confirm": "Weiter"
+      },
+      "optionsDialog": {
+        "title": "Firewall-Optionen von {name}",
+        "enable": "Firewall aktiv",
+        "policy_in": "Eingehende Richtlinie",
+        "policy_out": "Ausgehende Richtlinie",
+        "log_level_in": "Eingehende Protokollstufe",
+        "log_level_out": "Ausgehende Protokollstufe",
+        "on": "Ein",
+        "off": "Aus",
+        "hint": "Wird beim Veröffentlichen in Proxmox geschrieben"
+      },
+      "confirmPublish": {
+        "title": "{count} Änderungen veröffentlichen",
+        "body": "{count} Änderungen werden nacheinander in Proxmox geschrieben, je ein Aufruf",
+        "confirm": "Veröffentlichen"
+      },
+      "confirmDiscard": {
+        "title": "Änderungen verwerfen",
+        "body": "Die {count} unveröffentlichten Änderungen gehen verloren",
+        "confirm": "Verwerfen"
+      },
+      "section": {
+        "cluster": "Cluster-Regeln",
+        "zone": "Mikrosegmentierung · Zone {zone}",
+        "host": "Knoten {node}"
+      },
+      "appliedTo": {
+        "cluster": "Alle Hosts",
+        "zone": "{count, plural, one {# Gast} other {# Gäste}}",
+        "zoneUnknown": "Mitglieder von {zone}"
+      },
+      "hitsNone": "Proxmox stellt keine Zähler pro Regel bereit",
+      "hitsZone": "Von der Engine protokollierte Flüsse zu dieser Zone für diesen Dienst, letzte 24 Std.",
+      "hitsPartial": "Mindestens: Die gelesenen Ereignisse reichen nicht 24 Std. zurück",
+      "managed": "von der Engine verwaltet",
+      "unpublishedCount": "{count, plural, one {# unveröffentlicht} other {# unveröffentlicht}}",
+      "changedInProxmox": "in Proxmox geändert",
+      "changedInProxmoxHint": "Die Regeln wurden seit diesem Entwurf in Proxmox geändert: Die Veröffentlichung stoppt bei diesem Abschnitt. Verwerfen Sie seine Änderungen, um vom Stand in Proxmox neu zu beginnen",
+      "guestFirewallOff": "Gast-Firewall AUS",
+      "hostFirewallOff": "Host-Firewall AUS",
+      "firewallOnAtPublish": "Firewall beim Veröffentlichen an",
+      "enableFirewall": "Firewall aktivieren",
+      "undo": "rückgängig",
+      "ruleCount": "{count, plural, one {# Regel} other {# Regeln}}",
+      "editInMicroseg": "in Mikrosegmentierung bearbeiten ›",
+      "object": {
+        "group": "Sicherheitsgruppe {group}"
+      },
+      "sectionMenu": "Aktionen von {name}",
+      "group": {
+        "protected": "{count} durch die Mikrosegmentierung geschützt",
+        "onOpen": "Regeln werden beim Öffnen eines Gasts gelesen",
+        "page": "Seite {page} / {pages}"
+      },
+      "noMatch": "Keine Regel entspricht dem Filter",
+      "zoneState": {
+        "enforce": "Durchsetzen",
+        "observe": "Beobachten",
+        "disabled": "Nicht bereitgestellt"
+      },
+      "clusterOptions": "Cluster-Firewall-Optionen",
+      "menu": {
+        "options": "Firewall-Optionen",
+        "discard": "Änderungen dieses Abschnitts verwerfen"
+      },
+      "keepInDraft": "Im Entwurf behalten",
+      "published": "{count, plural, one {# Änderung veröffentlicht} other {# Änderungen veröffentlicht}}",
+      "publishedPart": "{applied} von {total} Änderungen veröffentlicht: Für den Rest erneut veröffentlichen",
+      "publishFailed": "Veröffentlichung nach {applied} angewendeten Änderungen gestoppt:",
+      "conflict": "die Regeln eines Abschnitts wurden seit dem Lesen in Proxmox geändert. Aktualisieren und erneut veröffentlichen: Nicht veröffentlichte Änderungen bleiben im Entwurf",
+      "mode": {
+        "cluster": "{count, plural, one {Cluster · # Knoten} other {Cluster · # Knoten}}",
+        "standalone": "Einzelknoten"
+      }
     }
   }
 }

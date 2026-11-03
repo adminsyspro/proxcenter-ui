@@ -1,8 +1,9 @@
 /**
- * A user without node.manage on the connection reads the Firewalling, Security Groups, Aliases and IP Sets tabs but
+ * A user without node.manage on the connection reads the Security Groups, Aliases and IP Sets tabs but
  * every write control is disabled, with the read-only reason as its tooltip; with the right everything is enabled.
  * The page hands the write access down (MicrosegWriteContext, set from useCanManageMicroseg, as the
- * Micro-segmentation tab does); each panel is rendered here under both values.
+ * Micro-segmentation tab does); each panel is rendered here under both values. The Firewalling tab has its own
+ * read-only test in FirewallingView.test.tsx.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -22,10 +23,7 @@ vi.mock('@/contexts/ToastContext', () => ({
 
 import { MicrosegWriteContext } from '../microseg/microsegAccess'
 import ObjectsTab from '../ObjectsTab'
-import FirewallPolicyTable from './FirewallPolicyTable'
-import HostRulesPanel from './HostRulesPanel'
 import SecurityGroupsPanel from './SecurityGroupsPanel'
-import VMRulesPanel from './VMRulesPanel'
 
 afterEach(cleanup)
 
@@ -43,13 +41,6 @@ const MEMBER: VMFirewallInfo = { ...GUEST, rules: [{ pos: 0, type: 'group', acti
 function renderAs(canWrite: boolean, ui: ReactElement) {
   return renderWithProviders(<MicrosegWriteContext.Provider value={canWrite}>{ui}</MicrosegWriteContext.Provider>)
 }
-
-const cluster = () => (
-  <FirewallPolicyTable
-    clusterRules={[RULE]} securityGroups={[]} selectedConnection={CONN} setClusterRules={vi.fn()}
-    clusterOptions={{ enable: 1 } as firewallAPIType.ClusterOptions} setClusterOptions={vi.fn()} aliases={[]} ipsets={[]} reload={vi.fn()}
-  />
-)
 
 const groups = () => (
   <SecurityGroupsPanel
@@ -76,59 +67,6 @@ async function expectReadOnly(controls: HTMLElement[]) {
   }
   await waitFor(() => expect(screen.getAllByText(READ_ONLY).length).toBeGreaterThan(0))
 }
-
-describe('Firewalling > Cluster for a read-only user', () => {
-  const writes = () => [
-    ...screen.getAllByRole('button', { name: 'Add rule' }),
-    screen.getByRole('button', { name: 'Edit' }),
-    screen.getByRole('button', { name: 'Delete' }),
-    ...screen.getAllByRole('switch'),
-  ]
-
-  it('disables Add rule, edit, delete, the switches and the default policies, with the reason', async () => {
-    renderAs(false, cluster())
-    for (const select of screen.getAllByRole('combobox')) expect(select).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByRole('row', { name: /tcp/i })).toHaveAttribute('draggable', 'false')
-    await expectReadOnly(writes())
-  })
-
-  it('leaves them enabled with the right', () => {
-    renderAs(true, cluster())
-    for (const control of writes()) expect(control).toBeEnabled()
-    expect(screen.getByRole('row', { name: /tcp/i })).toHaveAttribute('draggable', 'true')
-  })
-})
-
-describe('Firewalling > Host rules and VM rules for a read-only user', () => {
-  it('disables the node switch and Add rule of a host', async () => {
-    renderAs(false, (
-      <HostRulesPanel
-        hostRulesByNode={{ pve1: [RULE] }} nodesList={['pve1']} securityGroups={[]} loadingHostRules={false}
-        selectedConnection={CONN} loadHostRules={vi.fn().mockResolvedValue(undefined)} reloadHostRulesForNode={vi.fn()} aliases={[]} ipsets={[]}
-      />
-    ))
-    await expectReadOnly([screen.getByRole('button', { name: 'Add rule' }), ...screen.getAllByRole('switch')])
-  })
-
-  it('disables the guest firewall switch, its policies and Add rule; enabled with the right', async () => {
-    const vmPanel = () => (
-      <VMRulesPanel
-        vmFirewallData={[GUEST]} securityGroups={[]} loadingVMRules={false} selectedConnection={CONN}
-        loadVMFirewallData={vi.fn()} loadGuestRules={vi.fn().mockResolvedValue([RULE])} reloadVMFirewallRules={vi.fn()} aliases={[]} ipsets={[]}
-      />
-    )
-    renderAs(false, vmPanel())
-    fireEvent.click(screen.getByRole('button', { name: 'Expand all' }))
-    for (const select of screen.getAllByRole('combobox')) expect(select).toHaveAttribute('aria-disabled', 'true')
-    await expectReadOnly([screen.getByRole('button', { name: 'Add rule' }), ...screen.getAllByRole('switch')])
-    cleanup()
-
-    renderAs(true, vmPanel())
-    fireEvent.click(screen.getByRole('button', { name: 'Expand all' }))
-    expect(screen.getByRole('button', { name: 'Add rule' })).toBeEnabled()
-    for (const select of screen.getAllByRole('combobox')) expect(select).not.toHaveAttribute('aria-disabled')
-  })
-})
 
 describe('Security Groups for a read-only user', () => {
   it('disables New policy, Add rule, Delete, the rule controls, attach and detach, with the reason', async () => {

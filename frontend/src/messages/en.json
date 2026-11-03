@@ -13607,6 +13607,150 @@
         "fromUnknown": "From unknown",
         "bySourceZone": "Bytes per source zone"
       }
+    },
+    "dfw": {
+      "hits24h": "Hits 24 h",
+      "selectAll": "Select every rule shown",
+      "any": "any",
+      "actionLabel": "Rule action",
+      "action": {
+        "ACCEPT": "Allow",
+        "DROP": "Drop",
+        "REJECT": "Reject"
+      },
+      "managedRule": "Managed by the micro-segmentation engine: read-only here",
+      "unnamed": "Rule {pos}",
+      "rowAdded": "new",
+      "rowEdited": "unpublished",
+      "rowMoved": "moved",
+      "rowDisabled": "disabled",
+      "selectRule": "Select rule {pos}",
+      "enableLabel": "Rule {pos} enabled",
+      "logLabel": "Rule {pos} logged",
+      "selectSection": "Select the rules of {name}",
+      "collapse": "Collapse {name}",
+      "expand": "Expand {name}",
+      "lastPublished": "Last successful publish on {date} at {time}",
+      "publish": "Publish ({count})",
+      "discard": "Discard changes",
+      "status": {
+        "rules": "{count, plural, one {Rules: # in total} other {Rules: # in total}}",
+        "rulesAtLeast": "{count, plural, one {Rules: at least # in total} other {Rules: at least # in total}}",
+        "rulesHint": "Counts the sections read: the rules of a host or a guest are read when it is opened",
+        "unpublished": "Unpublished",
+        "disabled": "Disabled {count}",
+        "sections": "Sections: {count}",
+        "managed": "Managed by the micro-segmentation {count}",
+        "covered": "VMs covered: {covered} / {running} running",
+        "coveredUnknown": "VMs covered: not read yet",
+        "scope": "Scope"
+      },
+      "scope": {
+        "cluster": "Cluster",
+        "hosts": "Hosts",
+        "vms": "VMs",
+        "all": "All"
+      },
+      "addSection": "Add section",
+      "bulk": {
+        "enable": "Enable",
+        "disable": "Disable",
+        "clone": "Clone",
+        "up": "Move up",
+        "down": "Move down",
+        "moveTo": "Move to section"
+      },
+      "selection": "{count, plural, =0 {No rule selected} one {# rule selected} other {# rules selected}}",
+      "dragHint": "drag ⋮⋮ to reorder",
+      "clearSelection": "Clear selection",
+      "filter": "Filter: IP, port, group, VM",
+      "moveDialog": {
+        "title": "{count, plural, one {Move # rule to} other {Move # rules to}}",
+        "target": "Section",
+        "hint": "Deleted here and created at the end of that section when you publish",
+        "notRead": "Open that section first: its rules are not read yet",
+        "confirm": "Move"
+      },
+      "addSectionDialog": {
+        "title": "Add a section",
+        "target": "Host or guest",
+        "hint": "The section opens with its first rule: the rule editor comes next",
+        "confirm": "Continue"
+      },
+      "optionsDialog": {
+        "title": "Firewall options of {name}",
+        "enable": "Firewall",
+        "policy_in": "Inbound policy",
+        "policy_out": "Outbound policy",
+        "log_level_in": "Inbound log level",
+        "log_level_out": "Outbound log level",
+        "on": "On",
+        "off": "Off",
+        "hint": "Written to Proxmox when you publish"
+      },
+      "confirmPublish": {
+        "title": "Publish {count} changes",
+        "body": "{count} changes are written to Proxmox one after the other, each with its own call",
+        "confirm": "Publish"
+      },
+      "confirmDiscard": {
+        "title": "Discard the changes",
+        "body": "The {count} unpublished changes are lost",
+        "confirm": "Discard"
+      },
+      "section": {
+        "cluster": "Cluster rules",
+        "zone": "Micro-segmentation · zone {zone}",
+        "host": "Host {node}"
+      },
+      "appliedTo": {
+        "cluster": "All hosts",
+        "zone": "{count, plural, one {# VM} other {# VMs}}",
+        "zoneUnknown": "members of {zone}"
+      },
+      "hitsNone": "Proxmox exposes no per-rule counters",
+      "hitsZone": "Flows the engine logged towards this zone for this service, last 24 h",
+      "hitsPartial": "At least: the events read do not reach 24 h back",
+      "managed": "managed by the engine",
+      "unpublishedCount": "{count, plural, one {# unpublished} other {# unpublished}}",
+      "changedInProxmox": "changed in Proxmox",
+      "changedInProxmoxHint": "The rules were changed in Proxmox since this draft: the publish will stop on this section. Discard its changes to start again from what Proxmox holds",
+      "guestFirewallOff": "guest firewall OFF",
+      "hostFirewallOff": "host firewall OFF",
+      "firewallOnAtPublish": "firewall on at publish",
+      "enableFirewall": "enable firewall",
+      "undo": "undo",
+      "ruleCount": "{count, plural, one {# rule} other {# rules}}",
+      "editInMicroseg": "edit in Micro-segmentation ›",
+      "object": {
+        "group": "security group {group}"
+      },
+      "sectionMenu": "Actions of {name}",
+      "group": {
+        "protected": "{count} protected by the micro-segmentation",
+        "onOpen": "rules read when a guest is opened",
+        "page": "page {page} / {pages}"
+      },
+      "noMatch": "No rule matches the filter",
+      "zoneState": {
+        "enforce": "Enforce",
+        "observe": "Observe",
+        "disabled": "Not deployed"
+      },
+      "clusterOptions": "Cluster firewall options",
+      "menu": {
+        "options": "Firewall options",
+        "discard": "Discard the changes of this section"
+      },
+      "keepInDraft": "Keep in the draft",
+      "published": "{count, plural, one {# change published} other {# changes published}}",
+      "publishedPart": "{applied} of {total} changes published: publish again for the rest",
+      "publishFailed": "Publish stopped after {applied} changes applied:",
+      "conflict": "the rules of a section were changed in Proxmox since they were read. Refresh, then publish again: the changes not published stay in the draft",
+      "mode": {
+        "cluster": "{count, plural, one {cluster · # node} other {cluster · # nodes}}",
+        "standalone": "single node"
+      }
     }
   }
 }

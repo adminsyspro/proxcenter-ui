@@ -13607,6 +13607,150 @@
         "fromUnknown": "알 수 없는 출발지에서",
         "bySourceZone": "출발 영역별 바이트"
       }
+    },
+    "dfw": {
+      "hits24h": "24시간 적중",
+      "selectAll": "표시된 모든 규칙 선택",
+      "any": "모두",
+      "actionLabel": "규칙 동작",
+      "action": {
+        "ACCEPT": "허용",
+        "DROP": "차단",
+        "REJECT": "거부"
+      },
+      "managedRule": "마이크로세그멘테이션 엔진이 관리: 여기서는 읽기 전용",
+      "unnamed": "규칙 {pos}",
+      "rowAdded": "신규",
+      "rowEdited": "미게시",
+      "rowMoved": "이동됨",
+      "rowDisabled": "비활성",
+      "selectRule": "규칙 {pos} 선택",
+      "enableLabel": "규칙 {pos} 활성",
+      "logLabel": "규칙 {pos} 로그 기록",
+      "selectSection": "{name}의 규칙 선택",
+      "collapse": "{name} 접기",
+      "expand": "{name} 펼치기",
+      "lastPublished": "마지막 게시 성공: {date} {time}",
+      "publish": "게시 ({count})",
+      "discard": "변경 취소",
+      "status": {
+        "rules": "{count, plural, other {규칙: 총 #개}}",
+        "rulesAtLeast": "{count, plural, other {규칙: 최소 총 #개}}",
+        "rulesHint": "읽은 섹션만 셉니다: 호스트나 게스트의 규칙은 열 때 읽습니다",
+        "unpublished": "미게시",
+        "disabled": "비활성 {count}",
+        "sections": "섹션: {count}",
+        "managed": "마이크로세그멘테이션 관리 {count}",
+        "covered": "보호된 VM: 실행 중 {running}개 중 {covered}개",
+        "coveredUnknown": "보호된 VM: 아직 읽지 않음",
+        "scope": "범위"
+      },
+      "scope": {
+        "cluster": "클러스터",
+        "hosts": "호스트",
+        "vms": "VM",
+        "all": "전체"
+      },
+      "addSection": "섹션 추가",
+      "bulk": {
+        "enable": "활성화",
+        "disable": "비활성화",
+        "clone": "복제",
+        "up": "위로",
+        "down": "아래로",
+        "moveTo": "섹션으로 이동"
+      },
+      "selection": "{count, plural, =0 {선택된 규칙 없음} other {규칙 #개 선택됨}}",
+      "dragHint": "⋮⋮ 끌어서 순서 변경",
+      "clearSelection": "선택 해제",
+      "filter": "필터: IP, 포트, 그룹, VM",
+      "moveDialog": {
+        "title": "{count, plural, other {규칙 #개 이동 대상}}",
+        "target": "섹션",
+        "hint": "게시할 때 여기서 삭제되고 그 섹션 끝에 생성됩니다",
+        "notRead": "먼저 그 섹션을 여세요: 규칙을 아직 읽지 않았습니다",
+        "confirm": "이동"
+      },
+      "addSectionDialog": {
+        "title": "섹션 추가",
+        "target": "호스트 또는 게스트",
+        "hint": "섹션이 첫 규칙과 함께 열립니다: 다음에 규칙 편집기가 나옵니다",
+        "confirm": "계속"
+      },
+      "optionsDialog": {
+        "title": "{name}의 방화벽 옵션",
+        "enable": "방화벽",
+        "policy_in": "인바운드 정책",
+        "policy_out": "아웃바운드 정책",
+        "log_level_in": "인바운드 로그 수준",
+        "log_level_out": "아웃바운드 로그 수준",
+        "on": "켜짐",
+        "off": "꺼짐",
+        "hint": "게시할 때 Proxmox에 기록됩니다"
+      },
+      "confirmPublish": {
+        "title": "변경 {count}개 게시",
+        "body": "변경 {count}개를 하나씩 차례로 Proxmox에 기록합니다",
+        "confirm": "게시"
+      },
+      "confirmDiscard": {
+        "title": "변경 취소",
+        "body": "게시되지 않은 변경 {count}개가 사라집니다",
+        "confirm": "취소"
+      },
+      "section": {
+        "cluster": "클러스터 규칙",
+        "zone": "마이크로세그멘테이션 · 영역 {zone}",
+        "host": "호스트 {node}"
+      },
+      "appliedTo": {
+        "cluster": "모든 호스트",
+        "zone": "{count, plural, other {VM #개}}",
+        "zoneUnknown": "{zone} 구성원"
+      },
+      "hitsNone": "Proxmox는 규칙별 카운터를 제공하지 않습니다",
+      "hitsZone": "지난 24시간 동안 엔진이 이 서비스로 이 영역에 기록한 흐름",
+      "hitsPartial": "최소값: 읽은 이벤트가 24시간 전까지 닿지 않습니다",
+      "managed": "엔진이 관리",
+      "unpublishedCount": "{count, plural, other {미게시 #개}}",
+      "changedInProxmox": "Proxmox에서 변경됨",
+      "changedInProxmoxHint": "이 초안 이후 Proxmox에서 규칙이 변경되었습니다: 게시가 이 섹션에서 멈춥니다. 변경을 취소하고 Proxmox의 현재 상태에서 다시 시작하세요",
+      "guestFirewallOff": "게스트 방화벽 꺼짐",
+      "hostFirewallOff": "호스트 방화벽 꺼짐",
+      "firewallOnAtPublish": "게시 시 방화벽 켜짐",
+      "enableFirewall": "방화벽 켜기",
+      "undo": "되돌리기",
+      "ruleCount": "{count, plural, other {규칙 #개}}",
+      "editInMicroseg": "마이크로세그멘테이션에서 편집 ›",
+      "object": {
+        "group": "보안 그룹 {group}"
+      },
+      "sectionMenu": "{name} 작업",
+      "group": {
+        "protected": "마이크로세그멘테이션으로 보호 {count}개",
+        "onOpen": "게스트를 열 때 규칙을 읽음",
+        "page": "{page} / {pages} 페이지"
+      },
+      "noMatch": "필터와 일치하는 규칙 없음",
+      "zoneState": {
+        "enforce": "적용",
+        "observe": "관찰",
+        "disabled": "배포되지 않음"
+      },
+      "clusterOptions": "클러스터 방화벽 옵션",
+      "menu": {
+        "options": "방화벽 옵션",
+        "discard": "이 섹션의 변경 취소"
+      },
+      "keepInDraft": "초안에 보관",
+      "published": "{count, plural, other {변경 #개 게시됨}}",
+      "publishedPart": "변경 {total}개 중 {applied}개 게시됨: 나머지는 다시 게시하세요",
+      "publishFailed": "변경 {applied}개 적용 후 게시가 중단됨:",
+      "conflict": "섹션의 규칙이 읽은 이후 Proxmox에서 변경되었습니다. 새로 고친 후 다시 게시하세요: 게시되지 않은 변경은 초안에 남습니다",
+      "mode": {
+        "cluster": "{count, plural, other {클러스터 · 노드 #개}}",
+        "standalone": "단일 노드"
+      }
     }
   }
 }

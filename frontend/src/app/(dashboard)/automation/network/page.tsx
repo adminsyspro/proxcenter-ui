@@ -85,7 +85,7 @@ export default function NetworkAutomationPage() {
   } = useVMFirewallRules(isEnterprise ? selectedConnection || null : null)
 
   const {
-    hostRulesByNode, loadingHostRules, hostRulesError, loadHostRules, reloadHostRulesForNode, setHostRulesByNode,
+    hostRulesByNode, hostRulesError, setHostRulesByNode,
   } = useHostFirewallRules(isEnterprise ? selectedConnection || null : null, nodesList)
 
   // The firewall tabs write with node.manage on the connection, like the micro-segmentation: a read-only user sees
@@ -122,17 +122,17 @@ export default function NetworkAutomationPage() {
   // A standalone node has no cluster firewall: Firewalling opens on its host rules instead.
   const shownRulesSubTab = firewallMode === 'standalone' && rulesSubTab === 0 ? 1 : rulesSubTab
 
-  // The guest list (firewall state, VLANs, tags) on Firewalling > VMs (tab 1, subTab 2)
-  // and Security Groups (tab 4) only: one request to the coverage route, computed and
-  // cached on the server with one Proxmox call per guest at most (UA44). A guest's rules
-  // are read when its row is opened, never for every guest on mount.
+  // The guest list (firewall state, VLANs, tags) on Firewalling (tab 1: its guest sections and the VMs covered of its
+  // status bar) and Security Groups (tab 4) only: one request to the coverage route, computed and cached on the
+  // server with one Proxmox call per guest at most (UA44). A guest's rules are read when its section is opened,
+  // never for every guest on mount.
   useEffect(() => {
     if (isEnterprise && selectedConnection && !loadingVMRules && vmFirewallData.length === 0) {
-      if (activeTab === 4 || (activeTab === 1 && shownRulesSubTab === 2)) {
+      if (activeTab === 4 || activeTab === 1) {
         void loadVMFirewallData()
       }
     }
-  }, [isEnterprise, activeTab, shownRulesSubTab, selectedConnection, vmFirewallData.length, loadingVMRules, loadVMFirewallData])
+  }, [isEnterprise, activeTab, selectedConnection, vmFirewallData.length, loadingVMRules, loadVMFirewallData])
 
   // The Aliases and IP Sets tabs are the same objects view on the same data.
   const objectsProps = {
@@ -219,23 +219,22 @@ export default function NetworkAutomationPage() {
               clusterOptions={clusterOptions}
               setClusterOptions={setClusterOptions}
               hostRulesByNode={hostRulesByNode}
+              setHostRulesByNode={setHostRulesByNode}
               nodesList={nodesList}
-              loadingHostRules={loadingHostRules}
-              loadHostRules={loadHostRules}
-              reloadHostRulesForNode={reloadHostRulesForNode}
               vmFirewallData={vmFirewallData}
+              setVMFirewallData={setVMFirewallData}
               loadingVMRules={loadingVMRules}
               loadVMFirewallData={loadVMFirewallData}
               loadGuestRules={loadGuestRules}
-              reloadVMFirewallRules={reloadVMFirewallRules}
               securityGroups={securityGroups}
               aliases={aliases}
               ipsets={ipsets}
               firewallMode={firewallMode}
-              totalRules={totalRules}
               selectedConnection={selectedConnection}
+              connectionName={connections.find(c => c.id === selectedConnection)?.name}
               loadError={firewallLoadError || null}
               reload={loadFirewallData}
+              onOpenMicroseg={() => changeTab(6)}
             />
           )}
 

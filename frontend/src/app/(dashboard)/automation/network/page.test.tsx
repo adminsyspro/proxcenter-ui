@@ -149,14 +149,16 @@ describe('network page Dashboard load (UA44)', () => {
     expect(loadVMFirewallData).not.toHaveBeenCalled()
   })
 
-  it('reads no guest list for the Firewalling cluster rules, which show none', async () => {
+  it('reads the guest list once for Firewalling (its guest sections and VMs covered), the rules stay on demand', async () => {
     renderWithProviders(<NetworkAutomationPage />)
     await screen.findByText(/dashboard tab/)
+    expect(loadVMFirewallData).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('tab', { name: /Firewalling/ }))
 
     expect(await screen.findByText(/rules tab/)).toBeInTheDocument()
-    expect(loadVMFirewallData).not.toHaveBeenCalled()
+    expect(loadVMFirewallData).toHaveBeenCalledTimes(1)
+    expect(loadVMFirewallData).toHaveBeenCalledWith()
   })
 
   it('reads the guest list for the Security Groups tab (one request, the rules stay on demand)', async () => {

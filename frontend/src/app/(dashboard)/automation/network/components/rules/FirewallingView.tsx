@@ -933,9 +933,9 @@ function readOptions(
 
 function objectName(s: Section, t: ReturnType<typeof useTranslations<'microsegPilot.dfw'>>): string {
   if (s.kind === 'zone') return t('object.group', { group: s.zone!.group })
-  if (s.kind === 'cluster') return 'cluster.fw'
-  if (s.kind === 'host') return `host.fw · ${s.node}`
-  return `${s.guest!.vmid}.fw · ${s.guest!.node}`
+  if (s.kind === 'cluster') return t('object.cluster')
+  if (s.kind === 'host') return t('object.host', { node: s.node })
+  return t('object.guest', { vmid: s.guest!.vmid, node: s.guest!.node })
 }
 
 function sectionIcon(s: Section, colour: string): ReactNode {

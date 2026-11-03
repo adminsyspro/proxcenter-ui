@@ -13712,7 +13712,10 @@
       "undo": "되돌리기",
       "ruleCount": "{count, plural, other {규칙 #개}}",
       "object": {
-        "group": "보안 그룹 {group}"
+        "group": "보안 그룹 {group}",
+        "cluster": "클러스터 방화벽",
+        "host": "{node} 호스트 방화벽",
+        "guest": "{node}의 게스트 {vmid}"
       },
       "sectionMenu": "{name} 작업",
       "group": {

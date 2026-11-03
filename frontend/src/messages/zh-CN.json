@@ -13712,7 +13712,10 @@
       "undo": "撤销",
       "ruleCount": "{count, plural, other {# 条规则}}",
       "object": {
-        "group": "安全组 {group}"
+        "group": "安全组 {group}",
+        "cluster": "集群防火墙",
+        "host": "主机 {node} 的防火墙",
+        "guest": "{node} 上的客户机 {vmid}"
       },
       "sectionMenu": "{name} 的操作",
       "group": {

@@ -13380,7 +13380,10 @@
       "undo": "rückgängig",
       "ruleCount": "{count, plural, one {# Regel} other {# Regeln}}",
       "object": {
-        "group": "Sicherheitsgruppe {group}"
+        "group": "Sicherheitsgruppe {group}",
+        "cluster": "Cluster-Firewall",
+        "host": "Host-Firewall von {node}",
+        "guest": "Gast {vmid} auf {node}"
       },
       "sectionMenu": "Aktionen von {name}",
       "group": {

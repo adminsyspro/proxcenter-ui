@@ -13713,7 +13713,10 @@
       "undo": "annuler",
       "ruleCount": "{count, plural, one {# règle} other {# règles}}",
       "object": {
-        "group": "groupe de sécurité {group}"
+        "group": "groupe de sécurité {group}",
+        "cluster": "pare-feu du cluster",
+        "host": "pare-feu de l’hôte {node}",
+        "guest": "invité {vmid} sur {node}"
       },
       "sectionMenu": "Actions de {name}",
       "group": {

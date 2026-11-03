@@ -13712,7 +13712,10 @@
       "undo": "deshacer",
       "ruleCount": "{count, plural, one {# regla} other {# reglas}}",
       "object": {
-        "group": "grupo de seguridad {group}"
+        "group": "grupo de seguridad {group}",
+        "cluster": "cortafuegos del clúster",
+        "host": "cortafuegos del host {node}",
+        "guest": "invitado {vmid} en {node}"
       },
       "sectionMenu": "Acciones de {name}",
       "group": {

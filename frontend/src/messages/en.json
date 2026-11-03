@@ -13712,7 +13712,10 @@
       "undo": "undo",
       "ruleCount": "{count, plural, one {# rule} other {# rules}}",
       "object": {
-        "group": "security group {group}"
+        "group": "security group {group}",
+        "cluster": "cluster firewall",
+        "host": "host firewall of {node}",
+        "guest": "guest {vmid} on {node}"
       },
       "sectionMenu": "Actions of {name}",
       "group": {

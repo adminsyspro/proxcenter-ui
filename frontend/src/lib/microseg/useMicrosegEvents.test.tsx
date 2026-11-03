@@ -36,11 +36,20 @@ describe('mergeFresh', () => {
     expect(merged).toMatchObject({ loadedOlder: true, more: true, truncated: true, epoch: 3 })
   })
 
-  it('starts again from the page when the filters changed or the ring is no longer truncated', () => {
+  it('keeps the loaded older pages when the fresh page is a full page the orchestrator did not flag truncated (it overlaps the previous head)', () => {
+    const before = { key: 'k', rows: list([30, 20, 10, 5]).events, loadedOlder: true, more: true, truncated: false, epoch: 3 }
+
+    expect(mergeFresh(before, 'k', list([40, 35, 31])).rows.map(e => e.seq)).toEqual([40, 35, 31, 30, 20, 10, 5])
+    expect(mergeFresh(before, 'k', list([40, 35, 30])).rows.map(e => e.seq)).toEqual([40, 35, 30, 20, 10, 5])
+    expect(mergeFresh(before, 'k', list([40, 30, 20, 10])).rows.map(e => e.seq)).toEqual([40, 30, 20, 10, 5])
+    expect(mergeFresh(before, 'k', list([40, 30, 20, 10]))).toMatchObject({ loadedOlder: true, epoch: 3 })
+  })
+
+  it('starts again from the page when the filters changed or the page is empty', () => {
     const before = { key: 'k', rows: list([30, 20, 10]).events, loadedOlder: true, more: true, truncated: true, epoch: 3 }
 
     expect(mergeFresh(before, 'other', list([40, 30], true)).rows).toHaveLength(2)
-    expect(mergeFresh(before, 'k', list([40, 30, 20, 10])).loadedOlder).toBe(false)
+    expect(mergeFresh(before, 'k', list([])).loadedOlder).toBe(false)
   })
 
   it('starts again from the new page when more came in than one page holds: no gap shown as if nothing happened', () => {

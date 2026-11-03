@@ -39,7 +39,7 @@ const isMore = (list: MicrosegEventList) => list.truncated || list.events.length
  */
 export function mergeFresh(prev: Accumulated | null, stamp: string, fresh: MicrosegEventList): Accumulated {
   const epoch = prev?.epoch ?? 0
-  if (prev?.key === stamp && prev.loadedOlder && fresh.truncated && fresh.events.length > 0) {
+  if (prev?.key === stamp && prev.loadedOlder && fresh.events.length > 0) {
     const cut = fresh.events.at(-1)?.seq ?? Infinity
     const newestShown = prev.rows[0]?.seq ?? -Infinity
     if (cut <= newestShown + 1) {

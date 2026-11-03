@@ -23,5 +23,7 @@ export function useLastRevisionSnapshot(connId: string | null | undefined, revis
     },
     { revalidateOnFocus: false, shouldRetryOnError: false },
   )
-  return { revision: data ?? null, error }
+  // True while the asked revision is still being read (false when nothing is asked, once read, or on an error).
+  const loading = !!key && data === undefined && !error
+  return { revision: data ?? null, error, loading }
 }

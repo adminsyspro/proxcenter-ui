@@ -46,12 +46,20 @@ vi.mock('@/lib/api/firewall', () => ({
 }))
 
 // The deployed micro-segmentation revision the membership of the zone groups comes from (UA44): none by default.
-const microseg = vi.hoisted(() => ({ snapshot: null as null | Record<string, unknown>, zones: [] as Array<{ name: string; color: string }> }))
+const microseg = vi.hoisted(() => ({
+  snapshot: null as null | Record<string, unknown>, zones: [] as Array<{ name: string; color: string }>, revisionLoading: false,
+}))
 vi.mock('@/lib/microseg/useMicroseg', () => ({
-  useMicrosegPolicy: () => ({ data: microseg.snapshot || microseg.zones.length ? { last_revision: microseg.snapshot ? { id: 'r1' } : null, zones: microseg.zones } : undefined }),
+  useMicrosegPolicy: () => ({
+    data: microseg.snapshot || microseg.zones.length || microseg.revisionLoading ? { last_revision: microseg.snapshot || microseg.revisionLoading ? { id: 'r1' } : null, zones: microseg.zones } : undefined,
+    loading: false,
+  }),
 }))
 vi.mock('@/lib/microseg/useLastRevision', () => ({
-  useLastRevisionSnapshot: () => ({ revision: microseg.snapshot ? { id: 'r1', snapshot: microseg.snapshot } : null }),
+  useLastRevisionSnapshot: () => ({
+    revision: microseg.snapshot && !microseg.revisionLoading ? { id: 'r1', snapshot: microseg.snapshot } : null,
+    loading: microseg.revisionLoading,
+  }),
 }))
 
 vi.mock('@/contexts/ToastContext', () => ({
@@ -482,6 +490,7 @@ describe('SecurityGroupsPanel membership without every guest rules (UA44)', () =
   afterEach(() => {
     cleanup()
     microseg.snapshot = null
+    microseg.revisionLoading = false
   })
 
   const tagged = (vmid: number, tags: string[]): VMFirewallInfo => ({
@@ -497,6 +506,23 @@ describe('SecurityGroupsPanel membership without every guest rules (UA44)', () =
     expect(within(sectionRow('sg-db')).getByText('0 VMs')).toBeInTheDocument()
     expect(p.loadGuestRules).not.toHaveBeenCalled()
     expect(api.getVMRules).not.toHaveBeenCalled()
+  })
+
+  it('shows a zone group count as pending, not "0 VMs", until the deployed revision is read (D6)', () => {
+    microseg.snapshot = { tag_prefix: 'zone-', flows: [], zones: [{ id: 'z1', name: 'web', state: 'enforce' }] }
+    microseg.revisionLoading = true
+    const vms = [tagged(1, ['zone-web'])]
+    renderPanel({ securityGroups: ZONE_GROUPS, vmFirewallData: vms })
+
+    expect(within(sectionRow('pcz-web')).getByText('…')).toBeInTheDocument()
+    expect(within(sectionRow('pcz-web')).queryByText('0 VMs')).not.toBeInTheDocument()
+    // Not a zone group: its count does not wait on the revision.
+    expect(within(sectionRow('sg-db')).getByText('0 VMs')).toBeInTheDocument()
+
+    cleanup()
+    microseg.revisionLoading = false
+    renderPanel({ securityGroups: ZONE_GROUPS, vmFirewallData: vms })
+    expect(within(sectionRow('pcz-web')).getByText(/^1 VMs?$/)).toBeInTheDocument()
   })
 
   it('leaves a disabled zone group, or one with no deployed revision, unknown', () => {

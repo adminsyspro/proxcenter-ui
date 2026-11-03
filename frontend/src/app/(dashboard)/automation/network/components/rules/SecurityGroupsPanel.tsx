@@ -23,7 +23,7 @@ import SecurityGroupMembersDialog from './shared/SecurityGroupMembersDialog'
 import FirewallLogDialog from '@/components/firewall/FirewallLogDialog'
 import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
-import { groupMembers } from './shared/groupMembership'
+import { ZONE_GROUP_PREFIX, groupMembers } from './shared/groupMembership'
 import { objectColour, objectDotSx } from '../microseg/objectColour'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
 import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
@@ -90,9 +90,13 @@ export default function SecurityGroupsPanel({
 
   // Membership without reading every guest's rules (UA44): the zone groups of the deployed micro-segmentation
   // revision have their members from the zone tags; any other group only knows the guests whose rules were read.
-  const { data: microsegPolicy } = useMicrosegPolicy(selectedConnection || null)
-  const { revision: deployed } = useLastRevisionSnapshot(selectedConnection || null, microsegPolicy?.last_revision?.id)
+  const { data: microsegPolicy, loading: policyLoading } = useMicrosegPolicy(selectedConnection || null)
+  const { revision: deployed, loading: revisionLoading } = useLastRevisionSnapshot(selectedConnection || null, microsegPolicy?.last_revision?.id)
   const deployedSnapshot = deployed?.snapshot ?? null
+  // The members of a zone group come from the deployed revision: until it is read, its count is not known yet (a
+  // "0 VMs" shown meanwhile reads as an unused group).
+  const deploymentPending = !!policyLoading || (!!microsegPolicy?.last_revision && !!revisionLoading)
+  const membersPending = (group: string) => loadingVMRules || (deploymentPending && group.startsWith(ZONE_GROUP_PREFIX))
 
   // ── State ──
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
@@ -129,7 +133,7 @@ export default function SecurityGroupsPanel({
   )
 
   const membersLabel = (section: PolicySection) => {
-    if (loadingVMRules) return '…'
+    if (membersPending(section.id)) return '…'
     // "0+ VMs" would read as odd: with none seen, the count is plain and the tooltip says why it may be more.
     if (section.appliedToKnown === false && section.appliedTo.length > 0) return t('networkPage.rulesOnDemand.membersUnknownCount', { count: section.appliedTo.length })
     return t('networkPage.vmCount', { count: section.appliedTo.length })
@@ -397,7 +401,7 @@ export default function SecurityGroupsPanel({
                 sx={{ height: 20, fontSize: 10, ml: 0.5 }}
               />
               <Tooltip
-                title={loadingVMRules
+                title={membersPending(section.id)
                   ? t('networkPage.loading')
                   : [
                     section.appliedToKnown === false ? t('networkPage.rulesOnDemand.membersUnknown') : '',

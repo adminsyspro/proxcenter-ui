@@ -12786,7 +12786,24 @@
         "pendingMove": "{zone}(으)로 이동 중",
         "moveHint": "{zone}(으)로 이동 대기 중입니다. 이 영역에 유지하려면 다시 선택하세요."
       },
-      "preflightButton": "사전 점검"
+      "preflightButton": "사전 점검",
+      "state": {
+        "immediate": "상태 변경은 새 리비전으로 Proxmox에 즉시 적용됩니다.",
+        "pendingFirst": "먼저 대기 중인 변경 사항 {count, plural, other {#개}}를 적용하거나 취소하세요.",
+        "pendingFirstNoCount": "먼저 대기 중인 변경 사항을 적용하거나 취소하세요.",
+        "title": {
+          "observe": "{name} 영역을 관찰 모드로 전환할까요?",
+          "disabled": "{name} 영역을 비활성화할까요?"
+        },
+        "body": {
+          "observe": "아무것도 차단되지 않으며, 영역이 차단할 트래픽은 기록됩니다.",
+          "disabled": "ProxCenter가 이 영역의 게스트 필터링을 중지합니다."
+        },
+        "confirm": {
+          "observe": "관찰",
+          "disabled": "비활성화"
+        }
+      }
     },
     "plan": {
       "title": "마이크로 세분화 계획",

@@ -18,6 +18,9 @@ const chooseState = async (zoneName: string, label: string) => {
   const row = await screen.findByRole('listitem', { name: zoneName })
   fireEvent.click(within(row).getByRole('button', { name: 'Change state' }))
   fireEvent.click(await screen.findByRole('menuitem', { name: label }))
+  const dialog = await screen.findByRole('dialog')
+  fireEvent.click(within(dialog).getByRole('button', { name: label }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 }
 
 afterEach(() => {

@@ -12786,7 +12786,24 @@
         "pendingMove": "Moviendo a {zone}",
         "moveHint": "En cola para moverse a {zone}, selecciónelo de nuevo para mantenerlo en esta zona."
       },
-      "preflightButton": "Comprobaciones previas"
+      "preflightButton": "Comprobaciones previas",
+      "state": {
+        "immediate": "El cambio de estado se aplica a Proxmox de inmediato, como una nueva revisión.",
+        "pendingFirst": "Aplique o descarte primero {count, plural, one {# cambio pendiente} other {# cambios pendientes}}.",
+        "pendingFirstNoCount": "Aplique o descarte primero sus cambios pendientes.",
+        "title": {
+          "observe": "¿Poner la zona {name} en observación?",
+          "disabled": "¿Desactivar la zona {name}?"
+        },
+        "body": {
+          "observe": "No se bloquea nada: se registra el tráfico que la zona bloquearía.",
+          "disabled": "ProxCenter deja de filtrar los invitados de esta zona."
+        },
+        "confirm": {
+          "observe": "Observar",
+          "disabled": "Desactivar"
+        }
+      }
     },
     "plan": {
       "title": "Plan de microsegmentación",

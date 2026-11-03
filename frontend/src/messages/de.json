@@ -12454,7 +12454,24 @@
         "pendingMove": "Wechsel nach {zone}",
         "moveHint": "Für den Wechsel nach {zone} vorgemerkt, erneut auswählen, um ihn in dieser Zone zu behalten."
       },
-      "preflightButton": "Vorabprüfungen"
+      "preflightButton": "Vorabprüfungen",
+      "state": {
+        "immediate": "Die Statusänderung wird sofort als neue Revision auf Proxmox angewendet.",
+        "pendingFirst": "Wenden Sie zuerst {count, plural, one {# ausstehende Änderung} other {# ausstehende Änderungen}} an oder verwerfen Sie sie.",
+        "pendingFirstNoCount": "Wenden Sie zuerst Ihre ausstehenden Änderungen an oder verwerfen Sie sie.",
+        "title": {
+          "observe": "Zone {name} beobachten?",
+          "disabled": "Zone {name} deaktivieren?"
+        },
+        "body": {
+          "observe": "Nichts wird blockiert: Verkehr, den die Zone blockieren würde, wird protokolliert.",
+          "disabled": "ProxCenter filtert die Gäste dieser Zone nicht mehr."
+        },
+        "confirm": {
+          "observe": "Beobachten",
+          "disabled": "Deaktivieren"
+        }
+      }
     },
     "plan": {
       "title": "Mikrosegmentierungsplan",

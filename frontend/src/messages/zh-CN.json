@@ -12786,7 +12786,24 @@
         "pendingMove": "正在移动到 {zone}",
         "moveHint": "已排队移动到 {zone}，再次选择可将其保留在此区域。"
       },
-      "preflightButton": "预检"
+      "preflightButton": "预检",
+      "state": {
+        "immediate": "状态变更会立即作为新修订版应用到 Proxmox。",
+        "pendingFirst": "请先应用或放弃 {count, plural, other {# 项}}待处理更改。",
+        "pendingFirstNoCount": "请先应用或放弃您的待处理更改。",
+        "title": {
+          "observe": "将区域 {name} 切换为观察模式？",
+          "disabled": "停用区域 {name}？"
+        },
+        "body": {
+          "observe": "不会阻止任何流量：区域将会阻止的流量会被记录。",
+          "disabled": "ProxCenter 将停止过滤此区域的虚拟机。"
+        },
+        "confirm": {
+          "observe": "观察",
+          "disabled": "停用"
+        }
+      }
     },
     "plan": {
       "title": "微分段计划",

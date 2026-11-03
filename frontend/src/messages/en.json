@@ -12786,7 +12786,24 @@
         "pendingMove": "Moving to {zone}",
         "moveHint": "Queued to move to {zone}, select it again to keep it in this zone."
       },
-      "preflightButton": "Pre-flight checks"
+      "preflightButton": "Pre-flight checks",
+      "state": {
+        "immediate": "The state change is applied to Proxmox right away, as a new revision.",
+        "pendingFirst": "Apply or discard your {count, plural, one {# pending change} other {# pending changes}} first.",
+        "pendingFirstNoCount": "Apply or discard your pending changes first.",
+        "title": {
+          "observe": "Observe zone {name}?",
+          "disabled": "Disable zone {name}?"
+        },
+        "body": {
+          "observe": "Nothing is blocked: the traffic the zone would block is logged.",
+          "disabled": "ProxCenter stops filtering the guests of this zone."
+        },
+        "confirm": {
+          "observe": "Observe",
+          "disabled": "Disable"
+        }
+      }
     },
     "plan": {
       "title": "Micro-segmentation plan",

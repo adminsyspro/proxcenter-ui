@@ -10,6 +10,7 @@ import type { MicrosegZone } from '@/lib/microseg/types'
 import { OneLine, useDialogAction } from './dialogParts'
 import TypedConfirmDialog from './TypedConfirmDialog'
 import { isZoneReady } from './zoneModel'
+import ZoneStateGate from './ZoneStateGate'
 
 /** One page of pending would-block suggestions; a full page means there may be more we cannot see. */
 const SUGGESTIONS_LIMIT = 200
@@ -20,6 +21,10 @@ type Props = {
   connectionId: string
   zone: MicrosegZone
   readyAfterHours: number
+  /** The draft has unapplied changes: enforcing would apply them unseen, so it is refused until they are applied or discarded. */
+  pending?: boolean
+  pendingCount?: number | null
+  onViewPlan?: () => void
   /** Starts the state change; throws when it fails (the dialog shows the error). */
   onConfirm: () => Promise<void>
   onCancel: () => void
@@ -31,7 +36,9 @@ type Props = {
  * not a lock: a zone that is not ready (or whose readiness cannot be read) goes
  * ahead only once its name is typed.
  */
-export default function ZoneEnforceDialog({ connectionId, zone, readyAfterHours, onConfirm, onCancel }: Props) {
+export default function ZoneEnforceDialog({
+  connectionId, zone, readyAfterHours, pending = false, pendingCount = null, onViewPlan, onConfirm, onCancel,
+}: Props) {
   const t = useTranslations('microsegPilot.policy.enforce')
   const [readiness, setReadiness] = useState<Readiness | null>(null)
   const { busy, error, run } = useDialogAction()
@@ -60,7 +67,7 @@ export default function ZoneEnforceDialog({ connectionId, zone, readyAfterHours,
       expected={needsName ? zone.name : undefined}
       confirmLabel={t('confirm')}
       color='warning'
-      ready={readiness !== null}
+      ready={readiness !== null && !pending}
       busy={busy}
       error={error}
       onConfirm={() => void run(onConfirm)}
@@ -74,6 +81,7 @@ export default function ZoneEnforceDialog({ connectionId, zone, readyAfterHours,
       ) : (
         <OneLine text={t(readiness, { hours: readyAfterHours })} />
       )}
+      <ZoneStateGate pending={pending} count={pendingCount} onViewPlan={onViewPlan} />
     </TypedConfirmDialog>
   )
 }

@@ -16,8 +16,10 @@ import MicrosegErrorAlert from './MicrosegErrorAlert'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import ZoneDialog from './ZoneDialog'
 import ZoneEnforceDialog from './ZoneEnforceDialog'
+import ZoneStateDialog from './ZoneStateDialog'
 import type { ZoneFormValues } from './zoneForm'
 import ZoneList from './ZoneList'
+import { usePendingChanges } from './usePendingChanges'
 import { useZoneGuests } from './useZoneGuests'
 
 const DEFAULT_READY_AFTER_HOURS = 24
@@ -31,7 +33,7 @@ type Deleting = { kind: 'zone'; zone: MicrosegZone } | { kind: 'flow'; flow: Mic
  * (and its input) open. A zone state change starts a run, followed in the strip
  * of the tab (it survives a switch of sub-tab).
  */
-export default function PolicyPanel({ connectionId, policy, reloadPolicy, startRun, onOpenPreflight }: MicrosegSubTabProps) {
+export default function PolicyPanel({ connectionId, policy, reloadPolicy, startRun, onOpenPlan, onOpenPreflight }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.policy')
   const api = microsegApi(connectionId)
   const { guests, status: guestsStatus } = useZoneGuests(connectionId)
@@ -39,12 +41,14 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
   const [zoneDialog, setZoneDialog] = useState<Editing<MicrosegZone>>(null)
   const [flowDialog, setFlowDialog] = useState<Editing<MicrosegFlow>>(null)
   const [deleting, setDeleting] = useState<Deleting>(null)
-  const [enforcing, setEnforcing] = useState<MicrosegZone | null>(null)
+  // Every state change goes through a dialog: it is applied at once, with the whole draft (UA30).
+  const [changing, setChanging] = useState<{ zone: MicrosegZone; state: ZoneState } | null>(null)
   const [assigning, setAssigning] = useState<MicrosegZone | null>(null)
   const [actionError, setActionError] = useState<unknown>(null)
   const [removingMember, setRemovingMember] = useState(false)
   const removal = useDialogAction()
 
+  const pendingChanges = usePendingChanges(connectionId, policy)
   const readyAfterHours = policy.policy.settings?.ready_after_hours || DEFAULT_READY_AFTER_HOURS
   const refresh = () => reloadPolicy().catch(() => undefined)
 
@@ -103,12 +107,16 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
 
   const onSetState = (zone: MicrosegZone, state: ZoneState) => {
     setActionError(null)
-    if (state === 'enforce') {
-      setEnforcing(zone)
-      return
-    }
-    startState(zone, state).catch(setActionError)
+    setChanging({ zone, state })
   }
+
+  const confirmState = async () => {
+    if (!changing) return
+    await startState(changing.zone, changing.state)
+    setChanging(null)
+  }
+
+  const viewPlan = onOpenPlan ? () => { setChanging(null); onOpenPlan() } : undefined
 
   return (
     <Box>
@@ -154,13 +162,27 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
           onClose={() => setAssigning(null)}
         />
       )}
-      {enforcing && (
+      {changing?.state === 'enforce' && (
         <ZoneEnforceDialog
           connectionId={connectionId}
-          zone={enforcing}
+          zone={changing.zone}
           readyAfterHours={readyAfterHours}
-          onConfirm={async () => { await startState(enforcing, 'enforce'); setEnforcing(null) }}
-          onCancel={() => setEnforcing(null)}
+          pending={pendingChanges.pending}
+          pendingCount={pendingChanges.count}
+          onViewPlan={viewPlan}
+          onConfirm={confirmState}
+          onCancel={() => setChanging(null)}
+        />
+      )}
+      {changing && changing.state !== 'enforce' && (
+        <ZoneStateDialog
+          zone={changing.zone}
+          state={changing.state}
+          pending={pendingChanges.pending}
+          pendingCount={pendingChanges.count}
+          onViewPlan={viewPlan}
+          onConfirm={confirmState}
+          onCancel={() => setChanging(null)}
         />
       )}
       <MicrosegConfirmDialog

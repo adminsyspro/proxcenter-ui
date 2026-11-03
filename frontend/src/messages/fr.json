@@ -12787,7 +12787,24 @@
         "pendingMove": "Déplacement vers {zone}",
         "moveHint": "Déplacement vers {zone} en file, sélectionnez-le à nouveau pour le garder dans cette zone."
       },
-      "preflightButton": "Vérifications préalables"
+      "preflightButton": "Vérifications préalables",
+      "state": {
+        "immediate": "Le changement d'état est appliqué à Proxmox tout de suite, comme une nouvelle révision.",
+        "pendingFirst": "Appliquez ou annulez d'abord {count, plural, one {# modification en attente} other {# modifications en attente}}.",
+        "pendingFirstNoCount": "Appliquez ou annulez d'abord vos modifications en attente.",
+        "title": {
+          "observe": "Mettre la zone {name} en observation ?",
+          "disabled": "Désactiver la zone {name} ?"
+        },
+        "body": {
+          "observe": "Rien n'est bloqué : le trafic que la zone bloquerait est journalisé.",
+          "disabled": "ProxCenter cesse de filtrer les invités de cette zone."
+        },
+        "confirm": {
+          "observe": "Observer",
+          "disabled": "Désactiver"
+        }
+      }
     },
     "plan": {
       "title": "Plan de micro-segmentation",

@@ -3,9 +3,9 @@
 import { Alert, Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { countPendingChanges } from '@/lib/microseg/pendingChanges'
-import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
 import type { MicrosegPolicy } from '@/lib/microseg/types'
+
+import { usePendingChanges } from './usePendingChanges'
 
 type Props = {
   connectionId: string
@@ -22,17 +22,9 @@ type Props = {
  */
 export default function PendingChangesBar({ connectionId, policy, onOpenPlan }: Props) {
   const t = useTranslations()
-  const lastId = policy.last_revision?.id
-  const { revision } = useLastRevisionSnapshot(connectionId, policy.pending_changes ? lastId : null)
+  const { pending, count } = usePendingChanges(connectionId, policy)
 
-  if (!policy.pending_changes) return null
-
-  let count: number | null = null
-  if (!policy.last_revision) {
-    count = countPendingChanges(policy, null)
-  } else if (revision) {
-    count = countPendingChanges({ ...policy, tag_prefix: policy.policy.tag_prefix }, revision)
-  }
+  if (!pending) return null
 
   return (
     <Alert

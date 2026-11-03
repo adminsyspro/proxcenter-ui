@@ -36,10 +36,13 @@ export function setup(opts: {
   flows?: MicrosegFlow[]
   pending_members?: PendingMember[]
   vms?: unknown[]
+  /** The draft has unapplied changes. */
+  pending_changes?: boolean
 } = {}) {
   window.localStorage.setItem('microseg.subTab', 'policy')
   mock.routes['GET /policy'] = () => reply(200, policy({
     zones: opts.zones ?? [], flows: opts.flows ?? [], pending_members: opts.pending_members ?? [], last_revision: REVISION_HEAD,
+    pending_changes: opts.pending_changes ?? false,
   }))
   mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: opts.vms ?? [] } })
   return renderTab()

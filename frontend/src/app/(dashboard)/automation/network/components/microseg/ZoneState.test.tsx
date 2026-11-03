@@ -13,16 +13,24 @@ installFreshMocks()
 
 
 describe('zone state', () => {
+  /** Picks the state in the menu, then confirms it in its dialog. */
   const chooseState = async (label: string) => {
     fireEvent.click(await screen.findByRole('button', { name: 'Change state' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: label }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: label }))
   }
 
-  it('moves a zone to observation straight away and follows the run', async () => {
+  it('moves a zone to observation once confirmed, says it is applied at once, and follows the run', async () => {
     mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1' })
     mock.routes['GET /runs/r1'] = () => reply(200, run('running'))
     setup({ zones: [web({ state: 'disabled' })] })
-    await chooseState('Observe')
+    fireEvent.click(await screen.findByRole('button', { name: 'Change state' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Observe' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Observe zone web?' })
+    expect(within(dialog).getByText('The state change is applied to Proxmox right away, as a new revision.')).toBeTruthy()
+    expect(calls('POST /zones/zw/state')).toHaveLength(0)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Observe' }))
 
     await waitFor(() => expect(calls('POST /zones/zw/state')).toHaveLength(1))
     expect(body(calls('POST /zones/zw/state')[0][1] as RequestInit)).toEqual({ version: 3, state: 'observe' })
@@ -65,6 +73,33 @@ describe('zone state', () => {
     await chooseState('Observe')
     expect(await screen.findByText(/changed elsewhere/)).toBeTruthy()
     await waitFor(() => expect(calls('GET /policy').length).toBeGreaterThan(before))
+  })
+
+  it('refuses to observe while the draft has pending changes, and offers the plan instead', async () => {
+    mock.routes['POST /plan'] = () => reply(202, { run_id: 'p1' })
+    mock.routes['GET /runs/p1'] = () => reply(200, run('running'))
+    setup({ zones: [web({ state: 'disabled' })], pending_changes: true })
+    fireEvent.click(await screen.findByRole('button', { name: 'Change state' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Observe' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Observe zone web?' })
+
+    expect(await within(dialog).findByText(/^Apply or discard your \d+ pending changes? first\.$/)).toBeTruthy()
+    expect((within(dialog).getByRole('button', { name: 'Observe' }) as HTMLButtonElement).disabled).toBe(true)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'View plan' }))
+    expect(await screen.findByRole('dialog', { name: 'Micro-segmentation plan' })).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: 'Observe zone web?' })).toBeNull()
+    expect(calls('POST /zones/zw/state')).toHaveLength(0)
+  })
+
+  it('says pending changes without a number while the last revision is not read', async () => {
+    mock.routes['GET /revisions?limit=1'] = () => reply(502, { code: 'ORCHESTRATOR_ERROR', error: 'x' })
+    setup({ zones: [web({ state: 'observe' })], pending_changes: true })
+    fireEvent.click(await screen.findByRole('button', { name: 'Change state' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Disable' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Disable zone web?' })
+    expect(await within(dialog).findByText('Apply or discard your pending changes first.')).toBeTruthy()
+    expect((within(dialog).getByRole('button', { name: 'Disable' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('does not offer the state the zone is already in', async () => {
@@ -134,6 +169,19 @@ describe('enforcing a zone', () => {
     const dialog = await chooseEnforce()
     expect(await within(dialog).findByLabelText('Type web to confirm')).toBeTruthy()
     expect(within(dialog).getByText(/could not be checked/)).toBeTruthy()
+  })
+
+  it('refuses to enforce a ready zone while the draft has pending changes', async () => {
+    mock.routes[SUGGESTIONS_ROUTE] = () =>
+      reply(200, { suggestions: [suggestion(hoursAgo(30))], limit: 200, offset: 0 })
+    setup({ zones: [web({ state: 'observe', observe_since: hoursAgo(48) })], pending_changes: true })
+    const dialog = await chooseEnforce()
+
+    expect(await within(dialog).findByText(/^Apply or discard your \d+ pending changes? first\.$/)).toBeTruthy()
+    expect(await within(dialog).findByText(/Nothing would have been blocked/)).toBeTruthy()
+    expect(within(dialog).getByText('The state change is applied to Proxmox right away, as a new revision.')).toBeTruthy()
+    expect((within(dialog).getByRole('button', { name: 'Enforce' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(dialog).getByRole('button', { name: 'View plan' })).toBeTruthy()
   })
 
   it('sends nothing when the dialog is cancelled', async () => {

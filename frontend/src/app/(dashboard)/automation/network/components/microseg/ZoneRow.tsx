@@ -49,6 +49,40 @@ function ZoneGlyph({ zone, label }: { zone: MicrosegZone; label: string }) {
   )
 }
 
+/** The change queued for a tagged member: its removal, or its move to another zone. */
+export function MemberChangeChip({ member }: { member: ZoneMember }) {
+  const t = useTranslations('microsegPilot.policy.zone')
+  if (member.change?.kind === 'removal') {
+    return (
+      <Tooltip title={t('memberRemovalHint')}>
+        <Chip size='small' color='warning' variant='outlined' label={t('memberRemoval')} sx={{ flexShrink: 0 }} />
+      </Tooltip>
+    )
+  }
+  if (member.change?.kind === 'move') {
+    return (
+      <Tooltip title={t('memberMoveHint', { zone: member.change.zoneName })}>
+        <Chip size='small' color='warning' variant='outlined' label={t('memberMove', { zone: member.change.zoneName })} sx={{ flexShrink: 1, minWidth: 0, maxWidth: 200 }} />
+      </Tooltip>
+    )
+  }
+  return null
+}
+
+/** The three states of a zone, the current one disabled. */
+export function ZoneStateMenu({ zone, anchor, onClose, onPick }: { zone: MicrosegZone; anchor: HTMLElement | null; onClose: () => void; onPick: (state: ZoneState) => void }) {
+  const t = useTranslations('microsegPilot.policy.zone')
+  return (
+    <Menu anchorEl={anchor} open={!!anchor} onClose={onClose}>
+      {STATES.map(state => (
+        <MenuItem key={state} disabled={state === zone.state} onClick={() => { onClose(); onPick(state) }}>
+          {t(`setState.${state}`)}
+        </MenuItem>
+      ))}
+    </Menu>
+  )
+}
+
 function MemberLine({ member, busy, onRemove }: { member: ZoneMember; busy: boolean; onRemove: () => void }) {
   const t = useTranslations('microsegPilot.policy.zone')
   const { canWrite } = useMicrosegWrite()
@@ -63,16 +97,7 @@ function MemberLine({ member, busy, onRemove }: { member: ZoneMember; busy: bool
       <Tooltip title={name}><Typography noWrap sx={{ flex: '0 1 auto' }}>{name}</Typography></Tooltip>
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{where}</Typography>
       {member.pending && <Chip size='small' color='warning' variant='outlined' label={t('memberPending')} sx={{ flexShrink: 0 }} />}
-      {member.change?.kind === 'removal' && (
-        <Tooltip title={t('memberRemovalHint')}>
-          <Chip size='small' color='warning' variant='outlined' label={t('memberRemoval')} sx={{ flexShrink: 0 }} />
-        </Tooltip>
-      )}
-      {member.change?.kind === 'move' && (
-        <Tooltip title={t('memberMoveHint', { zone: member.change.zoneName })}>
-          <Chip size='small' color='warning' variant='outlined' label={t('memberMove', { zone: member.change.zoneName })} sx={{ flexShrink: 1, minWidth: 0, maxWidth: 200 }} />
-        </Tooltip>
-      )}
+      <MemberChangeChip member={member} />
       <WriteTip title={t('removeMember')}>
         <IconButton size='small' aria-label={t('removeMember')} disabled={!canWrite || busy || member.change?.kind === 'removal'} onClick={onRemove} sx={{ flexShrink: 0 }}>
           <i className='ri-close-line' />
@@ -149,17 +174,7 @@ export default function ZoneRow({ zone, members, membersKnown, flows, zonesById,
         <WriteTip title={t('delete')}>
           <IconButton size='small' aria-label={t('delete')} disabled={!canWrite} onClick={() => onDelete(zone)}><i className='ri-delete-bin-line' /></IconButton>
         </WriteTip>
-        <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
-          {STATES.map(state => (
-            <MenuItem
-              key={state}
-              disabled={state === zone.state}
-              onClick={() => { setAnchor(null); onSetState(zone, state) }}
-            >
-              {t(`setState.${state}`)}
-            </MenuItem>
-          ))}
-        </Menu>
+        <ZoneStateMenu zone={zone} anchor={anchor} onClose={() => setAnchor(null)} onPick={state => onSetState(zone, state)} />
       </Box>
       <Collapse in={open} unmountOnExit>
         <ZoneDetails zone={zone} members={members} membersKnown={membersKnown} flows={flows} zonesById={zonesById} onRemoveMember={onRemoveMember} removeBusy={removeBusy} />

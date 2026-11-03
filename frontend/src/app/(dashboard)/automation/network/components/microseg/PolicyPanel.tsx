@@ -4,11 +4,10 @@ import { useContext, useState } from 'react'
 import { Box, Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { microsegApi } from '@/lib/microseg/api'
-import type { GuestRef, MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import type { MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
-import { isVersionConflict, useDialogAction } from './dialogParts'
+import { useDialogAction } from './dialogParts'
 import FlowDialog, { type FlowSaveValues } from './FlowDialog'
 import FlowList from './FlowList'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
@@ -16,14 +15,11 @@ import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { MicrosegActionsSlot, SlotActions } from './microsegAccess'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import ZoneDialog from './ZoneDialog'
-import ZoneEnforceDialog from './ZoneEnforceDialog'
-import ZoneStateDialog from './ZoneStateDialog'
 import type { ZoneFormValues } from './zoneForm'
 import ZoneList from './ZoneList'
-import { usePendingChanges } from './usePendingChanges'
+import { ZoneStateConfirm } from './ZonePanelActions'
+import { useZoneEdits } from './useZoneEdits'
 import { useZoneGuests } from './useZoneGuests'
-
-const DEFAULT_READY_AFTER_HOURS = 24
 
 type Editing<T> = { item: T | null } | null
 type Deleting = { kind: 'zone'; zone: MicrosegZone } | { kind: 'flow'; flow: MicrosegFlow } | null
@@ -36,7 +32,6 @@ type Deleting = { kind: 'zone'; zone: MicrosegZone } | { kind: 'flow'; flow: Mic
  */
 export default function PolicyPanel({ connectionId, policy, reloadPolicy, startRun, onOpenPlan, onOpenPreflight }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.policy')
-  const api = microsegApi(connectionId)
   const inSlot = useContext(MicrosegActionsSlot) !== null
   const { guests, status: guestsStatus } = useZoneGuests(connectionId)
 
@@ -46,79 +41,29 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
   // Every state change goes through a dialog: it is applied at once, with the whole draft (UA30).
   const [changing, setChanging] = useState<{ zone: MicrosegZone; state: ZoneState } | null>(null)
   const [assigning, setAssigning] = useState<MicrosegZone | null>(null)
-  const [actionError, setActionError] = useState<unknown>(null)
-  const [removingMember, setRemovingMember] = useState(false)
   const removal = useDialogAction()
-
-  const pendingChanges = usePendingChanges(connectionId, policy)
-  const readyAfterHours = policy.policy.settings?.ready_after_hours || DEFAULT_READY_AFTER_HOURS
-  const refresh = () => reloadPolicy().catch(() => undefined)
-
-  /** Runs a write; on success reloads the policy, on a conflict reloads it too and rethrows so the dialog keeps its input. */
-  async function write(action: () => Promise<unknown>) {
-    try {
-      await action()
-    } catch (e) {
-      if (isVersionConflict(e)) await refresh()
-      throw e
-    }
-    await refresh()
-  }
+  const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
 
   const saveZone = (zone: MicrosegZone | null) => async (values: ZoneFormValues) => {
-    await write(() => api.saveZone({
-      id: zone?.id,
-      version: policy.version,
-      name: values.name,
-      label: values.label,
-      color: values.color,
-      enforcement: zone?.enforcement ?? 'guest',
-      vnet_id: zone?.vnet_id ?? '',
-      isolate_members: values.isolate_members,
-    }))
+    await edits.saveZone(zone, values)
     setZoneDialog(null)
   }
 
   const saveFlow = (flow: MicrosegFlow | null) => async (values: FlowSaveValues) => {
-    await write(() => api.saveFlow({ id: flow?.id, version: policy.version, ...values }))
+    await edits.saveFlow(flow, values)
     setFlowDialog(null)
   }
 
   const confirmDelete = async () => {
     if (!deleting) return
-    const ok = await removal.run(() => write(() => (
-      deleting.kind === 'zone' ? api.deleteZone(deleting.zone.id, policy.version) : api.deleteFlow(deleting.flow.id, policy.version)
-    )))
+    const ok = await removal.run(() => (deleting.kind === 'zone' ? edits.deleteZone(deleting.zone) : edits.deleteFlow(deleting.flow)))
     if (ok) setDeleting(null)
   }
 
-  /** Takes a guest out of every zone: a draft change, the next apply removes the zone tag. */
-  const removeMember = (ref: GuestRef) => {
-    if (removingMember) return
-    setActionError(null)
-    setRemovingMember(true)
-    write(() => api.setMembers({ version: policy.version, zone_id: '', guests: [ref] }))
-      .catch(setActionError)
-      .finally(() => setRemovingMember(false))
-  }
-
-  const startState = (zone: MicrosegZone, state: ZoneState) => write(async () => {
-    const started = await api.setZoneState(zone.id, state, policy.version)
-    startRun({ runId: started.run_id, kind: 'zoneState', label: zone.name, runningText: t(`run.running.${state}`, { label: zone.name }) })
-  })
-
   const onSetState = (zone: MicrosegZone, state: ZoneState) => {
-    setActionError(null)
+    edits.clearMemberError()
     setChanging({ zone, state })
   }
-
-  const confirmState = async () => {
-    if (!changing) return
-    await startState(changing.zone, changing.state)
-    setChanging(null)
-  }
-
-  const viewPlan = onOpenPlan ? () => { setChanging(null); onOpenPlan() } : undefined
 
   return (
     <Box>
@@ -130,7 +75,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
           </Box>
         </SlotActions>
       )}
-      {actionError != null && <MicrosegErrorAlert error={actionError} onClose={() => setActionError(null)} />}
+      {edits.memberError != null && <MicrosegErrorAlert error={edits.memberError} onClose={edits.clearMemberError} />}
 
       <ZoneList
         zones={policy.zones}
@@ -144,8 +89,8 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
         onDelete={zone => { removal.reset(); setDeleting({ kind: 'zone', zone }) }}
         onSetState={onSetState}
         onAssign={setAssigning}
-        onRemoveMember={removeMember}
-        removeBusy={removingMember}
+        onRemoveMember={ref => edits.changeMember(ref, '')}
+        removeBusy={edits.memberBusy}
       />
       <FlowList
         flows={policy.flows}
@@ -167,29 +112,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
           onClose={() => setAssigning(null)}
         />
       )}
-      {changing?.state === 'enforce' && (
-        <ZoneEnforceDialog
-          connectionId={connectionId}
-          zone={changing.zone}
-          readyAfterHours={readyAfterHours}
-          pending={pendingChanges.pending}
-          pendingCount={pendingChanges.count}
-          onViewPlan={viewPlan}
-          onConfirm={confirmState}
-          onCancel={() => setChanging(null)}
-        />
-      )}
-      {changing && changing.state !== 'enforce' && (
-        <ZoneStateDialog
-          zone={changing.zone}
-          state={changing.state}
-          pending={pendingChanges.pending}
-          pendingCount={pendingChanges.count}
-          onViewPlan={viewPlan}
-          onConfirm={confirmState}
-          onCancel={() => setChanging(null)}
-        />
-      )}
+      {changing && <ZoneStateConfirm zone={changing.zone} state={changing.state} edits={edits} onClose={() => setChanging(null)} />}
       <MicrosegConfirmDialog
         open={deleting !== null}
         title={deleting?.kind === 'zone' ? t('delete.zoneTitle', { name: deleting.zone.name }) : t('delete.flowTitle')}

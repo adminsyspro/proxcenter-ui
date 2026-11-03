@@ -13,7 +13,7 @@ import { coverage } from './coverage'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import { useDialogAction } from './dialogParts'
 import { MicrosegWriteContext, WriteTip, useCanManageMicroseg } from './microsegAccess'
-import { deployedCounts, formatWhen, lastCheckAt, stillPaused } from './summaryModel'
+import { clusterFirewallOff, deployedCounts, formatWhen, lastCheckAt, stillPaused } from './summaryModel'
 import { NOW_REFRESH_MS, useNow } from './useNow'
 
 type Props = {
@@ -75,7 +75,7 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
 
   const deployment = (() => {
     if (stopped) {
-      const label = status?.engine.cluster_firewall === 'disabled' ? t('dashboard.deployment.stoppedFirewall') : t('dashboard.deployment.stopped')
+      const label = clusterFirewallOff(status, policy) ? t('dashboard.deployment.stoppedFirewall') : t('dashboard.deployment.stopped')
       return <Chip size='small' color='error' label={label} sx={{ maxWidth: '100%' }} />
     }
     if (policyError && !policy) return <Typography variant='body2'>{t('dashboard.unavailable')}</Typography>

@@ -9,7 +9,7 @@ import type { MicrosegPolicy } from '@/lib/microseg/types'
 import MicrosegConfirmDialog, { type ConfirmInfoLine } from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PendingChangesBar from './PendingChangesBar'
-import { formatWhen, stillPaused } from './summaryModel'
+import { clusterFirewallOff, formatWhen, stillPaused } from './summaryModel'
 import type { ControlAction, MicrosegControls } from './useMicrosegControls'
 import { NOW_REFRESH_MS, useNow } from './useNow'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
@@ -78,7 +78,7 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
             >
               <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
                 <span>{t('microsegPilot.stop.active')}</span>
-                {status.engine.cluster_firewall === 'disabled' && (
+                {clusterFirewallOff(status, policy) && (
                   <Chip
                     size='small'
                     variant='outlined'

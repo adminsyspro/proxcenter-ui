@@ -1,6 +1,6 @@
 import type { useFormatter } from 'next-intl'
 
-import type { MicrosegSnapshot, MicrosegStatus } from '@/lib/microseg/types'
+import type { MicrosegPolicy, MicrosegSnapshot, MicrosegStatus } from '@/lib/microseg/types'
 
 /** A pause whose end is past `now` is over (the engine clears the field on its next pass). */
 export function stillPaused(pausedUntil: string | null | undefined, now: number = Date.now()): boolean {
@@ -35,4 +35,14 @@ export function lastCheckAt(status: Pick<MicrosegStatus, 'engine'>): Date | null
     if (!newest || at > newest) newest = at
   }
   return newest
+}
+
+/**
+ * The emergency stop switched the cluster firewall off: the engine says so, or, while it cannot read the firewall
+ * ('unknown' or absent), the policy remembers that the stop did it.
+ */
+export function clusterFirewallOff(status: Pick<MicrosegStatus, 'engine'> | undefined, policy: Pick<MicrosegPolicy, 'policy'> | undefined): boolean {
+  const state = status?.engine.cluster_firewall
+  if (state === 'disabled') return true
+  return state !== 'enabled' && !!policy?.policy.stop_cluster_disabled
 }

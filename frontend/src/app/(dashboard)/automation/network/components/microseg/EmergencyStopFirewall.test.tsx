@@ -8,7 +8,12 @@ import { cleanup, within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
-import { calls, mock, renderTab, reply, resetMocks, status } from './microsegTestKit'
+import type { MicrosegRun } from '@/lib/microseg/types'
+
+import ApplyResult from './ApplyResult'
+import PlanNotices from './PlanNotices'
+import PreflightPanel from './PreflightPanel'
+import { calls, mock, policy, renderTab, reply, resetMocks, status, zone } from './microsegTestKit'
 import MicrosegTab from './MicrosegTab'
 
 // A portal, like the real MUI dialog.
@@ -163,5 +168,129 @@ describe('the banner', () => {
     await screen.findByRole('button', { name: 'Emergency stop' })
     await waitFor(() => expect(calls('GET /status').length).toBeGreaterThan(0))
     expect(screen.queryByText('Cluster firewall disabled')).toBeNull()
+  })
+})
+
+describe('the stop button', () => {
+  it('waits for a first revision, with the reason in a tooltip', async () => {
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: null }))
+    renderTab()
+    const button = await screen.findByRole('button', { name: 'Emergency stop' })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.mouseOver(button.parentElement as HTMLElement)
+    expect(await screen.findByText('Nothing deployed')).toBeTruthy()
+  })
+
+  it('is available once something is deployed', async () => {
+    renderTab()
+    const button = await screen.findByRole('button', { name: 'Emergency stop' })
+    expect((button as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('says it with its own message when the server answers 409 NOT_DEPLOYED', async () => {
+    mock.routes['POST /emergency-stop'] = () => reply(409, { code: 'NOT_DEPLOYED', error: 'x' })
+    renderTab()
+    fireEvent.click(await screen.findByRole('button', { name: 'Emergency stop' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Emergency stop' }))
+    expect(await screen.findByText('Nothing is deployed yet: apply a plan first, the emergency stop acts on a deployed policy.')).toBeTruthy()
+  })
+})
+
+describe('the banner, when the engine cannot read the cluster firewall', () => {
+  const withFlag = (flag: boolean | undefined) => () => reply(200, {
+    ...policy({ zones: [zone('a')] }),
+    policy: { ...policy().policy, emergency_stop: true, stop_cluster_disabled: flag },
+    last_revision: { id: 'r1', version: 2, author: 'me', created_at: '2026-11-02T09:00:00Z' },
+  })
+
+  it.each(['unknown', undefined] as const)('shows the mark from the policy flag when the state is %s', async state => {
+    mock.routes['GET /status'] = () => reply(200, status({ emergency_stop: true, engine: engine(state) }))
+    mock.routes['GET /policy'] = withFlag(true)
+    renderTab()
+    expect(await screen.findByText('Cluster firewall disabled')).toBeTruthy()
+  })
+
+  it('does not contradict an engine that reads the firewall as enabled', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ emergency_stop: true, engine: engine('enabled') }))
+    mock.routes['GET /policy'] = withFlag(true)
+    renderTab()
+    await screen.findByText('Emergency stop active: every zone is in observation')
+    expect(screen.queryByText('Cluster firewall disabled')).toBeNull()
+  })
+
+  it('shows no mark without the flag', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ emergency_stop: true, engine: engine('unknown') }))
+    mock.routes['GET /policy'] = withFlag(undefined)
+    renderTab()
+    await screen.findByText('Emergency stop active: every zone is in observation')
+    expect(screen.queryByText('Cluster firewall disabled')).toBeNull()
+  })
+})
+
+describe('the pre-flight panel during a stop', () => {
+  const held = { id: 'cluster_firewall', status: 'warn', fix: 'enable_cluster_firewall', detail: { reason: 'emergency_stop', held_by_stop: true } }
+  const checks = (check: object) => () => reply(200, { checks: [check, { id: 'socle_rules', status: 'pass' }] })
+
+  it('says the stop holds the firewall off and offers Resume instead of the wizard', async () => {
+    mock.routes['GET /preflight'] = checks(held)
+    const onResume = vi.fn()
+    const onOpenWizard = vi.fn()
+    renderTab(<PreflightPanel open connectionId='c1' onClose={vi.fn()} onOpenWizard={onOpenWizard} onResume={onResume} />)
+
+    expect(await screen.findByText('Cluster firewall held off by the emergency stop: lift the stop to re-enable it')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Open the deployment wizard' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    expect(onResume).toHaveBeenCalledTimes(1)
+    expect(onOpenWizard).not.toHaveBeenCalled()
+  })
+
+  it('keeps the wizard fix for a firewall that is plainly off, with no Resume', async () => {
+    mock.routes['GET /preflight'] = checks({ id: 'cluster_firewall', status: 'fail', fix: 'enable_cluster_firewall' })
+    renderTab(<PreflightPanel open connectionId='c1' onClose={vi.fn()} onOpenWizard={vi.fn()} onResume={vi.fn()} />)
+
+    expect(await screen.findByRole('button', { name: 'Open the deployment wizard' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
+  })
+
+  it('opens the resume dialog of the tab from the Resume button', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ emergency_stop: true, engine: engine('disabled') }))
+    mock.routes['GET /preflight'] = checks(held)
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [], last_revision: null }))
+    renderConfigured()
+    fireEvent.click(await screen.findByRole('button', { name: 'Run the checks' }))
+    const panel = await screen.findByRole('dialog', { name: 'Pre-flight checks' })
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Resume' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Resume micro-segmentation?' })).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Pre-flight checks' })).toBeNull())
+  })
+})
+
+describe('a plan or an apply written during a stop', () => {
+  const LINE = 'Written while the emergency stop holds the cluster firewall off; takes effect when the stop is lifted'
+  const run = (result: object): MicrosegRun => ({
+    id: 'run1', policy_id: 'p1', kind: 'apply', status: 'done', started_at: '2026-11-03T10:00:00Z', duration_ms: 10, api_calls: 1, writes: 1, error: '',
+    result: { guests: 1, members: 1, steps: 1, drifts: 0, ...result } as never,
+  })
+
+  it('warns in the plan notices', () => {
+    renderTab(<PlanNotices result={run({ stop_active: true }).result!} guests={[]} />)
+    expect(screen.getByText(LINE)).toBeTruthy()
+  })
+
+  it('draws no plan notice without the mark', () => {
+    const { container } = renderTab(<PlanNotices result={run({}).result!} guests={[]} />)
+    expect(container.textContent).not.toContain('Written while the emergency stop')
+  })
+
+  it('warns in the apply result, next to the counts', () => {
+    renderTab(<ApplyResult run={run({ stop_active: true, done: [] })} guests={[]} />)
+    expect(screen.getByText(LINE)).toBeTruthy()
+    expect(screen.getByText('0 done, 0 failed, 0 not run')).toBeTruthy()
+  })
+
+  it('draws no warning in the apply result without the mark', () => {
+    renderTab(<ApplyResult run={run({ done: [] })} guests={[]} />)
+    expect(screen.queryByText(LINE)).toBeNull()
   })
 })

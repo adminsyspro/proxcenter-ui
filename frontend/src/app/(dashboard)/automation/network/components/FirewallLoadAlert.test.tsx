@@ -3,11 +3,11 @@
  * failed load reads as an empty cluster.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, within } from '@testing-library/react'
 
 import { fireEvent, renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
 
-import FirewallLoadAlert from './FirewallLoadAlert'
+import FirewallLoadAlert, { loadErrorCauses } from './FirewallLoadAlert'
 
 afterEach(cleanup)
 
@@ -37,5 +37,30 @@ describe('FirewallLoadAlert', () => {
       expect(screen.queryByRole('alert')).toBeNull()
       cleanup()
     }
+  })
+
+  it('shows the first cause and how many more, with every cause under Details', () => {
+    const error = 'connect ECONNREFUSED 127.0.0.1:9 · HTTP 502 · HTTP 500 · HTTP 502'
+    renderWithProviders(<FirewallLoadAlert error={error} onRetry={vi.fn()} />)
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('may be incomplete: connect ECONNREFUSED 127.0.0.1:9 and 2 more')
+    expect(within(alert).queryByText('HTTP 500')).toBeNull()
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Details' }))
+    expect(within(alert).getByText('HTTP 500')).toBeTruthy()
+    expect(within(alert).getByText('HTTP 502')).toBeTruthy()
+    expect(within(alert).getByRole('button', { name: 'Hide details' }).getAttribute('aria-expanded')).toBe('true')
+    expect(within(alert).getByRole('button', { name: 'Retry' })).toBeTruthy()
+  })
+
+  it('has no Details button for a single cause', () => {
+    renderWithProviders(<FirewallLoadAlert error='HTTP 502' />)
+    expect(screen.queryByRole('button', { name: 'Details' })).toBeNull()
+    expect(screen.getByRole('alert').textContent).not.toContain('more')
+  })
+
+  it('splits the causes the page joined, once each', () => {
+    expect(loadErrorCauses('a · b · a ·  · c')).toEqual(['a', 'b', 'c'])
+    expect(loadErrorCauses(null)).toEqual([])
   })
 })

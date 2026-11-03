@@ -8968,7 +8968,10 @@
     },
     "firewallNoNicFlag": "In den Firewall-Optionen des Gasts aktiviert, aber keine Netzwerkschnittstelle hat die Firewall-Option: es wird nichts gefiltert",
     "firewallOptionsOff": "Eine Netzwerkschnittstelle hat die Firewall-Option, aber die Firewall ist in den Optionen des Gasts deaktiviert: es wird nichts gefiltert",
-    "tabLogging": "Protokolle"
+    "tabLogging": "Protokolle",
+    "loadErrorMore": "und {count, number} weitere",
+    "loadErrorDetails": "Details anzeigen",
+    "loadErrorHideDetails": "Details ausblenden"
   },
   "deployWizard": {
     "bannerTitle": "Cluster-Firewall nicht konfiguriert",

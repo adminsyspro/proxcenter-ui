@@ -9021,7 +9021,10 @@
     },
     "firewallNoNicFlag": "게스트 방화벽 옵션에서 활성화되었지만 방화벽 플래그가 설정된 네트워크 인터페이스가 없습니다: 아무것도 필터링되지 않습니다",
     "firewallOptionsOff": "네트워크 인터페이스에 방화벽 플래그가 있지만 게스트 옵션에서 방화벽이 꺼져 있습니다: 아무것도 필터링되지 않습니다",
-    "tabLogging": "로그"
+    "tabLogging": "로그",
+    "loadErrorMore": "외 {count, number}건",
+    "loadErrorDetails": "자세히",
+    "loadErrorHideDetails": "자세히 숨기기"
   },
   "deployWizard": {
     "bannerTitle": "클러스터 방화벽이 구성되지 않았습니다",

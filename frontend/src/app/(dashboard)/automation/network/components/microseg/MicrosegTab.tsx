@@ -50,7 +50,7 @@ function storeSubTab(tab: MicrosegSubTab) {
 /** Content of one sub-tab. */
 function SubTabContent({ tab, ...props }: { tab: MicrosegSubTab } & MicrosegSubTabProps) {
   return (
-    <Box role='tabpanel' id={`microseg-panel-${tab}`} aria-labelledby={`microseg-tab-${tab}`} sx={{ pt: 3 }}>
+    <Box role='tabpanel' id={`microseg-panel-${tab}`} aria-labelledby={`microseg-tab-${tab}`} sx={{ pt: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {tab === 'overview' && <ZoneMap {...props} />}
       {tab === 'policy' && <PolicyPanel {...props} />}
       {tab === 'observation' && <ObservationPanel {...props} />}
@@ -135,7 +135,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
   return (
     <MicrosegWriteContext.Provider value={canWrite}>
     <MicrosegActionsSlot.Provider value={actionsSlot}>
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <MicrosegBanner connectionId={connectionId} policy={policy} controls={controls} onOpenPlan={onOpenPlan} />
       <RunStrip connectionId={connectionId} runs={runs} onFinished={refreshAfterRun} onRemove={removeRun} />
       {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={onOpenPlan} onOpenPreflight={onOpenPreflight} />}

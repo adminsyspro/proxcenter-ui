@@ -179,7 +179,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
 
   const panelOpen = !!selectedZone || !!selectedEdge
   return (
-    <Box sx={{ px: 3, pb: 3 }}>
+    <Box sx={{ px: 3, pb: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, flexWrap: 'wrap' }}>
         <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
           <MapToolbar filters={filters} onFilters={setFilters} refreshedAt={refreshedAt} refreshing={refreshing} onRefresh={refresh} />
@@ -202,11 +202,11 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
         </Alert>
       )}
       <MapNamesContext.Provider value={names}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: { xs: 'wrap', lg: 'nowrap' } }}>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', flexWrap: { xs: 'wrap', lg: 'nowrap' }, flex: 1, minHeight: 560 }}>
           <Box
             role='region'
             aria-label={t('mapLabel')}
-            sx={{ flex: '1 1 0', minWidth: 0, width: '100%', height: 560, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
+            sx={{ flex: '1 1 0', minWidth: 0, width: '100%', minHeight: 560, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
           >
             <ZoneCanvas
               nodes={nodes}

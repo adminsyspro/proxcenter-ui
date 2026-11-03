@@ -116,7 +116,7 @@ export default function NetworkAutomationPage() {
   return (
     <ProviderTenantGuard>
     <EnterpriseGuard requiredFeature={Features.MICROSEGMENTATION} featureName="Microsegmentation / Firewall">
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ p: 3, minHeight: 'calc(100vh - 130px)', display: 'flex', flexDirection: 'column' }}>
 
         {!selectedConnection && (
           <Alert severity="info" sx={{ mb: 3 }}>
@@ -125,7 +125,7 @@ export default function NetworkAutomationPage() {
         )}
 
         {/* Main Content Card */}
-        <Card sx={{ background: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(10px)', border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 3 }}>
+        <Card sx={{ background: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(10px)', border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, flex: '1 1 460px', minWidth: 0 }}>
             <Tab icon={<i className="ri-dashboard-line" />} iconPosition="start" label={t('firewall.dashboard')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />

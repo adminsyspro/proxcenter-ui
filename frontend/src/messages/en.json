@@ -12763,7 +12763,8 @@
         "removed": "{count, plural, one {# flow removed} other {# flows removed}}"
       },
       "members": "{count, plural, one {# member change} other {# member changes}}",
-      "tagPrefix": "tag prefix changed"
+      "tagPrefix": "tag prefix changed",
+      "whatWillChangeInline": "what will change: {list}"
     },
     "firstRun": {
       "title": "Set up micro-segmentation",
@@ -13007,7 +13008,8 @@
           "unknownHint": "Comparing with the applied revision..."
         },
         "uncovered": "{count, plural, one {Uncovered 24 h: # hit} other {Uncovered 24 h: # hits}}",
-        "uncoveredHint": "Traffic into this zone that no flow covers (logged by the zone's members over the last 24 h)"
+        "uncoveredHint": "Traffic into this zone that no flow covers (logged by the zone's members over the last 24 h)",
+        "noFlowInto": "No flow into this zone"
       }
     },
     "plan": {
@@ -13190,7 +13192,9 @@
         "unknownDot": "Unknown source",
         "about": "About the hit counts"
       },
-      "acceptUnknownSource": "Unknown source: use As CIDR"
+      "acceptUnknownSource": "Unknown source: use As CIDR",
+      "zoneBanner": "Suggestions for zone {zone} · {count, plural, one {# uncovered hit} other {# uncovered hits}} in 24 h",
+      "zoneBannerNoCount": "Suggestions for zone {zone}"
     },
     "overview": {
       "empty": "No zone to draw yet.",

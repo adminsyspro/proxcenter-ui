@@ -19,13 +19,15 @@ describe('zone list', () => {
     const zones = Array.from({ length: 11 }, (_, i) => zone(`z${i}`, { name: `zone${String(i).padStart(2, '0')}` }))
     setup({ zones })
 
-    expect(await screen.findByText('zone00')).toBeTruthy()
-    expect(screen.getByText('zone09')).toBeTruthy()
-    expect(screen.queryByText('zone10')).toBeNull()
+    // The flow table keeps a group per zone too: the zone list is its own region.
+    const list = await screen.findByRole('region', { name: 'Zones' })
+    expect(await within(list).findByText('zone00')).toBeTruthy()
+    expect(within(list).getByText('zone09')).toBeTruthy()
+    expect(within(list).queryByText('zone10')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: /next page/i }))
-    expect(await screen.findByText('zone10')).toBeTruthy()
-    expect(screen.queryByText('zone00')).toBeNull()
+    fireEvent.click(within(list).getByRole('button', { name: /next page/i }))
+    expect(await within(list).findByText('zone10')).toBeTruthy()
+    expect(within(list).queryByText('zone00')).toBeNull()
   })
 
   it('shows the state of a zone and how many members it has', async () => {
@@ -181,6 +183,11 @@ describe('flow list', () => {
     expect(within(region).queryByText('tcp/42010')).toBeNull()
     fireEvent.click(within(region).getByRole('button', { name: /next page/i }))
     expect(await within(region).findByText('tcp/42010')).toBeTruthy()
+
+    // A new filter starts the group again on its first page.
+    fireEvent.change(within(region).getByRole('textbox', { name: 'Filter by zone or service' }), { target: { value: 'tcp' } })
+    expect(await within(region).findByText('tcp/42000')).toBeTruthy()
+    expect(within(region).queryByText('tcp/42010')).toBeNull()
   })
 })
 

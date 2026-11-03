@@ -34,6 +34,8 @@ export type PolicyDiff = {
   flows: ReadonlyMap<string, DiffKind>
   removedZones: MicrosegZone[]
   removedFlows: MicrosegFlow[]
+  /** The name each renamed zone had in the revision (the history logged it under that name). */
+  renamedZones: ReadonlyMap<string, string>
   members: number
   prefix: boolean
 }
@@ -57,11 +59,14 @@ export function policyDiff(draft: MicrosegDraft, last: MicrosegRevision | null):
   if (last && !snap) return null
   const zones = diffById(draft.zones, snap ? snap.zones : null, sameZone)
   const flows = diffById(draft.flows, snap ? snap.flows : null, sameFlow)
+  const before = new Map((snap ? snap.zones : []).map(z => [z.id, z.name]))
+  const renamedZones = new Map(draft.zones.filter(z => before.has(z.id) && before.get(z.id) !== z.name).map(z => [z.id, before.get(z.id)!]))
   return {
     zones: zones.kinds,
     flows: flows.kinds,
     removedZones: zones.removed,
     removedFlows: flows.removed,
+    renamedZones,
     members: draft.pending_members.length,
     prefix: !!snap && draft.tag_prefix !== undefined && draft.tag_prefix !== snap.tag_prefix,
   }

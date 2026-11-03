@@ -12431,7 +12431,8 @@
         "removed": "{count, plural, one {# Fluss entfernt} other {# Flüsse entfernt}}"
       },
       "members": "{count, plural, one {# Mitgliedsänderung} other {# Mitgliedsänderungen}}",
-      "tagPrefix": "Tag-Präfix geändert"
+      "tagPrefix": "Tag-Präfix geändert",
+      "whatWillChangeInline": "was sich ändert: {list}"
     },
     "firstRun": {
       "title": "Mikrosegmentierung einrichten",
@@ -12675,7 +12676,8 @@
           "unknownHint": "Vergleich mit der angewendeten Revision..."
         },
         "uncovered": "{count, plural, one {Nicht abgedeckt 24 h: # Treffer} other {Nicht abgedeckt 24 h: # Treffer}}",
-        "uncoveredHint": "Verkehr in diese Zone, den kein Fluss abdeckt (von den Mitgliedern der Zone in den letzten 24 h protokolliert)"
+        "uncoveredHint": "Verkehr in diese Zone, den kein Fluss abdeckt (von den Mitgliedern der Zone in den letzten 24 h protokolliert)",
+        "noFlowInto": "Kein Fluss in diese Zone"
       }
     },
     "plan": {
@@ -12858,7 +12860,9 @@
         "unknownDot": "Unbekannte Quelle",
         "about": "Zu den Trefferzahlen"
       },
-      "acceptUnknownSource": "Unbekannte Quelle: Als CIDR verwenden"
+      "acceptUnknownSource": "Unbekannte Quelle: Als CIDR verwenden",
+      "zoneBanner": "Vorschläge für Zone {zone} · {count, plural, one {# nicht abgedeckter Treffer} other {# nicht abgedeckte Treffer}} in 24 h",
+      "zoneBannerNoCount": "Vorschläge für Zone {zone}"
     },
     "overview": {
       "empty": "Noch keine Zone zum Zeichnen.",

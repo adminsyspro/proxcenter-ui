@@ -12764,7 +12764,8 @@
         "removed": "{count, plural, one {# flux supprimé} other {# flux supprimés}}"
       },
       "members": "{count, plural, one {# changement de membre} other {# changements de membres}}",
-      "tagPrefix": "préfixe des tags modifié"
+      "tagPrefix": "préfixe des tags modifié",
+      "whatWillChangeInline": "ce qui va changer : {list}"
     },
     "firstRun": {
       "title": "Mettre en place la micro-segmentation",
@@ -13008,7 +13009,8 @@
           "unknownHint": "Comparaison avec la révision appliquée..."
         },
         "uncovered": "{count, plural, one {Non couvert 24 h : # occurrence} other {Non couvert 24 h : # occurrences}}",
-        "uncoveredHint": "Trafic entrant dans cette zone qu’aucun flux ne couvre (journalisé par les membres de la zone ces dernières 24 h)"
+        "uncoveredHint": "Trafic entrant dans cette zone qu’aucun flux ne couvre (journalisé par les membres de la zone ces dernières 24 h)",
+        "noFlowInto": "Aucun flux vers cette zone"
       }
     },
     "plan": {
@@ -13191,7 +13193,9 @@
         "unknownDot": "Source inconnue",
         "about": "À propos des occurrences"
       },
-      "acceptUnknownSource": "Source inconnue : utilisez En CIDR"
+      "acceptUnknownSource": "Source inconnue : utilisez En CIDR",
+      "zoneBanner": "Suggestions pour la zone {zone} · {count, plural, one {# occurrence non couverte} other {# occurrences non couvertes}} en 24 h",
+      "zoneBannerNoCount": "Suggestions pour la zone {zone}"
     },
     "overview": {
       "empty": "Aucune zone à dessiner pour l'instant.",

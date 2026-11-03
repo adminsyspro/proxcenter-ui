@@ -16,7 +16,9 @@ import ObservationTable from './ObservationTable'
 import { useResolveSuggestions } from './observationParts'
 import { PrevNextPager } from './PolicyPager'
 import { useNow } from './useNow'
+import { usePendingChanges } from './usePendingChanges'
 import { useStored } from './useStoredChoice'
+import { uncoveredOf, useZoneUncovered } from './useZoneUncovered'
 
 /** Where the folded destination zones of the table are kept in this browser. */
 export const COLLAPSED_STORAGE_KEY = 'microseg.observation.collapsed'
@@ -31,6 +33,24 @@ type Resolved = { action: SuggestionAction; count: number }
  * Filtering and paging are the server's. Accepting turns a flow into a learned
  * flow of the draft (the plan applies it); dismissing hides it for good.
  */
+/**
+ * The zone the list is filtered on, with its uncovered hits of the last 24 hours (the same history read and count as
+ * the Policy zone group it was opened from): suggestions and hits are two datasets, shown side by side.
+ */
+function ZoneFilterBanner({ connectionId, policy, zoneId }: { connectionId: string; policy: MicrosegSubTabProps['policy']; zoneId: string }) {
+  const t = useTranslations('microsegPilot.observation')
+  const { byZone } = useZoneUncovered(connectionId)
+  const { diff } = usePendingChanges(connectionId, policy)
+  const zone = policy.zones.find(z => z.id === zoneId)
+  if (!zone) return null
+  const count = byZone ? uncoveredOf(byZone, zone.name, diff?.renamedZones.get(zone.id)) : null
+  return (
+    <Alert severity='info' icon={<i className='ri-radar-line' />} sx={{ mb: 1.5 }}>
+      {count === null ? t('zoneBannerNoCount', { zone: zone.name }) : t('zoneBanner', { zone: zone.name, count })}
+    </Alert>
+  )
+}
+
 export default function ObservationPanel({ connectionId, policy, reloadPolicy, onOpenSettings, observationZone = null }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.observation')
   // Opened from a Policy zone group: filtered on that zone (it stays a filter the user can clear).
@@ -109,6 +129,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
     <Box sx={{ px: 3, pb: 3 }}>
       <ObservationLegend onOpenSettings={onOpenSettings} />
       <ObservationFilters values={filters} zones={policy.zones} onChange={changeFilters} />
+      {filters.zone && <ZoneFilterBanner connectionId={connectionId} policy={policy} zoneId={filters.zone} />}
 
       {error && <MicrosegErrorAlert error={error} onRetry={reload} />}
       {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1.5 }}>{failure}</Alert>}

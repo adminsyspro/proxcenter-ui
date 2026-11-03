@@ -12763,7 +12763,8 @@
         "removed": "{count, plural, one {# flujo eliminado} other {# flujos eliminados}}"
       },
       "members": "{count, plural, one {# cambio de miembro} other {# cambios de miembros}}",
-      "tagPrefix": "prefijo de etiquetas modificado"
+      "tagPrefix": "prefijo de etiquetas modificado",
+      "whatWillChangeInline": "lo que va a cambiar: {list}"
     },
     "firstRun": {
       "title": "Configurar la microsegmentación",
@@ -13007,7 +13008,8 @@
           "unknownHint": "Comparando con la revisión aplicada..."
         },
         "uncovered": "{count, plural, one {Sin cubrir 24 h: # impacto} other {Sin cubrir 24 h: # impactos}}",
-        "uncoveredHint": "Tráfico hacia esta zona que ningún flujo cubre (registrado por los miembros de la zona en las últimas 24 h)"
+        "uncoveredHint": "Tráfico hacia esta zona que ningún flujo cubre (registrado por los miembros de la zona en las últimas 24 h)",
+        "noFlowInto": "Ningún flujo hacia esta zona"
       }
     },
     "plan": {
@@ -13190,7 +13192,9 @@
         "unknownDot": "Origen desconocido",
         "about": "Sobre las coincidencias"
       },
-      "acceptUnknownSource": "Origen desconocido: use Como CIDR"
+      "acceptUnknownSource": "Origen desconocido: use Como CIDR",
+      "zoneBanner": "Sugerencias para la zona {zone} · {count, plural, one {# impacto sin cubrir} other {# impactos sin cubrir}} en 24 h",
+      "zoneBannerNoCount": "Sugerencias para la zona {zone}"
     },
     "overview": {
       "empty": "Aún no hay ninguna zona que dibujar.",

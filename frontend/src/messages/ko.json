@@ -12763,7 +12763,8 @@
         "removed": "{count, plural, other {플로우 #개 삭제}}"
       },
       "members": "{count, plural, other {구성원 변경 #개}}",
-      "tagPrefix": "태그 접두사 변경"
+      "tagPrefix": "태그 접두사 변경",
+      "whatWillChangeInline": "변경될 내용: {list}"
     },
     "firstRun": {
       "title": "마이크로 세분화 설정",
@@ -13007,7 +13008,8 @@
           "unknownHint": "적용된 리비전과 비교하는 중..."
         },
         "uncovered": "{count, plural, other {미허용 24시간: 히트 #회}}",
-        "uncoveredHint": "어떤 플로우도 허용하지 않는 이 영역으로의 트래픽 (지난 24시간 동안 영역 구성원이 기록)"
+        "uncoveredHint": "어떤 플로우도 허용하지 않는 이 영역으로의 트래픽 (지난 24시간 동안 영역 구성원이 기록)",
+        "noFlowInto": "이 영역으로 들어오는 플로우가 없습니다"
       }
     },
     "plan": {
@@ -13190,7 +13192,9 @@
         "unknownDot": "알 수 없는 출발지",
         "about": "적중 수 안내"
       },
-      "acceptUnknownSource": "알 수 없는 출발지: CIDR로를 사용하세요"
+      "acceptUnknownSource": "알 수 없는 출발지: CIDR로를 사용하세요",
+      "zoneBanner": "{zone} 영역의 제안 · 24시간 동안 미허용 히트 {count, plural, other {#회}}",
+      "zoneBannerNoCount": "{zone} 영역의 제안"
     },
     "overview": {
       "empty": "아직 그릴 영역이 없습니다.",

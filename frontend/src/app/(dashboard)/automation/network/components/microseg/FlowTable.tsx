@@ -15,6 +15,7 @@ import DiffChip from './DiffChip'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { OUTSIDE_GROUP, flowGroups, type FlowGroup, type FlowRowModel, type FlowState } from './policyTableModel'
 import { SlotActions, WriteTip, useMicrosegWrite } from './microsegAccess'
+import { uncoveredOf } from './useZoneUncovered'
 
 const COLUMNS = 5
 const STRUCK = { textDecoration: 'line-through', opacity: 0.7 }
@@ -132,11 +133,13 @@ function FlowTableRow({ row, zonesById, onEdit, onDelete }: { row: FlowRowModel;
 }
 
 /** One destination: its header (chevron, colour, name, count, "+ Flow" into it), then its flows ten per page. */
-function GroupRows({ group, open, onToggle, zonesById, uncovered, onOpenObservation, onAdd, onEdit, onDelete }: {
+function GroupRows({ group, open, onToggle, zonesById, uncovered, previousName, onOpenObservation, onAdd, onEdit, onDelete }: {
   group: FlowGroup
   open: boolean
   onToggle: () => void
   zonesById: ReadonlyMap<string, MicrosegZone>
+  /** The zone's name in the applied revision when the draft renamed it. */
+  previousName?: string
 } & Pick<Props, 'uncovered' | 'onOpenObservation' | 'onAdd' | 'onEdit' | 'onDelete'>) {
   const t = useTranslations('microsegPilot.policy')
   const { canWrite } = useMicrosegWrite()
@@ -145,14 +148,15 @@ function GroupRows({ group, open, onToggle, zonesById, uncovered, onOpenObservat
   const name = outside ? t('table.outside') : (group.zone?.name ?? group.key)
   const addable = !outside && !group.zoneRemoved && !!group.zone
   const zoneId = addable ? group.key : null
-  const uncoveredHits = zoneId && uncovered && group.zone ? (uncovered.get(group.zone.name.toLowerCase()) ?? 0) : null
+  const uncoveredHits = zoneId && uncovered && group.zone ? uncoveredOf(uncovered, group.zone.name, previousName) : null
+  const bodyId = `policy-flows-${group.key}`
 
   return (
-    <TableBody aria-label={name}>
+    <TableBody aria-label={name} id={bodyId}>
       <TableRow sx={{ bgcolor: 'action.hover' }}>
-        <TableCell colSpan={COLUMNS} sx={{ py: 0.25 }}>
+        <TableCell component='th' scope='rowgroup' colSpan={COLUMNS} sx={{ py: 0.25, fontWeight: 'inherit' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-            <IconButton size='small' aria-expanded={open} aria-label={open ? t('hideDetails') : t('showDetails')} onClick={onToggle}>
+            <IconButton size='small' aria-expanded={open} aria-controls={bodyId} aria-label={open ? t('hideDetails') : t('showDetails')} onClick={onToggle}>
               <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
             </IconButton>
             {outside
@@ -174,6 +178,11 @@ function GroupRows({ group, open, onToggle, zonesById, uncovered, onOpenObservat
           </Box>
         </TableCell>
       </TableRow>
+      {open && paged.count === 0 && (
+        <TableRow>
+          <TableCell colSpan={COLUMNS}><Typography variant='body2' color='text.secondary'>{t('table.noFlowInto')}</Typography></TableCell>
+        </TableRow>
+      )}
       {open && paged.rows.map(row => <FlowTableRow key={`${row.removed ? 'removed' : 'draft'}-${row.flow.id}`} row={row} zonesById={zonesById} onEdit={onEdit} onDelete={onDelete} />)}
       {open && paged.count > paged.size && (
         <TableRow>
@@ -205,7 +214,8 @@ export default function FlowTable({ flows, zones, diff, uncovered, onOpenObserva
     if (!next.delete(key)) next.add(key)
     return next
   })
-  const anyFlow = flows.length > 0 || (diff?.removedFlows.length ?? 0) > 0
+  // The zones show even without a flow: each group says how much traffic into its zone no flow covers.
+  const anyFlow = zones.length > 0 || flows.length > 0 || (diff?.removedFlows.length ?? 0) > 0
 
   return (
     <Box component='section' aria-label={t('flowsTitle')} sx={{ mt: 3 }}>
@@ -251,11 +261,13 @@ export default function FlowTable({ flows, zones, diff, uncovered, onOpenObserva
                 </TableHead>
                 {groups.map(group => (
                   <GroupRows
-                    key={group.key}
+                    // A new filter starts every group on its first page.
+                    key={`${group.key}|${filter}`}
                     group={group}
                     open={!collapsed.has(group.key)}
                     onToggle={() => toggle(group.key)}
                     zonesById={zonesById}
+                    previousName={diff?.renamedZones.get(group.key)}
                     uncovered={uncovered}
                     onOpenObservation={onOpenObservation}
                     onAdd={onAdd}

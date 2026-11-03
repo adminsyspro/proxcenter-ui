@@ -38,6 +38,9 @@ describe('flow table: groups and filter', () => {
     expect(within(dbGroup).getByText('2 flows')).toBeTruthy()
     expect(rowsOf(dbGroup)).toHaveLength(2)
     expect(within(t).getAllByRole('columnheader').map(c => c.textContent)).toEqual(['Source', 'Destination', 'Service', 'State', 'Actions'])
+    const header = within(dbGroup).getByRole('rowheader')
+    expect(header.getAttribute('scope')).toBe('rowgroup')
+    expect(within(header).getByRole('button', { name: 'Hide details' }).getAttribute('aria-controls')).toBe(dbGroup.id)
   })
 
   it('folds a group under its chevron and adds a flow into its zone from its header', async () => {
@@ -181,6 +184,32 @@ describe('flow table: uncovered traffic of each zone', () => {
     fireEvent.click(await within(group(await table(), 'db')).findByRole('button', { name: 'Uncovered 24 h: 5 hits' }))
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Observation' }).getAttribute('aria-selected')).toBe('true'))
     await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).startsWith(`${BASE}/suggestions?`) && new URL(String(u), 'http://x').searchParams.get('zone') === 'zd')).toBe(true))
+    // The suggestions and the hits are two datasets: the banner puts the zone's count next to the list.
+    expect(await screen.findByText('Suggestions for zone db · 5 uncovered hits in 24 h')).toBeTruthy()
+    expect(trafficReads()).toHaveLength(1)
+  })
+
+  it('keeps the group of a zone no flow goes into, with its count and its new flow, until a filter is typed', async () => {
+    mock.routes['GET /traffic*'] = () => reply(200, { step: 3600, from: '', to: '', buckets: [bucket('', 'web', 4)] })
+    setup({ zones: [web(), db()], flows: [f('f1', { src_zone_id: 'zw', dst_zone_id: 'zd' })] })
+    const t = await table()
+    const webGroup = group(t, 'web')
+    expect(within(webGroup).getByText('No flow into this zone')).toBeTruthy()
+    expect(within(webGroup).getByText('0 flows')).toBeTruthy()
+    expect(await within(webGroup).findByRole('button', { name: 'Uncovered 24 h: 4 hits' })).toBeTruthy()
+    expect(within(webGroup).getByRole('button', { name: 'New flow into web' })).toBeTruthy()
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Filter by zone or service' }), { target: { value: 'https' } })
+    await waitFor(() => expect(within(t).queryByRole('rowgroup', { name: 'web' })).toBeNull())
+  })
+
+  it('also counts the hits logged under the name a renamed zone had in the applied revision', async () => {
+    mock.routes['GET /revisions?limit=1'] = () => reply(200, { revisions: [revisionWithSnapshot([web(), db({ name: 'olddb' })], [])] })
+    mock.routes['GET /traffic*'] = () => reply(200, { step: 3600, from: '', to: '', buckets: [bucket('web', 'olddb', 3), bucket('web', 'db', 2)] })
+    setup({ zones: [web(), db()], flows: [f('f1', { src_zone_id: 'zw', dst_zone_id: 'zd' })], pending_changes: true })
+    const t = await table()
+    expect(await within(group(t, 'db')).findByRole('button', { name: 'Uncovered 24 h: 5 hits' })).toBeTruthy()
+    expect(within(screen.getByRole('listitem', { name: 'db' })).getByText('Changed')).toBeTruthy()
   })
 
   it('shows no count when the history cannot be read, and never asks Proxmox', async () => {

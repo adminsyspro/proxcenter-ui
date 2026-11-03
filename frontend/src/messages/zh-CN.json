@@ -12763,7 +12763,8 @@
         "removed": "{count, plural, other {删除 # 条流量规则}}"
       },
       "members": "{count, plural, other {# 项成员更改}}",
-      "tagPrefix": "标签前缀已更改"
+      "tagPrefix": "标签前缀已更改",
+      "whatWillChangeInline": "将要更改的内容：{list}"
     },
     "firstRun": {
       "title": "设置微分段",
@@ -13007,7 +13008,8 @@
           "unknownHint": "正在与已应用的修订版比较..."
         },
         "uncovered": "{count, plural, other {未覆盖 24 小时：# 次命中}}",
-        "uncoveredHint": "进入该区域且未被任何流量规则覆盖的流量（由该区域成员在过去 24 小时内记录）"
+        "uncoveredHint": "进入该区域且未被任何流量规则覆盖的流量（由该区域成员在过去 24 小时内记录）",
+        "noFlowInto": "没有流向该区域的流量规则"
       }
     },
     "plan": {
@@ -13190,7 +13192,9 @@
         "unknownDot": "未知来源",
         "about": "关于命中数"
       },
-      "acceptUnknownSource": "未知来源：请使用“按 CIDR”"
+      "acceptUnknownSource": "未知来源：请使用“按 CIDR”",
+      "zoneBanner": "{zone} 区域的建议 · 24 小时内 {count, plural, other {# 次未覆盖命中}}",
+      "zoneBannerNoCount": "{zone} 区域的建议"
     },
     "overview": {
       "empty": "还没有可绘制的区域。",

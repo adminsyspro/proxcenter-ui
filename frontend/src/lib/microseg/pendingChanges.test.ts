@@ -80,6 +80,13 @@ describe('policyDiff', () => {
     expect(policyDiff(draft, { id: 'r1', version: 1, author: 'me', created_at: '' })).toBeNull()
   })
 
+  it('counts a renamed zone as changed and keeps the name it had in the revision', () => {
+    const draft = { zones: [zone('a', { name: 'front' }), zone('b'), zone('gone')], flows: [flow('f1'), flow('f2'), flow('f3')], pending_members: [] }
+    const diff = policyDiff(draft, last)!
+    expect([...diff.zones]).toEqual([['a', 'changed']])
+    expect([...diff.renamedZones]).toEqual([['a', 'a']])
+  })
+
   it('notes a moved tag prefix', () => {
     const draft = { zones: [zone('a'), zone('b'), zone('gone')], flows: [flow('f1'), flow('f2'), flow('f3')], pending_members: [], tag_prefix: 'seg-' }
     expect(policyDiff(draft, last)!.prefix).toBe(true)

@@ -65,7 +65,10 @@ export default function PendingChangesBar({ connectionId, policy, onOpenPlan, pr
         </>
       )}
     >
-      {prefixed(parts.length > 0 ? t('microsegPilot.pending.whatWillChange', { list: parts.join(', ') }) : t('microsegPilot.pending.noCount'))}
+      {prefixed(parts.length > 0
+        // After a prefix ("Micro-segmentation: what will change: ..."), the sentence goes on in lower case.
+        ? t(prefix ? 'microsegPilot.pending.whatWillChangeInline' : 'microsegPilot.pending.whatWillChange', { list: parts.join(', ') })
+        : t('microsegPilot.pending.noCount'))}
     </Alert>
   )
 }

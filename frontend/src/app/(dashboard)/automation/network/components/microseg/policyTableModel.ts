@@ -55,8 +55,9 @@ function bySource(zonesById: ReadonlyMap<string, MicrosegZone>) {
 
 /**
  * The flows of the draft and those it removed, grouped by destination: the zones in the draft's order, then the zones
- * the draft removed, then the CIDR destinations. Only the groups the filter leaves a row in; rows sorted by source,
- * then service.
+ * the draft removed, then the CIDR destinations. Without a filter every zone of the draft keeps its group, even with
+ * no flow into it (its header still says how much traffic no flow covers); with one, only the groups it leaves a row
+ * in. Rows sorted by source, then service.
  */
 export function flowGroups(input: {
   zones: readonly MicrosegZone[]
@@ -89,5 +90,8 @@ export function flowGroups(input: {
   order.push({ key: OUTSIDE_GROUP, zone: null, zoneRemoved: false, rows: byKey.get(OUTSIDE_GROUP) ?? [] })
 
   const compare = bySource(zonesById)
-  return order.filter(g => g.rows.length > 0).map(g => ({ ...g, rows: [...g.rows].sort(compare) }))
+  const filtering = filter.trim() !== ''
+  return order
+    .filter(g => g.rows.length > 0 || (!filtering && !!g.zone && !g.zoneRemoved))
+    .map(g => ({ ...g, rows: [...g.rows].sort(compare) }))
 }

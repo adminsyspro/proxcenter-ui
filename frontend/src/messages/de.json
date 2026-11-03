@@ -12695,7 +12695,17 @@
       "minimap": "Übersicht der Karte",
       "zoomIn": "Vergrößern",
       "zoomOut": "Verkleinern",
-      "fitView": "Karte an die Ansicht anpassen"
+      "fitView": "Karte an die Ansicht anpassen",
+      "a11y": {
+        "nodeDescription": "Drücken Sie Eingabe oder Leertaste, um die Details zu öffnen.",
+        "nodeDescriptionKeyboard": "Drücken Sie Eingabe oder Leertaste, um die Details zu öffnen.",
+        "nodeMoved": "Ausgewähltes Element verschoben: {direction}. Neue Position, x: {x}, y: {y}",
+        "edgeDescription": "Drücken Sie Eingabe oder Leertaste, um die Details dieses Flusses zu öffnen.",
+        "interactive": "Interaktivität umschalten",
+        "handle": "Verbindungspunkt",
+        "nodeRole": "Kartenelement",
+        "edgeRole": "Fluss"
+      }
     },
     "preflight": {
       "title": "Vorabprüfungen",

@@ -13027,7 +13027,17 @@
       "minimap": "Vista general del mapa",
       "zoomIn": "Acercar",
       "zoomOut": "Alejar",
-      "fitView": "Ajustar el mapa a la vista"
+      "fitView": "Ajustar el mapa a la vista",
+      "a11y": {
+        "nodeDescription": "Pulse Intro o Espacio para abrir sus detalles.",
+        "nodeDescriptionKeyboard": "Pulse Intro o Espacio para abrir sus detalles.",
+        "nodeMoved": "Elemento seleccionado movido: {direction}. Nueva posición, x: {x}, y: {y}",
+        "edgeDescription": "Pulse Intro o Espacio para abrir los detalles de este flujo.",
+        "interactive": "Activar o desactivar la interactividad",
+        "handle": "Punto de conexión",
+        "nodeRole": "elemento del mapa",
+        "edgeRole": "flujo"
+      }
     },
     "preflight": {
       "title": "Comprobaciones previas",

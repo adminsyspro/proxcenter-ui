@@ -13028,7 +13028,17 @@
       "minimap": "Vue d'ensemble de la carte",
       "zoomIn": "Zoom avant",
       "zoomOut": "Zoom arrière",
-      "fitView": "Ajuster la carte à la vue"
+      "fitView": "Ajuster la carte à la vue",
+      "a11y": {
+        "nodeDescription": "Appuyez sur Entrée ou Espace pour ouvrir ses détails.",
+        "nodeDescriptionKeyboard": "Appuyez sur Entrée ou Espace pour ouvrir ses détails.",
+        "nodeMoved": "Élément sélectionné déplacé : {direction}. Nouvelle position, x : {x}, y : {y}",
+        "edgeDescription": "Appuyez sur Entrée ou Espace pour ouvrir les détails de ce flux.",
+        "interactive": "Activer ou désactiver l'interactivité",
+        "handle": "Point de connexion",
+        "nodeRole": "élément de la carte",
+        "edgeRole": "flux"
+      }
     },
     "preflight": {
       "title": "Vérifications préalables",

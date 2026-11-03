@@ -13027,7 +13027,17 @@
       "minimap": "지도 개요",
       "zoomIn": "확대",
       "zoomOut": "축소",
-      "fitView": "지도를 화면에 맞추기"
+      "fitView": "지도를 화면에 맞추기",
+      "a11y": {
+        "nodeDescription": "Enter 또는 Space 키를 눌러 세부 정보를 엽니다.",
+        "nodeDescriptionKeyboard": "Enter 또는 Space 키를 눌러 세부 정보를 엽니다.",
+        "nodeMoved": "선택한 항목을 {direction}(으)로 이동했습니다. 새 위치, x: {x}, y: {y}",
+        "edgeDescription": "Enter 또는 Space 키를 눌러 이 플로우의 세부 정보를 엽니다.",
+        "interactive": "상호작용 전환",
+        "handle": "연결 지점",
+        "nodeRole": "지도 항목",
+        "edgeRole": "플로우"
+      }
     },
     "preflight": {
       "title": "사전 점검",

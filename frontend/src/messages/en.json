@@ -13027,7 +13027,17 @@
       "minimap": "Overview of the map",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
-      "fitView": "Fit the map to the view"
+      "fitView": "Fit the map to the view",
+      "a11y": {
+        "nodeDescription": "Press enter or space to open its details.",
+        "nodeDescriptionKeyboard": "Press enter or space to open its details.",
+        "nodeMoved": "Moved selected item {direction}. New position, x: {x}, y: {y}",
+        "edgeDescription": "Press enter or space to open the details of this flow.",
+        "interactive": "Toggle interactivity",
+        "handle": "Connection point",
+        "nodeRole": "map item",
+        "edgeRole": "flow"
+      }
     },
     "preflight": {
       "title": "Pre-flight checks",

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo } from 'react'
 import {
-  Background, ControlButton, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type EdgeMouseHandler, type Node, type NodeMouseHandler,
+  Background, ControlButton, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow, type AriaLabelConfig, type Edge, type EdgeMouseHandler, type Node, type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Box, alpha, useTheme, type Theme } from '@mui/material'
@@ -48,6 +48,26 @@ export function canvasSx(theme: Theme) {
   }
 }
 
+/**
+ * The screen-reader texts React Flow brings are English and describe moving and deleting nodes, which this map does
+ * not allow: every one of them goes through the catalog, and the description says what the keyboard really does.
+ */
+export function ariaLabels(t: (key: string, values?: Record<string, string | number>) => string): Partial<AriaLabelConfig> {
+  return {
+    'node.a11yDescription.default': t('a11y.nodeDescription'),
+    'node.a11yDescription.keyboardDisabled': t('a11y.nodeDescriptionKeyboard'),
+    'node.a11yDescription.ariaLiveMessage': ({ direction, x, y }) => t('a11y.nodeMoved', { direction, x, y }),
+    'edge.a11yDescription.default': t('a11y.edgeDescription'),
+    'controls.ariaLabel': t('controls'),
+    'controls.zoomIn.ariaLabel': t('zoomIn'),
+    'controls.zoomOut.ariaLabel': t('zoomOut'),
+    'controls.fitView.ariaLabel': t('fitView'),
+    'controls.interactive.ariaLabel': t('a11y.interactive'),
+    'minimap.ariaLabel': t('minimap'),
+    'handle.ariaLabel': t('a11y.handle'),
+  }
+}
+
 type Props = {
   nodes: Node[]
   edges: Edge[]
@@ -70,6 +90,18 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
   const { fitView, zoomIn, zoomOut } = useReactFlow()
   const theme = useTheme()
   const t = useTranslations('microsegPilot.overview')
+  const ariaLabelConfig = useMemo(() => ariaLabels(t), [t])
+  // The wrapper of every node and edge carries a hard-coded English role description: the DOM attributes win over it.
+  const nodeRole = t('a11y.nodeRole')
+  const edgeRole = t('a11y.edgeRole')
+  const labelledNodes = useMemo(
+    () => nodes.map(n => ({ ...n, domAttributes: { ...n.domAttributes, 'aria-roledescription': nodeRole } })),
+    [nodes, nodeRole],
+  )
+  const labelledEdges = useMemo(
+    () => edges.map(e => ({ ...e, domAttributes: { ...e.domAttributes, 'aria-roledescription': edgeRole } })),
+    [edges, edgeRole],
+  )
 
   // Refit when the graph reshapes (a zone added, a circle grown once its guests are known) or when the side panel
   // opens or closes, like the topology view.
@@ -103,8 +135,9 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
       <EdgeClickContext.Provider value={onSelectEdge}>
         <Box sx={canvasSx(theme)}>
           <ReactFlow
-            nodes={nodes}
-            edges={edges}
+            nodes={labelledNodes}
+            edges={labelledEdges}
+            ariaLabelConfig={ariaLabelConfig}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             onNodeClick={onNodeClick}

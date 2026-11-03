@@ -13027,7 +13027,17 @@
       "minimap": "地图概览",
       "zoomIn": "放大",
       "zoomOut": "缩小",
-      "fitView": "使地图适应视图"
+      "fitView": "使地图适应视图",
+      "a11y": {
+        "nodeDescription": "按 Enter 键或空格键打开其详细信息。",
+        "nodeDescriptionKeyboard": "按 Enter 键或空格键打开其详细信息。",
+        "nodeMoved": "已向 {direction} 移动所选项目。新位置，x：{x}，y：{y}",
+        "edgeDescription": "按 Enter 键或空格键打开此流量的详细信息。",
+        "interactive": "切换交互",
+        "handle": "连接点",
+        "nodeRole": "地图项目",
+        "edgeRole": "流量"
+      }
     },
     "preflight": {
       "title": "预检",

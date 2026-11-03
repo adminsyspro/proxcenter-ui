@@ -8,6 +8,13 @@ import { MicrosegApiError, microsegApi, microsegBaseUrl } from './api'
 import type { MicrosegPolicy, MicrosegRun } from './types'
 
 export const RUN_POLL_MS = 2000
+/** The longest wait between two reads of a run that keeps failing. */
+export const RUN_POLL_MAX_MS = 30_000
+
+/** The wait after the n-th failure in a row (n >= 1): 2 s, 4 s, 8 s, 16 s, then 30 s. */
+export function runRetryDelay(failures: number): number {
+  return Math.min(RUN_POLL_MS * 2 ** Math.max(0, failures - 1), RUN_POLL_MAX_MS)
+}
 
 // An error that trying again cannot cure.
 export const FATAL_CODES = new Set(['NOT_FOUND', 'UNAUTHORIZED', 'FORBIDDEN', 'FEATURE_REQUIRED'])
@@ -36,8 +43,10 @@ export function isRunFinished(run: Pick<MicrosegRun, 'status'> | null | undefine
 
 /**
  * Follows a run: reads it at once, then every 2 s until it is `done` or
- * `failed`. Polling also stops on unmount and when the connection or the run
- * changes; an answer that comes back after that is dropped.
+ * `failed`. A read that fails with a curable error is retried later and later
+ * (runRetryDelay), back to every 2 s after the next success. Polling also
+ * stops on unmount and when the connection or the run changes; an answer that
+ * comes back after that is dropped.
  */
 export function useMicrosegRun(connId: string | null | undefined, runId: string | null | undefined) {
   // The state is tagged with the run it belongs to, so a new connection or run
@@ -55,6 +64,7 @@ export function useMicrosegRun(connId: string | null | undefined, runId: string 
     const api = microsegApi(connId)
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
+    let failures = 0
 
     const tick = async () => {
       let next: MicrosegRun
@@ -64,10 +74,12 @@ export function useMicrosegRun(connId: string | null | undefined, runId: string 
         if (cancelled) return
         setState(prev => ({ key: stateKey, run: prev.key === stateKey ? prev.run : null, error: e as Error }))
         if (e instanceof MicrosegApiError && FATAL_CODES.has(e.code)) return
-        timer = setTimeout(tick, RUN_POLL_MS)
+        failures += 1
+        timer = setTimeout(tick, runRetryDelay(failures))
         return
       }
       if (cancelled) return
+      failures = 0
       setState({ key: stateKey, run: next, error: null })
       if (!isRunFinished(next)) timer = setTimeout(tick, RUN_POLL_MS)
     }

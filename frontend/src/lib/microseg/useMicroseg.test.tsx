@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { SWRConfig } from 'swr'
 
-import { useMicrosegPolicy, useMicrosegRun } from './useMicroseg'
+import { runRetryDelay, useMicrosegPolicy, useMicrosegRun } from './useMicroseg'
 
 const fetchMock = vi.fn()
 const reply = (status: number, body: unknown) => ({ ok: status < 400, status, text: async () => JSON.stringify(body) })
@@ -116,6 +116,36 @@ describe('useMicrosegRun', () => {
     expect(result.current.error).toMatchObject({ code: 'NOT_FOUND' })
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
     expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('waits 2, 4, 8, 16 then 30 s between reads that keep failing, and back to 2 s after a success', async () => {
+    const failing = () => reply(503, { code: 'NOT_LEADER', error: 'x' })
+    fetchMock
+      .mockResolvedValueOnce(failing()).mockResolvedValueOnce(failing()).mockResolvedValueOnce(failing())
+      .mockResolvedValueOnce(failing()).mockResolvedValueOnce(failing()).mockResolvedValueOnce(failing())
+      .mockResolvedValueOnce(run('running'))
+      .mockResolvedValueOnce(failing())
+      .mockResolvedValue(run('running'))
+    renderHook(() => useMicrosegRun('c1', 'r1'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    // Each wait, then the read it ends with: one more call exactly at its end, none just before.
+    for (const [wait, calls] of [[2000, 2], [4000, 3], [8000, 4], [16_000, 5], [30_000, 6], [30_000, 7]] as const) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(wait - 1) })
+      expect(fetchMock, `before the ${wait} ms wait ends`).toHaveBeenCalledTimes(calls - 1)
+      await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+      expect(fetchMock, `at the end of the ${wait} ms wait`).toHaveBeenCalledTimes(calls)
+    }
+    // The 7th read succeeded: 2 s; the 8th fails again: the backoff starts over at 2 s.
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    expect(fetchMock).toHaveBeenCalledTimes(8)
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    expect(fetchMock).toHaveBeenCalledTimes(9)
+  })
+
+  it('caps the retry delay at 30 s', () => {
+    expect([1, 2, 3, 4, 5, 6, 40].map(runRetryDelay)).toEqual([2000, 4000, 8000, 16_000, 30_000, 30_000, 30_000])
   })
 })
 

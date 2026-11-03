@@ -206,6 +206,9 @@ export type MicrosegDrift = {
   detail?: Record<string, unknown>
 }
 
+/** GET /drifts. `computed` is false until the first full run after an orchestrator restart or a leader change. */
+export type MicrosegDriftList = { drifts: MicrosegDrift[]; computed: boolean }
+
 export type PreflightStatus = 'pass' | 'warn' | 'fail'
 
 export type PreflightCheck = {
@@ -232,7 +235,10 @@ export type MicrosegStatus = {
     last_runs: Record<string, MicrosegRunSummary>
     last_log: string | null
   }
-  coverage: MicrosegCoverage
+  /** Null until the first full run after an orchestrator restart or a leader change: nothing is measured yet. */
+  coverage: MicrosegCoverage | null
+  /** When the coverage was measured (ISO), absent while `coverage` is null. */
+  coverage_at?: string
   zones_by_state: Record<ZoneState, number>
   emergency_stop: boolean
 }

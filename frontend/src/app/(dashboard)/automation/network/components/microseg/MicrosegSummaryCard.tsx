@@ -82,6 +82,7 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
   })()
 
   const protection = (() => {
+    if (status && !cov) return <Typography variant='body2' color='text.secondary'>{t('waitingFirstCheck')}</Typography>
     if (!cov) return statusError ? <Typography variant='body2'>{t('dashboard.unavailable')}</Typography> : <Skeleton width={180} />
     if (cov.running === 0 && cov.members === 0) return <Typography variant='body2'>{t('dashboard.protection.none')}</Typography>
     return (

@@ -104,6 +104,14 @@ describe('drift list', () => {
     expect(await screen.findByText('No full run yet: drifts appear after the first one.')).toBeTruthy()
   })
 
+  it('waits for the first full check after a restart instead of saying there is no drift', async () => {
+    setup()
+    mock.routes['GET /drifts'] = () => reply(200, { drifts: [], computed: false })
+    expect(await screen.findByText('Waiting for the first full check')).toBeTruthy()
+    expect(screen.queryByText('No drift: Proxmox matches the policy.')).toBeNull()
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+  })
+
   it('says there is no drift', async () => {
     setup([])
     expect(await screen.findByText('No drift: Proxmox matches the policy.')).toBeTruthy()

@@ -13210,6 +13210,7 @@
         "noCheck": "Aucun contrôle pour l'instant",
         "held": "En attente de votre confirmation (plafond d'écritures atteint)"
       }
-    }
+    },
+    "waitingFirstCheck": "En attente du premier contrôle complet"
   }
 }

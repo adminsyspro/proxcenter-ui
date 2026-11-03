@@ -4,7 +4,7 @@
 // Next relay at /api/v1/firewall/microseg/{connectionId}/<route>.
 
 import type {
-  EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegFlow, MicrosegPolicy,
+  EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegFlow, MicrosegPolicy,
   MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegZone, PolicyUpdate,
   PreflightCheck, ResolveSuggestionsInput, SuggestionKind, SuggestionStatus, ZoneInput, ZoneState,
 } from './types'
@@ -159,7 +159,11 @@ export function microsegApi(connId: string) {
       call<{ suggestions: MicrosegSuggestion[]; limit: number; offset: number }>('GET', `suggestions${query(params)}`),
     resolveSuggestions: (body: ResolveSuggestionsInput) => call<{ version: number }>('POST', 'suggestions/resolve', body),
 
-    getDrifts: async () => (await call<{ drifts: MicrosegDrift[] }>('GET', 'drifts')).drifts,
+    /** `computed` false: the engine has not done its first full run since it started, the list means nothing yet. */
+    getDrifts: async (): Promise<MicrosegDriftList> => {
+      const body = await call<{ drifts?: MicrosegDrift[] | null; computed?: boolean }>('GET', 'drifts')
+      return { drifts: body?.drifts ?? [], computed: body?.computed !== false }
+    },
     getPreflight: async () => (await call<{ checks: PreflightCheck[] }>('GET', 'preflight')).checks,
     getStatus: (signal?: AbortSignal) => call<MicrosegStatus>('GET', 'status', undefined, signal),
   }

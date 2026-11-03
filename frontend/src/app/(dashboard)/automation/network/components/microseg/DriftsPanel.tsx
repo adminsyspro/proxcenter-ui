@@ -32,7 +32,11 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
   const t = useTranslations('microsegPilot.drifts')
   const tk = useTranslations('microsegPilot.drifts.kind')
   const format = useFormatter()
-  const { data: drifts, loading, error, reload } = useMicrosegDrifts(connectionId)
+  const { data, loading, error, reload } = useMicrosegDrifts(connectionId)
+  const drifts = data?.drifts
+  // Until the first full run since the engine started, an empty list would read as "no drift": say it is waiting instead.
+  const waiting = !!data && !data.computed
+  const tm = useTranslations('microsegPilot')
   const { data: status } = useMicrosegStatus(connectionId)
   const { guests } = useZoneGuests(connectionId)
   const { ignored, ignore, restore } = useIgnoredDrifts(connectionId)
@@ -90,9 +94,9 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
         )}
       </Box>
 
-      {visible.length === 0 ? (
-        <Alert severity='success' sx={{ '& .MuiAlert-message': { minWidth: 0 } }}>{t('empty')}</Alert>
-      ) : (
+      {waiting && <Alert severity='info' sx={{ '& .MuiAlert-message': { minWidth: 0 } }}>{tm('waitingFirstCheck')}</Alert>}
+      {!waiting && visible.length === 0 && <Alert severity='success' sx={{ '& .MuiAlert-message': { minWidth: 0 } }}>{t('empty')}</Alert>}
+      {!waiting && visible.length > 0 && (
         <>
           <Box role='list'>
             {paged.rows.map(drift => {

@@ -5,7 +5,7 @@ import useSWR from 'swr'
 
 import { MicrosegApiError, microsegApi, microsegBaseUrl, type ListRunsParams, type ListSuggestionsParams } from './api'
 import { FATAL_CODES } from './useMicroseg'
-import type { MicrosegDrift, MicrosegRevision, MicrosegRun, MicrosegSuggestion } from './types'
+import type { MicrosegDriftList, MicrosegRevision, MicrosegRun, MicrosegSuggestion } from './types'
 
 /** The drifts are the engine's own memory of its last full run, which is rarely more often than every few minutes. */
 export const DRIFTS_REFRESH_MS = 60_000
@@ -16,7 +16,7 @@ const shouldRetry = (e: MicrosegApiError) => !FATAL_CODES.has(e?.code)
 export function useMicrosegDrifts(connId: string | null | undefined) {
   const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
   const key = connId ? `${microsegBaseUrl(connId)}/drifts` : null
-  const { data, error, isLoading, mutate } = useSWR<MicrosegDrift[], MicrosegApiError>(key, () => api!.getDrifts(), {
+  const { data, error, isLoading, mutate } = useSWR<MicrosegDriftList, MicrosegApiError>(key, () => api!.getDrifts(), {
     refreshInterval: DRIFTS_REFRESH_MS,
     shouldRetryOnError: shouldRetry,
   })

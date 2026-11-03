@@ -94,6 +94,14 @@ describe('protection', () => {
     renderCard()
     expect(await screen.findByText('Not measured yet')).toBeTruthy()
   })
+
+  it('waits for the first full check after a restart instead of reading 0 of 0', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ coverage: null }))
+    renderCard()
+    expect(await screen.findByText('Waiting for the first full check')).toBeTruthy()
+    expect(screen.queryByText(/guests protected/)).toBeNull()
+    expect(screen.queryByText(/in no zone/)).toBeNull()
+  })
 })
 
 describe('engine', () => {

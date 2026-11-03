@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { coverage } from './coverage'
 import type { MicrosegStatus } from '@/lib/microseg/types'
 
-const status = (cov: Partial<MicrosegStatus['coverage']> | undefined): MicrosegStatus => ({
+const status = (cov: Partial<NonNullable<MicrosegStatus['coverage']>> | null | undefined): MicrosegStatus => ({
   engine: { paused_until: null, held: false, last_runs: {}, last_log: null },
   coverage: cov as MicrosegStatus['coverage'],
   zones_by_state: { disabled: 0, observe: 0, enforce: 0 },
@@ -30,5 +30,9 @@ describe('coverage', () => {
     expect(coverage(status(undefined))).toEqual({ running: 0, zoned: 0, members: 0, protected: 0 })
     expect(coverage(status({ running: -1, zoned: Number.NaN, members: 2, protected: 1 })))
       .toEqual({ running: 0, zoned: 0, members: 2, protected: 1 })
+  })
+
+  it('measures nothing while the engine waits for its first full run', () => {
+    expect(coverage(status(null))).toBeNull()
   })
 })

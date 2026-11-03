@@ -13209,6 +13209,7 @@
         "noCheck": "No check yet",
         "held": "Waiting for your confirmation (write cap reached)"
       }
-    }
+    },
+    "waitingFirstCheck": "Waiting for the first full check"
   }
 }

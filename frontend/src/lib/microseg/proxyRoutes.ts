@@ -28,7 +28,7 @@ type RouteBase = {
 
 export type MicrosegRoute =
   | (RouteBase & { audit: 'none' })
-  | (RouteBase & { audit: 'orchestrator' | 'relay'; auditAction: AuditAction })
+  | (RouteBase & { audit: Exclude<MicrosegAuditBy, 'none'>; auditAction: AuditAction })
 
 const read = (pattern: RegExp): MicrosegRoute => ({ method: 'GET', pattern, write: false, audit: 'none' })
 

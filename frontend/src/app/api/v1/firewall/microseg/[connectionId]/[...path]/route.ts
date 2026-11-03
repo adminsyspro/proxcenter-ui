@@ -161,6 +161,61 @@ async function relay(request: NextRequest, { params }: { params: Promise<Params>
   return res
 }
 
+/** The refusal of a caller who may not make this call (ownership, RBAC, vDC tenant), or null. */
+async function accessRefusal(connectionId: string, route: MicrosegRoute): Promise<Response | null> {
+  const ownershipDenied = await verifyConnectionOwnership(connectionId)
+
+  if (ownershipDenied) return ownershipDenied
+
+  const denied = await checkPermission(route.write ? PERMISSIONS.NODE_MANAGE : PERMISSIONS.NODE_VIEW, 'connection', connectionId)
+
+  if (denied) return denied
+
+  return refusedForVdcTenant()
+}
+
+/** The orchestrator's answer as the UI gets it. */
+async function upstreamAnswer(upstream: Response, trace: RelayTrace): Promise<Response> {
+  // 401 is the orchestrator refusing this server's own API key, not the
+  // user's session: relayed as is, the UI would send the user to the login
+  // page in a loop.
+  if (upstream.status === 401) {
+    trace.reached = false
+    console.error('The orchestrator refused the server credentials (HTTP 401) on a micro-segmentation call')
+
+    return refusal(502, 'ORCHESTRATOR_ERROR', 'The orchestrator refused the server credentials')
+  }
+
+  const text = NO_BODY_STATUSES.has(upstream.status) ? null : await upstream.text()
+
+  if (text !== null && upstream.status >= 400 && !isJson(text)) {
+    console.error(`Non-JSON answer from the orchestrator on a micro-segmentation call (HTTP ${upstream.status})`)
+
+    return refusal(502, 'ORCHESTRATOR_ERROR', 'Unexpected answer from the orchestrator')
+  }
+
+  return new NextResponse(text, {
+    status: upstream.status,
+    headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
+  })
+}
+
+/** The answer to a call that threw on the way. */
+function failureAnswer(error: any, trace: RelayTrace): Response {
+  if (error?.message === 'Invalid or expired API token') return refusal(401, 'UNAUTHORIZED', 'Invalid or expired API token')
+  if (error?.name === 'TenantAccessError') return refusal(403, 'FORBIDDEN', 'Tenant not available for this session')
+  if (error?.code === 'ORCHESTRATOR_UNAVAILABLE') {
+    trace.reached = false
+
+    return refusal(503, 'MICROSEG_UNAVAILABLE', 'Orchestrator unavailable')
+  }
+  if (error?.message === 'Orchestrator request timeout') return refusal(504, 'ORCHESTRATOR_TIMEOUT', 'Orchestrator request timeout')
+
+  console.error('Error relaying a micro-segmentation call:', error)
+
+  return refusal(502, 'ORCHESTRATOR_ERROR', 'Failed to reach the orchestrator')
+}
+
 async function forward(request: NextRequest, connectionId: string, path: string[], route: MicrosegRoute, trace: RelayTrace): Promise<Response> {
   let target: string
 
@@ -173,17 +228,9 @@ async function forward(request: NextRequest, connectionId: string, path: string[
   }
 
   try {
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    const refused = await accessRefusal(connectionId, route)
 
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(route.write ? PERMISSIONS.NODE_MANAGE : PERMISSIONS.NODE_VIEW, 'connection', connectionId)
-
-    if (denied) return denied
-
-    const tenantRefusal = await refusedForVdcTenant()
-
-    if (tenantRefusal) return tenantRefusal
+    if (refused) return refused
 
     const body = request.method === 'GET' ? '' : await readBoundedBody(request)
 
@@ -193,41 +240,9 @@ async function forward(request: NextRequest, connectionId: string, path: string[
 
     const upstream = await orchestratorRelay(target, { method: route.method, body: body || undefined, signal: request.signal })
 
-    // 401 is the orchestrator refusing this server's own API key, not the
-    // user's session: relayed as is, the UI would send the user to the login
-    // page in a loop.
-    if (upstream.status === 401) {
-      trace.reached = false
-      console.error('The orchestrator refused the server credentials (HTTP 401) on a micro-segmentation call')
-
-      return refusal(502, 'ORCHESTRATOR_ERROR', 'The orchestrator refused the server credentials')
-    }
-
-    const text = NO_BODY_STATUSES.has(upstream.status) ? null : await upstream.text()
-
-    if (text !== null && upstream.status >= 400 && !isJson(text)) {
-      console.error(`Non-JSON answer from the orchestrator on a micro-segmentation call (HTTP ${upstream.status})`)
-
-      return refusal(502, 'ORCHESTRATOR_ERROR', 'Unexpected answer from the orchestrator')
-    }
-
-    return new NextResponse(text, {
-      status: upstream.status,
-      headers: { 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
-    })
-  } catch (error: any) {
-    if (error?.message === 'Invalid or expired API token') return refusal(401, 'UNAUTHORIZED', 'Invalid or expired API token')
-    if (error?.name === 'TenantAccessError') return refusal(403, 'FORBIDDEN', 'Tenant not available for this session')
-    if (error?.code === 'ORCHESTRATOR_UNAVAILABLE') {
-      trace.reached = false
-
-      return refusal(503, 'MICROSEG_UNAVAILABLE', 'Orchestrator unavailable')
-    }
-    if (error?.message === 'Orchestrator request timeout') return refusal(504, 'ORCHESTRATOR_TIMEOUT', 'Orchestrator request timeout')
-
-    console.error('Error relaying a micro-segmentation call:', error)
-
-    return refusal(502, 'ORCHESTRATOR_ERROR', 'Failed to reach the orchestrator')
+    return await upstreamAnswer(upstream, trace)
+  } catch (error) {
+    return failureAnswer(error, trace)
   }
 }
 

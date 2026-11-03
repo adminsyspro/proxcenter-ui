@@ -274,6 +274,22 @@ describe('config read for a guest whose NICs the inventory does not know (UA46)'
     expect(fetchNet).toHaveBeenCalledTimes(2)
   })
 
+  it('on the full read after the TTL, asks the options again but keeps the NICs it read, even when the inventory lost them', async () => {
+    let clock = 0
+    const fetchOptions = vi.fn(async () => ({ enable: 1 }))
+    const fetchNet = vi.fn(async (_guest: CoverageGuest) => ({ nicFirewall: true, vlans: [7] }))
+    const deps = { listGuests: async () => [g(1, 'pve1', 'lxc'), g(2, 'pve2', 'lxc')], guestNet: () => undefined, fetchOptions, fetchNet, now: () => clock }
+    await getGuestCoverage('c-ttl', deps)
+
+    clock += COVERAGE_TTL_MS + 1
+    const after = await getGuestCoverage('c-ttl', deps)
+
+    expect(fetchOptions).toHaveBeenCalledTimes(4)
+    expect(fetchNet).toHaveBeenCalledTimes(2)
+    expect(after.result).toMatchObject({ enabled: 2, unknown: 0 })
+    expect(after.result?.guests[0].vlans).toEqual([7])
+  })
+
   it('reads a written guest alone again: its options and its config, nothing for the others', async () => {
     const fetchOptions = vi.fn(async () => ({ enable: 1 }))
     const fetchNet = vi.fn(async (_guest: CoverageGuest) => ({ nicFirewall: true, vlans: [] }))

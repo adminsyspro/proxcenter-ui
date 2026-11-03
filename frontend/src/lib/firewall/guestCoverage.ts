@@ -284,7 +284,7 @@ const optionsOn = (options: GuestOptions | null | undefined) => !!options && Num
  * (budget, trip) or whose read failed comes back with null options; a guest of an offline node is skipped. Never
  * throws.
  */
-export async function readGuestOptions(guests: CoverageGuest[], deps: CoverageDeps): Promise<Map<string, Known>> {
+export async function readGuestOptions(guests: CoverageGuest[], deps: CoverageDeps, previous?: Map<string, Known>): Promise<Map<string, Known>> {
   const now = deps.now ?? Date.now
   const deadline = now() + COVERAGE_BUDGET_MS
   const onNode = nodeLimiter(COVERAGE_NODE_CONCURRENCY)
@@ -312,6 +312,9 @@ export async function readGuestOptions(guests: CoverageGuest[], deps: CoverageDe
       const options = await timed(() => deps.fetchOptions(guest))
       // Options off: not filtered whatever the NICs say, no config to read.
       if (!optionsOn(options) || !deps.fetchNet || deps.guestNet(guest) !== undefined) return { options }
+      // The NICs read by an earlier pass are kept: a full read after the TTL asks the options again, not the config.
+      const kept = previous?.get(placedKey(guest))?.net
+      if (kept) return { options, net: kept }
       const net = await timed(() => deps.fetchNet!(guest))
       return net ? { options, net } : { options }
     })
@@ -432,7 +435,7 @@ function begin(connId: string, deps: CoverageDeps, force: boolean): Promise<Gues
     if (toRead.length > 0) {
       const startGen = new Map(toRead.map(g => [`${connId}|${guestKey(g)}`, generationOf(`${connId}|${guestKey(g)}`)]))
       const started = now()
-      const read = await readGuestOptions(toRead, deps)
+      const read = await readGuestOptions(toRead, deps, state.known)
       const called = [...read.values()].some(k => k.options !== null || !!k.net)
       const target = full ? new Map<string, Known>() : state.known
       if (store(connId, target, read, startGen, connGen)) {

@@ -5,7 +5,7 @@ import type { MicrosegEvent, MicrosegTraffic, MicrosegZone } from '@/lib/microse
 
 import type { PostureGuest } from './dashboardPosture'
 import {
-  BUCKET_MS, MAX_BUCKETS, MAX_VOLUME_VMIDS, RANGE_SPEC, TIMELINE_RANGES, accumulateVmids, areaPaths, asRange, bucketXs, busiestVmids, historyWindow, mergeEvents, nearestBucket, postureHistory, postureTimeline, postureVolume, stepMsOf, volumeWindow, type TimelineRange, type TimelineSeries, type VmSeries,
+  BUCKET_MS, MAX_BUCKETS, MAX_VOLUME_VMIDS, RANGE_SPEC, TIMELINE_RANGES, accumulateVmids, areaPaths, asRange, bucketXs, busiestVmids, historyWindow, mergeEvents, nearestBucket, postureHistory, postureTimeline, postureVolume, stepMsOf, topSources, volumeWindow, type TimelineRange, type TimelineSeries, type VmSeries,
 } from './postureTimeline'
 
 const NOW = Date.parse('2026-11-03T10:02:00Z')
@@ -93,6 +93,15 @@ describe('postureTimeline: grouping', () => {
     const node = run({ groupBy: 'node', events, slices: [slice('node:pve2', 'node', '#333333', 'pve2'), slice('external', 'external', '#616161')] })
     // A guest the connection does not list is Unknown by node as by VLAN, whatever node the event names.
     expect(node.buckets.at(-1)!.counts).toEqual({ 'node:pve2': 2, external: 1 })
+  })
+})
+
+describe('postureTimeline: one guest (map panel)', () => {
+  it('keeps the events of that guest only, the window being the one of what is kept', () => {
+    const events = [event({ vmid: 102, ts: at(1) }), event({ vmid: 104, ts: at(30) }), event({ vmid: 102, type: 'lxc', ts: at(40) })]
+    const t = run({ events, keep: e => e.vmid === 102 && e.type === 'qemu' })
+    expect(t).toMatchObject({ total: 1, windowMinutes: 1 })
+    expect(run({ events }).total).toBe(3)
   })
 })
 
@@ -238,6 +247,22 @@ describe('the persisted history (UA55)', () => {
     expect(RANGE_SPEC['7d'].stepSec).toBe(10_800)
     expect(Object.values(RANGE_SPEC).every(r => r.stepSec % 300 === 0 && r.stepSec >= 300 && r.stepSec <= 21_600)).toBe(true)
     expect(Object.values(RANGE_SPEC).every(r => r.stepSec * 1000 % { '5m': 300_000, '15m': 900_000, '1h': 3_600_000 }[r.granularity] === 0)).toBe(true)
+  })
+
+  it('keeps only the flows logged in the zone of a map panel (its name, any case)', () => {
+    const last = win('1h').to - 300_000
+    const rows = [row(last, { hits: 3 }), row(last, { hits: 2, zone: 'web' }), row(last, { hits: 4, zone: 'DB', src_zone: '' })]
+    expect(run('1h', rows, { zone: 'db' }).total).toBe(7)
+    expect(run('1h', rows, { zone: 'web' }).total).toBe(2)
+    expect(run('1h', rows).total).toBe(9)
+  })
+
+  it('ranks the sources of the range by hits with their share, the 5 busiest', () => {
+    const last = win('1h').to - 300_000
+    const t = run('1h', [row(last, { hits: 3 }), row(last - 300_000, { hits: 3 }), row(last, { src_zone: '', hits: 2 })])
+    expect(topSources(t).map(s => [s.key, s.hits, s.share])).toEqual([['zone:zweb', 6, 75], ['external', 2, 25]])
+    const many = { total: 60, series: Array.from({ length: 7 }, (_, i) => slice(`k${i}`, 'zone', '#1', `k${i}`)), buckets: [{ start: 0, total: 60, counts: Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`k${i}`, i + 1])) }] }
+    expect(topSources(many).map(s => s.key)).toEqual(['k6', 'k5', 'k4', 'k3', 'k2'])
   })
 
   it('stacks the hits per 5-minute bucket by source zone, in the donut order and colours', () => {

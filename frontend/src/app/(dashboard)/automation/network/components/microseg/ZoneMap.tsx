@@ -364,6 +364,13 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
               edits={edits}
               onClose={clear}
               onAssign={() => setAssigning(true)}
+              connectionId={connectionId}
+              version={policy.version}
+              suggestions={input.suggestions}
+              reloadPolicy={reloadPolicy}
+              reloadSuggestions={suggestions.reload}
+              onResolved={setResolved}
+              onOpenDrifts={zoneId => goToSubTab('drifts', { zoneId })}
             />
           )}
           {targetPanel && target && (

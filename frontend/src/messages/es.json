@@ -13047,7 +13047,9 @@
         "ambiguous_zone": "Varias zonas",
         "object_collision": "Nombre ocupado",
         "generic": "Desviación"
-      }
+      },
+      "zoneFilter": "Zona {name}",
+      "zoneFilterClear": "Mostrar todas las zonas"
     },
     "observation": {
       "sampling": "Por defecto Proxmox registra como máximo una línea por segundo y por cadena, por lo que los flujos muy activos pueden contarse de menos.",
@@ -13305,6 +13307,26 @@
           "partial": "Solo se leen los primeros {count} flujos observados pendientes del mapa: puede que falten algunos en esta lista."
         },
         "more": "Se muestran los primeros {shown} de {count} invitados: escriba para acotar"
+      },
+      "sections": {
+        "traffic": "Tráfico observado",
+        "posture": "Postura",
+        "topSources": "Fuentes principales",
+        "suggestions": "Sugerencias pendientes",
+        "guest": "Invitado",
+        "flows": "Flujos",
+        "summary": "{hits, plural, one {# coincidencia} other {# coincidencias}} · fuente principal {source} ({share} %) · {wouldBlock, number} se bloquearían, {blocked, number} bloqueados",
+        "summaryNone": "Ningún tráfico en este intervalo",
+        "membersStatus": "{running, number} en ejecución, {stopped, number} detenidos",
+        "membersStatusUnknown": "Miembros desconocidos (lista de invitados no leída)",
+        "firewallOff": "{count, plural, one {# miembro con el cortafuegos de NIC apagado} other {# miembros con el cortafuegos de NIC apagado}}",
+        "firewallOffNone": "Todos los miembros tienen el cortafuegos de NIC activado",
+        "drifts": "{count, plural, one {# desviación} other {# desviaciones}}",
+        "driftsNone": "Ninguna desviación",
+        "driftsUnknown": "Desviaciones aún no calculadas",
+        "openDrifts": "Abrir desviaciones",
+        "topSourcesEmpty": "Ninguna fuente en este intervalo",
+        "suggestionsEmpty": "Ninguna sugerencia pendiente para esta zona"
       }
     },
     "preflight": {

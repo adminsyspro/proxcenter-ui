@@ -13047,7 +13047,9 @@
         "ambiguous_zone": "여러 영역",
         "object_collision": "이름 사용 중",
         "generic": "불일치"
-      }
+      },
+      "zoneFilter": "영역 {name}",
+      "zoneFilterClear": "모든 영역 표시"
     },
     "observation": {
       "sampling": "Proxmox는 기본적으로 체인당 초당 최대 한 줄만 기록하므로 트래픽이 많은 흐름은 적게 집계될 수 있습니다.",
@@ -13305,6 +13307,26 @@
           "partial": "지도에서 대기 중인 관찰 흐름은 처음 {count}개만 읽습니다. 이 목록에 일부가 빠져 있을 수 있습니다."
         },
         "more": "게스트 {count}개 중 처음 {shown}개만 표시됩니다. 입력하여 범위를 좁히세요"
+      },
+      "sections": {
+        "traffic": "관찰된 트래픽",
+        "posture": "보안 상태",
+        "topSources": "주요 출발지",
+        "suggestions": "대기 중인 제안",
+        "guest": "게스트",
+        "flows": "흐름",
+        "summary": "{hits, plural, other {적중 #회}} · 주요 출발지 {source} ({share}%) · 차단 예정 {wouldBlock, number}, 차단됨 {blocked, number}",
+        "summaryNone": "이 기간에 트래픽 없음",
+        "membersStatus": "실행 중 {running, number}, 중지됨 {stopped, number}",
+        "membersStatusUnknown": "구성원 알 수 없음 (게스트 목록을 읽지 못함)",
+        "firewallOff": "{count, plural, other {NIC 방화벽이 꺼진 구성원 #개}}",
+        "firewallOffNone": "모든 구성원의 NIC 방화벽이 켜져 있음",
+        "drifts": "{count, plural, other {편차 #개}}",
+        "driftsNone": "편차 없음",
+        "driftsUnknown": "편차가 아직 계산되지 않음",
+        "openDrifts": "편차 열기",
+        "topSourcesEmpty": "이 기간에 출발지 없음",
+        "suggestionsEmpty": "이 영역에 대기 중인 제안 없음"
       }
     },
     "preflight": {

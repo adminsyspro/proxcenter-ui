@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Alert, Box, Button, CircularProgress, Menu, MenuItem, Typography } from '@mui/material'
+import { Alert, Box, Button, Chip, CircularProgress, Menu, MenuItem, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
@@ -28,7 +28,7 @@ type Assigning = { zone: MicrosegZone; preselect: string[] }
  * opens the plan; nothing is written to Proxmox from here. "Ignore" hides a
  * drift in this browser.
  */
-export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpenPlan }: MicrosegSubTabProps) {
+export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpenPlan, goToSubTab, driftsZone = null }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.drifts')
   const tk = useTranslations('microsegPilot.drifts.kind')
   const format = useFormatter()
@@ -46,9 +46,17 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
 
   const guestsByKey = useMemo(() => new Map(guests.map(g => [guestKey(g), g])), [guests])
   const ignoredCount = useMemo(() => (drifts ?? []).filter(d => ignored.has(driftKey(d))).length, [drifts, ignored])
+  // Opened from a zone panel: the drifts of that zone (its own, or of one of its members), until the filter is cleared.
+  const filterZone = driftsZone ? policy.zones.find(z => z.id === driftsZone) ?? null : null
+  const memberKeys = useMemo(() => {
+    if (!filterZone) return null
+    const tag = `${policy.policy.tag_prefix}${filterZone.name}`.toLowerCase()
+    return new Set(guests.filter(g => g.tags.some(x => x.toLowerCase() === tag)).map(g => guestKey(g)))
+  }, [filterZone, guests, policy.policy.tag_prefix])
   const visible = useMemo(
-    () => (drifts ?? []).filter(d => showIgnored || !ignored.has(driftKey(d))),
-    [drifts, ignored, showIgnored],
+    () => (drifts ?? []).filter(d => (showIgnored || !ignored.has(driftKey(d)))
+      && (!filterZone || zoneOfDrift(d, policy.zones)?.id === filterZone.id || (!!d.guest && !!memberKeys?.has(guestKey(d.guest))))),
+    [drifts, ignored, showIgnored, filterZone, memberKeys, policy.zones],
   )
   const paged = usePaged(visible)
 
@@ -87,6 +95,17 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
       {error && <MicrosegErrorAlert error={error} onRetry={reload} />}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 36, mb: 1 }}>
         <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: 1, minWidth: 0 }}>{asOf}</Typography>
+        {filterZone && (
+          <Chip
+            size='small'
+            data-testid='drifts-zone-filter'
+            icon={<i className='ri-shield-fill' style={{ color: filterZone.color || undefined }} />}
+            label={t('zoneFilter', { name: filterZone.name })}
+            onDelete={() => goToSubTab('drifts')}
+            deleteIcon={<i className='ri-close-line' aria-label={t('zoneFilterClear')} role='button' />}
+            sx={{ flexShrink: 0, maxWidth: 220 }}
+          />
+        )}
         {ignoredCount > 0 && (
           <Button size='small' onClick={() => setShowIgnored(v => !v)} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
             {showIgnored ? t('hideIgnored') : t('showIgnored', { count: ignoredCount })}

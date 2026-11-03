@@ -344,3 +344,14 @@ export function protectedRunning(coverage: Pick<FirewallCoverage, 'computedAt' |
   const running = coverage.guests.filter(r => r.status === 'running')
   return { protected: running.filter(r => r.enabled === true).length, running: running.length }
 }
+
+/**
+ * The groups of the zone grouping without the donut (the map panel): every zone in its colour (the donut's), then
+ * Unknown / External. A chart on them stacks the source zones in the order of the policy.
+ */
+export function zoneSeries(zones: readonly MicrosegZone[]): Pick<PostureSlice, 'key' | 'kind' | 'name' | 'color'>[] {
+  return [
+    ...zones.map(z => ({ key: zoneKey(z.id), kind: 'zone' as const, name: z.name, color: z.color || objectColour(`zone:${z.name}`, zones) })),
+    { key: EXTERNAL_KEY, kind: 'external' as const, name: '', color: GROUP_COLORS.external },
+  ]
+}

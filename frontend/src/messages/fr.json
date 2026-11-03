@@ -13048,7 +13048,9 @@
         "ambiguous_zone": "Plusieurs zones",
         "object_collision": "Nom pris",
         "generic": "Dérive"
-      }
+      },
+      "zoneFilter": "Zone {name} seulement",
+      "zoneFilterClear": "Afficher toutes les zones"
     },
     "observation": {
       "sampling": "Par défaut, Proxmox journalise au plus une ligne par seconde et par chaîne : les flux très actifs peuvent être sous-comptés.",
@@ -13306,6 +13308,26 @@
           "partial": "Seuls les {count} premiers flux observés en attente de la carte sont lus : cette liste peut en manquer."
         },
         "more": "Les {shown} premiers invités sur {count} sont affichés : tapez pour affiner"
+      },
+      "sections": {
+        "traffic": "Trafic observé",
+        "posture": "Posture de sécurité",
+        "topSources": "Principales sources",
+        "suggestions": "Suggestions en attente",
+        "guest": "Invité",
+        "flows": "Flux",
+        "summary": "{hits, plural, one {# occurrence} other {# occurrences}} · première source {source} ({share} %) · {wouldBlock, number} seraient bloqués, {blocked, number} bloqués",
+        "summaryNone": "Aucun trafic sur cette période",
+        "membersStatus": "{running, number} en marche, {stopped, number} arrêtés",
+        "membersStatusUnknown": "Membres inconnus (liste des invités non lue)",
+        "firewallOff": "{count, plural, one {# membre avec le pare-feu de carte réseau coupé} other {# membres avec le pare-feu de carte réseau coupé}}",
+        "firewallOffNone": "Chaque membre a le pare-feu de carte réseau activé",
+        "drifts": "{count, plural, one {# écart} other {# écarts}}",
+        "driftsNone": "Aucun écart",
+        "driftsUnknown": "Écarts pas encore calculés",
+        "openDrifts": "Voir les écarts",
+        "topSourcesEmpty": "Aucune source sur cette période",
+        "suggestionsEmpty": "Aucune suggestion en attente pour cette zone"
       }
     },
     "preflight": {

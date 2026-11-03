@@ -13047,7 +13047,9 @@
         "ambiguous_zone": "Several zones",
         "object_collision": "Name taken",
         "generic": "Drift"
-      }
+      },
+      "zoneFilter": "Zone {name}",
+      "zoneFilterClear": "Show every zone"
     },
     "observation": {
       "sampling": "Proxmox logs at most one line per second per chain by default, so busy flows may be under-counted.",
@@ -13305,6 +13307,26 @@
           "partial": "Only the first {count} pending observed flows of the map are read: this list may miss some."
         },
         "more": "Showing the first {shown} of {count} guests: type to narrow"
+      },
+      "sections": {
+        "traffic": "Observed traffic",
+        "posture": "Posture",
+        "topSources": "Top sources",
+        "suggestions": "Pending suggestions",
+        "guest": "Guest",
+        "flows": "Flows",
+        "summary": "{hits, plural, one {# hit} other {# hits}} · top source {source} ({share}%) · {wouldBlock, number} would be blocked, {blocked, number} blocked",
+        "summaryNone": "No traffic in this range",
+        "membersStatus": "{running, number} running, {stopped, number} stopped",
+        "membersStatusUnknown": "Members not known (guest list not read)",
+        "firewallOff": "{count, plural, one {# member with its NIC firewall off} other {# members with their NIC firewall off}}",
+        "firewallOffNone": "Every member has its NIC firewall on",
+        "drifts": "{count, plural, one {# drift} other {# drifts}}",
+        "driftsNone": "No drift",
+        "driftsUnknown": "Drifts not computed yet",
+        "openDrifts": "Open Drifts",
+        "topSourcesEmpty": "No source in this range",
+        "suggestionsEmpty": "No pending suggestion for this zone"
       }
     },
     "preflight": {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Box, Paper, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, useTheme } from '@mui/material'
+import { Box, Chip, Paper, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { formatBytes } from '@/utils/format'
@@ -29,11 +29,16 @@ type Props = {
    * has them), or the history is not served by this orchestrator. Null when the range applies.
    */
   rangeLock?: 'grouping' | 'unavailable' | null
+  /** The map panel's variant: lower, no title (the section header is it), the groups as a row of chips under it. */
+  compact?: boolean
+  /** False for a chart of the orchestrator's memory only (a guest): no range chips. */
+  showRange?: boolean
 }
 
 type Unit = 'events' | 'bytes'
 
 export const TIMELINE_HEIGHT = 160
+export const COMPACT_TIMELINE_HEIGHT = 120
 const LEFT = 36
 const RIGHT = 4
 const TOP = 8
@@ -60,7 +65,7 @@ function tickIndexes(count: number): number[] {
  * The stacked areas of the buckets (one per group, in the donut's order and colours, a line on top of each), with the
  * scale, the time labels, and on hover a guide at the nearest bucket with its breakdown.
  */
-function Areas({ timeline, measured, unit }: { timeline: PostureTimeline; measured: number | null; unit: Unit }) {
+function Areas({ timeline, measured, unit, height = TIMELINE_HEIGHT }: { timeline: PostureTimeline; measured: number | null; unit: Unit; height?: number }) {
   const width = measured ?? FALLBACK_WIDTH
   const theme = useTheme()
   const format = useFormatter()
@@ -68,7 +73,7 @@ function Areas({ timeline, measured, unit }: { timeline: PostureTimeline; measur
   const nameOf = useSliceName()
   const [hover, setHover] = useState<number | null>(null)
   const { buckets, series, max } = timeline
-  const box = { left: LEFT, width: Math.max(40, width - LEFT - RIGHT), top: TOP, height: TIMELINE_HEIGHT - TOP - BOTTOM }
+  const box = { left: LEFT, width: Math.max(40, width - LEFT - RIGHT), top: TOP, height: height - TOP - BOTTOM }
   const xs = bucketXs(buckets.length, box)
   const paths = areaPaths(timeline, box)
   const colourOf = new Map(series.map(s => [s.key, s.color]))
@@ -91,8 +96,8 @@ function Areas({ timeline, measured, unit }: { timeline: PostureTimeline; measur
     <>
       <svg
         width={measured ?? '100%'}
-        height={measured ? TIMELINE_HEIGHT : undefined}
-        viewBox={`0 0 ${width} ${TIMELINE_HEIGHT}`}
+        height={measured ? height : undefined}
+        viewBox={`0 0 ${width} ${height}`}
         role='img'
         aria-label={unit === 'bytes' ? t('postureVolumeLabel') : t('postureTimelineLabel')}
         style={{ display: 'block' }}
@@ -108,7 +113,7 @@ function Areas({ timeline, measured, unit }: { timeline: PostureTimeline; measur
           </g>
         ))}
         {tickIndexes(buckets.length).map(i => (
-          <text key={i} x={xs[i]} y={TIMELINE_HEIGHT - 4} textAnchor='middle' fontSize={10} fill={theme.palette.text.secondary}>{clock(buckets[i].start)}</text>
+          <text key={i} x={xs[i]} y={height - 4} textAnchor='middle' fontSize={10} fill={theme.palette.text.secondary}>{clock(buckets[i].start)}</text>
         ))}
         {hovered && (
           <line data-testid='timeline-guide' x1={guideX} x2={guideX} y1={TOP} y2={TOP + box.height} stroke={theme.palette.text.secondary} strokeWidth={1} strokeDasharray='3 3' pointerEvents='none' />
@@ -142,6 +147,25 @@ function Areas({ timeline, measured, unit }: { timeline: PostureTimeline; measur
   )
 }
 
+/** The groups of a compact chart as one row of chips (dot and name), cut at the end of the row. */
+function LegendChips({ timeline }: { timeline: PostureTimeline }) {
+  const nameOf = useSliceName()
+  return (
+    <Box data-testid='timeline-legend' sx={{ display: 'flex', gap: 0.5, overflow: 'hidden', flexWrap: 'nowrap', minWidth: 0 }}>
+      {timeline.series.map(s => (
+        <Chip
+          key={s.key}
+          size='small'
+          variant='outlined'
+          icon={<Box component='span' sx={{ ...objectDotSx(s.color), ml: 1 }} />}
+          label={nameOf(s)}
+          sx={{ flexShrink: 0, height: 22, fontSize: 11 }}
+        />
+      ))}
+    </Box>
+  )
+}
+
 /**
  * The observed traffic over time, under the donut: the persisted history of the flows for the range chosen (by zone), or
  * the events of the orchestrator's memory per 5-minute bucket (by VLAN or node, or when the history is not served),
@@ -149,20 +173,21 @@ function Areas({ timeline, measured, unit }: { timeline: PostureTimeline; measur
  * second tab, "Volume (sFlow)", shows the sFlow bytes of the same groups over the same range, only when sFlow has data
  * for the connection.
  */
-export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null }: Props) {
+export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, showRange = true }: Props) {
   const t = useTranslations('networkPage.dashboard')
   const [ref, size] = useBoxSize<HTMLDivElement>()
   const [chosen, setChosen] = useState<Unit>('events')
   // The Volume tab only exists while sFlow has data for the connection.
   const unit: Unit = volume ? chosen : 'events'
   const measured = size?.width ?? null
+  const height = compact ? COMPACT_TIMELINE_HEIGHT : TIMELINE_HEIGHT
 
   let body: React.ReactNode
-  if (unit === 'bytes' && volume) body = volume.total > 0 ? <Areas timeline={volume} measured={measured} unit='bytes' /> : <Typography variant='body2' color='text.secondary' data-testid='volume-empty'>{t('postureVolumeEmpty')}</Typography>
-  else if (phase === 'loading') body = <Skeleton data-testid='timeline-loading' variant='rounded' height={TIMELINE_HEIGHT} />
+  if (unit === 'bytes' && volume) body = volume.total > 0 ? <Areas timeline={volume} measured={measured} unit='bytes' height={height} /> : <Typography variant='body2' color='text.secondary' data-testid='volume-empty'>{t('postureVolumeEmpty')}</Typography>
+  else if (phase === 'loading') body = <Skeleton data-testid='timeline-loading' variant='rounded' height={height} />
   else if (phase === 'unavailable') body = <Typography variant='body2' color='text.secondary' data-testid='timeline-unavailable'>{t('postureTimelineUnavailable')}</Typography>
   else if (timeline.total === 0) body = <Typography variant='body2' color='text.secondary' data-testid='timeline-empty'>{t(timeline.range ? 'postureTimelineEmptyRange' : 'postureTimelineEmpty')}</Typography>
-  else body = <Areas timeline={timeline} measured={measured} unit='events' />
+  else body = <Areas timeline={timeline} measured={measured} unit='events' height={height} />
 
   let caption: string | null = null
   if (unit === 'bytes') caption = t(volumeSent ? 'postureVolumeCaptionSent' : 'postureVolumeCaptionReceived', { range: t(RANGE_LABEL[range]) })
@@ -192,7 +217,7 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
     </Tooltip>
   )
 
-  const title = volume ? (
+  let title: React.ReactNode = volume ? (
     <Tabs value={unit} onChange={(_, next: Unit) => setChosen(next)} sx={{ minHeight: 32, '& .MuiTab-root': { minHeight: 32, py: 0.5, px: 1.5, textTransform: 'none' } }}>
       <Tab value='events' label={t('postureTimelineTitle')} />
       <Tab value='bytes' label={t('postureVolumeTab')} data-testid='volume-tab' />
@@ -200,6 +225,7 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   ) : (
     <Typography variant='subtitle2' component='h3' sx={{ fontWeight: 700 }}>{t('postureTimelineTitle')}</Typography>
   )
+  if (compact) title = null
 
   return (
     <Box data-testid='timeline' sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
@@ -219,10 +245,11 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
               {VERDICTS.map(v => <ToggleButton key={v} value={v}>{t(VERDICT_LABEL[v])}</ToggleButton>)}
             </ToggleButtonGroup>
           )}
-          {chips}
+          {showRange && chips}
         </Box>
       </Box>
       <Box ref={ref} sx={{ position: 'relative', width: '100%', minWidth: 0 }}>{body}</Box>
+      {compact && phase === 'ready' && timeline.total > 0 && <LegendChips timeline={timeline} />}
     </Box>
   )
 }

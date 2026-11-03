@@ -98,6 +98,8 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
   const [preflightOpen, setPreflightOpen] = useState(false)
   const onOpenPreflight = useCallback(() => setPreflightOpen(true), [])
   const [wizardOpen, setWizardOpen] = useState(false)
+  // The zone a zone panel opened the Drifts sub-tab on (cleared by any other way to a sub-tab).
+  const [driftsZone, setDriftsZone] = useState<string | null>(null)
   // The wizard changes the cluster: the pre-flight checks are read again once it is done.
   const [preflightRound, setPreflightRound] = useState(0)
   // The row of the sub-tabs hosts the actions of the active sub-tab (a state, so they render once it is mounted).
@@ -121,9 +123,10 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
     void mutate((key: unknown) => Array.isArray(key) && key[0] === suggestions)
   }, [refreshAfterRun, mutate, connectionId])
 
-  const goToSubTab = (tab: MicrosegSubTab) => {
+  const goToSubTab = (tab: MicrosegSubTab, options?: { zoneId?: string }) => {
     setSubTab(tab)
     storeSubTab(tab)
+    setDriftsZone(tab === 'drifts' ? options?.zoneId ?? null : null)
   }
 
   if (!connectionId) return <Alert severity='info' sx={{ m: 3 }}>{t('noConnection')}</Alert>
@@ -145,7 +148,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
 
   const firstRun = !policy.last_revision && policy.zones.length === 0
   const contentProps: MicrosegSubTabProps = {
-    connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun, onOpenSettings, onOpenPreflight, targetVm,
+    connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun, onOpenSettings, onOpenPreflight, targetVm, driftsZone,
   }
 
   return (

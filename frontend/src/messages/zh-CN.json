@@ -13047,7 +13047,9 @@
         "ambiguous_zone": "多个区域",
         "object_collision": "名称已占用",
         "generic": "偏差"
-      }
+      },
+      "zoneFilter": "区域 {name}",
+      "zoneFilterClear": "显示所有区域"
     },
     "observation": {
       "sampling": "Proxmox 默认每条链每秒最多记录一行日志，因此繁忙的流量可能被少计。",
@@ -13305,6 +13307,26 @@
           "partial": "地图只读取前 {count} 条待处理的观测流量：此列表可能有遗漏。"
         },
         "more": "显示 {count} 台客户机中的前 {shown} 台：输入以缩小范围"
+      },
+      "sections": {
+        "traffic": "观察到的流量",
+        "posture": "安全态势",
+        "topSources": "主要来源",
+        "suggestions": "待处理的建议",
+        "guest": "客户机",
+        "flows": "流量",
+        "summary": "{hits, plural, other {# 次命中}} · 主要来源 {source}（{share}%）· 将被阻止 {wouldBlock, number}，已阻止 {blocked, number}",
+        "summaryNone": "此时间范围内没有流量",
+        "membersStatus": "{running, number} 个运行中，{stopped, number} 个已停止",
+        "membersStatusUnknown": "成员未知（未读取客户机列表）",
+        "firewallOff": "{count, plural, other {# 个成员的网卡防火墙已关闭}}",
+        "firewallOffNone": "所有成员的网卡防火墙均已开启",
+        "drifts": "{count, plural, other {# 个偏差}}",
+        "driftsNone": "无偏差",
+        "driftsUnknown": "偏差尚未计算",
+        "openDrifts": "打开偏差",
+        "topSourcesEmpty": "此时间范围内没有来源",
+        "suggestionsEmpty": "此区域没有待处理的建议"
       }
     },
     "preflight": {

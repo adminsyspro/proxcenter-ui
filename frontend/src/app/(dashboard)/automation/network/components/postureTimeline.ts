@@ -3,6 +3,7 @@ import type { MicrosegEvent, MicrosegTraffic, MicrosegZone, SuggestionKind } fro
 
 import { NO_VLAN_KEY, type GroupBy, type PostureGuest, type PostureSlice } from './dashboardPosture'
 import { bareIp } from './microseg/zoneGraph'
+import { byText } from './microseg/zoneLayout'
 
 /**
  * The time chart of the Posture Dashboard (UA50), pure: the events of the orchestrator's ring (the flows the engine
@@ -116,8 +117,11 @@ export function postureTimeline(input: {
   /** The slices of the donut: their keys, names and colours. */
   slices: readonly TimelineSeries[]
   now: number
+  /** Only these events (a guest of the map panel); the window is the one of what is kept. */
+  keep?: ((e: MicrosegEvent) => boolean) | null
 }): PostureTimeline {
-  const { events, groupBy, verdict, slices, now } = input
+  const { groupBy, verdict, slices, now, keep } = input
+  const events = keep ? input.events.filter(keep) : input.events
   const zoneByName = new Map(input.zones.map(z => [z.name.toLowerCase(), z]))
   const guestByKey = new Map(input.guests.map(g => [g.key, g]))
   const guestIps = input.addresses ? new Set(input.guests.flatMap(g => g.ips.map(bareIp))) : null
@@ -159,8 +163,11 @@ export function postureHistory(input: {
   verdict: TimelineVerdict
   zones: readonly MicrosegZone[]
   slices: readonly TimelineSeries[]
+  /** Only the flows logged in this zone (its name, as the history carries it): the zone panel of the map. */
+  zone?: string | null
 }): PostureTimeline {
   const { history, range, verdict, slices } = input
+  const logging = input.zone?.toLowerCase() ?? null
   const stepMs = stepMsOf(range)
   const zoneByName = new Map(input.zones.map(z => [z.name.toLowerCase(), z]))
   const groupOf = (srcZone: string) => {
@@ -169,7 +176,7 @@ export function postureHistory(input: {
     return zone ? zoneKey(zone.id) : OTHER_KEY
   }
   const items = history.buckets
-    .filter(b => verdict === 'all' || b.verdict === verdict)
+    .filter(b => (verdict === 'all' || b.verdict === verdict) && (logging === null || b.zone.toLowerCase() === logging))
     .map(b => ({ at: Date.parse(b.at), group: groupOf(b.src_zone), value: b.hits }))
   const first = Math.ceil(Date.parse(history.from) / stepMs) * stepMs
   const last = Math.floor((Date.parse(history.to) - 1) / stepMs) * stepMs
@@ -336,4 +343,18 @@ export function nearestBucket(x: number, count: number, box: PlotBox): number {
   if (count <= 1) return 0
   const i = Math.round((x - box.left) / (box.width / count) - 0.5)
   return Math.min(count - 1, Math.max(0, i))
+}
+
+/** A group of the chart with its total over the range and its share of all the hits. */
+export type SourceTotal = TimelineSeries & { hits: number; share: number }
+
+/** The groups of a chart by their hits over the whole range, the busiest first (ties by key), `max` at most. */
+export function topSources(timeline: Pick<PostureTimeline, 'series' | 'buckets' | 'total'>, max = 5): SourceTotal[] {
+  const sums = new Map<string, number>()
+  for (const b of timeline.buckets) for (const [key, value] of Object.entries(b.counts)) sums.set(key, (sums.get(key) ?? 0) + value)
+  return timeline.series
+    .map(s => ({ ...s, hits: sums.get(s.key) ?? 0, share: timeline.total > 0 ? ((sums.get(s.key) ?? 0) / timeline.total) * 100 : 0 }))
+    .filter(s => s.hits > 0)
+    .sort((a, b) => b.hits - a.hits || byText(a.key, b.key))
+    .slice(0, max)
 }

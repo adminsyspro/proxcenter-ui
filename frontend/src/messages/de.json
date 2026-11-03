@@ -12715,7 +12715,9 @@
         "ambiguous_zone": "Mehrere Zonen",
         "object_collision": "Name belegt",
         "generic": "Abweichung"
-      }
+      },
+      "zoneFilter": "Zone {name}",
+      "zoneFilterClear": "Alle Zonen anzeigen"
     },
     "observation": {
       "sampling": "Proxmox protokolliert standardmäßig höchstens eine Zeile pro Sekunde und Kette, daher können stark ausgelastete Flüsse zu niedrig gezählt werden.",
@@ -12973,6 +12975,26 @@
           "partial": "Nur die ersten {count} ausstehenden beobachteten Flüsse der Karte werden gelesen: in dieser Liste können welche fehlen."
         },
         "more": "Die ersten {shown} von {count} Gästen werden angezeigt: zum Eingrenzen tippen"
+      },
+      "sections": {
+        "traffic": "Beobachteter Verkehr",
+        "posture": "Sicherheitslage",
+        "topSources": "Wichtigste Quellen",
+        "suggestions": "Offene Vorschläge",
+        "guest": "Gast",
+        "flows": "Flüsse",
+        "summary": "{hits, plural, one {# Treffer} other {# Treffer}} · wichtigste Quelle {source} ({share} %) · {wouldBlock, number} würden blockiert, {blocked, number} blockiert",
+        "summaryNone": "Kein Verkehr in diesem Zeitraum",
+        "membersStatus": "{running, number} laufend, {stopped, number} gestoppt",
+        "membersStatusUnknown": "Mitglieder unbekannt (Gästeliste nicht gelesen)",
+        "firewallOff": "{count, plural, one {# Mitglied mit ausgeschalteter NIC-Firewall} other {# Mitglieder mit ausgeschalteter NIC-Firewall}}",
+        "firewallOffNone": "Alle Mitglieder haben die NIC-Firewall an",
+        "drifts": "{count, plural, one {# Abweichung} other {# Abweichungen}}",
+        "driftsNone": "Keine Abweichung",
+        "driftsUnknown": "Abweichungen noch nicht berechnet",
+        "openDrifts": "Abweichungen öffnen",
+        "topSourcesEmpty": "Keine Quelle in diesem Zeitraum",
+        "suggestionsEmpty": "Kein offener Vorschlag für diese Zone"
       }
     },
     "preflight": {

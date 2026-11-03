@@ -10,7 +10,7 @@ import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { useMicrosegDrifts, useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 import type { ListSuggestionsParams } from '@/lib/microseg/api'
-import type { MicrosegPolicy, MicrosegStatus, MicrosegSuggestion } from '@/lib/microseg/types'
+import type { MicrosegPolicy, MicrosegStatus, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import DashboardTodo, { type TodoActions } from './DashboardTodo'
 import { dashboardPhase, missingManagementPorts, todoItems, type BlockPhase } from './dashboardModel'
@@ -23,12 +23,10 @@ import { TopServices, TrafficDistribution } from './ObservedTraffic'
 import PostureChips from './PostureChips'
 import TrafficByZone from './TrafficByZone'
 import TrafficTimeline from './TrafficTimeline'
-import { postureHistory, postureTimeline, postureVolume, type TimelineRange, type TimelineVerdict } from './postureTimeline'
-import { usePostureEvents } from './usePostureEvents'
-import { usePostureHistory } from './usePostureHistory'
+import { postureVolume, type TimelineRange, type TimelineVerdict } from './postureTimeline'
 import { useTimelineRange } from './useTimelineRange'
+import { useTrafficTimeline } from './useTrafficTimeline'
 import { usePostureVolume } from './usePostureVolume'
-import { useNow } from './microseg/useNow'
 import { coverage as microsegCoverage } from './microseg/coverage'
 import type { MicrosegSubTab } from './microseg/microsegTabTypes'
 import { clusterFirewallOff, lastCheckAt, unzonedRunning } from './microseg/summaryModel'
@@ -112,6 +110,8 @@ function usePostureFigures(policy: MicrosegPolicy | undefined, suggestions: Micr
   }, [policy, suggestions, rows, listed, groupBy])
 }
 
+const NO_ZONES: MicrosegZone[] = []
+
 /**
  * The time charts, on the groups of the donut. The events chart reads the persisted history of the range chosen when
  * grouped by zone (the only grouping the history carries), the events of the ring otherwise or when the orchestrator
@@ -121,26 +121,15 @@ function useTimelineFigures(
   connection: string | null, policy: MicrosegPolicy | undefined, posture: ReturnType<typeof usePostureFigures>,
   groupBy: GroupBy, verdict: TimelineVerdict, addresses: boolean, range: TimelineRange,
 ) {
-  const history = usePostureHistory(groupBy === 'zone' ? connection : null, range)
-  // The ring (orchestrator memory) is read only when it is the source: no events read for a history that answered.
-  const memory = groupBy !== 'zone' || !!history.error
-  const ring = usePostureEvents(memory ? connection : null)
-  // A minute clock: the last bucket follows the time, the sFlow window moves at each edge of its windows.
-  const now = useNow(60_000, ring.events)
+  const { timeline, answer, rangeLock, now } = useTrafficTimeline({
+    connection, zones: policy?.zones ?? NO_ZONES, slices: posture.traffic.slices, groupBy, verdict, range, guests: posture.guests, addresses,
+  })
+  // The sFlow window moves at each edge of its windows, on the same minute clock.
   const sflow = usePostureVolume(connection, posture.guests, now, range)
-  const timeline = useMemo(() => (memory ? postureTimeline({
-    events: ring.events ?? [], groupBy, verdict, zones: policy?.zones ?? [], guests: posture.guests, addresses, slices: posture.traffic.slices, now,
-  }) : postureHistory({
-    history: history.history ?? { step: 0, from: '', to: '', buckets: [] }, range: history.range, verdict, zones: policy?.zones ?? [], slices: posture.traffic.slices,
-  })), [memory, ring.events, history.history, history.range, groupBy, verdict, policy, posture, addresses, now])
   const volume = useMemo(() => (sflow.available ? postureVolume({
     series: sflow.series, groupBy, zones: policy?.zones ?? [], tagPrefix: policy?.policy.tag_prefix ?? '', guests: posture.guests,
     slices: posture.traffic.slices, range, from: sflow.from, to: sflow.to,
   }) : null), [sflow.available, sflow.series, sflow.from, sflow.to, range, groupBy, policy, posture])
-  const answer = memory ? { data: ring.events, error: ring.error } : { data: history.history, error: undefined }
-  let rangeLock: 'grouping' | 'unavailable' | null = null
-  if (groupBy !== 'zone') rangeLock = 'grouping'
-  else if (memory) rangeLock = 'unavailable'
   return { timeline, volume, answer, rangeLock }
 }
 

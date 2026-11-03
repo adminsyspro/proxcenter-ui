@@ -11,7 +11,9 @@ import { serviceTitle } from '@/lib/network/serviceNames'
 import { OneLine } from './dialogParts'
 import FlowSummary from './FlowSummary'
 import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
+import PanelSection, { PanelFrame } from './PanelSection'
 import PolicyPager, { usePaged } from './PolicyPager'
+import { SelectionTrafficChart, useSelectionTraffic } from './SelectionTraffic'
 import { targetSuggestions, type TargetFlow, type TargetGuest } from './targetModel'
 import { bareIp } from './zoneGraph'
 import ZoneStateChip from './ZoneStateChip'
@@ -41,7 +43,7 @@ type Props = {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Box component='section' aria-label={title} sx={{ mt: 1.5, minWidth: 0 }}>
+    <Box component='section' aria-label={title} sx={{ mt: 1, minWidth: 0 }}>
       <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{title}</Typography>
       {children}
     </Box>
@@ -94,9 +96,11 @@ function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
 }
 
 /**
- * The guest the map is targeted on: who and where it is, its zone (a button opens the zone panel), the pending
- * observed flows its addresses are the sample source or destination of (in and out, each with the three ways out of
- * the Observation sub-tab), and the allowed flows of its zone. One line per row, five rows per page.
+ * The guest the map is targeted on, as tall as the map with its body scrolling, in foldable sections (remembered per
+ * browser): the guest (its zone, a button opens the zone panel, its addresses), its flows (the pending observed flows
+ * its addresses are the sample source or destination of, each with the three ways out of the Observation sub-tab, and
+ * the allowed flows of its zone; one line per row, five per page), and its observed traffic over time (its events in
+ * the orchestrator's memory).
  */
 export default function TargetPanel({ target, zonesById, suggestions, flows, peers, connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onOpenZone, onClose, partialLimit = null }: Props) {
   const t = useTranslations('microsegPilot.overview')
@@ -106,6 +110,8 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
   const observedPage = usePaged(observed, ROWS_PER_PAGE)
   const allowedPage = usePaged(allowed, ROWS_PER_PAGE)
   const { busy, failure, clearFailure, resolve: resolveIds } = useResolveSuggestions(connectionId, version, reloadPolicy, reloadSuggestions)
+  const zones = useMemo(() => [...zonesById.values()], [zonesById])
+  const traffic = useSelectionTraffic(connectionId, zones, { kind: 'guest', type: target.type, vmid: target.vmid })
   const ips = target.ips.length ? t('node.guestIps', { ips: target.ips.join(', ') }) : t('node.guestNoIp')
 
   async function resolve(id: string, action: SuggestionAction) {
@@ -117,70 +123,75 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
   if (!target.ips.length) observedEmpty = t('target.panel.noIps')
   else if (!observed.length) observedEmpty = t('target.panel.noObserved')
 
-  return (
-    <Box
-      component='aside'
-      aria-label={t('target.panel.label', { name: target.name })}
-      data-target={target.key}
-      sx={{ width: { xs: '100%', lg: 440 }, flexShrink: 0, minWidth: 0, border: 1, borderColor: 'divider', borderRadius: 1, p: 2, maxHeight: 560, overflowY: 'auto', overflowX: 'hidden' }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-        <StatusIcon type='vm' vmType={target.type} status={target.status} />
-        <Tooltip title={target.name}><Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', minWidth: NAME_MIN_WIDTH }}>{target.name}</Typography></Tooltip>
-        <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>
-          {t('target.panel.where', { type: t(`target.type.${target.type}`), vmid: target.vmid, node: target.node })}
-        </Typography>
-        <IconButton size='small' aria-label={t('panel.close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
-      </Box>
-
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: 1 }}>
-        {zone ? (
-          <>
-            <Chip
-              size='small'
-              variant='outlined'
-              icon={<i className='ri-shield-fill' style={{ color: zone.color || undefined }} />}
-              label={zone.name}
-              sx={{ minWidth: 0, flex: '0 1 auto' }}
-            />
-            <ZoneStateChip state={zone.state} />
-          </>
-        ) : <Chip size='small' variant='outlined' label={t('target.panel.noZone')} sx={{ flexShrink: 0 }} />}
-        <Box sx={{ flex: 1 }} />
-        {zone && (
-          <Button size='small' variant='outlined' startIcon={<i className='ri-shield-line' />} onClick={() => onOpenZone(zone.id)} sx={{ flexShrink: 0 }}>
-            {t('target.panel.openZone')}
-          </Button>
-        )}
-      </Box>
-      <Tooltip title={ips}>
-        <Typography noWrap variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>{ips}</Typography>
-      </Tooltip>
-      {failure && <Alert severity='error' onClose={clearFailure} sx={{ mt: 1.5 }}>{failure}</Alert>}
-
-      <Section title={t('target.panel.observed')}>
-        {partialLimit !== null && <OneLine text={t('target.panel.partial', { count: partialLimit })} />}
-        {observedEmpty && <Empty text={observedEmpty} />}
-        <Box role='list'>
-          {observedPage.rows.map(row => (
-            <ObservedLine key={row.suggestion.id} row={row} peers={peers} zonesById={zonesById} busy={busy} onResolve={action => resolve(row.suggestion.id, action)} />
-          ))}
-        </Box>
-        <PolicyPager count={observedPage.count} page={observedPage.page} size={observedPage.size} onPage={observedPage.setPage} />
-      </Section>
-
-      <Section title={t('target.panel.allowed')}>
-        {!zone && <Empty text={t('target.panel.noZoneFlows')} />}
-        {zone && !allowed.length && <Empty text={t('panel.noFlows')} />}
-        <Box role='list'>
-          {allowedPage.rows.map(f => (
-            <Box role='listitem' key={f.id} sx={{ display: 'flex', alignItems: 'center', minHeight: 28, minWidth: 0 }}>
-              <FlowSummary flow={f} zonesById={zonesById} sideMinWidth={NAME_MIN_WIDTH / 2} />
-            </Box>
-          ))}
-        </Box>
-        <PolicyPager count={allowedPage.count} page={allowedPage.page} size={allowedPage.size} onPage={allowedPage.setPage} />
-      </Section>
+  const header = (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+      <StatusIcon type='vm' vmType={target.type} status={target.status} />
+      <Tooltip title={target.name}><Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', minWidth: NAME_MIN_WIDTH }}>{target.name}</Typography></Tooltip>
+      <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>
+        {t('target.panel.where', { type: t(`target.type.${target.type}`), vmid: target.vmid, node: target.node })}
+      </Typography>
+      <IconButton size='small' aria-label={t('panel.close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
     </Box>
+  )
+
+  return (
+    <PanelFrame label={t('target.panel.label', { name: target.name })} width={440} header={header} dataTarget={target.key}>
+      <PanelSection id='guest.guest' title={t('sections.guest')}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+          {zone ? (
+            <>
+              <Chip
+                size='small'
+                variant='outlined'
+                icon={<i className='ri-shield-fill' style={{ color: zone.color || undefined }} />}
+                label={zone.name}
+                sx={{ minWidth: 0, flex: '0 1 auto' }}
+              />
+              <ZoneStateChip state={zone.state} />
+            </>
+          ) : <Chip size='small' variant='outlined' label={t('target.panel.noZone')} sx={{ flexShrink: 0 }} />}
+          <Box sx={{ flex: 1 }} />
+          {zone && (
+            <Button size='small' variant='outlined' startIcon={<i className='ri-shield-line' />} onClick={() => onOpenZone(zone.id)} sx={{ flexShrink: 0 }}>
+              {t('target.panel.openZone')}
+            </Button>
+          )}
+        </Box>
+        <Tooltip title={ips}>
+          <Typography noWrap variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>{ips}</Typography>
+        </Tooltip>
+      </PanelSection>
+
+      <PanelSection id='guest.flows' title={t('sections.flows')} count={observed.length + allowed.length}>
+        {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1.5 }}>{failure}</Alert>}
+        <Section title={t('target.panel.observed')}>
+          {partialLimit !== null && <OneLine text={t('target.panel.partial', { count: partialLimit })} />}
+          {observedEmpty && <Empty text={observedEmpty} />}
+          <Box role='list'>
+            {observedPage.rows.map(row => (
+              <ObservedLine key={row.suggestion.id} row={row} peers={peers} zonesById={zonesById} busy={busy} onResolve={action => resolve(row.suggestion.id, action)} />
+            ))}
+          </Box>
+          <PolicyPager count={observedPage.count} page={observedPage.page} size={observedPage.size} onPage={observedPage.setPage} />
+        </Section>
+
+        <Section title={t('target.panel.allowed')}>
+          {!zone && <Empty text={t('target.panel.noZoneFlows')} />}
+          {zone && !allowed.length && <Empty text={t('panel.noFlows')} />}
+          <Box role='list'>
+            {allowedPage.rows.map(f => (
+              <Box role='listitem' key={f.id} sx={{ display: 'flex', alignItems: 'center', minHeight: 28, minWidth: 0 }}>
+                <FlowSummary flow={f} zonesById={zonesById} sideMinWidth={NAME_MIN_WIDTH / 2} />
+              </Box>
+            ))}
+          </Box>
+          <PolicyPager count={allowedPage.count} page={allowedPage.page} size={allowedPage.size} onPage={allowedPage.setPage} />
+        </Section>
+      </PanelSection>
+
+      <PanelSection id='guest.traffic' title={t('sections.traffic')}>
+        <SelectionTrafficChart traffic={traffic} />
+      </PanelSection>
+    </PanelFrame>
   )
 }

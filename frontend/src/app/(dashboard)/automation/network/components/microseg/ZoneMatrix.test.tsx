@@ -8,10 +8,10 @@ import { cleanup } from '@testing-library/react'
 
 import { renderWithProviders, screen, fireEvent } from '@/__tests__/setup/renderWithProviders'
 
-import { demoInput } from './mapViewsTestKit'
+import { demoInput, zone } from './mapViewsTestKit'
 import { buildMatrix } from './matrixModel'
 import { ALL_FLOWS, EXTERNAL_ID, OUTSIDE_ID } from './zoneGraph'
-import ZoneMatrix from './ZoneMatrix'
+import ZoneMatrix, { ROW_MIN_H, matrixTracks } from './ZoneMatrix'
 
 const renders = vi.hoisted(() => ({ count: 0 }))
 
@@ -36,6 +36,32 @@ function show(model = buildMatrix(demoInput())) {
 }
 
 describe('ZoneMatrix', () => {
+  it('fills the map: the frame takes all of it, the zone columns and rows share the room left (1fr)', () => {
+    show()
+    const frame = screen.getByTestId('matrix-frame')
+    const grid = screen.getByRole('grid')
+    expect(getComputedStyle(frame).height).toBe('100%')
+    expect(getComputedStyle(frame).overflow).toBe('auto')
+    expect(getComputedStyle(grid).height).toBe('100%')
+    expect(getComputedStyle(grid).width).toBe('100%')
+    expect(grid.getAttribute('data-columns')).toBe('190px repeat(7, minmax(150px, 1fr))')
+    expect(grid.getAttribute('data-rows')).toBe(`auto repeat(7, minmax(${ROW_MIN_H}px, 1fr))`)
+    expect(getComputedStyle(grid).gridTemplateColumns).toBe('190px repeat(7, minmax(150px, 1fr))')
+    expect(getComputedStyle(grid).gridTemplateRows).toBe(`auto repeat(7, minmax(${ROW_MIN_H}px, 1fr))`)
+  })
+
+  it('scrolls only when the least sizes do not fit: 40 zones need more than a 1600x900 map', () => {
+    const zones = Array.from({ length: 40 }, (_, i) => zone(`z${i}`, `zone-${String(i).padStart(2, '0')}`))
+    show(buildMatrix({ zones, flows: [], suggestions: [] }))
+    const tracks = matrixTracks(41, 41, false)
+    expect(tracks.minWidth).toBeGreaterThan(1600)
+    expect(tracks.minHeight).toBeGreaterThan(900)
+    expect(getComputedStyle(screen.getByRole('grid')).minWidth).toBe(`${tracks.minWidth}px`)
+    expect(getComputedStyle(screen.getByRole('grid')).minHeight).toBe(`${tracks.minHeight}px`)
+    expect(matrixTracks(7, 7, false).minWidth).toBeLessThan(1600)
+    expect(matrixTracks(7, 7, true).columns).toBe('150px repeat(7, minmax(112px, 1fr))')
+  })
+
   it('lights the row and the column under the pointer without rendering any cell again', () => {
     show()
     const grid = screen.getByRole('grid')

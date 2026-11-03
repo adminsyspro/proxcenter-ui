@@ -13,6 +13,23 @@ import { ZoneShield } from './ZoneNode'
 const SORT_KEY = 'microseg.map.matrixSort'
 /** The width of the row heads and the least width of a cell, and the chips per line: smaller when a panel is open. */
 const SIZES = { wide: { head: 190, cell: 150, chips: 2 }, narrow: { head: 150, cell: 112, chips: 1 } } as const
+/** The least height of a row of cells, and the height the head row takes (the sort buttons and the corner caption). */
+export const ROW_MIN_H = 68
+const HEAD_ROW_H = 64
+
+/**
+ * The tracks of the grid: the head column, then one column per destination and one row per source that share the
+ * room left (1fr) above their least size. The grid fills the map; it scrolls only when the least sizes do not fit.
+ */
+export function matrixTracks(rowCount: number, colCount: number, narrow: boolean) {
+  const size = narrow ? SIZES.narrow : SIZES.wide
+  return {
+    columns: `${size.head}px repeat(${colCount}, minmax(${size.cell}px, 1fr))`,
+    rows: `auto repeat(${rowCount}, minmax(${ROW_MIN_H}px, 1fr))`,
+    minWidth: size.head + colCount * size.cell,
+    minHeight: HEAD_ROW_H + rowCount * ROW_MIN_H,
+  }
+}
 
 type Names = { end: (e: MatrixEnd) => string }
 type Highlight = { row: string | null; col: string | null }
@@ -82,6 +99,7 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
     [model.cells, filters, unapplied],
   )
   const size = narrow ? SIZES.narrow : SIZES.wide
+  const tracks = matrixTracks(rows.length, cols.length, narrow)
   const lit: Highlight = hover.row || hover.col ? hover : { row: selectedZone, col: selectedZone }
   // The Tab stop stays on a cell that exists after the grid shrinks (a zone deleted, the other sort).
   const activeR = Math.min(active.r, rows.length - 1)
@@ -157,7 +175,7 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
   }
 
   return (
-    <Box sx={{ height: '100%', overflow: 'auto' }} onMouseLeave={() => setHover({ row: null, col: null })}>
+    <Box data-testid='matrix-frame' sx={{ width: '100%', height: '100%', overflow: 'auto' }} onMouseLeave={() => setHover({ row: null, col: null })}>
       <Box
         ref={grid}
         role='grid'
@@ -166,7 +184,12 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
         aria-colcount={cols.length + 1}
         data-lit-row={lit.row ?? ''}
         data-lit-col={lit.col ?? ''}
-        sx={theme => ({ display: 'grid', gridTemplateColumns: `${size.head}px repeat(${cols.length}, minmax(${size.cell}px, 1fr))`, minWidth: 'max-content', ...litSx(theme) })}
+        data-columns={tracks.columns}
+        data-rows={tracks.rows}
+        sx={theme => ({
+          display: 'grid', gridTemplateColumns: tracks.columns, gridTemplateRows: tracks.rows,
+          width: '100%', height: '100%', minWidth: tracks.minWidth, minHeight: tracks.minHeight, boxSizing: 'border-box', ...litSx(theme),
+        })}
       >
         <Box role='row' sx={{ display: 'contents' }}>
           <Box role='columnheader' sx={{ ...sticky, top: 0, left: 0, zIndex: 3, borderBottom: 1, borderRight: 1, p: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>

@@ -186,7 +186,11 @@ describe('DashboardTab guest coverage (UA44)', () => {
 
     await screen.findByText('/100')
     expect(screen.getByTestId('breakdown-ri-computer-line').textContent).toBe('-')
-    expect(screen.getByText('Not measured: no guest could be told apart yet')).toBeInTheDocument()
+    // No score, no band: the hero says not measured instead of a verdict on part of the figures.
+    expect(screen.getByTestId('zero-trust-score').textContent).toBe('-')
+    expect(screen.getAllByText('Not measured: no guest could be told apart yet')).toHaveLength(2)
+    expect(screen.queryByText('To improve')).not.toBeInTheDocument()
+    expect(screen.queryByText('Moderate')).not.toBeInTheDocument()
   })
 
   it('says the figures are a sample above 200 guests', async () => {

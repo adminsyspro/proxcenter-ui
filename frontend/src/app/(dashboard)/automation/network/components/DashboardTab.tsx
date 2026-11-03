@@ -197,6 +197,8 @@ function HeroScore({ color, label, parts, protectedCount, measured, totalRules, 
   firewallEnabled: boolean; hasStrictPolicy: boolean; indicators: React.ReactNode; t: T
 }) {
   const [showBreakdown, setShowBreakdown] = useState(false)
+  // No guest told apart yet: no score is given (a total without its coverage part would read as a verdict).
+  const unmeasured = parts.coveragePercent === null
 
   return (
     <>
@@ -204,9 +206,9 @@ function HeroScore({ color, label, parts, protectedCount, measured, totalRules, 
         {/* Gauge */}
         <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
           <CircularProgress variant="determinate" value={100} size={140} thickness={3} sx={{ color: alpha(color, 0.22) }} />
-          <CircularProgress variant="determinate" value={parts.total} size={140} thickness={3} sx={{ color, position: 'absolute', left: 0, filter: `drop-shadow(0 0 8px ${alpha(color, 0.4)})` }} />
+          <CircularProgress variant="determinate" value={unmeasured ? 0 : parts.total} size={140} thickness={3} sx={{ color, position: 'absolute', left: 0, filter: `drop-shadow(0 0 8px ${alpha(color, 0.4)})` }} />
           <Box sx={{ top: 0, left: 0, bottom: 0, right: 0, position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-            <Typography variant="h2" fontWeight={800} sx={{ color, lineHeight: 1 }}>{parts.total}</Typography>
+            <Typography variant="h2" fontWeight={800} sx={{ color, lineHeight: 1 }} data-testid="zero-trust-score">{unmeasured ? '-' : parts.total}</Typography>
             <Typography variant="caption" color="text.secondary">/100</Typography>
           </Box>
         </Box>
@@ -221,7 +223,7 @@ function HeroScore({ color, label, parts, protectedCount, measured, totalRules, 
               </IconButton>
             </Tooltip>
           </Stack>
-          <Chip label={label} sx={{ bgcolor: alpha(color, 0.2), color, fontWeight: 700, fontSize: '0.85rem', height: 28, mb: 2 }} />
+          <Chip label={unmeasured ? t('networkPage.dashboard.coverageNotMeasured') : label} sx={{ bgcolor: alpha(color, 0.2), color: unmeasured ? 'text.secondary' : color, fontWeight: 700, fontSize: '0.85rem', height: 28, mb: 2, maxWidth: '100%' }} />
 
           {/* KPIs row */}
           <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
@@ -369,7 +371,8 @@ export default function DashboardTab({
   const parts: ScoreParts = { firewall: firewallEnabled ? 30 : 0, policy: hasStrictPolicy ? 25 : 0, vmCoverage: Math.round((coverageShare ?? 0) * 0.45), coveragePercent: coverageShare, total: 0 }
   parts.total = parts.firewall + parts.policy + parts.vmCoverage
   const band = scoreBand(parts.total)
-  const scoreColor = phase.hero === 'ready' ? BAND_COLOR[band] : theme.palette.text.disabled
+  // Neutral, never a band, until the figures are in and at least one guest was told apart.
+  const scoreColor = phase.hero === 'ready' && coverageShare !== null ? BAND_COLOR[band] : theme.palette.text.disabled
   const nav: Navigation = { onNavigateTab, onNavigateRulesSubTab }
   const openGuests = () => { onNavigateTab(1); onNavigateRulesSubTab(2) }
 

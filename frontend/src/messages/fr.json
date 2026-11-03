@@ -7607,7 +7607,8 @@
     "bulkPartial": "{description} - {success} OK, {errors} erreurs",
     "bulkFailed": "{description} - {errors} erreurs",
     "migrateStillRunning": "Toujours en cours quand ProxCenter a cessé de la suivre, voir le journal de la tâche",
-    "migrateGuestFailed": "{name} : échec de la migration : {reason}"
+    "migrateGuestFailed": "{name} : échec de la migration : {reason}",
+    "bulkStillRunning": "{count} encore en cours dans Proxmox"
   },
   "vmConfig": {
     "title": "Configuration VM",
@@ -12645,5 +12646,79 @@
         "slow": "Lent"
       }
     }
+  },
+  "bulkPower": {
+    "menu": "Alimentation",
+    "action": {
+      "start": "Démarrer ({count})",
+      "shutdown": "Éteindre ({count})",
+      "reboot": "Redémarrer ({count})",
+      "stop": "Arrêt forcé ({count})"
+    },
+    "title": {
+      "start": "Démarrer {count} invité(s)",
+      "shutdown": "Éteindre {count} invité(s)",
+      "reboot": "Redémarrer {count} invité(s)",
+      "stop": "Arrêt forcé de {count} invité(s)"
+    },
+    "running": {
+      "start": "Démarrage des invités",
+      "shutdown": "Extinction des invités",
+      "reboot": "Redémarrage des invités",
+      "stop": "Arrêt des invités"
+    },
+    "scope": "{count} invité(s) sur {hosts} hôte(s).",
+    "skipped": {
+      "start": "{count} invité(s) sélectionné(s) écarté(s) : pas arrêté(s).",
+      "other": "{count} invité(s) sélectionné(s) écarté(s) : pas en marche."
+    },
+    "stopWarning": "Un arrêt forcé coupe les invités comme on débranche la prise : les données non enregistrées sont perdues.",
+    "perNode": "Tâches en parallèle par hôte",
+    "perNodeHelp": "Chaque hôte exécute au plus ce nombre de tâches à la fois ; une place se libère quand la tâche Proxmox se termine. Baissez-le sur des hôtes chargés.",
+    "status": {
+      "queued": "En attente",
+      "running": "En cours",
+      "completed": "Terminé",
+      "failed": "Échec",
+      "timeout": "Toujours en cours",
+      "cancelled": "Annulé"
+    },
+    "count": {
+      "completed": "Terminés",
+      "failed": "Échecs",
+      "active": "En cours",
+      "queued": "En attente",
+      "cancelled": "Annulés"
+    },
+    "stopQueued": "Annuler les invités en attente",
+    "closeKeepsRunning": "Fermer cette fenêtre n'arrête pas le lot : les tâches déjà envoyées vont jusqu'au bout.",
+    "clusters": "{count} clusters",
+    "migrateOneCluster": "La migration porte sur un seul cluster à la fois : ne gardez que les invités d'un cluster.",
+    "migrateNeedsTwoNodes": "La migration demande un cluster d'au moins deux nœuds en ligne.",
+    "showDetail": "Afficher le détail"
+  },
+  "hostGroup": {
+    "selectionCount": "{count} hôte(s) sélectionné(s)",
+    "enter": "Entrer en maintenance ({count})",
+    "exit": "Sortir de maintenance ({count})",
+    "cannotEnter": {
+      "count": "Sélectionnez au moins deux hôtes",
+      "state": "Chaque hôte sélectionné doit être en ligne et hors maintenance",
+      "remaining": "Au moins un hôte en ligne doit rester hors du groupe"
+    },
+    "cannotExit": "Chaque hôte sélectionné doit être en maintenance",
+    "enterTitle": "Maintenance : {nodes}",
+    "enterIntro": "Les hôtes entrent en maintenance ensemble : un seul plan envoie les invités vers les hôtes restés hors du groupe, jamais vers l'un du groupe, puis la maintenance HA Proxmox est posée sur chaque hôte. Les invités HA sont déplacés par Proxmox HA, les invités sur stockage local restent et sont listés.",
+    "cephHint": "Sur un cluster Ceph, posez le flag noout avant d'arrêter plusieurs hôtes à la fois : le noout par hôte de la maintenance d'un seul hôte n'est pas posé pour un groupe.",
+    "blocked": "Les hôtes restés hors du groupe ne peuvent pas accueillir {count} invité(s) : le groupe ne peut pas entrer en maintenance.",
+    "blockedMore": "et {count} de plus",
+    "started": "Maintenance de {nodes} lancée, suivez chaque invité dans le Task Center",
+    "exitTitle": "Sortie de maintenance : {nodes}",
+    "exitIntro": "Chaque hôte quitte la maintenance HA Proxmox ; Proxmox HA ramène ses propres invités.",
+    "bringBack": "Ramener aussi les {count} invité(s) déplacé(s) par la maintenance du groupe",
+    "nothingToBringBack": "Aucun invité déplacé par la maintenance du groupe à ramener",
+    "exited": "{nodes} sorti(s) de maintenance",
+    "stillInMaintenance": "Un hôte du groupe est encore en maintenance : les invités n'ont pas été ramenés.",
+    "returnStarted": "Retour de {count} invité(s) lancé"
   }
 }

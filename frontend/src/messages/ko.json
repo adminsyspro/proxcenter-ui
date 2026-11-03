@@ -7607,7 +7607,8 @@
     "bulkPartial": "{description} - {success}개 성공, {errors}개 오류",
     "bulkFailed": "{description} - {errors}개 오류",
     "migrateStillRunning": "ProxCenter가 추적을 중단했을 때 아직 실행 중이었습니다. 작업 로그를 확인하세요",
-    "migrateGuestFailed": "{name}: 마이그레이션 실패: {reason}"
+    "migrateGuestFailed": "{name}: 마이그레이션 실패: {reason}",
+    "bulkStillRunning": "{count}개가 Proxmox에서 아직 실행 중"
   },
   "vmConfig": {
     "title": "VM 구성",
@@ -12644,5 +12645,79 @@
         "slow": "느림"
       }
     }
+  },
+  "bulkPower": {
+    "menu": "전원",
+    "action": {
+      "start": "시작 ({count})",
+      "shutdown": "종료 ({count})",
+      "reboot": "재시작 ({count})",
+      "stop": "강제 중지 ({count})"
+    },
+    "title": {
+      "start": "게스트 {count}개 시작",
+      "shutdown": "게스트 {count}개 종료",
+      "reboot": "게스트 {count}개 재시작",
+      "stop": "게스트 {count}개 강제 중지"
+    },
+    "running": {
+      "start": "게스트 시작 중",
+      "shutdown": "게스트 종료 중",
+      "reboot": "게스트 재시작 중",
+      "stop": "게스트 중지 중"
+    },
+    "scope": "호스트 {hosts}개의 게스트 {count}개.",
+    "skipped": {
+      "start": "선택한 게스트 {count}개 제외: 중지 상태가 아님.",
+      "other": "선택한 게스트 {count}개 제외: 실행 중이 아님."
+    },
+    "stopWarning": "강제 중지는 전원 플러그를 뽑는 것과 같습니다. 저장되지 않은 데이터는 손실됩니다.",
+    "perNode": "호스트당 병렬 작업 수",
+    "perNodeHelp": "각 호스트는 한 번에 최대 이 수만큼의 작업을 실행합니다. Proxmox 작업이 끝나면 자리가 비워집니다. 부하가 큰 호스트에서는 낮추세요.",
+    "status": {
+      "queued": "대기 중",
+      "running": "실행 중",
+      "completed": "완료",
+      "failed": "실패",
+      "timeout": "아직 실행 중",
+      "cancelled": "취소됨"
+    },
+    "count": {
+      "completed": "완료",
+      "failed": "실패",
+      "active": "실행 중",
+      "queued": "대기 중",
+      "cancelled": "취소됨"
+    },
+    "stopQueued": "대기 중인 항목 취소",
+    "closeKeepsRunning": "이 창을 닫아도 일괄 작업은 멈추지 않습니다. 이미 보낸 작업은 끝까지 실행됩니다.",
+    "clusters": "클러스터 {count}개",
+    "migrateOneCluster": "마이그레이션은 한 번에 하나의 클러스터만 대상으로 합니다. 한 클러스터의 게스트만 남기세요.",
+    "migrateNeedsTwoNodes": "마이그레이션에는 온라인 노드가 두 개 이상인 클러스터가 필요합니다.",
+    "showDetail": "자세히 보기"
+  },
+  "hostGroup": {
+    "selectionCount": "호스트 {count}개 선택됨",
+    "enter": "유지 관리 시작 ({count})",
+    "exit": "유지 관리 종료 ({count})",
+    "cannotEnter": {
+      "count": "호스트를 두 개 이상 선택하세요",
+      "state": "선택한 모든 호스트가 온라인이고 유지 관리 중이 아니어야 합니다",
+      "remaining": "온라인 호스트가 하나 이상 그룹 밖에 남아 있어야 합니다"
+    },
+    "cannotExit": "선택한 모든 호스트가 유지 관리 중이어야 합니다",
+    "enterTitle": "유지 관리: {nodes}",
+    "enterIntro": "호스트가 함께 유지 관리에 들어갑니다. 하나의 계획이 게스트를 그룹 밖에 남은 호스트로만 보내고(그룹의 호스트로는 보내지 않음) 이후 각 호스트에 Proxmox HA 유지 관리를 설정합니다. HA 게스트는 Proxmox HA가 이동하며, 로컬 스토리지의 게스트는 남고 목록에 표시됩니다.",
+    "cephHint": "Ceph 클러스터에서는 여러 호스트를 동시에 내리기 전에 noout 플래그를 설정하세요. 단일 호스트 유지 관리의 호스트별 noout은 그룹에는 설정되지 않습니다.",
+    "blocked": "그룹 밖의 호스트가 게스트 {count}개를 받을 수 없어 그룹이 유지 관리에 들어갈 수 없습니다.",
+    "blockedMore": "외 {count}개",
+    "started": "{nodes} 유지 관리가 시작되었습니다. Task Center에서 각 게스트를 확인하세요",
+    "exitTitle": "유지 관리 종료: {nodes}",
+    "exitIntro": "각 호스트가 Proxmox HA 유지 관리를 종료하며, Proxmox HA가 자신의 게스트를 되돌립니다.",
+    "bringBack": "그룹 유지 관리로 이동한 게스트 {count}개도 되돌리기",
+    "nothingToBringBack": "그룹 유지 관리로 이동해 되돌릴 게스트가 없습니다",
+    "exited": "{nodes} 유지 관리 종료됨",
+    "stillInMaintenance": "그룹의 호스트가 아직 유지 관리 중이라 게스트를 되돌리지 않았습니다.",
+    "returnStarted": "게스트 {count}개 복귀 시작"
   }
 }

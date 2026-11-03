@@ -58,6 +58,19 @@ describe("waitForPveTask", () => {
     expect(res).toEqual({ outcome: "failed", error: "migration aborted", reason: "CT is locked (backup)" })
   })
 
+  it("keeps WARNINGS a failure unless asked, then reports it as done with its warning", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(taskResponse("stopped", "WARNINGS: 1"))
+
+    expect(await waitForPveTask("conn-1", "pve-01", UPID, FAST)).toMatchObject({ outcome: "failed", error: "WARNINGS: 1" })
+    expect(await waitForPveTask("conn-1", "pve-01", UPID, { ...FAST, acceptWarnings: true })).toEqual({ outcome: "ok", warning: "WARNINGS: 1" })
+  })
+
+  it("carries the reason the route read for an accepted warning", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({ ok: true, json: async () => ({ status: "stopped", exitstatus: "WARNINGS: 2", failureReason: "nesting off" }) } as unknown as Response)
+
+    expect(await waitForPveTask("conn-1", "pve-01", UPID, { ...FAST, acceptWarnings: true })).toEqual({ outcome: "ok", warning: "nesting off" })
+  })
+
   it("reports failed with an empty error when PVE gave no exitstatus", async () => {
     // The task route serializes a missing exitstatus as null.
     vi.spyOn(global, "fetch").mockResolvedValue(taskResponse("stopped", null))

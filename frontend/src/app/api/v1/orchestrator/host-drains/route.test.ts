@@ -251,3 +251,33 @@ describe("POST /api/v1/orchestrator/host-drains, a selection of guests (#1218)",
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+describe("POST /api/v1/orchestrator/host-drains, a group of nodes (roadmap#198)", () => {
+  beforeEach(() => {
+    pveFetchMock.mockResolvedValue([
+      { type: "node", node: "pve1" }, { type: "node", node: "pve2" }, { type: "node", node: "pve3" },
+      { type: "qemu", node: "pve2", vmid: 201, status: "running" },
+    ])
+    hostFindManyMock.mockResolvedValue([])
+  })
+
+  it("starts the group without a node, with SSH, under the right to manage each node", async () => {
+    const res = await callRoute(POST, { body: { connection_id: "c1", config: { nodes: ["pve2", "pve3"], enter_maintenance: true } } })
+    expect(res.status).toBe(200)
+    expect(checkPermissionMock).toHaveBeenCalledWith("node.manage", "node", "c1:pve2")
+    expect(checkPermissionMock).toHaveBeenCalledWith("node.manage", "node", "c1:pve3")
+    const body = sent()
+    expect(body.node).toBe("")
+    expect(body.config.nodes).toEqual(["pve2", "pve3"])
+    expect(body.config.ssh_credentials).toBeDefined()
+  })
+
+  it("refuses a node of the group the caller may not manage, and a malformed group", async () => {
+    checkPermissionMock.mockImplementation(async (perm: string, _t?: string, id?: string) => (perm === "node.manage" && id === "c1:pve3" ? new Response(null, { status: 403 }) : null))
+    expect((await callRoute(POST, { body: { connection_id: "c1", config: { nodes: ["pve2", "pve3"], enter_maintenance: true } } })).status).toBe(403)
+    checkPermissionMock.mockResolvedValue(null)
+    expect((await callRoute(POST, { body: { connection_id: "c1", config: { nodes: ["pve2", "pve2"], enter_maintenance: true } } })).status).toBe(400)
+    expect((await callRoute(POST, { body: { config: { nodes: ["pve2", "pve3"] } } })).status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

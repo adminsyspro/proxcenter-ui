@@ -7,8 +7,8 @@ import type { InventorySelection, DetailsPayload } from '../types'
 import type { AllVmItem, HostItem } from '../InventoryTree'
 import { parseVmId, fetchDetails, resolveVmPowerAction } from '../helpers'
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
+import { bulkPowerMessage, bulkPowerSeverity, readPerNodePreference, runBulkGuestPower, type BulkPowerAction } from '@/lib/inventory/bulkGuestPower'
 import {
-  runInBatches,
   startTrackedMigration,
   type MigrateGuestRef,
 } from '@/lib/migration/guestMigrateClient'
@@ -473,8 +473,9 @@ export function useVmActions({
     const { action, node } = bulkActionDialog
     if (!action || !node || !data?.allVms) return
 
+    // The node of this connection only: two clusters may share a node name.
     const nodeVms = (data.allVms as any[]).filter((vm: any) =>
-      vm.node === node.name && !vm.template
+      vm.node === node.name && (!node.connId || vm.connId === node.connId) && !vm.template
     )
 
     if (nodeVms.length === 0) {
@@ -484,7 +485,7 @@ export function useVmActions({
     }
 
     let vmsToProcess: any[] = []
-    let apiAction = ''
+    let apiAction: BulkPowerAction = 'start'
     let description = ''
 
     switch (action) {
@@ -518,31 +519,14 @@ export function useVmActions({
     setBulkActionDialog({ open: false, action: null, node: null, targetNode: '' })
     toast.info(`${description} (${vmsToProcess.length} VMs)...`)
 
-    let successCount = 0
-    let errorCount = 0
+    // At most N tasks per host until each ends (roadmap#197), not five POSTs.
+    const outcome = await runBulkGuestPower(
+      vmsToProcess.map((vm: any) => ({ connId: vm.connId, node: vm.node, type: vm.type, vmid: vm.vmid })),
+      apiAction,
+      { perNode: readPerNodePreference() },
+    )
 
-    await runInBatches(vmsToProcess, 5, async (vm: any) => {
-      try {
-        const url = `/api/v1/connections/${encodeURIComponent(vm.connId)}/guests/${vm.type}/${encodeURIComponent(vm.node)}/${encodeURIComponent(vm.vmid)}/${apiAction}`
-        const res = await fetch(url, { method: 'POST' })
-
-        if (res.ok) {
-          successCount++
-        } else {
-          errorCount++
-        }
-      } catch {
-        errorCount++
-      }
-    })
-
-    if (errorCount === 0) {
-      toast.success(t('vmActions.bulkSuccess', { description, count: successCount }))
-    } else if (successCount > 0) {
-      toast.warning(t('vmActions.bulkPartial', { description, success: successCount, errors: errorCount }))
-    } else {
-      toast.error(t('vmActions.bulkFailed', { description, errors: errorCount }))
-    }
+    toast[bulkPowerSeverity(outcome)](bulkPowerMessage(outcome, description, t))
 
     if (onRefresh) {
       setTimeout(() => onRefresh(), 2000)

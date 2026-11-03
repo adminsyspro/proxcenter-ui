@@ -18,6 +18,7 @@ import { buildClusterCapacity, buildNodeCapacities, buildStoragePools, computeSt
 
 import { demoAvailabilityResponse, demoSettings } from './availabilityDemo'
 import { demoCephCrush, demoCephExporterFailures, demoCephExporterNodes, demoCephExporterOsd, demoCephHistory, demoCephLive, demoCephOkToStop, demoCephStatus, demoCrushRules, demoCrushTree, parseDemoHistoryOsds } from './cephCockpitDemo'
+import { demoDrainPlan } from './hostDrainDemo'
 import mockDataJson from './mock-data.json'
 import { domainMock, resolveDomainMock } from './mocks'
 import cloudImagesJson from '@/data/cloudImages.json'
@@ -4060,6 +4061,16 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
       }
 
       return NextResponse.json({ data: result }, { headers: demoHeaders })
+    }
+
+    // The drain dialogs preview a plan before anything runs (roadmap#198).
+    if (method === 'POST' && cleanPath === '/api/v1/orchestrator/host-drains/plan') {
+      return req.json().catch(() => null).then(sent => {
+        const connId = typeof sent?.connection_id === 'string' ? sent.connection_id : 'demo-pve-cluster-001'
+        const list = (v: unknown) => (Array.isArray(v) ? v : [])
+
+        return NextResponse.json({ data: demoDrainPlan(sent, list(demoNodes(connId)), list(demoResources(connId))) }, { headers: demoHeaders })
+      })
     }
 
     // The settings tab reads the saved values back from the answer: echo them.

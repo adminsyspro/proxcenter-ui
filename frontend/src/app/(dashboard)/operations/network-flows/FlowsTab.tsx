@@ -974,6 +974,11 @@ export default function FlowsTab() {
                   }}
                 />
                 {lens && pairActions.failure}
+                {lens?.policy.pending_changes && (
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                    {t('microsegPilot.trafficLens.draftNote')}
+                  </Typography>
+                )}
                 {topPairs.length === 0 ? (
                   <FlowPanelEmptyState totalFlows={status?.total_flows ?? 0} activeVMs={status?.active_vms ?? 0} />
                 ) : (

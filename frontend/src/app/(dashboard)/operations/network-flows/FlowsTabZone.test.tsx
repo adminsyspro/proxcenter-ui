@@ -71,6 +71,12 @@ describe('FlowsTab grouped by zone', () => {
     expect(within(firstRow).getByText('db')).toBeInTheDocument()
   })
 
+  it('says the statuses read a draft with changes not applied yet', async () => {
+    policy = { ...POLICY, pending_changes: true }
+    renderTab()
+    expect(await screen.findByText('Read against the draft, which has changes not applied yet')).toBeInTheDocument()
+  })
+
   it('goes back to the plain table when VM is chosen, and remembers it', async () => {
     renderTab()
     await screen.findByTestId('traffic-by-zone')

@@ -38,6 +38,8 @@ import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useTheme } from '@mui/material/styles'
 
+import BridgePicker from '@/components/hardware/BridgePicker'
+import { migrationBridgeOption, sortNaturally } from '@/components/hardware/bridgeChoices'
 import { MIGRATION_CPU_TYPES, MIGRATION_CPU_TYPE_DEFAULT } from '@/lib/migration/cpu-type'
 import { MIGRATION_NIC_MODELS, MIGRATION_DISK_BUSES, HARDWARE_LIMITS, type MigrationDiskBus } from '@/lib/migration/target-overrides'
 import {
@@ -58,7 +60,7 @@ export interface NetworkChoice {
   kind: 'bridge' | 'vnet' | 'shared'
 }
 
-/** Flatten a `network-choices` answer into picker rows (bridges first, then VNets). */
+/** Flatten a `network-choices` answer into picker rows (bridges first, then VNets, each in natural order). */
 export function toNetworkChoices(data: unknown): NetworkChoice[] {
   if (!Array.isArray(data)) return []
   const out: NetworkChoice[] = []
@@ -74,7 +76,8 @@ export function toNetworkChoices(data: unknown): NetworkChoice[] {
       out.push({ name: c.name, kind: 'bridge', label: typeof c.type === 'string' && c.type !== 'bridge' ? c.type : '' })
     }
   }
-  return [...out.filter(c => c.kind !== 'vnet'), ...out.filter(c => c.kind === 'vnet')]
+  const byName = (c: NetworkChoice) => c.name
+  return [...sortNaturally(out.filter(c => c.kind !== 'vnet'), byName), ...sortNaturally(out.filter(c => c.kind === 'vnet'), byName)]
 }
 
 // Leading icon of a disk or NIC row: same size and tone as the hardware rows'
@@ -511,34 +514,15 @@ export default function MigrationReviewStep({
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <FormControl fullWidth size="small" data-testid={`review-nic-${index}-bridge`} error={!nic.bridge}>
-                        <Select
+                      <Box data-testid={`review-nic-${index}-bridge`}>
+                        <BridgePicker
+                          options={bridgeOptions(nic.bridge).map(migrationBridgeOption)}
                           value={nic.bridge}
-                          onChange={e => setNic(index, { bridge: String(e.target.value) })}
-                          displayEmpty
-                          sx={SELECT_SX}
-                          renderValue={val => {
-                            const c = choices.find(x => x.name === val)
-                            return (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <i className="ri-router-line" style={{ fontSize: 14, opacity: 0.7 }} />
-                                <Typography variant="body2" fontWeight={500}>{String(val) || t('inventoryPage.esxiMigration.selectBridge')}</Typography>
-                                {c?.label && <Typography variant="caption" sx={{ opacity: 0.5 }} noWrap>({c.label})</Typography>}
-                              </Box>
-                            )
-                          }}
-                        >
-                          {bridgeOptions(nic.bridge).map(c => (
-                            <MenuItem key={c.name} value={c.name}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                                <i className={c.kind === 'vnet' ? 'ri-node-tree' : 'ri-router-line'} style={{ fontSize: 14, opacity: 0.7 }} />
-                                <Typography variant="body2" fontWeight={500}>{c.name}</Typography>
-                                {c.label && <Typography variant="caption" sx={{ opacity: 0.5, ml: 'auto' }}>{c.label}</Typography>}
-                              </Box>
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
+                          onChange={bridge => setNic(index, { bridge })}
+                          placeholder={t('inventoryPage.esxiMigration.selectBridge')}
+                          error={!nic.bridge}
+                        />
+                      </Box>
                     </TableCell>
                     <TableCell>
                       <TextField

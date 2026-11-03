@@ -6124,7 +6124,12 @@
     "openBulkMigration": "Abrir el seguimiento de esta migración masiva",
     "openArchive": "Abrir el archivo de tareas",
     "search": "Buscar tareas",
-    "clearSearch": "Borrar la búsqueda"
+    "clearSearch": "Borrar la búsqueda",
+    "moveProgress": {
+      "label": "Progreso del movimiento",
+      "bytes": "{done} de {total}",
+      "eta": "quedan unos {eta}"
+    }
   },
   "events": {
     "title": "Eventos",
@@ -7949,7 +7954,10 @@
     },
     "cloneHa": "Activar alta disponibilidad",
     "cloneHaHelp": "Se añade al gestor HA y se arranca cuando termina el clon.",
-    "cloneHaLocal": "Necesita almacenamiento compartido: el almacenamiento de destino es local a su nodo."
+    "cloneHaLocal": "Necesita almacenamiento compartido: el almacenamiento de destino es local a su nodo.",
+    "sharedDisksStay": "Los discos en almacenamiento compartido se quedan donde están",
+    "targetStorageLocalOnly": "Solo se aplica a los discos locales",
+    "tpmMoveWhileRunning": "El estado TPM no se puede mover mientras la VM está en ejecución. Apague primero la VM."
   },
   "ldap": {
     "description": "Configure la autenticación LDAP/Active Directory para permitir que los usuarios inicien sesión con sus credenciales corporativas.",

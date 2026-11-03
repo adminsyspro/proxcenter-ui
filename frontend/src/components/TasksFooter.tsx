@@ -49,6 +49,9 @@ import ActiveBulkBatchChips from '@/components/tasks/ActiveBulkBatchChips'
 import TaskLogButton from '@/components/tasks/TaskLogButton'
 import FailureReasonText from '@/components/tasks/FailureReasonText'
 import { useTaskFailureReasons } from '@/hooks/useTaskFailureReasons'
+import { useMoveTaskProgress } from '@/hooks/useMoveTaskProgress'
+import { TASK_POLL_MS } from '@/hooks/useTaskDetail'
+import MoveTaskProgress from '@/components/tasks/MoveTaskProgress'
 import StopTaskConfirmDialog from '@/components/tasks/StopTaskConfirmDialog'
 import { useStopTask, type StopTaskTarget } from '@/hooks/useStopTask'
 import { useRBAC } from '@/contexts/RBACContext'
@@ -453,6 +456,13 @@ export default function TasksFooter({
   )
   const failureReasons = useTaskFailureReasons(failedTaskRefs)
 
+  // Progress bar of each running disk or volume move (roadmap#196): its log
+  // tail is read at the task detail cadence, only while the rows show (panel
+  // open on this tab, browser tab visible), for the rows the search keeps.
+  const proxmoxRowsShown = expanded && !hidden && activeTab === 'proxmox'
+  const movePollMs = useRefreshInterval(TASK_POLL_MS)
+  const moveProgress = useMoveTaskProgress(proxmoxRowsShown ? filteredTasks : [], proxmoxRowsShown ? movePollMs : 0)
+
   // Panel height (resizable by dragging, #582). `maxHeight` stays the seed
   // so the default appearance is unchanged for users who never drag.
   const [panelHeight, setPanelHeight] = useState(() => {
@@ -734,6 +744,9 @@ export default function TasksFooter({
         const status = params.value || 'running'
         const color = getStatusColor(status)
         const isRunning = status === 'running'
+        const move = isRunning ? moveProgress[params.row.upid] : undefined
+
+        if (move) return <MoveTaskProgress progress={move} />
 
         return (
           <Chip

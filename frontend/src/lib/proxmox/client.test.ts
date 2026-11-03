@@ -40,7 +40,7 @@ import type { AddressInfo } from "node:net"
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { errors as undiciErrors } from "undici"
 
-import { classifyPveError, isFailoverWorthy, pveFetch, PveApplicationError, PveLicenseExcludedError, type PveErrorClass } from "./client"
+import { classifyPveError, isConnectPhaseFailure, isFailoverWorthy, pveFetch, PveApplicationError, PveLicenseExcludedError, type PveErrorClass } from "./client"
 import { isConnectionLicenseExcluded } from "../license/exclusions"
 import { isVmConfigNotFoundError } from "./locateVm"
 
@@ -412,6 +412,28 @@ describe("isFailoverWorthy", () => {
     for (const [cls, hasLongBudget, expected] of matrix) {
       expect(isFailoverWorthy(cls, hasLongBudget), `${cls} with hasLongBudget=${hasLongBudget}`).toBe(expected)
     }
+  })
+})
+
+// roadmap#194: what lets a request below the failover threshold go through a
+// peer node, for itself only.
+describe("isConnectPhaseFailure", () => {
+  it("accepts a refused connection and a handshake that never completed, read or write", () => {
+    for (const replaySafe of [true, false]) {
+      expect(isConnectPhaseFailure(errorWith({ code: "ECONNREFUSED" }), replaySafe)).toBe(true)
+      expect(isConnectPhaseFailure(errorWith({ code: "UND_ERR_CONNECT_TIMEOUT" }), replaySafe)).toBe(true)
+    }
+  })
+
+  it("accepts a reset for a read only: a write may already have landed", () => {
+    expect(isConnectPhaseFailure(errorWith({ cause: { code: "ECONNRESET" } }), true)).toBe(true)
+    expect(isConnectPhaseFailure(errorWith({ cause: { code: "ECONNRESET" } }), false)).toBe(false)
+  })
+
+  it("refuses everything that proves the host answered or the caller left", () => {
+    expect(isConnectPhaseFailure(new PveApplicationError("PVE 500 /nodes: ECONNREFUSED", 500), true)).toBe(false)
+    expect(isConnectPhaseFailure(errorWith({ name: "TimeoutError" }), true)).toBe(false)
+    expect(isConnectPhaseFailure(errorWith({ name: "AbortError", code: "ECONNREFUSED" }), true)).toBe(false)
   })
 })
 

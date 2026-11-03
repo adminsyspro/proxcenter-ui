@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
 import { checkPermission, checkPermissions, buildNodeResourceId, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { syncIpamForVmConfig } from "@/lib/vdc/ipamSync"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
@@ -356,6 +357,10 @@ async function handler(
       }
     )
 
+    // roadmap#192: the restored guest shows on the next reload (locked while
+    // the task runs), not after the inventory TTL.
+    await refreshCachedGuests(id, conn, { type: endpoint, vmid })
+
     // ── Post-restore IPAM sync (qemu only) ──
     // qmrestore reinjects the saved netN/ipconfigN. For VMs that were
     // tracked by our IPAM before the backup, the same (subnet, mac)
@@ -426,6 +431,10 @@ async function handler(
             console.error(`[restore-pool] failed to add vmid=${numericVmid} to pool ${safeLog(targetPool)}: ${safeLog(err?.message ?? err)}`)
           }
         }
+
+        // Task over, pool placed: the lock is gone and a vDC tenant's mask
+        // (keyed on the pool) now lets the guest through on a reload.
+        await refreshCachedGuests(id, conn)
 
         // ── Post-restore storage-tier QoS restamp ──
         // Storage policies are resolved once above (pre-PVE-call) since

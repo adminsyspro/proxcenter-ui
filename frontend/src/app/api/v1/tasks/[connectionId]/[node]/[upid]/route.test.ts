@@ -356,7 +356,7 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid] — progress of a runni
     })
 
     it('parses a "transferred X of Y (N%)" line and a plain speed line', async () => {
-      const body = await progressOf('qmmove', [
+      const body = await progressOf('imgcopy', [
         'create full clone of drive scsi0 (local-lvm:vm-100-disk-0)',
         'transferred 1.0 GiB of 4.0 GiB (25.00%)',
         'average rate 110.5 MiB/s',
@@ -382,6 +382,98 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid] — progress of a runni
 
       expect(body).toMatchObject({ progress: 0, message: '', speed: '', eta: '' })
     })
+  })
+
+  describe('disk and volume moves (roadmap#196)', () => {
+    it('an online move reads the newest mirror line, its throughput and what is left', async () => {
+      const body = await progressOf('qmmove', [
+        'drive mirror is starting for drive-scsi0',
+        'mirror-scsi0: transferred 128.0 MiB of 1.0 GiB (12.50%) in 1s',
+        'mirror-scsi0: transferred 512.0 MiB of 1.0 GiB (50.00%) in 2s',
+      ])
+
+      expect(body.progress).toBe(50)
+      expect(body.message).toBe(`Transfer: ${formatSize(512 * 1024 ** 2)} / ${formatSize(GiB)}`)
+      expect(body.speed).toBe('256.0 MiB/s')
+      expect(body.eta).toBe('2s')
+    })
+
+    it('a move that has not copied anything yet reports no progress', async () => {
+      const body = await progressOf('move_volume', ['moving volume to storage local-lvm'])
+
+      expect(body).toMatchObject({ progress: 0, message: '', speed: '', eta: '' })
+    })
+
+    it('a percentage-only line moves the bar without bytes nor speed', async () => {
+      const body = await progressOf('move_volume', ['  1,234,567  45%  12.34MB/s  0:00:10'])
+
+      expect(body).toMatchObject({ progress: 45, message: '', speed: '', eta: '' })
+    })
+  })
+})
+
+describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]?tail=1: progress from the log tail (roadmap#196)', () => {
+  /** A log of `count` lines whose last one is `last`, paged like PVE with its `total`. */
+  function servedLog(count: number, last: string) {
+    pveFetchMock.mockImplementation((_conn: any, path: string, _init: any, opts: any) => {
+      if (!path.includes('/log')) return Promise.resolve(undefined)
+      const q = new URL(`http://x${path}`).searchParams
+      const start = Number(q.get('start'))
+      const limit = Number(q.get('limit'))
+      const all = Array.from({ length: count }, (_, i) => ({ n: i + 1, t: i === count - 1 ? last : `line ${i}` }))
+      const data = all.slice(start, start + limit)
+      return Promise.resolve(opts?.envelope ? { data, total: count } : data)
+    })
+  }
+
+  it('reads only the window after `from`, never the status nor the whole log', async () => {
+    servedLog(12, 'mirror-scsi0: transferred 512.0 MiB of 1.0 GiB (50.00%) in 2s')
+    const { req, params } = ctx('?tail=1&from=10')
+    const res = await GET(req, { params })
+    const body = await readJson<any>(res)
+
+    expect(res.status).toBe(200)
+    expect(body).toMatchObject({ upid: UPID, total: 12, finished: false })
+    expect(body.progress).toMatchObject({ percent: 50, doneBytes: 512 * 1024 ** 2, bytesPerSec: 256 * 1024 ** 2, etaSec: 2 })
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    expect(pveFetchMock.mock.calls[0][1]).toContain('/log?start=10&limit=50')
+  })
+
+  it('says the task ended once the closing line shows', async () => {
+    servedLog(3, 'TASK OK')
+    const { req, params } = ctx('?tail=1')
+    const body = await readJson<any>(await GET(req, { params }))
+
+    expect(body).toMatchObject({ total: 3, finished: true, progress: null })
+  })
+
+  it('a bad `from` reads from the first line', async () => {
+    servedLog(2, 'transferred 8.0 GiB of 32.0 GiB (25.00%)')
+    const { req, params } = ctx('?tail=1&from=abc')
+    const body = await readJson<any>(await GET(req, { params }))
+
+    expect(pveFetchMock.mock.calls[0][1]).toContain('/log?start=0&limit=50')
+    expect(body.progress.percent).toBe(25)
+    // The UPID start time stands in for the copy time of a plain copy.
+    expect(body.progress.bytesPerSec).toBeGreaterThan(0)
+  })
+
+  it('answers 502 when the log cannot be read', async () => {
+    pveFetchMock.mockRejectedValue(new Error('node down'))
+    const { req, params } = ctx('?tail=1')
+    const res = await GET(req, { params })
+
+    expect(res.status).toBe(502)
+    expect((await readJson<any>(res)).error).toContain('node down')
+  })
+
+  it('is judged on the same access rules as the full read', async () => {
+    checkPermissionMock.mockResolvedValue(new Response(null, { status: 401 }))
+    const { req, params } = ctx('?tail=1')
+    const res = await GET(req, { params })
+
+    expect(res.status).toBe(401)
+    expect(pveFetchMock).not.toHaveBeenCalled()
   })
 })
 

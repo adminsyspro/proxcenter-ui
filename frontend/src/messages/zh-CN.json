@@ -6124,7 +6124,12 @@
     "openBulkMigration": "打开此批量迁移的进度",
     "openArchive": "打开任务归档",
     "search": "搜索任务",
-    "clearSearch": "清除搜索"
+    "clearSearch": "清除搜索",
+    "moveProgress": {
+      "label": "移动进度",
+      "bytes": "{done} / {total}",
+      "eta": "剩余约 {eta}"
+    }
   },
   "events": {
     "title": "事件",
@@ -7949,7 +7954,10 @@
     },
     "cloneHa": "启用高可用",
     "cloneHaHelp": "克隆完成后加入 HA 管理器并启动。",
-    "cloneHaLocal": "需要共享存储：目标存储是节点本地存储。"
+    "cloneHaLocal": "需要共享存储：目标存储是节点本地存储。",
+    "sharedDisksStay": "共享存储上的磁盘保留在原位置",
+    "targetStorageLocalOnly": "仅适用于本地磁盘",
+    "tpmMoveWhileRunning": "虚拟机运行时无法移动 TPM 状态。请先关闭虚拟机。"
   },
   "ldap": {
     "description": "配置 LDAP/Active Directory 身份验证，允许用户使用企业凭据登录。",

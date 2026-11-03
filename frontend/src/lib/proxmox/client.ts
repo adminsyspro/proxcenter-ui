@@ -232,6 +232,48 @@ function clearFailoverUrl(connId: string): void {
   getFailoverStore().delete(connId)
 }
 
+/**
+ * The request provably never reached the host: the handshake failed or never
+ * completed. A reset is a reachability failure too, but it can strike after a
+ * write was sent, so it only counts here for a read.
+ */
+export function isConnectPhaseFailure(err: unknown, replaySafe: boolean): boolean {
+  const cls = classifyPveError(err)
+  if (cls === "connect-timeout") return true
+  if (cls !== "hard-network") return false
+  return replaySafe || !hasErrorCode(err, "ECONNRESET")
+}
+
+function hasErrorCode(err: unknown, code: string): boolean {
+  const e = err as any
+  return [e?.message, e?.code, e?.cause?.code, e?.cause?.message].some(v => String(v ?? "").includes(code))
+}
+
+/** Node IPs of a connection: the in-memory cache, else the managed hosts. */
+async function loadNodeIps(connId: string, baseUrl: string): Promise<{ ips: string[]; port: number; protocol: string } | null> {
+  const cached = getNodeIps(connId)
+  if (cached && cached.ips.length > 0) return cached
+  try {
+    const { prisma } = await import("../db/prisma")
+    const hosts = await prisma.managedHost.findMany({
+      where: { connectionId: connId, enabled: true, ip: { not: null } },
+      select: { ip: true },
+      // A verified management address before a guess (roadmap#51).
+      orderBy: [{ ipVerified: "desc" }, { node: "asc" }],
+    })
+    const dbIps = hosts.map(h => h.ip!).filter(Boolean)
+    if (dbIps.length > 0) {
+      const port = extractPortFromUrl(baseUrl)
+      const protocol = new URL(baseUrl).protocol.replaceAll(":", "")
+      setNodeIps(connId, dbIps, port, protocol)
+      return { ips: dbIps, port, protocol }
+    }
+  } catch {
+    // DB unavailable: continue without failover.
+  }
+  return cached
+}
+
 /** @deprecated No longer persists — kept for reference */
 function updateConnectionBaseUrl(connId: string, newUrl: string): Promise<void> {
   try {
@@ -356,6 +398,32 @@ export async function pveFetch<T>(
     return (fetchOpts.envelope && !probe ? json : json.data) as T
   }
 
+  /**
+   * Sends THIS request through another node after a connect failure on the
+   * primary that did not open the circuit (roadmap#194). Nothing is cached:
+   * the failure was counted, and only the threshold switches the connection.
+   * The peers are probed in parallel with a liveness read, so the detour costs
+   * one probe budget at most, and the caller's signal applies throughout: a
+   * caller that left gets the primary's error, not a request sent elsewhere.
+   */
+  async function viaPeerOnce(connId: string, primaryErr: unknown): Promise<T> {
+    const currentHost = extractHostFromUrl(opts.baseUrl)
+    const ips = (await loadNodeIps(connId, opts.baseUrl))?.ips ?? []
+    const peers = ips.filter(ip => ip !== currentHost).map(ip => replaceHostInUrl(opts.baseUrl, ip))
+    let peerUrl: string
+    try {
+      peerUrl = await Promise.any(peers.map(async url => {
+        await doRequest(url, PVE_PROBE_TIMEOUT_MS, false, true)
+        return url
+      }))
+    } catch {
+      throw primaryErr
+    }
+    // The connection id and path come from the request: kept out of this line (log injection).
+    console.log(`[failover] Request served through peer ${safeLog(peerUrl)} below the failure threshold`)
+    return doRequest(peerUrl, primaryTimeoutMs)
+  }
+
   // Circuit breaker: when a failover URL is cached, periodically probe the
   // primary to detect recovery.  States:
   //  - OPEN (< 60s since failover): use failover directly
@@ -464,6 +532,9 @@ export async function pveFetch<T>(
         const shouldFailover = incrementFailures(opts.id)
         if (!shouldFailover) {
           console.warn(`[failover] Connection ${safeLog(opts.id)} failure ${getFailureCount(opts.id)}/${FAILURE_THRESHOLD} for ${safeLog(path)} (${classifyPveError(err)})`)
+          // roadmap#194: below the threshold the circuit stays closed, but
+          // the request that met the dead primary need not fail for it.
+          if (isConnectPhaseFailure(err, replaySafe)) return viaPeerOnce(opts.id, err)
           throw err
         }
         console.log(`[failover] Connection ${safeLog(opts.id)} reached failure threshold, initiating failover...`)
@@ -491,29 +562,7 @@ export async function pveFetch<T>(
     }
 
     // Look up cached node IPs, fall back to DB if cache is empty
-    let cached = getNodeIps(connId)
-
-    if (!cached || cached.ips.length === 0) {
-      try {
-        const { prisma } = await import("../db/prisma")
-        const hosts = await prisma.managedHost.findMany({
-          where: { connectionId: connId, enabled: true, ip: { not: null } },
-          select: { ip: true },
-          // A verified management address before a guess (roadmap#51).
-          orderBy: [{ ipVerified: "desc" }, { node: "asc" }],
-        })
-        const dbIps = hosts.map(h => h.ip!).filter(Boolean)
-
-        if (dbIps.length > 0) {
-          const port = extractPortFromUrl(opts.baseUrl)
-          const protocol = new URL(opts.baseUrl).protocol.replaceAll(":", "")
-          setNodeIps(connId, dbIps, port, protocol)
-          cached = { ips: dbIps, port, protocol }
-        }
-      } catch {
-        // DB unavailable — continue without failover
-      }
-    }
+    const cached = await loadNodeIps(connId, opts.baseUrl)
 
     if (!cached || cached.ips.length === 0) {
       console.error(`[failover] No node IPs available for connection ${safeLog(connId)}. Visit Inventory or re-save the connection to discover nodes.`)
@@ -531,7 +580,9 @@ export async function pveFetch<T>(
         if (ip === currentHost) continue
         const candidateUrl = replaceHostInUrl(opts.baseUrl, ip)
         try {
-          await doRequest(candidateUrl, PVE_PROBE_TIMEOUT_MS, true)
+          // A liveness read, never the caller's request: the replay below
+          // sends it, and a write must reach Proxmox exactly once.
+          await doRequest(candidateUrl, PVE_PROBE_TIMEOUT_MS, true, true)
           await updateConnectionBaseUrl(connId, candidateUrl)
           return candidateUrl
         } catch {

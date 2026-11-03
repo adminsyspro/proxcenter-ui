@@ -49,6 +49,8 @@ import { isSharedStorage } from '@/lib/proxmox/storage'
 import { useRBAC } from '@/contexts/RBACContext'
 import { supportsVmDisks } from '@/lib/proxmox/storage'
 import type { StoragePolicyCaps } from '@/components/hardware/utils'
+import BridgePicker from '@/components/hardware/BridgePicker'
+import { deployBridgeOption, orderDeployBridges } from '@/components/hardware/bridgeChoices'
 import NumericTextField from '@/components/ui/NumericTextField'
 import StorageTypeIcon from '@/components/storage/StorageTypeIcon'
 import DeploymentProgress from './DeploymentProgress'
@@ -733,7 +735,8 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
             setNetworkBridge(list.some((b: { iface: string }) => b.iface === 'vmbr0') ? 'vmbr0' : (networkBridge || 'vmbr0'))
           }
         } else {
-          const tenantNets = list.filter((b: { type: string }) => b.type === 'vnet' || b.type === 'shared')
+          // Same order as the picker so its first row is the one picked (#195).
+          const tenantNets = orderDeployBridges(list, false)
           if (tenantNets.length > 0 && !tenantNets.some((b: { iface: string }) => b.iface === networkBridge)) {
             setNetworkBridge(tenantNets[0].iface)
           }
@@ -1707,68 +1710,22 @@ export default function DeployWizard({ open, onClose, image, prefillBlueprint, r
             editable; on a VNet it stays disabled like before. */}
       {(() => {
         // VNets float to the top so the friendly tenant-scoped entries stay
-        // discoverable; raw bridges follow. Stable within each group.
-        const vnetChoices = bridges.filter(b => b.type === 'vnet')
-        const sharedChoices = bridges.filter(b => b.type === 'shared')
-        const rawChoices = bridges.filter(b => b.type !== 'vnet' && b.type !== 'shared')
-        const tenantChoices = [...vnetChoices, ...sharedChoices]
-        const ordered = fullClusterNet ? [...vnetChoices, ...sharedChoices, ...rawChoices] : tenantChoices
+        // discoverable; raw bridges follow. Natural order within each group
+        // on the shown name (#195).
+        const tenantChoices = orderDeployBridges(bridges, false)
+        const ordered = fullClusterNet ? orderDeployBridges(bridges, true) : tenantChoices
         const selectValue = fullClusterNet
           ? (bridges.some(b => b.iface === networkBridge) ? networkBridge : '')
           : (tenantChoices.some(b => b.iface === networkBridge) ? networkBridge : (tenantChoices[0]?.iface || ''))
         return (
-          <FormControl size="small" sx={hideInfra && bridges.find(b => b.iface === networkBridge)?.type !== 'shared' ? { gridColumn: '1 / -1' } : undefined}>
-            <InputLabel>{t('templates.deploy.hardware.bridge')}</InputLabel>
-            <Select
-              value={selectValue}
-              onChange={e => setNetworkBridge(String(e.target.value))}
-              label={t('templates.deploy.hardware.bridge')}
-            >
-              {ordered.length === 0 && (
-                <MenuItem value="" disabled>
-                  <Typography variant="body2" sx={{ fontStyle: 'italic', opacity: 0.6 }}>
-                    {t(fullClusterNet ? 'templates.deploy.hardware.bridgeNoneAvailable' : 'templates.deploy.hardware.bridgeNoVnet')}
-                  </Typography>
-                </MenuItem>
-              )}
-              {ordered.map(b => {
-                if (b.type === 'vnet') {
-                  return (
-                    <MenuItem key={b.iface} value={b.iface}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
-                        <Box component="i" className="ri-shield-keyhole-line" sx={{ fontSize: 14, color: 'primary.main' }} />
-                        <Typography variant="body2">{b.displayName || b.iface}</Typography>
-                        {b.subnet && (
-                          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ ml: 'auto', opacity: 0.7 }}>
-                            <Chip
-                              size="small"
-                              label={b.subnet.cidr}
-                              sx={{ height: 18, fontSize: 10 }}
-                            />
-                            <Typography variant="caption" sx={{ fontSize: 10 }}>
-                              gw {b.subnet.gateway}
-                            </Typography>
-                          </Stack>
-                        )}
-                      </Box>
-                    </MenuItem>
-                  )
-                }
-                // Raw bridge / shared uplink. Mirror CreateVmDialog's label
-                // convention: iface name + a short type tag.
-                const tag = b.type === 'shared' ? 'Shared' : b.type === 'OVSBridge' ? 'OVS' : 'Bridge'
-                return (
-                  <MenuItem key={b.iface} value={b.iface}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
-                      <Box component="i" className="ri-git-branch-line" sx={{ fontSize: 14, opacity: 0.6 }} />
-                      <Typography variant="body2">{b.iface}</Typography>
-                      <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.5 }}>{tag}</Typography>
-                    </Box>
-                  </MenuItem>
-                )
-              })}
-            </Select>
-          </FormControl>
+          <BridgePicker
+            options={ordered.map(deployBridgeOption)}
+            value={selectValue}
+            onChange={setNetworkBridge}
+            label={t('templates.deploy.hardware.bridge')}
+            noOptionsText={t(fullClusterNet ? 'templates.deploy.hardware.bridgeNoneAvailable' : 'templates.deploy.hardware.bridgeNoVnet')}
+            sx={hideInfra && bridges.find(b => b.iface === networkBridge)?.type !== 'shared' ? { gridColumn: '1 / -1' } : undefined}
+          />
         )
       })()}
       {/* VLAN Tag field.

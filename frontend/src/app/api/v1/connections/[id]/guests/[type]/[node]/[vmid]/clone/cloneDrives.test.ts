@@ -55,7 +55,7 @@ vi.mock('@/lib/rbac', () => ({
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
-vi.mock('@/lib/cache/inventoryCache', () => ({ invalidateInventoryCache: vi.fn() }))
+vi.mock('@/lib/cache/guestSetRefresh', () => ({ refreshCachedGuests: vi.fn() }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1' }))
 vi.mock('@/lib/vdc/quota', () => ({
   resolveVdcForTenant: resolveVdcForTenantMock,

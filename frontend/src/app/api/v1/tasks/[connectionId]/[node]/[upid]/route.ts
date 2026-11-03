@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 
 import { pveFetch } from '@/lib/proxmox/client'
 import { isVmConfigNotFoundError } from '@/lib/proxmox/locateVm'
-import { fetchTaskLog } from '@/lib/proxmox/taskLog'
+import { fetchTaskLog, fetchTaskLogTail, TASK_LOG_MAX_LINES } from '@/lib/proxmox/taskLog'
+import { isMoveTaskType, isTaskLogEnd, parseMoveProgress, upidStartSec } from '@/lib/tasks/moveProgress'
 import { extractTaskFailureReason } from '@/lib/proxmox/taskFailureReason'
 import { getConnectionById, type PveConn } from '@/lib/connections/getConnection'
 import { formatBytes as formatSize } from '@/utils/format'
@@ -475,6 +476,39 @@ function parseMigrationProgress(logs: TaskLogEntry[]): { progress: number; messa
   }
 }
 
+/** A disk or volume move (roadmap#196): the newest transfer line, its throughput and what is left. */
+function parseMoveTaskProgress(logs: TaskLogEntry[], elapsedSec: number): { progress: number; message: string; speed: string; eta: string } {
+  const p = parseMoveProgress(logs.map(l => l?.t || ''), { elapsedSec })
+  if (!p) return { progress: 0, message: '', speed: '', eta: '' }
+
+  return {
+    progress: Math.round(p.percent * 10) / 10,
+    message: p.doneBytes !== null && p.totalBytes !== null ? `Transfer: ${formatSize(p.doneBytes)} / ${formatSize(p.totalBytes)}` : '',
+    speed: p.bytesPerSec ? formatSpeed(p.bytesPerSec) : '',
+    eta: p.etaSec ? formatDuration(p.etaSec) : '',
+  }
+}
+
+/**
+ * ?tail=1&from=N: the progress of a running task from the end of its log
+ * only, for lists that draw a progress bar per row (roadmap#196). One window
+ * read per poll once the caller passes back the `total` it got; no status
+ * read, the closing "TASK ..." line says the task ended.
+ */
+async function tailProgressResponse(connection: PveConn, node: string, upid: string, fromParam: string | null) {
+  const from = Math.min(Math.max(Number.parseInt(fromParam || '0', 10) || 0, 0), TASK_LOG_MAX_LINES)
+  try {
+    const { lines, total } = await fetchTaskLogTail(connection, node, upid, from)
+    const texts = lines.map(l => l?.t || '')
+    const started = upidStartSec(upid)
+    const elapsedSec = started ? Math.max(0, Math.floor(Date.now() / 1000) - started) : undefined
+
+    return NextResponse.json({ upid, total, finished: isTaskLogEnd(texts), progress: parseMoveProgress(texts, { elapsedSec }) })
+  } catch (e: any) {
+    return NextResponse.json({ error: `Failed to read task log: ${e?.message || e}` }, { status: 502 })
+  }
+}
+
 function parseGenericProgress(logs: TaskLogEntry[]): { progress: number; message: string; speed: string; eta: string } {
   if (!logs || !Array.isArray(logs) || logs.length === 0) {
     return { progress: 0, message: '', speed: '', eta: '' }
@@ -734,6 +768,9 @@ async function handler(
       if (outside) return outside
     }
 
+    const query = new URL(req.url).searchParams
+    if (query.get('tail') === '1') return tailProgressResponse(connection, node, decodedUpid, query.get('from'))
+
     // Reading a finished migration releases the source lock (SSH qm unlock):
     // a token only triggers that side effect when it may migrate.
     const mayReleaseMigrationLock = !isToken || !!principal.scopes?.includes('vms:migrate')
@@ -825,6 +862,8 @@ async function handler(
 
       if (taskType.includes('migrate') || taskType === 'qmigrate' || taskType === 'vzmigrate') {
         progressData = parseMigrationProgress(logs)
+      } else if (isMoveTaskType(taskType)) {
+        progressData = parseMoveTaskProgress(logs, duration)
       } else {
         progressData = parseGenericProgress(logs)
       }
@@ -832,7 +871,7 @@ async function handler(
 
     // Send at most 5000 log lines to the frontend to avoid huge payloads
     // ?summary=1 (lists that only want the outcome) skips the lines entirely.
-    const MAX_FRONTEND_LOGS = new URL(req.url).searchParams.get('summary') === '1' ? 0 : 5000
+    const MAX_FRONTEND_LOGS = query.get('summary') === '1' ? 0 : 5000
     const totalLogLines = logs.length
     const truncatedLogs = totalLogLines > MAX_FRONTEND_LOGS
       ? logs.slice(totalLogLines - MAX_FRONTEND_LOGS)

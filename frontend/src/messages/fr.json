@@ -6124,7 +6124,12 @@
     "openBulkMigration": "Ouvrir le suivi de cette migration groupée",
     "openArchive": "Ouvrir l’archive des tâches",
     "search": "Rechercher une tâche",
-    "clearSearch": "Effacer la recherche"
+    "clearSearch": "Effacer la recherche",
+    "moveProgress": {
+      "label": "Progression du déplacement",
+      "bytes": "{done} sur {total}",
+      "eta": "encore {eta} environ"
+    }
   },
   "events": {
     "title": "Évènements",
@@ -7949,7 +7954,10 @@
     },
     "cloneHa": "Activer la haute disponibilité",
     "cloneHaHelp": "Ajouté au gestionnaire HA et démarré une fois le clone terminé.",
-    "cloneHaLocal": "Exige un stockage partagé : le stockage cible est local à son nœud."
+    "cloneHaLocal": "Exige un stockage partagé : le stockage cible est local à son nœud.",
+    "sharedDisksStay": "Les disques sur un stockage partagé restent où ils sont",
+    "targetStorageLocalOnly": "Ne concerne que les disques locaux",
+    "tpmMoveWhileRunning": "L'état TPM ne peut pas être déplacé tant que la VM tourne. Arrêtez d'abord la VM."
   },
   "ldap": {
     "description": "Configurez l'authentification LDAP/Active Directory pour permettre aux utilisateurs de se connecter avec leurs identifiants d'entreprise.",

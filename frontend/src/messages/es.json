@@ -12968,8 +12968,10 @@
         "draft": "En el borrador: se aplica con el próximo plan",
         "more": "+{count, number} más",
         "example": "Ejemplo: {from} → {to}",
-        "zoneHits": "{count, plural, one {# coincidencia} other {# coincidencias}} entre la zona {from} y la zona {to} en {service} (se muestra un par de ejemplo)",
-        "sourceHits": "{count, plural, one {# coincidencia} other {# coincidencias}} de {from} a la zona {to} en {service} (se muestra un par de ejemplo)",
+        "zoneHits": "{count, plural, one {# coincidencia} other {# coincidencias}} entre la zona {from} y la zona {to} en {service}",
+        "zoneHitsSampled": "{count, plural, one {# coincidencia} other {# coincidencias}} entre la zona {from} y la zona {to} en {service} (se muestra un par de ejemplo)",
+        "sourceHits": "{count, plural, one {# coincidencia} other {# coincidencias}} de {from} a la zona {to} en {service}",
+        "sourceHitsSampled": "{count, plural, one {# coincidencia} other {# coincidencias}} de {from} a la zona {to} en {service} (se muestra un par de ejemplo)",
         "countUnprotected": "{count, plural, one {# flujo sin protección} other {# flujos sin protección}}",
         "countBlocked": "{count, plural, one {# flujo bloqueado} other {# flujos bloqueados}}"
       },

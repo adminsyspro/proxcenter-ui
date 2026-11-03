@@ -12968,8 +12968,10 @@
         "draft": "초안에 있음: 다음 계획으로 적용됨",
         "more": "+{count, number}개 더",
         "example": "예: {from} → {to}",
-        "zoneHits": "{service}에서 영역 {from}과(와) 영역 {to} 사이 {count, plural, other {#회}} (예시 쌍 표시)",
-        "sourceHits": "{service}에서 {from}에서 영역 {to}(으)로 {count, plural, other {#회}} (예시 쌍 표시)",
+        "zoneHits": "{service}에서 영역 {from}과(와) 영역 {to} 사이 {count, plural, other {#회}}",
+        "zoneHitsSampled": "{service}에서 영역 {from}과(와) 영역 {to} 사이 {count, plural, other {#회}} (예시 쌍 표시)",
+        "sourceHits": "{service}에서 {from}에서 영역 {to}(으)로 {count, plural, other {#회}}",
+        "sourceHitsSampled": "{service}에서 {from}에서 영역 {to}(으)로 {count, plural, other {#회}} (예시 쌍 표시)",
         "countUnprotected": "{count, plural, other {보호되지 않은 흐름 #개}}",
         "countBlocked": "{count, plural, other {차단된 흐름 #개}}"
       },

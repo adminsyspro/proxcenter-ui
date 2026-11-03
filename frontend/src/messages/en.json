@@ -12968,8 +12968,10 @@
         "draft": "In the draft: applied with the next plan",
         "more": "+{count, number} more",
         "example": "Example: {from} → {to}",
-        "zoneHits": "{count, plural, one {# hit} other {# hits}} between zone {from} and zone {to} on {service} (sample pair shown)",
-        "sourceHits": "{count, plural, one {# hit} other {# hits}} from {from} to zone {to} on {service} (sample pair shown)",
+        "zoneHits": "{count, plural, one {# hit} other {# hits}} between zone {from} and zone {to} on {service}",
+        "zoneHitsSampled": "{count, plural, one {# hit} other {# hits}} between zone {from} and zone {to} on {service} (sample pair shown)",
+        "sourceHits": "{count, plural, one {# hit} other {# hits}} from {from} to zone {to} on {service}",
+        "sourceHitsSampled": "{count, plural, one {# hit} other {# hits}} from {from} to zone {to} on {service} (sample pair shown)",
         "countUnprotected": "{count, plural, one {# unprotected flow} other {# unprotected flows}}",
         "countBlocked": "{count, plural, one {# blocked flow} other {# blocked flows}}"
       },

@@ -73,7 +73,7 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
       </Box>
       <Collapse in={open} unmountOnExit>
         <Box sx={{ pl: 5, pb: 1, minWidth: 0 }}>
-          <OneLine text={observedHits(te as EdgeT, { ...names, zone: zoneName }, s, to('unknownEndpoint'))} />
+          <OneLine text={observedHits(te as EdgeT, { ...names, zone: zoneName }, s, to('unknownEndpoint'), example !== null)} />
           {example && <OneLine text={example} />}
           <OneLine text={t('flowPanel.addresses', { from: s.src_ip || to('unknownEndpoint'), to: s.dst_ip || to('unknownEndpoint') })} />
           <OneLine text={to('detail.firstSeen', { time: when(s.first_seen) })} />
@@ -127,7 +127,7 @@ export default function EdgePanel({ edgeId, source, target, data, from, to, zone
 
       {observed ? (
         <>
-          <OneLine text={t('flowPanel.sampleNote')} />
+          {example && <OneLine text={t('flowPanel.sampleNote')} />}
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1.5 }}>{t('flowPanel.observed')}</Typography>
           <Box role='list'>
             {observedPage.rows.map(s => (

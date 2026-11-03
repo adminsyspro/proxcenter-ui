@@ -37,12 +37,15 @@ function edgeContent(t: EdgeT, d: MapEdgeData): string {
   return d.services.join(', ')
 }
 
-/** "14 hits between zone web and zone db on tcp/22 (sample pair shown)": the hits are the zone pair's, not the guests'. */
-export function observedHits(t: EdgeT, names: MapNames, s: MicrosegSuggestion, unknown: string): string {
+/**
+ * "14 hits between zone web and zone db on tcp/22": the hits are the zone pair's, not the guests'. On an edge drawn
+ * from a guest (`sampled`, see isSampled) it adds "(sample pair shown)", since the guests are only the example kept.
+ */
+export function observedHits(t: EdgeT, names: MapNames, s: MicrosegSuggestion, unknown: string, sampled: boolean): string {
   const service = s.dport ? `${s.proto}/${s.dport}` : s.proto
-  return s.src_zone_id
-    ? t('zoneHits', { count: s.hits, from: names.zone(s.src_zone_id), to: names.zone(s.dst_zone_id), service })
-    : t('sourceHits', { count: s.hits, from: s.src_ip || unknown, to: names.zone(s.dst_zone_id), service })
+  const to = names.zone(s.dst_zone_id)
+  if (s.src_zone_id) return t(sampled ? 'zoneHitsSampled' : 'zoneHits', { count: s.hits, from: names.zone(s.src_zone_id), to, service })
+  return t(sampled ? 'sourceHitsSampled' : 'sourceHits', { count: s.hits, from: s.src_ip || unknown, to, service })
 }
 
 function EdgeDetails({ d, source, target }: { d: MapEdgeData; source: string; target: string }) {
@@ -51,6 +54,7 @@ function EdgeDetails({ d, source, target }: { d: MapEdgeData; source: string; ta
   const names = useContext(MapNamesContext)
   const format = useFormatter()
   const when = (iso: string) => formatWhen(format, iso)
+  const sampled = isSampled(source, target)
   if (d.kind === 'allowed' || d.kind === 'outside') {
     return (
       <Box>
@@ -62,12 +66,12 @@ function EdgeDetails({ d, source, target }: { d: MapEdgeData; source: string; ta
   return (
     <Box>
       <Typography variant='caption' fontWeight={600} sx={{ display: 'block' }}>{t(d.kind, { count: d.count })}</Typography>
-      {isSampled(source, target) && (
+      {sampled && (
         <Typography variant='caption' sx={{ display: 'block' }}>{t('example', { from: names.short(source), to: names.short(target) })}</Typography>
       )}
       {d.observed.slice(0, TOOLTIP_ROWS).map(s => (
         <Typography key={s.id} variant='caption' sx={{ display: 'block' }}>
-          {`${observedHits(t as EdgeT, names, s, to('unknownEndpoint'))} · ${to('detail.lastSeen', { time: when(s.last_seen) })}`}
+          {`${observedHits(t as EdgeT, names, s, to('unknownEndpoint'), sampled)} · ${to('detail.lastSeen', { time: when(s.last_seen) })}`}
         </Typography>
       ))}
       {d.observed.length > TOOLTIP_ROWS && <Typography variant='caption' sx={{ display: 'block' }}>{t('more', { count: d.observed.length - TOOLTIP_ROWS })}</Typography>}

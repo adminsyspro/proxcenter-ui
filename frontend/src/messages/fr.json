@@ -12969,8 +12969,10 @@
         "draft": "Dans le brouillon : appliqué avec le prochain plan",
         "more": "+{count, number} de plus",
         "example": "Exemple : {from} → {to}",
-        "zoneHits": "{count, plural, one {# occurrence} other {# occurrences}} entre la zone {from} et la zone {to} sur {service} (paire d'exemple affichée)",
-        "sourceHits": "{count, plural, one {# occurrence} other {# occurrences}} de {from} vers la zone {to} sur {service} (paire d'exemple affichée)",
+        "zoneHits": "{count, plural, one {# occurrence} other {# occurrences}} entre la zone {from} et la zone {to} sur {service}",
+        "zoneHitsSampled": "{count, plural, one {# occurrence} other {# occurrences}} entre la zone {from} et la zone {to} sur {service} (paire d'exemple affichée)",
+        "sourceHits": "{count, plural, one {# occurrence} other {# occurrences}} de {from} vers la zone {to} sur {service}",
+        "sourceHitsSampled": "{count, plural, one {# occurrence} other {# occurrences}} de {from} vers la zone {to} sur {service} (paire d'exemple affichée)",
         "countUnprotected": "{count, plural, one {# flux non protégé} other {# flux non protégés}}",
         "countBlocked": "{count, plural, one {# flux bloqué} other {# flux bloqués}}"
       },

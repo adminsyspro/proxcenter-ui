@@ -12968,8 +12968,10 @@
         "draft": "在草稿中：随下一个计划应用",
         "more": "还有 {count, number} 个",
         "example": "示例：{from} → {to}",
-        "zoneHits": "区域 {from} 与区域 {to} 之间在 {service} 上 {count, plural, other {# 次命中}}（显示示例对）",
-        "sourceHits": "从 {from} 到区域 {to} 在 {service} 上 {count, plural, other {# 次命中}}（显示示例对）",
+        "zoneHits": "区域 {from} 与区域 {to} 之间在 {service} 上 {count, plural, other {# 次命中}}",
+        "zoneHitsSampled": "区域 {from} 与区域 {to} 之间在 {service} 上 {count, plural, other {# 次命中}}（显示示例对）",
+        "sourceHits": "从 {from} 到区域 {to} 在 {service} 上 {count, plural, other {# 次命中}}",
+        "sourceHitsSampled": "从 {from} 到区域 {to} 在 {service} 上 {count, plural, other {# 次命中}}（显示示例对）",
         "countUnprotected": "{count, plural, other {# 个未受保护的流量}}",
         "countBlocked": "{count, plural, other {# 个已阻止的流量}}"
       },

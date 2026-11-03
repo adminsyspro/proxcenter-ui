@@ -192,7 +192,8 @@ describe('panel of an edge', () => {
     expect(within(panel).queryByText(/^Example:/)).toBeNull()
     const row = within(panel).getByRole('listitem', { name: '203.0.113.9 to db' })
     fireEvent.click(within(row).getByRole('button', { name: 'Show details' }))
-    expect(await within(row).findByText('2 hits from 203.0.113.9 to zone db on tcp/80 (sample pair shown)')).toBeTruthy()
+    expect(await within(row).findByText('2 hits from 203.0.113.9 to zone db on tcp/80')).toBeTruthy()
+    expect(within(panel).queryByText(/sample pair/)).toBeNull()
   })
 
   it('opens from the keyboard: the label of an edge is a button named after the flow', async () => {

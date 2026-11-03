@@ -12636,8 +12636,10 @@
         "draft": "Im Entwurf: mit dem nächsten Plan angewendet",
         "more": "+{count, number} weitere",
         "example": "Beispiel: {from} → {to}",
-        "zoneHits": "{count, plural, one {# Treffer} other {# Treffer}} zwischen Zone {from} und Zone {to} auf {service} (Beispielpaar gezeigt)",
-        "sourceHits": "{count, plural, one {# Treffer} other {# Treffer}} von {from} zu Zone {to} auf {service} (Beispielpaar gezeigt)",
+        "zoneHits": "{count, plural, one {# Treffer} other {# Treffer}} zwischen Zone {from} und Zone {to} auf {service}",
+        "zoneHitsSampled": "{count, plural, one {# Treffer} other {# Treffer}} zwischen Zone {from} und Zone {to} auf {service} (Beispielpaar gezeigt)",
+        "sourceHits": "{count, plural, one {# Treffer} other {# Treffer}} von {from} zu Zone {to} auf {service}",
+        "sourceHitsSampled": "{count, plural, one {# Treffer} other {# Treffer}} von {from} zu Zone {to} auf {service} (Beispielpaar gezeigt)",
         "countUnprotected": "{count, plural, one {# ungeschützter Fluss} other {# ungeschützte Flüsse}}",
         "countBlocked": "{count, plural, one {# blockierter Fluss} other {# blockierte Flüsse}}"
       },

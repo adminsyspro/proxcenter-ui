@@ -101,7 +101,7 @@ export function demoDrainPlan(request: DrainRequest | null, nodes: DemoNode[], g
   })
 
   return {
-    node: group ? [...sources].sort().join(',') : request?.node ?? '',
+    node: group ? [...sources].sort((x, y) => x.localeCompare(y)).join(',') : request?.node ?? '',
     guests: planned,
     candidates,
     movable: planned.filter(g => g.status === 'pending').length,

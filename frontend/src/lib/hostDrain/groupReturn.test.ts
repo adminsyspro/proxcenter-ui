@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { lastGroupDrain, returnDrainConfig, returnableGuests, type GroupDrainRecord } from './groupReturn'
 
 const group = (id: string, nodes: string[], created_at: string, guests: GroupDrainRecord['guests'] = []): GroupDrainRecord =>
-  ({ id, node: [...nodes].sort().join(','), created_at, config: { nodes }, guests })
+  ({ id, node: [...nodes].sort((x, y) => x.localeCompare(y)).join(','), created_at, config: { nodes }, guests })
 
 describe('lastGroupDrain', () => {
   it('takes the newest drain of exactly these nodes, in any order', () => {

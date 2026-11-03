@@ -47,7 +47,7 @@ export function waitForGroupOut(connId: string, nodes: string[], opts: { pollMs?
         if (!busy) resolve(true)
         else if (Date.now() >= deadline) resolve(false)
         else setTimeout(check, pollMs)
-      })
+      }, () => resolve(false))
     }
 
     check()

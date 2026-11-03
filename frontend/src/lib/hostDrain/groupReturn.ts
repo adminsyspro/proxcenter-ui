@@ -22,7 +22,8 @@ export interface GroupDrainRecord {
   guests?: GroupDrainGuest[]
 }
 
-const sameNodes = (a: string[], b: string[]) => a.length === b.length && [...a].sort().join(',') === [...b].sort().join(',')
+const byName = (x: string, y: string) => x.localeCompare(y)
+const sameNodes = (a: string[], b: string[]) => a.length === b.length && [...a].sort(byName).join(',') === [...b].sort(byName).join(',')
 
 /** The newest drain that put exactly `nodes` in maintenance together. */
 export function lastGroupDrain(drains: GroupDrainRecord[], nodes: string[]): GroupDrainRecord | null {

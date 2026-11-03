@@ -23,6 +23,6 @@ describe('NodesTable selection', () => {
     expect((boxes[1] as HTMLInputElement).checked).toBe(true)
 
     fireEvent.click(boxes[2])
-    expect([...onSelectionChange.mock.calls.at(-1)![0]].sort()).toEqual(['c1:pve1', 'c1:pve2'])
+    expect([...onSelectionChange.mock.calls.at(-1)![0]].sort((x, y) => x.localeCompare(y))).toEqual(['c1:pve1', 'c1:pve2'])
   })
 })

@@ -24,6 +24,7 @@ import FirewallLogDialog from '@/components/firewall/FirewallLogDialog'
 import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { groupMembers } from './shared/groupMembership'
+import { objectColour, objectDotSx } from '../microseg/objectColour'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
 
 // ── Props ──
@@ -355,13 +356,18 @@ export default function SecurityGroupsPanel({
         }}
         onClick={() => toggleSection(section.id)}
       >
-        <TableCell colSpan={11} sx={{ py: 1, px: 2 }}>
+        <TableCell
+          colSpan={11}
+          data-testid={`sg-header-${section.id}`}
+          sx={{ py: 1, px: 2, borderLeft: `4px solid ${objectColour(section.id, microsegPolicy?.zones)}` }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
               <i
                 className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
                 style={{ fontSize: 20, color: theme.palette.text.secondary, flexShrink: 0 }}
               />
+              <Box component="span" data-testid={`sg-dot-${section.id}`} sx={objectDotSx(objectColour(section.id, microsegPolicy?.zones))} />
               <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{section.name}</span>
               {section.comment && (
                 <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

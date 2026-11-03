@@ -12,7 +12,10 @@ import {
 import * as firewallAPI from '@/lib/api/firewall'
 import { useToast } from '@/contexts/ToastContext'
 
+import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
+
 import FirewallLoadAlert from './FirewallLoadAlert'
+import { objectChipSx, objectColour, objectDotSx } from './microseg/objectColour'
 
 interface ObjectsTabProps {
   aliases: firewallAPI.Alias[]
@@ -29,6 +32,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
+  const { data: microsegPolicy } = useMicrosegPolicy(selectedConnection || null)
+  const zones = microsegPolicy?.zones ?? []
 
   // Alias state
   const [aliasDialogOpen, setAliasDialogOpen] = useState(false)
@@ -171,7 +176,15 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
             <TableBody>
               {aliases.map((alias) => (
                 <TableRow key={alias.name} hover>
-                  <TableCell><span style={{ fontSize: 13 }}>{alias.name}</span></TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={alias.name}
+                      data-testid={`alias-chip-${alias.name}`}
+                      sx={objectChipSx(objectColour(alias.name, zones), theme)}
+                    />
+                  </TableCell>
                   <TableCell><span style={{ fontSize: 13 }}>{alias.cidr}</span></TableCell>
                   <TableCell sx={{ color: 'text.secondary', fontSize: 13 }}>{alias.comment || '-'}</TableCell>
                   <TableCell>
@@ -216,11 +229,19 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
 
         <Box sx={{ p: 2 }}>
           <Stack spacing={2}>
-            {ipsets.map((ipset) => (
+            {ipsets.map((ipset) => {
+              const colour = objectColour(ipset.name, zones)
+              return (
               <Paper key={ipset.name} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.15)}`, overflow: 'hidden' }}>
-                <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha(theme.palette.background.default, 0.5) }}>
-                  <Box>
-                    <span style={{ fontSize: 14, fontWeight: 600 }}>{ipset.name}</span>
+                <Box
+                  data-testid={`ipset-header-${ipset.name}`}
+                  sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha(theme.palette.background.default, 0.5), borderLeft: `4px solid ${colour}` }}
+                >
+                  <Box sx={{ minWidth: 0 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box component="span" data-testid={`ipset-dot-${ipset.name}`} sx={objectDotSx(colour)} />
+                      <span style={{ fontSize: 14, fontWeight: 600 }}>{ipset.name}</span>
+                    </Box>
                     <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 12, display: 'block' }}>{ipset.comment || t('networkPage.noDescription')}</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -250,14 +271,16 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
                           size="small"
                           variant="outlined"
                           onDelete={() => handleDeleteIPSetEntry(ipset.name, member.cidr)}
-                          sx={{ '& .MuiChip-deleteIcon': { fontSize: 16 } }}
+                          data-testid={`ipset-entry-${ipset.name}`}
+                          sx={objectChipSx(colour, theme)}
                         />
                       ))}
                     </Box>
                   </Box>
                 )}
               </Paper>
-            ))}
+              )
+            })}
             {ipsets.length === 0 && !loading && (
               <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.4)}` }}>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>{t('networkPage.noIpSetConfigured')}</Typography>

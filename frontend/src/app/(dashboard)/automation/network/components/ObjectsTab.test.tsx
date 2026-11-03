@@ -45,6 +45,12 @@ vi.mock('@/lib/api/firewall', () => ({
 
 const { showToastMock } = vi.hoisted(() => ({ showToastMock: vi.fn() }))
 
+// The zones of the micro-segmentation policy give the pcz-<zone> objects their colour.
+const microseg = vi.hoisted(() => ({ zones: [] as Array<{ name: string; color: string }> }))
+vi.mock('@/lib/microseg/useMicroseg', () => ({
+  useMicrosegPolicy: () => ({ data: { zones: microseg.zones } }),
+}))
+
 vi.mock('@/contexts/ToastContext', () => ({
   useToast: () => ({ showToast: showToastMock, success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
 }))
@@ -89,6 +95,12 @@ function renderTab(overrides: Parameters<typeof props>[0] = {}) {
 const rowOf = (text: string) => screen.getAllByRole('row').find(r => within(r).queryByText(text))!
 
 const dialog = () => within(screen.getByRole('dialog'))
+
+const borderOf = (el: HTMLElement) => getComputedStyle(el).borderLeftColor
+const rgb = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgb(${n >> 16}, ${(n >> 8) & 255}, ${n & 255})`
+}
 
 describe('ObjectsTab', () => {
   afterEach(cleanup)
@@ -336,5 +348,34 @@ describe('ObjectsTab load error', () => {
     renderTab({ view: 'aliases' })
 
     expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument()
+  })
+
+  describe('colours', () => {
+    afterEach(() => { microseg.zones = [] })
+
+    it('gives each IP set a dot and a left border in its colour, and tints its entries', () => {
+      microseg.zones = [{ name: 'web', color: '#10b981' }]
+      renderTab({ ipsets: [{ name: 'pcz-web', members: [{ cidr: '10.0.0.1' }] }, { name: 'trusted', members: [{ cidr: '1.2.3.4' }] }] })
+
+      const zoneHeader = screen.getByTestId('ipset-header-pcz-web')
+      expect(borderOf(zoneHeader)).toBe(rgb('#10b981'))
+      expect(getComputedStyle(screen.getByTestId('ipset-dot-pcz-web')).backgroundColor).toBe(rgb('#10b981'))
+      const entry = screen.getByTestId('ipset-entry-pcz-web')
+      expect(getComputedStyle(entry).borderColor).toBe(rgb('#10b981'))
+      expect(getComputedStyle(entry).backgroundColor).toContain('0.08')
+      expect(within(entry).getByText('10.0.0.1')).toBeInTheDocument()
+
+      expect(borderOf(screen.getByTestId('ipset-header-trusted'))).not.toBe(borderOf(zoneHeader))
+      expect(within(screen.getByTestId('ipset-header-trusted')).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    })
+
+    it('colours the alias chips, a pcz alias with its zone', () => {
+      microseg.zones = [{ name: 'web', color: '#ef4444' }]
+      renderTab({ ipsets: [], aliases: [{ name: 'pcz-web', cidr: '10.0.0.0/24' }, { name: 'net-dmz', cidr: '10.98.0.0/16' }] })
+
+      expect(getComputedStyle(screen.getByTestId('alias-chip-pcz-web')).borderColor).toBe(rgb('#ef4444'))
+      expect(getComputedStyle(screen.getByTestId('alias-chip-net-dmz')).borderColor).not.toBe(rgb('#ef4444'))
+      expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(2)
+    })
   })
 })

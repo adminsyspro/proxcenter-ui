@@ -47,9 +47,9 @@ vi.mock('@/lib/api/firewall', () => ({
 }))
 
 // The deployed micro-segmentation revision the membership of the zone groups comes from (UA44): none by default.
-const microseg = vi.hoisted(() => ({ snapshot: null as null | Record<string, unknown> }))
+const microseg = vi.hoisted(() => ({ snapshot: null as null | Record<string, unknown>, zones: [] as Array<{ name: string; color: string }> }))
 vi.mock('@/lib/microseg/useMicroseg', () => ({
-  useMicrosegPolicy: () => ({ data: microseg.snapshot ? { last_revision: { id: 'r1' } } : undefined }),
+  useMicrosegPolicy: () => ({ data: microseg.snapshot || microseg.zones.length ? { last_revision: microseg.snapshot ? { id: 'r1' } : null, zones: microseg.zones } : undefined }),
 }))
 vi.mock('@/lib/microseg/useLastRevision', () => ({
   useLastRevisionSnapshot: () => ({ revision: microseg.snapshot ? { id: 'r1', snapshot: microseg.snapshot } : null }),
@@ -510,5 +510,20 @@ describe('SecurityGroupsPanel membership without every guest rules (UA44)', () =
 
     await waitFor(() => expect(api.deleteVMRule).toHaveBeenCalledWith(CONN, 'pve1', 'qemu', 7, 3))
     expect(loadGuestRules).toHaveBeenCalledTimes(1)
+  })
+
+  describe('colours', () => {
+    afterEach(() => { microseg.zones = [] })
+
+    it('gives each group header a dot and a left border in its colour, the zone colour for pcz-<zone>', () => {
+      microseg.zones = [{ name: 'web', color: '#8b5cf6' }]
+      renderPanel({ securityGroups: [{ group: 'pcz-web', rules: [] }, { group: 'sg-db', rules: [] }] })
+
+      const zoneHeader = screen.getByTestId('sg-header-pcz-web')
+      expect(getComputedStyle(zoneHeader).borderLeftColor).toBe('rgb(139, 92, 246)')
+      expect(getComputedStyle(screen.getByTestId('sg-dot-pcz-web')).backgroundColor).toBe('rgb(139, 92, 246)')
+      expect(getComputedStyle(screen.getByTestId('sg-header-sg-db')).borderLeftColor).not.toBe('rgb(139, 92, 246)')
+      expect(within(zoneHeader).getByText('pcz-web')).toBeInTheDocument()
+    })
   })
 })

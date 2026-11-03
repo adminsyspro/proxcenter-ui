@@ -11,6 +11,8 @@ import {
   onlineNodeSet,
   peekGuestDiskTotal,
   peekGuestNet,
+  peekGuestConfigFacts,
+  rememberGuestConfigFacts,
   noteGuestNicFirewall,
   peekGuestNicFirewall,
   configVlans,
@@ -420,5 +422,33 @@ describe("attachGuestDiskTotals partial list (UA46)", () => {
     await attachGuestDiskTotals(null, CONN, [{ vmid: 1, type: "lxc", node: "pve1" }], { onlineNodes: ONLINE, fetchConfig })
 
     expect(peekGuestNet(CONN, "lxc", 2)).toBeUndefined()
+  })
+})
+
+describe("peekGuestConfigFacts (UA52, GET /api/v1/vms)", () => {
+  it("keeps the config fields of the inventory's own read, so GET /api/v1/vms reads no config of its own", async () => {
+    const table = { "qemu/104": { ...configs["qemu/104"], cores: "4", agent: "1", ipconfig0: "ip=10.0.0.4/24", description: "db" } }
+    await attachGuestDiskTotals(null, CONN, [guests()[0]], { onlineNodes: ONLINE, fetchConfig: fetchFrom(table), now })
+
+    const cached = peekGuestConfigFacts(CONN, "qemu", 104, { maxdisk: 20 * G, now: clock })
+    expect(cached).toMatchObject({ diskTotal: 36 * G, readAt: clock, fresh: true })
+    expect(cached?.facts).toMatchObject({ cores: 4, agentEnabled: true, configIps: ["10.0.0.4"], description: "db" })
+  })
+
+  it("is no longer fresh past the TTL, nor when maxdisk moved, and is undefined for a guest never read", async () => {
+    await attachGuestDiskTotals(null, CONN, [guests()[0]], { onlineNodes: ONLINE, fetchConfig: fetchFrom(), now, random: () => 0 })
+
+    expect(peekGuestConfigFacts(CONN, "qemu", 104, { maxdisk: 20 * G, now: clock + DISK_TOTAL_TTL_MS })?.fresh).toBe(false)
+    expect(peekGuestConfigFacts(CONN, "qemu", 104, { maxdisk: 30 * G, now: clock })?.fresh).toBe(false)
+    expect(peekGuestConfigFacts(CONN, "qemu", 999)).toBeUndefined()
+  })
+
+  it("keeps a config GET /api/v1/vms read, with its NIC facts for the coverage, and nothing from a non-config", () => {
+    expect(rememberGuestConfigFacts(CONN, { vmid: 400, type: "lxc", node: "pve1" }, { rootfs: "local:400/d.raw,size=8G", net0: "name=eth0,ip=10.1.0.4/24,firewall=1" })).toBe(true)
+    expect(peekGuestNet(CONN, "lxc", 400)).toEqual({ nicFirewall: true, vlans: [] })
+    expect(peekGuestConfigFacts(CONN, "lxc", 400)?.facts.configIps).toEqual(["10.1.0.4"])
+
+    expect(rememberGuestConfigFacts(CONN, { vmid: 401, type: "lxc", node: "pve1" }, null)).toBe(false)
+    expect(rememberGuestConfigFacts(CONN, { vmid: 402, type: "node", node: "pve1" }, { rootfs: "x,size=1G" })).toBe(false)
   })
 })

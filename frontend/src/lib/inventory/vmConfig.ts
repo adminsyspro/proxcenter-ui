@@ -134,30 +134,42 @@ export async function enrichVmsWithConfig<T extends EnrichableVm>(
     const enriched = { ...vm, ...fields, ...parseGuestNetIdentity(config, kind), diskTotal: sumGuestConfigDisks(config, kind) }
 
     if (!opts.includeAgent) return enriched
-    // The flag means "the admin ticked the box"; the probe means "the agent is
-    // installed and running" (spec section 9). Only worth 7x the cost on a
-    // running VM whose flag is ON.
-    if (kind !== "qemu" || vm.status !== "running" || !fields.agentEnabled) {
-      return { ...enriched, agentResponding: false, agentOsName: null, agentVersion: null }
-    }
-    // Protected calls: through the node's pvedaemon slots, and an agent that
-    // did not answer is left alone for a while (roadmap#179).
-    let agentVersion: string | null = null
-    try {
-      // /agent/info answers on every agent version: it is the liveness probe,
-      // and get-osinfo, which old agents lack, is only asked once it answered.
-      const info = await callGuestAgent<any>(connData, vm.node, vm.vmid, "info", { deadline: opts.agentDeadline })
-      agentVersion = info?.result?.version ? String(info.result.version) : null
-    } catch (err) {
-      if (err instanceof DaemonSlotExpired) return enriched
-      return { ...enriched, agentResponding: false, agentOsName: null, agentVersion: null }
-    }
-    try {
-      const info = await callGuestAgent<any>(connData, vm.node, vm.vmid, "get-osinfo", { deadline: opts.agentDeadline, mute: false })
-      const name = info?.result?.["pretty-name"] ?? info?.result?.name ?? null
-      return { ...enriched, agentResponding: true, agentOsName: name ? String(name) : null, agentVersion }
-    } catch {
-      return { ...enriched, agentResponding: true, agentOsName: null, agentVersion }
-    }
+
+    return { ...enriched, ...(await probeGuestAgent(connData, vm, fields.agentEnabled, opts.agentDeadline)) }
   })
+}
+
+const AGENT_NOT_RESPONDING: VmAgentProbe = { agentResponding: false, agentOsName: null, agentVersion: null }
+
+/**
+ * The agent fields of one guest. The flag means "the admin ticked the box"; the probe means "the agent is installed
+ * and running" (spec section 9): only worth 7x the cost of a config read on a running VM whose flag is ON. Empty
+ * (unknown) when the probe could not start before `deadline`.
+ */
+export async function probeGuestAgent(
+  connData: any,
+  vm: EnrichableVm,
+  agentEnabled: boolean,
+  deadline?: number,
+): Promise<Partial<VmAgentProbe>> {
+  if (vm.type === "lxc" || vm.status !== "running" || !agentEnabled) return { ...AGENT_NOT_RESPONDING }
+  // Protected calls: through the node's pvedaemon slots, and an agent that
+  // did not answer is left alone for a while (roadmap#179).
+  let agentVersion: string | null = null
+  try {
+    // /agent/info answers on every agent version: it is the liveness probe,
+    // and get-osinfo, which old agents lack, is only asked once it answered.
+    const info = await callGuestAgent<any>(connData, vm.node, vm.vmid, "info", { deadline })
+    agentVersion = info?.result?.version ? String(info.result.version) : null
+  } catch (err) {
+    if (err instanceof DaemonSlotExpired) return {}
+    return { ...AGENT_NOT_RESPONDING }
+  }
+  try {
+    const info = await callGuestAgent<any>(connData, vm.node, vm.vmid, "get-osinfo", { deadline, mute: false })
+    const name = info?.result?.["pretty-name"] ?? info?.result?.name ?? null
+    return { agentResponding: true, agentOsName: name ? String(name) : null, agentVersion }
+  } catch {
+    return { agentResponding: true, agentOsName: null, agentVersion }
+  }
 }

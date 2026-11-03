@@ -13179,8 +13179,10 @@
           "noZoneFlows": "此客户机不在任何区域：没有适用于它的允许流量。",
           "incoming": "入站，来自 {peer}",
           "outgoing": "出站，前往 {peer}",
-          "acceptTip": "接受为流量 {from} → {to} {service}：引擎为每条观测流量只保留一对示例客户机，因此该流量覆盖整个区域对。"
-        }
+          "acceptTip": "接受为流量 {from} → {to} {service}：引擎为每条观测流量只保留一对示例客户机，因此该流量覆盖整个区域对。",
+          "partial": "地图只读取前 {count} 条待处理的观测流量：此列表可能有遗漏。"
+        },
+        "more": "显示 {count} 台客户机中的前 {shown} 台：输入以缩小范围"
       }
     },
     "preflight": {

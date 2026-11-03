@@ -5,12 +5,12 @@ import { Alert, Box, Button, Chip, Collapse, IconButton, Tooltip, Typography } f
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
-import { serviceLabel, serviceTitle, serviceTokensTitle } from '@/lib/network/serviceNames'
+import { serviceTitle, serviceTokensTitle } from '@/lib/network/serviceNames'
 
 import { OneLine } from './dialogParts'
 import { MapNamesContext, isSampled, observedHits, type EdgeT } from './FlowEdge'
 import FlowSummary, { flowService } from './FlowSummary'
-import { ObservedKindGlyph, ResolveActions, useResolveSuggestions } from './observationParts'
+import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
 import PolicyPager, { usePaged } from './PolicyPager'
 import type { PanelEdgeData } from './zoneGraph'
 import { formatWhen } from './summaryModel'
@@ -68,10 +68,7 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
         <Tooltip title={`${source} → ${destination}`}>
           <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{`${source} → ${destination}`}</Typography>
         </Tooltip>
-        <Tooltip title={service}>
-          <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{serviceLabel(s.proto, s.dport)}</Typography>
-        </Tooltip>
-        <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{to('hits', { count: s.hits })}</Typography>
+        <ServiceHits suggestion={s} />
         <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptLabel={accept} />
       </Box>
       <Collapse in={open} unmountOnExit>

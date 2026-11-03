@@ -6,10 +6,11 @@ import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
-import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
+import { serviceTitle } from '@/lib/network/serviceNames'
 
+import { OneLine } from './dialogParts'
 import FlowSummary from './FlowSummary'
-import { ObservedKindGlyph, ResolveActions, useResolveSuggestions } from './observationParts'
+import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { targetSuggestions, type TargetFlow, type TargetGuest } from './targetModel'
 import { bareIp } from './zoneGraph'
@@ -32,6 +33,8 @@ type Props = {
   onResolved: (action: SuggestionAction) => void
   onOpenZone: (zoneId: string) => void
   onClose: () => void
+  /** The map read only the first `limit` pending observed flows: the list may miss some. */
+  partialLimit?: number | null
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -71,10 +74,7 @@ function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
       <Tooltip title={where}>
         <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{peer}</Typography>
       </Tooltip>
-      <Tooltip title={service}>
-        <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{serviceLabel(s.proto, s.dport)}</Typography>
-      </Tooltip>
-      <Typography noWrap variant='body2' color='text.secondary' sx={{ flexShrink: 0 }}>{to('hits', { count: s.hits })}</Typography>
+      <ServiceHits suggestion={s} />
       <Chip
         size='small'
         variant='outlined'
@@ -93,7 +93,7 @@ function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
  * observed flows its addresses are the sample source or destination of (in and out, each with the three ways out of
  * the Observation sub-tab), and the allowed flows of its zone. One line per row, five rows per page.
  */
-export default function TargetPanel({ target, zonesById, suggestions, flows, peers, connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onOpenZone, onClose }: Props) {
+export default function TargetPanel({ target, zonesById, suggestions, flows, peers, connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onOpenZone, onClose, partialLimit = null }: Props) {
   const t = useTranslations('microsegPilot.overview')
   const zone = target.zoneId ? zonesById.get(target.zoneId) ?? null : null
   const observed = useMemo(() => targetSuggestions(suggestions, target), [suggestions, target])
@@ -154,6 +154,7 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
       {failure && <Alert severity='error' onClose={clearFailure} sx={{ mt: 1.5 }}>{failure}</Alert>}
 
       <Section title={t('target.panel.observed')}>
+        {partialLimit !== null && <OneLine text={t('target.panel.partial', { count: partialLimit })} />}
         {observedEmpty && <Empty text={observedEmpty} />}
         <Box role='list'>
           {observedPage.rows.map(row => (

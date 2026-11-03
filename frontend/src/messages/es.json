@@ -13179,8 +13179,10 @@
           "noZoneFlows": "Este invitado no está en ninguna zona: ningún flujo permitido se le aplica.",
           "incoming": "Entrante, desde {peer}",
           "outgoing": "Saliente, hacia {peer}",
-          "acceptTip": "Aceptar como flujo {from} → {to} {service}: el motor guarda un par de invitados de ejemplo por flujo observado, así que el flujo cubre todo el par de zonas."
-        }
+          "acceptTip": "Aceptar como flujo {from} → {to} {service}: el motor guarda un par de invitados de ejemplo por flujo observado, así que el flujo cubre todo el par de zonas.",
+          "partial": "Solo se leen los primeros {count} flujos observados pendientes del mapa: puede que falten algunos en esta lista."
+        },
+        "more": "Se muestran los primeros {shown} de {count} invitados: escriba para acotar"
       }
     },
     "preflight": {

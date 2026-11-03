@@ -12847,8 +12847,10 @@
           "noZoneFlows": "Dieser Gast ist in keiner Zone: kein erlaubter Fluss gilt für ihn.",
           "incoming": "Eingehend, von {peer}",
           "outgoing": "Ausgehend, zu {peer}",
-          "acceptTip": "Als Fluss {from} → {to} {service} akzeptieren: die Engine behält ein Beispielpaar von Gästen pro beobachtetem Fluss, der Fluss gilt also für das ganze Zonenpaar."
-        }
+          "acceptTip": "Als Fluss {from} → {to} {service} akzeptieren: die Engine behält ein Beispielpaar von Gästen pro beobachtetem Fluss, der Fluss gilt also für das ganze Zonenpaar.",
+          "partial": "Nur die ersten {count} ausstehenden beobachteten Flüsse der Karte werden gelesen: in dieser Liste können welche fehlen."
+        },
+        "more": "Die ersten {shown} von {count} Gästen werden angezeigt: zum Eingrenzen tippen"
       }
     },
     "preflight": {

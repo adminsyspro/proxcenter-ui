@@ -131,13 +131,15 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     const timer = setTimeout(() => setCentre(centreId), 0)
     return () => clearTimeout(timer)
   }, [centreKnown, centreId])
-  // A targeted guest puts its zone in the centre of the guest view (the admin can still move it afterwards).
+  // Each guest targeted puts its zone in the centre of the guest view (the admin can still move it afterwards; the
+  // next guest targeted, even in the same zone, brings it back).
+  const targetKey = target?.key ?? null
   const targetZone = target?.zoneId ?? null
   useEffect(() => {
-    if (!targetZone) return
+    if (!targetKey || !targetZone) return
     const timer = setTimeout(() => setCentre(targetZone), 0)
     return () => clearTimeout(timer)
-  }, [targetZone])
+  }, [targetKey, targetZone])
   // The matrix holds the pairs of the matrix and of the Sankey diagram (their flow panel).
   const matrix = useMemo(() => (view === 'matrix' || view === 'sankey' ? buildMatrix(input) : null), [view, input])
   const sankey = useMemo(() => (view === 'sankey' && matrix ? buildSankey(matrix, filters) : null), [view, matrix, filters])
@@ -378,6 +380,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
               onResolved={setResolved}
               onOpenZone={openTargetZone}
               onClose={hidePanel}
+              partialLimit={(suggestions.data?.length ?? 0) >= PENDING_LIMIT ? PENDING_LIMIT : null}
             />
           )}
           {selectedEdge && (

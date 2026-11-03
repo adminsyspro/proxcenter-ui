@@ -58,19 +58,24 @@ export function filterTargets(candidates: TargetGuest[], query: string): TargetG
   return candidates.filter(c => matchesTarget(c, query)).slice(0, MAX_OPTIONS)
 }
 
-const addressesOf = (t: Pick<TargetGuest, 'ips'>) => new Set(t.ips.map(ip => bareIp(ip)).filter(Boolean))
+/** The addresses of a guest in their canonical form: read once per guest, then matched against many flows. */
+export const targetAddresses = (t: Pick<TargetGuest, 'ips'>): ReadonlySet<string> => new Set(t.ips.map(ip => bareIp(ip)).filter(Boolean))
+
+/** An observed flow whose sample source or destination address is one of `ips` (see targetAddresses). */
+export function involvesAddresses(s: Pick<MicrosegSuggestion, 'src_ip' | 'dst_ip'>, ips: ReadonlySet<string>): boolean {
+  return [s.src_ip, s.dst_ip].some(ip => !!ip && ips.has(bareIp(ip)))
+}
 
 /** An observed flow whose sample source or destination address is one of the guest's. */
 export function involvesTarget(s: Pick<MicrosegSuggestion, 'src_ip' | 'dst_ip'>, t: Pick<TargetGuest, 'ips'>): boolean {
-  const ips = addressesOf(t)
-  return [s.src_ip, s.dst_ip].some(ip => !!ip && ips.has(bareIp(ip)))
+  return involvesAddresses(s, targetAddresses(t))
 }
 
 export type TargetFlow = { suggestion: MicrosegSuggestion; direction: 'in' | 'out'; peerIp: string }
 
 /** The pending observed flows of the guest: outgoing when it is the source, else incoming; busiest first. */
 export function targetSuggestions(suggestions: MicrosegSuggestion[], t: TargetGuest): TargetFlow[] {
-  const ips = addressesOf(t)
+  const ips = targetAddresses(t)
   const own = (ip: string) => !!ip && ips.has(bareIp(ip))
   return suggestions
     .filter(s => s.status === 'pending' && (own(s.src_ip) || own(s.dst_ip)))
@@ -106,7 +111,8 @@ export type TargetFocus = {
 
 /**
  * The focus a targeted guest locks on a canvas: its node, the observed edges whose flows it is the sample source or
- * destination of, the allowed edges of its zone (in and out), and their ends. Null without a target. Pure.
+ * destination of, the allowed edges of its zone (in and out), and their ends. Null without a target, and when the
+ * canvas draws nothing of it (the guest view centred on an unrelated zone): the map is then not dimmed. Pure.
  */
 export function targetFocus(graph: ZoneGraph, t: TargetGuest | null): TargetFocus | null {
   if (!t) return null
@@ -123,26 +129,29 @@ export function targetFocus(graph: ZoneGraph, t: TargetGuest | null): TargetFocu
     fit.add(top(id))
   }
   if (node) light(node)
+  const ips = targetAddresses(t)
   const edges = new Set<string>()
   for (const e of graph.edges) {
     const d = e.data as unknown as MapEdgeData
     const allowed = d.kind === 'allowed' || d.kind === 'outside'
-    const own = allowed ? !!zone && (e.source === zone || e.target === zone) : d.observed.some(s => involvesTarget(s, t))
+    const own = allowed ? !!zone && (e.source === zone || e.target === zone) : d.observed.some(s => involvesAddresses(s, ips))
     if (!own) continue
     edges.add(e.id)
     light(e.source)
     light(e.target)
   }
+  if (!nodes.size) return null
   return { node, nodes, edges, fit: [...fit] }
 }
 
 /** The observed ribbons of the Sankey diagram (`${kind}:${cell}`) whose flows the guest is the sample end of. */
 export function targetRibbons(model: MatrixModel, filters: FlowFilters, t: TargetGuest): Set<string> {
   const out = new Set<string>()
+  const ips = targetAddresses(t)
   for (const cell of model.cells.values()) {
     const view = cellView(cell, filters, null)
     for (const s of view?.observed ?? []) {
-      if (involvesTarget(s, t)) out.add(`${s.kind === 'blocked' ? 'blocked' : 'unprotected'}:${cell.id}`)
+      if (involvesAddresses(s, ips)) out.add(`${s.kind === 'blocked' ? 'blocked' : 'unprotected'}:${cell.id}`)
     }
   }
   return out

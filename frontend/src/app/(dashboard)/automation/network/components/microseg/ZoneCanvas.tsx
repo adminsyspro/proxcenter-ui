@@ -85,7 +85,7 @@ type Props = {
   onClear: () => void
   /** The side panel is open: the canvas changes width, so it fits the graph again when this flips. */
   panelOpen?: boolean
-  /** The nodes the view fits to instead of the whole graph (a targeted guest: its zone and its neighbours). */
+  /** The nodes the automatic fit goes to instead of the whole graph (a targeted guest: its zone and its neighbours); the Fit view button always fits the whole graph. */
   fitTo?: string[] | null
 }
 
@@ -177,7 +177,7 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
               <ControlButton title={t('zoomOut')} aria-label={t('zoomOut')} onClick={() => { void zoomOut({ duration: 200 }) }}>
                 <i className='ri-subtract-line' aria-hidden />
               </ControlButton>
-              <ControlButton title={t('fitView')} aria-label={t('fitView')} onClick={() => { void fitView(fitOptions(fitTo)) }}>
+              <ControlButton title={t('fitView')} aria-label={t('fitView')} onClick={() => { void fitView(fitOptions(null)) }}>
                 <i className='ri-fullscreen-line' aria-hidden />
               </ControlButton>
             </Controls>

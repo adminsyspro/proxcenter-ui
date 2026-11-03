@@ -6,8 +6,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 
-const navigation = vi.hoisted(() => ({ search: '' }))
-vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(navigation.search) }))
+const navigation = vi.hoisted(() => ({ search: '', replace: vi.fn() }))
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(navigation.search),
+  useRouter: () => ({ replace: navigation.replace }),
+  usePathname: () => '/automation/network',
+}))
 
 import { useMapTarget } from './useMapTarget'
 import type { PolicyGuest, ZoneMember } from './zoneModel'
@@ -19,6 +23,7 @@ const members = new Map<string, ZoneMember[]>([['zd', [{ ref: { node: 'pve1', ty
 
 function render(search: string, guests: PolicyGuest[] = [web1, db1]) {
   navigation.search = search
+  navigation.replace.mockClear()
   return renderHook(({ list }) => useMapTarget(list, members), { initialProps: { list: guests } })
 }
 
@@ -59,5 +64,22 @@ describe('the target of the map', () => {
 
   it('knows the guest name of each address', () => {
     expect(render('').result.current.peers.get('10.0.0.200')).toBe('db-1')
+  })
+})
+
+describe('the ?vm= link once used', () => {
+  it('leaves the address on a pick or a clear, keeping the other parameters', () => {
+    const hook = render('vm=200&tab=x')
+    act(() => hook.result.current.pick(null))
+    expect(navigation.replace).toHaveBeenCalledWith('/automation/network?tab=x', { scroll: false })
+    const alone = render('vm=200')
+    act(() => alone.result.current.pick(alone.result.current.candidates[0]))
+    expect(navigation.replace).toHaveBeenCalledWith('/automation/network', { scroll: false })
+  })
+
+  it('touches no address without the parameter', () => {
+    const hook = render('')
+    act(() => hook.result.current.pick(hook.result.current.candidates[0]))
+    expect(navigation.replace).not.toHaveBeenCalled()
   })
 })

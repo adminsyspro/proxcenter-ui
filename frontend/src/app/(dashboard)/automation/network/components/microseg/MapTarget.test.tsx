@@ -9,8 +9,8 @@ import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
-import { calls, mock, reply } from './microsegTestKit'
-import { body, installFreshMocks, vm } from './policyTestKit'
+import { calls, mock, reply, zone } from './microsegTestKit'
+import { body, db, installFreshMocks, vm, web } from './policyTestKit'
 import { fitView } from './xyflowTestMock'
 import { flowOf, node, setup, wouldBlock } from './zoneMapTestKit'
 
@@ -221,5 +221,75 @@ describe('the guest panel', () => {
     expect(cls('node-guest:zw:qemu/100')).toContain('microseg-target')
     fireEvent.click(within(screen.getByRole('complementary', { name: 'Flow web to db' })).getByRole('button', { name: 'Close' }))
     expect(await panel('Guest web-1')).toBeTruthy()
+  })
+})
+
+describe('fix round 1', () => {
+  const centre = () => screen.getByRole('combobox', { name: 'Zone in the centre' })
+  async function pickCentre(name: string) {
+    fireEvent.mouseDown(centre())
+    fireEvent.click(await screen.findByRole('option', { name: new RegExp(`^${name} `) }))
+  }
+
+  it('leaves the map undimmed, and the pointer working, when the canvas draws nothing of the target', async () => {
+    setup({ zones: [web(), db(), zone('zc', { name: 'cache' })], vms: guests, flows: [flowOf('f1')], suggestions: observed })
+    await node('guest:zw:qemu/100')
+    fireEvent.click(screen.getByRole('button', { name: 'Guest view' }))
+    await target('web-1')
+    await waitFor(() => expect(centre().textContent).toContain('web'))
+    await pickCentre('cache')
+    await waitFor(() => expect(screen.queryByTestId('node-guest:zw:qemu/100')).toBeNull())
+    expect(cls('node-zone:zc')).not.toContain('microseg-dim')
+    expect(screen.getByText('Targeting web-1')).toBeTruthy()
+  })
+
+  it('puts the zone back in the centre for every guest targeted, even in the zone it already had', async () => {
+    demo()
+    await node('guest:zw:qemu/100')
+    fireEvent.click(screen.getByRole('button', { name: 'Guest view' }))
+    await target('web-1')
+    await waitFor(() => expect(centre().textContent).toContain('web'))
+    await pickCentre('db')
+    await waitFor(() => expect(centre().textContent).toContain('db'))
+    await target('web-2')
+    await waitFor(() => expect(centre().textContent).toContain('web'))
+  })
+
+  it('fits the neighbourhood automatically, the whole graph from the Fit view button', async () => {
+    demo()
+    await node('guest:zw:qemu/100')
+    await target('web-1')
+    await waitFor(() => expect(fitView).toHaveBeenCalledWith(expect.objectContaining({ nodes: expect.any(Array) })))
+    fitView.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Fit the map to the view' }))
+    expect(fitView).toHaveBeenCalledTimes(1)
+    expect(fitView.mock.calls[0]).toEqual([{ padding: 0.1, duration: 300, maxZoom: 1 }])
+  })
+
+  it('says to type to narrow when the search matches more guests than the list shows', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => vm(1000 + i, `bulk-${String(i).padStart(2, '0')}`, []))
+    setup({ vms: [...guests, ...many], flows: [flowOf('f1')], suggestions: observed })
+    await node('guest:zw:qemu/100')
+    open()
+    fireEvent.change(search(), { target: { value: 'bulk' } })
+    expect(await screen.findByRole('note')).toHaveProperty('textContent', 'Showing the first 50 of 60 guests: type to narrow')
+    expect(screen.getAllByRole('option')).toHaveLength(50)
+    fireEvent.change(search(), { target: { value: 'bulk-1' } })
+    await waitFor(() => expect(screen.queryByRole('note')).toBeNull())
+  })
+
+  it('warns in the guest panel when the map read only the first page of observed flows', async () => {
+    const full = Array.from({ length: 200 }, (_, i) => wouldBlock(`p${i}`, { src_ip: '10.0.0.1', dst_ip: '10.0.0.2', dport: String(1000 + i), hits: 1 }))
+    setup({ vms: guests, flows: [flowOf('f1')], suggestions: full })
+    await node('guest:zw:qemu/100')
+    await target('web-1')
+    expect(within(await panel('Guest web-1')).getByText('Only the first 200 pending observed flows of the map are read: this list may miss some.')).toBeTruthy()
+  })
+
+  it('says nothing about a partial read under the limit', async () => {
+    demo()
+    await node('guest:zw:qemu/100')
+    await target('web-1')
+    expect(within(await panel('Guest web-1')).queryByText(/Only the first/)).toBeNull()
   })
 })

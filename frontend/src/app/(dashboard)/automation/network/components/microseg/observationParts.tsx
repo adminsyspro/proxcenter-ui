@@ -1,11 +1,12 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
-import { Box, IconButton, Tooltip } from '@mui/material'
+import { Box, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegSuggestion, SuggestionAction, SuggestionKind } from '@/lib/microseg/types'
+import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
 
 import { isVersionConflict, writeErrorMessage } from './dialogParts'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
@@ -36,6 +37,19 @@ export function ObservedKindGlyph({ kind }: { kind: SuggestionKind }) {
         />
       </Box>
     </Tooltip>
+  )
+}
+
+/** The service of an observed flow (its name, protocol and port in the tooltip) and its hits, as two cells of a row. */
+export function ServiceHits({ suggestion: s }: { suggestion: Pick<MicrosegSuggestion, 'proto' | 'dport' | 'hits'> }) {
+  const t = useTranslations('microsegPilot.observation')
+  return (
+    <>
+      <Tooltip title={serviceTitle(s.proto, s.dport)}>
+        <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{serviceLabel(s.proto, s.dport)}</Typography>
+      </Tooltip>
+      <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{t('hits', { count: s.hits })}</Typography>
+    </>
   )
 }
 

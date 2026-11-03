@@ -13180,8 +13180,10 @@
           "noZoneFlows": "Cet invité n'est dans aucune zone : aucun flux autorisé ne s'applique à lui.",
           "incoming": "Entrant, depuis {peer}",
           "outgoing": "Sortant, vers {peer}",
-          "acceptTip": "Accepter comme flux {from} → {to} {service} : le moteur garde une paire d'invités exemple par flux observé, le flux couvre donc toute la paire de zones."
-        }
+          "acceptTip": "Accepter comme flux {from} → {to} {service} : le moteur garde une paire d'invités exemple par flux observé, le flux couvre donc toute la paire de zones.",
+          "partial": "Seuls les {count} premiers flux observés en attente de la carte sont lus : cette liste peut en manquer."
+        },
+        "more": "Les {shown} premiers invités sur {count} sont affichés : tapez pour affiner"
       }
     },
     "preflight": {

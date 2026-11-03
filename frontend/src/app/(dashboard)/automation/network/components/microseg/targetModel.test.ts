@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { buildCompactGraph } from './compactGraph'
+import { buildGuestView } from './guestViewModel'
 import { buildMatrix } from './matrixModel'
 import { demoInput, flow, seen, zone } from './mapViewsTestKit'
 import {
@@ -129,8 +130,12 @@ describe('the focus a target locks on the map', () => {
     expect([...focus.edges].some(id => id.startsWith('allowed'))).toBe(false)
   })
 
-  it('is nothing without a target', () => {
+  it('is nothing without a target, and nothing when the canvas draws nothing of it', () => {
     expect(targetFocus(buildZoneGraph(input()), null)).toBeNull()
+    // The guest view centred on cache: web-1 and the flows of web are not drawn, the map must not be dimmed.
+    const graph = buildGuestView({ ...input(), centre: 'zc' })
+    expect(graph.nodes.length).toBeGreaterThan(0)
+    expect(targetFocus(graph, target())).toBeNull()
   })
 })
 

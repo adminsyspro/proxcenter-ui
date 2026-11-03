@@ -8,7 +8,7 @@ import { serviceTokensTitle } from '@/lib/network/serviceNames'
 
 import MatrixCell, { type CellHandlers } from './MatrixCell'
 import { MATRIX_SORTS, cellId, cellView, sortEnds, type CellView, type MatrixEnd, type MatrixModel, type MatrixSort } from './matrixModel'
-import { involvesTarget, type TargetGuest } from './targetModel'
+import { involvesAddresses, targetAddresses, type TargetGuest } from './targetModel'
 import { useStoredChoice } from './useStoredChoice'
 import { EXTERNAL_ID, zoneNodeId, type FlowFilters } from './zoneGraph'
 import { ZoneShield } from './ZoneNode'
@@ -111,6 +111,12 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
     () => new Map([...model.cells.values()].map(cell => [cell.id, cellView(cell, filters, unapplied)])),
     [model.cells, filters, unapplied],
   )
+  // The cells the targeted guest has observed flows in: read once per draft, checkboxes and target, not per cell.
+  const marked = useMemo(() => {
+    if (!target) return null
+    const ips = targetAddresses(target)
+    return new Set([...views.values()].flatMap(v => (v?.observed.some(o => involvesAddresses(o, ips)) ? [v.id] : [])))
+  }, [views, target])
   const size = narrow ? SIZES.narrow : SIZES.wide
   const tracks = matrixTracks(rows.length, cols.length, narrow)
   const targetZone = target?.zoneId ? zoneNodeId(target.zoneId) : null
@@ -246,7 +252,7 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
                   diagonal={row.id === col.id}
                   chips={size.chips}
                   handlers={handlers}
-                  marker={target && view?.observed.some(o => involvesTarget(o, target)) ? marker : undefined}
+                  marker={marked?.has(id) ? marker : undefined}
                 />
               )
             })}

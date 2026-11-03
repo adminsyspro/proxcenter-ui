@@ -23,8 +23,15 @@ import { executePublish, publishStatus, publishSummary, type PublishIO } from '@
 
 type RouteContext = { params: Promise<{ connectionId: string }> }
 
-/** A publish of 100 operations is far below this; anything larger is not a draft of this tab. */
+/** A publish of 200 writes is far below this; anything larger is not a draft of this tab. */
 const MAX_BODY_BYTES = 256 * 1024
+
+/**
+ * Connections with a publish running: a second one waits for the first to end (409 PUBLISH_RUNNING) rather than
+ * interleave its writes. Per Next process: with several frontends (HA), two of them may still publish at once, and
+ * the digests then stop the second one on its first write.
+ */
+const running = new Set<string>()
 
 async function readBody(req: NextRequest): Promise<unknown> {
   const declared = Number(req.headers.get('content-length'))
@@ -72,6 +79,10 @@ async function postHandler(req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: `A publish of ${ops.length} changes must be confirmed`, code: 'CONFIRM_REQUIRED', count: ops.length }, { status: 400 })
   }
 
+  if (running.has(connectionId)) {
+    return NextResponse.json({ error: 'A publish of this connection is already running: try again once it ends', code: 'PUBLISH_RUNNING' }, { status: 409 })
+  }
+  running.add(connectionId)
   try {
     const conn = await getConnectionById(connectionId)
     const result = await executePublish(ops, digests, pveIO(conn, connectionId))
@@ -96,6 +107,8 @@ async function postHandler(req: NextRequest, ctx: RouteContext) {
   } catch (e: any) {
     console.error('[firewall/publish] POST error:', e)
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  } finally {
+    running.delete(connectionId)
   }
 }
 

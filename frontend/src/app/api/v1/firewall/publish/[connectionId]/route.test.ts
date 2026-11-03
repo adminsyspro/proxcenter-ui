@@ -135,6 +135,32 @@ describe('POST /api/v1/firewall/publish/[connectionId]', () => {
     expect(puts).toBe(2)
   })
 
+  it('runs one publish per connection at a time: a second one meanwhile gets 409 PUBLISH_RUNNING', async () => {
+    onPve(2)
+    const base = h.pveFetch.getMockImplementation()!
+    let release: () => void = () => {}
+    const held = new Promise<void>(resolve => { release = resolve })
+    h.pveFetch.mockImplementation(async (conn: unknown, path: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') await held
+      return base(conn, path, init)
+    })
+    const first = post({ ops: [edit(0)], digests: {} })
+    await vi.waitFor(() => expect(h.pveFetch.mock.calls.some(([, , init]) => init?.method === 'PUT')).toBe(true))
+    const second = await post({ ops: [edit(1)], digests: {} })
+    expect(second.status).toBe(409)
+    expect(await readJson(second)).toMatchObject({ code: 'PUBLISH_RUNNING' })
+    release()
+    expect((await first).status).toBe(200)
+    // The lock is released once the first ends.
+    expect((await post({ ops: [edit(1)], digests: {} })).status).toBe(200)
+  })
+
+  it('writes the scope keys in the audit row', async () => {
+    onPve(1)
+    await post({ ops: [edit(0)], digests: {} })
+    expect(h.audit.mock.calls[0][0].details).toMatchObject({ scopeKeys: ['cluster'], moreScopes: 0 })
+  })
+
   it('forgets the coverage of a guest whose firewall it turned on', async () => {
     h.pveFetch.mockImplementation(async (_c: unknown, path: string, init?: RequestInit) => {
       if (init?.method) return null

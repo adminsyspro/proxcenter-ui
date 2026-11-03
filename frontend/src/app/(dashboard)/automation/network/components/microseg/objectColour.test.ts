@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createTheme } from '@mui/material'
+import { createTheme, darken, lighten } from '@mui/material'
 
 import { OBJECT_PALETTE, objectChipSx, objectColour, objectTextColour } from './objectColour'
 
@@ -33,12 +33,13 @@ describe('objectColour', () => {
 })
 
 describe('objectChipSx', () => {
-  it('borders and tints in the colour, and darkens the text on a light theme only', () => {
+  it('borders and tints in the colour, darkens the text 40 % on a light theme and lightens it 25 % on a dark one', () => {
     const light = createTheme({ palette: { mode: 'light' } })
     const dark = createTheme({ palette: { mode: 'dark' } })
     expect(objectChipSx('#f59e0b', light).borderColor).toBe('#f59e0b')
     expect(objectChipSx('#f59e0b', light).bgcolor).toMatch(/0\.08\)$/)
-    expect(objectTextColour('#f59e0b', dark)).toBe('#f59e0b')
-    expect(objectTextColour('#f59e0b', light)).not.toBe('#f59e0b')
+    expect(objectTextColour('#f59e0b', light)).toBe(darken('#f59e0b', 0.4))
+    expect(objectTextColour('#f59e0b', dark)).toBe(lighten('#f59e0b', 0.25))
+    expect(objectChipSx('#6366f1', dark).color).toBe(lighten('#6366f1', 0.25))
   })
 })

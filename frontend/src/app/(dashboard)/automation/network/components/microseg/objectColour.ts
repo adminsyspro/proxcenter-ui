@@ -1,4 +1,4 @@
-import { alpha, darken, type Theme } from '@mui/material'
+import { alpha, darken, lighten, type Theme } from '@mui/material'
 
 import type { MicrosegZone } from '@/lib/microseg/types'
 
@@ -33,8 +33,14 @@ export function objectColour(name: string, zones: readonly Pick<MicrosegZone, 'n
   return OBJECT_PALETTE[hash(name) % OBJECT_PALETTE.length]
 }
 
-/** The colour as text: darkened on a light theme so the amber and lime hues stay readable. */
-export const objectTextColour = (colour: string, theme: Theme) => (theme.palette.mode === 'dark' ? colour : darken(colour, 0.3))
+/** How far the text colour moves away from the palette hue, for its contrast on the paper of each theme. */
+export const TEXT_DARKEN_LIGHT = 0.4
+export const TEXT_LIGHTEN_DARK = 0.25
+
+/** The colour as text: darkened on a light theme, lightened on a dark one, so every hue (amber, lime, indigo) stays readable. */
+export const objectTextColour = (colour: string, theme: Theme) => (
+  theme.palette.mode === 'dark' ? lighten(colour, TEXT_LIGHTEN_DARK) : darken(colour, TEXT_DARKEN_LIGHT)
+)
 
 /** An outlined chip in the colour of its object: colour border and text, a light tint behind. */
 export const objectChipSx = (colour: string, theme: Theme) => ({

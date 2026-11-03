@@ -36,6 +36,8 @@ const POLICY = {
 }
 
 let policy: Record<string, unknown> | null = POLICY
+/** The relay refuses the policy read for want of a licence. */
+let unlicensed = false
 
 const EVENTS = {
   events: [{
@@ -49,7 +51,10 @@ const EVENTS = {
 const answer = (body: unknown, status = 200) => ({ ok: status < 400, status, text: async () => JSON.stringify(body), json: async () => body })
 
 const fetchMock = vi.fn(async (url: string) => {
-  if (url.endsWith('/policy')) return policy ? answer(policy) : answer({ code: 'NOT_FOUND', error: 'no policy' }, 404)
+  if (url.endsWith('/policy')) {
+    if (unlicensed) return answer({ code: 'FEATURE_REQUIRED', error: 'licence' }, 403)
+    return policy ? answer(policy) : answer({ code: 'NOT_FOUND', error: 'no policy' }, 404)
+  }
   if (url.includes('/events')) return answer(EVENTS)
 
   return answer({ data: url.endsWith('/resources') ? RESOURCES : NODES })
@@ -58,6 +63,7 @@ const fetchMock = vi.fn(async (url: string) => {
 const eventReads = () => fetchMock.mock.calls.filter(([url]) => String(url).includes('/events')).length
 
 beforeEach(() => {
+  unlicensed = false
   policy = POLICY
   api.getFirewallLog.mockReset()
   api.getFirewallLog.mockResolvedValue({ rows: [], warnings: [], truncated: false })
@@ -168,6 +174,19 @@ describe('LoggingTab', () => {
       expect(screen.queryByText('Pick an element to read its firewall log.')).toBeNull()
       expect(eventReads()).toBe(1)
       expect(api.getFirewallLog).not.toHaveBeenCalled()
+    })
+
+    it('says the licence is the cause when the relay refuses for want of it', async () => {
+      unlicensed = true
+
+      renderTab()
+
+      const list = await openList()
+
+      expect(option(list)).toHaveAttribute('aria-disabled', 'true')
+      fireEvent.mouseOver(within(option(list)).getByText('Micro-segmentation (zone guests)'))
+      expect(await screen.findByText('Micro-segmentation requires an Enterprise license.')).toBeInTheDocument()
+      expect(screen.queryByText('Needs a micro-segmentation policy with an applied revision on this connection.')).not.toBeInTheDocument()
     })
 
     it.each([

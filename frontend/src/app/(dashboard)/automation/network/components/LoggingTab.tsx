@@ -91,8 +91,10 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
   const [target, setTarget] = useState<Target | null>(null)
 
   // The source is offered once a revision of the policy has been applied: before that the engine has nothing to watch.
-  const { data: policy } = useMicrosegPolicy(selectedConnection)
+  const { data: policy, error: policyError } = useMicrosegPolicy(selectedConnection)
   const microsegAvailable = !!policy?.last_revision
+  // Without the licence the relay refuses with FEATURE_REQUIRED: say that, not "apply a revision first".
+  const unavailableReason = policyError?.code === 'FEATURE_REQUIRED' ? t('microsegPilot.errors.FEATURE_REQUIRED') : t('firewallLog.microseg.unavailable')
   const zones = useMemo(() => policy?.zones ?? [], [policy])
 
   const guestsByVmid = useMemo(() => Object.fromEntries(guests.map(g => [g.vmid, g])), [guests])
@@ -159,7 +161,7 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
             return (
               <Box component="li" key={key} {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 {/* A disabled option takes no pointer events: the tooltip needs its own. */}
-                <Tooltip title={unavailable ? t('firewallLog.microseg.unavailable') : ''} placement="right">
+                <Tooltip title={unavailable ? unavailableReason : ''} placement="right">
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0, pointerEvents: 'auto' }}>
                     <Box sx={{ width: 18, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{glyph(o)}</Box>
                     <Typography variant="body2" noWrap>{o.label}</Typography>

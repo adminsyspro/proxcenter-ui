@@ -18,6 +18,8 @@ const h = vi.hoisted(() => ({
   toast: vi.fn(),
   events: [] as any[],
   policy: null as any,
+  /** The last applied revision (what the rules on Proxmox come from). */
+  snapshot: null as any,
   api: { saveFlow: vi.fn(), deleteFlow: vi.fn(), setZoneState: vi.fn() },
   reloadPolicy: vi.fn(),
 }))
@@ -44,10 +46,7 @@ const draftPolicy = (pending = false) => ({
   last_revision: { id: 'rev1', version: 2, author: 'x', created_at: '2026-11-03T10:00:00Z' },
 })
 vi.mock('@/lib/microseg/useLastRevision', () => ({
-  useLastRevisionSnapshot: () => ({
-    revision: { id: 'rev1', snapshot: { tag_prefix: 'pc-', flows: [], zones: [{ name: 'db', state: 'enforce' }] } },
-    loading: false,
-  }),
+  useLastRevisionSnapshot: () => ({ revision: { id: 'rev1', snapshot: h.snapshot }, loading: false }),
 }))
 vi.mock('@/lib/microseg/useMicrosegEvents', () => ({ useMicrosegEvents: () => ({ events: h.events, truncated: false }) }))
 vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ showToast: h.toast }) }))
@@ -103,6 +102,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   try { sessionStorage.clear() } catch { /* storage blocked */ }
   h.policy = draftPolicy()
+  h.snapshot = { tag_prefix: 'pc-', zones: draftPolicy().zones, flows: draftPolicy().flows }
   h.api.saveFlow.mockResolvedValue({ version: 4 })
   h.api.deleteFlow.mockResolvedValue({ version: 4 })
   h.reloadPolicy.mockResolvedValue(undefined)
@@ -639,9 +639,9 @@ describe('Firewalling: the zones edited in place (micro-segmentation draft)', ()
     renderView()
     openDb()
     const appRule = ruleRow('[pc-microseg] app -> db')
-    expect(within(appRule).queryByLabelText('Not in the policy draft: the draft changed since the last apply, or Proxmox was changed by hand')).toBeNull()
+    expect(within(appRule).queryByLabelText('Proxmox was changed by hand or the engine has not re-applied yet')).toBeNull()
     // The rule of the fixture without a source matches no flow and no zone setting: a drift, locked.
-    expect(within(ruleRow('[pc-microseg] db -> db')).getByLabelText(/Not in the policy draft/)).toBeInTheDocument()
+    expect(within(ruleRow('[pc-microseg] db -> db')).getByLabelText('Proxmox was changed by hand or the engine has not re-applied yet')).toBeInTheDocument()
 
     fireEvent.click(within(appRule).getByRole('button', { name: 'Actions of the flow' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit the flow' }))
@@ -662,6 +662,53 @@ describe('Firewalling: the zones edited in place (micro-segmentation draft)', ()
     expect(publishButton()).toHaveTextContent('Publish (0)')
   })
 
+  it('a flow edited since the last apply: its deployed row edits the draft flow and says it changed', async () => {
+    h.policy = { ...draftPolicy(true), flows: [{ ...draftPolicy().flows[0], dport: '5433' }] }
+    renderView()
+    openDb()
+    const row = ruleRow('[pc-microseg] app -> db')
+    expect(within(row).getByText('changed')).toBeInTheDocument()
+    fireEvent.doubleClick(row)
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('textbox', { name: /Port/ })).toHaveValue('5433')
+  })
+
+  it('a flow deleted from the draft: its deployed row is struck, locked, without Edit or Delete', () => {
+    h.policy = { ...draftPolicy(true), flows: [] }
+    renderView()
+    openDb()
+    const row = ruleRow('[pc-microseg] app -> db')
+    expect(within(row).getByLabelText('Removal pending (next apply)')).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Actions of the flow' })).toBeNull()
+    expect(within(row).getByText('[pc-microseg] app -> db')).toHaveStyle({ textDecoration: 'line-through' })
+  })
+
+  it('a zone renamed in the draft keeps its Add rule and its state chip', () => {
+    h.policy = { ...draftPolicy(), zones: draftPolicy().zones.map(z => (z.id === 'z-db' ? { ...z, name: 'databases' } : z)) }
+    renderView()
+    const section = screen.getByTestId('dfw-section-zone:pcz-db')
+    expect(within(section).getByRole('button', { name: 'Add a rule to Micro-segmentation · zone db' })).toBeInTheDocument()
+    expect(within(section).getByRole('button', { name: 'Change the state of zone databases' })).toBeInTheDocument()
+  })
+
+  it('a double-click on a control of the row is that control, not an edit', () => {
+    renderView()
+    openDb()
+    const row = ruleRow('[pc-microseg] app -> db')
+    fireEvent.doubleClick(within(row).getByRole('button', { name: 'Actions of the flow' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('a state change is refused while the micro-segmentation draft has pending changes (UA30)', async () => {
+    h.policy = draftPolicy(true)
+    renderView()
+    fireEvent.click(within(screen.getByTestId('dfw-section-zone:pcz-db')).getByRole('button', { name: 'Change the state of zone db' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Observe' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent(/Apply or discard your (\d+ )?pending changes? first/)
+    expect(within(dialog).getByRole('button', { name: 'View plan' })).toBeInTheDocument()
+  })
+
   it('a double-click on a flow rule opens its flow', async () => {
     renderView()
     openDb()
@@ -673,7 +720,7 @@ describe('Firewalling: the zones edited in place (micro-segmentation draft)', ()
     h.policy = draftPolicy(true)
     renderView()
     const bar = screen.getByTestId('dfw-microseg-pending')
-    expect(bar).toHaveTextContent(/Micro-segmentation: \d+ unapplied changes?/)
+    expect(bar).toHaveTextContent(/Micro-segmentation draft: (\d+ u|U)napplied changes?/)
     expect(within(bar).getByRole('button', { name: 'View plan' })).toBeEnabled()
     expect(publishButton()).toHaveTextContent('Publish (0)')
   })

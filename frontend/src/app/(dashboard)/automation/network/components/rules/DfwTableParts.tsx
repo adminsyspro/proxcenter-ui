@@ -1,6 +1,6 @@
 'use client'
 
-import type { DragEvent, ReactNode } from 'react'
+import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -157,10 +157,12 @@ export type RuleRowProps = {
   lockTitle?: string | null
   /** Controls after the name (a zone rule's menu, a guest's Edit zone). */
   actions?: ReactNode
-  onDoubleClick?: () => void
+  onDoubleClick?: (e: ReactMouseEvent) => void
+  /** A rule leaving at the next apply (its flow was removed from the draft): struck through. */
+  struck?: boolean
 }
 
-function NameCell({ rule, index, state, managed, editable, onOpen, lockTitle, actions }: Pick<RuleRowProps, 'rule' | 'index' | 'state' | 'managed' | 'editable' | 'onOpen' | 'lockTitle' | 'actions'>) {
+function NameCell({ rule, index, state, managed, editable, onOpen, lockTitle, actions, struck }: Pick<RuleRowProps, 'rule' | 'index' | 'state' | 'managed' | 'editable' | 'onOpen' | 'lockTitle' | 'actions' | 'struck'>) {
   const t = useTranslations('microsegPilot.dfw')
   const name = ruleName(rule) || t('unnamed', { pos: index })
   const direction = rule.type === 'group' ? 'GROUP' : rule.type.toUpperCase()
@@ -172,7 +174,7 @@ function NameCell({ rule, index, state, managed, editable, onOpen, lockTitle, ac
         <Tooltip title={name}>
           {editable
             ? <Link component='button' type='button' underline='hover' onClick={onOpen} sx={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</Link>
-            : <Typography component='span' noWrap sx={{ fontSize: 13, color: managed ? 'text.secondary' : 'text.primary', minWidth: 0 }}>{name}</Typography>}
+            : <Typography component='span' noWrap sx={{ fontSize: 13, color: managed ? 'text.secondary' : 'text.primary', minWidth: 0, textDecoration: struck ? 'line-through' : undefined }}>{name}</Typography>}
         </Tooltip>
         {state && <Chip size='small' color='warning' variant='outlined' label={t(STATE_BADGE[state] as 'rowAdded')} sx={{ height: 18, fontSize: 10, fontWeight: 600, flexShrink: 0 }} />}
         {rule.enable !== 1 && <Chip size='small' label={t('rowDisabled')} sx={{ height: 18, fontSize: 10, flexShrink: 0 }} />}
@@ -233,7 +235,7 @@ export function RuleRow(props: RuleRowProps) {
           <Switch size='small' color='success' checked={rule.enable === 1} disabled={!editable} onChange={onToggleEnable} slotProps={{ input: { role: 'switch', 'aria-label': t('enableLabel', { pos: index }) } }} />
         </WriteTip>
       </TableCell>
-      <NameCell rule={rule} index={index} state={state} managed={managed} editable={editable} onOpen={props.onOpen} lockTitle={props.lockTitle} actions={props.actions} />
+      <NameCell rule={rule} index={index} state={state} managed={managed} editable={editable} onOpen={props.onOpen} lockTitle={props.lockTitle} actions={props.actions} struck={props.struck} />
       <AddressCell value={rule.type === 'group' ? '' : rule.source} />
       <AddressCell value={rule.type === 'group' ? '' : rule.dest} />
       <ServiceCell rule={rule} />

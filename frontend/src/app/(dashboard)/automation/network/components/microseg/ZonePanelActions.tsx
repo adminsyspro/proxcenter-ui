@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type MouseEvent, type ReactNode } from 'react'
+import { useCallback, useState, type MouseEvent, type ReactNode } from 'react'
 import { Box, IconButton } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -187,10 +187,11 @@ export function useFlowEditor(edits: ZoneEdits): {
     </>
   )
 
-  return {
-    edit: flow => setEditing({ flow }),
-    create: initial => setEditing({ flow: null, initial }),
-    remove: flow => { removal.reset(); setDeleting(flow) },
-    dialogs,
-  }
+  // Stable across renders: a consumer can keep them in a memoised value (the Firewalling zone tools).
+  const { reset } = removal
+  const edit = useCallback((flow: MicrosegFlow) => setEditing({ flow }), [])
+  const create = useCallback((initial: FlowInitial) => setEditing({ flow: null, initial }), [])
+  const remove = useCallback((flow: MicrosegFlow) => { reset(); setDeleting(flow) }, [reset])
+
+  return { edit, create, remove, dialogs }
 }

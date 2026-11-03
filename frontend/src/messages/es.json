@@ -12742,7 +12742,8 @@
     "pending": {
       "withCount": "{count, plural, one {# cambio sin aplicar} other {# cambios sin aplicar}}",
       "noCount": "Cambios sin aplicar",
-      "viewPlan": "Ver el plan"
+      "viewPlan": "Ver el plan",
+      "prefixed": "{prefix}: {text}"
     },
     "firstRun": {
       "title": "Configurar la microsegmentación",
@@ -13753,14 +13754,17 @@
       "addARule": "Añadir una regla",
       "ruleScope": "Se aplica a",
       "readingScope": "Leyendo las reglas de este ámbito: la regla podrá guardarse una vez leídas",
-      "microsegPrefix": "Microsegmentación:",
+      "microsegPrefix": "Borrador de microsegmentación",
       "changeZoneState": "Cambiar el estado de la zona {zone}",
       "ruleMenu": "Acciones del flujo",
       "editFlow": "Editar el flujo",
       "deleteFlow": "Eliminar el flujo",
-      "notInDraft": "No está en el borrador de la política: el borrador cambió desde la última aplicación o Proxmox se modificó a mano",
+      "notInDraft": "Proxmox se modificó a mano o el motor aún no ha vuelto a aplicar",
       "intraRule": "Los miembros de la zona se alcanzan entre sí: un ajuste de la zona (aislamiento de miembros desactivado)",
-      "editZone": "Editar la zona"
+      "editZone": "Editar la zona",
+      "removalPending": "Eliminación pendiente (próxima aplicación)",
+      "flowChanged": "cambiado",
+      "flowChangedHint": "Cambiado en el borrador: se aplica en la próxima aplicación"
     }
   }
 }

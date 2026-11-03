@@ -12742,7 +12742,8 @@
     "pending": {
       "withCount": "적용되지 않은 변경 {count}건",
       "noCount": "적용되지 않은 변경",
-      "viewPlan": "계획 보기"
+      "viewPlan": "계획 보기",
+      "prefixed": "{prefix} - {text}"
     },
     "firstRun": {
       "title": "마이크로 세분화 설정",
@@ -13753,14 +13754,17 @@
       "addARule": "규칙 하나 추가",
       "ruleScope": "적용 대상",
       "readingScope": "이 범위의 규칙을 읽는 중: 읽은 후 규칙을 보관할 수 있습니다",
-      "microsegPrefix": "마이크로세그멘테이션:",
+      "microsegPrefix": "마이크로세그멘테이션 초안",
       "changeZoneState": "{zone} 영역의 상태 변경",
       "ruleMenu": "흐름 작업",
       "editFlow": "흐름 편집",
       "deleteFlow": "흐름 삭제",
-      "notInDraft": "정책 초안에 없음: 마지막 적용 이후 초안이 바뀌었거나 Proxmox가 수동으로 변경되었습니다",
+      "notInDraft": "Proxmox가 수동으로 변경되었거나 엔진이 아직 다시 적용하지 않았습니다",
       "intraRule": "영역 구성원끼리 통신합니다: 영역 설정(구성원 격리 꺼짐)",
-      "editZone": "영역 편집"
+      "editZone": "영역 편집",
+      "removalPending": "삭제 대기 중 (다음 적용)",
+      "flowChanged": "변경됨",
+      "flowChangedHint": "초안에서 변경됨: 다음 적용 시 반영됩니다"
     }
   }
 }

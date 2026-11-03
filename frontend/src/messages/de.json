@@ -12410,7 +12410,8 @@
     "pending": {
       "withCount": "{count, plural, one {# nicht angewendete Änderung} other {# nicht angewendete Änderungen}}",
       "noCount": "Nicht angewendete Änderungen",
-      "viewPlan": "Plan anzeigen"
+      "viewPlan": "Plan anzeigen",
+      "prefixed": "{prefix}: {text}"
     },
     "firstRun": {
       "title": "Mikrosegmentierung einrichten",
@@ -13421,14 +13422,17 @@
       "addARule": "Eine Regel hinzufügen",
       "ruleScope": "Gilt für",
       "readingScope": "Die Regeln dieses Bereichs werden gelesen: Die Regel kann danach behalten werden",
-      "microsegPrefix": "Mikrosegmentierung:",
+      "microsegPrefix": "Mikrosegmentierungs-Entwurf",
       "changeZoneState": "Status der Zone {zone} ändern",
       "ruleMenu": "Aktionen des Flusses",
       "editFlow": "Fluss bearbeiten",
       "deleteFlow": "Fluss löschen",
-      "notInDraft": "Nicht im Richtlinienentwurf: Der Entwurf hat sich seit der letzten Anwendung geändert oder Proxmox wurde manuell geändert",
+      "notInDraft": "Proxmox wurde manuell geändert oder die Engine hat noch nicht erneut angewendet",
       "intraRule": "Die Mitglieder der Zone erreichen einander: eine Einstellung der Zone (Mitgliederisolierung aus)",
-      "editZone": "Zone bearbeiten"
+      "editZone": "Zone bearbeiten",
+      "removalPending": "Entfernung ausstehend (nächste Anwendung)",
+      "flowChanged": "geändert",
+      "flowChangedHint": "Im Entwurf geändert: wird bei der nächsten Anwendung wirksam"
     }
   }
 }

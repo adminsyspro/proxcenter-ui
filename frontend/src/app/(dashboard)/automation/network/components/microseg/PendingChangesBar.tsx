@@ -13,7 +13,7 @@ type Props = {
   policy: MicrosegPolicy
   /** The plan view; the button is disabled while nothing handles it. */
   onOpenPlan?: () => void
-  /** Names whose changes these are (with its punctuation), where other pending changes sit next to them (Firewalling). */
+  /** Names whose changes these are, where other pending changes sit next to them (the Firewalling table). */
   prefix?: string
 }
 
@@ -29,6 +29,7 @@ export default function PendingChangesBar({ connectionId, policy, onOpenPlan, pr
   const { canWrite } = useMicrosegWrite()
 
   if (!pending) return null
+  const prefixed = (text: string) => (prefix ? t('microsegPilot.pending.prefixed', { prefix, text }) : text)
 
   return (
     <Alert
@@ -36,7 +37,7 @@ export default function PendingChangesBar({ connectionId, policy, onOpenPlan, pr
       icon={<i className='ri-draft-line' />}
       action={<WriteTip><Button color='inherit' size='small' onClick={onOpenPlan} disabled={!canWrite || !onOpenPlan}>{t('microsegPilot.pending.viewPlan')}</Button></WriteTip>}
     >
-      {prefix ? `${prefix} ` : ''}{count ? t('microsegPilot.pending.withCount', { count }) : t('microsegPilot.pending.noCount')}
+      {prefixed(count ? t('microsegPilot.pending.withCount', { count }) : t('microsegPilot.pending.noCount'))}
     </Alert>
   )
 }

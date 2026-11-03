@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useMemo, useState, type DragEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { Alert, Box, IconButton, LinearProgress, Link, Menu, MenuItem, Paper, Table, TableBody, TableContainer, Typography, useTheme } from '@mui/material'
@@ -37,6 +37,7 @@ import {
 import { useFirewallDraft } from './useFirewallDraft'
 import { useSectionRules } from './useSectionRules'
 import { EditZoneButton, ZoneAddFlow, ZoneRuleRow, ZoneStateControl, ZoneTools } from './ZoneTools'
+import { occurrences } from './zoneRuleMatch'
 
 type Rules = firewallAPI.FirewallRule[]
 
@@ -287,6 +288,9 @@ export default function FirewallingView(p: FirewallingViewProps) {
   const [logVm, setLogVm] = useState<VMFirewallInfo | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmCount, setConfirmCount] = useState(0)
+  // The scroll to a zone section asked by a guest's Edit zone: cancelled when the tab goes away first.
+  const scrollFrame = useRef<number | null>(null)
+  useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])
   const [refreshing, setRefreshing] = useState(false)
   const pager = usePagesFor(p.listFilter ?? null)
 
@@ -545,6 +549,8 @@ export default function FirewallingView(p: FirewallingViewProps) {
       const add = s.scope && !q ? { label: t('addARule'), onClick: () => startAddRule(s), disabled: !canEdit } : undefined
       return deny ?? <EmptyRulesRow text={q ? t('noMatch') : tg('networkPage.noRules')} action={add} />
     }
+    // Identical rules of a zone group map one to one to identical flows, in order.
+    const ranks = s.zone ? occurrences(s.entries.map(x => x.rule)) : []
     const ruleRows = rows.map(({ e, i }) => {
       const managed = s.managed || isEngineComment(e.rule.comment)
       const editable = canEdit && !managed
@@ -570,7 +576,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
         actions: zoneGroup ? <EditZoneButton onClick={() => openZone(zoneGroup)} /> : undefined,
       }
       // A zone group's rule is edited as the flow it comes from (micro-segmentation draft).
-      return s.zone ? <ZoneRuleRow key={`${s.key}|${e.id}`} zoneName={s.zone.zone} {...row} /> : <RuleRow key={`${s.key}|${e.id}`} {...row} />
+      return s.zone ? <ZoneRuleRow key={`${s.key}|${e.id}`} zoneName={s.zone.zone} occurrence={ranks[i]} {...row} /> : <RuleRow key={`${s.key}|${e.id}`} {...row} />
     })
     return deny ? [...ruleRows, deny] : ruleRows
   }
@@ -645,7 +651,11 @@ export default function FirewallingView(p: FirewallingViewProps) {
     const key = `zone:${group}`
     if (!showsCluster(scope)) setScope('all')
     setOpen(prev => new Set(prev).add(key))
-    requestAnimationFrame(() => document.querySelector(`[data-testid="dfw-section-${key}"]`)?.scrollIntoView?.({ block: 'center' }))
+    if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current)
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollFrame.current = null
+      document.querySelector(`[data-testid="dfw-section-${key}"]`)?.scrollIntoView?.({ block: 'center' })
+    })
   }
 
   const renderSection = (s: Section, indent = 0) => (
@@ -769,7 +779,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
         onClearSelection={() => setSelected(new Set())}
       />
 
-      <ZoneTools connectionId={p.connectionId} policy={policy} reloadPolicy={reloadPolicy} onRunFinished={p.reloadFirewall}>
+      <ZoneTools connectionId={p.connectionId} policy={policy} deployed={deployed} reloadPolicy={reloadPolicy} onRunFinished={p.reloadFirewall}>
       <TableContainer component={Paper} variant='outlined' sx={{ borderRadius: 2.5 }}>
         <Table size='small' sx={{ minWidth: 1180 }}>
           <DfwHead show={visibleSelectable.length > 0} allChecked={allVisibleChecked} someChecked={selectedCount > 0} canCheck={canEdit}

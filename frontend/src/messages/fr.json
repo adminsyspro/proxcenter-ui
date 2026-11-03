@@ -12743,7 +12743,8 @@
     "pending": {
       "withCount": "{count, plural, one {# changement non appliqué} other {# changements non appliqués}}",
       "noCount": "Changements non appliqués",
-      "viewPlan": "Voir le plan"
+      "viewPlan": "Voir le plan",
+      "prefixed": "{prefix} : {text}"
     },
     "firstRun": {
       "title": "Mettre en place la micro-segmentation",
@@ -13754,14 +13755,17 @@
       "addARule": "Ajouter une règle",
       "ruleScope": "S’applique à",
       "readingScope": "Lecture des règles de cette portée : la règle pourra être gardée une fois lues",
-      "microsegPrefix": "Micro-segmentation :",
+      "microsegPrefix": "Brouillon de micro-segmentation",
       "changeZoneState": "Changer l’état de la zone {zone}",
       "ruleMenu": "Actions du flux",
       "editFlow": "Modifier le flux",
       "deleteFlow": "Supprimer le flux",
-      "notInDraft": "Absent du brouillon de la politique : le brouillon a changé depuis la dernière application, ou Proxmox a été modifié à la main",
+      "notInDraft": "Proxmox a été modifié à la main ou le moteur n’a pas encore réappliqué",
       "intraRule": "Les membres de la zone se joignent entre eux : un réglage de la zone (isolation des membres désactivée)",
-      "editZone": "Modifier la zone"
+      "editZone": "Modifier la zone",
+      "removalPending": "Suppression en attente (prochaine application)",
+      "flowChanged": "modifié",
+      "flowChangedHint": "Modifié dans le brouillon : s’applique à la prochaine application"
     }
   }
 }

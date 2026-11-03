@@ -1,12 +1,12 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { Box, ButtonBase, IconButton, Menu, MenuItem, Tooltip } from '@mui/material'
 
 import type { RuleFields } from '@/lib/firewall/publishOps'
-import type { MicrosegFlow, MicrosegPolicy, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import type { MicrosegFlow, MicrosegPolicy, MicrosegSnapshot, MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
 import PendingChangesBar from '../microseg/PendingChangesBar'
 import PlanDialog from '../microseg/PlanDialog'
@@ -17,8 +17,8 @@ import { ZoneStateConfirm, useFlowEditor } from '../microseg/ZonePanelActions'
 import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
 import type { TrackedRun } from '../microseg/microsegTabTypes'
 import { useZoneEdits } from '../microseg/useZoneEdits'
-import { RuleRow, SectionAddButton, type RuleRowProps } from './DfwTableParts'
-import { matchZoneRule, type ZoneRuleMatch } from './zoneRuleMatch'
+import { Badge, RuleRow, SectionAddButton, type RuleRowProps } from './DfwTableParts'
+import { draftZoneOf, matchZoneRule, type ZoneRuleMatch } from './zoneRuleMatch'
 
 /**
  * The micro-segmentation draft edited from the Firewalling table: a zone group's rules are the flows into the zone,
@@ -27,7 +27,7 @@ import { matchZoneRule, type ZoneRuleMatch } from './zoneRuleMatch'
  */
 type ZoneToolsValue = {
   zoneOf: (name: string) => MicrosegZone | undefined
-  match: (rule: RuleFields, zoneName: string) => ZoneRuleMatch
+  match: (rule: RuleFields, zoneName: string, occurrence: number) => ZoneRuleMatch
   addFlow: (zone: MicrosegZone) => void
   editFlow: (flow: MicrosegFlow) => void
   removeFlow: (flow: MicrosegFlow) => void
@@ -40,6 +40,8 @@ type Props = {
   connectionId: string
   /** The draft; while it is not read (or no zone exists) the table shows the engine's rules read-only. */
   policy: MicrosegPolicy | null | undefined
+  /** The last applied revision: the rules on Proxmox are compiled from it, so they are matched against it first. */
+  deployed: MicrosegSnapshot | null
   reloadPolicy: () => Promise<unknown>
   /** A run (zone state, apply) finished: the firewall lists are read again, the zone groups changed in Proxmox. */
   onRunFinished: () => void
@@ -51,7 +53,7 @@ export function ZoneTools({ policy, children, ...rest }: Props) {
   return <ZoneToolsWithPolicy policy={policy} {...rest}>{children}</ZoneToolsWithPolicy>
 }
 
-function ZoneToolsWithPolicy({ connectionId, policy, reloadPolicy, onRunFinished, children }: Props & { policy: MicrosegPolicy }) {
+function ZoneToolsWithPolicy({ connectionId, policy, deployed, reloadPolicy, onRunFinished, children }: Props & { policy: MicrosegPolicy }) {
   const t = useTranslations('microsegPilot.dfw')
   const [runs, setRuns] = useState<TrackedRun[]>([])
   const [planOpen, setPlanOpen] = useState(false)
@@ -64,14 +66,14 @@ function ZoneToolsWithPolicy({ connectionId, policy, reloadPolicy, onRunFinished
   const { create, edit, remove } = flows
 
   const value = useMemo<ZoneToolsValue>(() => ({
-    zoneOf: name => policy.zones.find(z => z.name === name),
-    match: (rule, zoneName) => matchZoneRule(rule, zoneName, policy.zones, policy.flows),
+    zoneOf: name => draftZoneOf(name, policy, deployed),
+    match: (rule, zoneName, occurrence) => matchZoneRule(rule, zoneName, policy, deployed, occurrence),
     // A zone's rule is a flow INTO it: the new flow starts with the zone as its destination.
     addFlow: zone => create({ dst_zone_id: zone.id }),
     editFlow: edit,
     removeFlow: remove,
     openStateMenu: (zone, anchor) => setStateMenu({ zone, anchor }),
-  }), [policy, create, edit, remove])
+  }), [policy, deployed, create, edit, remove])
 
   return (
     <ZoneToolsContext.Provider value={value}>
@@ -118,19 +120,28 @@ export function ZoneAddFlow({ zoneName, title, open }: { zoneName: string; title
  * A rule of a zone group: the flow it is compiled from is edited and deleted from its menu or a double-click; the
  * rule of the members among themselves is a zone setting; a rule matching no flow of the draft keeps its lock.
  */
-export function ZoneRuleRow({ zoneName, ...row }: RuleRowProps & { zoneName: string }) {
+/** A double-click on a control of the row (checkbox, switch, button, link) is that control's, not the row's. */
+const onControl = (e: ReactMouseEvent) => !!(e.target as HTMLElement).closest('button, input, a, [role="switch"], [role="checkbox"], [role="combobox"]')
+
+function lockTitleOf(match: ZoneRuleMatch, t: ReturnType<typeof useTranslations<'microsegPilot.dfw'>>): string {
+  if (match?.kind === 'intra') return t('intraRule')
+  if (match?.kind === 'removed') return t('removalPending')
+  return t('notInDraft')
+}
+
+export function ZoneRuleRow({ zoneName, occurrence, ...row }: RuleRowProps & { zoneName: string; occurrence: number }) {
   const t = useTranslations('microsegPilot.dfw')
   const tools = useContext(ZoneToolsContext)
   const { canWrite } = useMicrosegWrite()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
-  const match = tools?.match(row.rule, zoneName) ?? null
+  const match = tools?.match(row.rule, zoneName, occurrence) ?? null
   if (!tools || match?.kind !== 'flow') {
-    const lockTitle = match?.kind === 'intra' ? t('intraRule') : t('notInDraft')
-    return <RuleRow {...row} lockTitle={tools ? lockTitle : undefined} />
+    return <RuleRow {...row} lockTitle={tools ? lockTitleOf(match, t) : undefined} struck={match?.kind === 'removed'} />
   }
-  const { flow } = match
+  const { flow, changed } = match
   const menu = (
     <>
+      {changed && <Badge label={t('flowChanged')} tone='warning' title={t('flowChangedHint')} />}
       <WriteTip title={t('ruleMenu')}>
         <IconButton size='small' aria-label={t('ruleMenu')} aria-haspopup='menu' disabled={!canWrite} onClick={e => setAnchor(e.currentTarget)}>
           <i className='ri-more-2-fill' style={{ fontSize: 14 }} />
@@ -147,7 +158,7 @@ export function ZoneRuleRow({ zoneName, ...row }: RuleRowProps & { zoneName: str
       {...row}
       lockTitle={null}
       actions={menu}
-      onDoubleClick={canWrite ? () => tools.editFlow(flow) : undefined}
+      onDoubleClick={canWrite ? e => { if (!onControl(e)) tools.editFlow(flow) } : undefined}
     />
   )
 }

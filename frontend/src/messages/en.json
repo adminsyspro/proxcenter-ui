@@ -12742,7 +12742,8 @@
     "pending": {
       "withCount": "{count, plural, one {# unapplied change} other {# unapplied changes}}",
       "noCount": "Unapplied changes",
-      "viewPlan": "View plan"
+      "viewPlan": "View plan",
+      "prefixed": "{prefix}: {text}"
     },
     "firstRun": {
       "title": "Set up micro-segmentation",
@@ -13753,14 +13754,17 @@
       "addARule": "Add a rule",
       "ruleScope": "Applies to",
       "readingScope": "Reading the rules of this scope: the rule can be kept once they are read",
-      "microsegPrefix": "Micro-segmentation:",
+      "microsegPrefix": "Micro-segmentation draft",
       "changeZoneState": "Change the state of zone {zone}",
       "ruleMenu": "Actions of the flow",
       "editFlow": "Edit the flow",
       "deleteFlow": "Delete the flow",
-      "notInDraft": "Not in the policy draft: the draft changed since the last apply, or Proxmox was changed by hand",
+      "notInDraft": "Proxmox was changed by hand or the engine has not re-applied yet",
       "intraRule": "The members of the zone reach each other: a setting of the zone (isolate members off)",
-      "editZone": "Edit the zone"
+      "editZone": "Edit the zone",
+      "removalPending": "Removal pending (next apply)",
+      "flowChanged": "changed",
+      "flowChangedHint": "Changed in the draft: applies at the next apply"
     }
   }
 }

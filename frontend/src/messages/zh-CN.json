@@ -12742,7 +12742,8 @@
     "pending": {
       "withCount": "{count} 项未应用的更改",
       "noCount": "未应用的更改",
-      "viewPlan": "查看计划"
+      "viewPlan": "查看计划",
+      "prefixed": "{prefix}：{text}"
     },
     "firstRun": {
       "title": "设置微分段",
@@ -13753,14 +13754,17 @@
       "addARule": "添加一条规则",
       "ruleScope": "应用于",
       "readingScope": "正在读取该范围的规则：读取后即可保留该规则",
-      "microsegPrefix": "微分段：",
+      "microsegPrefix": "微分段草稿",
       "changeZoneState": "更改区域 {zone} 的状态",
       "ruleMenu": "流量操作",
       "editFlow": "编辑流量",
       "deleteFlow": "删除流量",
-      "notInDraft": "不在策略草稿中：自上次应用后草稿已更改，或 Proxmox 被手动修改",
+      "notInDraft": "Proxmox 被手动修改，或引擎尚未重新应用",
       "intraRule": "区域成员互相可达：区域设置（成员隔离关闭）",
-      "editZone": "编辑区域"
+      "editZone": "编辑区域",
+      "removalPending": "删除待处理（下次应用）",
+      "flowChanged": "已更改",
+      "flowChangedHint": "已在草稿中更改：下次应用时生效"
     }
   }
 }

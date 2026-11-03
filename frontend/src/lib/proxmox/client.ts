@@ -419,7 +419,8 @@ export async function pveFetch<T>(
     } catch {
       throw primaryErr
     }
-    console.log(`[failover] Connection ${safeLog(connId)} served ${safeLog(path)} through ${safeLog(peerUrl)} below the failure threshold`)
+    // The connection id and path come from the request: kept out of this line (log injection).
+    console.log(`[failover] Request served through peer ${safeLog(peerUrl)} below the failure threshold`)
     return doRequest(peerUrl, primaryTimeoutMs)
   }
 

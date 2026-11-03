@@ -4,8 +4,8 @@
 // create one. @peculiar/x509 encodes the ASN.1 and signs through WebCrypto, so
 // key generation and signing stay native and off the event loop.
 
-// @peculiar/x509 2 resolves its algorithms through tsyringe, which needs the
-// Reflect metadata API before the library loads.
+// @peculiar/x509 resolves its algorithms through tsyringe, which needs the
+// Reflect metadata API before the library loads (still true in 3.x).
 import 'reflect-metadata'
 
 import { webcrypto } from 'node:crypto'

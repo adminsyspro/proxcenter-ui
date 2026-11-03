@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { FirewallCoverage } from '@/hooks/useZeroTrust'
 import type { FirewallRule } from '@/lib/api/firewall'
 
-import { coveragePercent, dashboardPhase, guestTotals, missingManagementPorts, scoreBand, todoItems, zeroTrustScore } from './dashboardModel'
+import { coveragePercent, dashboardPhase, deniesInbound, guestTotals, missingManagementPorts, scoreBand, todoItems, zeroTrustScore } from './dashboardModel'
 
 const row = (vmid: number, status: string, enabled: boolean | null) => ({
   type: 'lxc' as const, node: 'pve1', vmid: String(vmid), name: `ct${vmid}`, status, tags: [],
@@ -63,6 +63,15 @@ describe('zeroTrustScore', () => {
     expect(score.total).toBe(0)
   })
 
+  it('counts an inbound REJECT as a deny, like DROP', () => {
+    const score = zeroTrustScore({ firewallOn: true, policyIn: 'REJECT', coverage: { enabled: 1, disabled: 0, unknown: 0, measured: 1, total: 1 } })
+
+    expect(score.components[1].points).toBe(25)
+    expect(deniesInbound('REJECT')).toBe(true)
+    expect(deniesInbound('DROP')).toBe(true)
+    expect(deniesInbound('ACCEPT')).toBe(false)
+  })
+
   it('computes no total until every component is known', () => {
     expect(zeroTrustScore({ firewallOn: null, policyIn: 'DROP', coverage: { enabled: 1, disabled: 0, unknown: 0, measured: 1, total: 1 } }).total).toBeNull()
     expect(zeroTrustScore({ firewallOn: true, policyIn: null, coverage: { enabled: 1, disabled: 0, unknown: 0, measured: 1, total: 1 } }).total).toBeNull()
@@ -118,6 +127,10 @@ describe('todoItems', () => {
     expect(todoItems({ ...clean, firewallOn: false, stopped: true, stopHoldsFirewall: true })).toEqual([{ kind: 'stopHeld' }])
     expect(todoItems({ ...clean, firewallOn: false, stopped: true })).toEqual([])
     expect(todoItems({ ...clean, stopped: true, missingManagement: [8006] })).toEqual([])
+  })
+
+  it('asks nothing of an inbound REJECT policy', () => {
+    expect(todoItems({ ...clean, policyIn: 'REJECT' })).toEqual([])
   })
 
   it('adds no line for what is not known', () => {

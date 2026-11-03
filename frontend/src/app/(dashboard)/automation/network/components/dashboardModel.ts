@@ -47,6 +47,9 @@ export function guestTotals(c: FirewallCoverage | null | undefined): GuestTotals
   }
 }
 
+/** An inbound policy that denies what no rule lets in: DROP, or REJECT (which answers the refusal). */
+export const deniesInbound = (policy: string) => policy === 'DROP' || policy === 'REJECT'
+
 export const SCORE_WEIGHTS = { firewall: 30, policyIn: 25, coverage: 45 } as const
 
 export type ScoreComponentKey = keyof typeof SCORE_WEIGHTS
@@ -69,12 +72,12 @@ function pointsIf(condition: boolean | null, weight: number): number | null {
 }
 
 /**
- * Cluster firewall on: 30. Inbound policy DROP: 25. Guest coverage: 45 x the share of protected guests among those
+ * Cluster firewall on: 30. Inbound policy DROP or REJECT: 25. Guest coverage: 45 x the share of protected guests among those
  * told apart. Each input is null while it is not known.
  */
 export function zeroTrustScore(input: { firewallOn: boolean | null; policyIn: string | null; coverage: CoverageFigures | null }): ZeroTrustScore {
   const percent = coveragePercent(input.coverage)
-  const strict = input.policyIn === null ? null : input.policyIn === 'DROP'
+  const strict = input.policyIn === null ? null : deniesInbound(input.policyIn)
   const components: ScoreComponent[] = [
     { key: 'firewall', weight: SCORE_WEIGHTS.firewall, points: pointsIf(input.firewallOn, SCORE_WEIGHTS.firewall) },
     { key: 'policyIn', weight: SCORE_WEIGHTS.policyIn, points: pointsIf(strict, SCORE_WEIGHTS.policyIn) },
@@ -160,7 +163,7 @@ export function todoItems(input: {
   if (input.stopHoldsFirewall) items.push({ kind: 'stopHeld' })
   else if (!input.firewallOn && !input.stopped) items.push({ kind: 'firewallOff' })
   if (input.firewallOn && !input.stopped && input.missingManagement.length > 0) items.push({ kind: 'managementRules', ports: input.missingManagement })
-  if (input.policyIn !== 'DROP') items.push({ kind: 'policyIn' })
+  if (!deniesInbound(input.policyIn)) items.push({ kind: 'policyIn' })
   if (input.unprotected) items.push({ kind: 'unprotected', count: input.unprotected })
   if (input.unzoned) items.push({ kind: 'unzoned', count: input.unzoned })
   if (input.pendingFlows?.count) items.push({ kind: 'pendingFlows', count: input.pendingFlows.count, more: input.pendingFlows.more })

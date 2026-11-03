@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import type { FirewallMode } from '@/lib/api/firewall'
 
 import DashboardStateCard, { STATE_AMBER, STATE_GREEN, STATE_GREY, STATE_RED, StateRow } from './DashboardStateCard'
+import { deniesInbound } from './dashboardModel'
 
 type Props = {
   phase: 'loading' | 'ready' | 'unavailable'
@@ -21,7 +22,7 @@ type Props = {
   onOpen: () => void
 }
 
-const policyColor = (policy: string) => (policy === 'DROP' ? STATE_GREEN : STATE_AMBER)
+const policyColor = (policy: string) => (deniesInbound(policy) ? STATE_GREEN : STATE_AMBER)
 
 const chipSx = (color: string) => ({ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.18), color, '& .MuiChip-icon': { color: 'inherit' } })
 
@@ -37,7 +38,7 @@ export default function ClusterFirewallCard({ phase, firewallMode, firewallOn, s
   let accent = STATE_GREY
   if (phase === 'ready') {
     if (!firewallOn) accent = STATE_RED
-    else accent = policyIn === 'DROP' ? STATE_GREEN : STATE_AMBER
+    else accent = policyColor(policyIn)
   }
 
   let state: React.ReactNode

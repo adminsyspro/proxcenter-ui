@@ -352,6 +352,16 @@ describe('DashboardTab: To do', () => {
     expect(onNavigateRulesSubTab).toHaveBeenCalledWith(0)
   })
 
+  it('takes an inbound REJECT for a deny: full policy points, green chip, no To do line', async () => {
+    stubReads()
+    renderDashboard({ enable: 1, policy_in: 'REJECT' })
+
+    await waitFor(() => expect(screen.getByTestId('score-policyIn').textContent).toContain('25/25'))
+    expect(screen.getByText('IN: REJECT')).toBeInTheDocument()
+    await screen.findByTestId('todo-unprotected')
+    expect(screen.queryByTestId('todo-policyIn')).not.toBeInTheDocument()
+  })
+
   it('says "Nothing to do" when clean', async () => {
     stubReads({ coverage: { enabled: 62, disabled: 0, guests: GUESTS.map(g => ({ ...g, enabled: true })) }, status: { coverage: { running: 33, zoned: 33, members: 33, protected: 33 } } })
     renderDashboard({ enable: 1 })

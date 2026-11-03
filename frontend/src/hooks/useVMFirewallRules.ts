@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import * as firewallAPI from '@/lib/api/firewall'
 import { errorMessage } from '@/lib/firewall/loadError'
 import { hasNICFirewall } from '@/lib/firewall/pveDefaults'
@@ -74,8 +74,24 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
   const [guestsNotScanned, setGuestsNotScanned] = useState(0)
   const [loaded, setLoaded] = useState(false)
 
+  // Each scan takes a number; only the latest one may write state. Without it, the slow scan of the
+  // connection that was just left finished after the switch, set `loaded` and left the new one at 0/0.
+  const latestScan = useRef(0)
+
+  useEffect(() => {
+    latestScan.current += 1
+    setVMFirewallData([])
+    setLoadingVMRules(false)
+    setVMRulesError(null)
+    setGuestsNotScanned(0)
+    setLoaded(false)
+  }, [connectionId])
+
   const loadVMFirewallData = useCallback(async () => {
     if (!connectionId || loaded) return
+
+    const scanId = ++latestScan.current
+    const isLatest = () => latestScan.current === scanId
 
     setLoadingVMRules(true)
 
@@ -97,6 +113,7 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
 
       const scanned = guests.slice(0, SCAN_LIMIT)
 
+      if (!isLatest()) return
       setGuestsNotScanned(Math.max(0, guests.length - scanned.length))
 
       const loadOneGuest = async (guest: any): Promise<VMFirewallInfo> => {
@@ -148,15 +165,19 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
         return b.rules.length - a.rules.length
       })
 
-      setVMFirewallData(vmData)
+      if (isLatest()) setVMFirewallData(vmData)
     } catch (err) {
-      console.error('Failed to load VM firewall data:', err)
-      errors.add(errorMessage(err))
-      setVMFirewallData([])
+      if (isLatest()) {
+        console.error('Failed to load VM firewall data:', err)
+        errors.add(errorMessage(err))
+        setVMFirewallData([])
+      }
     } finally {
-      setVMRulesError(errors.size > 0 ? [...errors].join(' · ') : null)
-      setLoadingVMRules(false)
-      setLoaded(true)
+      if (isLatest()) {
+        setVMRulesError(errors.size > 0 ? [...errors].join(' · ') : null)
+        setLoadingVMRules(false)
+        setLoaded(true)
+      }
     }
   }, [connectionId, loaded])
 
@@ -164,12 +185,17 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
   const reloadVMFirewallRules = useCallback(async (vm: VMFirewallInfo) => {
     if (!connectionId) return
 
+    const scanId = latestScan.current
+
     try {
       const [rulesData, optionsData, configResp] = await Promise.all([
         firewallAPI.getVMRules(connectionId, vm.node, vm.type, vm.vmid).catch(() => []),
         firewallAPI.getVMOptions(connectionId, vm.node, vm.type, vm.vmid).catch(() => null),
         fetch(`/api/v1/connections/${connectionId}/guests/${vm.type}/${vm.node}/${vm.vmid}/config`).then(r => r.json()).catch(() => null)
       ])
+
+      // Another connection or a new scan since: this guest's answer no longer belongs to the list.
+      if (latestScan.current !== scanId) return
 
       const vlans = configResp?.data ? extractVLANs(configResp.data) : []
 

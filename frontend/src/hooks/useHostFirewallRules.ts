@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import * as firewallAPI from '@/lib/api/firewall'
 import { errorMessage } from '@/lib/firewall/loadError'
 
@@ -17,11 +17,25 @@ export function useHostFirewallRules(connectionId: string | null, nodesList: str
   const [loadingHostRules, setLoadingHostRules] = useState(false)
   const [hostRulesError, setHostRulesError] = useState<string | null>(null)
 
+  // Each load takes a number; only the latest one may write state, so a slow answer of the connection
+  // that was just left never lands on the new one.
+  const latestLoad = useRef(0)
+
+  useEffect(() => {
+    latestLoad.current += 1
+    setHostRulesByNode({})
+    setLoadingHostRules(false)
+    setHostRulesError(null)
+  }, [connectionId])
+
   const loadHostRules = useCallback(async (connectionIdOverride?: string, nodesOverride?: string[]) => {
     const connId = connectionIdOverride || connectionId
     const nodeList = nodesOverride || nodesList
 
     if (!connId || nodeList.length === 0) return
+
+    const loadId = ++latestLoad.current
+    const isLatest = () => latestLoad.current === loadId
 
     setLoadingHostRules(true)
 
@@ -43,22 +57,29 @@ export function useHostFirewallRules(connectionId: string | null, nodesList: str
         })
       )
 
-      setHostRulesByNode(rulesMap)
+      if (isLatest()) setHostRulesByNode(rulesMap)
     } catch (err) {
-      console.error('Failed to load host rules:', err)
-      errors.add(errorMessage(err))
+      if (isLatest()) {
+        console.error('Failed to load host rules:', err)
+        errors.add(errorMessage(err))
+      }
     } finally {
-      setHostRulesError(errors.size > 0 ? [...errors].join(' · ') : null)
-      setLoadingHostRules(false)
+      if (isLatest()) {
+        setHostRulesError(errors.size > 0 ? [...errors].join(' · ') : null)
+        setLoadingHostRules(false)
+      }
     }
   }, [connectionId, nodesList])
 
   const reloadHostRulesForNode = useCallback(async (node: string) => {
     if (!connectionId) return
 
+    const loadId = latestLoad.current
+
     try {
       const rules = await firewallAPI.getNodeRules(connectionId, node)
 
+      if (latestLoad.current !== loadId) return
       setHostRulesByNode(prev => ({
         ...prev,
         [node]: Array.isArray(rules) ? rules : []

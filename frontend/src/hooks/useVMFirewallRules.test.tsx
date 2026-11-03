@@ -7,7 +7,7 @@
  * route handlers. No automatic RTL cleanup is configured in this repo.
  */
 
-import { act, cleanup, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { FirewallRule } from '@/lib/api/firewall'
@@ -379,5 +379,65 @@ describe('useVMFirewallRules', () => {
     })
 
     expect(result.current.vmRulesError).toBeNull()
+  })
+
+  it('ignores the late scan of the connection that was left, and scans the new one', async () => {
+    let releaseOld!: () => void
+    const oldInventory = new Promise<void>(resolve => { releaseOld = resolve })
+
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+
+      if (url === '/api/v1/vms?connId=conn-a') {
+        await oldInventory
+        throw new Error('conn-a unreachable')
+      }
+      if (url === '/api/v1/vms?connId=conn-b') return { json: async () => ({ data: { vms: [guest(700)] } }) } as Response
+
+      return { json: async () => ({ data: { net0: 'virtio,bridge=vmbr0,firewall=1' } }) } as Response
+    }))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const { result, rerender } = renderHook(({ id }: { id: string }) => useVMFirewallRules(id), {
+      initialProps: { id: 'conn-a' },
+    })
+
+    let oldScan!: Promise<void>
+
+    act(() => { oldScan = result.current.loadVMFirewallData() })
+    expect(result.current.loadingVMRules).toBe(true)
+
+    rerender({ id: 'conn-b' })
+    expect(result.current.loadingVMRules).toBe(false)
+
+    await act(async () => { await result.current.loadVMFirewallData() })
+    expect(result.current.vmFirewallData.map(v => v.vmid)).toEqual([700])
+
+    await act(async () => {
+      releaseOld()
+      await oldScan
+    })
+
+    expect(result.current.vmFirewallData.map(v => v.vmid)).toEqual([700])
+    expect(result.current.vmRulesError).toBeNull()
+    expect(result.current.loadingVMRules).toBe(false)
+    expect(console.error).not.toHaveBeenCalled()
+  })
+
+  it('starts the new connection from no data even when the old scan never answers', async () => {
+    mockGuestScan([guest(800)])
+
+    const { result, rerender } = renderHook(({ id }: { id: string }) => useVMFirewallRules(id), {
+      initialProps: { id: 'conn-a' },
+    })
+
+    await act(async () => { await result.current.loadVMFirewallData() })
+    expect(result.current.vmFirewallData).toHaveLength(1)
+
+    rerender({ id: 'conn-b' })
+    await waitFor(() => expect(result.current.vmFirewallData).toEqual([]))
+
+    await act(async () => { await result.current.loadVMFirewallData() })
+    expect(result.current.vmFirewallData).toHaveLength(1)
   })
 })

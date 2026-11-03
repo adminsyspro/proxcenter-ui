@@ -5,7 +5,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { within } from '@testing-library/react'
+import { cleanup, within } from '@testing-library/react'
 
 import { screen, fireEvent, renderWithProviders, waitFor } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegSuggestion } from '@/lib/microseg/types'
@@ -141,6 +141,61 @@ describe('observation list', () => {
     expect(link.disabled).toBe(false)
     fireEvent.click(link)
     expect(await screen.findByRole('dialog', { name: 'Micro-segmentation settings' })).toBeTruthy()
+  })
+})
+
+describe('grouping by destination zone', () => {
+  const toDb = [sug('d1', { hits: 24_000 }), sug('d2', { hits: 594, dst_ip: '10.0.0.8' })]
+  const toWeb = [sug('w1', { src_zone_id: 'zd', dst_zone_id: 'zw', hits: 30_000, dst_ip: '10.0.0.20' })]
+  const toNowhere = [sug('n1', { dst_zone_id: '', dst_ip: '203.0.113.9', hits: 90_000 })]
+  const headers = () => screen.getAllByRole('row').filter(r => r.hasAttribute('data-group'))
+
+  it('puts a header row per destination zone, the busiest first, the unknown destination last', async () => {
+    setup([...toWeb, ...toDb, ...toNowhere])
+    await findFlowRows()
+    expect(headers().map(h => h.textContent)).toEqual([
+      'web · 1 observed flow · 30,000 hits',
+      'db · 2 observed flows · 24,594 hits',
+      'Unknown destination · 1 observed flow · 90,000 hits',
+    ])
+    expect(flowRows().map(r => r.getAttribute('data-suggestion'))).toEqual(['w1', 'd1', 'd2', 'n1'])
+  })
+
+  it('folds a zone, keeps it folded in this browser, and unfolds it', async () => {
+    setup([...toDb, ...toWeb])
+    await findFlowRows()
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse db' }))
+    expect(flowRows().map(r => r.getAttribute('data-suggestion'))).toEqual(['w1'])
+    expect(window.localStorage.getItem('microseg.observation.collapsed')).toBe('["zd"]')
+    expect(screen.getByRole('button', { name: 'Expand db' }).getAttribute('aria-expanded')).toBe('false')
+    cleanup()
+
+    setup([...toDb, ...toWeb])
+    expect(await screen.findByRole('button', { name: 'Expand db' })).toBeTruthy()
+    await findFlowRows()
+    expect(flowRows().map(r => r.getAttribute('data-suggestion'))).toEqual(['w1'])
+    fireEvent.click(screen.getByRole('button', { name: 'Expand db' }))
+    expect(flowRows()).toHaveLength(3)
+    expect(window.localStorage.getItem('microseg.observation.collapsed')).toBe('[]')
+  })
+
+  it('reads a broken stored value as no zone folded', async () => {
+    setup([...toDb])
+    window.localStorage.setItem('microseg.observation.collapsed', '{broken')
+    await findFlowRows()
+    expect(flowRows()).toHaveLength(2)
+  })
+
+  it('says the grouping covers the page when the next page goes on, naming its first zone', async () => {
+    const full = Array.from({ length: 25 }, (_, i) => sug(`p${i}`, { dst_ip: `10.1.0.${i}` }))
+    setup([...full, sug('next', { src_zone_id: 'zd', dst_zone_id: 'zw' })])
+    expect(await screen.findByText('Flows are grouped within this page: the next page goes on, starting with web.')).toBeTruthy()
+  })
+
+  it('has no such caption on the last page', async () => {
+    setup(toDb)
+    await findFlowRows()
+    expect(screen.queryByText(/grouped within this page/)).toBeNull()
   })
 })
 

@@ -12627,7 +12627,12 @@
         "lastSeen": "Zuletzt gesehen",
         "status": "Zustand",
         "actions": "Aktionen"
-      }
+      },
+      "group": "{zone} · {count, plural, one {# beobachteter Fluss} other {# beobachtete Flüsse}} · {hits, plural, one {# Treffer} other {# Treffer}}",
+      "groupCollapse": "{zone} einklappen",
+      "groupExpand": "{zone} ausklappen",
+      "unknownDestination": "Unbekanntes Ziel",
+      "groupsContinue": "Die Flüsse sind innerhalb dieser Seite gruppiert: Die nächste Seite geht weiter, beginnend mit {zone}."
     },
     "overview": {
       "empty": "Noch keine Zone zum Zeichnen.",

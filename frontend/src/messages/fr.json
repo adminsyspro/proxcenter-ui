@@ -12960,7 +12960,12 @@
         "lastSeen": "Dernière fois",
         "status": "Statut",
         "actions": "Traitement"
-      }
+      },
+      "group": "{zone} · {count, plural, one {# flux observé} other {# flux observés}} · {hits, plural, one {# occurrence} other {# occurrences}}",
+      "groupCollapse": "Replier {zone}",
+      "groupExpand": "Déplier {zone}",
+      "unknownDestination": "Destination inconnue",
+      "groupsContinue": "Les flux sont regroupés au sein de cette page : la page suivante continue, en commençant par {zone}."
     },
     "overview": {
       "empty": "Aucune zone à dessiner pour l'instant.",

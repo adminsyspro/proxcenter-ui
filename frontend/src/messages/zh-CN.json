@@ -12959,7 +12959,12 @@
         "lastSeen": "最近一次",
         "status": "状态",
         "actions": "操作"
-      }
+      },
+      "group": "{zone} · {count, plural, other {# 个观察到的流}} · {hits, plural, other {# 次命中}}",
+      "groupCollapse": "折叠 {zone}",
+      "groupExpand": "展开 {zone}",
+      "unknownDestination": "未知目标",
+      "groupsContinue": "流仅在本页内分组：下一页从 {zone} 开始继续。"
     },
     "overview": {
       "empty": "还没有可绘制的区域。",

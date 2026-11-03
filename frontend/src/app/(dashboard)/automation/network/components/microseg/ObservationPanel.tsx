@@ -149,6 +149,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
               onToggleAll={toggleAll}
               onToggle={toggle}
               onResolve={one}
+              nextZoneId={hasNext ? data[OBSERVATION_PAGE_SIZE].dst_zone_id : undefined}
             />
           )}
         </>

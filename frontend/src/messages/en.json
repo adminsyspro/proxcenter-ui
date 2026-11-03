@@ -12959,7 +12959,12 @@
         "lastSeen": "Last seen",
         "status": "Status",
         "actions": "Actions"
-      }
+      },
+      "group": "{zone} · {count, plural, one {# observed flow} other {# observed flows}} · {hits, plural, one {# hit} other {# hits}}",
+      "groupCollapse": "Collapse {zone}",
+      "groupExpand": "Expand {zone}",
+      "unknownDestination": "Unknown destination",
+      "groupsContinue": "Flows are grouped within this page: the next page goes on, starting with {zone}."
     },
     "overview": {
       "empty": "No zone to draw yet.",

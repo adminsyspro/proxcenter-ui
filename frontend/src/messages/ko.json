@@ -12959,7 +12959,12 @@
         "lastSeen": "마지막 관찰",
         "status": "상태",
         "actions": "작업"
-      }
+      },
+      "group": "{zone} · 관찰된 흐름 {count, plural, other {#개}} · 적중 {hits, plural, other {#회}}",
+      "groupCollapse": "{zone} 접기",
+      "groupExpand": "{zone} 펼치기",
+      "unknownDestination": "알 수 없는 목적지",
+      "groupsContinue": "흐름은 이 페이지 안에서만 묶입니다. 다음 페이지가 {zone}부터 이어집니다."
     },
     "overview": {
       "empty": "아직 그릴 영역이 없습니다.",

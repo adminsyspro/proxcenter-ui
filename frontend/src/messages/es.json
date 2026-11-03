@@ -12959,7 +12959,12 @@
         "lastSeen": "Visto por última vez",
         "status": "Estado",
         "actions": "Acciones"
-      }
+      },
+      "group": "{zone} · {count, plural, one {# flujo observado} other {# flujos observados}} · {hits, plural, one {# coincidencia} other {# coincidencias}}",
+      "groupCollapse": "Contraer {zone}",
+      "groupExpand": "Expandir {zone}",
+      "unknownDestination": "Destino desconocido",
+      "groupsContinue": "Los flujos se agrupan dentro de esta página: la página siguiente continúa, empezando por {zone}."
     },
     "overview": {
       "empty": "Aún no hay ninguna zona que dibujar.",

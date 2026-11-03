@@ -5650,7 +5650,7 @@
     "selectConnectionMicroseg": "Select a connection to view microsegmentation",
     "zeroTrustScore": "Zero Trust Score",
     "defaultPolicies": "Default Policies",
-    "vmsWithDisabledFirewall": "{count} VMs with disabled firewall",
+    "vmsWithDisabledFirewall": "{count, plural, one {# VM with the firewall disabled} other {# VMs with the firewall disabled}}",
     "securityGroupsNotAvailable": "Security Groups not available",
     "securityGroupsClusterFeature": "Security Groups are a Proxmox cluster feature. In standalone mode, firewall rules must be configured directly at the host or VM/CT level.",
     "availableAlternatives": "Available alternatives:",
@@ -9024,7 +9024,19 @@
     "tabLogging": "Logging",
     "loadErrorMore": "and {count, number} more",
     "loadErrorDetails": "Details",
-    "loadErrorHideDetails": "Hide details"
+    "loadErrorHideDetails": "Hide details",
+    "dashboard": {
+      "coverageComputedAgo": "Computed {time}",
+      "coverageComputing": "Computing the coverage",
+      "coverageRefresh": "Compute again",
+      "coverageSample": "sample of {measured, number} guests out of {total, number}",
+      "coverageUnknown": "{count, plural, one {# guest not measured} other {# guests not measured}}",
+      "coverageUnknownHint": "Firewall options unreadable, network interfaces not read by the inventory yet, or out of time: compute again later",
+      "coverageUnavailable": "Coverage not available: {error}",
+      "coverageNone": "No guest on this connection",
+      "stopHeldTitle": "Cluster firewall held off by the emergency stop",
+      "stopHeldHint": "Resume from the Micro-segmentation tab to switch it back on."
+    }
   },
   "deployWizard": {
     "bannerTitle": "Cluster firewall not configured",

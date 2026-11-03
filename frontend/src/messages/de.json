@@ -5631,7 +5631,7 @@
     "selectConnectionMicroseg": "Wählen Sie eine Verbindung, um die Mikrosegmentierung anzuzeigen",
     "zeroTrustScore": "Zero-Trust-Score",
     "defaultPolicies": "Standard Policies",
-    "vmsWithDisabledFirewall": "{count} VMs with deaktiviert firewall",
+    "vmsWithDisabledFirewall": "{count, plural, one {# VM mit deaktivierter Firewall} other {# VMs mit deaktivierter Firewall}}",
     "securityGroupsNotAvailable": "Sicherheit Groups nicht verfügbar",
     "securityGroupsClusterFeature": "Security Groups sind eine Proxmox-Cluster-Funktion. Im Standalone-Modus müssen Firewall-Regeln direkt auf Host- oder VM/CT-Ebene konfiguriert werden.",
     "availableAlternatives": "verfügbar alternatives:",
@@ -8971,7 +8971,19 @@
     "tabLogging": "Protokolle",
     "loadErrorMore": "und {count, number} weitere",
     "loadErrorDetails": "Details anzeigen",
-    "loadErrorHideDetails": "Details ausblenden"
+    "loadErrorHideDetails": "Details ausblenden",
+    "dashboard": {
+      "coverageComputedAgo": "Berechnet {time}",
+      "coverageComputing": "Abdeckung wird berechnet",
+      "coverageRefresh": "Neu berechnen",
+      "coverageSample": "Stichprobe von {measured, number} von {total, number} Gästen",
+      "coverageUnknown": "{count, plural, one {# Gast nicht gemessen} other {# Gäste nicht gemessen}}",
+      "coverageUnknownHint": "Firewall-Optionen nicht lesbar, Netzwerkschnittstellen noch nicht vom Inventar gelesen oder Zeit abgelaufen: später neu berechnen",
+      "coverageUnavailable": "Abdeckung nicht verfügbar: {error}",
+      "coverageNone": "Kein Gast auf dieser Verbindung",
+      "stopHeldTitle": "Cluster-Firewall durch den Notstopp ausgeschaltet",
+      "stopHeldHint": "Im Tab Mikrosegmentierung fortsetzen, um sie wieder einzuschalten."
+    }
   },
   "deployWizard": {
     "bannerTitle": "Cluster-Firewall nicht konfiguriert",

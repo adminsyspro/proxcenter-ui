@@ -96,13 +96,15 @@ export default function NetworkAutomationPage() {
     }
   }, [firewallMode, activeTab, rulesSubTab])
 
-  // Load VM rules when on Dashboard (tab 0), Firewalling > Cluster/VMs (tab 1,
-  // subTab 0 or 2), or Security Groups (tab 4) — that last tab counts, per
-  // group, the guests whose rules reference it, so without this it showed 0 VMs
-  // everywhere while the data had simply never been fetched.
+  // Load VM rules on Firewalling > Cluster/VMs (tab 1, subTab 0 or 2) or Security
+  // Groups (tab 4): that last tab counts, per group, the guests whose rules
+  // reference it, so without this it showed 0 VMs everywhere while the data had
+  // simply never been fetched. Not on the Dashboard (tab 0) any more: its guest
+  // coverage is computed and cached on the server, one call per guest at most
+  // (UA44), where this scan asks three per guest.
   useEffect(() => {
     if (isEnterprise && selectedConnection && !loadingVMRules && vmFirewallData.length === 0) {
-      if (activeTab === 0 || activeTab === 4 || (activeTab === 1 && (rulesSubTab === 0 || rulesSubTab === 2))) {
+      if (activeTab === 4 || (activeTab === 1 && (rulesSubTab === 0 || rulesSubTab === 2))) {
         void loadVMFirewallData()
       }
     }
@@ -163,11 +165,10 @@ export default function NetworkAutomationPage() {
               clusterRules={clusterRules}
               aliases={aliases}
               ipsets={ipsets}
-              vmFirewallData={vmFirewallData}
-              loadingVMRules={loadingVMRules}
               firewallMode={firewallMode}
               currentOptions={currentOptions}
               selectedConnection={selectedConnection}
+              connectionName={connections.find(c => c.id === selectedConnection)?.name}
               totalRules={totalRules}
               totalIPSetEntries={totalIPSetEntries}
               nodesList={nodesList}

@@ -9024,7 +9024,19 @@
     "tabLogging": "Registros",
     "loadErrorMore": "y {count, number} más",
     "loadErrorDetails": "Detalles",
-    "loadErrorHideDetails": "Ocultar detalles"
+    "loadErrorHideDetails": "Ocultar detalles",
+    "dashboard": {
+      "coverageComputedAgo": "Calculada {time}",
+      "coverageComputing": "Calculando la cobertura",
+      "coverageRefresh": "Volver a calcular",
+      "coverageSample": "muestra de {measured, number} invitados de {total, number}",
+      "coverageUnknown": "{count, plural, one {# invitado sin medir} other {# invitados sin medir}}",
+      "coverageUnknownHint": "Opciones del cortafuegos ilegibles, interfaces de red aún no leídas por el inventario o tiempo agotado: vuelva a calcular más tarde",
+      "coverageUnavailable": "Cobertura no disponible: {error}",
+      "coverageNone": "Ningún invitado en esta conexión",
+      "stopHeldTitle": "Cortafuegos del clúster apagado por la parada de emergencia",
+      "stopHeldHint": "Reanude desde la pestaña Microsegmentación para volver a activarlo."
+    }
   },
   "deployWizard": {
     "bannerTitle": "Firewall de clúster no configurado",

@@ -27,10 +27,11 @@ vi.mock('@/hooks/useFirewallData', () => ({
     loading: false, loadError: 'cluster rules unreadable', reload: vi.fn(), setClusterRules: vi.fn(), setClusterOptions: vi.fn(),
   }),
 }))
+const { loadVMFirewallData } = vi.hoisted(() => ({ loadVMFirewallData: vi.fn() }))
 vi.mock('@/hooks/useVMFirewallRules', () => ({
   useVMFirewallRules: () => ({
     vmFirewallData: [], loadingVMRules: false, vmRulesError: null, guestsNotScanned: 0,
-    loadVMFirewallData: vi.fn(), reloadVMFirewallRules: vi.fn(), setVMFirewallData: vi.fn(),
+    loadVMFirewallData, reloadVMFirewallRules: vi.fn(), setVMFirewallData: vi.fn(),
   }),
 }))
 vi.mock('@/hooks/useHostFirewallRules', () => ({
@@ -39,7 +40,7 @@ vi.mock('@/hooks/useHostFirewallRules', () => ({
     reloadHostRulesForNode: vi.fn(), setHostRulesByNode: vi.fn(),
   }),
 }))
-vi.mock('./components/DashboardTab', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>dashboard tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
+vi.mock('./components/DashboardTab', () => ({ default: ({ loadError, connectionName }: { loadError?: string | null; connectionName?: string }) => <div data-connection={connectionName}>dashboard tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
 vi.mock('./components/RulesTab', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>rules tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
 vi.mock('./components/ObjectsTab', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>objects tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
 vi.mock('./components/rules/SecurityGroupsPanel', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>groups tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
@@ -48,7 +49,10 @@ vi.mock('./components/microseg/MicrosegTab', () => ({ default: () => <div>micros
 
 import NetworkAutomationPage from './page'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  loadVMFirewallData.mockClear()
+})
 
 const STAT_SUBVALUES = [/named networks/i, /entries$/i, /Firewall (active|inactive)/i]
 
@@ -111,5 +115,23 @@ describe('network page load error', () => {
       fireEvent.click(screen.getByRole('tab', { name: tab }))
       expect(await screen.findByText(`${content} (error: cluster rules unreadable)`)).toBeInTheDocument()
     }
+  })
+})
+
+describe('network page Dashboard load (UA44)', () => {
+  it('does not start the three-calls-per-guest scan for the Dashboard, and hands it the connection name', async () => {
+    renderWithProviders(<NetworkAutomationPage />)
+
+    expect((await screen.findByText(/dashboard tab/)).dataset.connection).toBe('lab')
+    expect(loadVMFirewallData).not.toHaveBeenCalled()
+  })
+
+  it('still scans the guests for the Security Groups tab, which counts their rules', async () => {
+    renderWithProviders(<NetworkAutomationPage />)
+    await screen.findByText(/dashboard tab/)
+
+    fireEvent.click(screen.getByRole('tab', { name: /Security Groups/ }))
+
+    expect(loadVMFirewallData).toHaveBeenCalled()
   })
 })

@@ -9024,7 +9024,19 @@
     "tabLogging": "로그",
     "loadErrorMore": "외 {count, number}건",
     "loadErrorDetails": "자세히",
-    "loadErrorHideDetails": "자세히 숨기기"
+    "loadErrorHideDetails": "자세히 숨기기",
+    "dashboard": {
+      "coverageComputedAgo": "{time} 계산됨",
+      "coverageComputing": "적용 범위 계산 중",
+      "coverageRefresh": "다시 계산",
+      "coverageSample": "게스트 {total, number}개 중 {measured, number}개 표본",
+      "coverageUnknown": "{count, plural, other {측정되지 않은 게스트 #개}}",
+      "coverageUnknownHint": "방화벽 옵션을 읽을 수 없거나, 인벤토리가 아직 네트워크 인터페이스를 읽지 않았거나, 시간이 초과되었습니다. 나중에 다시 계산하세요",
+      "coverageUnavailable": "적용 범위를 사용할 수 없음: {error}",
+      "coverageNone": "이 연결에 게스트가 없습니다",
+      "stopHeldTitle": "긴급 중지로 클러스터 방화벽이 꺼져 있음",
+      "stopHeldHint": "마이크로 세그멘테이션 탭에서 재개하여 다시 켜세요."
+    }
   },
   "deployWizard": {
     "bannerTitle": "클러스터 방화벽이 구성되지 않았습니다",

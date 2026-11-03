@@ -9024,7 +9024,19 @@
     "tabLogging": "日志",
     "loadErrorMore": "以及另外 {count, number} 项",
     "loadErrorDetails": "详情",
-    "loadErrorHideDetails": "隐藏详情"
+    "loadErrorHideDetails": "隐藏详情",
+    "dashboard": {
+      "coverageComputedAgo": "计算于{time}",
+      "coverageComputing": "正在计算覆盖率",
+      "coverageRefresh": "重新计算",
+      "coverageSample": "{total, number} 个客户机中抽样 {measured, number} 个",
+      "coverageUnknown": "{count, plural, other {# 个客户机未测量}}",
+      "coverageUnknownHint": "防火墙选项无法读取、清单尚未读取网络接口或已超时：请稍后重新计算",
+      "coverageUnavailable": "覆盖率不可用：{error}",
+      "coverageNone": "此连接上没有客户机",
+      "stopHeldTitle": "紧急停止已关闭集群防火墙",
+      "stopHeldHint": "在微分段选项卡中恢复以重新启用。"
+    }
   },
   "deployWizard": {
     "bannerTitle": "集群防火墙未配置",

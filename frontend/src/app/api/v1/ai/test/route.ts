@@ -9,6 +9,7 @@ import { fetchOllamaCapabilities, OllamaProbeTimeoutError, probeOllamaModel } fr
 import { preflightVerdict } from "@/lib/ai/qualifiedModels"
 import { requireFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 /** Sanitize a string for safe logging (strip newlines/control chars) */
 function sanitizeLog(str) {
@@ -17,6 +18,10 @@ function sanitizeLog(str) {
 
 // POST /api/v1/ai/test - Tester la connexion au LLM
 export async function POST(request) {
+  // No AI assistant for an IaaS (vDC) tenant (lib/tenant/iaasGuard).
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied

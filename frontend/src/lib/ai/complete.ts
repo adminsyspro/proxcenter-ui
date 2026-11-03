@@ -1,6 +1,8 @@
 import { getSetting } from '@/lib/db/settings'
 import { hasServerFeature } from '@/lib/auth/requireEnterprise'
 import { Features } from '@/lib/license/features'
+import { DEFAULT_TENANT_ID } from '@/lib/tenant/constants'
+import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
 
 import { openAiSecrets } from './settingsSecrets'
 import { validateAIUrl } from './url-guard'
@@ -13,6 +15,16 @@ export type AiTarget = {
   model: string
   baseUrl: string
   apiKey?: string
+}
+
+/** Whether the tenant is an IaaS (vDC) one; an unresolvable tenant counts as one (fail closed). */
+async function isIaasTenant(tenantId: string): Promise<boolean> {
+  if (tenantId === DEFAULT_TENANT_ID) return false
+  try {
+    return (await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })).kind === 'iaas'
+  } catch {
+    return true
+  }
 }
 
 /** Identifies a provider and model, so a reading made with another one is not reused. */
@@ -48,6 +60,10 @@ async function ollamaReachable(baseUrl: string): Promise<boolean> {
  *   settings.
  */
 export async function resolveAiTarget(tenantId: string): Promise<AiTarget | null> {
+  // No model for an IaaS (vDC) tenant: its readings fall back to the
+  // rule-based text, as with no model configured (lib/tenant/iaasGuard).
+  if (await isIaasTenant(tenantId)) return null
+
   const stored = await getSetting<Record<string, any>>('ai', tenantId).catch(() => null)
 
   if (stored) {

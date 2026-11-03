@@ -7,6 +7,7 @@ import { resolveMaskedAiSecrets } from "@/lib/ai/storedSecrets"
 import { fetchOllamaCapabilities } from "@/lib/ai/ollama"
 import { requireFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 const TIMEOUT_MS = 10_000
 
@@ -87,6 +88,10 @@ async function fetchAnthropicModels(key: string): Promise<string[]> {
 
 // POST /api/v1/ai/models - Fetch available models for a provider
 export async function POST(request: Request) {
+  // No AI assistant for an IaaS (vDC) tenant (lib/tenant/iaasGuard).
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied

@@ -10,6 +10,7 @@ import { withAudit } from '@/lib/audit/withAudit'
 import { DEFAULT_OLLAMA_MODEL } from '@/lib/ai/qualifiedModels'
 import { requireFeature } from '@/lib/auth/requireEnterprise'
 import { Features } from '@/lib/license/features'
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 const DEFAULT_AI_SETTINGS = {
   enabled: false,
@@ -32,6 +33,10 @@ const DEFAULT_AI_SETTINGS = {
 
 // GET /api/v1/settings/ai - Read the AI settings, keys masked
 export async function GET() {
+  // No AI assistant for an IaaS (vDC) tenant (lib/tenant/iaasGuard).
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     // RBAC: Check admin.settings permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
@@ -58,6 +63,10 @@ export async function GET() {
 
 // PUT /api/v1/settings/ai - Save the AI settings, keys sealed at rest
 async function handlePut(request: Request) {
+  // No AI assistant for an IaaS (vDC) tenant (lib/tenant/iaasGuard).
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     // RBAC: Check admin.settings permission
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)

@@ -11,6 +11,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+
+// The IaaS tenant gate is covered by src/lib/ai/iaasTenantAi.test.ts; the caller here is the provider.
+vi.mock("@/lib/tenant/iaasGuard", () => ({ denyIaasTenant: async () => null }))
+
 import { callRoute } from '@/__tests__/setup/route-test'
 import { clearOllamaThinkingCache, OLLAMA_NUM_CTX } from '@/lib/ai/ollama'
 import { createFrameDecoder, FRAME_MARK, type StreamFrame } from '@/lib/ai/streamFrames'

@@ -21,6 +21,7 @@ import { getCurrentTenantId } from '@/lib/tenant'
 import { buildToolContext } from '@/lib/tools/catalog'
 import { collectInventorySnapshot } from '@/lib/tools/snapshot'
 import { ToolScopeError, type ToolContext } from '@/lib/tools/types'
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -401,4 +402,12 @@ async function handler(req: Request) {
   }
 }
 
-export const POST = withAudit({ category: "automation", resourceType: "ai_action", action: "execute" }, handler)
+/** No AI assistant, so no action of it, for an IaaS (vDC) tenant (lib/tenant/iaasGuard). */
+async function gatedHandler(req: Request) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
+  return handler(req)
+}
+
+export const POST = withAudit({ category: "automation", resourceType: "ai_action", action: "execute" }, gatedHandler)

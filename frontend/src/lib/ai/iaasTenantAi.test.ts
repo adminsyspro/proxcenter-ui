@@ -77,14 +77,16 @@ beforeEach(() => {
 })
 
 describe("AI routes for an IaaS tenant", () => {
-  it("every AI route file but the status asks the gate in each handler", async () => {
+  it("every AI route file but the status asks the gate in each handler, directly or through openChatRequest", async () => {
     const files = aiRouteFiles()
     expect(files.length).toBeGreaterThanOrEqual(8)
     for (const file of files.filter(f => f !== STATUS)) {
       const source = readFileSync(join(V1, file), "utf8")
       const mod = await load(file)
       const handlers = METHODS.filter(m => typeof mod[m] === "function").length
-      expect(source.match(/await denyIaasTenant\(\)/g)?.length ?? 0, file).toBeGreaterThanOrEqual(handlers)
+      // The two chat routes ask it through their shared opening (lib/ai/chatRequest).
+      const gates = (source.match(/await denyIaasTenant\(\)/g)?.length ?? 0) + (source.match(/await openChatRequest\(/g)?.length ?? 0)
+      expect(gates, file).toBeGreaterThanOrEqual(handlers)
     }
   })
 

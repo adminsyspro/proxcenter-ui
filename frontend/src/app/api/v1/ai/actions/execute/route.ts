@@ -333,10 +333,6 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 async function handler(req: Request) {
-  // No AI assistant for an IaaS (vDC) tenant (lib/tenant/iaasGuard).
-  const iaasDenied = await denyIaasTenant()
-  if (iaasDenied) return iaasDenied
-
   // Hoisted so an unexpected failure after the signature still leaves the card's row (R4).
   let verified: Verified | undefined
 
@@ -406,4 +402,12 @@ async function handler(req: Request) {
   }
 }
 
-export const POST = withAudit({ category: "automation", resourceType: "ai_action", action: "execute" }, handler)
+/** No AI assistant, so no action of it, for an IaaS (vDC) tenant (lib/tenant/iaasGuard). */
+async function gatedHandler(req: Request) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
+  return handler(req)
+}
+
+export const POST = withAudit({ category: "automation", resourceType: "ai_action", action: "execute" }, gatedHandler)

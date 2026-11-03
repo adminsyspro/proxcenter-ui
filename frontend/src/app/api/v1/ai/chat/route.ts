@@ -1,14 +1,10 @@
 export const dynamic = "force-dynamic"
 import { NextResponse } from 'next/server'
 
-import { getSetting } from '@/lib/db/settings'
-import { openAiSecrets } from '@/lib/ai/settingsSecrets'
 import { getCurrentTenantId } from "@/lib/tenant"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getRequestLocale, languageInstruction, normalizeLocale, normalizeTimeZone } from '@/lib/ai/locale'
+import { languageInstruction, normalizeTimeZone } from '@/lib/ai/locale'
 import { validateAIUrl } from '@/lib/ai/url-guard'
 import { ollamaCanThink, ollamaOptions, ollamaThread } from '@/lib/ai/ollama'
-import { DEFAULT_OLLAMA_MODEL } from '@/lib/ai/qualifiedModels'
 import { collectActionCards } from '@/lib/ai/actions/cards'
 import { resolveAssistantTools } from '@/lib/ai/actions/resolve'
 import { collectCharts } from '@/lib/ai/charts'
@@ -18,28 +14,7 @@ import { buildToolContext } from '@/lib/tools/catalog'
 import { cephAllowedForCaller } from '@/lib/ceph/tenantGuard'
 import { toolsForProvider, type AiProvider } from '@/lib/ai/tools/adapters'
 import { runToolRounds, userTextOf, type SendTurn, type ToolMode } from '@/lib/ai/tools/loop'
-import { requireFeature } from '@/lib/auth/requireEnterprise'
-import { Features } from '@/lib/license/features'
-import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
-
-// Récupérer les paramètres IA (tenant-scoped)
-async function getAISettings() {
-  try {
-    const tenantId = await getCurrentTenantId()
-    const stored = await getSetting<any>('ai', tenantId)
-    // Keys are sealed at rest (lib/ai/settingsSecrets); open them for the call.
-    if (stored) return openAiSecrets(stored)
-  } catch (e) {
-    console.error('Failed to get AI settings:', e)
-  }
-
-  return {
-    enabled: false,
-    provider: 'ollama',
-    ollamaUrl: 'http://localhost:11434',
-    ollamaModel: DEFAULT_OLLAMA_MODEL
-  }
-}
+import { openChatRequest } from '@/lib/ai/chatRequest'
 
 function stripTrailingSlashes(value: string): string {
   let end = value.length
@@ -49,26 +24,12 @@ function stripTrailingSlashes(value: string): string {
 
 // POST /api/v1/ai/chat - Envoyer un message au LLM
 export async function POST(request: Request) {
-  // No AI assistant for an IaaS (vDC) tenant (lib/tenant/iaasGuard).
-  const iaasDenied = await denyIaasTenant()
-  if (iaasDenied) return iaasDenied
-
   try {
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
-    if (denied) return denied
-
-    // The assistant is an Enterprise feature: the widget and the settings tab
-    // hide it, and the API refuses it too, so a direct call cannot get round it.
-    const unlicensed = await requireFeature(Features.AI_INSIGHTS)
-    if (unlicensed) return unlicensed
-
-    const { messages, locale, timeZone, conversationId } = await request.json()
-
-    // The drawer sends `locale`; fall back to the NEXT_LOCALE cookie for any
-    // caller that does not (the streaming fallback used to be one of them).
-    const uiLocale = locale ? normalizeLocale(locale) : await getRequestLocale()
-    const lang = uiLocale === 'fr' ? 'fr' : 'en'
-    const settings = await getAISettings()
+    // The IaaS gate, connection.view and the Enterprise feature, then the
+    // request, its locale and the tenant's AI settings (lib/ai/chatRequest).
+    const opened = await openChatRequest(request)
+    if (opened.ok === false) return opened.response
+    const { messages, timeZone, conversationId, uiLocale, lang, settings } = opened.chat
 
     if (!settings.enabled) {
       return NextResponse.json({

@@ -3,7 +3,7 @@
 import { Box, Button, Paper, Skeleton, Stack, Tooltip, Typography, alpha, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
-import { STATE_AMBER, STATE_GREEN, STATE_RED } from './DashboardStateCard'
+import { STATE_AMBER, STATE_GREEN, STATE_RED } from './dashboardColors'
 import type { BlockPhase, TodoItem, TodoKind } from './dashboardModel'
 
 /** Where each line leads. */

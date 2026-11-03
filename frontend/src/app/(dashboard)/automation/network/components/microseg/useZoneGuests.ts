@@ -26,9 +26,12 @@ const coveragePoll = (latest?: FirewallCoverage) => (latest?.computing && !lates
  * firewall but not the inventory gets a 403. The guests are then the rows of the firewall coverage route, the list
  * Firewalling shows that user (type, node, name, status, tags; cached and shared server side, no new Proxmox call
  * when it is warm). They carry no address, so observed flows are not put on guests for that user.
+ *
+ * No connection (null or empty): nothing is read, the list stays empty and loading (the Dashboard reads it only once
+ * a grouping by VLAN or node asks for it).
  */
-export function useZoneGuests(connectionId: string) {
-  const { data, error, mutate } = useSWRFetch<VmsResponse>(zoneGuestsUrl(connectionId), { revalidateOnFocus: false })
+export function useZoneGuests(connectionId: string | null) {
+  const { data, error, mutate } = useSWRFetch<VmsResponse>(connectionId ? zoneGuestsUrl(connectionId) : null, { revalidateOnFocus: false })
   const forbidden = !data && isForbidden(error)
   const coverage = useSWRFetch<FirewallCoverage>(forbidden && connectionId ? firewallCoverageUrl(connectionId) : null, {
     revalidateOnFocus: false,

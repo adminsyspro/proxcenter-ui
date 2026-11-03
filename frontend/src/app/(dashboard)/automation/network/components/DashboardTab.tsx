@@ -1,27 +1,30 @@
 'use client'
 
-import { useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useMemo, useState } from 'react'
 import { Box } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { useVMFirewallCoverage } from '@/hooks/useZeroTrust'
-import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
+import { PVE_DEFAULT_POLICY_IN } from '@/lib/firewall/pveDefaults'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { useMicrosegDrifts, useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
+import type { ListSuggestionsParams } from '@/lib/microseg/api'
 
-import ClusterFirewallCard from './ClusterFirewallCard'
-import DashboardCoverage from './DashboardCoverage'
 import DashboardTodo, { type TodoActions } from './DashboardTodo'
-import { dashboardPhase, missingManagementPorts, todoItems, zeroTrustScore } from './dashboardModel'
+import { dashboardPhase, missingManagementPorts, todoItems, type BlockPhase } from './dashboardModel'
+import {
+  POSTURE_SUGGESTIONS_LIMIT, postureDistribution, postureGuests, postureTraffic, protectedRunning, topServices, zonesEnforced, type GroupBy,
+} from './dashboardPosture'
 import DeploymentWizard from './DeploymentWizard'
 import FirewallLoadAlert from './FirewallLoadAlert'
-import ZeroTrustScoreCard from './ZeroTrustScoreCard'
+import { TopServices, TrafficDistribution } from './ObservedTraffic'
+import PostureChips from './PostureChips'
+import TrafficByZone from './TrafficByZone'
 import { coverage as microsegCoverage } from './microseg/coverage'
-import MicrosegSummaryCard from './microseg/MicrosegSummaryCard'
 import type { MicrosegSubTab } from './microseg/microsegTabTypes'
-import { clusterFirewallOff, unzonedRunning } from './microseg/summaryModel'
+import { clusterFirewallOff, lastCheckAt, unzonedRunning } from './microseg/summaryModel'
+import { useZoneGuests } from './microseg/useZoneGuests'
 
 /** The guest filter Firewalling > VMs opens with from the "To do" list. */
 export type GuestFilter = 'unprotected'
@@ -36,7 +39,7 @@ interface DashboardTabProps {
   firewallMode: firewallAPI.FirewallMode
   currentOptions: firewallAPI.ClusterOptions | firewallAPI.NodeOptions | null
   selectedConnection: string
-  /** Name of the selected connection, shown on the micro-segmentation card. */
+  /** Name of the selected connection (the Posture layout does not show it). */
   connectionName?: string
   totalRules: number
   totalIPSetEntries: number
@@ -56,58 +59,57 @@ interface DashboardTabProps {
   onOpenMicroseg?: (subTab?: MicrosegSubTab) => void
 }
 
-/** Pending observed flows read for the count: past it, the line says "more than". */
-export const PENDING_FLOWS_LIMIT = 100
+/** The pending observed flows, the same page as the zone map (one SWR key, one read for both). */
+const PENDING_OBSERVED: ListSuggestionsParams = { status: 'pending', limit: POSTURE_SUGGESTIONS_LIMIT }
 
 /** A read is settled once it answered or failed. */
 const settled = (read: { data?: unknown; error?: unknown }) => !!read.data || !!read.error
 
-/** The count of the pending flows read (one more than the limit was asked: past it, "more than"). */
+/** The count of the pending flows read: a full page says "at least". */
 function pendingFlowsOf(list: unknown[] | undefined): { count: number; more: boolean } | null {
   if (!list) return null
 
-  return { count: Math.min(list.length, PENDING_FLOWS_LIMIT), more: list.length > PENDING_FLOWS_LIMIT }
+  return { count: list.length, more: list.length >= POSTURE_SUGGESTIONS_LIMIT }
 }
 
-/** What each score component reads, null while it is not known. */
-function scoreValuesOf(clusterKnown: boolean, firewallOn: boolean, policyIn: string, percent: number | null, t: ReturnType<typeof useTranslations>) {
-  const firewallWord = firewallOn ? t('firewallOn') : t('firewallOff')
+/** A block made of micro-segmentation reads: a skeleton until they answered, not available when one failed. */
+function microsegPhase(reads: { data?: unknown; error?: unknown }[]): BlockPhase {
+  if (reads.some(r => !r.data && r.error)) return 'unavailable'
 
-  return {
-    firewall: clusterKnown ? firewallWord : null,
-    policyIn: clusterKnown ? policyIn : null,
-    coverage: percent === null ? null : `${Math.round(percent)}%`,
-  }
+  return reads.every(r => r.data) ? 'ready' : 'loading'
 }
 
 /**
- * The Dashboard of /automation/network (UA46): three state cards with one source for their figures (cluster firewall,
- * micro-segmentation, guest firewall coverage), the Zero Trust score computed on those figures, and the "To do" list.
- * Its reads: the firewall data the page loads, the coverage route (computed and cached on the server), the
- * micro-segmentation status, policy, drifts and pending flows (orchestrator memory, no Proxmox call).
+ * The "Posture" Dashboard of /automation/network (UA50): the header chips (cluster firewall and inbound policy, or the
+ * emergency stop; zones enforced; running guests protected; last check), the observed traffic per zone (donut and
+ * chords), its distribution and top services, then the "To do" list. Its reads: the firewall data the page loads, the
+ * coverage route (computed and cached on the server), the micro-segmentation status, policy, drifts and pending flows
+ * (orchestrator memory). The guest list (the inventory route, one guest config per guest on Proxmox) is read only once
+ * a grouping by VLAN or node asks for it, shared with the zone map.
  */
 export default function DashboardTab({
   firewallMode, currentOptions,
-  selectedConnection, connectionName, clusterOptions, clusterRules, nodesList,
+  selectedConnection, clusterOptions, clusterRules, nodesList,
   securityGroups, loadError, loading = false,
   reload, onNavigateTab, onNavigateRulesSubTab, onOpenGuests, onOpenMicroseg,
 }: DashboardTabProps) {
-  const t = useTranslations('networkPage.dashboard')
   const [deployWizardOpen, setDeployWizardOpen] = useState(false)
+  const [groupBy, setGroupBy] = useState<GroupBy>('zone')
+  // Once a grouping by VLAN or node asked for the guests, they stay (a zone grouping then tells the unzoned apart).
+  const [guestsWanted, setGuestsWanted] = useState(false)
   const connection = selectedConnection || null
 
   // Read once when the tab shows (this component mounts with it), computed and cached on the server (UA44).
   const coverageRead = useVMFirewallCoverage(connection)
   const coverage = coverageRead.data?.computedAt ? coverageRead.data : null
-  // The same reads as the micro-segmentation card (SWR shares them): the emergency stop may hold the firewall off.
   const microsegStatus = useMicrosegStatus(connection)
   const microsegPolicy = useMicrosegPolicy(connection)
   const drifts = useMicrosegDrifts(connection)
-  const pending = useMicrosegSuggestions(connection, { status: 'pending', limit: PENDING_FLOWS_LIMIT + 1 })
+  const pending = useMicrosegSuggestions(connection, PENDING_OBSERVED)
+  const zoneGuests = useZoneGuests(guestsWanted ? connection : null)
 
   // Node options carry no policy: a host follows the cluster's, and an unset policy is PVE's default, not ACCEPT (#1065).
   const policyIn = clusterOptions?.policy_in || PVE_DEFAULT_POLICY_IN
-  const policyOut = clusterOptions?.policy_out || PVE_DEFAULT_POLICY_OUT
   const firewallOn = currentOptions?.enable === 1
 
   const status = microsegStatus.data
@@ -124,13 +126,22 @@ export default function DashboardTab({
     microsegListsIn: settled(drifts) && settled(pending),
   })
 
-  const clusterKnown = phase.cluster === 'ready'
-  const score = zeroTrustScore({
-    firewallOn: clusterKnown ? firewallOn : null,
-    policyIn: clusterKnown ? policyIn : null,
-    coverage,
-  })
-  const scoreValues = scoreValuesOf(clusterKnown, firewallOn, policyIn, score.coveragePercent, t)
+  const addresses = guestsWanted && zoneGuests.status === 'ready'
+  let trafficPhase = microsegPhase([microsegPolicy, pending])
+  if (trafficPhase === 'ready' && groupBy !== 'zone' && zoneGuests.status === 'loading') trafficPhase = 'loading'
+
+  const posture = useMemo(() => {
+    const zones = policy?.zones ?? []
+    const tagPrefix = policy?.policy.tag_prefix ?? ''
+    const suggestions = pending.data ?? []
+    const guests = postureGuests(coverage?.guests, addresses ? zoneGuests.guests : null)
+    return {
+      traffic: postureTraffic({ groupBy, zones, tagPrefix, suggestions, guests, addresses }),
+      distribution: postureDistribution({ zones, tagPrefix, flows: policy?.flows ?? [], suggestions, guests, addresses }),
+      services: topServices(suggestions, policy?.flows ?? []),
+    }
+  }, [policy, pending.data, coverage?.guests, addresses, zoneGuests.guests, groupBy])
+
   const items = todoItems({
     firewallOn,
     stopped,
@@ -160,8 +171,19 @@ export default function DashboardTab({
     unzoned: () => openMicroseg('drifts'),
     pendingFlows: () => openMicroseg('observation'),
   }
+  const changeGroupBy = (next: GroupBy) => {
+    setGroupBy(next)
+    if (next !== 'zone') setGuestsWanted(true)
+  }
 
   if (!selectedConnection) return <Box sx={{ p: 3 }} />
+
+  let zonesFigure: ReturnType<typeof zonesEnforced> | undefined
+  if (status) zonesFigure = zonesEnforced(status)
+  else if (microsegStatus.error) zonesFigure = null
+  let lastCheck: Date | null | undefined
+  if (status) lastCheck = lastCheckAt(status)
+  else if (microsegStatus.error) lastCheck = null
 
   return (
     <Box sx={{ p: 3 }}>
@@ -178,31 +200,39 @@ export default function DashboardTab({
         onComplete={reload}
       />
 
-      {/* 1. Three state cards, one row */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, minmax(0, 1fr))' }, gap: 2, mb: 3 }}>
-        <ClusterFirewallCard
-          phase={phase.cluster}
-          firewallMode={firewallMode}
-          firewallOn={firewallOn}
-          stopHoldsFirewall={stopHoldsFirewall}
-          policyIn={policyIn}
-          policyOut={policyOut}
-          rules={clusterRules.length}
-          groups={securityGroups.length}
-          onOpen={openRules(0)}
-        />
-        <MicrosegSummaryCard key={selectedConnection} connectionId={selectedConnection} connectionName={connectionName} onOpen={() => openMicroseg()} />
-        <DashboardCoverage
-          coverage={coverage}
-          error={coverageRead.error}
-          refreshing={coverageRead.refreshing}
-          onRefresh={() => { void coverageRead.refresh() }}
-          onOpen={() => openGuests()}
-        />
-      </Box>
+      {/* 1. Header chips */}
+      <PostureChips
+        clusterPhase={phase.cluster}
+        firewallMode={firewallMode}
+        firewallOn={firewallOn}
+        policyIn={policyIn}
+        stopped={stopped}
+        stopHoldsFirewall={stopHoldsFirewall}
+        zones={zonesFigure}
+        guests={protectedRunning(coverage)}
+        lastCheck={lastCheck}
+        onOpenCluster={stopped ? () => openMicroseg('overview') : openRules(0)}
+        onOpenMicroseg={() => openMicroseg()}
+        onOpenGuests={() => openGuests()}
+      />
 
-      {/* 2. Zero Trust score, on the figures above */}
-      <ZeroTrustScoreCard phase={phase.score} score={score} values={scoreValues} />
+      {/* 2. Observed traffic: by zone on the left, its distribution and top services on the right */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gap: 2.5, mb: 2.5 }}>
+        <Box sx={{ gridColumn: { xs: 'span 12', lg: 'span 7' }, minWidth: 0 }}>
+          <TrafficByZone
+            phase={trafficPhase}
+            traffic={posture.traffic}
+            groupBy={groupBy}
+            onGroupBy={changeGroupBy}
+            truncated={(pending.data?.length ?? 0) >= POSTURE_SUGGESTIONS_LIMIT}
+            addresses={addresses}
+          />
+        </Box>
+        <Box sx={{ gridColumn: { xs: 'span 12', lg: 'span 5' }, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <TrafficDistribution phase={microsegPhase([microsegPolicy, pending])} distribution={posture.distribution} />
+          <TopServices phase={microsegPhase([microsegPolicy, pending])} rows={posture.services} />
+        </Box>
+      </Box>
 
       {/* 3. To do */}
       <DashboardTodo phase={phase.todo} items={items} actions={actions} />

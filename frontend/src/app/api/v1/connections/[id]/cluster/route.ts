@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { formatBytes } from "@/utils/format"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { cephAllowedForCaller } from "@/lib/ceph/tenantGuard"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -13,6 +14,9 @@ function round1(n: number) {
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id

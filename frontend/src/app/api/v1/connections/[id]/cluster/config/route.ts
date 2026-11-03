@@ -6,6 +6,7 @@ import { resolveManagementIp } from "@/lib/proxmox/resolveManagementIp"
 import { corosyncLinksOf } from "@/lib/proxmox/corosyncLinks"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -13,6 +14,9 @@ type CorosyncNodeConfig = { votes: number | null; links: string[]; fingerprint: 
 
 // GET - Récupérer les informations de join du cluster
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -231,6 +235,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
 
 // POST - Créer un cluster ou joindre un cluster
 async function handlePost(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id

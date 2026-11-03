@@ -9,6 +9,8 @@ import { cephAllowedForCaller } from "@/lib/ceph/tenantGuard"
 import { resolveStorageCaller, storageVisibilityFilter } from "@/lib/storage/storageVisibility"
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { resolveCallerInfraScope } from "@/lib/tenant/iaasGuard"
+import { iaasStorageView } from "@/lib/connections/iaasView"
 import { attachPbsStorage, PbsAttachError } from "@/lib/storage/attachPbsStorage"
 import { audit } from "@/lib/audit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
@@ -173,6 +175,12 @@ async function getHandler(_req: Request, ctx: { params: Promise<{ id: string }> 
     if (!(await cephAllowedForCaller())) {
       result = result.map((s: any) => ({ ...s, monhost: null }))
     }
+
+    // Nor does it get the backend addressing of the provider's storages
+    // (servers, paths, exports, certificates): lib/connections/iaasView.
+    const tenantCaller = await resolveCallerInfraScope()
+    if (tenantCaller.ok === false) return tenantCaller.response
+    if (tenantCaller.infra.kind === "iaas") result = result.map((s: any) => iaasStorageView(s))
 
     // Trier: partagés d'abord, puis par utilisation décroissante
     result.sort((a, b) => {

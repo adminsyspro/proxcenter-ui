@@ -3,11 +3,15 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
 // GET - Get a specific matcher
 export async function GET(req: Request, ctx: { params: Promise<{ id: string; name: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, name } = await ctx.params
     if (!id || !name) return NextResponse.json({ error: "Missing params" }, { status: 400 })
@@ -23,6 +27,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; nam
 
 // POST - Create a matcher (POST goes to /matchers not /matchers/{name})
 async function handlePost(req: Request, ctx: { params: Promise<{ id: string; name: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id } = await ctx.params
     if (!id) return NextResponse.json({ error: "Missing params" }, { status: 400 })
@@ -49,6 +56,9 @@ async function handlePost(req: Request, ctx: { params: Promise<{ id: string; nam
 
 // PUT - Update a matcher
 async function handlePut(req: Request, ctx: { params: Promise<{ id: string; name: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, name } = await ctx.params
     if (!id || !name) return NextResponse.json({ error: "Missing params" }, { status: 400 })
@@ -75,6 +85,9 @@ async function handlePut(req: Request, ctx: { params: Promise<{ id: string; name
 
 // DELETE - Delete a matcher
 async function handleDelete(req: Request, ctx: { params: Promise<{ id: string; name: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, name } = await ctx.params
     if (!id || !name) return NextResponse.json({ error: "Missing params" }, { status: 400 })

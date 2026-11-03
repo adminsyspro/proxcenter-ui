@@ -38,6 +38,16 @@ vi.mock("@/lib/tenant", () => ({
   DEFAULT_TENANT_ID: "default",
 }))
 
+// The caller's tenant comes from its principal (lib/tenant/iaasGuard); here it
+// follows this file's tenant mocks.
+vi.mock("@/lib/tenant/iaasGuard", () => ({
+  resolveCallerInfraScope: async (opts: { ignoreVdcContext?: boolean } = {}) => {
+    const tenantId = await getCurrentTenantIdMock()
+    const infra = await getInfraMock(tenantId, { ignoreVdcContext: opts.ignoreVdcContext ?? true })
+    return { ok: true, tenantId, infra }
+  },
+}))
+
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     connection: { findMany: (...a: any[]) => findManyMock(...a) },
@@ -161,10 +171,14 @@ describe("GET /api/v1/orchestrator/jobs — tenant scoping", () => {
 
     const body = await res.json()
     const ids = body.data.map((j: any) => j.id)
-    expect(ids).toContain("ru-c1")
-    expect(ids).toContain("dm-c1")
+    // Rolling updates and DRS moves are the provider's operations on the
+    // whole shared cluster (roadmap#189): none of them, in or out of the vDC view.
+    expect(ids).not.toContain("ru-c1")
+    expect(ids).not.toContain("dm-c1")
     expect(ids).not.toContain("ru-c2")
     expect(ids).not.toContain("ru-none")
+    expect(ids).toContain("mig-c1")
+    expect(body.stats.total).toBe(1)
   })
 
   it("iaas: a multi-cluster job with one endpoint outside the perimeter is hidden entirely", async () => {
@@ -297,7 +311,11 @@ describe("GET /api/v1/orchestrator/jobs — tenant scoping", () => {
     // migration from them.
     expect(ids).toContain("mig-c1")
     expect(ids).not.toContain("mig-c2")
-    expect(migrationFindManyMock.mock.calls[0][0].where).toEqual({ targetConnectionId: { in: ["c1"] } })
+    // The cluster by its name, never the provider's API host.
+    expect(body.data.find((j: any) => j.id === "mig-c1").target).toBe("cluster-1")
+    expect(JSON.stringify(body)).not.toContain("pve1.example.com")
+    // Its own migrations only: the cluster is shared with other customers.
+    expect(migrationFindManyMock.mock.calls[0][0].where).toEqual({ tenantId: "tenant-a", targetConnectionId: { in: ["c1"] } })
   })
 
   it("maps every terminal migration status and never offers cancel on one", async () => {

@@ -5,6 +5,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+
+// The IaaS tenant gate of this route is covered by lib/tenant/iaasGuard.routes.test.ts (roadmap#189).
+vi.mock("@/lib/tenant/iaasGuard", () => ({ denyIaasTenant: async () => null }))
+
 import { callRoute } from '@/__tests__/setup/route-test'
 
 // The vDC guest guard (lib/vdc/guestGuard.ts) has its own tests: pass-through

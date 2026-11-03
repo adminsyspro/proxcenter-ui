@@ -195,6 +195,8 @@ export type AuditAction =
   | "microseg.suggestions.resolve"
   | "microseg.confirm_writes"
   | "microseg.check"
+  // Firewalling draft published in one call (app/api/v1/firewall/publish)
+  | "firewall.publish"
 
 export type AuditStatus = "success" | "failure" | "warning"
 

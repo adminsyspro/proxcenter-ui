@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
-import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { getRBACContext, filterVmsByPermission, PERMISSIONS, checkPermission } from "@/lib/rbac"
 import { formatBytes, formatUptime } from "@/utils/format"
 import { getTenantInfrastructureScope, inventoryConnectionPlan, maskingScope } from "@/lib/tenant/infraScope"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
-import { enrichVmsWithConfig } from "@/lib/inventory/vmConfig"
+import { parseVmConfig, probeGuestAgent } from "@/lib/inventory/vmConfig"
 import { attachGuestIps } from "@/lib/inventory/guestIpIndex"
+import { EMPTY_GUEST_NET_IDENTITY } from "@/lib/inventory/guestNetIdentity"
+import { peekGuestConfigFacts } from "@/lib/inventory/guestDiskTotals"
+import { fillGuestConfigs, getGuestListing, takeForcedRefresh } from "@/lib/inventory/vmsListing"
+import { mapWithConcurrency } from "@/lib/inventory/concurrency"
+import { POOL_GLOBAL_CONCURRENCY, withConnectionSlot } from "@/lib/inventory/connectionPool"
 import { withPublicApiGuard, type GuardedRouteContext } from "@/lib/api-tokens/routeGuard"
 import { restrictToTokenScope } from "@/lib/api-tokens/scope"
 
@@ -22,6 +26,14 @@ export const runtime = "nodejs"
  * Les IPs sont chargées séparément via /api/v1/vms/ips pour ne pas ralentir.
  * `ips`/`macs` (recherche, #223/#861) viennent de la config déjà lue plus de
  * l'index d'adresses live rafraîchi en arrière-plan : jamais d'appel bloquant.
+ *
+ * PVE load (UA52): the guest list is read at most every 15 s per connection
+ * and shared by concurrent callers; the config fields come from the guest
+ * config cache (guestDiskTotals, 15 min), and only a guest missing from it is
+ * read, through the connection's pool (4 in flight, 2 per node). See
+ * lib/inventory/vmsListing.ts. `?refresh=1` reads everything again, at most
+ * once per 30 s per connection. `cached_at`: the oldest read served; `partial`:
+ * some guest is served without fresh config fields, or a list read failed.
  */
 
 /**
@@ -41,6 +53,46 @@ function round1(n: number) {
 
 /** include=agent: probes not started after this are left unknown (roadmap#179). */
 const AGENT_PROBE_BUDGET_MS = 25_000
+/** The configs still being read past this are served from the older cache entry (or without), `partial` (nginx cuts at 60 s). */
+const CONFIG_WAIT_MS = 25_000
+
+/** Resolves when `p` does, or after `ms`, whichever comes first; `p` goes on. */
+async function waitAtMost(p: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([p, new Promise<void>(resolve => { timer = setTimeout(resolve, ms) })])
+    .finally(() => clearTimeout(timer))
+}
+
+type MappedVm = { vmid: string; node: string; type: string; status: string; maxdisk: number }
+
+/** The config fields of each guest from the cache, and what that says of the answer. */
+function withCachedConfig<T extends MappedVm>(connId: string, vms: T[]) {
+  let partial = false
+  let oldest = Number.POSITIVE_INFINITY
+  const rows = vms.map(vm => {
+    const cached = peekGuestConfigFacts(connId, vm.type === 'lxc' ? 'lxc' : 'qemu', vm.vmid, { maxdisk: vm.maxdisk })
+    if (!cached) {
+      partial = true
+      return { ...vm, ...parseVmConfig(null), ...EMPTY_GUEST_NET_IDENTITY, diskTotal: undefined as number | undefined }
+    }
+    if (!cached.fresh) partial = true
+    oldest = Math.min(oldest, cached.readAt)
+    return { ...vm, ...cached.facts, diskTotal: cached.diskTotal as number | undefined }
+  })
+
+  return { rows, partial, oldest }
+}
+
+/** Agent probes (include=agent, the inventory export): only running qemu guests with the flag, in the connection's pool. */
+function withAgentProbes<T extends MappedVm & { agentEnabled: boolean }>(connId: string, connData: any, vms: T[], deadline?: number) {
+  return mapWithConcurrency(vms, POOL_GLOBAL_CONCURRENCY, async vm => {
+    const eligible = vm.type === 'qemu' && vm.status === 'running' && vm.agentEnabled
+    const probe = eligible
+      ? await withConnectionSlot(connId, vm.node, () => probeGuestAgent(connData, vm, true, deadline))
+      : await probeGuestAgent(connData, vm, false, deadline)
+    return { ...vm, ...probe }
+  })
+}
 
 async function handler(req: Request, ctx: GuardedRouteContext) {
   try {
@@ -53,6 +105,7 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     const includeAgent = url.searchParams.get('include') === 'agent'
     const agentDeadline = includeAgent ? Date.now() + AGENT_PROBE_BUDGET_MS : undefined
     const vmidFilter = parseVmidFilter(url.searchParams.get('vmids'))
+    const refreshAsked = url.searchParams.get('refresh') === '1'
 
     // Resolve infrastructure scope once; used for both connection enumeration
     // and vDC masking later. Provider and MSP avoid calling getVdcScope.
@@ -86,7 +139,9 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
       return NextResponse.json({
         data: {
           vms: [],
-          stats: { total: 0, running: 0, stopped: 0, paused: 0 }
+          stats: { total: 0, running: 0, stopped: 0, paused: 0 },
+          cached_at: null,
+          partial: false,
         }
       })
     }
@@ -99,6 +154,8 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     // True while a connection's address index is being built for the first
     // time: the palette re-fetches once so the IPs show up without a reload.
     let ipIndexWarming = false
+    let partial = false
+    let oldestRead = Number.POSITIVE_INFINITY
 
     // Charger toutes les connexions EN PARALLÈLE
     const connectionPromises = targetConnections.map(async (conn) => {
@@ -107,21 +164,20 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
 
         if (!connData.baseUrl || !connData.apiToken) return []
 
-        // Charger cluster/resources et nodes en parallèle
-        const [resourcesResult, nodesResult] = await Promise.allSettled([
-          pveFetch<any[]>(connData, "/cluster/resources?type=vm"),
-          pveFetch<any[]>(connData, "/nodes"),
-        ])
+        // cluster/resources and nodes: the last read of the connection when
+        // younger than 15 s, or the read running, else 2 calls.
+        const force = refreshAsked && takeForcedRefresh(conn.id)
+        const listing = await getGuestListing(conn.id, connData, { force })
 
-        const resources = resourcesResult.status === 'fulfilled' ? resourcesResult.value || [] : []
+        const resources = listing.resources
         // A rejected /nodes leaves node status UNKNOWN, not "everyone offline":
-        // `onlineNodes` stays null so enrichVmsWithConfig attempts the /config
-        // call instead of fabricating nulls for a connection that is otherwise
-        // reachable (resources succeeded).
-        const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value || [] : []
+        // `onlineNodes` stays null so the configs are still read instead of
+        // fabricating nulls for a connection that is otherwise reachable
+        // (resources succeeded).
+        const nodes = listing.nodes
 
         const isCluster = nodes.length > 1
-        const onlineNodes = nodesResult.status === 'fulfilled'
+        const onlineNodes = listing.nodesOk
           ? new Set(
               nodes.filter((n: any) => n?.status === 'online' && n?.node).map((n: any) => String(n.node)),
             )
@@ -164,9 +220,16 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
           }
         })
 
+        // Only the guests with no cached config (or past its TTL) are read.
+        await waitAtMost(fillGuestConfigs(conn.id, connData, mapped, onlineNodes, { force }), CONFIG_WAIT_MS)
+        const cached = withCachedConfig(conn.id, mapped)
+        if (cached.partial || !listing.resourcesOk) partial = true
+        oldestRead = Math.min(oldestRead, cached.oldest, listing.at)
+
         // The agent probes queue behind the node's pvedaemon slots: past this
         // budget the rest is left unknown, so the route stays under nginx's 60 s.
-        const enriched = (await enrichVmsWithConfig(connData, mapped, onlineNodes, { includeAgent, agentDeadline }))
+        const configured = includeAgent ? await withAgentProbes(conn.id, connData, cached.rows, agentDeadline) : cached.rows
+        const enriched = configured
           // #938: `diskGb` is the VM's disk size, so every disk of it, not the
           // boot disk `maxdisk` names. Never below maxdisk, and maxdisk alone
           // when the config could not be read.
@@ -175,13 +238,14 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
         // index is fine, rebuilding it from that list is not.
         // A vmids subset is not the connection's guest list either.
         const { vms: withIps, warming } = attachGuestIps(conn.id, connData, enriched, {
-          refresh: resourcesResult.status === 'fulfilled' && !vmidFilter,
+          refresh: listing.resourcesOk && !vmidFilter,
         })
         if (warming) ipIndexWarming = true
 
         return withIps
       } catch (e) {
         console.error(`[vms] Error fetching connection ${conn.id}:`, e)
+        partial = true
         
 return []
       }
@@ -239,6 +303,8 @@ return aId - bId
         vms: allVms,
         stats,
         ipIndexWarming,
+        cached_at: Number.isFinite(oldestRead) ? new Date(oldestRead).toISOString() : null,
+        partial,
       }
     })
   } catch (e: any) {

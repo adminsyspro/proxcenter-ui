@@ -38,11 +38,12 @@ type Props = { result: MicrosegRunResult; guests: PolicyGuest[] }
  */
 export default function PlanNotices({ result, guests }: Props) {
   const t = useTranslations('microsegPilot.plan')
-  const { collisions = [], foreign_rules: foreign = [], unread = [], ambiguous = [] } = result
-  if (!collisions.length && !foreign.length && !unread.length && !ambiguous.length) return null
+  const { collisions = [], foreign_rules: foreign = [], unread = [], ambiguous = [], stop_active: stopActive = false } = result
+  if (!collisions.length && !foreign.length && !unread.length && !ambiguous.length && !stopActive) return null
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
+      {stopActive && <Notice severity='warning' text={t('stopActive')} />}
       {collisions.length > 0 && <Notice severity='error' text={t('collisions', { names: collisions.join(', ') })} />}
       {foreign.length > 0 && <Notice severity='warning' text={t('foreignRules', { names: foreign.join(', ') })} />}
       {unread.length > 0 && <Notice severity='warning' text={t('unread', { count: unread.length, names: guestList(guests, unread) })} />}

@@ -32,6 +32,7 @@ export default function ApplyResult({ run, guests }: Props) {
       <Notice severity={failed.length > 0 ? 'warning' : 'success'} text={summary} />
       {result.truncated && <Notice severity='warning' text={t('truncated')} />}
       {result.interrupted && <Notice severity='warning' text={t('interrupted')} />}
+      {result.stop_active && <Notice severity='warning' text={t('stopActive')} />}
       {result.held && <Notice severity='warning' text={t('held')} />}
       {errors.length > 0 && <Notice severity='warning' text={t('errors', { list: errors.join('; ') })} />}
       {notes.length > 0 && <Notice severity='info' text={t('notes', { list: notes.join('; ') })} />}

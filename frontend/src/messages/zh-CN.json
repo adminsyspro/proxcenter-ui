@@ -9029,42 +9029,8 @@
     "loadErrorDetails": "详情",
     "loadErrorHideDetails": "隐藏详情",
     "dashboard": {
-      "coverageComputedAgo": "计算于{time}",
-      "coverageComputing": "正在计算覆盖率",
-      "coverageRefresh": "重新计算",
-      "coverageSample": "{total, number} 个客户机中抽样 {measured, number} 个",
-      "coverageUnknown": "{count, plural, other {# 个客户机未读取}}",
-      "coverageUnknownHint": "节点离线或 Proxmox 响应过慢：请稍后重新计算",
-      "coverageUnavailable": "覆盖率不可用：{error}",
-      "coverageNone": "此连接上没有客户机",
       "stopHeldTitle": "紧急停止已关闭集群防火墙",
-      "open": "打开",
-      "openCluster": "打开集群防火墙",
-      "openGuests": "打开客户机防火墙",
-      "clusterTitle": "集群防火墙",
-      "hostTitle": "主机防火墙",
-      "clusterUnavailable": "防火墙数据不可用",
-      "stateLabel": "状态",
-      "firewallOn": "已启用",
-      "firewallOff": "已关闭",
-      "policiesLabel": "默认策略",
-      "rulesLabel": "规则",
-      "rulesCount": "{rules, plural, other {# 条集群规则}}，{groups, plural, other {# 个安全组}}",
-      "coverageTitle": "客户机防火墙",
-      "coverageProtectedLabel": "受保护的客户机",
-      "coverageProtected": "{total, number} 个中 {protected, number} 个受保护",
-      "coverageStates": "{running, number} 个运行中，{stopped, number} 个已停止",
       "coverageDefinition": "受保护：客户机选项及其某个网络接口上均已启用防火墙，即 Proxmox 实际应用的状态",
-      "coverageRate": "保护率",
-      "coverageUnprotected": "{count, plural, other {# 个无防火墙}}",
-      "coverageRefreshSoon": "30 秒内刚重新计算过",
-      "scoreNotComputed": "未计算",
-      "scoreNotComputedHint": "在集群防火墙和至少一个客户机的防火墙状态已知后计算",
-      "componentFirewall": "集群防火墙",
-      "componentPolicyIn": "入站策略",
-      "componentCoverage": "受保护的客户机",
-      "scoreLine": "{label}（{value}）：{weight, number} 分中得 {points, number} 分",
-      "scoreLineUnknown": "{label}：尚未知晓",
       "todoTitle": "待办",
       "todoNothing": "无待办事项",
       "todoUnavailable": "无法读取防火墙数据时不可用",
@@ -13510,39 +13476,6 @@
           "removeComplete": "移除完成。",
           "removeIncomplete": "移除未完成：请重新运行。"
         }
-      }
-    },
-    "dashboard": {
-      "open": "打开微分段",
-      "openShort": "打开",
-      "unavailable": "不可用",
-      "deployment": {
-        "label": "部署",
-        "none": "未部署",
-        "deployed": "已部署",
-        "counts": "已部署：{enforced, number} 个区域已强制，{observing, number} 个在观察",
-        "stopped": "紧急停止已启用",
-        "stoppedFirewall": "紧急停止已启用：集群防火墙已禁用"
-      },
-      "protection": {
-        "label": "客户机保护",
-        "protected": "{members, number} 个区域成员中有 {protected, number} 个受保护",
-        "unzoned": "{running, number} 个运行中的客户机中有 {count, number} 个不在任何区域内",
-        "allZoned": "{running, plural, =0 {没有运行中的客户机} other {全部 # 个运行中的客户机都在区域内}}",
-        "none": "尚未测量"
-      },
-      "engine": {
-        "label": "引擎",
-        "lastCheck": "上次检查 {time}",
-        "noCheck": "尚无检查",
-        "held": "等待您的确认（已达写入上限）"
-      },
-      "notSetUp": "此连接尚未设置：打开选项卡以定义区域",
-      "zones": "区域：{enforce, number} 个强制，{observe, number} 个观察，{disabled, number} 个停用",
-      "drifts": {
-        "label": "偏差",
-        "count": "{count, plural, other {# 个偏差}}",
-        "none": "无偏差"
       }
     },
     "waitingFirstCheck": "正在等待首次完整检查",

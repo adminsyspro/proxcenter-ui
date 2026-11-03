@@ -9029,42 +9029,8 @@
     "loadErrorDetails": "자세히",
     "loadErrorHideDetails": "자세히 숨기기",
     "dashboard": {
-      "coverageComputedAgo": "{time} 계산됨",
-      "coverageComputing": "적용 범위 계산 중",
-      "coverageRefresh": "다시 계산",
-      "coverageSample": "게스트 {total, number}개 중 {measured, number}개 표본",
-      "coverageUnknown": "{count, plural, other {읽지 못한 게스트 #개}}",
-      "coverageUnknownHint": "노드가 오프라인이거나 Proxmox 응답이 너무 느림: 나중에 다시 계산하세요",
-      "coverageUnavailable": "적용 범위를 사용할 수 없음: {error}",
-      "coverageNone": "이 연결에 게스트가 없습니다",
       "stopHeldTitle": "긴급 중지로 클러스터 방화벽이 꺼져 있음",
-      "open": "열기",
-      "openCluster": "클러스터 방화벽 열기",
-      "openGuests": "게스트 방화벽 열기",
-      "clusterTitle": "클러스터 방화벽",
-      "hostTitle": "호스트 방화벽",
-      "clusterUnavailable": "방화벽 데이터를 사용할 수 없음",
-      "stateLabel": "상태",
-      "firewallOn": "켜짐",
-      "firewallOff": "꺼짐",
-      "policiesLabel": "기본 정책",
-      "rulesLabel": "규칙",
-      "rulesCount": "{rules, plural, other {클러스터 규칙 #개}}, {groups, plural, other {보안 그룹 #개}}",
-      "coverageTitle": "게스트 방화벽",
-      "coverageProtectedLabel": "보호된 게스트",
-      "coverageProtected": "{total, number}개 중 {protected, number}개 보호됨",
-      "coverageStates": "실행 중 {running, number}개, 중지됨 {stopped, number}개",
       "coverageDefinition": "보호됨: 게스트 옵션과 네트워크 인터페이스 중 하나에서 방화벽이 켜져 있음(Proxmox가 적용하는 기준)",
-      "coverageRate": "보호율",
-      "coverageUnprotected": "{count, plural, other {방화벽 없음 #개}}",
-      "coverageRefreshSoon": "30초 이내에 새로 계산됨",
-      "scoreNotComputed": "계산되지 않음",
-      "scoreNotComputedHint": "클러스터 방화벽과 게스트 하나 이상의 방화벽 상태가 확인되면 계산됩니다",
-      "componentFirewall": "클러스터 방화벽",
-      "componentPolicyIn": "인바운드 정책",
-      "componentCoverage": "보호된 게스트",
-      "scoreLine": "{label} ({value}): {weight, number}점 중 {points, number}점",
-      "scoreLineUnknown": "{label}: 아직 알 수 없음",
       "todoTitle": "할 일",
       "todoNothing": "할 일 없음",
       "todoUnavailable": "방화벽 데이터를 읽을 수 없는 동안에는 사용할 수 없음",
@@ -13510,39 +13476,6 @@
           "removeComplete": "제거가 완료되었습니다.",
           "removeIncomplete": "제거가 완료되지 않았습니다. 다시 실행하세요."
         }
-      }
-    },
-    "dashboard": {
-      "open": "마이크로 세분화 열기",
-      "openShort": "열기",
-      "unavailable": "사용할 수 없음",
-      "deployment": {
-        "label": "배포",
-        "none": "배포되지 않음",
-        "deployed": "배포됨",
-        "counts": "배포됨: 적용 영역 {enforced, number}개, 관찰 중 {observing, number}개",
-        "stopped": "긴급 중지 활성",
-        "stoppedFirewall": "긴급 중지 활성: 클러스터 방화벽 비활성화됨"
-      },
-      "protection": {
-        "label": "게스트 보호",
-        "protected": "영역 구성원 {members, number}개 중 {protected, number}개 보호됨",
-        "unzoned": "실행 중인 게스트 {running, number}개 중 {count, number}개가 어느 영역에도 속하지 않음",
-        "allZoned": "{running, plural, =0 {실행 중인 게스트 없음} other {실행 중인 게스트 #개가 모두 영역에 속해 있습니다}}",
-        "none": "아직 측정되지 않음"
-      },
-      "engine": {
-        "label": "엔진",
-        "lastCheck": "마지막 점검 {time}",
-        "noCheck": "아직 점검 없음",
-        "held": "확인 대기 중 (쓰기 한도 도달)"
-      },
-      "notSetUp": "이 연결에는 아직 설정되지 않았습니다. 탭을 열어 영역을 정의하세요",
-      "zones": "영역: 적용 {enforce, number}개, 관찰 {observe, number}개, 비활성 {disabled, number}개",
-      "drifts": {
-        "label": "드리프트",
-        "count": "{count, plural, other {드리프트 #개}}",
-        "none": "드리프트 없음"
       }
     },
     "waitingFirstCheck": "첫 번째 전체 점검을 기다리는 중",

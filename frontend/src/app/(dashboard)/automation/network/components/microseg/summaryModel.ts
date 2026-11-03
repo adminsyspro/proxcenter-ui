@@ -1,6 +1,6 @@
 import type { useFormatter } from 'next-intl'
 
-import type { MicrosegDriftList, MicrosegPolicy, MicrosegSnapshot, MicrosegStatus } from '@/lib/microseg/types'
+import type { MicrosegDriftList, MicrosegPolicy, MicrosegStatus } from '@/lib/microseg/types'
 
 import type { Coverage } from './coverage'
 
@@ -17,15 +17,6 @@ export function formatWhen(format: ReturnType<typeof useFormatter>, iso: string)
 
 /** What an admin starts, not what the engine does by itself: these runs are not "checks". */
 const ADMIN_KINDS = new Set(['plan', 'apply', 'remove', 'restore'])
-
-/** Zones of the last applied revision that enforce, and those that only observe (disabled ones are neither). */
-export function deployedCounts(snapshot: MicrosegSnapshot): { enforced: number; observing: number } {
-  const zones = snapshot.zones ?? []
-  return {
-    enforced: zones.filter(z => z.state === 'enforce').length,
-    observing: zones.filter(z => z.state === 'observe').length,
-  }
-}
 
 /** When the engine last looked at the cluster: its newest own run, whatever the kind. Null before the first one. */
 export function lastCheckAt(status: Pick<MicrosegStatus, 'engine'>): Date | null {
@@ -47,23 +38,6 @@ export function clusterFirewallOff(status: Pick<MicrosegStatus, 'engine'> | unde
   const state = status?.engine.cluster_firewall
   if (state === 'disabled') return true
   return state !== 'enabled' && !!policy?.policy.stop_cluster_disabled
-}
-
-/** Runs an admin starts and that change what is deployed. */
-const DEPLOY_KINDS = ['apply', 'remove', 'restore'] as const
-
-/**
- * When the deployed state last changed, as far as the engine tells: the start of its newest apply, remove and restore
- * runs. A new value means the last revision may have moved and the policy must be read again.
- */
-export function adminRunsMark(status: Pick<MicrosegStatus, 'engine' | 'emergency_stop'>): string {
-  const runs = status.engine.last_runs ?? {}
-  return [...DEPLOY_KINDS.map(kind => runs[kind]?.started_at ?? ''), String(!!status.emergency_stop)].join('|')
-}
-
-/** No policy on this connection yet: the orchestrator answers its empty draft, version 0, never deployed. */
-export function policyNotSetUp(policy: Pick<MicrosegPolicy, 'version' | 'last_revision' | 'zones'>): boolean {
-  return !policy.last_revision && policy.version === 0 && (policy.zones ?? []).length === 0
 }
 
 /**

@@ -8976,42 +8976,8 @@
     "loadErrorDetails": "Details anzeigen",
     "loadErrorHideDetails": "Details ausblenden",
     "dashboard": {
-      "coverageComputedAgo": "Berechnet {time}",
-      "coverageComputing": "Abdeckung wird berechnet",
-      "coverageRefresh": "Neu berechnen",
-      "coverageSample": "Stichprobe von {measured, number} von {total, number} Gästen",
-      "coverageUnknown": "{count, plural, one {# Gast nicht gelesen} other {# Gäste nicht gelesen}}",
-      "coverageUnknownHint": "Knoten offline oder Proxmox antwortet zu langsam: später neu berechnen",
-      "coverageUnavailable": "Abdeckung nicht verfügbar: {error}",
-      "coverageNone": "Kein Gast auf dieser Verbindung",
       "stopHeldTitle": "Cluster-Firewall durch den Notstopp ausgeschaltet",
-      "open": "Öffnen",
-      "openCluster": "Cluster-Firewall öffnen",
-      "openGuests": "Gast-Firewall öffnen",
-      "clusterTitle": "Cluster-Firewall",
-      "hostTitle": "Host-Firewall",
-      "clusterUnavailable": "Firewall-Daten nicht verfügbar",
-      "stateLabel": "Zustand",
-      "firewallOn": "Ein",
-      "firewallOff": "Aus",
-      "policiesLabel": "Standardrichtlinien",
-      "rulesLabel": "Regeln",
-      "rulesCount": "{rules, plural, one {# Cluster-Regel} other {# Cluster-Regeln}}, {groups, plural, one {# Sicherheitsgruppe} other {# Sicherheitsgruppen}}",
-      "coverageTitle": "Gast-Firewall",
-      "coverageProtectedLabel": "Geschützte Gäste",
-      "coverageProtected": "{protected, number} von {total, number} geschützt",
-      "coverageStates": "{running, number} laufend, {stopped, number} gestoppt",
       "coverageDefinition": "Geschützt: Firewall in den Gastoptionen und auf einer seiner Netzwerkschnittstellen aktiviert, so wie Proxmox sie anwendet",
-      "coverageRate": "Schutzrate",
-      "coverageUnprotected": "{count, plural, one {# ohne Firewall} other {# ohne Firewall}}",
-      "coverageRefreshSoon": "Neue Zahlen vor weniger als 30 Sekunden",
-      "scoreNotComputed": "Nicht berechnet",
-      "scoreNotComputedHint": "Wird berechnet, sobald die Cluster-Firewall und der Firewall-Zustand mindestens eines Gastes bekannt sind",
-      "componentFirewall": "Cluster-Firewall",
-      "componentPolicyIn": "Eingangsrichtlinie",
-      "componentCoverage": "Geschützte Gäste",
-      "scoreLine": "{label} ({value}): {points, number} von {weight, number}",
-      "scoreLineUnknown": "{label}: noch nicht bekannt",
       "todoTitle": "Zu erledigen",
       "todoNothing": "Nichts zu tun",
       "todoUnavailable": "Nicht verfügbar, solange die Firewall-Daten nicht gelesen werden können",
@@ -13178,39 +13144,6 @@
           "removeComplete": "Entfernung abgeschlossen.",
           "removeIncomplete": "Entfernung unvollständig: erneut ausführen."
         }
-      }
-    },
-    "dashboard": {
-      "open": "Mikrosegmentierung öffnen",
-      "openShort": "Öffnen",
-      "unavailable": "Nicht verfügbar",
-      "deployment": {
-        "label": "Bereitstellung",
-        "none": "Nicht bereitgestellt",
-        "deployed": "Bereitgestellt",
-        "counts": "Bereitgestellt: {enforced, plural, one {# Zone durchgesetzt} other {# Zonen durchgesetzt}}, {observing, number} in Beobachtung",
-        "stopped": "Notfall-Stopp aktiv",
-        "stoppedFirewall": "Notfallstopp aktiv: Cluster-Firewall deaktiviert"
-      },
-      "protection": {
-        "label": "Schutz der Gäste",
-        "protected": "{protected, number} von {members, number} Zonenmitgliedern geschützt",
-        "unzoned": "{count, plural, one {# laufender Gast} other {# laufende Gäste}} in keiner Zone, von {running, number} laufenden",
-        "allZoned": "{running, plural, =0 {Kein Gast läuft} one {Der einzige laufende Gast befindet sich in einer Zone} other {Alle # laufenden Gäste befinden sich in einer Zone}}",
-        "none": "Noch nicht gemessen"
-      },
-      "engine": {
-        "label": "Engine",
-        "lastCheck": "Letzte Prüfung {time}",
-        "noCheck": "Noch keine Prüfung",
-        "held": "Wartet auf Ihre Bestätigung (Schreibgrenze erreicht)"
-      },
-      "notSetUp": "Auf dieser Verbindung noch nicht eingerichtet: Tab öffnen, um Zonen zu definieren",
-      "zones": "Zonen: {enforce, number} durchgesetzt, {observe, number} beobachtend, {disabled, number} deaktiviert",
-      "drifts": {
-        "label": "Abweichungen",
-        "count": "{count, plural, one {# Abweichung} other {# Abweichungen}}",
-        "none": "Keine Abweichung"
       }
     },
     "waitingFirstCheck": "Warten auf die erste vollständige Prüfung",

@@ -9029,42 +9029,8 @@
     "loadErrorDetails": "Details",
     "loadErrorHideDetails": "Hide details",
     "dashboard": {
-      "coverageComputedAgo": "Computed {time}",
-      "coverageComputing": "Computing the coverage",
-      "coverageRefresh": "Compute again",
-      "coverageSample": "sample of {measured, number} guests out of {total, number}",
-      "coverageUnknown": "{count, plural, one {# guest not read} other {# guests not read}}",
-      "coverageUnknownHint": "Node offline or Proxmox too slow to answer: compute again later",
-      "coverageUnavailable": "Coverage not available: {error}",
-      "coverageNone": "No guest on this connection",
       "stopHeldTitle": "Cluster firewall held off by the emergency stop",
-      "open": "Open",
-      "openCluster": "Open the cluster firewall",
-      "openGuests": "Open the guest firewall",
-      "clusterTitle": "Cluster firewall",
-      "hostTitle": "Host firewall",
-      "clusterUnavailable": "Firewall data not available",
-      "stateLabel": "State",
-      "firewallOn": "On",
-      "firewallOff": "Off",
-      "policiesLabel": "Default policies",
-      "rulesLabel": "Rules",
-      "rulesCount": "{rules, plural, one {# cluster rule} other {# cluster rules}}, {groups, plural, one {# security group} other {# security groups}}",
-      "coverageTitle": "Guest firewall",
-      "coverageProtectedLabel": "Protected guests",
-      "coverageProtected": "{protected, number} protected of {total, number}",
-      "coverageStates": "{running, number} running, {stopped, number} stopped",
       "coverageDefinition": "Protected: firewall on in the guest options and on one of its network interfaces, what Proxmox applies",
-      "coverageRate": "Protection rate",
-      "coverageUnprotected": "{count, plural, one {# without firewall} other {# without firewall}}",
-      "coverageRefreshSoon": "New figures less than 30 seconds ago",
-      "scoreNotComputed": "Not computed",
-      "scoreNotComputedHint": "Computed once the cluster firewall and at least one guest's firewall state are known",
-      "componentFirewall": "Cluster firewall",
-      "componentPolicyIn": "Inbound policy",
-      "componentCoverage": "Guests protected",
-      "scoreLine": "{label} ({value}): {points, number} of {weight, number}",
-      "scoreLineUnknown": "{label}: not known yet",
       "todoTitle": "To do",
       "todoNothing": "Nothing to do",
       "todoUnavailable": "Not available while the firewall data cannot be read",
@@ -13510,39 +13476,6 @@
           "removeComplete": "Removal complete.",
           "removeIncomplete": "Removal incomplete: run it again."
         }
-      }
-    },
-    "dashboard": {
-      "open": "Open Micro-segmentation",
-      "openShort": "Open",
-      "unavailable": "Not available",
-      "deployment": {
-        "label": "Deployment",
-        "none": "Not deployed",
-        "deployed": "Deployed",
-        "counts": "Deployed: {enforced, plural, one {# zone enforced} other {# zones enforced}}, {observing, number} observing",
-        "stopped": "Emergency stop active",
-        "stoppedFirewall": "Emergency stop active: cluster firewall disabled"
-      },
-      "protection": {
-        "label": "Guest protection",
-        "protected": "{protected, number} of {members, number} zone members protected",
-        "unzoned": "{count, plural, one {# running guest} other {# running guests}} in no zone, of {running, number} running",
-        "allZoned": "{running, plural, =0 {No guest is running} one {The # running guest is in a zone} other {All # running guests are in a zone}}",
-        "none": "Not measured yet"
-      },
-      "engine": {
-        "label": "Engine",
-        "lastCheck": "Last check {time}",
-        "noCheck": "No check yet",
-        "held": "Waiting for your confirmation (write cap reached)"
-      },
-      "notSetUp": "Not set up on this connection yet: open the tab to define zones",
-      "zones": "Zones: {enforce, number} enforced, {observe, number} observing, {disabled, number} disabled",
-      "drifts": {
-        "label": "Drifts",
-        "count": "{count, plural, one {# drift} other {# drifts}}",
-        "none": "No drift"
       }
     },
     "waitingFirstCheck": "Waiting for the first full check",

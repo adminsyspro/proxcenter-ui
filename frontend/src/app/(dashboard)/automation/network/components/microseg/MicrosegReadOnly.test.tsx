@@ -13,7 +13,6 @@ import RBACContext, { type RBACContextValue } from '@/contexts/RBACContext'
 // The kit first: it stands in for the canvas library before the tab imports it.
 import { REVISION_HEAD, mock, policy, renderTab, reply, status, zone } from './microsegTestKit'
 import MicrosegTab from './MicrosegTab'
-import MicrosegSummaryCard from './MicrosegSummaryCard'
 import { installFreshMocks, suggestion, vm } from './policyTestKit'
 
 installFreshMocks()
@@ -81,12 +80,6 @@ describe('read-only user', () => {
     renderAs(rbac(false))
     expect((await screen.findByRole('button', { name: 'Resume' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getAllByRole('button', { name: 'Confirm writes' })[0] as HTMLButtonElement).disabled).toBe(true)
-  })
-
-  it('disables the confirmation of held writes on the Dashboard card', async () => {
-    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: true, last_runs: {}, last_log: null } }))
-    renderAs(rbac(false), <MicrosegSummaryCard connectionId='c1' onOpen={vi.fn()} />)
-    expect((await screen.findByRole('button', { name: 'Confirm writes' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('disables Accept, As CIDR and Dismiss of an observed flow, and Restore of a revision', async () => {

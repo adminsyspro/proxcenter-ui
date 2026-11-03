@@ -9029,42 +9029,8 @@
     "loadErrorDetails": "Detalles",
     "loadErrorHideDetails": "Ocultar detalles",
     "dashboard": {
-      "coverageComputedAgo": "Calculada {time}",
-      "coverageComputing": "Calculando la cobertura",
-      "coverageRefresh": "Volver a calcular",
-      "coverageSample": "muestra de {measured, number} invitados de {total, number}",
-      "coverageUnknown": "{count, plural, one {# invitado sin leer} other {# invitados sin leer}}",
-      "coverageUnknownHint": "Nodo fuera de línea o Proxmox demasiado lento: vuelva a calcular más tarde",
-      "coverageUnavailable": "Cobertura no disponible: {error}",
-      "coverageNone": "Ningún invitado en esta conexión",
       "stopHeldTitle": "Cortafuegos del clúster apagado por la parada de emergencia",
-      "open": "Abrir",
-      "openCluster": "Abrir el cortafuegos del clúster",
-      "openGuests": "Abrir el cortafuegos de los invitados",
-      "clusterTitle": "Cortafuegos del clúster",
-      "hostTitle": "Cortafuegos del host",
-      "clusterUnavailable": "Datos del cortafuegos no disponibles",
-      "stateLabel": "Estado",
-      "firewallOn": "Activado",
-      "firewallOff": "Desactivado",
-      "policiesLabel": "Políticas por defecto",
-      "rulesLabel": "Reglas",
-      "rulesCount": "{rules, plural, one {# regla de clúster} other {# reglas de clúster}}, {groups, plural, one {# grupo de seguridad} other {# grupos de seguridad}}",
-      "coverageTitle": "Cortafuegos de los invitados",
-      "coverageProtectedLabel": "Invitados protegidos",
-      "coverageProtected": "{protected, number} protegidos de {total, number}",
-      "coverageStates": "{running, number} en marcha, {stopped, number} detenidos",
       "coverageDefinition": "Protegido: cortafuegos activado en las opciones del invitado y en una de sus interfaces de red, lo que aplica Proxmox",
-      "coverageRate": "Tasa de protección",
-      "coverageUnprotected": "{count, plural, one {# sin cortafuegos} other {# sin cortafuegos}}",
-      "coverageRefreshSoon": "Cifras recalculadas hace menos de 30 segundos",
-      "scoreNotComputed": "Sin calcular",
-      "scoreNotComputedHint": "Se calcula en cuanto se conocen el cortafuegos del clúster y el estado del cortafuegos de al menos un invitado",
-      "componentFirewall": "Cortafuegos del clúster",
-      "componentPolicyIn": "Política de entrada",
-      "componentCoverage": "Invitados protegidos",
-      "scoreLine": "{label} ({value}): {points, number} de {weight, number}",
-      "scoreLineUnknown": "{label}: aún desconocido",
       "todoTitle": "Por hacer",
       "todoNothing": "Nada que hacer",
       "todoUnavailable": "No disponible mientras no se puedan leer los datos del cortafuegos",
@@ -13510,39 +13476,6 @@
           "removeComplete": "Retirada completa.",
           "removeIncomplete": "Retirada incompleta: vuelva a ejecutarla."
         }
-      }
-    },
-    "dashboard": {
-      "open": "Abrir la microsegmentación",
-      "openShort": "Abrir",
-      "unavailable": "No disponible",
-      "deployment": {
-        "label": "Despliegue",
-        "none": "No desplegada",
-        "deployed": "Desplegada",
-        "counts": "Desplegada: {enforced, plural, one {# zona aplicada} other {# zonas aplicadas}}, {observing, number} en observación",
-        "stopped": "Parada de emergencia activa",
-        "stoppedFirewall": "Parada de emergencia activa: cortafuegos de clúster desactivado"
-      },
-      "protection": {
-        "label": "Protección de invitados",
-        "protected": "{protected, number} de {members, number} miembros de zona protegidos",
-        "unzoned": "{count, plural, one {# invitado en marcha} other {# invitados en marcha}} en ninguna zona, de {running, number} en marcha",
-        "allZoned": "{running, plural, =0 {Ningún invitado en marcha} one {El único invitado en marcha está en una zona} other {Los # invitados en marcha están todos en una zona}}",
-        "none": "Aún sin medir"
-      },
-      "engine": {
-        "label": "Motor",
-        "lastCheck": "Última comprobación {time}",
-        "noCheck": "Aún sin comprobaciones",
-        "held": "A la espera de su confirmación (límite de escrituras alcanzado)"
-      },
-      "notSetUp": "Aún no configurada en esta conexión: abra la pestaña para definir zonas",
-      "zones": "Zonas: {enforce, number} aplicadas, {observe, number} en observación, {disabled, number} desactivadas",
-      "drifts": {
-        "label": "Desviaciones",
-        "count": "{count, plural, one {# desviación} other {# desviaciones}}",
-        "none": "Ninguna desviación"
       }
     },
     "waitingFirstCheck": "A la espera de la primera comprobación completa",

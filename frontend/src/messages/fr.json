@@ -9029,42 +9029,8 @@
     "loadErrorDetails": "Détails",
     "loadErrorHideDetails": "Masquer les détails",
     "dashboard": {
-      "coverageComputedAgo": "Calculée {time}",
-      "coverageComputing": "Calcul de la couverture en cours",
-      "coverageRefresh": "Recalculer",
-      "coverageSample": "échantillon de {measured, number} invités sur {total, number}",
-      "coverageUnknown": "{count, plural, one {# invité non lu} other {# invités non lus}}",
-      "coverageUnknownHint": "Nœud hors ligne ou Proxmox trop lent à répondre : recalculez plus tard",
-      "coverageUnavailable": "Couverture indisponible : {error}",
-      "coverageNone": "Aucun invité sur cette connexion",
       "stopHeldTitle": "Pare-feu de cluster coupé par l'arrêt d'urgence",
-      "open": "Ouvrir",
-      "openCluster": "Ouvrir le pare-feu du cluster",
-      "openGuests": "Ouvrir le pare-feu des invités",
-      "clusterTitle": "Pare-feu du cluster",
-      "hostTitle": "Pare-feu de l'hôte",
-      "clusterUnavailable": "Données du pare-feu indisponibles",
-      "stateLabel": "État",
-      "firewallOn": "Activé",
-      "firewallOff": "Désactivé",
-      "policiesLabel": "Politiques par défaut",
-      "rulesLabel": "Règles",
-      "rulesCount": "{rules, plural, one {# règle de cluster} other {# règles de cluster}}, {groups, plural, one {# groupe de sécurité} other {# groupes de sécurité}}",
-      "coverageTitle": "Pare-feu des invités",
-      "coverageProtectedLabel": "Invités protégés",
-      "coverageProtected": "{protected, number} protégés sur {total, number}",
-      "coverageStates": "{running, number} en marche, {stopped, number} arrêtés",
       "coverageDefinition": "Protégé : pare-feu activé dans les options de l'invité et sur une de ses interfaces réseau, ce que Proxmox applique",
-      "coverageRate": "Taux de protection",
-      "coverageUnprotected": "{count, plural, one {# sans pare-feu} other {# sans pare-feu}}",
-      "coverageRefreshSoon": "Chiffres recalculés il y a moins de 30 secondes",
-      "scoreNotComputed": "Non calculé",
-      "scoreNotComputedHint": "Calculé dès que le pare-feu du cluster et l'état du pare-feu d'au moins un invité sont connus",
-      "componentFirewall": "Pare-feu du cluster",
-      "componentPolicyIn": "Politique entrante",
-      "componentCoverage": "Invités protégés",
-      "scoreLine": "{label} ({value}) : {points, number} sur {weight, number}",
-      "scoreLineUnknown": "{label} : pas encore connu",
       "todoTitle": "À faire",
       "todoNothing": "Rien à faire",
       "todoUnavailable": "Indisponible tant que les données du pare-feu ne peuvent pas être lues",
@@ -13511,39 +13477,6 @@
           "removeComplete": "Retrait terminé.",
           "removeIncomplete": "Retrait incomplet : relancez-le."
         }
-      }
-    },
-    "dashboard": {
-      "open": "Ouvrir la micro-segmentation",
-      "openShort": "Ouvrir",
-      "unavailable": "Indisponible",
-      "deployment": {
-        "label": "Déploiement",
-        "none": "Non déployée",
-        "deployed": "Déployée",
-        "counts": "Déployée : {enforced, plural, one {# zone appliquée} other {# zones appliquées}}, {observing, number} en observation",
-        "stopped": "Arrêt d'urgence actif",
-        "stoppedFirewall": "Arrêt d'urgence actif : pare-feu de cluster désactivé"
-      },
-      "protection": {
-        "label": "Protection des invités",
-        "protected": "{protected, number} membres de zone protégés sur {members, number}",
-        "unzoned": "{count, plural, one {# invité en marche} other {# invités en marche}} dans aucune zone, sur {running, number} en marche",
-        "allZoned": "{running, plural, =0 {Aucun invité en marche} one {L'unique invité en marche est dans une zone} other {Les # invités en marche sont tous dans une zone}}",
-        "none": "Pas encore mesurée"
-      },
-      "engine": {
-        "label": "Moteur",
-        "lastCheck": "Dernier contrôle {time}",
-        "noCheck": "Aucun contrôle pour l'instant",
-        "held": "En attente de votre confirmation (plafond d'écritures atteint)"
-      },
-      "notSetUp": "Pas encore configurée sur cette connexion : ouvrez l'onglet pour définir des zones",
-      "zones": "Zones : {enforce, number} appliquées, {observe, number} en observation, {disabled, number} désactivées",
-      "drifts": {
-        "label": "Écarts",
-        "count": "{count, plural, one {# écart} other {# écarts}}",
-        "none": "Aucun écart"
       }
     },
     "waitingFirstCheck": "En attente du premier contrôle complet",

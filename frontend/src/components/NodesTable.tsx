@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react'
+import { paletteColor } from '@/utils/paletteColor'
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 
@@ -19,14 +20,15 @@ import {
   Typography,
   useTheme
 } from '@mui/material'
-import { DataGrid, GridColDef } from '@mui/x-data-grid'
+import { DataGrid, GridColDef, type GridRowSelectionModel } from '@mui/x-data-grid'
+import { resolveSelectedRowIds } from '@/utils/gridSelection'
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 // RemixIcon replacements for @mui/icons-material
-const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
 
 /* -----------------------------
   Helpers
@@ -125,6 +127,9 @@ type NodesTableProps = {
   maxHeight?: number | string
   showMigrateOption?: boolean // Only show migrate in cluster with multiple nodes
   showTrends?: boolean
+  /** Checkboxes, the selection held by the parent (roadmap#198: a group of nodes). */
+  selectedIds?: ReadonlySet<string>
+  onSelectionChange?: (ids: Set<string>) => void
 }
 
 /* -----------------------------
@@ -222,12 +227,26 @@ function NodesTable({
   maxHeight = 400,
   showMigrateOption = true,
   showTrends = false,
+  selectedIds,
+  onSelectionChange,
 }: NodesTableProps) {
   const theme = useTheme()
   const t = useTranslations()
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<NodeContextMenu>(null)
+
+  // Checkboxes only when the parent follows the selection; the grid's
+  // "select all" answers with an exclusion list, resolved against the rows.
+  const selectionProps = useMemo(() => {
+    if (!onSelectionChange) return {}
+    return {
+      checkboxSelection: true,
+      hideFooterSelectedRowCount: true,
+      rowSelectionModel: { type: 'include', ids: new Set(selectedIds ?? []) } as GridRowSelectionModel,
+      onRowSelectionModelChange: (model: GridRowSelectionModel) => onSelectionChange(new Set(resolveSelectedRowIds(model, nodes))),
+    }
+  }, [onSelectionChange, selectedIds, nodes])
 
   const handleContextMenu = useCallback((event: React.MouseEvent, node: NodeRow) => {
     event.preventDefault()
@@ -451,11 +470,12 @@ function NodesTable({
       onContextMenu={handleContainerContextMenu}
     >
       <DataGrid
+        {...selectionProps}
         rows={nodes}
         columns={columns}
         loading={loading}
         density={compact ? 'compact' : 'standard'}
-        disableRowSelectionOnClick={!onNodeClick}
+        disableRowSelectionOnClick={!onNodeClick || !!onSelectionChange}
         onRowClick={onNodeClick ? (params) => onNodeClick(params.row as NodeRow) : undefined}
         pageSizeOptions={[10, 15, 25, 50]}
         autoHeight={isAutoHeight}

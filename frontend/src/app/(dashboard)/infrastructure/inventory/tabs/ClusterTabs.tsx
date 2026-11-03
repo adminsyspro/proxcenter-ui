@@ -86,6 +86,8 @@ import { useToast } from '@/contexts/ToastContext'
 import { useRollingUpdates } from '@/contexts/RollingUpdateContext'
 import { useDRSStatus, useDRSMetrics, useDRSSettings, useDRSRecommendations } from '@/hooks/useDRS'
 import { useRBAC } from '@/contexts/RBACContext'
+import { useTenant } from '@/contexts/TenantContext'
+import HostGroupBar from '@/components/HostGroupBar'
 import { computeDrsHealthScore } from '@/lib/utils/drs-health'
 import { aggregatePermissionErrors } from '@/lib/proxmox/loadNodeAptUpdates'
 import MetricsRangeSelector, { type MetricsRangeValue } from '@/components/metrics/MetricsRangeSelector'
@@ -379,7 +381,15 @@ export default function ClusterTabs(props: any) {
     () => ((data?.nodesData || []) as NodeRow[]).map(n => ({ connId: clusterConnId, node: n.name, status: n.status })),
     [data?.nodesData, clusterConnId],
   )
-  const guestSelection = useGuestSelection({ vms: (data?.allVms || []) as VmRow[], nodes: selectionNodes, migratingVmIds, resetKey: clusterConnId })
+  const guestSelection = useGuestSelection({ vms: (data?.allVms || []) as VmRow[], nodes: selectionNodes, migratingVmIds, resetKey: clusterConnId, liveVms: allVms })
+
+  // Several nodes in maintenance at once (roadmap#198): node.manage, on a
+  // cluster the tenant owns, of three nodes at least (two leave, one stays).
+  const { isFullClusterView } = useTenant()
+  const canGroupHosts = isFullClusterView && hasPermission('node.manage') && (data?.nodesData?.length ?? 0) > 2
+  const [pickedHosts, setPickedHosts] = useState<{ conn: string; ids: Set<string> }>(() => ({ conn: clusterConnId, ids: new Set() }))
+  const hostIds = pickedHosts.conn === clusterConnId ? pickedHosts.ids : new Set<string>()
+  const setHostIds = useCallback((ids: Set<string>) => setPickedHosts({ conn: clusterConnId, ids }), [clusterConnId])
 
   const drsHealth = useMemo(() => {
     if (!isEnterprise || !(drsStatus as any)?.enabled || !metricsData) return null
@@ -1572,6 +1582,9 @@ export default function ClusterTabs(props: any) {
                 )}
 
                 {/* Onglet Nodes - Index 1 */}
+                {clusterTab === 1 && data.nodesData.length > 0 && canGroupHosts && (
+                  <HostGroupBar connId={clusterConnId} nodes={data.nodesData as NodeRow[]} selectedIds={hostIds} onClear={() => setHostIds(new Set())} />
+                )}
                 {clusterTab === 1 && data.nodesData.length > 0 && (
                   <NodesTable
                     nodes={(enrichedNodesData as NodeRow[]).map(n => ({
@@ -1594,6 +1607,7 @@ export default function ClusterTabs(props: any) {
                     onBulkAction={handleNodeBulkAction}
                     showMigrateOption={data.nodesData.length > 1}
                     showTrends
+                    {...(canGroupHosts ? { selectedIds: hostIds, onSelectionChange: setHostIds } : {})}
                   />
                 )}
 

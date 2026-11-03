@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+import { paletteColor } from '@/utils/paletteColor'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -21,7 +22,7 @@ import { useToast } from '@/contexts/ToastContext'
 
 import { sanitizeTag, filterTagInput } from '../helpers'
 
-const AddIcon = (props: any) => <i className="ri-add-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const AddIcon = (props: any) => <i className="ri-add-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
 const CloseIcon = ({ fontSize, sx, style, className, ...rest }: any) => <i className={`ri-close-line${className ? ` ${className}` : ''}`} style={{ fontSize: fontSize === 'small' ? 18 : 20, color: sx?.color, ...style }} {...rest} />
 
 type TagManagerProps = {

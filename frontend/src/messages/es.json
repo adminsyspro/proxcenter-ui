@@ -7607,7 +7607,8 @@
     "bulkPartial": "{description} - {success} OK, {errors} errores",
     "bulkFailed": "{description} - {errors} errores",
     "migrateStillRunning": "Seguía en curso cuando ProxCenter dejó de seguirla, consulta el registro de la tarea",
-    "migrateGuestFailed": "{name}: migración fallida: {reason}"
+    "migrateGuestFailed": "{name}: migración fallida: {reason}",
+    "bulkStillRunning": "{count} siguen en curso en Proxmox"
   },
   "vmConfig": {
     "title": "Configuración de VM",
@@ -12644,5 +12645,79 @@
         "slow": "Lento"
       }
     }
+  },
+  "bulkPower": {
+    "menu": "Encendido",
+    "action": {
+      "start": "Iniciar ({count})",
+      "shutdown": "Apagar ({count})",
+      "reboot": "Reiniciar ({count})",
+      "stop": "Forzar parada ({count})"
+    },
+    "title": {
+      "start": "Iniciar {count} invitado(s)",
+      "shutdown": "Apagar {count} invitado(s)",
+      "reboot": "Reiniciar {count} invitado(s)",
+      "stop": "Forzar parada de {count} invitado(s)"
+    },
+    "running": {
+      "start": "Iniciando invitados",
+      "shutdown": "Apagando invitados",
+      "reboot": "Reiniciando invitados",
+      "stop": "Deteniendo invitados"
+    },
+    "scope": "{count} invitado(s) en {hosts} host(s).",
+    "skipped": {
+      "start": "{count} invitado(s) seleccionado(s) omitido(s): no detenido(s).",
+      "other": "{count} invitado(s) seleccionado(s) omitido(s): no en ejecución."
+    },
+    "stopWarning": "Una parada forzada corta los invitados como al desenchufarlos: los datos no guardados se pierden.",
+    "perNode": "Tareas en paralelo por host",
+    "perNodeHelp": "Cada host ejecuta como máximo este número de tareas a la vez; un hueco se libera cuando termina la tarea de Proxmox. Redúzcalo en hosts cargados.",
+    "status": {
+      "queued": "En cola",
+      "running": "En curso",
+      "completed": "Hecho",
+      "failed": "Error",
+      "timeout": "Sigue en curso",
+      "cancelled": "Cancelado"
+    },
+    "count": {
+      "completed": "Hechos",
+      "failed": "Errores",
+      "active": "En curso",
+      "queued": "En cola",
+      "cancelled": "Cancelados"
+    },
+    "stopQueued": "Cancelar los en cola",
+    "closeKeepsRunning": "Cerrar esta ventana no detiene el lote: las tareas ya enviadas llegan hasta el final.",
+    "clusters": "{count} clústeres",
+    "migrateOneCluster": "La migración abarca un solo clúster a la vez: conserve solo los invitados de un clúster.",
+    "migrateNeedsTwoNodes": "La migración requiere un clúster con al menos dos nodos en línea.",
+    "showDetail": "Mostrar el detalle"
+  },
+  "hostGroup": {
+    "selectionCount": "{count} host(s) seleccionado(s)",
+    "enter": "Entrar en mantenimiento ({count})",
+    "exit": "Salir de mantenimiento ({count})",
+    "cannotEnter": {
+      "count": "Seleccione al menos dos hosts",
+      "state": "Cada host seleccionado debe estar en línea y fuera de mantenimiento",
+      "remaining": "Al menos un host en línea debe quedar fuera del grupo"
+    },
+    "cannotExit": "Cada host seleccionado debe estar en mantenimiento",
+    "enterTitle": "Mantenimiento: {nodes}",
+    "enterIntro": "Los hosts entran en mantenimiento juntos: un único plan envía los invitados a los hosts que quedan fuera del grupo, nunca a uno del grupo, y luego se activa el mantenimiento HA de Proxmox en cada host. Proxmox HA mueve los invitados HA; los invitados en almacenamiento local se quedan y se listan.",
+    "cephHint": "En un clúster Ceph, active el flag noout antes de detener varios hosts a la vez: el noout por host del mantenimiento de un solo host no se aplica a un grupo.",
+    "blocked": "Los hosts fuera del grupo no pueden acoger {count} invitado(s): el grupo no puede entrar en mantenimiento.",
+    "blockedMore": "y {count} más",
+    "started": "Mantenimiento de {nodes} iniciado, siga cada invitado en el Task Center",
+    "exitTitle": "Salir de mantenimiento: {nodes}",
+    "exitIntro": "Cada host sale del mantenimiento HA de Proxmox; Proxmox HA devuelve sus propios invitados.",
+    "bringBack": "Devolver también los {count} invitado(s) movidos por el mantenimiento del grupo",
+    "nothingToBringBack": "Ningún invitado movido por el mantenimiento del grupo que devolver",
+    "exited": "{nodes} salió/salieron del mantenimiento",
+    "stillInMaintenance": "Un host del grupo sigue en mantenimiento: los invitados no se devolvieron.",
+    "returnStarted": "Retorno de {count} invitado(s) iniciado"
   }
 }

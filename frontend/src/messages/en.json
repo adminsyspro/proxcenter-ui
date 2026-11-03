@@ -7607,7 +7607,8 @@
     "bulkPartial": "{description} - {success} OK, {errors} errors",
     "bulkFailed": "{description} - {errors} errors",
     "migrateStillRunning": "Still running when ProxCenter stopped following it, see the task log",
-    "migrateGuestFailed": "{name}: migration failed: {reason}"
+    "migrateGuestFailed": "{name}: migration failed: {reason}",
+    "bulkStillRunning": "{count} still running in Proxmox"
   },
   "vmConfig": {
     "title": "VM Configuration",
@@ -12644,5 +12645,79 @@
         "slow": "Slow"
       }
     }
+  },
+  "bulkPower": {
+    "menu": "Power",
+    "action": {
+      "start": "Start ({count})",
+      "shutdown": "Shut down ({count})",
+      "reboot": "Reboot ({count})",
+      "stop": "Force stop ({count})"
+    },
+    "title": {
+      "start": "Start {count} guest(s)",
+      "shutdown": "Shut down {count} guest(s)",
+      "reboot": "Reboot {count} guest(s)",
+      "stop": "Force stop {count} guest(s)"
+    },
+    "running": {
+      "start": "Starting guests",
+      "shutdown": "Shutting down guests",
+      "reboot": "Rebooting guests",
+      "stop": "Stopping guests"
+    },
+    "scope": "{count} guest(s) on {hosts} host(s).",
+    "skipped": {
+      "start": "{count} selected guest(s) left out: not stopped.",
+      "other": "{count} selected guest(s) left out: not running."
+    },
+    "stopWarning": "A force stop cuts the guests off like pulling the plug: unsaved data is lost.",
+    "perNode": "Tasks in parallel per host",
+    "perNodeHelp": "Each host runs at most this many tasks at a time; a slot frees when the Proxmox task ends. Lower it on busy hosts.",
+    "status": {
+      "queued": "Queued",
+      "running": "Running",
+      "completed": "Done",
+      "failed": "Failed",
+      "timeout": "Still running",
+      "cancelled": "Cancelled"
+    },
+    "count": {
+      "completed": "Done",
+      "failed": "Failed",
+      "active": "Running",
+      "queued": "Queued",
+      "cancelled": "Cancelled"
+    },
+    "stopQueued": "Cancel queued",
+    "closeKeepsRunning": "Closing this window does not stop the batch: the tasks already sent run to their end.",
+    "clusters": "{count} clusters",
+    "migrateOneCluster": "Migration covers one cluster at a time: keep the guests of one cluster only.",
+    "migrateNeedsTwoNodes": "Migration needs a cluster with two online nodes at least.",
+    "showDetail": "Show the details"
+  },
+  "hostGroup": {
+    "selectionCount": "{count} host(s) selected",
+    "enter": "Enter maintenance ({count})",
+    "exit": "Exit maintenance ({count})",
+    "cannotEnter": {
+      "count": "Select two hosts at least",
+      "state": "Every selected host must be online and out of maintenance",
+      "remaining": "At least one online host must stay outside the group"
+    },
+    "cannotExit": "Every selected host must be in maintenance",
+    "enterTitle": "Maintenance: {nodes}",
+    "enterIntro": "The hosts enter maintenance together: one plan sends the guests to the hosts left outside the group, never to one of the group, then Proxmox HA maintenance is set on each host. HA guests are relocated by Proxmox HA, guests on local storage stay and are listed.",
+    "cephHint": "On a Ceph cluster, set the noout flag before taking several hosts down at once: the per-host noout of a single host's maintenance is not set for a group.",
+    "blocked": "The hosts left outside the group cannot take {count} guest(s): the group cannot enter maintenance.",
+    "blockedMore": "and {count} more",
+    "started": "Maintenance of {nodes} started, follow each guest in the Task Center",
+    "exitTitle": "Exit maintenance: {nodes}",
+    "exitIntro": "Every host leaves Proxmox HA maintenance; Proxmox HA brings its own guests back.",
+    "bringBack": "Also bring back the {count} guest(s) the group maintenance moved",
+    "nothingToBringBack": "No guest moved by the group maintenance to bring back",
+    "exited": "{nodes} left maintenance",
+    "stillInMaintenance": "A host of the group is still in maintenance: the guests were not brought back.",
+    "returnStarted": "Return of {count} guest(s) started"
   }
 }

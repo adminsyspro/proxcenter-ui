@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
-import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { PERMISSIONS } from "@/lib/rbac"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { DrainConfigError, sanitizeDrainConfig } from "@/lib/hostDrain/config"
 import { drainCluster, DrainTargetDenied, restrictDrainTargets } from "@/lib/hostDrain/access"
-import { assertNodeName } from "@/lib/ssh/validate"
+import { checkScopePermission, parseDrainScope, scopeError, scopeNode, scopeNodes } from "@/lib/hostDrain/scope"
 import { isConnectionNotFoundError } from "@/lib/connections/getConnection"
 
 export const runtime = "nodejs"
@@ -17,31 +17,20 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 // Dry run: the guests of the node, where each one would go and which ones the
 // drain would refuse. Nothing moves. A selection of guests (#1218) sends
 // config.vmids and no node: the right to migrate each guest is then checked
-// by restrictDrainTargets, as for the drain itself.
+// by restrictDrainTargets, as for the drain itself. A group of nodes
+// (roadmap#198) sends config.nodes and no node: the right to view each one.
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null)
     const connectionId = body?.connection_id
-    const node = body?.node
-    const selection = Array.isArray(body?.config?.vmids) && body.config.vmids.length > 0
+    const parsed = parseDrainScope(body)
+    if (!connectionId) return scopeError("connection_id and node are required")
+    if ("error" in parsed) return scopeError(parsed.error)
+    const { scope } = parsed
+    const safeNode = scopeNode(scope)
 
-    if (!connectionId || (!node && !selection)) {
-      return NextResponse.json({ error: "connection_id and node are required" }, { status: 400 })
-    }
-    if (node && selection) {
-      return NextResponse.json({ error: "a selection of guests has no node" }, { status: 400 })
-    }
-
-    let safeNode = ""
-    if (!selection) {
-      try {
-        safeNode = assertNodeName(node)
-      } catch {
-        return NextResponse.json({ error: "Invalid node name" }, { status: 400 })
-      }
-      const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "node", buildNodeResourceId(connectionId, safeNode))
-      if (denied) return denied
-    }
+    const denied = await checkScopePermission(connectionId, scope, PERMISSIONS.NODE_VIEW)
+    if (denied) return denied
     // The plan names every guest of the node: clusters the caller owns only.
     if (!canMigrateConnections(await getTenantInfrastructureScope(await getCurrentTenantId()), connectionId)) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
@@ -54,7 +43,7 @@ export async function POST(req: Request) {
     let config
     try {
       const requested = sanitizeDrainConfig(body.config)
-      config = await restrictDrainTargets(await drainCluster(connectionId), connectionId, safeNode, requested)
+      config = await restrictDrainTargets(await drainCluster(connectionId), connectionId, scopeNodes(scope), requested)
     } catch (e) {
       if (e instanceof DrainConfigError) return NextResponse.json({ error: e.message }, { status: 400 })
       if (isConnectionNotFoundError(e)) return NextResponse.json({ error: "Connection not found" }, { status: 404 })

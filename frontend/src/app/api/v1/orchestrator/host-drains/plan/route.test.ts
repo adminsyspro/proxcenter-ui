@@ -185,3 +185,30 @@ describe("POST /api/v1/orchestrator/host-drains/plan, a selection of guests (#12
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
+
+describe("POST /api/v1/orchestrator/host-drains/plan, a group of nodes (roadmap#198)", () => {
+  beforeEach(() => {
+    pveFetchMock.mockResolvedValue([
+      { type: "node", node: "pve1" }, { type: "node", node: "pve2" }, { type: "node", node: "pve3" },
+      { type: "qemu", node: "pve2", vmid: 201, status: "running" },
+      { type: "qemu", node: "pve3", vmid: 301, status: "running" },
+    ])
+  })
+
+  it("plans the group without a node, under the right to view each node and to migrate its guests", async () => {
+    const res = await callRoute(POST, { body: { connection_id: "c1", config: { nodes: ["pve2", "pve3"], enter_maintenance: true } } })
+    expect(res.status).toBe(200)
+    expect(sent()).toMatchObject({ connection_id: "c1", node: "", config: { nodes: ["pve2", "pve3"], enter_maintenance: true } })
+    expect(checkPermissionMock).toHaveBeenCalledWith("node.view", "node", "c1:pve2")
+    expect(checkPermissionMock).toHaveBeenCalledWith("node.view", "node", "c1:pve3")
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve2:qemu:201")
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve3:qemu:301")
+  })
+
+  it("refuses a node of the group the caller may not view, and a group mixed with a node", async () => {
+    checkPermissionMock.mockImplementation(async (perm: string, _t?: string, id?: string) => (perm === "node.view" && id === "c1:pve3" ? new Response(null, { status: 403 }) : null))
+    expect((await callRoute(POST, { body: { connection_id: "c1", config: { nodes: ["pve2", "pve3"], enter_maintenance: true } } })).status).toBe(403)
+    expect((await callRoute(POST, { body: { connection_id: "c1", node: "pve1", config: { nodes: ["pve2", "pve3"], enter_maintenance: true } } })).status).toBe(400)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})

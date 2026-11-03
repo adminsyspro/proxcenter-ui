@@ -7607,7 +7607,8 @@
     "bulkPartial": "{description} - {success} 个成功，{errors} 个错误",
     "bulkFailed": "{description} - {errors} 个错误",
     "migrateStillRunning": "ProxCenter 停止跟踪时仍在运行，请查看任务日志",
-    "migrateGuestFailed": "{name}：迁移失败：{reason}"
+    "migrateGuestFailed": "{name}：迁移失败：{reason}",
+    "bulkStillRunning": "{count} 个仍在 Proxmox 中运行"
   },
   "vmConfig": {
     "title": "VM 配置",
@@ -12644,5 +12645,79 @@
         "slow": "较慢"
       }
     }
+  },
+  "bulkPower": {
+    "menu": "电源",
+    "action": {
+      "start": "启动 ({count})",
+      "shutdown": "关机 ({count})",
+      "reboot": "重启 ({count})",
+      "stop": "强制停止 ({count})"
+    },
+    "title": {
+      "start": "启动 {count} 个虚拟机/容器",
+      "shutdown": "关闭 {count} 个虚拟机/容器",
+      "reboot": "重启 {count} 个虚拟机/容器",
+      "stop": "强制停止 {count} 个虚拟机/容器"
+    },
+    "running": {
+      "start": "正在启动",
+      "shutdown": "正在关机",
+      "reboot": "正在重启",
+      "stop": "正在停止"
+    },
+    "scope": "{hosts} 台主机上的 {count} 个虚拟机/容器。",
+    "skipped": {
+      "start": "已排除 {count} 个所选对象：未处于停止状态。",
+      "other": "已排除 {count} 个所选对象：未在运行。"
+    },
+    "stopWarning": "强制停止相当于拔掉电源：未保存的数据将丢失。",
+    "perNode": "每台主机的并行任务数",
+    "perNodeHelp": "每台主机同时最多运行这么多任务；Proxmox 任务结束后释放名额。主机负载较高时请调低。",
+    "status": {
+      "queued": "排队中",
+      "running": "运行中",
+      "completed": "完成",
+      "failed": "失败",
+      "timeout": "仍在运行",
+      "cancelled": "已取消"
+    },
+    "count": {
+      "completed": "完成",
+      "failed": "失败",
+      "active": "运行中",
+      "queued": "排队中",
+      "cancelled": "已取消"
+    },
+    "stopQueued": "取消排队项",
+    "closeKeepsRunning": "关闭此窗口不会停止批处理：已发送的任务会运行到结束。",
+    "clusters": "{count} 个集群",
+    "migrateOneCluster": "迁移一次只针对一个集群：请只保留同一集群的对象。",
+    "migrateNeedsTwoNodes": "迁移需要至少有两个在线节点的集群。",
+    "showDetail": "显示详情"
+  },
+  "hostGroup": {
+    "selectionCount": "已选择 {count} 台主机",
+    "enter": "进入维护 ({count})",
+    "exit": "退出维护 ({count})",
+    "cannotEnter": {
+      "count": "请至少选择两台主机",
+      "state": "所选主机必须全部在线且未处于维护",
+      "remaining": "至少要有一台在线主机留在组外"
+    },
+    "cannotExit": "所选主机必须全部处于维护",
+    "enterTitle": "维护：{nodes}",
+    "enterIntro": "这些主机一起进入维护：同一个计划只把虚拟机/容器迁往组外的主机，绝不迁往组内主机，然后在每台主机上设置 Proxmox HA 维护。HA 对象由 Proxmox HA 迁移，本地存储上的对象保留并列出。",
+    "cephHint": "在 Ceph 集群上，同时停用多台主机前请设置 noout 标志：单台主机维护时的按主机 noout 不会为组设置。",
+    "blocked": "组外主机无法接收 {count} 个对象：该组无法进入维护。",
+    "blockedMore": "还有 {count} 个",
+    "started": "{nodes} 的维护已开始，请在任务中心跟踪每个对象",
+    "exitTitle": "退出维护：{nodes}",
+    "exitIntro": "每台主机退出 Proxmox HA 维护；Proxmox HA 会迁回其管理的对象。",
+    "bringBack": "同时迁回组维护迁走的 {count} 个对象",
+    "nothingToBringBack": "没有可迁回的组维护迁走的对象",
+    "exited": "{nodes} 已退出维护",
+    "stillInMaintenance": "组内仍有主机处于维护：未迁回对象。",
+    "returnStarted": "已开始迁回 {count} 个对象"
   }
 }

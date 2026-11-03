@@ -3,7 +3,7 @@ import { cleanup } from '@testing-library/react'
 
 import { renderWithProviders, screen, fireEvent, userEvent, waitFor, within } from '@/__tests__/setup/renderWithProviders'
 
-import HostDrainDialog, { buildHostDrainConfig, KEEP_ON_NODE } from './HostDrainDialog'
+import HostDrainDialog, { buildHostDrainConfig, KEEP_ON_NODE, readHostDrainPlan } from './HostDrainDialog'
 
 /*
    #248: the drain dialog previews the orchestrator's plan (one line per guest,
@@ -97,6 +97,18 @@ describe('HostDrainDialog', () => {
     // The eligible targets live in the info tooltip, the summary on the title line.
     expect(screen.getByTestId('drain-plan-candidates')).toHaveAttribute('aria-label', 'Eligible targets: pve1, pve2')
     expect(screen.queryByText('Eligible targets: pve1, pve2')).toBeNull()
+  })
+
+  it('reads an answer without a plan as the orchestrator out of reach, never as a crash', async () => {
+    expect(readHostDrainPlan({ success: true, demo: true })).toBeNull()
+    expect(readHostDrainPlan(null)).toBeNull()
+    expect(readHostDrainPlan({ node: 'n', guests: [], blocked: null })).toMatchObject({ candidates: [], projection: [], blocked: [] })
+    expect(readHostDrainPlan({ node: 'n', guests: [] })).not.toHaveProperty('blocked')
+
+    fetchMock.mockImplementation(async () => ({ ok: true, status: 200, json: async () => ({ success: true, demo: true, message: 'Action disabled in demo mode' }) }))
+    renderWithProviders(<HostDrainDialog open mode="maintenance" connId="c1" node="pve3" otherNodes={['pve1']} onClose={vi.fn()} />)
+
+    expect(await screen.findByText('The orchestrator is unreachable, the drain cannot run.')).toBeInTheDocument()
   })
 
   it('paginates a long plan, refused guests first', async () => {
@@ -503,5 +515,53 @@ describe('HostDrainDialog, Migrate selection (#1218)', () => {
     expect(sent.config.vmids).toEqual([101, 102])
     await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ id: 'd-2' }))
     expect(toast.success).toHaveBeenCalledWith('Migration of 2 guest(s) started')
+  })
+})
+
+describe('HostDrainDialog, a group of nodes (roadmap#198)', () => {
+  const GROUP_PLAN = { ...PLAN, node: '', candidates: ['pve1'], guests: PLAN.guests.map(g => ({ ...g, source_node: 'pve3' })) }
+
+  it('plans and starts the group without a node, always evacuating, with the Ceph hint', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).endsWith('/plan')) return { ok: true, status: 200, json: async () => ({ data: GROUP_PLAN }) }
+      return { ok: true, status: 200, json: async () => ({ data: { id: 'g-1' } }) }
+    })
+    const onStarted = vi.fn()
+    renderWithProviders(
+      <HostDrainDialog open mode="maintenance" connId="c1" node="" nodes={['pve2', 'pve3']} otherNodes={['pve1']} onClose={vi.fn()} onStarted={onStarted} />,
+    )
+
+    expect(screen.getByText('Maintenance: pve2, pve3')).toBeInTheDocument()
+    expect(screen.getByTestId('host-group-ceph-hint')).toBeInTheDocument()
+    expect(screen.queryByText('Evacuate the guests')).toBeNull()
+    await screen.findByTestId('drain-plan-guest-92481')
+    expect(JSON.parse(planCalls()[0][1].body)).toEqual({ connection_id: 'c1', config: expect.objectContaining({ nodes: ['pve2', 'pve3'], enter_maintenance: true }) })
+
+    const start = await screen.findByRole('button', { name: 'Start the drain' })
+    await waitFor(() => expect(start).toBeEnabled())
+    fireEvent.click(start)
+    await waitFor(() => expect(startCalls()).toHaveLength(1))
+    expect(JSON.parse(startCalls()[0][1].body)).toEqual({ connection_id: 'c1', config: expect.objectContaining({ nodes: ['pve2', 'pve3'] }) })
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Maintenance of pve2, pve3 started, follow each guest in the Task Center'))
+    expect(onStarted).toHaveBeenCalledWith({ id: 'g-1' })
+  })
+
+  it('lists what the nodes left outside cannot take and holds Start', async () => {
+    const blocked = Array.from({ length: 10 }, (_, i) => `VM ${200 + i} (big) on pve2: no target with enough free memory`)
+    fetchMock.mockImplementation(async () => ({ ok: true, status: 200, json: async () => ({ data: { ...GROUP_PLAN, blocked } }) }))
+    renderWithProviders(
+      <HostDrainDialog open mode="maintenance" connId="c1" node="" nodes={['pve2', 'pve3']} otherNodes={['pve1']} onClose={vi.fn()} />,
+    )
+
+    const alert = await screen.findByTestId('host-group-blocked')
+    expect(alert.textContent).toContain('cannot take 10 guest(s)')
+    expect(within(alert).getAllByRole('listitem')).toHaveLength(8)
+    expect(alert.textContent).toContain('and 2 more')
+    expect(screen.getByRole('button', { name: 'Start the drain' })).toBeDisabled()
+  })
+
+  it('keeps a single node out of the group config', () => {
+    expect(buildHostDrainConfig({ mode: 'maintenance', maxParallel: 2, memCeiling: 90, includeStopped: true, nodes: ['pve1'] })).not.toHaveProperty('nodes')
+    expect(buildHostDrainConfig({ mode: 'migrate-all', maxParallel: 2, memCeiling: 90, includeStopped: true, nodes: ['pve1', 'pve2'] })).not.toHaveProperty('nodes')
   })
 })

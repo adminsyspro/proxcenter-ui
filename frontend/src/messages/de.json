@@ -7588,7 +7588,8 @@
     "bulkPartial": "{description} - {success} OK, {errors} Fehler",
     "bulkFailed": "{description} - {errors} Fehler",
     "migrateStillRunning": "Lief noch, als ProxCenter die Verfolgung beendet hat, siehe Task-Protokoll",
-    "migrateGuestFailed": "{name}: Migration fehlgeschlagen: {reason}"
+    "migrateGuestFailed": "{name}: Migration fehlgeschlagen: {reason}",
+    "bulkStillRunning": "{count} laufen noch in Proxmox"
   },
   "vmConfig": {
     "title": "VM Konfiguration",
@@ -12312,5 +12313,79 @@
         "slow": "Langsam"
       }
     }
+  },
+  "bulkPower": {
+    "menu": "Energie",
+    "action": {
+      "start": "Starten ({count})",
+      "shutdown": "Herunterfahren ({count})",
+      "reboot": "Neu starten ({count})",
+      "stop": "Hart stoppen ({count})"
+    },
+    "title": {
+      "start": "{count} Gast/Gäste starten",
+      "shutdown": "{count} Gast/Gäste herunterfahren",
+      "reboot": "{count} Gast/Gäste neu starten",
+      "stop": "{count} Gast/Gäste hart stoppen"
+    },
+    "running": {
+      "start": "Gäste werden gestartet",
+      "shutdown": "Gäste werden heruntergefahren",
+      "reboot": "Gäste werden neu gestartet",
+      "stop": "Gäste werden gestoppt"
+    },
+    "scope": "{count} Gast/Gäste auf {hosts} Host(s).",
+    "skipped": {
+      "start": "{count} ausgewählte(r) Gast/Gäste ausgelassen: nicht gestoppt.",
+      "other": "{count} ausgewählte(r) Gast/Gäste ausgelassen: nicht in Betrieb."
+    },
+    "stopWarning": "Ein harter Stopp schaltet die Gäste ab wie ein gezogener Stecker: nicht gespeicherte Daten gehen verloren.",
+    "perNode": "Parallele Aufgaben pro Host",
+    "perNodeHelp": "Jeder Host führt höchstens so viele Aufgaben gleichzeitig aus; ein Platz wird frei, wenn die Proxmox-Aufgabe endet. Auf ausgelasteten Hosts verringern.",
+    "status": {
+      "queued": "Wartend",
+      "running": "Läuft",
+      "completed": "Fertig",
+      "failed": "Fehlgeschlagen",
+      "timeout": "Läuft noch",
+      "cancelled": "Abgebrochen"
+    },
+    "count": {
+      "completed": "Fertig",
+      "failed": "Fehlgeschlagen",
+      "active": "Laufend",
+      "queued": "Wartend",
+      "cancelled": "Abgebrochen"
+    },
+    "stopQueued": "Wartende abbrechen",
+    "closeKeepsRunning": "Das Schließen dieses Fensters stoppt den Stapel nicht: bereits gesendete Aufgaben laufen zu Ende.",
+    "clusters": "{count} Cluster",
+    "migrateOneCluster": "Eine Migration betrifft jeweils einen Cluster: nur die Gäste eines Clusters behalten.",
+    "migrateNeedsTwoNodes": "Eine Migration braucht einen Cluster mit mindestens zwei Online-Knoten.",
+    "showDetail": "Details anzeigen"
+  },
+  "hostGroup": {
+    "selectionCount": "{count} Host(s) ausgewählt",
+    "enter": "Wartung starten ({count})",
+    "exit": "Wartung beenden ({count})",
+    "cannotEnter": {
+      "count": "Mindestens zwei Hosts auswählen",
+      "state": "Jeder ausgewählte Host muss online und nicht in Wartung sein",
+      "remaining": "Mindestens ein Online-Host muss außerhalb der Gruppe bleiben"
+    },
+    "cannotExit": "Jeder ausgewählte Host muss in Wartung sein",
+    "enterTitle": "Wartung: {nodes}",
+    "enterIntro": "Die Hosts gehen gemeinsam in Wartung: ein einziger Plan verschiebt die Gäste auf die Hosts außerhalb der Gruppe, nie auf einen Host der Gruppe, dann wird auf jedem Host die Proxmox-HA-Wartung gesetzt. HA-Gäste verschiebt Proxmox HA, Gäste auf lokalem Speicher bleiben und werden aufgeführt.",
+    "cephHint": "Auf einem Ceph-Cluster vor dem gleichzeitigen Abschalten mehrerer Hosts das noout-Flag setzen: das host-bezogene noout der Wartung eines einzelnen Hosts wird für eine Gruppe nicht gesetzt.",
+    "blocked": "Die Hosts außerhalb der Gruppe können {count} Gast/Gäste nicht aufnehmen: die Gruppe kann nicht in Wartung gehen.",
+    "blockedMore": "und {count} weitere",
+    "started": "Wartung von {nodes} gestartet, jeden Gast im Task Center verfolgen",
+    "exitTitle": "Wartung beenden: {nodes}",
+    "exitIntro": "Jeder Host verlässt die Proxmox-HA-Wartung; Proxmox HA holt seine eigenen Gäste zurück.",
+    "bringBack": "Auch die {count} von der Gruppenwartung verschobenen Gäste zurückholen",
+    "nothingToBringBack": "Keine von der Gruppenwartung verschobenen Gäste zurückzuholen",
+    "exited": "{nodes} hat/haben die Wartung verlassen",
+    "stillInMaintenance": "Ein Host der Gruppe ist noch in Wartung: die Gäste wurden nicht zurückgeholt.",
+    "returnStarted": "Rückkehr von {count} Gast/Gästen gestartet"
   }
 }

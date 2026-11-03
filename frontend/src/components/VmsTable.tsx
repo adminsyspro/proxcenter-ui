@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo, useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
+import { paletteColor } from '@/utils/paletteColor'
 import { useTranslations } from 'next-intl'
 import { getOsSvgIcon } from '@/lib/utils/osIcons'
 import { tagsSortValue } from '@/lib/inventory/guestSearch'
@@ -51,14 +52,14 @@ import ChartContainer from '@/components/ChartContainer'
 // XLSX is dynamically imported in handleExportExcel to reduce bundle size
 
 // RemixIcon replacements for @mui/icons-material
-const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PauseIcon = (props: any) => <i className="ri-pause-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const RestartAltIcon = (props: any) => <i className="ri-restart-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const TerminalIcon = (props: any) => <i className="ri-terminal-box-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const ContentCopyIcon = (props: any) => <i className="ri-file-copy-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const PauseIcon = (props: any) => <i className="ri-pause-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const RestartAltIcon = (props: any) => <i className="ri-restart-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const TerminalIcon = (props: any) => <i className="ri-terminal-box-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const ContentCopyIcon = (props: any) => <i className="ri-file-copy-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const MoveUpIcon = (props: any) => <i className="ri-upload-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
 
 /* -----------------------------
   Types
@@ -527,6 +528,8 @@ type VmsTableProps = {
   selectedIds?: ReadonlySet<string>
   onSelectionChange?: (ids: Set<string>) => void
   isRowSelectable?: (vm: VmRow) => boolean
+  /** A right click on a ticked row while several are ticked: the selection's menu (roadmap#197). */
+  onSelectionContextMenu?: (event: React.MouseEvent) => void
 }
 
 /* -----------------------------
@@ -563,7 +566,8 @@ function VmsTable({
   showVdcColumn = false,
   selectedIds,
   onSelectionChange,
-  isRowSelectable
+  isRowSelectable,
+  onSelectionContextMenu
 }: VmsTableProps) {
   const theme = useTheme()
   const t = useTranslations()
@@ -2131,6 +2135,11 @@ return [
               if (vm) {
                 // Bloquer le menu contextuel si la VM est en migration
                 if (isVmMigrating(vm.connId, vm.vmid)) return
+                // A ticked row among several opens the menu of the whole selection.
+                if (onSelectionContextMenu && selectedIds?.has(vm.id) && selectedIds.size > 1) {
+                  onSelectionContextMenu(event)
+                  return
+                }
                 handleContextMenu(event, vm)
               }
             },

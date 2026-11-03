@@ -62,7 +62,7 @@ describe("restrictDrainTargets (#248)", () => {
     const { restrictDrainTargets } = await import("./access")
     checkPermissionMock.mockImplementation(async (_p: string, _t: string, id: string) => (id === "c1:pve2" ? new Response(null, { status: 403 }) : null))
 
-    expect(await restrictDrainTargets(cluster, "c1", "pve3", { exclude_nodes: ["pve9"] })).toEqual({ exclude_nodes: ["pve9", "pve2"] })
+    expect(await restrictDrainTargets(cluster, "c1", ["pve3"], { exclude_nodes: ["pve9"] })).toEqual({ exclude_nodes: ["pve9", "pve2"] })
     // A node missing from ProxCenter's records is checked too (no fail-open).
     expect(checkPermissionMock).toHaveBeenCalledWith("node.manage", "node", "c1:pve4")
     expect(checkPermissionMock).not.toHaveBeenCalledWith("node.manage", "node", "c1:pve3")
@@ -73,46 +73,46 @@ describe("restrictDrainTargets (#248)", () => {
     checkPermissionMock.mockResolvedValue(null)
     const config = { target_node: "pve1" }
 
-    expect(await restrictDrainTargets(cluster, "c1", "pve3", config)).toBe(config)
+    expect(await restrictDrainTargets(cluster, "c1", ["pve3"], config)).toBe(config)
   })
 
   it("refuses a target chosen for one guest that the caller does not manage", async () => {
     const { restrictDrainTargets, DrainTargetDenied } = await import("./access")
     checkPermissionMock.mockImplementation(async (_p: string, _t: string, id: string) => (id === "c1:pve2" ? new Response(null, { status: 403 }) : null))
 
-    await expect(restrictDrainTargets(cluster, "c1", "pve3", { guest_targets: { 105: "pve1", 106: "pve2" } })).rejects.toBeInstanceOf(DrainTargetDenied)
+    await expect(restrictDrainTargets(cluster, "c1", ["pve3"], { guest_targets: { 105: "pve1", 106: "pve2" } })).rejects.toBeInstanceOf(DrainTargetDenied)
   })
 
   it("refuses a forced target the caller does not manage", async () => {
     const { restrictDrainTargets, DrainTargetDenied } = await import("./access")
     checkPermissionMock.mockImplementation(async (_p: string, _t: string, id: string) => (id === "c1:pve1" ? new Response(null, { status: 403 }) : null))
 
-    await expect(restrictDrainTargets(cluster, "c1", "pve3", { target_node: "pve1" })).rejects.toBeInstanceOf(DrainTargetDenied)
+    await expect(restrictDrainTargets(cluster, "c1", ["pve3"], { target_node: "pve1" })).rejects.toBeInstanceOf(DrainTargetDenied)
   })
 
   it("needs the right to migrate every guest the drain moves itself", async () => {
     const { restrictDrainTargets, DrainTargetDenied } = await import("./access")
     checkPermissionMock.mockImplementation(async (p: string, _t: string, id: string) => (p === "vm.migrate" && id === "c1:pve3:lxc:107" ? new Response(null, { status: 403 }) : null))
 
-    await expect(restrictDrainTargets(cluster, "c1", "pve3", {})).rejects.toThrow("You cannot migrate guest(s) 107")
-    await expect(restrictDrainTargets(cluster, "c1", "pve3", {})).rejects.toBeInstanceOf(DrainTargetDenied)
+    await expect(restrictDrainTargets(cluster, "c1", ["pve3"], {})).rejects.toThrow("You cannot migrate guest(s) 107")
+    await expect(restrictDrainTargets(cluster, "c1", ["pve3"], {})).rejects.toBeInstanceOf(DrainTargetDenied)
     // Neither the template nor a guest of another node is checked.
     expect(checkPermissionMock).not.toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve3:qemu:9000")
     expect(checkPermissionMock).not.toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve1:qemu:200")
 
     // Left on the node, or a stopped guest not moved: nothing to migrate.
-    expect(await restrictDrainTargets(cluster, "c1", "pve3", { keep_vmids: [107] })).toEqual({ keep_vmids: [107] })
-    expect(await restrictDrainTargets(cluster, "c1", "pve3", { include_stopped: false })).toEqual({ include_stopped: false })
+    expect(await restrictDrainTargets(cluster, "c1", ["pve3"], { keep_vmids: [107] })).toEqual({ keep_vmids: [107] })
+    expect(await restrictDrainTargets(cluster, "c1", ["pve3"], { include_stopped: false })).toEqual({ include_stopped: false })
   })
 
   it("leaves the running HA guests of a node entering maintenance to Proxmox HA", async () => {
     const { restrictDrainTargets } = await import("./access")
     checkPermissionMock.mockImplementation(async (p: string, _t: string, id: string) => (p === "vm.migrate" && id === "c1:pve3:qemu:106" ? new Response(null, { status: 403 }) : null))
 
-    expect(await restrictDrainTargets(cluster, "c1", "pve3", { enter_maintenance: true })).toEqual({ enter_maintenance: true })
-    await expect(restrictDrainTargets(cluster, "c1", "pve3", {})).rejects.toThrow("You cannot migrate guest(s) 106")
+    expect(await restrictDrainTargets(cluster, "c1", ["pve3"], { enter_maintenance: true })).toEqual({ enter_maintenance: true })
+    await expect(restrictDrainTargets(cluster, "c1", ["pve3"], {})).rejects.toThrow("You cannot migrate guest(s) 106")
     // A node in maintenance is emptied: keep_vmids does not spare a guest.
-    await expect(restrictDrainTargets(cluster, "c1", "pve3", { keep_vmids: [106] })).resolves.toBeDefined()
+    await expect(restrictDrainTargets(cluster, "c1", ["pve3"], { keep_vmids: [106] })).resolves.toBeDefined()
   })
 })
 
@@ -159,7 +159,7 @@ describe("selection of guests (#1218)", () => {
     const { restrictDrainTargets } = await import("./access")
     checkPermissionMock.mockResolvedValue(null)
 
-    expect(await restrictDrainTargets(cluster, "c1", "", { vmids: [101, 102] })).toEqual({ vmids: [101, 102] })
+    expect(await restrictDrainTargets(cluster, "c1", [], { vmids: [101, 102] })).toEqual({ vmids: [101, 102] })
     expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve1:qemu:101")
     expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve2:qemu:102")
     expect(checkPermissionMock).not.toHaveBeenCalledWith("vm.migrate", "vm", "c1:pve3:qemu:103")
@@ -171,7 +171,7 @@ describe("selection of guests (#1218)", () => {
     const { restrictDrainTargets } = await import("./access")
     checkPermissionMock.mockImplementation(async (p: string, _t: string, id: string) => (p === "vm.migrate" && id === "c1:pve3:qemu:103" ? new Response(null, { status: 403 }) : null))
 
-    await expect(restrictDrainTargets(cluster, "c1", "", { vmids: [101, 103] })).rejects.toThrow("You cannot migrate guest(s) 103")
+    await expect(restrictDrainTargets(cluster, "c1", [], { vmids: [101, 103] })).rejects.toThrow("You cannot migrate guest(s) 103")
   })
 
   it("checks a selection whole: a template or a stopped guest left in place still needs the right, an unknown guest is refused alike", async () => {
@@ -179,10 +179,10 @@ describe("selection of guests (#1218)", () => {
     checkPermissionMock.mockImplementation(async (p: string) => (p === "vm.migrate" ? new Response(null, { status: 403 }) : null))
 
     // The plan would name them: no right to migrate them, no plan.
-    await expect(restrictDrainTargets(cluster, "c1", "", { vmids: [900, 102], include_stopped: false })).rejects.toThrow("You cannot migrate guest(s) 102, 900")
+    await expect(restrictDrainTargets(cluster, "c1", [], { vmids: [900, 102], include_stopped: false })).rejects.toThrow("You cannot migrate guest(s) 102, 900")
     // A guest outside the cluster gets the same answer, before the orchestrator could say it is unknown.
     checkPermissionMock.mockResolvedValue(null)
-    await expect(restrictDrainTargets(cluster, "c1", "", { vmids: [101, 4242] })).rejects.toThrow("You cannot migrate guest(s) 4242")
+    await expect(restrictDrainTargets(cluster, "c1", [], { vmids: [101, 4242] })).rejects.toThrow("You cannot migrate guest(s) 4242")
   })
 
   it("refuses a drain record with no node at all", async () => {
@@ -191,5 +191,41 @@ describe("selection of guests (#1218)", () => {
 
     expect(await canActOnDrain({ connection_id: "c1", node: "", guests: [] }, "node.view")).toBe(false)
     expect(await canActOnDrain({ connection_id: "c1", node: "pve1" }, "node.view")).toBe(true)
+  })
+})
+
+describe("a group of nodes (roadmap#198)", () => {
+  const cluster = [
+    { type: "node", node: "pve1" }, { type: "node", node: "pve2" }, { type: "node", node: "pve3" },
+    { type: "qemu", node: "pve1", vmid: 101, status: "running" },
+    { type: "qemu", node: "pve3", vmid: 301, status: "running" },
+    { type: "qemu", node: "pve3", vmid: 302, status: "running", hastate: "started" },
+    { type: "qemu", node: "pve2", vmid: 201, status: "running" },
+  ]
+
+  it("checks the guests of every node of the group and never offers one of them as a target", async () => {
+    const { restrictDrainTargets } = await import("./access")
+    checkPermissionMock.mockImplementation(async (_p: string, _t: string, id: string) => (id === "c1:pve2:qemu:201" ? new Response(null, { status: 403 }) : null))
+
+    const config = { enter_maintenance: true, nodes: ["pve1", "pve3"] }
+    expect(await restrictDrainTargets(cluster, "c1", ["pve1", "pve3"], config)).toBe(config)
+    const asked = checkPermissionMock.mock.calls.map(c => c[2])
+    expect(asked).toEqual(expect.arrayContaining(["c1:pve2", "c1:pve1:qemu:101", "c1:pve3:qemu:301"]))
+    expect(asked).not.toContain("c1:pve1")
+    expect(asked).not.toContain("c1:pve3:qemu:302")
+    expect(asked).not.toContain("c1:pve2:qemu:201")
+  })
+
+  it("refuses a guest of the group the caller may not migrate", async () => {
+    const { restrictDrainTargets } = await import("./access")
+    checkPermissionMock.mockImplementation(async (_p: string, _t: string, id: string) => (id === "c1:pve3:qemu:301" ? new Response(null, { status: 403 }) : null))
+    await expect(restrictDrainTargets(cluster, "c1", ["pve1", "pve3"], { enter_maintenance: true })).rejects.toThrow("You cannot migrate guest(s) 301")
+  })
+
+  it("reads the nodes of a group drain from its comma separated node field", async () => {
+    const { drainNodes, filterViewableDrains } = await import("./access")
+    expect(drainNodes({ node: "pve1,pve3" })).toEqual(["pve1", "pve3"])
+    checkPermissionMock.mockImplementation(async (_p: string, _t: string, id: string) => (id === "c1:pve3" ? new Response(null, { status: 403 }) : null))
+    expect(await filterViewableDrains([{ connection_id: "c1", node: "pve1,pve3" }, { connection_id: "c1", node: "pve1" }])).toEqual([{ connection_id: "c1", node: "pve1" }])
   })
 })

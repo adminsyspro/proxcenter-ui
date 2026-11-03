@@ -328,4 +328,25 @@ describe('config read for a guest whose NICs the inventory does not know (UA46)'
 
     expect(result).toMatchObject({ enabled: 0, disabled: 0, unknown: 1 })
   })
+
+  it('measures every guest of a cold inventory (recette D3): none left unknown, none counted unprotected for want of a NIC flag', async () => {
+    // The recette's cold case: 62 guests, 33 with their options on, and the inventory has cached no guest config yet.
+    const list = Array.from({ length: 62 }, (_, i) => g(i + 1, `pve${(i % 3) + 1}`, i % 2 ? 'lxc' : 'qemu'))
+    const optionsOn = (guest: CoverageGuest) => Number(guest.vmid) <= 33
+    const fetchNet = vi.fn(async (guest: CoverageGuest) => ({ nicFirewall: Number(guest.vmid) % 11 !== 0, vlans: [] }))
+
+    const result = await computeGuestCoverage(list, {
+      listGuests: async () => [],
+      guestNet: () => undefined,
+      fetchOptions: async guest => ({ enable: optionsOn(guest) ? 1 : 0 }),
+      fetchNet,
+    })
+
+    // Only the guests whose options are on need their NICs: one config read each.
+    expect(fetchNet).toHaveBeenCalledTimes(33)
+    // 3 of the 33 (vmid 11, 22, 33) have no NIC flag: certainly not filtered, like the 29 whose options are off.
+    expect(result).toMatchObject({ total: 62, measured: 62, enabled: 30, disabled: 32, unknown: 0, partial: false })
+    expect(result.guests.filter(r => r.enabled === null)).toHaveLength(0)
+    expect(result.guests.find(r => r.vmid === '1')).toMatchObject({ optionsEnabled: true, nicFirewall: true, enabled: true })
+  })
 })

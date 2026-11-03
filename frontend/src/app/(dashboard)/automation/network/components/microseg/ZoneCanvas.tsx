@@ -35,6 +35,8 @@ export function canvasSx(theme: Theme) {
   return {
     width: '100%', height: '100%',
     '& .microseg-dim': { opacity: 0.25 },
+    // Out of a target's scope (UA57): the outline only.
+    '& .microseg-faint': { opacity: 0.08 },
     '& .react-flow__edgelabel-renderer': { zIndex: LABEL_LAYER_Z },
     // React Flow writes the z-index of a node inline: only !important lifts the guests above the edges.
     '& .react-flow__node-guest, & .react-flow__node-more': { zIndex: `${GUEST_LAYER_Z} !important` },

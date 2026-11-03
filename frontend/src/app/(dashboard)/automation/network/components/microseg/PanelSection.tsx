@@ -6,6 +6,9 @@ import { Box, ButtonBase, Collapse, Divider, Typography } from '@mui/material'
 /** The sections of the map panels the user folded, remembered per browser (their ids). */
 export const PANEL_SECTIONS_KEY = 'proxcenter.microseg.panelSections'
 
+/** The sections that start folded until the user opens them once (their id, then stored as opened). */
+const OPENED_KEY_SUFFIX = ':opened'
+
 function readFolded(): Set<string> {
   try {
     const raw = window.localStorage.getItem(PANEL_SECTIONS_KEY)
@@ -29,11 +32,13 @@ function storeFolded(id: string, folded: boolean) {
 }
 
 /** The open state of a section, remembered per browser: for a panel that needs to know it (a read to hold). */
-export function usePanelSection(id: string): [boolean, () => void] {
-  const [open, setOpen] = useState(() => !readFolded().has(id))
+export function usePanelSection(id: string, defaultOpen = true): [boolean, () => void] {
+  // A section folded by default is remembered by its opened mark instead.
+  const mark = defaultOpen ? id : `${id}${OPENED_KEY_SUFFIX}`
+  const [open, setOpen] = useState(() => readFolded().has(mark) !== defaultOpen)
   const toggle = () => {
     const next = !open
-    storeFolded(id, !next)
+    storeFolded(mark, defaultOpen ? !next : next)
     setOpen(next)
   }
   return [open, toggle]
@@ -49,10 +54,12 @@ type Props = {
   action?: ReactNode
   /** Held by the panel (`usePanelSection`), when it must know whether the section is open. */
   state?: [boolean, () => void]
+  /** False: folded until the user opens it (context the panel does not lead with). */
+  defaultOpen?: boolean
   children: ReactNode
 }
 
-function SectionBody({ id, title, count, action, open, toggle, children }: Omit<Props, 'state'> & { open: boolean; toggle: () => void }) {
+function SectionBody({ id, title, count, action, open, toggle, children }: Omit<Props, 'state' | 'defaultOpen'> & { open: boolean; toggle: () => void }) {
   return (
     <Box component='section' aria-label={title} data-section={id} sx={{ minWidth: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, minHeight: 32 }}>
@@ -82,8 +89,8 @@ function SectionBody({ id, title, count, action, open, toggle, children }: Omit<
   )
 }
 
-function OwnSection(props: Omit<Props, 'state'>) {
-  const [open, toggle] = usePanelSection(props.id)
+function OwnSection({ defaultOpen, ...props }: Omit<Props, 'state'>) {
+  const [open, toggle] = usePanelSection(props.id, defaultOpen)
   return <SectionBody {...props} open={open} toggle={toggle} />
 }
 
@@ -92,7 +99,10 @@ function OwnSection(props: Omit<Props, 'state'>) {
  * count, a divider under it. Open by default; the folded ones are remembered per browser.
  */
 export default function PanelSection({ state, ...props }: Props) {
-  if (state) return <SectionBody {...props} open={state[0]} toggle={state[1]} />
+  if (state) {
+    const { defaultOpen: _ignored, ...rest } = props
+    return <SectionBody {...rest} open={state[0]} toggle={state[1]} />
+  }
   return <OwnSection {...props} />
 }
 

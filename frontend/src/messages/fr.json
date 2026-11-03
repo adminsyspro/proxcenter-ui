@@ -13314,7 +13314,8 @@
           "acceptTip": "Accepter comme flux {from} → {to} {service} : le moteur garde une paire d'invités exemple par flux observé, le flux couvre donc toute la paire de zones.",
           "partial": "Seuls les {count} premiers flux observés en attente de la carte sont lus : cette liste peut en manquer."
         },
-        "more": "Les {shown} premiers invités sur {count} sont affichés : tapez pour affiner"
+        "more": "Les {shown} premiers invités sur {count} sont affichés : tapez pour affiner",
+        "chipFlows": "Cible {name} · {count, plural, one {# flux observé} other {# flux observés}}"
       },
       "sections": {
         "traffic": "Trafic observé",
@@ -13332,7 +13333,9 @@
         "topDestinationsEmpty": "Aucune destination sur cette période",
         "memberRunning": "En marche",
         "memberStopped": "Arrêté",
-        "memberFirewallOff": "Pare-feu de carte réseau coupé (dernière vérification du moteur)"
+        "memberFirewallOff": "Pare-feu de carte réseau coupé (dernière vérification du moteur)",
+        "zoneRules": "Règles de sa zone",
+        "guestTrafficEmpty": "Aucun événement observé pour cet invité dans la mémoire de l'orchestrateur (environ 2 dernières heures)"
       }
     },
     "preflight": {

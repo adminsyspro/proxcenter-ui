@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, type ReactNode } from 'react'
+import { useMemo } from 'react'
 import { Alert, Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -39,15 +39,6 @@ type Props = {
   onClose: () => void
   /** The map read only the first `limit` pending observed flows: the list may miss some. */
   partialLimit?: number | null
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Box component='section' aria-label={title} sx={{ mt: 1, minWidth: 0 }}>
-      <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{title}</Typography>
-      {children}
-    </Box>
-  )
 }
 
 const Empty = ({ text }: { text: string }) => <Typography variant='body2' color='text.disabled'>{text}</Typography>
@@ -98,9 +89,9 @@ function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
 /**
  * The guest the map is targeted on, as tall as the map with its body scrolling, in foldable sections (remembered per
  * browser): the guest (its zone, a button opens the zone panel, its addresses), its flows (the pending observed flows
- * its addresses are the sample source or destination of, each with the three ways out of the Observation sub-tab, and
- * the allowed flows of its zone; one line per row, five per page), and its observed traffic over time (its events in
- * the orchestrator's memory).
+ * its addresses are the sample source or destination of, each with the three ways out of the Observation sub-tab; one
+ * line per row, five per page), the rules of its zone (the allowed flows, context, folded by default), and its
+ * observed traffic over time (its events in the orchestrator's memory).
  */
 export default function TargetPanel({ target, zonesById, suggestions, flows, peers, connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onOpenZone, onClose, partialLimit = null }: Props) {
   const t = useTranslations('microsegPilot.overview')
@@ -163,35 +154,33 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
         </Tooltip>
       </PanelSection>
 
-      <PanelSection id='guest.flows' title={t('sections.flows')} count={observed.length + allowed.length}>
+      <PanelSection id='guest.flows' title={t('sections.flows')} count={observed.length}>
         {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1.5 }}>{failure}</Alert>}
-        <Section title={t('target.panel.observed')}>
-          {partialLimit !== null && <OneLine text={t('target.panel.partial', { count: partialLimit })} />}
-          {observedEmpty && <Empty text={observedEmpty} />}
-          <Box role='list'>
-            {observedPage.rows.map(row => (
-              <ObservedLine key={row.suggestion.id} row={row} peers={peers} zonesById={zonesById} busy={busy} onResolve={action => resolve(row.suggestion.id, action)} />
-            ))}
-          </Box>
-          <PolicyPager count={observedPage.count} page={observedPage.page} size={observedPage.size} onPage={observedPage.setPage} />
-        </Section>
+        {partialLimit !== null && <OneLine text={t('target.panel.partial', { count: partialLimit })} />}
+        {observedEmpty && <Empty text={observedEmpty} />}
+        <Box role='list'>
+          {observedPage.rows.map(row => (
+            <ObservedLine key={row.suggestion.id} row={row} peers={peers} zonesById={zonesById} busy={busy} onResolve={action => resolve(row.suggestion.id, action)} />
+          ))}
+        </Box>
+        <PolicyPager count={observedPage.count} page={observedPage.page} size={observedPage.size} onPage={observedPage.setPage} />
+      </PanelSection>
 
-        <Section title={t('target.panel.allowed')}>
-          {!zone && <Empty text={t('target.panel.noZoneFlows')} />}
-          {zone && !allowed.length && <Empty text={t('panel.noFlows')} />}
-          <Box role='list'>
-            {allowedPage.rows.map(f => (
-              <Box role='listitem' key={f.id} sx={{ display: 'flex', alignItems: 'center', minHeight: 28, minWidth: 0 }}>
-                <FlowSummary flow={f} zonesById={zonesById} sideMinWidth={NAME_MIN_WIDTH / 2} />
-              </Box>
-            ))}
-          </Box>
-          <PolicyPager count={allowedPage.count} page={allowedPage.page} size={allowedPage.size} onPage={allowedPage.setPage} />
-        </Section>
+      <PanelSection id='guest.zoneRules' title={t('sections.zoneRules')} count={zone ? allowed.length : null} defaultOpen={false}>
+        {!zone && <Empty text={t('target.panel.noZoneFlows')} />}
+        {zone && !allowed.length && <Empty text={t('panel.noFlows')} />}
+        <Box role='list'>
+          {allowedPage.rows.map(f => (
+            <Box role='listitem' key={f.id} sx={{ display: 'flex', alignItems: 'center', minHeight: 28, minWidth: 0 }}>
+              <FlowSummary flow={f} zonesById={zonesById} sideMinWidth={NAME_MIN_WIDTH / 2} />
+            </Box>
+          ))}
+        </Box>
+        <PolicyPager count={allowedPage.count} page={allowedPage.page} size={allowedPage.size} onPage={allowedPage.setPage} />
       </PanelSection>
 
       <PanelSection id='guest.traffic' title={t('sections.traffic')} state={trafficSection}>
-        <SelectionTrafficChart traffic={traffic} />
+        <SelectionTrafficChart traffic={traffic} emptyText={t('sections.guestTrafficEmpty')} />
       </PanelSection>
     </PanelFrame>
   )

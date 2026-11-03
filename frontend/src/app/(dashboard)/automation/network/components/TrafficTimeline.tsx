@@ -37,6 +37,10 @@ type Props = {
   /** A map panel's direction (inbound / outbound), on the line of the verdict; none on the Dashboard. */
   direction?: TimelineDirection
   onDirection?: (direction: TimelineDirection) => void
+  /** What an empty chart says instead of the generic message (a guest of the map panel). */
+  emptyText?: string
+  /** No verdict toggle (nothing in any verdict). */
+  hideVerdict?: boolean
 }
 
 export type TimelineDirection = 'in' | 'out'
@@ -179,7 +183,7 @@ function LegendChips({ timeline }: { timeline: PostureTimeline }) {
  * second tab, "Volume (sFlow)", shows the sFlow bytes of the same groups over the same range, only when sFlow has data
  * for the connection.
  */
-export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, showRange = true, direction, onDirection }: Props) {
+export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, showRange = true, direction, onDirection, emptyText, hideVerdict = false }: Props) {
   const t = useTranslations('networkPage.dashboard')
   const [ref, size] = useBoxSize<HTMLDivElement>()
   const [chosen, setChosen] = useState<Unit>('events')
@@ -192,7 +196,7 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   if (unit === 'bytes' && volume) body = volume.total > 0 ? <Areas timeline={volume} measured={measured} unit='bytes' height={height} /> : <Typography variant='body2' color='text.secondary' data-testid='volume-empty'>{t('postureVolumeEmpty')}</Typography>
   else if (phase === 'loading') body = <Skeleton data-testid='timeline-loading' variant='rounded' height={height} />
   else if (phase === 'unavailable') body = <Typography variant='body2' color='text.secondary' data-testid='timeline-unavailable'>{t('postureTimelineUnavailable')}</Typography>
-  else if (timeline.total === 0) body = <Typography variant='body2' color='text.secondary' data-testid='timeline-empty'>{t(timeline.range ? 'postureTimelineEmptyRange' : 'postureTimelineEmpty')}</Typography>
+  else if (timeline.total === 0) body = <Typography variant='body2' color='text.secondary' data-testid='timeline-empty'>{emptyText ?? t(timeline.range ? 'postureTimelineEmptyRange' : 'postureTimelineEmpty')}</Typography>
   else body = <Areas timeline={timeline} measured={measured} unit='events' height={height} />
 
   let caption: string | null = null
@@ -238,7 +242,8 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
     </ToggleButtonGroup>
   )
   let verdictControl: React.ReactNode = null
-  if (unit === 'events' && compact) {
+  if (hideVerdict) verdictControl = null
+  else if (unit === 'events' && compact) {
     verdictControl = (
       <FormControl size='small' sx={{ minWidth: 96, flexShrink: 0 }}>
         <Select

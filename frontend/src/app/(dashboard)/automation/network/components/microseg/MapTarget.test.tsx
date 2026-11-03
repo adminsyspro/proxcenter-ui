@@ -66,10 +66,10 @@ describe('the target search', () => {
     demo()
     await node('guest:zw:qemu/100')
     await target('web-1')
-    expect(screen.getByText('Targeting web-1')).toBeTruthy()
+    expect(screen.getByText('Targeting web-1 · 1 observed flow')).toBeTruthy()
     expect(await panel('Guest web-1')).toBeTruthy()
-    fireEvent.click((screen.getByText('Targeting web-1').closest('.MuiChip-root') as HTMLElement).querySelector('.MuiChip-deleteIcon')!)
-    await waitFor(() => expect(screen.queryByText('Targeting web-1')).toBeNull())
+    fireEvent.click((screen.getByText(/^Targeting web-1 ·/).closest('.MuiChip-root') as HTMLElement).querySelector('.MuiChip-deleteIcon')!)
+    await waitFor(() => expect(screen.queryByText(/^Targeting web-1 ·/)).toBeNull())
     expect(screen.queryByRole('complementary', { name: 'Guest web-1' })).toBeNull()
     expect(cls('node-guest:zw:qemu/100')).not.toContain('microseg-target')
     expect(cls('node-guest:zw:qemu/101')).not.toContain('microseg-dim')
@@ -77,7 +77,7 @@ describe('the target search', () => {
 })
 
 describe('the focus a target locks', () => {
-  it('keeps the guest, its observed edges and the allowed edges of its zone lit in Groups, whatever the pointer does', async () => {
+  it('keeps the guest and its observed edges lit in Groups, the allowed flows between kept zones dimmed, whatever the pointer does', async () => {
     demo()
     await node('guest:zw:qemu/100')
     await target('web-1')
@@ -86,13 +86,26 @@ describe('the focus a target locks', () => {
     expect(cls('node-guest:zw:qemu/101')).toContain('microseg-dim')
     expect(cls('node-guest:zd:qemu/200')).not.toContain('microseg-dim')
     expect(cls('edge-unprotected:guest:zw:qemu/100>guest:zd:qemu/200')).not.toContain('microseg-dim')
-    expect(cls('edge-allowed:zone:zw>zone:zd')).not.toContain('microseg-dim')
+    // Web and db are both kept (the pair web-1 to db-1): their allowed flow is context, dimmed, not faint.
+    expect(cls('edge-allowed:zone:zw>zone:zd')).toContain('microseg-dim')
+    expect(cls('edge-allowed:zone:zw>zone:zd')).not.toContain('microseg-faint')
     expect(cls('edge-blocked:guest:zw:qemu/101>guest:zd:qemu/200')).toContain('microseg-dim')
     fireEvent.mouseEnter(screen.getByTestId('node-guest:zw:qemu/101'))
     expect(cls('node-guest:zw:qemu/101')).toContain('microseg-dim')
     expect(cls('node-guest:zw:qemu/100')).toContain('microseg-target')
     // The view fits to its zone and its neighbours.
     await waitFor(() => expect(fitView).toHaveBeenCalledWith(expect.objectContaining({ nodes: expect.arrayContaining([{ id: 'zone:zw' }, { id: 'zone:zd' }]) })))
+  })
+
+  it('keeps only the zones of its pairs: an unrelated zone and its edges are a faint outline', async () => {
+    setup({ zones: [web(), db(), zone('zc', { name: 'cache' })], vms: [...guests, vm(600, 'cache-1', ['zone-cache'], { ips: ['10.0.5.5'] })], flows: [flowOf('f1'), flowOf('f2', { src_zone_id: 'zc', dst_zone_id: 'zd' })], suggestions: observed })
+    await node('guest:zw:qemu/100')
+    await target('web-1')
+    await waitFor(() => expect(cls('node-zone:zc')).toContain('microseg-faint'))
+    expect(cls('node-guest:zc:qemu/600')).toContain('microseg-faint')
+    expect(cls('edge-allowed:zone:zc>zone:zd')).toContain('microseg-faint')
+    expect(cls('node-zone:zd')).not.toContain('microseg-faint')
+    expect(cls('node-zone:zw')).not.toContain('microseg-faint')
   })
 
   it('lights its zone box in Compact zones', async () => {
@@ -161,21 +174,24 @@ describe('the guest panel', () => {
     expect(screen.queryByRole('complementary', { name: 'Guest web-1' })).toBeNull()
     // The lock stays; the chip brings the guest panel back.
     expect(cls('node-guest:zw:qemu/100')).toContain('microseg-target')
-    fireEvent.click(screen.getByText('Targeting web-1'))
+    fireEvent.click(screen.getByText(/^Targeting web-1 ·/))
     expect(await panel('Guest web-1')).toBeTruthy()
   })
 
-  it('lists its observed flows in and out with their peers and services, and the allowed flows of its zone', async () => {
+  it('lists its observed flows in and out with their peers and services, and the rules of its zone folded', async () => {
     demo()
     await node('guest:zw:qemu/100')
     await target('db-1')
     const aside = await panel('Guest db-1')
-    const observedList = within(within(aside).getByRole('region', { name: 'Observed flows' })).getAllByRole('listitem')
+    const observedList = within(within(aside).getByRole('region', { name: 'Flows' })).getAllByRole('listitem')
+    expect(within(aside).getByTestId('section-guest.flows-count').textContent).toBe('3')
     expect(observedList.map(r => r.getAttribute('aria-label'))).toEqual(['Incoming, from web-2', 'Incoming, from web-1', 'Incoming, from lost'])
     expect(within(observedList[0]).getByText('SSH')).toBeTruthy()
     expect(within(observedList[0]).getByText('Blocked')).toBeTruthy()
     expect(within(observedList[2]).getByText('PostgreSQL')).toBeTruthy()
-    const allowedList = within(within(aside).getByRole('region', { name: 'Allowed flows of its zone' })).getAllByRole('listitem')
+    expect(within(aside).getByTestId('section-guest.zoneRules').getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(within(aside).getByTestId('section-guest.zoneRules'))
+    const allowedList = within(within(aside).getByRole('region', { name: 'Rules of its zone' })).getAllByRole('listitem')
     expect(allowedList).toHaveLength(1)
     expect(within(allowedList[0]).getByText('HTTPS')).toBeTruthy()
   })
@@ -185,14 +201,15 @@ describe('the guest panel', () => {
     await node('guest:zw:qemu/100')
     await target('db-1')
     const aside = await panel('Guest db-1')
-    const row = within(within(aside).getByRole('region', { name: 'Observed flows' })).getAllByRole('listitem')[0]
+    const row = within(within(aside).getByRole('region', { name: 'Flows' })).getAllByRole('listitem')[0]
     // The peer name holds 96 px; the kind chip gives way first.
     expect(within(row).getByText('web-2')).toHaveStyle({ minWidth: '96px' })
     expect(within(row).getByText('Blocked').closest('.MuiChip-root')).toHaveStyle({ minWidth: '0' })
     fireEvent.mouseOver(within(row).getByText('web-2'))
     expect(await screen.findByRole('tooltip', { name: 'Incoming, from web-2' })).toBeTruthy()
     // Each side of an allowed flow holds 48 px before its ellipsis.
-    const allowed = within(within(aside).getByRole('region', { name: 'Allowed flows of its zone' })).getAllByRole('listitem')[0]
+    fireEvent.click(within(aside).getByTestId('section-guest.zoneRules'))
+    const allowed = within(within(aside).getByRole('region', { name: 'Rules of its zone' })).getAllByRole('listitem')[0]
     expect(within(allowed).getAllByText(/^(web|db)$/)[0].parentElement!).toHaveStyle({ minWidth: '48px' })
   })
 
@@ -220,6 +237,7 @@ describe('the guest panel', () => {
     const aside = await panel('Guest lost')
     expect(within(aside).getByText('In no zone')).toBeTruthy()
     expect(within(aside).queryByRole('button', { name: 'Open zone' })).toBeNull()
+    fireEvent.click(within(aside).getByTestId('section-guest.zoneRules'))
     expect(within(aside).getByText('This guest is in no zone: no allowed flow applies to it.')).toBeTruthy()
     expect(within(aside).getAllByRole('listitem').map(r => r.getAttribute('aria-label'))).toEqual(['Outgoing, to db-1'])
     await target('bare')
@@ -256,7 +274,7 @@ describe('fix round 1', () => {
     await pickCentre('cache')
     await waitFor(() => expect(screen.queryByTestId('node-guest:zw:qemu/100')).toBeNull())
     expect(cls('node-zone:zc')).not.toContain('microseg-dim')
-    expect(screen.getByText('Targeting web-1')).toBeTruthy()
+    expect(screen.getByText(/^Targeting web-1 ·/)).toBeTruthy()
   })
 
   it('puts the zone back in the centre for every guest targeted, even in the zone it already had', async () => {
@@ -330,7 +348,7 @@ describe('the target search of a user who cannot read the inventory (D9)', () =>
     await expectOptions('db', ['db-1, guest 200, db'])
     await expectOptions('old', [])
     await target('web-1')
-    expect(screen.getByText('Targeting web-1')).toBeTruthy()
+    expect(screen.getByText(/^Targeting web-1 ·/)).toBeTruthy()
     // The rows carry no address: the panel says so instead of listing flows it cannot place.
     expect(within(await panel('Guest web-1')).getByText('No IP address known')).toBeTruthy()
     expect(calls(`GET ${GUESTS_ROUTE}`).length).toBeGreaterThan(0)

@@ -16,6 +16,8 @@ type Props = {
   onTarget: (next: TargetGuest | null) => void
   /** The "Targeting" chip was clicked: show the panel of the guest again. */
   onShowPanel: () => void
+  /** The guest's pending observed flows, said in the chip (absent: the name alone). */
+  observedCount?: number
 }
 
 const optionLabel = (o: TargetGuest) => o.name
@@ -54,7 +56,7 @@ function ZoneOf({ zone, none }: { zone: MicrosegZone | undefined; none: string }
  * (glyph, name, VMID, zone). The pick focuses the map on that guest until it is cleared; the "Targeting" chip
  * beside it reminds the lock, shows the guest panel again on a click, and clears the target with its cross.
  */
-export default function TargetPicker({ candidates, zonesById, target, onTarget, onShowPanel }: Props) {
+export default function TargetPicker({ candidates, zonesById, target, onTarget, onShowPanel, observedCount }: Props) {
   const t = useTranslations('microsegPilot.overview.target')
   const zoneName = (c: TargetGuest) => (c.zoneId ? zonesById.get(c.zoneId)?.name : undefined) ?? t('noZone')
   // The search filters from the first key typed; the name of the guest picked (shown in the field) filters nothing.
@@ -115,7 +117,7 @@ export default function TargetPicker({ candidates, zonesById, target, onTarget, 
             color='primary'
             variant='outlined'
             icon={<i className='ri-focus-3-line' />}
-            label={t('chip', { name: target.name })}
+            label={observedCount === undefined ? t('chip', { name: target.name }) : t('chipFlows', { name: target.name, count: observedCount })}
             onClick={onShowPanel}
             onDelete={() => onTarget(null)}
             sx={{ minWidth: 0, maxWidth: 220 }}

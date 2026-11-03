@@ -13313,7 +13313,8 @@
           "acceptTip": "接受为流量 {from} → {to} {service}：引擎为每条观测流量只保留一对示例客户机，因此该流量覆盖整个区域对。",
           "partial": "地图只读取前 {count} 条待处理的观测流量：此列表可能有遗漏。"
         },
-        "more": "显示 {count} 台客户机中的前 {shown} 台：输入以缩小范围"
+        "more": "显示 {count} 台客户机中的前 {shown} 台：输入以缩小范围",
+        "chipFlows": "目标 {name} · {count, plural, other {# 个观察流量}}"
       },
       "sections": {
         "traffic": "观察到的流量",
@@ -13331,7 +13332,9 @@
         "topDestinationsEmpty": "此时间范围内没有目的地",
         "memberRunning": "运行中",
         "memberStopped": "已停止",
-        "memberFirewallOff": "网卡防火墙已关闭（引擎上次检查）"
+        "memberFirewallOff": "网卡防火墙已关闭（引擎上次检查）",
+        "zoneRules": "其所在区域的规则",
+        "guestTrafficEmpty": "编排器内存中没有此客户机的观察事件（最近约 2 小时）"
       }
     },
     "preflight": {

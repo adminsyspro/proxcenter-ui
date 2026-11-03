@@ -67,9 +67,13 @@ export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[],
 export type SelectionTrafficState = ReturnType<typeof useSelectionTraffic>
 
 /** The compact chart of a panel section (its header is the title): verdict toggle, range chips for a zone. */
-export function SelectionTrafficChart({ traffic }: { traffic: SelectionTrafficState }) {
+export function SelectionTrafficChart({ traffic, emptyText }: { traffic: SelectionTrafficState; emptyText?: string }) {
+  // Nothing in any verdict: no verdict to pick (a verdict that empties the chart keeps its toggle to go back).
+  const nothing = traffic.phase === 'ready' && traffic.summary.total === 0
   return (
     <TrafficTimeline
+      emptyText={emptyText}
+      hideVerdict={nothing}
       compact
       phase={traffic.phase}
       timeline={traffic.timeline}

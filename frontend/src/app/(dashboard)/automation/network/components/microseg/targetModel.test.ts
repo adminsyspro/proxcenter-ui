@@ -89,19 +89,32 @@ describe('the focus a target locks on the map', () => {
     return { ...d, members: d.members, unzoned: d.unzoned }
   }
 
-  it('lights its guest in Groups, the observed edges it is an end of and the allowed edges of its zone, both ways', () => {
+  it('lights its guest in Groups and the observed edges it is an end of; keeps its zone and the zones of its pairs', () => {
     const graph = buildZoneGraph(input())
     // web-1 (10.0.1.1) sends s1 to db-1; web allows f03 to app and receives f01 from External and f06 from app.
     const focus = targetFocus(graph, target())!
     expect(focus.node).toBe('guest:zw:qemu/100')
-    expect([...focus.edges].sort()).toEqual([
-      'allowed:external>zone:zw', 'allowed:zone:za>zone:zw', 'allowed:zone:zw>zone:za', 'unprotected:guest:zw:qemu/100>guest:zd:qemu/400',
-    ])
+    expect([...focus.edges].sort()).toEqual(['unprotected:guest:zw:qemu/100>guest:zd:qemu/400'])
     expect(focus.nodes.has('guest:zw:qemu/100')).toBe(true)
     expect(focus.nodes.has('zone:zw')).toBe(true)
     expect(focus.nodes.has('guest:zd:qemu/400')).toBe(true)
     expect(focus.nodes.has('guest:zw:qemu/101')).toBe(false)
-    expect(focus.fit.sort()).toEqual(['external', 'zone:za', 'zone:zd', 'zone:zw'])
+    expect(focus.fit.sort()).toEqual(['zone:zd', 'zone:zw'])
+  })
+
+  it('draws the zones with no relation to the guest, and their edges, as a faint outline; the allowed flows between kept zones are only dimmed', () => {
+    const graph = buildZoneGraph(input())
+    const focus = targetFocus(graph, target())!
+    // app and External have no pair with web-1: faint; web and db are kept.
+    expect(focus.faintNodes.has('zone:za')).toBe(true)
+    expect(focus.faintNodes.has('external')).toBe(true)
+    expect(focus.faintNodes.has('zone:zw')).toBe(false)
+    expect(focus.faintNodes.has('guest:zw:qemu/101')).toBe(false)
+    expect(focus.faintEdges.has('allowed:zone:zw>zone:za')).toBe(true)
+    expect(focus.faintEdges.has('allowed:external>zone:zw')).toBe(true)
+    expect(focus.faintEdges.has('unprotected:guest:zw:qemu/100>guest:zd:qemu/400')).toBe(false)
+    const between = graph.edges.filter(e => e.source.endsWith('zw') && e.target.endsWith('zd') && e.id.startsWith('allowed'))
+    for (const e of between) expect(focus.faintEdges.has(e.id)).toBe(false)
   })
 
   it('lights its zone box in Compact, and only the observed edges its flows ride on', () => {
@@ -111,7 +124,8 @@ describe('the focus a target locks on the map', () => {
     expect(focus.edges.has('unprotected:zone:zw>zone:zd')).toBe(true)
     // s5 (web-2 to db) is blocked: not web-1's.
     expect(focus.edges.has('blocked:zone:zw>zone:zd')).toBe(false)
-    expect(focus.edges.has('allowed:zone:zw>zone:za')).toBe(true)
+    // The allowed edges are context now: not lit.
+    expect(focus.edges.has('allowed:zone:zw>zone:za')).toBe(false)
   })
 
   it('falls back on the "+N" of its circle when the guest is not drawn', () => {

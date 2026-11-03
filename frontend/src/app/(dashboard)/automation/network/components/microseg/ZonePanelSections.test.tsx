@@ -204,6 +204,23 @@ describe('guest panel: Observed traffic', () => {
   })
 })
 
+describe('guest panel: nothing in memory', () => {
+  it('says the memory holds nothing for the guest and offers no verdict to pick', async () => {
+    mock.routes['GET /events?limit=500'] = () => reply(200, { events: [event('web', { vmid: 999 })], truncated: false, oldest: null })
+    setup({ vms: [vm(101, 'db1', ['zone-db'], { ips: ['10.0.0.2'] })] })
+    const search = await screen.findByRole('combobox', { name: 'Target a VM' })
+    search.focus()
+    fireEvent.keyDown(search, { key: 'ArrowDown' })
+    fireEvent.change(search, { target: { value: 'db1' } })
+    fireEvent.click(await screen.findByRole('option', { name: /^db1,/ }))
+    const traffic = section(await screen.findByRole('complementary', { name: 'Guest db1' }), 'Observed traffic')
+
+    expect((await within(traffic).findByTestId('timeline-empty')).textContent).toBe('No observed event for this guest in the orchestrator memory (last ~2 h)')
+    expect(within(traffic).queryByRole('combobox', { name: 'Verdict' })).toBeNull()
+    expect(within(traffic).getByTestId('direction-in')).toBeTruthy()
+  })
+})
+
 function rbac(grant: boolean): RBACContextValue {
   return {
     permissions: [], roles: [], isAdmin: false, scopeTypes: [], hiddenWidgets: [], loading: false,

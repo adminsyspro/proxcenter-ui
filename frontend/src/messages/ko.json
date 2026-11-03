@@ -13313,7 +13313,8 @@
           "acceptTip": "{from} → {to} {service} 흐름으로 허용: 엔진은 관찰된 흐름마다 게스트 예시 쌍 하나만 보관하므로 이 흐름은 영역 쌍 전체에 적용됩니다.",
           "partial": "지도에서 대기 중인 관찰 흐름은 처음 {count}개만 읽습니다. 이 목록에 일부가 빠져 있을 수 있습니다."
         },
-        "more": "게스트 {count}개 중 처음 {shown}개만 표시됩니다. 입력하여 범위를 좁히세요"
+        "more": "게스트 {count}개 중 처음 {shown}개만 표시됩니다. 입력하여 범위를 좁히세요",
+        "chipFlows": "대상 {name} · {count, plural, other {관찰된 흐름 #개}}"
       },
       "sections": {
         "traffic": "관찰된 트래픽",
@@ -13331,7 +13332,9 @@
         "topDestinationsEmpty": "이 기간에 목적지 없음",
         "memberRunning": "실행 중",
         "memberStopped": "중지됨",
-        "memberFirewallOff": "NIC 방화벽 꺼짐 (엔진의 마지막 점검)"
+        "memberFirewallOff": "NIC 방화벽 꺼짐 (엔진의 마지막 점검)",
+        "zoneRules": "해당 영역의 규칙",
+        "guestTrafficEmpty": "오케스트레이터 메모리에 이 게스트의 관찰된 이벤트 없음 (최근 약 2시간)"
       }
     },
     "preflight": {

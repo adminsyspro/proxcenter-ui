@@ -103,45 +103,55 @@ export function targetNodeId(graph: ZoneGraph, t: TargetGuest): string | null {
 export type TargetFocus = {
   /** The node of the guest (null when the canvas does not draw it). */
   node: string | null
+  /** Lit: the guest, its zone, the ends of its observed pairs. */
   nodes: Set<string>
+  /** Lit: the observed edges whose flows the guest is the sample source or destination of. */
   edges: Set<string>
-  /** The top-level nodes the view fits to: the zone of the guest and its neighbours. */
+  /** The top-level nodes kept (the guest's zone and the zones, or Unknown / External, of its pairs); the view fits to them. */
   fit: string[]
+  /**
+   * Nodes and edges that have nothing to do with the guest: drawn as a faint outline. The allowed flows between two
+   * kept zones are neither lit nor faint: dimmed, as context.
+   */
+  faintNodes: Set<string>
+  faintEdges: Set<string>
 }
 
 /**
- * The focus a targeted guest locks on a canvas: its node, the observed edges whose flows it is the sample source or
- * destination of, the allowed edges of its zone (in and out), and their ends. Null without a target, and when the
- * canvas draws nothing of it (the guest view centred on an unrelated zone): the map is then not dimmed. Pure.
+ * The focus a targeted guest locks on a canvas, recentred on the guest (UA57): its node and its zone, the observed
+ * edges whose flows it is the sample source or destination of with their ends, lit; the allowed flows between the
+ * zones kept, dimmed; every other zone and edge a faint outline. Null without a target, and when the canvas draws
+ * nothing of it (the guest view centred on an unrelated zone): the map is then not dimmed. Pure.
  */
 export function targetFocus(graph: ZoneGraph, t: TargetGuest | null): TargetFocus | null {
   if (!t) return null
   const parent = new Map(graph.nodes.map(n => [n.id, n.parentId]))
   const top = (id: string) => parent.get(id) ?? id
   const node = targetNodeId(graph, t)
-  const zone = t.zoneId ? zoneNodeId(t.zoneId) : null
   const nodes = new Set<string>()
-  const fit = new Set<string>()
+  const kept = new Set<string>()
   const light = (id: string) => {
     nodes.add(id)
     const p = parent.get(id)
     if (p) nodes.add(p)
-    fit.add(top(id))
+    kept.add(top(id))
   }
   if (node) light(node)
+  if (t.zoneId && parent.has(zoneNodeId(t.zoneId))) light(zoneNodeId(t.zoneId))
   const ips = targetAddresses(t)
   const edges = new Set<string>()
   for (const e of graph.edges) {
     const d = e.data as unknown as MapEdgeData
-    const allowed = d.kind === 'allowed' || d.kind === 'outside'
-    const own = allowed ? !!zone && (e.source === zone || e.target === zone) : d.observed.some(s => involvesAddresses(s, ips))
-    if (!own) continue
+    if (d.kind === 'allowed' || d.kind === 'outside') continue
+    if (!d.observed.some(s => involvesAddresses(s, ips))) continue
     edges.add(e.id)
     light(e.source)
     light(e.target)
   }
   if (!nodes.size) return null
-  return { node, nodes, edges, fit: [...fit] }
+  const faintNodes = new Set(graph.nodes.filter(n => !kept.has(top(n.id))).map(n => n.id))
+  const faintEdges = new Set(graph.edges.filter(e => !edges.has(e.id) && (!kept.has(top(e.source)) || !kept.has(top(e.target)))).map(e => e.id))
+  return { node, nodes, edges, fit: [...kept], faintNodes, faintEdges }
 }
 
 /** The observed ribbons of the Sankey diagram (`${kind}:${cell}`) whose flows the guest is the sample end of. */

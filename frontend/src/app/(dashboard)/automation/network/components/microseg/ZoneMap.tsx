@@ -25,7 +25,7 @@ import ZoneMatrix from './ZoneMatrix'
 import ZoneSankey from './ZoneSankey'
 import TargetPanel from './TargetPanel'
 import TargetPicker from './TargetPicker'
-import { targetFocus, targetRing, targetSankey, type TargetGuest } from './targetModel'
+import { targetFocus, targetRing, targetSankey, targetSuggestions, type TargetGuest } from './targetModel'
 import { useMapTarget } from './useMapTarget'
 import {
   EXTERNAL_ID, OUTSIDE_ID, UNZONED_ID, filterEdges, focusSets, zoneNodeId,
@@ -198,24 +198,33 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   }), [zonesById, nameOf, graph.nodes])
 
   const targetColor = targetRing(target, zonesById)
+  const targetFlowCount = useMemo(() => (target ? targetSuggestions(input.suggestions, target).length : 0), [target, input.suggestions])
   const nodes = useMemo(() => graph.nodes.map(n => {
     if (lock && n.id === lock.node) return { ...n, selected: n.id === selectedNode, className: 'microseg-target', data: { ...n.data, target: targetColor } }
     const selected = n.id === selectedNode
     const dimmed = !!lit && !lit.nodes.has(n.id)
-    return selected || dimmed ? { ...n, selected, className: dimmed ? 'microseg-dim' : undefined } : n
+    // A target keeps its zone and the zones of its pairs; the others are a faint outline.
+    const faint = !!lock?.faintNodes.has(n.id)
+    if (!selected && !dimmed) return n
+    let className: string | undefined
+    if (dimmed) className = faint ? 'microseg-faint' : 'microseg-dim'
+    return { ...n, selected, className }
   }), [graph.nodes, selectedNode, lit, lock, targetColor])
 
   // The edges take no focus, but a screen reader names them: "web to db: tcp/443".
   const edges = useMemo(() => filterEdges(graph.edges, filters).map(e => {
     const d = e.data as unknown as MapEdgeData
     const dimmed = !!lit && !lit.edges.has(e.id)
+    let className: string | undefined
+    if (lock?.faintEdges.has(e.id)) className = 'microseg-faint'
+    else if (dimmed) className = 'microseg-dim'
     return {
       ...e,
-      className: dimmed ? 'microseg-dim' : undefined,
+      className,
       ariaLabel: edgeAria(tEdge as EdgeT, names, e.source, e.target, d),
       data: dimmed ? { ...e.data, dimmed } : e.data,
     }
-  }), [graph.edges, filters, lit, tEdge, names])
+  }), [graph.edges, filters, lit, lock, tEdge, names])
 
   // In the guest view another zone is not opened but put in the centre; the zone in the centre opens its panel.
   const selectZone = useCallback((zoneId: string) => {
@@ -277,7 +286,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           <MapToolbar
             view={view}
             onView={changeView}
-            lead={<TargetPicker candidates={mapTarget.candidates} zonesById={zonesById} target={target} onTarget={changeTarget} onShowPanel={showTarget} />}
+            lead={<TargetPicker candidates={mapTarget.candidates} zonesById={zonesById} target={target} onTarget={changeTarget} onShowPanel={showTarget} observedCount={targetFlowCount} />}
             filters={filters}
             onFilters={setFilters}
             refreshedAt={refreshedAt}

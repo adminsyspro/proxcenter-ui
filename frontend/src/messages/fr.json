@@ -13054,6 +13054,13 @@
         "handle": "Point de connexion",
         "nodeRole": "élément de la carte",
         "edgeRole": "flux"
+      },
+      "view": {
+        "label": "Rendu de la carte",
+        "groups": "Groupes",
+        "groupsHint": "les zones en cercles avec leurs invités",
+        "compact": "Zones compactes",
+        "compactHint": "une boîte par zone, pour beaucoup de zones"
       }
     },
     "preflight": {

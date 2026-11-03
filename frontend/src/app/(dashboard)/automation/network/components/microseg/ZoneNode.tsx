@@ -6,6 +6,7 @@ import { Box, Tooltip, Typography, alpha } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
+import type { ZoneState } from '@/lib/microseg/types'
 
 import { STATE_DOT } from './ZoneRow'
 import { NODE_H, NODE_W, UNZONED_ID, type BoundaryNodeData, type GuestNodeData, type MoreNodeData, type UnzonedNodeData, type ZoneNodeData } from './zoneGraph'
@@ -21,7 +22,7 @@ export type MapActions = {
 export const MapActionsContext = createContext<MapActions>({ openZone: () => undefined, selectGuest: () => undefined, setFocus: () => undefined })
 
 /** Edges meet at one point of a node (the center of a circle, of a guest glyph): the handles are invisible points there. */
-function Handles({ top = '50%' }: { top?: string | number }) {
+export function Handles({ top = '50%' }: { top?: string | number }) {
   const style = {
     top, left: '50%', transform: 'translate(-50%, -50%)', width: 2, height: 2, minWidth: 2, minHeight: 2,
     opacity: 0, pointerEvents: 'none', border: 0, background: 'transparent',
@@ -34,14 +35,28 @@ function Handles({ top = '50%' }: { top?: string | number }) {
   )
 }
 
-const onKeys = (action: () => void) => (event: KeyboardEvent) => {
+export const onKeys = (action: () => void) => (event: KeyboardEvent) => {
   if (event.key !== 'Enter' && event.key !== ' ') return
   event.preventDefault()
   action()
 }
 
-const FOCUS_RING = { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } as const
-const tint = (color: string, amount: number) => (/^#[0-9a-f]{3,8}$/i.test(color) ? alpha(color, amount) : 'transparent')
+export const FOCUS_RING = { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } as const
+export const tint = (color: string, amount: number) => (/^#[0-9a-f]{3,8}$/i.test(color) ? alpha(color, amount) : 'transparent')
+
+/** The glyph of a zone: a shield in its colour with a dot of its state (disabled, observe, enforce) at its corner. */
+export function ZoneShield({ color, state }: { color: string; state: ZoneState }) {
+  return (
+    <Box component='span' sx={{ position: 'relative', display: 'inline-flex', width: 16, height: 16, flexShrink: 0 }}>
+      <i className='ri-shield-fill' style={{ fontSize: 16, color }} />
+      <Box
+        component='span'
+        data-state={state}
+        sx={{ position: 'absolute', bottom: -2, right: -3, width: 8, height: 8, borderRadius: '50%', bgcolor: STATE_DOT[state], border: '1.5px solid', borderColor: 'background.paper' }}
+      />
+    </Box>
+  )
+}
 
 /** The width of the line of text at the top of a circle (a chord of the circle, 26 px under its top). */
 export const topChord = (r: number) => Math.max(60, Math.floor(2 * Math.sqrt(r * r - (r - 26) * (r - 26)) - 16))
@@ -92,14 +107,7 @@ function ZoneNodeComponent({ id, data, selected }: NodeProps) {
       >
         <Handles />
         <CircleTitle r={r}>
-          <Box component='span' sx={{ position: 'relative', display: 'inline-flex', width: 16, height: 16, flexShrink: 0 }}>
-            <i className='ri-shield-fill' style={{ fontSize: 16, color }} />
-            <Box
-              component='span'
-              data-state={state}
-              sx={{ position: 'absolute', bottom: -2, right: -3, width: 8, height: 8, borderRadius: '50%', bgcolor: STATE_DOT[state], border: '1.5px solid', borderColor: 'background.paper' }}
-            />
-          </Box>
+          <ZoneShield color={color} state={state} />
           <Typography noWrap fontWeight={600} sx={{ flexShrink: 0, fontSize: '0.85rem' }}>{zone.name}</Typography>
           <Typography noWrap variant='caption' color='text.secondary' sx={{ flexShrink: 0 }}>{d.members === null ? '-' : members}</Typography>
         </CircleTitle>

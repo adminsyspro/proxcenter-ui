@@ -13053,6 +13053,13 @@
         "handle": "Punto de conexión",
         "nodeRole": "elemento del mapa",
         "edgeRole": "flujo"
+      },
+      "view": {
+        "label": "Representación del mapa",
+        "groups": "Grupos",
+        "groupsHint": "las zonas como círculos con sus invitados",
+        "compact": "Zonas compactas",
+        "compactHint": "una caja por zona, para muchas zonas"
       }
     },
     "preflight": {

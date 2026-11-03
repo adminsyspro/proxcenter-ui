@@ -13053,6 +13053,13 @@
         "handle": "연결 지점",
         "nodeRole": "지도 항목",
         "edgeRole": "플로우"
+      },
+      "view": {
+        "label": "지도 표시 방식",
+        "groups": "그룹",
+        "groupsHint": "게스트를 담은 원으로 표시한 영역",
+        "compact": "간결한 영역",
+        "compactHint": "영역마다 상자 하나, 영역이 많을 때"
       }
     },
     "preflight": {

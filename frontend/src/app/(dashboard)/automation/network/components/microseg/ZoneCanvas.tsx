@@ -9,10 +9,11 @@ import { Box, alpha, useTheme, type Theme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { EdgeClickContext, FlowEdge } from './FlowEdge'
+import { ZoneBoxNode } from './MapBoxNodes'
 import { BoundaryNode, GuestNode, MapActionsContext, MoreNode, UnzonedNode, ZoneNode, type MapActions } from './ZoneNode'
 import { UNZONED_ID, type MapNodeData } from './zoneGraph'
 
-const nodeTypes = { zone: ZoneNode, unzoned: UnzonedNode, guest: GuestNode, more: MoreNode, boundary: BoundaryNode }
+const nodeTypes = { zone: ZoneNode, zoneBox: ZoneBoxNode, unzoned: UnzonedNode, guest: GuestNode, more: MoreNode, boundary: BoundaryNode }
 const edgeTypes = { flow: FlowEdge }
 
 /** What the fit-to-view follows: the top-level nodes (circles and boxes) and their size, which grows with the guests. */

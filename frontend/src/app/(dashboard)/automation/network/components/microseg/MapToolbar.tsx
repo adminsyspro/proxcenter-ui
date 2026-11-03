@@ -1,12 +1,62 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { Box, Checkbox, FormControlLabel, IconButton, Tooltip, Typography } from '@mui/material'
+import { Box, Checkbox, FormControlLabel, IconButton, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { ALL_FLOWS, EDGE_COLORS, type FlowFilters } from './zoneGraph'
 
 const STORAGE_KEY = 'microseg.map.flows'
+const VIEW_KEY = 'microseg.map.view'
+
+/** The renderings of the map; Groups (circles holding their guests) is the reference and the default. */
+export const MAP_VIEWS = ['groups', 'compact'] as const
+export type MapView = (typeof MAP_VIEWS)[number]
+const VIEW_ICONS: Record<MapView, string> = { groups: 'ri-bubble-chart-line', compact: 'ri-flow-chart' }
+
+/** The rendering of the map, kept in this browser (a blocked storage, or an unknown value, just means Groups). */
+export function useMapView(): [MapView, (next: MapView) => void] {
+  const [view, setView] = useState<MapView>(() => {
+    try {
+      const saved = window.localStorage.getItem(VIEW_KEY)
+      return MAP_VIEWS.find(v => v === saved) ?? 'groups'
+    } catch {
+      return 'groups'
+    }
+  })
+  const change = useCallback((next: MapView) => {
+    setView(next)
+    try {
+      window.localStorage.setItem(VIEW_KEY, next)
+    } catch {
+      // Storage refused: the choice lasts as long as the page.
+    }
+  }, [])
+  return [view, change]
+}
+
+/** The rendering selector: one icon button per rendering, its name in a tooltip and for screen readers. */
+export function ViewSwitch({ view, onView }: { view: MapView; onView: (next: MapView) => void }) {
+  const t = useTranslations('microsegPilot.overview.view')
+  return (
+    <ToggleButtonGroup
+      exclusive
+      size='small'
+      value={view}
+      aria-label={t('label')}
+      onChange={(_e, next: MapView | null) => { if (next) onView(next) }}
+      sx={{ mr: 1, '& .MuiToggleButton-root': { px: 1, py: 0.5 } }}
+    >
+      {MAP_VIEWS.map(v => (
+        <Tooltip key={v} title={`${t(v)}: ${t(`${v}Hint`)}`}>
+          <ToggleButton value={v} aria-label={t(v)}>
+            <i className={VIEW_ICONS[v]} aria-hidden style={{ fontSize: 18 }} />
+          </ToggleButton>
+        </Tooltip>
+      ))}
+    </ToggleButtonGroup>
+  )
+}
 
 /** The three checkboxes of the map, kept in this browser (a blocked storage just means the defaults: all on). */
 export function useFlowFilters(): [FlowFilters, (next: FlowFilters) => void] {
@@ -45,6 +95,9 @@ const FILTERS = [
 ] as const
 
 type Props = {
+  /** The rendering selector is drawn only when both are given. */
+  view?: MapView
+  onView?: (next: MapView) => void
   filters: FlowFilters
   onFilters: (next: FlowFilters) => void
   refreshedAt: Date | null
@@ -53,14 +106,15 @@ type Props = {
 }
 
 /**
- * The toolbar of the map: "Flows:" with its three checkboxes (each with the line it draws, so it is the legend too),
+ * The toolbar of the map: the rendering selector, "Flows:" with its three checkboxes (each with the line it draws, so it is the legend too),
  * then the time of the last read with a refresh button. A time range selector would go between the two.
  */
-export default function MapToolbar({ filters, onFilters, refreshedAt, refreshing, onRefresh }: Props) {
+export default function MapToolbar({ view, onView, filters, onFilters, refreshedAt, refreshing, onRefresh }: Props) {
   const t = useTranslations('microsegPilot.overview')
   const format = useFormatter()
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minHeight: 36 }}>
+      {view && onView && <ViewSwitch view={view} onView={onView} />}
       <Box role='group' aria-label={t('filters.title')} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
         <Typography variant='body2' color='text.secondary' sx={{ mr: 0.5 }}>{t('filters.title')}</Typography>
         {FILTERS.map(f => (

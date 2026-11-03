@@ -13053,6 +13053,13 @@
         "handle": "Connection point",
         "nodeRole": "map item",
         "edgeRole": "flow"
+      },
+      "view": {
+        "label": "Map rendering",
+        "groups": "Groups",
+        "groupsHint": "zones as circles holding their guests",
+        "compact": "Compact zones",
+        "compactHint": "one box per zone, for many zones"
       }
     },
     "preflight": {

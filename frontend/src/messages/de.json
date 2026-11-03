@@ -12721,6 +12721,13 @@
         "handle": "Verbindungspunkt",
         "nodeRole": "Kartenelement",
         "edgeRole": "Fluss"
+      },
+      "view": {
+        "label": "Kartendarstellung",
+        "groups": "Gruppen",
+        "groupsHint": "Zonen als Kreise mit ihren Gästen",
+        "compact": "Kompakte Zonen",
+        "compactHint": "ein Kasten pro Zone, für viele Zonen"
       }
     },
     "preflight": {

@@ -12,14 +12,15 @@ import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 import AssignGuestsDialog from './AssignGuestsDialog'
 import EdgePanel from './EdgePanel'
 import { MapNamesContext, edgeAria, type EdgeT, type MapNames } from './FlowEdge'
-import MapToolbar, { useFlowFilters } from './MapToolbar'
+import MapToolbar, { useFlowFilters, useMapView, type MapView } from './MapToolbar'
+import { mapViewGraph } from './mapViewGraph'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import { useZoneEdits } from './useZoneEdits'
 import { useZoneGuests } from './useZoneGuests'
 import ZoneCanvas from './ZoneCanvas'
 import {
-  EXTERNAL_ID, OUTSIDE_ID, UNZONED_ID, buildZoneGraph, filterEdges, focusSets, zoneNodeId,
-  type MapEdgeData, type MapMember, type MapNodeData,
+  EXTERNAL_ID, OUTSIDE_ID, UNZONED_ID, filterEdges, focusSets, zoneNodeId,
+  type MapEdgeData, type MapInput, type MapMember, type MapNodeData, type PanelEdgeData,
 } from './zoneGraph'
 import { guestKey, zoneMembers, type PolicyGuest, type ZoneMember } from './zoneModel'
 import ZonePanel from './ZonePanel'
@@ -29,6 +30,8 @@ const PENDING_LIMIT = 200
 const PENDING_OBSERVED: ListSuggestionsParams = { status: 'pending', limit: PENDING_LIMIT }
 
 type Selection = { kind: 'zone' | 'guest' | 'edge'; id: string }
+/** The edge whose flow panel is open. */
+type PanelEdge = { id: string; source: string; target: string; data: PanelEdgeData }
 
 /** The node the selection lights: the circle of the selected zone, or the selected guest. */
 function selectedNodeOf(selectedZone: { id: string } | null, selection: Selection | null): string | null {
@@ -52,10 +55,12 @@ const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_z
   && a.dst_zone_id === b.dst_zone_id && a.dst_cidr === b.dst_cidr && a.proto === b.proto && a.dport === b.dport
 
 /**
- * The Overview sub-tab: the draft as a map, like the security groups view of NSX. A circle per zone holding its
- * guests, the running guests in no zone in a dashed circle, the allowed flows circle to circle, the observed ones
- * (unprotected, blocked) guest to guest. Hover or select something to light it and its flows; click a circle for
- * its panel, an edge for its flows. Nothing polls beyond the shared hooks (one inventory read, one suggestions read).
+ * The Overview sub-tab: the draft as a map, in one of two renderings chosen in the toolbar (kept in the browser).
+ * Groups, like the security groups view of NSX: a circle per zone holding its guests, the running guests in no zone
+ * in a dashed circle, the allowed flows circle to circle, the observed ones (unprotected, blocked) guest to guest.
+ * Compact zones: a box per zone, every flow zone to zone. Hover or select something
+ * to light it and its flows; click a zone for its panel, an edge (or a cell) for its flows. Nothing polls beyond the
+ * shared hooks (one inventory read, one suggestions read).
  */
 export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.overview')
@@ -72,6 +77,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const [refreshing, setRefreshing] = useState(false)
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null)
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
+  const [view, setView] = useMapView()
 
   const { zones, flows, pending_members: pendingMembers } = policy
   const tagPrefix = policy.policy.tag_prefix
@@ -92,12 +98,13 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     return new Set(flows.filter(f => !before.has(f.id) || !sameFlow(before.get(f.id)!, f)).map(f => f.id))
   }, [policy.pending_changes, policy.last_revision, revision, flows])
 
-  const graph = useMemo(() => {
+  const input = useMemo<MapInput>(() => {
     const members = membersKnown ? new Map([...membersByZone].map(([id, list]) => [id, list.map(toMapMember)])) : null
     const zoned = new Set([...membersByZone.values()].flatMap(list => list.map(m => guestKey(m.ref))))
     const unzoned = membersKnown ? guests.filter(g => g.status === 'running' && !zoned.has(guestKey(g))).map(guestToMember) : null
-    return buildZoneGraph({ zones, flows, suggestions: suggestions.data ?? [], members, unzoned, unapplied })
+    return { zones, flows, suggestions: suggestions.data ?? [], members, unzoned, unapplied }
   }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied])
+  const graph = useMemo(() => mapViewGraph(view, input), [view, input])
 
   // "Refreshed at": the first answer, then the end of every refresh (a refresh that changes nothing still moves it).
   const loaded = !!suggestions.data || membersKnown
@@ -109,7 +116,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
 
   // A zone deleted from the draft (or an edge gone after a reload) simply closes its panel.
   const selectedZone = selection?.kind === 'zone' ? zones.find(z => z.id === selection.id) ?? null : null
-  const selectedEdge = selection?.kind === 'edge' ? graph.edges.find(e => e.id === selection.id) ?? null : null
+  const graphEdge = graph.edges.find(e => selection?.kind === 'edge' && e.id === selection.id)
+  const selectedEdge: PanelEdge | null = graphEdge ? { id: graphEdge.id, source: graphEdge.source, target: graphEdge.target, data: graphEdge.data as unknown as MapEdgeData } : null
   const selectedNode = selectedNodeOf(selectedZone, selection)
   const selectedFocus = selectedNode ?? (selection?.kind === 'edge' ? selection.id : null)
   const focusId = hover ?? keyFocus ?? selectedFocus
@@ -120,11 +128,11 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const nameOf = useCallback((nodeId: string) => {
     if (nodeId === EXTERNAL_ID) return tNode('external')
     if (nodeId === OUTSIDE_ID) return tNode('outside')
+    if (nodeId.startsWith('zone:')) return zonesById.get(nodeId.slice(5))?.name ?? nodeId
     const node = graph.nodes.find(n => n.id === nodeId)
     const d = node?.data as unknown as MapNodeData | undefined
     if (!d) return nodeId
     const groupName = (groupId: string) => (groupId === UNZONED_ID ? tNode('unzoned', { count: (graph.nodes.find(n => n.id === UNZONED_ID)?.data as { count?: number } | undefined)?.count ?? 0 }) : zonesById.get(groupId)?.name ?? groupId)
-    if (d.kind === 'zone') return d.zone.name
     if (d.kind === 'guest') return `${d.member.name} (${groupName(d.groupId)})`
     if (d.kind === 'more') return `+${d.count} (${groupName(d.groupId)})`
     if (d.kind === 'unzoned') return tNode('unzoned', { count: d.count })
@@ -160,6 +168,13 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   }), [graph.edges, filters, lit, tEdge, names])
 
   const selectZone = useCallback((zoneId: string) => { setSelection({ kind: 'zone', id: zoneId }); setResolved(null) }, [])
+  // A zone panel stays open across renderings; an edge or a guest belongs to the rendering it was picked in.
+  const changeView = useCallback((next: MapView) => {
+    setView(next)
+    setSelection(s => (s?.kind === 'zone' ? s : null))
+    setHover(null)
+    setKeyFocus(null)
+  }, [setView])
   const selectGuest = useCallback((nodeId: string) => setSelection({ kind: 'guest', id: nodeId }), [])
   const selectEdge = useCallback((edgeId: string) => { setSelection({ kind: 'edge', id: edgeId }); setResolved(null) }, [])
   const clear = useCallback(() => setSelection(null), [])
@@ -184,7 +199,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     <Box sx={{ px: 3, pb: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, flexWrap: 'wrap' }}>
         <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
-          <MapToolbar filters={filters} onFilters={setFilters} refreshedAt={refreshedAt} refreshing={refreshing} onRefresh={refresh} />
+          <MapToolbar view={view} onView={changeView} filters={filters} onFilters={setFilters} refreshedAt={refreshedAt} refreshing={refreshing} onRefresh={refresh} />
         </Box>
         {policy.pending_changes && (
           <Tooltip title={t('unappliedHint')}>
@@ -241,7 +256,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
               edgeId={selectedEdge.id}
               source={selectedEdge.source}
               target={selectedEdge.target}
-              data={selectedEdge.data as unknown as MapEdgeData}
+              data={selectedEdge.data}
               from={nameOf(selectedEdge.source)}
               to={nameOf(selectedEdge.target)}
               zonesById={zonesById}

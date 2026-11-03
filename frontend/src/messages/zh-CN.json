@@ -13053,6 +13053,13 @@
         "handle": "连接点",
         "nodeRole": "地图项目",
         "edgeRole": "流量"
+      },
+      "view": {
+        "label": "地图呈现方式",
+        "groups": "分组",
+        "groupsHint": "以圆圈表示区域并包含其虚拟机",
+        "compact": "紧凑区域",
+        "compactHint": "每个区域一个方框，适合区域较多时"
       }
     },
     "preflight": {

@@ -11,7 +11,7 @@ import { MapNamesContext, isSampled, observedHits, type EdgeT } from './FlowEdge
 import FlowSummary from './FlowSummary'
 import { ObservedKindGlyph, ResolveActions, useResolveSuggestions } from './observationParts'
 import PolicyPager, { usePaged } from './PolicyPager'
-import type { MapEdgeData } from './zoneGraph'
+import type { PanelEdgeData } from './zoneGraph'
 import { formatWhen } from './summaryModel'
 
 const ROWS_PER_PAGE = 5
@@ -20,7 +20,7 @@ type Props = {
   edgeId: string
   source: string
   target: string
-  data: MapEdgeData
+  data: PanelEdgeData
   /** The names of the two ends ("web-1 (web)", "web", "Unknown / External"). */
   from: string
   to: string
@@ -89,12 +89,15 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
  * The edge clicked on the map. An observed one lists its flows (addresses, hits, first and last seen, status) with
  * the three ways out of the Observation sub-tab (one line per flow, details under the chevron), same semantics: accept as a flow of the zones, accept as a CIDR,
  * dismiss; a 409 re-reads the draft and the list. An allowed one lists its flows, the ones not applied yet marked.
+ * A cell of the matrix is a pair with both: the observed section, then the allowed one.
  */
 export default function EdgePanel({ edgeId, source, target, data, from, to, zonesById, unapplied, connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onClose, onEdit }: Props) {
   const t = useTranslations('microsegPilot.overview')
-  const observed = data.kind === 'unprotected' || data.kind === 'blocked'
+  const observedKind = data.kind === 'unprotected' || data.kind === 'blocked'
+  const observed = observedKind || data.observed.length > 0
+  const allowed = !observedKind || data.flows.length > 0
   const names = useContext(MapNamesContext)
-  const example = observed && isSampled(source, target) ? t('edge.example', { from: names.short(source), to: names.short(target) }) : null
+  const example = observedKind && isSampled(source, target) ? t('edge.example', { from: names.short(source), to: names.short(target) }) : null
   const title = example ?? `${from} → ${to}`
   const observedPage = usePaged(data.observed, ROWS_PER_PAGE)
   const flowsPage = usePaged(data.flows, ROWS_PER_PAGE)
@@ -125,7 +128,7 @@ export default function EdgePanel({ edgeId, source, target, data, from, to, zone
       </Tooltip>
       {failure && <Alert severity='error' onClose={clearFailure} sx={{ mt: 1.5 }}>{failure}</Alert>}
 
-      {observed ? (
+      {observed && (
         <>
           {example && <OneLine text={t('flowPanel.sampleNote')} />}
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1.5 }}>{t('flowPanel.observed')}</Typography>
@@ -136,7 +139,8 @@ export default function EdgePanel({ edgeId, source, target, data, from, to, zone
           </Box>
           <PolicyPager count={observedPage.count} page={observedPage.page} size={observedPage.size} onPage={observedPage.setPage} />
         </>
-      ) : (
+      )}
+      {allowed && (
         <>
           <Box sx={{ display: 'flex', gap: 1, my: 1.5 }}>
             <Button size='small' variant='outlined' startIcon={<i className='ri-pencil-line' />} onClick={onEdit}>{t('panel.editInPolicy')}</Button>

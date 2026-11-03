@@ -13734,7 +13734,9 @@
       "denyBlock": "Bloquear",
       "denyWouldBlock": "Bloquearía",
       "hitsOnDefault": "Proxmox no cuenta coincidencias por regla: los flujos bloqueados o que se bloquearían están en la denegación predeterminada de la zona",
-      "discardSection": "Descartar esta sección"
+      "discardSection": "Descartar esta sección",
+      "conflictOptions": "las opciones del cortafuegos de una sección cambiaron en Proxmox desde que se leyeron. Descarte los cambios de esa sección y publique de nuevo: las demás secciones conservan los suyos",
+      "publishAgain": "Publique de nuevo: los cambios no aplicados siguen en el borrador."
     }
   }
 }

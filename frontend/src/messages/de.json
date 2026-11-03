@@ -13402,7 +13402,9 @@
       "denyBlock": "Blockieren",
       "denyWouldBlock": "Würde blockieren",
       "hitsOnDefault": "Proxmox zählt keine Treffer pro Regel: Die blockierten oder zu blockierenden Flüsse der Zone stehen in ihrer Standardverweigerung",
-      "discardSection": "Diesen Abschnitt verwerfen"
+      "discardSection": "Diesen Abschnitt verwerfen",
+      "conflictOptions": "die Firewall-Optionen eines Abschnitts wurden seit dem Lesen in Proxmox geändert. Verwerfen Sie die Änderungen dieses Abschnitts und veröffentlichen Sie erneut: Die anderen Abschnitte behalten ihre",
+      "publishAgain": "Erneut veröffentlichen: Die nicht angewendeten Änderungen sind noch im Entwurf."
     }
   }
 }

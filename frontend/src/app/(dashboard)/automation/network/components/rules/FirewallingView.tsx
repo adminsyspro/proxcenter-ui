@@ -195,7 +195,7 @@ function useZones(connectionId: string, groups: firewallAPI.SecurityGroup[], gue
 }
 
 function Notices({ error, onCloseError, notice, onCloseNotice, onDiscardScope }: {
-  error: { message: string; code?: string; applied?: number } | null
+  error: AlertError | null
   onCloseError: () => void
   notice: string | null
   onCloseNotice: () => void
@@ -211,20 +211,35 @@ function Notices({ error, onCloseError, notice, onCloseNotice, onDiscardScope }:
 }
 
 /** Why the last publish stopped, on one line. */
-function PublishErrorAlert({ error, onClose, onDiscardScope }: { error: { message: string; code?: string; applied?: number }; onClose: () => void; onDiscardScope?: () => void }) {
+type AlertError = { message: string; code?: string; kind?: string; applied?: number }
+
+/** The stops a discard of the section cures: the list or its rule is not the one the draft was made on. */
+const DISCARD_CURES = new Set(['DIGEST_CONFLICT', 'STALE_POSITION', 'NOT_OURS', 'MANAGED_RULE'])
+/** The stops a new publish cures: nothing wrong with the draft, the publish was cut. */
+const RETRY_CURES = new Set(['TIME_BUDGET', 'PVE_ERROR'])
+
+export const offersDiscard = (code: string | undefined): boolean => !!code && DISCARD_CURES.has(code)
+
+function alertText(error: AlertError, t: ReturnType<typeof useTranslations<'microsegPilot.dfw'>>): string {
+  if (error.code === 'DIGEST_CONFLICT') return error.kind === 'options.set' ? t('conflictOptions') : t('conflict')
+  if (error.code && RETRY_CURES.has(error.code)) return `${error.message} ${t('publishAgain')}`
+  return error.message
+}
+
+function PublishErrorAlert({ error, onClose, onDiscardScope }: { error: AlertError; onClose: () => void; onDiscardScope?: () => void }) {
   const t = useTranslations('microsegPilot.dfw')
   const head = error.applied === undefined ? '' : `${t('publishFailed', { applied: error.applied })} `
   return (
     <Alert severity='error' onClose={onClose} data-testid='dfw-publish-error' action={onDiscardScope ? <DiscardLink onClick={onDiscardScope} /> : undefined}>
-      {head}{error.code === 'DIGEST_CONFLICT' ? t('conflict') : error.message}
+      {head}{alertText(error, t)}
     </Alert>
   )
 }
 
-function DiscardLink({ onClick }: { onClick: () => void }) {
+function DiscardLink({ onClick, disabled = false }: { onClick: () => void; disabled?: boolean }) {
   const t = useTranslations('microsegPilot.dfw')
   return (
-    <Link component='button' type='button' underline='hover' onClick={onClick} sx={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
+    <Link component='button' type='button' underline='hover' disabled={disabled} onClick={onClick} sx={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
       {t('discardSection')}
     </Link>
   )
@@ -481,7 +496,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
   /** The alert's way out: drop the scope the publish stopped on, while the draft still holds it. */
   const errorDiscard = () => {
     const key = fw.error?.scope
-    return key && fw.draft.scopes[key] ? () => discardSection(key) : undefined
+    return key && fw.draft.scopes[key] && offersDiscard(fw.error?.code) ? () => discardSection(key) : undefined
   }
 
   const patchRule = (s: Section, id: string, fields: Partial<RuleFields>) => {
@@ -500,7 +515,8 @@ export default function FirewallingView(p: FirewallingViewProps) {
       )
     }
     const rows = visibleEntries(s)
-    const deny = s.zone ? <DefaultDenyRow key={`${s.key}|deny`} enforce={s.zone.state === 'enforce'} appliedTo={s.appliedTo} hits={zoneDenyHits(hits, s.zone.zone)} hitsTitle={denyTitle()} /> : null
+    const deployedZone = s.zone?.state === 'enforce' || s.zone?.state === 'observe'
+    const deny = s.zone && deployedZone ? <DefaultDenyRow key={`${s.key}|deny`} enforce={s.zone.state === 'enforce'} appliedTo={s.appliedTo} hits={zoneDenyHits(hits, s.zone.zone)} hitsTitle={denyTitle()} /> : null
     if (rows.length === 0) return deny ?? <WideRow><Typography variant='body2' color='text.secondary'>{q ? t('noMatch') : tg('networkPage.noRules')}</Typography></WideRow>
     const ruleRows = rows.map(({ e, i }) => {
       const managed = s.managed || isEngineComment(e.rule.comment)
@@ -537,7 +553,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
       {s.managed && <Badge label={t('managed')} />}
       {s.pending > 0 && <Badge label={t('unpublishedCount', { count: s.pending })} tone='warning' />}
       {s.stale && <Badge label={t('changedInProxmox')} tone='error' title={t('changedInProxmoxHint')} />}
-      {s.stale && s.scope && <DiscardLink onClick={() => discardSection(scopeKey(s.scope!))} />}
+      {s.stale && s.scope && <DiscardLink disabled={fw.busy} onClick={() => discardSection(scopeKey(s.scope!))} />}
       {firewallOffBadge(s)}
     </>
   )
@@ -607,10 +623,19 @@ export default function FirewallingView(p: FirewallingViewProps) {
     </Fragment>
   )
 
-  const protectedIn = (vms: VMFirewallInfo[]) => {
-    if (!deployed) return 0
-    const tags = new Set(deployed.zones.filter(z => z.state === 'observe' || z.state === 'enforce').map(z => `${deployed.tag_prefix}${z.name}`.toLowerCase()))
-    return vms.filter(vm => vm.tags.some(tag => tags.has(tag.toLowerCase()))).length
+  const zoneTags = new Set((deployed?.zones ?? []).filter(z => z.state === 'observe' || z.state === 'enforce').map(z => `${deployed!.tag_prefix}${z.name}`.toLowerCase()))
+  const inZone = (vm: VMFirewallInfo) => vm.tags.some(tag => zoneTags.has(tag.toLowerCase()))
+  const protectedIn = (vms: VMFirewallInfo[]) => vms.filter(inZone).length
+  /** The engine owns the guest's switch, inbound policy and log level: its rules are there, or it is tagged into a zone. */
+  const engineOwnsOptions = (s: Section) => s.kind === 'guest' && (s.entries.some(e => isEngineComment(e.rule.comment)) || (!!s.guest && inZone(s.guest)))
+  /** A guest's options dialog opens on its rules read (one call the first time), so the engine's lock is known. */
+  const openOptions = (s: Section) => {
+    if (s.guest && !hasRules(s)) {
+      const key = s.key
+      void lazy.openGuest(s.guest).then(() => setOptionsFor(key))
+      return
+    }
+    setOptionsFor(s.key)
   }
 
   const renderGroup = ([vlan, vms]: [string, VMFirewallInfo[]]) => {
@@ -735,7 +760,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
           scope={editorScope(sectionByKey(editor.sectionKey))}
           rule={editor.form}
           onRuleChange={form => setEditor(prev => (prev ? { ...prev, form } : prev))}
-          securityGroups={p.securityGroups.filter(g => !g.group.startsWith(ZONE_GROUP_PREFIX))}
+          securityGroups={p.securityGroups.filter(g => !g.group.toLowerCase().startsWith(ZONE_GROUP_PREFIX))}
           aliases={p.aliases}
           ipsets={p.ipsets}
           submitLabel={t('keepInDraft')}
@@ -763,7 +788,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
       )}
       {optionsSection && (
         <ScopeOptionsDialog open name={optionsSection.title} scope={optionsSection.scope!} current={currentOptions(optionsSection)}
-          locked={optionsSection.kind === 'guest' && optionsSection.entries.some(e => isEngineComment(e.rule.comment)) ? [...ENGINE_GUEST_OPTIONS] : []}
+          locked={engineOwnsOptions(optionsSection) ? [...ENGINE_GUEST_OPTIONS] : []} busy={fw.busy}
           onClose={() => setOptionsFor(null)} onSave={form => saveOptions(optionsSection, form)} />
       )}
       <MicrosegConfirmDialog
@@ -806,9 +831,9 @@ export default function FirewallingView(p: FirewallingViewProps) {
     const loaded = hasRules(s)
     return [
       { label: tg('networkPage.addRule'), onClick: () => openEditor(s, null), disabled: !canEdit || !loaded },
-      { label: t('menu.options'), onClick: () => setOptionsFor(s.key), disabled: s.kind === 'host' && !((s.node ?? '') in lazy.nodeOptions) },
+      { label: t('menu.options'), onClick: () => openOptions(s), disabled: s.kind === 'host' && !((s.node ?? '') in lazy.nodeOptions) },
       ...(s.guest ? [{ label: tg('networkPage.viewLogs'), onClick: () => setLogVm(s.guest!) }] : []),
-      { label: t('menu.discard'), onClick: () => fw.update(d => discardOf(d, s.scope!)), disabled: s.pending === 0 },
+      { label: t('menu.discard'), onClick: () => fw.update(d => discardOf(d, s.scope!)), disabled: s.pending === 0 || fw.busy },
     ]
   }
 }

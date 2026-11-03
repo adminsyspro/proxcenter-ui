@@ -104,7 +104,7 @@ const FIELDS: Record<DraftScope['kind'], OptionField[]> = {
 
 const POLICIES = ['ACCEPT', 'DROP', 'REJECT']
 
-export function ScopeOptionsDialog({ open, name, scope, current, locked = [], onClose, onSave }: {
+export function ScopeOptionsDialog({ open, name, scope, current, locked = [], busy = false, onClose, onSave }: {
   open: boolean
   name: string
   scope: DraftScope
@@ -112,6 +112,8 @@ export function ScopeOptionsDialog({ open, name, scope, current, locked = [], on
   current: ScopeOptions
   /** Options the engine owns on this guest (its zone rules are there): shown, never changed here. */
   locked?: readonly string[]
+  /** A publish is running: the draft takes no change until it ends. */
+  busy?: boolean
   onClose: () => void
   onSave: (options: ScopeOptions) => void
 }) {
@@ -156,7 +158,7 @@ export function ScopeOptionsDialog({ open, name, scope, current, locked = [], on
       <DialogActions>
         <Button onClick={onClose}>{tg('common.cancel')}</Button>
         <WriteTip>
-          <Button variant='contained' disabled={!canWrite} onClick={() => onSave(form)}>{tg('common.save')}</Button>
+          <Button variant='contained' disabled={!canWrite || busy} onClick={() => onSave(form)}>{tg('common.save')}</Button>
         </WriteTip>
       </DialogActions>
     </Dialog>

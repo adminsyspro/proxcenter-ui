@@ -13734,7 +13734,9 @@
       "denyBlock": "阻止",
       "denyWouldBlock": "将被阻止",
       "hitsOnDefault": "Proxmox 不按规则计数：区域被阻止或将被阻止的流量显示在其默认拒绝行",
-      "discardSection": "放弃此部分"
+      "discardSection": "放弃此部分",
+      "conflictOptions": "某部分的防火墙选项在读取后已在 Proxmox 中更改。请放弃该部分的更改后再次发布：其他部分的更改保留",
+      "publishAgain": "请再次发布：未应用的更改仍在草稿中。"
     }
   }
 }

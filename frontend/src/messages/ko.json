@@ -13734,7 +13734,9 @@
       "denyBlock": "차단",
       "denyWouldBlock": "차단 예정",
       "hitsOnDefault": "Proxmox는 규칙별 적중을 세지 않습니다: 영역의 차단(예정) 흐름은 기본 거부 행에 있습니다",
-      "discardSection": "이 섹션 취소"
+      "discardSection": "이 섹션 취소",
+      "conflictOptions": "섹션의 방화벽 옵션이 읽은 이후 Proxmox에서 변경되었습니다. 이 섹션의 변경을 취소한 후 다시 게시하세요: 다른 섹션의 변경은 유지됩니다",
+      "publishAgain": "다시 게시하세요: 적용되지 않은 변경은 초안에 남아 있습니다."
     }
   }
 }

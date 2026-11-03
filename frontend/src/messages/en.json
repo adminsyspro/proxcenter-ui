@@ -13734,7 +13734,9 @@
       "denyBlock": "Block",
       "denyWouldBlock": "Would block",
       "hitsOnDefault": "Proxmox counts no hit per rule: the zone's blocked or would-block flows are on its default deny row",
-      "discardSection": "Discard this section"
+      "discardSection": "Discard this section",
+      "conflictOptions": "the firewall options of a section were changed in Proxmox since they were read. Discard this section's changes, then publish again: the other sections keep theirs",
+      "publishAgain": "Publish again: the changes not applied are still in the draft."
     }
   }
 }

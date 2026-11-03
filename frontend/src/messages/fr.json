@@ -13735,7 +13735,9 @@
       "denyBlock": "Bloquer",
       "denyWouldBlock": "Bloquerait",
       "hitsOnDefault": "Proxmox ne compte aucune occurrence par règle : les flux bloqués ou qui le seraient sont sur la ligne de refus par défaut de la zone",
-      "discardSection": "Annuler cette section"
+      "discardSection": "Annuler cette section",
+      "conflictOptions": "les options du pare-feu d’une section ont changé dans Proxmox depuis leur lecture. Annulez les changements de cette section, puis publiez à nouveau : les autres sections gardent les leurs",
+      "publishAgain": "Publiez à nouveau : les changements non appliqués sont toujours dans le brouillon."
     }
   }
 }

@@ -34,7 +34,7 @@ export function firstBatch(ops: PublishOp[], maxWrites = PUBLISH_MAX_WRITES): Pu
 }
 
 /** Why the last publish stopped: the server's message and the operation it stopped at. */
-export type PublishError = { message: string; code?: string; scope?: string; applied?: number }
+export type PublishError = { message: string; code?: string; scope?: string; kind?: string; applied?: number }
 
 export type PublishOutcome =
   | { status: 'published'; result: PublishResult }
@@ -104,7 +104,7 @@ export function useFirewallDraft(connectionId: string) {
           writeStored(publishedKey(connectionId), at)
         }
         if (result.failed) {
-          setError({ message: result.failed.message, code: result.failed.code, scope: result.failed.scope, applied: result.applied })
+          setError({ message: result.failed.message, code: result.failed.code, scope: result.failed.scope, kind: result.failed.kind, applied: result.applied })
           return { status: 'partial', result }
         }
         return { status: 'published', result }

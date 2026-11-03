@@ -361,6 +361,65 @@ describe('Firewalling: the engine block of a guest and the way out of a conflict
   })
 })
 
+describe('Firewalling: round 2 details', () => {
+  it('shows no default deny row for a zone that is not deployed', () => {
+    renderView(props({ securityGroups: [{ group: 'pcz-web', rules: [{ pos: 0, type: 'in', action: 'ACCEPT', enable: 1, comment: '[pc-microseg] web -> web' }] }] }))
+    fireEvent.click(within(screen.getByTestId('dfw-section-zone:pcz-web')).getByRole('button', { name: /Expand/ }))
+    expect(screen.getByTestId('dfw-section-zone:pcz-web')).toHaveTextContent('Not deployed')
+    expect(screen.queryByTestId('dfw-default-deny')).toBeNull()
+  })
+
+  it('offers no discard when the publish was only cut short: it says to publish again', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      applied: 0, total: 1, scopes: {}, failed: { index: 0, kind: 'rule.edit', scope: 'cluster', code: 'PVE_ERROR', message: 'timeout' },
+    }), { status: 502 }))
+    renderView()
+    fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' }))
+    fireEvent.click(publishButton())
+    const alert = await screen.findByTestId('dfw-publish-error')
+    expect(alert).toHaveTextContent('timeout Publish again: the changes not applied are still in the draft.')
+    expect(within(alert).queryByRole('button', { name: 'Discard this section' })).toBeNull()
+    fetchSpy.mockRestore()
+  })
+
+  it('names the options when their digest stopped the publish', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      applied: 0, total: 1, scopes: {}, failed: { index: 0, kind: 'options.set', scope: 'cluster', code: 'DIGEST_CONFLICT', message: 'changed' },
+    }), { status: 409 }))
+    renderView()
+    fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' }))
+    fireEvent.click(publishButton())
+    expect(await screen.findByTestId('dfw-publish-error')).toHaveTextContent('the firewall options of a section were changed in Proxmox')
+    fetchSpy.mockRestore()
+  })
+
+  it('reads a collapsed guest first when its options open, and locks what the engine owns on a zone member', async () => {
+    const p = props()
+    renderView(p)
+    fireEvent.click(within(screen.getByTestId('dfw-group-100')).getByRole('button', { name: /Expand/ }))
+    // vm-102 carries the pc-db tag of the deployed db zone; its rules were never read.
+    fireEvent.click(within(screen.getByTestId('dfw-section-guest:qemu/102')).getByRole('button', { name: /Actions of/ }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Firewall options' }))
+    const selects = within(await screen.findByRole('dialog')).getAllByRole('combobox')
+    expect(p.loadGuestRules).toHaveBeenCalledTimes(1)
+    expect(selects.map(c => c.getAttribute('aria-disabled') === 'true')).toEqual([true, true, false, true, false])
+  })
+
+  it('freezes Save of the options and the section discard while a publish runs', async () => {
+    let answer: (r: Response) => void = () => {}
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise<Response>(resolve => { answer = resolve }))
+    renderView()
+    fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' }))
+    fireEvent.click(publishButton())
+    fireEvent.click(within(screen.getByTestId('dfw-section-cluster')).getByRole('button', { name: /Actions of/ }))
+    expect(await screen.findByRole('menuitem', { name: 'Discard the changes of this section' })).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Firewall options' }))
+    expect(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save' })).toBeDisabled()
+    answer(new Response(JSON.stringify({ applied: 1, total: 1, scopes: {} }), { status: 200 }))
+    fetchSpy.mockRestore()
+  })
+})
+
 describe('Firewalling for a read-only user', () => {
   it('disables Publish, Add rule, Add section, the switches and the action, with the reason', async () => {
     renderView(props(), false)

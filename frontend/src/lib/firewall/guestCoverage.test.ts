@@ -57,7 +57,7 @@ describe('computeGuestCoverage', () => {
 
     const result = await computeGuestCoverage([g(1), g(2), g(3), g(4), g(5), g(6)], {
       listGuests: async () => [],
-      nicFirewall: () => true,
+      guestNet: () => ({ nicFirewall: true, vlans: [] }),
       fetchOptions,
       now: () => clock,
     })
@@ -71,7 +71,7 @@ describe('computeGuestCoverage', () => {
   it('counts an unreadable options answer as unknown, never as protected', async () => {
     const result = await computeGuestCoverage([g(1), g(2)], {
       listGuests: async () => [],
-      nicFirewall: () => true,
+      guestNet: () => ({ nicFirewall: true, vlans: [] }),
       fetchOptions: async guest => {
         if (guest.vmid === '1') throw new Error('HTTP 500')
         return { enable: '1' }
@@ -90,7 +90,7 @@ describe('getGuestCoverage', () => {
       await gate
       return { enable: 1 }
     })
-    const deps = { listGuests: async () => [g(1), g(2)], nicFirewall: () => true, fetchOptions }
+    const deps = { listGuests: async () => [g(1), g(2)], guestNet: () => ({ nicFirewall: true, vlans: [] }), fetchOptions }
 
     const first = await getGuestCoverage('c1', deps, { waitMs: 5 })
     expect(first).toEqual({ result: null, computing: true })

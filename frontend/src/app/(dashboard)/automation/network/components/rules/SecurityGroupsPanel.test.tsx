@@ -43,6 +43,16 @@ vi.mock('@/lib/api/firewall', () => ({
   // Used by the members dialog this panel opens, not by the panel itself.
   addVMRule: vi.fn(),
   deleteVMRule: vi.fn(),
+  getVMRules: vi.fn(),
+}))
+
+// The deployed micro-segmentation revision the membership of the zone groups comes from (UA44): none by default.
+const microseg = vi.hoisted(() => ({ snapshot: null as null | Record<string, unknown> }))
+vi.mock('@/lib/microseg/useMicroseg', () => ({
+  useMicrosegPolicy: () => ({ data: microseg.snapshot ? { last_revision: { id: 'r1' } } : undefined }),
+}))
+vi.mock('@/lib/microseg/useLastRevision', () => ({
+  useLastRevisionSnapshot: () => ({ revision: microseg.snapshot ? { id: 'r1', snapshot: microseg.snapshot } : null }),
 }))
 
 vi.mock('@/contexts/ToastContext', () => ({
@@ -75,7 +85,7 @@ const GROUPS: firewallAPIType.SecurityGroup[] = [
 const WEB_VM: VMFirewallInfo = {
   vmid: 100, name: 'web-01', node: 'pve1', type: 'qemu', status: 'running',
   firewallEnabled: true, optionsEnabled: true, nicFirewallEnabled: true, options: null, vlans: [20],
-  rules: [{ pos: 0, type: 'group', action: 'sg-web', enable: 1 }],
+  rules: [{ pos: 0, type: 'group', action: 'sg-web', enable: 1 }], rulesLoaded: true, stateUnknown: false, tags: [],
 }
 
 /** A group rule pointing at `group`, as PVE stores membership. */
@@ -97,6 +107,7 @@ function props(overrides: Partial<React.ComponentProps<typeof SecurityGroupsPane
     aliases: [{ name: 'net-mgmt', cidr: '10.99.99.0/24' }] as firewallAPIType.Alias[],
     ipsets: [] as firewallAPIType.IPSet[],
     reload: vi.fn(),
+    loadGuestRules: vi.fn().mockResolvedValue([]),
     reloadVMFirewallRules: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   }
@@ -146,9 +157,10 @@ describe('SecurityGroupsPanel', () => {
     expect(screen.getByText('2 rules')).toBeInTheDocument()
     expect(screen.getByText('0 rules')).toBeInTheDocument()
 
-    // sg-web is referenced by web-01, sg-db by nobody.
-    expect(screen.getByText('1 VMs')).toBeInTheDocument()
-    expect(screen.getByText('0 VMs')).toBeInTheDocument()
+    // sg-web is referenced by web-01, whose rules were read; outside the deployed zones the list is
+    // only what was read, which the count says (UA44).
+    expect(screen.getByText('1+ VMs')).toBeInTheDocument()
+    expect(screen.getByText('0+ VMs')).toBeInTheDocument()
 
     expect(screen.queryByText('https in')).not.toBeInTheDocument()
   })
@@ -160,7 +172,7 @@ describe('SecurityGroupsPanel', () => {
     // nothing; the column was dropped and this table now has the same eleven
     // columns as the other three.
     expect(screen.queryByText('Applied To')).not.toBeInTheDocument()
-    expect(screen.getByText('1 VMs')).toBeInTheDocument()
+    expect(screen.getByText('1+ VMs')).toBeInTheDocument()
   })
 
   it('reveals a group\'s rules, with their log level, when expanded', () => {
@@ -364,7 +376,7 @@ describe('SecurityGroupsPanel', () => {
 
     const p = renderPanel()
 
-    fireEvent.click(screen.getByText('1 VMs'))
+    fireEvent.click(screen.getByText('1+ VMs'))
 
     await waitFor(() => expect(screen.getByText('Members of sg-web')).toBeInTheDocument())
 
@@ -395,7 +407,7 @@ describe('SecurityGroupsPanel', () => {
 
     // A "0 VMs" shown mid-scan reads as "unused" on a group that may well be
     // in use, so the count waits.
-    expect(screen.queryByText('1 VMs')).not.toBeInTheDocument()
+    expect(screen.queryByText('1+ VMs')).not.toBeInTheDocument()
     expect(screen.getAllByText('…')).toHaveLength(GROUPS.length)
     expect(screen.getAllByRole('button', { name: 'Loading...' })).toHaveLength(GROUPS.length)
   })
@@ -404,7 +416,7 @@ describe('SecurityGroupsPanel', () => {
     renderPanel({ guestsNotScanned: 3 })
 
     expect(screen.getByRole('button', {
-      name: 'web-01 (100) — 3 guests were not scanned, this count may be incomplete',
+      name: /web-01 \(100\) · 3 guests were not scanned, this count may be incomplete$/,
     })).toBeInTheDocument()
   })
 
@@ -449,5 +461,54 @@ describe('SecurityGroupsPanel load error', () => {
     renderPanel()
 
     expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument()
+  })
+})
+
+describe('SecurityGroupsPanel membership without every guest rules (UA44)', () => {
+  afterEach(() => {
+    cleanup()
+    microseg.snapshot = null
+  })
+
+  const tagged = (vmid: number, tags: string[]): VMFirewallInfo => ({
+    ...WEB_VM, vmid, name: `vm-${vmid}`, rules: [], rulesLoaded: false, tags,
+  })
+  const ZONE_GROUPS: firewallAPIType.SecurityGroup[] = [{ group: 'pcz-web', rules: [] }, { group: 'sg-db', rules: [] }]
+
+  it('knows the members of a deployed zone group from the zone tags, without reading a rule', () => {
+    microseg.snapshot = { tag_prefix: 'zone-', flows: [], zones: [{ id: 'z1', name: 'web', state: 'enforce' }] }
+    const p = renderPanel({ securityGroups: ZONE_GROUPS, vmFirewallData: [tagged(1, ['zone-web']), tagged(2, ['Zone-Web']), tagged(3, ['zone-db'])] })
+
+    expect(within(sectionRow('pcz-web')).getByText('2 VMs')).toBeInTheDocument()
+    expect(within(sectionRow('sg-db')).getByText('0+ VMs')).toBeInTheDocument()
+    expect(p.loadGuestRules).not.toHaveBeenCalled()
+    expect(api.getVMRules).not.toHaveBeenCalled()
+  })
+
+  it('leaves a disabled zone group, or one with no deployed revision, unknown', () => {
+    microseg.snapshot = { tag_prefix: 'zone-', flows: [], zones: [{ id: 'z1', name: 'web', state: 'disabled' }] }
+    renderPanel({ securityGroups: ZONE_GROUPS, vmFirewallData: [tagged(1, ['zone-web'])] })
+
+    expect(within(sectionRow('pcz-web')).getByText('0+ VMs')).toBeInTheDocument()
+  })
+
+  it('says why the count is unknown in the chip tooltip', () => {
+    renderPanel()
+
+    expect(within(sectionRow('sg-web')).getByRole('button', { name: /^Proxmox keeps no member list/ })).toBeInTheDocument()
+  })
+
+  it('reads the rules of the one guest a detach needs when they were not read', async () => {
+    microseg.snapshot = { tag_prefix: 'zone-', flows: [], zones: [{ id: 'z1', name: 'web', state: 'observe' }] }
+    api.deleteVMRule.mockResolvedValue(undefined)
+    const loadGuestRules = vi.fn().mockResolvedValue([groupRule('pcz-web', 3)])
+    renderPanel({ securityGroups: ZONE_GROUPS, vmFirewallData: [tagged(7, ['zone-web']), tagged(8, [])], loadGuestRules })
+
+    fireEvent.click(within(sectionRow('pcz-web')).getByText('1 VMs'))
+    await waitFor(() => expect(screen.getByText('Members of pcz-web')).toBeInTheDocument())
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Detach' }))
+
+    await waitFor(() => expect(api.deleteVMRule).toHaveBeenCalledWith(CONN, 'pve1', 'qemu', 7, 3))
+    expect(loadGuestRules).toHaveBeenCalledTimes(1)
   })
 })

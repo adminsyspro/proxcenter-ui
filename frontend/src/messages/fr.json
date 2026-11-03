@@ -9036,6 +9036,16 @@
       "coverageNone": "Aucun invité sur cette connexion",
       "stopHeldTitle": "Pare-feu de cluster coupé par l'arrêt d'urgence",
       "stopHeldHint": "Reprenez depuis l'onglet Micro-segmentation pour le réactiver."
+    },
+    "rulesOnDemand": {
+      "chip": "Règles à l'ouverture",
+      "hint": "Les règles d'un invité sont lues quand vous ouvrez sa ligne, un invité à la fois",
+      "readFailed": "Les règles de cet invité n'ont pas pu être lues",
+      "stateUnknown": "État du firewall inconnu : options illisibles, ou interfaces réseau pas encore lues par l'inventaire",
+      "vmTabCount": "Invités listés ; leurs règles sont lues quand vous en ouvrez un",
+      "membersUnknown": "Proxmox ne tient aucune liste de membres : un invité en fait partie quand une de ses règles porte le groupe, et les règles sont lues invité par invité. Les membres d'un groupe de zone de micro-segmentation déployée sont connus par leurs tags ; pour ce groupe, seuls les invités déjà ouverts sont listés",
+      "membersUnknownCount": "{count, number}+ VMs",
+      "detachNoRule": "{guest} ne porte aucune règle de {group}"
     }
   },
   "deployWizard": {

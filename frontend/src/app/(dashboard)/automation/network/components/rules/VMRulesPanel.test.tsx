@@ -42,6 +42,7 @@ vi.mock('@/lib/api/firewall', () => ({
   deleteVMRule: vi.fn(),
   getVMFirewallLog: vi.fn(),
   getFirewallLog: vi.fn(),
+  getVMRules: vi.fn(),
 }))
 
 const { showToastMock } = vi.hoisted(() => ({ showToastMock: vi.fn() }))
@@ -82,12 +83,20 @@ const WEB: VMFirewallInfo = {
   vmid: 100, name: 'web-01', node: 'pve1', type: 'qemu', status: 'running',
   firewallEnabled: true, optionsEnabled: true, nicFirewallEnabled: true, rules: [FULL_RULE, BARE_RULE],
   options: { enable: 1, policy_in: 'DROP', policy_out: 'ACCEPT', log_level_in: 'info', log_level_out: 'nolog' },
-  vlans: [20],
+  vlans: [20], stateUnknown: false, rulesLoaded: true, tags: [],
 }
 
 const DB: VMFirewallInfo = {
   vmid: 101, name: 'db-01', node: 'pve2', type: 'lxc', status: 'running',
   firewallEnabled: false, optionsEnabled: false, nicFirewallEnabled: true, rules: [], options: null, vlans: [],
+  stateUnknown: false, rulesLoaded: true, tags: [],
+}
+
+/** A guest as the coverage route lists it: its rules not read yet (UA44). */
+const APP: VMFirewallInfo = {
+  vmid: 102, name: 'app-01', node: 'pve1', type: 'qemu', status: 'running',
+  firewallEnabled: true, optionsEnabled: true, nicFirewallEnabled: true, rules: [], options: { enable: 1 }, vlans: [30],
+  stateUnknown: false, rulesLoaded: false, tags: [],
 }
 
 const ALIASES: firewallAPIType.Alias[] = [{ name: 'net-mgmt', cidr: '10.99.99.0/24' }]
@@ -105,6 +114,7 @@ function props(overrides: Partial<React.ComponentProps<typeof VMRulesPanel>> = {
     loadingVMRules: false,
     selectedConnection: CONN,
     loadVMFirewallData: vi.fn().mockResolvedValue(undefined),
+    loadGuestRules: vi.fn().mockResolvedValue([]),
     reloadVMFirewallRules: vi.fn().mockResolvedValue(undefined),
     aliases: ALIASES,
     ipsets: IPSETS,
@@ -203,15 +213,82 @@ describe('VMRulesPanel', () => {
     expect(screen.getByText('db-01 (101)')).toBeInTheDocument()
   })
 
-  it('expands and collapses every VLAN and guest at once', () => {
-    renderPanel()
+  it('expands every VLAN at once, never every guest (that would read every guest\'s rules), and collapses all', () => {
+    const p = renderPanel({ vmFirewallData: [WEB, DB, APP] })
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand all' }))
-    expect(screen.getByText('https in')).toBeInTheDocument()
-    expect(screen.getByText('No rule configured')).toBeInTheDocument()
+    expect(screen.getByText('web-01')).toBeInTheDocument()
+    expect(screen.getByText('app-01')).toBeInTheDocument()
+    expect(screen.queryByText('https in')).not.toBeInTheDocument()
+    expect(p.loadGuestRules).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse all' }))
     expect(screen.queryByText('web-01')).not.toBeInTheDocument()
+  })
+
+  describe('rules on demand (UA44)', () => {
+    it('reads no guest rules on mount, nor when a VLAN opens', () => {
+      const p = renderPanel({ vmFirewallData: [WEB, DB, APP] })
+
+      fireEvent.click(screen.getByText('VLAN 30'))
+
+      expect(screen.getByText('app-01')).toBeInTheDocument()
+      expect(p.loadGuestRules).not.toHaveBeenCalled()
+      expect(api.getVMRules).not.toHaveBeenCalled()
+    })
+
+    it('says the rules load when the row is opened, and reads that one guest once when it is', async () => {
+      let release: (rules: firewallAPIType.FirewallRule[]) => void = () => {}
+      const loadGuestRules = vi.fn(() => new Promise<firewallAPIType.FirewallRule[]>(resolve => { release = resolve }))
+      renderPanel({ vmFirewallData: [WEB, DB, APP], loadGuestRules })
+      fireEvent.click(screen.getByText('VLAN 30'))
+      expect(screen.getByText('Rules on open')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByText('app-01'))
+
+      expect(loadGuestRules).toHaveBeenCalledTimes(1)
+      expect(loadGuestRules).toHaveBeenCalledWith(APP)
+      expect(screen.getByTestId('vm-rules-reading-102')).toBeInTheDocument()
+
+      // Closing and opening again while it reads asks nothing more.
+      fireEvent.click(screen.getByText('app-01'))
+      fireEvent.click(screen.getByText('app-01'))
+      expect(loadGuestRules).toHaveBeenCalledTimes(1)
+      release([])
+      await waitFor(() => expect(screen.queryByTestId('vm-rules-reading-102')).not.toBeInTheDocument())
+    })
+
+    it('does not read again a guest whose rules are in', () => {
+      const p = renderPanel()
+
+      expandTo('web-01', 'VLAN 20')
+
+      expect(screen.getByText('https in')).toBeInTheDocument()
+      expect(p.loadGuestRules).not.toHaveBeenCalled()
+    })
+
+    it('says so when a guest rules could not be read', async () => {
+      renderPanel({ vmFirewallData: [APP], loadGuestRules: vi.fn().mockRejectedValue(new Error('HTTP 500')) })
+
+      expandTo('app-01', 'VLAN 30')
+
+      expect(await screen.findByText('The rules of this guest could not be read')).toBeInTheDocument()
+    })
+
+    it('marks a guest whose firewall state could not be told', () => {
+      renderPanel({ vmFirewallData: [{ ...APP, stateUnknown: true, firewallEnabled: false }] })
+      fireEvent.click(screen.getByText('VLAN 30'))
+
+      expect(screen.getByTestId('vm-state-unknown-102')).toBeInTheDocument()
+    })
+
+    it('asks the server for new figures from Refresh', () => {
+      const p = renderPanel()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+
+      expect(p.loadVMFirewallData).toHaveBeenCalledWith(true)
+    })
   })
 
   it('searches guests by name, id, node and VLAN', () => {

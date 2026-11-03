@@ -9036,6 +9036,16 @@
       "coverageNone": "此连接上没有客户机",
       "stopHeldTitle": "紧急停止已关闭集群防火墙",
       "stopHeldHint": "在微分段选项卡中恢复以重新启用。"
+    },
+    "rulesOnDemand": {
+      "chip": "打开时加载规则",
+      "hint": "打开客户机所在行时才读取其规则，每次一个客户机",
+      "readFailed": "无法读取此客户机的规则",
+      "stateUnknown": "防火墙状态未知：选项无法读取，或清单尚未读取网络接口",
+      "vmTabCount": "已列出的客户机；打开某个客户机时读取其规则",
+      "membersUnknown": "Proxmox 不维护成员列表：客户机的某条规则包含该组时即为成员，规则逐个客户机读取。已部署的微分段区域组的成员可通过其标签得知；此组仅列出已打开的客户机",
+      "membersUnknownCount": "{count, number}+ 个 VM",
+      "detachNoRule": "{guest} 没有 {group} 的规则"
     }
   },
   "deployWizard": {

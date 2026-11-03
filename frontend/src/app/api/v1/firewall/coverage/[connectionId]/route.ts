@@ -1,7 +1,8 @@
 export const dynamic = "force-dynamic"
 // src/app/api/v1/firewall/coverage/[connectionId]/route.ts
 //
-// GET: firewall coverage of the guests of a connection, for the Dashboard tab (UA44). `?refresh=1` asks for new
+// GET: firewall state of the guests of a connection, for the Dashboard, Firewalling > VMs and Security Groups tabs
+// (UA44): counts and one row per guest asked (options, NIC flag, VLANs, tags), never the rules. `?refresh=1` asks for new
 // figures (served from the cache inside 30 s of the last ones). The load it may put on Proxmox is bounded in
 // lib/firewall/guestCoverage.ts: at most one call per guest, 4 in flight, 2 per node, 200 guests, every 10 min.
 // Session only: the public API allowlist has no entry for it, so a token is refused upstream.
@@ -14,7 +15,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { getInventoryFromCache } from '@/lib/cache/inventoryCache'
 import { pveFetch } from '@/lib/proxmox/client'
-import { peekGuestNicFirewall } from '@/lib/inventory/guestDiskTotals'
+import { peekGuestNet } from '@/lib/inventory/guestDiskTotals'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { getGuestCoverage, type CoverageGuest } from '@/lib/firewall/guestCoverage'
@@ -26,7 +27,22 @@ function toGuest(raw: any): CoverageGuest | null {
   if (raw.type !== 'qemu' && raw.type !== 'lxc') return null
   if (raw.vmid === undefined || raw.vmid === null || !raw.node) return null
 
-  return { vmid: String(raw.vmid), node: String(raw.node), type: raw.type }
+  return {
+    vmid: String(raw.vmid),
+    node: String(raw.node),
+    type: raw.type,
+    name: typeof raw.name === 'string' ? raw.name : undefined,
+    status: typeof raw.status === 'string' ? raw.status : undefined,
+    tags: parseTags(raw.tags),
+  }
+}
+
+/** Proxmox gives the tags as one `;` separated string (the inventory keeps that form), lowercased. */
+function parseTags(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.filter((t): t is string => typeof t === 'string')
+  if (typeof raw !== 'string') return []
+
+  return raw.split(/[;,]/).map(t => t.trim()).filter(Boolean)
 }
 
 /**
@@ -67,7 +83,7 @@ async function getHandler(req: NextRequest, ctx: RouteContext) {
 
     const { result, computing } = await getGuestCoverage(connectionId, {
       listGuests: () => listGuests(tenantId, connectionId, conn),
-      nicFirewall: g => peekGuestNicFirewall(connectionId, g.type, g.vmid),
+      guestNet: g => peekGuestNet(connectionId, g.type, g.vmid),
       fetchOptions: g => orchestratorOrPve(
         'firewall/coverage',
         () => orchestrator.get(`/firewall/vms/${connectionId}/${encodeURIComponent(g.node)}/${g.type}/${encodeURIComponent(g.vmid)}/options`),

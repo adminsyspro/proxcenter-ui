@@ -1,13 +1,13 @@
 // src/lib/firewall/guestCoverage.ts
 //
-// Firewall coverage of the guests of one connection, for the Dashboard of /automation/network (UA44).
+// Firewall state of the guests of one connection, for the Dashboard, Firewalling > VMs and Security Groups tabs of
+// /automation/network (UA44): the counts, and one row per guest asked.
 //
 // A guest is filtered by Proxmox only when its firewall options are on AND a NIC has firewall=1 (#1065). The
 // browser used to ask three requests per guest (rules, options, config) for every viewer, every time the tab
 // opened. Here the work is done once per connection, for everyone, and bounded:
-//  - the NIC flag comes from the config read the inventory already caches (guestDiskTotals): no call;
-//  - a guest whose NICs have no firewall flag is not filtered whatever its options say: no call either;
-//  - the options are the only per-guest Proxmox call, at most COVERAGE_GLOBAL_CONCURRENCY in flight and
+//  - the NIC flag and VLAN tags come from the config read the inventory already caches (guestDiskTotals): no call;
+//  - the options (enable, policies, log levels the VM rows show) are the only per-guest Proxmox call, at most COVERAGE_GLOBAL_CONCURRENCY in flight and
 //    COVERAGE_NODE_CONCURRENCY per node, and none started after COVERAGE_BUDGET_MS;
 //  - at most COVERAGE_MAX_GUESTS guests are asked: beyond, an even sample, and the answer says so;
 //  - the answer is kept COVERAGE_TTL_MS for the same guest list, one computation runs at a time per
@@ -27,7 +27,31 @@ export const COVERAGE_BUDGET_MS = 120_000
 export const COVERAGE_FORCE_MIN_MS = 30_000
 export const COVERAGE_WAIT_MS = 20_000
 
-export type CoverageGuest = { vmid: string; node: string; type: 'qemu' | 'lxc' }
+export type CoverageGuest = { vmid: string; node: string; type: 'qemu' | 'lxc'; name?: string; status?: string; tags?: string[] }
+
+/** Firewall options of a guest as Proxmox answers them (only the fields read here are typed). */
+export type GuestOptions = { enable?: number | string; policy_in?: string; policy_out?: string; log_level_in?: string; log_level_out?: string }
+
+/** One guest asked. Null where it could not be told; a guest's RULES are never here, they are read on demand. */
+export type GuestCoverageRow = {
+  type: 'qemu' | 'lxc'
+  node: string
+  vmid: string
+  name: string
+  status: string
+  tags: string[]
+  /** Filtered by Proxmox: options on and a NIC with the flag. */
+  enabled: boolean | null
+  /** Enabled in the guest's firewall options. */
+  optionsEnabled: boolean | null
+  /** `firewall=1` on a NIC (inventory config cache). */
+  nicFirewall: boolean | null
+  options: GuestOptions | null
+  vlans: number[]
+}
+
+/** Cached NIC facts of a guest. */
+export type GuestNet = { nicFirewall: boolean; vlans: number[] }
 
 export type GuestCoverage = {
   /** Guests of the connection, templates left out. */
@@ -46,15 +70,17 @@ export type GuestCoverage = {
   partial: boolean
   /** ISO time the figures were computed. */
   computedAt: string
+  /** The guests asked, sorted by type and vmid. */
+  guests: GuestCoverageRow[]
 }
 
 export type CoverageDeps = {
   /** The connection's guests (templates excluded). */
   listGuests: () => Promise<CoverageGuest[]>
-  /** The cached NIC flag of a guest, undefined when not known. */
-  nicFirewall: (guest: CoverageGuest) => boolean | undefined
+  /** The cached NIC facts of a guest, undefined when not known. */
+  guestNet: (guest: CoverageGuest) => GuestNet | undefined
   /** The guest's firewall options: the one Proxmox call per guest. */
-  fetchOptions: (guest: CoverageGuest) => Promise<{ enable?: number | string } | null | undefined>
+  fetchOptions: (guest: CoverageGuest) => Promise<GuestOptions | null | undefined>
   now?: () => number
 }
 
@@ -160,7 +186,24 @@ function nodeLimiter(limit: number) {
   }
 }
 
-type Verdict = 'enabled' | 'disabled' | 'unknown'
+function baseRow(guest: CoverageGuest): Omit<GuestCoverageRow, 'enabled' | 'optionsEnabled' | 'nicFirewall' | 'options' | 'vlans'> {
+  return {
+    type: guest.type,
+    node: guest.node,
+    vmid: guest.vmid,
+    name: guest.name || `${guest.type}/${guest.vmid}`,
+    status: guest.status || 'unknown',
+    tags: guest.tags ?? [],
+  }
+}
+
+/** Filtered when both levels are on; certainly not when one is off; unknown otherwise. */
+function verdict(optionsEnabled: boolean | null, nicFirewall: boolean | null): boolean | null {
+  if (optionsEnabled === false || nicFirewall === false) return false
+  if (optionsEnabled === null || nicFirewall === null) return null
+
+  return true
+}
 
 /** Computes the coverage of these guests now. Exported for the tests; callers go through getGuestCoverage. */
 export async function computeGuestCoverage(guests: CoverageGuest[], deps: CoverageDeps): Promise<GuestCoverage> {
@@ -169,37 +212,50 @@ export async function computeGuestCoverage(guests: CoverageGuest[], deps: Covera
   const measured = sampleGuests(guests)
   const onNode = nodeLimiter(COVERAGE_NODE_CONCURRENCY)
 
-  const verdicts = await mapWithConcurrency<CoverageGuest, Verdict>(interleaveByNode(measured), COVERAGE_GLOBAL_CONCURRENCY, async guest => {
-    const nic = deps.nicFirewall(guest)
-    if (nic === false) return 'disabled'
-
-    return onNode(guest.node, async () => {
-      if (now() > deadline) return 'unknown'
-      let options: { enable?: number | string } | null | undefined
+  const rows = await mapWithConcurrency<CoverageGuest, GuestCoverageRow>(interleaveByNode(measured), COVERAGE_GLOBAL_CONCURRENCY, async guest => {
+    const net = deps.guestNet(guest)
+    const nicFirewall = net ? net.nicFirewall : null
+    const options = await onNode(guest.node, async () => {
+      if (now() > deadline) return null
       try {
-        options = await deps.fetchOptions(guest)
+        return (await deps.fetchOptions(guest)) ?? null
       } catch {
-        return 'unknown'
+        return null
       }
-      if (Number(options?.enable) !== 1) return 'disabled'
-
-      return nic === true ? 'enabled' : 'unknown'
     })
+    const optionsEnabled = options ? Number(options.enable) === 1 : null
+
+    return { ...baseRow(guest), enabled: verdict(optionsEnabled, nicFirewall), optionsEnabled, nicFirewall, options, vlans: net?.vlans ?? [] }
   })
 
-  const count = (v: Verdict) => verdicts.filter(x => x === v).length
-  const unknown = count('unknown')
+  const enabled = rows.filter(r => r.enabled === true).length
+  const disabled = rows.filter(r => r.enabled === false).length
+  const unknown = rows.length - enabled - disabled
   const sampled = guests.length > measured.length
 
   return {
     total: guests.length,
     measured: measured.length,
-    enabled: count('enabled'),
-    disabled: count('disabled'),
+    enabled,
+    disabled,
     unknown,
     sampled,
     partial: sampled || unknown > 0,
     computedAt: new Date(now()).toISOString(),
+    guests: rows.sort(byKey),
+  }
+}
+
+/** The cached figures with the names, states and tags of the guest list just read (they move without a recompute). */
+function withFreshFacts(result: GuestCoverage, guests: CoverageGuest[]): GuestCoverage {
+  const byGuest = new Map(guests.map(g => [guestKey(g), g]))
+
+  return {
+    ...result,
+    guests: result.guests.map(row => {
+      const fresh = byGuest.get(guestKey(row))
+      return fresh ? { ...row, ...baseRow(fresh) } : row
+    }),
   }
 }
 
@@ -215,7 +271,7 @@ function begin(connId: string, deps: CoverageDeps, force: boolean): Promise<Gues
     const entry = cache().get(connId)
     const age = entry ? now() - entry.at : Infinity
     const fresh = !!entry && entry.hash === hash && age < COVERAGE_TTL_MS
-    if (entry && fresh && (!force || age < COVERAGE_FORCE_MIN_MS)) return entry.result
+    if (entry && fresh && (!force || age < COVERAGE_FORCE_MIN_MS)) return withFreshFacts(entry.result, guests)
 
     const result = await computeGuestCoverage(guests, deps)
     cache().set(connId, { hash, result, at: now() })

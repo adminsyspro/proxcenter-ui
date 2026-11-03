@@ -21,6 +21,9 @@ import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
 import RulesTableHead from './shared/RulesTableHead'
 import SecurityGroupMembersDialog from './shared/SecurityGroupMembersDialog'
 import FirewallLogDialog from '@/components/firewall/FirewallLogDialog'
+import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
+import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
+import { groupMembers } from './shared/groupMembership'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
 
 // ── Props ──
@@ -41,18 +44,9 @@ interface SecurityGroupsPanelProps {
   /** What failed on the last load of the firewall data, null when it all loaded. */
   loadError?: string | null
   reload: () => void
+  /** Reads one guest's rules (the members dialog asks it before detaching a guest whose rules were not read). */
+  loadGuestRules: (vm: VMFirewallInfo) => Promise<firewallAPI.FirewallRule[]>
   reloadVMFirewallRules: (vm: VMFirewallInfo) => Promise<void>
-}
-
-// ── Helpers ──
-
-function computeAppliedTo(sgName: string, vmFirewallData: VMFirewallInfo[]): { vmid: number; name: string; node: string }[] {
-  const vms: { vmid: number; name: string; node: string }[] = []
-  for (const vm of vmFirewallData) {
-    const hasRef = vm.rules.some(r => r.type === 'group' && r.action === sgName)
-    if (hasRef) vms.push({ vmid: vm.vmid, name: vm.name, node: vm.node })
-  }
-  return vms
 }
 
 /**
@@ -82,11 +76,17 @@ function computeScopeRefs(
 
 export default function SecurityGroupsPanel({
   securityGroups, vmFirewallData, loadingVMRules, guestsNotScanned, clusterRules, hostRulesByNode,
-  firewallMode, selectedConnection, totalRules, aliases, ipsets, loadError, reload, reloadVMFirewallRules
+  firewallMode, selectedConnection, totalRules, aliases, ipsets, loadError, reload, loadGuestRules, reloadVMFirewallRules
 }: SecurityGroupsPanelProps) {
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
+
+  // Membership without reading every guest's rules (UA44): the zone groups of the deployed micro-segmentation
+  // revision have their members from the zone tags; any other group only knows the guests whose rules were read.
+  const { data: microsegPolicy } = useMicrosegPolicy(selectedConnection || null)
+  const { revision: deployed } = useLastRevisionSnapshot(selectedConnection || null, microsegPolicy?.last_revision?.id)
+  const deployedSnapshot = deployed?.snapshot ?? null
 
   // ── State ──
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
@@ -118,6 +118,12 @@ export default function SecurityGroupsPanel({
     [vmFirewallData]
   )
 
+  const membersLabel = (section: PolicySection) => {
+    if (loadingVMRules) return '…'
+    if (section.appliedToKnown === false) return t('networkPage.rulesOnDemand.membersUnknownCount', { count: section.appliedTo.length })
+    return t('networkPage.vmCount', { count: section.appliedTo.length })
+  }
+
   // Drag & drop
   const [dragState, setDragState] = useState<{ sectionId: string; draggedPos: number | null; dragOverPos: number | null }>({ sectionId: '', draggedPos: null, dragOverPos: null })
 
@@ -125,18 +131,20 @@ export default function SecurityGroupsPanel({
   const sections: PolicySection[] = useMemo(() => {
     return securityGroups.map(sg => {
       const rules = sg.rules || []
+      const membership = groupMembers(sg.group, vmFirewallData, deployedSnapshot)
       return {
         id: sg.group,
         type: 'security-group' as const,
         name: sg.group,
         comment: sg.comment,
         rules,
-        appliedTo: computeAppliedTo(sg.group, vmFirewallData),
+        appliedTo: membership.members.map(vm => ({ vmid: vm.vmid, name: vm.name, node: vm.node })),
+        appliedToKnown: membership.known,
         ruleCount: rules.length,
         activeRuleCount: rules.filter(isRuleEnabled).length,
       }
     })
-  }, [securityGroups, vmFirewallData])
+  }, [securityGroups, vmFirewallData, deployedSnapshot])
 
   // ── Filter by search ──
   const filteredSections = useMemo(() => {
@@ -368,16 +376,18 @@ export default function SecurityGroupsPanel({
                 title={loadingVMRules
                   ? t('networkPage.loading')
                   : [
+                    section.appliedToKnown === false ? t('networkPage.rulesOnDemand.membersUnknown') : '',
                     section.appliedTo.length > 0
                       ? section.appliedTo.map(v => `${v.name} (${v.vmid})`).join(', ')
-                      : t('networkPage.noVmsReferencing'),
+                      : (section.appliedToKnown === false ? '' : t('networkPage.noVmsReferencing')),
                     guestsNotScanned > 0 ? t('firewall.membersPartial', { count: guestsNotScanned }) : '',
-                  ].filter(Boolean).join(' — ')
+                  ].filter(Boolean).join(' · ')
                 }
               >
                 <Chip
                   icon={<i className="ri-computer-line" style={{ fontSize: 12 }} />}
-                  label={loadingVMRules ? '…' : t('networkPage.vmCount', { count: section.appliedTo.length })}
+                  label={membersLabel(section)}
+                  data-testid={`sg-members-${section.id}`}
                   size="small"
                   variant="outlined"
                   onClick={() => setMembersOf(section.id)}
@@ -581,6 +591,8 @@ export default function SecurityGroupsPanel({
           groupName={membersOf}
           connectionId={selectedConnection}
           guests={vmFirewallData}
+          membership={groupMembers(membersOf, vmFirewallData, deployedSnapshot)}
+          loadGuestRules={loadGuestRules}
           guestsNotScanned={guestsNotScanned}
           onClose={() => setMembersOf(null)}
           onChanged={touched => { touched.forEach(guest => { void reloadVMFirewallRules(guest) }) }}

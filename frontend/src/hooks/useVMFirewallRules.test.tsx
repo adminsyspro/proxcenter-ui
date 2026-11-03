@@ -1,16 +1,11 @@
 /**
- * Coverage for the bounded VM firewall scan and its single-guest refresh.
- *
- * The inventory request and per-guest config requests share `fetch`, while the
- * firewall adapter supplies rules and options. Keeping those mocks separate
- * lets these tests assert the scan cap and batch size without depending on any
- * route handlers. No automatic RTL cleanup is configured in this repo.
+ * The guest list of the Firewalling > VMs and Security Groups tabs (UA44): ONE request to the coverage route, which
+ * the server bounds (one Proxmox call per guest at most, cached), and a guest's rules read only when asked for that
+ * guest. The hook used to ask rules, options and config for every guest on mount. No automatic RTL cleanup here.
  */
 
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-import type { FirewallRule } from '@/lib/api/firewall'
 
 vi.mock('@/lib/api/firewall', () => ({
   getVMRules: vi.fn(),
@@ -19,425 +14,146 @@ vi.mock('@/lib/api/firewall', () => ({
 
 import * as firewallAPI from '@/lib/api/firewall'
 
-import { useVMFirewallRules, type VMFirewallInfo } from './useVMFirewallRules'
+import { useVMFirewallRules } from './useVMFirewallRules'
 
-interface Guest {
-  vmid: string
-  name: string
-  node: string
-  type: 'qemu' | 'lxc'
-  status: string
-  template?: boolean
-}
+const row = (vmid: number, over: Record<string, unknown> = {}) => ({
+  type: 'qemu', node: 'pve1', vmid: String(vmid), name: `vm-${vmid}`, status: 'running', tags: ['zone-web'],
+  enabled: true, optionsEnabled: true, nicFirewall: true, options: { enable: 1, policy_in: 'DROP' }, vlans: [20],
+  ...over,
+})
 
-const getVMRules = vi.mocked(firewallAPI.getVMRules)
-const getVMOptions = vi.mocked(firewallAPI.getVMOptions)
+const coverage = (guests: unknown[], over: Record<string, unknown> = {}) => ({
+  total: guests.length, measured: guests.length, enabled: 0, disabled: 0, unknown: 0, sampled: false, partial: false,
+  computedAt: '2026-11-03T10:00:00.000Z', computing: false, guests, ...over,
+})
 
-const rule = (pos: number): FirewallRule => ({ pos, type: 'in', action: 'ACCEPT', enable: 1 })
+const answer = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
-function guest(vmid: number, overrides: Partial<Guest> = {}): Guest {
-  return {
-    vmid: String(vmid),
-    name: `guest-${vmid}`,
-    node: 'pve1',
-    type: 'qemu',
-    status: 'running',
-    ...overrides,
-  }
-}
-
-function vm(vmid: number, overrides: Partial<VMFirewallInfo> = {}): VMFirewallInfo {
-  return {
-    vmid,
-    name: `guest-${vmid}`,
-    node: 'pve1',
-    type: 'qemu',
-    status: 'running',
-    firewallEnabled: false,
-    optionsEnabled: false,
-    nicFirewallEnabled: false,
-    rules: [],
-    options: null,
-    vlans: [],
-    ...overrides,
-  }
-}
-
-/** Mock the inventory response and the config returned for each scanned guest. */
-function mockGuestScan(
-  guests: Guest[],
-  configs: Record<number, Record<string, unknown> | null> = {},
-) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    const url = String(input)
-
-    if (url.startsWith('/api/v1/vms?')) {
-      return { json: async () => ({ data: { vms: guests } }) } as Response
-    }
-
-    const vmid = Number(url.match(/\/(\d+)\/config$/)?.[1])
-    const config = Object.hasOwn(configs, vmid) ? configs[vmid] : {}
-
-    return { json: async () => config === null ? null : { data: config } } as Response
-  })
-
-  vi.stubGlobal('fetch', fetchMock)
-
-  return fetchMock
-}
+let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
-  getVMRules.mockReset().mockResolvedValue([])
-  getVMOptions.mockReset().mockResolvedValue({ enable: 1 })
+  vi.mocked(firewallAPI.getVMRules).mockReset()
+  vi.mocked(firewallAPI.getVMOptions).mockReset()
+  fetchMock = vi.fn()
+  vi.stubGlobal('fetch', fetchMock)
 })
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.useRealTimers()
 })
 
-describe('useVMFirewallRules', () => {
-  it('caps a 250-guest inventory at 200 and reports the 50 skipped guests', async () => {
-    const guests = Array.from({ length: 250 }, (_, index) => guest(1000 + index))
+const urls = () => fetchMock.mock.calls.map(([u]) => String(u))
 
-    mockGuestScan(guests)
-
+describe('useVMFirewallRules (UA44)', () => {
+  it('reads the guest list in one request to the coverage route, and no guest rules, options or config', async () => {
+    fetchMock.mockResolvedValue(answer(coverage([row(100), row(101, { enabled: null, nicFirewall: null })], { total: 250, measured: 200 })))
     const { result } = renderHook(() => useVMFirewallRules('conn-1'))
 
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
+    await act(async () => { await result.current.loadVMFirewallData() })
 
-    expect(result.current.vmFirewallData).toHaveLength(200)
-    expect(result.current.guestsNotScanned).toBe(50)
-    expect(getVMRules).toHaveBeenCalledTimes(200)
-    expect(getVMOptions).toHaveBeenCalledTimes(200)
-    expect(result.current.vmFirewallData.map(item => item.vmid)).not.toContain(1200)
-  })
-
-  it('scans every non-template guest below the cap and excludes templates', async () => {
-    mockGuestScan([
-      guest(100),
-      guest(101, { template: true }),
-      guest(102, { type: 'lxc' }),
-      guest(103, { template: true }),
-    ])
-
-    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
-
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
-
-    expect(result.current.guestsNotScanned).toBe(0)
-    expect(result.current.vmFirewallData.map(item => item.vmid)).toEqual([100, 102])
-    expect(getVMRules).toHaveBeenCalledTimes(2)
-  })
-
-  it('never has more than eight guest rule requests in flight', async () => {
-    let inFlight = 0
-    let maximumInFlight = 0
-
-    mockGuestScan(Array.from({ length: 17 }, (_, index) => guest(200 + index)))
-    getVMRules.mockImplementation(async () => {
-      inFlight += 1
-      maximumInFlight = Math.max(maximumInFlight, inFlight)
-
-      await new Promise<void>(resolve => setTimeout(resolve, 0))
-
-      inFlight -= 1
-
-      return []
-    })
-
-    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
-
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
-
-    expect(getVMRules).toHaveBeenCalledTimes(17)
-    expect(maximumInFlight).toBe(8)
-  })
-
-  it('keeps a guest whose rules request fails, with an empty rules array', async () => {
-    mockGuestScan([guest(300), guest(301)])
-    getVMRules.mockImplementation(async (_connectionId, _node, _type, vmid) => {
-      if (Number(vmid) === 301) throw new Error('rules unavailable')
-
-      return [rule(0)]
-    })
-
-    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
-
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
-
+    expect(urls()).toEqual(['/api/v1/firewall/coverage/conn-1'])
+    expect(firewallAPI.getVMRules).not.toHaveBeenCalled()
+    expect(firewallAPI.getVMOptions).not.toHaveBeenCalled()
     expect(result.current.vmFirewallData).toHaveLength(2)
-    expect(result.current.vmFirewallData.find(item => item.vmid === 300)?.rules).toEqual([rule(0)])
-    expect(result.current.vmFirewallData.find(item => item.vmid === 301)?.rules).toEqual([])
-  })
-
-  it('keeps a guest whose adapter call throws outright, rather than sinking the scan', async () => {
-    mockGuestScan([guest(310), guest(311)])
-    getVMRules.mockImplementation((_connectionId, _node, _type, vmid) => {
-      // Thrown, not rejected: the per-call `.catch()` is never attached, so
-      // only the guest-level guard keeps the other guests from being lost.
-      if (Number(vmid) === 311) throw new Error('adapter unavailable')
-
-      return Promise.resolve([rule(0)])
-    })
-
-    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
-
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
-
-    expect(result.current.vmFirewallData).toHaveLength(2)
-    expect(result.current.vmFirewallData.find(item => item.vmid === 311)).toMatchObject({
-      name: 'guest-311', firewallEnabled: false, rules: [], options: null, vlans: [],
-    })
-  })
-
-  it('names a guest PVE returned without one after its id', async () => {
-    mockGuestScan([guest(320, { name: '' })])
-
-    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
-
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
-
-    expect(result.current.vmFirewallData[0].name).toBe('VM 320')
-  })
-
-  it('sorts firewall-enabled guests first, then sorts each tier by rule count', async () => {
-    const rulesByGuest: Record<number, FirewallRule[]> = {
-      400: [rule(0), rule(1), rule(2)],
-      401: [rule(0)],
-      402: [rule(0), rule(1)],
-      403: [rule(0)],
-    }
-
-    mockGuestScan(
-      [guest(400), guest(401), guest(402), guest(403)],
-      {
-        400: { net0: 'virtio=AA:00,tag=30' },
-        401: { net0: 'virtio=AA:01,firewall=1,tag=20' },
-        402: {
-          net0: 'virtio=AA:02,firewall=1,tag=30',
-          net1: 'virtio=AA:03,tag=10',
-          net2: 'virtio=AA:04,tag=30',
-        },
-        403: {},
-      },
-    )
-    getVMRules.mockImplementation(async (_connectionId, _node, _type, vmid) => rulesByGuest[Number(vmid)])
-
-    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
-
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
-
-    expect(result.current.vmFirewallData.map(item => item.vmid)).toEqual([402, 401, 400, 403])
-    expect(result.current.vmFirewallData[0]).toMatchObject({ firewallEnabled: true, vlans: [10, 30] })
-    expect(result.current.vmFirewallData[2].firewallEnabled).toBe(false)
-  })
-
-  it('reports a guest as firewalled only when both its options and a NIC have the firewall on (#1065)', async () => {
-    const optionsByGuest: Record<number, { enable?: number }> = { 700: { enable: 1 }, 701: { enable: 0 }, 702: { enable: 1 }, 703: {} }
-
-    mockGuestScan(
-      [guest(700), guest(701), guest(702), guest(703)],
-      {
-        700: { net0: 'virtio=AA:10,bridge=vmbr0,firewall=1' },
-        701: { net0: 'virtio=AA:11,bridge=vmbr0,firewall=1' },
-        702: { net0: 'virtio=AA:12,bridge=vmbr0,firewall=0' },
-        703: { net3: 'virtio=AA:13,bridge=vmbr0,firewall=1' },
-      },
-    )
-    getVMOptions.mockImplementation(async (_connectionId, _node, _type, vmid) => optionsByGuest[Number(vmid)])
-
-    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
-
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
-
-    const state = (vmid: number) => {
-      const { firewallEnabled, optionsEnabled, nicFirewallEnabled } = result.current.vmFirewallData.find(item => item.vmid === vmid)!
-
-      return { firewallEnabled, optionsEnabled, nicFirewallEnabled }
-    }
-
-    expect(state(700)).toEqual({ firewallEnabled: true, optionsEnabled: true, nicFirewallEnabled: true })
-    expect(state(701)).toEqual({ firewallEnabled: false, optionsEnabled: false, nicFirewallEnabled: true })
-    expect(state(702)).toEqual({ firewallEnabled: false, optionsEnabled: true, nicFirewallEnabled: false })
-    expect(state(703)).toEqual({ firewallEnabled: false, optionsEnabled: false, nicFirewallEnabled: true })
-  })
-
-  it('reloads only the requested guest with its latest rules, options and NIC config', async () => {
-    const first = vm(500, { rules: [rule(0)] })
-    const untouched = vm(501, { name: 'leave-me-alone', rules: [rule(1)] })
-
-    mockGuestScan([], {
-      500: {
-        net0: 'virtio=AA:05,firewall=1,tag=40',
-        net1: 'virtio=AA:06,tag=10',
-      },
-    })
-    getVMRules.mockResolvedValue([rule(7), rule(8)])
-    getVMOptions.mockResolvedValue({ enable: 0, policy_in: 'DROP' })
-
-    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
-
-    act(() => result.current.setVMFirewallData([first, untouched]))
-
-    await act(async () => {
-      await result.current.reloadVMFirewallRules(first)
-    })
-
-    expect(getVMRules).toHaveBeenCalledWith('conn-1', 'pve1', 'qemu', 500)
-    // #1065: firewall=1 on a NIC with the options switch off filters nothing.
     expect(result.current.vmFirewallData[0]).toMatchObject({
-      vmid: 500,
-      firewallEnabled: false,
-      optionsEnabled: false,
-      nicFirewallEnabled: true,
-      rules: [rule(7), rule(8)],
-      options: { enable: 0, policy_in: 'DROP' },
-      vlans: [10, 40],
+      vmid: 100, name: 'vm-100', firewallEnabled: true, optionsEnabled: true, nicFirewallEnabled: true,
+      stateUnknown: false, rules: [], rulesLoaded: false, vlans: [20], tags: ['zone-web'], options: { policy_in: 'DROP' },
     })
-    expect(result.current.vmFirewallData[1]).toEqual(untouched)
+    expect(result.current.vmFirewallData[1]).toMatchObject({ stateUnknown: true, firewallEnabled: false })
+    expect(result.current.guestsNotScanned).toBe(50)
+    expect(result.current.loadingVMRules).toBe(false)
   })
 
-  it('makes a second load a no-op until resetting the data', async () => {
-    const fetchMock = mockGuestScan([guest(600)])
+  it('reads again while the server is still computing, then shows its figures', async () => {
+    vi.useFakeTimers()
+    fetchMock
+      .mockResolvedValueOnce(answer({ computing: true }))
+      .mockResolvedValueOnce(answer(coverage([row(100)])))
     const { result } = renderHook(() => useVMFirewallRules('conn-1'))
 
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
+    let done: Promise<void> = Promise.resolve()
+    act(() => { done = result.current.loadVMFirewallData() })
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
+    await act(async () => { await done })
 
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
-
-    expect(getVMRules).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).startsWith('/api/v1/vms?'))).toHaveLength(1)
-
-    act(() => result.current.setVMFirewallData([]))
-
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
-
-    expect(getVMRules).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).startsWith('/api/v1/vms?'))).toHaveLength(2)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(result.current.vmFirewallData).toHaveLength(1)
   })
 
-  it('reports failed rule and option fetches instead of passing them off as no rules', async () => {
-    mockGuestScan([guest(300), guest(301)])
-    getVMRules.mockImplementation(async (_conn, _node, _type, vmid) => {
-      if (Number(vmid) === 300) throw new Error('Orchestrator 500: {"error":"failed to parse VM rules"}')
-
-      return [rule(0)]
-    })
-    getVMOptions.mockRejectedValue(new Error('HTTP 502'))
-
+  it('reads one guest rules once, when asked for that guest', async () => {
+    fetchMock.mockResolvedValue(answer(coverage([row(100), row(101)])))
+    vi.mocked(firewallAPI.getVMRules).mockResolvedValue([{ pos: 0, type: 'group', action: 'sg-web' }] as any)
     const { result } = renderHook(() => useVMFirewallRules('conn-1'))
+    await act(async () => { await result.current.loadVMFirewallData() })
 
     await act(async () => {
-      await result.current.loadVMFirewallData()
+      await Promise.all([
+        result.current.loadGuestRules(result.current.vmFirewallData[0]),
+        result.current.loadGuestRules(result.current.vmFirewallData[0]),
+      ])
     })
 
-    expect(result.current.vmFirewallData.find(v => v.vmid === 300)?.rules).toEqual([])
-    expect(result.current.vmFirewallData.find(v => v.vmid === 301)?.rules).toEqual([rule(0)])
-    expect(result.current.vmRulesError).toBe('failed to parse VM rules · HTTP 502')
+    expect(firewallAPI.getVMRules).toHaveBeenCalledTimes(1)
+    expect(firewallAPI.getVMRules).toHaveBeenCalledWith('conn-1', 'pve1', 'qemu', 100)
+    expect(result.current.vmFirewallData[0]).toMatchObject({ rulesLoaded: true, rules: [{ action: 'sg-web' }] })
+    expect(result.current.vmFirewallData[1].rulesLoaded).toBe(false)
   })
 
-  it('reports an inventory failure and clears the error on the next clean scan', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('inventory down') }))
-    vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('asks the server for new figures on a forced load, and keeps the rules already read', async () => {
+    fetchMock.mockResolvedValue(answer(coverage([row(100)])))
+    vi.mocked(firewallAPI.getVMRules).mockResolvedValue([{ pos: 0, type: 'in', action: 'ACCEPT' }] as any)
+    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
+    await act(async () => { await result.current.loadVMFirewallData() })
+    await act(async () => { await result.current.loadGuestRules(result.current.vmFirewallData[0]) })
 
+    await act(async () => { await result.current.loadVMFirewallData() })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    await act(async () => { await result.current.loadVMFirewallData(true) })
+
+    expect(urls()[1]).toBe('/api/v1/firewall/coverage/conn-1?refresh=1')
+    expect(result.current.vmFirewallData[0]).toMatchObject({ rulesLoaded: true, rules: [{ action: 'ACCEPT' }] })
+  })
+
+  it('reports a failed load instead of an empty list that reads as no guest', async () => {
+    fetchMock.mockResolvedValue(answer({ error: 'HTTP 502' }, 502))
     const { result } = renderHook(() => useVMFirewallRules('conn-1'))
 
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
+    await act(async () => { await result.current.loadVMFirewallData() })
 
+    expect(result.current.vmRulesError).toBe('HTTP 502')
     expect(result.current.vmFirewallData).toEqual([])
-    expect(result.current.vmRulesError).toBe('inventory down')
-
-    mockGuestScan([guest(400)])
-    act(() => result.current.setVMFirewallData([]))
-    await act(async () => {
-      await result.current.loadVMFirewallData()
-    })
-
-    expect(result.current.vmRulesError).toBeNull()
   })
 
-  it('ignores the late scan of the connection that was left, and scans the new one', async () => {
-    let releaseOld!: () => void
-    const oldInventory = new Promise<void>(resolve => { releaseOld = resolve })
-
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input)
-
-      if (url === '/api/v1/vms?connId=conn-a') {
-        await oldInventory
-        throw new Error('conn-a unreachable')
-      }
-      if (url === '/api/v1/vms?connId=conn-b') return { json: async () => ({ data: { vms: [guest(700)] } }) } as Response
-
-      return { json: async () => ({ data: { net0: 'virtio,bridge=vmbr0,firewall=1' } }) } as Response
-    }))
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    const { result, rerender } = renderHook(({ id }: { id: string }) => useVMFirewallRules(id), {
-      initialProps: { id: 'conn-a' },
-    })
-
-    let oldScan!: Promise<void>
-
-    act(() => { oldScan = result.current.loadVMFirewallData() })
-    expect(result.current.loadingVMRules).toBe(true)
-
-    rerender({ id: 'conn-b' })
-    expect(result.current.loadingVMRules).toBe(false)
-
+  it('reloads one guest after an edit, with its rules, options and NIC config', async () => {
+    fetchMock.mockResolvedValueOnce(answer(coverage([row(100, { enabled: false, optionsEnabled: false })])))
+    const { result } = renderHook(() => useVMFirewallRules('conn-1'))
     await act(async () => { await result.current.loadVMFirewallData() })
-    expect(result.current.vmFirewallData.map(v => v.vmid)).toEqual([700])
 
-    await act(async () => {
-      releaseOld()
-      await oldScan
-    })
+    vi.mocked(firewallAPI.getVMRules).mockResolvedValue([])
+    vi.mocked(firewallAPI.getVMOptions).mockResolvedValue({ enable: 1 })
+    fetchMock.mockResolvedValueOnce({ json: async () => ({ data: { net0: 'virtio=AA,bridge=vmbr0,tag=30,firewall=1' } }) })
 
-    expect(result.current.vmFirewallData.map(v => v.vmid)).toEqual([700])
-    expect(result.current.vmRulesError).toBeNull()
-    expect(result.current.loadingVMRules).toBe(false)
-    expect(console.error).not.toHaveBeenCalled()
+    await act(async () => { await result.current.reloadVMFirewallRules(result.current.vmFirewallData[0]) })
+
+    expect(result.current.vmFirewallData[0]).toMatchObject({ firewallEnabled: true, rulesLoaded: true, vlans: [30] })
   })
 
-  it('starts the new connection from no data even when the old scan never answers', async () => {
-    mockGuestScan([guest(800)])
+  it('drops the late answer of the connection that was left', async () => {
+    let release: (v: unknown) => void = () => {}
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    const { result, rerender } = renderHook(({ id }: { id: string }) => useVMFirewallRules(id), { initialProps: { id: 'conn-1' } })
+    let first: Promise<void> = Promise.resolve()
+    act(() => { first = result.current.loadVMFirewallData() })
 
-    const { result, rerender } = renderHook(({ id }: { id: string }) => useVMFirewallRules(id), {
-      initialProps: { id: 'conn-a' },
-    })
-
+    rerender({ id: 'conn-2' })
+    fetchMock.mockResolvedValueOnce(answer(coverage([row(200)])))
     await act(async () => { await result.current.loadVMFirewallData() })
-    expect(result.current.vmFirewallData).toHaveLength(1)
+    release(answer(coverage([row(100)])))
+    await act(async () => { await first })
 
-    rerender({ id: 'conn-b' })
-    await waitFor(() => expect(result.current.vmFirewallData).toEqual([]))
-
-    await act(async () => { await result.current.loadVMFirewallData() })
-    expect(result.current.vmFirewallData).toHaveLength(1)
+    await waitFor(() => expect(result.current.vmFirewallData.map(v => v.vmid)).toEqual([200]))
   })
 })

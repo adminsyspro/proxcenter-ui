@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
 import { useRefreshInterval } from './useRefreshInterval'
 import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
+import type { GuestCoverageRow } from '@/lib/firewall/guestCoverage'
 
 // Fetcher that chains connections -> firewall options for a single PVE connection
 const clusterFirewallFetcher = async (url: string) => {
@@ -97,6 +98,8 @@ export type FirewallCoverage = {
   computedAt: string
   /** The server is still computing: the figures above are the previous ones, or absent. */
   computing: boolean
+  /** One row per guest asked (firewall state, options, VLANs, tags), never the rules. */
+  guests?: GuestCoverageRow[]
 }
 
 /** While the server computes, it is asked again this often (a cheap read: it joins the running computation). */

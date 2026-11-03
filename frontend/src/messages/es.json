@@ -9036,6 +9036,16 @@
       "coverageNone": "Ningún invitado en esta conexión",
       "stopHeldTitle": "Cortafuegos del clúster apagado por la parada de emergencia",
       "stopHeldHint": "Reanude desde la pestaña Microsegmentación para volver a activarlo."
+    },
+    "rulesOnDemand": {
+      "chip": "Reglas al abrir",
+      "hint": "Las reglas de un invitado se leen al abrir su fila, un invitado cada vez",
+      "readFailed": "No se pudieron leer las reglas de este invitado",
+      "stateUnknown": "Estado del cortafuegos desconocido: opciones ilegibles o interfaces de red aún no leídas por el inventario",
+      "vmTabCount": "Invitados listados; sus reglas se leen al abrir uno",
+      "membersUnknown": "Proxmox no lleva lista de miembros: un invitado pertenece cuando una de sus reglas lleva el grupo, y las reglas se leen invitado por invitado. Los miembros de un grupo de zona de microsegmentación desplegada se conocen por sus etiquetas; para este grupo solo se listan los invitados ya abiertos",
+      "membersUnknownCount": "{count, number}+ VMs",
+      "detachNoRule": "{guest} no lleva ninguna regla de {group}"
     }
   },
   "deployWizard": {

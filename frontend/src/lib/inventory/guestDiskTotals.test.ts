@@ -10,7 +10,9 @@ import {
   invalidateGuestDiskTotal,
   onlineNodeSet,
   peekGuestDiskTotal,
+  peekGuestNet,
   peekGuestNicFirewall,
+  configVlans,
   readGuestDiskBytes,
   resetGuestDiskTotals,
   type DiskTotalGuest,
@@ -71,6 +73,15 @@ describe("peekGuestNicFirewall (UA44)", () => {
     expect(peekGuestNicFirewall(CONN, "qemu", "9938")).toBe(false)
     expect(peekGuestNicFirewall(CONN, "lxc", 200)).toBe(false)
     expect(peekGuestNicFirewall(CONN, "qemu", 555)).toBeUndefined()
+  })
+
+  it("keeps the VLAN tags of the NICs from the same read", async () => {
+    const table = { ...configs, "qemu/104": { ...configs["qemu/104"], net0: "virtio=AA,bridge=vmbr0,tag=30,firewall=1", net1: "virtio=AB,bridge=vmbr1,tag=20" } }
+    await attachGuestDiskTotals(null, CONN, guests(), { onlineNodes: ONLINE, fetchConfig: fetchFrom(table), now })
+
+    expect(peekGuestNet(CONN, "qemu", 104)).toEqual({ nicFirewall: true, vlans: [20, 30] })
+    expect(peekGuestNet(CONN, "qemu", 555)).toBeUndefined()
+    expect(configVlans({ net0: "name=eth0,tag=7", ipconfig0: "tag=9", net1: 3 })).toEqual([7])
   })
 
   it("forgets the flag with the figure when ProxCenter changes the guest", async () => {

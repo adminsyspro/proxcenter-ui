@@ -1,8 +1,8 @@
 /**
  * GET /api/v1/firewall/coverage/[connectionId] (UA44): the Dashboard's guest firewall coverage, computed on the
- * server once per connection. The guarantees on the Proxmox load are what is tested here: one options call per
- * guest at most, none for a guest whose NICs carry no firewall flag, never more than 4 in flight nor 2 per node,
- * 200 guests at most, and the cache in front of all of it.
+ * server once per connection, with one row per guest for the Firewalling and Security Groups tabs. The guarantees on
+ * the Proxmox load are what is tested here: one options call per guest at most, never a rules or config call,
+ * never more than 4 in flight nor 2 per node, 200 guests at most, and the cache in front of all of it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -30,7 +30,10 @@ vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: async () 
 vi.mock('@/lib/orchestrator/client', () => ({ getOrchestratorClient: () => ({ get: (p: string) => h.orchGet(p) }) }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: (...a: any[]) => h.pveFetch(...a) }))
 vi.mock('@/lib/inventory/guestDiskTotals', () => ({
-  peekGuestNicFirewall: (_conn: string, type: string, vmid: string) => h.nic.get(`${type}/${vmid}`),
+  peekGuestNet: (_conn: string, type: string, vmid: string) => {
+    const nic = h.nic.get(`${type}/${vmid}`)
+    return nic === undefined ? undefined : { nicFirewall: nic, vlans: nic ? [20] : [] }
+  },
 }))
 
 import { setCachedInventory, invalidateInventoryCache } from '@/lib/cache/inventoryCache'
@@ -128,9 +131,9 @@ describe('GET /api/v1/firewall/coverage/[connectionId]: access', () => {
 })
 
 describe('GET /api/v1/firewall/coverage/[connectionId]: figures and load', () => {
-  it('counts a guest as filtered only with its options and a NIC on, with no call for a guest whose NICs have no flag', async () => {
+  it('counts a guest as filtered only with its options and a NIC on, one options call per guest and nothing else', async () => {
     const list: Guest[] = [
-      { vmid: 101, node: 'pve1', type: 'qemu' },
+      { vmid: 101, node: 'pve1', type: 'qemu', name: 'web-1', tags: 'zone-web;prod' } as any,
       { vmid: 102, node: 'pve1', type: 'qemu' },
       { vmid: 103, node: 'pve2', type: 'lxc' },
       { vmid: 104, node: 'pve2', type: 'qemu' },
@@ -149,10 +152,32 @@ describe('GET /api/v1/firewall/coverage/[connectionId]: figures and load', () =>
     expect(res.status).toBe(200)
     expect(body).toMatchObject({ total: 4, measured: 4, enabled: 1, disabled: 2, unknown: 1, sampled: false, partial: true, computing: false })
     expect(typeof body.computedAt).toBe('string')
-    // 103 needed no call; no rules call, no config call ever.
-    expect(stats.calls).toBe(3)
+    // One options call per guest, no rules call, no config call ever.
+    expect(stats.calls).toBe(4)
     expect(h.orchGet.mock.calls.every(([p]) => String(p).endsWith('/options'))).toBe(true)
     expect(h.pveFetch).toHaveBeenCalledTimes(1)
+    // One row per guest for the Firewalling and Security Groups tabs, without the rules.
+    expect(body.guests).toHaveLength(4)
+    expect(body.guests[0]).toEqual({
+      type: 'lxc', node: 'pve2', vmid: '103', name: 'lxc/103', status: 'unknown', tags: [],
+      enabled: false, optionsEnabled: true, nicFirewall: false, options: { enable: 1 }, vlans: [],
+    })
+    expect(body.guests.find((r: any) => r.vmid === '101')).toMatchObject({ name: 'web-1', tags: ['zone-web', 'prod'], enabled: true, vlans: [20] })
+    expect(body.guests.find((r: any) => r.vmid === '104')).toMatchObject({ enabled: null, nicFirewall: null, optionsEnabled: true })
+    expect(body.guests.some((r: any) => 'rules' in r)).toBe(false)
+  })
+
+  it('serves the new names, states and tags of the same guests from the cache, with no options call', async () => {
+    onPve([{ vmid: 101, node: 'pve1', type: 'qemu', name: 'a', tags: 'zone-web' } as any])
+    h.nic.set('qemu/101', true)
+    const stats = options(() => true)
+    await get()
+
+    onPve([{ vmid: 101, node: 'pve1', type: 'qemu', name: 'b', tags: 'zone-db' } as any])
+    const body = await readJson<any>(await get())
+
+    expect(stats.calls).toBe(1)
+    expect(body.guests[0]).toMatchObject({ name: 'b', tags: ['zone-db'] })
   })
 
   it('reads the guest list from the inventory cache when it is warm: no Proxmox call but the options', async () => {

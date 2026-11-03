@@ -36,6 +36,7 @@ vi.mock('@/contexts/ToastContext', () => ({
 import * as firewallAPI from '@/lib/api/firewall'
 
 import SecurityGroupMembersDialog from './SecurityGroupMembersDialog'
+import { groupMembers } from './groupMembership'
 
 Element.prototype.scrollIntoView ??= vi.fn()
 
@@ -63,18 +64,25 @@ function guest(vmid: number, overrides: Partial<VMFirewallInfo> = {}): VMFirewal
     optionsEnabled: true,
     nicFirewallEnabled: true,
     rules: [],
+    rulesLoaded: true,
+    stateUnknown: false,
     options: null,
     vlans: [],
+    tags: [],
     ...overrides,
   }
 }
 
 function props(overrides: Partial<ComponentProps<typeof SecurityGroupMembersDialog>> = {}) {
+  const guests = overrides.guests ?? []
   return {
     open: true,
     groupName: GROUP,
     connectionId: CONNECTION,
-    guests: [],
+    guests,
+    // Every guest's rules read here: the members are the whole membership.
+    membership: { ...groupMembers(GROUP, guests, null), known: true },
+    loadGuestRules: vi.fn().mockResolvedValue([]),
     guestsNotScanned: 0,
     onClose: vi.fn(),
     onChanged: vi.fn(),
@@ -312,5 +320,38 @@ describe('SecurityGroupMembersDialog', () => {
 
     await act(async () => finishDetach?.())
     await waitFor(() => expect(button).toBeEnabled())
+  })
+})
+
+describe('SecurityGroupMembersDialog with rules read on demand (UA44)', () => {
+  it('says the members are only those whose rules were read, when the list is not known', () => {
+    const read = guest(150, { rules: [groupRule(GROUP, 2)] })
+    const unread = guest(151, { rulesLoaded: false })
+
+    renderDialog({ guests: [read, unread], membership: groupMembers(GROUP, [read, unread], null) })
+
+    expect(screen.getByTestId('members-unknown')).toBeInTheDocument()
+    expect(screen.getByText('guest-150 (150)')).toBeInTheDocument()
+  })
+
+  it('reads the rules of a member before detaching it when they were not read', async () => {
+    const member = guest(152, { rulesLoaded: false, rules: [] })
+    const loadGuestRules = vi.fn().mockResolvedValue([groupRule(GROUP, 4)])
+
+    renderDialog({ guests: [member], membership: { members: [member], known: true }, loadGuestRules })
+    fireEvent.click(screen.getByRole('button', { name: 'Detach' }))
+
+    await waitFor(() => expect(deleteVMRule).toHaveBeenCalledWith(CONNECTION, 'pve1', 'qemu', 152, 4))
+    expect(loadGuestRules).toHaveBeenCalledTimes(1)
+  })
+
+  it('says a member carries no rule of the group instead of deleting anything', async () => {
+    const member = guest(153, { rulesLoaded: false })
+
+    renderDialog({ guests: [member], membership: { members: [member], known: true }, loadGuestRules: vi.fn().mockResolvedValue([]) })
+    fireEvent.click(screen.getByRole('button', { name: 'Detach' }))
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('guest-153 (153) carries no rule of sg-web', 'info'))
+    expect(deleteVMRule).not.toHaveBeenCalled()
   })
 })

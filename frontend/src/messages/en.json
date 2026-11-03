@@ -9036,6 +9036,16 @@
       "coverageNone": "No guest on this connection",
       "stopHeldTitle": "Cluster firewall held off by the emergency stop",
       "stopHeldHint": "Resume from the Micro-segmentation tab to switch it back on."
+    },
+    "rulesOnDemand": {
+      "chip": "Rules on open",
+      "hint": "The rules of a guest are read when you open its row, one guest at a time",
+      "readFailed": "The rules of this guest could not be read",
+      "stateUnknown": "Firewall state unknown: options unreadable, or the network interfaces not read by the inventory yet",
+      "vmTabCount": "Guests listed; their rules are read when you open one",
+      "membersUnknown": "Proxmox keeps no member list: a guest belongs when one of its rules carries the group, and rules are read guest by guest. The members of a deployed micro-segmentation zone group are known from its tags; for this group only the guests opened so far are listed",
+      "membersUnknownCount": "{count, number}+ VMs",
+      "detachNoRule": "{guest} carries no rule of {group}"
     }
   },
   "deployWizard": {

@@ -39,10 +39,11 @@ export type DiskTotalGuest = {
 }
 
 /**
- * `nicFirewall`: `firewall=1` on at least one NIC, from the same config read. The firewall coverage of the Dashboard
- * reads it here instead of asking each guest config again (UA44).
+ * `nicFirewall`: `firewall=1` on at least one NIC, and `vlans`: the `tag=` of its NICs, from the same config read. The
+ * firewall coverage (Dashboard, Firewalling, Security Groups) reads them here instead of asking each guest config
+ * again (UA44).
  */
-type Entry = { total: number; expiresAt: number; maxdisk?: number; nicFirewall?: boolean }
+type Entry = { total: number; expiresAt: number; maxdisk?: number; nicFirewall?: boolean; vlans?: number[] }
 
 type FetchConfig = (node: string, type: "qemu" | "lxc", vmid: string) => Promise<unknown>
 
@@ -103,6 +104,27 @@ export function peekGuestNicFirewall(connId: string, type: string, vmid: string 
   return store().get(diskTotalKey(connId, type, vmid))?.nicFirewall
 }
 
+/** Cached NIC facts of a guest (firewall flag, VLAN tags), whatever their age; undefined when never read. */
+export function peekGuestNet(connId: string, type: string, vmid: string | number): { nicFirewall: boolean; vlans: number[] } | undefined {
+  const entry = store().get(diskTotalKey(connId, type, vmid))
+  if (entry?.nicFirewall === undefined) return undefined
+
+  return { nicFirewall: entry.nicFirewall, vlans: entry.vlans ?? [] }
+}
+
+/** VLAN tags of the NICs of a config (`tag=N` on `netN`), sorted, deduplicated. */
+export function configVlans(config: unknown): number[] {
+  if (!config || typeof config !== "object") return []
+  const vlans = new Set<number>()
+  for (const [key, value] of Object.entries(config as Record<string, unknown>)) {
+    if (!/^net\d+$/.test(key) || typeof value !== "string") continue
+    const match = /(?:^|,)tag=(\d+)/.exec(value)
+    if (match) vlans.add(Number(match[1]))
+  }
+
+  return [...vlans].sort((a, b) => a - b)
+}
+
 /** Forget a guest's figure, after ProxCenter itself added, removed or resized one of its disks. */
 export function invalidateGuestDiskTotal(connId: string, type: string, vmid: string | number): void {
   store().delete(diskTotalKey(connId, type, vmid))
@@ -128,6 +150,7 @@ function remember(key: string, total: number, guest: DiskTotalGuest, now: () => 
     expiresAt: now() + DISK_TOTAL_TTL_MS * (1 - JITTER * random()),
     maxdisk: typeof guest.maxdisk === "number" ? guest.maxdisk : undefined,
     nicFirewall: hasNICFirewall(config as Record<string, any> | null),
+    vlans: configVlans(config),
   })
 }
 

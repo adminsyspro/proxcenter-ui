@@ -8983,6 +8983,16 @@
       "coverageNone": "Kein Gast auf dieser Verbindung",
       "stopHeldTitle": "Cluster-Firewall durch den Notstopp ausgeschaltet",
       "stopHeldHint": "Im Tab Mikrosegmentierung fortsetzen, um sie wieder einzuschalten."
+    },
+    "rulesOnDemand": {
+      "chip": "Regeln beim Öffnen",
+      "hint": "Die Regeln eines Gasts werden gelesen, wenn Sie seine Zeile öffnen, ein Gast nach dem anderen",
+      "readFailed": "Die Regeln dieses Gasts konnten nicht gelesen werden",
+      "stateUnknown": "Firewall-Status unbekannt: Optionen nicht lesbar oder Netzwerkschnittstellen noch nicht vom Inventar gelesen",
+      "vmTabCount": "Aufgelistete Gäste; ihre Regeln werden beim Öffnen gelesen",
+      "membersUnknown": "Proxmox führt keine Mitgliederliste: Ein Gast gehört dazu, wenn eine seiner Regeln die Gruppe trägt, und Regeln werden Gast für Gast gelesen. Die Mitglieder einer bereitgestellten Mikrosegmentierungszone sind über ihre Tags bekannt; für diese Gruppe werden nur die bereits geöffneten Gäste aufgeführt",
+      "membersUnknownCount": "{count, number}+ VMs",
+      "detachNoRule": "{guest} trägt keine Regel von {group}"
     }
   },
   "deployWizard": {

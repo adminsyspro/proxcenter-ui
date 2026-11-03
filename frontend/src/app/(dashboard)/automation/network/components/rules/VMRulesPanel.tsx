@@ -30,7 +30,9 @@ interface VMRulesPanelProps {
   securityGroups: firewallAPI.SecurityGroup[]
   loadingVMRules: boolean
   selectedConnection: string
-  loadVMFirewallData: () => Promise<void>
+  loadVMFirewallData: (force?: boolean) => Promise<void>
+  /** Reads one guest's rules, when its row is opened (never for every guest at once). */
+  loadGuestRules: (vm: VMFirewallInfo) => Promise<firewallAPI.FirewallRule[]>
   reloadVMFirewallRules: (vm: VMFirewallInfo) => Promise<void>
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
@@ -46,7 +48,7 @@ function getVlanColor(vlanKey: string, index: number): string {
 
 // ── Main Component ──
 
-export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVMRules, selectedConnection, loadVMFirewallData, reloadVMFirewallRules, aliases, ipsets }: VMRulesPanelProps) {
+export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVMRules, selectedConnection, loadVMFirewallData, loadGuestRules, reloadVMFirewallRules, aliases, ipsets }: VMRulesPanelProps) {
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
@@ -60,6 +62,20 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
   const [vmDragState, setVmDragState] = useState<{ vmid: number; draggedPos: number | null; dragOverPos: number | null }>({ vmid: 0, draggedPos: null, dragOverPos: null })
 
   const [expandedVlans, setExpandedVlans] = useState<Set<string>>(new Set())
+  // Guests whose rules are being read: the request goes out when the row is opened, one guest at a time (UA44).
+  const [readingRules, setReadingRules] = useState<Set<number>>(new Set())
+  const [rulesReadFailed, setRulesReadFailed] = useState<Set<number>>(new Set())
+
+  const toggleGuest = (vm: VMFirewallInfo) => {
+    const opening = !expandedVMs.has(vm.vmid)
+    setExpandedVMs(prev => { const n = new Set(prev); if (n.has(vm.vmid)) n.delete(vm.vmid); else n.add(vm.vmid); return n })
+    if (!opening || vm.rulesLoaded || readingRules.has(vm.vmid)) return
+    setReadingRules(prev => new Set(prev).add(vm.vmid))
+    setRulesReadFailed(prev => { const n = new Set(prev); n.delete(vm.vmid); return n })
+    loadGuestRules(vm)
+      .catch(() => setRulesReadFailed(prev => new Set(prev).add(vm.vmid)))
+      .finally(() => setReadingRules(prev => { const n = new Set(prev); n.delete(vm.vmid); return n }))
+  }
 
   const filteredVMData = vmFirewallData.filter(vm =>
     !vmSearchQuery ||
@@ -256,12 +272,12 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
             }}
             sx={{ width: 200 }}
           />
-          <Button size="small" variant="outlined" onClick={() => { setExpandedVlans(new Set(vlanGroups.map(([k]) => k))); setExpandedVMs(new Set(filteredVMData.map(v => v.vmid))) }}>{t('common.expandAll')}</Button>
+          <Button size="small" variant="outlined" onClick={() => setExpandedVlans(new Set(vlanGroups.map(([k]) => k)))}>{t('common.expandAll')}</Button>
           <Button size="small" variant="outlined" onClick={() => { setExpandedVlans(new Set()); setExpandedVMs(new Set()) }}>{t('common.collapseAll')}</Button>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Chip label={t('networkPage.vmsProtectedCount', { filtered: filteredVMData.length, total: vmFirewallData.length, protected: vmFirewallData.filter(v => v.firewallEnabled).length })} size="small" />
-          <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" />} onClick={loadVMFirewallData} disabled={loadingVMRules}>
+          <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" />} onClick={() => { void loadVMFirewallData(true) }} disabled={loadingVMRules}>
             {t('networkPage.refresh')}
           </Button>
         </Box>
@@ -282,7 +298,8 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                 const vlanLabel = isUntagged ? t('networkPage.untagged') : `VLAN ${vlanKey}`
                 const isVlanExpanded = expandedVlans.has(vlanKey)
                 const vlanVmCount = vms.length
-                const vlanRulesCount = vms.reduce((acc, v) => acc + v.rules.length, 0)
+                // A count of the rules read so far would be wrong: it shows once every guest of the group was opened.
+                const vlanRulesCount = vms.every(v => v.rulesLoaded) ? vms.reduce((acc, v) => acc + v.rules.length, 0) : null
                 const vlanColor = getVlanColor(vlanKey, vlanIdx)
 
                 return (
@@ -306,7 +323,9 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                           <i className={isUntagged ? 'ri-ethernet-line' : 'ri-git-branch-line'} style={{ fontSize: 16, color: vlanColor }} />
                           <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: 13, color: vlanColor }}>{vlanLabel}</Typography>
                           <Chip label={`${vlanVmCount} VM${vlanVmCount > 1 ? 's' : ''}`} size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: alpha(vlanColor, 0.18), color: vlanColor }} />
-                          <Chip label={t('networkPage.totalRules', { count: vlanRulesCount })} size="small" sx={{ height: 20, fontSize: 10, bgcolor: alpha(vlanColor, 0.12) }} />
+                          {vlanRulesCount !== null && (
+                            <Chip label={t('networkPage.totalRules', { count: vlanRulesCount })} size="small" sx={{ height: 20, fontSize: 10, bgcolor: alpha(vlanColor, 0.12) }} />
+                          )}
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -325,7 +344,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                               cursor: 'pointer',
                               '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }
                             }}
-                            onClick={() => setExpandedVMs(prev => { const n = new Set(prev); if (n.has(vm.vmid)) n.delete(vm.vmid); else n.add(vm.vmid); return n })}
+                            onClick={() => toggleGuest(vm)}
                           >
                             <TableCell colSpan={11} sx={{ py: 1, px: 2, pl: 5 }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -341,11 +360,17 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                                   <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{vm.name}</span>
                                   <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>({vm.vmid})</Typography>
                                   <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11 }}>{vm.node}</Typography>
-                                  <Chip
-                                    label={t('firewall.rulesCount', { count: vm.rules.length })}
-                                    size="small"
-                                    sx={{ height: 20, fontSize: 10, ml: 0.5 }}
-                                  />
+                                  {vm.rulesLoaded ? (
+                                    <Chip
+                                      label={t('firewall.rulesCount', { count: vm.rules.length })}
+                                      size="small"
+                                      sx={{ height: 20, fontSize: 10, ml: 0.5 }}
+                                    />
+                                  ) : (
+                                    <Tooltip title={t('networkPage.rulesOnDemand.hint')}>
+                                      <Chip label={t('networkPage.rulesOnDemand.chip')} size="small" variant="outlined" sx={{ height: 20, fontSize: 10, ml: 0.5 }} />
+                                    </Tooltip>
+                                  )}
                                 </Box>
                                 <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.5 }}>
@@ -391,7 +416,12 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                                   <Typography variant="caption" sx={{ fontWeight: 600, color: vm.firewallEnabled ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
                                     {vm.firewallEnabled ? 'ON' : 'OFF'}
                                   </Typography>
-                                  {vm.optionsEnabled !== vm.nicFirewallEnabled && (
+                                  {vm.stateUnknown && (
+                                    <Tooltip title={t('networkPage.rulesOnDemand.stateUnknown')}>
+                                      <i className="ri-question-line" style={{ fontSize: 16, color: theme.palette.text.secondary }} data-testid={`vm-state-unknown-${vm.vmid}`} />
+                                    </Tooltip>
+                                  )}
+                                  {!vm.stateUnknown && vm.optionsEnabled !== vm.nicFirewallEnabled && (
                                     <Tooltip title={t(vm.optionsEnabled ? 'networkPage.firewallNoNicFlag' : 'networkPage.firewallOptionsOff')}>
                                       <i className="ri-error-warning-line" style={{ fontSize: 16, color: theme.palette.warning.main }} />
                                     </Tooltip>
@@ -406,8 +436,18 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                             </TableCell>
                           </TableRow>
 
+                          {isExpanded && !vm.rulesLoaded && (readingRules.has(vm.vmid) || rulesReadFailed.has(vm.vmid)) && (
+                            <TableRow key={`reading-${vm.vmid}`}>
+                              <TableCell colSpan={11} sx={{ py: 2, px: 5 }}>
+                                {rulesReadFailed.has(vm.vmid)
+                                  ? <Typography variant="body2" color="text.secondary">{t('networkPage.rulesOnDemand.readFailed')}</Typography>
+                                  : <LinearProgress data-testid={`vm-rules-reading-${vm.vmid}`} />}
+                              </TableCell>
+                            </TableRow>
+                          )}
+
                           {/* Rule rows when expanded */}
-                          {isExpanded && (vm.rules.length > 0 ? vm.rules.map((rule, idx) => {
+                          {isExpanded && vm.rulesLoaded && (vm.rules.length > 0 ? vm.rules.map((rule, idx) => {
                       const isDragging = vmDragState.vmid === vm.vmid && vmDragState.draggedPos === rule.pos
                       const isDragOver = vmDragState.vmid === vm.vmid && vmDragState.dragOverPos === rule.pos
                       const isGroupRule = rule.type === 'group'
@@ -466,7 +506,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
         <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.3)}` }}>
           <i className="ri-computer-line" style={{ fontSize: 48, opacity: 0.3 }} />
           <Typography variant="body1" sx={{ mt: 2, color: 'text.secondary' }}>{t('networkPage.noVmFoundLabel')}</Typography>
-          <Button sx={{ mt: 2 }} onClick={loadVMFirewallData}>{t('common.loadVms')}</Button>
+          <Button sx={{ mt: 2 }} onClick={() => { void loadVMFirewallData(true) }}>{t('common.loadVms')}</Button>
         </Paper>
       )}
 

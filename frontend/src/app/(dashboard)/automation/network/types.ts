@@ -27,6 +27,8 @@ export interface PolicySection {
   comment?: string
   rules: firewallAPI.FirewallRule[]
   appliedTo: { vmid: number; name: string; node: string }[]
+  /** False when `appliedTo` is only the guests whose rules were read (a group outside the deployed zones, UA44). */
+  appliedToKnown?: boolean
   ruleCount: number
   activeRuleCount: number
 }

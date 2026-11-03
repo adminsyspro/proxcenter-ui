@@ -56,7 +56,7 @@ const CLUSTER_RULES: firewallAPIType.FirewallRule[] = [
 const WEB_VM: VMFirewallInfo = {
   vmid: 100, name: 'web-01', node: 'pve1', type: 'qemu', status: 'running',
   firewallEnabled: true, optionsEnabled: true, nicFirewallEnabled: true, options: null, vlans: [20],
-  rules: [{ pos: 0, type: 'in', action: 'ACCEPT' }],
+  rules: [{ pos: 0, type: 'in', action: 'ACCEPT' }], rulesLoaded: true, stateUnknown: false, tags: [],
 }
 
 function props(overrides: Partial<React.ComponentProps<typeof RulesTab>> = {}) {
@@ -75,6 +75,7 @@ function props(overrides: Partial<React.ComponentProps<typeof RulesTab>> = {}) {
     vmFirewallData: [WEB_VM],
     loadingVMRules: false,
     loadVMFirewallData: vi.fn().mockResolvedValue(undefined),
+    loadGuestRules: vi.fn().mockResolvedValue([]),
     reloadVMFirewallRules: vi.fn().mockResolvedValue(undefined),
     securityGroups: [] as firewallAPIType.SecurityGroup[],
     aliases: [] as firewallAPIType.Alias[],
@@ -105,7 +106,7 @@ describe('RulesTab', () => {
   it('counts the rules of each scope on its toggle', () => {
     renderTab()
 
-    // Two cluster rules, one host rule across the two nodes, one VM rule.
+    // Two cluster rules, one host rule across the two nodes, one guest listed (its rules load on open).
     expect(toggle(/Cluster/)).toHaveTextContent('2')
     expect(toggle(/Host Rules/)).toHaveTextContent('1')
     expect(toggle(/VM/)).toHaveTextContent('1')

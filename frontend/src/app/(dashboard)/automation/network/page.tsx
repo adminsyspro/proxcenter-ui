@@ -54,7 +54,7 @@ export default function NetworkAutomationPage() {
   } = useFirewallData(isEnterprise ? selectedConnection || null : null, isEnterprise)
 
   const {
-    vmFirewallData, loadingVMRules, vmRulesError, guestsNotScanned, loadVMFirewallData, reloadVMFirewallRules, setVMFirewallData,
+    vmFirewallData, loadingVMRules, vmRulesError, guestsNotScanned, loadVMFirewallData, loadGuestRules, reloadVMFirewallRules, setVMFirewallData,
   } = useVMFirewallRules(isEnterprise ? selectedConnection || null : null)
 
   const {
@@ -96,15 +96,13 @@ export default function NetworkAutomationPage() {
     }
   }, [firewallMode, activeTab, rulesSubTab])
 
-  // Load VM rules on Firewalling > Cluster/VMs (tab 1, subTab 0 or 2) or Security
-  // Groups (tab 4): that last tab counts, per group, the guests whose rules
-  // reference it, so without this it showed 0 VMs everywhere while the data had
-  // simply never been fetched. Not on the Dashboard (tab 0) any more: its guest
-  // coverage is computed and cached on the server, one call per guest at most
-  // (UA44), where this scan asks three per guest.
+  // The guest list (firewall state, VLANs, tags) on Firewalling > VMs (tab 1, subTab 2)
+  // and Security Groups (tab 4) only: one request to the coverage route, computed and
+  // cached on the server with one Proxmox call per guest at most (UA44). A guest's rules
+  // are read when its row is opened, never for every guest on mount.
   useEffect(() => {
     if (isEnterprise && selectedConnection && !loadingVMRules && vmFirewallData.length === 0) {
-      if (activeTab === 4 || (activeTab === 1 && (rulesSubTab === 0 || rulesSubTab === 2))) {
+      if (activeTab === 4 || (activeTab === 1 && rulesSubTab === 2)) {
         void loadVMFirewallData()
       }
     }
@@ -197,6 +195,7 @@ export default function NetworkAutomationPage() {
               vmFirewallData={vmFirewallData}
               loadingVMRules={loadingVMRules}
               loadVMFirewallData={loadVMFirewallData}
+              loadGuestRules={loadGuestRules}
               reloadVMFirewallRules={reloadVMFirewallRules}
               securityGroups={securityGroups}
               aliases={aliases}
@@ -235,6 +234,7 @@ export default function NetworkAutomationPage() {
               ipsets={ipsets}
               loadError={firewallLoadError || null}
               reload={loadFirewallData}
+              loadGuestRules={loadGuestRules}
               reloadVMFirewallRules={reloadVMFirewallRules}
             />
           )}

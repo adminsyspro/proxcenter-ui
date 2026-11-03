@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, Chip, ToggleButton, ToggleButtonGroup, useTheme, alpha } from '@mui/material'
+import { Box, Chip, ToggleButton, ToggleButtonGroup, Tooltip, useTheme, alpha } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
@@ -30,7 +30,8 @@ interface RulesTabProps {
   // VM
   vmFirewallData: VMFirewallInfo[]
   loadingVMRules: boolean
-  loadVMFirewallData: () => Promise<void>
+  loadVMFirewallData: (force?: boolean) => Promise<void>
+  loadGuestRules: (vm: VMFirewallInfo) => Promise<firewallAPI.FirewallRule[]>
   reloadVMFirewallRules: (vm: VMFirewallInfo) => Promise<void>
   // Security Groups
   securityGroups: firewallAPI.SecurityGroup[]
@@ -64,7 +65,7 @@ export default function RulesTab({
   clusterRules, setClusterRules,
   clusterOptions, setClusterOptions,
   hostRulesByNode, nodesList, loadingHostRules, loadHostRules, reloadHostRulesForNode,
-  vmFirewallData, loadingVMRules, loadVMFirewallData, reloadVMFirewallRules,
+  vmFirewallData, loadingVMRules, loadVMFirewallData, loadGuestRules, reloadVMFirewallRules,
   securityGroups, aliases, ipsets, firewallMode, totalRules,
   selectedConnection, loadError, reload
 }: RulesTabProps) {
@@ -72,7 +73,9 @@ export default function RulesTab({
   const t = useTranslations()
 
   const hostRulesCount = Object.values(hostRulesByNode).reduce((acc, r) => acc + r.length, 0)
-  const vmRulesCount = vmFirewallData.reduce((acc, v) => acc + v.rules.length, 0)
+  // The guests' rules are read one guest at a time, when its row is opened (UA44): the VM count is the number of
+  // guests listed, not a rule total that would only add up the rows opened so far.
+  const vmGuestCount = vmFirewallData.length
   const policyRulesCount = clusterRules.length
 
   // Remap legacy sub-tab values on mount / when changed from outside
@@ -128,7 +131,11 @@ export default function RulesTab({
           <ToggleButton value={2}>
             <i className="ri-computer-line" style={{ marginRight: 6, fontSize: 16 }} />
             {t('networkPage.vmDirectRules')}
-            <Chip label={vmRulesCount} size="small" sx={{ ml: 1, height: 18, minWidth: 18, fontSize: 10, fontWeight: 700 }} />
+            {vmGuestCount > 0 && (
+              <Tooltip title={t('networkPage.rulesOnDemand.vmTabCount')}>
+                <Chip label={vmGuestCount} size="small" sx={{ ml: 1, height: 18, minWidth: 18, fontSize: 10, fontWeight: 700 }} />
+              </Tooltip>
+            )}
           </ToggleButton>
         </ToggleButtonGroup>
       </Box>
@@ -166,6 +173,7 @@ export default function RulesTab({
           loadingVMRules={loadingVMRules}
           selectedConnection={selectedConnection}
           loadVMFirewallData={loadVMFirewallData}
+          loadGuestRules={loadGuestRules}
           reloadVMFirewallRules={reloadVMFirewallRules}
           aliases={aliases}
           ipsets={ipsets}

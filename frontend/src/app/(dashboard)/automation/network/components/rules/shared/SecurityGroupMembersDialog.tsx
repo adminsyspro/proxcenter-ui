@@ -12,12 +12,18 @@ import * as firewallAPI from '@/lib/api/firewall'
 import type { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
 
+import type { GroupMembers } from './groupMembership'
+
 interface SecurityGroupMembersDialogProps {
   open: boolean
   groupName: string
   connectionId: string
-  /** Every guest the firewall scan covered, with its rules. */
+  /** Every guest listed; their rules are read only when needed. */
   guests: VMFirewallInfo[]
+  /** The members as far as they can be told (zone tags of the deployed micro-segmentation, rules already read). */
+  membership: GroupMembers
+  /** Reads one guest's rules, to find the group rule a detach deletes. */
+  loadGuestRules: (vm: VMFirewallInfo) => Promise<firewallAPI.FirewallRule[]>
   /** Guests the scan left out: they can be neither listed nor offered here. */
   guestsNotScanned: number
   onClose: () => void
@@ -25,9 +31,9 @@ interface SecurityGroupMembersDialogProps {
   onChanged: (touched: VMFirewallInfo[]) => void
 }
 
-/** The group rule a guest carries for this security group, if any. */
-function groupRuleOf(guest: VMFirewallInfo, groupName: string) {
-  return guest.rules.find(r => r.type === 'group' && r.action === groupName)
+/** The group rule in these rules for this security group, if any. */
+function groupRuleIn(rules: firewallAPI.FirewallRule[], groupName: string) {
+  return rules.find(r => r.type === 'group' && r.action === groupName)
 }
 
 /**
@@ -36,10 +42,13 @@ function groupRuleOf(guest: VMFirewallInfo, groupName: string) {
  * PVE has no membership list of its own: a group applies to a guest because that
  * guest carries a rule of type `group` whose action is the group name. So the
  * members shown here are derived from the guests' rules, attaching inserts such
- * a rule, and detaching deletes it.
+ * a rule, and detaching deletes it. The rules are not read for every guest any
+ * more (UA44): the members are the zone tags of the deployed micro-segmentation
+ * for a zone group, else only the guests whose rules were read, which is said.
+ * Detaching reads the rules of that one guest when they were not read yet.
  */
 export default function SecurityGroupMembersDialog({
-  open, groupName, connectionId, guests, guestsNotScanned, onClose, onChanged
+  open, groupName, connectionId, guests, membership, loadGuestRules, guestsNotScanned, onClose, onChanged
 }: SecurityGroupMembersDialogProps) {
   const t = useTranslations()
   const { showToast } = useToast()
@@ -47,15 +56,12 @@ export default function SecurityGroupMembersDialog({
   const [selected, setSelected] = useState<VMFirewallInfo[]>([])
   const [busy, setBusy] = useState(false)
 
-  const members = useMemo(
-    () => guests.filter(g => groupRuleOf(g, groupName)),
-    [guests, groupName]
-  )
+  const members = membership.members
 
-  const candidates = useMemo(
-    () => guests.filter(g => !groupRuleOf(g, groupName)),
-    [guests, groupName]
-  )
+  const candidates = useMemo(() => {
+    const memberKeys = new Set(members.map(m => `${m.type}/${m.vmid}`))
+    return guests.filter(g => !memberKeys.has(`${g.type}/${g.vmid}`))
+  }, [guests, members])
 
   const guestLabel = (g: VMFirewallInfo) => `${g.name} (${g.vmid})`
 
@@ -97,13 +103,18 @@ export default function SecurityGroupMembersDialog({
   }
 
   const detach = async (guest: VMFirewallInfo) => {
-    const rule = groupRuleOf(guest, groupName)
-
-    if (!rule || rule.pos === undefined) return
-
     setBusy(true)
 
     try {
+      const rules = guest.rulesLoaded ? guest.rules : await loadGuestRules(guest)
+      const rule = groupRuleIn(rules, groupName)
+
+      if (!rule) {
+        showToast(t('networkPage.rulesOnDemand.detachNoRule', { guest: guestLabel(guest), group: groupName }), 'info')
+        return
+      }
+      // The delete endpoint is addressed by position: a rule PVE returned without one cannot be deleted from here.
+      if (rule.pos === undefined) return
       await firewallAPI.deleteVMRule(connectionId, guest.node, guest.type, guest.vmid, rule.pos)
       onChanged([guest])
       showToast(t('firewall.membersDetached', { guest: guestLabel(guest), group: groupName }), 'success')
@@ -118,6 +129,11 @@ export default function SecurityGroupMembersDialog({
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{t('firewall.membersTitle', { group: groupName })}</DialogTitle>
       <DialogContent>
+        {!membership.known && (
+          <Alert severity="info" sx={{ mb: 2 }} data-testid="members-unknown">
+            {t('networkPage.rulesOnDemand.membersUnknown')}
+          </Alert>
+        )}
         {guestsNotScanned > 0 && (
           <Alert severity="info" sx={{ mb: 2 }}>
             {t('firewall.membersPartial', { count: guestsNotScanned })}

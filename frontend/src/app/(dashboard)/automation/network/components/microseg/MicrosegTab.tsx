@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { Alert, Box, CircularProgress, IconButton, Tab, Tabs, Tooltip, Typography } from '@mui/material'
+import NextLink from 'next/link'
+import { Alert, Box, CircularProgress, IconButton, Link, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { useSWRConfig } from 'swr'
 
@@ -171,6 +172,13 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
           ))}
         </Tabs>
         <Box ref={setActionsSlot} data-testid='microseg-actions-slot' sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }} />
+        {subTab === 'overview' && (
+          <Tooltip describeChild title={t('trafficLens.openFlowsTip')}>
+            <Link component={NextLink} href={`/operations/network-flows?groupBy=zone&connection=${encodeURIComponent(connectionId)}`} underline='hover' sx={{ fontSize: 13, flexShrink: 0 }}>
+              {t('trafficLens.summary.title')}
+            </Link>
+          </Tooltip>
+        )}
         <CheckNowButton
           connectionId={connectionId}
           deployed={!!policy.last_revision}

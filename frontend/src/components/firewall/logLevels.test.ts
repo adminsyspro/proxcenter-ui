@@ -1,8 +1,8 @@
 /**
  * Tests for the firewall log level constants and resolver (#682).
  *
- * The level list used to be duplicated (shared.tsx and VMRulesPanel), with
- * a third dialog hardcoding only four of the nine values, so the list is
+ * The level list used to be duplicated (shared.tsx and the former VM rules
+ * panel), with a third dialog hardcoding only four of the nine values, so the list is
  * asserted here as a contract: nine PVE levels, `nolog` first, no
  * duplicates. `resolveLogLevel` guards the `<Select>` value — PVE can
  * return nothing at all for a rule that was created without a log level,

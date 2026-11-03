@@ -9,10 +9,10 @@ import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
-import { calls, mock, reply, zone } from './microsegTestKit'
+import { GUESTS_ROUTE, REVISION_HEAD, calls, mock, policy, renderTab, reply, zone } from './microsegTestKit'
 import { body, db, installFreshMocks, vm, web } from './policyTestKit'
 import { fitView } from './xyflowTestMock'
-import { flowOf, node, setup, wouldBlock } from './zoneMapTestKit'
+import { SUGGESTIONS, flowOf, node, setup, wouldBlock } from './zoneMapTestKit'
 
 installFreshMocks()
 beforeEach(() => fitView.mockClear())
@@ -307,5 +307,38 @@ describe('fix round 1', () => {
     await node('guest:zw:qemu/100')
     await target('web-1')
     expect(within(await panel('Guest web-1')).queryByText(/Only the first/)).toBeNull()
+  })
+})
+
+describe('the target search of a user who cannot read the inventory (D9)', () => {
+  const COVERAGE = 'GET /api/v1/firewall/coverage/c1'
+  const row = (g: ReturnType<typeof vm>) => ({ ...g, enabled: true, optionsEnabled: true, nicFirewall: true, options: null, vlans: [] })
+
+  /** The Overview as a node.view user reads it: the inventory refuses (it asks vm.view), the coverage route answers. */
+  function viewer(coverage: () => unknown) {
+    window.localStorage.setItem('microseg.subTab', 'overview')
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web(), db()], flows: [flowOf('f1')], last_revision: REVISION_HEAD }))
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(403, { error: 'Forbidden' })
+    mock.routes[COVERAGE] = coverage
+    mock.routes[SUGGESTIONS] = () => reply(200, { suggestions: observed, limit: 200, offset: 0 })
+    return renderTab()
+  }
+
+  it('lists the running guests of the coverage rows, with their zone from the tags, and targets one', async () => {
+    viewer(() => reply(200, { total: 5, measured: 5, computing: false, guests: guests.map(row) }))
+    await node('guest:zw:qemu/100')
+    await expectOptions('db', ['db-1, guest 200, db'])
+    await expectOptions('old', [])
+    await target('web-1')
+    expect(screen.getByText('Targeting web-1')).toBeTruthy()
+    // The rows carry no address: the panel says so instead of listing flows it cannot place.
+    expect(within(await panel('Guest web-1')).getByText('No IP address known')).toBeTruthy()
+    expect(calls(`GET ${GUESTS_ROUTE}`).length).toBeGreaterThan(0)
+  })
+
+  it('never reads the coverage route while the inventory answers', async () => {
+    demo()
+    await node('guest:zw:qemu/100')
+    expect(calls(COVERAGE)).toHaveLength(0)
   })
 })

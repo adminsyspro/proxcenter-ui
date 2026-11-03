@@ -64,7 +64,7 @@ describe('banner: nothing to say, nothing drawn (UA27)', () => {
   it('draws the strip for the pending changes alone', async () => {
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: null, pending_changes: true }))
     renderTab()
-    expect(await screen.findByText('1 unapplied change')).toBeTruthy()
+    expect(await screen.findByText('What will change: 1 zone added')).toBeTruthy()
   })
 
   it('draws the outcome of an action, then nothing once it is dismissed', async () => {
@@ -314,8 +314,7 @@ describe('banner: pending changes', () => {
     mock.routes['GET /revisions?limit=1'] = () => reply(200, { revisions: [revisionWithSnapshot([zone('a')], [])] })
     renderTab()
 
-    // 2 zones added + 1 flow added
-    expect(await screen.findByText('3 unapplied changes')).toBeTruthy()
+    expect(await screen.findByText('What will change: 2 zones added, 1 flow added')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'View plan' }))
     expect(await screen.findByRole('dialog', { name: 'Micro-segmentation plan' })).toBeTruthy()
   })
@@ -327,21 +326,21 @@ describe('banner: pending changes', () => {
 
     expect(await screen.findByText('Unapplied changes')).toBeTruthy()
     await waitFor(() => expect(calls('GET /revisions?limit=1').length).toBeGreaterThan(0))
-    expect(screen.queryByText(/^\d+ unapplied change/)).toBeNull()
+    expect(screen.queryByText(/What will change/)).toBeNull()
     expect(screen.getByText('Unapplied changes')).toBeTruthy()
   })
 
   it('counts against nothing when no revision exists yet, without reading revisions', async () => {
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], flows: [flow('f1')], last_revision: null, pending_changes: true }))
     renderTab()
-    expect(await screen.findByText('2 unapplied changes')).toBeTruthy()
+    expect(await screen.findByText('What will change: 1 zone added, 1 flow added')).toBeTruthy()
     expect(calls('GET /revisions?limit=1')).toHaveLength(0)
   })
 
   it('shows no bar when nothing is pending', async () => {
     renderTab()
     await bannerReady()
-    expect(screen.queryByText(/unapplied change/i)).toBeNull()
+    expect(screen.queryByText(/What will change|unapplied change/i)).toBeNull()
   })
 
   it('does not read revisions when nothing is pending', async () => {

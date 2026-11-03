@@ -12748,10 +12748,22 @@
       "notDeployed": "Rien de déployé"
     },
     "pending": {
-      "withCount": "{count, plural, one {# changement non appliqué} other {# changements non appliqués}}",
       "noCount": "Changements non appliqués",
       "viewPlan": "Voir le plan",
-      "prefixed": "{prefix} : {text}"
+      "prefixed": "{prefix} : {text}",
+      "whatWillChange": "Ce qui va changer : {list}",
+      "zones": {
+        "added": "{count, plural, one {# zone ajoutée} other {# zones ajoutées}}",
+        "changed": "{count, plural, one {# zone modifiée} other {# zones modifiées}}",
+        "removed": "{count, plural, one {# zone supprimée} other {# zones supprimées}}"
+      },
+      "flows": {
+        "added": "{count, plural, one {# flux ajouté} other {# flux ajoutés}}",
+        "changed": "{count, plural, one {# flux modifié} other {# flux modifiés}}",
+        "removed": "{count, plural, one {# flux supprimé} other {# flux supprimés}}"
+      },
+      "members": "{count, plural, one {# changement de membre} other {# changements de membres}}",
+      "tagPrefix": "préfixe des tags modifié"
     },
     "firstRun": {
       "title": "Mettre en place la micro-segmentation",
@@ -12811,7 +12823,6 @@
         "membersTitle": "Membres",
         "noMembers": "Aucun membre",
         "membersUnknown": "La liste des invités n'a pas pu être lue.",
-        "memberSummary": "{count, plural, one {# membre} other {# membres}}, {running} en marche",
         "memberPending": "En attente",
         "incoming": "Flux entrants",
         "outgoing": "Flux sortants",
@@ -12839,7 +12850,12 @@
           "observe": "Le trafic est journalisé, rien n'est bloqué",
           "enforce": "Seuls les flux autorisés passent",
           "disabled": "La zone n'est pas appliquée"
-        }
+        },
+        "counters": "{members} · {incoming, number} entrants · {outgoing, number} sortants",
+        "memberCountUnknown": "membres inconnus",
+        "addFlowInto": "Nouveau flux vers {zone}",
+        "flowsTitle": "Flux de la zone",
+        "memberCount": "{count, plural, one {# membre} other {# membres}}"
       },
       "flow": {
         "notApplied": "Non appliqué (sortie non gérée en v1)",
@@ -12955,6 +12971,53 @@
         "confirm": {
           "observe": "Observer",
           "disabled": "Désactiver"
+        }
+      },
+      "diff": {
+        "added": "Ajouté",
+        "changed": "Modifié",
+        "removed": "Supprimé",
+        "addedHint": "Absent de la révision appliquée : ajouté à la prochaine application",
+        "changedHint": "Diffère de la révision appliquée : modifié à la prochaine application",
+        "removedHint": "Toujours appliqué : supprimé à la prochaine application"
+      },
+      "table": {
+        "source": "Origine",
+        "destination": "Cible",
+        "service": "Service réseau",
+        "stateColumn": "État",
+        "hitsColumn": "Occurrences 24 h",
+        "actions": "Opérations",
+        "hitsHint": "Trafic journalisé ces dernières 24 heures de la zone d’origine vers la zone cible. L’historique garde les zones, pas le port : les flux entre les mêmes zones partagent leur compte.",
+        "hitsZeroHint": "Aucune occurrence ces dernières 24 h : candidat au nettoyage",
+        "outside": "Hors des zones",
+        "addFlowInto": "Nouveau flux vers {zone}",
+        "addFlowShort": "Flux",
+        "filter": "Filtrer par zone ou service",
+        "sort": "Trier par",
+        "sortSource": "Origine",
+        "sortHits": "Occurrences 24 h",
+        "noMatch": "Aucun flux ne correspond au filtre.",
+        "hits": "{count, plural, one {# occurrence} other {# occurrences}}",
+        "groupCount": "{count, plural, one {# flux} other {# flux}}",
+        "hitsNone": {
+          "cidrSource": "L’historique ne garde pas l’adresse d’origine",
+          "cidrDestination": "Non appliqué en v1 : aucune occurrence comptée",
+          "unavailable": "L’historique du trafic n’a pas pu être lu",
+          "loading": "Lecture de l’historique du trafic..."
+        },
+        "state": {
+          "applied": "Appliqué",
+          "appliedHint": "Dans la révision appliquée",
+          "pendingAdd": "Ajout en attente",
+          "pendingAddHint": "Ajouté à la prochaine application",
+          "pendingChange": "Modification en attente",
+          "pendingChangeHint": "Modifié à la prochaine application",
+          "pendingRemoval": "Suppression en attente",
+          "pendingRemovalHint": "Supprimé à la prochaine application",
+          "notApplied": "Non appliqué en v1",
+          "notAppliedHint": "Non appliqué (sortie non gérée en v1)",
+          "unknownHint": "Comparaison avec la révision appliquée..."
         }
       }
     },

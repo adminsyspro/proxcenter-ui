@@ -4,12 +4,11 @@ import { useContext, useState } from 'react'
 import { Box, Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import type { MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import type { MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
 import { useDialogAction } from './dialogParts'
-import FlowDialog, { type FlowSaveValues } from './FlowDialog'
-import FlowList from './FlowList'
+import FlowTable from './FlowTable'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { MicrosegActionsSlot, SlotActions } from './microsegAccess'
@@ -17,18 +16,20 @@ import type { MicrosegSubTabProps } from './microsegTabTypes'
 import ZoneDialog from './ZoneDialog'
 import type { ZoneFormValues } from './zoneForm'
 import ZoneList from './ZoneList'
-import { ZoneStateConfirm } from './ZonePanelActions'
+import { ZoneStateConfirm, useFlowEditor } from './ZonePanelActions'
+import { useFlowHits } from './useFlowHits'
+import { usePendingChanges } from './usePendingChanges'
 import { useZoneEdits } from './useZoneEdits'
 import { useZoneGuests } from './useZoneGuests'
 
 type Editing<T> = { item: T | null } | null
-type Deleting = { kind: 'zone'; zone: MicrosegZone } | { kind: 'flow'; flow: MicrosegFlow } | null
 
 /**
- * The Policy sub-tab: zones and flows of the draft. Every write carries the
- * draft version; a VERSION_CONFLICT reloads the policy and keeps the dialog
- * (and its input) open. A zone state change starts a run, followed in the strip
- * of the tab (it survives a switch of sub-tab).
+ * The Policy sub-tab: zones of the draft (one compact line each, members and flows side by side under the chevron),
+ * then its flows as one table grouped by destination zone, each zone and flow marked with how it differs from the
+ * applied revision and each flow with its hits of the last 24 hours (one history read for the tab, no Proxmox call).
+ * Every write carries the draft version; a VERSION_CONFLICT reloads the policy and keeps the dialog (and its input)
+ * open. A zone state change starts a run, followed in the strip of the tab (it survives a switch of sub-tab).
  */
 export default function PolicyPanel({ connectionId, policy, reloadPolicy, startRun, onOpenPlan, onOpenPreflight }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.policy')
@@ -36,27 +37,24 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
   const { guests, status: guestsStatus } = useZoneGuests(connectionId)
 
   const [zoneDialog, setZoneDialog] = useState<Editing<MicrosegZone>>(null)
-  const [flowDialog, setFlowDialog] = useState<Editing<MicrosegFlow>>(null)
-  const [deleting, setDeleting] = useState<Deleting>(null)
+  const [deleting, setDeleting] = useState<MicrosegZone | null>(null)
   // Every state change goes through a dialog: it is applied at once, with the whole draft (UA30).
   const [changing, setChanging] = useState<{ zone: MicrosegZone; state: ZoneState } | null>(null)
   const [assigning, setAssigning] = useState<MicrosegZone | null>(null)
   const removal = useDialogAction()
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
+  const flowEditor = useFlowEditor(edits)
+  const { diff } = usePendingChanges(connectionId, policy)
+  const hits = useFlowHits(connectionId)
 
   const saveZone = (zone: MicrosegZone | null) => async (values: ZoneFormValues) => {
     await edits.saveZone(zone, values)
     setZoneDialog(null)
   }
 
-  const saveFlow = (flow: MicrosegFlow | null) => async (values: FlowSaveValues) => {
-    await edits.saveFlow(flow, values)
-    setFlowDialog(null)
-  }
-
   const confirmDelete = async () => {
     if (!deleting) return
-    const ok = await removal.run(() => (deleting.kind === 'zone' ? edits.deleteZone(deleting.zone) : edits.deleteFlow(deleting.flow)))
+    const ok = await removal.run(() => edits.deleteZone(deleting))
     if (ok) setDeleting(null)
   }
 
@@ -78,30 +76,38 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
       {edits.memberError != null && <MicrosegErrorAlert error={edits.memberError} onClose={edits.clearMemberError} />}
 
       <ZoneList
+        connectionId={connectionId}
         zones={policy.zones}
         flows={policy.flows}
         tagPrefix={policy.policy.tag_prefix}
         guests={guests}
         guestsStatus={guestsStatus}
         pendingMembers={policy.pending_members}
+        diff={diff}
         onAdd={() => setZoneDialog({ item: null })}
         onEdit={zone => setZoneDialog({ item: zone })}
-        onDelete={zone => { removal.reset(); setDeleting({ kind: 'zone', zone }) }}
+        onDelete={zone => { removal.reset(); setDeleting(zone) }}
+        onAddFlow={zone => flowEditor.create({ dst_zone_id: zone.id })}
+        onEditFlow={flowEditor.edit}
+        onDeleteFlow={flowEditor.remove}
         onSetState={onSetState}
         onAssign={setAssigning}
         onRemoveMember={ref => edits.changeMember(ref, '')}
         removeBusy={edits.memberBusy}
       />
-      <FlowList
+      <FlowTable
         flows={policy.flows}
         zones={policy.zones}
-        onAdd={() => setFlowDialog({ item: null })}
-        onEdit={flow => setFlowDialog({ item: flow })}
-        onDelete={flow => { removal.reset(); setDeleting({ kind: 'flow', flow }) }}
+        diff={diff}
+        pairs={hits.pairs}
+        hitsFailed={hits.failed}
+        onAdd={dst => flowEditor.create(dst ? { dst_zone_id: dst } : {})}
+        onEdit={flowEditor.edit}
+        onDelete={flowEditor.remove}
       />
 
       {zoneDialog && <ZoneDialog zone={zoneDialog.item} onSave={saveZone(zoneDialog.item)} onClose={() => setZoneDialog(null)} />}
-      {flowDialog && <FlowDialog flow={flowDialog.item} zones={policy.zones} onSave={saveFlow(flowDialog.item)} onClose={() => setFlowDialog(null)} />}
+      {flowEditor.dialogs}
       {assigning && (
         <AssignGuestsDialog
           open
@@ -115,8 +121,8 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
       {changing && <ZoneStateConfirm zone={changing.zone} state={changing.state} edits={edits} onClose={() => setChanging(null)} />}
       <MicrosegConfirmDialog
         open={deleting !== null}
-        title={deleting?.kind === 'zone' ? t('delete.zoneTitle', { name: deleting.zone.name }) : t('delete.flowTitle')}
-        body={deleting?.kind === 'zone' ? t('delete.zoneBody') : t('delete.flowBody')}
+        title={deleting ? t('delete.zoneTitle', { name: deleting.name }) : ''}
+        body={t('delete.zoneBody')}
         confirmLabel={t('delete.confirm')}
         color='error'
         busy={removal.busy}

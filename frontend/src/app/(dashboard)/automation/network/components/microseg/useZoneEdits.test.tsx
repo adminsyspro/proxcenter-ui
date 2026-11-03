@@ -152,6 +152,6 @@ describe('useZoneEdits', () => {
   it('exposes the readiness window and the pending changes of the draft', () => {
     const { result } = setup({ policy: policy({ ...draft, pending_changes: true, last_revision: null, zones: [web] }) })
     expect(result.current.readyAfterHours).toBe(24)
-    expect(result.current.pendingChanges).toEqual({ pending: true, count: 1 })
+    expect(result.current.pendingChanges).toMatchObject({ pending: true, count: 1 })
   })
 })

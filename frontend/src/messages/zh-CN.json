@@ -12747,10 +12747,22 @@
       "notDeployed": "尚未部署任何内容"
     },
     "pending": {
-      "withCount": "{count} 项未应用的更改",
       "noCount": "未应用的更改",
       "viewPlan": "查看计划",
-      "prefixed": "{prefix}：{text}"
+      "prefixed": "{prefix}：{text}",
+      "whatWillChange": "将要更改的内容：{list}",
+      "zones": {
+        "added": "{count, plural, other {新增 # 个区域}}",
+        "changed": "{count, plural, other {更改 # 个区域}}",
+        "removed": "{count, plural, other {删除 # 个区域}}"
+      },
+      "flows": {
+        "added": "{count, plural, other {新增 # 条流量规则}}",
+        "changed": "{count, plural, other {更改 # 条流量规则}}",
+        "removed": "{count, plural, other {删除 # 条流量规则}}"
+      },
+      "members": "{count, plural, other {# 项成员更改}}",
+      "tagPrefix": "标签前缀已更改"
     },
     "firstRun": {
       "title": "设置微分段",
@@ -12810,7 +12822,6 @@
         "membersTitle": "成员",
         "noMembers": "没有成员",
         "membersUnknown": "无法读取客户机列表。",
-        "memberSummary": "{count, plural, other {# 个成员}}，{running} 个运行中",
         "memberPending": "待处理",
         "incoming": "入站流量规则",
         "outgoing": "出站流量规则",
@@ -12838,7 +12849,12 @@
           "observe": "流量会被记录,不会拦截任何内容",
           "enforce": "只有允许的流量可以进入",
           "disabled": "该区域未被应用"
-        }
+        },
+        "counters": "{members} · 入站 {incoming, number} 条 · 出站 {outgoing, number} 条",
+        "memberCountUnknown": "成员未知",
+        "addFlowInto": "新建流向 {zone} 的流量规则",
+        "flowsTitle": "该区域的流量规则",
+        "memberCount": "{count, plural, other {# 个成员}}"
       },
       "flow": {
         "notApplied": "未应用（v1 不管理出站）",
@@ -12954,6 +12970,53 @@
         "confirm": {
           "observe": "观察",
           "disabled": "停用"
+        }
+      },
+      "diff": {
+        "added": "已新增",
+        "changed": "已更改",
+        "removed": "已删除",
+        "addedHint": "不在已应用的修订版中：下次应用时新增",
+        "changedHint": "与已应用的修订版不同：下次应用时更改",
+        "removedHint": "仍在生效：下次应用时删除"
+      },
+      "table": {
+        "source": "源",
+        "destination": "目标",
+        "service": "服务",
+        "stateColumn": "状态",
+        "hitsColumn": "24 小时命中",
+        "actions": "操作",
+        "hitsHint": "过去 24 小时内从源区域到目标区域记录的流量。历史只保存区域而不保存端口：相同区域之间的流量规则共享同一计数。",
+        "hitsZeroHint": "过去 24 小时无命中：可考虑清理",
+        "outside": "区域之外",
+        "addFlowInto": "新建流向 {zone} 的流量规则",
+        "addFlowShort": "流量规则",
+        "filter": "按区域或服务筛选",
+        "sort": "排序方式",
+        "sortSource": "源",
+        "sortHits": "24 小时命中",
+        "noMatch": "没有与筛选条件匹配的流量规则。",
+        "hits": "{count, plural, other {# 次命中}}",
+        "groupCount": "{count, plural, other {# 条流量规则}}",
+        "hitsNone": {
+          "cidrSource": "历史不保存源地址",
+          "cidrDestination": "v1 中未应用：不计命中",
+          "unavailable": "无法读取流量历史",
+          "loading": "正在读取流量历史..."
+        },
+        "state": {
+          "applied": "已应用",
+          "appliedHint": "在已应用的修订版中",
+          "pendingAdd": "待新增",
+          "pendingAddHint": "下次应用时新增",
+          "pendingChange": "待更改",
+          "pendingChangeHint": "下次应用时更改",
+          "pendingRemoval": "待删除",
+          "pendingRemovalHint": "下次应用时删除",
+          "notApplied": "v1 中未应用",
+          "notAppliedHint": "未应用（v1 不管理出站）",
+          "unknownHint": "正在与已应用的修订版比较..."
         }
       }
     },

@@ -22,15 +22,54 @@ function sameFlow(a: MicrosegFlow, b: MicrosegFlow): boolean {
     && a.origin === b.origin
 }
 
-function diffById<T extends { id: string }>(draft: T[], last: T[], same: (a: T, b: T) => boolean): number {
-  const before = new Map(last.map(x => [x.id, x]))
-  let n = 0
+export type DiffKind = 'added' | 'changed' | 'removed'
+
+/**
+ * What the draft changes over the last applied revision: each zone and flow added, changed (by value) or removed, by
+ * id; the items removed (from the revision's snapshot, to show them until the next apply); the pending members; the
+ * tag prefix moved. Without a revision everything is added. Null when the revision came without its snapshot.
+ */
+export type PolicyDiff = {
+  zones: ReadonlyMap<string, DiffKind>
+  flows: ReadonlyMap<string, DiffKind>
+  removedZones: MicrosegZone[]
+  removedFlows: MicrosegFlow[]
+  members: number
+  prefix: boolean
+}
+
+function diffById<T extends { id: string }>(draft: T[], last: T[] | null, same: (a: T, b: T) => boolean): { kinds: Map<string, DiffKind>; removed: T[] } {
+  const kinds = new Map<string, DiffKind>()
+  const before = new Map((last ?? []).map(x => [x.id, x]))
   for (const x of draft) {
     const old = before.get(x.id)
-    if (!old || !same(old, x)) n++
+    if (!old) kinds.set(x.id, 'added')
+    else if (!same(old, x)) kinds.set(x.id, 'changed')
     before.delete(x.id)
   }
-  return n + before.size
+  const removed = [...before.values()]
+  for (const x of removed) kinds.set(x.id, 'removed')
+  return { kinds, removed }
+}
+
+export function policyDiff(draft: MicrosegDraft, last: MicrosegRevision | null): PolicyDiff | null {
+  const snap = last ? last.snapshot : null
+  if (last && !snap) return null
+  const zones = diffById(draft.zones, snap ? snap.zones : null, sameZone)
+  const flows = diffById(draft.flows, snap ? snap.flows : null, sameFlow)
+  return {
+    zones: zones.kinds,
+    flows: flows.kinds,
+    removedZones: zones.removed,
+    removedFlows: flows.removed,
+    members: draft.pending_members.length,
+    prefix: !!snap && draft.tag_prefix !== undefined && draft.tag_prefix !== snap.tag_prefix,
+  }
+}
+
+/** The number of changes a diff holds: one per zone, flow and pending member, plus one for a moved tag prefix. */
+export function diffCount(diff: PolicyDiff): number {
+  return diff.zones.size + diff.flows.size + diff.members + (diff.prefix ? 1 : 0)
 }
 
 /**
@@ -44,10 +83,6 @@ function diffById<T extends { id: string }>(draft: T[], last: T[], same: (a: T, 
  * `pending_changes` flag.
  */
 export function countPendingChanges(draft: MicrosegDraft, last: MicrosegRevision | null): number {
-  const pending = draft.pending_members.length
-  if (!last) return draft.zones.length + draft.flows.length + pending
-  const snap = last.snapshot
-  if (!snap) return pending
-  const prefix = draft.tag_prefix !== undefined && draft.tag_prefix !== snap.tag_prefix ? 1 : 0
-  return diffById(draft.zones, snap.zones, sameZone) + diffById(draft.flows, snap.flows, sameFlow) + pending + prefix
+  const diff = policyDiff(draft, last)
+  return diff ? diffCount(diff) : draft.pending_members.length
 }

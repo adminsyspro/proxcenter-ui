@@ -1,5 +1,6 @@
 'use client'
 
+import type { MouseEvent } from 'react'
 import { Chip, Tooltip } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -14,8 +15,11 @@ export const STATE_VISUAL: Record<ZoneState, { color: StateColor; icon: string; 
   disabled: { color: 'default', icon: 'ri-shield-cross-line', palette: 'text.secondary' },
 }
 
-/** The state of a zone as a coloured outlined chip with its icon; the tooltip says in one sentence what the state does. */
-export default function ZoneStateChip({ state, size = 'small' }: { state: ZoneState; size?: 'small' | 'medium' }) {
+/**
+ * The state of a zone as a coloured outlined chip with its icon; the tooltip says in one sentence what the state does.
+ * With `onClick` the chip is a button that opens the state menu.
+ */
+export default function ZoneStateChip({ state, size = 'small', onClick }: { state: ZoneState; size?: 'small' | 'medium'; onClick?: (anchor: HTMLElement) => void }) {
   const t = useTranslations('microsegPilot.policy.zone')
   const visual = STATE_VISUAL[state]
   return (
@@ -26,6 +30,7 @@ export default function ZoneStateChip({ state, size = 'small' }: { state: ZoneSt
         color={visual.color}
         icon={<i className={visual.icon} style={{ fontSize: size === 'small' ? 14 : 16 }} />}
         label={t(`state.${state}`)}
+        {...(onClick ? { onClick: (e: MouseEvent<HTMLDivElement>) => onClick(e.currentTarget), 'aria-haspopup': 'menu' as const } : {})}
         sx={{ flexShrink: 0, maxWidth: '100%' }}
       />
     </Tooltip>

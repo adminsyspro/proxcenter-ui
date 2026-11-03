@@ -12747,10 +12747,22 @@
       "notDeployed": "배포된 항목 없음"
     },
     "pending": {
-      "withCount": "적용되지 않은 변경 {count}건",
       "noCount": "적용되지 않은 변경",
       "viewPlan": "계획 보기",
-      "prefixed": "{prefix} - {text}"
+      "prefixed": "{prefix} - {text}",
+      "whatWillChange": "변경될 내용: {list}",
+      "zones": {
+        "added": "{count, plural, other {영역 #개 추가}}",
+        "changed": "{count, plural, other {영역 #개 변경}}",
+        "removed": "{count, plural, other {영역 #개 삭제}}"
+      },
+      "flows": {
+        "added": "{count, plural, other {플로우 #개 추가}}",
+        "changed": "{count, plural, other {플로우 #개 변경}}",
+        "removed": "{count, plural, other {플로우 #개 삭제}}"
+      },
+      "members": "{count, plural, other {구성원 변경 #개}}",
+      "tagPrefix": "태그 접두사 변경"
     },
     "firstRun": {
       "title": "마이크로 세분화 설정",
@@ -12810,7 +12822,6 @@
         "membersTitle": "구성원",
         "noMembers": "구성원 없음",
         "membersUnknown": "게스트 목록을 읽을 수 없습니다.",
-        "memberSummary": "{count, plural, other {구성원 #개}}, 실행 중 {running}개",
         "memberPending": "대기 중",
         "incoming": "수신 플로우",
         "outgoing": "송신 플로우",
@@ -12838,7 +12849,12 @@
           "observe": "트래픽은 기록되며 아무것도 차단되지 않습니다",
           "enforce": "허용된 흐름만 통과합니다",
           "disabled": "영역이 적용되지 않습니다"
-        }
+        },
+        "counters": "{members} · 수신 {incoming, number}개 · 송신 {outgoing, number}개",
+        "memberCountUnknown": "구성원 알 수 없음",
+        "addFlowInto": "{zone}(으)로 새 플로우",
+        "flowsTitle": "영역의 플로우",
+        "memberCount": "{count, plural, other {구성원 #개}}"
       },
       "flow": {
         "notApplied": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",
@@ -12954,6 +12970,53 @@
         "confirm": {
           "observe": "관찰",
           "disabled": "비활성화"
+        }
+      },
+      "diff": {
+        "added": "추가됨",
+        "changed": "변경됨",
+        "removed": "삭제됨",
+        "addedHint": "적용된 리비전에 없음: 다음 적용 시 추가됨",
+        "changedHint": "적용된 리비전과 다름: 다음 적용 시 변경됨",
+        "removedHint": "아직 적용 중: 다음 적용 시 삭제됨"
+      },
+      "table": {
+        "source": "소스",
+        "destination": "대상",
+        "service": "서비스",
+        "stateColumn": "상태",
+        "hitsColumn": "24시간 히트",
+        "actions": "작업",
+        "hitsHint": "지난 24시간 동안 소스 영역에서 대상 영역으로 기록된 트래픽입니다. 기록은 포트가 아니라 영역을 보관하므로 같은 영역 사이의 플로우는 같은 수를 공유합니다.",
+        "hitsZeroHint": "지난 24시간 동안 히트 없음: 정리 후보",
+        "outside": "영역 외부",
+        "addFlowInto": "{zone}(으)로 새 플로우",
+        "addFlowShort": "플로우",
+        "filter": "영역 또는 서비스로 필터",
+        "sort": "정렬 기준",
+        "sortSource": "소스",
+        "sortHits": "24시간 히트",
+        "noMatch": "필터와 일치하는 플로우가 없습니다.",
+        "hits": "{count, plural, other {히트 #회}}",
+        "groupCount": "{count, plural, other {플로우 #개}}",
+        "hitsNone": {
+          "cidrSource": "기록은 소스 주소를 보관하지 않습니다",
+          "cidrDestination": "v1에서는 적용되지 않음: 히트를 세지 않습니다",
+          "unavailable": "트래픽 기록을 읽을 수 없습니다",
+          "loading": "트래픽 기록을 읽는 중..."
+        },
+        "state": {
+          "applied": "적용됨",
+          "appliedHint": "적용된 리비전에 있음",
+          "pendingAdd": "추가 대기 중",
+          "pendingAddHint": "다음 적용 시 추가됨",
+          "pendingChange": "변경 대기 중",
+          "pendingChangeHint": "다음 적용 시 변경됨",
+          "pendingRemoval": "삭제 대기 중",
+          "pendingRemovalHint": "다음 적용 시 삭제됨",
+          "notApplied": "v1에서 적용 안 됨",
+          "notAppliedHint": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",
+          "unknownHint": "적용된 리비전과 비교하는 중..."
         }
       }
     },

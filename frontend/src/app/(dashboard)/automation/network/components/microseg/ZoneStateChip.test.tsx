@@ -49,6 +49,7 @@ describe('where the state shows', () => {
   const rowProps = {
     members: [], membersKnown: true, flows: [], zonesById: new Map(),
     onEdit: vi.fn(), onDelete: vi.fn(), onSetState: vi.fn(), onAssign: vi.fn(), onRemoveMember: vi.fn(),
+    flowDiff: null, open: false, onToggle: vi.fn(), onAddFlow: vi.fn(), onEditFlow: vi.fn(), onDeleteFlow: vi.fn(),
   }
 
   it('puts the chip in the list row', () => {

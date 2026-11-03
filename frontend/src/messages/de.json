@@ -12415,10 +12415,22 @@
       "notDeployed": "Nichts bereitgestellt"
     },
     "pending": {
-      "withCount": "{count, plural, one {# nicht angewendete Änderung} other {# nicht angewendete Änderungen}}",
       "noCount": "Nicht angewendete Änderungen",
       "viewPlan": "Plan anzeigen",
-      "prefixed": "{prefix}: {text}"
+      "prefixed": "{prefix}: {text}",
+      "whatWillChange": "Was sich ändert: {list}",
+      "zones": {
+        "added": "{count, plural, one {# Zone hinzugefügt} other {# Zonen hinzugefügt}}",
+        "changed": "{count, plural, one {# Zone geändert} other {# Zonen geändert}}",
+        "removed": "{count, plural, one {# Zone entfernt} other {# Zonen entfernt}}"
+      },
+      "flows": {
+        "added": "{count, plural, one {# Fluss hinzugefügt} other {# Flüsse hinzugefügt}}",
+        "changed": "{count, plural, one {# Fluss geändert} other {# Flüsse geändert}}",
+        "removed": "{count, plural, one {# Fluss entfernt} other {# Flüsse entfernt}}"
+      },
+      "members": "{count, plural, one {# Mitgliedsänderung} other {# Mitgliedsänderungen}}",
+      "tagPrefix": "Tag-Präfix geändert"
     },
     "firstRun": {
       "title": "Mikrosegmentierung einrichten",
@@ -12478,7 +12490,6 @@
         "membersTitle": "Mitglieder",
         "noMembers": "Keine Mitglieder",
         "membersUnknown": "Die Gästeliste konnte nicht gelesen werden.",
-        "memberSummary": "{count, plural, one {# Mitglied} other {# Mitglieder}}, {running} laufend",
         "memberPending": "Ausstehend",
         "incoming": "Eingehende Flüsse",
         "outgoing": "Ausgehende Flüsse",
@@ -12506,7 +12517,12 @@
           "observe": "Der Verkehr wird protokolliert, nichts wird blockiert",
           "enforce": "Nur die erlaubten Flüsse kommen durch",
           "disabled": "Die Zone wird nicht angewendet"
-        }
+        },
+        "counters": "{members} · {incoming, number} eingehend · {outgoing, number} ausgehend",
+        "memberCountUnknown": "Mitglieder unbekannt",
+        "addFlowInto": "Neuer Fluss nach {zone}",
+        "flowsTitle": "Flüsse der Zone",
+        "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}"
       },
       "flow": {
         "notApplied": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",
@@ -12622,6 +12638,53 @@
         "confirm": {
           "observe": "Beobachten",
           "disabled": "Deaktivieren"
+        }
+      },
+      "diff": {
+        "added": "Hinzugefügt",
+        "changed": "Geändert",
+        "removed": "Entfernt",
+        "addedHint": "Nicht in der angewendeten Revision: wird beim nächsten Anwenden hinzugefügt",
+        "changedHint": "Weicht von der angewendeten Revision ab: wird beim nächsten Anwenden geändert",
+        "removedHint": "Noch angewendet: wird beim nächsten Anwenden entfernt"
+      },
+      "table": {
+        "source": "Quelle",
+        "destination": "Ziel",
+        "service": "Dienst",
+        "stateColumn": "Status",
+        "hitsColumn": "Treffer 24 h",
+        "actions": "Aktionen",
+        "hitsHint": "In den letzten 24 Stunden protokollierter Verkehr von der Quellzone zur Zielzone. Der Verlauf speichert die Zonen, nicht den Port: Flüsse zwischen denselben Zonen teilen sich ihre Zahl.",
+        "hitsZeroHint": "Kein Treffer in den letzten 24 h: Kandidat zum Aufräumen",
+        "outside": "Außerhalb der Zonen",
+        "addFlowInto": "Neuer Fluss nach {zone}",
+        "addFlowShort": "Fluss",
+        "filter": "Nach Zone oder Dienst filtern",
+        "sort": "Sortieren nach",
+        "sortSource": "Quelle",
+        "sortHits": "Treffer 24 h",
+        "noMatch": "Kein Fluss entspricht dem Filter.",
+        "hits": "{count, plural, one {# Treffer} other {# Treffer}}",
+        "groupCount": "{count, plural, one {# Fluss} other {# Flüsse}}",
+        "hitsNone": {
+          "cidrSource": "Der Verlauf speichert die Quelladresse nicht",
+          "cidrDestination": "In v1 nicht angewendet: keine Treffer gezählt",
+          "unavailable": "Der Verkehrsverlauf konnte nicht gelesen werden",
+          "loading": "Verkehrsverlauf wird gelesen..."
+        },
+        "state": {
+          "applied": "Angewendet",
+          "appliedHint": "In der angewendeten Revision",
+          "pendingAdd": "Hinzufügen ausstehend",
+          "pendingAddHint": "Wird beim nächsten Anwenden hinzugefügt",
+          "pendingChange": "Änderung ausstehend",
+          "pendingChangeHint": "Wird beim nächsten Anwenden geändert",
+          "pendingRemoval": "Entfernen ausstehend",
+          "pendingRemovalHint": "Wird beim nächsten Anwenden entfernt",
+          "notApplied": "In v1 nicht angewendet",
+          "notAppliedHint": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",
+          "unknownHint": "Vergleich mit der angewendeten Revision..."
         }
       }
     },

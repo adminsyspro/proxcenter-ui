@@ -12747,10 +12747,22 @@
       "notDeployed": "Nothing deployed"
     },
     "pending": {
-      "withCount": "{count, plural, one {# unapplied change} other {# unapplied changes}}",
       "noCount": "Unapplied changes",
       "viewPlan": "View plan",
-      "prefixed": "{prefix}: {text}"
+      "prefixed": "{prefix}: {text}",
+      "whatWillChange": "What will change: {list}",
+      "zones": {
+        "added": "{count, plural, one {# zone added} other {# zones added}}",
+        "changed": "{count, plural, one {# zone changed} other {# zones changed}}",
+        "removed": "{count, plural, one {# zone removed} other {# zones removed}}"
+      },
+      "flows": {
+        "added": "{count, plural, one {# flow added} other {# flows added}}",
+        "changed": "{count, plural, one {# flow changed} other {# flows changed}}",
+        "removed": "{count, plural, one {# flow removed} other {# flows removed}}"
+      },
+      "members": "{count, plural, one {# member change} other {# member changes}}",
+      "tagPrefix": "tag prefix changed"
     },
     "firstRun": {
       "title": "Set up micro-segmentation",
@@ -12810,7 +12822,6 @@
         "membersTitle": "Members",
         "noMembers": "No members",
         "membersUnknown": "The guest list could not be read.",
-        "memberSummary": "{count, plural, one {# member} other {# members}}, {running} running",
         "memberPending": "Pending",
         "incoming": "Incoming flows",
         "outgoing": "Outgoing flows",
@@ -12838,7 +12849,12 @@
           "observe": "Traffic is logged, nothing is blocked",
           "enforce": "Only the allowed flows get in",
           "disabled": "The zone is not applied"
-        }
+        },
+        "counters": "{members} · {incoming, number} incoming · {outgoing, number} outgoing",
+        "memberCountUnknown": "members unknown",
+        "addFlowInto": "New flow into {zone}",
+        "flowsTitle": "Flows of the zone",
+        "memberCount": "{count, plural, one {# member} other {# members}}"
       },
       "flow": {
         "notApplied": "Not applied (egress not managed in v1)",
@@ -12954,6 +12970,53 @@
         "confirm": {
           "observe": "Observe",
           "disabled": "Disable"
+        }
+      },
+      "diff": {
+        "added": "Added",
+        "changed": "Changed",
+        "removed": "Removed",
+        "addedHint": "Not in the applied revision: added on the next apply",
+        "changedHint": "Differs from the applied revision: changed on the next apply",
+        "removedHint": "Still applied: removed on the next apply"
+      },
+      "table": {
+        "source": "Source",
+        "destination": "Destination",
+        "service": "Service",
+        "stateColumn": "State",
+        "hitsColumn": "Hits 24 h",
+        "actions": "Actions",
+        "hitsHint": "Traffic logged over the last 24 hours from the source zone to the destination zone. The history keeps the zones, not the port: flows between the same zones share their count.",
+        "hitsZeroHint": "No hit in the last 24 h: candidate for cleanup",
+        "outside": "Outside the zones",
+        "addFlowInto": "New flow into {zone}",
+        "addFlowShort": "Flow",
+        "filter": "Filter by zone or service",
+        "sort": "Sort by",
+        "sortSource": "Source",
+        "sortHits": "Hits 24 h",
+        "noMatch": "No flow matches the filter.",
+        "hits": "{count, plural, one {# hit} other {# hits}}",
+        "groupCount": "{count, plural, one {# flow} other {# flows}}",
+        "hitsNone": {
+          "cidrSource": "The history does not keep the source address",
+          "cidrDestination": "Not applied in v1: no hit is counted",
+          "unavailable": "The traffic history could not be read",
+          "loading": "Reading the traffic history..."
+        },
+        "state": {
+          "applied": "Applied",
+          "appliedHint": "In the applied revision",
+          "pendingAdd": "Pending add",
+          "pendingAddHint": "Added on the next apply",
+          "pendingChange": "Pending change",
+          "pendingChangeHint": "Changed on the next apply",
+          "pendingRemoval": "Pending removal",
+          "pendingRemovalHint": "Removed on the next apply",
+          "notApplied": "Not applied in v1",
+          "notAppliedHint": "Not applied (egress not managed in v1)",
+          "unknownHint": "Comparing with the applied revision..."
         }
       }
     },

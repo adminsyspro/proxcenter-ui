@@ -32,7 +32,58 @@ describe('zone list', () => {
     setup({ zones: [web({ state: 'enforce' })], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'], { status: 'stopped' }), vm(102, 'other', [])] })
     const row = await screen.findByRole('listitem', { name: 'web' })
     expect(within(row).getByText('Enforced')).toBeTruthy()
-    expect(await within(row).findByText(/2 members, 1 running/)).toBeTruthy()
+    expect(await within(row).findByText('2 members · 0 incoming · 0 outgoing')).toBeTruthy()
+  })
+
+  it('counts the members, the incoming and the outgoing flows of a zone on its one line', async () => {
+    const flows: MicrosegFlow[] = [
+      { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: 'zd' },
+      { ...flow('f2'), src_zone_id: 'zd', dst_zone_id: 'zw' },
+      { ...flow('f3'), src_zone_id: 'zd', dst_zone_id: 'zw', dport: '22' },
+    ]
+    setup({ zones: [web({ label: 'Front web servers' }), db()], flows, vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])] })
+    const row = await screen.findByRole('listitem', { name: 'web' })
+    expect(await within(row).findByText('2 members · 2 incoming · 1 outgoing')).toBeTruthy()
+    expect(within(row).getByText('Front web servers')).toBeTruthy()
+    expect(within(screen.getByRole('listitem', { name: 'db' })).getByText('0 members · 1 incoming · 2 outgoing')).toBeTruthy()
+    for (const name of ['Edit zone', 'Change state', 'New flow into web', 'Delete zone']) expect(within(row).getByRole('button', { name })).toBeTruthy()
+  })
+
+  it('opens the state menu from the state chip too', async () => {
+    setup({ zones: [web()] })
+    const row = await screen.findByRole('listitem', { name: 'web' })
+    fireEvent.click(within(row).getByText('Observation'))
+    expect(await screen.findByRole('menuitem', { name: 'Enforce' })).toBeTruthy()
+  })
+
+  it('opens a new flow into the zone from its line, with the zone as destination', async () => {
+    setup({ zones: [web(), db()] })
+    const row = await screen.findByRole('listitem', { name: 'db' })
+    fireEvent.click(within(row).getByRole('button', { name: 'New flow into db' }))
+    const dialog = await screen.findByRole('dialog', { name: 'New flow' })
+    expect(within(dialog).getByRole('combobox', { name: 'Destination zone' }).textContent).toContain('db')
+  })
+
+  it('opens the members and the flows side by side, and remembers it for the zone', async () => {
+    const out: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: 'zd' }
+    const view = setup({ zones: [web(), db()], flows: [out], vms: [vm(100, 'web-1', ['zone-web'])] })
+    const row = await screen.findByRole('listitem', { name: 'web' })
+    fireEvent.click(within(row).getByRole('button', { name: 'Show details' }))
+    const members = await within(row).findByRole('region', { name: 'Members' })
+    const flowsColumn = within(row).getByRole('region', { name: 'Flows of the zone' })
+    expect(members.parentElement).toBe(flowsColumn.parentElement)
+    expect(await within(members).findByText('web-1')).toBeTruthy()
+    expect(within(members).getByRole('button', { name: 'Assign guests' })).toBeTruthy()
+    expect(within(flowsColumn).getByText('Outgoing flows')).toBeTruthy()
+    expect(within(flowsColumn).getByRole('button', { name: 'Edit flow' })).toBeTruthy()
+    expect(within(flowsColumn).getByRole('button', { name: 'Delete flow' })).toBeTruthy()
+    expect(JSON.parse(window.localStorage.getItem('microseg.policy.openZones.c1') ?? '[]')).toEqual(['zw'])
+
+    view.unmount()
+    setup({ zones: [web(), db()], flows: [out], vms: [vm(100, 'web-1', ['zone-web'])] })
+    const again = await screen.findByRole('listitem', { name: 'web' })
+    expect(await within(again).findByText('web-1')).toBeTruthy()
+    expect(within(screen.getByRole('listitem', { name: 'db' })).getByRole('button', { name: 'Show details' })).toBeTruthy()
   })
 
   it('says so when there is no zone', async () => {
@@ -99,14 +150,14 @@ describe('flow list', () => {
     expect(await screen.findByText('Create a zone first: a flow links zones or a zone and a CIDR.')).toBeTruthy()
   })
 
-  it('shows the pill "not applied" on a flow whose destination is a CIDR, in the list and under the zone', async () => {
+  it('says "not applied in v1" for a flow whose destination is a CIDR, in the table and under the zone', async () => {
     const toCidr: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: '', dst_cidr: '10.0.0.0/8', dport: '53', proto: 'udp' }
     const toZone: MicrosegFlow = { ...flow('f2'), src_zone_id: 'zw', dst_zone_id: 'zd' }
     setup({ zones: [web(), db()], flows: [toCidr, toZone] })
 
     const pill = 'Not applied (egress not managed in v1)'
     const flows = await screen.findByRole('region', { name: 'Flows' })
-    expect(within(flows).getAllByText(pill)).toHaveLength(1)
+    expect(within(flows).getAllByText('Not applied in v1')).toHaveLength(1)
     expect(within(flows).getByText('10.0.0.0/8')).toBeTruthy()
 
     const row = screen.getByRole('listitem', { name: 'web' })

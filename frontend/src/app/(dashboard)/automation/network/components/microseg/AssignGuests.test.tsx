@@ -18,6 +18,9 @@ const manyGuests = (n: number) => Array.from({ length: n }, (_, i) => vm(1000 + 
 
 async function openDialog() {
   const row = await screen.findByRole('listitem', { name: 'web' })
+  // The members sit under the chevron, with their Assign guests button.
+  const chevron = within(row).queryByRole('button', { name: 'Show details' })
+  if (chevron) fireEvent.click(chevron)
   fireEvent.click(await within(row).findByRole('button', { name: 'Assign guests' }))
   return screen.findByRole('dialog', { name: 'Assign guests to web' })
 }
@@ -319,7 +322,7 @@ describe('queued removals and moves of tagged members', () => {
     mock.routes['GET /revisions?limit=1'] = () => reply(200, { revisions: [revisionWithSnapshot([web()], [])] })
     setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])], pending_members: pendingRows, pending_changes: true })
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web()], pending_members: pendingRows, last_revision: REVISION_HEAD, pending_changes: pendingRows.length > 0 }))
-    expect(await screen.findByText('1 unapplied change')).toBeTruthy()
+    expect(await screen.findByText('What will change: 1 member change')).toBeTruthy()
     const dialog = await openDialog()
     const leaving = await within(dialog).findByRole('listitem', { name: 'web-1' })
     expect(within(leaving).getByText('Pending removal')).toBeTruthy()
@@ -334,7 +337,7 @@ describe('queued removals and moves of tagged members', () => {
     await waitFor(() => expect(calls('POST /members')).toHaveLength(1))
     expect(body(calls('POST /members')[0][1] as RequestInit)).toEqual({ version: 3, clear: [{ type: 'qemu', vmid: 100 }] })
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    await waitFor(() => expect(screen.queryByText(/unapplied change/)).toBeNull())
+    await waitFor(() => expect(screen.queryByText(/What will change/)).toBeNull())
   })
 
   it('clears a taken-back move and queues the new guests in the same request', async () => {

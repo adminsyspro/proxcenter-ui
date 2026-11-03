@@ -5,7 +5,7 @@ import type { MicrosegEvent, MicrosegZone } from '@/lib/microseg/types'
 
 import type { PostureGuest } from './dashboardPosture'
 import {
-  BUCKET_MS, MAX_BUCKETS, MAX_VOLUME_VMIDS, VOLUME_WINDOW_MS, accumulateVmids, busiestVmids, mergeEvents, postureTimeline, postureVolume, volumeWindow, type TimelineSeries, type VmSeries,
+  BUCKET_MS, MAX_BUCKETS, MAX_VOLUME_VMIDS, VOLUME_WINDOW_MS, accumulateVmids, areaPaths, bucketXs, busiestVmids, mergeEvents, nearestBucket, postureTimeline, postureVolume, volumeWindow, type TimelineSeries, type VmSeries,
 } from './postureTimeline'
 
 const NOW = Date.parse('2026-11-03T10:02:00Z')
@@ -203,5 +203,35 @@ describe('the VMIDs of the volume read', () => {
     expect(ids).toHaveLength(MAX_VOLUME_VMIDS)
     expect(ids[0]).toBe(1050)
     expect(ids.at(-1)).toBe(1149)
+  })
+})
+
+describe('stacked areas', () => {
+  const box = { left: 0, width: 100, top: 0, height: 10 }
+  const bucket = (start: number, counts: Record<string, number>) => ({ start, total: Object.values(counts).reduce((a, b) => a + b, 0), counts })
+  const series = [slice('a', 'zone', '#1', 'a'), slice('b', 'zone', '#2', 'b')]
+
+  it('puts each bucket at its middle, a single bucket across the plot', () => {
+    expect(bucketXs(4, box)).toEqual([12.5, 37.5, 62.5, 87.5])
+    expect(bucketXs(1, box)).toEqual([0, 100])
+  })
+
+  it('stacks one band per series in order, the first on the axis, a line on top of each', () => {
+    const paths = areaPaths({ series, max: 4, buckets: [bucket(0, { a: 2, b: 2 }), bucket(1, { a: 1 })] }, box)
+    expect(paths.map(p => p.key)).toEqual(['a', 'b'])
+    expect(paths[0]).toEqual({ key: 'a', line: 'M 25 5 L 75 7.5', area: 'M 25 5 L 75 7.5 L 75 10 L 25 10 Z' })
+    expect(paths[1]).toEqual({ key: 'b', line: 'M 25 0 L 75 7.5', area: 'M 25 0 L 75 7.5 L 75 7.5 L 25 5 Z' })
+  })
+
+  it('draws nothing without a value, a single bucket as a flat band', () => {
+    expect(areaPaths({ series, max: 0, buckets: [] }, box)).toEqual([])
+    expect(areaPaths({ series: series.slice(0, 1), max: 2, buckets: [bucket(0, { a: 2 })] }, box)[0].line).toBe('M 0 0 L 100 0')
+  })
+
+  it('finds the bucket nearest to the pointer, clamped to the plot', () => {
+    expect(nearestBucket(40, 4, box)).toBe(1)
+    expect(nearestBucket(-50, 4, box)).toBe(0)
+    expect(nearestBucket(10_000, 4, box)).toBe(3)
+    expect(nearestBucket(5, 1, box)).toBe(0)
   })
 })

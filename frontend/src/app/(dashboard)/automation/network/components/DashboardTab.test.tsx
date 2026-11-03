@@ -335,17 +335,24 @@ describe('DashboardTab: traffic over time', () => {
     expect(screen.getByTestId('timeline-max').textContent).toBe('2')
   })
 
-  it('shows the breakdown of a bucket on hover', async () => {
-    postureReads({ events: [ev(0), ev(0, { src_zone: '', src_ip: '203.0.113.9' })] })
+  it('draws one stacked area per group, and on hover a guide at the nearest bucket with its breakdown', async () => {
+    postureReads({ events: [ev(0), ev(0, { src_zone: '', src_ip: '203.0.113.9' }), ev(12)] })
     renderDashboard({ enable: 1 })
 
     await screen.findByTestId('timeline-caption')
-    const hits = screen.getAllByTestId(/^bucket-hit-/)
-    fireEvent.mouseEnter(hits.at(-1)!)
+    const timeline = screen.getByTestId('timeline')
+    expect(within(timeline).getAllByTestId(/^area-/).map(g => g.getAttribute('data-testid'))).toEqual(['area-zone:zweb', 'area-external'])
+    expect(within(timeline).getByTestId('area-zone:zweb').querySelectorAll('path')).toHaveLength(2)
+    expect(within(timeline).queryByTestId('timeline-guide')).not.toBeInTheDocument()
+    // Far right: the last bucket (the browser has no layout here, the pointer x is read in drawing units).
+    fireEvent.mouseMove(screen.getByTestId('timeline-overlay'), { clientX: 10_000 })
+    expect(screen.getByTestId('timeline-guide')).toBeInTheDocument()
     const tip = screen.getByTestId('timeline-tip')
     expect(tip.textContent).toContain('2 events')
     expect(tip.textContent).toContain('web')
     expect(tip.textContent).toContain('Unknown / External')
+    fireEvent.mouseLeave(screen.getByTestId('timeline-overlay'))
+    expect(screen.queryByTestId('timeline-tip')).not.toBeInTheDocument()
   })
 
   it('keeps the blocked events only from the verdict toggle', async () => {

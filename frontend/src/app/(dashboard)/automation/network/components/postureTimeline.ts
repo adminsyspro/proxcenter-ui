@@ -219,3 +219,44 @@ export function postureVolume(input: {
   })
   return { ...stack(input.from, input.to - BUCKET_MS, items, input.slices), windowMinutes: VOLUME_WINDOW_MS / 60_000 }
 }
+
+/** The drawing box of the time chart: the left edge and width of the plot, its top and height. */
+export type PlotBox = { left: number; width: number; top: number; height: number }
+
+/** The x of each bucket: at its middle; a single bucket spans the plot (two points, so its area has a width). */
+export function bucketXs(count: number, box: PlotBox): number[] {
+  if (count === 1) return [box.left, box.left + box.width]
+  const step = box.width / count
+  return Array.from({ length: count }, (_, i) => box.left + (i + 0.5) * step)
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * The stacked areas of the series, in their order (the first at the bottom): for each, the closed path of its band
+ * and the line on top of it, straight segments from bucket to bucket.
+ */
+export function areaPaths(timeline: Pick<PostureTimeline, 'buckets' | 'series' | 'max'>, box: PlotBox): { key: string; area: string; line: string }[] {
+  const { buckets, series, max } = timeline
+  if (!buckets.length || max <= 0) return []
+  const xs = bucketXs(buckets.length, box)
+  const values = buckets.length === 1 ? [buckets[0], buckets[0]] : buckets
+  const base = box.top + box.height
+  const y = (v: number) => base - (v / max) * box.height
+  const below = values.map(() => 0)
+  return series.map(s => {
+    const lower = below.map(v => y(v))
+    values.forEach((b, i) => { below[i] += b.counts[s.key] ?? 0 })
+    const upper = below.map(v => y(v))
+    const top = xs.map((x, i) => `${r2(x)} ${r2(upper[i])}`)
+    const bottom = xs.map((x, i) => `${r2(x)} ${r2(lower[i])}`).reverse()
+    return { key: s.key, line: `M ${top.join(' L ')}`, area: `M ${top.join(' L ')} L ${bottom.join(' L ')} Z` }
+  })
+}
+
+/** The bucket nearest to an x of the plot. */
+export function nearestBucket(x: number, count: number, box: PlotBox): number {
+  if (count <= 1) return 0
+  const i = Math.round((x - box.left) / (box.width / count) - 0.5)
+  return Math.min(count - 1, Math.max(0, i))
+}

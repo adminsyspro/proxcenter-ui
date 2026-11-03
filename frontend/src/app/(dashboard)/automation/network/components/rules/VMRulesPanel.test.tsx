@@ -252,6 +252,23 @@ describe('VMRulesPanel', () => {
       expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled()
     })
 
+    it('starts every group again from the first page when the list filter is set or cleared (the Dashboard link)', () => {
+      const p = props({ vmFirewallData: many })
+      const view = renderWithProviders(<VMRulesPanel {...p} />)
+      fireEvent.click(screen.getByText('Untagged'))
+      fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+      expect(screen.getByText('Page 3 of 3')).toBeInTheDocument()
+
+      view.rerender(<VMRulesPanel {...p} vmFirewallData={many.slice(0, 55)} listFilter='unprotected' />)
+      expect(shownGuests()[0]).toBe('g-01')
+      expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+      view.rerender(<VMRulesPanel {...p} />)
+      expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
+    })
+
     it('filters before paging, and a new search starts again from the first page', () => {
       renderPanel({ vmFirewallData: many })
       fireEvent.click(screen.getByText('Untagged'))

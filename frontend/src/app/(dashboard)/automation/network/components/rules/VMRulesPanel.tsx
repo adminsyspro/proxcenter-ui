@@ -38,6 +38,8 @@ interface VMRulesPanelProps {
   reloadVMFirewallRules: (vm: VMFirewallInfo) => Promise<void>
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
+  /** The filter the list is shown with (the Dashboard's "VMs filtered" link): another one starts every group on page 1. */
+  listFilter?: string | null
 }
 
 // ── Helpers ──
@@ -50,7 +52,7 @@ function getVlanColor(vlanKey: string, index: number): string {
 
 // ── Main Component ──
 
-export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVMRules, selectedConnection, loadVMFirewallData, loadGuestRules, reloadVMFirewallRules, aliases, ipsets }: VMRulesPanelProps) {
+export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVMRules, selectedConnection, loadVMFirewallData, loadGuestRules, reloadVMFirewallRules, aliases, ipsets, listFilter = null }: VMRulesPanelProps) {
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
@@ -69,6 +71,13 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
   const [expandedVlans, setExpandedVlans] = useState<Set<string>>(new Set())
   // The guests of a group are paged (UA47): a page per group, one page size; the open rows stay open across pages.
   const pager = useGroupPages()
+  // A filter set or cleared from outside is a new list, like a new search: every group back to its first page
+  // (adjusted while rendering, not in an effect).
+  const [pagedFilter, setPagedFilter] = useState(listFilter)
+  if (pagedFilter !== listFilter) {
+    setPagedFilter(listFilter)
+    pager.reset()
+  }
   // Guests whose rules are being read: the request goes out when the row is opened, one guest at a time (UA44).
   const [readingRules, setReadingRules] = useState<Set<number>>(new Set())
   const [rulesReadFailed, setRulesReadFailed] = useState<Set<number>>(new Set())

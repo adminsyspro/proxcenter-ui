@@ -187,6 +187,7 @@ export default function RulesTab({
         )}
         <VMRulesPanel
           vmFirewallData={shownGuests}
+          listFilter={guestFilter ?? null}
           securityGroups={securityGroups}
           loadingVMRules={loadingVMRules}
           selectedConnection={selectedConnection}

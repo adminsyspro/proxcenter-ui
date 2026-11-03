@@ -154,7 +154,8 @@ export function forgetGuestCoverage(connId: string, guest?: { type: string; vmid
   }
   const state = cache().get(connId)
   const prefix = `${guest.type}/${guest.vmid}@`
-  if (state) for (const key of [...state.known.keys()]) if (key.startsWith(prefix)) state.known.delete(key)
+  // Deleting the entry being visited is safe while iterating a Map.
+  if (state) for (const key of state.known.keys()) if (key.startsWith(prefix)) state.known.delete(key)
   bump(`${connId}|${guest.type}/${guest.vmid}`)
 }
 
@@ -177,7 +178,7 @@ function byKey(a: { type: string; vmid: string }, b: { type: string; vmid: strin
 
 /** Identity of a guest list: a guest added, removed or moved to another node changes it. */
 export function guestListHash(guests: CoverageGuest[]): string {
-  const lines = guests.map(placedKey).sort()
+  const lines = guests.map(placedKey).sort((a, b) => a.localeCompare(b))
 
   return createHash('sha256').update(lines.join('\n')).digest('hex')
 }
@@ -416,7 +417,7 @@ function begin(connId: string, deps: CoverageDeps, force: boolean): Promise<Gues
 function remember(connId: string, state: State, hash: string, guests: CoverageGuest[], answer: GuestCoverage): GuestCoverage {
   // Guests gone from the list are forgotten; the state is kept only when no connection-wide write wiped it.
   const present = new Set(guests.map(placedKey))
-  for (const key of [...state.known.keys()]) if (!present.has(key)) state.known.delete(key)
+  for (const key of state.known.keys()) if (!present.has(key)) state.known.delete(key)
   state.hash = hash
   state.last = answer
   cache().set(connId, state)

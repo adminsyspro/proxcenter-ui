@@ -263,7 +263,7 @@ describe('GET /api/v1/firewall/coverage/[connectionId]: cache', () => {
     const body = await readJson<any>(await get())
 
     expect(stats.calls).toBe(7)
-    expect(h.orchGet.mock.calls.at(-1)?.[0]).toBe('/firewall/vms/conn-1/pve3/qemu/106/options')
+    expect(h.orchGet.mock.calls.at(-1)?.[0]).toBe('/firewall/vms/conn-1/pve1/qemu/106/options')
     expect(body).toMatchObject({ total: 7, enabled: 7 })
   })
 

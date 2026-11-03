@@ -45,6 +45,9 @@ function parseTags(raw: unknown): string[] {
   return raw.split(/[;,]/).map(t => t.trim()).filter(Boolean)
 }
 
+/** A node reported down; a node with no status at all is not taken for one. */
+const isDown = (status: unknown) => typeof status === 'string' && status !== '' && status !== 'online'
+
 /**
  * The guests of the connection, with the offline flag of their node: from the inventory the app already keeps (no
  * call), or one /cluster/resources read (guests and nodes) when it is cold. Only the union view of the tenant: a
@@ -56,14 +59,14 @@ async function listGuests(tenantId: string, connectionId: string, conn: () => Pr
 
   if (cluster) {
     const nodes: any[] = cluster.nodes ?? []
-    const offline = new Set(nodes.filter(n => n?.node && n.status !== 'online').map(n => String(n.node)))
+    const offline = new Set(nodes.filter(n => n?.node && isDown(n.status)).map(n => String(n.node)))
     const raw = nodes.flatMap(n => (n?.guests ?? []).map((g: any) => ({ ...g, node: g?.node ?? n?.node })))
 
     return raw.map(g => toGuest(g, offline)).filter((g): g is CoverageGuest => g !== null)
   }
 
   const resources: any[] = (await pveFetch<any[]>(await conn(), '/cluster/resources')) ?? []
-  const offline = new Set(resources.filter(r => r?.type === 'node' && r.status !== 'online').map(r => String(r.node)))
+  const offline = new Set(resources.filter(r => r?.type === 'node' && isDown(r.status)).map(r => String(r.node)))
 
   return resources.map(r => toGuest(r, offline)).filter((g): g is CoverageGuest => g !== null)
 }

@@ -272,6 +272,11 @@ describe('method-aware matching', () => {
     expect(matchPublicApiPath(`${jobs}/runs/guests`, 'POST').entryId).toBe('backup-job-guests')
   })
 
+  it('keeps the micro-segmentation relay closed to public API tokens, reads and the emergency stop alike', () => {
+    expect(matchPublicApiPath('/api/v1/firewall/microseg/c1/policy', 'GET').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/firewall/microseg/c1/emergency-stop', 'POST').ok).toBe(false)
+  })
+
   it('a PBS snapshot id carries its slashes encoded in its one segment only', () => {
     const snap = '/api/v1/pbs/p1/backups/ds1%2Fvm%2F100%2F1760000000'
     expect(matchPublicApiPath(snap, 'DELETE')).toMatchObject({ entryId: 'pbs-backup-delete', params: { backupId: 'ds1%2Fvm%2F100%2F1760000000' } })

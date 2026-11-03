@@ -24,6 +24,10 @@ import ZoneCanvas from './ZoneCanvas'
 import ZoneMatrix from './ZoneMatrix'
 import ZoneSankey from './ZoneSankey'
 import { buildSankey } from './sankeyModel'
+import TargetPanel from './TargetPanel'
+import TargetPicker from './TargetPicker'
+import { targetFocus, targetRing, targetSankey, type TargetGuest } from './targetModel'
+import { useMapTarget } from './useMapTarget'
 import {
   EXTERNAL_ID, OUTSIDE_ID, UNZONED_ID, filterEdges, focusSets, zoneNodeId,
   type MapEdgeData, type MapInput, type MapMember, type MapNodeData, type PanelEdgeData,
@@ -96,6 +100,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   )
   const membersKnown = guestsStatus === 'ready'
   const zonesById = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
+  const mapTarget = useMapTarget(guests, membersByZone)
+  const { target } = mapTarget
 
   // The flows of the draft that the last applied revision does not have (null: not known yet, nothing marked).
   const unapplied = useMemo<ReadonlySet<string> | null>(() => {
@@ -125,10 +131,21 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     const timer = setTimeout(() => setCentre(centreId), 0)
     return () => clearTimeout(timer)
   }, [centreKnown, centreId])
+  // A targeted guest puts its zone in the centre of the guest view (the admin can still move it afterwards).
+  const targetZone = target?.zoneId ?? null
+  useEffect(() => {
+    if (!targetZone) return
+    const timer = setTimeout(() => setCentre(targetZone), 0)
+    return () => clearTimeout(timer)
+  }, [targetZone])
   // The matrix holds the pairs of the matrix and of the Sankey diagram (their flow panel).
   const matrix = useMemo(() => (view === 'matrix' || view === 'sankey' ? buildMatrix(input) : null), [view, input])
   const sankey = useMemo(() => (view === 'sankey' && matrix ? buildSankey(matrix, filters) : null), [view, matrix, filters])
   const graph = useMemo(() => mapViewGraph(view, input, centreId), [view, input, centreId])
+  const sankeyTarget = useMemo(
+    () => (target && matrix && sankey ? targetSankey(matrix, filters, target) : null),
+    [target, matrix, sankey, filters],
+  )
 
   // "Refreshed at": the first answer, then the end of every refresh (a refresh that changes nothing still moves it).
   const loaded = !!suggestions.data || membersKnown
@@ -147,7 +164,9 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const selectedNode = selectedNodeOf(selectedZone, selection)
   const selectedFocus = selectedNode ?? (selection?.kind === 'edge' ? selection.id : null)
   const focusId = hover ?? keyFocus ?? selectedFocus
-  const lit = useMemo(() => focusSets(graph, focusId), [graph, focusId])
+  // A target locks the focus on its guest: the pointer, the keyboard and the selection do not move it.
+  const lock = useMemo(() => targetFocus(graph, target), [graph, target])
+  const lit = useMemo(() => lock ?? focusSets(graph, focusId), [lock, graph, focusId])
 
   const tNode = useTranslations('microsegPilot.overview.node')
   const tEdge = useTranslations('microsegPilot.overview.edge')
@@ -176,11 +195,13 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     },
   }), [zonesById, nameOf, graph.nodes])
 
+  const targetColor = targetRing(target, zonesById)
   const nodes = useMemo(() => graph.nodes.map(n => {
+    if (lock && n.id === lock.node) return { ...n, selected: n.id === selectedNode, className: 'microseg-target', data: { ...n.data, target: targetColor } }
     const selected = n.id === selectedNode
     const dimmed = !!lit && !lit.nodes.has(n.id)
     return selected || dimmed ? { ...n, selected, className: dimmed ? 'microseg-dim' : undefined } : n
-  }), [graph.nodes, selectedNode, lit])
+  }), [graph.nodes, selectedNode, lit, lock, targetColor])
 
   // The edges take no focus, but a screen reader names them: "web to db: tcp/443".
   const edges = useMemo(() => filterEdges(graph.edges, filters).map(e => {
@@ -220,6 +241,15 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const selectGuest = useCallback((nodeId: string) => setSelection({ kind: 'guest', id: nodeId }), [])
   const selectEdge = useCallback((edgeId: string) => { setSelection({ kind: 'edge', id: edgeId }); setResolved(null) }, [])
   const clear = useCallback(() => setSelection(null), [])
+  // A guest picked (or cleared): its panel replaces the open one; a zone or an edge picked afterwards keeps the lock.
+  const { pick, showPanel, hidePanel } = mapTarget
+  const changeTarget = useCallback((next: TargetGuest | null) => {
+    pick(next)
+    setSelection(null)
+    setResolved(null)
+  }, [pick])
+  const showTarget = useCallback(() => { showPanel(); setSelection(null) }, [showPanel])
+  const openTargetZone = useCallback((zoneId: string) => { setResolved(null); setSelection({ kind: 'zone', id: zoneId }) }, [])
   const refresh = useCallback(async () => {
     setRefreshing(true)
     await Promise.all([reloadPolicy().catch(() => undefined), suggestions.reload().catch(() => undefined), reloadGuests().catch(() => undefined)])
@@ -236,12 +266,22 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     )
   }
 
-  const panelOpen = !!selectedZone || !!selectedEdge
+  const targetPanel = !!target && mapTarget.panelOpen && !selectedZone && !selectedEdge
+  const panelOpen = !!selectedZone || !!selectedEdge || targetPanel
   return (
     <Box sx={{ px: 3, pb: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, flexWrap: 'wrap' }}>
         <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
-          <MapToolbar view={view} onView={changeView} filters={filters} onFilters={setFilters} refreshedAt={refreshedAt} refreshing={refreshing} onRefresh={refresh} />
+          <MapToolbar
+            view={view}
+            onView={changeView}
+            lead={<TargetPicker candidates={mapTarget.candidates} zonesById={zonesById} target={target} onTarget={changeTarget} onShowPanel={showTarget} />}
+            filters={filters}
+            onFilters={setFilters}
+            refreshedAt={refreshedAt}
+            refreshing={refreshing}
+            onRefresh={refresh}
+          />
         </Box>
         {policy.pending_changes && (
           <Tooltip title={t('unappliedHint')}>
@@ -278,6 +318,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 onSelectCell={selectEdge}
                 onSelectZone={selectZone}
                 names={{ end: endName }}
+                target={sankeyTarget}
               />
             )}
             {matrix && !sankey && (
@@ -291,6 +332,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 onSelectCell={selectEdge}
                 onSelectZone={selectZone}
                 names={{ end: endName }}
+                target={target}
               />
             )}
             {!matrix && (
@@ -304,6 +346,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 onFocusNode={setKeyFocus}
                 onClear={clear}
                 panelOpen={panelOpen}
+                fitTo={lock?.fit ?? null}
               />
             )}
           </Box>
@@ -318,6 +361,23 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
               edits={edits}
               onClose={clear}
               onAssign={() => setAssigning(true)}
+            />
+          )}
+          {targetPanel && target && (
+            <TargetPanel
+              key={target.key}
+              target={target}
+              zonesById={zonesById}
+              suggestions={input.suggestions}
+              flows={flows}
+              peers={mapTarget.peers}
+              connectionId={connectionId}
+              version={policy.version}
+              reloadPolicy={reloadPolicy}
+              reloadSuggestions={suggestions.reload}
+              onResolved={setResolved}
+              onOpenZone={openTargetZone}
+              onClose={hidePanel}
             />
           )}
           {selectedEdge && (

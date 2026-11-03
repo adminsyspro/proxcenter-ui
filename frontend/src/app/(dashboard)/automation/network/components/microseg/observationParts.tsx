@@ -45,17 +45,19 @@ type ResolveActionsProps = {
   onResolve: (action: SuggestionAction) => void
   /** Name of the accept button (its tooltip too when the flow has a source zone); "Accept" by default. */
   acceptLabel?: string
+  /** Tooltip of the accept button when the flow has a source zone; the accept label by default. */
+  acceptTip?: string
 }
 
 /** The three ways out of an observed flow: accept as a flow of the zones, accept as a CIDR, dismiss. */
-export function ResolveActions({ suggestion: s, busy, onResolve, acceptLabel }: ResolveActionsProps) {
+export function ResolveActions({ suggestion: s, busy, onResolve, acceptLabel, acceptTip }: ResolveActionsProps) {
   const t = useTranslations('microsegPilot.observation')
   const accept = acceptLabel ?? t('accept')
   const { canWrite } = useMicrosegWrite()
 
   return (
     <>
-      <WriteTip title={s.src_zone_id ? accept : t('acceptNoZone')}>
+      <WriteTip title={s.src_zone_id ? acceptTip ?? accept : t('acceptNoZone')}>
         <IconButton size='small' aria-label={accept} disabled={!canWrite || busy || !s.src_zone_id} onClick={() => onResolve('accept')}><i className='ri-check-line' /></IconButton>
       </WriteTip>
       <WriteTip title={s.src_ip ? t('acceptCidr') : t('acceptCidrNoIp')}>

@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { Box, Checkbox, FormControlLabel, IconButton, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
@@ -72,6 +73,8 @@ type Props = {
   /** The rendering selector is drawn only when both are given. */
   view?: MapView
   onView?: (next: MapView) => void
+  /** Drawn after the rendering selector (the Overview puts its "Target a VM" search there). */
+  lead?: ReactNode
   filters: FlowFilters
   onFilters: (next: FlowFilters) => void
   refreshedAt: Date | null
@@ -83,12 +86,13 @@ type Props = {
  * The toolbar of the map: the rendering selector, "Flows:" with its three checkboxes (each with the line it draws, so it is the legend too),
  * then the time of the last read with a refresh button. A time range selector would go between the two.
  */
-export default function MapToolbar({ view, onView, filters, onFilters, refreshedAt, refreshing, onRefresh }: Props) {
+export default function MapToolbar({ view, onView, lead, filters, onFilters, refreshedAt, refreshing, onRefresh }: Props) {
   const t = useTranslations('microsegPilot.overview')
   const format = useFormatter()
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minHeight: 36 }}>
       {view && onView && <ViewSwitch view={view} onView={onView} />}
+      {lead}
       <Box role='group' aria-label={t('filters.title')} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
         <Typography variant='body2' color='text.secondary' sx={{ mr: 0.5 }}>{t('filters.title')}</Typography>
         {FILTERS.map(f => (

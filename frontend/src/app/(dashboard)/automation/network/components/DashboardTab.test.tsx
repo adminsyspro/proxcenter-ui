@@ -41,6 +41,7 @@ type Stub = {
   drifts?: Record<string, unknown> | 'pending'
   suggestions?: unknown[] | 'pending' | 'error'
   vms?: unknown[] | 'pending'
+  events?: unknown[] | 'pending' | 'error'
 }
 
 const pending = () => new Promise<never>(() => {})
@@ -75,6 +76,14 @@ function stubReads(over: Stub = {}) {
     if (url.endsWith('/drifts')) {
       if (over.drifts === 'pending') return pending()
       return answer({ drifts: [], computed: true, ...(over.drifts ?? {}) })
+    }
+    if (url.includes('/events?')) {
+      if (over.events === 'pending') return pending()
+      if (over.events === 'error') return answer({ code: 'FEATURE_REQUIRED', error: 'enterprise' }, 403)
+      const all = over.events ?? []
+      const before = Number(new URL(url, 'http://x').searchParams.get('before_seq') ?? Infinity)
+      const page = (all as { seq: number }[]).filter(e => e.seq < before).slice(0, 500)
+      return answer({ events: page, truncated: false, oldest: null })
     }
     if (url.startsWith('/api/v1/vms?')) {
       if (over.vms === 'pending') return pending()
@@ -298,6 +307,70 @@ describe('DashboardTab: traffic by zone', () => {
 
     expect(await screen.findByTestId('traffic-empty')).toBeInTheDocument()
     expect(await screen.findByTestId('services-table')).toBeInTheDocument()
+  })
+})
+
+let evSeq = 5000
+/** An event of the ring, `minutesAgo` before now, from web to db unless told otherwise. */
+const ev = (minutesAgo: number, over: Record<string, unknown> = {}) => ({
+  seq: evSeq--, ts: new Date(Date.now() - minutesAgo * 60_000).toISOString(), node: 'pve2', vmid: 102, type: 'qemu', guest: 'db1', zone: 'db',
+  src_zone: 'web', src_ip: '10.0.0.1', dst_ip: '10.0.0.2', proto: 'tcp', dport: 5432, verdict: 'would_block', ...over,
+})
+
+describe('DashboardTab: traffic over time', () => {
+  it('stacks the events of the ring per 5 minutes under the donut and says the window the memory covers', async () => {
+    postureReads({ events: [ev(0), ev(0, { verdict: 'blocked' }), ev(42, { src_zone: '', src_ip: '203.0.113.9' })] })
+    renderDashboard({ enable: 1 })
+
+    const caption = await screen.findByTestId('timeline-caption')
+    expect(caption.textContent).toBe('covered window: last 42 min (orchestrator memory)')
+    expect(within(screen.getByTestId('traffic-card')).getByTestId('timeline')).toBeInTheDocument()
+    expect(screen.getByTestId('timeline-max').textContent).toBe('2')
+  })
+
+  it('shows the breakdown of a bucket on hover', async () => {
+    postureReads({ events: [ev(0), ev(0, { src_zone: '', src_ip: '203.0.113.9' })] })
+    renderDashboard({ enable: 1 })
+
+    await screen.findByTestId('timeline-caption')
+    const hits = screen.getAllByTestId(/^bucket-hit-/)
+    fireEvent.mouseEnter(hits.at(-1)!)
+    const tip = screen.getByTestId('timeline-tip')
+    expect(tip.textContent).toContain('2 events')
+    expect(tip.textContent).toContain('web')
+    expect(tip.textContent).toContain('Unknown / External')
+  })
+
+  it('keeps the blocked events only from the verdict toggle', async () => {
+    postureReads({ events: [ev(0), ev(0), ev(0, { verdict: 'blocked' })] })
+    renderDashboard({ enable: 1 })
+
+    await waitFor(() => expect(screen.getByTestId('timeline-max').textContent).toBe('3'))
+    fireEvent.click(within(screen.getByTestId('timeline')).getByRole('button', { name: 'Blocked' }))
+    await waitFor(() => expect(screen.getByTestId('timeline-max').textContent).toBe('1'))
+  })
+
+  it('reads up to 4 pages of 500 events, each below the previous', async () => {
+    postureReads({ events: Array.from({ length: 2100 }, (_, i) => ev(i % 50)) })
+    renderDashboard({ enable: 1 })
+
+    await screen.findByTestId('timeline-caption')
+    const reads = fetchedUrls().filter(u => u.includes('/microseg/conn-1/events?'))
+    expect(reads).toHaveLength(4)
+    expect(reads[0]).toMatch(/limit=500$/)
+    expect(reads.slice(1).every(u => /before_seq=\d+/.test(u))).toBe(true)
+    expect(fetchedUrls().some(u => /\/config$|\/api\/v1\/vms/.test(u))).toBe(false)
+  })
+
+  it('says when the memory holds no event, and when the events cannot be read', async () => {
+    postureReads({ events: [] })
+    renderDashboard({ enable: 1 })
+    expect(await screen.findByTestId('timeline-empty')).toBeInTheDocument()
+    cleanup()
+
+    postureReads({ events: 'error' })
+    renderDashboard({ enable: 1 })
+    expect(await screen.findByTestId('timeline-unavailable')).toBeInTheDocument()
   })
 })
 

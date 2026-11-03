@@ -9080,7 +9080,15 @@
       "postureRefresh": "적용 범위 다시 계산",
       "postureRefreshAgo": "{time} 계산됨 · 다시 계산",
       "postureRefreshSoon": "{time} 계산됨 · 30초 이내의 새 수치",
-      "postureRefreshComputing": "적용 범위 계산 중"
+      "postureRefreshComputing": "적용 범위 계산 중",
+      "postureTimelineTitle": "시간별 관찰 트래픽",
+      "postureTimelineWindow": "포함 구간: 최근 {minutes, number}분 (오케스트레이터 메모리)",
+      "postureTimelineVerdict": "판정",
+      "postureTimelineAll": "전체",
+      "postureTimelineLabel": "5분 단위 관찰 이벤트, 그룹별 누적",
+      "postureTimelineEvents": "{count, plural, other {이벤트 #개}}",
+      "postureTimelineUnavailable": "관찰된 이벤트 정보 없음",
+      "postureTimelineEmpty": "오케스트레이터 메모리에 관찰된 이벤트 없음"
     },
     "rulesOnDemand": {
       "chip": "열 때 규칙 로드",

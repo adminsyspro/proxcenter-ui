@@ -10,7 +10,7 @@ import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { useMicrosegDrifts, useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 import type { ListSuggestionsParams } from '@/lib/microseg/api'
-import type { MicrosegPolicy, MicrosegStatus, MicrosegSuggestion } from '@/lib/microseg/types'
+import type { MicrosegEvent, MicrosegPolicy, MicrosegStatus, MicrosegSuggestion } from '@/lib/microseg/types'
 
 import DashboardTodo, { type TodoActions } from './DashboardTodo'
 import { dashboardPhase, missingManagementPorts, todoItems, type BlockPhase } from './dashboardModel'
@@ -22,6 +22,10 @@ import FirewallLoadAlert from './FirewallLoadAlert'
 import { TopServices, TrafficDistribution } from './ObservedTraffic'
 import PostureChips from './PostureChips'
 import TrafficByZone from './TrafficByZone'
+import TrafficTimeline from './TrafficTimeline'
+import { postureTimeline, type TimelineVerdict } from './postureTimeline'
+import { usePostureEvents } from './usePostureEvents'
+import { useNow } from './microseg/useNow'
 import { coverage as microsegCoverage } from './microseg/coverage'
 import type { MicrosegSubTab } from './microseg/microsegTabTypes'
 import { clusterFirewallOff, lastCheckAt, unzonedRunning } from './microseg/summaryModel'
@@ -97,6 +101,7 @@ function usePostureFigures(policy: MicrosegPolicy | undefined, suggestions: Micr
     const addresses = listed !== null
     const guests = postureGuests(rows, listed)
     return {
+      guests,
       traffic: postureTraffic({ groupBy, zones, tagPrefix, suggestions: seen, guests, addresses }),
       distribution: postureDistribution({ zones, tagPrefix, flows, suggestions: seen, guests, addresses }),
       services: topServices(seen, flows),
@@ -104,12 +109,22 @@ function usePostureFigures(policy: MicrosegPolicy | undefined, suggestions: Micr
   }, [policy, suggestions, rows, listed, groupBy])
 }
 
+/** The time chart, on the groups of the donut. A minute clock: the last bucket follows the time. */
+function useTimelineFigures(
+  events: MicrosegEvent[] | undefined, policy: MicrosegPolicy | undefined, posture: ReturnType<typeof usePostureFigures>, groupBy: GroupBy, verdict: TimelineVerdict, addresses: boolean,
+) {
+  const now = useNow(60_000, events)
+  return useMemo(() => postureTimeline({
+    events: events ?? [], groupBy, verdict, zones: policy?.zones ?? [], guests: posture.guests, addresses, slices: posture.traffic.slices, now,
+  }), [events, groupBy, verdict, policy, posture, addresses, now])
+}
+
 /**
  * The "Posture" Dashboard of /automation/network (UA50): the header chips (cluster firewall and inbound policy, or the
  * emergency stop; zones enforced; running guests protected; last check), the observed traffic per zone (donut and
  * chords), its distribution and top services, then the "To do" list. Its reads: the firewall data the page loads, the
  * coverage route (computed and cached on the server), the micro-segmentation status, policy, drifts and pending flows
- * (orchestrator memory). The guest list (the inventory route, one guest config per guest on Proxmox) is read only once
+ * (orchestrator memory), the events ring for the time chart (orchestrator memory, every minute). The guest list (the inventory route, one guest config per guest on Proxmox) is read only once
  * a grouping by VLAN or node asks for it, shared with the zone map.
  */
 export default function DashboardTab({
@@ -122,6 +137,7 @@ export default function DashboardTab({
   const [groupBy, setGroupBy] = useState<GroupBy>('zone')
   // Once a grouping by VLAN or node asked for the guests, they stay (a zone grouping then tells the unzoned apart).
   const [guestsWanted, setGuestsWanted] = useState(false)
+  const [verdict, setVerdict] = useState<TimelineVerdict>('all')
   const connection = selectedConnection || null
 
   // Read once when the tab shows (this component mounts with it), computed and cached on the server (UA44).
@@ -132,6 +148,7 @@ export default function DashboardTab({
   const drifts = useMicrosegDrifts(connection)
   const pending = useMicrosegSuggestions(connection, PENDING_OBSERVED)
   const zoneGuests = useZoneGuests(guestsWanted ? connection : null)
+  const ring = usePostureEvents(connection)
 
   // Node options carry no policy: a host follows the cluster's, and an unset policy is PVE's default, not ACCEPT (#1065).
   const policyIn = clusterOptions?.policy_in || PVE_DEFAULT_POLICY_IN
@@ -156,6 +173,8 @@ export default function DashboardTab({
   // A grouping by VLAN or node waits for the guests it is made of.
   const trafficPhase = listsPhase === 'ready' && groupBy !== 'zone' && zoneGuests.status === 'loading' ? 'loading' : listsPhase
   const posture = usePostureFigures(policy, pending.data, coverage?.guests, addresses ? zoneGuests.guests : null, groupBy)
+  const timeline = useTimelineFigures(ring.events, policy, posture, groupBy, verdict, addresses)
+  const timelinePhase = microsegPhase([microsegPolicy, { data: ring.events, error: ring.error }])
 
   const items = todoItems({
     firewallOn,
@@ -239,6 +258,7 @@ export default function DashboardTab({
             onGroupBy={changeGroupBy}
             truncated={(pending.data?.length ?? 0) >= POSTURE_SUGGESTIONS_LIMIT}
             addresses={addresses}
+            footer={<TrafficTimeline phase={timelinePhase} timeline={timeline} verdict={verdict} onVerdict={setVerdict} />}
           />
         </Box>
         <Box sx={{ gridColumn: { xs: 'span 12', lg: 'span 5' }, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2.5 }}>

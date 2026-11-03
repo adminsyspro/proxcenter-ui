@@ -3,8 +3,6 @@
 import { Box, Chip, Skeleton, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography, alpha, darken, lighten, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
-import { serviceTokenLabel, serviceTokenTitle } from '@/lib/network/serviceNames'
-
 import PostureCard from './PostureCard'
 import type { BlockPhase } from './dashboardModel'
 import type { PostureDistribution, ServiceRow, ServiceStatus, Share } from './dashboardPosture'
@@ -102,8 +100,8 @@ export function TopServices({ phase, rows }: { phase: BlockPhase; rows: ServiceR
               return (
                 <TableRow key={row.key} data-testid={`service-${row.key}`}>
                   <TableCell sx={{ maxWidth: 200 }}>
-                    <Tooltip title={serviceTokenTitle(row.token)}>
-                      <Typography variant='body2' noWrap sx={{ fontWeight: 600 }}>{serviceTokenLabel(row.token)}</Typography>
+                    <Tooltip title={row.tokens.join(', ')}>
+                      <Typography variant='body2' noWrap sx={{ fontWeight: 600 }}>{row.label}</Typography>
                     </Tooltip>
                   </TableCell>
                   <TableCell align='right'>{format.number(row.flows)}</TableCell>

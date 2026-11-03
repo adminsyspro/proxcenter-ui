@@ -9080,7 +9080,15 @@
       "postureRefresh": "Recalculer la couverture",
       "postureRefreshAgo": "Calculée {time} · recalculer",
       "postureRefreshSoon": "Calculée {time} · chiffres de moins de 30 secondes",
-      "postureRefreshComputing": "Calcul de la couverture en cours"
+      "postureRefreshComputing": "Calcul de la couverture en cours",
+      "postureTimelineTitle": "Trafic observé dans le temps",
+      "postureTimelineWindow": "fenêtre couverte : {minutes, number} dernières min (mémoire de l'orchestrateur)",
+      "postureTimelineVerdict": "Verdict du pare-feu",
+      "postureTimelineAll": "Tous",
+      "postureTimelineLabel": "Événements observés par tranche de 5 minutes, empilés par groupe",
+      "postureTimelineEvents": "{count, plural, one {# événement} other {# événements}}",
+      "postureTimelineUnavailable": "Événements observés indisponibles",
+      "postureTimelineEmpty": "Aucun événement observé dans la mémoire de l'orchestrateur"
     },
     "rulesOnDemand": {
       "chip": "Règles à l'ouverture",

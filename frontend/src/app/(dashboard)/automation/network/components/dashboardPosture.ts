@@ -1,6 +1,7 @@
 import type { FirewallCoverage } from '@/hooks/useZeroTrust'
 import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, UNZONED_KEY, zoneKey } from '@/lib/microseg/trafficLens'
 import type { MicrosegFlow, MicrosegStatus, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
+import { serviceTokenLabel } from '@/lib/network/serviceNames'
 
 import { flowService } from './microseg/FlowSummary'
 import { objectColour } from './microseg/objectColour'
@@ -294,34 +295,37 @@ export function postureDistribution(input: {
 
 export type ServiceStatus = 'allowed' | 'not_covered' | 'blocked'
 
-/** One row of the top services: a protocol/port token ("tcp/5432", "tcp/22,80", "icmp"), its flows and hits. */
-export type ServiceRow = { key: string; token: string; flows: number; hits: number | null; status: ServiceStatus }
+/**
+ * One row of the top services: a service by its name ("SSH", or the raw "tcp/9999" for a port without one) and status,
+ * the protocol/port tokens it was seen or allowed on ("tcp/22", "udp/22"), its flows and hits.
+ */
+export type ServiceRow = { key: string; label: string; tokens: string[]; flows: number; hits: number | null; status: ServiceStatus }
 
 const tokenOf = (proto: string, dport: string) => flowService({ proto: proto.toLowerCase(), dport })
 
+/** Adds one flow of `token` to the row of its service name and status. */
+function addTo(rows: Map<string, ServiceRow>, status: ServiceStatus, token: string, hits: number | null) {
+  const label = serviceTokenLabel(token)
+  const key = `${status}|${label}`
+  const row = rows.get(key) ?? { key, label, tokens: [], flows: 0, hits: hits === null ? null : 0, status }
+  if (!row.tokens.includes(token)) row.tokens.push(token)
+  row.flows += 1
+  if (hits !== null) row.hits = (row.hits ?? 0) + hits
+  rows.set(key, row)
+}
+
 /**
- * The services by hits: the pending observed flows per service and status (not covered while observing, blocked
- * while enforcing), the busiest first, then the services the policy allows (its flows, which carry no counter).
+ * The services by hits, one row per service name and status: the pending observed flows (not covered while observing,
+ * blocked while enforcing), the busiest first, then the services the policy allows (its flows, which carry no counter).
+ * The tokens of one name ("tcp/22" and "udp/22" are both SSH) sum their flows and hits; the row keeps them for its
+ * tooltip.
  */
 export function topServices(suggestions: readonly MicrosegSuggestion[], flows: readonly MicrosegFlow[], max = MAX_SERVICES): ServiceRow[] {
   const observed = new Map<string, ServiceRow>()
-  for (const s of suggestions) {
-    const status: ServiceStatus = s.kind === 'blocked' ? 'blocked' : 'not_covered'
-    const token = tokenOf(s.proto, s.dport)
-    const key = `${status}|${token}`
-    const row = observed.get(key) ?? { key, token, flows: 0, hits: 0, status }
-    row.flows += 1
-    row.hits = (row.hits ?? 0) + s.hits
-    observed.set(key, row)
-  }
+  for (const s of suggestions) addTo(observed, s.kind === 'blocked' ? 'blocked' : 'not_covered', tokenOf(s.proto, s.dport), s.hits)
   const allowed = new Map<string, ServiceRow>()
-  for (const f of flows) {
-    const token = tokenOf(f.proto, f.dport)
-    const key = `allowed|${token}`
-    const row = allowed.get(key) ?? { key, token, flows: 0, hits: null, status: 'allowed' }
-    row.flows += 1
-    allowed.set(key, row)
-  }
+  for (const f of flows) addTo(allowed, 'allowed', tokenOf(f.proto, f.dport), null)
+  for (const row of [...observed.values(), ...allowed.values()]) row.tokens.sort(byText)
   const busiest = [...observed.values()].sort((a, b) => (b.hits ?? 0) - (a.hits ?? 0) || byText(a.key, b.key))
   const allowedRows = [...allowed.values()].sort((a, b) => b.flows - a.flows || byText(a.key, b.key))
   return [...busiest, ...allowedRows].slice(0, max)

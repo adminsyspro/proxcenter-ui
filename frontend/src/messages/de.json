@@ -9027,7 +9027,15 @@
       "postureRefresh": "Abdeckung neu berechnen",
       "postureRefreshAgo": "Berechnet {time} · neu berechnen",
       "postureRefreshSoon": "Berechnet {time} · Zahlen jünger als 30 Sekunden",
-      "postureRefreshComputing": "Abdeckung wird berechnet"
+      "postureRefreshComputing": "Abdeckung wird berechnet",
+      "postureTimelineTitle": "Beobachteter Verkehr im Zeitverlauf",
+      "postureTimelineWindow": "abgedecktes Fenster: letzte {minutes, number} Min. (Speicher des Orchestrators)",
+      "postureTimelineVerdict": "Urteil",
+      "postureTimelineAll": "Alle",
+      "postureTimelineLabel": "Beobachtete Ereignisse pro 5 Minuten, nach Gruppe gestapelt",
+      "postureTimelineEvents": "{count, plural, one {# Ereignis} other {# Ereignisse}}",
+      "postureTimelineUnavailable": "Beobachtete Ereignisse nicht verfügbar",
+      "postureTimelineEmpty": "Kein beobachtetes Ereignis im Speicher des Orchestrators"
     },
     "rulesOnDemand": {
       "chip": "Regeln beim Öffnen",

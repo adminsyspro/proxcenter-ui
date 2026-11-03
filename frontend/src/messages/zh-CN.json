@@ -9080,7 +9080,15 @@
       "postureRefresh": "重新计算覆盖率",
       "postureRefreshAgo": "{time}计算 · 重新计算",
       "postureRefreshSoon": "{time}计算 · 数据不足 30 秒",
-      "postureRefreshComputing": "正在计算覆盖率"
+      "postureRefreshComputing": "正在计算覆盖率",
+      "postureTimelineTitle": "观察流量随时间变化",
+      "postureTimelineWindow": "覆盖窗口：最近 {minutes, number} 分钟（编排器内存）",
+      "postureTimelineVerdict": "判定",
+      "postureTimelineAll": "全部",
+      "postureTimelineLabel": "每 5 分钟观察到的事件，按组堆叠",
+      "postureTimelineEvents": "{count, plural, other {# 个事件}}",
+      "postureTimelineUnavailable": "观察到的事件不可用",
+      "postureTimelineEmpty": "编排器内存中没有观察到的事件"
     },
     "rulesOnDemand": {
       "chip": "打开时加载规则",

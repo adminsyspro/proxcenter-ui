@@ -21,6 +21,8 @@ type Props = {
   truncated: boolean
   /** The guest addresses are in: the sources in no zone are told apart (Unzoned) from the unknown ones. */
   addresses: boolean
+  /** Shown under the donut (the time chart). */
+  footer?: React.ReactNode
 }
 
 const R = 118
@@ -33,9 +35,10 @@ const GAP = 0.012
 const TITLE: Record<GroupBy, string> = { zone: 'postureTrafficByZone', vlan: 'postureTrafficByVlan', node: 'postureTrafficByNode' }
 const GROUP_LABEL: Record<GroupBy, string> = { zone: 'postureGroupZone', vlan: 'postureGroupVlan', node: 'postureGroupNode' }
 
-function useSliceName() {
+/** The name of a group of the donut (and of a series of the time chart) in the words of the page. */
+export function useSliceName() {
   const t = useTranslations('networkPage.dashboard')
-  return (slice: PostureSlice): string => {
+  return (slice: Pick<PostureSlice, 'kind' | 'name'>): string => {
     switch (slice.kind) {
       case 'unzoned': return t('postureUnzoned')
       case 'external': return t('postureUnknownExternal')
@@ -149,7 +152,7 @@ function TrafficSkeleton() {
  * "Traffic by zone" of the Posture Dashboard: a donut of the hits of the pending observed flows per source zone (or
  * per VLAN / node of the destination guest), chords between the groups that exchange traffic, and its legend.
  */
-export default function TrafficByZone({ phase, traffic, groupBy, onGroupBy, truncated, addresses }: Props) {
+export default function TrafficByZone({ phase, traffic, groupBy, onGroupBy, truncated, addresses, footer }: Props) {
   const t = useTranslations('networkPage.dashboard')
   const [active, setActive] = useState<string | null>(null)
   const nameOf = useSliceName()
@@ -195,6 +198,7 @@ export default function TrafficByZone({ phase, traffic, groupBy, onGroupBy, trun
   return (
     <PostureCard testId='traffic-card' title={t(TITLE[groupBy])} caption={caption} action={select}>
       {body}
+      {footer && <Box sx={{ mt: 1, pt: 2, borderTop: 1, borderColor: 'divider' }}>{footer}</Box>}
     </PostureCard>
   )
 }

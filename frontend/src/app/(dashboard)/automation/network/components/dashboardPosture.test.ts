@@ -182,20 +182,31 @@ describe('topServices', () => {
   it('sums the observed flows per service and status, busiest first, then the services the policy allows', () => {
     const rows = topServices(FLOWS_SEEN, [flow({}), flow({ dport: '9100' }), flow({ dport: '9100', src_zone_id: 'zapp' }), flow({ proto: 'ICMP', dport: '' })])
     expect(rows).toEqual([
-      { key: 'not_covered|tcp/5432', token: 'tcp/5432', flows: 1, hits: 300, status: 'not_covered' },
-      { key: 'blocked|tcp/5432', token: 'tcp/5432', flows: 1, hits: 100, status: 'blocked' },
-      { key: 'not_covered|tcp/22', token: 'tcp/22', flows: 2, hits: 100, status: 'not_covered' },
-      { key: 'allowed|tcp/9100', token: 'tcp/9100', flows: 2, hits: null, status: 'allowed' },
-      { key: 'allowed|icmp', token: 'icmp', flows: 1, hits: null, status: 'allowed' },
-      { key: 'allowed|tcp/5432', token: 'tcp/5432', flows: 1, hits: null, status: 'allowed' },
+      { key: 'not_covered|PostgreSQL', label: 'PostgreSQL', tokens: ['tcp/5432'], flows: 1, hits: 300, status: 'not_covered' },
+      { key: 'blocked|PostgreSQL', label: 'PostgreSQL', tokens: ['tcp/5432'], flows: 1, hits: 100, status: 'blocked' },
+      { key: 'not_covered|SSH', label: 'SSH', tokens: ['tcp/22'], flows: 2, hits: 100, status: 'not_covered' },
+      { key: 'allowed|node-exporter', label: 'node-exporter', tokens: ['tcp/9100'], flows: 2, hits: null, status: 'allowed' },
+      { key: 'allowed|PostgreSQL', label: 'PostgreSQL', tokens: ['tcp/5432'], flows: 1, hits: null, status: 'allowed' },
+      { key: 'allowed|icmp', label: 'icmp', tokens: ['icmp'], flows: 1, hits: null, status: 'allowed' },
+    ])
+  })
+
+  it('merges the ports of one service name and status, summing flows and hits, the raw tokens kept', () => {
+    const rows = topServices([
+      seen({ dport: '8080', hits: 5 }), seen({ dport: '8081', hits: 7 }), seen({ proto: 'TCP', dport: '8080', hits: 1 }),
+      seen({ dport: '22', hits: 2 }), seen({ proto: 'udp', dport: '22', hits: 3 }), seen({ dport: '22', hits: 4, src_ip: '10.9.9.9' }),
+    ], [])
+    expect(rows).toEqual([
+      { key: 'not_covered|HTTP-alt', label: 'HTTP-alt', tokens: ['tcp/8080', 'tcp/8081'], flows: 3, hits: 13, status: 'not_covered' },
+      { key: 'not_covered|SSH', label: 'SSH', tokens: ['tcp/22', 'udp/22'], flows: 3, hits: 9, status: 'not_covered' },
     ])
   })
 
   it('keeps the top 8', () => {
-    const many = Array.from({ length: 12 }, (_, i) => seen({ dport: String(1000 + i), hits: i }))
+    const many = Array.from({ length: 12 }, (_, i) => seen({ dport: String(40000 + i), hits: i }))
     const rows = topServices(many, [])
     expect(rows).toHaveLength(8)
-    expect(rows[0]).toMatchObject({ token: 'tcp/1011', hits: 11 })
+    expect(rows[0]).toMatchObject({ label: 'tcp/40011', hits: 11 })
   })
 })
 

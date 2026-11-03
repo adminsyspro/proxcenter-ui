@@ -9080,7 +9080,15 @@
       "postureRefresh": "Compute the coverage again",
       "postureRefreshAgo": "Computed {time} · compute again",
       "postureRefreshSoon": "Computed {time} · new figures less than 30 seconds ago",
-      "postureRefreshComputing": "Computing the coverage"
+      "postureRefreshComputing": "Computing the coverage",
+      "postureTimelineTitle": "Observed traffic over time",
+      "postureTimelineWindow": "covered window: last {minutes, number} min (orchestrator memory)",
+      "postureTimelineVerdict": "Verdict",
+      "postureTimelineAll": "All",
+      "postureTimelineLabel": "Observed events per 5 minutes, stacked per group",
+      "postureTimelineEvents": "{count, plural, one {# event} other {# events}}",
+      "postureTimelineUnavailable": "Observed events not available",
+      "postureTimelineEmpty": "No observed event in the orchestrator memory"
     },
     "rulesOnDemand": {
       "chip": "Rules on open",

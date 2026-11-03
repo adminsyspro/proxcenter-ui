@@ -112,7 +112,7 @@ describe('Firewalling: sections and badges', () => {
     renderView()
     fireEvent.click(within(screen.getByTestId('dfw-section-zone:pcz-db')).getByRole('button', { name: /Expand/ }))
     const appRule = ruleRow('[pc-microseg] app -> db')
-    expect(within(appRule).getAllByRole('checkbox')[0]).toBeDisabled()
+    expect(within(appRule).queryByRole('checkbox')).toBeNull()
     expect(within(appRule).queryByRole('combobox')).toBeNull()
     expect(within(appRule).getByTestId('dfw-hits')).toHaveTextContent('-')
     expect(within(ruleRow('[pc-microseg] db -> db')).getByTestId('dfw-hits')).toHaveTextContent('-')
@@ -373,6 +373,62 @@ describe('Firewalling: the engine block of a guest and the way out of a conflict
     answer(new Response(JSON.stringify({ applied: 1, total: 1, scopes: {} }), { status: 200 }))
     await waitFor(() => expect(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' })).toBeEnabled())
     fetchSpy.mockRestore()
+  })
+})
+
+describe('Firewalling: checkboxes (bench report: "the boxes cannot be checked")', () => {
+  const ZONED = guest(104, {
+    name: 'zoned', rulesLoaded: true, vlans: [],
+    rules: [
+      { pos: 0, type: 'group', action: 'pcz-db', enable: 1, comment: '[pc-microseg]', digest: 'G' },
+      { pos: 1, type: 'in', action: 'ACCEPT', enable: 1, comment: 'u1', digest: 'G' },
+      { pos: 2, type: 'in', action: 'ACCEPT', enable: 1, comment: 'u2', digest: 'G' },
+      { pos: 3, type: 'in', action: 'ACCEPT', enable: 1, log: 'info', comment: '[pc-microseg] observe', digest: 'G' },
+    ],
+  })
+  const bar = () => screen.getByTestId('dfw-actions')
+
+  it('shows no checkbox on an engine row nor on a zone group header', () => {
+    renderView()
+    const zone = screen.getByTestId('dfw-section-zone:pcz-db')
+    expect(within(zone).queryByRole('checkbox')).toBeNull()
+    fireEvent.click(within(zone).getByRole('button', { name: /Expand/ }))
+    for (const name of ['[pc-microseg] app -> db', '[pc-microseg] db -> db']) expect(within(ruleRow(name)).queryByRole('checkbox')).toBeNull()
+  })
+
+  it('disables a section header checkbox while the section holds no selectable rule', () => {
+    renderView(props({ clusterRules: [] }), true, true)
+    expect(within(screen.getByTestId('dfw-section-cluster')).getByRole('checkbox')).toBeDisabled()
+    // A host whose rules were never read: nothing to select either.
+    expect(within(screen.getByTestId('dfw-section-host:pve1')).getByRole('checkbox')).toBeDisabled()
+    expect(screen.getAllByRole('checkbox', { name: 'Select every rule shown' })[0]).toBeDisabled()
+  })
+
+  it('a section header checks only the selectable rules of a guest, collapsed or not; the head checkbox likewise', () => {
+    renderView(props({ guests: [ZONED], clusterRules: [] }), true, true)
+    fireEvent.click(within(screen.getByTestId('dfw-group-__untagged__')).getByRole('button', { name: /Expand/ }))
+    const header = within(screen.getByTestId('dfw-section-guest:qemu/104')).getByRole('checkbox')
+    expect(header).toBeEnabled()
+    fireEvent.click(header)
+    expect(bar()).toHaveTextContent('2 rules selected')
+    fireEvent.click(within(screen.getByTestId('dfw-section-guest:qemu/104')).getByRole('button', { name: /Expand/ }))
+    expect(within(ruleRow('u1')).getByRole('checkbox')).toBeChecked()
+    expect(within(ruleRow('[pc-microseg]')).queryByRole('checkbox')).toBeNull()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select every rule shown' }))
+    expect(bar()).toHaveTextContent('No rule selected')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select every rule shown' }))
+    expect(bar()).toHaveTextContent('2 rules selected')
+  })
+
+  it("a user rule's checkbox toggles and lights the bulk actions", () => {
+    renderView()
+    const box = within(ruleRow('Admin SSH')).getByRole('checkbox', { name: 'Select rule 1' })
+    fireEvent.click(box)
+    expect(box).toBeChecked()
+    for (const name of ['Enable', 'Disable', 'Clone', 'Move to section', 'Delete']) expect(within(bar()).getByRole('button', { name })).toBeEnabled()
+    fireEvent.click(box)
+    expect(box).not.toBeChecked()
+    expect(within(bar()).getByRole('button', { name: 'Enable' })).toBeDisabled()
   })
 })
 

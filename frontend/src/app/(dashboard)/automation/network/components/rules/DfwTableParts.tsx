@@ -23,6 +23,9 @@ export const DFW_COLUMNS = 12
 const CELL = { fontSize: 13, py: 0.5, px: 0.75, whiteSpace: 'nowrap' } as const
 const HEAD = { ...CELL, fontWeight: 700, color: 'text.secondary' } as const
 
+/** A disabled checkbox reads as one: the theme draws it like an enabled empty box otherwise. */
+const CHECK_SX = { '&.Mui-disabled': { opacity: 0.35 } } as const
+
 export const ACTION_COLOURS: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
 
 const Dot = ({ colour }: { colour: string }) => (
@@ -37,7 +40,7 @@ export function DfwHead({ allChecked, someChecked, onCheckAll, canCheck }: { all
       <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.6) }}>
         <TableCell sx={{ ...HEAD, width: 28 }} />
         <TableCell sx={{ ...HEAD, width: 36 }} padding='checkbox'>
-          <Checkbox size='small' checked={allChecked} indeterminate={someChecked && !allChecked} disabled={!canCheck}
+          <Checkbox size='small' sx={CHECK_SX} checked={allChecked} indeterminate={someChecked && !allChecked} disabled={!canCheck}
             onChange={e => onCheckAll(e.target.checked)} inputProps={{ 'aria-label': t('microsegPilot.dfw.selectAll') }} />
         </TableCell>
         <TableCell sx={{ ...HEAD, width: 34 }}>#</TableCell>
@@ -208,8 +211,11 @@ export function RuleRow(props: RuleRowProps) {
         {!managed && <i className='ri-draggable' aria-hidden style={{ fontSize: 14 }} />}
       </TableCell>
       <TableCell padding='checkbox' sx={{ width: 36 }}>
-        <Checkbox size='small' checked={selected} disabled={managed} onChange={e => onSelect(e.target.checked)}
-          inputProps={{ 'aria-label': managed ? t('managedRule') : t('selectRule', { pos: index }) }} />
+        {/* A rule of the engine is never selected: no checkbox at all, like the zone's default deny row. */}
+        {!managed && (
+          <Checkbox size='small' sx={CHECK_SX} checked={selected} onChange={e => onSelect(e.target.checked)}
+            inputProps={{ 'aria-label': t('selectRule', { pos: index }) }} />
+        )}
       </TableCell>
       <TableCell sx={{ ...CELL, width: 34, color: 'text.secondary' }}>{index}</TableCell>
       <TableCell sx={{ ...CELL, width: 56 }}>
@@ -261,7 +267,7 @@ export function SectionRow({ title, icon, open, onToggle, badges, right, check, 
       <TableCell sx={{ ...CELL, width: 28 }} />
       <TableCell padding='checkbox' sx={{ width: 36 }}>
         {check && (
-          <Checkbox size='small' checked={check.checked} indeterminate={check.indeterminate} disabled={check.disabled}
+          <Checkbox size='small' sx={CHECK_SX} checked={check.checked} indeterminate={check.indeterminate} disabled={check.disabled}
             onChange={e => check.onChange(e.target.checked)} inputProps={{ 'aria-label': t('selectSection', { name: title }) }} />
         )}
       </TableCell>

@@ -604,10 +604,14 @@ export default function FirewallingView(p: FirewallingViewProps) {
     )
   }
 
+  /** The rules of a section the user may check: none in a zone group, never the engine's rules of a guest. */
+  const selectableIds = (s: Section) => (s.managed ? [] : visibleEntries(s).filter(({ e }) => !isEngineComment(e.rule.comment)).map(({ e }) => e.id))
+  /** No checkbox on a zone group (nothing in it is ever selected); disabled while the section holds no selectable rule. */
   const sectionCheck = (s: Section) => {
-    const ids = s.entries.filter(e => !isEngineComment(e.rule.comment)).map(e => e.id)
+    if (s.managed) return undefined
+    const ids = selectableIds(s)
     const on = ids.filter(id => selected.has(selKey(s.key, id))).length
-    return { checked: ids.length > 0 && on === ids.length, indeterminate: on > 0 && on < ids.length, disabled: s.managed || ids.length === 0 || !open.has(s.key), onChange: (c: boolean) => toggleSel(s.key, ids, c) }
+    return { checked: ids.length > 0 && on === ids.length, indeterminate: on > 0 && on < ids.length, disabled: !canEdit || ids.length === 0, onChange: (c: boolean) => toggleSel(s.key, ids, c) }
   }
 
   const sectionMenu = (s: Section) => (s.scope ? (
@@ -681,9 +685,9 @@ export default function FirewallingView(p: FirewallingViewProps) {
   const shownFixed = inScope.filter(sectionShown)
 
   // The head checkbox checks every rule shown in an open section that can be changed.
-  const openGuests = guestsShown ? p.guests.filter(vm => open.has(scopeKey(guestScope(vm)))).map(guestSection) : []
-  const openSections = [...shownFixed, ...openGuests].filter(s => open.has(s.key) && !s.managed)
-  const visibleSelectable = openSections.flatMap(s => visibleEntries(s).filter(({ e }) => !isEngineComment(e.rule.comment)).map(({ e }) => selKey(s.key, e.id)))
+  // The head checkbox checks every selectable rule of the sections shown (collapsed or not) whose rules are known.
+  const guestSections = guestsShown ? shownGuests.map(guestSection).filter(hasRules) : []
+  const visibleSelectable = [...shownFixed, ...guestSections].flatMap(s => selectableIds(s).map(id => selKey(s.key, id)))
   const allVisibleChecked = visibleSelectable.length > 0 && visibleSelectable.every(k => selected.has(k))
   const oneSection = selection.size === 1
   const firstSelected = [...selection.keys()][0]

@@ -35,6 +35,22 @@ interface Props {
 /** Debounce of the search text before it is sent as `q`. */
 export const SEARCH_DEBOUNCE_MS = 400
 
+/** Longest search text: the ring is searched by IP or port, nothing longer is useful. */
+export const SEARCH_MAX_LENGTH = 64
+
+/** What the server can search in its ring: an IPv4/IPv6 address (or part of one) or a port. */
+const SERVER_SEARCHABLE = /^[\d.:]+$|^[0-9a-f]*:[0-9a-f:]*$/i
+
+/**
+ * The `q` sent to the relay: the text when it looks like an IP or a port, else nothing. A guest, zone, node or service
+ * name is matched here, on the lines already read, never sent as a server filter it does not know.
+ */
+export function serverQuery(text: string): string {
+  const q = text.trim()
+
+  return SERVER_SEARCHABLE.test(q) ? q : ''
+}
+
 // Same semantics as the zone map's edges and the observation list: blue for a flow an enforced zone blocked, red for
 // one that would be blocked once its zone enforces.
 const VERDICTS: Record<SuggestionKind, { icon: string; color: 'error' | 'info'; label: string; tip: string }> = {
@@ -75,7 +91,7 @@ export default function MicrosegEventsView({ connectionId, zones, guests }: Prop
   const [rowsPerPage, setRowsPerPage] = useState(50)
 
   useEffect(() => {
-    const timer = setTimeout(() => setSentSearch(search.trim()), SEARCH_DEBOUNCE_MS)
+    const timer = setTimeout(() => setSentSearch(serverQuery(search)), SEARCH_DEBOUNCE_MS)
 
     return () => clearTimeout(timer)
   }, [search])
@@ -125,7 +141,7 @@ export default function MicrosegEventsView({ connectionId, zones, guests }: Prop
           onChange={e => { setSearch(e.target.value); setPage(0) }}
           sx={{ flex: '1 1 220px', minWidth: 200 }}
           slotProps={{
-            htmlInput: { 'aria-label': t('searchPlaceholder') },
+            htmlInput: { 'aria-label': t('searchPlaceholder'), maxLength: SEARCH_MAX_LENGTH },
             input: {
               startAdornment: (
                 <InputAdornment position='start'>

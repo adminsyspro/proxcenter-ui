@@ -11,7 +11,7 @@ import { SWRConfig } from 'swr'
 import { fireEvent, renderWithProviders, screen, waitFor } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegEvent, MicrosegEventList, MicrosegZone } from '@/lib/microseg/types'
 
-import MicrosegEventsView, { SEARCH_DEBOUNCE_MS } from './MicrosegEventsView'
+import MicrosegEventsView, { SEARCH_DEBOUNCE_MS, SEARCH_MAX_LENGTH, serverQuery } from './MicrosegEventsView'
 
 const ZONES = [
   { id: 'z1', name: 'web', color: '#22c55e' },
@@ -161,6 +161,19 @@ describe('MicrosegEventsView', () => {
     expect(screen.getByText('No entry matches the filters.')).toBeInTheDocument()
   })
 
+  it('sends a guest, zone or service name to no server filter: it is matched on the lines read', async () => {
+    renderView()
+    await screen.findByText('web-01')
+    const box = screen.getByPlaceholderText('Search an IP, a port, a guest, a zone…')
+
+    fireEvent.change(box, { target: { value: 'web-01' } })
+    expect(screen.getAllByText('10.0.0.5').length).toBeGreaterThan(0)
+    await new Promise(resolve => setTimeout(resolve, SEARCH_DEBOUNCE_MS * 2))
+
+    expect(urls().some(u => u.searchParams.has('q'))).toBe(false)
+    expect(box.getAttribute('maxlength')).toBe(String(SEARCH_MAX_LENGTH))
+  })
+
   it('pages the older events by the seq of the last one, and keeps the newest on screen', async () => {
     const newest = Array.from({ length: 200 }, (_, i) => event({ seq: 1000 - i, ts: new Date(Date.UTC(2026, 10, 3, 10, 0, 0) - i * 1000).toISOString(), src_ip: `10.1.${Math.floor(i / 250)}.${i % 250}` }))
     const older = [event({ seq: 800, ts: '2026-11-03T08:00:00.000Z', src_ip: '172.16.0.1' })]
@@ -245,5 +258,17 @@ describe('MicrosegEventsView', () => {
     view.unmount()
     await act(async () => { await vi.advanceTimersByTimeAsync(180_000) })
     expect(urls()).toHaveLength(1)
+  })
+})
+
+describe('serverQuery', () => {
+  it('keeps an IPv4, an IPv6 or a port, and nothing else', () => {
+    expect(serverQuery(' 192.168.1 ')).toBe('192.168.1')
+    expect(serverQuery('443')).toBe('443')
+    expect(serverQuery('fe80::1')).toBe('fe80::1')
+    expect(serverQuery('2001:db8:')).toBe('2001:db8:')
+    expect(serverQuery('web-01')).toBe('')
+    expect(serverQuery('ssh')).toBe('')
+    expect(serverQuery('dead')).toBe('')
   })
 })

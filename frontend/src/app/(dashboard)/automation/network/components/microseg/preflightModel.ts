@@ -25,6 +25,7 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
 
   switch (check.id) {
     case 'cluster_firewall':
+      if (heldByStop(check)) return { key: 'checks.cluster_firewall.heldByStop' }
       return { key: check.status === 'pass' ? 'checks.cluster_firewall.pass' : 'checks.cluster_firewall.off' }
     case 'socle_rules':
       if (check.status === 'pass') return { key: detail.node_firewalls === 'off' ? 'checks.socle_rules.nodesOff' : 'checks.socle_rules.pass' }
@@ -58,7 +59,13 @@ export function preflightMessage(check: PreflightCheck): PreflightMessage {
   return { title: KNOWN_IDS.has(check.id) ? check.id : null, detail: detailOf(check) }
 }
 
+/** The cluster firewall is off because the emergency stop switched it off: lifting the stop is the fix, not the wizard. */
+export function heldByStop(check: PreflightCheck): boolean {
+  return check.id === 'cluster_firewall' && check.status !== 'pass'
+    && (check.detail?.reason === 'emergency_stop' || check.detail?.held_by_stop === true)
+}
+
 /** Both fixes the orchestrator names are done by the deployment wizard (it enables the cluster firewall last). */
 export function opensWizard(check: PreflightCheck): boolean {
-  return check.status !== 'pass' && (check.fix === 'socle' || check.fix === 'enable_cluster_firewall')
+  return check.status !== 'pass' && !heldByStop(check) && (check.fix === 'socle' || check.fix === 'enable_cluster_firewall')
 }

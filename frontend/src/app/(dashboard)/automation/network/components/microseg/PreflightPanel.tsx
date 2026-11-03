@@ -8,7 +8,7 @@ import { MicrosegApiError, microsegApi, microsegErrorKeyOf } from '@/lib/microse
 import type { PreflightCheck, PreflightStatus } from '@/lib/microseg/types'
 
 import { ONE_LINE_SX } from './dialogParts'
-import { opensWizard, parseRate, preflightMessage } from './preflightModel'
+import { heldByStop, opensWizard, parseRate, preflightMessage } from './preflightModel'
 
 const STATUS_ICON: Record<PreflightStatus, { icon: string; color: string }> = {
   pass: { icon: 'ri-checkbox-circle-fill', color: 'success.main' },
@@ -16,8 +16,9 @@ const STATUS_ICON: Record<PreflightStatus, { icon: string; color: string }> = {
   fail: { icon: 'ri-close-circle-fill', color: 'error.main' },
 }
 
-function CheckRow({ check, onOpenWizard }: { check: PreflightCheck; onOpenWizard?: () => void }) {
+function CheckRow({ check, onOpenWizard, onResume }: { check: PreflightCheck; onOpenWizard?: () => void; onResume?: () => void }) {
   const t = useTranslations('microsegPilot.preflight')
+  const tStop = useTranslations('microsegPilot.stop')
   const { title, detail } = preflightMessage(check)
   const name = title ? t(`checks.${title}.title`) : check.id
   // The rate PVE writes ("20/second") is said with a translated unit; any other wording is shown as PVE wrote it.
@@ -31,6 +32,9 @@ function CheckRow({ check, onOpenWizard }: { check: PreflightCheck; onOpenWizard
       <Box component='i' className={icon.icon} sx={{ color: icon.color, fontSize: 20, flexShrink: 0 }} />
       <Tooltip title={name}><Typography noWrap fontWeight={600} sx={{ flex: '0 0 auto', width: 170 }}>{name}</Typography></Tooltip>
       <Tooltip title={message}><Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{message}</Typography></Tooltip>
+      {onResume && heldByStop(check) && (
+        <Button size='small' variant='outlined' color='error' onClick={onResume} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{tStop('resume')}</Button>
+      )}
       {onOpenWizard && opensWizard(check) && (
         <Button size='small' variant='outlined' onClick={onOpenWizard} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{t('openWizard')}</Button>
       )}
@@ -46,10 +50,12 @@ type Props = {
   refreshKey?: number
   /** Opens the deployment wizard (the fix of the socle and cluster firewall checks); absent: no fix button. */
   onOpenWizard?: () => void
+  /** Opens the resume dialog (the fix of a cluster firewall the emergency stop holds off); absent: no button. */
+  onResume?: () => void
 }
 
 /** The pre-flight checks of a connection, one line each. The cluster is read on every opening: nothing is cached. */
-export default function PreflightPanel({ open, connectionId, onClose, refreshKey = 0, onOpenWizard }: Props) {
+export default function PreflightPanel({ open, connectionId, onClose, refreshKey = 0, onOpenWizard, onResume }: Props) {
   const t = useTranslations('microsegPilot.preflight')
   const tAll = useTranslations()
   const [attempt, setAttempt] = useState(0)
@@ -98,7 +104,7 @@ export default function PreflightPanel({ open, connectionId, onClose, refreshKey
         )}
         {checks && (
           <Box role='list'>
-            {checks.map(check => <CheckRow key={check.id} check={check} onOpenWizard={onOpenWizard} />)}
+            {checks.map(check => <CheckRow key={check.id} check={check} onOpenWizard={onOpenWizard} onResume={onResume} />)}
           </Box>
         )}
       </DialogContent>

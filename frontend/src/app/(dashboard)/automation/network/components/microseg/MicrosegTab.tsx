@@ -196,7 +196,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
           onDone={refreshAfterCheck}
           onOpenDrifts={() => goToSubTab('drifts')}
         />
-        <EmergencyStopButton controls={controls} />
+        <EmergencyStopButton controls={controls} deployed={!!policy.last_revision} />
         <Tooltip title={t('settings.open')}>
           <IconButton aria-label={t('settings.open')} onClick={onOpenSettings} sx={{ flexShrink: 0 }}>
             <i className='ri-settings-3-line' />
@@ -229,6 +229,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
           refreshKey={preflightRound}
           onClose={() => setPreflightOpen(false)}
           onOpenWizard={firewall ? () => setWizardOpen(true) : undefined}
+          onResume={() => { setPreflightOpen(false); controls.ask('resume') }}
         />
       )}
       {firewall && (

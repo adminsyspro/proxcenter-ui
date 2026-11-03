@@ -117,6 +117,8 @@ afterEach(() => {
 describe("GET /api/v1/vms PVE load (UA52)", () => {
   it("cold: 2 list calls and one config per guest; warm: 0 Proxmox call, same rows", async () => {
     const cold = await vmsOf(await get())
+    // The background address index (the DHCP container 101 is read by its interfaces) is done before the warm call.
+    await getGuestIpInflight("c1")
     expect(listCalls()).toBe(2)
     expect(configCalls()).toBe(3)
     expect(cold.partial).toBe(false)
@@ -279,10 +281,25 @@ describe("GET /api/v1/vms PVE load (UA52)", () => {
     expect(configCalls()).toBe(3)
   })
 
-  it("never probes a guest agent for a container nor without the flag", async () => {
+  it("never probes a guest agent for a container nor without the flag; a container with a static ip is not read live", async () => {
+    configImpl = async (path) => (path.includes("/lxc/")
+      ? { rootfs: "local:y,size=1G", net0: "name=eth0,bridge=vmbr0,ip=10.0.0.11/24" }
+      : { cores: 1, scsi0: "local:x,size=1G" })
     await get()
+    await getGuestIpInflight("c1")
 
     expect(h.pveFetch.mock.calls.some(([, p]) => String(p).includes("/agent/") || String(p).includes("/interfaces"))).toBe(false)
+  })
+
+  it("reads a running DHCP container by its interfaces, never by the QEMU agent", async () => {
+    configImpl = async (path) => (path.includes("/lxc/")
+      ? { rootfs: "local:y,size=1G", net0: "name=eth0,bridge=vmbr0,ip=dhcp" }
+      : { cores: 1, scsi0: "local:x,size=1G" })
+    await get()
+    await getGuestIpInflight("c1")
+
+    const live = h.pveFetch.mock.calls.map(([, p]) => String(p)).filter(p => p.includes("/agent/") || p.includes("/interfaces"))
+    expect(live).toEqual(["/nodes/n1/lxc/101/interfaces"])
   })
 
   // The load table of the report: Proxmox calls per call of the route, by kind.
@@ -298,9 +315,11 @@ describe("GET /api/v1/vms PVE load (UA52)", () => {
         list: paths.filter(p => p === "/cluster/resources?type=vm" || p === "/nodes").length,
         config: paths.filter(p => p.endsWith("/config")).length,
         agent: paths.filter(p => p.includes("/agent/")).length,
+        lxc: paths.filter(p => p.endsWith("/interfaces")).length,
       }
     }
     const qemu = Math.ceil(n / 2)
+    const lxc = n - qemu
 
     await get()
     const cold = await count()
@@ -318,12 +337,13 @@ describe("GET /api/v1/vms PVE load (UA52)", () => {
     const agent = await count()
 
     console.log(`[load ${n}] cold ${JSON.stringify(cold)} warm ${JSON.stringify(warm)} +15s ${JSON.stringify(later)} +15min ${JSON.stringify(pastTtl)} include=agent ${JSON.stringify(agent)}`)
-    // The background address index probes the running qemu guests with the agent flag, once (UA52: never a container).
-    expect(cold).toEqual({ list: 2, config: n, agent: qemu })
-    expect(warm).toEqual({ list: 0, config: 0, agent: 0 })
-    expect(later).toEqual({ list: 2, config: 0, agent: 0 })
-    expect(pastTtl).toEqual({ list: 2, config: n, agent: qemu })
+    // The background address index probes, once per 15 min, the running qemu guests with the agent flag and the
+    // running containers whose config pins no address (here every container: no ip=), never the agent for a container.
+    expect(cold).toEqual({ list: 2, config: n, agent: qemu, lxc })
+    expect(warm).toEqual({ list: 0, config: 0, agent: 0, lxc: 0 })
+    expect(later).toEqual({ list: 2, config: 0, agent: 0, lxc: 0 })
+    expect(pastTtl).toEqual({ list: 2, config: n, agent: qemu, lxc })
     // Export only: /agent/info + /agent/get-osinfo per running qemu guest with the flag.
-    expect(agent).toEqual({ list: 0, config: 0, agent: 2 * qemu })
+    expect(agent).toEqual({ list: 0, config: 0, agent: 2 * qemu, lxc: 0 })
   })
 })

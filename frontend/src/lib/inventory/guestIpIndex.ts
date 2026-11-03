@@ -11,11 +11,16 @@
 // The probe is a protected PVE call: it goes through the node's pvedaemon
 // slots, and an agent that did not answer is left alone (roadmap#179).
 //
-// UA52: only QEMU guests are probed (agent network-get-interfaces), each one at
-// most once per GUEST_IP_PROBE_TTL_MS, through the connection's pool (4 in
-// flight, 2 per node, shared with the config reads) and a gate (no probe starts
-// after GUEST_IP_REFRESH_BUDGET_MS or once one was slow or timed out). A
-// container is never probed: its addresses come from its config (`ip=`).
+// UA52: a running QEMU guest with the agent flag (agent network-get-interfaces)
+// and a running container whose config pins no address (DHCP, or no ip=: its
+// `/lxc/{vmid}/interfaces`, PVE 8+, never the QEMU agent) are probed, each one
+// at most once per GUEST_IP_PROBE_TTL_MS whatever the outcome (a 404 of an
+// older PVE is not asked again before then either), through the connection's
+// pool (4 in flight, 2 per node, shared with the config reads) and a gate (no
+// probe starts after GUEST_IP_REFRESH_BUDGET_MS or once one was slow or timed
+// out). A container with a static `ip=` is never probed: its config says it.
+import { pveFetch } from "@/lib/proxmox/client"
+import { daemonNodeKey, withDaemonSlot } from "@/lib/proxmox/daemonSlots"
 import { callGuestAgent } from "@/lib/proxmox/guestAgentCall"
 import {
   GUEST_IP_RETENTION_MS,
@@ -62,10 +67,17 @@ export const GUEST_IP_PROBE_TTL_MS = 15 * 60 * 1_000
 /** No probe of a refresh starts after this. */
 export const GUEST_IP_REFRESH_BUDGET_MS = 60_000
 
-/** The live endpoint worth calling for this guest right now, or null: a running QEMU guest with the agent flag. */
+/**
+ * The live endpoint worth calling for this guest right now, or null: a running QEMU guest with the agent flag, or a
+ * running container whose config pins no address (`configIps` empty).
+ */
 export function liveAddressesPath(g: IndexableGuest): string | null {
-  if (g.status !== "running" || g.type !== "qemu" || !g.agentEnabled) return null
-  return `/nodes/${encodeURIComponent(g.node)}/qemu/${encodeURIComponent(String(g.vmid))}/agent/network-get-interfaces`
+  if (g.status !== "running") return null
+  const node = encodeURIComponent(g.node)
+  const vmid = encodeURIComponent(String(g.vmid))
+  if (g.type === "lxc") return (g.configIps ?? []).length === 0 ? `/nodes/${node}/lxc/${vmid}/interfaces` : null
+  if (g.type === "qemu" && g.agentEnabled) return `/nodes/${node}/qemu/${vmid}/agent/network-get-interfaces`
+  return null
 }
 
 type ProbeMark = { at: number; generation: number }
@@ -117,12 +129,16 @@ export async function refreshGuestIpIndex(
   const results = await mapWithConcurrency(guests, POOL_GLOBAL_CONCURRENCY, async (g): Promise<[string, GuestIpEntry | null]> => {
     const key = guestKey(g.type, g.vmid)
     const prev = previous.get(key)
-    if (!liveAddressesPath(g)) return [key, carryOver(prev, now)]
+    const path = liveAddressesPath(g)
+    if (!path) return [key, carryOver(prev, now)]
     // Asked less than 15 min ago: what it said then still stands.
     if (probedRecently(connId, key, generation, now)) return [key, prev ?? null]
     const answer = await withConnectionSlot(connId, g.node, () => gate.run(() => {
       probed().set(`${connId}::${key}`, { at: now, generation })
-      return callGuestAgent<unknown>(conn, g.node, g.vmid, "network-get-interfaces")
+      // A container is read by its own endpoint (a protected call: the node's pvedaemon slots), never the QEMU agent.
+      return g.type === "lxc"
+        ? withDaemonSlot(daemonNodeKey(conn, g.node), () => pveFetch<unknown>(conn, path))
+        : callGuestAgent<unknown>(conn, g.node, g.vmid, "network-get-interfaces")
     }))
     const live = extractLiveAddresses(answer)
     // No answer, or one without a single routable address (DHCP still

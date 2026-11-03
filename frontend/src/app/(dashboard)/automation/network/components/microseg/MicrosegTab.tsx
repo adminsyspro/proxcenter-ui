@@ -148,7 +148,13 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
     <MicrosegWriteContext.Provider value={canWrite}>
     <MicrosegActionsSlot.Provider value={actionsSlot}>
     <Box sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <MicrosegBanner connectionId={connectionId} policy={policy} controls={controls} onOpenPlan={onOpenPlan} />
+      <MicrosegBanner
+        connectionId={connectionId}
+        policy={policy}
+        controls={controls}
+        onOpenPlan={onOpenPlan}
+        onOpenWizard={firewall ? () => setWizardOpen(true) : undefined}
+      />
       <RunStrip connectionId={connectionId} runs={runs} onFinished={refreshAfterRun} onRemove={removeRun} />
       {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={onOpenPlan} onOpenPreflight={onOpenPreflight} />}
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>

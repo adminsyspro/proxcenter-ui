@@ -3,9 +3,10 @@
 import { Alert, Box, Button, Chip, Paper, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
+import { microsegErrorKeyOf } from '@/lib/microseg/api'
 import type { MicrosegPolicy } from '@/lib/microseg/types'
 
-import MicrosegConfirmDialog from './MicrosegConfirmDialog'
+import MicrosegConfirmDialog, { type ConfirmInfoLine } from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PendingChangesBar from './PendingChangesBar'
 import { formatWhen, stillPaused } from './summaryModel'
@@ -18,6 +19,8 @@ type Props = {
   policy: MicrosegPolicy
   controls: MicrosegControls
   onOpenPlan?: () => void
+  /** Opens the deployment wizard, where the management rules a refused resume asks for are added (absent: no wizard here). */
+  onOpenWizard?: () => void
 }
 
 /**
@@ -26,16 +29,30 @@ type Props = {
  * nothing is drawn, not even an empty strip (UA27). The Emergency stop button is in the sub-tabs row; the engine
  * state and the coverage are on the page's Dashboard tab. The confirmation dialog is always mounted here.
  */
-export default function MicrosegBanner({ connectionId, policy, controls, onOpenPlan }: Props) {
+export default function MicrosegBanner({ connectionId, policy, controls, onOpenPlan, onOpenWizard }: Props) {
   const t = useTranslations()
   const { canWrite } = useMicrosegWrite()
   const format = useFormatter()
-  const { status, statusError, reload, action, open, busy, actionError, notice } = controls
+  const { status, statusError, reload, action, open, busy, actionError, dialogError, notice } = controls
 
   const dialog: Record<ControlAction, { title: string; body: string; label: string; color: 'primary' | 'warning' | 'error' }> = {
     stop: { title: t('microsegPilot.stop.title'), body: t('microsegPilot.stop.body'), label: t('microsegPilot.stop.button'), color: 'error' },
     resume: { title: t('microsegPilot.stop.resumeTitle'), body: t('microsegPilot.stop.resumeBody'), label: t('microsegPilot.stop.resume'), color: 'primary' },
     confirmWrites: { title: t('microsegPilot.banner.confirmWritesTitle'), body: t('microsegPilot.banner.confirmWritesBody'), label: t('microsegPilot.banner.confirmWrites'), color: 'warning' },
+  }
+
+  const infoLines: Record<ControlAction, ConfirmInfoLine[]> = {
+    stop: [
+      { icon: 'ri-flashlight-line', text: t('microsegPilot.stop.infoDisable') },
+      { icon: 'ri-shield-cross-line', text: t('microsegPilot.stop.infoUnmanaged') },
+      { icon: 'ri-shield-keyhole-line', text: t('microsegPilot.stop.infoObjects') },
+      { icon: 'ri-lightbulb-line', text: t('microsegPilot.stop.infoUse') },
+    ],
+    resume: [
+      { icon: 'ri-shield-check-line', text: t('microsegPilot.stop.resumeInfoReenable') },
+      { icon: 'ri-error-warning-line', text: t('microsegPilot.stop.resumeInfoSocle') },
+    ],
+    confirmWrites: [],
   }
 
   // "Applied by the leader within a minute" is over once the status has moved.
@@ -59,7 +76,18 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
               variant='filled'
               action={<WriteTip><Button color='inherit' size='small' disabled={!canWrite} onClick={() => controls.ask('resume')}>{t('microsegPilot.stop.resume')}</Button></WriteTip>}
             >
-              {t('microsegPilot.stop.active')}
+              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
+                <span>{t('microsegPilot.stop.active')}</span>
+                {status.engine.cluster_firewall === 'disabled' && (
+                  <Chip
+                    size='small'
+                    variant='outlined'
+                    icon={<i className='ri-shield-cross-line' />}
+                    label={t('microsegPilot.stop.clusterFirewallOff')}
+                    sx={{ color: 'inherit', borderColor: 'currentColor', '& .MuiChip-icon': { color: 'inherit' } }}
+                  />
+                )}
+              </Box>
             </Alert>
           )}
 
@@ -103,9 +131,13 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
         open={open}
         title={dialog[action].title}
         body={dialog[action].body}
+        infoLines={infoLines[action]}
         confirmLabel={dialog[action].label}
         color={dialog[action].color}
         busy={busy}
+        error={dialogError ? t(microsegErrorKeyOf(dialogError)) : null}
+        errorDetail={dialogError?.serverMessage}
+        extraAction={dialogError && onOpenWizard ? { label: t('microsegPilot.stop.openWizard'), onClick: () => { controls.close(); onOpenWizard() } } : undefined}
         onConfirm={controls.run}
         onCancel={controls.close}
       />

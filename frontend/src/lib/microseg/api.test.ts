@@ -215,3 +215,15 @@ describe('isPlanStale', () => {
     expect(isPlanStale(null, 5)).toBe(false)
   })
 })
+
+describe('microsegApi resume refusal', () => {
+  it('raises SOCLE_MISSING on the 409 of a resume without the management rules, with a message of its own and the server wording kept', async () => {
+    fetchMock.mockResolvedValue(reply(409, { code: 'SOCLE_MISSING', error: 'SSH 22 rule is missing' }))
+    const err = await microsegApi('c1').emergencyStop(false).catch(e => e)
+    expect(lastCall()).toEqual({ url: '/api/v1/firewall/microseg/c1/emergency-stop', method: 'POST', body: { on: false } })
+    expect(err).toBeInstanceOf(MicrosegApiError)
+    expect(err).not.toBeInstanceOf(MicrosegConflictError)
+    expect(err).toMatchObject({ status: 409, code: 'SOCLE_MISSING', serverMessage: 'SSH 22 rule is missing' })
+    expect(microsegErrorKeyOf(err)).toBe('microsegPilot.errors.SOCLE_MISSING')
+  })
+})

@@ -10,6 +10,7 @@ import {
   invalidateGuestDiskTotal,
   onlineNodeSet,
   peekGuestDiskTotal,
+  peekGuestNicFirewall,
   readGuestDiskBytes,
   resetGuestDiskTotals,
   type DiskTotalGuest,
@@ -53,6 +54,31 @@ beforeEach(() => {
 
 afterEach(() => {
   resetGuestDiskTotals()
+})
+
+describe("peekGuestNicFirewall (UA44)", () => {
+  it("keeps the NIC firewall flag of the config read it already does, and knows nothing of a guest never read", async () => {
+    const table = {
+      ...configs,
+      "qemu/104": { ...configs["qemu/104"], net0: "virtio=AA:BB:CC:DD:EE:01,bridge=vmbr0,firewall=1" },
+      "lxc/200": { ...configs["lxc/200"], net0: "name=eth0,bridge=vmbr0,firewall=0" },
+    }
+    const fetchConfig = fetchFrom(table)
+    await attachGuestDiskTotals(null, CONN, guests(), { onlineNodes: ONLINE, fetchConfig, now })
+
+    expect(fetchConfig).toHaveBeenCalledTimes(3)
+    expect(peekGuestNicFirewall(CONN, "qemu", 104)).toBe(true)
+    expect(peekGuestNicFirewall(CONN, "qemu", "9938")).toBe(false)
+    expect(peekGuestNicFirewall(CONN, "lxc", 200)).toBe(false)
+    expect(peekGuestNicFirewall(CONN, "qemu", 555)).toBeUndefined()
+  })
+
+  it("forgets the flag with the figure when ProxCenter changes the guest", async () => {
+    await attachGuestDiskTotals(null, CONN, guests(), { onlineNodes: ONLINE, fetchConfig: fetchFrom(), now })
+    invalidateGuestDiskTotal(CONN, "qemu", 104)
+
+    expect(peekGuestNicFirewall(CONN, "qemu", 104)).toBeUndefined()
+  })
 })
 
 describe("attachGuestDiskTotals (#938)", () => {

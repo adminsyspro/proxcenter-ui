@@ -15,6 +15,7 @@
  *  - a failed `/config` keeps the previous figure. With none, the guest gets no
  *    `diskTotal` and the UI falls back on `maxdisk`.
  */
+import { hasNICFirewall } from "@/lib/firewall/pveDefaults"
 import { pveFetch } from "@/lib/proxmox/client"
 
 import { mapWithConcurrency, PVEPROXY_CONCURRENCY } from "./concurrency"
@@ -37,7 +38,11 @@ export type DiskTotalGuest = {
   diskTotal?: number
 }
 
-type Entry = { total: number; expiresAt: number; maxdisk?: number }
+/**
+ * `nicFirewall`: `firewall=1` on at least one NIC, from the same config read. The firewall coverage of the Dashboard
+ * reads it here instead of asking each guest config again (UA44).
+ */
+type Entry = { total: number; expiresAt: number; maxdisk?: number; nicFirewall?: boolean }
 
 type FetchConfig = (node: string, type: "qemu" | "lxc", vmid: string) => Promise<unknown>
 
@@ -93,6 +98,11 @@ export function peekGuestDiskTotal(connId: string, type: string, vmid: string | 
   return store().get(diskTotalKey(connId, type, vmid))?.total
 }
 
+/** Cached NIC firewall flag of a guest (true: a NIC has `firewall=1`), whatever its age; undefined when never read. */
+export function peekGuestNicFirewall(connId: string, type: string, vmid: string | number): boolean | undefined {
+  return store().get(diskTotalKey(connId, type, vmid))?.nicFirewall
+}
+
 /** Forget a guest's figure, after ProxCenter itself added, removed or resized one of its disks. */
 export function invalidateGuestDiskTotal(connId: string, type: string, vmid: string | number): void {
   store().delete(diskTotalKey(connId, type, vmid))
@@ -112,11 +122,12 @@ function isFresh(entry: Entry | undefined, guest: DiskTotalGuest, now: number): 
   return true
 }
 
-function remember(key: string, total: number, guest: DiskTotalGuest, now: () => number, random: () => number): void {
+function remember(key: string, total: number, guest: DiskTotalGuest, now: () => number, random: () => number, config: unknown): void {
   store().set(key, {
     total,
     expiresAt: now() + DISK_TOTAL_TTL_MS * (1 - JITTER * random()),
     maxdisk: typeof guest.maxdisk === "number" ? guest.maxdisk : undefined,
+    nicFirewall: hasNICFirewall(config as Record<string, any> | null),
   })
 }
 
@@ -160,7 +171,7 @@ async function refreshOne(
     }
     const total = sumGuestConfigDisks(config, kind)
     if (total === null) return
-    remember(key, total, guest, now, random)
+    remember(key, total, guest, now, random, config)
   })().finally(() => inflight().delete(key))
 
   inflight().set(key, job)
@@ -299,7 +310,7 @@ async function readOneGuestBytes(guest: DiskTotalGuest, ctx: ReadContext): Promi
 
     return floor
   }
-  remember(diskTotalKey(ctx.connId, kind, guest.vmid), total, guest, ctx.now, ctx.random)
+  remember(diskTotalKey(ctx.connId, kind, guest.vmid), total, guest, ctx.now, ctx.random, config)
 
   return Math.max(total, floor) + await sumUnusedVolumes(guest, kind, config, ctx)
 }

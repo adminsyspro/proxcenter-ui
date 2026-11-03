@@ -11546,7 +11546,30 @@
       "flags": "플래그"
     },
     "detailFlow": "흐름",
-    "detailHeader": "IP / TCP 헤더"
+    "detailHeader": "IP / TCP 헤더",
+    "microseg": {
+      "group": "영역 엔진",
+      "option": "마이크로 세분화 (영역 게스트)",
+      "optionHint": "영역 엔진이 본 흐름",
+      "unavailable": "이 연결에 적용된 리비전이 있는 마이크로 세분화 정책이 필요합니다.",
+      "searchPlaceholder": "IP, 포트, 게스트, 영역 검색…",
+      "verdict": "판정",
+      "zone": "영역",
+      "allZones": "모든 영역",
+      "allVerdicts": "모든 판정",
+      "wouldBlock": "차단될 흐름",
+      "blocked": "차단됨",
+      "wouldBlockTip": "영역이 관찰 중입니다. 영역이 적용 모드가 되면 이 흐름은 차단됩니다.",
+      "blockedTip": "영역이 적용 모드입니다. 이 흐름은 차단되었습니다.",
+      "zoneFlowTip": "{from} 영역에서 {to} 영역으로",
+      "guestTip": "노드 {node}의 {name} #{vmid}",
+      "showing": "최근 {count}개 표시 중",
+      "source": "오케스트레이터 메모리에서 노드로부터 매분 읽음, 추가 Proxmox 호출 없음",
+      "truncated": "오래된 줄은 삭제되었습니다",
+      "frozen": "영역 및 게스트 이름은 이벤트 당시의 이름입니다",
+      "loadOlder": "이전 항목 불러오기",
+      "empty": "아직 이벤트가 없습니다. 엔진이 매분 노드 로그를 읽습니다."
+    }
   },
   "vdcUsageHistory": {
     "title": "사용량 기록",

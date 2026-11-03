@@ -11546,7 +11546,30 @@
       "flags": "标志"
     },
     "detailFlow": "流量",
-    "detailHeader": "IP / TCP 报头"
+    "detailHeader": "IP / TCP 报头",
+    "microseg": {
+      "group": "区域引擎",
+      "option": "微分段（区域客户机）",
+      "optionHint": "区域引擎看到的流量",
+      "unavailable": "此连接需要一个已应用修订版的微分段策略。",
+      "searchPlaceholder": "搜索 IP、端口、客户机或区域…",
+      "verdict": "判定",
+      "zone": "区域",
+      "allZones": "所有区域",
+      "allVerdicts": "所有判定",
+      "wouldBlock": "将被阻止",
+      "blocked": "已阻止",
+      "wouldBlockTip": "区域处于观察模式：区域强制执行后，此流量将被阻止。",
+      "blockedTip": "区域已强制执行：此流量已被阻止。",
+      "zoneFlowTip": "从区域 {from} 到区域 {to}",
+      "guestTip": "节点 {node} 上的 {name} #{vmid}",
+      "showing": "显示最近的 {count} 条",
+      "source": "来自编排器内存，每分钟从节点读取，不增加 Proxmox 调用",
+      "truncated": "更早的行已被丢弃",
+      "frozen": "区域和客户机名称为事件发生时的名称",
+      "loadOlder": "加载更早的",
+      "empty": "暂无事件：引擎每分钟读取节点日志。"
+    }
   },
   "vdcUsageHistory": {
     "title": "使用量历史",

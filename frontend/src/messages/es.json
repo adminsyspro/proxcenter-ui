@@ -11546,7 +11546,30 @@
       "flags": "Indicadores"
     },
     "detailFlow": "Flujo",
-    "detailHeader": "Cabecera IP / TCP"
+    "detailHeader": "Cabecera IP / TCP",
+    "microseg": {
+      "group": "Motor de zonas",
+      "option": "Microsegmentación (invitados de las zonas)",
+      "optionHint": "Flujos vistos por el motor de zonas",
+      "unavailable": "Requiere una política de microsegmentación con una revisión aplicada en esta conexión.",
+      "searchPlaceholder": "Buscar una IP, un puerto, un invitado, una zona…",
+      "verdict": "Veredicto",
+      "zone": "Zona",
+      "allZones": "Todas las zonas",
+      "allVerdicts": "Todos los veredictos",
+      "wouldBlock": "Se bloquearía",
+      "blocked": "Bloqueado",
+      "wouldBlockTip": "La zona observa: este flujo se bloquearía cuando la zona aplique las reglas.",
+      "blockedTip": "La zona aplica las reglas: este flujo se bloqueó.",
+      "zoneFlowTip": "De la zona {from} a la zona {to}",
+      "guestTip": "{name} #{vmid} en el nodo {node}",
+      "showing": "Mostrando los {count} más recientes",
+      "source": "desde la memoria del orquestador, leída cada minuto en los nodos, sin ninguna llamada adicional a Proxmox",
+      "truncated": "se descartaron las líneas más antiguas",
+      "frozen": "nombres de zonas e invitados tal como estaban en el momento del evento",
+      "loadOlder": "Cargar anteriores",
+      "empty": "Aún no hay eventos: el motor lee los registros de los nodos cada minuto."
+    }
   },
   "vdcUsageHistory": {
     "title": "Historial de uso",

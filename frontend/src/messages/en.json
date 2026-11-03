@@ -11546,7 +11546,30 @@
       "flags": "Flags"
     },
     "detailFlow": "Flow",
-    "detailHeader": "IP / TCP header"
+    "detailHeader": "IP / TCP header",
+    "microseg": {
+      "group": "Zone engine",
+      "option": "Micro-segmentation (zone guests)",
+      "optionHint": "Flows seen by the zone engine",
+      "unavailable": "Needs a micro-segmentation policy with an applied revision on this connection.",
+      "searchPlaceholder": "Search an IP, a port, a guest, a zone…",
+      "verdict": "Verdict",
+      "zone": "Zone",
+      "allZones": "All zones",
+      "allVerdicts": "All verdicts",
+      "wouldBlock": "Would be blocked",
+      "blocked": "Blocked",
+      "wouldBlockTip": "The zone is observing: this flow would be dropped once the zone enforces.",
+      "blockedTip": "The zone enforces: this flow was dropped.",
+      "zoneFlowTip": "From zone {from} to zone {to}",
+      "guestTip": "{name} #{vmid} on node {node}",
+      "showing": "Showing the {count} most recent",
+      "source": "from the orchestrator's memory, read every minute from the nodes, no extra Proxmox call",
+      "truncated": "older lines were dropped",
+      "frozen": "zone and guest names as they were when the event was seen",
+      "loadOlder": "Load older",
+      "empty": "No event yet: the engine reads the node logs every minute."
+    }
   },
   "vdcUsageHistory": {
     "title": "Usage history",

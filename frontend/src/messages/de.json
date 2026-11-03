@@ -11214,7 +11214,30 @@
       "flags": "Flags"
     },
     "detailFlow": "Datenfluss",
-    "detailHeader": "IP-/TCP-Header"
+    "detailHeader": "IP-/TCP-Header",
+    "microseg": {
+      "group": "Zonen-Engine",
+      "option": "Mikrosegmentierung (Gäste der Zonen)",
+      "optionHint": "Von der Zonen-Engine gesehene Datenflüsse",
+      "unavailable": "Erfordert eine Mikrosegmentierungsrichtlinie mit angewendeter Revision auf dieser Verbindung.",
+      "searchPlaceholder": "IP, Port, Gast oder Zone suchen…",
+      "verdict": "Urteil",
+      "zone": "Zone",
+      "allZones": "Alle Zonen",
+      "allVerdicts": "Alle Urteile",
+      "wouldBlock": "Würde blockiert",
+      "blocked": "Blockiert",
+      "wouldBlockTip": "Die Zone beobachtet: Dieser Datenfluss würde blockiert, sobald die Zone durchsetzt.",
+      "blockedTip": "Die Zone setzt durch: Dieser Datenfluss wurde blockiert.",
+      "zoneFlowTip": "Von Zone {from} zu Zone {to}",
+      "guestTip": "{name} #{vmid} auf Knoten {node}",
+      "showing": "Die {count} neuesten werden angezeigt",
+      "source": "aus dem Speicher des Orchestrators, jede Minute von den Knoten gelesen, kein zusätzlicher Proxmox-Aufruf",
+      "truncated": "ältere Zeilen wurden verworfen",
+      "frozen": "Zonen- und Gastnamen wie zum Zeitpunkt des Ereignisses",
+      "loadOlder": "Ältere laden",
+      "empty": "Noch kein Ereignis: Die Engine liest die Knotenprotokolle jede Minute."
+    }
   },
   "vdcUsageHistory": {
     "title": "Nutzungsverlauf",

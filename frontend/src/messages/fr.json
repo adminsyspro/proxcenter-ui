@@ -11547,7 +11547,30 @@
       "flags": "Drapeaux"
     },
     "detailFlow": "Flux",
-    "detailHeader": "En-tête IP / TCP"
+    "detailHeader": "En-tête IP / TCP",
+    "microseg": {
+      "group": "Moteur de zones",
+      "option": "Micro-segmentation (invités des zones)",
+      "optionHint": "Flux vus par le moteur de zones",
+      "unavailable": "Nécessite une politique de micro-segmentation dont une révision est appliquée sur cette connexion.",
+      "searchPlaceholder": "Rechercher une IP, un port, un invité, une zone…",
+      "verdict": "Décision",
+      "zone": "Zone",
+      "allZones": "Toutes les zones",
+      "allVerdicts": "Toutes les décisions",
+      "wouldBlock": "Serait bloqué",
+      "blocked": "Bloqué",
+      "wouldBlockTip": "La zone observe : ce flux serait bloqué une fois la zone en mode appliqué.",
+      "blockedTip": "La zone applique ses règles : ce flux a été bloqué.",
+      "zoneFlowTip": "De la zone {from} vers la zone {to}",
+      "guestTip": "{name} #{vmid} sur le nœud {node}",
+      "showing": "Affichage des {count} plus récents",
+      "source": "depuis la mémoire de l'orchestrateur, lue chaque minute sur les nœuds, sans appel Proxmox supplémentaire",
+      "truncated": "les lignes plus anciennes ont été abandonnées",
+      "frozen": "noms de zones et d'invités tels qu'au moment de l'événement",
+      "loadOlder": "Charger les plus anciens",
+      "empty": "Aucun événement pour l'instant : le moteur lit les journaux des nœuds chaque minute."
+    }
   },
   "vdcUsageHistory": {
     "title": "Historique d'usage",

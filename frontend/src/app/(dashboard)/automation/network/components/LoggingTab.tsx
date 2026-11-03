@@ -4,15 +4,19 @@
 // element of the infrastructure at a time, picked in a single list (the
 // cluster's host rules, a node, a guest, a security group). Reading every log
 // of a cluster at once would cost a read per node and per guest every few
-// seconds, so nothing is read until an element is chosen.
+// seconds, so nothing is read until an element is chosen. The micro-segmentation
+// source is the exception: it reads the orchestrator's memory, not Proxmox.
 
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Autocomplete, Box, InputAdornment, TextField, Typography, useTheme } from '@mui/material'
+import { Autocomplete, Box, InputAdornment, TextField, Tooltip, Typography, useTheme } from '@mui/material'
 
 import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import FirewallLogView from '@/components/firewall/FirewallLogView'
+import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
+
+import MicrosegEventsView from './MicrosegEventsView'
 
 import type { LogGuestInfo } from '@/components/firewall/FirewallLogView'
 import type { FirewallLogScope, FirewallMode, SecurityGroup } from '@/lib/api/firewall'
@@ -34,8 +38,10 @@ type Target =
   | { kind: 'node'; key: string; label: string; status?: string }
   | { kind: 'vm'; key: string; label: string; guest: Guest }
   | { kind: 'group'; key: string; label: string; comment?: string }
+  | { kind: 'microseg'; key: string; label: string }
 
-function scopeOf(target: Target): FirewallLogScope {
+/** The scope of a Proxmox firewall log; the micro-segmentation source has none, it is not read from Proxmox. */
+function scopeOf(target: Exclude<Target, { kind: 'microseg' }>): FirewallLogScope {
   switch (target.kind) {
     case 'cluster': return { kind: 'cluster' }
     case 'node': return { kind: 'node', node: target.label }
@@ -84,10 +90,16 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
   const { guests, nodeStatus, loading } = useInventory(selectedConnection)
   const [target, setTarget] = useState<Target | null>(null)
 
+  // The source is offered once a revision of the policy has been applied: before that the engine has nothing to watch.
+  const { data: policy } = useMicrosegPolicy(selectedConnection)
+  const microsegAvailable = !!policy?.last_revision
+  const zones = useMemo(() => policy?.zones ?? [], [policy])
+
   const guestsByVmid = useMemo(() => Object.fromEntries(guests.map(g => [g.vmid, g])), [guests])
 
   // In kind order, as groupBy needs each kind contiguous.
   const options = useMemo<Target[]>(() => [
+    { kind: 'microseg' as const, key: 'microseg', label: t('firewallLog.microseg.option') },
     // A standalone node has no cluster beyond itself: its node log says it all.
     ...(firewallMode === 'cluster' ? [{ kind: 'cluster' as const, key: 'cluster', label: t('firewallLog.clusterTarget') }] : []),
     ...[...nodesList].sort((a, b) => a.localeCompare(b)).map(n => ({ kind: 'node' as const, key: `node:${n}`, label: n, status: nodeStatus[n] })),
@@ -96,6 +108,7 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
   ], [firewallMode, nodesList, nodeStatus, guests, securityGroups, t])
 
   const groupLabel = (kind: Target['kind']) => ({
+    microseg: t('firewallLog.microseg.group'),
     cluster: t('firewallLog.groupCluster'),
     node: t('firewallLog.groupNodes'),
     vm: t('firewallLog.groupGuests'),
@@ -104,6 +117,7 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
 
   const glyph = (o: Target) => {
     switch (o.kind) {
+      case 'microseg': return <i className="ri-shield-keyhole-line" style={{ fontSize: 15, opacity: 0.8 }} />
       case 'cluster': return <i className="ri-server-line" style={{ fontSize: 15, opacity: 0.8 }} />
       case 'node': return <NodeGlyph status={o.status} dark={dark} dotBorder={dotBorder} />
       case 'vm': return <GuestGlyph type={o.guest.type} status={o.guest.status} dotBorder={dotBorder} />
@@ -112,6 +126,7 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
   }
 
   const caption = (o: Target) => {
+    if (o.kind === 'microseg') return t('firewallLog.microseg.optionHint')
     if (o.kind === 'cluster') return t('firewallLog.clusterTargetHint')
     if (o.kind === 'vm') return o.guest.node
     if (o.kind === 'group') return o.comment
@@ -125,7 +140,8 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
         <Autocomplete
           options={options}
           value={target}
-          onChange={(_, v) => setTarget(v)}
+          onChange={(_, v) => { if (v?.kind !== 'microseg' || microsegAvailable) setTarget(v) }}
+          getOptionDisabled={o => o.kind === 'microseg' && !microsegAvailable}
           loading={loading}
           groupBy={o => groupLabel(o.kind)}
           getOptionLabel={o => o.label}
@@ -137,15 +153,24 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
 
             return opts.filter(o => !q || o.label.toLowerCase().includes(q) || (caption(o) || '').toLowerCase().includes(q))
           }}
-          renderOption={({ key, ...props }, o) => (
-            <Box component="li" key={key} {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ width: 18, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{glyph(o)}</Box>
-              <Typography variant="body2" noWrap>{o.label}</Typography>
-              {caption(o) && (
-                <Typography variant="caption" noWrap sx={{ color: 'text.disabled', ml: 'auto', pl: 2 }}>{caption(o)}</Typography>
-              )}
-            </Box>
-          )}
+          renderOption={({ key, ...props }, o) => {
+            const unavailable = o.kind === 'microseg' && !microsegAvailable
+
+            return (
+              <Box component="li" key={key} {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {/* A disabled option takes no pointer events: the tooltip needs its own. */}
+                <Tooltip title={unavailable ? t('firewallLog.microseg.unavailable') : ''} placement="right">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0, pointerEvents: 'auto' }}>
+                    <Box sx={{ width: 18, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{glyph(o)}</Box>
+                    <Typography variant="body2" noWrap>{o.label}</Typography>
+                    {caption(o) && (
+                      <Typography variant="caption" noWrap sx={{ color: 'text.disabled', ml: 'auto', pl: 2 }}>{caption(o)}</Typography>
+                    )}
+                  </Box>
+                </Tooltip>
+              </Box>
+            )
+          }}
           renderInput={params => (
             <TextField
               {...params}
@@ -164,7 +189,14 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
         />
       </Box>
 
-      {target ? (
+      {target?.kind === 'microseg' ? (
+        <MicrosegEventsView
+          key={target.key}
+          connectionId={selectedConnection}
+          zones={zones}
+          guests={guestsByVmid}
+        />
+      ) : target ? (
         <FirewallLogView
           key={target.key}
           connectionId={selectedConnection}

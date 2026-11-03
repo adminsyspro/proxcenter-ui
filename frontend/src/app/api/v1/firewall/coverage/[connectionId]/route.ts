@@ -4,7 +4,8 @@ export const dynamic = "force-dynamic"
 // GET: firewall state of the guests of a connection, for the Dashboard, Firewalling > VMs and Security Groups tabs
 // (UA44): counts and one row per guest asked (options, NIC flag, VLANs, tags), never the rules. `?refresh=1` asks for new
 // figures (served from the cache inside 30 s of the last ones). The load it may put on Proxmox is bounded in
-// lib/firewall/guestCoverage.ts: at most one call per guest, 4 in flight, 2 per node, 200 guests, every 10 min.
+// lib/firewall/guestCoverage.ts: one options call per guest, plus one config call for a guest whose options are on
+// and whose NICs the inventory has not read (2 at most), 4 in flight, 2 per node, 200 guests, every 10 min.
 // Session only: the public API allowlist has no entry for it, so a token is refused upstream.
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -15,7 +16,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { getInventoryFromCache } from '@/lib/cache/inventoryCache'
 import { pveFetch } from '@/lib/proxmox/client'
-import { peekGuestNet } from '@/lib/inventory/guestDiskTotals'
+import { peekGuestNet, rememberGuestConfig } from '@/lib/inventory/guestDiskTotals'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { getGuestCoverage, type CoverageGuest, type GuestOptions } from '@/lib/firewall/guestCoverage'
 
@@ -90,6 +91,23 @@ function optionsReader(connectionId: string, conn: () => Promise<any>) {
   )
 }
 
+/**
+ * The NIC facts of a guest the inventory has not read: its config, direct to Proxmox with the long read budget, kept
+ * in the inventory's config cache (so neither the coverage nor the inventory reads it again before the TTL).
+ */
+function netReader(connectionId: string, conn: () => Promise<any>) {
+  return async (g: CoverageGuest) => {
+    const config = await pveFetch<unknown>(
+      await conn(),
+      `/nodes/${encodeURIComponent(g.node)}/${g.type}/${encodeURIComponent(g.vmid)}/config`,
+      {},
+      { slowRead: true },
+    )
+
+    return rememberGuestConfig(connectionId, g.type, g.vmid, config)
+  }
+}
+
 async function getHandler(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId } = await ctx.params
@@ -114,6 +132,7 @@ async function getHandler(req: NextRequest, ctx: RouteContext) {
       listGuests: () => listGuests(tenantId, connectionId, conn),
       guestNet: g => peekGuestNet(connectionId, g.type, g.vmid),
       fetchOptions: optionsReader(connectionId, conn),
+      fetchNet: netReader(connectionId, conn),
     }, { force })
 
     return NextResponse.json({ ...result, computing })

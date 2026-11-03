@@ -122,6 +122,19 @@ export function noteGuestNicFirewall(connId: string, type: string, vmid: string 
   if (entry && (entry.nics ?? 0) > 0) entry.nicFirewall = enabled
 }
 
+/**
+ * A guest config read by someone else (the firewall coverage, for a guest the inventory had not read yet): kept like
+ * one the inventory read, so neither reads it again before the TTL, and a NIC toggle can follow it. The NIC facts
+ * found are returned. A config that is not an object is not kept.
+ */
+export function rememberGuestConfig(connId: string, type: "qemu" | "lxc", vmid: string | number, config: unknown): { nicFirewall: boolean; vlans: number[] } | null {
+  const total = sumGuestConfigDisks(config, type)
+  if (total === null) return null
+  remember(diskTotalKey(connId, type, vmid), total, {}, Date.now, Math.random, config)
+
+  return { nicFirewall: hasNICFirewall(config as Record<string, any>), vlans: configVlans(config) }
+}
+
 /** Number of NICs (`netN`) of a config. */
 function configNicCount(config: unknown): number {
   if (!config || typeof config !== "object") return 0

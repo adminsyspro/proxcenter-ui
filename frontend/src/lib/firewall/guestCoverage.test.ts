@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   COVERAGE_BUDGET_MS,
   COVERAGE_SLOW_CALL_MS,
+  COVERAGE_TTL_MS,
+  forgetGuestCoverage,
   forceFloorMs,
   isTimeoutError,
   computeGuestCoverage,
@@ -211,5 +213,103 @@ describe('evictGuestCoverage (connection deleted)', () => {
     // Nothing was kept: the next answer reads again.
     await getGuestCoverage('gone', deps, { waitMs: 1000 })
     expect(fetchOptions).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('config read for a guest whose NICs the inventory does not know (UA46)', () => {
+  it('reads the config of a guest whose options are on, never of one whose options are off, in the same slot', async () => {
+    let inFlight = 0
+    let maxInFlight = 0
+    const slot = async <T>(value: T) => {
+      inFlight++
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      await new Promise(resolve => setTimeout(resolve, 2))
+      inFlight--
+      return value
+    }
+    const fetchOptions = vi.fn(async (guest: CoverageGuest) => slot({ enable: Number(guest.vmid) % 2 }))
+    const fetchNet = vi.fn(async () => slot({ nicFirewall: true, vlans: [30] }))
+    const list = Array.from({ length: 12 }, (_, i) => g(i + 1, `pve${(i % 3) + 1}`, 'lxc'))
+
+    const result = await computeGuestCoverage(list, { listGuests: async () => [], guestNet: () => undefined, fetchOptions, fetchNet })
+
+    // 6 odd vmids are on: options + config (2 calls each), 6 even are off: options only.
+    expect(fetchOptions).toHaveBeenCalledTimes(12)
+    expect(fetchNet).toHaveBeenCalledTimes(6)
+    expect(fetchNet.mock.calls.every(([guest]) => Number((guest as CoverageGuest).vmid) % 2 === 1)).toBe(true)
+    expect(result).toMatchObject({ enabled: 6, disabled: 6, unknown: 0, partial: false })
+    expect(result.guests.find(r => r.vmid === '1')).toMatchObject({ nicFirewall: true, vlans: [30], enabled: true })
+    // The config call holds the guest's slot: still 4 in flight at most.
+    expect(maxInFlight).toBeLessThanOrEqual(4)
+  })
+
+  it('reads no config when the inventory knows the NICs', async () => {
+    const fetchNet = vi.fn(async () => ({ nicFirewall: true, vlans: [] }))
+
+    await computeGuestCoverage([g(1, 'pve1', 'lxc')], {
+      listGuests: async () => [],
+      guestNet: () => ({ nicFirewall: false, vlans: [] }),
+      fetchOptions: async () => ({ enable: 1 }),
+      fetchNet,
+    })
+
+    expect(fetchNet).not.toHaveBeenCalled()
+  })
+
+  it('keeps what the config read found: no second read before the TTL, one again after it only if still unknown', async () => {
+    let clock = 0
+    const fetchOptions = vi.fn(async () => ({ enable: 1 }))
+    const fetchNet = vi.fn(async () => ({ nicFirewall: true, vlans: [] }))
+    const deps = { listGuests: async () => [g(1, 'pve1', 'lxc'), g(2, 'pve1', 'lxc')], guestNet: () => undefined, fetchOptions, fetchNet, now: () => clock }
+
+    const first = await getGuestCoverage('c-net', deps)
+    expect(first.result).toMatchObject({ enabled: 2, unknown: 0 })
+    expect(fetchOptions).toHaveBeenCalledTimes(2)
+    expect(fetchNet).toHaveBeenCalledTimes(2)
+
+    clock += COVERAGE_TTL_MS - 1
+    const second = await getGuestCoverage('c-net', deps)
+    expect(second.result).toMatchObject({ enabled: 2, unknown: 0 })
+    expect(fetchOptions).toHaveBeenCalledTimes(2)
+    expect(fetchNet).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads a written guest alone again: its options and its config, nothing for the others', async () => {
+    const fetchOptions = vi.fn(async () => ({ enable: 1 }))
+    const fetchNet = vi.fn(async () => ({ nicFirewall: true, vlans: [] }))
+    const deps = { listGuests: async () => [g(1, 'pve1', 'lxc'), g(2, 'pve1', 'lxc')], guestNet: () => undefined, fetchOptions, fetchNet }
+    await getGuestCoverage('c-write', deps)
+
+    forgetGuestCoverage('c-write', { type: 'lxc', vmid: '2' })
+    await getGuestCoverage('c-write', deps)
+
+    expect(fetchOptions).toHaveBeenCalledTimes(3)
+    expect(fetchNet).toHaveBeenCalledTimes(3)
+    expect(fetchNet.mock.calls[2][0]).toMatchObject({ vmid: '2' })
+  })
+
+  it('starts no config read once tripped, and the guest stays unknown', async () => {
+    let clock = 0
+    const fetchOptions = vi.fn(async () => {
+      clock += COVERAGE_SLOW_CALL_MS + 1
+      return { enable: 1 }
+    })
+    const fetchNet = vi.fn(async () => ({ nicFirewall: true, vlans: [] }))
+
+    const result = await computeGuestCoverage([g(1, 'pve1', 'lxc')], { listGuests: async () => [], guestNet: () => undefined, fetchOptions, fetchNet, now: () => clock })
+
+    expect(fetchNet).not.toHaveBeenCalled()
+    expect(result.unknown).toBe(1)
+  })
+
+  it('leaves the guest unknown when its config cannot be read', async () => {
+    const result = await computeGuestCoverage([g(1, 'pve1', 'lxc')], {
+      listGuests: async () => [],
+      guestNet: () => undefined,
+      fetchOptions: async () => ({ enable: 1 }),
+      fetchNet: async () => { throw new Error('HTTP 500') },
+    })
+
+    expect(result).toMatchObject({ enabled: 0, disabled: 0, unknown: 1 })
   })
 })

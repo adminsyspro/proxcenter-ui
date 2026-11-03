@@ -1,8 +1,9 @@
 /**
  * GET /api/v1/firewall/coverage/[connectionId] (UA44): the Dashboard's guest firewall coverage, computed on the
  * server once per connection, with one row per guest for the Firewalling and Security Groups tabs. The guarantees on
- * the Proxmox load are what is tested here: one options call per guest at most, never a rules or config call,
- * never more than 4 in flight nor 2 per node, 200 guests at most, and the cache in front of all of it.
+ * the Proxmox load are what is tested here: one options call per guest, one config call more only for a guest whose
+ * options are on and whose NICs the inventory has not read (UA46), never a rules call, never more than 4 in flight
+ * nor 2 per node, 200 guests at most, and the cache in front of all of it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -15,6 +16,8 @@ const h = vi.hoisted(() => ({
   orchGet: vi.fn<(path: string) => Promise<any>>(),
   pveFetch: vi.fn<(...a: any[]) => Promise<any>>(),
   nic: new Map<string, boolean>(),
+  /** Configs Proxmox answers, by type/vmid; absent: a container NIC with firewall=1. */
+  configs: new Map<string, Record<string, string>>(),
 }))
 
 vi.mock('@/lib/tenant', () => ({
@@ -34,6 +37,12 @@ vi.mock('@/lib/inventory/guestDiskTotals', () => ({
     const nic = h.nic.get(`${type}/${vmid}`)
     return nic === undefined ? undefined : { nicFirewall: nic, vlans: nic ? [20] : [] }
   },
+  // What the real one does that matters here: the config read is kept, the next peek sees it.
+  rememberGuestConfig: (_conn: string, type: string, vmid: string, config: Record<string, string>) => {
+    const nicFirewall = Object.entries(config).some(([k, v]) => /^net\d+$/.test(k) && /(^|,)firewall=1(,|$)/.test(v))
+    h.nic.set(`${type}/${vmid}`, nicFirewall)
+    return { nicFirewall, vlans: nicFirewall ? [20] : [] }
+  },
 }))
 
 import { setCachedInventory, invalidateInventoryCache } from '@/lib/cache/inventoryCache'
@@ -52,9 +61,13 @@ function onPve(list: Guest[], offlineNodes: string[] = []) {
   const nodes = [...new Set(list.map(g => g.node))].map(node => ({ type: 'node', node, status: offlineNodes.includes(node) ? 'offline' : 'online' }))
   h.pveFetch.mockImplementation(async (_conn: unknown, path: string) => {
     if (path === '/cluster/resources') return [...nodes, ...list]
+    const config = /^\/nodes\/[^/]+\/(qemu|lxc)\/(\d+)\/config$/.exec(path)
+    if (config) return h.configs.get(`${config[1]}/${config[2]}`) ?? { rootfs: 'local:subvol,size=8G', net0: 'name=eth0,bridge=vmbr0,firewall=1,type=veth' }
     throw new Error(`unexpected PVE call ${path}`)
   })
 }
+
+const configCalls = () => h.pveFetch.mock.calls.filter(([, path]) => String(path).endsWith('/config'))
 
 /** Every guest has a NIC with firewall=1 in the inventory's config cache. */
 function nicOn(list: Guest[]) {
@@ -90,6 +103,7 @@ beforeEach(() => {
   resetGuestCoverage()
   invalidateInventoryCache()
   h.nic.clear()
+  h.configs.clear()
   h.ownership.mockResolvedValue(null)
   h.permission.mockResolvedValue(null)
   h.infra.mockResolvedValue({ kind: 'provider' })
@@ -144,19 +158,22 @@ describe('GET /api/v1/firewall/coverage/[connectionId]: figures and load', () =>
     h.nic.set('qemu/101', true)
     h.nic.set('qemu/102', true)
     h.nic.set('lxc/103', false)
-    // qemu/104: the inventory has not read its config yet.
+    // qemu/104: the inventory has not read its config yet, Proxmox has no firewall on its NIC.
+    h.configs.set('qemu/104', { scsi0: 'local:vm-104-disk-0,size=1G', net0: 'virtio=AA:BB:CC:DD:EE:04,bridge=vmbr0' })
     const stats = options(vmid => vmid !== 102)
 
     const res = await get()
     const body = await readJson<any>(res)
 
     expect(res.status).toBe(200)
-    expect(body).toMatchObject({ total: 4, measured: 4, enabled: 1, disabled: 2, unknown: 1, sampled: false, partial: true, computing: false })
+    expect(body).toMatchObject({ total: 4, measured: 4, enabled: 1, disabled: 3, unknown: 0, sampled: false, partial: false, computing: false })
     expect(typeof body.computedAt).toBe('string')
-    // One options call per guest, no rules call, no config call ever.
+    // One options call per guest, no rules call; one config call, for the one guest the inventory had not read.
     expect(stats.calls).toBe(4)
     expect(h.orchGet.mock.calls.every(([p]) => String(p).endsWith('/options'))).toBe(true)
-    expect(h.pveFetch).toHaveBeenCalledTimes(1)
+    expect(configCalls().map(([, p]) => p)).toEqual(['/nodes/pve2/qemu/104/config'])
+    expect(configCalls()[0][3]).toEqual({ slowRead: true })
+    expect(h.pveFetch).toHaveBeenCalledTimes(2)
     // One row per guest for the Firewalling and Security Groups tabs, without the rules.
     expect(body.guests).toHaveLength(4)
     expect(body.guests[0]).toEqual({
@@ -164,7 +181,7 @@ describe('GET /api/v1/firewall/coverage/[connectionId]: figures and load', () =>
       enabled: false, optionsEnabled: true, nicFirewall: false, options: { enable: 1 }, vlans: [],
     })
     expect(body.guests.find((r: any) => r.vmid === '101')).toMatchObject({ name: 'web-1', tags: ['zone-web', 'prod'], enabled: true, vlans: [20] })
-    expect(body.guests.find((r: any) => r.vmid === '104')).toMatchObject({ enabled: null, nicFirewall: null, optionsEnabled: true })
+    expect(body.guests.find((r: any) => r.vmid === '104')).toMatchObject({ enabled: false, nicFirewall: false, optionsEnabled: true })
     expect(body.guests.some((r: any) => 'rules' in r)).toBe(false)
   })
 
@@ -233,6 +250,100 @@ describe('GET /api/v1/firewall/coverage/[connectionId]: figures and load', () =>
 
     expect(stats.calls).toBe(200)
     expect(body).toMatchObject({ total: 450, measured: 200, enabled: 200, sampled: true, partial: true })
+  })
+})
+
+describe('GET /api/v1/firewall/coverage/[connectionId]: containers the inventory has not read (UA46)', () => {
+  const containers = (count: number) => guests(count).map(g => ({ ...g, type: 'lxc' as const }))
+
+  it('36 containers with their firewall on: 36 options + 36 config calls once, then none for 10 minutes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const list = containers(36)
+    onPve(list)
+    const stats = options(() => true, 0)
+
+    const first = await readJson<any>(await get())
+    expect(first).toMatchObject({ total: 36, enabled: 36, unknown: 0 })
+    expect(stats.calls).toBe(36)
+    expect(configCalls()).toHaveLength(36)
+
+    vi.setSystemTime(Date.now() + 9 * 60_000)
+    const second = await readJson<any>(await get())
+    expect(second).toMatchObject({ enabled: 36, unknown: 0 })
+    expect(stats.calls).toBe(36)
+    expect(configCalls()).toHaveLength(36)
+  })
+
+  it('past the 10 minutes, reads the options again but not the configs it kept', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const list = containers(36)
+    onPve(list)
+    const stats = options(() => true, 0)
+    await get()
+
+    vi.setSystemTime(Date.now() + 10 * 60_000 + 1)
+    const body = await readJson<any>(await get())
+
+    expect(body).toMatchObject({ enabled: 36, unknown: 0 })
+    expect(stats.calls).toBe(72)
+    expect(configCalls()).toHaveLength(36)
+  })
+
+  it('a guest written by ProxCenter is read alone: its options, and no config (now kept)', async () => {
+    const list = containers(36)
+    onPve(list)
+    const stats = options(() => true, 0)
+    await get()
+
+    forgetGuestCoverage('conn-1', { type: 'lxc', vmid: '105' })
+    await get()
+
+    expect(stats.calls).toBe(37)
+    expect(configCalls()).toHaveLength(36)
+  })
+
+  it('reads no config for a container whose options are off', async () => {
+    const list = containers(10)
+    onPve(list)
+    options(() => false, 0)
+
+    const body = await readJson<any>(await get())
+
+    expect(body).toMatchObject({ disabled: 10, unknown: 0 })
+    expect(configCalls()).toHaveLength(0)
+  })
+
+  it('keeps the pool with the config calls: 4 in flight at most, 2 per node', async () => {
+    const list = containers(36)
+    onPve(list)
+    let inFlight = 0
+    let maxInFlight = 0
+    const perNode = new Map<string, number>()
+    let maxPerNode = 0
+    const enter = async (node: string) => {
+      inFlight++
+      perNode.set(node, (perNode.get(node) ?? 0) + 1)
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      maxPerNode = Math.max(maxPerNode, perNode.get(node)!)
+      await new Promise(resolve => setTimeout(resolve, 2))
+      inFlight--
+      perNode.set(node, perNode.get(node)! - 1)
+    }
+    h.orchGet.mockImplementation(async (path: string) => {
+      await enter(path.split('/')[4])
+      return { data: { enable: 1 } }
+    })
+    h.pveFetch.mockImplementation(async (_conn: unknown, path: string) => {
+      if (path === '/cluster/resources') return list
+      await enter(path.split('/')[2])
+      return { rootfs: 'local:subvol,size=8G', net0: 'name=eth0,bridge=vmbr0,firewall=1' }
+    })
+
+    const body = await readJson<any>(await get())
+
+    expect(body.enabled).toBe(36)
+    expect(maxInFlight).toBeLessThanOrEqual(4)
+    expect(maxPerNode).toBeLessThanOrEqual(2)
   })
 })
 

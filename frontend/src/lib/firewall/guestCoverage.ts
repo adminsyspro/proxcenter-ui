@@ -7,8 +7,11 @@
 // browser used to ask three requests per guest (rules, options, config) for every viewer, every time the tab
 // opened. Here the work is done once per connection, for everyone, and bounded:
 //  - the NIC flag and VLAN tags come from the config read the inventory already caches (guestDiskTotals), read
-//    again on every answer: no call, and a NIC toggle shows at once;
-//  - the options (enable, policies, log levels the VM rows show) are the only per-guest Proxmox call, at most
+//    again on every answer: no call, and a NIC toggle shows at once. A guest whose options are on but whose config
+//    the inventory has not read (a guest created since its last pass, a container it never reached) gets ONE config
+//    read, in the same slot as its options call: 2 calls at most per guest. What it found is kept with the options
+//    and handed to the inventory cache, so it is not read again before the TTL or a write by ProxCenter (UA46);
+//  - the options (enable, policies, log levels the VM rows show) are the only other per-guest Proxmox call, at most
 //    COVERAGE_GLOBAL_CONCURRENCY in flight and COVERAGE_NODE_CONCURRENCY per node, none on a node the inventory
 //    reports offline, none started after COVERAGE_BUDGET_MS, and none started once one call timed out or took
 //    longer than COVERAGE_SLOW_CALL_MS (a slow Proxmox is left alone: the rest is unknown, and that is cached);
@@ -97,15 +100,23 @@ export type CoverageDeps = {
   listGuests: () => Promise<CoverageGuest[]>
   /** The cached NIC facts of a guest, undefined when not known. */
   guestNet: (guest: CoverageGuest) => GuestNet | undefined
-  /** The guest's firewall options: the one Proxmox call per guest. */
+  /** The guest's firewall options: the first Proxmox call per guest. */
   fetchOptions: (guest: CoverageGuest) => Promise<GuestOptions | null | undefined>
+  /**
+   * The NIC facts read from the guest config, for a guest whose options are on and whose NICs `guestNet` does not
+   * know: the second, and last, Proxmox call for that guest. Absent: such a guest stays unknown.
+   */
+  fetchNet?: (guest: CoverageGuest) => Promise<GuestNet | null | undefined>
   now?: () => number
 }
 
 export type CoverageOutcome = { result: GuestCoverage | null; computing: boolean }
 
-/** What was read of a guest: its options, or null when they could not be read. */
-type Known = { options: GuestOptions | null }
+/**
+ * What was read of a guest: its options, or null when they could not be read, and the NIC facts when its config had
+ * to be read (the inventory did not know them).
+ */
+type Known = { options: GuestOptions | null; net?: GuestNet }
 
 type State = {
   /** Options read, keyed by type/vmid@node: a guest moved to another node is read again. */
@@ -264,9 +275,14 @@ export function isTimeoutError(err: unknown): boolean {
   return /time(d)? ?out/i.test(String(e.message ?? ''))
 }
 
+/** Options that switch the guest firewall on. */
+const optionsOn = (options: GuestOptions | null | undefined) => !!options && Number(options.enable) === 1
+
 /**
- * Reads the options of these guests, under the caps above. A guest not reached (budget, trip) or whose read failed
- * comes back with null options; a guest of an offline node is skipped. Never throws.
+ * Reads the options of these guests, under the caps above, and the config of those whose options are on while their
+ * NICs are not known, in the same slot (the second call counts in the pool like the first). A guest not reached
+ * (budget, trip) or whose read failed comes back with null options; a guest of an offline node is skipped. Never
+ * throws.
  */
 export async function readGuestOptions(guests: CoverageGuest[], deps: CoverageDeps): Promise<Map<string, Known>> {
   const now = deps.now ?? Date.now
@@ -277,20 +293,29 @@ export async function readGuestOptions(guests: CoverageGuest[], deps: CoverageDe
   let tripped = false
   const out = new Map<string, Known>()
 
+  /** One Proxmox call, or null when none may start or it failed; trips on a timeout or a slow answer. */
+  const timed = async <T>(call: () => Promise<T | null | undefined>): Promise<T | null> => {
+    if (tripped || now() > deadline) return null
+    const started = now()
+    try {
+      const answer = (await call()) ?? null
+      if (now() - started > COVERAGE_SLOW_CALL_MS) tripped = true
+      return answer
+    } catch (err) {
+      if (isTimeoutError(err) || now() - started > COVERAGE_SLOW_CALL_MS) tripped = true
+      return null
+    }
+  }
+
   await mapWithConcurrency(interleaveByNode(guests.filter(g => !g.offline)), COVERAGE_GLOBAL_CONCURRENCY, async guest => {
-    const options = await onNode(guest.node, async () => {
-      if (tripped || now() > deadline) return null
-      const started = now()
-      try {
-        const answer = (await deps.fetchOptions(guest)) ?? null
-        if (now() - started > COVERAGE_SLOW_CALL_MS) tripped = true
-        return answer
-      } catch (err) {
-        if (isTimeoutError(err) || now() - started > COVERAGE_SLOW_CALL_MS) tripped = true
-        return null
-      }
+    const known = await onNode(guest.node, async (): Promise<Known> => {
+      const options = await timed(() => deps.fetchOptions(guest))
+      // Options off: not filtered whatever the NICs say, no config to read.
+      if (!optionsOn(options) || !deps.fetchNet || deps.guestNet(guest) !== undefined) return { options }
+      const net = await timed(() => deps.fetchNet!(guest))
+      return net ? { options, net } : { options }
     })
-    out.set(placedKey(guest), { options })
+    out.set(placedKey(guest), known)
   })
   // A guest of an offline node is not stored: it is read once its node is back (0 calls meanwhile).
 
@@ -307,8 +332,9 @@ function verdict(optionsEnabled: boolean | null, nicFirewall: boolean | null): b
 
 function rowOf(guest: CoverageGuest, known: Known | undefined, net: GuestNet | undefined, sampledOut: boolean): GuestCoverageRow {
   const options = known?.options ?? null
-  const optionsEnabled = options ? Number(options.enable) === 1 : null
-  const nicFirewall = net ? net.nicFirewall : null
+  const optionsEnabled = options ? optionsOn(options) : null
+  const nicFacts = net ?? known?.net
+  const nicFirewall = nicFacts ? nicFacts.nicFirewall : null
   const row: GuestCoverageRow = {
     type: guest.type,
     node: guest.node,
@@ -320,7 +346,7 @@ function rowOf(guest: CoverageGuest, known: Known | undefined, net: GuestNet | u
     optionsEnabled,
     nicFirewall,
     options,
-    vlans: net?.vlans ?? [],
+    vlans: nicFacts?.vlans ?? [],
   }
   if (sampledOut) row.sampledOut = true
 
@@ -407,7 +433,7 @@ function begin(connId: string, deps: CoverageDeps, force: boolean): Promise<Gues
       const startGen = new Map(toRead.map(g => [`${connId}|${guestKey(g)}`, generationOf(`${connId}|${guestKey(g)}`)]))
       const started = now()
       const read = await readGuestOptions(toRead, deps)
-      const called = [...read.values()].some(k => k.options !== null)
+      const called = [...read.values()].some(k => k.options !== null || !!k.net)
       const target = full ? new Map<string, Known>() : state.known
       if (store(connId, target, read, startGen, connGen)) {
         state.known = target

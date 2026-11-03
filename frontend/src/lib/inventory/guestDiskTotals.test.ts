@@ -15,6 +15,7 @@ import {
   peekGuestNicFirewall,
   configVlans,
   readGuestDiskBytes,
+  rememberGuestConfig,
   resetGuestDiskTotals,
   type DiskTotalGuest,
 } from "./guestDiskTotals"
@@ -366,5 +367,33 @@ describe("readGuestDiskBytes (#938, vDC quotas)", () => {
 
     expect(pveFetchMock).toHaveBeenCalledWith({ id: "c" }, "/nodes/pve1/qemu/104/config")
     expect(bytes).toEqual([36 * G])
+  })
+})
+
+describe("rememberGuestConfig (UA46)", () => {
+  beforeEach(() => resetGuestDiskTotals())
+
+  it("keeps a config the firewall coverage read: NIC facts and disk total, so the inventory does not read it again", async () => {
+    const facts = rememberGuestConfig(CONN, "lxc", 300, { rootfs: "local:300/vm-300-disk-0.raw,size=8G", net0: "name=eth0,bridge=vmbr0,firewall=1,tag=40,type=veth" })
+
+    expect(facts).toEqual({ nicFirewall: true, vlans: [40] })
+    expect(peekGuestNet(CONN, "lxc", 300)).toEqual({ nicFirewall: true, vlans: [40] })
+    expect(peekGuestDiskTotal(CONN, "lxc", 300)).toBe(8 * G)
+
+    const fetchConfig = vi.fn(async () => ({}))
+    await attachGuestDiskTotals(null, CONN, [{ vmid: 300, type: "lxc", node: "pve1" }], { onlineNodes: ONLINE, fetchConfig })
+    expect(fetchConfig).not.toHaveBeenCalled()
+  })
+
+  it("lets a NIC toggle follow it", () => {
+    rememberGuestConfig(CONN, "lxc", 301, { rootfs: "local:301/vm-301-disk-0.raw,size=8G", net0: "name=eth0,bridge=vmbr0,type=veth" })
+    noteGuestNicFirewall(CONN, "lxc", 301, true)
+
+    expect(peekGuestNicFirewall(CONN, "lxc", 301)).toBe(true)
+  })
+
+  it("keeps nothing from an answer that is not a config", () => {
+    expect(rememberGuestConfig(CONN, "lxc", 302, null)).toBeNull()
+    expect(peekGuestNet(CONN, "lxc", 302)).toBeUndefined()
   })
 })

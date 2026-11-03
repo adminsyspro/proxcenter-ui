@@ -27,14 +27,12 @@ const powerDialog = vi.hoisted(() => ({ props: null as any }))
 vi.mock('@/components/BulkPowerDialog', async importOriginal => {
   const { useEffect } = await import('react')
   const actual = await importOriginal<typeof import('@/components/BulkPowerDialog')>()
-  return {
-    POWER_ACTION_LOOK: actual.POWER_ACTION_LOOK,
-    default: (p: any) => {
-      powerDialog.props = p
-      useEffect(() => () => { powerDialog.props = null }, [])
-      return null
-    },
+  function BulkPowerDialogMock(p: any) {
+    powerDialog.props = p
+    useEffect(() => () => { powerDialog.props = null }, [])
+    return null
   }
+  return { POWER_ACTION_LOOK: actual.POWER_ACTION_LOOK, default: BulkPowerDialogMock }
 })
 vi.mock('@/components/tasks/JobDetailDialog', () => ({ default: (p: any) => { jobDialog.props = p; return null } }))
 vi.mock('@/lib/tasks/jobActions', () => ({ runJobAction }))

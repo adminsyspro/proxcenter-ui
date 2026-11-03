@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Alert, Box, Button, Checkbox, CircularProgress, IconButton, Tooltip, Typography } from '@mui/material'
+import { Alert, Box, Button, Checkbox, CircularProgress, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion, SuggestionAction } from '@/lib/microseg/types'
@@ -13,6 +13,7 @@ import ObservationFilters, { type ObservationFilterValues } from './ObservationF
 import ObservationRow from './ObservationRow'
 import { useResolveSuggestions } from './observationParts'
 import { Notice } from './PlanNotices'
+import { PrevNextPager } from './PolicyPager'
 
 /** Flows per page. The request asks for one more, which tells whether a next page exists. */
 export const OBSERVATION_PAGE_SIZE = 25
@@ -26,7 +27,6 @@ type Resolved = { action: SuggestionAction; count: number }
  */
 export default function ObservationPanel({ connectionId, policy, reloadPolicy, onOpenSettings }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.observation')
-  const tAll = useTranslations()
   const [filters, setFilters] = useState<ObservationFilterValues>({ kind: '', status: 'pending', zone: '' })
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
@@ -135,13 +135,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
                 <Button size='small' color='inherit' disabled={busy} onClick={() => bulk('dismiss')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkDismiss')}</Button>
               </>
             ) : <Box sx={{ flex: 1 }} />}
-            <Typography noWrap variant='body2' color='text.secondary' sx={{ flexShrink: 0 }}>{t('page', { page: page + 1 })}</Typography>
-            <IconButton size='small' aria-label={tAll('microsegPilot.policy.pager.previous')} disabled={page === 0} onClick={() => goToPage(page - 1)}>
-              <i className='ri-arrow-left-s-line' />
-            </IconButton>
-            <IconButton size='small' aria-label={tAll('microsegPilot.policy.pager.next')} disabled={!hasNext} onClick={() => goToPage(page + 1)}>
-              <i className='ri-arrow-right-s-line' />
-            </IconButton>
+            <PrevNextPager page={page} hasNext={hasNext} onPage={goToPage} />
           </Box>
           {rows.length === 0 ? (
             <Typography color='text.secondary' sx={{ py: 2 }}>{t('empty')}</Typography>

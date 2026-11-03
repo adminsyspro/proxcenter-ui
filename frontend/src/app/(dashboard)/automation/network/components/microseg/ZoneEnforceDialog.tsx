@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField } from '@mui/material'
+import { Box, CircularProgress } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegZone } from '@/lib/microseg/types'
 
-import { DialogErrorLine, ONE_LINE_SX, OneLine, useDialogAction } from './dialogParts'
+import { OneLine, useDialogAction } from './dialogParts'
+import TypedConfirmDialog from './TypedConfirmDialog'
 import { isZoneReady } from './zoneModel'
 
 /** One page of pending would-block suggestions; a full page means there may be more we cannot see. */
@@ -32,9 +33,7 @@ type Props = {
  */
 export default function ZoneEnforceDialog({ connectionId, zone, readyAfterHours, onConfirm, onCancel }: Props) {
   const t = useTranslations('microsegPilot.policy.enforce')
-  const tc = useTranslations('common')
   const [readiness, setReadiness] = useState<Readiness | null>(null)
-  const [typed, setTyped] = useState('')
   const { busy, error, run } = useDialogAction()
 
   const { id: zoneId, state, observe_since: observeSince } = zone
@@ -53,41 +52,28 @@ export default function ZoneEnforceDialog({ connectionId, zone, readyAfterHours,
   }, [connectionId, zoneId, state, observeSince, readyAfterHours])
 
   const needsName = readiness !== null && readiness !== 'ready'
-  const canConfirm = readiness !== null && (!needsName || typed === zone.name)
 
   return (
-    <Dialog open onClose={busy ? undefined : onCancel} maxWidth='sm' fullWidth aria-labelledby='microseg-enforce-title'>
-      <DialogTitle id='microseg-enforce-title' sx={ONE_LINE_SX}>{t('title', { name: zone.name })}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 0.5 }}>
-          {readiness === null && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <CircularProgress size={16} />
-              <OneLine text={t('checking')} />
-            </Box>
-          )}
-          {readiness !== null && <OneLine text={t(readiness, { hours: readyAfterHours })} />}
-          {needsName && (
-            <TextField
-              label={t('typeName', { name: zone.name })}
-              value={typed}
-              onChange={e => setTyped(e.target.value)}
-              disabled={busy}
-              size='small'
-              fullWidth
-              autoFocus
-              autoComplete='off'
-            />
-          )}
-          {error && <DialogErrorLine message={error} />}
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onCancel} disabled={busy}>{tc('cancel')}</Button>
-        <Button onClick={() => void run(onConfirm)} variant='contained' color='warning' disabled={busy || !canConfirm}>
-          {t('confirm')}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <TypedConfirmDialog
+      title={t('title', { name: zone.name })}
+      inputLabel={t('typeName', { name: zone.name })}
+      expected={needsName ? zone.name : undefined}
+      confirmLabel={t('confirm')}
+      color='warning'
+      ready={readiness !== null}
+      busy={busy}
+      error={error}
+      onConfirm={() => void run(onConfirm)}
+      onCancel={onCancel}
+    >
+      {readiness === null ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <CircularProgress size={16} />
+          <OneLine text={t('checking')} />
+        </Box>
+      ) : (
+        <OneLine text={t(readiness, { hours: readyAfterHours })} />
+      )}
+    </TypedConfirmDialog>
   )
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Box, CircularProgress, IconButton, Typography } from '@mui/material'
+import { Box, CircularProgress, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
@@ -12,7 +12,7 @@ import { isVersionConflict, useDialogAction } from './dialogParts'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
-import PolicyPager, { usePaged } from './PolicyPager'
+import PolicyPager, { PrevNextPager, usePaged } from './PolicyPager'
 import RevisionRow from './RevisionRow'
 import RunRow from './RunRow'
 
@@ -116,8 +116,6 @@ function Revisions({ connectionId, policy, reloadPolicy, startRun }: MicrosegSub
 
 function Runs({ connectionId }: Pick<MicrosegSubTabProps, 'connectionId'>) {
   const t = useTranslations('microsegPilot.history.runs')
-  const tp = useTranslations('microsegPilot.policy.pager')
-  const to = useTranslations('microsegPilot.observation')
   const [page, setPage] = useState(0)
   const { data, error, loading, reload } = useMicrosegRuns(connectionId, {
     limit: RUNS_PAGE_SIZE + 1,
@@ -129,13 +127,7 @@ function Runs({ connectionId }: Pick<MicrosegSubTabProps, 'connectionId'>) {
   return (
     <Box component='section' aria-label={t('title')}>
       <SectionHeader title={t('title')}>
-        <Typography noWrap variant='body2' color='text.secondary'>{to('page', { page: page + 1 })}</Typography>
-        <IconButton size='small' aria-label={tp('previous')} disabled={page === 0} onClick={() => setPage(page - 1)}>
-          <i className='ri-arrow-left-s-line' />
-        </IconButton>
-        <IconButton size='small' aria-label={tp('next')} disabled={!hasNext} onClick={() => setPage(page + 1)}>
-          <i className='ri-arrow-right-s-line' />
-        </IconButton>
+        <PrevNextPager page={page} hasNext={hasNext} onPage={setPage} />
       </SectionHeader>
       {error && !data && <MicrosegErrorAlert error={error} onRetry={reload} />}
       {!data && !error && loading && <Loading text={t('loading')} />}

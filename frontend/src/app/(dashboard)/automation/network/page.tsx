@@ -108,6 +108,11 @@ export default function NetworkAutomationPage() {
     }
   }, [activeTab, rulesSubTab, selectedConnection, vmFirewallData.length, loadingVMRules, loadVMFirewallData])
 
+  // The Aliases and IP Sets tabs are the same objects view on the same data.
+  const objectsProps = {
+    aliases, ipsets, selectedConnection, loading, loadError: firewallLoadError || null, reload: loadFirewallData,
+  }
+
   return (
     <ProviderTenantGuard>
     <EnterpriseGuard requiredFeature={Features.MICROSEGMENTATION} featureName="Microsegmentation / Firewall">
@@ -204,28 +209,12 @@ export default function NetworkAutomationPage() {
 
           {/* Tab 2: Aliases */}
           {activeTab === 2 && (
-            <ObjectsTab
-              aliases={aliases}
-              ipsets={ipsets}
-              selectedConnection={selectedConnection}
-              loading={loading}
-              loadError={firewallLoadError || null}
-              reload={loadFirewallData}
-              view="aliases"
-            />
+            <ObjectsTab {...objectsProps} view="aliases" />
           )}
 
           {/* Tab 3: IP Sets */}
           {activeTab === 3 && (
-            <ObjectsTab
-              aliases={aliases}
-              ipsets={ipsets}
-              selectedConnection={selectedConnection}
-              loading={loading}
-              loadError={firewallLoadError || null}
-              reload={loadFirewallData}
-              view="ipsets"
-            />
+            <ObjectsTab {...objectsProps} view="ipsets" />
           )}
 
           {/* Tab 4: Security Groups */}

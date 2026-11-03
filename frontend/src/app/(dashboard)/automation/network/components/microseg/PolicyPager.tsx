@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { TablePagination } from '@mui/material'
+import { IconButton, TablePagination, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 export const POLICY_PAGE_SIZE = 10
@@ -32,5 +32,23 @@ export default function PolicyPager({ count, page, size, onPage }: Props) {
       getItemAriaLabel={type => t(type)}
       sx={{ '& .MuiTablePagination-toolbar': { minHeight: 40, pl: 1 } }}
     />
+  )
+}
+
+type PrevNextProps = { page: number; hasNext: boolean; onPage: (page: number) => void }
+
+/** Pagination of a list the server pages without a total: "Page N" and the previous and next buttons. */
+export function PrevNextPager({ page, hasNext, onPage }: PrevNextProps) {
+  const t = useTranslations('microsegPilot')
+  return (
+    <>
+      <Typography noWrap variant='body2' color='text.secondary' sx={{ flexShrink: 0 }}>{t('observation.page', { page: page + 1 })}</Typography>
+      <IconButton size='small' aria-label={t('policy.pager.previous')} disabled={page === 0} onClick={() => onPage(page - 1)}>
+        <i className='ri-arrow-left-s-line' />
+      </IconButton>
+      <IconButton size='small' aria-label={t('policy.pager.next')} disabled={!hasNext} onClick={() => onPage(page + 1)}>
+        <i className='ri-arrow-right-s-line' />
+      </IconButton>
+    </>
   )
 }

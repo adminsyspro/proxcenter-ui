@@ -43,24 +43,58 @@ function setup(suggestions: MicrosegSuggestion[], opts: { route?: string; pendin
   return renderTab()
 }
 
-const row = (name: RegExp | string) => screen.findByRole('listitem', { name })
+const row = (name: RegExp | string) => screen.findByRole('row', { name })
+/** The flow rows of the table (not the header, the group headers or the details). */
+const flowRows = () => screen.getAllByRole('row').filter(r => r.hasAttribute('data-suggestion'))
+const findFlowRows = async () => { await waitFor(() => expect(flowRows().length).toBeGreaterThan(0)); return flowRows() }
 const unknownSource = sug('u1', { src_zone_id: '', src_ip: '192.168.1.50' })
 
 describe('observation list', () => {
-  it('shows one line per flow: source, destination, protocol and port, hits, last seen', async () => {
-    setup([sug('s1'), unknownSource])
-    const line = await row('web to db')
-    expect(within(line).getByText('web')).toBeTruthy()
-    expect(within(line).getByText('db')).toBeTruthy()
-    expect(within(line).getByText('tcp/443')).toBeTruthy()
-    expect(within(line).getByText('12 hits')).toBeTruthy()
-    expect(within(line).getByText(/Last seen Nov 2, 2026, 12:00\sPM/)).toBeTruthy()
-    expect(line.querySelector('i.ri-eye-line')).toBeTruthy()
+  it('shows one row per flow: source, destination, service, hits, last seen and status', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-02T14:00:00Z'))
+    try {
+      setup([sug('s1'), unknownSource])
+      const line = await row('web to db')
+      expect(within(line).getByText('web')).toBeTruthy()
+      expect(within(line).getByText('db')).toBeTruthy()
+      expect(within(line).getByText('tcp/443')).toBeTruthy()
+      expect(within(line).getByText('12')).toBeTruthy()
+      expect(within(line).getByText('2 hours ago')).toBeTruthy()
+      expect(within(line).getByText('Would be blocked')).toBeTruthy()
+      expect(line.querySelector('i.ri-eye-line')).toBeTruthy()
+      expect(screen.getByRole('columnheader', { name: 'Last seen' })).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
-  it('shows a blocked flow with its own glyph', async () => {
+  it('gives the absolute date of the last time in the tooltip of the relative one', async () => {
+    setup([sug('s1')])
+    const line = await row('web to db')
+    fireEvent.mouseOver(within(line).getByText(/ago$/))
+    expect(await screen.findByText(/Last seen Nov 2, 2026, 12:00\sPM/)).toBeTruthy()
+  })
+
+  it('draws the hits bar as a share of the busiest flow of the page', async () => {
+    setup([sug('s1', { hits: 200 }), sug('s2', { hits: 50, dst_ip: '10.0.0.8', src_zone_id: 'zd', dst_zone_id: 'zw' })])
+    const busy = (await row('web to db')).querySelector('[data-share]') as HTMLElement
+    const quiet = (await row('db to web')).querySelector('[data-share]') as HTMLElement
+    expect(busy.style.width).toBe('100%')
+    expect(quiet.style.width).toBe('25%')
+  })
+
+  it('colours the source dot with the zone colour, red for a source in no zone', async () => {
+    setup([sug('s1'), unknownSource])
+    expect((await row('web to db')).querySelector('[data-source-dot]')?.getAttribute('data-source-dot')).toBe('#3b82f6')
+    expect((await row('192.168.1.50 to db')).querySelector('[data-source-dot]')?.getAttribute('data-source-dot')).toBe('error.main')
+  })
+
+  it('shows a blocked flow with its own glyph and a blue status', async () => {
     setup([sug('b1', { kind: 'blocked' })])
-    expect((await row('web to db')).querySelector('i.ri-forbid-line')).toBeTruthy()
+    const line = await row('web to db')
+    expect(line.querySelector('i.ri-forbid-line')).toBeTruthy()
+    expect(within(line).getByText('Blocked').closest('.MuiChip-root')?.className).toMatch(/colorInfo/)
   })
 
   it('shows an unknown source as an IP with the accept as CIDR action, and Accept disabled', async () => {
@@ -84,14 +118,15 @@ describe('observation list', () => {
     expect((within(line).getByRole('button', { name: 'Accept' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('keeps the addresses and times under the chevron', async () => {
+  it('keeps the sample addresses, the sample pair wording and the times under the chevron', async () => {
     setup([unknownSource])
     const line = await row('192.168.1.50 to db')
-    expect(within(line).queryByText(/First seen/)).toBeNull()
+    expect(screen.queryByText(/First seen/)).toBeNull()
     fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
-    expect(within(line).getByText(/First seen Nov 1, 2026, 10:00\sAM/)).toBeTruthy()
-    expect(within(line).getByText('Source: 192.168.1.50')).toBeTruthy()
-    expect(within(line).getByText('Destination: db (10.0.0.9)')).toBeTruthy()
+    expect(await screen.findByText(/First seen Nov 1, 2026, 10:00\sAM/)).toBeTruthy()
+    expect(screen.getByText(/Last seen Nov 2, 2026, 12:00\sPM/)).toBeTruthy()
+    expect(screen.getByText('Sample addresses: 192.168.1.50 \u2192 10.0.0.9')).toBeTruthy()
+    expect(screen.getByText(/one sample pair of addresses per observed flow/)).toBeTruthy()
   })
 
   it('says there is nothing to show', async () => {
@@ -139,7 +174,7 @@ describe('unit actions', () => {
   it('reloads on a 409 and keeps the selection', async () => {
     setup([sug('s1'), sug('s2', { src_zone_id: 'zd', dst_zone_id: 'zw' })])
     mock.routes['POST /suggestions/resolve'] = () => reply(409, { code: 'VERSION_CONFLICT', error: 'x' })
-    await screen.findByRole('listitem', { name: 'web to db' })
+    await row('web to db')
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }))
     expect(screen.getByText('2 selected')).toBeTruthy()
     const before = calls('GET /policy').length
@@ -155,7 +190,7 @@ describe('bulk actions', () => {
 
   it('accepts three suggestions at once and reloads', async () => {
     setup(three)
-    await screen.findAllByRole('listitem')
+    await findFlowRows()
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }))
     expect(screen.getByText('3 selected')).toBeTruthy()
     const before = listCalls().length
@@ -168,13 +203,13 @@ describe('bulk actions', () => {
 
   it('has a three-state select-all over the current page', async () => {
     setup(three)
-    await screen.findAllByRole('listitem')
+    await findFlowRows()
     const all = screen.getByRole('checkbox', { name: 'Select all on this page' }) as HTMLInputElement
     const indeterminate = () => all.getAttribute('data-indeterminate') === 'true'
     expect(all.checked).toBe(false)
     expect(indeterminate()).toBe(false)
 
-    const lines = screen.getAllByRole('listitem')
+    const lines = flowRows()
     fireEvent.click(within(lines[0]).getByRole('checkbox'))
     expect(all.checked).toBe(false)
     expect(indeterminate()).toBe(true)
@@ -190,13 +225,13 @@ describe('bulk actions', () => {
 
   it('disables the bulk Accept while a selected flow has no source zone, and offers the CIDR', async () => {
     setup([sug('s1'), unknownSource])
-    await screen.findAllByRole('listitem')
+    await findFlowRows()
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }))
     expect((screen.getByRole('button', { name: 'Accept selected' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Accept selected as CIDR' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Dismiss selected' }) as HTMLButtonElement).disabled).toBe(false)
 
-    fireEvent.click(within(screen.getByRole('listitem', { name: 'web to db' })).getByRole('checkbox'))
+    fireEvent.click(within(screen.getByRole('row', { name: 'web to db' })).getByRole('checkbox'))
     expect((screen.getByRole('button', { name: 'Accept selected as CIDR' }) as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: 'Accept selected as CIDR' }))
     await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
@@ -205,7 +240,7 @@ describe('bulk actions', () => {
 
   it('has no bulk bar until something is selected', async () => {
     setup(three)
-    await screen.findAllByRole('listitem')
+    await findFlowRows()
     expect(screen.queryByRole('button', { name: 'Accept selected' })).toBeNull()
   })
 })
@@ -241,14 +276,14 @@ describe('server side filters and pagination', () => {
     const page = (from: number, n: number) => Array.from({ length: n }, (_, i) => sug(`p${from + i}`, { dst_ip: `10.1.0.${from + i}` }))
     setup(page(0, 26))
     mock.routes['GET /suggestions?limit=26&offset=25&status=pending'] = () => reply(200, { suggestions: page(25, 3), limit: 26, offset: 25 })
-    await screen.findAllByRole('listitem')
-    expect(screen.getAllByRole('listitem')).toHaveLength(25)
+    await findFlowRows()
+    expect(flowRows()).toHaveLength(25)
     expect(screen.getByText('Page 1')).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Previous page' }) as HTMLButtonElement).disabled).toBe(true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     await waitFor(() => expect(screen.getByText('Page 2')).toBeTruthy())
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3))
+    await waitFor(() => expect(flowRows()).toHaveLength(3))
     expect(listCalls()).toContain('/suggestions?limit=26&offset=25&status=pending')
     expect((screen.getByRole('button', { name: 'Next page' }) as HTMLButtonElement).disabled).toBe(true)
 
@@ -262,14 +297,14 @@ describe('server side filters and pagination', () => {
     let resolved = false
     mock.routes['GET /suggestions?limit=26&offset=25&status=pending'] = () => reply(200, { suggestions: resolved ? [] : [sug('p25')], limit: 26, offset: 25 })
     mock.routes['POST /suggestions/resolve'] = () => { resolved = true; return reply(200, { version: 4 }) }
-    await screen.findAllByRole('listitem')
+    await findFlowRows()
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     await waitFor(() => expect(screen.getByText('Page 2')).toBeTruthy())
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1))
+    await waitFor(() => expect(flowRows()).toHaveLength(1))
 
-    fireEvent.click(within(screen.getAllByRole('listitem')[0]).getByRole('button', { name: 'Dismiss' }))
+    fireEvent.click(within(flowRows()[0]).getByRole('button', { name: 'Dismiss' }))
     await waitFor(() => expect(screen.getByText('Page 1')).toBeTruthy())
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(25))
+    await waitFor(() => expect(flowRows()).toHaveLength(25))
     expect(screen.queryByText('No observed flow matches these filters.')).toBeNull()
   })
 
@@ -277,10 +312,10 @@ describe('server side filters and pagination', () => {
     const full = Array.from({ length: 26 }, (_, i) => sug(`p${i}`, { dst_ip: `10.1.0.${i}` }))
     setup(full)
     mock.routes['GET /suggestions?limit=26&offset=25&status=pending'] = () => reply(200, { suggestions: [sug('p25'), sug('p26', { dst_ip: '10.1.0.99' })], limit: 26, offset: 25 })
-    await screen.findAllByRole('listitem')
+    await findFlowRows()
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(2))
-    fireEvent.click(within(screen.getAllByRole('listitem')[0]).getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(flowRows()).toHaveLength(2))
+    fireEvent.click(within(flowRows()[0]).getByRole('button', { name: 'Dismiss' }))
     await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
     await waitFor(() => expect(screen.getByText('1 flow dismissed')).toBeTruthy())
     expect(screen.getByText('Page 2')).toBeTruthy()
@@ -290,7 +325,7 @@ describe('server side filters and pagination', () => {
     const full = Array.from({ length: 26 }, (_, i) => sug(`p${i}`, { dst_ip: `10.1.0.${i}` }))
     setup(full)
     mock.routes['GET /suggestions?limit=26&offset=25&status=pending'] = () => reply(200, { suggestions: [sug('p25')], limit: 26, offset: 25 })
-    await screen.findAllByRole('listitem')
+    await findFlowRows()
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }))
     expect(screen.getByText('25 selected')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))

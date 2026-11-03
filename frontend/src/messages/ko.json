@@ -12943,12 +12943,23 @@
       "detail": {
         "firstSeen": "처음 확인 {time}",
         "lastSeen": "마지막 확인 {time}",
-        "source": "출발지: {value}",
-        "destination": "대상: {value}"
+        "addresses": "예시 주소: {from} → {to}",
+        "sampleNote": "엔진은 관찰된 흐름마다 예시 주소 쌍 하나만 보관합니다. 적중 수는 이 쌍만이 아니라 흐름 전체를 셉니다."
       },
       "resolvedAccept": "{count, plural, other {#개 흐름을 초안에 수락했습니다}}",
       "resolvedDismiss": "{count, plural, other {#개 흐름을 무시했습니다}}",
-      "page": "{page, number}페이지"
+      "page": "{page, number}페이지",
+      "tableLabel": "관찰된 흐름",
+      "columns": {
+        "details": "세부 정보",
+        "source": "출발지",
+        "destination": "목적지",
+        "service": "서비스",
+        "hits": "적중 수",
+        "lastSeen": "마지막 관찰",
+        "status": "상태",
+        "actions": "작업"
+      }
     },
     "overview": {
       "empty": "아직 그릴 영역이 없습니다.",

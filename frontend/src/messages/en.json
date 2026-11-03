@@ -12943,12 +12943,23 @@
       "detail": {
         "firstSeen": "First seen {time}",
         "lastSeen": "Last seen {time}",
-        "source": "Source: {value}",
-        "destination": "Destination: {value}"
+        "addresses": "Sample addresses: {from} → {to}",
+        "sampleNote": "The engine keeps one sample pair of addresses per observed flow: the hits count the whole flow, not only this pair."
       },
       "resolvedAccept": "{count, plural, one {# flow accepted into the draft} other {# flows accepted into the draft}}",
       "resolvedDismiss": "{count, plural, one {# flow dismissed} other {# flows dismissed}}",
-      "page": "Page {page, number}"
+      "page": "Page {page, number}",
+      "tableLabel": "Observed flows",
+      "columns": {
+        "details": "Details",
+        "source": "Source",
+        "destination": "Destination",
+        "service": "Service",
+        "hits": "Hits",
+        "lastSeen": "Last seen",
+        "status": "Status",
+        "actions": "Actions"
+      }
     },
     "overview": {
       "empty": "No zone to draw yet.",

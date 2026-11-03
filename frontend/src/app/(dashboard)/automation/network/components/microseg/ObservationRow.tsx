@@ -1,14 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import { Box, Checkbox, Chip, Collapse, IconButton, Tooltip, Typography } from '@mui/material'
+import { Box, Checkbox, Chip, Collapse, IconButton, TableCell, TableRow, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 
 import { OneLine } from './dialogParts'
+import { hitsShare } from './observationModel'
 import { ObservedKindGlyph, ResolveActions } from './observationParts'
 import { formatWhen } from './summaryModel'
+
+/** Columns of the table: select, details, source, arrow, destination, service, hits, last seen, status, actions. */
+export const OBSERVATION_COLUMNS = 10
+
+const CELL_SX = { py: 0.5, px: 1, whiteSpace: 'nowrap' } as const
+const NAME_SX = { maxWidth: 200, minWidth: 0 } as const
 
 /** What a zone-less endpoint is called: its IP, or "Unknown". */
 function endpoint(zoneId: string, ip: string, zones: Map<string, MicrosegZone>, t: (key: string) => string): string {
@@ -16,10 +23,16 @@ function endpoint(zoneId: string, ip: string, zones: Map<string, MicrosegZone>, 
   return ip || t('unknownEndpoint')
 }
 
-/** The zone with its IP when both are known, for the details. */
-function endpointDetail(zoneId: string, ip: string, zones: Map<string, MicrosegZone>, t: (key: string) => string): string {
-  const name = endpoint(zoneId, ip, zones, t)
-  return zoneId && ip ? `${name} (${ip})` : name
+/** The colour of the source dot: its zone's, red for a source in no zone, grey for a zone that is gone. */
+function sourceDot(s: MicrosegSuggestion, zones: Map<string, MicrosegZone>): string {
+  if (!s.src_zone_id) return 'error.main'
+  return zones.get(s.src_zone_id)?.color || 'text.disabled'
+}
+
+/** "2 hours ago", or the raw text when it is not a date. */
+function relative(format: ReturnType<typeof useFormatter>, iso: string, now: number): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : format.relativeTime(d, now)
 }
 
 export type ObservationRowProps = {
@@ -27,12 +40,16 @@ export type ObservationRowProps = {
   zones: Map<string, MicrosegZone>
   checked: boolean
   busy: boolean
+  /** Most hits of a flow on the page: the bar of each row is its share of it. */
+  maxHits: number
+  /** The current time of the relative "last seen" (useNow). */
+  now: number
   onToggle: () => void
   onResolve: (action: SuggestionAction) => void
 }
 
-/** One observed flow on one line; the first and last time and the addresses sit under the chevron. */
-export default function ObservationRow({ suggestion: s, zones, checked, busy, onToggle, onResolve }: ObservationRowProps) {
+/** One observed flow, one row of the table; the sample addresses and the first and last time sit under the chevron. */
+export default function ObservationRow({ suggestion: s, zones, checked, busy, maxHits, now, onToggle, onResolve }: ObservationRowProps) {
   const t = useTranslations('microsegPilot.observation')
   const tp = useTranslations('microsegPilot.policy')
   const format = useFormatter()
@@ -43,44 +60,77 @@ export default function ObservationRow({ suggestion: s, zones, checked, busy, on
   const destination = endpoint(s.dst_zone_id, s.dst_ip, zones, t)
   const service = s.dport ? `${s.proto}/${s.dport}` : s.proto
   const pending = s.status === 'pending'
+  const share = hitsShare(s.hits, maxHits)
+  const dot = sourceDot(s, zones)
 
   return (
-    <Box role='listitem' aria-label={t('rowLabel', { source, destination })} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 44, pr: 1, minWidth: 0 }}>
-        <Checkbox
-          size='small'
-          checked={checked}
-          disabled={!pending || busy}
-          onChange={onToggle}
-          slotProps={{ input: { 'aria-label': t('selectRow', { source, destination }) } }}
-          sx={{ p: 0.5 }}
-        />
-        <IconButton size='small' aria-expanded={open} aria-label={open ? tp('hideDetails') : tp('showDetails')} onClick={() => setOpen(v => !v)}>
-          <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
-        </IconButton>
-        <ObservedKindGlyph kind={s.kind} />
-        <Tooltip title={source}><Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', maxWidth: 200 }}>{source}</Typography></Tooltip>
-        <i className='ri-arrow-right-line' style={{ opacity: 0.6, flexShrink: 0 }} />
-        <Tooltip title={destination}><Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', maxWidth: 200 }}>{destination}</Typography></Tooltip>
-        <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{service}</Typography>
-        <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{t('hits', { count: s.hits })}</Typography>
-        <Tooltip title={t('lastSeen', { time: when(s.last_seen) })}>
-          <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{t('lastSeen', { time: when(s.last_seen) })}</Typography>
-        </Tooltip>
-        {pending ? (
-          <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} />
-        ) : (
-          <Chip size='small' variant='outlined' label={t(`status.${s.status}`)} sx={{ flexShrink: 0 }} />
-        )}
-      </Box>
-      <Collapse in={open} unmountOnExit>
-        <Box sx={{ pl: 11, pr: 2, pb: 1.5, minWidth: 0 }}>
-          <OneLine text={t('detail.firstSeen', { time: when(s.first_seen) })} />
-          <OneLine text={t('detail.lastSeen', { time: when(s.last_seen) })} />
-          <OneLine text={t('detail.source', { value: endpointDetail(s.src_zone_id, s.src_ip, zones, t) })} />
-          <OneLine text={t('detail.destination', { value: endpointDetail(s.dst_zone_id, s.dst_ip, zones, t) })} />
-        </Box>
-      </Collapse>
-    </Box>
+    <>
+      <TableRow hover data-suggestion={s.id} aria-label={t('rowLabel', { source, destination })} sx={{ '& > td': { borderBottom: open ? 0 : undefined } }}>
+        <TableCell padding='checkbox' sx={{ py: 0.5 }}>
+          <Checkbox
+            size='small'
+            checked={checked}
+            disabled={!pending || busy}
+            onChange={onToggle}
+            slotProps={{ input: { 'aria-label': t('selectRow', { source, destination }) } }}
+            sx={{ p: 0.5 }}
+          />
+        </TableCell>
+        <TableCell sx={{ ...CELL_SX, px: 0 }}>
+          <IconButton size='small' aria-expanded={open} aria-label={open ? tp('hideDetails') : tp('showDetails')} onClick={() => setOpen(v => !v)}>
+            <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
+          </IconButton>
+        </TableCell>
+        <TableCell sx={CELL_SX}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+            <ObservedKindGlyph kind={s.kind} />
+            <Box component='span' data-source-dot={dot} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: dot, flexShrink: 0 }} />
+            <Tooltip title={source}><Typography noWrap fontWeight={600} sx={NAME_SX}>{source}</Typography></Tooltip>
+          </Box>
+        </TableCell>
+        <TableCell sx={{ ...CELL_SX, px: 0 }} aria-hidden><i className='ri-arrow-right-line' style={{ opacity: 0.6 }} /></TableCell>
+        <TableCell sx={CELL_SX}>
+          <Tooltip title={destination}><Typography noWrap fontWeight={600} sx={NAME_SX}>{destination}</Typography></Tooltip>
+        </TableCell>
+        <TableCell sx={CELL_SX}><Chip size='small' variant='outlined' label={service} /></TableCell>
+        <TableCell sx={CELL_SX}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant='body2' sx={{ minWidth: 48, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{format.number(s.hits)}</Typography>
+            <Box aria-hidden sx={{ width: 56, height: 6, borderRadius: 3, bgcolor: 'action.hover', overflow: 'hidden', flexShrink: 0 }}>
+              <Box data-share={share} sx={{ height: '100%', borderRadius: 3, bgcolor: 'primary.main' }} style={{ width: `${share}%` }} />
+            </Box>
+          </Box>
+        </TableCell>
+        <TableCell sx={CELL_SX}>
+          <Tooltip title={t('lastSeen', { time: when(s.last_seen) })}>
+            <Typography noWrap variant='body2' color='text.secondary'>{relative(format, s.last_seen, now)}</Typography>
+          </Tooltip>
+        </TableCell>
+        <TableCell sx={CELL_SX}>
+          <Chip size='small' variant='outlined' color={s.kind === 'blocked' ? 'info' : 'error'} label={t(`kind.${s.kind}`)} />
+        </TableCell>
+        <TableCell sx={{ ...CELL_SX, textAlign: 'right' }}>
+          {pending ? (
+            <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} />
+          ) : (
+            <Chip size='small' variant='outlined' label={t(`status.${s.status}`)} />
+          )}
+        </TableCell>
+      </TableRow>
+      {open && (
+        <TableRow data-detail={s.id}>
+          <TableCell colSpan={OBSERVATION_COLUMNS} sx={{ py: 0, px: 0 }}>
+            <Collapse in appear unmountOnExit>
+              <Box sx={{ pl: 11, pr: 2, pb: 1.5, minWidth: 0, maxWidth: '100%' }}>
+                <OneLine text={t('detail.addresses', { from: s.src_ip || t('unknownEndpoint'), to: s.dst_ip || t('unknownEndpoint') })} />
+                <OneLine text={t('detail.sampleNote')} />
+                <OneLine text={t('detail.firstSeen', { time: when(s.first_seen) })} />
+                <OneLine text={t('detail.lastSeen', { time: when(s.last_seen) })} />
+              </Box>
+            </Collapse>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
   )
 }

@@ -12611,12 +12611,23 @@
       "detail": {
         "firstSeen": "Erstmals gesehen {time}",
         "lastSeen": "Zuletzt gesehen {time}",
-        "source": "Quelle: {value}",
-        "destination": "Ziel: {value}"
+        "addresses": "Beispieladressen: {from} → {to}",
+        "sampleNote": "Die Engine behält pro beobachtetem Fluss nur ein Beispieladresspaar: Die Treffer zählen den ganzen Fluss, nicht nur dieses Paar."
       },
       "resolvedAccept": "{count, plural, one {# Fluss in den Entwurf übernommen} other {# Flüsse in den Entwurf übernommen}}",
       "resolvedDismiss": "{count, plural, one {# Fluss verworfen} other {# Flüsse verworfen}}",
-      "page": "Seite {page, number}"
+      "page": "Seite {page, number}",
+      "tableLabel": "Beobachtete Flüsse",
+      "columns": {
+        "details": "Details anzeigen",
+        "source": "Quelle",
+        "destination": "Ziel",
+        "service": "Dienst",
+        "hits": "Treffer",
+        "lastSeen": "Zuletzt gesehen",
+        "status": "Zustand",
+        "actions": "Aktionen"
+      }
     },
     "overview": {
       "empty": "Noch keine Zone zum Zeichnen.",

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Alert, Box, Button, Checkbox, CircularProgress, Tooltip, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion, SuggestionAction } from '@/lib/microseg/types'
@@ -10,11 +10,12 @@ import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import ObservationFilters, { type ObservationFilterValues } from './ObservationFilters'
-import ObservationRow from './ObservationRow'
+import ObservationTable from './ObservationTable'
 import { useResolveSuggestions } from './observationParts'
 import { Notice } from './PlanNotices'
 import { PrevNextPager } from './PolicyPager'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import { useNow } from './useNow'
 
 /** Flows per page. The request asks for one more, which tells whether a next page exists. */
 export const OBSERVATION_PAGE_SIZE = 25
@@ -45,6 +46,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
   const zonesById = useMemo(() => new Map(policy.zones.map(z => [z.id, z])), [policy.zones])
   const rows = useMemo(() => (data ?? []).slice(0, OBSERVATION_PAGE_SIZE), [data])
   const hasNext = (data?.length ?? 0) > OBSERVATION_PAGE_SIZE
+  const now = useNow(undefined, data)
 
   // Select-all covers the current page, the pending flows of it (the others cannot be resolved).
   const pending = rows.filter(r => r.status === 'pending')
@@ -114,16 +116,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
 
       {data && (
         <>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40, borderBottom: 1, borderColor: 'divider' }}>
-            <Checkbox
-              size='small'
-              checked={allChecked}
-              indeterminate={chosen.length > 0 && !allChecked}
-              disabled={pending.length === 0 || busy}
-              onChange={toggleAll}
-              slotProps={{ input: { 'aria-label': t('selectPage') } }}
-              sx={{ p: 0.5 }}
-            />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40 }}>
             {chosen.length > 0 ? (
               <>
                 <Typography noWrap variant='body2' sx={{ flexShrink: 0 }}>{t('selected', { count: chosen.length })}</Typography>
@@ -144,19 +137,19 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
           {rows.length === 0 ? (
             <Typography color='text.secondary' sx={{ py: 2 }}>{t('empty')}</Typography>
           ) : (
-            <Box role='list'>
-              {rows.map(s => (
-                <ObservationRow
-                  key={s.id}
-                  suggestion={s}
-                  zones={zonesById}
-                  checked={selected.has(s.id)}
-                  busy={busy}
-                  onToggle={() => toggle(s.id)}
-                  onResolve={action => one(s, action)}
-                />
-              ))}
-            </Box>
+            <ObservationTable
+              rows={rows}
+              zones={zonesById}
+              selected={selected}
+              busy={busy}
+              now={now}
+              allChecked={allChecked}
+              someChecked={chosen.length > 0}
+              canSelect={pending.length > 0}
+              onToggleAll={toggleAll}
+              onToggle={toggle}
+              onResolve={one}
+            />
           )}
         </>
       )}

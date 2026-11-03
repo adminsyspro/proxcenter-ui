@@ -12944,12 +12944,23 @@
       "detail": {
         "firstSeen": "Vu pour la première fois {time}",
         "lastSeen": "Vu pour la dernière fois {time}",
-        "source": "Source : {value}",
-        "destination": "Destination : {value}"
+        "addresses": "Adresses d'exemple : {from} → {to}",
+        "sampleNote": "Le moteur ne garde qu'une paire d'adresses d'exemple par flux observé : les occurrences comptent tout le flux, pas seulement cette paire."
       },
       "resolvedAccept": "{count, plural, one {# flux accepté dans le brouillon} other {# flux acceptés dans le brouillon}}",
       "resolvedDismiss": "{count, plural, one {# flux écarté} other {# flux écartés}}",
-      "page": "Page {page, number}"
+      "page": "Page {page, number}",
+      "tableLabel": "Flux observés",
+      "columns": {
+        "details": "Détails",
+        "source": "Provenance",
+        "destination": "Destination",
+        "service": "Protocole et port",
+        "hits": "Occurrences",
+        "lastSeen": "Dernière fois",
+        "status": "Statut",
+        "actions": "Traitement"
+      }
     },
     "overview": {
       "empty": "Aucune zone à dessiner pour l'instant.",

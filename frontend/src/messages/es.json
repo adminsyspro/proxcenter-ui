@@ -12943,12 +12943,23 @@
       "detail": {
         "firstSeen": "Visto por primera vez {time}",
         "lastSeen": "Visto por última vez {time}",
-        "source": "Origen: {value}",
-        "destination": "Destino: {value}"
+        "addresses": "Direcciones de ejemplo: {from} → {to}",
+        "sampleNote": "El motor guarda un solo par de direcciones de ejemplo por flujo observado: las coincidencias cuentan todo el flujo, no solo este par."
       },
       "resolvedAccept": "{count, plural, one {# flujo aceptado en el borrador} other {# flujos aceptados en el borrador}}",
       "resolvedDismiss": "{count, plural, one {# flujo descartado} other {# flujos descartados}}",
-      "page": "Página {page, number}"
+      "page": "Página {page, number}",
+      "tableLabel": "Flujos observados",
+      "columns": {
+        "details": "Detalles",
+        "source": "Origen",
+        "destination": "Destino",
+        "service": "Servicio",
+        "hits": "Coincidencias",
+        "lastSeen": "Visto por última vez",
+        "status": "Estado",
+        "actions": "Acciones"
+      }
     },
     "overview": {
       "empty": "Aún no hay ninguna zona que dibujar.",

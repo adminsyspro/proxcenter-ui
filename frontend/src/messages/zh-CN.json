@@ -12943,12 +12943,23 @@
       "detail": {
         "firstSeen": "首次出现 {time}",
         "lastSeen": "最后出现 {time}",
-        "source": "来源：{value}",
-        "destination": "目标：{value}"
+        "addresses": "示例地址：{from} → {to}",
+        "sampleNote": "引擎对每个观察到的流只保留一对示例地址：命中数统计的是整个流，而不只是这一对。"
       },
       "resolvedAccept": "{count, plural, other {已将 # 条流量接受到草稿}}",
       "resolvedDismiss": "{count, plural, other {已忽略 # 条流量}}",
-      "page": "第 {page, number} 页"
+      "page": "第 {page, number} 页",
+      "tableLabel": "观察到的流",
+      "columns": {
+        "details": "详情",
+        "source": "源",
+        "destination": "目标",
+        "service": "服务",
+        "hits": "命中数",
+        "lastSeen": "最近一次",
+        "status": "状态",
+        "actions": "操作"
+      }
     },
     "overview": {
       "empty": "还没有可绘制的区域。",

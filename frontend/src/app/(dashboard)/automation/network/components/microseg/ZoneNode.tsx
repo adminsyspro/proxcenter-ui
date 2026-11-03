@@ -76,7 +76,6 @@ function CircleTitle({ r, children }: { r: number; children: ReactNode }) {
   return <Box sx={circleTitleSx(r)}>{children}</Box>
 }
 
-/** A zone: a circle in its colour, its name, state and member count on its top line, its guests inside. */
 /**
  * What a zone node says and does, for the circle and for the box of the compact rendering: its member count, its
  * state, its name for screen readers, and the props of its button (enter or space opens the panel, the focus lights
@@ -95,6 +94,7 @@ export function useZoneNodeProps(id: string, d: ZoneNodeData, selected: boolean 
   return { members, stateText, label, button }
 }
 
+/** A zone: a circle in its colour, its name, state and member count on its top line, its guests inside. */
 function ZoneNodeComponent({ id, data, selected }: NodeProps) {
   const d = data as unknown as ZoneNodeData
   const { zone, state, radius: r } = d

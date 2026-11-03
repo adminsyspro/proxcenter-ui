@@ -266,9 +266,15 @@ describe('the guest view', () => {
     demo()
     const picker = await screen.findByRole('combobox', { name: 'Zone in the centre' })
     await waitFor(() => expect(picker.textContent).toBe('db · 12 hits'))
-    mock.routes[SUGGESTIONS] = () => reply(200, { suggestions: [...observed, wouldBlock('s9', { src_zone_id: 'zd', dst_zone_id: 'zw', src_ip: '10.0.0.2', dst_ip: '10.0.0.1', hits: 500 })], limit: 200, offset: 0 })
+    // 500 hits from outside into web: unpinned, the default would move to web.
+    mock.routes[SUGGESTIONS] = () => reply(200, { suggestions: [...observed, wouldBlock('s9', { src_zone_id: '', src_ip: '203.0.113.9', dst_zone_id: 'zw', dst_ip: '10.0.0.1', hits: 500 })], limit: 200, offset: 0 })
     fireEvent.click(screen.getByRole('button', { name: 'Refresh the map' }))
-    await waitFor(() => expect(picker.textContent).toBe('db · 512 hits'))
+    await waitFor(() => expect(calls(SUGGESTIONS).length).toBeGreaterThan(1))
+    fireEvent.mouseDown(picker)
+    expect(await screen.findByRole('option', { name: 'web · 512 hits' })).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+    expect(picker.textContent).toBe('db · 12 hits')
+    expect((await node('guest:zd:qemu/200')).getAttribute('data-parent')).toBe('zone:zd')
   })
 
   it('changes the zone in the centre from the picker', async () => {

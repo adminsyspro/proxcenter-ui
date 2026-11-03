@@ -12310,6 +12310,7 @@
       "PVE_ERROR": "Proxmox hat einen Fehler zurückgegeben.",
       "CONFLICT": "Dies kollidiert mit einem bereits vorhandenen Element.",
       "NETWORK": "ProxCenter ist nicht erreichbar. Prüfen Sie Ihre Netzwerkverbindung.",
+      "CHECK_PENDING": "Eine Prüfung ist bereits eingereiht: die Engine startet sie bei ihrem nächsten Durchlauf.",
       "generic": "Etwas ist schiefgelaufen. Versuchen Sie es erneut."
     },
     "policy": {

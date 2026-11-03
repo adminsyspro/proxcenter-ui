@@ -12643,6 +12643,7 @@
       "PVE_ERROR": "Proxmox a renvoyé une erreur.",
       "CONFLICT": "Cela entre en conflit avec un élément existant.",
       "NETWORK": "ProxCenter est injoignable. Vérifiez votre connexion réseau.",
+      "CHECK_PENDING": "Une vérification est déjà en file d'attente : le moteur la lance à son prochain passage.",
       "generic": "Une erreur est survenue. Réessayez."
     },
     "policy": {

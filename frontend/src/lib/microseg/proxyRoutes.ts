@@ -10,7 +10,8 @@
 // exactly one: the orchestrator audits the five lifecycle actions itself
 // (apply, zone state, emergency stop, restore, remove, see
 // internal/microseg/audit.go of the backend), the relay audits the draft writes
-// under `auditAction`, and a read (or the plan preview) is audited by nobody.
+// and the manual check under `auditAction`, and a read (or the plan preview) is
+// audited by nobody.
 // A lifecycle call that Next refuses before it reaches the orchestrator (RBAC,
 // ownership, body size) is audited by the relay under the orchestrator's own
 // action name, since the orchestrator never sees it.
@@ -55,6 +56,8 @@ export const MICROSEG_ROUTES: MicrosegRoute[] = [
   { method: 'POST', pattern: /^confirm-writes$/, write: true, audit: 'relay', auditAction: 'microseg.confirm_writes' },
   { method: 'POST', pattern: /^emergency-stop$/, write: true, audit: 'orchestrator', auditAction: 'microseg.emergency_stop' },
   { method: 'POST', pattern: /^remove$/, write: true, audit: 'orchestrator', auditAction: 'microseg.remove' },
+  // Queues a manual check: the engine reads, compares and realigns at its next pass, like a scheduled full run.
+  { method: 'POST', pattern: /^check$/, write: true, audit: 'relay', auditAction: 'microseg.check' },
   read(/^runs$/),
   read(/^runs\/[^/]+$/),
   read(/^status$/),

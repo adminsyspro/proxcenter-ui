@@ -4,7 +4,7 @@
 // Next relay at /api/v1/firewall/microseg/{connectionId}/<route>.
 
 import type {
-  EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegFlow, MicrosegPolicy,
+  CheckQueued, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegFlow, MicrosegPolicy,
   MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegZone, PolicyUpdate,
   PreflightCheck, ResolveSuggestionsInput, SuggestionKind, SuggestionStatus, ZoneInput, ZoneState,
 } from './types'
@@ -35,7 +35,7 @@ export class MicrosegConflictError extends MicrosegApiError {
 export const KNOWN_CODES: ReadonlySet<string> = new Set([
   'VERSION_CONFLICT', 'BUSY', 'ZONE_NAME_TAKEN', 'IN_USE', 'CONFLICT', 'INVALID', 'FEATURE_REQUIRED',
   'FORBIDDEN', 'NOT_FOUND', 'UNAUTHORIZED', 'NOT_LEADER', 'MICROSEG_UNAVAILABLE', 'ENGINE_STOPPED',
-  'ORCHESTRATOR_ERROR', 'ORCHESTRATOR_TIMEOUT', 'PVE_ERROR', 'NETWORK',
+  'ORCHESTRATOR_ERROR', 'ORCHESTRATOR_TIMEOUT', 'PVE_ERROR', 'NETWORK', 'CHECK_PENDING',
 ])
 
 /** i18n key of an error code (the strings live in the microsegPilot catalogue). */
@@ -145,6 +145,9 @@ export function microsegApi(connId: string) {
     confirmWrites: () => call<{ ok: boolean; was_held: boolean }>('POST', 'confirm-writes'),
     /** The leader answers 200, a follower 202 (applied by the leader within a minute). */
     emergencyStop: (on: boolean) => call<EmergencyStopResult>('POST', 'emergency-stop', { on }),
+
+    /** Queues a manual check (IP collection, then a full run); 409 CHECK_PENDING while one is queued. */
+    checkNow: () => call<CheckQueued>('POST', 'check', {}),
 
     getRun: (runId: string, signal?: AbortSignal) => call<MicrosegRun>('GET', `runs/${id(runId)}`, undefined, signal),
     listRuns: (params: ListRunsParams = {}) =>

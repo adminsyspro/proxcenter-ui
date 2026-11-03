@@ -340,6 +340,21 @@ describe('microseg proxy route audit', () => {
     })
   })
 
+  it('records the manual check, queued or refused as already pending', async () => {
+    const { POST } = await import('./route')
+
+    relayMock.mockResolvedValue(upstream(202, { queued: true, requested_at: '2026-11-03T10:00:00Z' }))
+    const res = await callRoute(POST as any, { ...ctx(['check']), body: {} })
+    expect(res.status).toBe(202)
+    expect(relayMock.mock.calls[0][0]).toBe('/microseg/c1/check')
+    relayMock.mockResolvedValue(upstream(409, { code: 'CHECK_PENDING', error: 'a check is already queued' }))
+    await callRoute(POST as any, { ...ctx(['check']), body: {} })
+
+    expect(auditMock).toHaveBeenCalledTimes(2)
+    expect(auditMock.mock.calls[0][0]).toMatchObject({ action: 'microseg.check', status: 'success', details: { path: 'check', method: 'POST', status: 202 } })
+    expect(auditMock.mock.calls[1][0]).toMatchObject({ action: 'microseg.check', status: 'failure', errorMessage: 'a check is already queued' })
+  })
+
   it('records nothing for a lifecycle write the orchestrator handled, success or refusal', async () => {
     const { POST } = await import('./route')
 

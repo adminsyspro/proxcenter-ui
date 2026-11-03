@@ -12642,6 +12642,7 @@
       "PVE_ERROR": "Proxmox devolvió un error.",
       "CONFLICT": "Esto entra en conflicto con un elemento existente.",
       "NETWORK": "No se puede contactar con ProxCenter. Compruebe su conexión de red.",
+      "CHECK_PENDING": "Ya hay una comprobación en cola: el motor la inicia en su próxima pasada.",
       "generic": "Algo salió mal. Inténtelo de nuevo."
     },
     "policy": {

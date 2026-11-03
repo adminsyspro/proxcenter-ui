@@ -12642,6 +12642,7 @@
       "PVE_ERROR": "Proxmox returned an error.",
       "CONFLICT": "This conflicts with an item that already exists.",
       "NETWORK": "ProxCenter cannot be reached. Check your network connection.",
+      "CHECK_PENDING": "A check is already queued: the engine starts it at its next pass.",
       "generic": "Something went wrong. Try again."
     },
     "policy": {

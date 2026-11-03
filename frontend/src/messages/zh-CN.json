@@ -12642,6 +12642,7 @@
       "PVE_ERROR": "Proxmox 返回了错误。",
       "CONFLICT": "这与已存在的项目冲突。",
       "NETWORK": "无法连接到 ProxCenter。请检查网络连接。",
+      "CHECK_PENDING": "已有一次检查在排队：引擎会在下一轮运行时启动它。",
       "generic": "出了点问题。请重试。"
     },
     "policy": {

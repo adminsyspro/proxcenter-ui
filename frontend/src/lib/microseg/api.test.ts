@@ -153,6 +153,23 @@ describe('microsegApi requests', () => {
   })
 })
 
+describe('microsegApi manual check', () => {
+  it('posts an empty object to /check and returns the queued answer', async () => {
+    fetchMock.mockResolvedValue(reply(202, { queued: true, requested_at: '2026-11-03T10:00:00Z' }))
+    expect(await microsegApi('c1').checkNow()).toEqual({ queued: true, requested_at: '2026-11-03T10:00:00Z' })
+    expect(lastCall()).toEqual({ url: '/api/v1/firewall/microseg/c1/check', method: 'POST', body: {} })
+  })
+
+  it('raises CHECK_PENDING on the 409 of a check already queued, with a message of its own', async () => {
+    fetchMock.mockResolvedValue(reply(409, { code: 'CHECK_PENDING', error: 'a check is already queued' }))
+    const err = await microsegApi('c1').checkNow().catch(e => e)
+    expect(err).toBeInstanceOf(MicrosegApiError)
+    expect(err).not.toBeInstanceOf(MicrosegConflictError)
+    expect(err).toMatchObject({ status: 409, code: 'CHECK_PENDING' })
+    expect(microsegErrorKeyOf(err)).toBe('microsegPilot.errors.CHECK_PENDING')
+  })
+})
+
 describe('isPlanStale', () => {
   it('is stale when the plan was computed from another draft version, or has none while the draft has one (Go omits version 0)', () => {
     expect(isPlanStale({ result: { version: 4 } as any }, 5)).toBe(true)

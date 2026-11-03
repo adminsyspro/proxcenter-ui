@@ -194,6 +194,7 @@ export type AuditAction =
   | "microseg.members.set"
   | "microseg.suggestions.resolve"
   | "microseg.confirm_writes"
+  | "microseg.check"
 
 export type AuditStatus = "success" | "failure" | "warning"
 

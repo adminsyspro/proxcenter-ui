@@ -152,6 +152,8 @@ export type PlanStep = StepRef
 export type MicrosegRunResult = {
   guests: number
   members: number
+  /** "check" on the full run a manual check asked for (POST /check); absent on a scheduled run. */
+  trigger?: string
   steps: number
   done?: StepRef[]
   failed?: StepRef[]
@@ -169,6 +171,8 @@ export type MicrosegRunResult = {
   suggestions?: number
   log_truncated?: string[]
   errors?: string[]
+  /** Ingress events left out because their destination is not the guest that logged them (flooded bridge). */
+  dropped_foreign_dst?: number
   plan?: StepRef[]
   /** Draft version the plan was computed from. */
   version?: number
@@ -232,6 +236,8 @@ export type MicrosegStatus = {
   engine: {
     paused_until: string | null
     held: boolean
+    /** A manual check is queued and its full run has not started yet (absent on an orchestrator without the check). */
+    check_pending?: boolean
     last_runs: Record<string, MicrosegRunSummary>
     last_log: string | null
   }
@@ -290,5 +296,8 @@ export type ResolveSuggestionsInput = {
   ids: string[]
   action: SuggestionAction
 }
+
+/** POST /check: the check is queued, the engine starts it at its next pass (up to a minute). */
+export type CheckQueued = { queued: boolean; requested_at: string }
 
 export type EmergencyStopResult = { accepted: boolean; applied_by: 'self' | 'leader'; on: boolean }

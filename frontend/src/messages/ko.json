@@ -12608,7 +12608,15 @@
       "resume": "재개",
       "resumeTitle": "마이크로 세분화를 재개하시겠습니까?",
       "resumeBody": "엔진이 다시 영역을 관리합니다.",
-      "appliedByLeader": "요청이 수락되었습니다. 리더 오케스트레이터가 1분 이내에 적용합니다."
+      "appliedByLeader": "요청이 수락되었습니다. 리더 오케스트레이터가 1분 이내에 적용합니다.",
+      "infoDisable": "요청 한 번으로 Proxmox 클러스터 방화벽을 비활성화하며, 모든 노드에 즉시 적용됩니다",
+      "infoUnmanaged": "ProxCenter가 관리하지 않는 규칙(관리 규칙, 호스트 및 게스트 규칙)을 포함해 모든 방화벽 규칙의 평가가 중단됩니다",
+      "infoObjects": "마이크로 세분화 개체는 그대로 유지되며, 재개하면 클러스터 방화벽을 다시 활성화하고 정책을 다시 적용합니다",
+      "infoUse": "세분화가 막지 말아야 할 트래픽을 차단할 때 사용하세요",
+      "resumeInfoReenable": "클러스터 방화벽을 다시 활성화한 뒤 마지막 리비전을 다시 적용합니다",
+      "resumeInfoSocle": "관리 규칙(SSH 22, 웹 8006)이 없으면 거부됩니다. 먼저 대시보드의 배포 마법사에서 수정하세요",
+      "openWizard": "배포 마법사 열기",
+      "clusterFirewallOff": "클러스터 방화벽 비활성화됨"
     },
     "pending": {
       "withCount": "적용되지 않은 변경 {count}건",
@@ -12647,7 +12655,8 @@
       "CONFLICT": "이미 있는 항목과 충돌합니다.",
       "NETWORK": "ProxCenter에 연결할 수 없습니다. 네트워크 연결을 확인하세요.",
       "CHECK_PENDING": "이미 대기 중인 점검이 있습니다. 엔진이 다음 실행 때 시작합니다.",
-      "generic": "문제가 발생했습니다. 다시 시도하세요."
+      "generic": "문제가 발생했습니다. 다시 시도하세요.",
+      "SOCLE_MISSING": "관리 규칙(SSH 22, 웹 8006)이 없어 클러스터 방화벽을 다시 활성화하지 않았습니다. 배포 마법사로 추가한 뒤 재개하세요."
     },
     "policy": {
       "zonesTitle": "영역",
@@ -13302,7 +13311,8 @@
         "none": "배포되지 않음",
         "deployed": "배포됨",
         "counts": "배포됨: 적용 영역 {enforced, number}개, 관찰 중 {observing, number}개",
-        "stopped": "긴급 중지 활성"
+        "stopped": "긴급 중지 활성",
+        "stoppedFirewall": "긴급 중지 활성: 클러스터 방화벽 비활성화됨"
       },
       "protection": {
         "label": "게스트 보호",

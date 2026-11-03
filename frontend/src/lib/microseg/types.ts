@@ -231,6 +231,9 @@ export type MicrosegRunSummary = {
 
 export type MicrosegCoverage = { running: number; zoned: number; members: number; protected: number }
 
+/** What the engine reports of the Proxmox cluster firewall. */
+export type ClusterFirewallState = 'enabled' | 'disabled' | 'unknown'
+
 /** GET /status. */
 export type MicrosegStatus = {
   engine: {
@@ -238,6 +241,11 @@ export type MicrosegStatus = {
     held: boolean
     /** A manual check is queued and its full run has not started yet (absent on an orchestrator without the check). */
     check_pending?: boolean
+    /**
+     * The Proxmox cluster firewall as the engine last read it: the Emergency stop turns it off in one request
+     * (absent on an orchestrator that does not report it).
+     */
+    cluster_firewall?: ClusterFirewallState
     last_runs: Record<string, MicrosegRunSummary>
     last_log: string | null
   }

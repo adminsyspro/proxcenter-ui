@@ -12609,7 +12609,15 @@
       "resume": "Reprendre",
       "resumeTitle": "Reprendre la micro-segmentation ?",
       "resumeBody": "Le moteur reprend la main sur les zones.",
-      "appliedByLeader": "Demande acceptée : l'orchestrateur leader l'applique en moins d'une minute."
+      "appliedByLeader": "Demande acceptée : l'orchestrateur leader l'applique en moins d'une minute.",
+      "infoDisable": "Désactive le pare-feu de cluster Proxmox en une seule requête, effet immédiat sur tous les nœuds",
+      "infoUnmanaged": "Toutes les règles de pare-feu cessent d'être évaluées, y compris celles que ProxCenter ne gère pas (règles de gestion, règles d'hôte et d'invité)",
+      "infoObjects": "Les objets de micro-segmentation restent en place ; Reprendre réactive le pare-feu de cluster et réapplique la politique",
+      "infoUse": "À utiliser quand la segmentation bloque quelque chose qu'elle ne devrait pas",
+      "resumeInfoReenable": "Réactive le pare-feu de cluster, puis réapplique la dernière révision",
+      "resumeInfoSocle": "Refusé si les règles de gestion (SSH 22, web 8006) sont absentes : corrigez-les d'abord dans l'assistant de déploiement du tableau de bord",
+      "openWizard": "Ouvrir l'assistant de déploiement",
+      "clusterFirewallOff": "Pare-feu de cluster désactivé"
     },
     "pending": {
       "withCount": "{count, plural, one {# changement non appliqué} other {# changements non appliqués}}",
@@ -12648,7 +12656,8 @@
       "CONFLICT": "Cela entre en conflit avec un élément existant.",
       "NETWORK": "ProxCenter est injoignable. Vérifiez votre connexion réseau.",
       "CHECK_PENDING": "Une vérification est déjà en file d'attente : le moteur la lance à son prochain passage.",
-      "generic": "Une erreur est survenue. Réessayez."
+      "generic": "Une erreur est survenue. Réessayez.",
+      "SOCLE_MISSING": "Les règles de gestion (SSH 22, web 8006) sont absentes : le pare-feu de cluster n'a pas été réactivé. Ajoutez-les avec l'assistant de déploiement, puis reprenez."
     },
     "policy": {
       "zonesTitle": "Zones",
@@ -13303,7 +13312,8 @@
         "none": "Non déployée",
         "deployed": "Déployée",
         "counts": "Déployée : {enforced, plural, one {# zone appliquée} other {# zones appliquées}}, {observing, number} en observation",
-        "stopped": "Arrêt d'urgence actif"
+        "stopped": "Arrêt d'urgence actif",
+        "stoppedFirewall": "Arrêt d'urgence actif : pare-feu de cluster désactivé"
       },
       "protection": {
         "label": "Protection des invités",

@@ -12276,7 +12276,15 @@
       "resume": "Fortsetzen",
       "resumeTitle": "Mikrosegmentierung fortsetzen?",
       "resumeBody": "Die Engine übernimmt die Zonen wieder.",
-      "appliedByLeader": "Anfrage angenommen: Der Leader-Orchestrator wendet sie innerhalb einer Minute an."
+      "appliedByLeader": "Anfrage angenommen: Der Leader-Orchestrator wendet sie innerhalb einer Minute an.",
+      "infoDisable": "Deaktiviert die Proxmox-Cluster-Firewall mit einer einzigen Anfrage, sofort wirksam auf allen Knoten",
+      "infoUnmanaged": "Keine Firewall-Regel wird mehr ausgewertet, auch nicht die, die ProxCenter nicht verwaltet (Verwaltungsregeln, Host- und Gastregeln)",
+      "infoObjects": "Die Mikrosegmentierungsobjekte bleiben erhalten; Fortsetzen aktiviert die Cluster-Firewall wieder und wendet die Richtlinie erneut an",
+      "infoUse": "Nutzen Sie dies, wenn die Segmentierung etwas blockiert, das sie nicht blockieren soll",
+      "resumeInfoReenable": "Aktiviert die Cluster-Firewall wieder und wendet dann die letzte Revision erneut an",
+      "resumeInfoSocle": "Abgelehnt, wenn die Verwaltungsregeln (SSH 22, Web 8006) fehlen: Beheben Sie dies zuerst im Bereitstellungsassistenten des Dashboards",
+      "openWizard": "Bereitstellungsassistenten öffnen",
+      "clusterFirewallOff": "Cluster-Firewall deaktiviert"
     },
     "pending": {
       "withCount": "{count, plural, one {# nicht angewendete Änderung} other {# nicht angewendete Änderungen}}",
@@ -12315,7 +12323,8 @@
       "CONFLICT": "Dies kollidiert mit einem bereits vorhandenen Element.",
       "NETWORK": "ProxCenter ist nicht erreichbar. Prüfen Sie Ihre Netzwerkverbindung.",
       "CHECK_PENDING": "Eine Prüfung ist bereits eingereiht: die Engine startet sie bei ihrem nächsten Durchlauf.",
-      "generic": "Etwas ist schiefgelaufen. Versuchen Sie es erneut."
+      "generic": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
+      "SOCLE_MISSING": "Die Verwaltungsregeln (SSH 22, Web 8006) fehlen, daher wurde die Cluster-Firewall nicht wieder aktiviert. Fügen Sie sie mit dem Bereitstellungsassistenten hinzu und setzen Sie dann fort."
     },
     "policy": {
       "zonesTitle": "Zonen",
@@ -12970,7 +12979,8 @@
         "none": "Nicht bereitgestellt",
         "deployed": "Bereitgestellt",
         "counts": "Bereitgestellt: {enforced, plural, one {# Zone durchgesetzt} other {# Zonen durchgesetzt}}, {observing, number} in Beobachtung",
-        "stopped": "Notfall-Stopp aktiv"
+        "stopped": "Notfall-Stopp aktiv",
+        "stoppedFirewall": "Notfallstopp aktiv: Cluster-Firewall deaktiviert"
       },
       "protection": {
         "label": "Schutz der Gäste",

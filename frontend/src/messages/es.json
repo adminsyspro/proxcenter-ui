@@ -12608,7 +12608,15 @@
       "resume": "Reanudar",
       "resumeTitle": "¿Reanudar la microsegmentación?",
       "resumeBody": "El motor vuelve a gestionar las zonas.",
-      "appliedByLeader": "Solicitud aceptada: el orquestador líder la aplica en menos de un minuto."
+      "appliedByLeader": "Solicitud aceptada: el orquestador líder la aplica en menos de un minuto.",
+      "infoDisable": "Desactiva el cortafuegos de clúster de Proxmox con una sola petición, efecto inmediato en todos los nodos",
+      "infoUnmanaged": "Todas las reglas del cortafuegos dejan de evaluarse, incluidas las que ProxCenter no gestiona (reglas de gestión, de host y de invitado)",
+      "infoObjects": "Los objetos de microsegmentación se conservan; Reanudar reactiva el cortafuegos de clúster y vuelve a aplicar la política",
+      "infoUse": "Úselo cuando la segmentación bloquee algo que no debería",
+      "resumeInfoReenable": "Reactiva el cortafuegos de clúster y después vuelve a aplicar la última revisión",
+      "resumeInfoSocle": "Se rechaza si faltan las reglas de gestión (SSH 22, web 8006): corríjalas antes en el asistente de despliegue del panel",
+      "openWizard": "Abrir el asistente de despliegue",
+      "clusterFirewallOff": "Cortafuegos de clúster desactivado"
     },
     "pending": {
       "withCount": "{count, plural, one {# cambio sin aplicar} other {# cambios sin aplicar}}",
@@ -12647,7 +12655,8 @@
       "CONFLICT": "Esto entra en conflicto con un elemento existente.",
       "NETWORK": "No se puede contactar con ProxCenter. Compruebe su conexión de red.",
       "CHECK_PENDING": "Ya hay una comprobación en cola: el motor la inicia en su próxima pasada.",
-      "generic": "Algo salió mal. Inténtelo de nuevo."
+      "generic": "Algo salió mal. Inténtelo de nuevo.",
+      "SOCLE_MISSING": "Faltan las reglas de gestión (SSH 22, web 8006), por lo que no se reactivó el cortafuegos de clúster. Añádalas con el asistente de despliegue y reanude."
     },
     "policy": {
       "zonesTitle": "Zonas",
@@ -13302,7 +13311,8 @@
         "none": "No desplegada",
         "deployed": "Desplegada",
         "counts": "Desplegada: {enforced, plural, one {# zona aplicada} other {# zonas aplicadas}}, {observing, number} en observación",
-        "stopped": "Parada de emergencia activa"
+        "stopped": "Parada de emergencia activa",
+        "stoppedFirewall": "Parada de emergencia activa: cortafuegos de clúster desactivado"
       },
       "protection": {
         "label": "Protección de invitados",

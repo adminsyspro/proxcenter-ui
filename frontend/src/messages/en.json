@@ -12608,7 +12608,15 @@
       "resume": "Resume",
       "resumeTitle": "Resume micro-segmentation?",
       "resumeBody": "The engine takes over the zones again.",
-      "appliedByLeader": "Request accepted: the leader orchestrator applies it within a minute."
+      "appliedByLeader": "Request accepted: the leader orchestrator applies it within a minute.",
+      "infoDisable": "Disables the Proxmox cluster firewall with a single request: immediate on every node",
+      "infoUnmanaged": "Every firewall rule stops being evaluated, including the ones ProxCenter does not manage (management rules, host and guest rules)",
+      "infoObjects": "The micro-segmentation objects stay in place; Resume re-enables the cluster firewall and re-applies the policy",
+      "infoUse": "Use it when the segmentation blocks something it should not",
+      "resumeInfoReenable": "Re-enables the cluster firewall, then re-applies the last revision",
+      "resumeInfoSocle": "Refused if the management rules (SSH 22, web 8006) are missing: fix them in the Dashboard deployment wizard first",
+      "openWizard": "Open the deployment wizard",
+      "clusterFirewallOff": "Cluster firewall disabled"
     },
     "pending": {
       "withCount": "{count, plural, one {# unapplied change} other {# unapplied changes}}",
@@ -12647,7 +12655,8 @@
       "CONFLICT": "This conflicts with an item that already exists.",
       "NETWORK": "ProxCenter cannot be reached. Check your network connection.",
       "CHECK_PENDING": "A check is already queued: the engine starts it at its next pass.",
-      "generic": "Something went wrong. Try again."
+      "generic": "Something went wrong. Try again.",
+      "SOCLE_MISSING": "The management rules (SSH 22, web 8006) are missing, so the cluster firewall was not re-enabled. Add them with the deployment wizard, then resume."
     },
     "policy": {
       "zonesTitle": "Zones",
@@ -13302,7 +13311,8 @@
         "none": "Not deployed",
         "deployed": "Deployed",
         "counts": "Deployed: {enforced, plural, one {# zone enforced} other {# zones enforced}}, {observing, number} observing",
-        "stopped": "Emergency stop active"
+        "stopped": "Emergency stop active",
+        "stoppedFirewall": "Emergency stop active: cluster firewall disabled"
       },
       "protection": {
         "label": "Guest protection",

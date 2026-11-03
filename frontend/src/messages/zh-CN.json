@@ -12608,7 +12608,15 @@
       "resume": "恢复",
       "resumeTitle": "恢复微分段吗？",
       "resumeBody": "引擎将重新接管这些区域。",
-      "appliedByLeader": "请求已接受：主节点编排器将在一分钟内应用。"
+      "appliedByLeader": "请求已接受：主节点编排器将在一分钟内应用。",
+      "infoDisable": "通过一次请求禁用 Proxmox 集群防火墙，对所有节点立即生效",
+      "infoUnmanaged": "所有防火墙规则都将停止评估，包括 ProxCenter 不管理的规则（管理规则、主机和客户机规则）",
+      "infoObjects": "微分段对象保持不变；恢复时会重新启用集群防火墙并重新应用策略",
+      "infoUse": "当分段阻止了不应阻止的流量时使用",
+      "resumeInfoReenable": "重新启用集群防火墙，然后重新应用最新修订",
+      "resumeInfoSocle": "如果缺少管理规则（SSH 22、Web 8006）将被拒绝：请先在仪表板的部署向导中修复",
+      "openWizard": "打开部署向导",
+      "clusterFirewallOff": "集群防火墙已禁用"
     },
     "pending": {
       "withCount": "{count} 项未应用的更改",
@@ -12647,7 +12655,8 @@
       "CONFLICT": "这与已存在的项目冲突。",
       "NETWORK": "无法连接到 ProxCenter。请检查网络连接。",
       "CHECK_PENDING": "已有一次检查在排队：引擎会在下一轮运行时启动它。",
-      "generic": "出了点问题。请重试。"
+      "generic": "出了点问题。请重试。",
+      "SOCLE_MISSING": "缺少管理规则（SSH 22、Web 8006），因此未重新启用集群防火墙。请使用部署向导添加后再恢复。"
     },
     "policy": {
       "zonesTitle": "区域",
@@ -13302,7 +13311,8 @@
         "none": "未部署",
         "deployed": "已部署",
         "counts": "已部署：{enforced, number} 个区域已强制，{observing, number} 个在观察",
-        "stopped": "紧急停止已启用"
+        "stopped": "紧急停止已启用",
+        "stoppedFirewall": "紧急停止已启用：集群防火墙已禁用"
       },
       "protection": {
         "label": "客户机保护",

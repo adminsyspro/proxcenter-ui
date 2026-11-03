@@ -106,6 +106,27 @@ describe('compact zones', () => {
   })
 })
 
+describe('box nodes', () => {
+  it('lights a zone box and its edges while it has the keyboard focus, and nothing else', async () => {
+    window.localStorage.setItem('microseg.map.view', 'compact')
+    demo({ zones: [web(), db(), { ...web(), id: 'zq', name: 'quiet' }] })
+    const button = within(await node('zone:zw')).getByRole('button', { name: /Zone web/ })
+    fireEvent.focus(button)
+    await waitFor(() => expect(screen.getByTestId('node-zone:zq').className).toContain('microseg-dim'))
+    expect(screen.getByTestId('node-zone:zd').className).not.toContain('microseg-dim')
+    fireEvent.blur(button)
+    await waitFor(() => expect(screen.getByTestId('node-zone:zq').className).not.toContain('microseg-dim'))
+  })
+
+  it('draws an address in no zone that talked to the zone of the guest view as its own box', async () => {
+    window.localStorage.setItem('microseg.map.view', 'guests')
+    demo({ suggestions: [...observed, wouldBlock('s9', { src_zone_id: '', src_ip: '203.0.113.9', dst_ip: '10.0.0.2', hits: 50 })] })
+    const box = await node('ip:203.0.113.9')
+    expect(within(box).getByText('203.0.113.9')).toBeTruthy()
+    expect(await pathOf('unprotected:ip:203.0.113.9>guest:zd:qemu/200')).toBeTruthy()
+  })
+})
+
 describe('the matrix', () => {
   const cell = (from: string, to: string) => screen.getByRole('gridcell', { name: new RegExp(`^${from} to ${to}:`) })
 

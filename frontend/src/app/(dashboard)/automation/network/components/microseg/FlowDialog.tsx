@@ -28,6 +28,8 @@ export type FlowSaveValues = {
 type Props = {
   flow: MicrosegFlow | null
   zones: MicrosegZone[]
+  /** What a new flow starts from (ignored when editing): the Network flows page prefills the zones and the service. */
+  initial?: Partial<Pick<FlowSaveValues, 'src_zone_id' | 'dst_zone_id' | 'proto' | 'dport'>>
   onSave: (values: FlowSaveValues) => Promise<void>
   onClose: () => void
 }
@@ -104,16 +106,17 @@ function FlowSide({ side, kind, zoneId, cidr, zones, error, disabled, onKind, on
 }
 
 /** Create or edit a flow: source, destination, protocol, ports, comment. */
-export default function FlowDialog({ flow, zones, onSave, onClose }: Props) {
+export default function FlowDialog({ flow, zones, initial, onSave, onClose }: Props) {
   const t = useTranslations()
   const td = useTranslations('microsegPilot.policy.flowDialog')
   const editing = flow !== null
   const [srcKind, setSrcKind] = useState<Kind>(flow?.src_cidr ? 'cidr' : 'zone')
   const [dstKind, setDstKind] = useState<Kind>(flow?.dst_cidr ? 'cidr' : 'zone')
-  const [src, setSrc] = useState({ zone: flow?.src_zone_id ?? '', cidr: flow?.src_cidr ?? '' })
-  const [dst, setDst] = useState({ zone: flow?.dst_zone_id ?? '', cidr: flow?.dst_cidr ?? '' })
-  const [proto, setProto] = useState(flow?.proto ?? 'tcp')
-  const [dport, setDport] = useState(flow?.dport ?? '')
+  const seed = flow ?? initial
+  const [src, setSrc] = useState({ zone: seed?.src_zone_id ?? '', cidr: flow?.src_cidr ?? '' })
+  const [dst, setDst] = useState({ zone: seed?.dst_zone_id ?? '', cidr: flow?.dst_cidr ?? '' })
+  const [proto, setProto] = useState(seed?.proto ?? 'tcp')
+  const [dport, setDport] = useState(seed?.dport ?? '')
   const [comment, setComment] = useState(flow?.comment ?? '')
   const { busy, error, run } = useDialogAction()
 

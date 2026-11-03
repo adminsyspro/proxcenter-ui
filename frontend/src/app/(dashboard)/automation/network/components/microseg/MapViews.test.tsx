@@ -296,7 +296,7 @@ describe('the Sankey diagram', () => {
   it('draws a ribbon per pair and kind, observed by their hits, allowed thin, and says the allowed ones have no counter', async () => {
     window.localStorage.setItem('microseg.map.view', 'sankey')
     demo()
-    expect(await screen.findByRole('group', { name: 'Traffic between the zones as ribbons' })).toBeTruthy()
+    expect(await screen.findByRole('figure', { name: 'Traffic between the zones as ribbons' })).toBeTruthy()
     await waitFor(() => expect(ribbon('blocked:cell:zone:zw>zone:zd')).toBeTruthy())
     expect(ribbon('blocked:cell:zone:zw>zone:zd')!.getAttribute('stroke-width')).toBe('48')
     expect(ribbon('unprotected:cell:zone:zw>zone:zd')!.getAttribute('stroke')).toBe('#e53935')

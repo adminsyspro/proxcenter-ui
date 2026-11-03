@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent } from 'react'
+import { useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import { Box, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, type Theme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -18,7 +18,7 @@ type Names = { end: (e: MatrixEnd) => string }
 type Highlight = { row: string | null; col: string | null }
 
 /** An attribute value inside a CSS selector string. */
-const attr = (value: string) => value.replace(/["\\]/g, '\\$&')
+const attr = (value: string) => value.replace(/["\\]/g, String.raw`\$&`)
 
 /** The head of a column or of a row: a zone (a button that opens its panel), Unknown / External or Outside. */
 function EndHead({ end, name, onSelectZone }: { end: MatrixEnd; name: string; onSelectZone: (zoneId: string) => void }) {

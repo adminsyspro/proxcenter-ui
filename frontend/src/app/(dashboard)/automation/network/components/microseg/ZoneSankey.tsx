@@ -154,63 +154,66 @@ export default function ZoneSankey({ layout, selectedCell, selectedZone, onSelec
           <Typography noWrap variant='caption' color='text.secondary' sx={{ minWidth: 0 }}>{t('sankey.note')}</Typography>
         </Tooltip>
       </Box>
-      <svg role='group' aria-label={t('sankey.label')} viewBox={`0 0 ${W} ${height}`} width='100%' style={{ display: 'block', maxWidth: 1100, margin: '0 auto' }}>
-        <text x={LEFT_X + BAR_W / 2} y={14} textAnchor='middle' fontSize={12} fill={theme.palette.text.secondary}>{t('sankey.sources')}</text>
-        <text x={RIGHT_X + BAR_W / 2} y={14} textAnchor='middle' fontSize={12} fill={theme.palette.text.secondary}>{t('sankey.destinations')}</text>
-        <g>
-          {/* The widest first: a thin ribbon (an allowed flow) is drawn over the wide ones and stays clickable. */}
-          {byWidth.map(r => {
-            const ya = HEAD + r.y0 + r.width / 2
-            const yb = HEAD + r.y1 + r.width / 2
-            const x0 = LEFT_X + BAR_W
-            const xm = (x0 + RIGHT_X) / 2
-            const on = !lit || lit.has(r.id)
-            const tip = ribbonTip(r)
-            const d = `M ${x0} ${ya} C ${xm} ${ya}, ${xm} ${yb}, ${RIGHT_X} ${yb}`
-            return (
-              <Tooltip
-                key={r.id}
-                followCursor
-                title={(
-                  <Box>
-                    <Typography variant='caption' fontWeight={600} sx={{ display: 'block' }}>{tip.title}</Typography>
-                    <Typography variant='caption' sx={{ display: 'block' }}>{tip.line}</Typography>
-                    <Typography variant='caption' sx={{ display: 'block' }}>{tip.amount}</Typography>
-                  </Box>
-                )}
-              >
-                <g>
-                  <path
-                    data-ribbon={r.id}
-                    role='button'
-                    tabIndex={0}
-                    aria-label={tip.aria}
-                    aria-pressed={selectedCell === r.cell}
-                    d={d}
-                    fill='none'
-                    stroke={EDGE_COLORS[r.kind]}
-                    strokeWidth={r.width}
-                    strokeOpacity={on ? 0.55 : 0.1}
-                    style={{ cursor: 'pointer', transition: 'stroke-opacity 150ms', outline: 'none' }}
-                    onClick={() => onSelectCell(r.cell)}
-                    onKeyDown={onKeys(() => onSelectCell(r.cell))}
-                    onMouseEnter={() => setFocus({ ribbon: r.id })}
-                    onMouseLeave={() => setFocus(null)}
-                    onFocus={() => setFocus({ ribbon: r.id })}
-                    onBlur={() => setFocus(null)}
-                  />
-                  {/* Unprotected traffic is dashed red, like in the legend of the toolbar. */}
-                  {r.kind === 'unprotected' && (
-                    <path data-dash={r.id} d={d} fill='none' stroke={EDGE_COLORS.unprotected} strokeWidth={2} strokeDasharray='6 4' strokeOpacity={on ? 1 : 0.2} pointerEvents='none' aria-hidden />
+      {/* A named figure, not an image: its ribbons and zones are buttons that assistive technology must reach. */}
+      <Box component='figure' aria-label={t('sankey.label')} sx={{ m: 0 }}>
+        <svg viewBox={`0 0 ${W} ${height}`} width='100%' style={{ display: 'block', maxWidth: 1100, margin: '0 auto' }}>
+          <text x={LEFT_X + BAR_W / 2} y={14} textAnchor='middle' fontSize={12} fill={theme.palette.text.secondary}>{t('sankey.sources')}</text>
+          <text x={RIGHT_X + BAR_W / 2} y={14} textAnchor='middle' fontSize={12} fill={theme.palette.text.secondary}>{t('sankey.destinations')}</text>
+          <g>
+            {/* The widest first: a thin ribbon (an allowed flow) is drawn over the wide ones and stays clickable. */}
+            {byWidth.map(r => {
+              const ya = HEAD + r.y0 + r.width / 2
+              const yb = HEAD + r.y1 + r.width / 2
+              const x0 = LEFT_X + BAR_W
+              const xm = (x0 + RIGHT_X) / 2
+              const on = !lit || lit.has(r.id)
+              const tip = ribbonTip(r)
+              const d = `M ${x0} ${ya} C ${xm} ${ya}, ${xm} ${yb}, ${RIGHT_X} ${yb}`
+              return (
+                <Tooltip
+                  key={r.id}
+                  followCursor
+                  title={(
+                    <Box>
+                      <Typography variant='caption' fontWeight={600} sx={{ display: 'block' }}>{tip.title}</Typography>
+                      <Typography variant='caption' sx={{ display: 'block' }}>{tip.line}</Typography>
+                      <Typography variant='caption' sx={{ display: 'block' }}>{tip.amount}</Typography>
+                    </Box>
                   )}
-                </g>
-              </Tooltip>
-            )
-          })}
-        </g>
-        {layout.sources.map(n => nodeBar(n, 'source'))}
-        {layout.targets.map(n => nodeBar(n, 'target'))}
-      </svg>
+                >
+                  <g>
+                    <path
+                      data-ribbon={r.id}
+                      role='button'
+                      tabIndex={0}
+                      aria-label={tip.aria}
+                      aria-pressed={selectedCell === r.cell}
+                      d={d}
+                      fill='none'
+                      stroke={EDGE_COLORS[r.kind]}
+                      strokeWidth={r.width}
+                      strokeOpacity={on ? 0.55 : 0.1}
+                      style={{ cursor: 'pointer', transition: 'stroke-opacity 150ms', outline: 'none' }}
+                      onClick={() => onSelectCell(r.cell)}
+                      onKeyDown={onKeys(() => onSelectCell(r.cell))}
+                      onMouseEnter={() => setFocus({ ribbon: r.id })}
+                      onMouseLeave={() => setFocus(null)}
+                      onFocus={() => setFocus({ ribbon: r.id })}
+                      onBlur={() => setFocus(null)}
+                    />
+                    {/* Unprotected traffic is dashed red, like in the legend of the toolbar. */}
+                    {r.kind === 'unprotected' && (
+                      <path data-dash={r.id} d={d} fill='none' stroke={EDGE_COLORS.unprotected} strokeWidth={2} strokeDasharray='6 4' strokeOpacity={on ? 1 : 0.2} pointerEvents='none' aria-hidden />
+                    )}
+                  </g>
+                </Tooltip>
+              )
+            })}
+          </g>
+          {layout.sources.map(n => nodeBar(n, 'source'))}
+          {layout.targets.map(n => nodeBar(n, 'target'))}
+        </svg>
+      </Box>
     </Box>
   )
 }

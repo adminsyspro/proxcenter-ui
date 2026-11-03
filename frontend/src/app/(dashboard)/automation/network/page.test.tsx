@@ -40,12 +40,27 @@ vi.mock('@/hooks/useHostFirewallRules', () => ({
     reloadHostRulesForNode: vi.fn(), setHostRulesByNode: vi.fn(),
   }),
 }))
-vi.mock('./components/DashboardTab', () => ({ default: ({ loadError, connectionName }: { loadError?: string | null; connectionName?: string }) => <div data-connection={connectionName}>dashboard tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
-vi.mock('./components/RulesTab', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>rules tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
+vi.mock('./components/DashboardTab', () => ({
+  default: ({ loadError, connectionName, onOpenGuests, onOpenMicroseg }: { loadError?: string | null; connectionName?: string; onOpenGuests?: (f?: string) => void; onOpenMicroseg?: (s?: string) => void }) => (
+    <div data-connection={connectionName}>
+      dashboard tab{loadError ? ` (error: ${loadError})` : ''}
+      <button onClick={() => onOpenGuests?.('unprotected')}>todo guests</button>
+      <button onClick={() => onOpenMicroseg?.('drifts')}>todo drifts</button>
+    </div>
+  ),
+}))
+vi.mock('./components/RulesTab', () => ({
+  default: ({ loadError, activeSubTab, guestFilter, onClearGuestFilter }: { loadError?: string | null; activeSubTab: number; guestFilter?: string | null; onClearGuestFilter?: () => void }) => (
+    <div data-subtab={activeSubTab} data-filter={guestFilter ?? ''}>
+      rules tab{loadError ? ` (error: ${loadError})` : ''}
+      <button onClick={onClearGuestFilter}>clear filter</button>
+    </div>
+  ),
+}))
 vi.mock('./components/ObjectsTab', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>objects tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
 vi.mock('./components/rules/SecurityGroupsPanel', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>groups tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
 vi.mock('./components/LoggingTab', () => ({ default: () => <div>logging tab</div> }))
-vi.mock('./components/microseg/MicrosegTab', () => ({ default: () => <div>microseg tab</div> }))
+vi.mock('./components/microseg/MicrosegTab', () => ({ default: ({ initialSubTab }: { initialSubTab?: string }) => <div data-subtab={initialSubTab ?? ''}>microseg tab</div> }))
 
 import NetworkAutomationPage from './page'
 
@@ -143,5 +158,37 @@ describe('network page Dashboard load (UA44)', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Security Groups/ }))
 
     expect(loadVMFirewallData).toHaveBeenCalled()
+  })
+})
+
+describe('network page: the Dashboard "To do" links (UA46)', () => {
+  it('opens Firewalling > VMs filtered on the guests without firewall, and drops the filter on request', async () => {
+    renderWithProviders(<NetworkAutomationPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'todo guests' }))
+
+    const rules = await screen.findByText(/rules tab/)
+    expect(rules.dataset.subtab).toBe('2')
+    expect(rules.dataset.filter).toBe('unprotected')
+
+    fireEvent.click(screen.getByRole('button', { name: 'clear filter' }))
+    expect(screen.getByText(/rules tab/).dataset.filter).toBe('')
+  })
+
+  it('drops the filter when the user changes tab', async () => {
+    renderWithProviders(<NetworkAutomationPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'todo guests' }))
+    await screen.findByText(/rules tab/)
+
+    fireEvent.click(screen.getByRole('tab', { name: /Dashboard/ }))
+    fireEvent.click(screen.getByRole('tab', { name: /Firewalling/ }))
+
+    expect((await screen.findByText(/rules tab/)).dataset.filter).toBe('')
+  })
+
+  it('opens the Micro-segmentation tab on the sub-tab the line asks for', async () => {
+    renderWithProviders(<NetworkAutomationPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'todo drifts' }))
+
+    expect((await screen.findByText('microseg tab')).dataset.subtab).toBe('drifts')
   })
 })

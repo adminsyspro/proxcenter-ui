@@ -8,6 +8,7 @@ import { cleanup, within } from '@testing-library/react'
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
 import { calls, mock, policy, renderTab, reply, resetMocks, status, zone, REVISION_HEAD } from './microsegTestKit'
+import MicrosegTab from './MicrosegTab'
 
 beforeEach(resetMocks)
 
@@ -141,6 +142,13 @@ describe('sub-tabs', () => {
       getItem.mockRestore()
       setItem.mockRestore()
     }
+  })
+
+  it('opens on the sub-tab a Dashboard "To do" line asks for, over the one remembered (UA46)', async () => {
+    window.localStorage.setItem('microseg.subTab', 'history')
+    renderTab(<MicrosegTab connectionId='c1' initialSubTab='drifts' />)
+    const tab = await screen.findByRole('tab', { name: 'Drifts' })
+    expect(tab.getAttribute('aria-selected')).toBe('true')
   })
 
   it('ignores a stored value that is not a sub-tab', async () => {

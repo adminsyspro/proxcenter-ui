@@ -70,10 +70,12 @@ type Props = {
   connectionName?: string
   /** What the deployment wizard needs; without it a failed pre-flight check has no wizard to open. */
   firewall?: FirewallWizardData
+  /** The sub-tab to open on, from a line of the Dashboard's "To do" list; else the one last shown. */
+  initialSubTab?: MicrosegSubTab
 }
 
 /** The Micro-segmentation tab of /automation/network: banner, first run guide and the five sub-tabs. */
-export default function MicrosegTab({ connectionId, connectionName, firewall }: Props) {
+export default function MicrosegTab({ connectionId, connectionName, firewall, initialSubTab }: Props) {
   const t = useTranslations('microsegPilot')
   const { data: policy, loading, error, reload } = useMicrosegPolicy(connectionId || null)
   // While a manual check waits in the queue, the status (shared with the banner and the button) is read faster.
@@ -82,7 +84,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
   // A read-only user (no node.manage on the connection) sees every write control disabled, with the reason.
   const canWrite = useCanManageMicroseg(connectionId)
   // Read once: nothing of the sub-tab shows before the policy has loaded, so this never differs from a server render.
-  const [subTab, setSubTab] = useState<MicrosegSubTab>(() => readStoredSubTab() ?? 'overview')
+  const [subTab, setSubTab] = useState<MicrosegSubTab>(() => initialSubTab ?? readStoredSubTab() ?? 'overview')
 
   // The runs live here, not in a sub-tab: switching sub-tab must not lose them.
   const [runs, setRuns] = useState<TrackedRun[]>([])

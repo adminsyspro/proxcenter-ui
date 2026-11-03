@@ -180,3 +180,30 @@ describe('RulesTab load error', () => {
     expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument()
   })
 })
+
+describe('RulesTab guest filter from the Dashboard (UA46)', () => {
+  afterEach(cleanup)
+
+  const OFF_VM: VMFirewallInfo = { ...WEB_VM, vmid: 101, name: 'db-01', firewallEnabled: false, optionsEnabled: false }
+  const UNKNOWN_VM: VMFirewallInfo = { ...WEB_VM, vmid: 102, name: 'app-01', firewallEnabled: false, stateUnknown: true }
+
+  it('lists only the guests certainly without firewall, says so, and drops the filter on request', () => {
+    const onClearGuestFilter = vi.fn()
+    renderTab({ activeSubTab: 2, vmFirewallData: [WEB_VM, OFF_VM, UNKNOWN_VM], guestFilter: 'unprotected', onClearGuestFilter })
+
+    expect(screen.getByTestId('guest-filter')).toHaveTextContent('1 guest without firewall')
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all' }))
+    expect(screen.getByText('db-01')).toBeInTheDocument()
+    expect(screen.queryByText('web-01')).not.toBeInTheDocument()
+    expect(screen.queryByText('app-01')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show every guest' }))
+    expect(onClearGuestFilter).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows every guest without the filter', () => {
+    renderTab({ activeSubTab: 2, vmFirewallData: [WEB_VM, OFF_VM] })
+
+    expect(screen.queryByTestId('guest-filter')).not.toBeInTheDocument()
+  })
+})

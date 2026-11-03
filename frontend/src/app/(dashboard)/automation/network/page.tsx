@@ -19,7 +19,8 @@ import { useFirewallData, Connection } from '@/hooks/useFirewallData'
 import { useVMFirewallRules } from '@/hooks/useVMFirewallRules'
 import { useHostFirewallRules } from '@/hooks/useHostFirewallRules'
 
-import DashboardTab from './components/DashboardTab'
+import DashboardTab, { type GuestFilter } from './components/DashboardTab'
+import type { MicrosegSubTab } from './components/microseg/microsegTabTypes'
 import RulesTab from './components/RulesTab'
 import ObjectsTab from './components/ObjectsTab'
 import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
@@ -41,6 +42,14 @@ export default function NetworkAutomationPage() {
   const [activeTab, setActiveTab] = useState(0)
   const [rulesSubTab, setRulesSubTab] = useState(0)
   const [selectedConnection, setSelectedConnection] = useState<string>('')
+  // Set by a line of the Dashboard's "To do" list, for the tab it opens; dropped on any other tab change.
+  const [guestFilter, setGuestFilter] = useState<GuestFilter | null>(null)
+  const [microsegSubTab, setMicrosegSubTab] = useState<MicrosegSubTab | null>(null)
+  const changeTab = (tab: number) => {
+    setActiveTab(tab)
+    setGuestFilter(null)
+    setMicrosegSubTab(null)
+  }
 
   // ── Connections ──
   const { data: connectionsData } = usePVEConnections()
@@ -127,7 +136,7 @@ export default function NetworkAutomationPage() {
         {/* Main Content Card */}
         <Card sx={{ background: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(10px)', border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
-          <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, flex: '1 1 460px', minWidth: 0 }}>
+          <Tabs value={activeTab} onChange={(_, v) => changeTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, flex: '1 1 460px', minWidth: 0 }}>
             <Tab icon={<i className="ri-dashboard-line" />} iconPosition="start" label={t('firewall.dashboard')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-shield-flash-line" />} iconPosition="start" label={t('networkPage.tabFirewalling')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-price-tag-3-line" />} iconPosition="start" label={t('networkPage.tabAliases')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
@@ -173,8 +182,10 @@ export default function NetworkAutomationPage() {
               loadError={firewallLoadError || null}
               loading={loading}
               reload={loadFirewallData}
-              onNavigateTab={setActiveTab}
+              onNavigateTab={changeTab}
               onNavigateRulesSubTab={setRulesSubTab}
+              onOpenGuests={filter => { changeTab(1); setRulesSubTab(2); setGuestFilter(filter ?? null) }}
+              onOpenMicroseg={subTab => { changeTab(6); setMicrosegSubTab(subTab ?? null) }}
             />
           )}
 
@@ -183,6 +194,8 @@ export default function NetworkAutomationPage() {
             <RulesTab
               activeSubTab={rulesSubTab}
               onSubTabChange={setRulesSubTab}
+              guestFilter={guestFilter}
+              onClearGuestFilter={() => setGuestFilter(null)}
               clusterRules={clusterRules}
               setClusterRules={setClusterRules}
               clusterOptions={clusterOptions}
@@ -256,6 +269,7 @@ export default function NetworkAutomationPage() {
               key={selectedConnection}
               connectionId={selectedConnection}
               connectionName={connections.find(c => c.id === selectedConnection)?.name}
+              initialSubTab={microsegSubTab ?? undefined}
               firewall={{ clusterOptions, clusterRules, nodesList, firewallMode, onComplete: loadFirewallData }}
             />
           )}

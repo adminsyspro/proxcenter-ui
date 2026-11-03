@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, Chip, ToggleButton, ToggleButtonGroup, Tooltip, useTheme, alpha } from '@mui/material'
+import { Box, Button, Chip, ToggleButton, ToggleButtonGroup, Tooltip, useTheme, alpha } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
@@ -16,6 +16,9 @@ import VMRulesPanel from './rules/VMRulesPanel'
 interface RulesTabProps {
   activeSubTab: number
   onSubTabChange: (newTab: number) => void
+  /** Firewalling > VMs opened from the Dashboard's "To do" list: only the guests without firewall, until cleared. */
+  guestFilter?: 'unprotected' | null
+  onClearGuestFilter?: () => void
   // Cluster
   clusterRules: firewallAPI.FirewallRule[]
   setClusterRules: React.Dispatch<React.SetStateAction<firewallAPI.FirewallRule[]>>
@@ -61,7 +64,7 @@ function mapLegacySubTab(v: number): number {
 }
 
 export default function RulesTab({
-  activeSubTab, onSubTabChange,
+  activeSubTab, onSubTabChange, guestFilter, onClearGuestFilter,
   clusterRules, setClusterRules,
   clusterOptions, setClusterOptions,
   hostRulesByNode, nodesList, loadingHostRules, loadHostRules, reloadHostRulesForNode,
@@ -77,6 +80,8 @@ export default function RulesTab({
   // guests listed, not a rule total that would only add up the rows opened so far.
   const vmGuestCount = vmFirewallData.length
   const policyRulesCount = clusterRules.length
+  // Certainly not filtered by Proxmox: a guest whose state is unknown is not listed as one.
+  const shownGuests = guestFilter === 'unprotected' ? vmFirewallData.filter(vm => !vm.firewallEnabled && !vm.stateUnknown) : vmFirewallData
 
   // Remap legacy sub-tab values on mount / when changed from outside
   useEffect(() => {
@@ -167,8 +172,21 @@ export default function RulesTab({
         />
       )}
       {currentTab === 2 && (
+        <>
+        {guestFilter === 'unprotected' && (
+          <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Chip
+              data-testid='guest-filter'
+              color='warning'
+              variant='outlined'
+              icon={<i className='ri-filter-3-line' style={{ fontSize: 14 }} />}
+              label={t('networkPage.dashboard.filterUnprotected', { count: shownGuests.length })}
+            />
+            <Button size='small' onClick={onClearGuestFilter}>{t('networkPage.dashboard.filterClear')}</Button>
+          </Box>
+        )}
         <VMRulesPanel
-          vmFirewallData={vmFirewallData}
+          vmFirewallData={shownGuests}
           securityGroups={securityGroups}
           loadingVMRules={loadingVMRules}
           selectedConnection={selectedConnection}
@@ -178,6 +196,7 @@ export default function RulesTab({
           aliases={aliases}
           ipsets={ipsets}
         />
+        </>
       )}
     </Box>
   )

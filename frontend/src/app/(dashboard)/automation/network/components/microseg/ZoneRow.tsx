@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Box, Chip, Collapse, IconButton, Menu, MenuItem, Tooltip, Typography } from '@mui/material'
+import { Box, Chip, Collapse, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
@@ -11,6 +11,7 @@ import FlowSummary from './FlowSummary'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { flowsOfZone, type ZoneMember } from './zoneModel'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import ZoneStateChip, { STATE_VISUAL } from './ZoneStateChip'
 
 const STATES: ZoneState[] = ['observe', 'enforce', 'disabled']
 export const STATE_DOT: Record<ZoneState, string> = { disabled: '#9e9e9e', observe: '#ed6c02', enforce: '#4caf50' }
@@ -76,7 +77,8 @@ export function ZoneStateMenu({ zone, anchor, onClose, onPick }: { zone: Microse
     <Menu anchorEl={anchor} open={!!anchor} onClose={onClose}>
       {STATES.map(state => (
         <MenuItem key={state} disabled={state === zone.state} onClick={() => { onClose(); onPick(state) }}>
-          {t(`setState.${state}`)}
+          <ListItemIcon sx={{ minWidth: 28, color: STATE_VISUAL[state].palette }}><i className={STATE_VISUAL[state].icon} style={{ fontSize: 18 }} /></ListItemIcon>
+          <ListItemText>{t(`setState.${state}`)}</ListItemText>
         </MenuItem>
       ))}
     </Menu>
@@ -158,7 +160,7 @@ export default function ZoneRow({ zone, members, membersKnown, flows, zonesById,
         <ZoneGlyph zone={zone} label={t(`state.${zone.state}`)} />
         <Tooltip title={zone.name}><Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', maxWidth: 220 }}>{zone.name}</Typography></Tooltip>
         <Tooltip title={zone.label}><Typography noWrap color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{zone.label}</Typography></Tooltip>
-        <Chip size='small' variant='outlined' label={t(`state.${zone.state}`)} sx={{ flexShrink: 0 }} />
+        <ZoneStateChip state={zone.state} />
         <Typography noWrap variant='body2' color='text.secondary' sx={{ flexShrink: 0 }}>{summary}</Typography>
         <WriteTip title={t('changeState')}>
           <IconButton size='small' aria-label={t('changeState')} aria-haspopup='menu' disabled={!canWrite} onClick={e => setAnchor(e.currentTarget)}>

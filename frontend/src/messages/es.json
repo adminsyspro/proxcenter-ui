@@ -12703,7 +12703,12 @@
         "memberRemoval": "Retirada pendiente",
         "memberRemovalHint": "En cola para retirarse, la etiqueta de zona se quita en la próxima aplicación.",
         "memberMove": "Moviendo a {zone}",
-        "memberMoveHint": "En cola para moverse a {zone} en la próxima aplicación."
+        "memberMoveHint": "En cola para moverse a {zone} en la próxima aplicación.",
+        "stateHint": {
+          "observe": "El tráfico se registra, nada se bloquea",
+          "enforce": "Solo entran los flujos permitidos",
+          "disabled": "La zona no se aplica"
+        }
       },
       "flow": {
         "notApplied": "No aplicado (salida no gestionada en v1)",
@@ -12907,6 +12912,16 @@
           "detail": "{object} ya existe en Proxmox y no fue creado por ProxCenter: no se toca.",
           "hint": "Existe en Proxmox un objeto llamado pcz-* sin la marca de la microsegmentación: renómbrelo o elimínelo en Proxmox."
         }
+      },
+      "chip": {
+        "unzoned_running": "Sin zona",
+        "nic_firewall_off": "Cortafuegos apagado",
+        "foreign_accept": "Regla ajena",
+        "ipset_out_of_sync": "Desincronizado",
+        "member_without_ip": "Sin IP",
+        "ambiguous_zone": "Varias zonas",
+        "object_collision": "Nombre ocupado",
+        "generic": "Desviación"
       }
     },
     "observation": {

@@ -12703,7 +12703,12 @@
         "memberRemoval": "제거 대기 중",
         "memberRemovalHint": "제거 대기 중이며 다음 적용 시 영역 태그가 제거됩니다.",
         "memberMove": "{zone}(으)로 이동 중",
-        "memberMoveHint": "다음 적용 시 {zone}(으)로 이동하도록 대기 중입니다."
+        "memberMoveHint": "다음 적용 시 {zone}(으)로 이동하도록 대기 중입니다.",
+        "stateHint": {
+          "observe": "트래픽은 기록되며 아무것도 차단되지 않습니다",
+          "enforce": "허용된 흐름만 통과합니다",
+          "disabled": "영역이 적용되지 않습니다"
+        }
       },
       "flow": {
         "notApplied": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",
@@ -12907,6 +12912,16 @@
           "detail": "{object}은(는) 이미 Proxmox에 있고 ProxCenter가 만든 것이 아니므로 건드리지 않습니다.",
           "hint": "마이크로 세분화 표시가 없는 pcz-* 이름의 개체가 Proxmox에 있습니다. Proxmox에서 이름을 바꾸거나 삭제하세요."
         }
+      },
+      "chip": {
+        "unzoned_running": "영역 없음",
+        "nic_firewall_off": "방화벽 꺼짐",
+        "foreign_accept": "외부 규칙",
+        "ipset_out_of_sync": "동기화 안 됨",
+        "member_without_ip": "IP 없음",
+        "ambiguous_zone": "여러 영역",
+        "object_collision": "이름 사용 중",
+        "generic": "불일치"
       }
     },
     "observation": {

@@ -9,7 +9,7 @@ import { useMicrosegDrifts } from '@/lib/microseg/useMicrosegLists'
 import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
-import { driftKey, driftLabel } from './driftLabels'
+import { driftKey, driftLabel, zoneOfDrift } from './driftLabels'
 import { useIgnoredDrifts } from './driftIgnore'
 import DriftRow from './DriftRow'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
@@ -108,6 +108,7 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
                   drift={drift}
                   label={label}
                   subject={subjectOf(drift)}
+                  zone={zoneOfDrift(drift, policy.zones)}
                   guest={drift.guest ? guestsByKey.get(guestKey(drift.guest)) ?? null : null}
                   ignored={ignored.has(key)}
                   hasZones={policy.zones.length > 0}

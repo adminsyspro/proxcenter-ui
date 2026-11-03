@@ -1,4 +1,4 @@
-import type { MicrosegDrift } from '@/lib/microseg/types'
+import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
 
 import { guestKey } from './zoneModel'
 
@@ -78,4 +78,11 @@ export function driftLabel(d: MicrosegDrift, t: Translate): DriftLabel {
 export function driftKey(d: MicrosegDrift): string {
   const pos = typeof d.detail?.pos === 'number' ? String(d.detail.pos) : ''
   return [d.kind, d.guest ? guestKey(d.guest) : '', d.object ?? '', pos].join('|')
+}
+
+/** The zone a drift is about (its detail names it by name or id), when the policy holds it. */
+export function zoneOfDrift(d: MicrosegDrift, zones: MicrosegZone[]): MicrosegZone | null {
+  const ref = d.detail?.zone
+  if (typeof ref !== 'string' || !ref) return null
+  return zones.find(z => z.id === ref || z.name === ref) ?? null
 }

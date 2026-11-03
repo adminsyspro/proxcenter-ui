@@ -12371,7 +12371,12 @@
         "memberRemoval": "Entfernung ausstehend",
         "memberRemovalHint": "Zur Entfernung vorgemerkt, das Zonen-Tag wird bei der nächsten Anwendung entfernt.",
         "memberMove": "Wechsel nach {zone}",
-        "memberMoveHint": "Für den Wechsel nach {zone} bei der nächsten Anwendung vorgemerkt."
+        "memberMoveHint": "Für den Wechsel nach {zone} bei der nächsten Anwendung vorgemerkt.",
+        "stateHint": {
+          "observe": "Der Verkehr wird protokolliert, nichts wird blockiert",
+          "enforce": "Nur die erlaubten Flüsse kommen durch",
+          "disabled": "Die Zone wird nicht angewendet"
+        }
       },
       "flow": {
         "notApplied": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",
@@ -12575,6 +12580,16 @@
           "detail": "{object} existiert bereits in Proxmox und wurde nicht von ProxCenter angelegt: Es bleibt unberührt.",
           "hint": "Ein Objekt namens pcz-* existiert in Proxmox ohne die Markierung der Mikrosegmentierung: in Proxmox umbenennen oder löschen."
         }
+      },
+      "chip": {
+        "unzoned_running": "Ohne Zone",
+        "nic_firewall_off": "Firewall aus",
+        "foreign_accept": "Fremde Regel",
+        "ipset_out_of_sync": "Nicht synchron",
+        "member_without_ip": "Keine IP",
+        "ambiguous_zone": "Mehrere Zonen",
+        "object_collision": "Name belegt",
+        "generic": "Abweichung"
       }
     },
     "observation": {

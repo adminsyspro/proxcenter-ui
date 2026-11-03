@@ -9,7 +9,8 @@ import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
 import FlowSummary from './FlowSummary'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PolicyPager, { usePaged } from './PolicyPager'
-import { MemberChangeChip, STATE_DOT } from './ZoneRow'
+import { MemberChangeChip } from './ZoneRow'
+import ZoneStateChip from './ZoneStateChip'
 import { FlowRowActions, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
 import type { ZoneEdits } from './useZoneEdits'
 import { flowsOfZone, type ZoneMember } from './zoneModel'
@@ -95,13 +96,7 @@ export default function ZonePanel({ zone, members, membersKnown, flows, zonesByI
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
         <i className='ri-shield-fill' style={{ fontSize: 18, color: zone.color || undefined }} />
         <Tooltip title={zone.name}><Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{zone.name}</Typography></Tooltip>
-        <Chip
-          size='small'
-          variant='outlined'
-          label={ts(`state.${zone.state}`)}
-          icon={<Box component='span' sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: STATE_DOT[zone.state] }} />}
-          sx={{ flexShrink: 0 }}
-        />
+        <ZoneStateChip state={zone.state} />
         <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
       </Box>
 

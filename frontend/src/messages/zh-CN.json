@@ -12703,7 +12703,12 @@
         "memberRemoval": "待移除",
         "memberRemovalHint": "已排队移除，下次应用时将移除区域标签。",
         "memberMove": "正在移动到 {zone}",
-        "memberMoveHint": "已排队，下次应用时移动到 {zone}。"
+        "memberMoveHint": "已排队，下次应用时移动到 {zone}。",
+        "stateHint": {
+          "observe": "流量会被记录,不会拦截任何内容",
+          "enforce": "只有允许的流量可以进入",
+          "disabled": "该区域未被应用"
+        }
       },
       "flow": {
         "notApplied": "未应用（v1 不管理出站）",
@@ -12907,6 +12912,16 @@
           "detail": "{object} 已存在于 Proxmox 中，不是由 ProxCenter 创建的，不会被改动。",
           "hint": "Proxmox 中存在名为 pcz-* 且没有微分段标记的对象：请在 Proxmox 中重命名或删除。"
         }
+      },
+      "chip": {
+        "unzoned_running": "无区域",
+        "nic_firewall_off": "防火墙已关闭",
+        "foreign_accept": "外部规则",
+        "ipset_out_of_sync": "未同步",
+        "member_without_ip": "无 IP",
+        "ambiguous_zone": "多个区域",
+        "object_collision": "名称已占用",
+        "generic": "偏差"
       }
     },
     "observation": {

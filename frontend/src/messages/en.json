@@ -12703,7 +12703,12 @@
         "memberRemoval": "Pending removal",
         "memberRemovalHint": "Queued for removal, the zone tag is removed on the next apply.",
         "memberMove": "Moving to {zone}",
-        "memberMoveHint": "Queued to move to {zone} on the next apply."
+        "memberMoveHint": "Queued to move to {zone} on the next apply.",
+        "stateHint": {
+          "observe": "Traffic is logged, nothing is blocked",
+          "enforce": "Only the allowed flows get in",
+          "disabled": "The zone is not applied"
+        }
       },
       "flow": {
         "notApplied": "Not applied (egress not managed in v1)",
@@ -12907,6 +12912,16 @@
           "detail": "{object} already exists in Proxmox and was not created by ProxCenter: it is left untouched.",
           "hint": "An object named pcz-* exists in Proxmox without the micro-segmentation marker: rename or delete it in Proxmox."
         }
+      },
+      "chip": {
+        "unzoned_running": "No zone",
+        "nic_firewall_off": "Firewall off",
+        "foreign_accept": "Foreign rule",
+        "ipset_out_of_sync": "Out of sync",
+        "member_without_ip": "No IP",
+        "ambiguous_zone": "Several zones",
+        "object_collision": "Name taken",
+        "generic": "Drift"
       }
     },
     "observation": {

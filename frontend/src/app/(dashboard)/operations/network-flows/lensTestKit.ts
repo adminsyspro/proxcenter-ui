@@ -5,7 +5,7 @@
 
 import type { MicrosegPolicy, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 import {
-  EXTERNAL_KEY, OTHER_KEY, UNZONED_KEY, buildResolver, groupColor, pairVerdict, type LensPair,
+  EXTERNAL_KEY, OTHER_KEY, UNZONED_KEY, buildResolver, canonicalRows, groupColor, pairVerdict, type LensPair,
 } from '@/lib/microseg/trafficLens'
 
 import type { TrafficLens } from './useTrafficLens'
@@ -84,6 +84,7 @@ export function makeLens(policy: MicrosegPolicy = POLICY, suggestions: MicrosegS
     labelOf: key => names[key] ?? zonesById.get(key.replace(/^zone:/, ''))?.name ?? key,
     colorOf: key => groupColor(key, zonesById),
     verdictOf: p => pairVerdict(p, resolve, policy.flows, suggestions),
+    rows: pairs => canonicalRows(pairs, p => pairVerdict(p, resolve, policy.flows, suggestions).status === 'allowed'),
   }
 }
 

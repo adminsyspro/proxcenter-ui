@@ -56,17 +56,20 @@ function SourceDonut({ slices, lens }: { slices: ZoneSlice[]; lens: TrafficLens 
           ))}
         </g>
       </svg>
-      <Box sx={{ minWidth: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', columnGap: 1.5, rowGap: 0.25, flex: 1 }}>
-        <Typography variant='caption' color='text.secondary' fontWeight={600} sx={{ gridColumn: '1 / -1' }}>{t('bySourceZone')}</Typography>
-        {slices.map(s => (
-          <Box key={s.key} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-            <Box component='span' sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: lens.colorOf(s.key), flexShrink: 0 }} />
-            <Tooltip title={`${lens.labelOf(s.key)} · ${formatBytes(s.bytes)}`}>
-              <Typography variant='caption' noWrap sx={{ minWidth: 0 }}>{lens.labelOf(s.key)}</Typography>
-            </Tooltip>
-            <Typography variant='caption' color='text.secondary' sx={{ flexShrink: 0, ml: 'auto' }}>{percentText(s.percent)}</Typography>
-          </Box>
-        ))}
+      <Box sx={{ minWidth: 0, flex: 1, alignSelf: 'stretch', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <Typography variant='caption' color='text.secondary' fontWeight={600} sx={{ mb: 0.5 }}>{t('bySourceZone')}</Typography>
+        {/* One grid for every row: the dots, the names and the right-aligned shares line up in three columns. */}
+        <Box data-testid='donut-legend' sx={{ display: 'grid', gridTemplateColumns: '8px minmax(0, 1fr) auto', columnGap: 0.75, rowGap: 0.25, alignItems: 'center' }}>
+          {slices.map(s => (
+            <Box key={s.key} sx={{ display: 'contents' }}>
+              <Box component='span' sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: lens.colorOf(s.key) }} />
+              <Tooltip title={`${lens.labelOf(s.key)} · ${formatBytes(s.bytes)}`}>
+                <Typography variant='caption' noWrap sx={{ minWidth: 0 }}>{lens.labelOf(s.key)}</Typography>
+              </Tooltip>
+              <Typography variant='caption' color='text.secondary' sx={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{percentText(s.percent)}</Typography>
+            </Box>
+          ))}
+        </Box>
       </Box>
     </Box>
   )

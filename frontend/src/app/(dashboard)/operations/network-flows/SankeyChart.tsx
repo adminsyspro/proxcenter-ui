@@ -199,11 +199,9 @@ export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {})
 
   // SVG dimensions: full width, height = fill remaining viewport
   const svgWidth = containerWidth || 900
-  const svgHeight = useMemo(() => {
-    // Viewport height - page header(64) - tabs(48) - card header(40) - paddings(48)
-    const available = typeof window !== 'undefined' ? window.innerHeight - 200 : 500
-    return Math.max(350, available)
-  }, [containerWidth]) // recalc when width changes (orientation change)
+  // Viewport height - page header(64) - tabs(48) - card header(40) - paddings(48), read again on every render
+  // (a width change, an orientation change, a hover)
+  const svgHeight = Math.max(350, typeof window === 'undefined' ? 500 : window.innerHeight - 200)
 
   // Build Sankey data
   const sankeyData = useMemo(() => {
@@ -215,9 +213,10 @@ export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {})
     // The server-side matches are re-checked locally: an orchestrator that
     // predates ?q= answers with its unfiltered top pairs.
     const serverMatches = matchedPairs.filter(pairMatches)
-    const sourcePairs = !q ? pairs
-      : mode === 'filter' ? mergePairs(pairs.filter(pairMatches), serverMatches)
-      : mergePairs(pairs, serverMatches)
+    let searched = pairs
+    if (q) searched = mode === 'filter' ? mergePairs(pairs.filter(pairMatches), serverMatches) : mergePairs(pairs, serverMatches)
+    // In Zone mode the reply direction of a pair is folded into it, as in the pairs table.
+    const sourcePairs = lens ? lens.rows(searched) : searched
 
     const nodeMap = new Map<string, number>()
     const nodes: SankeyNodeData[] = []

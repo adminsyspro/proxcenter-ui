@@ -13345,7 +13345,8 @@
         "allowed": "Allowed",
         "notCovered": "Not covered",
         "blocked": "Blocked",
-        "unknown": "Unknown"
+        "unknown": "Unknown",
+        "reply": "Return traffic"
       },
       "tip": {
         "allowedFlow": "Allowed by the flow {src} → {dst} {service}",
@@ -13353,7 +13354,11 @@
         "notCovered": "No flow from {src} to {dst} covers {service}",
         "wouldBlock": "No flow from {src} to {dst} covers {service}: the zone would block it once enforced ({hits, plural, one {# hit} other {# hits}} observed)",
         "blocked": "Blocked: no flow from {src} to {dst} covers {service} ({hits, plural, one {# hit} other {# hits}} observed)",
-        "unknown": "{src} → {dst}: one end is in no zone, the policy does not apply"
+        "unknown": "{src} → {dst}: one end is in no zone, the policy does not apply",
+        "reply": "Return traffic of a connection {dst} opened to {src}: port {port} is a client port, the stateful firewall lets the answer back without a flow",
+        "notEnforced": "The zone {zone} is disabled: the policy is not enforced for it",
+        "includesReply": "Includes {volume} of return traffic",
+        "lastSampled": "sFlow sums every service between these two addresses: the status is for the last one sampled, {service}"
       },
       "accept": "Accept",
       "acceptTip": "Accept the observed flow: it is added to the draft",

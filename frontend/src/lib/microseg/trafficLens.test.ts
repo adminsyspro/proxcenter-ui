@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from './types'
 import {
-  EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, UNZONED_KEY, aggregateByGroup, buildResolver, coveringFlow, flowDraftOf, groupColor,
-  groupKeyOf, pairVerdict, portInSpec, sourceZoneSlices, trafficDistribution, zoneKey, type LensPair,
+  EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, UNZONED_KEY, aggregateByGroup, buildResolver, canonicalRows, coveringFlow, flowDraftOf,
+  groupColor, groupKeyOf, pairVerdict, portInSpec, protoOf, sourceZoneSlices, trafficDistribution, zoneKey, type LensPair,
 } from './trafficLens'
 
 const zone = (id: string, over: Partial<MicrosegZone> = {}): MicrosegZone => ({
@@ -163,5 +163,78 @@ describe('colours, keys and the flow draft', () => {
     expect(flowDraftOf(pair('a', 'b'), 'web', 'db')).toEqual({ src_zone_id: 'web', dst_zone_id: 'db', proto: 'tcp', dport: '5432' })
     expect(flowDraftOf(pair('a', 'b', { protocol: 'ICMP', dst_port: 0 }), 'web', 'db').dport).toBe('')
     expect(flowDraftOf(pair('a', 'b', { protocol: 'GRE' }), 'web', 'db')).toMatchObject({ proto: 'any', dport: '' })
+  })
+})
+
+describe('protocols and zone states', () => {
+  it('names ICMPv6 one way, and an icmpv6 flow covers an ICMPv6 pair (not an ICMP one)', () => {
+    expect(protoOf('ICMPv6')).toBe('icmpv6')
+    expect(protoOf('ipv6-icmp')).toBe('icmpv6')
+    const v6 = [flow({ proto: 'icmpv6', dport: '' })]
+    expect(coveringFlow(v6, 'web', 'db', 'ICMPv6', 0)).toBeDefined()
+    expect(coveringFlow(v6, 'web', 'db', 'IPV6-ICMP', 0)).toBeDefined()
+    expect(coveringFlow(v6, 'web', 'db', 'ICMP', 0)).toBeUndefined()
+    expect(flowDraftOf(pair('a', 'b', { protocol: 'ICMPv6', dst_port: 0 }), 'web', 'db')).toMatchObject({ proto: 'icmpv6', dport: '' })
+  })
+
+  it('reads a pair into a disabled zone as unknown, not enforced; a source zone that is disabled does not matter', () => {
+    const zones = [zone('web', { state: 'disabled' }), zone('db', { state: 'disabled' })]
+    const r = buildResolver(zones, 'zone-', GUESTS)
+    expect(pairVerdict(pair('10.0.0.1', '10.0.0.2'), r, [flow()], [])).toMatchObject({ status: 'unknown', notEnforced: true })
+    const srcOff = buildResolver([zone('web', { state: 'disabled' }), zone('db')], 'zone-', GUESTS)
+    expect(pairVerdict(pair('10.0.0.1', '10.0.0.2'), srcOff, [flow()], []).status).toBe('allowed')
+  })
+})
+
+describe('canonicalRows: the reply direction of a pair', () => {
+  // web-01 (10.0.0.1) opens tcp/5432 to db-01 (10.0.0.2): the answers carry the client port.
+  const covered = (p: LensPair) => pairVerdict(p, resolve, [flow()], []).status === 'allowed'
+
+  it('folds a reply on a client port into its request: bytes summed, no row of its own', () => {
+    const rows = canonicalRows([
+      pair('10.0.0.1', '10.0.0.2', { bytes: 300, packets: 3 }),
+      pair('10.0.0.2', '10.0.0.1', { dst_port: 51234, bytes: 700, packets: 7 }),
+    ], covered)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ src_ip: '10.0.0.1', dst_port: 5432, bytes: 1000, packets: 10, replyBytes: 700, orphanReply: false })
+    expect(pairVerdict(rows[0], resolve, [flow()], []).status).toBe('allowed')
+  })
+
+  it('folds the reply whichever direction is listed first', () => {
+    const rows = canonicalRows([
+      pair('10.0.0.2', '10.0.0.1', { dst_port: 40000, bytes: 50 }),
+      pair('10.0.0.1', '10.0.0.2', { bytes: 10 }),
+    ], () => false)
+    expect(rows.map(r => [r.src_ip, r.dst_port, r.bytes])).toEqual([['10.0.0.1', 5432, 60]])
+  })
+
+  it('marks a direction alone on a client port that no flow covers as return traffic, without action', () => {
+    const [row] = canonicalRows([pair('10.0.0.2', '10.0.0.1', { dst_port: 51234 })], covered)
+    expect(row).toMatchObject({ orphanReply: true, replyBytes: 0 })
+    expect(pairVerdict(row, resolve, [flow()], []).status).toBe('reply')
+    const [served] = canonicalRows([pair('10.0.0.2', '10.0.0.1', { dst_port: 51234 })], () => true)
+    expect(served.orphanReply).toBe(false)
+    const [serviceAlone] = canonicalRows([pair('10.0.0.2', '10.0.0.1', { dst_port: 5432 })], covered)
+    expect(serviceAlone.orphanReply).toBe(false)
+  })
+
+  it('of two service ports folds the higher one only when the lower is covered and the higher is not', () => {
+    const lowCovered = canonicalRows([pair('10.0.0.1', '10.0.0.2'), pair('10.0.0.2', '10.0.0.1', { dst_port: 8443 })], covered)
+    expect(lowCovered).toHaveLength(1)
+    expect(lowCovered[0].dst_port).toBe(5432)
+    const neither = canonicalRows([pair('10.0.0.1', '10.0.0.2', { dst_port: 22 }), pair('10.0.0.2', '10.0.0.1', { dst_port: 8443 })], covered)
+    expect(neither).toHaveLength(2)
+  })
+
+  it('of two client ports folds the higher one, and keeps other protocols and addresses apart', () => {
+    const rows = canonicalRows([
+      pair('10.0.0.1', '10.0.0.2', { dst_port: 33000, bytes: 10 }),
+      pair('10.0.0.2', '10.0.0.1', { dst_port: 60000, bytes: 10 }),
+      pair('10.0.0.2', '10.0.0.1', { protocol: 'UDP', dst_port: 53, bytes: 5 }),
+      pair('10.0.0.3', '10.0.0.1', { dst_port: 443, bytes: 1 }),
+    ], () => false)
+    expect(rows.map(r => `${r.src_ip}>${r.dst_ip}:${r.protocol}/${r.dst_port}=${r.bytes}`)).toEqual([
+      '10.0.0.1>10.0.0.2:TCP/33000=20', '10.0.0.2>10.0.0.1:UDP/53=5', '10.0.0.3>10.0.0.1:TCP/443=1',
+    ])
   })
 })

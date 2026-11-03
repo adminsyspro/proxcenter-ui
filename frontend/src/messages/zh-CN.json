@@ -13345,7 +13345,8 @@
         "allowed": "已允许",
         "notCovered": "未覆盖",
         "blocked": "已阻止",
-        "unknown": "未知"
+        "unknown": "未知",
+        "reply": "返回流量"
       },
       "tip": {
         "allowedFlow": "由流量规则 {src} → {dst} {service} 允许",
@@ -13353,7 +13354,11 @@
         "notCovered": "没有从 {src} 到 {dst} 的流量规则覆盖 {service}",
         "wouldBlock": "没有从 {src} 到 {dst} 的流量规则覆盖 {service}：区域强制执行后将阻止它（已观察到 {hits} 次）",
         "blocked": "已阻止：没有从 {src} 到 {dst} 的流量规则覆盖 {service}（已观察到 {hits} 次）",
-        "unknown": "{src} → {dst}：有一端不属于任何区域，策略不适用"
+        "unknown": "{src} → {dst}：有一端不属于任何区域，策略不适用",
+        "reply": "{dst} 向 {src} 发起的连接的返回流量：端口 {port} 是客户端端口，有状态防火墙无需流量规则即可放行应答",
+        "notEnforced": "区域 {zone} 已禁用：策略不对其生效",
+        "includesReply": "包含 {volume} 的返回流量",
+        "lastSampled": "sFlow 汇总这两个地址之间的所有服务：状态针对最后采样的服务 {service}"
       },
       "accept": "接受",
       "acceptTip": "接受观察到的流量：它将被添加到草稿",

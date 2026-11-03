@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 
 import { Features, useLicense } from '@/contexts/LicenseContext'
@@ -11,8 +12,8 @@ import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 import type { MicrosegPolicy, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 import {
-  EXTERNAL_KEY, OTHER_KEY, UNZONED_KEY, buildResolver, groupColor, pairVerdict,
-  type LensGuest, type LensPair, type PairVerdict, type Resolver,
+  EXTERNAL_KEY, OTHER_KEY, UNZONED_KEY, buildResolver, canonicalRows, groupColor, pairVerdict,
+  type LensGuest, type LensPair, type PairVerdict, type ReplyMarks, type Resolver,
 } from '@/lib/microseg/trafficLens'
 
 export type GroupBy = 'vm' | 'ip' | 'zone'
@@ -40,29 +41,31 @@ function store(key: string, value: string) {
   }
 }
 
-function readQuery(name: string): string | null {
-  try {
-    return new URLSearchParams(window.location.search).get(name)
-  } catch {
-    return null
-  }
+/**
+ * A choice a query parameter sets, the user changes and the browser remembers. The parameter is read from the router
+ * (it is the new one at once on a client-side navigation): a valid one wins until the user picks something else, and
+ * again whenever it changes; the stored choice only counts when no valid parameter is there.
+ */
+function useRememberedChoice(param: string, storageKey: string, valid: (value: string) => boolean): [string | null, (value: string) => void] {
+  const raw = useSearchParams()?.get(param) ?? null
+  const asked = raw !== null && valid(raw) ? raw : null
+  const [stored] = useState(() => readStored(storageKey))
+  const [choice, setChoice] = useState<{ asked: string | null; value: string } | null>(null)
+  let value = asked ?? choice?.value ?? stored
+  if (choice && choice.asked === asked) value = choice.value
+  const choose = useCallback((next: string) => {
+    setChoice({ asked, value: next })
+    store(storageKey, next)
+  }, [asked, storageKey])
+  return [value, choose]
 }
 
 const isGroupBy = (value: unknown): value is GroupBy => GROUP_BY_VALUES.includes(value as GroupBy)
 
-/** The grouping of the page: ?groupBy= first (the link of the Micro-segmentation tab), then the stored choice, then VM. */
+/** The grouping of the page: ?groupBy= (the link of the Micro-segmentation tab), else the stored choice, else VM. */
 export function useGroupBy(): [GroupBy, (next: GroupBy) => void] {
-  const [groupBy, setGroupBy] = useState<GroupBy>(() => {
-    const asked = readQuery('groupBy')
-    if (isGroupBy(asked)) return asked
-    const stored = readStored(GROUP_BY_KEY)
-    return isGroupBy(stored) ? stored : 'vm'
-  })
-  const choose = useCallback((next: GroupBy) => {
-    setGroupBy(next)
-    store(GROUP_BY_KEY, next)
-  }, [])
-  return [groupBy, choose]
+  const [value, choose] = useRememberedChoice('groupBy', GROUP_BY_KEY, isGroupBy)
+  return [isGroupBy(value) ? value : 'vm', choose]
 }
 
 export type LensConnection = { id: string; name: string }
@@ -74,12 +77,9 @@ export function useLensConnection(): { connections: LensConnection[]; connection
     () => (Array.isArray(data?.data) ? data.data : []).map((c: { id: string; name?: string }) => ({ id: c.id, name: c.name || c.id })),
     [data],
   )
-  const [wanted, setWanted] = useState<string | null>(() => readQuery('connection') ?? readStored(CONNECTION_KEY))
+  const known = useCallback((id: string) => connections.some(c => c.id === id), [connections])
+  const [wanted, choose] = useRememberedChoice('connection', CONNECTION_KEY, known)
   const connectionId = connections.find(c => c.id === wanted)?.id ?? connections[0]?.id ?? null
-  const choose = useCallback((id: string) => {
-    setWanted(id)
-    store(CONNECTION_KEY, id)
-  }, [])
   return { connections, connectionId, choose }
 }
 
@@ -111,7 +111,9 @@ export type TrafficLens = {
   resolve: Resolver
   labelOf: (key: string) => string
   colorOf: (key: string) => string
-  verdictOf: (pair: LensPair) => PairVerdict
+  verdictOf: (pair: LensPair & Partial<ReplyMarks>) => PairVerdict
+  /** The pairs with their reply direction folded in (canonicalRows), what the table, the strip and the charts show. */
+  rows: <T extends LensPair>(pairs: T[]) => Array<T & ReplyMarks>
 }
 
 export type TrafficLensRead = {
@@ -174,7 +176,8 @@ export function useTrafficLens(connectionId: string | null): TrafficLensRead {
       resolve,
       labelOf,
       colorOf: (key: string) => groupColor(key, zonesById),
-      verdictOf: (pair: LensPair) => pairVerdict(pair, resolve, policy.flows, suggestions),
+      verdictOf: (pair: LensPair & Partial<ReplyMarks>) => pairVerdict(pair, resolve, policy.flows, suggestions),
+      rows: <T extends LensPair>(pairs: T[]) => canonicalRows(pairs, p => pairVerdict(p, resolve, policy.flows, suggestions).status === 'allowed'),
     }
   }, [state, policy, conn, suggestionsRead.data, guestsRead.data, t])
 

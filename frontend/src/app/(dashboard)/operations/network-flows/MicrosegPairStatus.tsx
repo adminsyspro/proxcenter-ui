@@ -9,9 +9,12 @@ import { isVersionConflict } from '@/app/(dashboard)/automation/network/componen
 import { WriteTip, useMicrosegWrite } from '@/app/(dashboard)/automation/network/components/microseg/microsegAccess'
 import { useResolveSuggestions } from '@/app/(dashboard)/automation/network/components/microseg/observationParts'
 import { EDGE_COLORS } from '@/app/(dashboard)/automation/network/components/microseg/zoneGraph'
+import { formatBytes } from '@/utils/format'
 import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegSuggestion } from '@/lib/microseg/types'
-import { flowDraftOf, groupKeyOf, type LensEndpoint, type LensPair, type LensStatus, type PairVerdict } from '@/lib/microseg/trafficLens'
+import {
+  flowDraftOf, groupKeyOf, protoOf, type LensEndpoint, type LensPair, type LensStatus, type PairVerdict, type ReplyMarks,
+} from '@/lib/microseg/trafficLens'
 
 import type { TrafficLens, TrafficLensRead } from './useTrafficLens'
 
@@ -21,15 +24,19 @@ const STATUS_SX: Record<LensStatus, object> = {
   not_covered: { bgcolor: 'transparent', color: EDGE_COLORS.unprotected, borderColor: EDGE_COLORS.unprotected },
   blocked: { bgcolor: `${EDGE_COLORS.blocked}1f`, color: EDGE_COLORS.blocked, borderColor: 'transparent' },
   unknown: { bgcolor: 'transparent', color: 'text.secondary', borderColor: 'divider' },
+  reply: { bgcolor: 'action.hover', color: 'text.secondary', borderColor: 'transparent' },
 }
 
 const STATUS_LABEL: Record<LensStatus, string> = {
-  allowed: 'status.allowed', not_covered: 'status.notCovered', blocked: 'status.blocked', unknown: 'status.unknown',
+  allowed: 'status.allowed', not_covered: 'status.notCovered', blocked: 'status.blocked', unknown: 'status.unknown', reply: 'status.reply',
 }
+
+/** A row of the table: an sFlow pair, its reply direction folded in. */
+type LensRow = LensPair & Partial<ReplyMarks>
 
 /** The service of a pair as the policy writes it: "tcp/443", "udp/53", "icmp". */
 export function pairService(pair: Pick<LensPair, 'protocol' | 'dst_port'>): string {
-  const proto = pair.protocol.toLowerCase()
+  const proto = protoOf(pair.protocol)
   return (proto === 'tcp' || proto === 'udp') && pair.dst_port > 0 ? `${proto}/${pair.dst_port}` : proto
 }
 
@@ -44,12 +51,14 @@ function useEndpointLabel(lens: TrafficLens) {
   return (endpoint: LensEndpoint) => lens.labelOf(groupKeyOf(endpoint))
 }
 
-/** The tooltip of a status: the flow that allows the pair, or why none does. */
+/** The tooltip of a status: the flow that allows the pair, or why none does, then what the row is made of. */
 function useVerdictText(lens: TrafficLens) {
   const t = useTranslations('microsegPilot.trafficLens.tip')
   const labelOf = useEndpointLabel(lens)
-  return (verdict: PairVerdict, pair: LensPair) => {
+  const reason = (verdict: PairVerdict, pair: LensRow) => {
     const values = { src: labelOf(verdict.src), dst: labelOf(verdict.dst), service: pairService(pair) }
+    if (verdict.status === 'reply') return t('reply', { ...values, port: pair.dst_port })
+    if (verdict.notEnforced) return t('notEnforced', { zone: values.dst })
     if (verdict.status === 'unknown') return t('unknown', values)
     if (verdict.intraZone) return t('intraZone', { zone: values.src })
     if (verdict.flow) {
@@ -59,6 +68,13 @@ function useVerdictText(lens: TrafficLens) {
     if (verdict.status === 'blocked') return t('blocked', { ...values, hits: verdict.suggestion?.hits ?? 0 })
     if (verdict.suggestion) return t('wouldBlock', { ...values, hits: verdict.suggestion.hits })
     return t('notCovered', values)
+  }
+  return (verdict: PairVerdict, pair: LensRow) => {
+    const lines = [reason(verdict, pair)]
+    if (pair.replyBytes) lines.push(t('includesReply', { volume: formatBytes(pair.replyBytes) }))
+    // The orchestrator keeps one entry per direction of two addresses: the service is the last one sampled.
+    if (verdict.status !== 'reply') lines.push(t('lastSampled', { service: pairService(pair) }))
+    return lines.join('\n')
   }
 }
 
@@ -139,7 +155,7 @@ export function usePairActions(read: TrafficLensRead): PairActions {
 }
 
 /** The status of a pair against the draft, as a chip with its explanation, and the write it calls for. */
-export function MicrosegPairStatus({ pair, lens, actions }: { pair: LensPair; lens: TrafficLens; actions: PairActions }) {
+export function MicrosegPairStatus({ pair, lens, actions }: { pair: LensRow; lens: TrafficLens; actions: PairActions }) {
   const t = useTranslations('microsegPilot.trafficLens')
   const { canWrite } = useMicrosegWrite()
   const verdictText = useVerdictText(lens)
@@ -150,7 +166,7 @@ export function MicrosegPairStatus({ pair, lens, actions }: { pair: LensPair; le
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-      <Tooltip title={verdictText(verdict, pair)}>
+      <Tooltip title={verdictText(verdict, pair)} slotProps={{ tooltip: { sx: { whiteSpace: 'pre-line' } } }}>
         <Chip
           data-testid='microseg-status'
           data-status={status}

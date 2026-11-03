@@ -82,12 +82,19 @@ export function portInSpec(port: number, spec: string): boolean {
   })
 }
 
-const sameProto = (rule: string, pair: string) => rule === 'any' || rule.toLowerCase() === pair.toLowerCase()
+/** A protocol name as the policy writes it: lowercase, the ICMPv6 aliases as "icmpv6". */
+export function protoOf(name: string): string {
+  const p = name.trim().toLowerCase()
+  return p === 'icmp6' || p === 'ipv6-icmp' ? 'icmpv6' : p
+}
+
+const sameProto = (rule: string, pair: string) => protoOf(rule) === 'any' || protoOf(rule) === protoOf(pair)
+
+const hasPorts = (proto: string) => proto === 'tcp' || proto === 'udp'
 
 /** The ports only count for TCP and UDP: an ICMP flow covers every ICMP packet. */
 function servicePorts(proto: string, port: number, spec: string): boolean {
-  const p = proto.toLowerCase()
-  return p === 'tcp' || p === 'udp' ? portInSpec(port, spec) : true
+  return hasPorts(protoOf(proto)) ? portInSpec(port, spec) : true
 }
 
 /** A flow of the draft that lets this zone pair talk on this service (zone to zone flows only). */
@@ -108,7 +115,8 @@ export function matchingSuggestion(
     && sameProto(s.proto, pair.protocol) && servicePorts(pair.protocol, pair.dst_port, s.dport))
 }
 
-export type LensStatus = 'allowed' | 'not_covered' | 'blocked' | 'unknown'
+/** `reply`: the return direction of a connection the other end opened (the PVE firewall is stateful). */
+export type LensStatus = 'allowed' | 'not_covered' | 'blocked' | 'unknown' | 'reply'
 
 export type PairVerdict = {
   status: LensStatus
@@ -120,6 +128,16 @@ export type PairVerdict = {
   intraZone?: boolean
   /** The pending suggestion of the pair: blocked, or would be blocked. */
   suggestion?: MicrosegSuggestion
+  /** Unknown because the destination zone is disabled: the policy is not compiled for it. */
+  notEnforced?: boolean
+}
+
+/** A pair once its reply direction is folded in (canonicalRows). */
+export type ReplyMarks = {
+  /** Bytes of the reply direction summed into this row (0 when there is none). */
+  replyBytes: number
+  /** Only this direction was sampled and its port is a client port: the return traffic of a connection. */
+  orphanReply: boolean
 }
 
 /**
@@ -127,10 +145,14 @@ export type PairVerdict = {
  * one zone that does not isolate its members), blocked (a pending blocked suggestion matches it), not covered (no
  * flow; a would-block suggestion may be attached), unknown (an end is in no zone).
  */
-export function pairVerdict(pair: LensPair, resolve: Resolver, flows: MicrosegFlow[], suggestions: MicrosegSuggestion[]): PairVerdict {
+export function pairVerdict(
+  pair: LensPair & Partial<ReplyMarks>, resolve: Resolver, flows: MicrosegFlow[], suggestions: MicrosegSuggestion[],
+): PairVerdict {
   const src = resolve(pair.src_ip, pair.src_vmid)
   const dst = resolve(pair.dst_ip, pair.dst_vmid)
+  if (pair.orphanReply) return { status: 'reply', src, dst }
   if (src.kind !== 'zone' || dst.kind !== 'zone') return { status: 'unknown', src, dst }
+  if (dst.zone.state === 'disabled') return { status: 'unknown', src, dst, notEnforced: true }
   const flow = coveringFlow(flows, src.zone.id, dst.zone.id, pair.protocol, pair.dst_port)
   if (flow) return { status: 'allowed', src, dst, flow }
   if (src.zone.id === dst.zone.id && !src.zone.isolate_members) return { status: 'allowed', src, dst, intraZone: true }
@@ -138,6 +160,72 @@ export function pairVerdict(pair: LensPair, resolve: Resolver, flows: MicrosegFl
   if (blocked) return { status: 'blocked', src, dst, suggestion: blocked }
   const wouldBlock = matchingSuggestion(suggestions, pair, src.zone.id, dst.zone.id, 'would_block')
   return { status: 'not_covered', src, dst, suggestion: wouldBlock }
+}
+
+/** The first port of the dynamic range Linux hands to clients (net.ipv4.ip_local_port_range starts at 32768). */
+export const EPHEMERAL_PORT = 32768
+
+const isEphemeral = (pair: LensPair) => hasPorts(protoOf(pair.protocol)) && pair.dst_port >= EPHEMERAL_PORT
+
+/**
+ * Which of two opposite pairs (same two addresses, same protocol) is the reply of the other, or null when neither
+ * clearly is: the one on a client port (>= 32768) when the other is not; of two client ports the higher; of two
+ * service ports the higher, when the lower is covered by the policy and the higher is not.
+ */
+function replyOf<T extends LensPair>(a: T, b: T, covered: (p: LensPair) => boolean): T | null {
+  const [low, high] = a.dst_port <= b.dst_port ? [a, b] : [b, a]
+  if (low.dst_port === high.dst_port) return null
+  if (isEphemeral(high)) return high
+  return covered(low) && !covered(high) ? high : null
+}
+
+/**
+ * The pairs with their reply direction folded in. The orchestrator keeps one entry per direction of two addresses,
+ * with the protocol and port of the last sampled packet: the server-to-client direction mostly carries the client's
+ * port. When both directions of two addresses and a protocol are there, the reply (replyOf) is summed into the other
+ * and has no row of its own; a direction alone on a client port that the policy does not cover is marked as a reply.
+ * Should a direction hold several entries (the orchestrator never sends that), its busiest one decides. Busiest first.
+ */
+export function canonicalRows<T extends LensPair>(pairs: T[], covered: (p: LensPair) => boolean): Array<T & ReplyMarks> {
+  const rows: Array<T & ReplyMarks> = []
+  for (const group of byAddresses(pairs).values()) rows.push(...foldGroup(group, covered))
+  return rows.sort((a, b) => b.bytes - a.bytes)
+}
+
+type Directions<T> = { forward: T[]; backward: T[] }
+
+/** The pairs per two addresses (in either order) and protocol, split by direction. */
+function byAddresses<T extends LensPair>(pairs: T[]): Map<string, Directions<T>> {
+  const groups = new Map<string, Directions<T>>()
+  for (const p of pairs) {
+    const forward = p.src_ip <= p.dst_ip
+    const [a, b] = forward ? [p.src_ip, p.dst_ip] : [p.dst_ip, p.src_ip]
+    const key = `${a}|${b}|${protoOf(p.protocol)}`
+    const group = groups.get(key) ?? { forward: [], backward: [] }
+    if (forward) group.forward.push(p)
+    else group.backward.push(p)
+    groups.set(key, group)
+  }
+  return groups
+}
+
+const busiest = <T extends LensPair>(list: T[]): T => list.reduce((best, p) => (p.bytes > best.bytes ? p : best), list[0])
+const sumOf = (list: LensPair[], field: 'bytes' | 'packets') => list.reduce((total, p) => total + p[field], 0)
+
+/** The rows of two addresses and a protocol: the reply direction summed into the busiest pair of the other one. */
+function foldGroup<T extends LensPair>({ forward, backward }: Directions<T>, covered: (p: LensPair) => boolean): Array<T & ReplyMarks> {
+  const both = forward.length > 0 && backward.length > 0
+  const reply = both ? replyOf(busiest(forward), busiest(backward), covered) : null
+  if (!reply) {
+    // A direction alone on a client port the policy does not cover is the answer of a connection opened from the other end.
+    return [...forward, ...backward].map(p => ({ ...p, replyBytes: 0, orphanReply: !both && isEphemeral(p) && !covered(p) }))
+  }
+  const [replies, kept] = forward.includes(reply) ? [forward, backward] : [backward, forward]
+  const head = busiest(kept)
+  const replyBytes = sumOf(replies, 'bytes')
+  return kept.map(p => (p === head
+    ? { ...p, bytes: p.bytes + replyBytes, packets: p.packets + sumOf(replies, 'packets'), replyBytes, orphanReply: false }
+    : { ...p, replyBytes: 0, orphanReply: false }))
 }
 
 /** The pairs with their ends replaced by their group key, summed per source, destination, protocol and port. */
@@ -229,12 +317,12 @@ export function groupColor(key: string, zonesById: ReadonlyMap<string, MicrosegZ
 
 /** What the Create flow window starts from: the two zones and the service of the pair. */
 export function flowDraftOf(pair: LensPair, srcZoneId: string, dstZoneId: string) {
-  const proto = pair.protocol.toLowerCase()
-  const known = proto === 'tcp' || proto === 'udp' || proto === 'icmp'
+  const proto = protoOf(pair.protocol)
+  const known = hasPorts(proto) || proto === 'icmp' || proto === 'icmpv6'
   return {
     src_zone_id: srcZoneId,
     dst_zone_id: dstZoneId,
     proto: known ? proto : 'any',
-    dport: (proto === 'tcp' || proto === 'udp') && pair.dst_port > 0 ? String(pair.dst_port) : '',
+    dport: hasPorts(proto) && pair.dst_port > 0 ? String(pair.dst_port) : '',
   }
 }

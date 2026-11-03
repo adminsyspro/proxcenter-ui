@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Cell } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
@@ -204,6 +204,8 @@ export default function FlowsTab() {
   const lensConnection = useLensConnection()
   const lensRead = useTrafficLens(lensConnection.connectionId)
   const lens = groupBy === 'zone' ? lensRead.lens : null
+  // In Zone mode the reply direction of a pair is folded into it (the firewall is stateful): one row per connection.
+  const lensRows = useMemo(() => (lens ? lens.rows(topPairs) : null), [lens, topPairs])
   // Zone stays the choice while the zones load (or cannot be used): the page shows the VM grouping meanwhile.
   const shownGroupBy = lens || groupBy !== 'zone' ? groupBy : 'vm'
   const pairActions = usePairActions(lensRead)
@@ -541,7 +543,7 @@ export default function FlowsTab() {
       />
       </Box>
 
-      {lens && topPairs.length > 0 && <TrafficByZoneStrip pairs={topPairs} lens={lens} />}
+      {lens && lensRows && lensRows.length > 0 && <TrafficByZoneStrip pairs={lensRows} lens={lens} />}
 
       {/* Overview sub-tab */}
       {subTab === 0 && (
@@ -996,7 +998,7 @@ export default function FlowsTab() {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {topPairs
+                        {(lensRows ?? topPairs)
                           .filter(p => !pairSearch || p.src_ip.includes(pairSearch) || p.dst_ip.includes(pairSearch) || String(p.dst_port).includes(pairSearch))
                           .map((pair, idx) => (
                           <TableRow key={idx} hover sx={{ cursor: 'pointer' }} onClick={() => setSelectedPair(pair)}>

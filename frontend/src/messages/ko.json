@@ -13345,7 +13345,8 @@
         "allowed": "허용됨",
         "notCovered": "적용 안 됨",
         "blocked": "차단됨",
-        "unknown": "알 수 없음"
+        "unknown": "알 수 없음",
+        "reply": "응답 트래픽"
       },
       "tip": {
         "allowedFlow": "{src} → {dst} {service} 플로우로 허용됨",
@@ -13353,7 +13354,11 @@
         "notCovered": "{src}에서 {dst}(으)로 {service}을(를) 허용하는 플로우가 없습니다",
         "wouldBlock": "{src}에서 {dst}(으)로 {service}을(를) 허용하는 플로우가 없습니다. 영역이 적용되면 차단됩니다({hits}회 관찰됨)",
         "blocked": "차단됨: {src}에서 {dst}(으)로 {service}을(를) 허용하는 플로우가 없습니다({hits}회 관찰됨)",
-        "unknown": "{src} → {dst}: 한쪽 끝이 어떤 영역에도 속하지 않아 정책이 적용되지 않습니다"
+        "unknown": "{src} → {dst}: 한쪽 끝이 어떤 영역에도 속하지 않아 정책이 적용되지 않습니다",
+        "reply": "{dst}이(가) {src}(으)로 연 연결의 응답 트래픽입니다. 포트 {port}은(는) 클라이언트 포트이며, 상태 기반 방화벽이 플로우 없이 응답을 돌려보냅니다",
+        "notEnforced": "{zone} 영역이 비활성화되어 정책이 적용되지 않습니다",
+        "includesReply": "응답 트래픽 {volume} 포함",
+        "lastSampled": "sFlow는 두 주소 간의 모든 서비스를 합산합니다. 상태는 마지막으로 샘플링된 {service} 기준입니다"
       },
       "accept": "수락",
       "acceptTip": "관찰된 플로우를 수락합니다. 초안에 추가됩니다",

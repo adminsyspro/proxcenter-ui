@@ -14,7 +14,7 @@ import {
   MarkerType,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import dagre from '@dagrejs/dagre'
+import { graphlib, layout } from '@dagrejs/dagre'
 
 import { Box, Chip, CircularProgress, Typography, useTheme } from '@mui/material'
 import { formatBytes } from '@/utils/format'
@@ -48,7 +48,7 @@ async function fetchIPPairs(): Promise<IPPair[]> {
 
 // Layout nodes using dagre
 function getLayoutedElements(nodes: Node[], edges: Edge[], direction = 'LR') {
-  const g = new dagre.graphlib.Graph()
+  const g = new graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({ rankdir: direction, ranksep: 100, nodesep: 60 })
 
@@ -60,7 +60,7 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], direction = 'LR') {
     g.setEdge(edge.source, edge.target)
   })
 
-  dagre.layout(g)
+  layout(g)
 
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = g.node(node.id)
@@ -102,7 +102,7 @@ export default function DependencyGraph({ connectionId, lens = null }: Dependenc
   // Build nodes and edges from IP pairs
   const { initialNodes, initialEdges } = useMemo(() => {
     if (pairs.length === 0) return { initialNodes: [], initialEdges: [] }
-    const shown: IPPair[] = lens ? aggregateByGroup(pairs, lens.resolve) : pairs
+    const shown: IPPair[] = lens ? aggregateByGroup(lens.rows(pairs), lens.resolve) : pairs
 
     const ipSet = new Set<string>()
     const ipBytes = new Map<string, number>()

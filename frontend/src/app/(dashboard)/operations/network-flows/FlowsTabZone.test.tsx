@@ -3,11 +3,16 @@
  * Micro-segmentation column; without an applied policy the Zone grouping stays disabled and the page stays as before.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, waitFor, within } from '@testing-library/react'
-import { SWRConfig } from 'swr'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 
-import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
-
+vi.mock('next/navigation', async () => {
+  const { navigation } = await import('./lensRender')
+  return {
+    useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+    usePathname: () => '/operations/network-flows',
+    useSearchParams: () => new URLSearchParams(navigation.search),
+  }
+})
 vi.mock('next/dynamic', () => ({ default: () => () => null }))
 vi.mock('@/contexts/LicenseContext', async importOriginal => ({
   ...(await importOriginal<typeof import('@/contexts/LicenseContext')>()),
@@ -16,6 +21,7 @@ vi.mock('@/contexts/LicenseContext', async importOriginal => ({
 
 import FlowsTab from './FlowsTab'
 import { PAIRS, POLICY, SUGGESTIONS, VMS, reply } from './lensTestKit'
+import { navigation, renderLens } from './lensRender'
 
 const STATUS = { enabled: true, listen_address: '0.0.0.0:6343', agents: [], total_flows: 6, flow_rate: 1, active_vms: 3 }
 
@@ -37,9 +43,7 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
   return reply(404, {})
 })
 
-const renderTab = () => renderWithProviders(
-  <SWRConfig value={{ revalidateOnMount: true, dedupingInterval: 0, errorRetryCount: 0, refreshInterval: 0 }}><FlowsTab /></SWRConfig>,
-)
+const renderTab = () => renderLens(<FlowsTab />)
 
 beforeEach(() => {
   policy = POLICY
@@ -47,7 +51,7 @@ beforeEach(() => {
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
   window.localStorage.clear()
-  window.history.replaceState(null, '', '/operations/network-flows?groupBy=zone')
+  navigation.search = 'groupBy=zone'
 })
 
 afterEach(() => {
@@ -69,6 +73,15 @@ describe('FlowsTab grouped by zone', () => {
     const firstRow = screen.getAllByTestId('microseg-status')[0].closest('tr')!
     expect(within(firstRow).getByText('web')).toBeInTheDocument()
     expect(within(firstRow).getByText('db')).toBeInTheDocument()
+  })
+
+  it('folds the reply direction of a pair into its row', async () => {
+    // The orchestrator keeps one entry per direction: web-01 answering the external client on its client port.
+    pairs = [...PAIRS, { src_ip: '10.0.0.1', dst_ip: '198.51.100.7', protocol: 'TCP', dst_port: 51234, bytes: 999, packets: 1 }]
+    renderTab()
+    await screen.findByTestId('traffic-by-zone')
+    expect(screen.getAllByTestId('microseg-status')).toHaveLength(PAIRS.length)
+    expect(screen.queryByText('51234/TCP')).not.toBeInTheDocument()
   })
 
   it('says the statuses read a draft with changes not applied yet', async () => {

@@ -13346,7 +13346,8 @@
         "allowed": "Autorisé",
         "notCovered": "Non couvert",
         "blocked": "Bloqué",
-        "unknown": "Inconnu"
+        "unknown": "Inconnu",
+        "reply": "Trafic retour"
       },
       "tip": {
         "allowedFlow": "Autorisé par le flux {src} → {dst} {service}",
@@ -13354,7 +13355,11 @@
         "notCovered": "Aucun flux de {src} vers {dst} ne couvre {service}",
         "wouldBlock": "Aucun flux de {src} vers {dst} ne couvre {service} : la zone le bloquerait une fois appliquée ({hits, plural, one {# occurrence observée} other {# occurrences observées}})",
         "blocked": "Bloqué : aucun flux de {src} vers {dst} ne couvre {service} ({hits, plural, one {# occurrence observée} other {# occurrences observées}})",
-        "unknown": "{src} → {dst} : une extrémité n'est dans aucune zone, la politique ne s'applique pas"
+        "unknown": "{src} → {dst} : une extrémité n'est dans aucune zone, la politique ne s'applique pas",
+        "reply": "Trafic retour d'une connexion ouverte par {dst} vers {src} : le port {port} est un port client, le pare-feu à états laisse revenir la réponse sans flux",
+        "notEnforced": "La zone {zone} est désactivée : la politique ne s'y applique pas",
+        "includesReply": "Inclut {volume} de trafic retour",
+        "lastSampled": "sFlow additionne tous les services entre ces deux adresses : le statut porte sur le dernier échantillonné, {service}"
       },
       "accept": "Accepter",
       "acceptTip": "Accepter le flux observé : il est ajouté au brouillon",

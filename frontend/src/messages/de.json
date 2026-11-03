@@ -13013,7 +13013,8 @@
         "allowed": "Erlaubt",
         "notCovered": "Nicht abgedeckt",
         "blocked": "Blockiert",
-        "unknown": "Unbekannt"
+        "unknown": "Unbekannt",
+        "reply": "Rückverkehr"
       },
       "tip": {
         "allowedFlow": "Erlaubt durch den Fluss {src} → {dst} {service}",
@@ -13021,7 +13022,11 @@
         "notCovered": "Kein Fluss von {src} nach {dst} deckt {service} ab",
         "wouldBlock": "Kein Fluss von {src} nach {dst} deckt {service} ab: die Zone würde ihn nach der Durchsetzung blockieren ({hits, plural, one {# Treffer} other {# Treffer}} beobachtet)",
         "blocked": "Blockiert: kein Fluss von {src} nach {dst} deckt {service} ab ({hits, plural, one {# Treffer} other {# Treffer}} beobachtet)",
-        "unknown": "{src} → {dst}: ein Ende liegt in keiner Zone, die Richtlinie gilt nicht"
+        "unknown": "{src} → {dst}: ein Ende liegt in keiner Zone, die Richtlinie gilt nicht",
+        "reply": "Rückverkehr einer Verbindung, die {dst} zu {src} geöffnet hat: Port {port} ist ein Client-Port, die zustandsbehaftete Firewall lässt die Antwort ohne Fluss zurück",
+        "notEnforced": "Die Zone {zone} ist deaktiviert: die Richtlinie wird für sie nicht durchgesetzt",
+        "includesReply": "Enthält {volume} Rückverkehr",
+        "lastSampled": "sFlow summiert alle Dienste zwischen diesen beiden Adressen: der Status gilt für den zuletzt erfassten, {service}"
       },
       "accept": "Akzeptieren",
       "acceptTip": "Den beobachteten Fluss akzeptieren: er wird dem Entwurf hinzugefügt",

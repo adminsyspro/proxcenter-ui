@@ -3,14 +3,18 @@
  * status chips and their writes, the Traffic by zone strip, and the hooks behind them (query string, storage, reads).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, waitFor, within } from '@testing-library/react'
-import { SWRConfig } from 'swr'
-import type { ReactElement } from 'react'
-
-import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { MicrosegWriteContext } from '@/app/(dashboard)/automation/network/components/microseg/microsegAccess'
 import { formatBytes } from '@/utils/format'
 
+vi.mock('next/navigation', async () => {
+  const { navigation } = await import('./lensRender')
+  return {
+    useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+    usePathname: () => '/operations/network-flows',
+    useSearchParams: () => new URLSearchParams(navigation.search),
+  }
+})
 const license = vi.hoisted(() => ({ microseg: true }))
 vi.mock('@/contexts/LicenseContext', async importOriginal => ({
   ...(await importOriginal<typeof import('@/contexts/LicenseContext')>()),
@@ -22,6 +26,7 @@ import { MicrosegPairStatus, usePairActions } from './MicrosegPairStatus'
 import TrafficByZoneStrip from './TrafficByZoneStrip'
 import { useGroupBy, useLensConnection, useTrafficLens, type TrafficLensRead } from './useTrafficLens'
 import { PAIRS, POLICY, SUGGESTIONS, VMS, makeLens, reply } from './lensTestKit'
+import { navigation, renderLens } from './lensRender'
 import type { LensPair } from '@/lib/microseg/trafficLens'
 
 const BASE = '/api/v1/firewall/microseg/c1'
@@ -32,9 +37,8 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
 })
 const callsTo = (key: string) => fetchMock.mock.calls.filter(([u, i]) => `${(i as RequestInit | undefined)?.method ?? 'GET'} ${u}` === key)
 
-const renderLive = (ui: ReactElement) => renderWithProviders(
-  <SWRConfig value={{ revalidateOnMount: true, dedupingInterval: 0, errorRetryCount: 0, refreshInterval: 0 }}>{ui}</SWRConfig>,
-)
+const renderWithProviders = renderLens
+const renderLive = renderLens
 
 beforeEach(() => {
   license.microseg = true
@@ -42,7 +46,7 @@ beforeEach(() => {
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
   window.localStorage.clear()
-  window.history.replaceState(null, '', '/operations/network-flows')
+  navigation.search = ''
 })
 
 afterEach(() => {
@@ -142,6 +146,40 @@ describe('MicrosegPairStatus', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent(text)
   })
 
+  it('shows return traffic as such, with no action, and says what a row sums', async () => {
+    const lens = makeLens()
+    const rows = lens.rows([
+      { src_ip: '10.0.0.1', dst_ip: '10.0.0.2', protocol: 'TCP', dst_port: 5432, bytes: 3000, packets: 3 },
+      { src_ip: '10.0.0.2', dst_ip: '10.0.0.1', protocol: 'TCP', dst_port: 51234, bytes: 1024, packets: 1 },
+      { src_ip: '10.0.0.2', dst_ip: '10.0.0.3', protocol: 'TCP', dst_port: 40001, bytes: 10, packets: 1 },
+    ])
+    renderWithProviders(<StatusTable read={{ ...lensRead(), lens }} pairs={rows} />)
+    expect(screen.getAllByTestId('microseg-status').map(c => c.dataset.status)).toEqual(['allowed', 'reply'])
+    expect(screen.getAllByTestId('microseg-status')[1]).toHaveTextContent('Return traffic')
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+
+    fireEvent.mouseOver(screen.getAllByTestId('microseg-status')[0])
+    const tip = await screen.findByRole('tooltip')
+    expect(tip).toHaveTextContent(`Includes ${formatBytes(1024)} of return traffic`)
+    expect(tip).toHaveTextContent('the status is for the last one sampled, tcp/5432')
+  })
+
+  it('explains the return traffic and a disabled destination zone', async () => {
+    const lens = makeLens()
+    const [orphan] = lens.rows([{ src_ip: '10.0.0.2', dst_ip: '10.0.0.1', protocol: 'TCP', dst_port: 51234, bytes: 10, packets: 1 }])
+    const off = makeLens({ ...POLICY, zones: [POLICY.zones[0], { ...POLICY.zones[1], state: 'disabled' }] })
+    const view = renderWithProviders(<StatusTable read={{ ...lensRead(), lens }} pairs={[orphan]} />)
+    fireEvent.mouseOver(screen.getByTestId('microseg-status'))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Return traffic of a connection web opened to db: port 51234 is a client port')
+    view.unmount()
+
+    renderWithProviders(<StatusTable read={{ ...lensRead(), lens: off }} pairs={[PAIRS[1]]} />)
+    expect(screen.getByTestId('microseg-status').dataset.status).toBe('unknown')
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    fireEvent.mouseOver(screen.getByTestId('microseg-status'))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('The zone db is disabled: the policy is not enforced for it')
+  })
+
   it('offers Accept on a pending suggestion and Create flow when nothing covers the pair, nothing on the others', () => {
     renderWithProviders(<StatusTable read={lensRead()} pairs={PAIRS} />)
     const row = (src: string, port: number, proto: string) => within(screen.getByTestId(`row-${src}-${port}-${proto}`))
@@ -231,6 +269,8 @@ describe('TrafficByZoneStrip', () => {
     expect(screen.getByTestId('donut-unzoned')).toBeInTheDocument()
     expect(screen.getByTestId('donut-external')).toBeInTheDocument()
     expect(screen.getByText('Unknown / External')).toBeInTheDocument()
+    // Dot, name and share of every slice sit in the three columns of one grid.
+    expect(screen.getByTestId('donut-legend').children).toHaveLength(4)
   })
 })
 
@@ -262,7 +302,7 @@ describe('the lens hooks', () => {
 
   it('starts from ?groupBy=zone&connection= (the link of the Micro-segmentation tab) and reads the zones', async () => {
     live()
-    window.history.replaceState(null, '', '/operations/network-flows?groupBy=zone&connection=c2')
+    navigation.search = 'groupBy=zone&connection=c2'
     renderLive(<Probe />)
     expect(screen.getByTestId('group-by')).toHaveTextContent('zone')
     await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('ready'))
@@ -286,10 +326,39 @@ describe('the lens hooks', () => {
 
   it('falls back on VM and the first connection when nothing valid is asked or stored', async () => {
     live()
-    window.history.replaceState(null, '', '/operations/network-flows?groupBy=bogus&connection=gone')
+    navigation.search = 'groupBy=bogus&connection=gone'
     renderLive(<Probe />)
     expect(screen.getByTestId('group-by')).toHaveTextContent('vm')
     await waitFor(() => expect(screen.getByTestId('connection')).toHaveTextContent('c1'))
+  })
+
+  it('follows the search params of a client-side navigation, over the stored choice and the one made before', async () => {
+    live()
+    window.localStorage.setItem('networkFlows.groupBy', 'ip')
+    const view = renderLive(<Probe />)
+    expect(screen.getByTestId('group-by')).toHaveTextContent('ip')
+    await waitFor(() => expect(screen.getByTestId('connection')).toHaveTextContent('c1'))
+
+    // The Overview link of the Micro-segmentation tab: the router hands the new params to the mounted page.
+    navigation.search = 'groupBy=zone&connection=c2'
+    view.rerender(<Probe />)
+    expect(screen.getByTestId('group-by')).toHaveTextContent('zone')
+    expect(screen.getByTestId('connection')).toHaveTextContent('c2')
+
+    // A choice made afterwards wins over the same params, and new params win again.
+    fireEvent.click(screen.getByRole('button', { name: 'ip' }))
+    expect(screen.getByTestId('group-by')).toHaveTextContent('ip')
+    navigation.search = 'groupBy=vm'
+    view.rerender(<Probe />)
+    expect(screen.getByTestId('group-by')).toHaveTextContent('vm')
+  })
+
+  it('uses the stored grouping when the params ask for none, even with an invalid one', () => {
+    live()
+    window.localStorage.setItem('networkFlows.groupBy', 'zone')
+    navigation.search = 'groupBy=bogus'
+    renderLive(<Probe />)
+    expect(screen.getByTestId('group-by')).toHaveTextContent('zone')
   })
 
   it('is unavailable until a policy is applied, and reads neither the suggestions nor the guests then', async () => {

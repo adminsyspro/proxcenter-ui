@@ -13345,7 +13345,8 @@
         "allowed": "Permitido",
         "notCovered": "No cubierto",
         "blocked": "Bloqueado",
-        "unknown": "Desconocido"
+        "unknown": "Desconocido",
+        "reply": "Tráfico de retorno"
       },
       "tip": {
         "allowedFlow": "Permitido por el flujo {src} → {dst} {service}",
@@ -13353,7 +13354,11 @@
         "notCovered": "Ningún flujo de {src} a {dst} cubre {service}",
         "wouldBlock": "Ningún flujo de {src} a {dst} cubre {service}: la zona lo bloquearía una vez aplicada ({hits, plural, one {# coincidencia observada} other {# coincidencias observadas}})",
         "blocked": "Bloqueado: ningún flujo de {src} a {dst} cubre {service} ({hits, plural, one {# coincidencia observada} other {# coincidencias observadas}})",
-        "unknown": "{src} → {dst}: un extremo no está en ninguna zona, la política no se aplica"
+        "unknown": "{src} → {dst}: un extremo no está en ninguna zona, la política no se aplica",
+        "reply": "Tráfico de retorno de una conexión que {dst} abrió hacia {src}: el puerto {port} es un puerto de cliente, el cortafuegos con estado deja volver la respuesta sin flujo",
+        "notEnforced": "La zona {zone} está desactivada: la política no se aplica a ella",
+        "includesReply": "Incluye {volume} de tráfico de retorno",
+        "lastSampled": "sFlow suma todos los servicios entre estas dos direcciones: el estado corresponde al último muestreado, {service}"
       },
       "accept": "Aceptar",
       "acceptTip": "Aceptar el flujo observado: se añade al borrador",

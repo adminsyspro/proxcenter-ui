@@ -13710,7 +13710,6 @@
       "enableFirewall": "enable firewall",
       "undo": "undo",
       "ruleCount": "{count, plural, one {# rule} other {# rules}}",
-      "editInMicroseg": "edit in Micro-segmentation ›",
       "object": {
         "group": "security group {group}"
       },
@@ -13753,7 +13752,15 @@
       "addRuleTo": "Add a rule to {name}",
       "addARule": "Add a rule",
       "ruleScope": "Applies to",
-      "readingScope": "Reading the rules of this scope: the rule can be kept once they are read"
+      "readingScope": "Reading the rules of this scope: the rule can be kept once they are read",
+      "microsegPrefix": "Micro-segmentation:",
+      "changeZoneState": "Change the state of zone {zone}",
+      "ruleMenu": "Actions of the flow",
+      "editFlow": "Edit the flow",
+      "deleteFlow": "Delete the flow",
+      "notInDraft": "Not in the policy draft: the draft changed since the last apply, or Proxmox was changed by hand",
+      "intraRule": "The members of the zone reach each other: a setting of the zone (isolate members off)",
+      "editZone": "Edit the zone"
     }
   }
 }

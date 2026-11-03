@@ -17,6 +17,9 @@ const h = vi.hoisted(() => ({
   getVMOptions: vi.fn(),
   toast: vi.fn(),
   events: [] as any[],
+  policy: null as any,
+  api: { saveFlow: vi.fn(), deleteFlow: vi.fn(), setZoneState: vi.fn() },
+  reloadPolicy: vi.fn(),
 }))
 
 vi.mock('@/lib/api/firewall', () => ({
@@ -24,7 +27,22 @@ vi.mock('@/lib/api/firewall', () => ({
   getNodeOptions: (...a: any[]) => h.getNodeOptions(...a),
   getVMOptions: (...a: any[]) => h.getVMOptions(...a),
 }))
-vi.mock('@/lib/microseg/useMicroseg', () => ({ useMicrosegPolicy: () => ({ data: { last_revision: { id: 'rev1' } } }) }))
+vi.mock('@/lib/microseg/useMicroseg', () => ({ useMicrosegPolicy: () => ({ data: h.policy, reload: h.reloadPolicy }) }))
+vi.mock('@/lib/microseg/api', async orig => ({ ...(await orig() as object), microsegApi: () => h.api }))
+
+/** The micro-segmentation draft: zones db (enforce) and app (observe), one flow app -> db tcp/5432. */
+const draftPolicy = (pending = false) => ({
+  policy: { id: 'p1', tag_prefix: 'pc-', settings: { ready_after_hours: 24 } },
+  version: 3,
+  zones: [
+    { id: 'z-db', name: 'db', label: 'Databases', color: '#f00', enforcement: 'guest', vnet_id: '', state: 'enforce', isolate_members: false, observe_since: null },
+    { id: 'z-app', name: 'app', label: 'Apps', color: '#0f0', enforcement: 'guest', vnet_id: '', state: 'observe', isolate_members: false, observe_since: null },
+  ],
+  flows: [{ id: 'f1', policy_id: 'p1', src_zone_id: 'z-app', src_cidr: '', dst_zone_id: 'z-db', dst_cidr: '', proto: 'tcp', dport: '5432', comment: '', origin: 'manual', created_by: 'x' }],
+  pending_members: [],
+  pending_changes: pending,
+  last_revision: { id: 'rev1', version: 2, author: 'x', created_at: '2026-11-03T10:00:00Z' },
+})
 vi.mock('@/lib/microseg/useLastRevision', () => ({
   useLastRevisionSnapshot: () => ({
     revision: { id: 'rev1', snapshot: { tag_prefix: 'pc-', flows: [], zones: [{ name: 'db', state: 'enforce' }] } },
@@ -66,7 +84,7 @@ function props(over: Partial<FirewallingViewProps> = {}): FirewallingViewProps {
     clusterRules: CLUSTER_RULES, setClusterRules: vi.fn(), clusterOptions: { enable: 1 }, setClusterOptions: vi.fn(),
     hostRulesByNode: {}, setHostRulesByNode: vi.fn(), guests: GUESTS, setVMFirewallData: vi.fn(), loadingVMRules: false,
     loadGuestRules: vi.fn().mockResolvedValue([]), securityGroups: [ZONE_GROUP, { group: 'sg-web', rules: [] }], aliases: [], ipsets: [],
-    initialScope: 'all', reloadFirewall: vi.fn(), reloadGuests: vi.fn().mockResolvedValue(undefined), onOpenMicroseg: vi.fn(),
+    initialScope: 'all', reloadFirewall: vi.fn(), reloadGuests: vi.fn().mockResolvedValue(undefined),
     ...over,
   }
 }
@@ -84,6 +102,10 @@ const publishButton = () => screen.getByRole('button', { name: /^Publish \(\d+\)
 beforeEach(() => {
   vi.clearAllMocks()
   try { sessionStorage.clear() } catch { /* storage blocked */ }
+  h.policy = draftPolicy()
+  h.api.saveFlow.mockResolvedValue({ version: 4 })
+  h.api.deleteFlow.mockResolvedValue({ version: 4 })
+  h.reloadPolicy.mockResolvedValue(undefined)
   h.getVMOptions.mockResolvedValue({ enable: 1, policy_in: 'DROP', log_level_in: 'info' })
   const now = Date.now()
   h.events = [
@@ -97,9 +119,11 @@ describe('Firewalling: sections and badges', () => {
     renderView()
     const zone = screen.getByTestId('dfw-section-zone:pcz-db')
     expect(within(zone).getByText('Micro-segmentation · zone db')).toBeInTheDocument()
-    expect(within(zone).getByText('Enforce')).toBeInTheDocument()
+    expect(within(zone).getByText('Enforced')).toBeInTheDocument()
     expect(within(zone).getByText('managed by the engine')).toBeInTheDocument()
-    expect(within(zone).getByRole('button', { name: /edit in Micro-segmentation/ })).toBeInTheDocument()
+    // No link away: the zone is edited here (its Add rule is a new flow into it).
+    expect(within(zone).queryByRole('button', { name: /edit in Micro-segmentation/ })).toBeNull()
+    expect(within(zone).getByRole('button', { name: 'Add a rule to Micro-segmentation · zone db' })).toBeInTheDocument()
     expect(screen.getByTestId('dfw-section-cluster')).toHaveTextContent('Cluster rules')
     expect(screen.getByTestId('dfw-section-host:pve1')).toHaveTextContent('Rules read when opened')
     expect(screen.getByTestId('dfw-group-100')).toHaveTextContent('VLAN 100 · 2 VMs')
@@ -552,9 +576,8 @@ describe('Firewalling: creating a rule', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Keep in the draft' }))
   }
 
-  it('each user section has its Add rule, none on a zone group; on a collapsed section it opens it and the editor', async () => {
+  it('each user section has its Add rule; on a collapsed section it opens it and the editor', async () => {
     renderView(props(), true, true)
-    expect(within(screen.getByTestId('dfw-section-zone:pcz-db')).queryByRole('button', { name: /Add a rule to/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Add a rule to Cluster rules' }))
     expect(within(await screen.findByRole('dialog')).queryByRole('combobox', { name: /Applies to/ })).toBeNull()
     await keep()
@@ -598,6 +621,89 @@ describe('Firewalling: creating a rule', () => {
     fireEvent.click(within(list).getByRole('option', { name: 'Host pve2' }))
     // The host's rules are read; the rule can be kept once they are.
     await waitFor(() => expect(h.getNodeRules).toHaveBeenCalledWith('c1', 'pve2'))
+  })
+})
+
+describe('Firewalling: the zones edited in place (micro-segmentation draft)', () => {
+  const openDb = () => fireEvent.click(within(screen.getByTestId('dfw-section-zone:pcz-db')).getByRole('button', { name: /Expand/ }))
+
+  it("the zone's Add rule opens the flow dialog with the zone as destination", async () => {
+    renderView()
+    fireEvent.click(within(screen.getByTestId('dfw-section-zone:pcz-db')).getByRole('button', { name: 'Add a rule to Micro-segmentation · zone db' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('New flow')
+    expect(within(dialog).getByRole('combobox', { name: /Destination zone/ })).toHaveTextContent(/db/)
+  })
+
+  it('a rule compiled from a flow is edited and deleted as that flow; one matching none keeps its lock', async () => {
+    renderView()
+    openDb()
+    const appRule = ruleRow('[pc-microseg] app -> db')
+    expect(within(appRule).queryByLabelText('Not in the policy draft: the draft changed since the last apply, or Proxmox was changed by hand')).toBeNull()
+    // The rule of the fixture without a source matches no flow and no zone setting: a drift, locked.
+    expect(within(ruleRow('[pc-microseg] db -> db')).getByLabelText(/Not in the policy draft/)).toBeInTheDocument()
+
+    fireEvent.click(within(appRule).getByRole('button', { name: 'Actions of the flow' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit the flow' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('Edit flow')
+    expect(within(dialog).getByRole('textbox', { name: /Port/ })).toHaveValue('5432')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(h.api.saveFlow).toHaveBeenCalledWith(expect.objectContaining({ id: 'f1', version: 3, dst_zone_id: 'z-db', src_zone_id: 'z-app', dport: '5432' })))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    fireEvent.click(within(ruleRow('[pc-microseg] app -> db')).getByRole('button', { name: 'Actions of the flow' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete the flow' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Delete this flow?' })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(h.api.deleteFlow).toHaveBeenCalledWith('f1', 3))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // Never through the Firewalling publish.
+    expect(publishButton()).toHaveTextContent('Publish (0)')
+  })
+
+  it('a double-click on a flow rule opens its flow', async () => {
+    renderView()
+    openDb()
+    fireEvent.doubleClick(ruleRow('[pc-microseg] app -> db'))
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Edit flow')
+  })
+
+  it('shows the micro-segmentation pending changes above the table, apart from the Firewalling publish', () => {
+    h.policy = draftPolicy(true)
+    renderView()
+    const bar = screen.getByTestId('dfw-microseg-pending')
+    expect(bar).toHaveTextContent(/Micro-segmentation: \d+ unapplied changes?/)
+    expect(within(bar).getByRole('button', { name: 'View plan' })).toBeEnabled()
+    expect(publishButton()).toHaveTextContent('Publish (0)')
+  })
+
+  it("the zone's state chip opens the state menu of the Policy tab", async () => {
+    renderView()
+    fireEvent.click(within(screen.getByTestId('dfw-section-zone:pcz-db')).getByRole('button', { name: 'Change the state of zone db' }))
+    expect(await screen.findByRole('menuitem', { name: 'Observe' })).toBeInTheDocument()
+  })
+
+  it('a guest of a zone: its zone group rule opens the zone section', () => {
+    const zoned = guest(105, {
+      name: 'member', rulesLoaded: true, vlans: [],
+      rules: [{ pos: 0, type: 'group', action: 'pcz-db', enable: 1, comment: '[pc-microseg]', digest: 'G' }],
+    })
+    renderView(props({ guests: [zoned] }), true, true)
+    fireEvent.click(within(screen.getByTestId('dfw-group-__untagged__')).getByRole('button', { name: /Expand/ }))
+    fireEvent.click(within(screen.getByTestId('dfw-section-guest:qemu/105')).getByRole('button', { name: /Expand/ }))
+    fireEvent.click(within(ruleRow('[pc-microseg]')).getByRole('button', { name: 'Edit the zone' }))
+    expect(within(screen.getByTestId('dfw-section-zone:pcz-db')).getByRole('button', { name: /Collapse/ })).toBeInTheDocument()
+  })
+
+  it('a read-only user sees the zone controls disabled', () => {
+    h.policy = draftPolicy(true)
+    renderView(props(), false)
+    openDb()
+    expect(within(screen.getByTestId('dfw-section-zone:pcz-db')).getByRole('button', { name: 'Add a rule to Micro-segmentation · zone db' })).toBeDisabled()
+    expect(within(screen.getByTestId('dfw-section-zone:pcz-db')).getByRole('button', { name: 'Change the state of zone db' })).toBeDisabled()
+    expect(within(ruleRow('[pc-microseg] app -> db')).getByRole('button', { name: 'Actions of the flow' })).toBeDisabled()
+    expect(within(screen.getByTestId('dfw-microseg-pending')).getByRole('button', { name: 'View plan' })).toBeDisabled()
   })
 })
 

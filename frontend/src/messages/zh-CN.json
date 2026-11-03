@@ -13710,7 +13710,6 @@
       "enableFirewall": "启用防火墙",
       "undo": "撤销",
       "ruleCount": "{count, plural, other {# 条规则}}",
-      "editInMicroseg": "在微分段中编辑 ›",
       "object": {
         "group": "安全组 {group}"
       },
@@ -13753,7 +13752,15 @@
       "addRuleTo": "向 {name} 添加规则",
       "addARule": "添加一条规则",
       "ruleScope": "应用于",
-      "readingScope": "正在读取该范围的规则：读取后即可保留该规则"
+      "readingScope": "正在读取该范围的规则：读取后即可保留该规则",
+      "microsegPrefix": "微分段：",
+      "changeZoneState": "更改区域 {zone} 的状态",
+      "ruleMenu": "流量操作",
+      "editFlow": "编辑流量",
+      "deleteFlow": "删除流量",
+      "notInDraft": "不在策略草稿中：自上次应用后草稿已更改，或 Proxmox 被手动修改",
+      "intraRule": "区域成员互相可达：区域设置（成员隔离关闭）",
+      "editZone": "编辑区域"
     }
   }
 }

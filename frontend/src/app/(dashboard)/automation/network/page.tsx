@@ -234,7 +234,6 @@ export default function NetworkAutomationPage() {
               connectionName={connections.find(c => c.id === selectedConnection)?.name}
               loadError={firewallLoadError || null}
               reload={loadFirewallData}
-              onOpenMicroseg={() => changeTab(TAB.microseg)}
             />
           )}
 

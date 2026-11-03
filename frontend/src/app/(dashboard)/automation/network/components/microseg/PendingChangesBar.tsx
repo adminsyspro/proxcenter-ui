@@ -13,6 +13,8 @@ type Props = {
   policy: MicrosegPolicy
   /** The plan view; the button is disabled while nothing handles it. */
   onOpenPlan?: () => void
+  /** Names whose changes these are (with its punctuation), where other pending changes sit next to them (Firewalling). */
+  prefix?: string
 }
 
 /**
@@ -21,7 +23,7 @@ type Props = {
  * no revision (everything counts) or once the last revision's snapshot is
  * loaded. Otherwise the bar says "Unapplied changes" without a number.
  */
-export default function PendingChangesBar({ connectionId, policy, onOpenPlan }: Props) {
+export default function PendingChangesBar({ connectionId, policy, onOpenPlan, prefix }: Props) {
   const t = useTranslations()
   const { pending, count } = usePendingChanges(connectionId, policy)
   const { canWrite } = useMicrosegWrite()
@@ -34,7 +36,7 @@ export default function PendingChangesBar({ connectionId, policy, onOpenPlan }: 
       icon={<i className='ri-draft-line' />}
       action={<WriteTip><Button color='inherit' size='small' onClick={onOpenPlan} disabled={!canWrite || !onOpenPlan}>{t('microsegPilot.pending.viewPlan')}</Button></WriteTip>}
     >
-      {count ? t('microsegPilot.pending.withCount', { count }) : t('microsegPilot.pending.noCount')}
+      {prefix ? `${prefix} ` : ''}{count ? t('microsegPilot.pending.withCount', { count }) : t('microsegPilot.pending.noCount')}
     </Alert>
   )
 }

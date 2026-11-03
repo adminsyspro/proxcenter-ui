@@ -13378,7 +13378,6 @@
       "enableFirewall": "Firewall aktivieren",
       "undo": "rückgängig",
       "ruleCount": "{count, plural, one {# Regel} other {# Regeln}}",
-      "editInMicroseg": "in Mikrosegmentierung bearbeiten ›",
       "object": {
         "group": "Sicherheitsgruppe {group}"
       },
@@ -13421,7 +13420,15 @@
       "addRuleTo": "Regel zu {name} hinzufügen",
       "addARule": "Eine Regel hinzufügen",
       "ruleScope": "Gilt für",
-      "readingScope": "Die Regeln dieses Bereichs werden gelesen: Die Regel kann danach behalten werden"
+      "readingScope": "Die Regeln dieses Bereichs werden gelesen: Die Regel kann danach behalten werden",
+      "microsegPrefix": "Mikrosegmentierung:",
+      "changeZoneState": "Status der Zone {zone} ändern",
+      "ruleMenu": "Aktionen des Flusses",
+      "editFlow": "Fluss bearbeiten",
+      "deleteFlow": "Fluss löschen",
+      "notInDraft": "Nicht im Richtlinienentwurf: Der Entwurf hat sich seit der letzten Anwendung geändert oder Proxmox wurde manuell geändert",
+      "intraRule": "Die Mitglieder der Zone erreichen einander: eine Einstellung der Zone (Mitgliederisolierung aus)",
+      "editZone": "Zone bearbeiten"
     }
   }
 }

@@ -39,7 +39,6 @@ interface RulesTabProps {
   /** What failed on the last load of the firewall data, null when it all loaded. */
   loadError?: string | null
   reload: () => void
-  onOpenMicroseg?: () => void
 }
 
 /**
@@ -51,7 +50,7 @@ export default function RulesTab({
   clusterRules, setClusterRules, clusterOptions, setClusterOptions,
   hostRulesByNode, setHostRulesByNode, nodesList,
   vmFirewallData, setVMFirewallData, loadingVMRules, loadVMFirewallData, loadGuestRules,
-  securityGroups, aliases, ipsets, firewallMode, selectedConnection, connectionName, loadError, reload, onOpenMicroseg,
+  securityGroups, aliases, ipsets, firewallMode, selectedConnection, connectionName, loadError, reload,
 }: RulesTabProps) {
   const t = useTranslations()
   // Certainly not filtered by Proxmox: a guest whose state is unknown is not listed as one.
@@ -97,7 +96,6 @@ export default function RulesTab({
           listFilter={guestFilter ?? null}
           reloadFirewall={reload}
           reloadGuests={() => loadVMFirewallData(true)}
-          onOpenMicroseg={onOpenMicroseg}
         />
       )}
     </Box>

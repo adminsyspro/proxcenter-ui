@@ -27,7 +27,7 @@ import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pv
 import RuleFormDialog, { type RuleFormData } from './RuleFormDialog'
 import GroupPager, { GROUP_PAGE_SIZE, pageCount, useGroupPages } from './shared/GroupPager'
 import { ZONE_GROUP_PREFIX } from './shared/groupMembership'
-import { DfwHead, DefaultDenyRow, EmptyRulesRow, RuleRow, SectionRow, WideRow, Badge } from './DfwTableParts'
+import { DfwHead, DefaultDenyRow, EmptyRulesRow, RuleRow, SectionRow, WideRow, Badge, type RuleRowProps } from './DfwTableParts'
 import { ActionBar, StatusBar, ViewToolbar } from './DfwToolbar'
 import { MoveToSectionDialog, ScopeOptionsDialog, ScopePicker, type SectionTarget } from './DfwDialogs'
 import {
@@ -36,6 +36,7 @@ import {
 } from './dfwModel'
 import { useFirewallDraft } from './useFirewallDraft'
 import { useSectionRules } from './useSectionRules'
+import { EditZoneButton, ZoneAddFlow, ZoneRuleRow, ZoneStateControl, ZoneTools } from './ZoneTools'
 
 type Rules = firewallAPI.FirewallRule[]
 
@@ -63,7 +64,6 @@ export type FirewallingViewProps = {
   listFilter?: string | null
   reloadFirewall: () => void
   reloadGuests: () => Promise<void>
-  onOpenMicroseg?: () => void
 }
 
 /** One section of the table: a scope of Proxmox, or a zone group of the engine (read-only). */
@@ -186,14 +186,14 @@ function usePagesFor(listFilter: string | null) {
 function useZones(connectionId: string, groups: firewallAPI.SecurityGroup[], guests: VMFirewallInfo[]) {
   const hasZones = groups.some(g => g.group.startsWith(ZONE_GROUP_PREFIX))
   const zoneConnection = hasZones ? connectionId : null
-  const { data: policy } = useMicrosegPolicy(zoneConnection)
+  const { data: policy, reload: reloadPolicy } = useMicrosegPolicy(zoneConnection)
   const { revision } = useLastRevisionSnapshot(zoneConnection, policy?.last_revision?.id)
   const deployed = revision?.snapshot ?? null
   const events = useMicrosegEvents(connectionId, { zone: '', verdict: '', q: '' }, hasZones)
   const now = useNow(60_000, events.events)
   const hits = useMemo(() => (hasZones ? hitsIndex(events.events, events.truncated, now) : null), [hasZones, events.events, events.truncated, now])
   const zones = useMemo(() => zoneSections(groups, deployed, guests), [groups, deployed, guests])
-  return { deployed, hits, zones }
+  return { deployed, hits, zones, policy, reloadPolicy }
 }
 
 function Notices({ error, onCloseError, notice, onCloseNotice, onDiscardScope }: {
@@ -292,7 +292,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
 
   // Micro-segmentation: the deployed zones (their mode, their members) and the engine's events, from the
   // orchestrator only (no Proxmox call), read only when the connection has zone groups.
-  const { deployed, hits, zones } = useZones(p.connectionId, p.securityGroups, p.guests)
+  const { deployed, hits, zones, policy, reloadPolicy } = useZones(p.connectionId, p.securityGroups, p.guests)
 
   const pendingOf = (s: DraftScope) => opsOn(fw.ops, s)
 
@@ -549,34 +549,35 @@ export default function FirewallingView(p: FirewallingViewProps) {
       const managed = s.managed || isEngineComment(e.rule.comment)
       const editable = canEdit && !managed
       const patch = (fields: Partial<RuleFields>) => patchRule(s, e.id, fields)
-      return (
-        <RuleRow
-          key={`${s.key}|${e.id}`}
-          index={i + 1}
-          rule={e.rule}
-          state={s.states.get(e.id) ?? null}
-          managed={managed}
-          editable={editable}
-          selected={selected.has(selKey(s.key, e.id))}
-          appliedTo={s.appliedTo}
-          hits={null}
-          hitsTitle={hitsTitle(s)}
-          drag={dragFor(s, e, i)}
-          onSelect={on => toggleSel(s.key, [e.id], on)}
-          onToggleEnable={() => patch({ enable: e.rule.enable === 1 ? 0 : 1 })}
-          onToggleLog={() => patch({ log: e.rule.log && e.rule.log !== 'nolog' ? 'nolog' : 'info' })}
-          onAction={action => patch({ action })}
-          onOpen={() => openEditor(s, e)}
-          onLogs={s.guest ? () => setLogVm(s.guest!) : undefined}
-        />
-      )
+      const zoneGroup = s.kind === 'guest' && managed && e.rule.type === 'group' && e.rule.action.toLowerCase().startsWith(ZONE_GROUP_PREFIX) ? e.rule.action : null
+      const row: RuleRowProps = {
+        index: i + 1,
+        rule: e.rule,
+        state: s.states.get(e.id) ?? null,
+        managed,
+        editable,
+        selected: selected.has(selKey(s.key, e.id)),
+        appliedTo: s.appliedTo,
+        hits: null,
+        hitsTitle: hitsTitle(s),
+        drag: dragFor(s, e, i),
+        onSelect: on => toggleSel(s.key, [e.id], on),
+        onToggleEnable: () => patch({ enable: e.rule.enable === 1 ? 0 : 1 }),
+        onToggleLog: () => patch({ log: e.rule.log && e.rule.log !== 'nolog' ? 'nolog' : 'info' }),
+        onAction: action => patch({ action }),
+        onOpen: () => openEditor(s, e),
+        onLogs: s.guest ? () => setLogVm(s.guest!) : undefined,
+        actions: zoneGroup ? <EditZoneButton onClick={() => openZone(zoneGroup)} /> : undefined,
+      }
+      // A zone group's rule is edited as the flow it comes from (micro-segmentation draft).
+      return s.zone ? <ZoneRuleRow key={`${s.key}|${e.id}`} zoneName={s.zone.zone} {...row} /> : <RuleRow key={`${s.key}|${e.id}`} {...row} />
     })
     return deny ? [...ruleRows, deny] : ruleRows
   }
 
   const sectionBadges = (s: Section): ReactNode => (
     <>
-      {s.zone && <ZoneStateBadge state={s.zone.state} />}
+      {s.zone && <ZoneStateControl zoneName={s.zone.zone} fallback={<ZoneStateBadge state={s.zone.state} />} />}
       {s.managed && <Badge label={t('managed')} />}
       {s.pending > 0 && <Badge label={t('unpublishedCount', { count: s.pending })} tone='warning' />}
       {s.stale && <Badge label={t('changedInProxmox')} tone='error' title={t('changedInProxmoxHint')} />}
@@ -613,9 +614,6 @@ export default function FirewallingView(p: FirewallingViewProps) {
     return (
       <>
         <Typography component='span' noWrap sx={{ fontSize: 12 }}>{objectName(s, t)} · {count}</Typography>
-        {s.kind === 'zone' && p.onOpenMicroseg && (
-          <Link component='button' type='button' underline='hover' onClick={p.onOpenMicroseg} sx={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>{t('editInMicroseg')}</Link>
-        )}
       </>
     )
   }
@@ -633,11 +631,22 @@ export default function FirewallingView(p: FirewallingViewProps) {
     return { checked: on === ids.length, indeterminate: on > 0 && on < ids.length, disabled: !canEdit, onChange: (c: boolean) => toggleSel(s.key, ids, c) }
   }
 
-  const sectionMenu = (s: Section) => (s.scope ? (
-    <IconButton size='small' aria-label={t('sectionMenu', { name: s.title })} onClick={e => setMenuFor({ key: s.key, anchor: e.currentTarget })}>
-      <i className='ri-more-2-fill' style={{ fontSize: 16 }} />
-    </IconButton>
-  ) : undefined)
+  const sectionMenu = (s: Section): ReactNode => {
+    // A zone group: its Add rule is a new flow into the zone (micro-segmentation draft).
+    if (!s.scope) return s.zone ? <ZoneAddFlow zoneName={s.zone.zone} title={s.title} open={open.has(s.key)} /> : undefined
+    return (
+      <IconButton size='small' aria-label={t('sectionMenu', { name: s.title })} onClick={e => setMenuFor({ key: s.key, anchor: e.currentTarget })}>
+        <i className='ri-more-2-fill' style={{ fontSize: 16 }} />
+      </IconButton>
+    )
+  }
+  /** The zone section of a guest's zone group: opened, shown, scrolled to. */
+  const openZone = (group: string) => {
+    const key = `zone:${group}`
+    if (!showsCluster(scope)) setScope('all')
+    setOpen(prev => new Set(prev).add(key))
+    requestAnimationFrame(() => document.querySelector(`[data-testid="dfw-section-${key}"]`)?.scrollIntoView?.({ block: 'center' }))
+  }
 
   const renderSection = (s: Section, indent = 0) => (
     <Fragment key={s.key}>
@@ -760,6 +769,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
         onClearSelection={() => setSelected(new Set())}
       />
 
+      <ZoneTools connectionId={p.connectionId} policy={policy} reloadPolicy={reloadPolicy} onRunFinished={p.reloadFirewall}>
       <TableContainer component={Paper} variant='outlined' sx={{ borderRadius: 2.5 }}>
         <Table size='small' sx={{ minWidth: 1180 }}>
           <DfwHead show={visibleSelectable.length > 0} allChecked={allVisibleChecked} someChecked={selectedCount > 0} canCheck={canEdit}
@@ -770,6 +780,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
           </TableBody>
         </Table>
       </TableContainer>
+      </ZoneTools>
 
       {renderDialogs()}
     </Box>

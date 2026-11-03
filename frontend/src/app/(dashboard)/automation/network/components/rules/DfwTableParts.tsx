@@ -153,9 +153,14 @@ export type RuleRowProps = {
   onOpen: () => void
   /** The guest rule's log (its terminal icon). */
   onLogs?: () => void
+  /** The lock of a managed rule: its tooltip, or null for none (a zone rule editable as its flow). */
+  lockTitle?: string | null
+  /** Controls after the name (a zone rule's menu, a guest's Edit zone). */
+  actions?: ReactNode
+  onDoubleClick?: () => void
 }
 
-function NameCell({ rule, index, state, managed, editable, onOpen }: Pick<RuleRowProps, 'rule' | 'index' | 'state' | 'managed' | 'editable' | 'onOpen'>) {
+function NameCell({ rule, index, state, managed, editable, onOpen, lockTitle, actions }: Pick<RuleRowProps, 'rule' | 'index' | 'state' | 'managed' | 'editable' | 'onOpen' | 'lockTitle' | 'actions'>) {
   const t = useTranslations('microsegPilot.dfw')
   const name = ruleName(rule) || t('unnamed', { pos: index })
   const direction = rule.type === 'group' ? 'GROUP' : rule.type.toUpperCase()
@@ -163,7 +168,7 @@ function NameCell({ rule, index, state, managed, editable, onOpen }: Pick<RuleRo
     <TableCell sx={{ ...CELL, maxWidth: 280 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
         <Chip size='small' label={direction} sx={{ height: 18, fontSize: 10, fontWeight: 700, flexShrink: 0 }} />
-        {managed && <Tooltip title={t('managedRule')}><i className='ri-lock-line' aria-label={t('managedRule')} style={{ fontSize: 14, flexShrink: 0 }} /></Tooltip>}
+        {managed && lockTitle !== null && <Tooltip title={lockTitle ?? t('managedRule')}><i className='ri-lock-line' aria-label={lockTitle ?? t('managedRule')} style={{ fontSize: 14, flexShrink: 0 }} /></Tooltip>}
         <Tooltip title={name}>
           {editable
             ? <Link component='button' type='button' underline='hover' onClick={onOpen} sx={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</Link>
@@ -171,6 +176,7 @@ function NameCell({ rule, index, state, managed, editable, onOpen }: Pick<RuleRo
         </Tooltip>
         {state && <Chip size='small' color='warning' variant='outlined' label={t(STATE_BADGE[state] as 'rowAdded')} sx={{ height: 18, fontSize: 10, fontWeight: 600, flexShrink: 0 }} />}
         {rule.enable !== 1 && <Chip size='small' label={t('rowDisabled')} sx={{ height: 18, fontSize: 10, flexShrink: 0 }} />}
+        {actions}
       </Box>
     </TableCell>
   )
@@ -188,7 +194,7 @@ function rowBackground(theme: Theme, selected: boolean, state: EntryState): stri
 }
 
 export function RuleRow(props: RuleRowProps) {
-  const { index, rule, state, managed, editable, selected, appliedTo, hits, hitsTitle, drag, onSelect, onToggleEnable, onToggleLog, onAction, onLogs } = props
+  const { index, rule, state, managed, editable, selected, appliedTo, hits, hitsTitle, drag, onSelect, onToggleEnable, onToggleLog, onAction, onLogs, onDoubleClick } = props
   const t = useTranslations('microsegPilot.dfw')
   const theme = useTheme()
   const logging = !!rule.log && rule.log !== 'nolog'
@@ -201,6 +207,7 @@ export function RuleRow(props: RuleRowProps) {
       onDragOver={drag.onDragOver}
       onDrop={drag.onDrop}
       onDragEnd={drag.onDragEnd}
+      onDoubleClick={onDoubleClick}
       data-testid='dfw-rule-row'
       data-state={state ?? ''}
       sx={{
@@ -226,7 +233,7 @@ export function RuleRow(props: RuleRowProps) {
           <Switch size='small' color='success' checked={rule.enable === 1} disabled={!editable} onChange={onToggleEnable} slotProps={{ input: { role: 'switch', 'aria-label': t('enableLabel', { pos: index }) } }} />
         </WriteTip>
       </TableCell>
-      <NameCell rule={rule} index={index} state={state} managed={managed} editable={editable} onOpen={props.onOpen} />
+      <NameCell rule={rule} index={index} state={state} managed={managed} editable={editable} onOpen={props.onOpen} lockTitle={props.lockTitle} actions={props.actions} />
       <AddressCell value={rule.type === 'group' ? '' : rule.source} />
       <AddressCell value={rule.type === 'group' ? '' : rule.dest} />
       <ServiceCell rule={rule} />
@@ -267,6 +274,20 @@ export type SectionRowProps = {
 /** The class of the header's Add rule button, for the hover rule of its row. */
 const ADD_CLASS = 'dfw-section-add'
 
+/** The Add rule of a section header (revealed on hover of a collapsed row by the row's own rule). */
+export function SectionAddButton({ title, onClick, disabled }: { title: string; open?: boolean; onClick: () => void; disabled: boolean }) {
+  const t = useTranslations('microsegPilot.dfw')
+  return (
+    <WriteTip>
+      <Button size='small' className={ADD_CLASS} onClick={onClick} disabled={disabled}
+        startIcon={<i className='ri-add-line' />} aria-label={t('addRuleTo', { name: title })}
+        sx={{ textTransform: 'none', fontSize: 12, fontWeight: 600, py: 0, minWidth: 0, whiteSpace: 'nowrap' }}>
+        {t('addRuleShort')}
+      </Button>
+    </WriteTip>
+  )
+}
+
 export function SectionRow({ title, icon, open, onToggle, badges, right, check, menu, addRule, indent = 0, testId }: SectionRowProps) {
   const t = useTranslations('microsegPilot.dfw')
   const theme = useTheme()
@@ -300,15 +321,7 @@ export function SectionRow({ title, icon, open, onToggle, badges, right, check, 
       <TableCell colSpan={3} sx={{ ...CELL, textAlign: 'right', color: 'text.secondary' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
           {right}
-          {addRule && (
-            <WriteTip>
-              <Button size='small' className={ADD_CLASS} onClick={addRule.onClick} disabled={addRule.disabled}
-                startIcon={<i className='ri-add-line' />} aria-label={t('addRuleTo', { name: title })}
-                sx={{ textTransform: 'none', fontSize: 12, fontWeight: 600, py: 0, minWidth: 0, whiteSpace: 'nowrap' }}>
-                {t('addRuleShort')}
-              </Button>
-            </WriteTip>
-          )}
+          {addRule && <SectionAddButton title={title} open={open} onClick={addRule.onClick} disabled={addRule.disabled} />}
           {menu}
         </Box>
       </TableCell>

@@ -13711,7 +13711,6 @@
       "enableFirewall": "activer le pare-feu",
       "undo": "annuler",
       "ruleCount": "{count, plural, one {# règle} other {# règles}}",
-      "editInMicroseg": "modifiable dans Micro-segmentation ›",
       "object": {
         "group": "groupe de sécurité {group}"
       },
@@ -13754,7 +13753,15 @@
       "addRuleTo": "Ajouter une règle à {name}",
       "addARule": "Ajouter une règle",
       "ruleScope": "S’applique à",
-      "readingScope": "Lecture des règles de cette portée : la règle pourra être gardée une fois lues"
+      "readingScope": "Lecture des règles de cette portée : la règle pourra être gardée une fois lues",
+      "microsegPrefix": "Micro-segmentation :",
+      "changeZoneState": "Changer l’état de la zone {zone}",
+      "ruleMenu": "Actions du flux",
+      "editFlow": "Modifier le flux",
+      "deleteFlow": "Supprimer le flux",
+      "notInDraft": "Absent du brouillon de la politique : le brouillon a changé depuis la dernière application, ou Proxmox a été modifié à la main",
+      "intraRule": "Les membres de la zone se joignent entre eux : un réglage de la zone (isolation des membres désactivée)",
+      "editZone": "Modifier la zone"
     }
   }
 }

@@ -13710,7 +13710,6 @@
       "enableFirewall": "activar el cortafuegos",
       "undo": "deshacer",
       "ruleCount": "{count, plural, one {# regla} other {# reglas}}",
-      "editInMicroseg": "editar en Microsegmentación ›",
       "object": {
         "group": "grupo de seguridad {group}"
       },
@@ -13753,7 +13752,15 @@
       "addRuleTo": "Añadir una regla a {name}",
       "addARule": "Añadir una regla",
       "ruleScope": "Se aplica a",
-      "readingScope": "Leyendo las reglas de este ámbito: la regla podrá guardarse una vez leídas"
+      "readingScope": "Leyendo las reglas de este ámbito: la regla podrá guardarse una vez leídas",
+      "microsegPrefix": "Microsegmentación:",
+      "changeZoneState": "Cambiar el estado de la zona {zone}",
+      "ruleMenu": "Acciones del flujo",
+      "editFlow": "Editar el flujo",
+      "deleteFlow": "Eliminar el flujo",
+      "notInDraft": "No está en el borrador de la política: el borrador cambió desde la última aplicación o Proxmox se modificó a mano",
+      "intraRule": "Los miembros de la zona se alcanzan entre sí: un ajuste de la zona (aislamiento de miembros desactivado)",
+      "editZone": "Editar la zona"
     }
   }
 }

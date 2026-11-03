@@ -19,7 +19,15 @@ import {
   invalidateGuestIpIndex,
   setGuestIpIndex,
 } from '@/lib/cache/guestIpCache'
-import { attachGuestIps, liveAddressesPath, refreshGuestIpIndex, scheduleGuestIpRefresh } from './guestIpIndex'
+import { connectionPoolActivity, resetConnectionPools } from './connectionPool'
+import {
+  GUEST_IP_PROBE_TTL_MS,
+  attachGuestIps,
+  liveAddressesPath,
+  refreshGuestIpIndex,
+  resetGuestIpProbeTimes,
+  scheduleGuestIpRefresh,
+} from './guestIpIndex'
 
 const CONN = { baseUrl: 'https://pve.test', apiToken: 'x' }
 
@@ -28,6 +36,8 @@ beforeEach(() => {
   resetDaemonSlots()
   resetGuestAgentMutes()
   __resetGuestIpIndexForTests()
+  resetGuestIpProbeTimes()
+  resetConnectionPools()
 })
 
 afterEach(() => {
@@ -40,9 +50,9 @@ describe('liveAddressesPath', () => {
     expect(liveAddressesPath({ vmid: 100, node: 'n1', type: 'qemu', status: 'running' })).toBeNull()
   })
 
-  it('builds the LXC interfaces path for a running container', () => {
-    expect(liveAddressesPath({ vmid: 101, node: 'n1', type: 'lxc', status: 'running' }))
-      .toBe('/nodes/n1/lxc/101/interfaces')
+  it('never probes a container: its addresses come from its config (UA52)', () => {
+    expect(liveAddressesPath({ vmid: 101, node: 'n1', type: 'lxc', status: 'running' })).toBeNull()
+    expect(liveAddressesPath({ vmid: 101, node: 'n1', type: 'lxc', status: 'running', agentEnabled: true })).toBeNull()
   })
 
   it('builds the QEMU agent path when the agent is enabled', () => {
@@ -51,8 +61,8 @@ describe('liveAddressesPath', () => {
   })
 
   it('URI-encodes node names and vmids', () => {
-    expect(liveAddressesPath({ vmid: '10/1', node: 'node/a', type: 'lxc', status: 'running' }))
-      .toBe('/nodes/node%2Fa/lxc/10%2F1/interfaces')
+    expect(liveAddressesPath({ vmid: '10/1', node: 'node/a', type: 'qemu', status: 'running', agentEnabled: true }))
+      .toBe('/nodes/node%2Fa/qemu/10%2F1/agent/network-get-interfaces')
   })
 })
 
@@ -93,10 +103,9 @@ describe('refreshGuestIpIndex', () => {
 
     await refreshGuestIpIndex('conn-1', CONN, guests, now)
 
-    expect(pveFetchMock).toHaveBeenCalledTimes(5)
+    expect(pveFetchMock).toHaveBeenCalledTimes(4)
     expect(pveFetchMock.mock.calls.map(([, path]) => path)).toEqual([
       '/nodes/n1/qemu/100/agent/network-get-interfaces',
-      '/nodes/n1/lxc/101/interfaces',
       '/nodes/n1/qemu/102/agent/network-get-interfaces',
       '/nodes/n1/qemu/103/agent/network-get-interfaces',
       '/nodes/n1/qemu/105/agent/network-get-interfaces',
@@ -104,9 +113,8 @@ describe('refreshGuestIpIndex', () => {
     expect(getGuestIpEntry('conn-1', 'qemu/100')).toEqual({
       ips: ['10.42.0.151'], macs: ['BC:24:11:C0:F0:6F'], seenAt: now, stale: false,
     })
-    expect(getGuestIpEntry('conn-1', 'lxc/101')).toEqual({
-      ips: ['192.168.1.10'], macs: ['BC:24:11:98:B7:A3'], seenAt: now, stale: false,
-    })
+    // A container is never probed (UA52): no live entry, its config IPs are merged by attachGuestIps.
+    expect(getGuestIpEntry('conn-1', 'lxc/101')).toBeNull()
     expect(getGuestIpEntry('conn-1', 'qemu/102')).toEqual({
       ips: ['10.0.0.102'], macs: ['AA:AA:AA:AA:AA:02'], seenAt: now - 100, stale: true,
     })
@@ -115,6 +123,89 @@ describe('refreshGuestIpIndex', () => {
     expect(getGuestIpEntry('conn-1', 'qemu/105')).toEqual({
       ips: ['10.0.0.105'], macs: ['AA:AA:AA:AA:AA:05'], seenAt: now - 100, stale: true,
     })
+  })
+})
+
+describe('refreshGuestIpIndex load bounds (UA52)', () => {
+  const running = (vmid: number, node = 'n1') => ({ vmid, node, type: 'qemu', status: 'running', agentEnabled: true })
+  const answer = (ip: string) => ({ result: [{ 'ip-addresses': [{ 'ip-address': ip }] }] })
+
+  it('asks a guest again only after 15 minutes, keeping its entry fresh meanwhile', async () => {
+    const now = 2_000_000_000
+    pveFetchMock.mockResolvedValue(answer('10.0.0.5'))
+
+    await refreshGuestIpIndex('conn-1', CONN, [running(100)], now)
+    await refreshGuestIpIndex('conn-1', CONN, [running(100)], now + 5 * 60_000)
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    expect(getGuestIpEntry('conn-1', 'qemu/100')).toMatchObject({ ips: ['10.0.0.5'], stale: false })
+
+    await refreshGuestIpIndex('conn-1', CONN, [running(100)], now + GUEST_IP_PROBE_TTL_MS)
+    expect(pveFetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not ask again within 15 minutes an agent that did not answer', async () => {
+    const now = 2_000_000_000
+    pveFetchMock.mockRejectedValue(new Error('QEMU guest agent is not running'))
+
+    await refreshGuestIpIndex('conn-1', CONN, [running(100)], now)
+    await refreshGuestIpIndex('conn-1', CONN, [running(100)], now + 60_000)
+
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks again at once after the index was invalidated (connection re-pointed)', async () => {
+    const now = 2_000_000_000
+    pveFetchMock.mockResolvedValue(answer('10.0.0.5'))
+
+    await refreshGuestIpIndex('conn-1', CONN, [running(100)], now)
+    invalidateGuestIpIndex('conn-1')
+    await refreshGuestIpIndex('conn-1', CONN, [running(100)], now + 1_000)
+
+    expect(pveFetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('never probes a container, whatever its state', async () => {
+    await refreshGuestIpIndex('conn-1', CONN, [{ vmid: 101, node: 'n1', type: 'lxc', status: 'running', agentEnabled: true }])
+
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps at most 4 probes in flight on the connection, 2 per node', async () => {
+    let inFlight = 0
+    let peak = 0
+    const perNode = new Map<string, number>()
+    let peakNode = 0
+    pveFetchMock.mockImplementation(async (_conn, path) => {
+      const node = String(path).split('/')[2]
+      inFlight++
+      perNode.set(node, (perNode.get(node) ?? 0) + 1)
+      peak = Math.max(peak, inFlight)
+      peakNode = Math.max(peakNode, perNode.get(node)!)
+      await new Promise(resolve => setTimeout(resolve, 5))
+      inFlight--
+      perNode.set(node, perNode.get(node)! - 1)
+      return answer('10.0.0.9')
+    })
+    const guests = Array.from({ length: 30 }, (_, i) => running(100 + i, `n${i % 3}`))
+
+    await refreshGuestIpIndex('conn-1', CONN, guests)
+
+    expect(pveFetchMock).toHaveBeenCalledTimes(30)
+    expect(peak).toBeLessThanOrEqual(4)
+    expect(peakNode).toBeLessThanOrEqual(2)
+    expect(connectionPoolActivity('conn-1')).toEqual({ active: 0, waiting: 0 })
+  })
+
+  it('starts no probe once one timed out (tripped)', async () => {
+    pveFetchMock.mockImplementation(async () => {
+      throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' })
+    })
+    const guests = Array.from({ length: 10 }, (_, i) => running(100 + i, 'n1'))
+
+    await refreshGuestIpIndex('conn-1', CONN, guests)
+
+    // The 2 node slots were taken before the first timeout came back; nothing started after it.
+    expect(pveFetchMock.mock.calls.length).toBeLessThanOrEqual(2)
   })
 })
 

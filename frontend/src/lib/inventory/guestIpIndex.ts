@@ -8,10 +8,14 @@
 // GUEST_IP_REFRESH_MS per connection, kicks off one bounded-concurrency
 // refresh that nobody waits for. A stopped guest keeps its last known
 // addresses flagged stale, so it can still be found by its former IP.
-// Both probes are protected PVE calls: they go through the node's pvedaemon
+// The probe is a protected PVE call: it goes through the node's pvedaemon
 // slots, and an agent that did not answer is left alone (roadmap#179).
-import { pveFetch } from "@/lib/proxmox/client"
-import { daemonNodeKey, withDaemonSlot } from "@/lib/proxmox/daemonSlots"
+//
+// UA52: only QEMU guests are probed (agent network-get-interfaces), each one at
+// most once per GUEST_IP_PROBE_TTL_MS, through the connection's pool (4 in
+// flight, 2 per node, shared with the config reads) and a gate (no probe starts
+// after GUEST_IP_REFRESH_BUDGET_MS or once one was slow or timed out). A
+// container is never probed: its addresses come from its config (`ip=`).
 import { callGuestAgent } from "@/lib/proxmox/guestAgentCall"
 import {
   GUEST_IP_RETENTION_MS,
@@ -26,7 +30,8 @@ import {
   type GuestIpEntry,
 } from "@/lib/cache/guestIpCache"
 
-import { mapWithConcurrency, PVEPROXY_CONCURRENCY } from "./concurrency"
+import { mapWithConcurrency } from "./concurrency"
+import { createCallGate, POOL_GLOBAL_CONCURRENCY, withConnectionSlot } from "./connectionPool"
 import { extractLiveAddresses } from "./guestNetIdentity"
 
 export type IndexableGuest = {
@@ -52,14 +57,37 @@ export type WithGuestIps<T> = T & {
   staleIps: string[]
 }
 
-/** The live endpoint worth calling for this guest right now, or null. */
+/** A guest's live addresses are asked again at most this often (UA52). */
+export const GUEST_IP_PROBE_TTL_MS = 15 * 60 * 1_000
+/** No probe of a refresh starts after this. */
+export const GUEST_IP_REFRESH_BUDGET_MS = 60_000
+
+/** The live endpoint worth calling for this guest right now, or null: a running QEMU guest with the agent flag. */
 export function liveAddressesPath(g: IndexableGuest): string | null {
-  if (g.status !== "running") return null
-  const node = encodeURIComponent(g.node)
-  const vmid = encodeURIComponent(String(g.vmid))
-  if (g.type === "lxc") return `/nodes/${node}/lxc/${vmid}/interfaces`
-  if (g.agentEnabled) return `/nodes/${node}/qemu/${vmid}/agent/network-get-interfaces`
-  return null
+  if (g.status !== "running" || g.type !== "qemu" || !g.agentEnabled) return null
+  return `/nodes/${encodeURIComponent(g.node)}/qemu/${encodeURIComponent(String(g.vmid))}/agent/network-get-interfaces`
+}
+
+type ProbeMark = { at: number; generation: number }
+
+const PROBED_KEY = "__proxcenter_guest_ip_probed__" as const
+
+/** When each guest was last probed, keyed by connection and type/vmid, with the index generation of the time. */
+function probed(): Map<string, ProbeMark> {
+  const g = globalThis as any
+  if (!g[PROBED_KEY]) g[PROBED_KEY] = new Map<string, ProbeMark>()
+  return g[PROBED_KEY]
+}
+
+/** Test seam. */
+export function resetGuestIpProbeTimes(): void {
+  probed().clear()
+}
+
+/** Probed less than GUEST_IP_PROBE_TTL_MS ago, in the index's current generation (an invalidation asks again). */
+function probedRecently(connId: string, key: string, generation: number, now: number): boolean {
+  const mark = probed().get(`${connId}::${key}`)
+  return !!mark && mark.generation === generation && now - mark.at < GUEST_IP_PROBE_TTL_MS
 }
 
 /** Keep the previous entry as stale, or drop it once the retention window is over. */
@@ -83,32 +111,36 @@ export async function refreshGuestIpIndex(
   const previous = getGuestIpIndex(connId) ?? new Map<string, GuestIpEntry>()
   const generation = getGuestIpGeneration(connId)
 
-  const probed = await mapWithConcurrency(guests, PVEPROXY_CONCURRENCY, async (g): Promise<[string, GuestIpEntry | null]> => {
+  const gate = createCallGate({ deadline: Date.now() + GUEST_IP_REFRESH_BUDGET_MS })
+  const conn = { ...connData, id: connId }
+
+  const results = await mapWithConcurrency(guests, POOL_GLOBAL_CONCURRENCY, async (g): Promise<[string, GuestIpEntry | null]> => {
     const key = guestKey(g.type, g.vmid)
     const prev = previous.get(key)
-    const path = liveAddressesPath(g)
-    if (!path) return [key, carryOver(prev, now)]
-    try {
-      const conn = { ...connData, id: connId }
-      const answer = g.type === "lxc"
-        ? await withDaemonSlot(daemonNodeKey(conn, g.node), () => pveFetch<unknown>(conn, path))
-        : await callGuestAgent<unknown>(conn, g.node, g.vmid, "network-get-interfaces")
-      const live = extractLiveAddresses(answer)
-      // An answer without a single routable address (DHCP still pending) is
-      // not a new truth: keep what we knew rather than erase it.
-      if (live.ips.length === 0) return [key, carryOver(prev, now)]
-      return [key, { ips: live.ips, macs: live.macs, seenAt: now, stale: false }]
-    } catch {
-      return [key, carryOver(prev, now)]
-    }
+    if (!liveAddressesPath(g)) return [key, carryOver(prev, now)]
+    // Asked less than 15 min ago: what it said then still stands.
+    if (probedRecently(connId, key, generation, now)) return [key, prev ?? null]
+    const answer = await withConnectionSlot(connId, g.node, () => gate.run(() => {
+      probed().set(`${connId}::${key}`, { at: now, generation })
+      return callGuestAgent<unknown>(conn, g.node, g.vmid, "network-get-interfaces")
+    }))
+    const live = extractLiveAddresses(answer)
+    // No answer, or one without a single routable address (DHCP still
+    // pending), is not a new truth: keep what we knew rather than erase it.
+    if (live.ips.length === 0) return [key, carryOver(prev, now)]
+    return [key, { ips: live.ips, macs: live.macs, seenAt: now, stale: false }]
   })
 
   // Invalidated while we were probing (connection deleted or re-pointed):
   // this result describes guests that no longer belong to the key space.
   if (getGuestIpGeneration(connId) !== generation) return
 
+  // A guest gone from the list (destroyed, moved away) is asked afresh if it comes back.
+  const listed = new Set(guests.map(g => `${connId}::${guestKey(g.type, g.vmid)}`))
+  for (const mark of probed().keys()) if (mark.startsWith(`${connId}::`) && !listed.has(mark)) probed().delete(mark)
+
   const next = new Map<string, GuestIpEntry>()
-  for (const [key, entry] of probed) {
+  for (const [key, entry] of results) {
     if (entry) next.set(key, entry)
   }
   setGuestIpIndex(connId, next, now)

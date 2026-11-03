@@ -15,7 +15,7 @@ import zhCN from './zh-CN.json'
 
 const locales: Record<string, any> = { en, fr, de, es, ko, 'zh-CN': zhCN }
 
-const placeholders = (s: string) => [...s.matchAll(/\{(\w+)/g)].map(m => m[1]).sort().join(',')
+const placeholders = (s: string) => [...new Set([...s.matchAll(/\{(\w+)\s*[,}]/g)].map(m => m[1]))].sort().join(',')
 
 for (const namespace of ['dashboard', 'rulesOnDemand', 'vmPager'] as const) {
   const reference: Record<string, string> = (en.networkPage as any)[namespace]

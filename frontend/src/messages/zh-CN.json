@@ -9069,7 +9069,7 @@
       "todoNothing": "无待办事项",
       "todoUnavailable": "无法读取防火墙数据时不可用",
       "todoFirewallOff": "集群防火墙已关闭",
-      "todoManagementRules": "没有集群规则放行管理访问（端口 {ports}）",
+      "todoManagementRules": "没有集群规则放行管理访问（{count, plural, other {端口 {ports}}}）",
       "todoPolicyIn": "入站策略为 ACCEPT：任何未被规则丢弃的流量都会进入",
       "todoUnprotected": "{count, plural, other {# 个客户机没有防火墙}}",
       "todoUnzoned": "{count, plural, other {# 个运行中的客户机不在任何区域}}",
@@ -13475,7 +13475,7 @@
         "label": "客户机保护",
         "protected": "{members, number} 个区域成员中有 {protected, number} 个受保护",
         "unzoned": "{running, number} 个运行中的客户机中有 {count, number} 个不在任何区域内",
-        "allZoned": "全部 {running, number} 个运行中的客户机都在区域内",
+        "allZoned": "{running, plural, =0 {没有运行中的客户机} other {全部 # 个运行中的客户机都在区域内}}",
         "none": "尚未测量"
       },
       "engine": {

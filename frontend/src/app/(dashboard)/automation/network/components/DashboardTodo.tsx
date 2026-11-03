@@ -1,7 +1,7 @@
 'use client'
 
 import { Box, Button, Paper, Skeleton, Stack, Tooltip, Typography, alpha, useTheme } from '@mui/material'
-import { useTranslations } from 'next-intl'
+import { useFormatter, useTranslations } from 'next-intl'
 
 import { STATE_AMBER, STATE_GREEN, STATE_RED } from './DashboardStateCard'
 import type { BlockPhase, TodoItem, TodoKind } from './dashboardModel'
@@ -47,12 +47,17 @@ const ACTION: Record<TodoKind, string> = {
 
 function useLineText() {
   const t = useTranslations('networkPage.dashboard')
+  const format = useFormatter()
 
   return (item: TodoItem): string => {
     switch (item.kind) {
       case 'stopHeld': return t('stopHeldTitle')
       case 'firewallOff': return t('todoFirewallOff')
-      case 'managementRules': return t('todoManagementRules', { ports: (item.ports ?? []).join(', ') })
+      case 'managementRules': {
+        const ports = (item.ports ?? []).map(String)
+        // "ports 8006 and 22", in the words of the locale.
+        return t('todoManagementRules', { count: ports.length, ports: format.list(ports, { type: 'conjunction' }) })
+      }
       case 'policyIn': return t('todoPolicyIn')
       case 'unprotected': return t('todoUnprotected', { count: item.count ?? 0 })
       case 'unzoned': return t('todoUnzoned', { count: item.count ?? 0 })

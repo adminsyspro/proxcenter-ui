@@ -9069,7 +9069,7 @@
       "todoNothing": "Nothing to do",
       "todoUnavailable": "Not available while the firewall data cannot be read",
       "todoFirewallOff": "Cluster firewall off",
-      "todoManagementRules": "No cluster rule lets the administration in (port {ports})",
+      "todoManagementRules": "No cluster rule lets the administration in ({count, plural, one {port {ports}} other {ports {ports}}})",
       "todoPolicyIn": "Inbound policy ACCEPT: whatever no rule drops comes in",
       "todoUnprotected": "{count, plural, one {# guest without firewall} other {# guests without firewall}}",
       "todoUnzoned": "{count, plural, one {# running guest in no zone} other {# running guests in no zone}}",
@@ -13475,7 +13475,7 @@
         "label": "Guest protection",
         "protected": "{protected, number} of {members, number} zone members protected",
         "unzoned": "{count, plural, one {# running guest} other {# running guests}} in no zone, of {running, number} running",
-        "allZoned": "All {running, number} running guests are in a zone",
+        "allZoned": "{running, plural, =0 {No guest is running} one {The # running guest is in a zone} other {All # running guests are in a zone}}",
         "none": "Not measured yet"
       },
       "engine": {

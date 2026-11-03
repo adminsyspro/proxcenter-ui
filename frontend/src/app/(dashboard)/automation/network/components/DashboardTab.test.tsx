@@ -340,6 +340,13 @@ describe('DashboardTab: To do', () => {
     expect((await screen.findByTestId('todo-managementRules')).textContent).toContain('(port 22)')
   })
 
+  it('names both administration ports in words when neither is let in', async () => {
+    stubReads()
+    renderDashboard({ enable: 1 }, { clusterRules: [] })
+
+    expect((await screen.findByTestId('todo-managementRules')).textContent).toContain('(ports 8006 and 22)')
+  })
+
   it('flags an explicit inbound ACCEPT policy and leads to the cluster options', async () => {
     stubReads()
     const onNavigateTab = vi.fn()

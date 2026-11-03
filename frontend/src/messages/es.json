@@ -9069,7 +9069,7 @@
       "todoNothing": "Nada que hacer",
       "todoUnavailable": "No disponible mientras no se puedan leer los datos del cortafuegos",
       "todoFirewallOff": "Cortafuegos del clúster desactivado",
-      "todoManagementRules": "Ninguna regla del clúster permite la administración (puerto {ports})",
+      "todoManagementRules": "Ninguna regla del clúster permite la administración ({count, plural, one {puerto {ports}} other {puertos {ports}}})",
       "todoPolicyIn": "Política de entrada ACCEPT: entra todo lo que ninguna regla descarta",
       "todoUnprotected": "{count, plural, one {# invitado sin cortafuegos} other {# invitados sin cortafuegos}}",
       "todoUnzoned": "{count, plural, one {# invitado en marcha en ninguna zona} other {# invitados en marcha en ninguna zona}}",
@@ -13475,7 +13475,7 @@
         "label": "Protección de invitados",
         "protected": "{protected, number} de {members, number} miembros de zona protegidos",
         "unzoned": "{count, plural, one {# invitado en marcha} other {# invitados en marcha}} en ninguna zona, de {running, number} en marcha",
-        "allZoned": "Los {running, number} invitados en marcha están todos en una zona",
+        "allZoned": "{running, plural, =0 {Ningún invitado en marcha} one {El único invitado en marcha está en una zona} other {Los # invitados en marcha están todos en una zona}}",
         "none": "Aún sin medir"
       },
       "engine": {

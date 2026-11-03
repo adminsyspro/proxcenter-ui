@@ -9016,7 +9016,7 @@
       "todoNothing": "Nichts zu tun",
       "todoUnavailable": "Nicht verfügbar, solange die Firewall-Daten nicht gelesen werden können",
       "todoFirewallOff": "Cluster-Firewall ausgeschaltet",
-      "todoManagementRules": "Keine Cluster-Regel lässt die Verwaltung zu (Port {ports})",
+      "todoManagementRules": "Keine Cluster-Regel lässt die Verwaltung zu ({count, plural, one {Port {ports}} other {Ports {ports}}})",
       "todoPolicyIn": "Eingangsrichtlinie ACCEPT: alles, was keine Regel verwirft, kommt herein",
       "todoUnprotected": "{count, plural, one {# Gast ohne Firewall} other {# Gäste ohne Firewall}}",
       "todoUnzoned": "{count, plural, one {# laufender Gast in keiner Zone} other {# laufende Gäste in keiner Zone}}",
@@ -13143,7 +13143,7 @@
         "label": "Schutz der Gäste",
         "protected": "{protected, number} von {members, number} Zonenmitgliedern geschützt",
         "unzoned": "{count, plural, one {# laufender Gast} other {# laufende Gäste}} in keiner Zone, von {running, number} laufenden",
-        "allZoned": "Alle {running, number} laufenden Gäste befinden sich in einer Zone",
+        "allZoned": "{running, plural, =0 {Kein Gast läuft} one {Der einzige laufende Gast befindet sich in einer Zone} other {Alle # laufenden Gäste befinden sich in einer Zone}}",
         "none": "Noch nicht gemessen"
       },
       "engine": {

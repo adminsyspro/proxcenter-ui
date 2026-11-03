@@ -98,6 +98,13 @@ describe('protection', () => {
     expect(screen.getByText('4 of 4 zone members protected')).toBeTruthy()
   })
 
+  it('uses the singular when the one running guest is in a zone', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ coverage: { running: 1, zoned: 1, members: 2, protected: 1 } }))
+    renderCard()
+    expect(await screen.findByText('The 1 running guest is in a zone')).toBeTruthy()
+    expect(screen.getByText('1 of 2 zone members protected')).toBeTruthy()
+  })
+
   it('uses the singular for one guest', async () => {
     mock.routes['GET /status'] = () => reply(200, status({ coverage: { running: 4, zoned: 3, members: 3, protected: 3 } }))
     renderCard()

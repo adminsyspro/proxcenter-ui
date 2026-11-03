@@ -9069,7 +9069,7 @@
       "todoNothing": "할 일 없음",
       "todoUnavailable": "방화벽 데이터를 읽을 수 없는 동안에는 사용할 수 없음",
       "todoFirewallOff": "클러스터 방화벽 꺼짐",
-      "todoManagementRules": "관리 접근을 허용하는 클러스터 규칙이 없음(포트 {ports})",
+      "todoManagementRules": "관리 접근을 허용하는 클러스터 규칙이 없음({count, plural, other {포트 {ports}}})",
       "todoPolicyIn": "인바운드 정책 ACCEPT: 규칙이 차단하지 않는 모든 트래픽이 들어옵니다",
       "todoUnprotected": "{count, plural, other {방화벽이 없는 게스트 #개}}",
       "todoUnzoned": "{count, plural, other {어느 영역에도 없는 실행 중 게스트 #개}}",
@@ -13475,7 +13475,7 @@
         "label": "게스트 보호",
         "protected": "영역 구성원 {members, number}개 중 {protected, number}개 보호됨",
         "unzoned": "실행 중인 게스트 {running, number}개 중 {count, number}개가 어느 영역에도 속하지 않음",
-        "allZoned": "실행 중인 게스트 {running, number}개가 모두 영역에 속해 있습니다",
+        "allZoned": "{running, plural, =0 {실행 중인 게스트 없음} other {실행 중인 게스트 #개가 모두 영역에 속해 있습니다}}",
         "none": "아직 측정되지 않음"
       },
       "engine": {

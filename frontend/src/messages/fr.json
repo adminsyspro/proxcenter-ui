@@ -9069,7 +9069,7 @@
       "todoNothing": "Rien à faire",
       "todoUnavailable": "Indisponible tant que les données du pare-feu ne peuvent pas être lues",
       "todoFirewallOff": "Pare-feu du cluster désactivé",
-      "todoManagementRules": "Aucune règle du cluster n'ouvre l'administration (port {ports})",
+      "todoManagementRules": "Aucune règle du cluster n'ouvre l'administration ({count, plural, one {port {ports}} other {ports {ports}}})",
       "todoPolicyIn": "Politique entrante ACCEPT : tout ce qu'aucune règle ne bloque entre",
       "todoUnprotected": "{count, plural, one {# invité sans pare-feu} other {# invités sans pare-feu}}",
       "todoUnzoned": "{count, plural, one {# invité en marche dans aucune zone} other {# invités en marche dans aucune zone}}",
@@ -9097,8 +9097,8 @@
       "expandAllHint": "Ouvre les groupes VLAN ; les règles d'un invité se chargent quand vous ouvrez sa ligne"
     },
     "vmPager": {
-      "groupCount": "{count, plural, one {# VM} other {# VMs}}",
-      "groupCountPaged": "{count, plural, one {# VM} other {# VMs}} · page {page, number}/{pages, number}",
+      "groupCount": "{count, plural, one {# VM} other {# VM}}",
+      "groupCountPaged": "{count, plural, one {# VM} other {# VM}} · page {page, number}/{pages, number}",
       "page": "Page {page, number} sur {pages, number}",
       "previous": "Page précédente",
       "next": "Page suivante",
@@ -13476,7 +13476,7 @@
         "label": "Protection des invités",
         "protected": "{protected, number} membres de zone protégés sur {members, number}",
         "unzoned": "{count, plural, one {# invité en marche} other {# invités en marche}} dans aucune zone, sur {running, number} en marche",
-        "allZoned": "Les {running, number} invités en marche sont tous dans une zone",
+        "allZoned": "{running, plural, =0 {Aucun invité en marche} one {L'unique invité en marche est dans une zone} other {Les # invités en marche sont tous dans une zone}}",
         "none": "Pas encore mesurée"
       },
       "engine": {

@@ -29,7 +29,7 @@ function flatten(node: unknown, prefix = ''): Record<string, string> {
   )
 }
 
-const placeholders = (s: string) => [...s.matchAll(/\{(\w+)/g)].map(m => m[1]).sort().join(',')
+const placeholders = (s: string) => [...new Set([...s.matchAll(/\{(\w+)\s*[,}]/g)].map(m => m[1]))].sort().join(',')
 
 const reference = flatten(en.microsegPilot)
 

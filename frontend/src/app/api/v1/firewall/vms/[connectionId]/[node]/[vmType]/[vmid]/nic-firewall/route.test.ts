@@ -140,7 +140,7 @@ describe('PUT /api/v1/firewall/vms/[connectionId]/[node]/[vmType]/[vmid]/nic-fir
     expect(toggleVMNICFirewallMock).not.toHaveBeenCalled()
   })
 
-  it('forgets the cached NIC flag of the guest once the toggle went through (UA44)', async () => {
+  it('sets the cached NIC flag of the guest once the toggle went through, with no config read (UA44)', async () => {
     const totals = await import('@/lib/inventory/guestDiskTotals')
     await totals.attachGuestDiskTotals(null, 'conn-1', [{ vmid: '101', type: 'qemu', node: 'pve1' }], {
       onlineNodes: null,
@@ -153,6 +153,6 @@ describe('PUT /api/v1/firewall/vms/[connectionId]/[node]/[vmType]/[vmid]/nic-fir
     const res = await callRoute(PUT, { params: PARAMS, body: { enable: true }, method: 'PUT' })
 
     expect(res.status).toBe(200)
-    expect(totals.peekGuestNicFirewall('conn-1', 'qemu', '101')).toBeUndefined()
+    expect(totals.peekGuestNicFirewall('conn-1', 'qemu', '101')).toBe(true)
   })
 })

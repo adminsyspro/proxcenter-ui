@@ -158,9 +158,9 @@ describe('SecurityGroupsPanel', () => {
     expect(screen.getByText('0 rules')).toBeInTheDocument()
 
     // sg-web is referenced by web-01, whose rules were read; outside the deployed zones the list is
-    // only what was read, which the count says (UA44).
+    // only what was read, which the count says with a "+" (UA44), except at 0 where "0+" would read oddly.
     expect(screen.getByText('1+ VMs')).toBeInTheDocument()
-    expect(screen.getByText('0+ VMs')).toBeInTheDocument()
+    expect(screen.getByText('0 VMs')).toBeInTheDocument()
 
     expect(screen.queryByText('https in')).not.toBeInTheDocument()
   })
@@ -480,7 +480,7 @@ describe('SecurityGroupsPanel membership without every guest rules (UA44)', () =
     const p = renderPanel({ securityGroups: ZONE_GROUPS, vmFirewallData: [tagged(1, ['zone-web']), tagged(2, ['Zone-Web']), tagged(3, ['zone-db'])] })
 
     expect(within(sectionRow('pcz-web')).getByText('2 VMs')).toBeInTheDocument()
-    expect(within(sectionRow('sg-db')).getByText('0+ VMs')).toBeInTheDocument()
+    expect(within(sectionRow('sg-db')).getByText('0 VMs')).toBeInTheDocument()
     expect(p.loadGuestRules).not.toHaveBeenCalled()
     expect(api.getVMRules).not.toHaveBeenCalled()
   })
@@ -489,7 +489,7 @@ describe('SecurityGroupsPanel membership without every guest rules (UA44)', () =
     microseg.snapshot = { tag_prefix: 'zone-', flows: [], zones: [{ id: 'z1', name: 'web', state: 'disabled' }] }
     renderPanel({ securityGroups: ZONE_GROUPS, vmFirewallData: [tagged(1, ['zone-web'])] })
 
-    expect(within(sectionRow('pcz-web')).getByText('0+ VMs')).toBeInTheDocument()
+    expect(within(sectionRow('pcz-web')).getByText('0 VMs')).toBeInTheDocument()
   })
 
   it('says why the count is unknown in the chip tooltip', () => {

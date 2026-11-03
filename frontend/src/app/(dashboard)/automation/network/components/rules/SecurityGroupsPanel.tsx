@@ -120,7 +120,8 @@ export default function SecurityGroupsPanel({
 
   const membersLabel = (section: PolicySection) => {
     if (loadingVMRules) return '…'
-    if (section.appliedToKnown === false) return t('networkPage.rulesOnDemand.membersUnknownCount', { count: section.appliedTo.length })
+    // "0+ VMs" would read as odd: with none seen, the count is plain and the tooltip says why it may be more.
+    if (section.appliedToKnown === false && section.appliedTo.length > 0) return t('networkPage.rulesOnDemand.membersUnknownCount', { count: section.appliedTo.length })
     return t('networkPage.vmCount', { count: section.appliedTo.length })
   }
 

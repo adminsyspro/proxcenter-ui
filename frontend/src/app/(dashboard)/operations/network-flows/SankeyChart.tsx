@@ -229,7 +229,7 @@ export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {})
     const aggregated = new Map<string, { bytes: number; packets: number; protocol: string; port: number; srcIP: string; dstIP: string; matched: boolean }>()
 
     for (const pair of sourcePairs) {
-      const service = serviceLabel(pair.protocol, pair.dst_port)
+      const service = serviceLabel(pair.protocol, pair.dst_port || undefined)
       const srcKey = endpointKey(pair.src_ip, pair.src_vmid)
       const dstKey = endpointKey(pair.dst_ip, pair.dst_vmid)
       const key = `${srcKey}|${service}|${dstKey}`
@@ -267,7 +267,7 @@ export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {})
     }
 
     for (const flow of sortedFlows) {
-      const service = serviceLabel(flow.protocol, flow.port)
+      const service = serviceLabel(flow.protocol, flow.port || undefined)
       const srcIdx = getOrCreateNode(flow.srcIP, 'source')
       const svcIdx = getOrCreateNode(service, 'service')
       const dstIdx = getOrCreateNode(flow.dstIP, 'destination')

@@ -21,9 +21,9 @@ describe('a cluster firewall the emergency stop holds off', () => {
   const held = { id: 'cluster_firewall', status: 'warn' as const, fix: 'enable_cluster_firewall', detail: { reason: 'emergency_stop', held_by_stop: true } }
   const off = { id: 'cluster_firewall', status: 'fail' as const, fix: 'enable_cluster_firewall' }
 
-  it('is told apart from a firewall that is simply off, by the reason or by held_by_stop', () => {
+  it('is told apart from a firewall that is simply off, by held_by_stop alone', () => {
     expect(heldByStop(held)).toBe(true)
-    expect(heldByStop({ ...held, detail: { reason: 'emergency_stop' } })).toBe(true)
+    expect(heldByStop({ ...held, detail: { reason: 'emergency_stop' } })).toBe(false)
     expect(heldByStop({ ...held, detail: { held_by_stop: true } })).toBe(true)
     expect(heldByStop(off)).toBe(false)
     expect(heldByStop({ ...held, status: 'pass' })).toBe(false)

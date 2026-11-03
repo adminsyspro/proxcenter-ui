@@ -9,6 +9,7 @@ import { isVersionConflict } from '@/app/(dashboard)/automation/network/componen
 import { WriteTip, useMicrosegWrite } from '@/app/(dashboard)/automation/network/components/microseg/microsegAccess'
 import { useResolveSuggestions } from '@/app/(dashboard)/automation/network/components/microseg/observationParts'
 import { EDGE_COLORS } from '@/app/(dashboard)/automation/network/components/microseg/zoneGraph'
+import { serviceLabel } from '@/lib/network/serviceNames'
 import { formatBytes } from '@/utils/format'
 import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegSuggestion } from '@/lib/microseg/types'
@@ -63,7 +64,7 @@ function useVerdictText(lens: TrafficLens) {
     if (verdict.intraZone) return t('intraZone', { zone: values.src })
     if (verdict.flow) {
       const f = verdict.flow
-      return t('allowedFlow', { ...values, service: f.dport ? `${f.proto}/${f.dport}` : f.proto })
+      return t('allowedFlow', { ...values, service: serviceLabel(f.proto, f.dport) })
     }
     if (verdict.status === 'blocked') return t('blocked', { ...values, hits: verdict.suggestion?.hits ?? 0 })
     if (verdict.suggestion) return t('wouldBlock', { ...values, hits: verdict.suggestion.hits })

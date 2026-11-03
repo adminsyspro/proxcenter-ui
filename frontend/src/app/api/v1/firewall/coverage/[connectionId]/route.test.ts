@@ -37,7 +37,7 @@ vi.mock('@/lib/inventory/guestDiskTotals', () => ({
 }))
 
 import { setCachedInventory, invalidateInventoryCache } from '@/lib/cache/inventoryCache'
-import { resetGuestCoverage } from '@/lib/firewall/guestCoverage'
+import { forgetGuestCoverage, resetGuestCoverage } from '@/lib/firewall/guestCoverage'
 
 import { GET } from './route'
 
@@ -47,10 +47,11 @@ function guests(count: number, nodes = ['pve1', 'pve2', 'pve3']): Guest[] {
   return Array.from({ length: count }, (_, i) => ({ vmid: 100 + i, node: nodes[i % nodes.length], type: 'qemu' }))
 }
 
-/** The connection's guests as /cluster/resources gives them (cold inventory). */
-function onPve(list: Guest[]) {
+/** The connection's guests and nodes as /cluster/resources gives them (cold inventory). */
+function onPve(list: Guest[], offlineNodes: string[] = []) {
+  const nodes = [...new Set(list.map(g => g.node))].map(node => ({ type: 'node', node, status: offlineNodes.includes(node) ? 'offline' : 'online' }))
   h.pveFetch.mockImplementation(async (_conn: unknown, path: string) => {
-    if (path === '/cluster/resources?type=vm') return list
+    if (path === '/cluster/resources') return [...nodes, ...list]
     throw new Error(`unexpected PVE call ${path}`)
   })
 }
@@ -249,7 +250,7 @@ describe('GET /api/v1/firewall/coverage/[connectionId]: cache', () => {
     expect(second.computedAt).toBe(first.computedAt)
   })
 
-  it('computes again when the guest list changed', async () => {
+  it('reads only the guest added when the guest list changed, not the others again', async () => {
     const list = guests(6)
     onPve(list)
     nicOn(list)
@@ -261,8 +262,129 @@ describe('GET /api/v1/firewall/coverage/[connectionId]: cache', () => {
     nicOn(grown)
     const body = await readJson<any>(await get())
 
-    expect(stats.calls).toBe(13)
-    expect(body.total).toBe(7)
+    expect(stats.calls).toBe(7)
+    expect(h.orchGet.mock.calls.at(-1)?.[0]).toBe('/firewall/vms/conn-1/pve3/qemu/106/options')
+    expect(body).toMatchObject({ total: 7, enabled: 7 })
+  })
+
+  it('reads a guest moved to another node again, alone', async () => {
+    onPve([{ vmid: 1, node: 'pve1', type: 'qemu' }, { vmid: 2, node: 'pve1', type: 'qemu' }])
+    h.nic.set('qemu/1', true)
+    h.nic.set('qemu/2', true)
+    const stats = options(() => true)
+    await get()
+
+    onPve([{ vmid: 1, node: 'pve1', type: 'qemu' }, { vmid: 2, node: 'pve2', type: 'qemu' }])
+    await get()
+
+    expect(stats.calls).toBe(3)
+    expect(h.orchGet.mock.calls.at(-1)?.[0]).toBe('/firewall/vms/conn-1/pve2/qemu/2/options')
+  })
+
+  it('shows a NIC toggle at once from the inventory cache, with no call', async () => {
+    onPve([{ vmid: 1, node: 'pve1', type: 'qemu' }])
+    h.nic.set('qemu/1', false)
+    const stats = options(() => true)
+    expect((await readJson<any>(await get())).enabled).toBe(0)
+
+    h.nic.set('qemu/1', true)
+    const body = await readJson<any>(await get())
+
+    expect(stats.calls).toBe(1)
+    expect(body.enabled).toBe(1)
+  })
+
+  it('reads one guest again after ProxCenter wrote its options, and only that one', async () => {
+    const list = guests(5)
+    onPve(list)
+    nicOn(list)
+    let on = false
+    const stats = options(vmid => vmid !== 102 || on)
+    expect((await readJson<any>(await get())).enabled).toBe(4)
+
+    on = true
+    forgetGuestCoverage('conn-1', { type: 'qemu', vmid: 102 })
+    const body = await readJson<any>(await get())
+
+    expect(stats.calls).toBe(6)
+    expect(body.enabled).toBe(5)
+  })
+
+  it('never caches what a read saw before a write made during it', async () => {
+    onPve([{ vmid: 1, node: 'pve1', type: 'qemu' }])
+    h.nic.set('qemu/1', true)
+    let enable = 0
+    h.orchGet.mockImplementation(async () => {
+      const seen = enable
+      // ProxCenter writes the options while this read is in flight.
+      forgetGuestCoverage('conn-1', { type: 'qemu', vmid: 1 })
+      enable = 1
+      return { data: { enable: seen } }
+    })
+    expect((await readJson<any>(await get())).enabled).toBe(0)
+
+    h.orchGet.mockImplementation(async () => ({ data: { enable } }))
+    const body = await readJson<any>(await get())
+
+    expect(h.orchGet).toHaveBeenCalledTimes(2)
+    expect(body.enabled).toBe(1)
+  })
+
+  it('asks no guest of an offline node, and lists it as unknown', async () => {
+    const list: Guest[] = [{ vmid: 1, node: 'pve1', type: 'qemu' }, { vmid: 2, node: 'pve9', type: 'qemu' }]
+    onPve(list, ['pve9'])
+    nicOn(list)
+    const stats = options(() => true)
+
+    const body = await readJson<any>(await get())
+
+    expect(stats.calls).toBe(1)
+    expect(body).toMatchObject({ enabled: 1, unknown: 1 })
+    expect(body.guests.find((r: any) => r.vmid === '2')).toMatchObject({ enabled: null, options: null })
+  })
+
+  it('falls back to Proxmox with the long read budget when the orchestrator is unavailable', async () => {
+    onPve([{ vmid: 1, node: 'pve1', type: 'qemu' }])
+    h.nic.set('qemu/1', true)
+    h.orchGet.mockRejectedValue(Object.assign(new Error('down'), { code: 'ORCHESTRATOR_UNAVAILABLE' }))
+    const listing = h.pveFetch.getMockImplementation()!
+    h.pveFetch.mockImplementation(async (conn: unknown, path: string, init?: unknown, opts?: unknown) =>
+      (path.endsWith('/firewall/options') ? { enable: 1 } : listing(conn, path, init, opts)))
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+
+    const body = await readJson<any>(await get())
+
+    expect(body.enabled).toBe(1)
+    expect(h.pveFetch).toHaveBeenCalledWith({ id: 'conn-1' }, '/nodes/pve1/qemu/1/firewall/options', {}, { slowRead: true })
+  })
+
+  it('stops starting calls once one timed out, and keeps that partial answer', async () => {
+    const list = guests(12, ['pve1'])
+    onPve(list)
+    nicOn(list)
+    h.orchGet.mockRejectedValue(Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }))
+
+    const body = await readJson<any>(await get())
+    expect(h.orchGet.mock.calls.length).toBeLessThanOrEqual(2)
+    expect(body).toMatchObject({ total: 12, unknown: 12, partial: true })
+
+    // The unknown guests are not asked again on the next answer (no hammering a slow Proxmox).
+    await get()
+    expect(h.orchGet.mock.calls.length).toBeLessThanOrEqual(2)
+  })
+
+  it('lists the guests left out above 200 as unknown, without asking them', async () => {
+    const list = guests(230)
+    onPve(list)
+    nicOn(list)
+    const stats = options(() => true, 0)
+
+    const body = await readJson<any>(await get())
+
+    expect(stats.calls).toBe(200)
+    expect(body.guests).toHaveLength(230)
+    expect(body.guests.filter((r: any) => r.sampledOut)).toHaveLength(30)
+    expect(body.guests.filter((r: any) => r.sampledOut).every((r: any) => r.options === null)).toBe(true)
   })
 
   it('computes again past 10 minutes', async () => {

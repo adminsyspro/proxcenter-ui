@@ -33,6 +33,16 @@ describe('ZoneStateChip', () => {
     fireEvent.mouseOver(chip)
     expect(await screen.findByRole('tooltip')).toHaveProperty('textContent', hint)
   })
+
+  it('keeps the state label as the accessible name, the hint only describes it', async () => {
+    renderWithProviders(<ZoneStateChip state='enforce' />)
+    const chip = screen.getByText('Enforced').closest('.MuiChip-root') as HTMLElement
+    fireEvent.mouseOver(chip)
+    await screen.findByRole('tooltip')
+    expect(chip.getAttribute('aria-label')).toBeNull()
+    expect(chip.getAttribute('title')).toBeNull()
+    expect(chip.getAttribute('aria-describedby')).toBeTruthy()
+  })
 })
 
 describe('where the state shows', () => {

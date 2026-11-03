@@ -9035,7 +9035,8 @@
       "coverageUnavailable": "Coverage not available: {error}",
       "coverageNone": "No guest on this connection",
       "stopHeldTitle": "Cluster firewall held off by the emergency stop",
-      "stopHeldHint": "Resume from the Micro-segmentation tab to switch it back on."
+      "stopHeldHint": "Resume from the Micro-segmentation tab to switch it back on.",
+      "coverageNotMeasured": "Not measured: no guest could be told apart yet"
     },
     "rulesOnDemand": {
       "chip": "Rules on open",
@@ -9045,7 +9046,9 @@
       "vmTabCount": "Guests listed; their rules are read when you open one",
       "membersUnknown": "Proxmox keeps no member list: a guest belongs when one of its rules carries the group, and rules are read guest by guest. The members of a deployed micro-segmentation zone group are known from its tags; for this group only the guests opened so far are listed",
       "membersUnknownCount": "{count, number}+ VMs",
-      "detachNoRule": "{guest} carries no rule of {group}"
+      "detachNoRule": "{guest} carries no rule of {group}",
+      "alreadyMember": "{guests} already carry {group}: not attached again",
+      "expandAllHint": "Opens the VLAN groups; the rules of a guest load when you open its row"
     }
   },
   "deployWizard": {
@@ -12883,7 +12886,8 @@
       "errors": "Errors: {list}",
       "notes": "Notes: {list}",
       "nothingRecord": "Nothing to write in Proxmox: applying records the revision.",
-      "stopActive": "Written while the emergency stop holds the cluster firewall off; takes effect when the stop is lifted"
+      "stopActive": "Written while the emergency stop holds the cluster firewall off; takes effect when the stop is lifted",
+      "stopActivePlan": "An apply now would be written while the emergency stop holds the cluster firewall off"
     },
     "drifts": {
       "asOf": "As of the last full run, {time}",

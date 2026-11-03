@@ -165,7 +165,7 @@ describe('drifts without a fix', () => {
     setup()
     const line = await row('Rule not managed by ProxCenter: db-1')
     fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
-    expect(within(line).getByText(/position 3 \(10\.0\.0\.0\/8 tcp\/22\)/)).toBeTruthy()
+    expect(within(line).getByText(/position 3 \(10\.0\.0\.0\/8 SSH\)/)).toBeTruthy()
   })
 })
 

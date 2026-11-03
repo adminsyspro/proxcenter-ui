@@ -1,3 +1,4 @@
+import { serviceLabel } from '@/lib/network/serviceNames'
 import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
 
 import { guestKey } from './zoneModel'
@@ -43,7 +44,7 @@ function ruleOf(detail: Record<string, unknown>): string {
   const source = text(detail.source, '')
   const proto = text(detail.proto, '')
   const dport = text(detail.dport, '')
-  const service = proto && dport ? `${proto}/${dport}` : proto || dport
+  const service = proto ? serviceLabel(proto, dport) : dport
   return [source, service].filter(Boolean).join(' ') || '-'
 }
 

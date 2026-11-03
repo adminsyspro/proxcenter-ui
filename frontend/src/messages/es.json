@@ -9035,7 +9035,8 @@
       "coverageUnavailable": "Cobertura no disponible: {error}",
       "coverageNone": "Ningún invitado en esta conexión",
       "stopHeldTitle": "Cortafuegos del clúster apagado por la parada de emergencia",
-      "stopHeldHint": "Reanude desde la pestaña Microsegmentación para volver a activarlo."
+      "stopHeldHint": "Reanude desde la pestaña Microsegmentación para volver a activarlo.",
+      "coverageNotMeasured": "Sin medir: aún no se pudo determinar ningún invitado"
     },
     "rulesOnDemand": {
       "chip": "Reglas al abrir",
@@ -9045,7 +9046,9 @@
       "vmTabCount": "Invitados listados; sus reglas se leen al abrir uno",
       "membersUnknown": "Proxmox no lleva lista de miembros: un invitado pertenece cuando una de sus reglas lleva el grupo, y las reglas se leen invitado por invitado. Los miembros de un grupo de zona de microsegmentación desplegada se conocen por sus etiquetas; para este grupo solo se listan los invitados ya abiertos",
       "membersUnknownCount": "{count, number}+ VMs",
-      "detachNoRule": "{guest} no lleva ninguna regla de {group}"
+      "detachNoRule": "{guest} no lleva ninguna regla de {group}",
+      "alreadyMember": "{guests} ya llevan {group}: no se vuelven a asociar",
+      "expandAllHint": "Abre los grupos VLAN; las reglas de un invitado se cargan al abrir su fila"
     }
   },
   "deployWizard": {
@@ -12632,11 +12635,11 @@
       "resumeBody": "El motor vuelve a gestionar las zonas.",
       "appliedByLeader": "Solicitud aceptada: el orquestador líder la aplica en menos de un minuto.",
       "infoDisable": "Desactiva el cortafuegos de clúster de Proxmox con una sola petición, efecto inmediato en todos los nodos",
-      "infoUnmanaged": "Todas las reglas del cortafuegos dejan de evaluarse, incluidas las que ProxCenter no gestiona (reglas de gestión, de host y de invitado)",
+      "infoUnmanaged": "Todas las reglas del cortafuegos dejan de evaluarse, incluidas las que ProxCenter no gestiona (reglas de administración, de host y de invitado)",
       "infoObjects": "Los objetos de microsegmentación se conservan; Reanudar reactiva el cortafuegos de clúster y vuelve a aplicar la política",
       "infoUse": "Úselo cuando la segmentación bloquee algo que no debería",
       "resumeInfoReenable": "Reactiva el cortafuegos de clúster y después vuelve a aplicar la última revisión",
-      "resumeInfoSocle": "Se rechaza si faltan las reglas de gestión (SSH 22, web 8006): corríjalas antes en el asistente de despliegue del panel",
+      "resumeInfoSocle": "Se rechaza si faltan las reglas de administración (SSH 22, web 8006): corríjalas antes en el asistente de despliegue del panel",
       "openWizard": "Abrir el asistente de despliegue",
       "clusterFirewallOff": "Cortafuegos de clúster desactivado",
       "notDeployed": "Nada desplegado"
@@ -12679,7 +12682,7 @@
       "NETWORK": "No se puede contactar con ProxCenter. Compruebe su conexión de red.",
       "CHECK_PENDING": "Ya hay una comprobación en cola: el motor la inicia en su próxima pasada.",
       "generic": "Algo salió mal. Inténtelo de nuevo.",
-      "SOCLE_MISSING": "Faltan las reglas de gestión (SSH 22, web 8006), por lo que no se reactivó el cortafuegos de clúster. Añádalas con el asistente de despliegue y reanude.",
+      "SOCLE_MISSING": "Faltan las reglas de administración (SSH 22, web 8006), por lo que no se reactivó el cortafuegos de clúster. Añádalas con el asistente de despliegue y reanude.",
       "NOT_DEPLOYED": "Aún no hay nada desplegado: aplique antes un plan, la parada de emergencia actúa sobre una política desplegada."
     },
     "policy": {
@@ -12883,7 +12886,8 @@
       "errors": "Errores: {list}",
       "notes": "Notas: {list}",
       "nothingRecord": "Nada que escribir en Proxmox: aplicar registra la revisión.",
-      "stopActive": "Escrito mientras la parada de emergencia mantiene desactivado el cortafuegos de clúster; surte efecto al levantar la parada"
+      "stopActive": "Escrito mientras la parada de emergencia mantiene desactivado el cortafuegos de clúster; surte efecto al levantar la parada",
+      "stopActivePlan": "Una aplicación ahora se escribiría mientras la parada de emergencia mantiene desactivado el cortafuegos de clúster"
     },
     "drifts": {
       "asOf": "Al último ciclo completo, {time}",

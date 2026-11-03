@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
+import { serviceTitle } from '@/lib/network/serviceNames'
 import type { MicrosegSuggestion, SuggestionAction, SuggestionKind } from '@/lib/microseg/types'
 
 import { ObservedKindGlyph } from './observationParts'
@@ -27,7 +28,7 @@ type FlowActionsProps = {
 export function FlowActions({ suggestion: s, source, destination, busy, onResolve }: FlowActionsProps) {
   const t = useTranslations('microsegPilot.observation')
   const { canWrite } = useMicrosegWrite()
-  const service = s.dport ? `${s.proto}/${s.dport}` : s.proto
+  const service = serviceTitle(s.proto, s.dport)
 
   return (
     <Box sx={{ display: 'inline-flex', gap: 0.5 }}>

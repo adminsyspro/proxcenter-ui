@@ -273,9 +273,10 @@ describe('a plan or an apply written during a stop', () => {
     result: { guests: 1, members: 1, steps: 1, drifts: 0, ...result } as never,
   })
 
-  it('warns in the plan notices', () => {
+  it('warns in the plan notices, in its own words (an apply would be written during the stop)', () => {
     renderTab(<PlanNotices result={run({ stop_active: true }).result!} guests={[]} />)
-    expect(screen.getByText(LINE)).toBeTruthy()
+    expect(screen.getByText('An apply now would be written while the emergency stop holds the cluster firewall off')).toBeTruthy()
+    expect(screen.queryByText(LINE)).toBeNull()
   })
 
   it('draws no plan notice without the mark', () => {
@@ -300,6 +301,11 @@ describe('a plan or an apply written during a stop', () => {
   it('keeps the orchestrator note when the mark is absent', () => {
     renderTab(<ApplyResult run={run({ done: [], notes: ['held by the emergency stop'] })} guests={[]} />)
     expect(screen.getByText(/held by the emergency stop/)).toBeTruthy()
+  })
+
+  it('keeps an orchestrator note that only mentions the stop, even with the mark', () => {
+    renderTab(<ApplyResult run={run({ stop_active: true, done: [], notes: ['the emergency stop was cleared by an admin'] })} guests={[]} />)
+    expect(screen.getByText(/the emergency stop was cleared by an admin/)).toBeTruthy()
   })
 
   it('draws no warning in the apply result without the mark', () => {

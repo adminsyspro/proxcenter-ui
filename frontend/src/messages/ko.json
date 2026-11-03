@@ -9035,7 +9035,8 @@
       "coverageUnavailable": "적용 범위를 사용할 수 없음: {error}",
       "coverageNone": "이 연결에 게스트가 없습니다",
       "stopHeldTitle": "긴급 중지로 클러스터 방화벽이 꺼져 있음",
-      "stopHeldHint": "마이크로 세그멘테이션 탭에서 재개하여 다시 켜세요."
+      "stopHeldHint": "마이크로 세그멘테이션 탭에서 재개하여 다시 켜세요.",
+      "coverageNotMeasured": "측정되지 않음: 아직 판별된 게스트가 없습니다"
     },
     "rulesOnDemand": {
       "chip": "열 때 규칙 로드",
@@ -9045,7 +9046,9 @@
       "vmTabCount": "나열된 게스트. 규칙은 게스트를 열 때 읽습니다",
       "membersUnknown": "Proxmox는 멤버 목록을 유지하지 않습니다. 게스트의 규칙 중 하나가 그룹을 포함하면 멤버이며, 규칙은 게스트별로 읽습니다. 배포된 마이크로 세그멘테이션 영역 그룹의 멤버는 태그로 알 수 있으며, 이 그룹에는 지금까지 연 게스트만 표시됩니다",
       "membersUnknownCount": "VM {count, number}개 이상",
-      "detachNoRule": "{guest}에 {group} 규칙이 없습니다"
+      "detachNoRule": "{guest}에 {group} 규칙이 없습니다",
+      "alreadyMember": "{guests}에 이미 {group}이(가) 있어 다시 연결하지 않았습니다",
+      "expandAllHint": "VLAN 그룹을 엽니다. 게스트의 규칙은 해당 행을 열 때 로드됩니다"
     }
   },
   "deployWizard": {
@@ -12883,7 +12886,8 @@
       "errors": "오류: {list}",
       "notes": "참고: {list}",
       "nothingRecord": "Proxmox에 기록할 내용이 없습니다. 적용하면 리비전이 기록됩니다.",
-      "stopActive": "긴급 중지가 클러스터 방화벽을 꺼 둔 동안 기록되었으며, 중지를 해제하면 적용됩니다"
+      "stopActive": "긴급 중지가 클러스터 방화벽을 꺼 둔 동안 기록되었으며, 중지를 해제하면 적용됩니다",
+      "stopActivePlan": "지금 적용하면 긴급 중지가 클러스터 방화벽을 꺼 둔 동안 기록됩니다"
     },
     "drifts": {
       "asOf": "마지막 전체 실행 기준, {time}",

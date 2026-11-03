@@ -43,7 +43,7 @@ export default function PlanNotices({ result, guests }: Props) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
-      {stopActive && <Notice severity='warning' text={t('stopActive')} />}
+      {stopActive && <Notice severity='warning' text={t('stopActivePlan')} />}
       {collisions.length > 0 && <Notice severity='error' text={t('collisions', { names: collisions.join(', ') })} />}
       {foreign.length > 0 && <Notice severity='warning' text={t('foreignRules', { names: foreign.join(', ') })} />}
       {unread.length > 0 && <Notice severity='warning' text={t('unread', { count: unread.length, names: guestList(guests, unread) })} />}

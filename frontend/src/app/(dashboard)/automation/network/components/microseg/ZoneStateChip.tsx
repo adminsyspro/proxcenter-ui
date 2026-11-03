@@ -19,7 +19,7 @@ export default function ZoneStateChip({ state, size = 'small' }: { state: ZoneSt
   const t = useTranslations('microsegPilot.policy.zone')
   const visual = STATE_VISUAL[state]
   return (
-    <Tooltip title={t(`stateHint.${state}`)}>
+    <Tooltip title={t(`stateHint.${state}`)} describeChild>
       <Chip
         size={size}
         variant='outlined'

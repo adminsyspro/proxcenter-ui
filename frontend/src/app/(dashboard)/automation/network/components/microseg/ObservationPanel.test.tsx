@@ -58,7 +58,7 @@ describe('observation list', () => {
       const line = await row('web to db')
       expect(within(line).getByText('web')).toBeTruthy()
       expect(within(line).getByText('db')).toBeTruthy()
-      expect(within(line).getByText('tcp/443')).toBeTruthy()
+      expect(within(line).getByText('HTTPS')).toBeTruthy()
       expect(within(line).getByText('12')).toBeTruthy()
       expect(within(line).getByText('2 hours ago')).toBeTruthy()
       expect(within(line).getByText('Would be blocked')).toBeTruthy()
@@ -251,7 +251,7 @@ describe('legend and labelled actions', () => {
     setup([sug('s1', { src_ip: '10.0.0.5' })])
     const line = await row('web to db')
     for (const name of ['Accept', 'As CIDR', 'Dismiss']) expect(within(line).getByRole('button', { name }).textContent).toBe(name)
-    expect(await tip(within(line).getByRole('button', { name: 'Accept' }))).toBe('Creates the flow web \u2192 db tcp/443 in the draft.')
+    expect(await tip(within(line).getByRole('button', { name: 'Accept' }))).toBe('Creates the flow web \u2192 db HTTPS (tcp/443) in the draft.')
   })
 
   it('explains As CIDR with the IP of the source', async () => {

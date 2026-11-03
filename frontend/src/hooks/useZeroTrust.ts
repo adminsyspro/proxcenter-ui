@@ -125,7 +125,8 @@ async function readCoverage(url: string, signal?: AbortSignal): Promise<Firewall
  */
 export function useVMFirewallCoverage(connectionId: string | null | undefined) {
   const key = connectionId ? firewallCoverageUrl(connectionId) : null
-  const controller = useRef<AbortController | null>(null)
+  // Every read in flight, the mount read and a refresh alike: a refresh must not lose the controller of the first.
+  const controllers = useRef(new Set<AbortController>())
   const mounted = useRef(false)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -134,13 +135,18 @@ export function useVMFirewallCoverage(connectionId: string | null | undefined) {
     mounted.current = true
     return () => {
       mounted.current = false
-      setTimeout(() => { if (!mounted.current) controller.current?.abort() }, 0)
+      setTimeout(() => {
+        if (mounted.current) return
+        for (const c of controllers.current) c.abort()
+        controllers.current.clear()
+      }, 0)
     }
   }, [])
 
   const fetcher = useCallback((url: string) => {
-    controller.current = new AbortController()
-    return readCoverage(url, controller.current.signal)
+    const controller = new AbortController()
+    controllers.current.add(controller)
+    return readCoverage(url, controller.signal).finally(() => controllers.current.delete(controller))
   }, [])
 
   const { data, error, isLoading, mutate } = useSWR<FirewallCoverage, Error>(key, fetcher, {

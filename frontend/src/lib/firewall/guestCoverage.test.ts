@@ -6,6 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   COVERAGE_BUDGET_MS,
+  COVERAGE_SLOW_CALL_MS,
+  forceFloorMs,
+  isTimeoutError,
   computeGuestCoverage,
   getGuestCoverage,
   guestListHash,
@@ -103,5 +106,73 @@ describe('getGuestCoverage', () => {
     expect(third.computing).toBe(false)
     expect(third.result).toMatchObject({ total: 2, enabled: 2 })
     expect(fetchOptions).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('slow Proxmox (the 1.4.12 trap)', () => {
+  it('starts no call once one took longer than the slow threshold', async () => {
+    let clock = 0
+    const fetchOptions = vi.fn(async () => {
+      clock += COVERAGE_SLOW_CALL_MS + 1
+      return { enable: 1 }
+    })
+
+    const result = await computeGuestCoverage([g(1), g(2), g(3), g(4), g(5), g(6)], {
+      listGuests: async () => [],
+      guestNet: () => ({ nicFirewall: true, vlans: [] }),
+      fetchOptions,
+      now: () => clock,
+    })
+
+    // The two calls of the node's lanes were already started; nothing after.
+    expect(fetchOptions.mock.calls.length).toBeLessThanOrEqual(2)
+    expect(result.unknown).toBeGreaterThanOrEqual(4)
+  })
+
+  it('starts no call once one timed out', async () => {
+    const fetchOptions = vi.fn(async () => { throw Object.assign(new Error('aborted'), { name: 'TimeoutError' }) })
+
+    await computeGuestCoverage(Array.from({ length: 20 }, (_, i) => g(i + 1, `pve${i % 3}`)), {
+      listGuests: async () => [],
+      guestNet: () => ({ nicFirewall: true, vlans: [] }),
+      fetchOptions,
+    })
+
+    expect(fetchOptions.mock.calls.length).toBeLessThanOrEqual(4)
+  })
+
+  it('does not trip on a plain refusal', async () => {
+    const fetchOptions = vi.fn(async () => { throw new Error('HTTP 403') })
+
+    await computeGuestCoverage([g(1), g(2), g(3), g(4)], { listGuests: async () => [], guestNet: () => undefined, fetchOptions })
+
+    expect(fetchOptions).toHaveBeenCalledTimes(4)
+  })
+
+  it('tells timeouts apart', () => {
+    expect(isTimeoutError(Object.assign(new Error('x'), { name: 'TimeoutError' }))).toBe(true)
+    expect(isTimeoutError(Object.assign(new Error('x'), { code: 'ETIMEDOUT' }))).toBe(true)
+    expect(isTimeoutError(new Error('Orchestrator request timed out'))).toBe(true)
+    expect(isTimeoutError(new Error('HTTP 500'))).toBe(false)
+  })
+})
+
+describe('forceFloorMs', () => {
+  it('is 30 s, or ten times the last full read when that was longer', () => {
+    expect(forceFloorMs(0)).toBe(30_000)
+    expect(forceFloorMs(12_000)).toBe(120_000)
+  })
+})
+
+describe('offline nodes', () => {
+  it('asks no guest of an offline node', async () => {
+    const fetchOptions = vi.fn(async () => ({ enable: 1 }))
+
+    const result = await computeGuestCoverage([g(1), { ...g(2, 'pve2'), offline: true }], {
+      listGuests: async () => [], guestNet: () => ({ nicFirewall: true, vlans: [] }), fetchOptions,
+    })
+
+    expect(fetchOptions).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({ enabled: 1, unknown: 1 })
   })
 })

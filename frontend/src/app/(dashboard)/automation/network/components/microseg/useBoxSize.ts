@@ -21,7 +21,7 @@ export function useBoxSize<T extends Element>(delay = BOX_SIZE_DELAY): [RefCallb
     const observer = new ResizeObserver(entries => {
       const rect = entries.at(-1)?.contentRect
       if (!rect) return
-      const next = { width: Math.round(rect.width), height: Math.round(rect.height) }
+      const next = { width: Math.floor(rect.width), height: Math.floor(rect.height) }
       const apply = () => setSize(prev => (prev?.width === next.width && prev?.height === next.height ? prev : next))
       clearTimeout(timer)
       if (measured) {

@@ -112,6 +112,15 @@ export function peekGuestNet(connId: string, type: string, vmid: string | number
   return { nicFirewall: entry.nicFirewall, vlans: entry.vlans ?? [] }
 }
 
+/**
+ * ProxCenter itself set the firewall flag of every NIC of a guest: the cached flag follows at once (the disk figure
+ * does not move with it), so the firewall coverage shows the toggle without reading the config again.
+ */
+export function noteGuestNicFirewall(connId: string, type: string, vmid: string | number, enabled: boolean): void {
+  const entry = store().get(diskTotalKey(connId, type, vmid))
+  if (entry) entry.nicFirewall = enabled
+}
+
 /** VLAN tags of the NICs of a config (`tag=N` on `netN`), sorted, deduplicated. */
 export function configVlans(config: unknown): number[] {
   if (!config || typeof config !== "object") return []

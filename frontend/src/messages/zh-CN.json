@@ -9035,7 +9035,8 @@
       "coverageUnavailable": "覆盖率不可用：{error}",
       "coverageNone": "此连接上没有客户机",
       "stopHeldTitle": "紧急停止已关闭集群防火墙",
-      "stopHeldHint": "在微分段选项卡中恢复以重新启用。"
+      "stopHeldHint": "在微分段选项卡中恢复以重新启用。",
+      "coverageNotMeasured": "未测量：尚无法判定任何客户机"
     },
     "rulesOnDemand": {
       "chip": "打开时加载规则",
@@ -9045,7 +9046,9 @@
       "vmTabCount": "已列出的客户机；打开某个客户机时读取其规则",
       "membersUnknown": "Proxmox 不维护成员列表：客户机的某条规则包含该组时即为成员，规则逐个客户机读取。已部署的微分段区域组的成员可通过其标签得知；此组仅列出已打开的客户机",
       "membersUnknownCount": "{count, number}+ 个 VM",
-      "detachNoRule": "{guest} 没有 {group} 的规则"
+      "detachNoRule": "{guest} 没有 {group} 的规则",
+      "alreadyMember": "{guests} 已带有 {group}：未重复附加",
+      "expandAllHint": "展开 VLAN 组；打开客户机所在行时才加载其规则"
     }
   },
   "deployWizard": {
@@ -12883,7 +12886,8 @@
       "errors": "错误：{list}",
       "notes": "备注：{list}",
       "nothingRecord": "无需写入 Proxmox：应用只会记录该修订。",
-      "stopActive": "在紧急停止使集群防火墙保持关闭期间写入；解除停止后生效"
+      "stopActive": "在紧急停止使集群防火墙保持关闭期间写入；解除停止后生效",
+      "stopActivePlan": "现在应用将在紧急停止使集群防火墙保持关闭期间写入"
     },
     "drifts": {
       "asOf": "截至最近一次完整运行，{time}",

@@ -131,7 +131,7 @@ describe('MicrosegPairStatus', () => {
     ])
 
     fireEvent.mouseOver(screen.getAllByTestId('microseg-status')[0])
-    expect(await screen.findByRole('tooltip')).toHaveTextContent('Allowed by the flow web → db tcp/5432')
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Allowed by the flow web → db PostgreSQL')
   })
 
   it.each([

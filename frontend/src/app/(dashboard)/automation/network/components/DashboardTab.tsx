@@ -48,9 +48,14 @@ interface DashboardTabProps {
 }
 
 const BreakdownRow = ({ icon, label, points, reason }: {
-  icon: string; label: string; points: number; reason: string
+  /** null: the part could not be measured, shown as "-" (never as a confident 0). */
+  icon: string; label: string; points: number | null; reason: string
 }) => {
-  const color = points > 0 ? '#22c55e' : 'text.secondary'
+  const scored = points !== null && points > 0
+  const color = scored ? '#22c55e' : 'text.secondary'
+  let chip = '0'
+  if (points === null) chip = '-'
+  else if (points > 0) chip = `+${points}`
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.75 }}>
@@ -63,10 +68,11 @@ const BreakdownRow = ({ icon, label, points, reason }: {
       </Box>
       <Chip
         size="small"
-        label={points > 0 ? `+${points}` : '0'}
+        label={chip}
+        data-testid={`breakdown-${icon}`}
         sx={{
           height: 22, minWidth: 44, fontWeight: 700, fontSize: '0.75rem',
-          bgcolor: alpha(points > 0 ? '#22c55e' : '#888', 0.18),
+          bgcolor: alpha(scored ? '#22c55e' : '#888', 0.18),
           color,
         }}
       />
@@ -183,7 +189,8 @@ function HeroSkeleton() {
   )
 }
 
-type ScoreParts = { firewall: number; policy: number; vmCoverage: number; coveragePercent: number; total: number }
+/** `coveragePercent` null: no guest could be told apart, the coverage part is not measured (it adds nothing). */
+type ScoreParts = { firewall: number; policy: number; vmCoverage: number; coveragePercent: number | null; total: number }
 
 function HeroScore({ color, label, parts, protectedCount, measured, totalRules, securityGroups, firewallEnabled, hasStrictPolicy, indicators, t }: {
   color: string; label: string; parts: ScoreParts; protectedCount: number; measured: number; totalRules: number; securityGroups: number
@@ -260,8 +267,10 @@ function HeroScore({ color, label, parts, protectedCount, measured, totalRules, 
           <BreakdownRow
             icon="ri-computer-line"
             label={t('networkPage.vmCoverageComponent')}
-            points={parts.vmCoverage}
-            reason={t('networkPage.coverageReason', { percent: Math.round(parts.coveragePercent) })}
+            points={parts.coveragePercent === null ? null : parts.vmCoverage}
+            reason={parts.coveragePercent === null
+              ? t('networkPage.dashboard.coverageNotMeasured')
+              : t('networkPage.coverageReason', { percent: Math.round(parts.coveragePercent) })}
           />
         </Box>
       </Collapse>
@@ -356,8 +365,8 @@ export default function DashboardTab({
   })
 
   // Score out of 100 in three parts; the guests whose state is unknown are left out of the coverage.
-  const coverageShare = coveragePercent(coverage) ?? 0
-  const parts: ScoreParts = { firewall: firewallEnabled ? 30 : 0, policy: hasStrictPolicy ? 25 : 0, vmCoverage: Math.round(coverageShare * 0.45), coveragePercent: coverageShare, total: 0 }
+  const coverageShare = coveragePercent(coverage)
+  const parts: ScoreParts = { firewall: firewallEnabled ? 30 : 0, policy: hasStrictPolicy ? 25 : 0, vmCoverage: Math.round((coverageShare ?? 0) * 0.45), coveragePercent: coverageShare, total: 0 }
   parts.total = parts.firewall + parts.policy + parts.vmCoverage
   const band = scoreBand(parts.total)
   const scoreColor = phase.hero === 'ready' ? BAND_COLOR[band] : theme.palette.text.disabled

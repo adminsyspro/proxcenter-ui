@@ -72,11 +72,18 @@ export default function SecurityGroupMembersDialog({
 
     const done: VMFirewallInfo[] = []
     const failed: string[] = []
+    const already: string[] = []
 
     // Sequential on purpose: PVE rewrites the guest's rule file on each insert,
     // and parallel inserts on the same guest list race for it.
     for (const guest of selected) {
       try {
+        // A guest whose rules were not read may carry the group already (UA44): one read for it, and no duplicate.
+        const rules = guest.rulesLoaded ? guest.rules : await loadGuestRules(guest)
+        if (groupRuleIn(rules, groupName)) {
+          already.push(guestLabel(guest))
+          continue
+        }
         await firewallAPI.addVMRule(connectionId, guest.node, guest.type, guest.vmid, {
           type: 'group',
           action: groupName,
@@ -99,6 +106,10 @@ export default function SecurityGroupMembersDialog({
 
     if (failed.length > 0) {
       showToast(t('firewall.membersAttachFailed', { guests: failed.join(', ') }), 'error')
+    }
+
+    if (already.length > 0) {
+      showToast(t('networkPage.rulesOnDemand.alreadyMember', { guests: already.join(', '), group: groupName }), 'info')
     }
   }
 

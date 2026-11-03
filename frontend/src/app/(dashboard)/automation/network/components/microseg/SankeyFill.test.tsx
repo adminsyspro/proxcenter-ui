@@ -108,6 +108,30 @@ describe('the Sankey diagram fills the map box', () => {
     expect(sourceBarX(svg())).toBe('210')
   })
 
+  it('starts filling at 735 px and keeps filling down to 720 px (no flip around the threshold)', () => {
+    const svg = draw()
+    resize(728, 700)
+    expect(svg().getAttribute('data-fill')).toBe('false')
+    resize(735, 700)
+    act(() => { vi.advanceTimersByTime(BOX_SIZE_DELAY) })
+    expect(svg().getAttribute('data-fill')).toBe('true')
+    resize(725, 700)
+    act(() => { vi.advanceTimersByTime(BOX_SIZE_DELAY) })
+    expect(svg().getAttribute('data-fill')).toBe('true')
+    resize(719, 700)
+    act(() => { vi.advanceTimersByTime(BOX_SIZE_DELAY) })
+    expect(svg().getAttribute('data-fill')).toBe('false')
+    resize(728, 700)
+    act(() => { vi.advanceTimersByTime(BOX_SIZE_DELAY) })
+    expect(svg().getAttribute('data-fill')).toBe('false')
+  })
+
+  it('rounds a fractional box size down (a fractional zoom must not make a phantom scrollbar)', () => {
+    const svg = draw()
+    resize(1200.9, 700.7)
+    expect(svg().getAttribute('viewBox')).toBe('0 0 1200 700')
+  })
+
   it('keeps the compact diagram where the browser has no ResizeObserver', () => {
     vi.stubGlobal('ResizeObserver', undefined)
     const svg = draw()

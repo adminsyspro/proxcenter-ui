@@ -62,7 +62,7 @@ export function preflightMessage(check: PreflightCheck): PreflightMessage {
 /** The cluster firewall is off because the emergency stop switched it off: lifting the stop is the fix, not the wizard. */
 export function heldByStop(check: PreflightCheck): boolean {
   return check.id === 'cluster_firewall' && check.status !== 'pass'
-    && (check.detail?.reason === 'emergency_stop' || check.detail?.held_by_stop === true)
+    && check.detail?.held_by_stop === true
 }
 
 /** Both fixes the orchestrator names are done by the deployment wizard (it enables the cluster firewall last). */

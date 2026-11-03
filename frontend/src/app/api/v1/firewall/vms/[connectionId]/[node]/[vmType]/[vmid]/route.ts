@@ -114,8 +114,8 @@ async function putHandler(req: NextRequest, ctx: RouteContext) {
       () => orchestrator.put(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/options`, body),
       async () => pveDirect.updateVMOptions(await getConnectionById(connectionId), node, vmType, vmid, body),
     )
-    // The Dashboard coverage counted this guest's options as they were (UA44).
-    forgetGuestCoverage(connectionId)
+    // The coverage read this guest's options as they were: it reads them again, alone (UA44).
+    forgetGuestCoverage(connectionId, { type: vmType, vmid })
 
     return NextResponse.json(result)
   } catch (e: any) {

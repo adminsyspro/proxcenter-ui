@@ -17,12 +17,11 @@ import { getInventoryFromCache } from '@/lib/cache/inventoryCache'
 import { pveFetch } from '@/lib/proxmox/client'
 import { peekGuestNet } from '@/lib/inventory/guestDiskTotals'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
-import * as pveDirect from '@/lib/firewall/pveDirect'
-import { getGuestCoverage, type CoverageGuest } from '@/lib/firewall/guestCoverage'
+import { getGuestCoverage, type CoverageGuest, type GuestOptions } from '@/lib/firewall/guestCoverage'
 
 type RouteContext = { params: Promise<{ connectionId: string }> }
 
-function toGuest(raw: any): CoverageGuest | null {
+function toGuest(raw: any, offlineNodes: Set<string>): CoverageGuest | null {
   if (!raw || raw.template === 1 || raw.template === true) return null
   if (raw.type !== 'qemu' && raw.type !== 'lxc') return null
   if (raw.vmid === undefined || raw.vmid === null || !raw.node) return null
@@ -34,6 +33,7 @@ function toGuest(raw: any): CoverageGuest | null {
     name: typeof raw.name === 'string' ? raw.name : undefined,
     status: typeof raw.status === 'string' ? raw.status : undefined,
     tags: parseTags(raw.tags),
+    offline: offlineNodes.has(String(raw.node)),
   }
 }
 
@@ -46,18 +46,45 @@ function parseTags(raw: unknown): string[] {
 }
 
 /**
- * The guests of the connection: from the inventory the app already keeps (no call), or one /cluster/resources
- * read when it is cold. Only the union view of the tenant: a vDC-narrowed entry holds a subset of the guests.
+ * The guests of the connection, with the offline flag of their node: from the inventory the app already keeps (no
+ * call), or one /cluster/resources read (guests and nodes) when it is cold. Only the union view of the tenant: a
+ * vDC-narrowed entry holds a subset of the guests.
  */
 async function listGuests(tenantId: string, connectionId: string, conn: () => Promise<any>): Promise<CoverageGuest[]> {
   const cached = getInventoryFromCache(tenantId, null)
   const cluster = cached.status === 'miss' ? null : cached.data.clusters.find((c: any) => c?.id === connectionId)
 
-  const raw: any[] = cluster
-    ? (cluster.nodes ?? []).flatMap((n: any) => (n?.guests ?? []).map((g: any) => ({ ...g, node: g?.node ?? n?.node })))
-    : (await pveFetch<any[]>(await conn(), '/cluster/resources?type=vm')) ?? []
+  if (cluster) {
+    const nodes: any[] = cluster.nodes ?? []
+    const offline = new Set(nodes.filter(n => n?.node && n.status !== 'online').map(n => String(n.node)))
+    const raw = nodes.flatMap(n => (n?.guests ?? []).map((g: any) => ({ ...g, node: g?.node ?? n?.node })))
 
-  return raw.map(toGuest).filter((g): g is CoverageGuest => g !== null)
+    return raw.map(g => toGuest(g, offline)).filter((g): g is CoverageGuest => g !== null)
+  }
+
+  const resources: any[] = (await pveFetch<any[]>(await conn(), '/cluster/resources')) ?? []
+  const offline = new Set(resources.filter(r => r?.type === 'node' && r.status !== 'online').map(r => String(r.node)))
+
+  return resources.map(r => toGuest(r, offline)).filter((g): g is CoverageGuest => g !== null)
+}
+
+/**
+ * One guest's firewall options. Direct to Proxmox (Community), the long read budget: a slow answer is waited for
+ * instead of dropped while Proxmox still works on it, and is not taken for a dead node (no failover).
+ */
+function optionsReader(connectionId: string, conn: () => Promise<any>) {
+  const orchestrator = getOrchestratorClient()
+
+  return (g: CoverageGuest) => orchestratorOrPve<GuestOptions>(
+    'firewall/coverage',
+    () => orchestrator.get(`/firewall/vms/${connectionId}/${encodeURIComponent(g.node)}/${g.type}/${encodeURIComponent(g.vmid)}/options`),
+    async () => pveFetch<GuestOptions>(
+      await conn(),
+      `/nodes/${encodeURIComponent(g.node)}/${g.type}/${encodeURIComponent(g.vmid)}/firewall/options`,
+      {},
+      { slowRead: true },
+    ),
+  )
 }
 
 async function getHandler(req: NextRequest, ctx: RouteContext) {
@@ -78,17 +105,12 @@ async function getHandler(req: NextRequest, ctx: RouteContext) {
 
     let connData: Promise<any> | null = null
     const conn = () => (connData ??= getConnectionById(connectionId))
-    const orchestrator = getOrchestratorClient()
     const force = new URL(req.url).searchParams.get('refresh') === '1'
 
     const { result, computing } = await getGuestCoverage(connectionId, {
       listGuests: () => listGuests(tenantId, connectionId, conn),
       guestNet: g => peekGuestNet(connectionId, g.type, g.vmid),
-      fetchOptions: g => orchestratorOrPve(
-        'firewall/coverage',
-        () => orchestrator.get(`/firewall/vms/${connectionId}/${encodeURIComponent(g.node)}/${g.type}/${encodeURIComponent(g.vmid)}/options`),
-        async () => pveDirect.getVMOptions(await conn(), encodeURIComponent(g.node), g.type, encodeURIComponent(g.vmid)),
-      ),
+      fetchOptions: optionsReader(connectionId, conn),
     }, { force })
 
     return NextResponse.json({ ...result, computing })

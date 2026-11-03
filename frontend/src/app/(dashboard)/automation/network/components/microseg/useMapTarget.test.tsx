@@ -3,13 +3,12 @@
  * clear wins over the link, and the target follows the inventory. renderWithProviders stubs next/navigation for every
  * file that imports it, so this file mocks it itself and renders the hook alone.
  */
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 
-const navigation = vi.hoisted(() => ({ search: '', replace: vi.fn() }))
+const navigation = vi.hoisted(() => ({ search: '' }))
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(navigation.search),
-  useRouter: () => ({ replace: navigation.replace }),
   usePathname: () => '/automation/network',
 }))
 
@@ -21,9 +20,12 @@ const web1 = guest(100, 'web-1')
 const db1 = guest(200, 'db-1')
 const members = new Map<string, ZoneMember[]>([['zd', [{ ref: { node: 'pve1', type: 'qemu', vmid: 200 }, guest: db1, pending: false }]]])
 
+const replaceState = vi.spyOn(window.history, 'replaceState')
+afterEach(() => { window.location.hash = '' })
+
 function render(search: string, guests: PolicyGuest[] = [web1, db1]) {
   navigation.search = search
-  navigation.replace.mockClear()
+  replaceState.mockClear()
   return renderHook(({ list }) => useMapTarget(list, members), { initialProps: { list: guests } })
 }
 
@@ -71,15 +73,22 @@ describe('the ?vm= link once used', () => {
   it('leaves the address on a pick or a clear, keeping the other parameters', () => {
     const hook = render('vm=200&tab=x')
     act(() => hook.result.current.pick(null))
-    expect(navigation.replace).toHaveBeenCalledWith('/automation/network?tab=x', { scroll: false })
+    expect(replaceState).toHaveBeenCalledWith(window.history.state, '', '/automation/network?tab=x')
     const alone = render('vm=200')
     act(() => alone.result.current.pick(alone.result.current.candidates[0]))
-    expect(navigation.replace).toHaveBeenCalledWith('/automation/network', { scroll: false })
+    expect(replaceState).toHaveBeenCalledWith(window.history.state, '', '/automation/network')
+  })
+
+  it('keeps the hash of the address', () => {
+    window.location.hash = '#map'
+    const hook = render('vm=200')
+    act(() => hook.result.current.pick(null))
+    expect(replaceState).toHaveBeenCalledWith(window.history.state, '', '/automation/network#map')
   })
 
   it('touches no address without the parameter', () => {
     const hook = render('')
     act(() => hook.result.current.pick(hook.result.current.candidates[0]))
-    expect(navigation.replace).not.toHaveBeenCalled()
+    expect(replaceState).not.toHaveBeenCalled()
   })
 })

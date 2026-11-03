@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 
 import { targetCandidates, targetPeers, type TargetGuest } from './targetModel'
 import type { PolicyGuest, ZoneMember } from './zoneModel'
@@ -12,7 +12,6 @@ import type { PolicyGuest, ZoneMember } from './zoneModel'
  */
 export function useMapTarget(guests: PolicyGuest[], membersByZone: ReadonlyMap<string, ZoneMember[]>) {
   const params = useSearchParams()
-  const router = useRouter()
   const pathname = usePathname()
   const linked = params?.get('vm')?.trim() ?? ''
   const candidates = useMemo(() => targetCandidates(guests, membersByZone), [guests, membersByZone])
@@ -30,9 +29,9 @@ export function useMapTarget(guests: PolicyGuest[], membersByZone: ReadonlyMap<s
       const rest = new URLSearchParams(params.toString())
       rest.delete('vm')
       const query = rest.toString()
-      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+      window.history.replaceState(window.history.state, '', `${pathname}${query ? `?${query}` : ''}${window.location.hash}`)
     }
-  }, [params, router, pathname])
+  }, [params, pathname])
   const showPanel = useCallback(() => setPanelOpen(true), [])
   const hidePanel = useCallback(() => setPanelOpen(false), [])
 

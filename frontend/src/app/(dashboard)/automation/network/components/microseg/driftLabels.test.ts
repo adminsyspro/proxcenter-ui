@@ -67,7 +67,7 @@ describe('driftLabel', () => {
     const t = translator('en')
     expect(driftLabel(SAMPLES[0], t).detail).toContain('web-1')
     expect(driftLabel(SAMPLES[1], t).detail).toContain('net0, net1')
-    expect(driftLabel(SAMPLES[2], t).detail).toContain('position 3 (10.0.0.0/8 tcp/22)')
+    expect(driftLabel(SAMPLES[2], t).detail).toContain('position 3 (10.0.0.0/8 SSH)')
     expect(driftLabel(SAMPLES[4], t).detail).toContain('pcz-web')
     expect(driftLabel(SAMPLES[5], t).detail).toContain('web')
   })

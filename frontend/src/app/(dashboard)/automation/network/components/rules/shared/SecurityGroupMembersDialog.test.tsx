@@ -354,4 +354,25 @@ describe('SecurityGroupMembersDialog with rules read on demand (UA44)', () => {
     await waitFor(() => expect(showToast).toHaveBeenCalledWith('guest-153 (153) carries no rule of sg-web', 'info'))
     expect(deleteVMRule).not.toHaveBeenCalled()
   })
+
+  it('reads the rules of a selected guest not read yet before attaching, and skips it when it carries the group', async () => {
+    const unreadMember = guest(160, { name: 'hidden-member', rulesLoaded: false })
+    const unreadOther = guest(161, { name: 'plain', rulesLoaded: false })
+    const loadGuestRules = vi.fn(async (g: VMFirewallInfo) => (g.vmid === 160 ? [groupRule(GROUP, 5)] : []))
+
+    const { dialogProps } = renderDialog({
+      guests: [unreadMember, unreadOther],
+      membership: { members: [], known: false },
+      loadGuestRules,
+    })
+    await chooseGuest('hidden-member (160)')
+    await chooseGuest('plain (161)')
+    fireEvent.click(screen.getByRole('button', { name: 'Attach' }))
+
+    await waitFor(() => expect(addVMRule).toHaveBeenCalledTimes(1))
+    expect(addVMRule).toHaveBeenCalledWith(CONNECTION, 'pve1', 'qemu', 161, { type: 'group', action: GROUP, enable: 1 })
+    expect(loadGuestRules).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('hidden-member (160) already carry sg-web: not attached again', 'info'))
+    expect(dialogProps.onChanged).toHaveBeenCalledWith([unreadOther])
+  })
 })

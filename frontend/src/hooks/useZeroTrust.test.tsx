@@ -114,6 +114,23 @@ describe('useVMFirewallCoverage', () => {
     vi.stubGlobal('fetch', realFetch)
   })
 
+  it('aborts both the first read and a refresh still in flight when the component goes away', async () => {
+    const signals: AbortSignal[] = []
+    vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.signal) signals.push(init.signal)
+      return new Promise<Response>(() => {})
+    }))
+
+    const { result, unmount } = renderHook(() => useVMFirewallCoverage('conn-1'), { wrapper })
+    await waitFor(() => expect(signals).toHaveLength(1))
+    act(() => { void result.current.refresh() })
+    await waitFor(() => expect(signals).toHaveLength(2))
+    unmount()
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(signals.every(s => s.aborted)).toBe(true)
+  })
+
   it('surfaces a server error', async () => {
     server.use(http.get('*/api/v1/firewall/coverage/:conn', () => HttpResponse.json({ error: 'boom' }, { status: 500 })))
 

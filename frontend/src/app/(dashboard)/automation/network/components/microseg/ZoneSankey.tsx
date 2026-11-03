@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { serviceTokensTitle } from '@/lib/network/serviceNames'
 
 import type { MatrixEnd, MatrixModel } from './matrixModel'
-import { BAR_W, FOOT, HEAD, buildSankey, type Ribbon, type SankeyLayout, type SankeyNode } from './sankeyModel'
+import { BAR_W, FILL_ENTER_WIDTH, FILL_MIN_WIDTH, FOOT, HEAD, buildSankey, type Ribbon, type SankeyLayout, type SankeyNode } from './sankeyModel'
 import { useBoxSize } from './useBoxSize'
 import { EDGE_COLORS, EXTERNAL_ID, type FlowFilters } from './zoneGraph'
 import { onKeys } from './ZoneNode'
@@ -126,7 +126,12 @@ export default function ZoneSankey({ model, filters, selectedCell, selectedZone,
   // The box under the hint line: the diagram fills it (below FILL_MIN_WIDTH, or before it is measured, the compact
   // drawing scales to its width instead).
   const [measure, size] = useBoxSize<HTMLDivElement>()
-  const layout = useMemo(() => buildSankey(model, filters, size), [model, filters, size])
+  // Hysteresis: the diagram starts filling the box at FILL_ENTER_WIDTH and keeps filling it down to FILL_MIN_WIDTH, so a
+  // box that wavers around the threshold (a scrollbar appearing) does not flip between the two drawings.
+  const [filling, setFilling] = useState(false)
+  const fillNow = !!size && size.width >= (filling ? FILL_MIN_WIDTH : FILL_ENTER_WIDTH)
+  if (fillNow !== filling) setFilling(fillNow)
+  const layout = useMemo(() => buildSankey(model, filters, fillNow ? size : null), [model, filters, size, fillNow])
   const lit = litRibbons(layout, focus, selectedCell, selectedZone)
   const byWidth = useMemo(() => [...layout.ribbons].sort((a, b) => b.width - a.width), [layout.ribbons])
   const height = HEAD + layout.height + FOOT

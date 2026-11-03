@@ -10,8 +10,7 @@ import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 import { withAudit } from '@/lib/audit/withAudit'
-import { invalidateGuestDiskTotal } from '@/lib/inventory/guestDiskTotals'
-import { forgetGuestCoverage } from '@/lib/firewall/guestCoverage'
+import { noteGuestNicFirewall } from '@/lib/inventory/guestDiskTotals'
 
 type RouteContext = {
   params: Promise<{ connectionId: string; node: string; vmType: string; vmid: string }>
@@ -40,9 +39,8 @@ async function putHandler(req: NextRequest, ctx: RouteContext) {
       // Second level of the guest firewall: rewrites firewall=0/1 on every NIC
       async () => pveDirect.toggleVMNICFirewall(await getConnectionById(connectionId), node, vmType, vmid, body.enable),
     )
-    // The cached NIC flag and the Dashboard coverage read from it are stale now (UA44).
-    invalidateGuestDiskTotal(connectionId, vmType, vmid)
-    forgetGuestCoverage(connectionId)
+    // The cached NIC flag follows the toggle; the coverage reads it on every answer, nothing to forget (UA44).
+    noteGuestNicFirewall(connectionId, vmType, vmid, !!body.enable)
 
     return NextResponse.json(result)
   } catch (e: any) {

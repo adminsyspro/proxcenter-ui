@@ -21,6 +21,8 @@ export const FOOT = 16
 /** The compact drawing (scaled to the map), used when no size is known or the map is narrower than FILL_MIN_WIDTH. */
 export const COMPACT_W = 960
 export const FILL_MIN_WIDTH = 720
+/** The width at which the compact drawing switches to filling the box; it keeps filling down to FILL_MIN_WIDTH (hysteresis). */
+export const FILL_ENTER_WIDTH = 735
 /** Filling the map: the bars at about 22 % and 78 % of the width, the widest observed ribbon at most MAX_FILL_W. */
 export const LEFT_AT = 0.22
 export const RIGHT_AT = 0.78

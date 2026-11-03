@@ -10,7 +10,7 @@ import PlanSteps from './PlanSteps'
 import type { PolicyGuest } from './zoneModel'
 
 /** The orchestrator's note that a write was made while the emergency stop holds the cluster firewall off. */
-const STOP_NOTE_RE = /emergency stop/i
+const STOP_NOTE_RE = /written while the emergency stop/i
 
 type Props = { run: MicrosegRun; guests: PolicyGuest[] }
 

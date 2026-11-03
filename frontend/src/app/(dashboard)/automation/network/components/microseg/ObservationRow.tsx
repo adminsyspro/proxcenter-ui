@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Box, Checkbox, Chip, Collapse, IconButton, TableCell, TableRow, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
+import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 
 import { OneLine } from './dialogParts'
@@ -59,7 +60,8 @@ export default function ObservationRow({ suggestion: s, zones, checked, busy, ma
   const when = (iso: string) => formatWhen(format, iso)
   const source = endpoint(s.src_zone_id, s.src_ip, zones, t)
   const destination = endpoint(s.dst_zone_id, s.dst_ip, zones, t)
-  const service = s.dport ? `${s.proto}/${s.dport}` : s.proto
+  const service = serviceLabel(s.proto, s.dport)
+  const serviceTip = serviceTitle(s.proto, s.dport)
   const pending = s.status === 'pending'
   const share = hitsShare(s.hits, maxHits)
   const dot = sourceDot(s, zones)
@@ -93,7 +95,7 @@ export default function ObservationRow({ suggestion: s, zones, checked, busy, ma
         <TableCell sx={CELL_SX}>
           <Tooltip title={destination}><Typography noWrap fontWeight={600} sx={NAME_SX}>{destination}</Typography></Tooltip>
         </TableCell>
-        <TableCell sx={CELL_SX}><Chip size='small' variant='outlined' label={service} /></TableCell>
+        <TableCell sx={CELL_SX}><Tooltip title={serviceTip}><Chip size='small' variant='outlined' label={service} /></Tooltip></TableCell>
         <TableCell sx={CELL_SX}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant='body2' sx={{ minWidth: 48, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{format.number(s.hits)}</Typography>

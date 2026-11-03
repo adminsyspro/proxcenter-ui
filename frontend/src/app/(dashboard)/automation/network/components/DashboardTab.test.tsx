@@ -180,6 +180,15 @@ describe('DashboardTab guest coverage (UA44)', () => {
     expect(fetchedUrls().filter(u => u.endsWith('/firewall/coverage/conn-1?refresh=1'))).toHaveLength(1)
   })
 
+  it('scores the coverage part as not measured, not as 0 %, when no guest could be told apart', async () => {
+    stubMicrosegRelay({ coverage: { enabled: 0, disabled: 0, unknown: 36 } })
+    renderDashboard({ enable: 1 })
+
+    await screen.findByText('/100')
+    expect(screen.getByTestId('breakdown-ri-computer-line').textContent).toBe('-')
+    expect(screen.getByText('Not measured: no guest could be told apart yet')).toBeInTheDocument()
+  })
+
   it('says the figures are a sample above 200 guests', async () => {
     stubMicrosegRelay({ coverage: { total: 450, measured: 200, enabled: 120, disabled: 80, unknown: 0, sampled: true } })
     renderDashboard({ enable: 1 })

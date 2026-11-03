@@ -32,6 +32,19 @@ describe('SankeyChart', () => {
     expect(queries).toEqual(['?endpoint=ip-pairs&n=100'])
   })
 
+  it('labels an ICMP flow with its protocol alone (no port 0)', async () => {
+    server.use(
+      http.get('*/api/v1/orchestrator/sflow', () => HttpResponse.json([
+        { src_ip: '10.0.0.1', dst_ip: '10.0.0.2', bytes: 100, packets: 1, protocol: 'icmp', dst_port: 0 },
+      ])),
+    )
+
+    renderWithProviders(<SankeyChart />)
+
+    expect(await screen.findByText('icmp')).toBeInTheDocument()
+    expect(screen.queryByText('icmp/0')).not.toBeInTheDocument()
+  })
+
   it('leaves the loading state with no flow drawn when the endpoint fails', async () => {
     server.use(http.get('*/api/v1/orchestrator/sflow', () => HttpResponse.json({}, { status: 503 })))
 

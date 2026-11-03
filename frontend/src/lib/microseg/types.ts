@@ -317,3 +317,32 @@ export type ResolveSuggestionsInput = {
 export type CheckQueued = { queued: boolean; requested_at: string }
 
 export type EmergencyStopResult = { accepted: boolean; applied_by: 'self' | 'leader'; on: boolean }
+
+/** A flow the engine saw towards a zone guest (the orchestrator's in-memory ring, read from the node logs every minute). */
+export type MicrosegEvent = {
+  /** Monotonic per connection, the newest event has the highest: the exact cursor of the paging. */
+  seq: number
+  ts: string
+  node: string
+  vmid: number
+  type: GuestType
+  guest: string
+  /** The zone of the guest the flow reached (its name when the event was seen: a renamed zone keeps the old name on past events). */
+  zone: string
+  /** The zone of the source, empty when the source is in none. */
+  src_zone: string
+  src_ip: string
+  dst_ip: string
+  proto: string
+  dport: number | string
+  verdict: SuggestionKind
+}
+
+/** GET /events: newest first. */
+export type MicrosegEventList = {
+  events: MicrosegEvent[]
+  /** The page stopped at the limit or the ring dropped older lines. */
+  truncated: boolean
+  /** Time of the oldest event returned, null for an empty list. */
+  oldest: string | null
+}

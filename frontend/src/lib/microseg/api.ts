@@ -4,7 +4,7 @@
 // Next relay at /api/v1/firewall/microseg/{connectionId}/<route>.
 
 import type {
-  CheckQueued, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegFlow, MicrosegPolicy,
+  CheckQueued, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegFlow, MicrosegPolicy,
   MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegZone, PolicyUpdate,
   PreflightCheck, ResolveSuggestionsInput, SuggestionKind, SuggestionStatus, ZoneInput, ZoneState,
 } from './types'
@@ -82,6 +82,17 @@ export type RunStarted = { run_id: string }
 
 export type PageParams = { limit?: number; offset?: number }
 export type ListRunsParams = PageParams
+export type ListEventsParams = {
+  limit?: number
+  /** Paging cursor: only the events older than this `seq`, exactly. */
+  before_seq?: number
+  /** RFC3339 time filter: only the events older than it (not for paging, two events may share a second). */
+  before?: string
+  zone?: string
+  verdict?: SuggestionKind
+  /** An IP or a port, as a substring. */
+  q?: string
+}
 export type ListSuggestionsParams = PageParams & {
   kind?: SuggestionKind
   status?: SuggestionStatus
@@ -207,6 +218,11 @@ export function microsegApi(connId: string) {
     },
     getPreflight: async () => (await call<{ checks: PreflightCheck[] }>('GET', 'preflight')).checks,
     getStatus: (signal?: AbortSignal) => call<MicrosegStatus>('GET', 'status', undefined, signal),
+    /** The flows seen towards zone guests, newest first, from the orchestrator's memory (no Proxmox call). */
+    getMicrosegEvents: async (params: ListEventsParams = {}, signal?: AbortSignal): Promise<MicrosegEventList> => {
+      const body = await call<Partial<MicrosegEventList> | null>('GET', `events${query(params)}`, undefined, signal)
+      return { events: body?.events ?? [], truncated: body?.truncated === true, oldest: body?.oldest ?? null }
+    },
   }
 }
 

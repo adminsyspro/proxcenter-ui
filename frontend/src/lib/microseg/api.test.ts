@@ -155,6 +155,22 @@ describe('microsegApi requests', () => {
   })
 })
 
+describe('microsegApi events', () => {
+  it('builds the query of the event ring and fills the envelope', async () => {
+    const api = microsegApi('c1')
+    fetchMock.mockResolvedValue(reply(200, { events: [{ ts: '2026-11-03T10:00:00Z' }], truncated: true, oldest: '2026-11-03T10:00:00Z' }))
+    expect(await api.getMicrosegEvents({ limit: 200, before: '2026-11-03T10:00:00+01:00', zone: 'web', verdict: 'would_block', q: '10.0.0.5' }))
+      .toEqual({ events: [{ ts: '2026-11-03T10:00:00Z' }], truncated: true, oldest: '2026-11-03T10:00:00Z' })
+    expect(lastCall().url).toBe('/api/v1/firewall/microseg/c1/events?limit=200&before=2026-11-03T10%3A00%3A00%2B01%3A00&zone=web&verdict=would_block&q=10.0.0.5')
+    expect(lastCall().method).toBe('GET')
+    fetchMock.mockResolvedValue(reply(200, { events: null }))
+    expect(await api.getMicrosegEvents({ limit: 200 })).toEqual({ events: [], truncated: false, oldest: null })
+    expect(lastCall().url).toBe('/api/v1/firewall/microseg/c1/events?limit=200')
+    fetchMock.mockResolvedValue(reply(503, { code: 'NOT_LEADER', error: 'not the leader' }))
+    expect(await api.getMicrosegEvents().catch(e => e)).toMatchObject({ status: 503, code: 'NOT_LEADER' })
+  })
+})
+
 describe('microsegApi manual check', () => {
   it('posts an empty object to /check and returns the queued answer', async () => {
     fetchMock.mockResolvedValue(reply(202, { queued: true, requested_at: '2026-11-03T10:00:00Z' }))

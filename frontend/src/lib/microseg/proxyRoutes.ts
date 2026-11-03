@@ -61,6 +61,8 @@ export const MICROSEG_ROUTES: MicrosegRoute[] = [
   read(/^runs$/),
   read(/^runs\/[^/]+$/),
   read(/^status$/),
+  // The engine's in-memory ring of flows seen towards zone guests: no Proxmox call.
+  read(/^events$/),
 ]
 
 // Every segment is a plain identifier or a route word: no dot, no slash, no

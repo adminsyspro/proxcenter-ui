@@ -62,6 +62,15 @@ describe('revisions', () => {
     expect(within(older).queryByText('Latest')).toBeNull()
   })
 
+  it('says no "by" for a revision recorded without an author', async () => {
+    setup({ revisions: [rev(9), rev(8, { author: '' }), rev(7, { author: '  ' })] })
+    const empty = await screen.findByRole('listitem', { name: 'Version 8' })
+    expect(within(empty).queryByText(/^by/)).toBeNull()
+    expect(within(empty).getByText(/Nov 2, 2026/)).toBeTruthy()
+    expect(within(screen.getByRole('listitem', { name: 'Version 7' })).queryByText(/^by/)).toBeNull()
+    expect(within(screen.getByRole('listitem', { name: 'Version 9' })).getByText('by ana')).toBeTruthy()
+  })
+
   it('shows the zones of a revision under its chevron', async () => {
     setup({ revisions: [rev(9)] })
     const line = await screen.findByRole('listitem', { name: 'Version 9' })

@@ -28,6 +28,9 @@ export default function RevisionRow({ revision, latest, onRestore }: Props) {
   const flows = revision.snapshot?.flows ?? []
   const counts = revision.snapshot ? t('counts', { zones: zones.length, flows: flows.length }) : ''
   const version = t('version', { version: revision.version })
+  // Old revisions may carry no author: no "by" left hanging then.
+  const author = revision.author?.trim()
+  const by = author ? t('by', { author }) : ''
 
   return (
     <Box role='listitem' aria-label={version} sx={{ borderBottom: 1, borderColor: 'divider' }}>
@@ -38,9 +41,11 @@ export default function RevisionRow({ revision, latest, onRestore }: Props) {
         <i className='ri-history-line' style={{ fontSize: 16, flexShrink: 0 }} />
         <Typography noWrap fontWeight={600} sx={{ flexShrink: 0 }}>{version}</Typography>
         {latest && <Chip size='small' color='primary' variant='outlined' label={t('latest')} sx={{ flexShrink: 0 }} />}
-        <Tooltip title={t('by', { author: revision.author })}>
-          <Typography noWrap color='text.secondary' sx={{ flex: '0 1 auto', maxWidth: 180 }}>{t('by', { author: revision.author })}</Typography>
-        </Tooltip>
+        {by && (
+          <Tooltip title={by}>
+            <Typography noWrap color='text.secondary' sx={{ flex: '0 1 auto', maxWidth: 180 }}>{by}</Typography>
+          </Tooltip>
+        )}
         <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{when}</Typography>
         <Tooltip title={counts}>
           <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{counts}</Typography>

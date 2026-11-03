@@ -44,14 +44,21 @@ const FOCUS_RING = { outline: '2px solid', outlineColor: 'primary.main', outline
 const tint = (color: string, amount: number) => (/^#[0-9a-f]{3,8}$/i.test(color) ? alpha(color, amount) : 'transparent')
 
 /** The width of the line of text at the top of a circle (a chord of the circle, 26 px under its top). */
-const topChord = (r: number) => Math.max(60, Math.floor(2 * Math.sqrt(r * r - (r - 26) * (r - 26)) - 16))
+export const topChord = (r: number) => Math.max(60, Math.floor(2 * Math.sqrt(r * r - (r - 26) * (r - 26)) - 16))
+
+/**
+ * The title line of a circle: at least the chord of the circle, wider when its text needs it (centred, it then goes
+ * past the border of the circle), so a zone name is never cut.
+ */
+export function circleTitleSx(r: number) {
+  return {
+    position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', width: 'max-content', minWidth: topChord(r),
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, whiteSpace: 'nowrap',
+  } as const
+}
 
 function CircleTitle({ r, children }: { r: number; children: ReactNode }) {
-  return (
-    <Box sx={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', width: topChord(r), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, minWidth: 0 }}>
-      {children}
-    </Box>
-  )
+  return <Box sx={circleTitleSx(r)}>{children}</Box>
 }
 
 /** A zone: a circle in its colour, its name, state and member count on its top line, its guests inside. */
@@ -93,7 +100,7 @@ function ZoneNodeComponent({ id, data, selected }: NodeProps) {
               sx={{ position: 'absolute', bottom: -2, right: -3, width: 8, height: 8, borderRadius: '50%', bgcolor: STATE_DOT[state], border: '1.5px solid', borderColor: 'background.paper' }}
             />
           </Box>
-          <Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', minWidth: 0, fontSize: '0.85rem' }}>{zone.name}</Typography>
+          <Typography noWrap fontWeight={600} sx={{ flexShrink: 0, fontSize: '0.85rem' }}>{zone.name}</Typography>
           <Typography noWrap variant='caption' color='text.secondary' sx={{ flexShrink: 0 }}>{d.members === null ? '-' : members}</Typography>
         </CircleTitle>
       </Box>
@@ -163,7 +170,8 @@ function GuestNodeComponent({ id, data, selected }: NodeProps) {
         >
           <StatusIcon type='vm' vmType={m.type} status={m.status} size={14} />
         </Box>
-        <Typography noWrap sx={{ fontSize: '0.65rem', lineHeight: 1.4, maxWidth: GUEST_W, mt: 0.25 }}>{m.name}</Typography>
+        {/* On a paper background: an edge passing under the guest goes behind its name, not through it. */}
+        <Typography noWrap sx={{ fontSize: '0.65rem', lineHeight: 1.4, maxWidth: GUEST_W, mt: 0.25, px: 0.25, borderRadius: 0.5, bgcolor: 'background.paper' }}>{m.name}</Typography>
       </Box>
     </Tooltip>
   )

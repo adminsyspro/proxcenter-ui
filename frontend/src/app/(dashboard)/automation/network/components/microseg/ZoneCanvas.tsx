@@ -23,12 +23,20 @@ export function fitKey(nodes: Node[]): string {
 /** Above every edge (their z-index stays under 10) and every node: a label is never painted over by a line or a circle. */
 export const LABEL_LAYER_Z = 1000
 
+/**
+ * The guests (and their "+N") sit above every edge but under the edge labels: their names are never painted over by a
+ * line. The edges end on the border of a guest glyph, so raising the glyph hides no arrowhead.
+ */
+export const GUEST_LAYER_Z = 50
+
 /** The look of the canvas: dimmed items, the label layer on top, the controls and the mini-map in the theme. */
 export function canvasSx(theme: Theme) {
   return {
     width: '100%', height: '100%',
     '& .microseg-dim': { opacity: 0.25 },
     '& .react-flow__edgelabel-renderer': { zIndex: LABEL_LAYER_Z },
+    // React Flow writes the z-index of a node inline: only !important lifts the guests above the edges.
+    '& .react-flow__node-guest, & .react-flow__node-more': { zIndex: `${GUEST_LAYER_Z} !important` },
     '& .react-flow__node, & .react-flow__edge, & .react-flow__edgelabel-renderer > div': { transition: 'opacity 150ms' },
     '@media (prefers-reduced-motion: reduce)': { '& *': { transition: 'none !important' } },
     '& .react-flow__controls': { boxShadow: theme.shadows[1], borderRadius: 1, overflow: 'hidden' },

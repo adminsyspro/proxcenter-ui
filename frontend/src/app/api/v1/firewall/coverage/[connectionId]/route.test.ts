@@ -47,6 +47,7 @@ vi.mock('@/lib/inventory/guestDiskTotals', () => ({
 
 import { setCachedInventory, invalidateInventoryCache } from '@/lib/cache/inventoryCache'
 import { forgetGuestCoverage, resetGuestCoverage, sampleGuests } from '@/lib/firewall/guestCoverage'
+import { resetConnectionPools } from '@/lib/inventory/connectionPool'
 
 import { GET } from './route'
 
@@ -101,6 +102,7 @@ const get = (searchParams?: Record<string, string>) => callRoute(GET, { params: 
 beforeEach(() => {
   vi.clearAllMocks()
   resetGuestCoverage()
+  resetConnectionPools()
   invalidateInventoryCache()
   h.nic.clear()
   h.configs.clear()

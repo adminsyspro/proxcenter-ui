@@ -26,16 +26,19 @@
 import { createHash } from 'node:crypto'
 
 import { mapWithConcurrency } from '@/lib/inventory/concurrency'
+import { createCallGate, POOL_GLOBAL_CONCURRENCY, POOL_NODE_CONCURRENCY, POOL_SLOW_CALL_MS, type SlotRunner } from '@/lib/inventory/connectionPool'
+
+export { isTimeoutError } from '@/lib/inventory/connectionPool'
 
 export const COVERAGE_TTL_MS = 10 * 60_000
 export const COVERAGE_MAX_GUESTS = 200
-export const COVERAGE_GLOBAL_CONCURRENCY = 4
-export const COVERAGE_NODE_CONCURRENCY = 2
+export const COVERAGE_GLOBAL_CONCURRENCY = POOL_GLOBAL_CONCURRENCY
+export const COVERAGE_NODE_CONCURRENCY = POOL_NODE_CONCURRENCY
 export const COVERAGE_BUDGET_MS = 120_000
 export const COVERAGE_FORCE_MIN_MS = 30_000
 export const COVERAGE_WAIT_MS = 20_000
 /** A call slower than this, or one that timed out, stops the read: no further call starts. */
-export const COVERAGE_SLOW_CALL_MS = 5_000
+export const COVERAGE_SLOW_CALL_MS = POOL_SLOW_CALL_MS
 
 export type CoverageGuest = {
   vmid: string
@@ -107,6 +110,11 @@ export type CoverageDeps = {
    * know: the second, and last, Proxmox call for that guest. Absent: such a guest stays unknown.
    */
   fetchNet?: (guest: CoverageGuest) => Promise<GuestNet | null | undefined>
+  /**
+   * Where the per-guest calls take their slot: the connection's shared pool (connectionSlots), so the coverage and
+   * GET /api/v1/vms never add up on one connection. Absent: a private limiter of COVERAGE_NODE_CONCURRENCY per node.
+   */
+  slots?: SlotRunner
   now?: () => number
 }
 
@@ -265,16 +273,6 @@ function nodeLimiter(limit: number) {
   }
 }
 
-/** A timeout of the call itself (pveFetch, undici, the orchestrator client), not a refusal. */
-export function isTimeoutError(err: unknown): boolean {
-  const e = err as { name?: string; code?: string; message?: string; cause?: { name?: string } } | null
-  if (!e) return false
-  if (e.name === 'TimeoutError' || e.cause?.name === 'TimeoutError') return true
-  if (e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.code === 'UND_ERR_HEADERS_TIMEOUT') return true
-
-  return /time(d)? ?out/i.test(String(e.message ?? ''))
-}
-
 /** Options that switch the guest firewall on. */
 const optionsOn = (options: GuestOptions | null | undefined) => !!options && Number(options.enable) === 1
 
@@ -286,26 +284,11 @@ const optionsOn = (options: GuestOptions | null | undefined) => !!options && Num
  */
 export async function readGuestOptions(guests: CoverageGuest[], deps: CoverageDeps, previous?: Map<string, Known>): Promise<Map<string, Known>> {
   const now = deps.now ?? Date.now
-  const deadline = now() + COVERAGE_BUDGET_MS
-  const onNode = nodeLimiter(COVERAGE_NODE_CONCURRENCY)
-  // Set by the first timeout or slow call: from then on no call starts (the 1.4.12 lesson, a slow Proxmox fed with
-  // more calls only gets slower, and a call the client gives up on still holds its worker).
-  let tripped = false
+  const onNode: SlotRunner = deps.slots ?? nodeLimiter(COVERAGE_NODE_CONCURRENCY)
+  // Tripped by the first timeout or slow call: from then on no call starts.
+  const gate = createCallGate({ deadline: now() + COVERAGE_BUDGET_MS, slowCallMs: COVERAGE_SLOW_CALL_MS, now })
+  const timed = gate.run
   const out = new Map<string, Known>()
-
-  /** One Proxmox call, or null when none may start or it failed; trips on a timeout or a slow answer. */
-  const timed = async <T>(call: () => Promise<T | null | undefined>): Promise<T | null> => {
-    if (tripped || now() > deadline) return null
-    const started = now()
-    try {
-      const answer = (await call()) ?? null
-      if (now() - started > COVERAGE_SLOW_CALL_MS) tripped = true
-      return answer
-    } catch (err) {
-      if (isTimeoutError(err) || now() - started > COVERAGE_SLOW_CALL_MS) tripped = true
-      return null
-    }
-  }
 
   await mapWithConcurrency(interleaveByNode(guests.filter(g => !g.offline)), COVERAGE_GLOBAL_CONCURRENCY, async guest => {
     const known = await onNode(guest.node, async (): Promise<Known> => {

@@ -350,3 +350,23 @@ describe('config read for a guest whose NICs the inventory does not know (UA46)'
     expect(result.guests.find(r => r.vmid === '1')).toMatchObject({ optionsEnabled: true, nicFirewall: true, enabled: true })
   })
 })
+
+describe('shared connection pool (UA52)', () => {
+  it('takes every per-guest slot from deps.slots when given (the connection pool GET /api/v1/vms shares)', async () => {
+    const nodesAsked: string[] = []
+    const slots = async <T>(node: string, call: () => Promise<T>): Promise<T> => {
+      nodesAsked.push(node)
+      return call()
+    }
+    const guests = [g(1, 'a'), g(2, 'b'), g(3, 'a')]
+
+    await computeGuestCoverage(guests, {
+      listGuests: async () => guests,
+      guestNet: () => ({ nicFirewall: true, vlans: [] }),
+      fetchOptions: async () => ({ enable: 1 }),
+      slots,
+    })
+
+    expect(nodesAsked.sort((x, y) => x.localeCompare(y))).toEqual(['a', 'a', 'b'])
+  })
+})

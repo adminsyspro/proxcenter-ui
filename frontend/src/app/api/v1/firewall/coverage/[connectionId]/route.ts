@@ -5,7 +5,8 @@ export const dynamic = "force-dynamic"
 // (UA44): counts and one row per guest asked (options, NIC flag, VLANs, tags), never the rules. `?refresh=1` asks for new
 // figures (served from the cache inside 30 s of the last ones). The load it may put on Proxmox is bounded in
 // lib/firewall/guestCoverage.ts: one options call per guest, plus one config call for a guest whose options are on
-// and whose NICs the inventory has not read (2 at most), 4 in flight, 2 per node, 200 guests, every 10 min.
+// and whose NICs the inventory has not read (2 at most), 4 in flight, 2 per node (the connection's pool, shared with
+// GET /api/v1/vms), 200 guests, every 10 min.
 // Session only: the public API allowlist has no entry for it, so a token is refused upstream.
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -19,6 +20,7 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { peekGuestNet, rememberGuestConfig } from '@/lib/inventory/guestDiskTotals'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { getGuestCoverage, type CoverageGuest, type GuestOptions } from '@/lib/firewall/guestCoverage'
+import { connectionSlots } from '@/lib/inventory/connectionPool'
 
 type RouteContext = { params: Promise<{ connectionId: string }> }
 
@@ -133,6 +135,8 @@ async function getHandler(req: NextRequest, ctx: RouteContext) {
       guestNet: g => peekGuestNet(connectionId, g.type, g.vmid),
       fetchOptions: optionsReader(connectionId, conn),
       fetchNet: netReader(connectionId, conn),
+      // The pool GET /api/v1/vms also reads configs through: both together stay at 4 in flight, 2 per node.
+      slots: connectionSlots(connectionId),
     }, { force })
 
     return NextResponse.json({ ...result, computing })

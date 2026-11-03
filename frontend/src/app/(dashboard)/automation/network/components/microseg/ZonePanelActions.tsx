@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import type { MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
 import { useDialogAction } from './dialogParts'
+import DiscardDraft from './DiscardDraft'
 import FlowDialog, { type FlowSaveValues } from './FlowDialog'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
@@ -47,6 +48,10 @@ export function ZoneStateConfirm({ zone, state, edits, onClose }: { zone: Micros
     await edits.setZoneState(zone, state)
     onClose()
   }
+  // The other way out of the refusal: the pending changes discarded, the state change can then go.
+  const discard = pendingChanges.pending
+    ? <DiscardDraft connectionId={edits.connectionId} policy={edits.policy} count={pendingChanges.count} variant='outlined' />
+    : undefined
   if (state === 'enforce') {
     return (
       <ZoneEnforceDialog
@@ -56,6 +61,7 @@ export function ZoneStateConfirm({ zone, state, edits, onClose }: { zone: Micros
         pending={pendingChanges.pending}
         pendingCount={pendingChanges.count}
         onViewPlan={viewPlan}
+        discard={discard}
         onConfirm={confirm}
         onCancel={onClose}
       />
@@ -68,6 +74,7 @@ export function ZoneStateConfirm({ zone, state, edits, onClose }: { zone: Micros
       pending={pendingChanges.pending}
       pendingCount={pendingChanges.count}
       onViewPlan={viewPlan}
+      discard={discard}
       onConfirm={confirm}
       onCancel={onClose}
     />

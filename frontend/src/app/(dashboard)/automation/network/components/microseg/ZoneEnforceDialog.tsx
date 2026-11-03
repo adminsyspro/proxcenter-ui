@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Box, CircularProgress } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -25,6 +25,8 @@ type Props = {
   pending?: boolean
   pendingCount?: number | null
   onViewPlan?: () => void
+  /** Discard of the pending changes, next to View plan in the refusal. */
+  discard?: ReactNode
   /** Starts the state change; throws when it fails (the dialog shows the error). */
   onConfirm: () => Promise<void>
   onCancel: () => void
@@ -37,7 +39,7 @@ type Props = {
  * ahead only once its name is typed.
  */
 export default function ZoneEnforceDialog({
-  connectionId, zone, readyAfterHours, pending = false, pendingCount = null, onViewPlan, onConfirm, onCancel,
+  connectionId, zone, readyAfterHours, pending = false, pendingCount = null, onViewPlan, discard, onConfirm, onCancel,
 }: Props) {
   const t = useTranslations('microsegPilot.policy.enforce')
   const [readiness, setReadiness] = useState<Readiness | null>(null)
@@ -81,7 +83,7 @@ export default function ZoneEnforceDialog({
       ) : (
         <OneLine text={t(readiness, { hours: readyAfterHours })} />
       )}
-      <ZoneStateGate pending={pending} count={pendingCount} onViewPlan={onViewPlan} />
+      <ZoneStateGate pending={pending} count={pendingCount} onViewPlan={onViewPlan} discard={discard} />
     </TypedConfirmDialog>
   )
 }

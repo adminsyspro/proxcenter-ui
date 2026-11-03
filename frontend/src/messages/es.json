@@ -13769,6 +13769,13 @@
       "flowChanged": "cambiado",
       "flowChangedHint": "Cambiado en el borrador: se aplica en la próxima aplicación",
       "engineFlowRule": "Regla del motor: edítela como su flujo (menú o doble clic)"
+    },
+    "discard": {
+      "button": "Descartar cambios",
+      "title": "{count, plural, one {¿Descartar el # cambio sin aplicar?} other {¿Descartar los # cambios sin aplicar?}}",
+      "titleNoCount": "¿Descartar los cambios sin aplicar?",
+      "body": "El borrador vuelve a la última revisión aplicada.",
+      "confirm": "Descartar"
     }
   }
 }

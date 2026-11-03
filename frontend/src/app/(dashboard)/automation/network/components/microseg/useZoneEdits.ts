@@ -100,6 +100,7 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
 
   return {
     connectionId,
+    policy,
     zones: policy.zones,
     readyAfterHours: policy.policy.settings?.ready_after_hours || DEFAULT_READY_AFTER_HOURS,
     pendingChanges,

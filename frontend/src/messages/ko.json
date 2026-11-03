@@ -13769,6 +13769,13 @@
       "flowChanged": "변경됨",
       "flowChangedHint": "초안에서 변경됨: 다음 적용 시 반영됩니다",
       "engineFlowRule": "엔진 규칙: 해당 흐름으로 편집하세요 (메뉴 또는 더블클릭)"
+    },
+    "discard": {
+      "button": "변경 취소",
+      "title": "{count, plural, other {적용되지 않은 변경 #개를 취소할까요?}}",
+      "titleNoCount": "적용되지 않은 변경을 취소할까요?",
+      "body": "초안이 마지막으로 적용된 리비전으로 돌아갑니다.",
+      "confirm": "취소하기"
     }
   }
 }

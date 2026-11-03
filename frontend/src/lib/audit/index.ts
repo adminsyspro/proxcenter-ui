@@ -185,6 +185,7 @@ export type AuditAction =
   | "microseg.remove"
   // Micro-segmentation draft writes, written by the Next relay (lib/microseg/proxyRoutes.ts)
   | "microseg.policy.update"
+  | "microseg.policy.discard"
   | "microseg.zone.create"
   | "microseg.zone.update"
   | "microseg.zone.delete"

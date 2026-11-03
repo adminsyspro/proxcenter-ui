@@ -13,7 +13,7 @@ describe('matchMicrosegRoute', () => {
   it('knows the exact route table of the orchestrator', () => {
     const table = MICROSEG_ROUTES.map(r => `${r.method} ${r.pattern.source}`).sort()
 
-    expect(MICROSEG_ROUTES).toHaveLength(27)
+    expect(MICROSEG_ROUTES).toHaveLength(28)
     expect(table).toHaveLength(new Set(table).size)
 
     const cases: Array<[string, string[], boolean]> = [
@@ -68,6 +68,8 @@ describe('matchMicrosegRoute', () => {
     expect(owner('POST', ['remove'])).toBe('orchestrator microseg.remove')
 
     expect(owner('PUT', ['policy'])).toBe('relay microseg.policy.update')
+    // R66: discarding the draft is a draft write, audited by the relay like the others.
+    expect(owner('POST', ['policy', 'discard'])).toBe('relay microseg.policy.discard')
     expect(owner('POST', ['zones'])).toBe('relay microseg.zone.create')
     expect(owner('PUT', ['zones', 'z1'])).toBe('relay microseg.zone.update')
     expect(owner('DELETE', ['zones', 'z1'])).toBe('relay microseg.zone.delete')

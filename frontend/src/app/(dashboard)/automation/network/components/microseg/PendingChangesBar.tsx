@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 
 import type { MicrosegPolicy } from '@/lib/microseg/types'
 
+import DiscardDraft from './DiscardDraft'
 import { usePendingChanges } from './usePendingChanges'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
@@ -35,7 +36,12 @@ export default function PendingChangesBar({ connectionId, policy, onOpenPlan, pr
     <Alert
       severity='warning'
       icon={<i className='ri-draft-line' />}
-      action={<WriteTip><Button color='inherit' size='small' onClick={onOpenPlan} disabled={!canWrite || !onOpenPlan}>{t('microsegPilot.pending.viewPlan')}</Button></WriteTip>}
+      action={(
+        <>
+          <DiscardDraft connectionId={connectionId} policy={policy} count={count} />
+          <WriteTip><Button color='inherit' size='small' onClick={onOpenPlan} disabled={!canWrite || !onOpenPlan}>{t('microsegPilot.pending.viewPlan')}</Button></WriteTip>
+        </>
+      )}
     >
       {prefixed(count ? t('microsegPilot.pending.withCount', { count }) : t('microsegPilot.pending.noCount'))}
     </Alert>

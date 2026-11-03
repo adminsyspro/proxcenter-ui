@@ -13770,6 +13770,13 @@
       "flowChanged": "modifié",
       "flowChangedHint": "Modifié dans le brouillon : s’applique à la prochaine application",
       "engineFlowRule": "Règle du moteur : modifiez-la comme son flux (menu ou double-clic)"
+    },
+    "discard": {
+      "button": "Abandonner les changements",
+      "title": "{count, plural, one {Abandonner le changement non appliqué ?} other {Abandonner les # changements non appliqués ?}}",
+      "titleNoCount": "Abandonner les changements non appliqués ?",
+      "body": "Le brouillon revient à la dernière révision appliquée.",
+      "confirm": "Abandonner"
     }
   }
 }

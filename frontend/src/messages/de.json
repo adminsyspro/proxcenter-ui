@@ -13437,6 +13437,13 @@
       "flowChanged": "geändert",
       "flowChangedHint": "Im Entwurf geändert: wird bei der nächsten Anwendung wirksam",
       "engineFlowRule": "Regel der Engine: als ihren Fluss bearbeiten (Menü oder Doppelklick)"
+    },
+    "discard": {
+      "button": "Änderungen verwerfen",
+      "title": "{count, plural, one {Die # nicht angewendete Änderung verwerfen?} other {Die # nicht angewendeten Änderungen verwerfen?}}",
+      "titleNoCount": "Die nicht angewendeten Änderungen verwerfen?",
+      "body": "Der Entwurf kehrt zur zuletzt angewendeten Revision zurück.",
+      "confirm": "Verwerfen"
     }
   }
 }

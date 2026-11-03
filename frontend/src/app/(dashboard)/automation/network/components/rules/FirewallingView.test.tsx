@@ -730,6 +730,8 @@ describe('Firewalling: the zones edited in place (micro-segmentation draft)', ()
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent(/Apply or discard your (\d+ )?pending changes? first/)
     expect(within(dialog).getByRole('button', { name: 'View plan' })).toBeInTheDocument()
+    // The other way out (R66): discard the pending changes.
+    expect(within(dialog).getByRole('button', { name: 'Discard changes' })).toBeEnabled()
   })
 
   it('a double-click on a flow rule opens its flow', async () => {
@@ -745,6 +747,7 @@ describe('Firewalling: the zones edited in place (micro-segmentation draft)', ()
     const bar = screen.getByTestId('dfw-microseg-pending')
     expect(bar).toHaveTextContent(/Micro-segmentation draft: (\d+ u|U)napplied changes?/)
     expect(within(bar).getByRole('button', { name: 'View plan' })).toBeEnabled()
+    expect(within(bar).getByRole('button', { name: 'Discard changes' })).toBeEnabled()
     expect(publishButton()).toHaveTextContent('Publish (0)')
   })
 

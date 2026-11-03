@@ -176,6 +176,8 @@ export function microsegApi(connId: string) {
   return {
     getPolicy: (signal?: AbortSignal) => call<MicrosegPolicy>('GET', 'policy', undefined, signal),
     savePolicy: (body: PolicyUpdate) => call<{ version: number; policy: MicrosegPolicy['policy'] }>('PUT', 'policy', body),
+    /** R66: the draft back to the last applied revision (empty without one); the answer is the new draft. */
+    discardDraft: (version: number) => call<MicrosegPolicy>('POST', 'policy/discard', { version }),
 
     saveZone: ({ id: zoneId, ...body }: ZoneInput) =>
       call<{ version: number; zone: MicrosegZone }>(zoneId ? 'PUT' : 'POST', zoneId ? `zones/${id(zoneId)}` : 'zones', body),

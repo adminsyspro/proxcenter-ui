@@ -13769,6 +13769,13 @@
       "flowChanged": "changed",
       "flowChangedHint": "Changed in the draft: applies at the next apply",
       "engineFlowRule": "The engine’s rule: edit it as its flow (menu or double-click)"
+    },
+    "discard": {
+      "button": "Discard changes",
+      "title": "{count, plural, one {Discard the # unapplied change?} other {Discard the # unapplied changes?}}",
+      "titleNoCount": "Discard the unapplied changes?",
+      "body": "The draft goes back to the last applied revision.",
+      "confirm": "Discard"
     }
   }
 }

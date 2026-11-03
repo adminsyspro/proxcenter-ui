@@ -36,6 +36,8 @@ const read = (pattern: RegExp): MicrosegRoute => ({ method: 'GET', pattern, writ
 export const MICROSEG_ROUTES: MicrosegRoute[] = [
   read(/^policy$/),
   { method: 'PUT', pattern: /^policy$/, write: true, audit: 'relay', auditAction: 'microseg.policy.update' },
+  // R66: the draft back to the last applied revision (a draft write, nothing changes on Proxmox).
+  { method: 'POST', pattern: /^policy\/discard$/, write: true, audit: 'relay', auditAction: 'microseg.policy.discard' },
   { method: 'POST', pattern: /^zones$/, write: true, audit: 'relay', auditAction: 'microseg.zone.create' },
   { method: 'PUT', pattern: /^zones\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.zone.update' },
   { method: 'DELETE', pattern: /^zones\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.zone.delete' },

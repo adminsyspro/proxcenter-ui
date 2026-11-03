@@ -89,14 +89,15 @@ describe('read-only user', () => {
     expect((await screen.findByRole('button', { name: 'Confirm writes' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('disables Accept, Accept as CIDR and Dismiss of an observed flow, and Restore of a revision', async () => {
+  it('disables Accept, As CIDR and Dismiss of an observed flow, and Restore of a revision', async () => {
     window.localStorage.setItem('microseg.subTab', 'observation')
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('zw', { name: 'web' })], last_revision: REVISION_HEAD }))
     mock.routes['GET /suggestions?limit=26&status=pending'] = () => reply(200, { suggestions: [suggestion(new Date().toISOString())], limit: 26, offset: 0 })
     renderAs(rbac(false))
     const dismiss = await screen.findByRole('button', { name: 'Dismiss' }) as HTMLButtonElement
     expect(dismiss.disabled).toBe(true)
-    expect((screen.getByRole('button', { name: 'Accept as CIDR' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'As CIDR' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Accept' }) as HTMLButtonElement).disabled).toBe(true)
 
     mock.routes['GET /revisions?limit=100'] = () => reply(200, { revisions: [{ ...REVISION_HEAD, snapshot: { tag_prefix: 'zone-', zones: [], flows: [] } }] })
     mock.routes['GET /runs?limit=11'] = () => reply(200, { runs: [], limit: 11, offset: 0 })

@@ -12964,7 +12964,23 @@
       "groupCollapse": "Contraer {zone}",
       "groupExpand": "Expandir {zone}",
       "unknownDestination": "Destino desconocido",
-      "groupsContinue": "Los flujos se agrupan dentro de esta página: la página siguiente continúa, empezando por {zone}."
+      "groupsContinue": "Los flujos se agrupan dentro de esta página: la página siguiente continúa, empezando por {zone}.",
+      "asCidr": "Como CIDR",
+      "acceptTip": "Crea el flujo {from} → {to} {service} en el borrador.",
+      "cidrTip": "Crea el mismo flujo con el origen {ip} como rango de direcciones: necesario cuando el origen es una IP desconocida.",
+      "dismissTip": "Oculta esta sugerencia para este par.",
+      "bulkLabel": "Flujos seleccionados",
+      "bulkAcceptTip": "Crea en el borrador el flujo entre las zonas de cada sugerencia seleccionada.",
+      "bulkCidrTip": "Crea los mismos flujos con cada origen como rango de direcciones.",
+      "bulkDismissTip": "Oculta las sugerencias seleccionadas.",
+      "legend": {
+        "title": "Leyenda",
+        "would_block": "Visto en observación, se bloquearía",
+        "blocked": "Bloqueado de verdad",
+        "zoneDot": "Color de la zona de origen",
+        "unknownDot": "Origen desconocido",
+        "about": "Sobre las coincidencias"
+      }
     },
     "overview": {
       "empty": "Aún no hay ninguna zona que dibujar.",

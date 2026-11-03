@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Alert, Box, Button, CircularProgress, Typography } from '@mui/material'
+import { Alert, Box, CircularProgress, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion, SuggestionAction } from '@/lib/microseg/types'
@@ -9,12 +9,11 @@ import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
+import { BulkBar, ObservationLegend } from './ObservationActions'
 import ObservationFilters, { type ObservationFilterValues } from './ObservationFilters'
 import ObservationTable from './ObservationTable'
 import { useResolveSuggestions } from './observationParts'
-import { Notice } from './PlanNotices'
 import { PrevNextPager } from './PolicyPager'
-import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import { useNow } from './useNow'
 
 /** Flows per page. The request asks for one more, which tells whether a next page exists. */
@@ -29,7 +28,6 @@ type Resolved = { action: SuggestionAction; count: number }
  */
 export default function ObservationPanel({ connectionId, policy, reloadPolicy, onOpenSettings }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.observation')
-  const { canWrite } = useMicrosegWrite()
   const [filters, setFilters] = useState<ObservationFilterValues>({ kind: '', status: 'pending', zone: '' })
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
@@ -90,13 +88,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
 
   return (
     <Box sx={{ px: 3, pb: 3 }}>
-      <Box sx={{ mb: 1.5 }}>
-        <Notice
-          severity='info'
-          text={t('sampling')}
-          action={<Button color='inherit' size='small' disabled={!onOpenSettings} onClick={onOpenSettings}>{t('openSettings')}</Button>}
-        />
-      </Box>
+      <ObservationLegend onOpenSettings={onOpenSettings} />
       <ObservationFilters values={filters} zones={policy.zones} onChange={changeFilters} />
 
       {error && <MicrosegErrorAlert error={error} onRetry={reload} />}
@@ -117,21 +109,8 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
       {data && (
         <>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40 }}>
-            {chosen.length > 0 ? (
-              <>
-                <Typography noWrap variant='body2' sx={{ flexShrink: 0 }}>{t('selected', { count: chosen.length })}</Typography>
-                <Box sx={{ flex: 1 }} />
-                <WriteTip title={noZoneAmongChosen ? t('bulkAcceptBlocked') : ''}>
-                  <Button size='small' disabled={!canWrite || busy || noZoneAmongChosen} onClick={() => bulk('accept')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkAccept')}</Button>
-                </WriteTip>
-                <WriteTip title={noIpAmongChosen ? t('bulkCidrBlocked') : ''}>
-                  <Button size='small' disabled={!canWrite || busy || noIpAmongChosen} onClick={() => bulk('accept_cidr')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkAcceptCidr')}</Button>
-                </WriteTip>
-                <WriteTip>
-                  <Button size='small' color='inherit' disabled={!canWrite || busy} onClick={() => bulk('dismiss')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkDismiss')}</Button>
-                </WriteTip>
-              </>
-            ) : <Box sx={{ flex: 1 }} />}
+            {chosen.length > 0 && <BulkBar count={chosen.length} busy={busy} noZone={noZoneAmongChosen} noIp={noIpAmongChosen} onResolve={bulk} />}
+            <Box sx={{ flex: 1 }} />
             <PrevNextPager page={page} hasNext={hasNext} onPage={goToPage} />
           </Box>
           {rows.length === 0 ? (

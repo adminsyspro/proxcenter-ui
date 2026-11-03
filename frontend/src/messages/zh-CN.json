@@ -12952,7 +12952,7 @@
       "tableLabel": "观察到的流",
       "columns": {
         "details": "详情",
-        "source": "源",
+        "source": "来源",
         "destination": "目标",
         "service": "服务",
         "hits": "命中数",
@@ -12964,7 +12964,23 @@
       "groupCollapse": "折叠 {zone}",
       "groupExpand": "展开 {zone}",
       "unknownDestination": "未知目标",
-      "groupsContinue": "流仅在本页内分组：下一页从 {zone} 开始继续。"
+      "groupsContinue": "流仅在本页内分组：下一页从 {zone} 开始继续。",
+      "asCidr": "按 CIDR",
+      "acceptTip": "在草稿中创建流 {from} → {to} {service}。",
+      "cidrTip": "以来源 {ip} 作为地址范围创建相同的流：当来源是未知 IP 时需要这样做。",
+      "dismissTip": "隐藏此配对的这条建议。",
+      "bulkLabel": "已选的流",
+      "bulkAcceptTip": "为每条所选建议在草稿中创建区域之间的流。",
+      "bulkCidrTip": "以每个来源作为地址范围创建相同的流。",
+      "bulkDismissTip": "隐藏所选建议。",
+      "legend": {
+        "title": "图例",
+        "would_block": "观察中发现，将被阻止",
+        "blocked": "已实际阻止",
+        "zoneDot": "来源区域颜色",
+        "unknownDot": "未知来源",
+        "about": "关于命中数"
+      }
     },
     "overview": {
       "empty": "还没有可绘制的区域。",

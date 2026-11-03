@@ -12965,7 +12965,23 @@
       "groupCollapse": "Replier {zone}",
       "groupExpand": "Déplier {zone}",
       "unknownDestination": "Destination inconnue",
-      "groupsContinue": "Les flux sont regroupés au sein de cette page : la page suivante continue, en commençant par {zone}."
+      "groupsContinue": "Les flux sont regroupés au sein de cette page : la page suivante continue, en commençant par {zone}.",
+      "asCidr": "En CIDR",
+      "acceptTip": "Crée le flux {from} → {to} {service} dans le brouillon.",
+      "cidrTip": "Crée le même flux avec la source {ip} comme plage d'adresses : nécessaire quand la source est une IP inconnue.",
+      "dismissTip": "Masque cette suggestion pour cette paire.",
+      "bulkLabel": "Flux sélectionnés",
+      "bulkAcceptTip": "Crée dans le brouillon le flux entre les zones de chaque suggestion sélectionnée.",
+      "bulkCidrTip": "Crée les mêmes flux avec chaque source comme plage d'adresses.",
+      "bulkDismissTip": "Masque les suggestions sélectionnées.",
+      "legend": {
+        "title": "Légende",
+        "would_block": "Vu en observation, serait bloqué",
+        "blocked": "Réellement bloqué",
+        "zoneDot": "Couleur de la zone source",
+        "unknownDot": "Source inconnue",
+        "about": "À propos des occurrences"
+      }
     },
     "overview": {
       "empty": "Aucune zone à dessiner pour l'instant.",

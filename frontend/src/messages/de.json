@@ -12632,7 +12632,23 @@
       "groupCollapse": "{zone} einklappen",
       "groupExpand": "{zone} ausklappen",
       "unknownDestination": "Unbekanntes Ziel",
-      "groupsContinue": "Die Flüsse sind innerhalb dieser Seite gruppiert: Die nächste Seite geht weiter, beginnend mit {zone}."
+      "groupsContinue": "Die Flüsse sind innerhalb dieser Seite gruppiert: Die nächste Seite geht weiter, beginnend mit {zone}.",
+      "asCidr": "Als CIDR",
+      "acceptTip": "Legt den Fluss {from} → {to} {service} im Entwurf an.",
+      "cidrTip": "Legt denselben Fluss mit der Quelle {ip} als Adressbereich an: nötig, wenn die Quelle eine unbekannte IP ist.",
+      "dismissTip": "Blendet diesen Vorschlag für dieses Paar aus.",
+      "bulkLabel": "Ausgewählte Flüsse",
+      "bulkAcceptTip": "Legt im Entwurf für jeden ausgewählten Vorschlag den Fluss zwischen den Zonen an.",
+      "bulkCidrTip": "Legt dieselben Flüsse mit jeder Quelle als Adressbereich an.",
+      "bulkDismissTip": "Blendet die ausgewählten Vorschläge aus.",
+      "legend": {
+        "title": "Legende",
+        "would_block": "In der Beobachtung gesehen, würde blockiert",
+        "blocked": "Tatsächlich blockiert",
+        "zoneDot": "Farbe der Quellzone",
+        "unknownDot": "Unbekannte Quelle",
+        "about": "Zu den Trefferzahlen"
+      }
     },
     "overview": {
       "empty": "Noch keine Zone zum Zeichnen.",

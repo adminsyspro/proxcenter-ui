@@ -12964,7 +12964,23 @@
       "groupCollapse": "{zone} 접기",
       "groupExpand": "{zone} 펼치기",
       "unknownDestination": "알 수 없는 목적지",
-      "groupsContinue": "흐름은 이 페이지 안에서만 묶입니다. 다음 페이지가 {zone}부터 이어집니다."
+      "groupsContinue": "흐름은 이 페이지 안에서만 묶입니다. 다음 페이지가 {zone}부터 이어집니다.",
+      "asCidr": "CIDR로",
+      "acceptTip": "초안에 {from} → {to} {service} 흐름을 만듭니다.",
+      "cidrTip": "출발지 {ip}를 주소 범위로 하여 같은 흐름을 만듭니다. 출발지가 알 수 없는 IP일 때 필요합니다.",
+      "dismissTip": "이 쌍에 대한 이 제안을 숨깁니다.",
+      "bulkLabel": "선택한 흐름",
+      "bulkAcceptTip": "선택한 각 제안의 영역 간 흐름을 초안에 만듭니다.",
+      "bulkCidrTip": "각 출발지를 주소 범위로 하여 같은 흐름을 만듭니다.",
+      "bulkDismissTip": "선택한 제안을 숨깁니다.",
+      "legend": {
+        "title": "범례",
+        "would_block": "관찰 중 확인됨, 차단될 예정",
+        "blocked": "실제로 차단됨",
+        "zoneDot": "출발지 영역 색상",
+        "unknownDot": "알 수 없는 출발지",
+        "about": "적중 수 안내"
+      }
     },
     "overview": {
       "empty": "아직 그릴 영역이 없습니다.",

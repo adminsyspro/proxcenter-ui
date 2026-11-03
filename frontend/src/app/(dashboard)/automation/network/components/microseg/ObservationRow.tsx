@@ -8,7 +8,8 @@ import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/m
 
 import { OneLine } from './dialogParts'
 import { hitsShare } from './observationModel'
-import { ObservedKindGlyph, ResolveActions } from './observationParts'
+import { FlowActions } from './ObservationActions'
+import { ObservedKindGlyph } from './observationParts'
 import { formatWhen } from './summaryModel'
 
 /** Columns of the table: select, details, source, arrow, destination, service, hits, last seen, status, actions. */
@@ -111,7 +112,7 @@ export default function ObservationRow({ suggestion: s, zones, checked, busy, ma
         </TableCell>
         <TableCell sx={{ ...CELL_SX, textAlign: 'right' }}>
           {pending ? (
-            <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} />
+            <FlowActions suggestion={s} source={source} destination={destination} busy={busy} onResolve={onResolve} />
           ) : (
             <Chip size='small' variant='outlined' label={t(`status.${s.status}`)} />
           )}

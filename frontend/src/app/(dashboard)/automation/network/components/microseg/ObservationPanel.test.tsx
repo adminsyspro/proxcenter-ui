@@ -103,7 +103,7 @@ describe('observation list', () => {
     expect(within(line).getByText('192.168.1.50')).toBeTruthy()
     const accept = within(line).getByRole('button', { name: 'Accept' }) as HTMLButtonElement
     expect(accept.disabled).toBe(true)
-    const cidr = within(line).getByRole('button', { name: 'Accept as CIDR' }) as HTMLButtonElement
+    const cidr = within(line).getByRole('button', { name: 'As CIDR' }) as HTMLButtonElement
     expect(cidr.disabled).toBe(false)
 
     fireEvent.click(cidr)
@@ -114,7 +114,7 @@ describe('observation list', () => {
   it('disables the accept as CIDR when the source has no IP', async () => {
     setup([sug('s1')])
     const line = await row('web to db')
-    expect((within(line).getByRole('button', { name: 'Accept as CIDR' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((within(line).getByRole('button', { name: 'As CIDR' }) as HTMLButtonElement).disabled).toBe(true)
     expect((within(line).getByRole('button', { name: 'Accept' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
@@ -136,6 +136,7 @@ describe('observation list', () => {
 
   it('shows the sampling notice with a link that opens the settings of the tab', async () => {
     setup([])
+    fireEvent.mouseOver(await screen.findByRole('button', { name: 'About the hit counts' }))
     expect(await screen.findByText(/at most one line per second per chain by default/)).toBeTruthy()
     const link = screen.getByRole('button', { name: 'Open settings' }) as HTMLButtonElement
     expect(link.disabled).toBe(false)
@@ -196,6 +197,55 @@ describe('grouping by destination zone', () => {
     setup(toDb)
     await findFlowRows()
     expect(screen.queryByText(/grouped within this page/)).toBeNull()
+  })
+})
+
+describe('legend and labelled actions', () => {
+  const tip = async (button: HTMLElement) => {
+    fireEvent.mouseOver(button.parentElement as HTMLElement)
+    return (await screen.findByRole('tooltip')).textContent
+  }
+
+  it('explains the marks of the table on one legend row above it', async () => {
+    setup([sug('s1')])
+    const legend = await screen.findByRole('list', { name: 'Legend' })
+    const items = within(legend).getAllByRole('listitem')
+    expect(items.map(i => i.textContent)).toEqual(['Seen in observation, would be blocked', 'Actually blocked', 'Source zone colour', 'Unknown source'])
+    expect(items[0].querySelector('i.ri-eye-line')).toBeTruthy()
+    expect(items[1].querySelector('i.ri-forbid-line')).toBeTruthy()
+    expect(items[3].querySelector('[data-legend-dot]')?.getAttribute('data-legend-dot')).toBe('error.main')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('labels the three actions of a row and says what each does', async () => {
+    setup([sug('s1', { src_ip: '10.0.0.5' })])
+    const line = await row('web to db')
+    for (const name of ['Accept', 'As CIDR', 'Dismiss']) expect(within(line).getByRole('button', { name }).textContent).toBe(name)
+    expect(await tip(within(line).getByRole('button', { name: 'Accept' }))).toBe('Creates the flow web \u2192 db tcp/443 in the draft.')
+  })
+
+  it('explains As CIDR with the IP of the source', async () => {
+    setup([unknownSource])
+    const line = await row('192.168.1.50 to db')
+    expect(await tip(within(line).getByRole('button', { name: 'As CIDR' }))).toMatch(/source 192\.168\.1\.50 as an address range: needed when the source is an unknown IP/)
+  })
+
+  it('tells what Dismiss does', async () => {
+    setup([sug('s1')])
+    expect(await tip(within(await row('web to db')).getByRole('button', { name: 'Dismiss' }))).toBe('Hides this suggestion for this pair.')
+  })
+
+  it('shows the bulk bar with the count and the labelled actions once flows are checked', async () => {
+    setup([sug('s1'), sug('s2', { dst_ip: '10.0.0.8' })])
+    await findFlowRows()
+    expect(screen.queryByRole('toolbar', { name: 'Selected flows' })).toBeNull()
+    fireEvent.click(within(flowRows()[0]).getByRole('checkbox'))
+    const bar = screen.getByRole('toolbar', { name: 'Selected flows' })
+    expect(within(bar).getByText('1 selected')).toBeTruthy()
+    expect(within(bar).getAllByRole('button').map(b => b.textContent)).toEqual(['Accept', 'As CIDR', 'Dismiss'])
+    fireEvent.click(within(bar).getByRole('button', { name: 'Accept selected' }))
+    await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
+    expect(body(calls('POST /suggestions/resolve')[0][1])).toEqual({ version: 3, ids: ['s1'], action: 'accept' })
   })
 })
 

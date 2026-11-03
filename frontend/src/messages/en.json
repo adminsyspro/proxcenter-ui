@@ -12964,7 +12964,23 @@
       "groupCollapse": "Collapse {zone}",
       "groupExpand": "Expand {zone}",
       "unknownDestination": "Unknown destination",
-      "groupsContinue": "Flows are grouped within this page: the next page goes on, starting with {zone}."
+      "groupsContinue": "Flows are grouped within this page: the next page goes on, starting with {zone}.",
+      "asCidr": "As CIDR",
+      "acceptTip": "Creates the flow {from} → {to} {service} in the draft.",
+      "cidrTip": "Creates the same flow with the source {ip} as an address range: needed when the source is an unknown IP.",
+      "dismissTip": "Hides this suggestion for this pair.",
+      "bulkLabel": "Selected flows",
+      "bulkAcceptTip": "Creates in the draft the flow between the zones of each selected suggestion.",
+      "bulkCidrTip": "Creates the same flows with each source as an address range.",
+      "bulkDismissTip": "Hides the selected suggestions.",
+      "legend": {
+        "title": "Legend",
+        "would_block": "Seen in observation, would be blocked",
+        "blocked": "Actually blocked",
+        "zoneDot": "Source zone colour",
+        "unknownDot": "Unknown source",
+        "about": "About the hit counts"
+      }
     },
     "overview": {
       "empty": "No zone to draw yet.",

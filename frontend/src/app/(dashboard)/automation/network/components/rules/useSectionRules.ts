@@ -19,6 +19,8 @@ type Args = {
  */
 export function useSectionRules({ connectionId, hostRulesByNode, setHostRulesByNode, loadGuestRules }: Args) {
   const [nodeOptions, setNodeOptions] = useState<Record<string, firewallAPI.NodeOptions>>({})
+  // A guest's firewall options as Proxmox holds them, read when its options dialog opens (the coverage row may lack some).
+  const [guestOptions, setGuestOptions] = useState<Record<string, firewallAPI.VMOptions>>({})
   const [reading, setReading] = useState<Set<string>>(() => new Set())
   const [failed, setFailed] = useState<Set<string>>(() => new Set())
   const inFlight = useRef(new Set<string>())
@@ -47,9 +49,19 @@ export function useSectionRules({ connectionId, hostRulesByNode, setHostRulesByN
 
   const readGuest = useCallback((vm: VMFirewallInfo) => track(`guest:${vm.type}/${vm.vmid}`, () => loadGuestRules(vm)), [loadGuestRules, track])
 
+  /** One call, the first time a guest's options dialog opens. */
+  const readGuestOptions = useCallback((vm: VMFirewallInfo) => {
+    const key = `guest:${vm.type}/${vm.vmid}`
+    if (key in guestOptions) return Promise.resolve()
+    return track(`options:${key}`, async () => {
+      const options = await firewallAPI.getVMOptions(connectionId, vm.node, vm.type, vm.vmid)
+      setGuestOptions(prev => ({ ...prev, [key]: options ?? {} }))
+    })
+  }, [connectionId, guestOptions, track])
+
   /** Opening a section reads it the first time only. */
   const openHost = useCallback((node: string) => (node in hostRulesByNode ? Promise.resolve() : readHost(node)), [hostRulesByNode, readHost])
   const openGuest = useCallback((vm: VMFirewallInfo) => (vm.rulesLoaded ? Promise.resolve() : readGuest(vm)), [readGuest])
 
-  return { nodeOptions, setNodeOptions, reading, failed, openHost, openGuest, readHost, readGuest }
+  return { nodeOptions, setNodeOptions, guestOptions, readGuestOptions, reading, failed, openHost, openGuest, readHost, readGuest }
 }

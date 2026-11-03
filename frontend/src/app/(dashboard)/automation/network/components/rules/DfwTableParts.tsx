@@ -204,7 +204,8 @@ export function RuleRow(props: RuleRowProps) {
       }}
     >
       <TableCell sx={{ ...CELL, width: 28, cursor: drag.enabled ? 'grab' : 'default', color: drag.enabled ? 'text.secondary' : 'text.disabled' }}>
-        <i className='ri-draggable' aria-hidden style={{ fontSize: 14 }} />
+        {/* A rule of the engine never moves: no handle at all, its lock says why. */}
+        {!managed && <i className='ri-draggable' aria-hidden style={{ fontSize: 14 }} />}
       </TableCell>
       <TableCell padding='checkbox' sx={{ width: 36 }}>
         <Checkbox size='small' checked={selected} disabled={managed} onChange={e => onSelect(e.target.checked)}

@@ -67,6 +67,8 @@ export function ViewToolbar({ subtitle, publishedAt, count, busy, canWrite, refr
 }
 
 type StatusBarProps = {
+  /** What the last publish did, until the draft changes again. */
+  summary?: string | null
   total: number
   totalPartial: boolean
   unpublished: number
@@ -81,7 +83,7 @@ type StatusBarProps = {
 const Sep = () => <Box component='span' aria-hidden sx={{ color: 'divider' }}>|</Box>
 
 /** Rules total / unpublished / disabled · sections / managed · VMs covered · scope. */
-export function StatusBar({ total, totalPartial, unpublished, disabled, sections, managed, covered, scope, onScope }: StatusBarProps) {
+export function StatusBar({ summary, total, totalPartial, unpublished, disabled, sections, managed, covered, scope, onScope }: StatusBarProps) {
   const t = useTranslations('microsegPilot.dfw')
   const theme = useTheme()
   return (
@@ -91,6 +93,7 @@ export function StatusBar({ total, totalPartial, unpublished, disabled, sections
       </Tooltip>
       <span>{t('status.unpublished')} <Box component='strong' sx={{ color: unpublished > 0 ? theme.palette.warning.main : 'inherit' }}>{unpublished}</Box></span>
       <span>{t('status.disabled', { count: disabled })}</span>
+      {summary && <Box component='span' data-testid='dfw-publish-summary' sx={{ color: 'text.secondary' }}>{summary}</Box>}
       <Sep />
       <span>{t('status.sections', { count: sections })}</span>
       <span>{t('status.managed', { count: managed })}</span>

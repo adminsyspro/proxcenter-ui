@@ -23,6 +23,7 @@ import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/component
 import MicrosegConfirmDialog from '../microseg/MicrosegConfirmDialog'
 import { useMicrosegWrite, WriteTip } from '../microseg/microsegAccess'
 import { useNow } from '../microseg/useNow'
+import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 import RuleFormDialog, { type RuleFormData } from './RuleFormDialog'
 import GroupPager, { GROUP_PAGE_SIZE, pageCount, useGroupPages } from './shared/GroupPager'
 import { ZONE_GROUP_PREFIX } from './shared/groupMembership'
@@ -260,13 +261,21 @@ export default function FirewallingView(p: FirewallingViewProps) {
   const canWrite = mayWrite && !!p.connectionId
 
   const fw = useFirewallDraft(p.connectionId)
+  // What the last publish did, shown until the draft changes again.
+  const [summary, setSummary] = useState<string | null>(null)
+  // Every change the user makes to the draft: the summary of the last publish is then no longer the state shown.
+  const edit = (change: (d: FirewallDraft) => FirewallDraft) => {
+    setSummary(null)
+    fw.update(change)
+  }
   // Nothing changes in the draft while it is being published: the answer rebases it.
   const canEdit = canWrite && !fw.busy
   const lazy = useSectionRules({ connectionId: p.connectionId, hostRulesByNode: p.hostRulesByNode, setHostRulesByNode: p.setHostRulesByNode, loadGuestRules: p.loadGuestRules })
 
   const [scope, setScope] = useState<ScopeFilter>(p.initialScope)
   const [filter, setFilter] = useState('')
-  const [open, setOpen] = useState<Set<string>>(() => new Set(['cluster']))
+  // Every section starts collapsed, the cluster's too.
+  const [open, setOpen] = useState<Set<string>>(() => new Set())
   const [openVlans, setOpenVlans] = useState<Set<string>>(() => new Set())
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [editor, setEditor] = useState<Editor | null>(null)
@@ -347,7 +356,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
 
   /** Applies a change to every section holding checked rules. */
   const onSelection = (change: (d: FirewallDraft, s: Section & { scope: DraftScope }, ids: string[]) => FirewallDraft) => {
-    fw.update(d => [...selection.entries()].reduce((acc, [key, ids]) => {
+    edit(d => [...selection.entries()].reduce((acc, [key, ids]) => {
       const s = sectionByKey(key)
       return s?.scope && !s.managed ? change(acc, s as Section & { scope: DraftScope }, ids) : acc
     }, d))
@@ -373,7 +382,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
     if (!s?.scope) return
     const fields = toFields(editor.form)
     const sc = s.scope
-    fw.update(d => (editor.entryId ? updateRules(d, sc, s.base, [editor.entryId], fields) : addRule(d, sc, s.base, fields)))
+    edit(d => (editor.entryId ? updateRules(d, sc, s.base, [editor.entryId], fields) : addRule(d, sc, s.base, fields)))
     setOpen(prev => new Set(prev).add(s.key))
     setEditor(null)
   }
@@ -402,7 +411,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
         e.preventDefault()
         if (drag?.sectionKey === s.key && drag.id !== entry.id && s.scope && !engine) {
           const sc = s.scope
-          fw.update(d => moveRule(d, sc, s.base, drag.id, index))
+          edit(d => moveRule(d, sc, s.base, drag.id, index))
         }
         setDrag(null)
       },
@@ -422,6 +431,10 @@ export default function FirewallingView(p: FirewallingViewProps) {
     if (outcome.status === 'refused') return
     applyPublished(outcome.result, sentOps, p, (node, o) => lazy.setNodeOptions(prev => ({ ...prev, [node]: { ...prev[node], ...o } })))
     setSelected(new Set())
+    const { applied, failed } = outcome.result
+    setSummary(failed
+      ? t('summaryStopped', { applied, total: sentOps.length, kind: failed.kind, scope: failed.scope })
+      : t('summary', { applied, total: sentOps.length }))
     if (outcome.status === 'published' && outcome.result.applied < sentOps.length) {
       setNotice(t('publishedPart', { applied: outcome.result.applied, total: sentOps.length }))
     } else if (outcome.status === 'published') {
@@ -465,14 +478,14 @@ export default function FirewallingView(p: FirewallingViewProps) {
   const sectionOrNull = (key: string | null | undefined) => (key ? sectionByKey(key) : null)
   const optionsSection = sectionOrNull(optionsFor)
   const currentOptions = (s: Section): ScopeOptions => {
-    const read: ScopeOptions = readOptions(s, p.clusterOptions, lazy.nodeOptions)
+    const read: ScopeOptions = readOptions(s, p.clusterOptions, lazy.nodeOptions, lazy.guestOptions)
     return { ...read, ...(s.scope ? scopeDraftOf(fw.draft, s.scope)?.options : undefined) }
   }
   const saveOptions = (s: Section, form: ScopeOptions) => {
     if (!s.scope) return
     const sc = s.scope
-    const read = readOptions(s, p.clusterOptions, lazy.nodeOptions)
-    fw.update(d => {
+    const read = readOptions(s, p.clusterOptions, lazy.nodeOptions, lazy.guestOptions)
+    edit(d => {
       let next = setScopeOptions(d, sc, read, form)
       if (s.guest && form.enable === 1 && !s.guest.nicFirewallEnabled) next = enableGuestFirewall(next, sc)
       return next
@@ -483,13 +496,11 @@ export default function FirewallingView(p: FirewallingViewProps) {
   // ── Rendering ──
   const hitsTitle = (s: Section) => (s.kind === 'zone' ? t('hitsOnDefault') : t('hitsNone'))
   const denyTitle = () => (hits?.partial ? t('hitsPartial') : t('hitsZone'))
-  // The # column counts the rule rows shown, from 1, across the sections (as the table reads).
-  const numbering = { next: 0 }
 
   /** Drops the changes of one scope: the way out of a conflict (the scope starts again from the list Proxmox holds). */
   const discardSection = (key: string) => {
     const scopeOf = fw.draft.scopes[key]?.scope
-    if (scopeOf) fw.update(d => discardOf(d, scopeOf))
+    if (scopeOf) edit(d => discardOf(d, scopeOf))
     fw.clearError()
   }
 
@@ -501,7 +512,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
 
   const patchRule = (s: Section, id: string, fields: Partial<RuleFields>) => {
     const sc = s.scope
-    if (sc) fw.update(d => updateRules(d, sc, s.base, [id], fields))
+    if (sc) edit(d => updateRules(d, sc, s.base, [id], fields))
   }
 
   const renderRules = (s: Section): ReactNode => {
@@ -525,7 +536,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
       return (
         <RuleRow
           key={`${s.key}|${e.id}`}
-          index={++numbering.next}
+          index={i + 1}
           rule={e.rule}
           state={s.states.get(e.id) ?? null}
           managed={managed}
@@ -567,8 +578,8 @@ export default function FirewallingView(p: FirewallingViewProps) {
     const willEnable = sd?.enableFirewall || sd?.options?.enable === 1
     const offLabel = s.kind === 'guest' ? t('guestFirewallOff') : t('hostFirewallOff')
     const sc = s.scope!
-    const turnOn = () => fw.update(d => (s.kind === 'guest' ? enableGuestFirewall(d, sc) : setScopeOptions(d, sc, lazy.nodeOptions[s.node!] ?? null, { enable: 1 })))
-    const undo = () => fw.update(d => (s.kind === 'guest' ? enableGuestFirewall(d, sc, false) : setScopeOptions(d, sc, lazy.nodeOptions[s.node!] ?? null, { enable: Number(lazy.nodeOptions[s.node!]?.enable) || 0 })))
+    const turnOn = () => edit(d => (s.kind === 'guest' ? enableGuestFirewall(d, sc) : setScopeOptions(d, sc, lazy.nodeOptions[s.node!] ?? null, { enable: 1 })))
+    const undo = () => edit(d => (s.kind === 'guest' ? enableGuestFirewall(d, sc, false) : setScopeOptions(d, sc, lazy.nodeOptions[s.node!] ?? null, { enable: Number(lazy.nodeOptions[s.node!]?.enable) || 0 })))
     return (
       <>
         <Badge label={willEnable ? t('firewallOnAtPublish') : offLabel} tone={willEnable ? 'warning' : 'default'} />
@@ -630,12 +641,11 @@ export default function FirewallingView(p: FirewallingViewProps) {
   const engineOwnsOptions = (s: Section) => s.kind === 'guest' && (s.entries.some(e => isEngineComment(e.rule.comment)) || (!!s.guest && inZone(s.guest)))
   /** A guest's options dialog opens on its rules read (one call the first time), so the engine's lock is known. */
   const openOptions = (s: Section) => {
-    if (s.guest && !hasRules(s)) {
-      const key = s.key
-      void lazy.openGuest(s.guest).then(() => setOptionsFor(key))
-      return
-    }
-    setOptionsFor(s.key)
+    if (!s.guest) return setOptionsFor(s.key)
+    // Its rules (for the engine's lock) and its options as Proxmox holds them, one after the other, each read once.
+    const vm = s.guest
+    const key = s.key
+    void lazy.openGuest(vm).then(() => lazy.readGuestOptions(vm)).then(() => setOptionsFor(key))
   }
 
   const renderGroup = ([vlan, vms]: [string, VMFirewallInfo[]]) => {
@@ -705,7 +715,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
       <Notices error={fw.error} onCloseError={fw.clearError} notice={notice} onCloseNotice={() => setNotice(null)}
         onDiscardScope={errorDiscard()} />
 
-      <StatusBar total={figures.total} totalPartial={figures.partial} unpublished={fw.count} disabled={figures.disabled} sections={figures.sections}
+      <StatusBar summary={summary} total={figures.total} totalPartial={figures.partial} unpublished={fw.count} disabled={figures.disabled} sections={figures.sections}
         managed={inScope.filter(s => s.kind === 'zone').length} covered={covered} scope={scope} onScope={setScope} />
 
       <ActionBar
@@ -773,7 +783,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
           targets={writableTargets.filter(target => !selection.has(target.key) || selection.size > 1)}
           onClose={() => setDialog(null)}
           onMove={target => {
-            fw.update(d => [...selection.entries()].reduce((acc, [key, ids]) => {
+            edit(d => [...selection.entries()].reduce((acc, [key, ids]) => {
               const from = sectionByKey(key)
               return from?.scope && !from.managed ? moveRulesToScope(acc, { scope: from.scope, baseRules: from.base }, ids, { scope: target.scope, baseRules: sectionByKey(target.key)?.base ?? null }) : acc
             }, d))
@@ -806,7 +816,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
         body={t('confirmDiscard.body', { count: fw.count })}
         confirmLabel={t('confirmDiscard.confirm')}
         color='error'
-        onConfirm={() => { fw.discard(); setSelected(new Set()); setDialog(null) }}
+        onConfirm={() => { fw.discard(); setSummary(null); setSelected(new Set()); setDialog(null) }}
         onCancel={() => setDialog(null)}
       />
       <Menu open={!!menuFor && !!menuSection} anchorEl={menuFor?.anchor} onClose={() => setMenuFor(null)}>
@@ -833,7 +843,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
       { label: tg('networkPage.addRule'), onClick: () => openEditor(s, null), disabled: !canEdit || !loaded },
       { label: t('menu.options'), onClick: () => openOptions(s), disabled: s.kind === 'host' && !((s.node ?? '') in lazy.nodeOptions) },
       ...(s.guest ? [{ label: tg('networkPage.viewLogs'), onClick: () => setLogVm(s.guest!) }] : []),
-      { label: t('menu.discard'), onClick: () => fw.update(d => discardOf(d, s.scope!)), disabled: s.pending === 0 || fw.busy },
+      { label: t('menu.discard'), onClick: () => edit(d => discardOf(d, s.scope!)), disabled: s.pending === 0 || fw.busy },
     ]
   }
 }
@@ -850,19 +860,30 @@ function discardOf(d: FirewallDraft, scope: DraftScope): FirewallDraft {
   return { ...d, scopes }
 }
 
-function readOptions(s: Section, cluster: firewallAPI.ClusterOptions | null, nodes: Record<string, firewallAPI.NodeOptions>): ScopeOptions {
+/** What Proxmox applies to an option it does not store (the orchestrator also drops a stored 0). */
+function optionDefaults(kind: Section['kind']): Required<ScopeOptions> {
+  return { enable: kind === 'host' ? 1 : 0, policy_in: PVE_DEFAULT_POLICY_IN, policy_out: PVE_DEFAULT_POLICY_OUT, log_level_in: 'nolog', log_level_out: 'nolog' }
+}
+
+/** The options of a scope as read, every field given: what Proxmox stores, else what it applies. */
+function readOptions(
+  s: Section,
+  cluster: firewallAPI.ClusterOptions | null,
+  nodes: Record<string, firewallAPI.NodeOptions>,
+  guests: Record<string, firewallAPI.VMOptions>,
+): ScopeOptions {
   const pick = (o: Record<string, unknown> | null | undefined): ScopeOptions => {
-    if (!o) return {}
-    const out: ScopeOptions = {}
+    const out: ScopeOptions = { ...optionDefaults(s.kind) }
+    if (!o) return out
     if (o.enable !== undefined) out.enable = Number(o.enable) === 1 ? 1 : 0
     for (const key of ['policy_in', 'policy_out', 'log_level_in', 'log_level_out'] as const) {
-      if (typeof o[key] === 'string') out[key] = o[key] as string
+      if (typeof o[key] === 'string' && o[key]) out[key] = o[key] as string
     }
     return out
   }
   if (s.kind === 'cluster') return pick(cluster as Record<string, unknown> | null)
   if (s.kind === 'host') return pick(nodes[s.node!] as Record<string, unknown> | undefined)
-  return pick(s.guest?.options as Record<string, unknown> | null)
+  return pick((guests[s.key] ?? s.guest?.options) as Record<string, unknown> | null)
 }
 
 function objectName(s: Section, t: ReturnType<typeof useTranslations<'microsegPilot.dfw'>>): string {

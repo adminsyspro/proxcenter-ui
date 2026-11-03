@@ -14,11 +14,16 @@ import type { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 const h = vi.hoisted(() => ({
   getNodeRules: vi.fn(),
   getNodeOptions: vi.fn(),
+  getVMOptions: vi.fn(),
   toast: vi.fn(),
   events: [] as any[],
 }))
 
-vi.mock('@/lib/api/firewall', () => ({ getNodeRules: (...a: any[]) => h.getNodeRules(...a), getNodeOptions: (...a: any[]) => h.getNodeOptions(...a) }))
+vi.mock('@/lib/api/firewall', () => ({
+  getNodeRules: (...a: any[]) => h.getNodeRules(...a),
+  getNodeOptions: (...a: any[]) => h.getNodeOptions(...a),
+  getVMOptions: (...a: any[]) => h.getVMOptions(...a),
+}))
 vi.mock('@/lib/microseg/useMicroseg', () => ({ useMicrosegPolicy: () => ({ data: { last_revision: { id: 'rev1' } } }) }))
 vi.mock('@/lib/microseg/useLastRevision', () => ({
   useLastRevisionSnapshot: () => ({
@@ -66,8 +71,12 @@ function props(over: Partial<FirewallingViewProps> = {}): FirewallingViewProps {
   }
 }
 
-const renderView = (p = props(), canWrite = true) =>
-  renderWithProviders(<MicrosegWriteContext.Provider value={canWrite}><FirewallingView {...p} /></MicrosegWriteContext.Provider>)
+/** Renders the tab and opens the cluster section (every section starts collapsed), unless `collapsed`. */
+const renderView = (p = props(), canWrite = true, collapsed = false) => {
+  const view = renderWithProviders(<MicrosegWriteContext.Provider value={canWrite}><FirewallingView {...p} /></MicrosegWriteContext.Provider>)
+  if (!collapsed) fireEvent.click(within(screen.getByTestId('dfw-section-cluster')).getByRole('button', { name: /Expand/ }))
+  return view
+}
 
 const ruleRow = (name: string) => screen.getAllByTestId('dfw-rule-row').find(r => within(r).queryByText(name))!
 const publishButton = () => screen.getByRole('button', { name: /^Publish \(\d+\)$/ })
@@ -75,6 +84,7 @@ const publishButton = () => screen.getByRole('button', { name: /^Publish \(\d+\)
 beforeEach(() => {
   vi.clearAllMocks()
   try { sessionStorage.clear() } catch { /* storage blocked */ }
+  h.getVMOptions.mockResolvedValue({ enable: 1, policy_in: 'DROP', log_level_in: 'info' })
   const now = Date.now()
   h.events = [
     ...Array.from({ length: 3 }, (_, i) => ({ seq: i, ts: new Date(now - 3600_000).toISOString(), zone: 'db', proto: 'tcp', dport: 5432, verdict: 'blocked' })),
@@ -112,7 +122,12 @@ describe('Firewalling: sections and badges', () => {
     expect(within(deny).getByTestId('dfw-hits')).toHaveTextContent('3')
     expect(within(deny).queryByRole('checkbox')).toBeNull()
     // Zone rules 1 and 2, then the cluster's from 3.
-    expect(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 3 enabled' })).toBeInTheDocument()
+    // Numbered per section, from 1: the zone's 1 and 2, the cluster's 1 and 2.
+    expect(within(ruleRow('[pc-microseg] app -> db')).getByRole('switch', { name: 'Rule 1 enabled' })).toBeInTheDocument()
+    expect(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' })).toBeInTheDocument()
+    // A rule of the engine carries a lock and no drag handle.
+    expect(appRule.querySelector('.ri-draggable')).toBeNull()
+    expect(ruleRow('Admin SSH').querySelector('.ri-draggable')).not.toBeNull()
     expect(within(ruleRow('Admin SSH')).getByTestId('dfw-hits')).toHaveTextContent('-')
     fireEvent.mouseOver(within(ruleRow('Admin SSH')).getByTestId('dfw-hits'))
     expect(await screen.findByText('Proxmox exposes no per-rule counters')).toBeInTheDocument()
@@ -357,6 +372,51 @@ describe('Firewalling: the engine block of a guest and the way out of a conflict
     expect(within(ruleRow('Old Zabbix')).queryByRole('combobox')).toBeNull()
     answer(new Response(JSON.stringify({ applied: 1, total: 1, scopes: {} }), { status: 200 }))
     await waitFor(() => expect(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' })).toBeEnabled())
+    fetchSpy.mockRestore()
+  })
+})
+
+describe('Firewalling: final recette details', () => {
+  it('opens with every section collapsed, the cluster too', () => {
+    renderView(props(), true, true)
+    expect(within(screen.getByTestId('dfw-section-cluster')).getByRole('button', { name: /Expand/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryAllByTestId('dfw-rule-row')).toHaveLength(0)
+  })
+
+  it('shows a zone guest options as Proxmox stores them, and the Proxmox default for what it does not store', async () => {
+    renderView()
+    fireEvent.click(within(screen.getByTestId('dfw-group-100')).getByRole('button', { name: /Expand/ }))
+    fireEvent.click(within(screen.getByTestId('dfw-section-guest:qemu/102')).getByRole('button', { name: /Actions of/ }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Firewall options' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(h.getVMOptions).toHaveBeenCalledTimes(1)
+    // Firewall on, inbound DROP and info as stored; outbound ACCEPT and nolog as Proxmox applies them.
+    expect(within(dialog).getAllByRole('combobox').map(c => c.textContent)).toEqual(['On', 'DROP', 'ACCEPT', 'info', 'nolog'])
+    // Opening and saving without a change makes no change to publish.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(publishButton()).toHaveTextContent('Publish (0)')
+  })
+
+  it('keeps the summary of the last publish next to the unpublished count until the draft changes', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ applied: 1, total: 1, scopes: {} }), { status: 200 }))
+    renderView()
+    fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' }))
+    fireEvent.click(publishButton())
+    expect(await screen.findByTestId('dfw-publish-summary')).toHaveTextContent('Last publish: 1 of 1 changes applied')
+    expect(h.toast).toHaveBeenCalledWith('1 change published', 'success')
+    fireEvent.click(within(ruleRow('Old Zabbix')).getByRole('switch', { name: 'Rule 2 enabled' }))
+    expect(screen.queryByTestId('dfw-publish-summary')).toBeNull()
+    fetchSpy.mockRestore()
+  })
+
+  it('says where the last publish stopped', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      applied: 0, total: 1, scopes: {}, failed: { index: 0, kind: 'rule.edit', scope: 'cluster', code: 'PVE_ERROR', message: 'timeout' },
+    }), { status: 502 }))
+    renderView()
+    fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' }))
+    fireEvent.click(publishButton())
+    expect(await screen.findByTestId('dfw-publish-summary')).toHaveTextContent('Last publish: 0 of 1 changes applied, stopped on rule.edit in cluster')
     fetchSpy.mockRestore()
   })
 })

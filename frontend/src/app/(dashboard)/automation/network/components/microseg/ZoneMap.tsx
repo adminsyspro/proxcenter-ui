@@ -8,7 +8,6 @@ import type { ListSuggestionsParams } from '@/lib/microseg/api'
 import type { MicrosegFlow, SuggestionAction } from '@/lib/microseg/types'
 import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
-import { useServiceNames } from '@/lib/network/serviceNames'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
 import EdgePanel from './EdgePanel'
@@ -88,8 +87,6 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
   const [view, setView] = useMapView()
   const [centre, setCentre] = useState<string | null>(null)
-  // The names of the services are baked into the labels of the model: they are built again when the full table arrives.
-  const serviceNamesVersion = useServiceNames()
 
   const { zones, flows, pending_members: pendingMembers } = policy
   const tagPrefix = policy.policy.tag_prefix
@@ -115,8 +112,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     const zoned = new Set([...membersByZone.values()].flatMap(list => list.map(m => guestKey(m.ref))))
     const unzoned = membersKnown ? guests.filter(g => g.status === 'running' && !zoned.has(guestKey(g))).map(guestToMember) : null
     return { zones, flows, suggestions: suggestions.data ?? [], members, unzoned, unapplied }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the version only makes a new input, so that the labels are built again
-  }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied, serviceNamesVersion])
+  }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied])
   // The zone of the guest view: the one picked, else (or once it is deleted) the one with the most observed traffic.
   const centreId = useMemo(
     () => (centre && zonesById.has(centre) ? centre : defaultCentre(zones, input.suggestions)),

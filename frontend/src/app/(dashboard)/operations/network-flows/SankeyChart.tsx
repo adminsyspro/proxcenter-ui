@@ -32,7 +32,7 @@ import {
 
 import { formatBytes } from '@/utils/format'
 import { groupKeyOf } from '@/lib/microseg/trafficLens'
-import { serviceLabel, useServiceNames } from '@/lib/network/serviceNames'
+import { serviceLabel } from '@/lib/network/serviceNames'
 
 import {
   buildEndpointIndex,
@@ -123,7 +123,6 @@ type Props = {
 
 export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {}) {
   const t = useTranslations()
-  const serviceNamesVersion = useServiceNames()
   const theme = useTheme()
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -280,8 +279,7 @@ export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {})
     }
 
     return { nodes, links, matchCount: matchedFlows.length }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the version only rebuilds the service names once the full table is loaded
-  }, [pairs, matchedPairs, endpointIndex, q, mode, endpointKey, nodeLabel, lens, serviceNamesVersion])
+  }, [pairs, matchedPairs, endpointIndex, q, mode, endpointKey, nodeLabel, lens])
 
   // Compute Sankey layout
   const layout = useMemo(() => {

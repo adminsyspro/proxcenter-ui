@@ -4,7 +4,7 @@ import { Box, Chip, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
-import { serviceLabel, serviceTitle, useServiceNames } from '@/lib/network/serviceNames'
+import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
 
 type Props = {
   flow: MicrosegFlow
@@ -35,7 +35,6 @@ export function flowService(flow: Pick<MicrosegFlow, 'proto' | 'dport'>): string
  */
 export default function FlowSummary({ flow, zonesById }: Props) {
   const t = useTranslations('microsegPilot.policy.flow')
-  useServiceNames()
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: '1 1 auto' }}>
       <Side zoneId={flow.src_zone_id} cidr={flow.src_cidr} zonesById={zonesById} />

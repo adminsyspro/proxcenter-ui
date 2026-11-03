@@ -81,7 +81,7 @@ describe('Check now button', () => {
 
 describe('Check window', () => {
   it('waits in the queue, follows the run, then shows the check rows and the log; Open Drifts switches the sub-tab', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date('2026-11-03T10:00:10Z') })
     let pending = false
     let listed: MicrosegRun[] = []
     // The orchestrator answers an empty result for a run that has not ended.
@@ -158,7 +158,7 @@ describe('Check window', () => {
     mock.routes['GET /status'] = () => reply(200, statusWith(false))
     mock.routes['GET /runs?limit=10'] = () => reply(200, { runs: [runOf('f1', 'full', '2026-11-03T10:00:05Z')], limit: 10, offset: 0 })
     mock.routes['GET /runs/f1'] = () => reply(200, runOf('f1', 'full', '2026-11-03T10:00:05Z', { result: result({ guests: 4, members: 2, trigger: 'check' }) }))
-    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date('2026-11-03T10:00:10Z') })
     renderTab()
 
     await screen.findByRole('button', { name: 'Check now' })

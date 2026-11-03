@@ -5,7 +5,7 @@ import { Alert, Box, Button, Chip, Collapse, IconButton, Tooltip, Typography } f
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
-import { serviceLabel, serviceTitle, serviceTokensTitle, useServiceNames } from '@/lib/network/serviceNames'
+import { serviceLabel, serviceTitle, serviceTokensTitle } from '@/lib/network/serviceNames'
 
 import { OneLine } from './dialogParts'
 import { MapNamesContext, isSampled, observedHits, type EdgeT } from './FlowEdge'
@@ -96,7 +96,6 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
  */
 export default function EdgePanel({ edgeId, source, target, data, from, to, zonesById, unapplied, connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onClose, onEdit }: Props) {
   const t = useTranslations('microsegPilot.overview')
-  useServiceNames()
   const observedKind = data.kind === 'unprotected' || data.kind === 'blocked'
   const tokens = [...new Set([...data.flows, ...data.observed].map(f => flowService(f)))].sort()
   const servicesTip = tokens.length ? serviceTokensTitle(tokens) : data.label

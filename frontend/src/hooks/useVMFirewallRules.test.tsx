@@ -46,6 +46,16 @@ afterEach(() => {
 
 const urls = () => fetchMock.mock.calls.map(([u]) => String(u))
 
+describe('useVMFirewallRules reset (recette N1)', () => {
+  it('hands the same reset function on every render, so an effect listing it does not run on each render', () => {
+    const { result, rerender } = renderHook(() => useVMFirewallRules('conn-1'))
+    const first = result.current.setVMFirewallData
+    rerender()
+    rerender()
+    expect(result.current.setVMFirewallData).toBe(first)
+  })
+})
+
 describe('useVMFirewallRules (UA44)', () => {
   it('reads the guest list in one request to the coverage route, and no guest rules, options or config', async () => {
     fetchMock.mockResolvedValue(answer(coverage([row(100), row(101, { enabled: null, nicFirewall: null })], { total: 250, measured: 200 })))

@@ -221,10 +221,12 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
     }
   }, [connectionId])
 
-  const resetVMFirewallData: typeof setVMFirewallData = (value) => {
+  // Stable across renders (its setters are): the page lists it in an effect that resets the list on a connection
+  // change, and a new function each render made that effect run, and the list reload, on every render.
+  const resetVMFirewallData = useCallback<typeof setVMFirewallData>((value) => {
     setVMFirewallData(value)
     setLoaded(false)
-  }
+  }, [])
 
   return {
     vmFirewallData,

@@ -289,6 +289,19 @@ describe('a plan or an apply written during a stop', () => {
     expect(screen.getByText('0 done, 0 failed, 0 not run')).toBeTruthy()
   })
 
+  it('shows the warning once when the orchestrator also notes it, and keeps its other notes', () => {
+    const note = 'written while the emergency stop holds the cluster firewall off; takes effect when the stop is lifted'
+    renderTab(<ApplyResult run={run({ stop_active: true, done: [], notes: [note, 'one guest was skipped'] })} guests={[]} />)
+    expect(screen.getAllByText(new RegExp(note.slice(8), 'i'))).toHaveLength(1)
+    expect(screen.getByText(LINE)).toBeTruthy()
+    expect(screen.getByText('Notes: one guest was skipped')).toBeTruthy()
+  })
+
+  it('keeps the orchestrator note when the mark is absent', () => {
+    renderTab(<ApplyResult run={run({ done: [], notes: ['held by the emergency stop'] })} guests={[]} />)
+    expect(screen.getByText(/held by the emergency stop/)).toBeTruthy()
+  })
+
   it('draws no warning in the apply result without the mark', () => {
     renderTab(<ApplyResult run={run({ done: [] })} guests={[]} />)
     expect(screen.queryByText(LINE)).toBeNull()

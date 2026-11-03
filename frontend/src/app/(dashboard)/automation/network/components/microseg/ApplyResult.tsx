@@ -9,6 +9,9 @@ import { Notice } from './PlanNotices'
 import PlanSteps from './PlanSteps'
 import type { PolicyGuest } from './zoneModel'
 
+/** The orchestrator's note that a write was made while the emergency stop holds the cluster firewall off. */
+const STOP_NOTE_RE = /emergency stop/i
+
 type Props = { run: MicrosegRun; guests: PolicyGuest[] }
 
 /** The outcome of a finished apply run: counts, why it stopped, then the failed steps and the ones not run, per guest. */
@@ -24,7 +27,8 @@ export default function ApplyResult({ run, guests }: Props) {
 
   const summary = t('resultSummary', { done: result.done?.length ?? 0, failed: failed.length, notRun: notRun.length })
   const errors = result.errors ?? []
-  const notes = result.notes ?? []
+  // The stop warning line says what the orchestrator's own note about the stop says: it is shown once.
+  const notes = (result.notes ?? []).filter(note => !(result.stop_active && STOP_NOTE_RE.test(note)))
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>

@@ -172,6 +172,7 @@ export default function NetworkAutomationPage() {
               totalIPSetEntries={totalIPSetEntries}
               nodesList={nodesList}
               loadError={firewallLoadError || null}
+              loading={loading}
               reload={loadFirewallData}
               onNavigateTab={setActiveTab}
               onNavigateRulesSubTab={setRulesSubTab}

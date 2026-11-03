@@ -40,7 +40,7 @@ function stubMicrosegRelay() {
 
 function renderDashboard(
   clusterOptions: firewallAPIType.ClusterOptions | null,
-  over: { selectedConnection?: string; onNavigateTab?: (tab: number) => void; loadError?: string | null; reload?: () => void } = {},
+  over: { selectedConnection?: string; onNavigateTab?: (tab: number) => void; loadError?: string | null; reload?: () => void; loading?: boolean } = {},
 ) {
   // The shared test provider does not read on mount; the page does.
   renderWithProviders(
@@ -61,6 +61,7 @@ function renderDashboard(
       nodesList={['pve1']}
       reload={over.reload ?? vi.fn()}
       loadError={over.loadError}
+      loading={over.loading}
       onNavigateTab={over.onNavigateTab ?? vi.fn()}
       onNavigateRulesSubTab={vi.fn()}
     />
@@ -146,5 +147,13 @@ describe('DashboardTab load error', () => {
 
     expect(screen.getByText('Cluster firewall not configured')).toBeInTheDocument()
     expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument()
+  })
+
+  it('shows a placeholder, never the wizard, while the firewall data is loading', () => {
+    stubMicrosegRelay()
+    renderDashboard(null, { loading: true })
+
+    expect(screen.getByTestId('firewall-loading-placeholder')).toBeInTheDocument()
+    expect(screen.queryByText('Cluster firewall not configured')).not.toBeInTheDocument()
   })
 })

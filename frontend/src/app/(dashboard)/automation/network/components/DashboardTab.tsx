@@ -33,6 +33,8 @@ interface DashboardTabProps {
   nodesList: string[]
   /** What failed on the last load of the firewall data, null when it all loaded. */
   loadError?: string | null
+  /** The firewall data is still loading: nothing can be said about the cluster yet. */
+  loading?: boolean
   // Handlers
   reload: () => void
   // Navigation
@@ -70,7 +72,7 @@ const BreakdownRow = ({ icon, label, points, reason }: {
 export default function DashboardTab({
   vmFirewallData, loadingVMRules, firewallMode, currentOptions,
   selectedConnection, clusterOptions, clusterRules, nodesList,
-  securityGroups, totalRules, loadError,
+  securityGroups, totalRules, loadError, loading = false,
   reload, onNavigateTab, onNavigateRulesSubTab
 }: DashboardTabProps) {
   const theme = useTheme()
@@ -79,8 +81,10 @@ export default function DashboardTab({
   const [showBreakdown, setShowBreakdown] = useState(false)
 
   // Virgin cluster detection (works for both cluster and standalone — PVE always has cluster-level firewall).
-  // Never on a failed load: missing options would read as a cluster nobody configured, and offer to deploy over it.
+  // Never on a failed load nor while loading: missing options would read as a cluster nobody configured,
+  // and offer to deploy over it.
   const isVirginCluster = !loadError
+    && !loading
     && clusterOptions?.enable !== 1
     && clusterRules.length === 0
 
@@ -108,6 +112,10 @@ export default function DashboardTab({
   return (
     <Box sx={{ p: 3 }}>
       <FirewallLoadAlert error={loadError} onRetry={reload} />
+
+      {loading && selectedConnection && !loadError && (
+        <Skeleton variant="rounded" height={56} sx={{ mb: 3 }} data-testid="firewall-loading-placeholder" />
+      )}
 
       {/* Virgin cluster banner */}
       {isVirginCluster && selectedConnection && (

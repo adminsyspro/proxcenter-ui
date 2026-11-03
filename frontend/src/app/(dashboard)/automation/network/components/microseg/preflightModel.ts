@@ -42,6 +42,16 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
   }
 }
 
+export type RateUnit = 'second' | 'minute' | 'hour' | 'day'
+
+const RATE_RE = /^\s*(\d+)\s*\/\s*(second|minute|hour|day)\s*$/
+
+/** A PVE log rate ("20/second") split into its count and unit, to be said in the user's language; null when PVE wrote something else. */
+export function parseRate(raw: string | undefined): { count: number; unit: RateUnit } | null {
+  const m = RATE_RE.exec(raw ?? '')
+  return m ? { count: Number(m[1]), unit: m[2] as RateUnit } : null
+}
+
 const KNOWN_IDS = new Set(['cluster_firewall', 'socle_rules', 'log_ratelimit', 'self_in_zone'])
 
 export function preflightMessage(check: PreflightCheck): PreflightMessage {

@@ -13021,7 +13021,10 @@
         "status": "상태: {status}"
       },
       "controls": "확대 및 맞춤 컨트롤",
-      "minimap": "지도 개요"
+      "minimap": "지도 개요",
+      "zoomIn": "확대",
+      "zoomOut": "축소",
+      "fitView": "지도를 화면에 맞추기"
     },
     "preflight": {
       "title": "사전 점검",
@@ -13060,6 +13063,12 @@
           "unknown": "ProxCenter 주소를 감지하지 못해 이 점검은 판단할 수 없습니다. 설정에서 지정하세요.",
           "inZone": "ProxCenter({self_ip})가 {zone} 영역 안에 있습니다. 강제 적용하면 연결이 끊길 수 있습니다."
         }
+      },
+      "rateUnits": {
+        "second": "초당 {count, number}건",
+        "minute": "분당 {count, number}건",
+        "hour": "시간당 {count, number}건",
+        "day": "하루 {count, number}건"
       }
     },
     "settings": {

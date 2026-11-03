@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo } from 'react'
 import {
-  Background, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type EdgeMouseHandler, type Node, type NodeMouseHandler,
+  Background, ControlButton, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type EdgeMouseHandler, type Node, type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Box, alpha, useTheme, type Theme } from '@mui/material'
@@ -59,7 +59,7 @@ type Props = {
 }
 
 function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHover, onFocusNode, onClear, panelOpen }: Props) {
-  const { fitView } = useReactFlow()
+  const { fitView, zoomIn, zoomOut } = useReactFlow()
   const theme = useTheme()
   const t = useTranslations('microsegPilot.overview')
 
@@ -118,7 +118,18 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={24} size={1} />
-            <Controls showInteractive={false} position='bottom-left' aria-label={t('controls')} />
+            {/* Own buttons: the built-in ones carry English titles ("Zoom In", "Fit View") that cannot be translated. */}
+            <Controls showZoom={false} showFitView={false} showInteractive={false} position='bottom-left' aria-label={t('controls')}>
+              <ControlButton title={t('zoomIn')} aria-label={t('zoomIn')} onClick={() => { void zoomIn({ duration: 200 }) }}>
+                <i className='ri-add-line' aria-hidden />
+              </ControlButton>
+              <ControlButton title={t('zoomOut')} aria-label={t('zoomOut')} onClick={() => { void zoomOut({ duration: 200 }) }}>
+                <i className='ri-subtract-line' aria-hidden />
+              </ControlButton>
+              <ControlButton title={t('fitView')} aria-label={t('fitView')} onClick={() => { void fitView({ padding: 0.1, duration: 300, maxZoom: 1 }) }}>
+                <i className='ri-fullscreen-line' aria-hidden />
+              </ControlButton>
+            </Controls>
             <MiniMap
               pannable
               zoomable

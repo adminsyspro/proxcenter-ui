@@ -41,10 +41,22 @@ describe('checks', () => {
     expect(within(socle).getByText(/22/)).toBeTruthy()
     expect(within(socle).queryByText(/8006/)).toBeNull()
     const rate = screen.getByRole('listitem', { name: 'Log rate limit: warning' })
-    expect(within(rate).getByText(/1\/second/)).toBeTruthy()
+    expect(within(rate).getByText(/1 per second/)).toBeTruthy()
     const self = screen.getByRole('listitem', { name: 'ProxCenter address: passed' })
     expect(within(self).getByText(/could not be detected/i)).toBeTruthy()
     expect(screen.getAllByRole('listitem')).toHaveLength(4)
+  })
+
+  it('says the rate limit with a translated unit, and keeps a wording it does not know as PVE wrote it', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [
+        { id: 'log_ratelimit', status: 'pass', detail: { rate: '20/minute' } },
+        { id: 'log_ratelimit', status: 'warn', detail: { rate: '5/fortnight' } },
+      ],
+    })
+    open()
+    expect(await screen.findByText('PVE logs up to 20 per minute.')).toBeTruthy()
+    expect(screen.getByText(/default rate \(5\/fortnight\)/)).toBeTruthy()
   })
 
   it('says where ProxCenter sits when it is inside an active zone', async () => {

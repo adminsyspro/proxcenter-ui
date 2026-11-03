@@ -13021,7 +13021,10 @@
         "status": "Status: {status}"
       },
       "controls": "Zoom and fit controls",
-      "minimap": "Overview of the map"
+      "minimap": "Overview of the map",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "fitView": "Fit the map to the view"
     },
     "preflight": {
       "title": "Pre-flight checks",
@@ -13060,6 +13063,12 @@
           "unknown": "The address of ProxCenter could not be detected, so this check cannot tell. Set it in the settings.",
           "inZone": "ProxCenter ({self_ip}) is inside the zone {zone}: enforcing it could cut the connection."
         }
+      },
+      "rateUnits": {
+        "second": "{count, number} per second",
+        "minute": "{count, number} per minute",
+        "hour": "{count, number} per hour",
+        "day": "{count, number} per day"
       }
     },
     "settings": {

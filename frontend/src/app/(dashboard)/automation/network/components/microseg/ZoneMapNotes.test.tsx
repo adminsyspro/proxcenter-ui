@@ -9,7 +9,7 @@ import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProvider
 
 import { GUESTS_ROUTE, mock, reply } from './microsegTestKit'
 import { db, installFreshMocks, vm, web } from './policyTestKit'
-import { fitView } from './xyflowTestMock'
+import { fitView, zoomIn, zoomOut } from './xyflowTestMock'
 import { flowOf, node, pathOf, setup, wouldBlock } from './zoneMapTestKit'
 
 installFreshMocks()
@@ -118,5 +118,26 @@ describe('map notes', () => {
     const other = await screen.findByRole('complementary', { name: 'Zone db' })
     expect(await within(other).findByText('db-00')).toBeTruthy()
     expect(within(other).queryByText('db-10')).toBeNull()
+  })
+})
+
+describe('canvas controls', () => {
+  it('names the zoom and fit buttons in the language of the user and drives the canvas with them', async () => {
+    setup({ zones: [web()] })
+    await node('zone:zw')
+    const controls = screen.getByTestId('flow-controls')
+    zoomIn.mockClear()
+    zoomOut.mockClear()
+
+    fireEvent.click(within(controls).getByRole('button', { name: 'Zoom in' }))
+    fireEvent.click(within(controls).getByRole('button', { name: 'Zoom out' }))
+    expect(zoomIn).toHaveBeenCalledTimes(1)
+    expect(zoomOut).toHaveBeenCalledTimes(1)
+
+    fitView.mockClear()
+    const fit = within(controls).getByRole('button', { name: 'Fit the map to the view' })
+    expect(fit.getAttribute('title')).toBe('Fit the map to the view')
+    fireEvent.click(fit)
+    expect(fitView).toHaveBeenCalledTimes(1)
   })
 })

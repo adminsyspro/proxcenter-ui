@@ -13021,7 +13021,10 @@
         "status": "状态：{status}"
       },
       "controls": "缩放和适配控件",
-      "minimap": "地图概览"
+      "minimap": "地图概览",
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "fitView": "使地图适应视图"
     },
     "preflight": {
       "title": "预检",
@@ -13060,6 +13063,12 @@
           "unknown": "无法检测 ProxCenter 的地址，此项检查无法判断。请在设置中指定。",
           "inZone": "ProxCenter（{self_ip}）位于区域 {zone} 内：强制执行可能会切断连接。"
         }
+      },
+      "rateUnits": {
+        "second": "每秒 {count, number} 条",
+        "minute": "每分钟 {count, number} 条",
+        "hour": "每小时 {count, number} 条",
+        "day": "每天 {count, number} 条"
       }
     },
     "settings": {

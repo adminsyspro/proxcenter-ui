@@ -8,7 +8,7 @@ import { MicrosegApiError, microsegApi, microsegErrorKeyOf } from '@/lib/microse
 import type { PreflightCheck, PreflightStatus } from '@/lib/microseg/types'
 
 import { ONE_LINE_SX } from './dialogParts'
-import { opensWizard, preflightMessage } from './preflightModel'
+import { opensWizard, parseRate, preflightMessage } from './preflightModel'
 
 const STATUS_ICON: Record<PreflightStatus, { icon: string; color: string }> = {
   pass: { icon: 'ri-checkbox-circle-fill', color: 'success.main' },
@@ -20,7 +20,10 @@ function CheckRow({ check, onOpenWizard }: { check: PreflightCheck; onOpenWizard
   const t = useTranslations('microsegPilot.preflight')
   const { title, detail } = preflightMessage(check)
   const name = title ? t(`checks.${title}.title`) : check.id
-  const message = detail ? t(detail.key, detail.values) : ''
+  // The rate PVE writes ("20/second") is said with a translated unit; any other wording is shown as PVE wrote it.
+  const rate = parseRate(detail?.values?.rate)
+  const values = rate ? { ...detail?.values, rate: t(`rateUnits.${rate.unit}`, { count: rate.count }) } : detail?.values
+  const message = detail ? t(detail.key, values) : ''
   const icon = STATUS_ICON[check.status] ?? STATUS_ICON.warn
 
   return (

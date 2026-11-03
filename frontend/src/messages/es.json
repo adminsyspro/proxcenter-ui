@@ -13021,7 +13021,10 @@
         "status": "Estado: {status}"
       },
       "controls": "Controles de zoom y ajuste",
-      "minimap": "Vista general del mapa"
+      "minimap": "Vista general del mapa",
+      "zoomIn": "Acercar",
+      "zoomOut": "Alejar",
+      "fitView": "Ajustar el mapa a la vista"
     },
     "preflight": {
       "title": "Comprobaciones previas",
@@ -13060,6 +13063,12 @@
           "unknown": "No se pudo detectar la dirección de ProxCenter, así que esta comprobación no puede concluir. Indíquela en los ajustes.",
           "inZone": "ProxCenter ({self_ip}) está dentro de la zona {zone}: aplicarla podría cortar la conexión."
         }
+      },
+      "rateUnits": {
+        "second": "{count, number} por segundo",
+        "minute": "{count, number} por minuto",
+        "hour": "{count, number} por hora",
+        "day": "{count, number} por día"
       }
     },
     "settings": {

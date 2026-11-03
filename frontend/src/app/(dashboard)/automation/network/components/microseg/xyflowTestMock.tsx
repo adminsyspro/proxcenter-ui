@@ -15,6 +15,9 @@ type AnyProps = Record<string, any>
 
 /** The fit-to-view the canvas asks for, to check when it refits. */
 export const fitView = vi.fn(() => Promise.resolve(true))
+/** The zoom buttons of the canvas. */
+export const zoomIn = vi.fn(() => Promise.resolve(true))
+export const zoomOut = vi.fn(() => Promise.resolve(true))
 
 export function ReactFlowMock({ nodes, edges, nodeTypes, edgeTypes, onNodeClick, onPaneClick, onEdgeClick, onNodeMouseEnter, onNodeMouseLeave, onEdgeMouseEnter, onEdgeMouseLeave, children }: AnyProps) {
   return (
@@ -64,12 +67,13 @@ export const xyflowMock = {
   ReactFlow: ReactFlowMock,
   ReactFlowProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   Background: () => null,
-  Controls: () => <div data-testid='flow-controls' />,
+  Controls: ({ children, 'aria-label': label }: AnyProps) => <div data-testid='flow-controls' aria-label={label}>{children}</div>,
+  ControlButton: ({ children, ...props }: AnyProps) => <button type='button' {...props}>{children}</button>,
   MiniMap: () => <div data-testid='flow-minimap' />,
   Handle: () => null,
   Position: { Top: 'top', Bottom: 'bottom', Left: 'left', Right: 'right' },
   MarkerType: { ArrowClosed: 'arrowclosed' },
-  useReactFlow: () => ({ fitView }),
+  useReactFlow: () => ({ fitView, zoomIn, zoomOut }),
   BaseEdge: ({ id, path, style, className }: AnyProps) => <path data-testid={`path-${id}`} d={path} className={className} data-stroke={style?.stroke} data-dash={style?.strokeDasharray ?? ''} />,
   EdgeLabelRenderer: ({ children }: { children: ReactNode }) => createPortal(children, document.body),
 }

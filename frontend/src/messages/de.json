@@ -12689,7 +12689,10 @@
         "status": "Status: {status}"
       },
       "controls": "Zoom- und Anpassungssteuerung",
-      "minimap": "Übersicht der Karte"
+      "minimap": "Übersicht der Karte",
+      "zoomIn": "Vergrößern",
+      "zoomOut": "Verkleinern",
+      "fitView": "Karte an die Ansicht anpassen"
     },
     "preflight": {
       "title": "Vorabprüfungen",
@@ -12728,6 +12731,12 @@
           "unknown": "Die Adresse von ProxCenter konnte nicht erkannt werden, diese Prüfung kann daher nichts aussagen. Legen Sie sie in den Einstellungen fest.",
           "inZone": "ProxCenter ({self_ip}) liegt in der Zone {zone}: Sie durchzusetzen könnte die Verbindung abschneiden."
         }
+      },
+      "rateUnits": {
+        "second": "{count, number} pro Sekunde",
+        "minute": "{count, number} pro Minute",
+        "hour": "{count, number} pro Stunde",
+        "day": "{count, number} pro Tag"
       }
     },
     "settings": {

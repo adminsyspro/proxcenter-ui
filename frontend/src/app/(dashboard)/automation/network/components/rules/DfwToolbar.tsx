@@ -119,7 +119,6 @@ type ActionBarProps = {
   filter: string
   onFilter: (value: string) => void
   onAddRule: () => void
-  onAddSection: () => void
   onEnable: () => void
   onDisable: () => void
   onClone: () => void
@@ -130,7 +129,7 @@ type ActionBarProps = {
   onClearSelection: () => void
 }
 
-/** Add rule, Add section, then what the checked rules can do, and the filter. */
+/** Add rule (with a scope to pick), then what the checked rules can do, and the filter. */
 export function ActionBar(p: ActionBarProps) {
   const t = useTranslations('microsegPilot.dfw')
   const tg = useTranslations()
@@ -149,11 +148,6 @@ export function ActionBar(p: ActionBarProps) {
       <WriteTip>
         <Button size='small' onClick={p.onAddRule} disabled={!p.canWrite || !p.canAddRule} startIcon={<i className='ri-add-line' />} sx={{ textTransform: 'none', fontWeight: 600 }}>
           {tg('networkPage.addRule')}
-        </Button>
-      </WriteTip>
-      <WriteTip>
-        <Button size='small' onClick={p.onAddSection} disabled={!p.canWrite} startIcon={<i className='ri-folder-add-line' />} sx={{ textTransform: 'none', fontWeight: 600 }}>
-          {t('addSection')}
         </Button>
       </WriteTip>
       <Divider orientation='vertical' flexItem sx={{ mx: 0.5 }} />

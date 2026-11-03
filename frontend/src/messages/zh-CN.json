@@ -13647,7 +13647,6 @@
         "vms": "虚拟机",
         "all": "全部"
       },
-      "addSection": "添加部分",
       "bulk": {
         "enable": "启用",
         "disable": "禁用",
@@ -13666,12 +13665,6 @@
         "hint": "发布时在此删除，并在该部分末尾创建",
         "notRead": "请先展开该部分：其规则尚未读取",
         "confirm": "移动"
-      },
-      "addSectionDialog": {
-        "title": "添加部分",
-        "target": "主机或虚拟机",
-        "hint": "该部分将以第一条规则打开：接下来是规则编辑器",
-        "confirm": "继续"
       },
       "optionsDialog": {
         "title": "{name} 的防火墙选项",
@@ -13755,7 +13748,12 @@
       "conflictOptions": "某部分的防火墙选项在读取后已在 Proxmox 中更改。请放弃该部分的更改后再次发布：其他部分的更改保留",
       "publishAgain": "请再次发布：未应用的更改仍在草稿中。",
       "summary": "上次发布：已应用 {total} 项中的 {applied} 项",
-      "summaryStopped": "上次发布：已应用 {total} 项中的 {applied} 项，在 {scope} 的 {kind} 处停止"
+      "summaryStopped": "上次发布：已应用 {total} 项中的 {applied} 项，在 {scope} 的 {kind} 处停止",
+      "addRuleShort": "添加规则",
+      "addRuleTo": "向 {name} 添加规则",
+      "addARule": "添加一条规则",
+      "ruleScope": "应用于",
+      "readingScope": "正在读取该范围的规则：读取后即可保留该规则"
     }
   }
 }

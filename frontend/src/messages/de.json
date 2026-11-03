@@ -13315,7 +13315,6 @@
         "vms": "Gäste",
         "all": "Alle"
       },
-      "addSection": "Abschnitt hinzufügen",
       "bulk": {
         "enable": "Aktivieren",
         "disable": "Deaktivieren",
@@ -13334,12 +13333,6 @@
         "hint": "Hier gelöscht und beim Veröffentlichen am Ende dieses Abschnitts erstellt",
         "notRead": "Öffnen Sie zuerst diesen Abschnitt: Seine Regeln sind noch nicht gelesen",
         "confirm": "Verschieben"
-      },
-      "addSectionDialog": {
-        "title": "Abschnitt hinzufügen",
-        "target": "Host oder Gast",
-        "hint": "Der Abschnitt öffnet sich mit seiner ersten Regel: Danach folgt der Regeleditor",
-        "confirm": "Weiter"
       },
       "optionsDialog": {
         "title": "Firewall-Optionen von {name}",
@@ -13423,7 +13416,12 @@
       "conflictOptions": "die Firewall-Optionen eines Abschnitts wurden seit dem Lesen in Proxmox geändert. Verwerfen Sie die Änderungen dieses Abschnitts und veröffentlichen Sie erneut: Die anderen Abschnitte behalten ihre",
       "publishAgain": "Erneut veröffentlichen: Die nicht angewendeten Änderungen sind noch im Entwurf.",
       "summary": "Letzte Veröffentlichung: {applied} von {total} Änderungen angewendet",
-      "summaryStopped": "Letzte Veröffentlichung: {applied} von {total} Änderungen angewendet, gestoppt bei {kind} in {scope}"
+      "summaryStopped": "Letzte Veröffentlichung: {applied} von {total} Änderungen angewendet, gestoppt bei {kind} in {scope}",
+      "addRuleShort": "Regel hinzufügen",
+      "addRuleTo": "Regel zu {name} hinzufügen",
+      "addARule": "Eine Regel hinzufügen",
+      "ruleScope": "Gilt für",
+      "readingScope": "Die Regeln dieses Bereichs werden gelesen: Die Regel kann danach behalten werden"
     }
   }
 }

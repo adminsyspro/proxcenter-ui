@@ -545,12 +545,68 @@ describe('Firewalling: round 2 details', () => {
   })
 })
 
+describe('Firewalling: creating a rule', () => {
+  const keep = async () => {
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Comment'), { target: { value: 'created here' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep in the draft' }))
+  }
+
+  it('each user section has its Add rule, none on a zone group; on a collapsed section it opens it and the editor', async () => {
+    renderView(props(), true, true)
+    expect(within(screen.getByTestId('dfw-section-zone:pcz-db')).queryByRole('button', { name: /Add a rule to/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Add a rule to Cluster rules' }))
+    expect(within(await screen.findByRole('dialog')).queryByRole('combobox', { name: /Applies to/ })).toBeNull()
+    await keep()
+    // The section is open and the rule is the last of the cluster's.
+    const rows = screen.getAllByTestId('dfw-rule-row').map(r => r.textContent)
+    expect(rows.at(-1)).toContain('created here')
+    expect(publishButton()).toHaveTextContent('Publish (1)')
+  })
+
+  it('a host section read first: its Add rule reads the rules, the editor keeps the rule once read', async () => {
+    h.getNodeRules.mockResolvedValue([])
+    h.getNodeOptions.mockResolvedValue({ enable: 1 })
+    const p = props()
+    renderView(p, true, true)
+    fireEvent.click(screen.getByRole('button', { name: 'Add a rule to Host pve1' }))
+    await waitFor(() => expect(h.getNodeRules).toHaveBeenCalledWith('c1', 'pve1'))
+    expect(p.setHostRulesByNode).toHaveBeenCalled()
+  })
+
+  it('an empty section offers "No rules · Add a rule"', async () => {
+    renderView(props({ clusterRules: [] }))
+    const empty = screen.getByTestId('dfw-empty')
+    expect(empty).toHaveTextContent('No rules · Add a rule')
+    fireEvent.click(within(empty).getByRole('button', { name: 'Add a rule' }))
+    await keep()
+    expect(publishButton()).toHaveTextContent('Publish (1)')
+  })
+
+  it('the toolbar Add rule asks where: the cluster preselected, a host or a guest shown can be picked', async () => {
+    h.getNodeRules.mockResolvedValue([])
+    h.getNodeOptions.mockResolvedValue({ enable: 1 })
+    renderView(props(), true, true)
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }))
+    const dialog = await screen.findByRole('dialog')
+    const scope = within(dialog).getByRole('combobox', { name: /Applies to/ })
+    expect(scope).toHaveTextContent('Cluster rules')
+    fireEvent.mouseDown(scope)
+    const list = await screen.findByRole('listbox')
+    expect(within(list).getByText('Hosts')).toBeInTheDocument()
+    expect(within(list).getByRole('option', { name: 'vm-101 (101) · pve1' })).toBeInTheDocument()
+    fireEvent.click(within(list).getByRole('option', { name: 'Host pve2' }))
+    // The host's rules are read; the rule can be kept once they are.
+    await waitFor(() => expect(h.getNodeRules).toHaveBeenCalledWith('c1', 'pve2'))
+  })
+})
+
 describe('Firewalling for a read-only user', () => {
-  it('disables Publish, Add rule, Add section, the switches and the action, with the reason', async () => {
+  it('disables Publish, Add rule (toolbar and sections), the switches and the action, with the reason', async () => {
     renderView(props(), false)
     expect(publishButton()).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add rule' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Add section' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add a rule to Cluster rules' })).toBeDisabled()
     const ssh = ruleRow('Admin SSH')
     for (const s of within(ssh).getAllByRole('switch')) expect(s).toBeDisabled()
     expect(within(ssh).queryByRole('combobox')).toBeNull()
@@ -577,7 +633,7 @@ describe('Firewalling for a read-only user', () => {
   it('leaves them enabled with the right', () => {
     renderView()
     expect(screen.getByRole('button', { name: 'Add rule' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Add section' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Add section' })).toBeNull()
     expect(ruleRow('Admin SSH')).toHaveAttribute('draggable', 'true')
     expect(within(ruleRow('Admin SSH')).getByRole('button', { name: 'Admin SSH' })).toBeEnabled()
   })

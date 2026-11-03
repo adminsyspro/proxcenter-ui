@@ -13647,7 +13647,6 @@
         "vms": "VM",
         "all": "Todo"
       },
-      "addSection": "Añadir sección",
       "bulk": {
         "enable": "Activar",
         "disable": "Desactivar",
@@ -13666,12 +13665,6 @@
         "hint": "Se eliminan aquí y se crean al final de esa sección al publicar",
         "notRead": "Abra primero esa sección: sus reglas aún no se han leído",
         "confirm": "Mover"
-      },
-      "addSectionDialog": {
-        "title": "Añadir una sección",
-        "target": "Host o invitado",
-        "hint": "La sección se abre con su primera regla: sigue el editor de reglas",
-        "confirm": "Continuar"
       },
       "optionsDialog": {
         "title": "Opciones del cortafuegos de {name}",
@@ -13755,7 +13748,12 @@
       "conflictOptions": "las opciones del cortafuegos de una sección cambiaron en Proxmox desde que se leyeron. Descarte los cambios de esa sección y publique de nuevo: las demás secciones conservan los suyos",
       "publishAgain": "Publique de nuevo: los cambios no aplicados siguen en el borrador.",
       "summary": "Última publicación: {applied} de {total} cambios aplicados",
-      "summaryStopped": "Última publicación: {applied} de {total} cambios aplicados, detenida en {kind} en {scope}"
+      "summaryStopped": "Última publicación: {applied} de {total} cambios aplicados, detenida en {kind} en {scope}",
+      "addRuleShort": "Añadir regla",
+      "addRuleTo": "Añadir una regla a {name}",
+      "addARule": "Añadir una regla",
+      "ruleScope": "Se aplica a",
+      "readingScope": "Leyendo las reglas de este ámbito: la regla podrá guardarse una vez leídas"
     }
   }
 }

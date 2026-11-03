@@ -13647,7 +13647,6 @@
         "vms": "VMs",
         "all": "All"
       },
-      "addSection": "Add section",
       "bulk": {
         "enable": "Enable",
         "disable": "Disable",
@@ -13666,12 +13665,6 @@
         "hint": "Deleted here and created at the end of that section when you publish",
         "notRead": "Open that section first: its rules are not read yet",
         "confirm": "Move"
-      },
-      "addSectionDialog": {
-        "title": "Add a section",
-        "target": "Host or guest",
-        "hint": "The section opens with its first rule: the rule editor comes next",
-        "confirm": "Continue"
       },
       "optionsDialog": {
         "title": "Firewall options of {name}",
@@ -13755,7 +13748,12 @@
       "conflictOptions": "the firewall options of a section were changed in Proxmox since they were read. Discard this section's changes, then publish again: the other sections keep theirs",
       "publishAgain": "Publish again: the changes not applied are still in the draft.",
       "summary": "Last publish: {applied} of {total} changes applied",
-      "summaryStopped": "Last publish: {applied} of {total} changes applied, stopped on {kind} in {scope}"
+      "summaryStopped": "Last publish: {applied} of {total} changes applied, stopped on {kind} in {scope}",
+      "addRuleShort": "Add rule",
+      "addRuleTo": "Add a rule to {name}",
+      "addARule": "Add a rule",
+      "ruleScope": "Applies to",
+      "readingScope": "Reading the rules of this scope: the rule can be kept once they are read"
     }
   }
 }

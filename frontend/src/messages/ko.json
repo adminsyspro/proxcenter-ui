@@ -13647,7 +13647,6 @@
         "vms": "VM",
         "all": "전체"
       },
-      "addSection": "섹션 추가",
       "bulk": {
         "enable": "활성화",
         "disable": "비활성화",
@@ -13666,12 +13665,6 @@
         "hint": "게시할 때 여기서 삭제되고 그 섹션 끝에 생성됩니다",
         "notRead": "먼저 그 섹션을 여세요: 규칙을 아직 읽지 않았습니다",
         "confirm": "이동"
-      },
-      "addSectionDialog": {
-        "title": "섹션 추가",
-        "target": "호스트 또는 게스트",
-        "hint": "섹션이 첫 규칙과 함께 열립니다: 다음에 규칙 편집기가 나옵니다",
-        "confirm": "계속"
       },
       "optionsDialog": {
         "title": "{name}의 방화벽 옵션",
@@ -13755,7 +13748,12 @@
       "conflictOptions": "섹션의 방화벽 옵션이 읽은 이후 Proxmox에서 변경되었습니다. 이 섹션의 변경을 취소한 후 다시 게시하세요: 다른 섹션의 변경은 유지됩니다",
       "publishAgain": "다시 게시하세요: 적용되지 않은 변경은 초안에 남아 있습니다.",
       "summary": "마지막 게시: 변경 {total}개 중 {applied}개 적용",
-      "summaryStopped": "마지막 게시: 변경 {total}개 중 {applied}개 적용, {scope}의 {kind}에서 중단"
+      "summaryStopped": "마지막 게시: 변경 {total}개 중 {applied}개 적용, {scope}의 {kind}에서 중단",
+      "addRuleShort": "규칙 추가",
+      "addRuleTo": "{name}에 규칙 추가",
+      "addARule": "규칙 하나 추가",
+      "ruleScope": "적용 대상",
+      "readingScope": "이 범위의 규칙을 읽는 중: 읽은 후 규칙을 보관할 수 있습니다"
     }
   }
 }

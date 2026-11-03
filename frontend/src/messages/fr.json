@@ -13648,7 +13648,6 @@
         "vms": "VM",
         "all": "Tout"
       },
-      "addSection": "Ajouter une section",
       "bulk": {
         "enable": "Activer",
         "disable": "Désactiver",
@@ -13667,12 +13666,6 @@
         "hint": "Supprimées ici et créées à la fin de cette section à la publication",
         "notRead": "Ouvrez d’abord cette section : ses règles ne sont pas encore lues",
         "confirm": "Déplacer"
-      },
-      "addSectionDialog": {
-        "title": "Ajouter une section",
-        "target": "Hôte ou invité",
-        "hint": "La section s’ouvre avec sa première règle : l’éditeur de règle suit",
-        "confirm": "Continuer"
       },
       "optionsDialog": {
         "title": "Options du pare-feu de {name}",
@@ -13756,7 +13749,12 @@
       "conflictOptions": "les options du pare-feu d’une section ont changé dans Proxmox depuis leur lecture. Annulez les changements de cette section, puis publiez à nouveau : les autres sections gardent les leurs",
       "publishAgain": "Publiez à nouveau : les changements non appliqués sont toujours dans le brouillon.",
       "summary": "Dernière publication : {applied} changements sur {total} appliqués",
-      "summaryStopped": "Dernière publication : {applied} changements sur {total} appliqués, arrêtée sur {kind} dans {scope}"
+      "summaryStopped": "Dernière publication : {applied} changements sur {total} appliqués, arrêtée sur {kind} dans {scope}",
+      "addRuleShort": "Ajouter une règle",
+      "addRuleTo": "Ajouter une règle à {name}",
+      "addARule": "Ajouter une règle",
+      "ruleScope": "S’applique à",
+      "readingScope": "Lecture des règles de cette portée : la règle pourra être gardée une fois lues"
     }
   }
 }

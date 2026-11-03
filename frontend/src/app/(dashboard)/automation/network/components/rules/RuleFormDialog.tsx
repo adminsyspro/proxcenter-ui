@@ -39,6 +39,9 @@ interface RuleFormDialogProps {
   ipsets: firewallAPI.IPSet[]
   /** The confirm button's label, over Add / Save (the Firewalling draft keeps the rule until it is published). */
   submitLabel?: string
+  /** A first line above the fields (the Firewalling scope picker). */
+  header?: React.ReactNode
+  submitDisabled?: boolean
 }
 
 const scopeColors: Record<string, string> = {
@@ -49,7 +52,7 @@ const scopeColors: Record<string, string> = {
 }
 
 export default function RuleFormDialog({
-  open, onClose, onSubmit, isNew, scope, rule, onRuleChange, securityGroups, aliases, ipsets, submitLabel
+  open, onClose, onSubmit, isNew, scope, rule, onRuleChange, securityGroups, aliases, ipsets, submitLabel, header, submitDisabled = false
 }: RuleFormDialogProps) {
   const t = useTranslations()
 
@@ -75,6 +78,7 @@ export default function RuleFormDialog({
         </Box>
       </DialogTitle>
       <DialogContent sx={{ pt: '20px !important' }}>
+        {header}
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 4 }}>
             <FormControl fullWidth size="small">
@@ -163,7 +167,7 @@ export default function RuleFormDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose}>{t('common.cancel')}</Button>
-        <Button variant="contained" onClick={onSubmit} startIcon={<i className={isNew ? 'ri-add-line' : 'ri-check-line'} />}>
+        <Button variant="contained" onClick={onSubmit} disabled={submitDisabled} startIcon={<i className={isNew ? 'ri-add-line' : 'ri-check-line'} />}>
           {submitLabel ?? (isNew ? t('common.add') : t('common.save'))}
         </Button>
       </DialogActions>

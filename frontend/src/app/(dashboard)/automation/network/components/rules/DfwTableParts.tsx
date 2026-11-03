@@ -4,7 +4,7 @@ import type { DragEvent, ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Box, Checkbox, Chip, IconButton, Link, MenuItem, Select, Switch, TableCell, TableHead, TableRow, Tooltip, Typography, alpha, useTheme,
+  Box, Button, Checkbox, Chip, IconButton, Link, MenuItem, Select, Switch, TableCell, TableHead, TableRow, Tooltip, Typography, alpha, useTheme,
 } from '@mui/material'
 
 import type { Theme } from '@mui/material/styles'
@@ -258,15 +258,26 @@ export type SectionRowProps = {
   /** The section checkbox: checks every rule of it; hidden for a read-only section. */
   check?: { checked: boolean; indeterminate: boolean; disabled: boolean; onChange: (checked: boolean) => void }
   menu?: ReactNode
+  /** The section's "Add rule": always shown on an open section, on hover or focus of a collapsed one (always on touch). */
+  addRule?: { onClick: () => void; disabled: boolean }
   indent?: number
   testId?: string
 }
 
-export function SectionRow({ title, icon, open, onToggle, badges, right, check, menu, indent = 0, testId }: SectionRowProps) {
+/** The class of the header's Add rule button, for the hover rule of its row. */
+const ADD_CLASS = 'dfw-section-add'
+
+export function SectionRow({ title, icon, open, onToggle, badges, right, check, menu, addRule, indent = 0, testId }: SectionRowProps) {
   const t = useTranslations('microsegPilot.dfw')
   const theme = useTheme()
+  const reveal = {
+    [`& .${ADD_CLASS}`]: { opacity: open ? 1 : 0, transition: 'opacity 120ms' },
+    [`&:hover .${ADD_CLASS}, &:focus-within .${ADD_CLASS}`]: { opacity: 1 },
+    [`@media (hover: none)`]: { [`& .${ADD_CLASS}`]: { opacity: 1 } },
+    [theme.breakpoints.down('md')]: { [`& .${ADD_CLASS}`]: { opacity: 1 } },
+  }
   return (
-    <TableRow data-testid={testId ?? 'dfw-section'} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.06), '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.3)}` } }}>
+    <TableRow data-testid={testId ?? 'dfw-section'} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.06), '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.3)}` }, ...reveal }}>
       <TableCell sx={{ ...CELL, width: 28 }} />
       <TableCell padding='checkbox' sx={{ width: 36 }}>
         {check && (
@@ -289,6 +300,15 @@ export function SectionRow({ title, icon, open, onToggle, badges, right, check, 
       <TableCell colSpan={3} sx={{ ...CELL, textAlign: 'right', color: 'text.secondary' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
           {right}
+          {addRule && (
+            <WriteTip>
+              <Button size='small' className={ADD_CLASS} onClick={addRule.onClick} disabled={addRule.disabled}
+                startIcon={<i className='ri-add-line' />} aria-label={t('addRuleTo', { name: title })}
+                sx={{ textTransform: 'none', fontSize: 12, fontWeight: 600, py: 0, minWidth: 0, whiteSpace: 'nowrap' }}>
+                {t('addRuleShort')}
+              </Button>
+            </WriteTip>
+          )}
           {menu}
         </Box>
       </TableCell>
@@ -297,12 +317,22 @@ export function SectionRow({ title, icon, open, onToggle, badges, right, check, 
 }
 
 /** "No rules" (or "no match") of an open section: a quiet caption under the Name column, not a full-width row. */
-export function EmptyRulesRow({ text }: { text: string }) {
+export function EmptyRulesRow({ text, action }: { text: string; action?: { label: string; onClick: () => void; disabled: boolean } }) {
   return (
     <TableRow data-testid='dfw-empty'>
       <TableCell colSpan={4} sx={{ ...CELL, py: 0.5 }} />
       <TableCell colSpan={DFW_COLUMNS - 4} sx={{ ...CELL, py: 0.5 }}>
         <Typography component='span' sx={{ fontSize: 12, color: 'text.secondary' }}>{text}</Typography>
+        {action && (
+          <>
+            <Typography component='span' sx={{ fontSize: 12, color: 'text.secondary' }}>{' · '}</Typography>
+            <WriteTip>
+              <Link component='button' type='button' underline='hover' disabled={action.disabled} onClick={action.onClick} sx={{ fontSize: 12, fontWeight: 600 }}>
+                {action.label}
+              </Link>
+            </WriteTip>
+          </>
+        )}
       </TableCell>
     </TableRow>
   )

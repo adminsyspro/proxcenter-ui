@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Select, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, ListSubheader, MenuItem, Select, Stack, Tooltip, Typography } from '@mui/material'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
 import { LOG_LEVELS } from '@/components/firewall/logLevels'
@@ -64,32 +64,26 @@ export function MoveToSectionDialog({ open, count, targets, onClose, onMove }: {
   )
 }
 
-export function AddSectionDialog({ open, targets, onClose, onPick }: {
-  open: boolean
-  targets: SectionTarget[]
-  onClose: () => void
-  onPick: (target: SectionTarget) => void
-}) {
+/** The scope a new rule goes to, on the first line of the rule editor: the cluster, the hosts, the guests shown. */
+export function ScopePicker({ value, targets, onChange, reading }: { value: string; targets: SectionTarget[]; onChange: (key: string) => void; reading: boolean }) {
   const t = useTranslations('microsegPilot.dfw')
-  const tg = useTranslations()
-  const [key, setKey] = useState('')
-  const target = targets.find(s => s.key === key) ?? null
+  const groups: [DraftScope['kind'], string][] = [['cluster', t('scope.cluster')], ['host', t('scope.hosts')], ['guest', t('scope.vms')]]
   return (
-    <Dialog open={open} onClose={onClose} maxWidth='sm' fullWidth aria-labelledby='dfw-add-section-title'>
-      <DialogTitle id='dfw-add-section-title' sx={ONE_LINE_SX}>{t('addSectionDialog.title')}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 1 }}>
-          <Field label={t('addSectionDialog.target')} id='dfw-add-section-target'>
-            <TargetSelect id='dfw-add-section-target' value={key} onChange={setKey} targets={targets} />
-          </Field>
-          <OneLine text={t('addSectionDialog.hint')} />
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>{tg('common.cancel')}</Button>
-        <Button variant='contained' disabled={!target} onClick={() => target && onPick(target)}>{t('addSectionDialog.confirm')}</Button>
-      </DialogActions>
-    </Dialog>
+    <Box sx={{ mb: 2 }}>
+      <Field label={t('ruleScope')} id='dfw-rule-scope'>
+        <Select size='small' fullWidth value={value} onChange={e => onChange(String(e.target.value))} sx={SMALL_SELECT_SX} labelId='dfw-rule-scope'>
+          {groups.flatMap(([kind, label]) => {
+            const items = targets.filter(target => target.scope.kind === kind)
+            if (items.length === 0) return []
+            return [
+              <ListSubheader key={`h-${kind}`}>{label}</ListSubheader>,
+              ...items.map(target => <MenuItem key={target.key} value={target.key} sx={ONE_LINE_SX}>{target.label}</MenuItem>),
+            ]
+          })}
+        </Select>
+      </Field>
+      {reading && <OneLine text={t('readingScope')} />}
+    </Box>
   )
 }
 

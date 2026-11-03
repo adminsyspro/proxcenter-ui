@@ -29,7 +29,7 @@ import GroupPager, { GROUP_PAGE_SIZE, pageCount, useGroupPages } from './shared/
 import { ZONE_GROUP_PREFIX } from './shared/groupMembership'
 import { DfwHead, DefaultDenyRow, EmptyRulesRow, RuleRow, SectionRow, WideRow, Badge } from './DfwTableParts'
 import { ActionBar, StatusBar, ViewToolbar } from './DfwToolbar'
-import { AddSectionDialog, MoveToSectionDialog, ScopeOptionsDialog, type SectionTarget } from './DfwDialogs'
+import { MoveToSectionDialog, ScopeOptionsDialog, ScopePicker, type SectionTarget } from './DfwDialogs'
 import {
   UNTAGGED, coveredCount, guestMatches, hitsIndex, ruleMatches, zoneDenyHits, showsCluster, showsGuests, showsHosts, vlanGroups, zoneSections,
   type ScopeFilter, type ZoneSection,
@@ -86,7 +86,8 @@ type Section = {
   stale: boolean
 }
 
-type Editor = { sectionKey: string; entryId: string | null; form: RuleFormData }
+/** The rule editor: on a section's rule, or a new rule (with the scope picker when opened from the toolbar). */
+type Editor = { sectionKey: string; entryId: string | null; form: RuleFormData; pick?: boolean }
 type Drag = { sectionKey: string; id: string; overId: string | null } | null
 
 const NEW_RULE: RuleFields = { type: 'in', action: 'ACCEPT', enable: 1, source: '', dest: '', proto: '', dport: '', sport: '', macro: '', iface: '', log: 'nolog', comment: '', 'icmp-type': '' }
@@ -280,7 +281,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [editor, setEditor] = useState<Editor | null>(null)
   const [drag, setDrag] = useState<Drag>(null)
-  const [dialog, setDialog] = useState<'move' | 'addSection' | 'confirmPublish' | 'discard' | null>(null)
+  const [dialog, setDialog] = useState<'move' | 'confirmPublish' | 'discard' | null>(null)
   const [optionsFor, setOptionsFor] = useState<string | null>(null)
   const [menuFor, setMenuFor] = useState<{ key: string; anchor: HTMLElement } | null>(null)
   const [logVm, setLogVm] = useState<VMFirewallInfo | null>(null)
@@ -463,15 +464,27 @@ export default function FirewallingView(p: FirewallingViewProps) {
     ...p.guests.map(vm => ({ key: scopeKey(guestScope(vm)), label: `${vm.name} (${vm.vmid}) · ${vm.node}`, scope: guestScope(vm), loaded: vm.rulesLoaded || !!scopeDraftOf(fw.draft, guestScope(vm))?.rules })),
   ]
 
-  const addSection = async (target: SectionTarget) => {
-    setDialog(null)
-    if (target.scope.kind === 'host') await lazy.openHost(target.scope.node)
-    if (target.scope.kind === 'guest') {
-      const vm = p.guests.find(g => scopeKey(guestScope(g)) === target.key)
-      if (vm) await lazy.openGuest(vm)
-    }
-    setOpen(prev => new Set(prev).add(target.key))
-    setEditor({ sectionKey: target.key, entryId: null, form: { ...NEW_RULE } })
+  /** The rules of a host or guest section read, the first time (one call; two for a host, its options after). */
+  const ensureRules = (s: Section | null) => {
+    if (!s || hasRules(s)) return
+    if (s.kind === 'host' && s.node) void lazy.openHost(s.node)
+    if (s.kind === 'guest' && s.guest) void lazy.openGuest(s.guest)
+  }
+  /** A new rule in a section (never a zone group): the section opens, its rules are read, the editor opens on it. */
+  const startAddRule = (s: Section, pick = false) => {
+    if (!canEdit || !s.scope || s.managed) return
+    setOpen(prev => new Set(prev).add(s.key))
+    ensureRules(s)
+    setEditor({ sectionKey: s.key, entryId: null, form: { ...NEW_RULE }, pick })
+  }
+  /** The scopes the toolbar's Add rule offers: the cluster, the hosts, the guests shown. */
+  const pickTargets: SectionTarget[] = [
+    ...writableTargets.filter(target => target.scope.kind !== 'guest'),
+    ...shownGuests.map(vm => writableTargets.find(target => target.key === scopeKey(guestScope(vm)))!).filter(Boolean),
+  ]
+  const pickScope = (key: string) => {
+    ensureRules(sectionByKey(key))
+    setEditor(prev => (prev ? { ...prev, sectionKey: key } : prev))
   }
 
   // ── Options of a scope ──
@@ -528,7 +541,10 @@ export default function FirewallingView(p: FirewallingViewProps) {
     const rows = visibleEntries(s)
     const deployedZone = s.zone?.state === 'enforce' || s.zone?.state === 'observe'
     const deny = s.zone && deployedZone ? <DefaultDenyRow key={`${s.key}|deny`} enforce={s.zone.state === 'enforce'} appliedTo={s.appliedTo} hits={zoneDenyHits(hits, s.zone.zone)} hitsTitle={denyTitle()} /> : null
-    if (rows.length === 0) return deny ?? <EmptyRulesRow text={q ? t('noMatch') : tg('networkPage.noRules')} />
+    if (rows.length === 0) {
+      const add = s.scope && !q ? { label: t('addARule'), onClick: () => startAddRule(s), disabled: !canEdit } : undefined
+      return deny ?? <EmptyRulesRow text={q ? t('noMatch') : tg('networkPage.noRules')} action={add} />
+    }
     const ruleRows = rows.map(({ e, i }) => {
       const managed = s.managed || isEngineComment(e.rule.comment)
       const editable = canEdit && !managed
@@ -634,6 +650,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
         right={sectionRight(s)}
         check={sectionCheck(s)}
         menu={sectionMenu(s)}
+        addRule={s.scope ? { onClick: () => startAddRule(s), disabled: !canEdit } : undefined}
         indent={indent}
         testId={`dfw-section-${s.key}`}
       />
@@ -695,7 +712,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
   const oneSection = selection.size === 1
   const firstSelected = [...selection.keys()][0]
   const addTarget = sectionOrNull(firstSelected) ?? clusterIfAny[0] ?? hostList[0]
-  const canAddRule = !!addTarget?.scope && !addTarget.managed && hasRules(addTarget)
+  const canAddRule = !!addTarget?.scope && !addTarget.managed
   const menuSection = sectionOrNull(menuFor?.key)
   const selectedCount = selected.size
   const subtitle = [p.connectionName, t(standalone ? 'mode.standalone' : 'mode.cluster', { count: p.nodesList.length })].filter(Boolean).join(' · ')
@@ -732,8 +749,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
         oneSection={oneSection}
         filter={filter}
         onFilter={value => { setFilter(value); pager.reset() }}
-        onAddRule={() => addTarget && openEditor(addTarget, null)}
-        onAddSection={() => setDialog('addSection')}
+        onAddRule={() => addTarget && startAddRule(addTarget, true)}
         onEnable={() => onSelection((d, s, ids) => updateRules(d, s.scope, s.base, ids, { enable: 1 }))}
         onDisable={() => onSelection((d, s, ids) => updateRules(d, s.scope, s.base, ids, { enable: 0 }))}
         onClone={() => onSelection((d, s, ids) => cloneRules(d, s.scope, s.base, ids))}
@@ -766,6 +782,9 @@ export default function FirewallingView(p: FirewallingViewProps) {
   }
 
   function renderDialogs(): ReactNode {
+    // A new rule waits for the rules of its scope to be read (a draft is only made on a list seen).
+    const editorSection = editor ? sectionByKey(editor.sectionKey) : null
+    const editorRulesKnown = !!editorSection && hasRules(editorSection)
     return (
       <>
       {editor && (
@@ -781,6 +800,8 @@ export default function FirewallingView(p: FirewallingViewProps) {
           aliases={p.aliases}
           ipsets={p.ipsets}
           submitLabel={t('keepInDraft')}
+          header={editor.pick ? <ScopePicker value={editor.sectionKey} targets={pickTargets} onChange={pickScope} reading={!editorRulesKnown} /> : undefined}
+          submitDisabled={!editorRulesKnown}
         />
       )}
       {dialog === 'move' && (
@@ -799,9 +820,6 @@ export default function FirewallingView(p: FirewallingViewProps) {
             setOpen(prev => new Set(prev).add(target.key))
           }}
         />
-      )}
-      {dialog === 'addSection' && (
-        <AddSectionDialog open targets={writableTargets.filter(target => target.key !== 'cluster')} onClose={() => setDialog(null)} onPick={target => { void addSection(target) }} />
       )}
       {optionsSection && (
         <ScopeOptionsDialog open name={optionsSection.title} scope={optionsSection.scope!} current={currentOptions(optionsSection)}
@@ -845,9 +863,8 @@ export default function FirewallingView(p: FirewallingViewProps) {
   }
 
   function sectionMenuItems(s: Section): { label: string; onClick: () => void; disabled?: boolean }[] {
-    const loaded = hasRules(s)
     return [
-      { label: tg('networkPage.addRule'), onClick: () => openEditor(s, null), disabled: !canEdit || !loaded },
+      { label: tg('networkPage.addRule'), onClick: () => startAddRule(s), disabled: !canEdit },
       { label: t('menu.options'), onClick: () => openOptions(s), disabled: s.kind === 'host' && !((s.node ?? '') in lazy.nodeOptions) },
       ...(s.guest ? [{ label: tg('networkPage.viewLogs'), onClick: () => setLogVm(s.guest!) }] : []),
       { label: t('menu.discard'), onClick: () => edit(d => discardOf(d, s.scope!)), disabled: s.pending === 0 || fw.busy },

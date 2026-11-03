@@ -13767,7 +13767,8 @@
       "editZone": "Edit the zone",
       "removalPending": "Removal pending (next apply)",
       "flowChanged": "changed",
-      "flowChangedHint": "Changed in the draft: applies at the next apply"
+      "flowChangedHint": "Changed in the draft: applies at the next apply",
+      "engineFlowRule": "The engine’s rule: edit it as its flow (menu or double-click)"
     }
   }
 }

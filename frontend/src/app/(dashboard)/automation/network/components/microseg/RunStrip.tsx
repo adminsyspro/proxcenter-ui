@@ -29,17 +29,28 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps
   const { run, done, error } = useMicrosegRun(connectionId, tracked.runId)
   const lost = !!error && !run
 
+  // The callbacks are read through refs: a parent handing new functions on each render must not re-run the effects
+  // (an onFinished that reloads would then reload, re-render and reload again, without end).
   const finished = useRef(onFinished)
-  useEffect(() => { finished.current = onFinished })
+  const remove = useRef(onRemove)
+  useEffect(() => {
+    finished.current = onFinished
+    remove.current = onRemove
+  })
+  // Once per run: the refresh of what it changed fires a single time, whatever re-renders follow.
+  const finishedRun = useRef<string | null>(null)
+  useEffect(() => {
+    if (!done || finishedRun.current === tracked.runId) return
+    finishedRun.current = tracked.runId
+    finished.current()
+  }, [done, tracked.runId])
   // The removal is rare and undoes everything: its outcome and its notes stay until the admin dismisses them.
   const lingers = tracked.kind !== 'remove'
   useEffect(() => {
-    if (!done) return
-    finished.current()
-    if (!lingers) return
-    const timer = setTimeout(() => onRemove(tracked.runId), RUN_LINGER_MS)
+    if (!done || !lingers) return
+    const timer = setTimeout(() => remove.current(tracked.runId), RUN_LINGER_MS)
     return () => clearTimeout(timer)
-  }, [done, tracked.runId, onRemove, lingers])
+  }, [done, tracked.runId, lingers])
 
   const { label } = tracked
   let text = tracked.runningText

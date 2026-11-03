@@ -13767,7 +13767,8 @@
       "editZone": "编辑区域",
       "removalPending": "删除待处理（下次应用）",
       "flowChanged": "已更改",
-      "flowChangedHint": "已在草稿中更改：下次应用时生效"
+      "flowChangedHint": "已在草稿中更改：下次应用时生效",
+      "engineFlowRule": "引擎规则：作为其流量编辑（菜单或双击）"
     }
   }
 }

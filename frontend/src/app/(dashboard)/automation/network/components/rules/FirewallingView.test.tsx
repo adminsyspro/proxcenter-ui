@@ -29,7 +29,12 @@ vi.mock('@/lib/api/firewall', () => ({
   getNodeOptions: (...a: any[]) => h.getNodeOptions(...a),
   getVMOptions: (...a: any[]) => h.getVMOptions(...a),
 }))
-vi.mock('@/lib/microseg/useMicroseg', () => ({ useMicrosegPolicy: () => ({ data: h.policy, reload: h.reloadPolicy }) }))
+vi.mock('@/lib/microseg/useMicroseg', () => ({
+  useMicrosegPolicy: () => ({ data: h.policy, reload: h.reloadPolicy }),
+  // Every run is already finished: what it changed is refreshed at once.
+  useMicrosegRun: () => ({ run: { status: 'done', result: { done: [], failed: [], not_run: [] } }, done: true, error: null }),
+  FATAL_CODES: new Set(),
+}))
 vi.mock('@/lib/microseg/api', async orig => ({ ...(await orig() as object), microsegApi: () => h.api }))
 
 /** The micro-segmentation draft: zones db (enforce) and app (observe), one flow app -> db tcp/5432. */
@@ -640,6 +645,8 @@ describe('Firewalling: the zones edited in place (micro-segmentation draft)', ()
     openDb()
     const appRule = ruleRow('[pc-microseg] app -> db')
     expect(within(appRule).queryByLabelText('Proxmox was changed by hand or the engine has not re-applied yet')).toBeNull()
+    // Still the engine's rule: the lock stays next to its menu.
+    expect(within(appRule).getByLabelText('The engine’s rule: edit it as its flow (menu or double-click)')).toBeInTheDocument()
     // The rule of the fixture without a source matches no flow and no zone setting: a drift, locked.
     expect(within(ruleRow('[pc-microseg] db -> db')).getByLabelText('Proxmox was changed by hand or the engine has not re-applied yet')).toBeInTheDocument()
 
@@ -697,6 +704,22 @@ describe('Firewalling: the zones edited in place (micro-segmentation draft)', ()
     const row = ruleRow('[pc-microseg] app -> db')
     fireEvent.doubleClick(within(row).getByRole('button', { name: 'Actions of the flow' }))
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('a finished run reloads the firewall data once and the draft once, no loop (recette D1)', async () => {
+    h.api.setZoneState.mockResolvedValue({ run_id: 'r1' })
+    const p = props()
+    renderView(p)
+    fireEvent.click(within(screen.getByTestId('dfw-section-zone:pcz-db')).getByRole('button', { name: 'Change the state of zone db' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Observe' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Observe' }))
+    await waitFor(() => expect(p.reloadFirewall).toHaveBeenCalledTimes(1))
+    const policyReads = h.reloadPolicy.mock.calls.length
+    // A second of re-renders and timers: no more reload.
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    expect(p.reloadFirewall).toHaveBeenCalledTimes(1)
+    expect(h.reloadPolicy.mock.calls.length).toBe(policyReads)
   })
 
   it('a state change is refused while the micro-segmentation draft has pending changes (UA30)', async () => {

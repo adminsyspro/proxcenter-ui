@@ -13768,7 +13768,8 @@
       "editZone": "Modifier la zone",
       "removalPending": "Suppression en attente (prochaine application)",
       "flowChanged": "modifié",
-      "flowChangedHint": "Modifié dans le brouillon : s’applique à la prochaine application"
+      "flowChangedHint": "Modifié dans le brouillon : s’applique à la prochaine application",
+      "engineFlowRule": "Règle du moteur : modifiez-la comme son flux (menu ou double-clic)"
     }
   }
 }

@@ -13767,7 +13767,8 @@
       "editZone": "Editar la zona",
       "removalPending": "Eliminación pendiente (próxima aplicación)",
       "flowChanged": "cambiado",
-      "flowChangedHint": "Cambiado en el borrador: se aplica en la próxima aplicación"
+      "flowChangedHint": "Cambiado en el borrador: se aplica en la próxima aplicación",
+      "engineFlowRule": "Regla del motor: edítela como su flujo (menú o doble clic)"
     }
   }
 }

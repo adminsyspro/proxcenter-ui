@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { Box, ButtonBase, IconButton, Menu, MenuItem, Tooltip } from '@mui/material'
@@ -60,6 +60,14 @@ function ZoneToolsWithPolicy({ connectionId, policy, deployed, reloadPolicy, onR
   const [stateMenu, setStateMenu] = useState<{ zone: MicrosegZone; anchor: HTMLElement } | null>(null)
   const [stateChange, setStateChange] = useState<{ zone: MicrosegZone; state: ZoneState } | null>(null)
   const startRun = useCallback((run: TrackedRun) => setRuns(prev => (prev.some(r => r.runId === run.runId) ? prev : [...prev, run])), [])
+  const removeRun = useCallback((runId: string) => setRuns(prev => prev.filter(r => r.runId !== runId)), [])
+  // A finished run (state change, apply): the draft once, the firewall lists once (the zone groups changed in Proxmox).
+  const refresh = useRef({ reloadPolicy, onRunFinished })
+  useEffect(() => { refresh.current = { reloadPolicy, onRunFinished } })
+  const runFinished = useCallback(() => {
+    void refresh.current.reloadPolicy()
+    refresh.current.onRunFinished()
+  }, [])
   const onOpenPlan = useCallback(() => setPlanOpen(true), [])
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
   const flows = useFlowEditor(edits)
@@ -80,7 +88,7 @@ function ZoneToolsWithPolicy({ connectionId, policy, deployed, reloadPolicy, onR
       <Box data-testid='dfw-microseg-pending'>
         <PendingChangesBar connectionId={connectionId} policy={policy} onOpenPlan={onOpenPlan} prefix={t('microsegPrefix')} />
       </Box>
-      <RunStrip connectionId={connectionId} runs={runs} onFinished={() => { void reloadPolicy(); onRunFinished() }} onRemove={runId => setRuns(prev => prev.filter(r => r.runId !== runId))} />
+      <RunStrip connectionId={connectionId} runs={runs} onFinished={runFinished} onRemove={removeRun} />
       {children}
       {flows.dialogs}
       {stateMenu && <ZoneStateMenu zone={stateMenu.zone} anchor={stateMenu.anchor} onClose={() => setStateMenu(null)} onPick={state => setStateChange({ zone: stateMenu.zone, state })} />}
@@ -139,6 +147,7 @@ export function ZoneRuleRow({ zoneName, occurrence, ...row }: RuleRowProps & { z
     return <RuleRow {...row} lockTitle={tools ? lockTitleOf(match, t) : undefined} struck={match?.kind === 'removed'} />
   }
   const { flow, changed } = match
+  // Still the engine's rule: the lock stays, it says the rule is edited as its flow.
   const menu = (
     <>
       {changed && <Badge label={t('flowChanged')} tone='warning' title={t('flowChangedHint')} />}
@@ -156,7 +165,7 @@ export function ZoneRuleRow({ zoneName, occurrence, ...row }: RuleRowProps & { z
   return (
     <RuleRow
       {...row}
-      lockTitle={null}
+      lockTitle={t('engineFlowRule')}
       actions={menu}
       onDoubleClick={canWrite ? e => { if (!onControl(e)) tools.editFlow(flow) } : undefined}
     />

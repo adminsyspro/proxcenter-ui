@@ -13435,7 +13435,8 @@
       "editZone": "Zone bearbeiten",
       "removalPending": "Entfernung ausstehend (nächste Anwendung)",
       "flowChanged": "geändert",
-      "flowChangedHint": "Im Entwurf geändert: wird bei der nächsten Anwendung wirksam"
+      "flowChangedHint": "Im Entwurf geändert: wird bei der nächsten Anwendung wirksam",
+      "engineFlowRule": "Regel der Engine: als ihren Fluss bearbeiten (Menü oder Doppelklick)"
     }
   }
 }

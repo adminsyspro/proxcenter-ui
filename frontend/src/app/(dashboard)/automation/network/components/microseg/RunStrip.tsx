@@ -11,6 +11,9 @@ import type { TrackedRun } from './microsegTabTypes'
 /** A finished run stays visible this long (or until dismissed). A removal stays until dismissed. */
 export const RUN_LINGER_MS = 10_000
 
+/** What stands between the summary of a run and the notes of the engine: they are two sentences, not one. */
+export const NOTE_SEPARATOR = ' · '
+
 type LineProps = {
   connectionId: string
   run: TrackedRun
@@ -71,7 +74,7 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps
   }
 
   const extra = [notes, run?.status === 'failed' ? run.error : ''].filter(Boolean).join(' ')
-  const detail = extra ? `${text} ${extra}` : text
+  const detail = extra ? `${text}${NOTE_SEPARATOR}${extra}` : text
 
   return (
     <Alert
@@ -84,7 +87,12 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps
       <Tooltip title={detail}>
         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
           <Typography variant='body2' noWrap sx={{ flexShrink: 0, maxWidth: '100%' }}>{text}</Typography>
-          {notes ? <Typography variant='caption' color='text.secondary' noWrap sx={{ display: 'block', minWidth: 0 }}>{notes}</Typography> : null}
+          {notes ? (
+            <>
+              <Typography variant='caption' color='text.secondary' sx={{ flexShrink: 0 }}>{NOTE_SEPARATOR.trim()}</Typography>
+              <Typography variant='caption' color='text.secondary' noWrap sx={{ display: 'block', minWidth: 0 }}>{notes}</Typography>
+            </>
+          ) : null}
         </Box>
       </Tooltip>
     </Alert>

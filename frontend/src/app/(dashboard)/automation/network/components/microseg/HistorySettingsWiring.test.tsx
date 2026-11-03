@@ -177,6 +177,12 @@ describe('removal run', () => {
     await act(async () => { finish(removeRun('done')) })
     expect(await screen.findByText('prod: removal complete, the zone tags stay on the guests', undefined, { timeout: 5000 })).toBeTruthy()
     expect(screen.getByText('the zone tags of the guests are kept')).toBeTruthy()
+    // The summary and the note of the engine are two sentences: a separator stands between them.
+    const summary = screen.getByText('prod: removal complete, the zone tags stay on the guests')
+    const separator = screen.getByText('·')
+    const note = screen.getByText('the zone tags of the guests are kept')
+    expect(summary.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(separator.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await waitFor(() => expect(calls('GET /runs?limit=11').length).toBeGreaterThan(runsReads))
   })
 

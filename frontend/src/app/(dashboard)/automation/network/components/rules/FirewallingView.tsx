@@ -640,7 +640,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
         onDiscard={() => setDialog('discard')}
         onRefresh={() => { void refresh() }}
         menu={[
-          ...clusterIfAny.map(() => ({ label: t('clusterOptions'), onClick: () => setOptionsFor('cluster'), write: true })),
+          ...clusterIfAny.map(() => ({ label: t('clusterOptions'), onClick: () => setOptionsFor('cluster') })),
           { label: tg('common.expandAll'), onClick: () => setOpen(new Set(['cluster', ...zoneList.map(z => z.key)])) },
           { label: tg('common.collapseAll'), onClick: () => { setOpen(new Set()); setOpenVlans(new Set()) } },
         ]}
@@ -773,7 +773,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
     const loaded = hasRules(s)
     return [
       { label: tg('networkPage.addRule'), onClick: () => openEditor(s, null), disabled: !canWrite || !loaded },
-      { label: t('menu.options'), onClick: () => setOptionsFor(s.key), disabled: !canWrite || (s.kind === 'host' && !((s.node ?? '') in lazy.nodeOptions)) },
+      { label: t('menu.options'), onClick: () => setOptionsFor(s.key), disabled: s.kind === 'host' && !((s.node ?? '') in lazy.nodeOptions) },
       ...(s.guest ? [{ label: tg('networkPage.viewLogs'), onClick: () => setLogVm(s.guest!) }] : []),
       { label: t('menu.discard'), onClick: () => fw.update(d => discardOf(d, s.scope!)), disabled: s.pending === 0 },
     ]

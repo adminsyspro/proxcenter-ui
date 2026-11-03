@@ -10,6 +10,7 @@ import { LOG_LEVELS } from '@/components/firewall/logLevels'
 import type { DraftScope, ScopeOptions } from '@/lib/firewall/publishOps'
 
 import { ONE_LINE_SX, OneLine } from '../microseg/dialogParts'
+import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
 
 /** A section a rule can go to: its scope and its name. */
 export type SectionTarget = { key: string; label: string; scope: DraftScope; loaded: boolean }
@@ -114,6 +115,8 @@ export function ScopeOptionsDialog({ open, name, scope, current, onClose, onSave
 }) {
   const t = useTranslations('microsegPilot.dfw')
   const tg = useTranslations()
+  // A read-only user sees the options (firewall switch, default policies, log levels) but changes none of them.
+  const { canWrite } = useMicrosegWrite()
   const [form, setForm] = useState<ScopeOptions>(current)
   const set = (field: OptionField, value: string) => setForm(prev => ({ ...prev, [field]: field === 'enable' ? Number(value) : value }))
   const choices = (field: OptionField): string[] => {
@@ -131,10 +134,12 @@ export function ScopeOptionsDialog({ open, name, scope, current, onClose, onSave
         <Stack spacing={1.5} sx={{ pt: 1 }}>
           {FIELDS[scope.kind].map(field => (
             <Field key={field} label={t(`optionsDialog.${field}`)} id={`dfw-opt-${field}`}>
-              <Select size='small' fullWidth value={String(form[field] ?? '')} onChange={e => set(field, String(e.target.value))} sx={SMALL_SELECT_SX}
-                inputProps={{ 'aria-labelledby': `dfw-opt-${field}` }}>
-                {choices(field).map(v => <MenuItem key={v} value={v}>{label(field, v)}</MenuItem>)}
-              </Select>
+              <WriteTip>
+                <Select size='small' fullWidth value={String(form[field] ?? '')} onChange={e => set(field, String(e.target.value))} sx={{ ...SMALL_SELECT_SX, width: '100%' }}
+                  disabled={!canWrite} inputProps={{ 'aria-labelledby': `dfw-opt-${field}` }}>
+                  {choices(field).map(v => <MenuItem key={v} value={v}>{label(field, v)}</MenuItem>)}
+                </Select>
+              </WriteTip>
             </Field>
           ))}
           <OneLine text={t('optionsDialog.hint')} />
@@ -142,7 +147,9 @@ export function ScopeOptionsDialog({ open, name, scope, current, onClose, onSave
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{tg('common.cancel')}</Button>
-        <Button variant='contained' onClick={() => onSave(form)}>{tg('common.save')}</Button>
+        <WriteTip>
+          <Button variant='contained' disabled={!canWrite} onClick={() => onSave(form)}>{tg('common.save')}</Button>
+        </WriteTip>
       </DialogActions>
     </Dialog>
   )

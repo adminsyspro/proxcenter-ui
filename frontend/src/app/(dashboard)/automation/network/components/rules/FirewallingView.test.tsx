@@ -290,11 +290,36 @@ describe('Firewalling for a read-only user', () => {
     expect(await screen.findByText('Read-only: you need node management rights')).toBeInTheDocument()
   })
 
+  it('shows the cluster options read-only: the firewall switch and the IN/OUT default policies disabled, with the reason', async () => {
+    renderView(props({ clusterOptions: { enable: 1, policy_in: 'DROP', policy_out: 'ACCEPT' } }), false)
+    fireEvent.click(screen.getByRole('button', { name: 'More' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Cluster firewall options' }))
+    const dialog = await screen.findByRole('dialog')
+    const selects = within(dialog).getAllByRole('combobox')
+    expect(selects).toHaveLength(3)
+    for (const select of selects) expect(select).toHaveAttribute('aria-disabled', 'true')
+    expect(within(dialog).getByText('DROP')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled()
+    fireEvent.mouseOver(selects[1].closest('span')!)
+    expect(await screen.findByText('Read-only: you need node management rights')).toBeInTheDocument()
+  })
+
   it('leaves them enabled with the right', () => {
     renderView()
     expect(screen.getByRole('button', { name: 'Add rule' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Add section' })).toBeEnabled()
     expect(ruleRow('Admin SSH')).toHaveAttribute('draggable', 'true')
     expect(within(ruleRow('Admin SSH')).getByRole('button', { name: 'Admin SSH' })).toBeEnabled()
+  })
+
+  it('changes a cluster default policy in the draft with the right', async () => {
+    renderView(props({ clusterOptions: { enable: 1, policy_in: 'DROP', policy_out: 'ACCEPT' } }))
+    fireEvent.click(screen.getByRole('button', { name: 'More' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Cluster firewall options' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[1])
+    fireEvent.click(await screen.findByRole('option', { name: 'ACCEPT' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(publishButton()).toHaveTextContent('Publish (1)'))
   })
 })

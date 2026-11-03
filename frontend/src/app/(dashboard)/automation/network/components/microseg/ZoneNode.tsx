@@ -150,7 +150,12 @@ function UnzonedNodeComponent({ data }: NodeProps) {
 
 export const UnzonedNode = memo(UnzonedNodeComponent)
 
-/** A guest inside its circle: its glyph (type and status), its name under it, the details in a tooltip. */
+function guestBorder(pending: boolean, selected: boolean): string {
+  if (pending) return 'warning.main'
+  return selected ? 'primary.main' : 'divider'
+}
+
+/** A guest inside its circle: its glyph (type and status), its name under it, the details in a tooltip; a ring when targeted. */
 function GuestNodeComponent({ id, data, selected }: NodeProps) {
   const d = data as unknown as GuestNodeData
   const t = useTranslations('microsegPilot.overview.node')
@@ -179,11 +184,13 @@ function GuestNodeComponent({ id, data, selected }: NodeProps) {
       >
         <Handles top={GLYPH_Y} />
         <Box
-          sx={{
+          data-target={d.target === undefined ? undefined : 'true'}
+          sx={theme => ({
             mt: `${GLYPH_Y - GUEST_R}px`, width: 2 * GUEST_R, height: 2 * GUEST_R, boxSizing: 'border-box', borderRadius: '50%', flexShrink: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.paper',
-            border: '1.5px solid', borderStyle: m.pending ? 'dashed' : 'solid', borderColor: m.pending ? 'warning.main' : selected ? 'primary.main' : 'divider',
-          }}
+            border: '1.5px solid', borderStyle: m.pending ? 'dashed' : 'solid', borderColor: guestBorder(m.pending, !!selected),
+            boxShadow: d.target === undefined ? 'none' : `0 0 0 3px ${d.target || theme.palette.primary.main}`,
+          })}
         >
           <StatusIcon type='vm' vmType={m.type} status={m.status} size={14} />
         </Box>

@@ -90,6 +90,21 @@ function litRibbons(layout: SankeyLayout, focus: Focus, selectedCell: string | n
   return null
 }
 
+/** A targeted guest on the diagram: the node id of its zone and the ribbons its observed flows ride on. */
+export type SankeyTarget = { zone: string | null; ribbons: ReadonlySet<string> }
+
+type RibbonState = 'target' | 'lit' | 'dim'
+const RIBBON_OPACITY: Record<RibbonState, number> = { target: 0.85, lit: 0.55, dim: 0.1 }
+
+/** A target locks the diagram: its ribbons stand out, the other ribbons of its zone stay, the rest is dimmed. */
+function ribbonState(r: Ribbon, lit: Set<string> | null, target: SankeyTarget | null): RibbonState {
+  if (target) {
+    if (target.ribbons.has(r.id)) return 'target'
+    return target.zone && (r.source === target.zone || r.target === target.zone) ? 'lit' : 'dim'
+  }
+  return !lit || lit.has(r.id) ? 'lit' : 'dim'
+}
+
 type Props = {
   layout: SankeyLayout
   /** The cell (pair) whose flow panel is open, and the node id of the zone whose panel is open. */
@@ -98,6 +113,7 @@ type Props = {
   onSelectCell: (cellId: string) => void
   onSelectZone: (zoneId: string) => void
   names: { end: (e: Pick<MatrixEnd, 'kind' | 'zone'>) => string }
+  target?: SankeyTarget | null
 }
 
 /**
@@ -106,7 +122,7 @@ type Props = {
  * counter, the note says so). Hovering a ribbon or a node lights it and dims the rest; a click (or enter) on a
  * ribbon opens the flow panel of its pair, on a zone its panel.
  */
-export default function ZoneSankey({ layout, selectedCell, selectedZone, onSelectCell, onSelectZone, names }: Props) {
+export default function ZoneSankey({ layout, selectedCell, selectedZone, onSelectCell, onSelectZone, names, target = null }: Props) {
   const t = useTranslations('microsegPilot.overview')
   const theme = useTheme()
   const [focus, setFocus] = useState<Focus>(null)
@@ -168,7 +184,8 @@ export default function ZoneSankey({ layout, selectedCell, selectedZone, onSelec
               const yb = HEAD + r.y1 + r.width / 2
               const x0 = LEFT_X + BAR_W
               const xm = (x0 + RIGHT_X) / 2
-              const on = !lit || lit.has(r.id)
+              const state = ribbonState(r, lit, target)
+              const on = state !== 'dim'
               const tip = ribbonTip(r)
               const d = `M ${x0} ${ya} C ${xm} ${ya}, ${xm} ${yb}, ${RIGHT_X} ${yb}`
               return (
@@ -186,6 +203,7 @@ export default function ZoneSankey({ layout, selectedCell, selectedZone, onSelec
                   <g>
                     <path
                       data-ribbon={r.id}
+                      data-state={state}
                       role='button'
                       tabIndex={0}
                       aria-label={tip.aria}
@@ -194,7 +212,7 @@ export default function ZoneSankey({ layout, selectedCell, selectedZone, onSelec
                       fill='none'
                       stroke={EDGE_COLORS[r.kind]}
                       strokeWidth={r.width}
-                      strokeOpacity={on ? 0.55 : 0.1}
+                      strokeOpacity={RIBBON_OPACITY[state]}
                       style={{ cursor: 'pointer', transition: 'stroke-opacity 150ms', outline: 'none' }}
                       onClick={() => onSelectCell(r.cell)}
                       onKeyDown={onKeys(() => onSelectCell(r.cell))}

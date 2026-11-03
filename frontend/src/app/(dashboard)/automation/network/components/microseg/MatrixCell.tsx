@@ -87,13 +87,26 @@ export type MatrixCellProps = {
   /** Chips shown per line. */
   chips: number
   handlers: CellHandlers
+  /** The name of the marker of a cell whose observed flows the targeted guest is an end of (none: no marker). */
+  marker?: string
+}
+
+/** The small marker of a cell the targeted guest has observed flows in. */
+function TargetMarker({ label }: { label: string }) {
+  return (
+    <Tooltip title={label}>
+      <Box component='span' role='img' aria-label={label} data-marker='target' sx={{ position: 'absolute', top: 2, left: 6, display: 'inline-flex', color: 'primary.main' }}>
+        <i className='ri-focus-3-line' style={{ fontSize: 14 }} aria-hidden />
+      </Box>
+    </Tooltip>
+  )
 }
 
 /**
  * A cell of the matrix. Its props are plain values and handlers shared by the whole grid, so a cell renders again
  * only when it changes: lighting a row and a column is done by the grid's CSS, not by the cells.
  */
-export function MatrixCellView({ id, r, c, rowId, colId, view, aria, selected, tabbable, diagonal, chips, handlers }: MatrixCellProps) {
+export function MatrixCellView({ id, r, c, rowId, colId, view, aria, selected, tabbable, diagonal, chips, handlers, marker }: MatrixCellProps) {
   return (
     <Box
       role='gridcell'
@@ -102,6 +115,7 @@ export function MatrixCellView({ id, r, c, rowId, colId, view, aria, selected, t
       data-row={rowId}
       data-col={colId}
       data-tone={view?.tone ?? ''}
+      data-target={marker ? 'true' : undefined}
       tabIndex={tabbable ? 0 : -1}
       aria-label={aria}
       aria-selected={selected}
@@ -118,6 +132,7 @@ export function MatrixCellView({ id, r, c, rowId, colId, view, aria, selected, t
         '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: -2 },
       })}
     >
+      {marker && <TargetMarker label={marker} />}
       {view ? <CellBody view={view} chips={chips} /> : <Typography variant='caption' color='text.disabled' aria-hidden sx={{ textAlign: 'center' }}>·</Typography>}
     </Box>
   )

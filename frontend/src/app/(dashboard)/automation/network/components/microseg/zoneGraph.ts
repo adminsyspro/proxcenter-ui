@@ -51,7 +51,13 @@ export type ZoneNodeData = {
   inside?: number
 }
 export type UnzonedNodeData = { kind: 'unzoned'; count: number; radius: number }
-export type GuestNodeData = { kind: 'guest'; member: MapMember; groupId: string }
+export type GuestNodeData = {
+  kind: 'guest'
+  member: MapMember
+  groupId: string
+  /** The guest is the target of the map: the colour of the ring around its glyph (its zone's). */
+  target?: string
+}
 export type MoreNodeData = { kind: 'more'; count: number; groupId: string }
 export type BoundaryNodeData = { kind: 'external' | 'outside' }
 /** An address that talks to a zone and is no guest (the guest view draws the busiest ones on their own). */

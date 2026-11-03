@@ -85,9 +85,17 @@ type Props = {
   onClear: () => void
   /** The side panel is open: the canvas changes width, so it fits the graph again when this flips. */
   panelOpen?: boolean
+  /** The nodes the view fits to instead of the whole graph (a targeted guest: its zone and its neighbours). */
+  fitTo?: string[] | null
 }
 
-function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHover, onFocusNode, onClear, panelOpen }: Props) {
+/** The options of a fit-to-view: the whole graph, or only the nodes asked for. */
+export function fitOptions(fitTo: string[] | null | undefined) {
+  const base = { padding: 0.1, duration: 300, maxZoom: 1 }
+  return fitTo?.length ? { ...base, nodes: fitTo.map(id => ({ id })) } : base
+}
+
+function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHover, onFocusNode, onClear, panelOpen, fitTo }: Props) {
   const { fitView, zoomIn, zoomOut } = useReactFlow()
   const theme = useTheme()
   const t = useTranslations('microsegPilot.overview')
@@ -104,14 +112,15 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
     [edges, edgeRole],
   )
 
-  // Refit when the graph reshapes (a zone added, a circle grown once its guests are known) or when the side panel
-  // opens or closes, like the topology view.
+  // Refit when the graph reshapes (a zone added, a circle grown once its guests are known), when the side panel
+  // opens or closes, like the topology view, or when a guest is targeted (then on its zone and its neighbours).
   const shape = fitKey(nodes)
+  const focusKey = fitTo?.join(',') ?? ''
   useEffect(() => {
     if (!shape) return
-    const timer = setTimeout(() => { void fitView({ padding: 0.1, duration: 300, maxZoom: 1 }) }, 100)
+    const timer = setTimeout(() => { void fitView(fitOptions(focusKey ? focusKey.split(',') : null)) }, 100)
     return () => clearTimeout(timer)
-  }, [shape, fitView, panelOpen])
+  }, [shape, fitView, panelOpen, focusKey])
 
   const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
     const d = node.data as unknown as MapNodeData
@@ -168,7 +177,7 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
               <ControlButton title={t('zoomOut')} aria-label={t('zoomOut')} onClick={() => { void zoomOut({ duration: 200 }) }}>
                 <i className='ri-subtract-line' aria-hidden />
               </ControlButton>
-              <ControlButton title={t('fitView')} aria-label={t('fitView')} onClick={() => { void fitView({ padding: 0.1, duration: 300, maxZoom: 1 }) }}>
+              <ControlButton title={t('fitView')} aria-label={t('fitView')} onClick={() => { void fitView(fitOptions(fitTo)) }}>
                 <i className='ri-fullscreen-line' aria-hidden />
               </ControlButton>
             </Controls>

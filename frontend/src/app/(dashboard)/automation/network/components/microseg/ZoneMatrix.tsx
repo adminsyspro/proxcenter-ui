@@ -8,8 +8,9 @@ import { serviceTokensTitle } from '@/lib/network/serviceNames'
 
 import MatrixCell, { type CellHandlers } from './MatrixCell'
 import { MATRIX_SORTS, cellId, cellView, sortEnds, type CellView, type MatrixEnd, type MatrixModel, type MatrixSort } from './matrixModel'
+import { involvesTarget, type TargetGuest } from './targetModel'
 import { useStoredChoice } from './useStoredChoice'
-import { EXTERNAL_ID, type FlowFilters } from './zoneGraph'
+import { EXTERNAL_ID, zoneNodeId, type FlowFilters } from './zoneGraph'
 import { ZoneShield } from './ZoneNode'
 
 const SORT_KEY = 'microseg.map.matrixSort'
@@ -78,6 +79,16 @@ type Props = {
   onSelectCell: (cellId: string) => void
   onSelectZone: (zoneId: string) => void
   names: Names
+  /** The targeted guest: the row and the column of its zone stay lit, its cells marked, the others dimmed. */
+  target?: TargetGuest | null
+}
+
+/** The cells the target dims: those out of the row and the column of its zone that carry none of its flows. */
+function targetSx(target: TargetGuest | null | undefined) {
+  if (!target) return {}
+  const zone = target.zoneId ? attr(zoneNodeId(target.zoneId)) : null
+  const keep = zone ? `:not([data-row="${zone}"]):not([data-col="${zone}"])` : ''
+  return { [`& [role="gridcell"]${keep}:not([data-target])`]: { opacity: 0.35 } }
 }
 
 /**
@@ -87,7 +98,7 @@ type Props = {
  * on a cell lights its row and its column (the grid's CSS does it: no cell renders again); a click, enter or space
  * opens the flow panel of the pair; the arrows move between cells. A click on a zone head opens its panel.
  */
-export default function ZoneMatrix({ model, filters, unapplied, selectedCell, selectedZone, narrow = false, onSelectCell, onSelectZone, names }: Props) {
+export default function ZoneMatrix({ model, filters, unapplied, selectedCell, selectedZone, narrow = false, onSelectCell, onSelectZone, names, target = null }: Props) {
   const t = useTranslations('microsegPilot.overview')
   const tEdge = useTranslations('microsegPilot.overview.edge')
   const [sort, setSort] = useStoredChoice<MatrixSort>(SORT_KEY, MATRIX_SORTS, 'name')
@@ -102,7 +113,11 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
   )
   const size = narrow ? SIZES.narrow : SIZES.wide
   const tracks = matrixTracks(rows.length, cols.length, narrow)
-  const lit: Highlight = hover.row || hover.col ? hover : { row: selectedZone, col: selectedZone }
+  const targetZone = target?.zoneId ? zoneNodeId(target.zoneId) : null
+  const marker = target ? t('target.cellMarker', { name: target.name }) : undefined
+  // A target locks the light on the row and the column of its zone: the pointer does not move it.
+  let lit: Highlight = hover.row || hover.col ? hover : { row: selectedZone, col: selectedZone }
+  if (target) lit = { row: targetZone, col: targetZone }
   // The Tab stop stays on a cell that exists after the grid shrinks (a zone deleted, the other sort).
   const activeR = Math.min(active.r, rows.length - 1)
   const activeC = Math.min(active.c, cols.length - 1)
@@ -186,11 +201,12 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
         aria-colcount={cols.length + 1}
         data-lit-row={lit.row ?? ''}
         data-lit-col={lit.col ?? ''}
+        data-target={target ? target.key : undefined}
         data-columns={tracks.columns}
         data-rows={tracks.rows}
         sx={theme => ({
           display: 'grid', gridTemplateColumns: tracks.columns, gridTemplateRows: tracks.rows,
-          width: '100%', height: '100%', minWidth: tracks.minWidth, minHeight: tracks.minHeight, boxSizing: 'border-box', ...litSx(theme),
+          width: '100%', height: '100%', minWidth: tracks.minWidth, minHeight: tracks.minHeight, boxSizing: 'border-box', ...litSx(theme), ...targetSx(target),
         })}
       >
         <Box role='row' sx={{ display: 'contents' }}>
@@ -230,6 +246,7 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
                   diagonal={row.id === col.id}
                   chips={size.chips}
                   handlers={handlers}
+                  marker={target && view?.observed.some(o => involvesTarget(o, target)) ? marker : undefined}
                 />
               )
             })}

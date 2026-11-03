@@ -8869,7 +8869,6 @@
     "basedOnCoverage": "基于防火墙覆盖率、隔离和策略",
     "totalRules": "共 {count} 条规则",
     "zeroTrustScore": "零信任评分",
-    "firewallActive": "防火墙已激活",
     "strictPolicy": "严格策略",
     "protectedPercent": "VM 保护率：{percent}%",
     "microSegPercent": "微分段：{percent}%",

@@ -8869,7 +8869,6 @@
     "basedOnCoverage": "방화벽 적용률, 격리 및 정책 기반",
     "totalRules": "총 {count}개 규칙",
     "zeroTrustScore": "제로 트러스트 점수",
-    "firewallActive": "방화벽 활성",
     "strictPolicy": "엄격한 정책",
     "protectedPercent": "보호된 VM: {percent}%",
     "microSegPercent": "마이크로 세분화: {percent}%",

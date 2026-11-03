@@ -8869,7 +8869,6 @@
     "basedOnCoverage": "Basé sur la couverture firewall, l'isolation et les politiques",
     "totalRules": "{count} règles au total",
     "zeroTrustScore": "Score Zero Trust",
-    "firewallActive": "Firewall actif",
     "strictPolicy": "Policy stricte",
     "protectedPercent": "VMs protégées : {percent}%",
     "microSegPercent": "Micro-seg : {percent}%",

@@ -89,7 +89,7 @@ export function opCalls(op: PublishOp): number {
   return 2
 }
 
-export type PublishFailureCode = 'DIGEST_CONFLICT' | 'MANAGED_RULE' | 'STALE_POSITION' | 'NOT_OURS' | 'TIME_BUDGET' | 'PVE_ERROR'
+export type PublishFailureCode = 'DIGEST_CONFLICT' | 'MANAGED_RULE' | 'STALE_POSITION' | 'NOT_OURS' | 'TIME_BUDGET' | 'PVE_ERROR' | 'PUBLISH_RUNNING'
 
 /** The guest options the engine sets on the guests of a zone: never written from the Firewalling draft. */
 export const ENGINE_GUEST_OPTIONS = ['enable', 'policy_in', 'log_level_in'] as const

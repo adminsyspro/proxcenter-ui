@@ -148,7 +148,10 @@ describe('POST /api/v1/firewall/publish/[connectionId]', () => {
     await vi.waitFor(() => expect(h.pveFetch.mock.calls.some(([, , init]) => init?.method === 'PUT')).toBe(true))
     const second = await post({ ops: [edit(1)], digests: {} })
     expect(second.status).toBe(409)
-    expect(await readJson(second)).toMatchObject({ code: 'PUBLISH_RUNNING' })
+    expect(await readJson(second)).toMatchObject({ applied: 0, total: 1, failed: { index: 0, kind: 'rule.edit', scope: 'cluster', code: 'PUBLISH_RUNNING' } })
+    expect(h.audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'firewall.publish', status: 'failure', details: expect.objectContaining({ reason: 'publish_running', scopeKeys: ['cluster'] }),
+    }))
     release()
     expect((await first).status).toBe(200)
     // The lock is released once the first ends.

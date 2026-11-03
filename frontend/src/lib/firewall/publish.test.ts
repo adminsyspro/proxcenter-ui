@@ -342,6 +342,16 @@ describe('executePublish on a guest of a zone: never refuses what the draft prod
     expect(comments(pve)).toEqual(['[pc-microseg]', 'n', '[pc-microseg] observe'])
   })
 
+  it('[group, u1, observe, u2]: rules on each side of the observe rule stay on their side', async () => {
+    const pve = guestOn([G(), stored('u1'), O(), stored('u2')])
+    const base = await pve.get<any[]>(GUEST_PATH)
+    let d = shiftRules(EMPTY_DRAFT, GUEST, base, ['b3'], -1)
+    d = moveRule(d, GUEST, base, 'b3', 0)
+    d = addRule(d, GUEST, base, newRule('n'))
+    expect((await publish(pve, d)).failed).toBeUndefined()
+    expect(comments(pve)).toEqual(['[pc-microseg]', 'u1', '[pc-microseg] observe', 'u2', 'n'])
+  })
+
   it('[group]: an add lands below it', async () => {
     const pve = guestOn([G()])
     const d = addRule(EMPTY_DRAFT, GUEST, await pve.get<any[]>(GUEST_PATH), newRule('n'))
@@ -385,7 +395,9 @@ describe('executePublish on a guest of a zone: never refuses what the draft prod
     it(`random guest draft ${seed}`, async () => {
       const r = rng(seed * 7919)
       const users = Array.from({ length: r(4) }, (_, i) => stored(`u${i}`))
-      const pve = guestOn([G(), ...users, ...(r(3) > 0 ? [O()] : [])])
+      // Shapes: [G, users, O], [G, users], and [G, users, O, U] (a user rule left below the observe rule).
+      const tail = r(4) === 0 ? [stored('below')] : []
+      const pve = guestOn([G(), ...users, ...(r(3) > 0 || tail.length > 0 ? [O()] : []), ...tail])
       const base = await pve.get<any[]>(GUEST_PATH)
       let d = EMPTY_DRAFT
       for (let step = 0; step < 1 + r(8); step++) {

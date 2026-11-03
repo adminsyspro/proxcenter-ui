@@ -18,7 +18,7 @@ import { audit } from '@/lib/audit'
 import { withAudit } from '@/lib/audit/withAudit'
 import { forgetGuestCoverage } from '@/lib/firewall/guestCoverage'
 import { noteGuestNicFirewall } from '@/lib/inventory/guestDiskTotals'
-import { PUBLISH_CONFIRM_ABOVE, isFail, parsePublishBody } from '@/lib/firewall/publishOps'
+import { PUBLISH_CONFIRM_ABOVE, isFail, parsePublishBody, scopeKey, type PublishResult } from '@/lib/firewall/publishOps'
 import { executePublish, publishStatus, publishSummary, type PublishIO } from '@/lib/firewall/publish'
 
 type RouteContext = { params: Promise<{ connectionId: string }> }
@@ -80,7 +80,18 @@ async function postHandler(req: NextRequest, ctx: RouteContext) {
   }
 
   if (running.has(connectionId)) {
-    return NextResponse.json({ error: 'A publish of this connection is already running: try again once it ends', code: 'PUBLISH_RUNNING' }, { status: 409 })
+    // Same shape as any other stop: nothing applied, the first operation named, the draft left as it is.
+    const message = 'A publish of this connection is already running: try again once it ends'
+    const busy: PublishResult = {
+      applied: 0, total: ops.length, scopes: {},
+      failed: { index: 0, kind: ops[0].kind, scope: scopeKey(ops[0].scope), code: 'PUBLISH_RUNNING', message },
+    }
+    const { scopeKeys, moreScopes } = publishSummary(ops)
+    await audit({
+      action: 'firewall.publish', category: 'firewall', resourceType: 'connection', resourceId: connectionId,
+      status: 'failure', errorMessage: message, details: { reason: 'publish_running', scopeKeys, moreScopes, total: ops.length },
+    })
+    return NextResponse.json(busy, { status: 409 })
   }
   running.add(connectionId)
   try {

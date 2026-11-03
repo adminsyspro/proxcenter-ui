@@ -305,7 +305,6 @@ export function publishStatus(result: PublishResult): number {
 const AUDIT_SCOPE_KEYS = 20
 
 /** The audit details of a publish: how many operations of each kind, on how many scopes of each kind, which scopes. */
-
 export function publishSummary(ops: PublishOp[]): { kinds: Record<string, number>; scopes: Record<string, number>; scopeKeys: string[]; moreScopes: number } {
   const kinds: Record<string, number> = {}
   const seen = new Map<string, string>()

@@ -23,6 +23,14 @@ describe('groupByDestination', () => {
     expect(groups.map(g => g.name)).toEqual(['app', 'web', 'Deleted zone'])
   })
 
+  it('ends a tie of hits and name on the zone id, whatever the order of the page', () => {
+    const same = (id: string) => (id === 'zx' || id === 'zy' ? 'twin' : nameOf(id))
+    const one = groupByDestination([row('1', 'zy', 4), row('2', 'zx', 4)], same).map(g => g.key)
+    const two = groupByDestination([row('2', 'zx', 4), row('1', 'zy', 4)], same).map(g => g.key)
+    expect(one).toEqual(['zx', 'zy'])
+    expect(two).toEqual(one)
+  })
+
   it('has no group for an empty page', () => {
     expect(groupByDestination([], nameOf)).toEqual([])
   })

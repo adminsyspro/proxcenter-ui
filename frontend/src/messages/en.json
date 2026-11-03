@@ -12922,7 +12922,7 @@
         "accepted": "Accepted",
         "dismissed": "Dismissed"
       },
-      "selectPage": "Select all on this page",
+      "selectPage": "Select all shown on this page",
       "selectRow": "Select {source} to {destination}",
       "selected": "{count, number} selected",
       "rowLabel": "{source} to {destination}",
@@ -12961,8 +12961,6 @@
         "actions": "Actions"
       },
       "group": "{zone} · {count, plural, one {# observed flow} other {# observed flows}} · {hits, plural, one {# hit} other {# hits}}",
-      "groupCollapse": "Collapse {zone}",
-      "groupExpand": "Expand {zone}",
       "unknownDestination": "Unknown destination",
       "groupsContinue": "Flows are grouped within this page: the next page goes on, starting with {zone}.",
       "asCidr": "As CIDR",
@@ -12980,7 +12978,8 @@
         "zoneDot": "Source zone colour",
         "unknownDot": "Unknown source",
         "about": "About the hit counts"
-      }
+      },
+      "acceptUnknownSource": "Unknown source: use As CIDR"
     },
     "overview": {
       "empty": "No zone to draw yet.",

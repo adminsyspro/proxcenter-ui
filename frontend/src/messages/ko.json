@@ -12922,7 +12922,7 @@
         "accepted": "수락됨",
         "dismissed": "무시됨"
       },
-      "selectPage": "이 페이지 전체 선택",
+      "selectPage": "이 페이지에 표시된 항목 모두 선택",
       "selectRow": "{source}에서 {destination}(으)로 선택",
       "selected": "{count, number}개 선택됨",
       "rowLabel": "{source}에서 {destination}(으)로",
@@ -12961,8 +12961,6 @@
         "actions": "작업"
       },
       "group": "{zone} · 관찰된 흐름 {count, plural, other {#개}} · 적중 {hits, plural, other {#회}}",
-      "groupCollapse": "{zone} 접기",
-      "groupExpand": "{zone} 펼치기",
       "unknownDestination": "알 수 없는 목적지",
       "groupsContinue": "흐름은 이 페이지 안에서만 묶입니다. 다음 페이지가 {zone}부터 이어집니다.",
       "asCidr": "CIDR로",
@@ -12980,7 +12978,8 @@
         "zoneDot": "출발지 영역 색상",
         "unknownDot": "알 수 없는 출발지",
         "about": "적중 수 안내"
-      }
+      },
+      "acceptUnknownSource": "알 수 없는 출발지: CIDR로를 사용하세요"
     },
     "overview": {
       "empty": "아직 그릴 영역이 없습니다.",

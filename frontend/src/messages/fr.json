@@ -12923,7 +12923,7 @@
         "accepted": "Accepté",
         "dismissed": "Écarté"
       },
-      "selectPage": "Sélectionner toute la page",
+      "selectPage": "Sélectionner tout ce qui est affiché sur la page",
       "selectRow": "Sélectionner {source} vers {destination}",
       "selected": "{count, number} sélectionné(s)",
       "rowLabel": "{source} vers {destination}",
@@ -12962,8 +12962,6 @@
         "actions": "Traitement"
       },
       "group": "{zone} · {count, plural, one {# flux observé} other {# flux observés}} · {hits, plural, one {# occurrence} other {# occurrences}}",
-      "groupCollapse": "Replier {zone}",
-      "groupExpand": "Déplier {zone}",
       "unknownDestination": "Destination inconnue",
       "groupsContinue": "Les flux sont regroupés au sein de cette page : la page suivante continue, en commençant par {zone}.",
       "asCidr": "En CIDR",
@@ -12981,7 +12979,8 @@
         "zoneDot": "Couleur de la zone source",
         "unknownDot": "Source inconnue",
         "about": "À propos des occurrences"
-      }
+      },
+      "acceptUnknownSource": "Source inconnue : utilisez En CIDR"
     },
     "overview": {
       "empty": "Aucune zone à dessiner pour l'instant.",

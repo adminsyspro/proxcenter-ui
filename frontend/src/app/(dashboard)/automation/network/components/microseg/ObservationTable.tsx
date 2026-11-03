@@ -1,17 +1,13 @@
 'use client'
 
-import { Fragment, useMemo } from 'react'
-import { Box, Checkbox, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
+import { Fragment } from 'react'
+import { Box, ButtonBase, Checkbox, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 
-import { decodeCollapsed, encodeCollapsed, groupByDestination, maxHits, type ObservationGroup } from './observationModel'
+import { groupByDestination, maxHits, type ObservationGroup } from './observationModel'
 import ObservationRow, { OBSERVATION_COLUMNS } from './ObservationRow'
-import { useStored } from './useStoredChoice'
-
-/** Where the collapsed destination zones of the table are kept in this browser. */
-export const COLLAPSED_STORAGE_KEY = 'microseg.observation.collapsed'
 
 const HEAD_SX = { py: 0.75, px: 1, whiteSpace: 'nowrap', fontWeight: 600 } as const
 const VISUALLY_HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' } as const
@@ -31,28 +27,31 @@ type Props = {
   onResolve: (s: MicrosegSuggestion, action: SuggestionAction) => void
   /** The destination zone of the first flow of the next page, when there is one: its group may go on there. */
   nextZoneId?: string
+  /** The folded destination zones ('' = unknown destination), and the fold or unfold of one. */
+  collapsed: ReadonlySet<string>
+  onToggleGroup: (key: string) => void
 }
 
-/** The header row of a destination zone: its name, flows and hits, and the chevron that folds its flows. */
+/**
+ * The header row of a destination zone: its name, flows and hits. The whole row is the button that folds its flows
+ * (a disclosure: named by its text, aria-expanded, Enter and Space).
+ */
 function GroupHeader({ group, color, collapsed, onToggle }: { group: ObservationGroup<MicrosegSuggestion>; color: string; collapsed: boolean; onToggle: () => void }) {
   const t = useTranslations('microsegPilot.observation')
   return (
     <TableRow data-group={group.key} sx={{ bgcolor: 'action.hover' }}>
-      <TableCell colSpan={OBSERVATION_COLUMNS} sx={{ py: 0.25, px: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-          <IconButton
-            size='small'
-            aria-expanded={!collapsed}
-            aria-label={t(collapsed ? 'groupExpand' : 'groupCollapse', { zone: group.name })}
-            onClick={onToggle}
-          >
-            <i className={collapsed ? 'ri-arrow-right-s-line' : 'ri-arrow-down-s-line'} />
-          </IconButton>
-          <Box component='span' sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
-          <Typography noWrap variant='body2' fontWeight={600} sx={{ minWidth: 0 }}>
+      <TableCell colSpan={OBSERVATION_COLUMNS} sx={{ p: 0 }}>
+        <ButtonBase
+          aria-expanded={!collapsed}
+          onClick={onToggle}
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 1, width: '100%', minWidth: 0, minHeight: 34, px: 1.5, textAlign: 'left', '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}
+        >
+          <i aria-hidden className={collapsed ? 'ri-arrow-right-s-line' : 'ri-arrow-down-s-line'} style={{ fontSize: 18 }} />
+          <Box component='span' aria-hidden sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
+          <Typography component='span' noWrap variant='body2' fontWeight={600} sx={{ minWidth: 0 }}>
             {t('group', { zone: group.name, count: group.rows.length, hits: group.hits })}
           </Typography>
-        </Box>
+        </ButtonBase>
       </TableCell>
     </TableRow>
   )
@@ -60,19 +59,16 @@ function GroupHeader({ group, color, collapsed, onToggle }: { group: Observation
 
 /**
  * The observed flows of the page as a dense table, one row per flow, under a header row per destination zone (the
- * busiest first) that folds its flows; the folded zones are kept in this browser. The grouping covers the page only:
+ * busiest first) that folds its flows (the panel keeps the folded zones). The grouping covers the page only:
  * the caption says so when the next page goes on with a zone.
  */
-export default function ObservationTable({ rows, zones, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, nextZoneId }: Props) {
+export default function ObservationTable({ rows, zones, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, nextZoneId, collapsed, onToggleGroup }: Props) {
   const t = useTranslations('microsegPilot.observation')
   const max = maxHits(rows)
-  const [collapsedKeys, setCollapsedKeys] = useStored(COLLAPSED_STORAGE_KEY, decodeCollapsed, encodeCollapsed)
-  const collapsed = useMemo(() => new Set(collapsedKeys), [collapsedKeys])
 
   const nameOf = (id: string) => (id ? zones.get(id)?.name ?? t('deletedZone') : t('unknownDestination'))
   const colorOf = (id: string) => (id ? zones.get(id)?.color || 'text.disabled' : 'error.main')
   const groups = groupByDestination(rows, nameOf)
-  const toggleGroup = (key: string) => setCollapsedKeys(collapsed.has(key) ? collapsedKeys.filter(k => k !== key) : [...collapsedKeys, key])
 
   return (
     <>
@@ -105,7 +101,7 @@ export default function ObservationTable({ rows, zones, selected, busy, now, all
           <TableBody>
             {groups.map(group => (
               <Fragment key={group.key}>
-                <GroupHeader group={group} color={colorOf(group.key)} collapsed={collapsed.has(group.key)} onToggle={() => toggleGroup(group.key)} />
+                <GroupHeader group={group} color={colorOf(group.key)} collapsed={collapsed.has(group.key)} onToggle={() => onToggleGroup(group.key)} />
                 {!collapsed.has(group.key) && group.rows.map(s => (
                   <ObservationRow
                     key={s.id}

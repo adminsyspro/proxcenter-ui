@@ -12922,7 +12922,7 @@
         "accepted": "Aceptado",
         "dismissed": "Descartado"
       },
-      "selectPage": "Seleccionar toda la página",
+      "selectPage": "Seleccionar todo lo mostrado en la página",
       "selectRow": "Seleccionar {source} hacia {destination}",
       "selected": "{count, number} seleccionados",
       "rowLabel": "{source} hacia {destination}",
@@ -12961,8 +12961,6 @@
         "actions": "Acciones"
       },
       "group": "{zone} · {count, plural, one {# flujo observado} other {# flujos observados}} · {hits, plural, one {# coincidencia} other {# coincidencias}}",
-      "groupCollapse": "Contraer {zone}",
-      "groupExpand": "Expandir {zone}",
       "unknownDestination": "Destino desconocido",
       "groupsContinue": "Los flujos se agrupan dentro de esta página: la página siguiente continúa, empezando por {zone}.",
       "asCidr": "Como CIDR",
@@ -12980,7 +12978,8 @@
         "zoneDot": "Color de la zona de origen",
         "unknownDot": "Origen desconocido",
         "about": "Sobre las coincidencias"
-      }
+      },
+      "acceptUnknownSource": "Origen desconocido: use Como CIDR"
     },
     "overview": {
       "empty": "Aún no hay ninguna zona que dibujar.",

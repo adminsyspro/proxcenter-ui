@@ -17,7 +17,7 @@ export type ObservationGroup<S> = { key: string; name: string; rows: S[]; hits: 
 
 /**
  * The flows of a page grouped by destination zone, in the order of the page within a group: the zones with the most
- * hits first (ties by name), the unknown destination last.
+ * hits first (ties by name, then by zone id), the unknown destination last.
  */
 export function groupByDestination<S extends { dst_zone_id: string; hits: number }>(rows: readonly S[], nameOf: (zoneId: string) => string): ObservationGroup<S>[] {
   const groups = new Map<string, ObservationGroup<S>>()
@@ -31,7 +31,8 @@ export function groupByDestination<S extends { dst_zone_id: string; hits: number
     group.hits += r.hits
   }
   const unknownLast = (g: ObservationGroup<S>) => (g.key === '' ? 1 : 0)
-  return [...groups.values()].sort((a, b) => unknownLast(a) - unknownLast(b) || b.hits - a.hits || a.name.localeCompare(b.name))
+  // Ties end on the zone id, so two zones of the same hits and name never swap between renders.
+  return [...groups.values()].sort((a, b) => unknownLast(a) - unknownLast(b) || b.hits - a.hits || a.name.localeCompare(b.name) || a.key.localeCompare(b.key))
 }
 
 /** The collapsed groups as stored in this browser: a JSON list of zone ids, anything else is none. */

@@ -12922,7 +12922,7 @@
         "accepted": "已接受",
         "dismissed": "已忽略"
       },
-      "selectPage": "选择本页全部",
+      "selectPage": "选择本页显示的全部",
       "selectRow": "选择 {source} 到 {destination}",
       "selected": "已选择 {count, number} 项",
       "rowLabel": "{source} 到 {destination}",
@@ -12961,8 +12961,6 @@
         "actions": "操作"
       },
       "group": "{zone} · {count, plural, other {# 个观察到的流}} · {hits, plural, other {# 次命中}}",
-      "groupCollapse": "折叠 {zone}",
-      "groupExpand": "展开 {zone}",
       "unknownDestination": "未知目标",
       "groupsContinue": "流仅在本页内分组：下一页从 {zone} 开始继续。",
       "asCidr": "按 CIDR",
@@ -12980,7 +12978,8 @@
         "zoneDot": "来源区域颜色",
         "unknownDot": "未知来源",
         "about": "关于命中数"
-      }
+      },
+      "acceptUnknownSource": "未知来源：请使用“按 CIDR”"
     },
     "overview": {
       "empty": "还没有可绘制的区域。",

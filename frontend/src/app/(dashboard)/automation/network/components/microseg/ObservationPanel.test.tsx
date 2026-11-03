@@ -150,6 +150,7 @@ describe('grouping by destination zone', () => {
   const toWeb = [sug('w1', { src_zone_id: 'zd', dst_zone_id: 'zw', hits: 30_000, dst_ip: '10.0.0.20' })]
   const toNowhere = [sug('n1', { dst_zone_id: '', dst_ip: '203.0.113.9', hits: 90_000 })]
   const headers = () => screen.getAllByRole('row').filter(r => r.hasAttribute('data-group'))
+  const groupButton = (zone: string) => screen.getByRole('button', { name: new RegExp(`^${zone} · `) })
 
   it('puts a header row per destination zone, the busiest first, the unknown destination last', async () => {
     setup([...toWeb, ...toDb, ...toNowhere])
@@ -162,22 +163,51 @@ describe('grouping by destination zone', () => {
     expect(flowRows().map(r => r.getAttribute('data-suggestion'))).toEqual(['w1', 'd1', 'd2', 'n1'])
   })
 
-  it('folds a zone, keeps it folded in this browser, and unfolds it', async () => {
+  it('folds a zone from its whole header row, keeps it folded in this browser, and unfolds it', async () => {
     setup([...toDb, ...toWeb])
     await findFlowRows()
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse db' }))
+    const header = groupButton('db')
+    expect(header.tagName).toBe('BUTTON')
+    expect(header.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(header)
     expect(flowRows().map(r => r.getAttribute('data-suggestion'))).toEqual(['w1'])
     expect(window.localStorage.getItem('microseg.observation.collapsed')).toBe('["zd"]')
-    expect(screen.getByRole('button', { name: 'Expand db' }).getAttribute('aria-expanded')).toBe('false')
+    expect(groupButton('db').getAttribute('aria-expanded')).toBe('false')
     cleanup()
 
     setup([...toDb, ...toWeb])
-    expect(await screen.findByRole('button', { name: 'Expand db' })).toBeTruthy()
     await findFlowRows()
+    expect(groupButton('db').getAttribute('aria-expanded')).toBe('false')
     expect(flowRows().map(r => r.getAttribute('data-suggestion'))).toEqual(['w1'])
-    fireEvent.click(screen.getByRole('button', { name: 'Expand db' }))
+    fireEvent.click(groupButton('db'))
     expect(flowRows()).toHaveLength(3)
     expect(window.localStorage.getItem('microseg.observation.collapsed')).toBe('[]')
+  })
+
+  it('selects only the flows of unfolded zones, and the bulk bar counts what is shown', async () => {
+    setup([...toDb, ...toWeb])
+    await findFlowRows()
+    fireEvent.click(groupButton('db'))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown on this page' }))
+    const bar = screen.getByRole('toolbar', { name: 'Selected flows' })
+    expect(within(bar).getByText('1 selected')).toBeTruthy()
+    fireEvent.click(within(bar).getByRole('button', { name: 'Dismiss selected' }))
+    await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
+    expect(body(calls('POST /suggestions/resolve')[0][1])).toEqual({ version: 3, ids: ['w1'], action: 'dismiss' })
+  })
+
+  it('drops the flows of a zone from the selection when it is folded', async () => {
+    setup([...toDb, ...toWeb])
+    await findFlowRows()
+    const all = screen.getByRole('checkbox', { name: 'Select all shown on this page' }) as HTMLInputElement
+    fireEvent.click(all)
+    expect(screen.getByText('3 selected')).toBeTruthy()
+    fireEvent.click(groupButton('db'))
+    expect(screen.getByText('1 selected')).toBeTruthy()
+    expect(all.checked).toBe(true)
+    fireEvent.click(groupButton('db'))
+    expect(screen.getByText('1 selected')).toBeTruthy()
+    expect(all.getAttribute('data-indeterminate')).toBe('true')
   })
 
   it('reads a broken stored value as no zone folded', async () => {
@@ -230,6 +260,18 @@ describe('legend and labelled actions', () => {
     expect(await tip(within(line).getByRole('button', { name: 'As CIDR' }))).toMatch(/source 192\.168\.1\.50 as an address range: needed when the source is an unknown IP/)
   })
 
+  it('says why Accept is disabled for a source in no zone', async () => {
+    setup([unknownSource])
+    const accept = within(await row('192.168.1.50 to db')).getByRole('button', { name: 'Accept' }) as HTMLButtonElement
+    expect(accept.disabled).toBe(true)
+    expect(await tip(accept)).toBe('Unknown source: use As CIDR')
+  })
+
+  it('lets the keyboard reach the tooltip of the source name', async () => {
+    setup([sug('s1')])
+    expect(within(await row('web to db')).getByText('web').getAttribute('tabindex')).toBe('0')
+  })
+
   it('tells what Dismiss does', async () => {
     setup([sug('s1')])
     expect(await tip(within(await row('web to db')).getByRole('button', { name: 'Dismiss' }))).toBe('Hides this suggestion for this pair.')
@@ -280,7 +322,7 @@ describe('unit actions', () => {
     setup([sug('s1'), sug('s2', { src_zone_id: 'zd', dst_zone_id: 'zw' })])
     mock.routes['POST /suggestions/resolve'] = () => reply(409, { code: 'VERSION_CONFLICT', error: 'x' })
     await row('web to db')
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown on this page' }))
     expect(screen.getByText('2 selected')).toBeTruthy()
     const before = calls('GET /policy').length
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss selected' }))
@@ -296,7 +338,7 @@ describe('bulk actions', () => {
   it('accepts three suggestions at once and reloads', async () => {
     setup(three)
     await findFlowRows()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown on this page' }))
     expect(screen.getByText('3 selected')).toBeTruthy()
     const before = listCalls().length
     fireEvent.click(screen.getByRole('button', { name: 'Accept selected' }))
@@ -309,7 +351,7 @@ describe('bulk actions', () => {
   it('has a three-state select-all over the current page', async () => {
     setup(three)
     await findFlowRows()
-    const all = screen.getByRole('checkbox', { name: 'Select all on this page' }) as HTMLInputElement
+    const all = screen.getByRole('checkbox', { name: 'Select all shown on this page' }) as HTMLInputElement
     const indeterminate = () => all.getAttribute('data-indeterminate') === 'true'
     expect(all.checked).toBe(false)
     expect(indeterminate()).toBe(false)
@@ -331,7 +373,7 @@ describe('bulk actions', () => {
   it('disables the bulk Accept while a selected flow has no source zone, and offers the CIDR', async () => {
     setup([sug('s1'), unknownSource])
     await findFlowRows()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown on this page' }))
     expect((screen.getByRole('button', { name: 'Accept selected' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Accept selected as CIDR' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Dismiss selected' }) as HTMLButtonElement).disabled).toBe(false)
@@ -431,7 +473,7 @@ describe('server side filters and pagination', () => {
     setup(full)
     mock.routes['GET /suggestions?limit=26&offset=25&status=pending'] = () => reply(200, { suggestions: [sug('p25')], limit: 26, offset: 25 })
     await findFlowRows()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all shown on this page' }))
     expect(screen.getByText('25 selected')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
     await waitFor(() => expect(screen.getByText('Page 2')).toBeTruthy())

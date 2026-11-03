@@ -86,7 +86,7 @@ export default function ObservationRow({ suggestion: s, zones, checked, busy, ma
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
             <ObservedKindGlyph kind={s.kind} />
             <Box component='span' data-source-dot={dot} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: dot, flexShrink: 0 }} />
-            <Tooltip title={source}><Typography noWrap fontWeight={600} sx={NAME_SX}>{source}</Typography></Tooltip>
+            <Tooltip title={source}><Typography noWrap fontWeight={600} tabIndex={0} sx={NAME_SX}>{source}</Typography></Tooltip>
           </Box>
         </TableCell>
         <TableCell sx={{ ...CELL_SX, px: 0 }} aria-hidden><i className='ri-arrow-right-line' style={{ opacity: 0.6 }} /></TableCell>

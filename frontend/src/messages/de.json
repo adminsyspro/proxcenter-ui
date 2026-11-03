@@ -12590,7 +12590,7 @@
         "accepted": "Akzeptiert",
         "dismissed": "Verworfen"
       },
-      "selectPage": "Alle auf dieser Seite auswählen",
+      "selectPage": "Alle auf dieser Seite angezeigten auswählen",
       "selectRow": "{source} nach {destination} auswählen",
       "selected": "{count, number} ausgewählt",
       "rowLabel": "{source} nach {destination}",
@@ -12629,8 +12629,6 @@
         "actions": "Aktionen"
       },
       "group": "{zone} · {count, plural, one {# beobachteter Fluss} other {# beobachtete Flüsse}} · {hits, plural, one {# Treffer} other {# Treffer}}",
-      "groupCollapse": "{zone} einklappen",
-      "groupExpand": "{zone} ausklappen",
       "unknownDestination": "Unbekanntes Ziel",
       "groupsContinue": "Die Flüsse sind innerhalb dieser Seite gruppiert: Die nächste Seite geht weiter, beginnend mit {zone}.",
       "asCidr": "Als CIDR",
@@ -12648,7 +12646,8 @@
         "zoneDot": "Farbe der Quellzone",
         "unknownDot": "Unbekannte Quelle",
         "about": "Zu den Trefferzahlen"
-      }
+      },
+      "acceptUnknownSource": "Unbekannte Quelle: Als CIDR verwenden"
     },
     "overview": {
       "empty": "Noch keine Zone zum Zeichnen.",

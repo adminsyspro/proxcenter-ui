@@ -11,10 +11,15 @@ import MicrosegErrorAlert from './MicrosegErrorAlert'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import { BulkBar, ObservationLegend } from './ObservationActions'
 import ObservationFilters, { type ObservationFilterValues } from './ObservationFilters'
+import { decodeCollapsed, encodeCollapsed } from './observationModel'
 import ObservationTable from './ObservationTable'
 import { useResolveSuggestions } from './observationParts'
 import { PrevNextPager } from './PolicyPager'
 import { useNow } from './useNow'
+import { useStored } from './useStoredChoice'
+
+/** Where the folded destination zones of the table are kept in this browser. */
+export const COLLAPSED_STORAGE_KEY = 'microseg.observation.collapsed'
 
 /** Flows per page. The request asks for one more, which tells whether a next page exists. */
 export const OBSERVATION_PAGE_SIZE = 25
@@ -46,8 +51,11 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
   const hasNext = (data?.length ?? 0) > OBSERVATION_PAGE_SIZE
   const now = useNow(undefined, data)
 
-  // Select-all covers the current page, the pending flows of it (the others cannot be resolved).
-  const pending = rows.filter(r => r.status === 'pending')
+  const [collapsedKeys, setCollapsedKeys] = useStored(COLLAPSED_STORAGE_KEY, decodeCollapsed, encodeCollapsed)
+  const collapsed = useMemo(() => new Set(collapsedKeys), [collapsedKeys])
+
+  // Select-all covers the pending flows of the page that are shown: not the resolved ones, not those of a folded zone.
+  const pending = rows.filter(r => r.status === 'pending' && !collapsed.has(r.dst_zone_id))
   const chosen = pending.filter(r => selected.has(r.id))
   const allChecked = pending.length > 0 && chosen.length === pending.length
   const noZoneAmongChosen = chosen.some(r => !r.src_zone_id)
@@ -67,6 +75,16 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
     if (!next.delete(id)) next.add(id)
     return next
   })
+  // Folding a zone drops its flows from the selection: a bulk action never reaches a flow the admin cannot see.
+  const toggleGroup = (key: string) => {
+    if (collapsed.has(key)) {
+      setCollapsedKeys(collapsedKeys.filter(k => k !== key))
+      return
+    }
+    setCollapsedKeys([...collapsedKeys, key])
+    const hidden = new Set(rows.filter(r => r.dst_zone_id === key).map(r => r.id))
+    setSelected(prev => new Set([...prev].filter(id => !hidden.has(id))))
+  }
   const toggleAll = () => setSelected(allChecked ? new Set() : new Set(pending.map(r => r.id)))
 
   async function resolve(ids: string[], action: SuggestionAction) {
@@ -129,6 +147,8 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
               onToggle={toggle}
               onResolve={one}
               nextZoneId={hasNext ? data[OBSERVATION_PAGE_SIZE].dst_zone_id : undefined}
+              collapsed={collapsed}
+              onToggleGroup={toggleGroup}
             />
           )}
         </>

@@ -31,7 +31,7 @@ export function FlowActions({ suggestion: s, source, destination, busy, onResolv
 
   return (
     <Box sx={{ display: 'inline-flex', gap: 0.5 }}>
-      <WriteTip title={s.src_zone_id ? t('acceptTip', { from: source, to: destination, service }) : t('acceptNoZone')}>
+      <WriteTip title={s.src_zone_id ? t('acceptTip', { from: source, to: destination, service }) : t('acceptUnknownSource')}>
         <Button size='small' variant='outlined' disabled={!canWrite || busy || !s.src_zone_id} onClick={() => onResolve('accept')} sx={ACTION_SX}>
           {t('accept')}
         </Button>

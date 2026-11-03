@@ -169,14 +169,13 @@ const isEphemeral = (pair: LensPair) => hasPorts(protoOf(pair.protocol)) && pair
 
 /**
  * Which of two opposite pairs (same two addresses, same protocol) is the reply of the other, or null when neither
- * clearly is: the one on a client port (>= 32768) when the other is not; of two client ports the higher; of two
- * service ports the higher, when the lower is covered by the policy and the higher is not.
+ * clearly is: the one on a client port (>= 32768) when the other is not; of two client ports the higher. Two
+ * service ports always stay two rows: B may have opened a service of its own toward A, folding would hide it.
  */
-function replyOf<T extends LensPair>(a: T, b: T, covered: (p: LensPair) => boolean): T | null {
+function replyOf<T extends LensPair>(a: T, b: T): T | null {
   const [low, high] = a.dst_port <= b.dst_port ? [a, b] : [b, a]
   if (low.dst_port === high.dst_port) return null
-  if (isEphemeral(high)) return high
-  return covered(low) && !covered(high) ? high : null
+  return isEphemeral(high) ? high : null
 }
 
 /**
@@ -215,7 +214,7 @@ const sumOf = (list: LensPair[], field: 'bytes' | 'packets') => list.reduce((tot
 /** The rows of two addresses and a protocol: the reply direction summed into the busiest pair of the other one. */
 function foldGroup<T extends LensPair>({ forward, backward }: Directions<T>, covered: (p: LensPair) => boolean): Array<T & ReplyMarks> {
   const both = forward.length > 0 && backward.length > 0
-  const reply = both ? replyOf(busiest(forward), busiest(backward), covered) : null
+  const reply = both ? replyOf(busiest(forward), busiest(backward)) : null
   if (!reply) {
     // A direction alone on a client port the policy does not cover is the answer of a connection opened from the other end.
     return [...forward, ...backward].map(p => ({ ...p, replyBytes: 0, orphanReply: !both && isEphemeral(p) && !covered(p) }))

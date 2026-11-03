@@ -218,12 +218,10 @@ describe('canonicalRows: the reply direction of a pair', () => {
     expect(serviceAlone.orphanReply).toBe(false)
   })
 
-  it('of two service ports folds the higher one only when the lower is covered and the higher is not', () => {
-    const lowCovered = canonicalRows([pair('10.0.0.1', '10.0.0.2'), pair('10.0.0.2', '10.0.0.1', { dst_port: 8443 })], covered)
-    expect(lowCovered).toHaveLength(1)
-    expect(lowCovered[0].dst_port).toBe(5432)
-    const neither = canonicalRows([pair('10.0.0.1', '10.0.0.2', { dst_port: 22 }), pair('10.0.0.2', '10.0.0.1', { dst_port: 8443 })], covered)
-    expect(neither).toHaveLength(2)
+  it('keeps two service ports as two rows with their own status: B may have opened a service of its own toward A', () => {
+    const rows = canonicalRows([pair('10.0.0.1', '10.0.0.2', { bytes: 200 }), pair('10.0.0.2', '10.0.0.1', { dst_port: 8443, bytes: 100 })], covered)
+    expect(rows.map(r => [r.src_ip, r.dst_port, r.replyBytes, r.orphanReply])).toEqual([['10.0.0.1', 5432, 0, false], ['10.0.0.2', 8443, 0, false]])
+    expect(rows.map(r => pairVerdict(r, resolve, [flow()], []).status)).toEqual(['allowed', 'not_covered'])
   })
 
   it('of two client ports folds the higher one, and keeps other protocols and addresses apart', () => {

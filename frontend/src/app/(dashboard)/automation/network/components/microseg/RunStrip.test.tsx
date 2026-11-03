@@ -9,7 +9,7 @@ import { act, within } from '@testing-library/react'
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegRun } from '@/lib/microseg/types'
 
-import { calls, mock, reply } from './microsegTestKit'
+import { GUESTS_ROUTE, calls, mock, reply } from './microsegTestKit'
 import { db, installFreshMocks, run, setup, web } from './policyTestKit'
 
 installFreshMocks()
@@ -41,11 +41,14 @@ describe('run strip', () => {
 
     const policyReads = calls('GET /policy').length
     const statusReads = calls('GET /status').length
+    const guestReads = calls(`GET ${GUESTS_ROUTE}`).length
     await act(async () => { finish(run('done', { guests: 1, members: 1, steps: 1, drifts: 0, done: [{ index: 0, kind: 'guest.tags', object: 'g', summary: 's' }] })) })
 
     expect(await screen.findByText('web: 1 done, 0 failed, 0 not run')).toBeTruthy()
     await waitFor(() => expect(calls('GET /policy').length).toBeGreaterThan(policyReads))
     await waitFor(() => expect(calls('GET /status').length).toBeGreaterThan(statusReads))
+    // The member counts come from the guest tags: the inventory is read again, no manual refresh needed.
+    await waitFor(() => expect(calls(`GET ${GUESTS_ROUTE}`).length).toBeGreaterThan(guestReads))
   })
 
   it('keeps the first run line when a second state change starts', async () => {

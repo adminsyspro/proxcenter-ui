@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 
 import { useSWRFetch } from '@/hooks/useSWRFetch'
+import { zoneGuestsUrl } from '@/lib/microseg/runRefresh'
 
 import type { PolicyGuest } from './zoneModel'
 
@@ -15,7 +16,7 @@ type VmsResponse = {
  * known live addresses, never probed by this read) lets the map put an observed flow on its guests.
  */
 export function useZoneGuests(connectionId: string) {
-  const { data, error, mutate } = useSWRFetch<VmsResponse>(`/api/v1/vms?connId=${encodeURIComponent(connectionId)}`, { revalidateOnFocus: false })
+  const { data, error, mutate } = useSWRFetch<VmsResponse>(zoneGuestsUrl(connectionId), { revalidateOnFocus: false })
 
   const guests = useMemo<PolicyGuest[]>(
     () => (data?.data?.vms ?? [])

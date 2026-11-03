@@ -8,7 +8,7 @@ import { useMicrosegRun } from '@/lib/microseg/useMicroseg'
 
 import type { TrackedRun } from './microsegTabTypes'
 
-/** A finished run stays visible this long (or until dismissed). */
+/** A finished run stays visible this long (or until dismissed). A removal stays until dismissed. */
 export const RUN_LINGER_MS = 10_000
 
 type LineProps = {
@@ -28,12 +28,15 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps
 
   const finished = useRef(onFinished)
   useEffect(() => { finished.current = onFinished })
+  // The removal is rare and undoes everything: its outcome and its notes stay until the admin dismisses them.
+  const lingers = tracked.kind !== 'remove'
   useEffect(() => {
     if (!done) return
     finished.current()
+    if (!lingers) return
     const timer = setTimeout(() => onRemove(tracked.runId), RUN_LINGER_MS)
     return () => clearTimeout(timer)
-  }, [done, tracked.runId, onRemove])
+  }, [done, tracked.runId, onRemove, lingers])
 
   const { label } = tracked
   let text = tracked.runningText
@@ -79,7 +82,10 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps
       sx={{ py: 0, '& .MuiAlert-message': { minWidth: 0, overflow: 'hidden' } }}
     >
       <Tooltip title={detail}>
-        <Typography variant='body2' noWrap>{text}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
+          <Typography variant='body2' noWrap sx={{ flexShrink: 0, maxWidth: '100%' }}>{text}</Typography>
+          {notes ? <Typography variant='caption' color='text.secondary' noWrap sx={{ display: 'block', minWidth: 0 }}>{notes}</Typography> : null}
+        </Box>
       </Tooltip>
     </Alert>
   )

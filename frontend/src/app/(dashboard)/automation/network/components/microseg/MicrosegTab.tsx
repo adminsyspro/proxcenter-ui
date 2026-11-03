@@ -5,7 +5,7 @@ import { Alert, Box, CircularProgress, IconButton, Tab, Tabs, Tooltip, Typograph
 import { useTranslations } from 'next-intl'
 import { useSWRConfig } from 'swr'
 
-import { microsegBaseUrl } from '@/lib/microseg/api'
+import { isRunAffectedKey } from '@/lib/microseg/runRefresh'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 
 import DeploymentWizard from '../DeploymentWizard'
@@ -93,9 +93,11 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
     setRuns(prev => (prev.some(r => r.runId === run.runId) ? prev : [...prev, run]))
   }, [])
   const removeRun = useCallback((runId: string) => setRuns(prev => prev.filter(r => r.runId !== runId)), [])
+  // A run changes Proxmox and records what it did: the draft, the status, the runs and revisions, the drifts
+  // and the zone members (tags) are read again, so no list or count stays stale until a manual reload.
   const refreshAfterRun = useCallback(() => {
     void reload()
-    void mutate(`${microsegBaseUrl(connectionId)}/status`)
+    void mutate(isRunAffectedKey(connectionId))
   }, [reload, mutate, connectionId])
 
   const goToSubTab = (tab: MicrosegSubTab) => {

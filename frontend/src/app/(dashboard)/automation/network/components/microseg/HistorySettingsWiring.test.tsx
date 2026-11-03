@@ -5,13 +5,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, within } from '@testing-library/react'
+import { act, cleanup, within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
 import { calls, mock, policy, renderTab, reply, resetMocks, zone, REVISION_HEAD } from './microsegTestKit'
 import MicrosegTab from './MicrosegTab'
 import { run } from './policyTestKit'
+import type { MicrosegRun } from '@/lib/microseg/types'
 
 // A portal, like the real MUI dialog: inside the tab it would be hidden from the accessibility tree by the open pre-flight dialog.
 vi.mock('../DeploymentWizard', async () => {
@@ -141,6 +142,63 @@ describe('settings', () => {
   })
 })
 
+describe('removal run', () => {
+  const removeRun = (status: MicrosegRun['status']): MicrosegRun => ({
+    ...run(status, status === 'running' ? null : {
+      guests: 2, members: 2, steps: 4, drifts: 0, complete: true, notes: ['the zone tags of the guests are kept'],
+    }),
+    id: 'rm1', kind: 'remove',
+  })
+
+  const startRemoval = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove…' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Remove micro-segmentation?' })
+    fireEvent.change(within(confirm).getByRole('textbox'), { target: { value: 'prod' } })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Remove' }))
+  }
+
+  it('shows the progress, then the result with its notes, and keeps it until dismissed', async () => {
+    window.localStorage.setItem('microseg.subTab', 'history')
+    mock.routes['GET /revisions?limit=100'] = () => reply(200, { revisions: [] })
+    mock.routes['GET /runs?limit=11'] = () => reply(200, { runs: [], limit: 11, offset: 0 })
+    mock.routes['POST /remove'] = () => reply(202, { run_id: 'rm1' })
+    let finish: (r: MicrosegRun) => void = () => undefined
+    const pending = new Promise<MicrosegRun>(resolve => { finish = resolve })
+    let reads = 0
+    mock.routes['GET /runs/rm1'] = async () => (reads++ === 0 ? reply(200, removeRun('running')) : reply(200, await pending))
+    renderConfigured()
+
+    await startRemoval()
+    expect(await screen.findByText('prod: removing micro-segmentation...')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Micro-segmentation settings' })).toBeNull())
+
+    const runsReads = calls('GET /runs?limit=11').length
+    await act(async () => { finish(removeRun('done')) })
+    expect(await screen.findByText('prod: removal complete, the zone tags stay on the guests', undefined, { timeout: 5000 })).toBeTruthy()
+    expect(screen.getByText('the zone tags of the guests are kept')).toBeTruthy()
+    await waitFor(() => expect(calls('GET /runs?limit=11').length).toBeGreaterThan(runsReads))
+  })
+
+  it('keeps a finished removal past the ten seconds of the other runs, until dismissed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      mock.routes['POST /remove'] = () => reply(202, { run_id: 'rm1' })
+      mock.routes['GET /runs/rm1'] = () => reply(200, removeRun('done'))
+      renderConfigured()
+      await startRemoval()
+      expect(await screen.findByText('prod: removal complete, the zone tags stay on the guests')).toBeTruthy()
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
+      const line = screen.getByText('prod: removal complete, the zone tags stay on the guests').closest('[role="alert"]') as HTMLElement
+      fireEvent.click(within(line).getByRole('button', { name: /close/i }))
+      expect(screen.queryByText('prod: removal complete, the zone tags stay on the guests')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  }, 20_000)
+})
+
 describe('history', () => {
   it('follows a restore in the strip and refreshes the policy at the end', async () => {
     window.localStorage.setItem('microseg.subTab', 'history')
@@ -159,8 +217,10 @@ describe('history', () => {
     const policyReads = calls('GET /policy').length
     fireEvent.click(within(dialog).getByRole('button', { name: 'Restore' }))
 
+    const runsReads = calls('GET /runs?limit=11').length
     expect(await screen.findByText('Restore of version 2: 1 done, 0 failed, 0 not run')).toBeTruthy()
     await waitFor(() => expect(calls('GET /policy').length).toBeGreaterThan(policyReads))
+    await waitFor(() => expect(calls('GET /runs?limit=11').length).toBeGreaterThan(runsReads))
   })
 })
 

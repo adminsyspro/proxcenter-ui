@@ -5,7 +5,7 @@ import { useSWRConfig } from 'swr'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
-import type { GuestRef, MicrosegFlow, MicrosegPolicy, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import type { GuestRef, MembersInput, MicrosegFlow, MicrosegPolicy, MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
 import { isVersionConflict } from './dialogParts'
 import type { FlowSaveValues } from './FlowDialog'
@@ -82,18 +82,21 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     startRun({ runId: started.run_id, kind: 'zoneState', label: zone.name, runningText: t(`run.running.${state}`, { label: zone.name }) })
   })
 
-  /**
-   * Queues a guest for a zone (a draft change, the next apply moves the tag): `zoneId` "" takes it out of every zone,
-   * the id of its own zone cancels a queued removal. One at a time; a failure is kept in `memberError`.
-   */
-  const changeMember = (ref: GuestRef, zoneId: string) => {
+  /** One member write at a time; a failure is kept in `memberError`. */
+  const memberWrite = (body: MembersInput) => {
     if (memberBusy) return
     setMemberError(null)
     setMemberBusy(true)
-    void write(() => api.setMembers({ version, zone_id: zoneId, guests: [ref] }))
+    void write(() => api.setMembers(body))
       .catch(setMemberError)
       .finally(() => setMemberBusy(false))
   }
+
+  /** Queues a guest for a zone (a draft change, the next apply moves the tag): `zoneId` "" takes it out of every zone. */
+  const changeMember = (ref: GuestRef, zoneId: string) => memberWrite({ version, zone_id: zoneId, guests: [ref] })
+
+  /** Forgets the queued removal or move of a guest: it stays in its zone and the draft loses that change. */
+  const keepMember = (ref: GuestRef) => memberWrite({ version, clear: [{ type: ref.type, vmid: ref.vmid }] })
 
   return {
     connectionId,
@@ -107,6 +110,7 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     deleteFlow,
     setZoneState,
     changeMember,
+    keepMember,
     memberBusy,
     memberError,
     clearMemberError: () => setMemberError(null),

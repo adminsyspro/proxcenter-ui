@@ -284,12 +284,16 @@ export type PolicyUpdate = {
   settings?: Partial<Omit<MicrosegSettings, 'original_log_rate_limit'>>
 }
 
-export type MembersInput = {
-  version: number
-  /** '' removes the guests from any zone. */
-  zone_id: string
-  guests: GuestRef[]
-}
+/** A pending member by type and vmid (the node it was queued on may have changed since). */
+export type PendingKey = { type: GuestType; vmid: number }
+
+/**
+ * POST /members: queues `guests` for `zone_id` ('' removes them from any zone) and/or deletes the pending change of each
+ * `clear` guest (the undo of a queued removal or move; a guest with none is ignored). `zone_id` goes with `guests` only.
+ */
+export type MembersInput =
+  | { version: number; zone_id: string; guests: GuestRef[]; clear?: PendingKey[] }
+  | { version: number; clear: PendingKey[] }
 
 export type ResolveSuggestionsInput = {
   version: number

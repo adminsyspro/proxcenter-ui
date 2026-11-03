@@ -10,7 +10,7 @@ import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/component
 import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegPolicy, MicrosegZone } from '@/lib/microseg/types'
 
-import { assignRows, filterRows, GUESTS_PAGE_SIZE, isSelectable, MAX_ASSIGN, type AssignRow } from './assignModel'
+import { assignRows, filterRows, GUESTS_PAGE_SIZE, isSelectable, MAX_ASSIGN, membersBody, type AssignRow } from './assignModel'
 import { DialogErrorLine, isVersionConflict, ONE_LINE_SX, OneLine, useDialogAction } from './dialogParts'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { useZoneGuests } from './useZoneGuests'
@@ -131,7 +131,7 @@ export default function AssignGuestsDialog({ open, connectionId, zone, policy, r
     const api = microsegApi(connectionId)
     const ok = await run(async () => {
       try {
-        await api.setMembers({ version: policy.version, zone_id: zone.id, guests: chosen.map(r => r.ref) })
+        await api.setMembers(membersBody(policy.version, zone.id, chosen))
       } catch (e) {
         if (isVersionConflict(e)) await reloadPolicy().catch(() => undefined)
         throw e

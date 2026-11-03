@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
-import { calls, mock, policy, reply, REVISION_HEAD } from './microsegTestKit'
+import { calls, mock, policy, reply, revisionWithSnapshot, REVISION_HEAD } from './microsegTestKit'
 import { body, db, installFreshMocks, setup, vm, web } from './policyTestKit'
 
 installFreshMocks()
@@ -284,7 +284,7 @@ describe('queued removals and moves of tagged members', () => {
   it('shows the removal after "Remove from zone" once the policy reloads with the pending row', async () => {
     let pendingRows: ReturnType<typeof queued> = []
     mock.routes['POST /members'] = () => { pendingRows = queued(''); return reply(200, { version: 4 }) }
-    setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])] })
+    setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])], pending_members: pendingRows, pending_changes: true })
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web()], pending_members: pendingRows, last_revision: REVISION_HEAD, pending_changes: pendingRows.length > 0 }))
     const row = await screen.findByRole('listitem', { name: 'web' })
     fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
@@ -313,9 +313,13 @@ describe('queued removals and moves of tagged members', () => {
     expect(within(row).getAllByText('web-1')).toHaveLength(1)
   })
 
-  it('lets the dialog undo a queued removal: the guest is selectable and re-queued for the zone', async () => {
-    mock.routes['POST /members'] = () => reply(200, { version: 4 })
-    setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])], pending_members: queued('') })
+  it('lets the dialog undo a queued removal: the guest is selectable and its pending row is cleared, not re-queued', async () => {
+    let pendingRows = queued('')
+    mock.routes['POST /members'] = () => { pendingRows = []; return reply(200, { version: 4 }) }
+    mock.routes['GET /revisions?limit=1'] = () => reply(200, { revisions: [revisionWithSnapshot([web()], [])] })
+    setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])], pending_members: pendingRows, pending_changes: true })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web()], pending_members: pendingRows, last_revision: REVISION_HEAD, pending_changes: pendingRows.length > 0 }))
+    expect(await screen.findByText('1 unapplied change')).toBeTruthy()
     const dialog = await openDialog()
     const leaving = await within(dialog).findByRole('listitem', { name: 'web-1' })
     expect(within(leaving).getByText('Pending removal')).toBeTruthy()
@@ -328,9 +332,34 @@ describe('queued removals and moves of tagged members', () => {
     fireEvent.click(box)
     fireEvent.click(assignButton(dialog, 'Assign 1 guest'))
     await waitFor(() => expect(calls('POST /members')).toHaveLength(1))
+    expect(body(calls('POST /members')[0][1] as RequestInit)).toEqual({ version: 3, clear: [{ type: 'qemu', vmid: 100 }] })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.queryByText(/unapplied change/)).toBeNull())
+  })
+
+  it('clears a taken-back move and queues the new guests in the same request', async () => {
+    mock.routes['POST /members'] = () => reply(200, { version: 4 })
+    setup({ zones: [web(), db()], vms: [vm(100, 'web-1', ['zone-web']), vm(102, 'new-1', [])], pending_members: queued('zd') })
+    const dialog = await openDialog()
+    fireEvent.click(within(await within(dialog).findByRole('listitem', { name: 'web-1' })).getByRole('checkbox'))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'new-1' }))
+    fireEvent.click(assignButton(dialog, 'Assign 2 guests'))
+    await waitFor(() => expect(calls('POST /members')).toHaveLength(1))
     expect(body(calls('POST /members')[0][1] as RequestInit)).toEqual({
-      version: 3, zone_id: 'zw', guests: [{ node: 'pve1', type: 'qemu', vmid: 100 }],
+      version: 3, zone_id: 'zw', guests: [{ node: 'pve1', type: 'qemu', vmid: 102 }], clear: [{ type: 'qemu', vmid: 100 }],
     })
+  })
+
+  it('keeps the dialog and reloads the policy when the clear hits a version conflict', async () => {
+    mock.routes['POST /members'] = () => reply(409, { code: 'VERSION_CONFLICT', error: 'stale' })
+    setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web'])], pending_members: queued('') })
+    const dialog = await openDialog()
+    fireEvent.click(within(await within(dialog).findByRole('listitem', { name: 'web-1' })).getByRole('checkbox'))
+    const before = calls('GET /policy').length
+    fireEvent.click(assignButton(dialog, 'Assign 1 guest'))
+    expect(await within(dialog).findByText(/The policy changed elsewhere/)).toBeTruthy()
+    expect(calls('GET /policy').length).toBeGreaterThan(before)
+    expect(screen.getByRole('dialog', { name: 'Assign guests to web' })).toBeTruthy()
   })
 
   it('lets the dialog take back a queued move too', async () => {

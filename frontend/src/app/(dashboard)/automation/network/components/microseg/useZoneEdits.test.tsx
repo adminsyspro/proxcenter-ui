@@ -130,6 +130,25 @@ describe('useZoneEdits', () => {
     expect(result.current.memberError).toBeNull()
   })
 
+  it('keeps a member by clearing its pending change, then reads the policy again', async () => {
+    mock.routes['POST /members'] = () => reply(200, { version: 4 })
+    const { result, reloadPolicy } = setup()
+    act(() => result.current.keepMember(ref))
+    await waitFor(() => expect(result.current.memberBusy).toBe(false))
+    expect(body(calls('POST /members')[0][1] as RequestInit)).toEqual({ version: 3, clear: [{ type: 'qemu', vmid: 100 }] })
+    expect(reloadPolicy).toHaveBeenCalled()
+    expect(result.current.memberError).toBeNull()
+  })
+
+  it('reads the policy again and keeps the error when keeping a member hits a version conflict', async () => {
+    mock.routes['POST /members'] = () => reply(409, { code: 'VERSION_CONFLICT', error: 'stale' })
+    const { result, reloadPolicy } = setup()
+    act(() => result.current.keepMember(ref))
+    await waitFor(() => expect(result.current.memberBusy).toBe(false))
+    expect((result.current.memberError as MicrosegApiError).code).toBe('VERSION_CONFLICT')
+    expect(reloadPolicy).toHaveBeenCalled()
+  })
+
   it('exposes the readiness window and the pending changes of the draft', () => {
     const { result } = setup({ policy: policy({ ...draft, pending_changes: true, last_revision: null, zones: [web] }) })
     expect(result.current.readyAfterHours).toBe(24)

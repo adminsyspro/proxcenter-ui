@@ -122,12 +122,12 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted }: { zone: 
 
 /**
  * Takes a member out of the zone (queued: the next apply removes the tag), or cancels a removal already queued by
- * queueing the guest for its zone again.
+ * clearing that pending change (the draft loses it, nothing is queued instead).
  */
 export function MemberAction({ member, zoneId, edits }: { member: ZoneMember; zoneId: string; edits: ZoneEdits }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
   if (member.change?.kind === 'removal') {
-    return <WriteIcon label={t('keepMember')} icon='ri-arrow-go-back-line' disabled={edits.memberBusy} onClick={() => edits.changeMember(member.ref, zoneId)} />
+    return <WriteIcon label={t('keepMember')} icon='ri-arrow-go-back-line' disabled={edits.memberBusy} onClick={() => edits.keepMember(member.ref)} />
   }
   return <WriteIcon label={t('removeMember')} icon='ri-close-line' disabled={edits.memberBusy} onClick={() => edits.changeMember(member.ref, '')} />
 }

@@ -1,4 +1,4 @@
-import type { GuestRef, MicrosegZone, PendingMember } from '@/lib/microseg/types'
+import type { GuestRef, MembersInput, MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
 import { guestKey, memberChange, type MemberChange, type PolicyGuest } from './zoneModel'
 
@@ -13,7 +13,7 @@ export type AssignRow = {
   ref: GuestRef
   /** Already tagged with the zone ("tag") or queued for it ("pending"): nothing to assign. */
   member: 'tag' | 'pending' | null
-  /** Tagged with the zone but queued for removal or for another zone: selecting it again re-queues it for this zone. */
+  /** Tagged with the zone but queued for removal or for another zone: selecting it again clears that queued change. */
   change?: MemberChange
   /** Names of the other zones the guest carries a tag of, or is queued for: assigning MOVES it. */
   otherZones: string[]
@@ -55,3 +55,14 @@ export function filterRows(rows: AssignRow[], search: string): AssignRow[] {
 
 /** A row the admin can tick: not a member yet, or a member whose removal / move is queued. */
 export const isSelectable = (row: AssignRow) => row.member === null || row.change !== undefined
+
+/**
+ * The request of the dialog: the guests to queue for the zone, and the members whose queued removal or move is taken
+ * back, cleared rather than queued again for their own zone (the draft then loses that change).
+ */
+export function membersBody(version: number, zoneId: string, chosen: AssignRow[]): MembersInput {
+  const clear = chosen.filter(r => r.change).map(r => ({ type: r.ref.type, vmid: r.ref.vmid }))
+  const guests = chosen.filter(r => !r.change).map(r => r.ref)
+  if (guests.length === 0) return { version, clear }
+  return clear.length > 0 ? { version, zone_id: zoneId, guests, clear } : { version, zone_id: zoneId, guests }
+}

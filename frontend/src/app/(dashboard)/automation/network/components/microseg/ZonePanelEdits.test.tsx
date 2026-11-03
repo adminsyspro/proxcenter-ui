@@ -147,9 +147,26 @@ describe('members', () => {
     expect(await within(queued).findByText('Pending removal')).toBeTruthy()
     expect(await screen.findByText('1 unapplied change')).toBeTruthy()
 
+    draftAfter({ pending_members: [], pending_changes: false })
     fireEvent.click(button(queued, 'Keep in zone'))
     await waitFor(() => expect(calls('POST /members')).toHaveLength(2))
-    expect(body(calls('POST /members')[1][1] as RequestInit)).toEqual({ version: 4, zone_id: 'zw', guests: [{ node: 'pve1', type: 'qemu', vmid: 100 }] })
+    expect(body(calls('POST /members')[1][1] as RequestInit)).toEqual({ version: 4, clear: [{ type: 'qemu', vmid: 100 }] })
+    await waitFor(() => expect(screen.queryByText(/unapplied change/)).toBeNull())
+    const kept = within(screen.getByRole('complementary', { name: 'Zone web' })).getByRole('listitem', { name: 'web-1' })
+    expect(within(kept).queryByText('Pending removal')).toBeNull()
+    expect(button(kept, 'Remove from zone')).toBeTruthy()
+  })
+
+  it('says why keeping a member failed on a version conflict and reads the draft again', async () => {
+    mock.routes['GET /revisions?limit=1'] = () => reply(200, { revisions: [revisionWithSnapshot([web(), db()], [])] })
+    setup({ vms: tagged, pending_members: [{ id: 'm1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: '' }], pending_changes: true })
+    mock.routes['POST /members'] = () => reply(409, { code: 'VERSION_CONFLICT', error: 'stale' })
+    const line = await within(await openPanel()).findByRole('listitem', { name: 'web-1' })
+    const before = calls('GET /policy').length
+    fireEvent.click(button(line, 'Keep in zone'))
+    expect(await screen.findByText(/The policy changed elsewhere/)).toBeTruthy()
+    expect(calls('GET /policy').length).toBeGreaterThan(before)
+    expect(body(calls('POST /members')[0][1] as RequestInit)).toEqual({ version: 3, clear: [{ type: 'qemu', vmid: 100 }] })
   })
 
   it('says why a removal failed', async () => {

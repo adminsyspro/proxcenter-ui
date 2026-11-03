@@ -155,22 +155,20 @@ describe('donut geometry', () => {
 })
 
 describe('postureDistribution', () => {
-  it('splits the hits: East-West from a zone or a guest, unknown source, to the outside; counts the flows', () => {
+  it('splits the hits: East-West from a zone or a guest, unknown source; counts the flows', () => {
     const d = postureDistribution({ zones: ZONES, tagPrefix: 'zone-', flows: [flow({}), flow({ dport: '443' })], suggestions: FLOWS_SEEN, guests: postureGuests(ROWS, GUESTS), addresses: true })
     expect(d.total).toBe(500)
     expect(d.eastWest).toEqual({ hits: 450, percent: 90 })
     expect(d.unknown).toEqual({ hits: 50, percent: 10 })
-    expect(d.outside).toEqual({ hits: 0, percent: 0 })
     expect(d).toMatchObject({ allowed: 2, wouldBlock: 3, blocked: 1, blockedZones: ['db'] })
   })
 
-  it('counts every source in no zone as unknown without the guest addresses, and a destination in no zone as outside', () => {
+  it('counts every source in no zone as unknown without the guest addresses, and leaves out a flow to a zone gone since', () => {
     const suggestions = [...FLOWS_SEEN, seen({ dst_zone_id: 'gone', hits: 100 })]
     const d = postureDistribution({ zones: ZONES, tagPrefix: 'zone-', flows: [], suggestions, guests: [], addresses: false })
-    expect(d.unknown.hits).toBe(100)
-    expect(d.outside.hits).toBe(100)
-    expect(d.outside.percent).toBeCloseTo(100 / 6)
-    expect(d.eastWest.hits).toBe(400)
+    expect(d.total).toBe(500)
+    expect(d.unknown).toEqual({ hits: 100, percent: 20 })
+    expect(d.eastWest).toEqual({ hits: 400, percent: 80 })
   })
 
   it('gives 0 % of nothing', () => {

@@ -9085,8 +9085,6 @@
       "postureDistributionTitle": "Observed traffic distribution",
       "postureEastWest": "East-West (between zones)",
       "postureUnknownSource": "Unknown source",
-      "postureToOutside": "To outside",
-      "postureNotFiltered": "not filtered in v1",
       "postureAllowed": "Allowed",
       "postureWouldBlock": "Would be blocked",
       "postureBlocked": "Blocked",
@@ -9101,7 +9099,12 @@
       "postureColFlows": "Flows",
       "postureColHits": "Hits",
       "postureColStatus": "Status",
-      "postureNoServices": "No service observed or allowed"
+      "postureNoServices": "No service observed or allowed",
+      "postureUnknownIncludesUnzoned": "unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)",
+      "postureRefresh": "Compute the coverage again",
+      "postureRefreshAgo": "Computed {time} · compute again",
+      "postureRefreshSoon": "Computed {time} · new figures less than 30 seconds ago",
+      "postureRefreshComputing": "Computing the coverage"
     },
     "rulesOnDemand": {
       "chip": "Rules on open",

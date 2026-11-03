@@ -9085,8 +9085,6 @@
       "postureDistributionTitle": "观察流量分布",
       "postureEastWest": "东西向（区域之间）",
       "postureUnknownSource": "未知来源",
-      "postureToOutside": "流向外部",
-      "postureNotFiltered": "v1 中不过滤",
       "postureAllowed": "已允许",
       "postureWouldBlock": "将被阻止",
       "postureBlocked": "已阻止",
@@ -9101,7 +9099,12 @@
       "postureColFlows": "流量",
       "postureColHits": "命中",
       "postureColStatus": "状态",
-      "postureNoServices": "没有观察到或允许的服务"
+      "postureNoServices": "没有观察到或允许的服务",
+      "postureUnknownIncludesUnzoned": "在读取客户机列表之前，未知来源包含不在区域内的客户机（按 VLAN 或节点分组）",
+      "postureRefresh": "重新计算覆盖率",
+      "postureRefreshAgo": "{time}计算 · 重新计算",
+      "postureRefreshSoon": "{time}计算 · 数据不足 30 秒",
+      "postureRefreshComputing": "正在计算覆盖率"
     },
     "rulesOnDemand": {
       "chip": "打开时加载规则",

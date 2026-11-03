@@ -1,6 +1,6 @@
 'use client'
 
-import { Box, Chip, Skeleton, Tooltip, alpha, darken, lighten, useTheme } from '@mui/material'
+import { Box, Chip, CircularProgress, IconButton, Skeleton, Tooltip, alpha, darken, lighten, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { FirewallMode } from '@/lib/api/firewall'
@@ -27,6 +27,11 @@ type Props = {
   guests: { protected: number; running: number } | null
   /** undefined while the status is read. */
   lastCheck: Date | null | undefined
+  /** When the coverage route computed the guest figures (ISO), absent before. */
+  coverageAt?: string
+  /** A refresh is asked, or the server is computing. */
+  coverageBusy: boolean
+  onRefreshCoverage: () => void
   onOpenCluster: () => void
   onOpenMicroseg: () => void
   onOpenGuests: () => void
@@ -46,6 +51,36 @@ function PostureChip({ color, label, testId, tip, onClick }: { color: string; la
     />
   )
   return tip ? <Tooltip title={tip}>{chip}</Tooltip> : chip
+}
+
+/** The server serves a forced refresh from its cache this soon after new figures (COVERAGE_FORCE_MIN_MS, server side). */
+export const REFRESH_FLOOR_MS = 30_000
+/** How often the refresh button checks whether that floor is over. */
+const FLOOR_TICK_MS = 5_000
+
+/** Computes the guest coverage again: held while computing and 30 s after new figures; says when they were computed. */
+function CoverageRefresh({ coverageAt, busy, onRefresh }: { coverageAt?: string; busy: boolean; onRefresh: () => void }) {
+  const t = useTranslations('networkPage.dashboard')
+  const format = useFormatter()
+  const at = coverageAt ? new Date(coverageAt) : null
+  const valid = !!at && !Number.isNaN(at.getTime())
+  const now = useNow(FLOOR_TICK_MS, coverageAt)
+  const tooSoon = valid && now - at.getTime() < REFRESH_FLOOR_MS
+  let tip = t('postureRefresh')
+  if (busy) tip = t('postureRefreshComputing')
+  else if (valid) {
+    const time = format.relativeTime(at, Math.max(now, at.getTime()))
+    tip = tooSoon ? t('postureRefreshSoon', { time }) : t('postureRefreshAgo', { time })
+  }
+  return (
+    <Tooltip title={tip}>
+      <span>
+        <IconButton size='small' aria-label={t('postureRefresh')} onClick={onRefresh} disabled={busy || tooSoon} data-testid='coverage-refresh'>
+          {busy ? <CircularProgress size={14} /> : <i className='ri-refresh-line' style={{ fontSize: 16 }} />}
+        </IconButton>
+      </span>
+    </Tooltip>
+  )
 }
 
 const ChipSkeleton = ({ testId }: { testId: string }) => <Skeleton data-testid={testId} variant='rounded' width={170} height={30} sx={{ borderRadius: 15 }} />
@@ -100,7 +135,10 @@ export default function PostureChips(props: Props) {
     <Box data-testid='posture-chips' sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 1, mb: 2.5 }}>
       <ClusterChip {...props} />
       {zonesChip}
-      <PostureChip testId='chip-guests' color={guestsColor} label={guestsLabel} tip={t('coverageDefinition')} onClick={props.onOpenGuests} />
+      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
+        <PostureChip testId='chip-guests' color={guestsColor} label={guestsLabel} tip={t('coverageDefinition')} onClick={props.onOpenGuests} />
+        <CoverageRefresh coverageAt={props.coverageAt} busy={props.coverageBusy} onRefresh={props.onRefreshCoverage} />
+      </Box>
       {checkChip}
     </Box>
   )

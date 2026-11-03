@@ -154,7 +154,9 @@ export default function TrafficByZone({ phase, traffic, groupBy, onGroupBy, trun
   const [active, setActive] = useState<string | null>(null)
   const nameOf = useSliceName()
 
-  const caption = truncated ? t('postureTrafficCaptionFirst', { count: POSTURE_SUGGESTIONS_LIMIT }) : t('postureTrafficCaption')
+  const base = truncated ? t('postureTrafficCaptionFirst', { count: POSTURE_SUGGESTIONS_LIMIT }) : t('postureTrafficCaption')
+  // Until the guest list is read (a VLAN or node grouping), a source in no zone cannot be told from an unknown one.
+  const caption = addresses ? base : `${base} · ${t('postureUnknownIncludesUnzoned')}`
   const select = (
     <FormControl size='small' sx={{ minWidth: 140 }}>
       <InputLabel shrink id='posture-group-by'>{t('postureGroupBy')}</InputLabel>

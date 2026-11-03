@@ -9085,8 +9085,6 @@
       "postureDistributionTitle": "관찰된 트래픽 분포",
       "postureEastWest": "동서 (영역 간)",
       "postureUnknownSource": "알 수 없는 출발지",
-      "postureToOutside": "외부로",
-      "postureNotFiltered": "v1에서는 필터링 안 됨",
       "postureAllowed": "허용됨",
       "postureWouldBlock": "차단될 예정",
       "postureBlocked": "차단됨",
@@ -9101,7 +9099,12 @@
       "postureColFlows": "흐름",
       "postureColHits": "적중",
       "postureColStatus": "상태",
-      "postureNoServices": "관찰되거나 허용된 서비스 없음"
+      "postureNoServices": "관찰되거나 허용된 서비스 없음",
+      "postureUnknownIncludesUnzoned": "게스트 목록을 읽기 전까지 알 수 없는 출발지에는 영역 없는 게스트가 포함됩니다 (VLAN 또는 노드별 그룹화)",
+      "postureRefresh": "적용 범위 다시 계산",
+      "postureRefreshAgo": "{time} 계산됨 · 다시 계산",
+      "postureRefreshSoon": "{time} 계산됨 · 30초 이내의 새 수치",
+      "postureRefreshComputing": "적용 범위 계산 중"
     },
     "rulesOnDemand": {
       "chip": "열 때 규칙 로드",

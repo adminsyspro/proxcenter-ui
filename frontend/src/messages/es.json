@@ -9085,8 +9085,6 @@
       "postureDistributionTitle": "Distribución del tráfico observado",
       "postureEastWest": "Este-Oeste (entre zonas)",
       "postureUnknownSource": "Fuente desconocida",
-      "postureToOutside": "Hacia el exterior",
-      "postureNotFiltered": "no filtrado en v1",
       "postureAllowed": "Permitido",
       "postureWouldBlock": "Se bloquearía",
       "postureBlocked": "Bloqueado",
@@ -9101,7 +9099,12 @@
       "postureColFlows": "Flujos",
       "postureColHits": "Coincidencias",
       "postureColStatus": "Estado",
-      "postureNoServices": "Ningún servicio observado ni permitido"
+      "postureNoServices": "Ningún servicio observado ni permitido",
+      "postureUnknownIncludesUnzoned": "las fuentes desconocidas incluyen los invitados sin zona hasta que se lea la lista de invitados (agrupar por VLAN o por nodo)",
+      "postureRefresh": "Volver a calcular la cobertura",
+      "postureRefreshAgo": "Calculada {time} · volver a calcular",
+      "postureRefreshSoon": "Calculada {time} · cifras de hace menos de 30 segundos",
+      "postureRefreshComputing": "Calculando la cobertura"
     },
     "rulesOnDemand": {
       "chip": "Reglas al abrir",

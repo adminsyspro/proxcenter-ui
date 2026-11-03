@@ -221,6 +221,9 @@ export default function DashboardTab({
         zones={engine.zones}
         guests={protectedRunning(coverage)}
         lastCheck={engine.lastCheck}
+        coverageAt={coverage?.computedAt}
+        coverageBusy={coverageRead.refreshing || !!coverageRead.data?.computing}
+        onRefreshCoverage={() => { void coverageRead.refresh() }}
         onOpenCluster={stopped ? () => openMicroseg('overview') : openRules(0)}
         onOpenMicroseg={() => openMicroseg()}
         onOpenGuests={() => openGuests()}

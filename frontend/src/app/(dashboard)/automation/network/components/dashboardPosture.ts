@@ -247,8 +247,6 @@ export type PostureDistribution = {
   eastWest: Share
   /** From an address in no zone and on no known guest (every source in no zone while the guest list is not read). */
   unknown: Share
-  /** To a destination in no zone: not filtered in v1, so normally none. */
-  outside: Share
   /** Flows of the policy: allowed, never counted. */
   allowed: number
   wouldBlock: number
@@ -271,23 +269,22 @@ export function postureDistribution(input: {
   const look = lookupOf(input.zones, input.tagPrefix, input.guests, input.addresses)
   let eastWest = 0
   let unknown = 0
-  let outside = 0
   const blockedZones = new Set<string>()
   for (const s of input.suggestions) {
-    if (!look.zonesById.has(s.dst_zone_id)) outside += s.hits
-    else if (groupOf('zone', s.src_zone_id, s.src_ip, look) === EXTERNAL_KEY) unknown += s.hits
+    // A flow is only logged towards a zone (the outside is not filtered in v1): one to a zone gone since is left out.
+    if (!look.zonesById.has(s.dst_zone_id)) continue
+    if (groupOf('zone', s.src_zone_id, s.src_ip, look) === EXTERNAL_KEY) unknown += s.hits
     else eastWest += s.hits
     if (s.kind === 'blocked') {
       const zone = look.zonesById.get(s.dst_zone_id)
       if (zone) blockedZones.add(zone.name)
     }
   }
-  const total = eastWest + unknown + outside
+  const total = eastWest + unknown
   return {
     total,
     eastWest: shareOf(eastWest, total),
     unknown: shareOf(unknown, total),
-    outside: shareOf(outside, total),
     allowed: input.flows.length,
     wouldBlock: input.suggestions.filter(s => s.kind === 'would_block').length,
     blocked: input.suggestions.filter(s => s.kind === 'blocked').length,

@@ -9085,8 +9085,6 @@
       "postureDistributionTitle": "Répartition du trafic observé",
       "postureEastWest": "Est-Ouest (entre zones)",
       "postureUnknownSource": "Source inconnue",
-      "postureToOutside": "Vers l'extérieur",
-      "postureNotFiltered": "non filtré en v1",
       "postureAllowed": "Autorisé",
       "postureWouldBlock": "Serait bloqué",
       "postureBlocked": "Bloqué",
@@ -9101,7 +9099,12 @@
       "postureColFlows": "Flux",
       "postureColHits": "Occurrences",
       "postureColStatus": "Statut",
-      "postureNoServices": "Aucun service observé ni autorisé"
+      "postureNoServices": "Aucun service observé ni autorisé",
+      "postureUnknownIncludesUnzoned": "les sources inconnues incluent les invités hors zone tant que la liste des invités n'est pas lue (regrouper par VLAN ou par nœud)",
+      "postureRefresh": "Recalculer la couverture",
+      "postureRefreshAgo": "Calculée {time} · recalculer",
+      "postureRefreshSoon": "Calculée {time} · chiffres de moins de 30 secondes",
+      "postureRefreshComputing": "Calcul de la couverture en cours"
     },
     "rulesOnDemand": {
       "chip": "Règles à l'ouverture",

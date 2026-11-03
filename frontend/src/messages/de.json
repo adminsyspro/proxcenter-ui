@@ -9032,8 +9032,6 @@
       "postureDistributionTitle": "Verteilung des beobachteten Verkehrs",
       "postureEastWest": "Ost-West (zwischen Zonen)",
       "postureUnknownSource": "Unbekannte Quelle",
-      "postureToOutside": "Nach außen",
-      "postureNotFiltered": "in v1 nicht gefiltert",
       "postureAllowed": "Erlaubt",
       "postureWouldBlock": "Würde blockiert",
       "postureBlocked": "Blockiert",
@@ -9048,7 +9046,12 @@
       "postureColFlows": "Flüsse",
       "postureColHits": "Treffer",
       "postureColStatus": "Status",
-      "postureNoServices": "Kein Dienst beobachtet oder erlaubt"
+      "postureNoServices": "Kein Dienst beobachtet oder erlaubt",
+      "postureUnknownIncludesUnzoned": "unbekannte Quellen umfassen die Gäste ohne Zone, bis die Gästeliste gelesen ist (nach VLAN oder Knoten gruppieren)",
+      "postureRefresh": "Abdeckung neu berechnen",
+      "postureRefreshAgo": "Berechnet {time} · neu berechnen",
+      "postureRefreshSoon": "Berechnet {time} · Zahlen jünger als 30 Sekunden",
+      "postureRefreshComputing": "Abdeckung wird berechnet"
     },
     "rulesOnDemand": {
       "chip": "Regeln beim Öffnen",

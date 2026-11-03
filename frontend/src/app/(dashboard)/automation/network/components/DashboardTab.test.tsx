@@ -203,6 +203,26 @@ describe('DashboardTab: header chips', () => {
     expect(onOpenGuests).toHaveBeenCalledWith(undefined)
   })
 
+  it('computes the coverage again from the button next to the guests chip, then holds it 30 s', async () => {
+    stubReads()
+    renderDashboard({ enable: 1 })
+
+    const button = await screen.findByRole('button', { name: 'Compute the coverage again' })
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(button)
+    await waitFor(() => expect(fetchedUrls().filter(u => u.endsWith('/firewall/coverage/conn-1?refresh=1'))).toHaveLength(1))
+    // Figures just computed: the button holds for 30 s (the server would serve them from its cache anyway).
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Compute the coverage again' }) as HTMLButtonElement).disabled).toBe(true))
+  })
+
+  it('holds the refresh while the figures are less than 30 s old', async () => {
+    stubReads({ coverage: { computedAt: new Date().toISOString() } })
+    renderDashboard({ enable: 1 })
+
+    await waitFor(() => expect(screen.getByTestId('chip-guests').textContent).toBe('Guests protected 30 / 33 running'))
+    expect((screen.getByTestId('coverage-refresh') as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('puts the emergency stop in red in place of the cluster chip, leading to Resume', async () => {
     const onOpenMicroseg = vi.fn()
     stubReads({ status: { emergency_stop: true, engine: { paused_until: null, held: false, last_runs: {}, last_log: null, cluster_firewall: 'enabled' } } })
@@ -233,7 +253,7 @@ describe('DashboardTab: traffic by zone', () => {
     expect(screen.getByTestId('donut-total').textContent).toBe('450')
     expect(screen.getByTestId('slice-zone:zweb')).toBeInTheDocument()
     expect(screen.getByTestId('chord-zone:zweb>zone:zdb')).toBeInTheDocument()
-    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows')
+    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
   })
 
   it('highlights a slice when its legend row is hovered', async () => {
@@ -261,13 +281,15 @@ describe('DashboardTab: traffic by zone', () => {
     expect(screen.getByText('Traffic by VLAN')).toBeInTheDocument()
     expect(screen.getByTestId('legend-vlan:20').textContent).toContain('VLAN 20')
     expect(fetchedUrls().filter(u => u === '/api/v1/vms?connId=conn-1')).toHaveLength(1)
+    // The guest list is in: the caption no longer says the unknown sources hold the unzoned guests.
+    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows')
   })
 
   it('says the figures are those of the first 200 flows when the page is full', async () => {
     postureReads({ suggestions: Array.from({ length: 200 }, (_, i) => seen({ dport: String(1000 + i) })) })
     renderDashboard({ enable: 1 })
 
-    expect((await screen.findByTestId('traffic-card-caption')).textContent).toBe('hits of the first 200 pending observed flows')
+    expect((await screen.findByTestId('traffic-card-caption')).textContent).toBe('hits of the first 200 pending observed flows · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
   })
 
   it('says when there is no observed flow', async () => {
@@ -280,14 +302,13 @@ describe('DashboardTab: traffic by zone', () => {
 })
 
 describe('DashboardTab: observed traffic distribution and top services', () => {
-  it('shows the six tiles', async () => {
+  it('shows the five tiles, no "To outside" (never logged in v1)', async () => {
     postureReads()
     renderDashboard({ enable: 1 })
 
     expect((await screen.findByTestId('tile-east-west-value')).textContent).toBe('78%')
     expect(screen.getByTestId('tile-unknown-value').textContent).toBe('22%')
-    expect(screen.getByTestId('tile-outside-value').textContent).toBe('-')
-    expect(screen.getByTestId('tile-outside').textContent).toContain('not filtered in v1')
+    expect(screen.queryByTestId('tile-outside')).not.toBeInTheDocument()
     expect(screen.getByTestId('tile-allowed-value').textContent).toBe('1 flow')
     expect(screen.getByTestId('tile-allowed').textContent).toContain('no counter')
     expect(screen.getByTestId('tile-would-block-value').textContent).toBe('2 flows')

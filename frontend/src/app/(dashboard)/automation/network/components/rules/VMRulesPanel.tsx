@@ -272,7 +272,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
             }}
             sx={{ width: 200 }}
           />
-          <Tooltip title={t('networkPage.rulesOnDemand.expandAllHint')}>
+          <Tooltip title={t('networkPage.rulesOnDemand.expandAllHint')} describeChild>
             <Button size="small" variant="outlined" onClick={() => setExpandedVlans(new Set(vlanGroups.map(([k]) => k)))}>{t('common.expandAll')}</Button>
           </Tooltip>
           <Button size="small" variant="outlined" onClick={() => { setExpandedVlans(new Set()); setExpandedVMs(new Set()) }}>{t('common.collapseAll')}</Button>

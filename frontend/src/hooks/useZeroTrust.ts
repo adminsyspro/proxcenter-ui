@@ -133,12 +133,13 @@ export function useVMFirewallCoverage(connectionId: string | null | undefined) {
   // Aborted on a real unmount only: React's development double mount runs the cleanup and mounts again at once.
   useEffect(() => {
     mounted.current = true
+    const inFlight = controllers.current
     return () => {
       mounted.current = false
       setTimeout(() => {
         if (mounted.current) return
-        for (const c of controllers.current) c.abort()
-        controllers.current.clear()
+        for (const c of inFlight) c.abort()
+        inFlight.clear()
       }, 0)
     }
   }, [])

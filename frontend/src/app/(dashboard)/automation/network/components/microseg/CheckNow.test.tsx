@@ -84,7 +84,8 @@ describe('Check window', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     let pending = false
     let listed: MicrosegRun[] = []
-    let full = runOf('f1', 'full', '2026-11-03T10:00:05Z', { status: 'running', api_calls: 0, result: null })
+    // The orchestrator answers an empty result for a run that has not ended.
+    let full = runOf('f1', 'full', '2026-11-03T10:00:05Z', { status: 'running', api_calls: 0, result: {} as MicrosegRunResult })
     mock.routes['POST /check'] = () => { pending = true; return reply(202, { queued: true, requested_at: REQUESTED }) }
     mock.routes['GET /status'] = () => reply(200, statusWith(pending))
     mock.routes['GET /runs?limit=10'] = () => reply(200, { runs: listed, limit: 10, offset: 0 })
@@ -98,6 +99,11 @@ describe('Check window', () => {
     await waitFor(() => expect(calls('POST /check')).toHaveLength(1))
     expect(calls('POST /check')[0][1]).toMatchObject({ method: 'POST', body: '{}' })
     await waitFor(() => expect(checkButton().textContent).toBe('Check requested'))
+    // The queue is read through the shared status of the tab, every 5 s: one read, not one per poller.
+    const statusReads = calls('GET /status').length
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(calls('GET /status').length).toBe(statusReads + 1)
+    expect(calls('GET /runs?limit=10')).toHaveLength(0)
 
     // The engine takes the check: the IP collection, then the full run, are listed.
     pending = false
@@ -108,6 +114,8 @@ describe('Check window', () => {
     expect(calls('GET /runs/old')).toHaveLength(0)
     // The run is followed in the strip like the others.
     expect(screen.getAllByText('Full check in progress').length).toBeGreaterThan(0)
+    // The window and the strip follow the run at once: their reads of it share one request.
+    expect(calls('GET /runs/f1')).toHaveLength(1)
 
     full = runOf('f1', 'full', '2026-11-03T10:00:05Z', {
       result: result({
@@ -162,10 +170,13 @@ describe('Check window', () => {
     expect(within(dialog).queryByRole('button', { name: 'Open Drifts' })).toBeNull()
     expect(within(dialog).getByRole('listitem', { name: 'Proxmox objects compared: passed' })).toBeTruthy()
     expect(within(dialog).getByRole('listitem', { name: 'IP collection: not measured' })).toBeTruthy()
-    // The log read is looked for a few times: the engine records it after the full run.
-    await act(async () => { await vi.advanceTimersByTimeAsync(7_000) })
-    const observation = await within(dialog).findByRole('listitem', { name: 'Observation: passed' })
-    expect(within(observation).getByText('0 events read, 0 suggestions')).toBeTruthy()
+    // The log read is looked for a few times (the engine records it once it has ended), then said not measured.
+    expect(within(dialog).getByRole('listitem', { name: 'Observation: reading...' })).toBeTruthy()
+    await act(async () => { await vi.advanceTimersByTimeAsync(13_000) })
+    const observation = await within(dialog).findByRole('listitem', { name: 'Observation: not measured' })
+    fireEvent.click(within(observation).getByRole('button', { name: 'Show details' }))
+    expect(within(observation).getByText('The firewall logs were not read during this check.')).toBeTruthy()
+    expect(within(dialog).queryByText('No new event in the firewall logs.')).toBeNull()
     expect(within(dialog).getByText('No step: there was nothing to write.')).toBeTruthy()
   })
 

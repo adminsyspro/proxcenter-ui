@@ -8,6 +8,7 @@ import { SWRConfig } from 'swr'
 import type { ReactElement } from 'react'
 
 import { renderWithProviders } from '@/__tests__/setup/renderWithProviders'
+import { forgetSharedReads } from '@/lib/microseg/api'
 import type { MicrosegFlow, MicrosegPolicy, MicrosegRevision, MicrosegStatus, MicrosegZone } from '@/lib/microseg/types'
 
 import MicrosegTab from './MicrosegTab'
@@ -70,6 +71,7 @@ export const calls = (key: string) =>
 /** Healthy defaults: a policy with a zone and a revision, a status, the last revision snapshot. */
 export function resetMocks() {
   window.localStorage.clear()
+  forgetSharedReads()
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
   mock.routes = {

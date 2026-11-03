@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  isPlanStale, MicrosegApiError, MicrosegConflictError, microsegApi, microsegErrorKey, microsegErrorKeyOf,
+  forgetSharedReads, isPlanStale, MicrosegApiError, MicrosegConflictError, microsegApi, microsegErrorKey, microsegErrorKeyOf,
+  RUN_READ_SHARE_MS,
 } from './api'
 
 const fetchMock = vi.fn()
@@ -16,6 +17,7 @@ const lastCall = () => {
 }
 
 beforeEach(() => {
+  forgetSharedReads()
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -167,6 +169,39 @@ describe('microsegApi manual check', () => {
     expect(err).not.toBeInstanceOf(MicrosegConflictError)
     expect(err).toMatchObject({ status: 409, code: 'CHECK_PENDING' })
     expect(microsegErrorKeyOf(err)).toBe('microsegPilot.errors.CHECK_PENDING')
+  })
+})
+
+describe('shared run reads', () => {
+  it('sends one request for the reads of one run asked at once, and lets an aborted caller go alone', async () => {
+    fetchMock.mockResolvedValue(reply(200, { id: 'r1', status: 'running' }))
+    const api = microsegApi('c1')
+    const controller = new AbortController()
+    const aborted = api.getRun('r1', controller.signal).catch(e => e)
+    controller.abort()
+    const [a, b] = await Promise.all([api.getRun('r1'), microsegApi('c1').getRun('r1')])
+    expect(a).toEqual({ id: 'r1', status: 'running' })
+    expect(b).toBe(a)
+    expect((await aborted).name).toBe('AbortError')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await api.getRun('r2')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads the run again once the sharing time is over, after a success or a failure', async () => {
+    vi.useFakeTimers()
+    try {
+      fetchMock.mockResolvedValueOnce(reply(502, { code: 'ORCHESTRATOR_ERROR', error: 'x' }))
+      expect(await microsegApi('c1').getRun('r1').catch(e => e.code)).toBe('ORCHESTRATOR_ERROR')
+      await vi.advanceTimersByTimeAsync(RUN_READ_SHARE_MS + 1)
+      fetchMock.mockResolvedValue(reply(200, { id: 'r1' }))
+      expect(await microsegApi('c1').getRun('r1')).toEqual({ id: 'r1' })
+      await vi.advanceTimersByTimeAsync(RUN_READ_SHARE_MS + 1)
+      await microsegApi('c1').getRun('r1')
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

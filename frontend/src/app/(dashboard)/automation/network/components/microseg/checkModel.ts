@@ -8,9 +8,6 @@ import type { GuestRef, MicrosegRun, StepRef } from '@/lib/microseg/types'
 /** How many runs the window lists to find the runs of its check (a pass records three at most). */
 export const CHECK_RUNS_LIMIT = 10
 
-/** The runs of the same pass start within seconds of each other; this bounds the search around the full run. */
-export const PASS_WINDOW_MS = 10 * 60_000
-
 /**
  * Which full run can be the one of the check. After a 202, the first full run started at or after `since` (the
  * request time, from the orchestrator's clock like the start times). After a 409 the request time is unknown: the
@@ -28,23 +25,34 @@ export function findCheckCandidate(runs: MicrosegRun[], cutoff: CheckCutoff): Mi
     && (Number.isNaN(since) || time(run.started_at) >= since)) ?? null
 }
 
+/** A result with nothing in it: the orchestrator writes `{}` for a run that has not ended. */
+export function hasResult(run: Pick<MicrosegRun, 'result'>): boolean {
+  return !!run.result && Object.keys(run.result).length > 0
+}
+
 /**
- * Whether the detail of a candidate is the check's run. A finished full run says it with its trigger; a running one
- * has no result yet and is taken on its start time.
+ * Whether the detail of a candidate is the check's run. A running full run is taken on its start time (its result is
+ * empty until it ends); an ended one says it with its trigger.
  */
 export function isCheckRun(run: MicrosegRun): boolean {
   if (run.kind !== 'full') return false
-  return !run.result || run.result.trigger === 'check'
+  if (run.status === 'running' || !hasResult(run)) return true
+  return run.result?.trigger === 'check'
 }
+
+/** The IP collection runs in the same tick as the full run, just before it. */
+export const IPS_BEFORE_FULL_MS = 60_000
+/** The log read starts once the full run has ended; this is the slack after its end. */
+export const LOG_AFTER_FULL_MS = 15_000
 
 /** The IP collection and the log read of the pass of a full run, found in the runs list (no result in it). */
 export function findCompanions(runs: MicrosegRun[], full: MicrosegRun): { ips: MicrosegRun | null; log: MicrosegRun | null } {
   const start = time(full.started_at)
-  const near = (run: MicrosegRun) => Math.abs(time(run.started_at) - start) <= PASS_WINDOW_MS
-  // Newest first: the IP collection is the newest ips run not after the full run, the log read the oldest log run
-  // not before it.
-  const ips = runs.find(run => run.kind === 'ips' && time(run.started_at) <= start && near(run)) ?? null
-  const log = runs.findLast(run => run.kind === 'log' && time(run.started_at) >= start && near(run)) ?? null
+  const end = start + full.duration_ms + LOG_AFTER_FULL_MS
+  // Newest first: the IP collection is the newest ips run of the minute before the full run, the log read the oldest
+  // log run between the start of the full run and a little after its end.
+  const ips = runs.find(run => run.kind === 'ips' && time(run.started_at) <= start && start - time(run.started_at) <= IPS_BEFORE_FULL_MS) ?? null
+  const log = runs.findLast(run => run.kind === 'log' && time(run.started_at) >= start && time(run.started_at) <= end) ?? null
   return { ips, log }
 }
 
@@ -73,8 +81,8 @@ const n = (value: number | undefined) => value ?? 0
 function ipsRow(companions: CheckCompanions): CheckRow {
   if (!companions.ipsReady) return { id: 'ips', status: 'pending', variant: 'pending', values: {} }
   const result = companions.ips?.result
-  // No IP collection in the pass (an emergency stop not applied yet skips it): nothing was measured.
-  if (!companions.ips || !result) return { id: 'ips', status: 'info', variant: 'none', values: {} }
+  // No IP collection in the pass (an emergency stop not applied yet skips it), or not ended: nothing was measured.
+  if (!companions.ips || companions.ips.status === 'running' || !result) return { id: 'ips', status: 'info', variant: 'none', values: {} }
   const members = n(result.members)
   const withIps = Math.min(n(result.with_ips), members)
   const missing = members - withIps
@@ -82,9 +90,11 @@ function ipsRow(companions: CheckCompanions): CheckRow {
 }
 
 function observationRow(companions: CheckCompanions): CheckRow {
-  if (!companions.logReady) return { id: 'observation', status: 'pending', variant: 'pending', values: {} }
-  const result = companions.log?.result
-  // The engine records a log read only when it read something.
+  const { log } = companions
+  // A log read still going on is in progress: its events are not known yet.
+  if (!companions.logReady || log?.status === 'running') return { id: 'observation', status: 'pending', variant: 'pending', values: {} }
+  if (!log) return { id: 'observation', status: 'info', variant: 'notMeasured', values: {} }
+  const result = log.result
   const values = { events: n(result?.events), suggestions: n(result?.suggestions), dropped: n(result?.dropped_foreign_dst) }
   return { id: 'observation', status: 'pass', variant: values.events > 0 ? 'pass' : 'none', values }
 }

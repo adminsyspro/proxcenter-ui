@@ -13288,6 +13288,7 @@
           "figure": "{events, plural, one {# event read} other {# events read}}, {suggestions, plural, one {# suggestion} other {# suggestions}}",
           "pass": "{events, plural, one {# event read} other {# events read}} in the firewall logs, {dropped, plural, one {# flooded packet ignored} other {# flooded packets ignored}}.",
           "none": "No new event in the firewall logs.",
+          "notMeasured": "The firewall logs were not read during this check.",
           "pending": "Reading the logs..."
         },
         "unread": {

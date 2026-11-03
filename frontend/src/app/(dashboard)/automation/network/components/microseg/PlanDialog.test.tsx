@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, act, within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
+import { forgetSharedReads } from '@/lib/microseg/api'
 
 import { calls, mock, policy, renderTab, reply, zone, REVISION_HEAD } from './microsegTestKit'
 import { failedWith, g101, openPlanDialog, planRun, resetPlanMocks, step } from './planTestKit'
@@ -169,6 +170,8 @@ describe('warnings and collisions', () => {
     await within(dialog).findByText(/Blocked/)
     expect(applyButton(dialog).disabled).toBe(true)
     cleanup()
+    // A new window on another plan: the read of run p1 shared a second ago is not this one.
+    forgetSharedReads()
 
     mock.routes['GET /runs/p1'] = () => reply(200, failedWith(planRun({ unread: [g101] }), 'save failed'))
     const again = await openPlanDialog()

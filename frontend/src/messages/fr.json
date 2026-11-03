@@ -13289,6 +13289,7 @@
           "figure": "{events, plural, one {# événement lu} other {# événements lus}}, {suggestions, plural, one {# suggestion} other {# suggestions}}",
           "pass": "{events, plural, one {# événement lu} other {# événements lus}} dans les journaux du pare-feu, {dropped, plural, one {# paquet inondé ignoré} other {# paquets inondés ignorés}}.",
           "none": "Aucun nouvel événement dans les journaux du pare-feu.",
+          "notMeasured": "Les journaux du pare-feu n'ont pas été lus pendant cette vérification.",
           "pending": "Lecture des journaux..."
         },
         "unread": {

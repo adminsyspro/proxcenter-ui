@@ -102,7 +102,10 @@ export default function CheckDialog({ check, connectionId, onClose, onOpenDrifts
     <Dialog open onClose={onClose} maxWidth='md' fullWidth aria-labelledby='microseg-check-title'>
       <DialogTitle id='microseg-check-title' sx={ONE_LINE_SX}>{t('title')}</DialogTitle>
       <DialogContent>
-        <Body check={check} connectionId={connectionId} onOpenDrifts={onOpenDrifts} />
+        {/* MUI sets no top padding under a title: the first line keeps 8 px from it. */}
+        <Box sx={{ pt: 1, minWidth: 0 }}>
+          <Body check={check} connectionId={connectionId} onOpenDrifts={onOpenDrifts} />
+        </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         {ended && (

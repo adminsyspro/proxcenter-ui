@@ -13288,6 +13288,7 @@
           "figure": "读取 {events, plural, other {# 个事件}}，{suggestions, plural, other {# 条建议}}",
           "pass": "从防火墙日志读取了 {events, plural, other {# 个事件}}，忽略了 {dropped, plural, other {# 个泛洪数据包}}。",
           "none": "防火墙日志中没有新事件。",
+          "notMeasured": "这次检查没有读取防火墙日志。",
           "pending": "正在读取日志..."
         },
         "unread": {

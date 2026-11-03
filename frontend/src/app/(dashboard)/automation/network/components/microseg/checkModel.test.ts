@@ -42,22 +42,34 @@ describe('isCheckRun', () => {
     expect(isCheckRun(run('f', 'full', 'x', { result: result({ trigger: 'check' }) }))).toBe(true)
     expect(isCheckRun(run('f', 'full', 'x', { result: result() }))).toBe(false)
     expect(isCheckRun(run('f', 'full', 'x', { status: 'running', result: null }))).toBe(true)
+    // The orchestrator writes an empty result for a run that has not ended: never a reason to exclude it.
+    expect(isCheckRun(run('f', 'full', 'x', { status: 'running', result: {} as MicrosegRunResult }))).toBe(true)
+    expect(isCheckRun(run('f', 'full', 'x', { status: 'running', result: result() }))).toBe(true)
+    expect(isCheckRun(run('f', 'full', 'x', { status: 'failed', result: result({ trigger: 'check' }) }))).toBe(true)
     expect(isCheckRun(run('f', 'light', 'x'))).toBe(false)
   })
 })
 
 describe('findCompanions', () => {
-  it('finds the IP collection just before the full run and the log read just after, within the pass', () => {
-    const full = run('f', 'full', '2026-11-03T10:00:05Z')
+  // The full run starts at 10:00:05 and lasts 4 s: the log read may start up to 10:00:24.
+  const full = run('f', 'full', '2026-11-03T10:00:05Z', { duration_ms: 4000 })
+
+  it('finds the IP collection of the minute before the full run and the log read that follows its end', () => {
     const runs = [
-      run('log2', 'log', '2026-11-03T10:30:00Z'),
-      run('log1', 'log', '2026-11-03T10:00:09Z'),
+      run('log2', 'log', '2026-11-03T10:01:09Z'),
+      run('log1', 'log', '2026-11-03T10:00:10Z'),
       full,
       run('ips1', 'ips', '2026-11-03T10:00:03Z'),
-      run('ips0', 'ips', '2026-11-03T09:00:00Z'),
+      run('ips0', 'ips', '2026-11-03T09:45:03Z'),
     ]
     expect(findCompanions(runs, full)).toEqual({ ips: runs[3], log: runs[1] })
-    expect(findCompanions([full, runs[4]], full)).toEqual({ ips: null, log: null })
+  })
+
+  it('never takes the runs of another tick (ips every 15 min, log every minute)', () => {
+    const stale = [run('log2', 'log', '2026-11-03T10:00:25Z'), full, run('ips0', 'ips', '2026-11-03T09:59:04Z'), run('ips-1', 'ips', '2026-11-03T09:45:00Z')]
+    expect(findCompanions(stale, full)).toEqual({ ips: null, log: null })
+    const edges = [run('log1', 'log', '2026-11-03T10:00:24Z'), full, run('ips1', 'ips', '2026-11-03T09:59:05Z')]
+    expect(findCompanions(edges, full)).toEqual({ ips: edges[2], log: edges[0] })
   })
 })
 
@@ -68,10 +80,17 @@ describe('checkRows', () => {
       ips: run('i', 'ips', 'x', { result: result({ members: 30, with_ips: 30 }) }),
     })
     expect(rows.map(r => `${r.id}:${r.status}:${r.variant}`)).toEqual([
-      'inventory:pass:pass', 'ips:pass:pass', 'objects:pass:pass', 'drifts:pass:pass', 'observation:pass:none',
+      'inventory:pass:pass', 'ips:pass:pass', 'objects:pass:pass', 'drifts:pass:pass', 'observation:info:notMeasured',
     ])
     expect(rowOf(rows, 'inventory')?.values).toEqual({ guests: 32, members: 32 })
-    expect(rowOf(rows, 'observation')?.values).toEqual({ events: 0, suggestions: 0, dropped: 0 })
+  })
+
+  it('says "no new event" only for an ended log read, and in progress for one still running', () => {
+    const full = run('f', 'full', 'x', { result: result({}) })
+    const ended = checkRows(full, { ...READY, log: run('l', 'log', 'x', { result: result({}) }) })
+    expect(rowOf(ended, 'observation')).toMatchObject({ status: 'pass', variant: 'none', values: { events: 0, suggestions: 0, dropped: 0 } })
+    const running = checkRows(full, { ...READY, log: run('l', 'log', 'x', { status: 'running', result: {} as MicrosegRunResult }) })
+    expect(rowOf(running, 'observation')).toMatchObject({ status: 'pending', variant: 'pending' })
   })
 
   it('warns on members without an IP, on writes (realigned) and on drifts', () => {

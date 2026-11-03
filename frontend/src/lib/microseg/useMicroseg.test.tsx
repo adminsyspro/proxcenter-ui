@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { SWRConfig } from 'swr'
 
+import { forgetSharedReads } from './api'
 import { runRetryDelay, useMicrosegPolicy, useMicrosegRun } from './useMicroseg'
 
 const fetchMock = vi.fn()
@@ -23,6 +24,7 @@ afterEach(() => {
 describe('useMicrosegRun', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    forgetSharedReads()
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
   })

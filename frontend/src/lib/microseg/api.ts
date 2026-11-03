@@ -94,6 +94,42 @@ function query(params: Record<string, string | number | undefined> = {}): string
   return s ? `?${s}` : ''
 }
 
+/**
+ * The reads of one run asked within this time share one request: the window of a check, the strip of runs and the
+ * History sub-tab follow the same run at once, and each of them polls it.
+ */
+export const RUN_READ_SHARE_MS = 1000
+
+const sharedRunReads = new Map<string, Promise<unknown>>()
+
+function abortError(): Error {
+  return new DOMException('The operation was aborted.', 'AbortError')
+}
+
+/** One request for every caller of `key` within RUN_READ_SHARE_MS; an aborted caller stops waiting, the others do not. */
+function shared<T>(key: string, load: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  let pending = sharedRunReads.get(key) as Promise<T> | undefined
+  if (!pending) {
+    pending = load()
+    sharedRunReads.set(key, pending)
+    const forget = () => { setTimeout(() => { if (sharedRunReads.get(key) === pending) sharedRunReads.delete(key) }, RUN_READ_SHARE_MS) }
+    pending.then(forget, forget)
+  }
+  if (!signal) return pending
+  if (signal.aborted) return Promise.reject(abortError())
+  const read = pending
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortError())
+    signal.addEventListener('abort', onAbort, { once: true })
+    read.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
+}
+
+/** Forgets the shared reads (tests start each case from nothing). */
+export function forgetSharedReads() {
+  sharedRunReads.clear()
+}
+
 export function microsegBaseUrl(connId: string): string {
   return `/api/v1/firewall/microseg/${encodeURIComponent(connId)}`
 }
@@ -149,7 +185,8 @@ export function microsegApi(connId: string) {
     /** Queues a manual check (IP collection, then a full run); 409 CHECK_PENDING while one is queued. */
     checkNow: () => call<CheckQueued>('POST', 'check', {}),
 
-    getRun: (runId: string, signal?: AbortSignal) => call<MicrosegRun>('GET', `runs/${id(runId)}`, undefined, signal),
+    getRun: (runId: string, signal?: AbortSignal) =>
+      shared(`${base}/runs/${id(runId)}`, () => call<MicrosegRun>('GET', `runs/${id(runId)}`), signal),
     listRuns: (params: ListRunsParams = {}) =>
       call<{ runs: MicrosegRun[]; limit: number; offset: number }>('GET', `runs${query(params)}`),
 

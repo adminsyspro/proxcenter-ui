@@ -12956,6 +12956,7 @@
           "figure": "{events, plural, one {# Ereignis gelesen} other {# Ereignisse gelesen}}, {suggestions, plural, one {# Vorschlag} other {# Vorschläge}}",
           "pass": "{events, plural, one {# Ereignis gelesen} other {# Ereignisse gelesen}} in den Firewall-Protokollen, {dropped, plural, one {# geflutetes Paket ignoriert} other {# geflutete Pakete ignoriert}}.",
           "none": "Kein neues Ereignis in den Firewall-Protokollen.",
+          "notMeasured": "Die Firewall-Protokolle wurden bei dieser Prüfung nicht gelesen.",
           "pending": "Protokolle werden gelesen..."
         },
         "unread": {

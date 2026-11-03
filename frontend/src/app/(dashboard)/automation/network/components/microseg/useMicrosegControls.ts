@@ -15,8 +15,8 @@ export type ControlNotice = { type: 'leader'; stop: boolean | undefined } | { ty
  * resume, confirm the held writes). The banner shows their outcome and the sub-tabs row holds the stop button, so
  * the state lives above both.
  */
-export function useMicrosegControls(connectionId: string) {
-  const { data: status, error: statusError, reload } = useMicrosegStatus(connectionId || null)
+export function useMicrosegControls(connectionId: string, statusRefreshMs?: number) {
+  const { data: status, error: statusError, reload } = useMicrosegStatus(connectionId || null, statusRefreshMs)
 
   // `action` outlives the dialog so its text does not blank out during the closing fade.
   const [action, setAction] = useState<ControlAction>('stop')

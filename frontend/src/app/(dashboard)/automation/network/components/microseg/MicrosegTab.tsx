@@ -24,6 +24,7 @@ import PreflightPanel from './PreflightPanel'
 import RunStrip from './RunStrip'
 import SettingsDialog from './SettingsDialog'
 import { useMicrosegControls } from './useMicrosegControls'
+import { CHECK_STATUS_POLL_MS } from './useMicrosegCheck'
 import { MicrosegActionsSlot, MicrosegWriteContext, useCanManageMicroseg } from './microsegAccess'
 import ZoneMap from './ZoneMap'
 import {
@@ -74,7 +75,9 @@ type Props = {
 export default function MicrosegTab({ connectionId, connectionName, firewall }: Props) {
   const t = useTranslations('microsegPilot')
   const { data: policy, loading, error, reload } = useMicrosegPolicy(connectionId || null)
-  const controls = useMicrosegControls(connectionId)
+  // While a manual check waits in the queue, the status (shared with the banner and the button) is read faster.
+  const [checkQueued, setCheckQueued] = useState(false)
+  const controls = useMicrosegControls(connectionId, checkQueued ? CHECK_STATUS_POLL_MS : undefined)
   // A read-only user (no node.manage on the connection) sees every write control disabled, with the reason.
   const canWrite = useCanManageMicroseg(connectionId)
   // Read once: nothing of the sub-tab shows before the policy has loaded, so this never differs from a server render.
@@ -171,7 +174,10 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
         <CheckNowButton
           connectionId={connectionId}
           deployed={!!policy.last_revision}
-          pending={!!controls.status?.engine.check_pending}
+          status={controls.status}
+          statusError={controls.statusError}
+          reloadStatus={controls.reload}
+          onQueued={setCheckQueued}
           startRun={startRun}
           onDone={refreshAfterCheck}
           onOpenDrifts={() => goToSubTab('drifts')}

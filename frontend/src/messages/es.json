@@ -13288,6 +13288,7 @@
           "figure": "{events, plural, one {# evento leído} other {# eventos leídos}}, {suggestions, plural, one {# sugerencia} other {# sugerencias}}",
           "pass": "{events, plural, one {# evento leído} other {# eventos leídos}} en los registros del cortafuegos, {dropped, plural, one {# paquete inundado ignorado} other {# paquetes inundados ignorados}}.",
           "none": "Ningún evento nuevo en los registros del cortafuegos.",
+          "notMeasured": "Los registros del cortafuegos no se leyeron durante esta comprobación.",
           "pending": "Leyendo los registros..."
         },
         "unread": {

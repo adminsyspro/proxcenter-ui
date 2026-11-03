@@ -13288,6 +13288,7 @@
           "figure": "읽은 이벤트 {events, plural, other {#개}}, 제안 {suggestions, plural, other {#개}}",
           "pass": "방화벽 로그에서 이벤트 {events, plural, other {#개}}를 읽고, 플러딩된 패킷 {dropped, plural, other {#개}}를 무시했습니다.",
           "none": "방화벽 로그에 새 이벤트가 없습니다.",
+          "notMeasured": "이번 점검에서는 방화벽 로그를 읽지 않았습니다.",
           "pending": "로그를 읽는 중..."
         },
         "unread": {

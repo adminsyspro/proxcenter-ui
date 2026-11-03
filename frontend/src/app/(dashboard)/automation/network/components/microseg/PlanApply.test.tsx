@@ -47,10 +47,11 @@ describe('applying', () => {
     await clickApply(dialog)
     await within(dialog).findByText('Applying the plan to Proxmox...')
 
-    // The window and the strip each read the run every 2 s: short requests, none waits for the end of the run.
+    // The window and the strip each read the run every 2 s (their reads at the same moment share one request):
+    // short requests, none waits for the end of the run.
     const readsBefore = calls('GET /runs/a1').length
     await act(async () => { await vi.advanceTimersByTimeAsync(6_000) })
-    expect(calls('GET /runs/a1').length).toBeGreaterThanOrEqual(readsBefore + 4)
+    expect(calls('GET /runs/a1').length).toBeGreaterThanOrEqual(readsBefore + 2)
     expect(within(dialog).getByText('Applying the plan to Proxmox...')).toBeTruthy()
 
     released = true

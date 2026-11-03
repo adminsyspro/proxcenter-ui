@@ -27,6 +27,7 @@ import { groupMembers } from './shared/groupMembership'
 import { objectColour, objectDotSx } from '../microseg/objectColour'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
 import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
+import MicrosegConfirmDialog from '../microseg/MicrosegConfirmDialog'
 
 // ── Props ──
 
@@ -110,6 +111,10 @@ export default function SecurityGroupsPanel({
 
   // Delete confirm
   const [deleteConfirm, setDeleteConfirm] = useState<{ groupName: string; pos: number } | null>(null)
+  // The group whose deletion is asked (themed dialog, never a native confirm), and that deletion while it runs
+  const [groupToDelete, setGroupToDelete] = useState<string | null>(null)
+  const [deletingGroup, setDeletingGroup] = useState(false)
+  const [deleteGroupError, setDeleteGroupError] = useState<string | null>(null)
 
   // Members (which guests this group is attached to)
   const [membersOf, setMembersOf] = useState<string | null>(null)
@@ -237,14 +242,22 @@ export default function SecurityGroupsPanel({
   }
 
   // ── Delete SG ──
-  const handleDeleteGroup = async (name: string) => {
-    if (!confirm(t('networkPage.deleteSgConfirm', { name }))) return
+  const handleDeleteGroup = (name: string) => {
+    setDeleteGroupError(null)
+    setGroupToDelete(name)
+  }
+  const confirmDeleteGroup = async () => {
+    if (!groupToDelete) return
+    setDeletingGroup(true)
     try {
-      await firewallAPI.deleteSecurityGroup(selectedConnection, name)
+      await firewallAPI.deleteSecurityGroup(selectedConnection, groupToDelete)
       showToast(t('networkPage.securityGroupDeleted'), 'success')
+      setGroupToDelete(null)
       reload()
     } catch (err: any) {
-      showToast(err.message || t('networkPage.error'), 'error')
+      setDeleteGroupError(err?.message || t('networkPage.error'))
+    } finally {
+      setDeletingGroup(false)
     }
   }
 
@@ -653,6 +666,19 @@ export default function SecurityGroupsPanel({
           <Button variant="contained" onClick={handleCreateGroup} disabled={!newGroup.group}>{t('networkPage.createButton')}</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Delete Security Group Confirmation */}
+      <MicrosegConfirmDialog
+        open={!!groupToDelete}
+        title={t('networkPage.deleteSgConfirm', { name: groupToDelete ?? '' })}
+        body={t('networkPage.deleteSgWarning', { name: groupToDelete ?? '' })}
+        confirmLabel={t('common.delete')}
+        color='error'
+        busy={deletingGroup}
+        error={deleteGroupError}
+        onConfirm={() => { void confirmDeleteGroup() }}
+        onCancel={() => setGroupToDelete(null)}
+      />
 
       {/* Delete Rule Confirmation */}
       <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} maxWidth="xs" fullWidth>

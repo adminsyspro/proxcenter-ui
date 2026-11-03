@@ -16,6 +16,7 @@ import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 
 import FirewallLoadAlert from './FirewallLoadAlert'
 import { WriteTip, useMicrosegWrite } from './microseg/microsegAccess'
+import MicrosegConfirmDialog from './microseg/MicrosegConfirmDialog'
 import { objectChipSx, objectColour, objectDotSx } from './microseg/objectColour'
 
 interface ObjectsTabProps {
@@ -51,6 +52,15 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
   const [ipsetEntryDialog, setIPSetEntryDialog] = useState<{ open: boolean; ipsetName: string }>({ open: false, ipsetName: '' })
   const [newIPSetEntry, setNewIPSetEntry] = useState({ cidr: '', comment: '' })
 
+  // The alias or IP set whose deletion is asked (themed dialog, never a native confirm), and that deletion while it runs
+  const [toDelete, setToDelete] = useState<{ kind: 'alias' | 'ipset'; name: string } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const askDelete = (kind: 'alias' | 'ipset', name: string) => {
+    setDeleteError(null)
+    setToDelete({ kind, name })
+  }
+
   const totalIPSetEntries = ipsets.reduce((acc, s) => acc + (s.members?.length || 0), 0)
 
   // ── Alias handlers ──
@@ -81,14 +91,19 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
     }
   }
 
-  const handleDeleteAlias = async (name: string) => {
-    if (!confirm(t('networkPage.deleteAliasConfirm', { name }))) return
+  const confirmDelete = async () => {
+    if (!toDelete) return
+    setDeleting(true)
     try {
-      await firewallAPI.deleteAlias(selectedConnection, name)
-      showToast(t('networkPage.aliasDeleted'), 'success')
+      if (toDelete.kind === 'alias') await firewallAPI.deleteAlias(selectedConnection, toDelete.name)
+      else await firewallAPI.deleteIPSet(selectedConnection, toDelete.name)
+      showToast(t(toDelete.kind === 'alias' ? 'networkPage.aliasDeleted' : 'networkPage.ipSetDeleted'), 'success')
+      setToDelete(null)
       reload()
     } catch (err: any) {
-      showToast(err.message || t('networkPage.error'), 'error')
+      setDeleteError(err?.message || t('networkPage.error'))
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -111,17 +126,6 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
       await firewallAPI.updateIPSetComment(selectedConnection, editingIPSet.name, editingIPSet.comment)
       showToast(t('networkPage.ipSetUpdated'), 'success')
       setEditingIPSet(null)
-      reload()
-    } catch (err: any) {
-      showToast(err.message || t('networkPage.error'), 'error')
-    }
-  }
-
-  const handleDeleteIPSet = async (name: string) => {
-    if (!confirm(t('networkPage.deleteIpSetConfirm', { name }))) return
-    try {
-      await firewallAPI.deleteIPSet(selectedConnection, name)
-      showToast(t('networkPage.ipSetDeleted'), 'success')
       reload()
     } catch (err: any) {
       showToast(err.message || t('networkPage.error'), 'error')
@@ -201,7 +205,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
                         </IconButton>
                       </WriteTip>
                       <WriteTip title={t('networkPage.delete')}>
-                        <IconButton size="small" aria-label={t('networkPage.delete')} color="error" disabled={!writable} onClick={() => handleDeleteAlias(alias.name)}>
+                        <IconButton size="small" aria-label={t('networkPage.delete')} color="error" disabled={!writable} onClick={() => askDelete('alias', alias.name)}>
                           <i className="ri-delete-bin-line" style={{ fontSize: 16 }} />
                         </IconButton>
                       </WriteTip>
@@ -265,7 +269,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
                       </IconButton>
                     </WriteTip>
                     <WriteTip title={t('networkPage.delete')}>
-                      <IconButton size="small" aria-label={t('networkPage.delete')} color="error" disabled={!writable} onClick={() => handleDeleteIPSet(ipset.name)}>
+                      <IconButton size="small" aria-label={t('networkPage.delete')} color="error" disabled={!writable} onClick={() => askDelete('ipset', ipset.name)}>
                         <i className="ri-delete-bin-line" />
                       </IconButton>
                     </WriteTip>
@@ -301,6 +305,19 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
       </Paper>}
 
       {/* ══ DIALOGS ══ */}
+
+      {/* Delete an alias or an IP set */}
+      <MicrosegConfirmDialog
+        open={!!toDelete}
+        title={toDelete ? t(toDelete.kind === 'alias' ? 'networkPage.deleteAliasConfirm' : 'networkPage.deleteIpSetConfirm', { name: toDelete.name }) : ''}
+        body={toDelete ? t(toDelete.kind === 'alias' ? 'networkPage.deleteAliasWarning' : 'networkPage.deleteIpSetWarning', { name: toDelete.name }) : ''}
+        confirmLabel={t('common.delete')}
+        color='error'
+        busy={deleting}
+        error={deleteError}
+        onConfirm={() => { void confirmDelete() }}
+        onCancel={() => setToDelete(null)}
+      />
 
       {/* Create Alias */}
       <Dialog open={aliasDialogOpen} onClose={() => setAliasDialogOpen(false)} maxWidth="sm" fullWidth>

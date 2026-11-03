@@ -15,8 +15,7 @@
  * checked here is that the panel pre-fills it from the right rule and sends
  * the result to the right group.
  *
- * `window.confirm` gates the group deletion and jsdom does not implement it,
- * so it is stubbed per test rather than globally.
+ * The group deletion is confirmed in a themed dialog, never a native confirm().
  *
  * No automatic RTL cleanup is configured in this repo, hence afterEach.
  */
@@ -298,8 +297,8 @@ describe('SecurityGroupsPanel', () => {
     await waitFor(() => expect(api.deleteSecurityGroupRule).toHaveBeenCalledWith(CONN, 'sg-web', 0))
   })
 
-  it('asks the browser to confirm before deleting a whole group', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('confirms in a themed dialog before deleting a whole group, never a native confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
 
     renderPanel()
 
@@ -307,13 +306,18 @@ describe('SecurityGroupsPanel', () => {
 
     fireEvent.click(within(section).getByRole('button', { name: 'Delete' }))
 
-    expect(confirmSpy).toHaveBeenCalledWith('Delete Security Group "sg-web"?')
+    const ask = await screen.findByRole('dialog')
+    expect(within(ask).getByText('Delete Security Group "sg-web"?')).toBeInTheDocument()
+    expect(within(ask).getByText(/Security group sg-web and its rules will be permanently deleted/)).toBeInTheDocument()
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(api.deleteSecurityGroup).not.toHaveBeenCalled()
 
-    confirmSpy.mockReturnValue(true)
     fireEvent.click(within(section).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(api.deleteSecurityGroup).toHaveBeenCalledWith(CONN, 'sg-web'))
+    expect(confirmSpy).not.toHaveBeenCalled()
     confirmSpy.mockRestore()
   })
 

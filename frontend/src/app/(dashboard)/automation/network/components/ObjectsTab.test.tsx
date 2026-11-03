@@ -15,8 +15,7 @@
  * to show Aliases and IP Sets under separate menu entries, so both the
  * narrowed and the combined rendering are covered.
  *
- * `window.confirm` gates the deletions and jsdom does not implement it, so it
- * is stubbed per test rather than globally.
+ * The deletions are confirmed in a themed dialog, never a native confirm().
  *
  * No automatic RTL cleanup is configured in this repo, hence afterEach.
  */
@@ -202,20 +201,25 @@ describe('ObjectsTab', () => {
     expect(dialog().getByLabelText('Description')).toHaveValue('')
   })
 
-  it('asks the browser to confirm before deleting an alias', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('confirms in a themed dialog before deleting an alias, never a native confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
 
     renderTab({ view: 'aliases' })
 
     fireEvent.click(within(rowOf('net-mgmt')).getByRole('button', { name: 'Delete' }))
 
-    expect(confirmSpy).toHaveBeenCalledWith('Delete alias "net-mgmt"?')
+    const ask = await screen.findByRole('dialog')
+    expect(within(ask).getByText('Delete alias "net-mgmt"?')).toBeInTheDocument()
+    expect(within(ask).getByText(/Alias net-mgmt will be permanently deleted/)).toBeInTheDocument()
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(api.deleteAlias).not.toHaveBeenCalled()
 
-    confirmSpy.mockReturnValue(true)
     fireEvent.click(within(rowOf('net-mgmt')).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(api.deleteAlias).toHaveBeenCalledWith(CONN, 'net-mgmt'))
+    expect(confirmSpy).not.toHaveBeenCalled()
     confirmSpy.mockRestore()
   })
 
@@ -305,8 +309,9 @@ describe('ObjectsTab', () => {
     await waitFor(() => expect(api.deleteIPSetEntry).toHaveBeenCalledWith(CONN, 'trusted', '1.2.3.4'))
   })
 
-  it('asks the browser to confirm before deleting an IP set', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('confirms in a themed dialog before deleting an IP set, and keeps it open on a failure', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    api.deleteIPSet.mockRejectedValueOnce(new Error('ipset in use'))
 
     renderTab({ view: 'ipsets' })
 
@@ -314,8 +319,15 @@ describe('ObjectsTab', () => {
 
     fireEvent.click(within(card.parentElement!.parentElement!).getByRole('button', { name: 'Delete' }))
 
-    expect(confirmSpy).toHaveBeenCalledWith('Delete IP Set "blocklist"?')
-    await waitFor(() => expect(api.deleteIPSet).toHaveBeenCalledWith(CONN, 'blocklist'))
+    const ask = await screen.findByRole('dialog')
+    expect(within(ask).getByText('Delete IP Set "blocklist"?')).toBeInTheDocument()
+    fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }))
+    expect(await within(ask).findByText('ipset in use')).toBeInTheDocument()
+
+    fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(api.deleteIPSet).toHaveBeenCalledTimes(2))
+    expect(api.deleteIPSet).toHaveBeenLastCalledWith(CONN, 'blocklist')
+    expect(confirmSpy).not.toHaveBeenCalled()
     confirmSpy.mockRestore()
   })
 

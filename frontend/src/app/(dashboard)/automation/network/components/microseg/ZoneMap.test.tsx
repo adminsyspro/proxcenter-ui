@@ -179,14 +179,6 @@ describe('side panel', () => {
     expect(await screen.findByText('No members')).toBeTruthy()
   })
 
-  it('switches to the Policy sub-tab with "Edit in Policy"', async () => {
-    setup()
-    fireEvent.click(await node('zone:zw'))
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit in Policy' }))
-    expect(await screen.findByRole('button', { name: 'New zone' })).toBeTruthy()
-    expect(window.localStorage.getItem('microseg.subTab')).toBe('policy')
-  })
-
   it('opens the assign dialog of the zone with "Assign guests"', async () => {
     setup({ vms: [vm(100, 'web-1', [])] })
     fireEvent.click(await node('zone:zw'))

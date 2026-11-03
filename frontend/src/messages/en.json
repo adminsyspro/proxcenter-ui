@@ -13003,12 +13003,23 @@
         "label": "Zone {name}",
         "close": "Close",
         "editInPolicy": "Edit in Policy",
-        "assign": "Assign guests",
         "members": "Members",
         "noMembers": "No members",
         "membersUnknown": "The guest list could not be read.",
         "pending": "Pending",
         "noFlows": "None"
+      },
+      "zonePanel": {
+        "edit": "Edit zone",
+        "changeState": "Change state",
+        "delete": "Delete zone",
+        "assign": "Assign guests",
+        "removeMember": "Remove from zone",
+        "keepMember": "Keep in zone",
+        "editFlow": "Edit flow",
+        "deleteFlow": "Delete flow",
+        "newIncoming": "New incoming flow",
+        "newOutgoing": "New outgoing flow"
       },
       "partial": "Partial: only the first {count, number} pending flows are drawn.",
       "filters": {

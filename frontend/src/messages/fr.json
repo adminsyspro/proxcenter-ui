@@ -13004,12 +13004,23 @@
         "label": "Zone {name}",
         "close": "Fermer",
         "editInPolicy": "Modifier dans Politique",
-        "assign": "Affecter des invités",
         "members": "Membres",
         "noMembers": "Aucun membre",
         "membersUnknown": "La liste des invités n'a pas pu être lue.",
         "pending": "En attente",
         "noFlows": "Aucun"
+      },
+      "zonePanel": {
+        "edit": "Modifier la zone",
+        "changeState": "Changer l'état",
+        "delete": "Supprimer la zone",
+        "assign": "Affecter des invités",
+        "removeMember": "Retirer de la zone",
+        "keepMember": "Garder dans la zone",
+        "editFlow": "Modifier le flux",
+        "deleteFlow": "Supprimer le flux",
+        "newIncoming": "Nouveau flux entrant",
+        "newOutgoing": "Nouveau flux sortant"
       },
       "partial": "Partiel : seuls les {count, number} premiers flux en attente sont dessinés.",
       "filters": {

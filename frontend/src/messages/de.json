@@ -12671,12 +12671,23 @@
         "label": "Zone {name}",
         "close": "Schließen",
         "editInPolicy": "In Richtlinie bearbeiten",
-        "assign": "Gäste zuweisen",
         "members": "Mitglieder",
         "noMembers": "Keine Mitglieder",
         "membersUnknown": "Die Gästeliste konnte nicht gelesen werden.",
         "pending": "Ausstehend",
         "noFlows": "Keine"
+      },
+      "zonePanel": {
+        "edit": "Zone bearbeiten",
+        "changeState": "Status ändern",
+        "delete": "Zone löschen",
+        "assign": "Gäste zuweisen",
+        "removeMember": "Aus der Zone entfernen",
+        "keepMember": "In der Zone behalten",
+        "editFlow": "Fluss bearbeiten",
+        "deleteFlow": "Fluss löschen",
+        "newIncoming": "Neuer eingehender Fluss",
+        "newOutgoing": "Neuer ausgehender Fluss"
       },
       "partial": "Teilweise: Nur die ersten {count, number} ausstehenden Flüsse werden gezeichnet.",
       "filters": {

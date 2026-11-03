@@ -13003,12 +13003,23 @@
         "label": "区域 {name}",
         "close": "关闭",
         "editInPolicy": "在策略中编辑",
-        "assign": "分配客户机",
         "members": "成员",
         "noMembers": "没有成员",
         "membersUnknown": "无法读取客户机列表。",
         "pending": "待处理",
         "noFlows": "无"
+      },
+      "zonePanel": {
+        "edit": "编辑区域",
+        "changeState": "更改状态",
+        "delete": "删除区域",
+        "assign": "分配客户机",
+        "removeMember": "从区域中移除",
+        "keepMember": "保留在区域中",
+        "editFlow": "编辑流量规则",
+        "deleteFlow": "删除流量规则",
+        "newIncoming": "新建入站流量规则",
+        "newOutgoing": "新建出站流量规则"
       },
       "partial": "部分显示：仅绘制前 {count, number} 条待处理流量。",
       "filters": {

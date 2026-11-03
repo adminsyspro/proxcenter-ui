@@ -13003,12 +13003,23 @@
         "label": "영역 {name}",
         "close": "닫기",
         "editInPolicy": "정책에서 편집",
-        "assign": "게스트 할당",
         "members": "구성원",
         "noMembers": "구성원 없음",
         "membersUnknown": "게스트 목록을 읽을 수 없습니다.",
         "pending": "대기 중",
         "noFlows": "없음"
+      },
+      "zonePanel": {
+        "edit": "영역 편집",
+        "changeState": "상태 변경",
+        "delete": "영역 삭제",
+        "assign": "게스트 할당",
+        "removeMember": "영역에서 제거",
+        "keepMember": "영역에 유지",
+        "editFlow": "플로우 편집",
+        "deleteFlow": "플로우 삭제",
+        "newIncoming": "새 수신 플로우",
+        "newOutgoing": "새 송신 플로우"
       },
       "partial": "일부만 표시: 대기 중인 처음 {count, number}개 플로우만 그려집니다.",
       "filters": {

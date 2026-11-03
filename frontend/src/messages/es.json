@@ -13003,12 +13003,23 @@
         "label": "Zona {name}",
         "close": "Cerrar",
         "editInPolicy": "Editar en Política",
-        "assign": "Asignar invitados",
         "members": "Miembros",
         "noMembers": "Sin miembros",
         "membersUnknown": "No se pudo leer la lista de invitados.",
         "pending": "Pendiente",
         "noFlows": "Ninguno"
+      },
+      "zonePanel": {
+        "edit": "Editar zona",
+        "changeState": "Cambiar el estado",
+        "delete": "Eliminar zona",
+        "assign": "Asignar invitados",
+        "removeMember": "Quitar de la zona",
+        "keepMember": "Mantener en la zona",
+        "editFlow": "Editar flujo",
+        "deleteFlow": "Eliminar flujo",
+        "newIncoming": "Nuevo flujo entrante",
+        "newOutgoing": "Nuevo flujo saliente"
       },
       "partial": "Parcial: solo se dibujan los primeros {count, number} flujos pendientes.",
       "filters": {

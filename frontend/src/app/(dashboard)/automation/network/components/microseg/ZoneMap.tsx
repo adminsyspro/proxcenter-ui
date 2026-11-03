@@ -14,6 +14,7 @@ import EdgePanel from './EdgePanel'
 import { MapNamesContext, edgeAria, type EdgeT, type MapNames } from './FlowEdge'
 import MapToolbar, { useFlowFilters } from './MapToolbar'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
+import { useZoneEdits } from './useZoneEdits'
 import { useZoneGuests } from './useZoneGuests'
 import ZoneCanvas from './ZoneCanvas'
 import {
@@ -56,7 +57,7 @@ const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_z
  * (unprotected, blocked) guest to guest. Hover or select something to light it and its flows; click a circle for
  * its panel, an edge for its flows. Nothing polls beyond the shared hooks (one inventory read, one suggestions read).
  */
-export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab }: MicrosegSubTabProps) {
+export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.overview')
   const tObs = useTranslations('microsegPilot.observation')
   const { guests, status: guestsStatus, reload: reloadGuests } = useZoneGuests(connectionId)
@@ -70,6 +71,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const [filters, setFilters] = useFlowFilters()
   const [refreshing, setRefreshing] = useState(false)
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null)
+  const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
 
   const { zones, flows, pending_members: pendingMembers } = policy
   const tagPrefix = policy.policy.tag_prefix
@@ -228,8 +230,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
               membersKnown={membersKnown}
               flows={flows}
               zonesById={zonesById}
+              edits={edits}
               onClose={clear}
-              onEdit={() => goToSubTab('policy')}
               onAssign={() => setAssigning(true)}
             />
           )}

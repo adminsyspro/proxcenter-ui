@@ -63,6 +63,8 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
 vi.mock("@/lib/connections/getConnection", () => ({ invalidateConnectionCache: vi.fn() }))
 vi.mock("@/lib/cache/inventoryCache", () => ({ invalidateInventoryCache: vi.fn() }))
 vi.mock("@/lib/vdc/pbsOrchestrator", () => ({ unbindFromVdc: unbindMock }))
+const { evictGuestCoverageMock } = vi.hoisted(() => ({ evictGuestCoverageMock: vi.fn() }))
+vi.mock("@/lib/firewall/guestCoverage", () => ({ evictGuestCoverage: evictGuestCoverageMock }))
 
 import { DELETE as deleteRoute } from "./route"
 
@@ -126,5 +128,14 @@ describe("DELETE /api/v1/connections/[id] (PBS binding cleanup)", () => {
     const body = await readJson<any>(res)
     expect(body.ok).toBe(true)
     expect(sessionDeleteMock).toHaveBeenCalled()
+  })
+
+  it("evicts the firewall coverage held for the deleted connection (UA44)", async () => {
+    sessionFindUniqueMock.mockResolvedValue({ name: "PVE prod", type: "pve", baseUrl: "https://pve:8006" })
+
+    const res = await callRoute(DELETE, { params: { id: "pve-1" }, method: "DELETE" })
+
+    expect(res.status).toBe(200)
+    expect(evictGuestCoverageMock).toHaveBeenCalledWith("pve-1")
   })
 })

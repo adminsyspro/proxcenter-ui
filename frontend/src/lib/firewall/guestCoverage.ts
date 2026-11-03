@@ -159,6 +159,16 @@ export function forgetGuestCoverage(connId: string, guest?: { type: string; vmid
   bump(`${connId}|${guest.type}/${guest.vmid}`)
 }
 
+/**
+ * A connection was deleted: everything held for it goes (answers, the read running, the generations). A read still
+ * running for it finishes for its callers but stores nothing, since it is no longer the connection's read.
+ */
+export function evictGuestCoverage(connId: string): void {
+  cache().delete(connId)
+  inflight().delete(connId)
+  for (const key of generations().keys()) if (key === connId || key.startsWith(`${connId}|`)) generations().delete(key)
+}
+
 /** Test seam. */
 export function resetGuestCoverage(): void {
   cache().clear()
@@ -183,12 +193,20 @@ export function guestListHash(guests: CoverageGuest[]): string {
   return createHash('sha256').update(lines.join('\n')).digest('hex')
 }
 
-/** At most `max` guests, spread evenly over the sorted list so every node and range is represented. */
-export function sampleGuests(guests: CoverageGuest[], max = COVERAGE_MAX_GUESTS): CoverageGuest[] {
-  const sorted = [...guests].sort(byKey)
-  if (sorted.length <= max) return sorted
+/** A stable pseudo-random rank of a guest: its place in the sample does not depend on the other guests. */
+function sampleRank(g: { type: string; vmid: string }): string {
+  return createHash('sha256').update(guestKey(g)).digest('hex')
+}
 
-  return Array.from({ length: max }, (_, i) => sorted[Math.floor((i * sorted.length) / max)])
+/**
+ * At most `max` guests: the `max` lowest ranks. Stable, so one guest added or removed changes the sample by at most
+ * that guest and the one it pushes out (read again: 1 call at most), and spread across nodes and vmid ranges.
+ */
+export function sampleGuests(guests: CoverageGuest[], max = COVERAGE_MAX_GUESTS): CoverageGuest[] {
+  if (guests.length <= max) return [...guests].sort(byKey)
+  const ranked = guests.map(g => ({ g, rank: sampleRank(g) })).sort((a, b) => a.rank.localeCompare(b.rank))
+
+  return ranked.slice(0, max).map(r => r.g).sort(byKey)
 }
 
 /** Node by node in turn, so the global slots rarely wait on a busy node while another one is idle. */
@@ -370,6 +388,8 @@ function store(connId: string, target: Map<string, Known>, read: Map<string, Kno
  */
 function begin(connId: string, deps: CoverageDeps, force: boolean): Promise<GuestCoverage> {
   const now = deps.now ?? Date.now
+  // Still the connection's read when it ends: false after an eviction (connection deleted), then nothing is stored.
+  const owner = () => inflight().get(connId)?.promise === promise
   const promise: Promise<GuestCoverage> = (async () => {
     const connGen = generationOf(connId)
     const guests = await deps.listGuests()
@@ -387,6 +407,7 @@ function begin(connId: string, deps: CoverageDeps, force: boolean): Promise<Gues
       const startGen = new Map(toRead.map(g => [`${connId}|${guestKey(g)}`, generationOf(`${connId}|${guestKey(g)}`)]))
       const started = now()
       const read = await readGuestOptions(toRead, deps)
+      const called = [...read.values()].some(k => k.options !== null)
       const target = full ? new Map<string, Known>() : state.known
       if (store(connId, target, read, startGen, connGen)) {
         state.known = target
@@ -394,15 +415,16 @@ function begin(connId: string, deps: CoverageDeps, force: boolean): Promise<Gues
           state.fullAt = now()
           state.fullMs = now() - started
         }
-        state.readAt = now()
+        // The time only moves when something was read from Proxmox (cosmetic: "computed X ago").
+        if (called || full) state.readAt = now()
       } else {
         state.known = new Map()
       }
       // What this read saw still answers its own callers, even where a write since keeps it out of the cache.
-      return remember(connId, state, hash, guests, build(guests, new Map([...state.known, ...read]), deps, now()))
+      return remember(connId, owner, state, hash, guests, build(guests, new Map([...state.known, ...read]), deps, state.readAt))
     }
 
-    return remember(connId, state, hash, guests, build(guests, state.known, deps, state.readAt))
+    return remember(connId, owner, state, hash, guests, build(guests, state.known, deps, state.readAt))
   })().finally(() => {
     if (inflight().get(connId)?.promise === promise) inflight().delete(connId)
   })
@@ -414,7 +436,8 @@ function begin(connId: string, deps: CoverageDeps, force: boolean): Promise<Gues
   return promise
 }
 
-function remember(connId: string, state: State, hash: string, guests: CoverageGuest[], answer: GuestCoverage): GuestCoverage {
+function remember(connId: string, owner: () => boolean, state: State, hash: string, guests: CoverageGuest[], answer: GuestCoverage): GuestCoverage {
+  if (!owner()) return answer
   // Guests gone from the list are forgotten; the state is kept only when no connection-wide write wiped it.
   const present = new Set(guests.map(placedKey))
   for (const key of state.known.keys()) if (!present.has(key)) state.known.delete(key)

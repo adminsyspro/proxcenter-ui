@@ -13,6 +13,7 @@ import {
   getGuestCoverage,
   guestListHash,
   interleaveByNode,
+  evictGuestCoverage,
   resetGuestCoverage,
   sampleGuests,
   type CoverageGuest,
@@ -23,15 +24,32 @@ const g = (vmid: number, node = 'pve1', type: 'qemu' | 'lxc' = 'qemu'): Coverage
 beforeEach(resetGuestCoverage)
 
 describe('sampleGuests', () => {
-  it('keeps every guest up to the cap, and an even spread above it', () => {
+  it('keeps every guest up to the cap, and a spread above it', () => {
     const many = Array.from({ length: 1000 }, (_, i) => g(1000 + i))
 
     expect(sampleGuests(many.slice(0, 200))).toHaveLength(200)
     const sample = sampleGuests(many)
     expect(sample).toHaveLength(200)
     expect(new Set(sample.map(s => s.vmid)).size).toBe(200)
-    expect(sample[0].vmid).toBe('1000')
-    expect(Number(sample[199].vmid)).toBeGreaterThanOrEqual(1990)
+    // Spread over the whole vmid range, not the first 200.
+    expect(sample.some(s => Number(s.vmid) < 1200)).toBe(true)
+    expect(sample.some(s => Number(s.vmid) >= 1800)).toBe(true)
+  })
+
+  it('is stable: one guest added or removed changes the sample by at most that guest and one other', () => {
+    const many = Array.from({ length: 230 }, (_, i) => g(1000 + i))
+    const before = new Set(sampleGuests(many).map(s => s.vmid))
+
+    for (const candidate of [g(5000), g(5001), g(5002)]) {
+      const after = new Set(sampleGuests([...many, candidate]).map(s => s.vmid))
+      const gone = [...before].filter(v => !after.has(v))
+      const come = [...after].filter(v => !before.has(v))
+      expect(gone.length).toBeLessThanOrEqual(1)
+      expect(come.length).toBeLessThanOrEqual(1)
+      if (come.length === 1) expect(come[0]).toBe(candidate.vmid)
+    }
+    const removed = new Set(sampleGuests(many.slice(1)).map(s => s.vmid))
+    expect([...removed].filter(v => !before.has(v)).length).toBeLessThanOrEqual(1)
   })
 })
 
@@ -174,5 +192,24 @@ describe('offline nodes', () => {
 
     expect(fetchOptions).toHaveBeenCalledTimes(1)
     expect(result).toMatchObject({ enabled: 1, unknown: 1 })
+  })
+})
+
+describe('evictGuestCoverage (connection deleted)', () => {
+  it('drops the answers, and a read still running stores nothing', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const fetchOptions = vi.fn(async () => { await gate; return { enable: 1 } })
+    const deps = { listGuests: async () => [g(1)], guestNet: () => ({ nicFirewall: true, vlans: [] }), fetchOptions }
+
+    const first = getGuestCoverage('gone', deps, { waitMs: 1000 })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    evictGuestCoverage('gone')
+    release()
+    expect((await first).result).toMatchObject({ enabled: 1 })
+
+    // Nothing was kept: the next answer reads again.
+    await getGuestCoverage('gone', deps, { waitMs: 1000 })
+    expect(fetchOptions).toHaveBeenCalledTimes(2)
   })
 })

@@ -37,7 +37,7 @@ vi.mock('@/lib/inventory/guestDiskTotals', () => ({
 }))
 
 import { setCachedInventory, invalidateInventoryCache } from '@/lib/cache/inventoryCache'
-import { forgetGuestCoverage, resetGuestCoverage } from '@/lib/firewall/guestCoverage'
+import { forgetGuestCoverage, resetGuestCoverage, sampleGuests } from '@/lib/firewall/guestCoverage'
 
 import { GET } from './route'
 
@@ -371,6 +371,43 @@ describe('GET /api/v1/firewall/coverage/[connectionId]: cache', () => {
     // The unknown guests are not asked again on the next answer (no hammering a slow Proxmox).
     await get()
     expect(h.orchGet.mock.calls.length).toBeLessThanOrEqual(2)
+  })
+
+  it('reads one guest when one is added above 200 guests: the sample is stable', async () => {
+    const list = guests(230)
+    onPve(list)
+    nicOn(list)
+    const stats = options(() => true, 0)
+    await get()
+    expect(stats.calls).toBe(200)
+
+    // A guest that lands in the sample (found by the same rank as the server's): read alone, the one it pushes out
+    // becomes a listed unknown row with no call.
+    let vmid = 9000
+    while (!sampleGuests([...list, { vmid: vmid, node: 'pve1', type: 'qemu' }].map(x => ({ ...x, vmid: String(x.vmid) })) as any)
+      .some(x => x.vmid === String(vmid))) vmid++
+    const grown = [...list, { vmid, node: 'pve1', type: 'qemu' } as Guest]
+    onPve(grown)
+    nicOn(grown)
+    const body = await readJson<any>(await get())
+
+    expect(stats.calls).toBe(201)
+    expect(body).toMatchObject({ total: 231, measured: 200 })
+  })
+
+  it('keeps the time of the figures when an answer made no call', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    onPve([{ vmid: 1, node: 'pve1', type: 'qemu' }])
+    h.nic.set('qemu/1', true)
+    options(() => true)
+    const first = await readJson<any>(await get())
+
+    vi.setSystemTime(Date.now() + 60_000)
+    onPve([{ vmid: 1, node: 'pve1', type: 'qemu' }, { vmid: 2, node: 'pve9', type: 'qemu' }], ['pve9'])
+    const second = await readJson<any>(await get())
+
+    expect(second.total).toBe(2)
+    expect(second.computedAt).toBe(first.computedAt)
   })
 
   it('lists the guests left out above 200 as unknown, without asking them', async () => {

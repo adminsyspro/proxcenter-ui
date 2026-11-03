@@ -11,6 +11,7 @@ import {
   onlineNodeSet,
   peekGuestDiskTotal,
   peekGuestNet,
+  noteGuestNicFirewall,
   peekGuestNicFirewall,
   configVlans,
   readGuestDiskBytes,
@@ -82,6 +83,18 @@ describe("peekGuestNicFirewall (UA44)", () => {
     expect(peekGuestNet(CONN, "qemu", 104)).toEqual({ nicFirewall: true, vlans: [20, 30] })
     expect(peekGuestNet(CONN, "qemu", 555)).toBeUndefined()
     expect(configVlans({ net0: "name=eth0,tag=7", ipconfig0: "tag=9", net1: 3 })).toEqual([7])
+  })
+
+  it("follows a NIC toggle made by ProxCenter, and leaves a guest without NIC unfiltered", async () => {
+    const table = { ...configs, "qemu/104": { ...configs["qemu/104"], net0: "virtio=AA,bridge=vmbr0" } }
+    await attachGuestDiskTotals(null, CONN, guests(), { onlineNodes: ONLINE, fetchConfig: fetchFrom(table), now })
+
+    noteGuestNicFirewall(CONN, "qemu", 104, true)
+    noteGuestNicFirewall(CONN, "lxc", 200, true)
+
+    expect(peekGuestNet(CONN, "qemu", 104)?.nicFirewall).toBe(true)
+    // lxc/200 has no netN: the toggle set nothing, it must not read as filtered.
+    expect(peekGuestNet(CONN, "lxc", 200)?.nicFirewall).toBe(false)
   })
 
   it("forgets the flag with the figure when ProxCenter changes the guest", async () => {

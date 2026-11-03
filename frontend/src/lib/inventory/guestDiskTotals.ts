@@ -43,7 +43,7 @@ export type DiskTotalGuest = {
  * firewall coverage (Dashboard, Firewalling, Security Groups) reads them here instead of asking each guest config
  * again (UA44).
  */
-type Entry = { total: number; expiresAt: number; maxdisk?: number; nicFirewall?: boolean; vlans?: number[] }
+type Entry = { total: number; expiresAt: number; maxdisk?: number; nicFirewall?: boolean; vlans?: number[]; nics?: number }
 
 type FetchConfig = (node: string, type: "qemu" | "lxc", vmid: string) => Promise<unknown>
 
@@ -118,7 +118,15 @@ export function peekGuestNet(connId: string, type: string, vmid: string | number
  */
 export function noteGuestNicFirewall(connId: string, type: string, vmid: string | number, enabled: boolean): void {
   const entry = store().get(diskTotalKey(connId, type, vmid))
-  if (entry) entry.nicFirewall = enabled
+  // A guest without a NIC has no flag to set: the toggle changed nothing, it must not read as filtered.
+  if (entry && (entry.nics ?? 0) > 0) entry.nicFirewall = enabled
+}
+
+/** Number of NICs (`netN`) of a config. */
+function configNicCount(config: unknown): number {
+  if (!config || typeof config !== "object") return 0
+
+  return Object.keys(config as Record<string, unknown>).filter(key => /^net\d+$/.test(key)).length
 }
 
 /** VLAN tags of the NICs of a config (`tag=N` on `netN`), sorted, deduplicated. */
@@ -160,6 +168,7 @@ function remember(key: string, total: number, guest: DiskTotalGuest, now: () => 
     maxdisk: typeof guest.maxdisk === "number" ? guest.maxdisk : undefined,
     nicFirewall: hasNICFirewall(config as Record<string, any> | null),
     vlans: configVlans(config),
+    nics: configNicCount(config),
   })
 }
 

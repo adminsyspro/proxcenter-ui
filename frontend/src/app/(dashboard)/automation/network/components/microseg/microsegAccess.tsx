@@ -1,7 +1,8 @@
 'use client'
 
 import { createContext, useContext, type ReactElement, type ReactNode } from 'react'
-import { Tooltip } from '@mui/material'
+import { createPortal } from 'react-dom'
+import { Box, Tooltip } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { useRBAC } from '@/contexts/RBACContext'
@@ -41,4 +42,20 @@ export function WriteTip({ title, children }: { title?: ReactNode; children: Rea
       <span style={{ display: 'inline-flex', flexShrink: 0 }}>{children}</span>
     </Tooltip>
   )
+}
+
+/**
+ * The element of the tab row (next to the sub-tabs) the sub-tab actions are rendered into. Null outside the tab, or
+ * before the row is mounted: the actions then stay in place.
+ */
+export const MicrosegActionsSlot = createContext<HTMLElement | null>(null)
+
+/**
+ * Renders the actions of a sub-tab in the row of the tab when it provides a slot, in place otherwise. `order` keeps the
+ * actions of the several sections in a fixed sequence in the row, whatever the order they mount in.
+ */
+export function SlotActions({ order, children }: { order: number; children: ReactNode }) {
+  const slot = useContext(MicrosegActionsSlot)
+  if (!slot) return <>{children}</>
+  return createPortal(<Box sx={{ order, display: 'inline-flex' }}>{children}</Box>, slot)
 }

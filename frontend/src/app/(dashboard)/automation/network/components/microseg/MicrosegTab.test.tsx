@@ -3,7 +3,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
@@ -151,3 +151,20 @@ describe('sub-tabs', () => {
   })
 })
 
+
+describe('actions row', () => {
+  it('shows the policy actions on the row of the sub-tabs only while the Policy sub-tab is active', async () => {
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: REVISION_HEAD }))
+    renderTab()
+    const slot = await screen.findByTestId('microseg-actions-slot')
+    expect(within(slot).queryByRole('button', { name: 'New zone' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Policy' }))
+    expect(await within(slot).findByRole('button', { name: 'Pre-flight checks' })).toBeTruthy()
+    expect(within(slot).getByRole('button', { name: 'New zone' })).toBeTruthy()
+    expect(within(slot).getByRole('button', { name: 'New flow' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }))
+    await waitFor(() => expect(within(slot).queryByRole('button')).toBeNull())
+  })
+})

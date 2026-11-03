@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import { Box, Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -13,6 +13,7 @@ import FlowDialog, { type FlowSaveValues } from './FlowDialog'
 import FlowList from './FlowList'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
+import { MicrosegActionsSlot, SlotActions } from './microsegAccess'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import ZoneDialog from './ZoneDialog'
 import ZoneEnforceDialog from './ZoneEnforceDialog'
@@ -36,6 +37,7 @@ type Deleting = { kind: 'zone'; zone: MicrosegZone } | { kind: 'flow'; flow: Mic
 export default function PolicyPanel({ connectionId, policy, reloadPolicy, startRun, onOpenPlan, onOpenPreflight }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.policy')
   const api = microsegApi(connectionId)
+  const inSlot = useContext(MicrosegActionsSlot) !== null
   const { guests, status: guestsStatus } = useZoneGuests(connectionId)
 
   const [zoneDialog, setZoneDialog] = useState<Editing<MicrosegZone>>(null)
@@ -121,9 +123,12 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
   return (
     <Box>
       {onOpenPreflight && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-          <Button size='small' variant='outlined' startIcon={<i className='ri-heart-pulse-line' />} onClick={onOpenPreflight}>{t('preflightButton')}</Button>
-        </Box>
+        <SlotActions order={1}>
+          {/* In place (no slot): its own right-aligned row above the sections. */}
+          <Box sx={{ display: inSlot ? 'contents' : 'flex', justifyContent: 'flex-end', mb: inSlot ? 0 : 1 }}>
+            <Button size='small' variant='outlined' startIcon={<i className='ri-heart-pulse-line' />} onClick={onOpenPreflight}>{t('preflightButton')}</Button>
+          </Box>
+        </SlotActions>
       )}
       {actionError != null && <MicrosegErrorAlert error={actionError} onClose={() => setActionError(null)} />}
 

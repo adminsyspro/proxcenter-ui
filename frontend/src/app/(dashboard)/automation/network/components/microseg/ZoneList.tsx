@@ -8,7 +8,7 @@ import type { MicrosegFlow, MicrosegZone, PendingMember } from '@/lib/microseg/t
 import PolicyPager, { usePaged } from './PolicyPager'
 import ZoneRow, { type ZoneRowProps } from './ZoneRow'
 import { zoneMembers, type PolicyGuest } from './zoneModel'
-import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import { SlotActions, WriteTip, useMicrosegWrite } from './microsegAccess'
 
 type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onAssign' | 'onRemoveMember' | 'removeBusy'> & {
   zones: MicrosegZone[]
@@ -31,9 +31,11 @@ export default function ZoneList({ zones, flows, tagPrefix, guests, guestsStatus
     <Box component='section' aria-label={t('zonesTitle')}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
         <Typography variant='subtitle1' fontWeight={600} sx={{ flex: 1 }}>{t('zonesTitle')}</Typography>
-        <WriteTip>
-          <Button size='small' variant='contained' startIcon={<i className='ri-add-line' />} onClick={onAdd} disabled={!canWrite}>{t('addZone')}</Button>
-        </WriteTip>
+        <SlotActions order={2}>
+          <WriteTip>
+            <Button size='small' variant='contained' startIcon={<i className='ri-add-line' />} onClick={onAdd} disabled={!canWrite}>{t('addZone')}</Button>
+          </WriteTip>
+        </SlotActions>
       </Box>
       {zones.length === 0 ? (
         <Typography color='text.secondary' sx={{ py: 2 }}>{t('zonesEmpty')}</Typography>

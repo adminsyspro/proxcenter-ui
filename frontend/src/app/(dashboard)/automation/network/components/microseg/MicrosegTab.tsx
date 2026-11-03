@@ -22,7 +22,7 @@ import PreflightPanel from './PreflightPanel'
 import RunStrip from './RunStrip'
 import SettingsDialog from './SettingsDialog'
 import { useMicrosegControls } from './useMicrosegControls'
-import { MicrosegWriteContext, useCanManageMicroseg } from './microsegAccess'
+import { MicrosegActionsSlot, MicrosegWriteContext, useCanManageMicroseg } from './microsegAccess'
 import ZoneMap from './ZoneMap'
 import {
   MICROSEG_SUBTABS, isMicrosegSubTab, type FirewallWizardData, type MicrosegSubTab, type MicrosegSubTabProps, type TrackedRun,
@@ -90,6 +90,8 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
   const [wizardOpen, setWizardOpen] = useState(false)
   // The wizard changes the cluster: the pre-flight checks are read again once it is done.
   const [preflightRound, setPreflightRound] = useState(0)
+  // The row of the sub-tabs hosts the actions of the active sub-tab (a state, so they render once it is mounted).
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null)
   const { mutate } = useSWRConfig()
 
   const startRun = useCallback((run: TrackedRun) => {
@@ -132,18 +134,19 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
 
   return (
     <MicrosegWriteContext.Provider value={canWrite}>
+    <MicrosegActionsSlot.Provider value={actionsSlot}>
     <Box sx={{ p: 3 }}>
       <MicrosegBanner connectionId={connectionId} policy={policy} controls={controls} onOpenPlan={onOpenPlan} />
       <RunStrip connectionId={connectionId} runs={runs} onFinished={refreshAfterRun} onRemove={removeRun} />
       {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={onOpenPlan} onOpenPreflight={onOpenPreflight} />}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
         <Tabs
           value={subTab}
           onChange={(_, v: MicrosegSubTab) => goToSubTab(v)}
           variant='scrollable'
           scrollButtons='auto'
           aria-label={t('subTabs.label')}
-          sx={{ flex: 1, minWidth: 0 }}
+          sx={{ flex: '1 1 320px', minWidth: 0 }}
         >
           {MICROSEG_SUBTABS.map(tab => (
             <Tab
@@ -156,6 +159,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
             />
           ))}
         </Tabs>
+        <Box ref={setActionsSlot} data-testid='microseg-actions-slot' sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }} />
         <EmergencyStopButton controls={controls} />
         <Tooltip title={t('settings.open')}>
           <IconButton aria-label={t('settings.open')} onClick={onOpenSettings} sx={{ flexShrink: 0 }}>
@@ -204,6 +208,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
         />
       )}
     </Box>
+    </MicrosegActionsSlot.Provider>
     </MicrosegWriteContext.Provider>
   )
 }

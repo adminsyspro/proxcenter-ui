@@ -133,3 +133,37 @@ describe('flow list', () => {
   })
 })
 
+
+describe('actions row', () => {
+  it('puts Pre-flight checks, New zone and New flow on the row of the sub-tabs, in that order, before Emergency stop', async () => {
+    setup({ zones: [web()] })
+    const slot = await screen.findByTestId('microseg-actions-slot')
+    await waitFor(() => expect(within(slot).getAllByRole('button').map(b => b.textContent)).toEqual(['Pre-flight checks', 'New zone', 'New flow']))
+    const row = slot.parentElement as HTMLElement
+    const names = within(row).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)
+    expect(names.indexOf('New flow')).toBeLessThan(names.findIndex(n => /Emergency stop/.test(n ?? '')))
+    expect(within(await screen.findByRole('region', { name: 'Zones' })).queryByRole('button', { name: 'New zone' })).toBeNull()
+    expect(screen.getByText('Zones')).toBeTruthy()
+    expect(screen.getByText('Flows')).toBeTruthy()
+  })
+
+  it('keeps the buttons working from the row', async () => {
+    setup({ zones: [web()] })
+    const slot = await screen.findByTestId('microseg-actions-slot')
+    fireEvent.click(await within(slot).findByRole('button', { name: 'New zone' }))
+    expect(await screen.findByRole('dialog')).toBeTruthy()
+  })
+
+  it('keeps the buttons in their sections when the panel is rendered without a tab row', async () => {
+    const { policy: makePolicy } = await import('./microsegTestKit')
+    const { default: PolicyPanel } = await import('./PolicyPanel')
+    const { renderWithProviders } = await import('@/__tests__/setup/renderWithProviders')
+    renderWithProviders(
+      <PolicyPanel connectionId='c1' policy={makePolicy({ zones: [web()] })} reloadPolicy={async () => undefined} goToSubTab={() => undefined} onOpenPlan={() => undefined} startRun={() => undefined} onOpenPreflight={() => undefined} />,
+    )
+    const zones = await screen.findByRole('region', { name: 'Zones' })
+    expect(within(zones).getByRole('button', { name: 'New zone' })).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Flows' })).getByRole('button', { name: 'New flow' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Pre-flight checks' })).toBeTruthy()
+  })
+})

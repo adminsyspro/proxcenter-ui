@@ -8,7 +8,7 @@ import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
 
 import FlowSummary from './FlowSummary'
 import PolicyPager, { usePaged } from './PolicyPager'
-import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import { SlotActions, WriteTip, useMicrosegWrite } from './microsegAccess'
 
 type Props = {
   flows: MicrosegFlow[]
@@ -62,11 +62,13 @@ export default function FlowList({ flows, zones, onAdd, onEdit, onDelete }: Prop
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
         <Typography variant='subtitle1' fontWeight={600} sx={{ flex: 1 }}>{t('flowsTitle')}</Typography>
         {/* A disabled button fires no hover: the tooltip sits on a wrapper. */}
-        <WriteTip title={zones.length === 0 ? t('addFlowNeedsZone') : ''}>
-          <Button size='small' variant='outlined' startIcon={<i className='ri-add-line' />} onClick={onAdd} disabled={!canWrite || zones.length === 0}>
-            {t('addFlow')}
-          </Button>
-        </WriteTip>
+        <SlotActions order={3}>
+          <WriteTip title={zones.length === 0 ? t('addFlowNeedsZone') : ''}>
+            <Button size='small' variant='outlined' startIcon={<i className='ri-add-line' />} onClick={onAdd} disabled={!canWrite || zones.length === 0}>
+              {t('addFlow')}
+            </Button>
+          </WriteTip>
+        </SlotActions>
       </Box>
       {flows.length === 0 ? (
         <Typography color='text.secondary' sx={{ py: 2 }}>{t('flowsEmpty')}</Typography>

@@ -112,13 +112,11 @@ export function hitsIndex(events: MicrosegEvent[], truncated: boolean, now: numb
   return { counts, partial: truncated && oldest > now - HITS_WINDOW_MS }
 }
 
-/** Hits of a zone rule: the zone's flows of the rule's service, all of them for a rule on any service; null for a macro. */
-export function ruleHits(index: HitsIndex | null, zone: string, rule: RuleFields): number | null {
-  if (!index || rule.macro || rule.type === 'group') return null
-  if (!rule.proto && !rule.dport) return index.counts.get(`${zone}|*`) ?? 0
-  if (!rule.proto || !rule.dport || /[,:]/.test(rule.dport)) return null
-  return index.counts.get(`${zone}|${rule.proto.toLowerCase()}/${rule.dport}`) ?? 0
-}
+/**
+ * Flows blocked or would-block towards the zone in the last 24 h, null when the ring was not read. No ACCEPT rule of
+ * the zone group matched them, so no rule of it has hits of its own: they belong to the zone's default deny row.
+ */
+export const zoneDenyHits = (index: HitsIndex | null, zone: string): number | null => (index ? index.counts.get(`${zone}|*`) ?? 0 : null)
 
 /** The name a rule shows: its comment, else its place in the list. */
 export const ruleName = (rule: RuleFields): string => rule.comment.trim()

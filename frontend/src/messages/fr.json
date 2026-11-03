@@ -13710,7 +13710,7 @@
         "zoneUnknown": "membres de {zone}"
       },
       "hitsNone": "Proxmox n’expose aucun compteur par règle",
-      "hitsZone": "Flux journalisés par le moteur vers cette zone pour ce service, dernières 24 h",
+      "hitsZone": "Flux bloqués ou qui le seraient vers cette zone, dernières 24 h",
       "hitsPartial": "Au moins : les événements lus ne remontent pas à 24 h",
       "managed": "gérée par le moteur",
       "unpublishedCount": "{count, plural, one {# non publiée} other {# non publiées}}",
@@ -13747,11 +13747,16 @@
       "published": "{count, plural, one {# changement publié} other {# changements publiés}}",
       "publishedPart": "{applied} changements sur {total} publiés : publiez à nouveau pour le reste",
       "publishFailed": "Publication arrêtée après {applied} changements appliqués :",
-      "conflict": "les règles d’une section ont changé dans Proxmox depuis leur lecture. Actualisez, puis publiez à nouveau : les changements non publiés restent dans le brouillon",
+      "conflict": "les règles d’une section ont changé dans Proxmox depuis leur lecture. Annulez les changements de cette section, puis publiez à nouveau : les autres sections gardent les leurs",
       "mode": {
         "cluster": "{count, plural, one {cluster · # nœud} other {cluster · # nœuds}}",
         "standalone": "nœud unique"
-      }
+      },
+      "defaultDeny": "Refus par défaut de la zone",
+      "denyBlock": "Bloquer",
+      "denyWouldBlock": "Bloquerait",
+      "hitsOnDefault": "Proxmox ne compte aucune occurrence par règle : les flux bloqués ou qui le seraient sont sur la ligne de refus par défaut de la zone",
+      "discardSection": "Annuler cette section"
     }
   }
 }

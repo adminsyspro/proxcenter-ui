@@ -13709,7 +13709,7 @@
         "zoneUnknown": "{zone} 的成员"
       },
       "hitsNone": "Proxmox 不提供按规则的计数",
-      "hitsZone": "引擎在过去 24 小时内记录的流向该区域该服务的流量",
+      "hitsZone": "过去 24 小时内流向该区域的已阻止或将被阻止的流量",
       "hitsPartial": "至少：读取的事件未覆盖 24 小时",
       "managed": "由引擎管理",
       "unpublishedCount": "{count, plural, other {# 项未发布}}",
@@ -13746,11 +13746,16 @@
       "published": "{count, plural, other {已发布 # 项更改}}",
       "publishedPart": "已发布 {total} 项中的 {applied} 项：请再次发布其余更改",
       "publishFailed": "已应用 {applied} 项更改后发布停止：",
-      "conflict": "某部分的规则在读取后已在 Proxmox 中更改。请刷新后再次发布：未发布的更改保留在草稿中",
+      "conflict": "某部分的规则在读取后已在 Proxmox 中更改。请放弃该部分的更改后再次发布：其他部分的更改保留",
       "mode": {
         "cluster": "{count, plural, other {集群 · # 个节点}}",
         "standalone": "单节点"
-      }
+      },
+      "defaultDeny": "区域默认拒绝",
+      "denyBlock": "阻止",
+      "denyWouldBlock": "将被阻止",
+      "hitsOnDefault": "Proxmox 不按规则计数：区域被阻止或将被阻止的流量显示在其默认拒绝行",
+      "discardSection": "放弃此部分"
     }
   }
 }

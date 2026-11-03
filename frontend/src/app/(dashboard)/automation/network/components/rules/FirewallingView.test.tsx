@@ -1,7 +1,7 @@
 /**
  * The Firewalling tab (UA51) from a fixture: one table, the sections (the zone group of the engine, read-only, the
  * cluster, the hosts, the guests by VLAN), their badges, the inline edits that go to the draft (action, switches),
- * the bulk bar, the hits of the zone rules, the rules of a host or guest read when its section opens (one call),
+ * the bulk bar, the hits of a zone on its default deny row, the rules of a host or guest read when its section opens (one call),
  * the publish in one call, and every control disabled for a read-only user.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -98,14 +98,21 @@ describe('Firewalling: sections and badges', () => {
     expect(screen.queryByTestId('dfw-section-zone:sg-web')).toBeNull()
   })
 
-  it('reads the rows of a managed section as locked, with the hits of the engine for its rules only', async () => {
+  it('reads the rows of a managed section as locked, the zone hits on its default deny row, numbered across the table', async () => {
     renderView()
     fireEvent.click(within(screen.getByTestId('dfw-section-zone:pcz-db')).getByRole('button', { name: /Expand/ }))
     const appRule = ruleRow('[pc-microseg] app -> db')
     expect(within(appRule).getAllByRole('checkbox')[0]).toBeDisabled()
     expect(within(appRule).queryByRole('combobox')).toBeNull()
-    expect(within(appRule).getByTestId('dfw-hits')).toHaveTextContent('3')
-    expect(within(ruleRow('[pc-microseg] db -> db')).getByTestId('dfw-hits')).toHaveTextContent('3')
+    expect(within(appRule).getByTestId('dfw-hits')).toHaveTextContent('-')
+    expect(within(ruleRow('[pc-microseg] db -> db')).getByTestId('dfw-hits')).toHaveTextContent('-')
+    const deny = screen.getByTestId('dfw-default-deny')
+    expect(deny).toHaveTextContent('Zone default deny')
+    expect(deny).toHaveTextContent('Block')
+    expect(within(deny).getByTestId('dfw-hits')).toHaveTextContent('3')
+    expect(within(deny).queryByRole('checkbox')).toBeNull()
+    // Zone rules 1 and 2, then the cluster's from 3.
+    expect(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 3 enabled' })).toBeInTheDocument()
     expect(within(ruleRow('Admin SSH')).getByTestId('dfw-hits')).toHaveTextContent('-')
     fireEvent.mouseOver(within(ruleRow('Admin SSH')).getByTestId('dfw-hits'))
     expect(await screen.findByText('Proxmox exposes no per-rule counters')).toBeInTheDocument()
@@ -147,7 +154,7 @@ describe('Firewalling: edits go to the draft', () => {
 
   it('a switch toggled twice is no change', () => {
     renderView()
-    const enabled = () => within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 0 enabled' })
+    const enabled = () => within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' })
     fireEvent.click(enabled())
     expect(publishButton()).toHaveTextContent('Publish (1)')
     fireEvent.click(enabled())
@@ -159,7 +166,7 @@ describe('Firewalling: edits go to the draft', () => {
     renderView()
     const bar = screen.getByTestId('dfw-actions')
     expect(within(bar).getByRole('button', { name: 'Delete' })).toBeDisabled()
-    fireEvent.click(within(ruleRow('Old Zabbix')).getByRole('checkbox', { name: 'Select rule 1' }))
+    fireEvent.click(within(ruleRow('Old Zabbix')).getByRole('checkbox', { name: 'Select rule 2' }))
     expect(within(bar).getByText(/1 rule selected/)).toBeInTheDocument()
     for (const name of ['Enable', 'Disable', 'Clone', 'Move up', 'Move down', 'Move to section', 'Delete']) {
       expect(within(bar).getByRole('button', { name })).toBeEnabled()
@@ -233,7 +240,7 @@ describe('Firewalling: publish', () => {
       applied: 0, total: 1, scopes: {}, failed: { index: 0, kind: 'rule.edit', scope: 'cluster', code: 'DIGEST_CONFLICT', message: 'changed' },
     }), { status: 409 }))
     renderView()
-    fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 0 enabled' }))
+    fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' }))
     fireEvent.click(publishButton())
     expect(await screen.findByTestId('dfw-publish-error')).toHaveTextContent('Publish stopped after 0 changes applied: the rules of a section were changed in Proxmox')
     expect(publishButton()).toHaveTextContent('Publish (1)')
@@ -271,6 +278,85 @@ describe('Firewalling: a large publish', () => {
     expect(await screen.findByText('100 of 104 changes published: publish again for the rest')).toBeInTheDocument()
     expect(JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body)).ops).toHaveLength(100)
     await waitFor(() => expect(publishButton()).toHaveTextContent('Publish (4)'))
+    fetchSpy.mockRestore()
+  })
+})
+
+describe('Firewalling: the engine block of a guest and the way out of a conflict', () => {
+  const ZONED = guest(103, {
+    name: 'zoned', rulesLoaded: true, vlans: [],
+    rules: [
+      { pos: 0, type: 'group', action: 'pcz-db', enable: 1, comment: '[pc-microseg]', digest: 'G' },
+      { pos: 1, type: 'in', action: 'ACCEPT', enable: 1, comment: 'u1', digest: 'G' },
+      { pos: 2, type: 'in', action: 'ACCEPT', enable: 1, comment: 'u2', digest: 'G' },
+      { pos: 3, type: 'in', action: 'ACCEPT', enable: 1, log: 'info', comment: '[pc-microseg] observe', digest: 'G' },
+    ],
+  })
+  const openZoned = () => {
+    renderView(props({ guests: [ZONED] }))
+    fireEvent.click(within(screen.getByTestId('dfw-group-__untagged__')).getByRole('button', { name: /Expand/ }))
+    fireEvent.click(within(screen.getByTestId('dfw-section-guest:qemu/103')).getByRole('button', { name: /Expand/ }))
+  }
+
+  it('drops nothing onto a rule of the engine', () => {
+    openZoned()
+    const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' }
+    fireEvent.dragStart(ruleRow('u2'), { dataTransfer })
+    fireEvent.dragOver(ruleRow('[pc-microseg]'), { dataTransfer })
+    fireEvent.drop(ruleRow('[pc-microseg]'), { dataTransfer })
+    expect(publishButton()).toHaveTextContent('Publish (0)')
+    // Onto u1 it does move.
+    fireEvent.dragStart(ruleRow('u2'), { dataTransfer })
+    fireEvent.dragOver(ruleRow('u1'), { dataTransfer })
+    fireEvent.drop(ruleRow('u1'), { dataTransfer })
+    expect(publishButton()).toHaveTextContent('Publish (1)')
+  })
+
+  it('shows the guest options the engine owns as locked', async () => {
+    openZoned()
+    fireEvent.click(within(screen.getByTestId('dfw-section-guest:qemu/103')).getByRole('button', { name: /Actions of/ }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Firewall options' }))
+    const selects = within(await screen.findByRole('dialog')).getAllByRole('combobox')
+    // Firewall, inbound policy, outbound policy, inbound log level, outbound log level.
+    expect(selects.map(c => c.getAttribute('aria-disabled') === 'true')).toEqual([true, true, false, true, false])
+  })
+
+  it('offers to discard the section a publish stopped on, from the alert', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      applied: 0, total: 1, scopes: { cluster: { digest: 'D1' } }, failed: { index: 0, kind: 'rule.edit', scope: 'cluster', code: 'DIGEST_CONFLICT', message: 'changed' },
+    }), { status: 409 }))
+    renderView()
+    fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' }))
+    fireEvent.click(publishButton())
+    const alert = await screen.findByTestId('dfw-publish-error')
+    expect(alert).toHaveTextContent("Discard this section's changes, then publish again")
+    fireEvent.click(within(alert).getByRole('button', { name: 'Discard this section' }))
+    expect(publishButton()).toHaveTextContent('Publish (0)')
+    expect(screen.queryByTestId('dfw-publish-error')).toBeNull()
+    fetchSpy.mockRestore()
+  })
+
+  it('offers the same on the "changed in Proxmox" badge of a section', () => {
+    const p = props()
+    const view = renderView(p)
+    fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' }))
+    view.rerender(<MicrosegWriteContext.Provider value><FirewallingView {...p} clusterRules={CLUSTER_RULES.map(r => ({ ...r, digest: 'D2' }))} /></MicrosegWriteContext.Provider>)
+    const section = screen.getByTestId('dfw-section-cluster')
+    expect(within(section).getByText('changed in Proxmox')).toBeInTheDocument()
+    fireEvent.click(within(section).getByRole('button', { name: 'Discard this section' }))
+    expect(publishButton()).toHaveTextContent('Publish (0)')
+  })
+
+  it('freezes the inline edits while a publish runs', async () => {
+    let answer: (r: Response) => void = () => {}
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise<Response>(resolve => { answer = resolve }))
+    renderView()
+    fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' }))
+    fireEvent.click(publishButton())
+    await waitFor(() => expect(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' })).toBeDisabled())
+    expect(within(ruleRow('Old Zabbix')).queryByRole('combobox')).toBeNull()
+    answer(new Response(JSON.stringify({ applied: 1, total: 1, scopes: {} }), { status: 200 }))
+    await waitFor(() => expect(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' })).toBeEnabled())
     fetchSpy.mockRestore()
   })
 })

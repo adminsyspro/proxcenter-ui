@@ -13709,7 +13709,7 @@
         "zoneUnknown": "miembros de {zone}"
       },
       "hitsNone": "Proxmox no expone contadores por regla",
-      "hitsZone": "Flujos registrados por el motor hacia esta zona para este servicio, últimas 24 h",
+      "hitsZone": "Flujos bloqueados o que se bloquearían hacia esta zona, últimas 24 h",
       "hitsPartial": "Como mínimo: los eventos leídos no llegan a 24 h atrás",
       "managed": "gestionada por el motor",
       "unpublishedCount": "{count, plural, one {# sin publicar} other {# sin publicar}}",
@@ -13746,11 +13746,16 @@
       "published": "{count, plural, one {# cambio publicado} other {# cambios publicados}}",
       "publishedPart": "{applied} de {total} cambios publicados: publique de nuevo para el resto",
       "publishFailed": "Publicación detenida tras aplicar {applied} cambios:",
-      "conflict": "las reglas de una sección cambiaron en Proxmox desde que se leyeron. Actualice y publique de nuevo: los cambios no publicados quedan en el borrador",
+      "conflict": "las reglas de una sección cambiaron en Proxmox desde que se leyeron. Descarte los cambios de esa sección y publique de nuevo: las demás secciones conservan los suyos",
       "mode": {
         "cluster": "{count, plural, one {clúster · # nodo} other {clúster · # nodos}}",
         "standalone": "nodo único"
-      }
+      },
+      "defaultDeny": "Denegación predeterminada de la zona",
+      "denyBlock": "Bloquear",
+      "denyWouldBlock": "Bloquearía",
+      "hitsOnDefault": "Proxmox no cuenta coincidencias por regla: los flujos bloqueados o que se bloquearían están en la denegación predeterminada de la zona",
+      "discardSection": "Descartar esta sección"
     }
   }
 }

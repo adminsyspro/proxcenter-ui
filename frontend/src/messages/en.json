@@ -13709,7 +13709,7 @@
         "zoneUnknown": "members of {zone}"
       },
       "hitsNone": "Proxmox exposes no per-rule counters",
-      "hitsZone": "Flows the engine logged towards this zone for this service, last 24 h",
+      "hitsZone": "Flows blocked or would-block towards this zone, last 24 h",
       "hitsPartial": "At least: the events read do not reach 24 h back",
       "managed": "managed by the engine",
       "unpublishedCount": "{count, plural, one {# unpublished} other {# unpublished}}",
@@ -13746,11 +13746,16 @@
       "published": "{count, plural, one {# change published} other {# changes published}}",
       "publishedPart": "{applied} of {total} changes published: publish again for the rest",
       "publishFailed": "Publish stopped after {applied} changes applied:",
-      "conflict": "the rules of a section were changed in Proxmox since they were read. Refresh, then publish again: the changes not published stay in the draft",
+      "conflict": "the rules of a section were changed in Proxmox since they were read. Discard this section's changes, then publish again: the other sections keep theirs",
       "mode": {
         "cluster": "{count, plural, one {cluster · # node} other {cluster · # nodes}}",
         "standalone": "single node"
-      }
+      },
+      "defaultDeny": "Zone default deny",
+      "denyBlock": "Block",
+      "denyWouldBlock": "Would block",
+      "hitsOnDefault": "Proxmox counts no hit per rule: the zone's blocked or would-block flows are on its default deny row",
+      "discardSection": "Discard this section"
     }
   }
 }

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Select, Stack, Typography } from '@mui/material'
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Select, Stack, Tooltip, Typography } from '@mui/material'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
 import { LOG_LEVELS } from '@/components/firewall/logLevels'
@@ -104,12 +104,14 @@ const FIELDS: Record<DraftScope['kind'], OptionField[]> = {
 
 const POLICIES = ['ACCEPT', 'DROP', 'REJECT']
 
-export function ScopeOptionsDialog({ open, name, scope, current, onClose, onSave }: {
+export function ScopeOptionsDialog({ open, name, scope, current, locked = [], onClose, onSave }: {
   open: boolean
   name: string
   scope: DraftScope
   /** The options as the draft shows them (read, then changed). */
   current: ScopeOptions
+  /** Options the engine owns on this guest (its zone rules are there): shown, never changed here. */
+  locked?: readonly string[]
   onClose: () => void
   onSave: (options: ScopeOptions) => void
 }) {
@@ -132,16 +134,22 @@ export function ScopeOptionsDialog({ open, name, scope, current, onClose, onSave
       <DialogTitle id='dfw-options-title' sx={ONE_LINE_SX}>{t('optionsDialog.title', { name })}</DialogTitle>
       <DialogContent>
         <Stack spacing={1.5} sx={{ pt: 1 }}>
-          {FIELDS[scope.kind].map(field => (
-            <Field key={field} label={t(`optionsDialog.${field}`)} id={`dfw-opt-${field}`}>
-              <WriteTip>
-                <Select size='small' fullWidth value={String(form[field] ?? '')} onChange={e => set(field, String(e.target.value))} sx={{ ...SMALL_SELECT_SX, width: '100%' }}
-                  disabled={!canWrite} inputProps={{ 'aria-labelledby': `dfw-opt-${field}` }}>
-                  {choices(field).map(v => <MenuItem key={v} value={v}>{label(field, v)}</MenuItem>)}
-                </Select>
-              </WriteTip>
-            </Field>
-          ))}
+          {FIELDS[scope.kind].map(field => {
+            const engine = locked.includes(field)
+            const select = (
+              <Select size='small' fullWidth value={String(form[field] ?? '')} onChange={e => set(field, String(e.target.value))} sx={{ ...SMALL_SELECT_SX, width: '100%' }}
+                disabled={!canWrite || engine} inputProps={{ 'aria-labelledby': `dfw-opt-${field}` }}>
+                {choices(field).map(v => <MenuItem key={v} value={v}>{label(field, v)}</MenuItem>)}
+              </Select>
+            )
+            return (
+              <Field key={field} label={t(`optionsDialog.${field}`)} id={`dfw-opt-${field}`}>
+                {engine
+                  ? <Tooltip title={t('managedRule')}><span style={{ display: 'flex' }}>{select}</span></Tooltip>
+                  : <WriteTip>{select}</WriteTip>}
+              </Field>
+            )
+          })}
           <OneLine text={t('optionsDialog.hint')} />
         </Stack>
       </DialogContent>

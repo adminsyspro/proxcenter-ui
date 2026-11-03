@@ -13709,7 +13709,7 @@
         "zoneUnknown": "{zone} 구성원"
       },
       "hitsNone": "Proxmox는 규칙별 카운터를 제공하지 않습니다",
-      "hitsZone": "지난 24시간 동안 엔진이 이 서비스로 이 영역에 기록한 흐름",
+      "hitsZone": "지난 24시간 동안 이 영역으로 차단되었거나 차단될 흐름",
       "hitsPartial": "최소값: 읽은 이벤트가 24시간 전까지 닿지 않습니다",
       "managed": "엔진이 관리",
       "unpublishedCount": "{count, plural, other {미게시 #개}}",
@@ -13746,11 +13746,16 @@
       "published": "{count, plural, other {변경 #개 게시됨}}",
       "publishedPart": "변경 {total}개 중 {applied}개 게시됨: 나머지는 다시 게시하세요",
       "publishFailed": "변경 {applied}개 적용 후 게시가 중단됨:",
-      "conflict": "섹션의 규칙이 읽은 이후 Proxmox에서 변경되었습니다. 새로 고친 후 다시 게시하세요: 게시되지 않은 변경은 초안에 남습니다",
+      "conflict": "섹션의 규칙이 읽은 이후 Proxmox에서 변경되었습니다. 이 섹션의 변경을 취소한 후 다시 게시하세요: 다른 섹션의 변경은 유지됩니다",
       "mode": {
         "cluster": "{count, plural, other {클러스터 · 노드 #개}}",
         "standalone": "단일 노드"
-      }
+      },
+      "defaultDeny": "영역 기본 거부",
+      "denyBlock": "차단",
+      "denyWouldBlock": "차단 예정",
+      "hitsOnDefault": "Proxmox는 규칙별 적중을 세지 않습니다: 영역의 차단(예정) 흐름은 기본 거부 행에 있습니다",
+      "discardSection": "이 섹션 취소"
     }
   }
 }

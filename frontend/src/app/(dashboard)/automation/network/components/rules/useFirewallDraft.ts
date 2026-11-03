@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { EMPTY_DRAFT, deriveOps, parseStoredDraft, rebaseDraft, serializeDraft, type FirewallDraft } from '@/lib/firewall/draft'
-import { PUBLISH_CONFIRM_ABOVE, PUBLISH_MAX_OPS, type PublishResult } from '@/lib/firewall/publishOps'
+import { PUBLISH_CONFIRM_ABOVE, PUBLISH_MAX_WRITES, opWrites, type PublishOp, type PublishResult } from '@/lib/firewall/publishOps'
 
 const storageKey = (connectionId: string) => `firewall.draft.${connectionId}`
 const publishedKey = (connectionId: string) => `firewall.published.${connectionId}`
@@ -23,6 +23,14 @@ function writeStored(key: string, value: string | null): void {
   } catch {
     // Blocked storage: the draft lives in memory only.
   }
+}
+
+/** The first operations whose Proxmox writes fit in one publish (a creation with its move, a guest switch: 2 each). */
+export function firstBatch(ops: PublishOp[], maxWrites = PUBLISH_MAX_WRITES): PublishOp[] {
+  let writes = 0
+  let n = 0
+  while (n < ops.length && writes + opWrites(ops[n]) <= maxWrites) writes += opWrites(ops[n++])
+  return ops.slice(0, n)
 }
 
 /** Why the last publish stopped: the server's message and the operation it stopped at. */
@@ -68,12 +76,12 @@ export function useFirewallDraft(connectionId: string) {
   }, [update])
 
   /**
-   * Sends the draft, PUBLISH_MAX_OPS operations at most per call (the first ones: the rest stays in the draft for the
+   * Sends the draft, PUBLISH_MAX_WRITES Proxmox writes at most per call (the first ones: the rest stays in the draft for the
    * next publish). Above PUBLISH_CONFIRM_ABOVE operations, `confirmed` must say the user agreed.
    */
   const publish = useCallback(async (confirmed = false): Promise<PublishOutcome> => {
     const sent = derived
-    const batch = sent.ops.slice(0, PUBLISH_MAX_OPS)
+    const batch = firstBatch(sent.ops)
     const count = batch.length
     if (count === 0) return { status: 'refused', message: '' }
     if (count > PUBLISH_CONFIRM_ABOVE && !confirmed) return { status: 'confirm', count }

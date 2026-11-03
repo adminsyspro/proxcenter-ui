@@ -14,7 +14,7 @@ import {
   scopeDraftOf, setScopeOptions, shiftRules, toFields, updateRules,
   type DraftEntry, type EntryState, type FirewallDraft,
 } from '@/lib/firewall/draft'
-import { isEngineComment, scopeKey, type DraftScope, type PublishOp, type PublishResult, type RuleFields, type ScopeOptions } from '@/lib/firewall/publishOps'
+import { ENGINE_GUEST_OPTIONS, isEngineComment, scopeKey, type DraftScope, type PublishOp, type PublishResult, type RuleFields, type ScopeOptions } from '@/lib/firewall/publishOps'
 import { useMicrosegEvents } from '@/lib/microseg/useMicrosegEvents'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
@@ -26,11 +26,11 @@ import { useNow } from '../microseg/useNow'
 import RuleFormDialog, { type RuleFormData } from './RuleFormDialog'
 import GroupPager, { GROUP_PAGE_SIZE, pageCount, useGroupPages } from './shared/GroupPager'
 import { ZONE_GROUP_PREFIX } from './shared/groupMembership'
-import { DfwHead, RuleRow, SectionRow, WideRow, Badge } from './DfwTableParts'
+import { DfwHead, DefaultDenyRow, RuleRow, SectionRow, WideRow, Badge } from './DfwTableParts'
 import { ActionBar, StatusBar, ViewToolbar } from './DfwToolbar'
 import { AddSectionDialog, MoveToSectionDialog, ScopeOptionsDialog, type SectionTarget } from './DfwDialogs'
 import {
-  UNTAGGED, coveredCount, guestMatches, hitsIndex, ruleHits, ruleMatches, showsCluster, showsGuests, showsHosts, vlanGroups, zoneSections,
+  UNTAGGED, coveredCount, guestMatches, hitsIndex, ruleMatches, zoneDenyHits, showsCluster, showsGuests, showsHosts, vlanGroups, zoneSections,
   type ScopeFilter, type ZoneSection,
 } from './dfwModel'
 import { useFirewallDraft } from './useFirewallDraft'
@@ -88,7 +88,7 @@ type Section = {
 type Editor = { sectionKey: string; entryId: string | null; form: RuleFormData }
 type Drag = { sectionKey: string; id: string; overId: string | null } | null
 
-const NEW_RULE: RuleFields = { type: 'in', action: 'ACCEPT', enable: 1, source: '', dest: '', proto: '', dport: '', sport: '', macro: '', iface: '', log: 'nolog', comment: '' }
+const NEW_RULE: RuleFields = { type: 'in', action: 'ACCEPT', enable: 1, source: '', dest: '', proto: '', dport: '', sport: '', macro: '', iface: '', log: 'nolog', comment: '', 'icmp-type': '' }
 
 const selKey = (sectionKey: string, id: string) => `${sectionKey}|${id}`
 const splitSel = (k: string): [string, string] => {
@@ -194,28 +194,39 @@ function useZones(connectionId: string, groups: firewallAPI.SecurityGroup[], gue
   return { deployed, hits, zones }
 }
 
-function Notices({ error, onCloseError, notice, onCloseNotice }: {
+function Notices({ error, onCloseError, notice, onCloseNotice, onDiscardScope }: {
   error: { message: string; code?: string; applied?: number } | null
   onCloseError: () => void
   notice: string | null
   onCloseNotice: () => void
+  /** The publish stopped on a scope still in the draft: its changes can be dropped from the alert. */
+  onDiscardScope?: () => void
 }) {
   return (
     <>
-      {error && <PublishErrorAlert error={error} onClose={onCloseError} />}
+      {error && <PublishErrorAlert error={error} onClose={onCloseError} onDiscardScope={onDiscardScope} />}
       {notice && <Alert severity='info' onClose={onCloseNotice}>{notice}</Alert>}
     </>
   )
 }
 
 /** Why the last publish stopped, on one line. */
-function PublishErrorAlert({ error, onClose }: { error: { message: string; code?: string; applied?: number }; onClose: () => void }) {
+function PublishErrorAlert({ error, onClose, onDiscardScope }: { error: { message: string; code?: string; applied?: number }; onClose: () => void; onDiscardScope?: () => void }) {
   const t = useTranslations('microsegPilot.dfw')
   const head = error.applied === undefined ? '' : `${t('publishFailed', { applied: error.applied })} `
   return (
-    <Alert severity='error' onClose={onClose} data-testid='dfw-publish-error'>
+    <Alert severity='error' onClose={onClose} data-testid='dfw-publish-error' action={onDiscardScope ? <DiscardLink onClick={onDiscardScope} /> : undefined}>
       {head}{error.code === 'DIGEST_CONFLICT' ? t('conflict') : error.message}
     </Alert>
+  )
+}
+
+function DiscardLink({ onClick }: { onClick: () => void }) {
+  const t = useTranslations('microsegPilot.dfw')
+  return (
+    <Link component='button' type='button' underline='hover' onClick={onClick} sx={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
+      {t('discardSection')}
+    </Link>
   )
 }
 
@@ -234,6 +245,8 @@ export default function FirewallingView(p: FirewallingViewProps) {
   const canWrite = mayWrite && !!p.connectionId
 
   const fw = useFirewallDraft(p.connectionId)
+  // Nothing changes in the draft while it is being published: the answer rebases it.
+  const canEdit = canWrite && !fw.busy
   const lazy = useSectionRules({ connectionId: p.connectionId, hostRulesByNode: p.hostRulesByNode, setHostRulesByNode: p.setHostRulesByNode, loadGuestRules: p.loadGuestRules })
 
   const [scope, setScope] = useState<ScopeFilter>(p.initialScope)
@@ -336,7 +349,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
 
   // ── Editor ──
   const openEditor = (s: Section, entry: DraftEntry | null) => {
-    if (!canWrite || !s.scope || s.managed) return
+    if (!canEdit || !s.scope || s.managed) return
     setEditor({ sectionKey: s.key, entryId: entry?.id ?? null, form: { ...(entry?.rule ?? NEW_RULE) } })
   }
   const saveEditor = () => {
@@ -345,14 +358,15 @@ export default function FirewallingView(p: FirewallingViewProps) {
     if (!s?.scope) return
     const fields = toFields(editor.form)
     const sc = s.scope
-    fw.update(d => (editor.entryId ? updateRules(d, sc, s.base, [editor.entryId], fields) : addRule(d, sc, s.base, fields, 0)))
+    fw.update(d => (editor.entryId ? updateRules(d, sc, s.base, [editor.entryId], fields) : addRule(d, sc, s.base, fields)))
     setOpen(prev => new Set(prev).add(s.key))
     setEditor(null)
   }
 
   // ── Drag and drop, inside a section ──
   const dragFor = (s: Section, entry: DraftEntry, index: number) => {
-    const enabled = canWrite && !s.managed && !isEngineComment(entry.rule.comment) && !q
+    const engine = isEngineComment(entry.rule.comment)
+    const enabled = canEdit && !s.managed && !engine && !q
     return {
       enabled,
       dragging: drag?.sectionKey === s.key && drag.id === entry.id,
@@ -364,13 +378,14 @@ export default function FirewallingView(p: FirewallingViewProps) {
         setDrag({ sectionKey: s.key, id: entry.id, overId: null })
       },
       onDragOver: (e: DragEvent) => {
-        if (drag?.sectionKey !== s.key) return
+        // A rule of the engine is no drop target: nothing goes before or after it from here.
+        if (drag?.sectionKey !== s.key || engine) return
         e.preventDefault()
         if (drag.overId !== entry.id) setDrag({ ...drag, overId: entry.id })
       },
       onDrop: (e: DragEvent) => {
         e.preventDefault()
-        if (drag?.sectionKey === s.key && drag.id !== entry.id && s.scope) {
+        if (drag?.sectionKey === s.key && drag.id !== entry.id && s.scope && !engine) {
           const sc = s.scope
           fw.update(d => moveRule(d, sc, s.base, drag.id, index))
         }
@@ -451,9 +466,22 @@ export default function FirewallingView(p: FirewallingViewProps) {
   }
 
   // ── Rendering ──
-  const hitsTitle = (s: Section) => {
-    if (s.kind !== 'zone') return t('hitsNone')
-    return hits?.partial ? t('hitsPartial') : t('hitsZone')
+  const hitsTitle = (s: Section) => (s.kind === 'zone' ? t('hitsOnDefault') : t('hitsNone'))
+  const denyTitle = () => (hits?.partial ? t('hitsPartial') : t('hitsZone'))
+  // The # column counts the rule rows shown, from 1, across the sections (as the table reads).
+  const numbering = { next: 0 }
+
+  /** Drops the changes of one scope: the way out of a conflict (the scope starts again from the list Proxmox holds). */
+  const discardSection = (key: string) => {
+    const scopeOf = fw.draft.scopes[key]?.scope
+    if (scopeOf) fw.update(d => discardOf(d, scopeOf))
+    fw.clearError()
+  }
+
+  /** The alert's way out: drop the scope the publish stopped on, while the draft still holds it. */
+  const errorDiscard = () => {
+    const key = fw.error?.scope
+    return key && fw.draft.scopes[key] ? () => discardSection(key) : undefined
   }
 
   const patchRule = (s: Section, id: string, fields: Partial<RuleFields>) => {
@@ -472,22 +500,23 @@ export default function FirewallingView(p: FirewallingViewProps) {
       )
     }
     const rows = visibleEntries(s)
-    if (rows.length === 0) return <WideRow><Typography variant='body2' color='text.secondary'>{q ? t('noMatch') : tg('networkPage.noRules')}</Typography></WideRow>
-    return rows.map(({ e, i }) => {
+    const deny = s.zone ? <DefaultDenyRow key={`${s.key}|deny`} enforce={s.zone.state === 'enforce'} appliedTo={s.appliedTo} hits={zoneDenyHits(hits, s.zone.zone)} hitsTitle={denyTitle()} /> : null
+    if (rows.length === 0) return deny ?? <WideRow><Typography variant='body2' color='text.secondary'>{q ? t('noMatch') : tg('networkPage.noRules')}</Typography></WideRow>
+    const ruleRows = rows.map(({ e, i }) => {
       const managed = s.managed || isEngineComment(e.rule.comment)
-      const editable = canWrite && !managed
+      const editable = canEdit && !managed
       const patch = (fields: Partial<RuleFields>) => patchRule(s, e.id, fields)
       return (
         <RuleRow
           key={`${s.key}|${e.id}`}
-          index={i}
+          index={++numbering.next}
           rule={e.rule}
           state={s.states.get(e.id) ?? null}
           managed={managed}
           editable={editable}
           selected={selected.has(selKey(s.key, e.id))}
           appliedTo={s.appliedTo}
-          hits={s.kind === 'zone' && s.zone ? ruleHits(hits, s.zone.zone, e.rule) : null}
+          hits={null}
           hitsTitle={hitsTitle(s)}
           drag={dragFor(s, e, i)}
           onSelect={on => toggleSel(s.key, [e.id], on)}
@@ -499,6 +528,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
         />
       )
     })
+    return deny ? [...ruleRows, deny] : ruleRows
   }
 
   const sectionBadges = (s: Section): ReactNode => (
@@ -507,6 +537,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
       {s.managed && <Badge label={t('managed')} />}
       {s.pending > 0 && <Badge label={t('unpublishedCount', { count: s.pending })} tone='warning' />}
       {s.stale && <Badge label={t('changedInProxmox')} tone='error' title={t('changedInProxmoxHint')} />}
+      {s.stale && s.scope && <DiscardLink onClick={() => discardSection(scopeKey(s.scope!))} />}
       {firewallOffBadge(s)}
     </>
   )
@@ -526,7 +557,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
       <>
         <Badge label={willEnable ? t('firewallOnAtPublish') : offLabel} tone={willEnable ? 'warning' : 'default'} />
         <WriteTip>
-          <Link component='button' type='button' underline='hover' disabled={!canWrite} onClick={willEnable ? undo : turnOn} sx={{ fontSize: 12, fontWeight: 600 }}>
+          <Link component='button' type='button' underline='hover' disabled={!canEdit} onClick={willEnable ? undo : turnOn} sx={{ fontSize: 12, fontWeight: 600 }}>
             {willEnable ? t('undo') : t('enableFirewall')}
           </Link>
         </WriteTip>
@@ -646,14 +677,15 @@ export default function FirewallingView(p: FirewallingViewProps) {
         ]}
       />
 
-      <Notices error={fw.error} onCloseError={fw.clearError} notice={notice} onCloseNotice={() => setNotice(null)} />
+      <Notices error={fw.error} onCloseError={fw.clearError} notice={notice} onCloseNotice={() => setNotice(null)}
+        onDiscardScope={errorDiscard()} />
 
       <StatusBar total={figures.total} totalPartial={figures.partial} unpublished={fw.count} disabled={figures.disabled} sections={figures.sections}
         managed={inScope.filter(s => s.kind === 'zone').length} covered={covered} scope={scope} onScope={setScope} />
 
       <ActionBar
         selected={selectedCount}
-        canWrite={canWrite}
+        canWrite={canEdit}
         canAddRule={canAddRule}
         oneSection={oneSection}
         filter={filter}
@@ -731,6 +763,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
       )}
       {optionsSection && (
         <ScopeOptionsDialog open name={optionsSection.title} scope={optionsSection.scope!} current={currentOptions(optionsSection)}
+          locked={optionsSection.kind === 'guest' && optionsSection.entries.some(e => isEngineComment(e.rule.comment)) ? [...ENGINE_GUEST_OPTIONS] : []}
           onClose={() => setOptionsFor(null)} onSave={form => saveOptions(optionsSection, form)} />
       )}
       <MicrosegConfirmDialog
@@ -772,7 +805,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
   function sectionMenuItems(s: Section): { label: string; onClick: () => void; disabled?: boolean }[] {
     const loaded = hasRules(s)
     return [
-      { label: tg('networkPage.addRule'), onClick: () => openEditor(s, null), disabled: !canWrite || !loaded },
+      { label: tg('networkPage.addRule'), onClick: () => openEditor(s, null), disabled: !canEdit || !loaded },
       { label: t('menu.options'), onClick: () => setOptionsFor(s.key), disabled: s.kind === 'host' && !((s.node ?? '') in lazy.nodeOptions) },
       ...(s.guest ? [{ label: tg('networkPage.viewLogs'), onClick: () => setLogVm(s.guest!) }] : []),
       { label: t('menu.discard'), onClick: () => fw.update(d => discardOf(d, s.scope!)), disabled: s.pending === 0 },

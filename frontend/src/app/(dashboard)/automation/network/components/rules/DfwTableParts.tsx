@@ -300,3 +300,37 @@ export function Badge({ label, tone = 'default', title }: { label: string; tone?
   const chip = <Chip size='small' label={label} color={tone} variant={tone === 'default' ? 'filled' : 'outlined'} sx={{ height: 20, fontSize: 11, fontWeight: 600, flexShrink: 0 }} />
   return title ? <Tooltip title={title}>{chip}</Tooltip> : chip
 }
+
+/**
+ * The last row of a zone section: what the engine does with what no rule of the zone allowed (enforce: blocked,
+ * observe: logged as would-block). Not a Proxmox rule: read-only, never selected; it carries the zone's hits.
+ */
+export function DefaultDenyRow({ enforce, appliedTo, hits, hitsTitle }: { enforce: boolean; appliedTo: string; hits: number | null; hitsTitle: string }) {
+  const t = useTranslations('microsegPilot.dfw')
+  const colour = enforce ? ACTION_COLOURS.DROP : ACTION_COLOURS.REJECT
+  return (
+    <TableRow data-testid='dfw-default-deny'>
+      <TableCell sx={{ ...CELL, width: 28 }} />
+      <TableCell padding='checkbox' sx={{ width: 36 }} />
+      <TableCell sx={{ ...CELL, width: 34, color: 'text.disabled' }}>-</TableCell>
+      <TableCell sx={{ ...CELL, width: 56 }} />
+      <TableCell sx={CELL}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Tooltip title={t('managedRule')}><i className='ri-lock-line' aria-label={t('managedRule')} style={{ fontSize: 14 }} /></Tooltip>
+          <Typography component='span' noWrap sx={{ fontSize: 13, color: 'text.secondary' }}>{t('defaultDeny')}</Typography>
+        </Box>
+      </TableCell>
+      <TableCell sx={{ ...CELL, color: 'text.disabled' }}>{t('any')}</TableCell>
+      <TableCell sx={{ ...CELL, color: 'text.secondary' }}>{appliedTo}</TableCell>
+      <TableCell sx={{ ...CELL, color: 'text.disabled' }}>{t('any')}</TableCell>
+      <TableCell sx={{ ...CELL, color: 'text.secondary' }}>{appliedTo}</TableCell>
+      <TableCell sx={CELL}>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}><Dot colour={colour} />{enforce ? t('denyBlock') : t('denyWouldBlock')}</Box>
+      </TableCell>
+      <TableCell sx={{ ...CELL, color: 'text.disabled' }}>-</TableCell>
+      <TableCell sx={{ ...CELL, width: 90, fontWeight: hits ? 600 : 400 }}>
+        <Tooltip title={hitsTitle}><span data-testid='dfw-hits'>{hits === null ? '-' : hits.toLocaleString()}</span></Tooltip>
+      </TableCell>
+    </TableRow>
+  )
+}

@@ -13377,7 +13377,7 @@
         "zoneUnknown": "Mitglieder von {zone}"
       },
       "hitsNone": "Proxmox stellt keine Zähler pro Regel bereit",
-      "hitsZone": "Von der Engine protokollierte Flüsse zu dieser Zone für diesen Dienst, letzte 24 Std.",
+      "hitsZone": "Blockierte oder zu blockierende Flüsse zu dieser Zone, letzte 24 Std.",
       "hitsPartial": "Mindestens: Die gelesenen Ereignisse reichen nicht 24 Std. zurück",
       "managed": "von der Engine verwaltet",
       "unpublishedCount": "{count, plural, one {# unveröffentlicht} other {# unveröffentlicht}}",
@@ -13414,11 +13414,16 @@
       "published": "{count, plural, one {# Änderung veröffentlicht} other {# Änderungen veröffentlicht}}",
       "publishedPart": "{applied} von {total} Änderungen veröffentlicht: Für den Rest erneut veröffentlichen",
       "publishFailed": "Veröffentlichung nach {applied} angewendeten Änderungen gestoppt:",
-      "conflict": "die Regeln eines Abschnitts wurden seit dem Lesen in Proxmox geändert. Aktualisieren und erneut veröffentlichen: Nicht veröffentlichte Änderungen bleiben im Entwurf",
+      "conflict": "die Regeln eines Abschnitts wurden seit dem Lesen in Proxmox geändert. Verwerfen Sie die Änderungen dieses Abschnitts und veröffentlichen Sie erneut: Die anderen Abschnitte behalten ihre",
       "mode": {
         "cluster": "{count, plural, one {Cluster · # Knoten} other {Cluster · # Knoten}}",
         "standalone": "Einzelknoten"
-      }
+      },
+      "defaultDeny": "Standardverweigerung der Zone",
+      "denyBlock": "Blockieren",
+      "denyWouldBlock": "Würde blockieren",
+      "hitsOnDefault": "Proxmox zählt keine Treffer pro Regel: Die blockierten oder zu blockierenden Flüsse der Zone stehen in ihrer Standardverweigerung",
+      "discardSection": "Diesen Abschnitt verwerfen"
     }
   }
 }

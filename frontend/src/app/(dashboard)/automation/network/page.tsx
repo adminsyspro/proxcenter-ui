@@ -6,15 +6,13 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Card, FormControl, IconButton, InputLabel, MenuItem,
-  Select, Tab, Tabs, Typography, useTheme, alpha
+  Select, Tab, Tabs, useTheme, alpha
 } from '@mui/material'
 
 import { usePageTitle } from "@/contexts/PageTitleContext"
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import ProviderTenantGuard from '@/components/guards/ProviderTenantGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
-import { useToast } from '@/contexts/ToastContext'
-import * as firewallAPI from '@/lib/api/firewall'
 import { usePVEConnections } from '@/hooks/useConnections'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { useFirewallData, Connection } from '@/hooks/useFirewallData'
@@ -40,7 +38,6 @@ export default function NetworkAutomationPage() {
   const { setPageInfo } = usePageTitle()
   const t = useTranslations()
   const { isEnterprise } = useLicense()
-  const { showToast } = useToast()
 
   // ── State ──
   // A link (?tab, ?sub, ?connection, ?vm) decides the tab, the sub-tab and the connection the page opens on; read once.
@@ -79,7 +76,7 @@ export default function NetworkAutomationPage() {
   // ── Data hooks ──
   const {
     aliases, ipsets, securityGroups, clusterOptions, clusterRules,
-    nodeOptions, nodeRules, firewallMode, connectionInfo, nodesList,
+    nodeOptions, firewallMode, nodesList,
     loading, loadError, reload: loadFirewallData, setClusterRules, setClusterOptions,
   } = useFirewallData(isEnterprise ? selectedConnection || null : null, isEnterprise)
 
@@ -147,7 +144,7 @@ export default function NetworkAutomationPage() {
     <EnterpriseGuard requiredFeature={Features.MICROSEGMENTATION} featureName="Microsegmentation / Firewall">
       <Box sx={{ p: 3, minHeight: 'calc(100vh - 130px)', display: 'flex', flexDirection: 'column' }}>
 
-        {!selectedConnection && (
+        {!selectedConnection && !waitingForVm && (
           <Alert severity="info" sx={{ mb: 3 }}>
             {t('networkPage.noPveConnection')}
           </Alert>

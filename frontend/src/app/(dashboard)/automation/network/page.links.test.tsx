@@ -161,6 +161,8 @@ describe('?vm=', () => {
     window.localStorage.setItem('microseg.subTab', 'policy')
     window.localStorage.setItem('network.connection', 'a5000')
     open('vm=98010')
+    // While the guest is looked up no connection is selected, and the page does not say there is none.
+    expect(screen.queryByText(/No PVE connection configured/)).toBeNull()
 
     await waitFor(() => expect(screen.getByTestId('microseg').dataset.connection).toBe('dr'))
     expect(screen.getByTestId('microseg').dataset.subtab).toBe('overview')

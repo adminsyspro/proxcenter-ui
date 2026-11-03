@@ -180,6 +180,22 @@ describe('the guest panel', () => {
     expect(within(allowedList[0]).getByText('HTTPS')).toBeTruthy()
   })
 
+  it('keeps room for the guest and zone names in its narrow rows, cut only beyond, with the full name as tooltip (D8)', async () => {
+    demo()
+    await node('guest:zw:qemu/100')
+    await target('db-1')
+    const aside = await panel('Guest db-1')
+    const row = within(within(aside).getByRole('region', { name: 'Observed flows' })).getAllByRole('listitem')[0]
+    // The peer name holds 96 px; the kind chip gives way first.
+    expect(within(row).getByText('web-2')).toHaveStyle({ minWidth: '96px' })
+    expect(within(row).getByText('Blocked').closest('.MuiChip-root')).toHaveStyle({ minWidth: '0' })
+    fireEvent.mouseOver(within(row).getByText('web-2'))
+    expect(await screen.findByRole('tooltip', { name: 'Incoming, from web-2' })).toBeTruthy()
+    // Each side of an allowed flow holds 48 px before its ellipsis.
+    const allowed = within(within(aside).getByRole('region', { name: 'Allowed flows of its zone' })).getAllByRole('listitem')[0]
+    expect(within(allowed).getAllByText(/^(web|db)$/)[0].parentElement!).toHaveStyle({ minWidth: '48px' })
+  })
+
   it('resolves an observed flow from its row, with the sample note in the accept tooltip', async () => {
     mock.routes['POST /suggestions/resolve'] = () => reply(200, { version: 4 })
     demo()

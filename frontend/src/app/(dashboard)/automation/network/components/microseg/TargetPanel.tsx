@@ -17,6 +17,8 @@ import { bareIp } from './zoneGraph'
 import ZoneStateChip from './ZoneStateChip'
 
 const ROWS_PER_PAGE = 5
+/** A guest name keeps at least this much of the row (a 12-character name such as "pcz-demo-34"), cut beyond. */
+const NAME_MIN_WIDTH = 96
 
 type Props = {
   target: TargetGuest
@@ -72,17 +74,20 @@ function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
         <i className={row.direction === 'out' ? 'ri-arrow-right-up-line' : 'ri-arrow-left-down-line'} style={{ flexShrink: 0 }} aria-hidden />
       </Tooltip>
       <Tooltip title={where}>
-        <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{peer}</Typography>
+        <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: NAME_MIN_WIDTH }}>{peer}</Typography>
       </Tooltip>
       <ServiceHits suggestion={s} />
-      <Chip
-        size='small'
-        variant='outlined'
-        color={kind === 'blocked' ? 'info' : 'error'}
-        icon={<ObservedKindGlyph kind={s.kind} />}
-        label={t(`legend.${kind}`)}
-        sx={{ flexShrink: 0, maxWidth: 120 }}
-      />
+      {/* The kind gives way before the peer's name: it is cut first, its full label stays in the tooltip. */}
+      <Tooltip title={t(`legend.${kind}`)}>
+        <Chip
+          size='small'
+          variant='outlined'
+          color={kind === 'blocked' ? 'info' : 'error'}
+          icon={<ObservedKindGlyph kind={s.kind} />}
+          label={t(`legend.${kind}`)}
+          sx={{ flex: '0 1 auto', minWidth: 0, maxWidth: 120 }}
+        />
+      </Tooltip>
       <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptLabel={accept} acceptTip={acceptTip} />
     </Box>
   )
@@ -117,11 +122,11 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
       component='aside'
       aria-label={t('target.panel.label', { name: target.name })}
       data-target={target.key}
-      sx={{ width: { xs: '100%', lg: 400 }, flexShrink: 0, minWidth: 0, border: 1, borderColor: 'divider', borderRadius: 1, p: 2, maxHeight: 560, overflowY: 'auto', overflowX: 'hidden' }}
+      sx={{ width: { xs: '100%', lg: 440 }, flexShrink: 0, minWidth: 0, border: 1, borderColor: 'divider', borderRadius: 1, p: 2, maxHeight: 560, overflowY: 'auto', overflowX: 'hidden' }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
         <StatusIcon type='vm' vmType={target.type} status={target.status} />
-        <Tooltip title={target.name}><Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', minWidth: 0 }}>{target.name}</Typography></Tooltip>
+        <Tooltip title={target.name}><Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', minWidth: NAME_MIN_WIDTH }}>{target.name}</Typography></Tooltip>
         <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>
           {t('target.panel.where', { type: t(`target.type.${target.type}`), vmid: target.vmid, node: target.node })}
         </Typography>
@@ -170,7 +175,7 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
         <Box role='list'>
           {allowedPage.rows.map(f => (
             <Box role='listitem' key={f.id} sx={{ display: 'flex', alignItems: 'center', minHeight: 28, minWidth: 0 }}>
-              <FlowSummary flow={f} zonesById={zonesById} />
+              <FlowSummary flow={f} zonesById={zonesById} sideMinWidth={NAME_MIN_WIDTH / 2} />
             </Box>
           ))}
         </Box>

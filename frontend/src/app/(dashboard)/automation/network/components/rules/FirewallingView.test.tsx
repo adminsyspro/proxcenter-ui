@@ -101,7 +101,7 @@ describe('Firewalling: sections and badges', () => {
     expect(within(zone).getByText('managed by the engine')).toBeInTheDocument()
     expect(within(zone).getByRole('button', { name: /edit in Micro-segmentation/ })).toBeInTheDocument()
     expect(screen.getByTestId('dfw-section-cluster')).toHaveTextContent('Cluster rules')
-    expect(screen.getByTestId('dfw-section-host:pve1')).toHaveTextContent('Rules on open')
+    expect(screen.getByTestId('dfw-section-host:pve1')).toHaveTextContent('Rules read when opened')
     expect(screen.getByTestId('dfw-group-100')).toHaveTextContent('VLAN 100 · 2 VMs')
     expect(screen.getByTestId('dfw-group-100')).toHaveTextContent('1 protected by the micro-segmentation')
     // The sg-web group is no section: only the zone groups of the engine are.

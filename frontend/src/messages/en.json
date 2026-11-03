@@ -9106,7 +9106,7 @@
       "postureTimelineEmptyRange": "No observed event in this range"
     },
     "rulesOnDemand": {
-      "chip": "Rules on open",
+      "chip": "Rules read when opened",
       "readFailed": "The rules of this guest could not be read",
       "membersUnknown": "Proxmox keeps no member list: a guest belongs when one of its rules carries the group, and rules are read guest by guest. The members of a deployed micro-segmentation zone group are known from its tags; for this group only the guests opened so far are listed",
       "membersUnknownCount": "{count, number}+ VMs",

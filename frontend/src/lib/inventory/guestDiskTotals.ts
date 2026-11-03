@@ -130,7 +130,7 @@ export function noteGuestNicFirewall(connId: string, type: string, vmid: string 
 export function rememberGuestConfig(connId: string, type: "qemu" | "lxc", vmid: string | number, config: unknown): { nicFirewall: boolean; vlans: number[] } | null {
   const total = sumGuestConfigDisks(config, type)
   if (total === null) return null
-  remember(diskTotalKey(connId, type, vmid), total, {}, Date.now, Math.random, config)
+  remember(diskTotalKey(connId, type, vmid), total, { type, vmid }, Date.now, Math.random, config)
 
   return { nicFirewall: hasNICFirewall(config as Record<string, any>), vlans: configVlans(config) }
 }

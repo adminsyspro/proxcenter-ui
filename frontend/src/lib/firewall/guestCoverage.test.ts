@@ -228,7 +228,7 @@ describe('config read for a guest whose NICs the inventory does not know (UA46)'
       return value
     }
     const fetchOptions = vi.fn(async (guest: CoverageGuest) => slot({ enable: Number(guest.vmid) % 2 }))
-    const fetchNet = vi.fn(async () => slot({ nicFirewall: true, vlans: [30] }))
+    const fetchNet = vi.fn(async (_guest: CoverageGuest) => slot({ nicFirewall: true, vlans: [30] }))
     const list = Array.from({ length: 12 }, (_, i) => g(i + 1, `pve${(i % 3) + 1}`, 'lxc'))
 
     const result = await computeGuestCoverage(list, { listGuests: async () => [], guestNet: () => undefined, fetchOptions, fetchNet })
@@ -236,7 +236,7 @@ describe('config read for a guest whose NICs the inventory does not know (UA46)'
     // 6 odd vmids are on: options + config (2 calls each), 6 even are off: options only.
     expect(fetchOptions).toHaveBeenCalledTimes(12)
     expect(fetchNet).toHaveBeenCalledTimes(6)
-    expect(fetchNet.mock.calls.every(([guest]) => Number((guest as CoverageGuest).vmid) % 2 === 1)).toBe(true)
+    expect(fetchNet.mock.calls.every(([guest]) => Number(guest.vmid) % 2 === 1)).toBe(true)
     expect(result).toMatchObject({ enabled: 6, disabled: 6, unknown: 0, partial: false })
     expect(result.guests.find(r => r.vmid === '1')).toMatchObject({ nicFirewall: true, vlans: [30], enabled: true })
     // The config call holds the guest's slot: still 4 in flight at most.
@@ -276,7 +276,7 @@ describe('config read for a guest whose NICs the inventory does not know (UA46)'
 
   it('reads a written guest alone again: its options and its config, nothing for the others', async () => {
     const fetchOptions = vi.fn(async () => ({ enable: 1 }))
-    const fetchNet = vi.fn(async () => ({ nicFirewall: true, vlans: [] }))
+    const fetchNet = vi.fn(async (_guest: CoverageGuest) => ({ nicFirewall: true, vlans: [] }))
     const deps = { listGuests: async () => [g(1, 'pve1', 'lxc'), g(2, 'pve1', 'lxc')], guestNet: () => undefined, fetchOptions, fetchNet }
     await getGuestCoverage('c-write', deps)
 

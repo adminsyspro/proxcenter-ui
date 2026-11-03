@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, within } from '@testing-library/react'
+import { useSWRConfig } from 'swr'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
@@ -217,5 +218,71 @@ describe('opening the Micro-segmentation tab', () => {
     fireEvent.click(screen.getByText('2 of 3 guests protected'))
     fireEvent.click(screen.getByRole('button', { name: 'Open Micro-segmentation' }))
     expect(onOpen).toHaveBeenCalledTimes(2)
+  })
+})
+
+/** Reads the status again, as its 15 s poll would. */
+function PollStatus() {
+  const { mutate } = useSWRConfig()
+  return <button onClick={() => { void mutate('/api/v1/firewall/microseg/c1/status') }}>poll status</button>
+}
+
+describe('coherence (UA44)', () => {
+  it('shows one skeleton, and no row that says nothing, until both reads are in', async () => {
+    let release: (v: unknown) => void = () => {}
+    mock.routes['GET /policy'] = () => new Promise(resolve => { release = resolve })
+    renderCard()
+
+    expect(await screen.findByTestId('microseg-card-loading')).toBeTruthy()
+    expect(screen.queryByText('Not deployed')).toBeNull()
+    expect(screen.queryByText('Waiting for the first full check')).toBeNull()
+    expect(screen.queryByText('No check yet')).toBeNull()
+
+    release(reply(200, policy({ zones: [zone('a')], last_revision: REVISION_HEAD })))
+    expect(await screen.findByText(/^Deployed/)).toBeTruthy()
+    expect(screen.queryByTestId('microseg-card-loading')).toBeNull()
+  })
+
+  it('says the connection has no micro-segmentation yet instead of three empty rows', async () => {
+    mock.routes['GET /policy'] = () => reply(200, policy({ version: 0, zones: [], last_revision: null }))
+    mock.routes['GET /status'] = () => reply(200, status({ coverage: null }))
+    renderCard()
+
+    expect(await screen.findByText('Not set up on this connection yet: open the tab to define zones')).toBeTruthy()
+    expect(screen.queryByText('Not deployed')).toBeNull()
+    expect(screen.queryByText('Waiting for the first full check')).toBeNull()
+  })
+
+  it('names the connection it is about', async () => {
+    renderTab(<MicrosegSummaryCard connectionId='c1' connectionName='PVE-DR' onOpen={vi.fn()} />)
+
+    expect((await screen.findByTestId('microseg-card-connection')).textContent).toBe('PVE-DR')
+  })
+
+  it('reads the deployed state again when the status shows a new deployment made elsewhere', async () => {
+    let deployed = false
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: deployed ? REVISION_HEAD : null }))
+    mock.routes['GET /status'] = () => reply(200, status({
+      engine: engine(deployed ? { last_runs: { apply: { started_at: minutesAgo(1), status: 'done', api_calls: 3, writes: 2 } } } : {}),
+    }))
+    renderTab(<><MicrosegSummaryCard connectionId='c1' onOpen={vi.fn()} /><PollStatus /></>)
+    expect(await screen.findByText('Not deployed')).toBeTruthy()
+    expect(calls('GET /policy')).toHaveLength(1)
+
+    deployed = true
+    fireEvent.click(screen.getByText('poll status'))
+
+    expect(await screen.findByText(/^Deployed/)).toBeTruthy()
+    expect(calls('GET /policy')).toHaveLength(2)
+  })
+
+  it('does not read the policy again on a poll that changed nothing', async () => {
+    renderTab(<><MicrosegSummaryCard connectionId='c1' onOpen={vi.fn()} /><PollStatus /></>)
+    await screen.findByText(/^Deployed/)
+
+    fireEvent.click(screen.getByText('poll status'))
+    await waitFor(() => expect(calls('GET /status')).toHaveLength(2))
+
+    expect(calls('GET /policy')).toHaveLength(1)
   })
 })

@@ -46,3 +46,20 @@ export function clusterFirewallOff(status: Pick<MicrosegStatus, 'engine'> | unde
   if (state === 'disabled') return true
   return state !== 'enabled' && !!policy?.policy.stop_cluster_disabled
 }
+
+/** Runs an admin starts and that change what is deployed. */
+const DEPLOY_KINDS = ['apply', 'remove', 'restore'] as const
+
+/**
+ * When the deployed state last changed, as far as the engine tells: the start of its newest apply, remove and restore
+ * runs. A new value means the last revision may have moved and the policy must be read again.
+ */
+export function adminRunsMark(status: Pick<MicrosegStatus, 'engine' | 'emergency_stop'>): string {
+  const runs = status.engine.last_runs ?? {}
+  return [...DEPLOY_KINDS.map(kind => runs[kind]?.started_at ?? ''), String(!!status.emergency_stop)].join('|')
+}
+
+/** No policy on this connection yet: the orchestrator answers its empty draft, version 0, never deployed. */
+export function policyNotSetUp(policy: Pick<MicrosegPolicy, 'version' | 'last_revision' | 'zones'>): boolean {
+  return !policy.last_revision && policy.version === 0 && (policy.zones ?? []).length === 0
+}

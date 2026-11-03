@@ -13046,7 +13046,8 @@
         "lastCheck": "Letzte Prüfung {time}",
         "noCheck": "Noch keine Prüfung",
         "held": "Wartet auf Ihre Bestätigung (Schreibgrenze erreicht)"
-      }
+      },
+      "notSetUp": "Auf dieser Verbindung noch nicht eingerichtet: Tab öffnen, um Zonen zu definieren"
     },
     "waitingFirstCheck": "Warten auf die erste vollständige Prüfung",
     "readOnly": "Nur Lesezugriff: Sie benötigen das Recht zur Knotenverwaltung",

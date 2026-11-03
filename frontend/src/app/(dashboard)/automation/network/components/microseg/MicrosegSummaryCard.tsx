@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Box, Button, Card, CardContent, Chip, Skeleton, Typography, alpha } from '@mui/material'
+import { useEffect, useRef, useState } from 'react'
+import { Box, Button, Card, CardContent, Chip, Skeleton, Tooltip, Typography, alpha } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
@@ -13,11 +13,13 @@ import { coverage } from './coverage'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import { useDialogAction } from './dialogParts'
 import { MicrosegWriteContext, WriteTip, useCanManageMicroseg } from './microsegAccess'
-import { clusterFirewallOff, deployedCounts, formatWhen, lastCheckAt, stillPaused } from './summaryModel'
+import { adminRunsMark, clusterFirewallOff, deployedCounts, formatWhen, lastCheckAt, policyNotSetUp, stillPaused } from './summaryModel'
 import { NOW_REFRESH_MS, useNow } from './useNow'
 
 type Props = {
   connectionId: string
+  /** Shown next to the title: the card is about this connection only. */
+  connectionName?: string
   /** Opens the Micro-segmentation tab. */
   onOpen: () => void
 }
@@ -45,12 +47,21 @@ function Row({ icon, label, children }: { icon: string; label: string; children:
  * The Micro-segmentation at a glance, for the Dashboard tab: what is deployed (the LAST REVISION, not the draft),
  * how many guests are protected, and what the engine is doing, in plain words. One click opens the tab.
  */
-export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
+export default function MicrosegSummaryCard({ connectionId, connectionName, onOpen }: Props) {
   const t = useTranslations('microsegPilot')
   const canWrite = useCanManageMicroseg(connectionId)
   const format = useFormatter()
   const { data: status, error: statusError, reload } = useMicrosegStatus(connectionId)
-  const { data: policy, error: policyError } = useMicrosegPolicy(connectionId)
+  const { data: policy, error: policyError, reload: reloadPolicy } = useMicrosegPolicy(connectionId)
+  // The status is polled, the policy read once: a deployment, a removal or a restore started anywhere else (another
+  // browser, the API) moves the status' admin runs, and the deployed state is read again then (UA44).
+  const runsMark = status ? adminRunsMark(status) : null
+  const seenMark = useRef<string | null>(null)
+  useEffect(() => {
+    if (runsMark === null) return
+    if (seenMark.current !== null && seenMark.current !== runsMark) void reloadPolicy()
+    seenMark.current = runsMark
+  }, [runsMark, reloadPolicy])
   const lastId = policy?.last_revision?.id
   const { revision } = useLastRevisionSnapshot(connectionId, lastId)
   const now = useNow(NOW_REFRESH_MS, status)
@@ -132,6 +143,31 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
     )
   })()
 
+  // Both reads in, or failed: until then one skeleton, never a row that says "nothing" from a missing answer.
+  const settled = (!!status || !!statusError) && (!!policy || !!policyError)
+  const notSetUp = !stopped && !!policy && policyNotSetUp(policy)
+  let body = (
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
+      <Row icon='ri-rocket-line' label={t('dashboard.deployment.label')}>{deployment}</Row>
+      <Row icon='ri-shield-check-line' label={t('dashboard.protection.label')}>{protection}</Row>
+      <Row icon='ri-settings-3-line' label={t('dashboard.engine.label')}>{engineLine}</Row>
+    </Box>
+  )
+  if (!settled) {
+    body = (
+      <Box data-testid='microseg-card-loading' sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
+        {[0, 1, 2].map(i => (
+          <Box key={i}>
+            <Skeleton width={90} height={16} />
+            <Skeleton width={180} height={22} />
+          </Box>
+        ))}
+      </Box>
+    )
+  } else if (notSetUp) {
+    body = <Typography variant='body2' color='text.secondary' sx={{ minHeight: 38, display: 'flex', alignItems: 'center' }}>{t('dashboard.notSetUp')}</Typography>
+  }
+
   let accent = GREY
   if (stopped) accent = RED
   else if (statusError && !status) accent = AMBER
@@ -159,7 +195,14 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
             <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: alpha(accent, 0.2), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <i className='ri-shield-keyhole-line' style={{ fontSize: 20, color: accent }} />
             </Box>
-            <Typography variant='subtitle1' sx={{ fontWeight: 700, flex: 1, minWidth: 0 }} noWrap>{t('tab.title')}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flex: 1, minWidth: 0 }}>
+              <Typography variant='subtitle1' sx={{ fontWeight: 700, flexShrink: 0 }}>{t('tab.title')}</Typography>
+              {connectionName && (
+                <Tooltip title={connectionName}>
+                  <Typography variant='body2' color='text.secondary' noWrap data-testid='microseg-card-connection'>{connectionName}</Typography>
+                </Tooltip>
+              )}
+            </Box>
             <Button
               size='small'
               aria-label={t('dashboard.open')}
@@ -170,11 +213,7 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
               {t('dashboard.openShort')}
             </Button>
           </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
-            <Row icon='ri-rocket-line' label={t('dashboard.deployment.label')}>{deployment}</Row>
-            <Row icon='ri-shield-check-line' label={t('dashboard.protection.label')}>{protection}</Row>
-            <Row icon='ri-settings-3-line' label={t('dashboard.engine.label')}>{engineLine}</Row>
-          </Box>
+          {body}
         </CardContent>
       </Card>
       <MicrosegConfirmDialog

@@ -13378,7 +13378,8 @@
         "lastCheck": "Last check {time}",
         "noCheck": "No check yet",
         "held": "Waiting for your confirmation (write cap reached)"
-      }
+      },
+      "notSetUp": "Not set up on this connection yet: open the tab to define zones"
     },
     "waitingFirstCheck": "Waiting for the first full check",
     "readOnly": "Read-only: you need node management rights",

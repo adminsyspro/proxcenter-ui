@@ -13379,7 +13379,8 @@
         "lastCheck": "Dernier contrôle {time}",
         "noCheck": "Aucun contrôle pour l'instant",
         "held": "En attente de votre confirmation (plafond d'écritures atteint)"
-      }
+      },
+      "notSetUp": "Pas encore configurée sur cette connexion : ouvrez l'onglet pour définir des zones"
     },
     "waitingFirstCheck": "En attente du premier contrôle complet",
     "readOnly": "Lecture seule : il vous faut le droit de gérer les nœuds",

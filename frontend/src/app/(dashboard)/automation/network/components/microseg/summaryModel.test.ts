@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { deployedCounts, formatWhen, lastCheckAt, stillPaused } from './summaryModel'
-import { status, zone } from './microsegTestKit'
+import { adminRunsMark, deployedCounts, formatWhen, lastCheckAt, policyNotSetUp, stillPaused } from './summaryModel'
+import { policy, status, zone } from './microsegTestKit'
 
 describe('deployedCounts', () => {
   it('counts the enforced and the observing zones of a snapshot, not the disabled ones', () => {
@@ -63,5 +63,28 @@ describe('formatWhen', () => {
 
   it('returns the raw text when it is not a date', () => {
     expect(formatWhen(format, 'soon')).toBe('soon')
+  })
+})
+
+describe('adminRunsMark', () => {
+  const run = (started_at: string) => ({ started_at, status: 'done' as const, api_calls: 1, writes: 1 })
+
+  it('moves with a new apply, remove or restore, or the stop, and not with the engine own runs', () => {
+    const base = status()
+    const mark = adminRunsMark(base)
+
+    expect(adminRunsMark(status({ engine: { ...base.engine, last_runs: { full: run('2026-11-03T10:00:00Z') } } }))).toBe(mark)
+    expect(adminRunsMark(status({ engine: { ...base.engine, last_runs: { apply: run('2026-11-03T10:00:00Z') } } }))).not.toBe(mark)
+    expect(adminRunsMark(status({ engine: { ...base.engine, last_runs: { restore: run('2026-11-03T10:00:00Z') } } }))).not.toBe(mark)
+    expect(adminRunsMark(status({ emergency_stop: true }))).not.toBe(mark)
+  })
+})
+
+describe('policyNotSetUp', () => {
+  it('is the empty draft of a connection nobody configured, never a deployed or edited one', () => {
+    expect(policyNotSetUp(policy({ version: 0, zones: [], last_revision: null }))).toBe(true)
+    expect(policyNotSetUp(policy({ version: 4, zones: [], last_revision: null }))).toBe(false)
+    expect(policyNotSetUp(policy({ version: 0, zones: [zone('a')], last_revision: null }))).toBe(false)
+    expect(policyNotSetUp(policy({ version: 0, zones: [], last_revision: { id: 'r', version: 1, author: 'me', created_at: '2026-11-01T00:00:00Z' } }))).toBe(false)
   })
 })

@@ -13378,7 +13378,8 @@
         "lastCheck": "上次检查 {time}",
         "noCheck": "尚无检查",
         "held": "等待您的确认（已达写入上限）"
-      }
+      },
+      "notSetUp": "此连接尚未设置：打开选项卡以定义区域"
     },
     "waitingFirstCheck": "正在等待首次完整检查",
     "readOnly": "只读：您需要节点管理权限",

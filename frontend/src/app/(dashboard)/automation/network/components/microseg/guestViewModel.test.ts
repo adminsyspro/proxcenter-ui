@@ -23,10 +23,11 @@ const cx = (nodes: Node[], id: string) => {
 
 describe('the zone in the centre', () => {
   it('sums the pending hits of every zone, as a source and as a destination', () => {
-    const traffic = zoneTraffic(demo.zones, demo.suggestions)
+    const traffic = zoneTraffic([...demo.zones, zone('zq', 'quiet')], demo.suggestions)
     expect(traffic.get('zd')).toBe(40 + 150 + 96)
     expect(traffic.get('zw')).toBe(40 + 7 + 150)
-    expect(traffic.get('zm')).toBe(0)
+    expect(traffic.get('zm')).toBe(20 + 5)
+    expect(traffic.get('zq')).toBe(0)
   })
 
   it('starts on the zone with the most observed traffic, by name when none has any', () => {

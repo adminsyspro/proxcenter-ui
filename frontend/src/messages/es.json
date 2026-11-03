@@ -12982,7 +12982,8 @@
         "guestPending": "En cola para la zona, se aplica con el próximo plan",
         "moreHint": "{count, plural, one {# miembro más} other {# miembros más}}: el panel de la zona los lista todos",
         "moreUnzonedHint": "{count, plural, one {# invitado más} other {# invitados más}} sin zona: Desviaciones los lista todos",
-        "ipHint": "{ip}: una dirección sin zona y sin invitado que habló con esta zona"
+        "ipHint": "{ip}: una dirección sin zona y sin invitado que habló con esta zona",
+        "inside": "{count, plural, one {# flujo observado} other {# flujos observados}} dentro de la zona"
       },
       "edge": {
         "outside": "No aplicado en v1: {services}",

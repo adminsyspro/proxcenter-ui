@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 
 import { demoInput, flow, seen, zone } from './mapViewsTestKit'
 import { buildMatrix } from './matrixModel'
-import { ALLOWED_W, MAX_W, MIN_W, NODE_GAP, buildSankey, ribbonWidth } from './sankeyModel'
+import { ALLOWED_W, MAX_W, MIN_PITCH, MIN_W, NODE_GAP, buildSankey, ribbonWidth } from './sankeyModel'
 import { ALL_FLOWS } from './zoneGraph'
 
 const web = zone('zw', 'web')
@@ -59,7 +59,7 @@ describe('buildSankey', () => {
     expect(layout.sources[0]).toMatchObject({ hits: 125, zone: web })
   })
 
-  it('stacks the nodes with a gap, each as tall as its ribbons, the ribbons side by side inside it', () => {
+  it('stacks the nodes with a gap (a thin node takes MIN_PITCH), each as tall as its ribbons, the ribbons side by side inside it', () => {
     for (const side of [layout.sources, layout.targets]) {
       let top = 0
       for (const n of side) {
@@ -68,10 +68,11 @@ describe('buildSankey', () => {
         const ends = own.map(r => (side === layout.sources ? r.y0 : r.y1)).sort((a, b) => a - b)
         expect(own.reduce((s, r) => s + r.width, 0), n.id).toBeCloseTo(n.height)
         expect(ends[0], n.id).toBe(n.y)
-        top = n.y + n.height + NODE_GAP
+        top = n.y + Math.max(n.height, MIN_PITCH) + NODE_GAP
       }
     }
-    expect(layout.height).toBe(Math.max(...[...layout.sources, ...layout.targets].map(n => n.y + n.height)))
+    expect(layout.height).toBe(Math.max(...[...layout.sources, ...layout.targets].map(n => n.y + Math.max(n.height, MIN_PITCH))))
+    expect(layout.targets.find(n => n.id === 'outside')!.height).toBeLessThan(MIN_PITCH)
   })
 
   it('orders the ribbons of a node by the other end, then unprotected, blocked, allowed', () => {

@@ -52,6 +52,14 @@ describe('compact zones', () => {
     expect(g.nodes.some(n => n.id === 'external')).toBe(true)
   })
 
+  it('counts the pending observed flows inside a zone on its box (no edge stands for them)', () => {
+    const g = buildCompactGraph({ zones: [web, db], flows: [], suggestions: [seen('s1', { dst_zone_id: 'zw' }), seen('s2', { dst_zone_id: 'zw', dport: '22' }), seen('s3', { dst_zone_id: 'zw', status: 'dismissed' })] })
+    const data = (id: string) => g.nodes.find(n => n.id === id)!.data as unknown as ZoneNodeData
+    expect(data('zone:zw').inside).toBe(2)
+    expect(data('zone:zd').inside).toBeUndefined()
+    expect(g.edges).toEqual([])
+  })
+
   it('ignores an observed flow whose destination is no zone, and a flow inside one zone', () => {
     const g = buildCompactGraph({ zones: [web, db], flows: [flow('f1', { dst_zone_id: 'zw' })], suggestions: [seen('s1', { dst_zone_id: 'gone' })] })
     expect(g.edges).toEqual([])
@@ -88,7 +96,7 @@ describe('the demo-like compact map is readable', () => {
 
   it('has the edges it should', () => {
     expect(graph.edges.filter(e => ['allowed', 'outside'].includes(data(e).kind))).toHaveLength(11)
-    expect(graph.edges.filter(e => data(e).kind === 'unprotected').map(e => e.id).sort()).toEqual(['unprotected:external>zone:za', 'unprotected:zone:zad>zone:zc', 'unprotected:zone:zw>zone:zd'])
+    expect(graph.edges.filter(e => data(e).kind === 'unprotected').map(e => e.id).sort()).toEqual(['unprotected:external>zone:za', 'unprotected:zone:zad>zone:zc', 'unprotected:zone:zad>zone:zm', 'unprotected:zone:zm>zone:zad', 'unprotected:zone:zw>zone:zd'])
     expect(graph.edges.filter(e => data(e).kind === 'blocked').map(e => e.id).sort()).toEqual(['blocked:external>zone:zw', 'blocked:zone:zc>zone:zd', 'blocked:zone:zw>zone:zd'])
   })
 

@@ -46,6 +46,8 @@ export type ZoneNodeData = {
   members: number | null
   state: ZoneState
   radius: number
+  /** The pending observed flows inside the zone (the compact rendering counts them, it draws no edge for them). */
+  inside?: number
 }
 export type UnzonedNodeData = { kind: 'unzoned'; count: number; radius: number }
 export type GuestNodeData = { kind: 'guest'; member: MapMember; groupId: string }
@@ -199,7 +201,7 @@ export function groupOf(id: string, members: MapMember[] | null, data: Group['da
 }
 
 /** The id a group's guest nodes carry: the zone id, or "unzoned". */
-export const groupKey = (group: Group) => (group.id === UNZONED_ID ? UNZONED_ID : group.id.replace(/^zone:/, ''))
+const groupKey = (group: Group) => (group.id === UNZONED_ID ? UNZONED_ID : group.id.replace(/^zone:/, ''))
 
 /**
  * Where an address of a group's members is drawn: its guest node, or the "+N" node when it is not drawn. An address
@@ -235,8 +237,8 @@ function buildGroups(sorted: MicrosegZone[], members: MapInput['members'], unzon
   return { groups, books }
 }
 
-export const pairKey = (p: Pick<Pair, 'kind' | 'source' | 'target'>) => `${p.kind}:${p.source}>${p.target}`
-export const isObserved = (kind: MapEdgeKind) => kind === 'unprotected' || kind === 'blocked'
+const pairKey = (p: Pick<Pair, 'kind' | 'source' | 'target'>) => `${p.kind}:${p.source}>${p.target}`
+const isObserved = (kind: MapEdgeKind) => kind === 'unprotected' || kind === 'blocked'
 
 export function addPair(pairs: Map<string, Pair>, kind: MapEdgeKind, source: string, target: string, service: string, flow?: MicrosegFlow, seen?: MicrosegSuggestion) {
   if (source === target) return
@@ -367,7 +369,7 @@ function dashStyle(dash: string | undefined, draft: boolean): Pick<CSSProperties
   return { strokeDasharray: dash, strokeLinecap: draft ? 'round' : undefined }
 }
 
-export function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, unapplied: ReadonlySet<string> | null): Edge {
+function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, unapplied: ReadonlySet<string> | null): Edge {
   const observed = isObserved(p.kind)
   const draft = !!unapplied && p.flows.length > 0 && p.flows.every(f => unapplied.has(f.id))
   const color = EDGE_COLORS[p.kind]

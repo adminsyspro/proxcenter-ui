@@ -6,7 +6,8 @@ import {
 } from './zoneGraph'
 import { byText } from './zoneLayout'
 
-export type MatrixSort = 'name' | 'layer'
+export const MATRIX_SORTS = ['name', 'layer'] as const
+export type MatrixSort = (typeof MATRIX_SORTS)[number]
 
 /** A row (source) or a column (destination) of the matrix. `layer` and `order` are its column and row on the map. */
 export type MatrixEnd = { id: string; kind: 'zone' | 'external' | 'outside'; zone: MicrosegZone | null; layer: number; order: number }

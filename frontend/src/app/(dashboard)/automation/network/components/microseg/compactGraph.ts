@@ -15,7 +15,7 @@ export const BOX_H = 64
 const boxShape = { kind: 'box' as const, halfW: BOX_W / 2, halfH: BOX_H / 2 }
 /** Boxes are smaller than circles: closer columns and rows keep the map readable when it fits the view. */
 const COMPACT_COL_GAP = 130
-const COMPACT_ROW_GAP = 56
+const COMPACT_ROW_GAP = 80
 
 /** The pending observed flows into a known zone, zone to zone (a source in no zone comes from External). */
 function addObservedZonePairs(pairs: Map<string, Pair>, suggestions: MicrosegSuggestion[], known: ReadonlyMap<string, MicrosegZone>) {
@@ -38,9 +38,18 @@ function boxGrid(columns: string[][], hasExternal: boolean, hasOutside: boolean)
   return grid
 }
 
-function placeBox(out: Placement, zone: MicrosegZone, members: number | null, c: { x: number; y: number }) {
+/** The pending observed flows inside each zone: no edge stands for them, the box counts them (the matrix diagonal shows them). */
+function insideCounts(suggestions: MicrosegSuggestion[], known: ReadonlyMap<string, MicrosegZone>): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const s of suggestions) {
+    if (s.status === 'pending' && s.src_zone_id === s.dst_zone_id && known.has(s.dst_zone_id)) counts.set(s.dst_zone_id, (counts.get(s.dst_zone_id) ?? 0) + 1)
+  }
+  return counts
+}
+
+function placeBox(out: Placement, zone: MicrosegZone, members: number | null, inside: number, c: { x: number; y: number }) {
   const id = zoneNodeId(zone.id)
-  const data: ZoneNodeData = { kind: 'zone', zone, members, state: zone.state, radius: 0 }
+  const data: ZoneNodeData = { kind: 'zone', zone, members, state: zone.state, radius: 0, ...(inside ? { inside } : {}) }
   out.nodes.push({ id, type: 'zoneBox', position: { x: c.x - BOX_W / 2, y: c.y - BOX_H / 2 }, width: BOX_W, height: BOX_H, focusable: false, data })
   out.obstacles.push({ id, center: c, shape: boxShape })
   out.endShapes.set(id, { center: c, shape: boxShape, group: id })
@@ -62,11 +71,12 @@ export function buildCompactGraph({ zones, flows, suggestions, members = null, u
   const grid = boxGrid(columns, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID))
   const centers = cellCenters(grid, COMPACT_COL_GAP, COMPACT_ROW_GAP)
 
+  const inside = insideCounts(suggestions, known)
   const out: Placement = { nodes: [] as Node[], obstacles: [], endShapes: new Map() }
   for (const cell of grid.flat()) {
     const c = centers.get(cell.id)!
     const zone = known.get(cell.id.replace(/^zone:/, ''))
-    if (zone && cell.id.startsWith('zone:')) placeBox(out, zone, members ? (members.get(zone.id)?.length ?? 0) : null, c)
+    if (zone && cell.id.startsWith('zone:')) placeBox(out, zone, members ? (members.get(zone.id)?.length ?? 0) : null, inside.get(zone.id) ?? 0, c)
     else placeBoundary(out, cell.id, c)
   }
 

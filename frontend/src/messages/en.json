@@ -12982,7 +12982,8 @@
         "guestPending": "Queued for the zone, applied with the next plan",
         "moreHint": "{count, plural, one {# more member} other {# more members}}: the zone panel lists them all",
         "moreUnzonedHint": "{count, plural, one {# more guest} other {# more guests}} in no zone: Drifts lists them all",
-        "ipHint": "{ip}: an address in no zone and no guest that talked to this zone"
+        "ipHint": "{ip}: an address in no zone and no guest that talked to this zone",
+        "inside": "{count, plural, one {# observed flow} other {# observed flows}} inside the zone"
       },
       "edge": {
         "outside": "Not applied in v1: {services}",

@@ -12982,7 +12982,8 @@
         "guestPending": "已排队加入该区域，随下一个计划应用",
         "moreHint": "{count, plural, other {还有 # 个成员}}：区域面板列出全部",
         "moreUnzonedHint": "{count, plural, other {还有 # 个无区域客户机}}：偏差中列出全部",
-        "ipHint": "{ip}：与此区域通信、不属于任何区域或虚拟机的地址"
+        "ipHint": "{ip}：与此区域通信、不属于任何区域或虚拟机的地址",
+        "inside": "{count, plural, other {区域内观察到的流 # 条}}"
       },
       "edge": {
         "outside": "v1 中未应用：{services}",

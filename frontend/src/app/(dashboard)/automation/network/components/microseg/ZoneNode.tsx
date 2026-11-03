@@ -77,25 +77,34 @@ function CircleTitle({ r, children }: { r: number; children: ReactNode }) {
 }
 
 /** A zone: a circle in its colour, its name, state and member count on its top line, its guests inside. */
-function ZoneNodeComponent({ id, data, selected }: NodeProps) {
-  const d = data as unknown as ZoneNodeData
+/**
+ * What a zone node says and does, for the circle and for the box of the compact rendering: its member count, its
+ * state, its name for screen readers, and the props of its button (enter or space opens the panel, the focus lights
+ * it like the pointer does).
+ */
+export function useZoneNodeProps(id: string, d: ZoneNodeData, selected: boolean | undefined) {
   const t = useTranslations('microsegPilot')
   const { openZone, setFocus } = useContext(MapActionsContext)
-  const { zone, state, radius: r } = d
   const members = d.members === null ? t('overview.node.membersUnknown') : t('overview.node.members', { count: d.members })
-  const label = t('overview.node.aria', { name: zone.name, state: t(`policy.zone.state.${state}`), members })
+  const stateText = t(`policy.zone.state.${d.state}`)
+  const label = t('overview.node.aria', { name: d.zone.name, state: stateText, members })
+  const button = {
+    role: 'button', tabIndex: 0, 'aria-label': label, 'aria-pressed': !!selected,
+    onKeyDown: onKeys(() => openZone(d.zone.id)), onFocus: () => setFocus(id), onBlur: () => setFocus(null),
+  }
+  return { members, stateText, label, button }
+}
+
+function ZoneNodeComponent({ id, data, selected }: NodeProps) {
+  const d = data as unknown as ZoneNodeData
+  const { zone, state, radius: r } = d
+  const { members, label, button } = useZoneNodeProps(id, d, selected)
   const color = zone.color || 'currentColor'
 
   return (
     <Tooltip title={label} describeChild placement='top' enterDelay={500}>
       <Box
-        role='button'
-        tabIndex={0}
-        aria-label={label}
-        aria-pressed={!!selected}
-        onKeyDown={onKeys(() => openZone(zone.id))}
-        onFocus={() => setFocus(id)}
-        onBlur={() => setFocus(null)}
+        {...button}
         sx={theme => ({
           position: 'relative', width: 2 * r, height: 2 * r, boxSizing: 'border-box', borderRadius: '50%', cursor: 'pointer',
           border: `2px solid ${zone.color || theme.palette.divider}`,

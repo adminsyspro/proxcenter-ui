@@ -55,6 +55,9 @@ export function demoInput(): Required<Pick<MapInput, 'zones' | 'flows' | 'sugges
     seen('s4', { src_zone_id: '', src_ip: '10.9.0.1', dst_zone_id: 'za', dst_ip: '10.0.3.2', dport: '8080', hits: 30 }),
     seen('s5', { kind: 'blocked', src_zone_id: 'zw', src_ip: '10.0.1.2', dst_zone_id: 'zd', dst_ip: '10.0.4.2', dport: '22', hits: 150 }),
     seen('s6', { kind: 'blocked', src_zone_id: 'zc', src_ip: '10.0.5.2', dst_zone_id: 'zd', dst_ip: '10.0.4.3', dport: '5432', hits: 96 }),
+    // Two zones of the same column (as on the lab: monitoring -> admin tcp/22), and the reply the other way.
+    seen('s7', { src_zone_id: 'zm', src_ip: '10.0.6.1', dst_zone_id: 'zad', dst_ip: '10.0.2.1', dport: '22', hits: 20 }),
+    seen('s8', { src_zone_id: 'zad', src_ip: '10.0.2.1', dst_zone_id: 'zm', dst_ip: '10.0.6.1', dport: '9100', hits: 5 }),
   ]
   const unzoned = [member(900, 'lost-1', ['10.9.0.1']), member(901, 'lost-2'), member(902, 'lost-3')]
   return { zones, flows, suggestions, members, unzoned }

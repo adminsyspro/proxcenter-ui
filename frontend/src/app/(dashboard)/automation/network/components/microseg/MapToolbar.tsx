@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useState } from 'react'
 import { Box, Checkbox, FormControlLabel, IconButton, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
+import { useStored, useStoredChoice } from './useStoredChoice'
 import { ALL_FLOWS, EDGE_COLORS, type FlowFilters } from './zoneGraph'
 
 const STORAGE_KEY = 'microseg.map.flows'
@@ -16,23 +16,7 @@ const VIEW_ICONS: Record<MapView, string> = { groups: 'ri-bubble-chart-line', co
 
 /** The rendering of the map, kept in this browser (a blocked storage, or an unknown value, just means Groups). */
 export function useMapView(): [MapView, (next: MapView) => void] {
-  const [view, setView] = useState<MapView>(() => {
-    try {
-      const saved = window.localStorage.getItem(VIEW_KEY)
-      return MAP_VIEWS.find(v => v === saved) ?? 'groups'
-    } catch {
-      return 'groups'
-    }
-  })
-  const change = useCallback((next: MapView) => {
-    setView(next)
-    try {
-      window.localStorage.setItem(VIEW_KEY, next)
-    } catch {
-      // Storage refused: the choice lasts as long as the page.
-    }
-  }, [])
-  return [view, change]
+  return useStoredChoice(VIEW_KEY, MAP_VIEWS, 'groups')
 }
 
 /** The rendering selector: one icon button per rendering, its name in a tooltip and for screen readers. */
@@ -58,30 +42,20 @@ export function ViewSwitch({ view, onView }: { view: MapView; onView: (next: Map
   )
 }
 
+/** The stored checkboxes: each one on unless stored off (nothing stored, or unreadable: all on). */
+function decodeFilters(raw: string | null): FlowFilters {
+  try {
+    const saved = raw ? (JSON.parse(raw) as Partial<FlowFilters>) : {}
+    return { allowed: saved.allowed !== false, unprotected: saved.unprotected !== false, blocked: saved.blocked !== false }
+  } catch {
+    return ALL_FLOWS
+  }
+}
+const encodeFilters = (filters: FlowFilters) => JSON.stringify(filters)
+
 /** The three checkboxes of the map, kept in this browser (a blocked storage just means the defaults: all on). */
 export function useFlowFilters(): [FlowFilters, (next: FlowFilters) => void] {
-  const [filters, setFilters] = useState<FlowFilters>(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY)
-      const saved = raw ? (JSON.parse(raw) as Partial<FlowFilters>) : {}
-      return {
-        allowed: saved.allowed !== false,
-        unprotected: saved.unprotected !== false,
-        blocked: saved.blocked !== false,
-      }
-    } catch {
-      return ALL_FLOWS
-    }
-  })
-  const change = useCallback((next: FlowFilters) => {
-    setFilters(next)
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-    } catch {
-      // Storage refused: the choice lasts as long as the page.
-    }
-  }, [])
-  return [filters, change]
+  return useStored(STORAGE_KEY, decodeFilters, encodeFilters)
 }
 
 function Swatch({ color, dash }: { color: string; dash: 'solid' | 'dashed' | 'dotted' }) {

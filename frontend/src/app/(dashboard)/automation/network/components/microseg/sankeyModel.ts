@@ -9,8 +9,9 @@ import { byText } from './zoneLayout'
 export const MAX_W = 48
 export const MIN_W = 2
 export const ALLOWED_W = 3
-/** Room between two nodes of a column. */
+/** Room between two nodes of a column, and the least height a node takes there (its two lines of label). */
 export const NODE_GAP = 24
+export const MIN_PITCH = 28
 
 export type SankeyNode = { id: string; zone: MicrosegZone | null; hits: number; y: number; height: number }
 
@@ -69,7 +70,7 @@ function draftRibbons(model: MatrixModel, filters: FlowFilters): Draft[] {
 
 const nameOf = (zone: MicrosegZone | null, id: string) => zone?.name ?? id
 
-/** The nodes of a column, busiest first (ties by name), stacked from the top with NODE_GAP between them. */
+/** The nodes of a column, busiest first (ties by name), stacked from the top: MIN_PITCH at least, NODE_GAP between. */
 function stack(ids: string[], ribbons: Ribbon[], end: 'source' | 'target', zoneOf: (id: string) => MicrosegZone | null): SankeyNode[] {
   const nodes = ids.map(id => {
     const own = ribbons.filter(r => r[end] === id)
@@ -79,7 +80,7 @@ function stack(ids: string[], ribbons: Ribbon[], end: 'source' | 'target', zoneO
   let top = 0
   for (const n of nodes) {
     n.y = round(top)
-    top += n.height + NODE_GAP
+    top += Math.max(n.height, MIN_PITCH) + NODE_GAP
   }
   return nodes
 }
@@ -118,6 +119,6 @@ export function buildSankey(model: MatrixModel, filters: FlowFilters): SankeyLay
   placeEnds(sources, ribbons, 'source', rank(targets))
   placeEnds(targets, ribbons, 'target', rank(sources))
   ribbons.sort((a, b) => byText(a.id, b.id))
-  const height = Math.max(...[...sources, ...targets].map(n => n.y + n.height))
+  const height = Math.max(...[...sources, ...targets].map(n => n.y + Math.max(n.height, MIN_PITCH)))
   return { sources, targets, ribbons, height: round(height) }
 }

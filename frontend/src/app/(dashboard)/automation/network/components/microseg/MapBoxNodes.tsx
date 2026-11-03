@@ -1,37 +1,31 @@
 'use client'
 
-import { memo, useContext } from 'react'
+import { memo } from 'react'
 import type { NodeProps } from '@xyflow/react'
 import { Box, Tooltip, Typography, alpha } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { BOX_H, BOX_W } from './compactGraph'
 import { NODE_H, NODE_W, type IpNodeData, type ZoneNodeData } from './zoneGraph'
-import { FOCUS_RING, Handles, MapActionsContext, ZoneShield, onKeys, tint } from './ZoneNode'
+import { FOCUS_RING, Handles, ZoneShield, tint, useZoneNodeProps } from './ZoneNode'
 
 /**
  * A zone of the compact rendering: a box in its colour, the shield and state dot with the name on the first line,
- * the state and the member count on the second. Enter, space or a click opens its panel.
+ * the state and the member count on the second (the observed flows inside the zone in its tooltip). Enter, space or
+ * a click opens its panel.
  */
 function ZoneBoxNodeComponent({ id, data, selected }: NodeProps) {
   const d = data as unknown as ZoneNodeData
-  const t = useTranslations('microsegPilot')
-  const { openZone, setFocus } = useContext(MapActionsContext)
+  const t = useTranslations('microsegPilot.overview.node')
   const { zone, state } = d
-  const members = d.members === null ? t('overview.node.membersUnknown') : t('overview.node.members', { count: d.members })
-  const stateText = t(`policy.zone.state.${state}`)
-  const label = t('overview.node.aria', { name: zone.name, state: stateText, members })
+  const { members, stateText, label, button } = useZoneNodeProps(id, d, selected)
+  // The flows seen inside the zone have no edge here (the diagonal of the matrix shows them): the tooltip counts them.
+  const tip = d.inside ? `${label} · ${t('inside', { count: d.inside })}` : label
 
   return (
-    <Tooltip title={label} describeChild placement='top' enterDelay={500}>
+    <Tooltip title={tip} describeChild placement='top' enterDelay={500}>
       <Box
-        role='button'
-        tabIndex={0}
-        aria-label={label}
-        aria-pressed={!!selected}
-        onKeyDown={onKeys(() => openZone(zone.id))}
-        onFocus={() => setFocus(id)}
-        onBlur={() => setFocus(null)}
+        {...button}
         sx={theme => ({
           width: BOX_W, height: BOX_H, boxSizing: 'border-box', borderRadius: 1.5, cursor: 'pointer', px: 1.25,
           display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 0.25,

@@ -114,7 +114,17 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     return { zones, flows, suggestions: suggestions.data ?? [], members, unzoned, unapplied }
   }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied])
   // The zone of the guest view: the one picked, else (or once it is deleted) the one with the most observed traffic.
-  const centreId = centre && zonesById.has(centre) ? centre : defaultCentre(zones, input.suggestions)
+  const centreId = useMemo(
+    () => (centre && zonesById.has(centre) ? centre : defaultCentre(zones, input.suggestions)),
+    [centre, zonesById, zones, input.suggestions],
+  )
+  // Once the guest view has found its zone (the observed flows are read), it keeps it: a refresh does not move it.
+  const centreKnown = view === 'guests' && !centre && !!suggestions.data && !!centreId
+  useEffect(() => {
+    if (!centreKnown) return
+    const timer = setTimeout(() => setCentre(centreId), 0)
+    return () => clearTimeout(timer)
+  }, [centreKnown, centreId])
   // The matrix holds the pairs of the matrix and of the Sankey diagram (their flow panel).
   const matrix = useMemo(() => (view === 'matrix' || view === 'sankey' ? buildMatrix(input) : null), [view, input])
   const sankey = useMemo(() => (view === 'sankey' && matrix ? buildSankey(matrix, filters) : null), [view, matrix, filters])
@@ -277,6 +287,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 unapplied={unapplied}
                 selectedCell={selectedEdge?.id ?? null}
                 selectedZone={selectedZone ? selectedNode : null}
+                narrow={panelOpen}
                 onSelectCell={selectEdge}
                 onSelectZone={selectZone}
                 names={{ end: endName }}

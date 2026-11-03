@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, type KeyboardEvent } from 'react'
+import { useMemo, useState } from 'react'
 import { Box, Tooltip, Typography, useTheme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { MatrixEnd } from './matrixModel'
 import type { Ribbon, SankeyLayout, SankeyNode } from './sankeyModel'
 import { EDGE_COLORS, EXTERNAL_ID } from './zoneGraph'
+import { onKeys } from './ZoneNode'
 
 /** The drawing, in its own units (the SVG scales to the width of the map): labels, bars, then the ribbons between. */
 const W = 960
@@ -27,11 +28,12 @@ const LABEL_AT: Record<Side, { bar: number; dot: number; text: number; anchor: '
 }
 
 const short = (name: string) => (name.length > MAX_NAME ? `${name.slice(0, MAX_NAME - 1)}…` : name)
-const onKeys = (action: () => void) => (event: KeyboardEvent) => {
-  if (event.key !== 'Enter' && event.key !== ' ') return
-  event.preventDefault()
-  action()
-}
+
+/** A ribbon or a node that has the keyboard focus is outlined in the primary colour. */
+const FOCUS_SX = (color: string) => ({
+  '& [data-ribbon]:focus-visible': { filter: `drop-shadow(0 0 2px ${color}) drop-shadow(0 0 2px ${color})` },
+  '& [data-node]:focus-visible rect': { stroke: color, strokeWidth: 2 },
+})
 
 type NodeBarProps = {
   node: SankeyNode
@@ -107,6 +109,7 @@ export default function ZoneSankey({ layout, selectedCell, selectedZone, onSelec
   const theme = useTheme()
   const [focus, setFocus] = useState<Focus>(null)
   const lit = litRibbons(layout, focus, selectedCell, selectedZone)
+  const byWidth = useMemo(() => [...layout.ribbons].sort((a, b) => b.width - a.width), [layout.ribbons])
   const height = HEAD + layout.height + 16
   const endKind = (id: string, side: Side) => {
     if (id === EXTERNAL_ID) return 'external' as const
@@ -121,7 +124,8 @@ export default function ZoneSankey({ layout, selectedCell, selectedZone, onSelec
     const amount = r.hits ? t('matrix.hits', { count: r.hits }) : t('sankey.flows', { count: r.count })
     const legend = t(r.kind === 'outside' ? 'legend.allowed' : `legend.${r.kind}`)
     const services = r.services.join(', ')
-    return { title: `${from} → ${to}`, line: `${legend}: ${services}`, amount, aria: t('edge.aria', { from, to, services: `${services}, ${amount}` }) }
+    const line = `${legend}: ${services}`
+    return { title: `${from} → ${to}`, line, amount, aria: t('edge.aria', { from, to, services: `${line}, ${amount}` }) }
   }
 
   const nodeBar = (n: SankeyNode, side: Side) => (
@@ -143,24 +147,26 @@ export default function ZoneSankey({ layout, selectedCell, selectedZone, onSelec
   }
 
   return (
-    <Box sx={{ height: '100%', overflow: 'auto', p: 1.5, boxSizing: 'border-box' }}>
+    <Box sx={{ height: '100%', overflow: 'auto', p: 1.5, boxSizing: 'border-box', ...FOCUS_SX(theme.palette.primary.main) }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, minWidth: 0 }}>
         <Box component='i' className='ri-information-line' aria-hidden sx={{ color: 'text.secondary', flexShrink: 0 }} />
         <Tooltip title={t('sankey.note')}>
           <Typography noWrap variant='caption' color='text.secondary' sx={{ minWidth: 0 }}>{t('sankey.note')}</Typography>
         </Tooltip>
       </Box>
-      <svg role='img' aria-label={t('sankey.label')} viewBox={`0 0 ${W} ${height}`} width='100%' style={{ display: 'block', maxWidth: 1100, margin: '0 auto' }}>
+      <svg role='group' aria-label={t('sankey.label')} viewBox={`0 0 ${W} ${height}`} width='100%' style={{ display: 'block', maxWidth: 1100, margin: '0 auto' }}>
         <text x={LEFT_X + BAR_W / 2} y={14} textAnchor='middle' fontSize={12} fill={theme.palette.text.secondary}>{t('sankey.sources')}</text>
         <text x={RIGHT_X + BAR_W / 2} y={14} textAnchor='middle' fontSize={12} fill={theme.palette.text.secondary}>{t('sankey.destinations')}</text>
         <g>
-          {layout.ribbons.map(r => {
+          {/* The widest first: a thin ribbon (an allowed flow) is drawn over the wide ones and stays clickable. */}
+          {byWidth.map(r => {
             const ya = HEAD + r.y0 + r.width / 2
             const yb = HEAD + r.y1 + r.width / 2
             const x0 = LEFT_X + BAR_W
             const xm = (x0 + RIGHT_X) / 2
             const on = !lit || lit.has(r.id)
             const tip = ribbonTip(r)
+            const d = `M ${x0} ${ya} C ${xm} ${ya}, ${xm} ${yb}, ${RIGHT_X} ${yb}`
             return (
               <Tooltip
                 key={r.id}
@@ -173,25 +179,31 @@ export default function ZoneSankey({ layout, selectedCell, selectedZone, onSelec
                   </Box>
                 )}
               >
-                <path
-                  data-ribbon={r.id}
-                  role='button'
-                  tabIndex={0}
-                  aria-label={tip.aria}
-                  aria-pressed={selectedCell === r.cell}
-                  d={`M ${x0} ${ya} C ${xm} ${ya}, ${xm} ${yb}, ${RIGHT_X} ${yb}`}
-                  fill='none'
-                  stroke={EDGE_COLORS[r.kind]}
-                  strokeWidth={r.width}
-                  strokeOpacity={on ? 0.55 : 0.1}
-                  style={{ cursor: 'pointer', transition: 'stroke-opacity 150ms', outline: 'none' }}
-                  onClick={() => onSelectCell(r.cell)}
-                  onKeyDown={onKeys(() => onSelectCell(r.cell))}
-                  onMouseEnter={() => setFocus({ ribbon: r.id })}
-                  onMouseLeave={() => setFocus(null)}
-                  onFocus={() => setFocus({ ribbon: r.id })}
-                  onBlur={() => setFocus(null)}
-                />
+                <g>
+                  <path
+                    data-ribbon={r.id}
+                    role='button'
+                    tabIndex={0}
+                    aria-label={tip.aria}
+                    aria-pressed={selectedCell === r.cell}
+                    d={d}
+                    fill='none'
+                    stroke={EDGE_COLORS[r.kind]}
+                    strokeWidth={r.width}
+                    strokeOpacity={on ? 0.55 : 0.1}
+                    style={{ cursor: 'pointer', transition: 'stroke-opacity 150ms', outline: 'none' }}
+                    onClick={() => onSelectCell(r.cell)}
+                    onKeyDown={onKeys(() => onSelectCell(r.cell))}
+                    onMouseEnter={() => setFocus({ ribbon: r.id })}
+                    onMouseLeave={() => setFocus(null)}
+                    onFocus={() => setFocus({ ribbon: r.id })}
+                    onBlur={() => setFocus(null)}
+                  />
+                  {/* Unprotected traffic is dashed red, like in the legend of the toolbar. */}
+                  {r.kind === 'unprotected' && (
+                    <path data-dash={r.id} d={d} fill='none' stroke={EDGE_COLORS.unprotected} strokeWidth={2} strokeDasharray='6 4' strokeOpacity={on ? 1 : 0.2} pointerEvents='none' aria-hidden />
+                  )}
+                </g>
               </Tooltip>
             )
           })}

@@ -12982,7 +12982,8 @@
         "guestPending": "영역에 대기 중, 다음 계획으로 적용됨",
         "moreHint": "{count, plural, other {멤버 #개 더}}: 영역 패널에 모두 나열됩니다",
         "moreUnzonedHint": "{count, plural, other {영역 없는 게스트 #개 더}}: 편차에 모두 나열됩니다",
-        "ipHint": "{ip}: 이 영역과 통신한, 영역과 게스트에 속하지 않는 주소"
+        "ipHint": "{ip}: 이 영역과 통신한, 영역과 게스트에 속하지 않는 주소",
+        "inside": "{count, plural, other {영역 내부에서 관찰된 흐름 #개}}"
       },
       "edge": {
         "outside": "v1에서 적용되지 않음: {services}",

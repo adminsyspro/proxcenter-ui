@@ -13059,7 +13059,20 @@
         "groups": "그룹",
         "groupsHint": "게스트를 담은 원으로 표시한 영역",
         "compact": "간결한 영역",
-        "compactHint": "영역마다 상자 하나, 영역이 많을 때"
+        "compactHint": "영역마다 상자 하나, 영역이 많을 때",
+        "matrix": "행렬",
+        "matrixHint": "출발지 × 목적지, 영역 수와 관계없이"
+      },
+      "matrix": {
+        "label": "영역 간 흐름: 출발지 × 목적지",
+        "corner": "출발지 → 목적지",
+        "sort": "영역 정렬",
+        "sortName": "이름순",
+        "sortLayer": "계층순 (지도를 읽는 방향)",
+        "hits": "{count, plural, other {#회 히트}}",
+        "noFlow": "흐름 없음",
+        "observedChip": "{service}: {count, plural, other {#회 히트}}",
+        "openZone": "{name} 영역 패널 열기"
       }
     },
     "preflight": {

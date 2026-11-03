@@ -13060,7 +13060,20 @@
         "groups": "Groupes",
         "groupsHint": "les zones en cercles avec leurs invités",
         "compact": "Zones compactes",
-        "compactHint": "une boîte par zone, pour beaucoup de zones"
+        "compactHint": "une boîte par zone, pour beaucoup de zones",
+        "matrix": "Matrice",
+        "matrixHint": "sources par destinations, pour tout nombre de zones"
+      },
+      "matrix": {
+        "label": "Flux entre les zones : sources par destinations",
+        "corner": "Origine → destination",
+        "sort": "Trier les zones",
+        "sortName": "Par nom",
+        "sortLayer": "Par couche, dans le sens de lecture de la carte",
+        "hits": "{count, plural, one {# occurrence} other {# occurrences}}",
+        "noFlow": "aucun flux",
+        "observedChip": "{service} : {count, plural, one {# occurrence} other {# occurrences}}",
+        "openZone": "Ouvrir le panneau de la zone {name}"
       }
     },
     "preflight": {

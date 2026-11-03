@@ -12727,7 +12727,20 @@
         "groups": "Gruppen",
         "groupsHint": "Zonen als Kreise mit ihren Gästen",
         "compact": "Kompakte Zonen",
-        "compactHint": "ein Kasten pro Zone, für viele Zonen"
+        "compactHint": "ein Kasten pro Zone, für viele Zonen",
+        "matrix": "Matrixansicht",
+        "matrixHint": "Quellen nach Zielen, für jede Anzahl von Zonen"
+      },
+      "matrix": {
+        "label": "Flüsse zwischen den Zonen: Quellen nach Zielen",
+        "corner": "Quelle → Ziel",
+        "sort": "Zonen sortieren",
+        "sortName": "Nach Name",
+        "sortLayer": "Nach Ebene, in Leserichtung der Karte",
+        "hits": "{count, plural, one {# Treffer} other {# Treffer}}",
+        "noFlow": "kein Fluss",
+        "observedChip": "{service}: {count, plural, one {# Treffer} other {# Treffer}}",
+        "openZone": "Bereich der Zone {name} öffnen"
       }
     },
     "preflight": {

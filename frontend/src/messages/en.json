@@ -13059,7 +13059,20 @@
         "groups": "Groups",
         "groupsHint": "zones as circles holding their guests",
         "compact": "Compact zones",
-        "compactHint": "one box per zone, for many zones"
+        "compactHint": "one box per zone, for many zones",
+        "matrix": "Matrix",
+        "matrixHint": "sources by destinations, for any number of zones"
+      },
+      "matrix": {
+        "label": "Flows between the zones: sources by destinations",
+        "corner": "Source → destination",
+        "sort": "Sort the zones",
+        "sortName": "By name",
+        "sortLayer": "By layer, as the map reads",
+        "hits": "{count, plural, one {# hit} other {# hits}}",
+        "noFlow": "no flow",
+        "observedChip": "{service}: {count, plural, one {# hit} other {# hits}}",
+        "openZone": "Open the panel of zone {name}"
       }
     },
     "preflight": {

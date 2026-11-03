@@ -13059,7 +13059,20 @@
         "groups": "Grupos",
         "groupsHint": "las zonas como círculos con sus invitados",
         "compact": "Zonas compactas",
-        "compactHint": "una caja por zona, para muchas zonas"
+        "compactHint": "una caja por zona, para muchas zonas",
+        "matrix": "Matriz",
+        "matrixHint": "orígenes por destinos, para cualquier número de zonas"
+      },
+      "matrix": {
+        "label": "Flujos entre las zonas: orígenes por destinos",
+        "corner": "Origen → destino",
+        "sort": "Ordenar las zonas",
+        "sortName": "Por nombre",
+        "sortLayer": "Por capa, en el sentido de lectura del mapa",
+        "hits": "{count, plural, one {# impacto} other {# impactos}}",
+        "noFlow": "ningún flujo",
+        "observedChip": "{service}: {count, plural, one {# impacto} other {# impactos}}",
+        "openZone": "Abrir el panel de la zona {name}"
       }
     },
     "preflight": {

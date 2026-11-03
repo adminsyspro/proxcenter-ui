@@ -14,10 +14,12 @@ import EdgePanel from './EdgePanel'
 import { MapNamesContext, edgeAria, type EdgeT, type MapNames } from './FlowEdge'
 import MapToolbar, { useFlowFilters, useMapView, type MapView } from './MapToolbar'
 import { mapViewGraph } from './mapViewGraph'
+import { buildMatrix, matrixEdge, type MatrixEnd } from './matrixModel'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import { useZoneEdits } from './useZoneEdits'
 import { useZoneGuests } from './useZoneGuests'
 import ZoneCanvas from './ZoneCanvas'
+import ZoneMatrix from './ZoneMatrix'
 import {
   EXTERNAL_ID, OUTSIDE_ID, UNZONED_ID, filterEdges, focusSets, zoneNodeId,
   type MapEdgeData, type MapInput, type MapMember, type MapNodeData, type PanelEdgeData,
@@ -30,7 +32,7 @@ const PENDING_LIMIT = 200
 const PENDING_OBSERVED: ListSuggestionsParams = { status: 'pending', limit: PENDING_LIMIT }
 
 type Selection = { kind: 'zone' | 'guest' | 'edge'; id: string }
-/** The edge whose flow panel is open. */
+/** The edge (or the cell of the matrix) whose flow panel is open. */
 type PanelEdge = { id: string; source: string; target: string; data: PanelEdgeData }
 
 /** The node the selection lights: the circle of the selected zone, or the selected guest. */
@@ -55,10 +57,10 @@ const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_z
   && a.dst_zone_id === b.dst_zone_id && a.dst_cidr === b.dst_cidr && a.proto === b.proto && a.dport === b.dport
 
 /**
- * The Overview sub-tab: the draft as a map, in one of two renderings chosen in the toolbar (kept in the browser).
+ * The Overview sub-tab: the draft as a map, in one of three renderings chosen in the toolbar (kept in the browser).
  * Groups, like the security groups view of NSX: a circle per zone holding its guests, the running guests in no zone
  * in a dashed circle, the allowed flows circle to circle, the observed ones (unprotected, blocked) guest to guest.
- * Compact zones: a box per zone, every flow zone to zone. Hover or select something
+ * Compact zones: a box per zone, every flow zone to zone. Matrix: sources by destinations. Hover or select something
  * to light it and its flows; click a zone for its panel, an edge (or a cell) for its flows. Nothing polls beyond the
  * shared hooks (one inventory read, one suggestions read).
  */
@@ -104,6 +106,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     const unzoned = membersKnown ? guests.filter(g => g.status === 'running' && !zoned.has(guestKey(g))).map(guestToMember) : null
     return { zones, flows, suggestions: suggestions.data ?? [], members, unzoned, unapplied }
   }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied])
+  const matrix = useMemo(() => (view === 'matrix' ? buildMatrix(input) : null), [view, input])
   const graph = useMemo(() => mapViewGraph(view, input), [view, input])
 
   // "Refreshed at": the first answer, then the end of every refresh (a refresh that changes nothing still moves it).
@@ -116,8 +119,10 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
 
   // A zone deleted from the draft (or an edge gone after a reload) simply closes its panel.
   const selectedZone = selection?.kind === 'zone' ? zones.find(z => z.id === selection.id) ?? null : null
+  // The flow panel: the selected cell of the matrix, or the selected edge of the canvas.
   const graphEdge = graph.edges.find(e => selection?.kind === 'edge' && e.id === selection.id)
-  const selectedEdge: PanelEdge | null = graphEdge ? { id: graphEdge.id, source: graphEdge.source, target: graphEdge.target, data: graphEdge.data as unknown as MapEdgeData } : null
+  const cellEdge = matrix && selection?.kind === 'edge' ? matrixEdge(matrix, selection.id, filters, unapplied) : null
+  const selectedEdge: PanelEdge | null = cellEdge ?? (graphEdge ? { id: graphEdge.id, source: graphEdge.source, target: graphEdge.target, data: graphEdge.data as unknown as MapEdgeData } : null)
   const selectedNode = selectedNodeOf(selectedZone, selection)
   const selectedFocus = selectedNode ?? (selection?.kind === 'edge' ? selection.id : null)
   const focusId = hover ?? keyFocus ?? selectedFocus
@@ -168,13 +173,14 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   }), [graph.edges, filters, lit, tEdge, names])
 
   const selectZone = useCallback((zoneId: string) => { setSelection({ kind: 'zone', id: zoneId }); setResolved(null) }, [])
-  // A zone panel stays open across renderings; an edge or a guest belongs to the rendering it was picked in.
+  // A zone panel stays open across renderings; an edge, a cell or a guest belongs to the rendering it was picked in.
   const changeView = useCallback((next: MapView) => {
     setView(next)
     setSelection(s => (s?.kind === 'zone' ? s : null))
     setHover(null)
     setKeyFocus(null)
   }, [setView])
+  const endName = useCallback((e: MatrixEnd) => e.zone?.name ?? tNode(e.kind === 'outside' ? 'outside' : 'external'), [tNode])
   const selectGuest = useCallback((nodeId: string) => setSelection({ kind: 'guest', id: nodeId }), [])
   const selectEdge = useCallback((edgeId: string) => { setSelection({ kind: 'edge', id: edgeId }); setResolved(null) }, [])
   const clear = useCallback(() => setSelection(null), [])
@@ -225,17 +231,31 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
             aria-label={t('mapLabel')}
             sx={{ flex: '1 1 0', minWidth: 0, width: '100%', minHeight: 560, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
           >
-            <ZoneCanvas
-              nodes={nodes}
-              edges={edges}
-              onSelectZone={selectZone}
-              onSelectGuest={selectGuest}
-              onSelectEdge={selectEdge}
-              onHover={setHover}
-              onFocusNode={setKeyFocus}
-              onClear={clear}
-              panelOpen={panelOpen}
-            />
+            {matrix && (
+              <ZoneMatrix
+                model={matrix}
+                filters={filters}
+                unapplied={unapplied}
+                selectedCell={selectedEdge?.id ?? null}
+                selectedZone={selectedZone ? selectedNode : null}
+                onSelectCell={selectEdge}
+                onSelectZone={selectZone}
+                names={{ end: endName }}
+              />
+            )}
+            {!matrix && (
+              <ZoneCanvas
+                nodes={nodes}
+                edges={edges}
+                onSelectZone={selectZone}
+                onSelectGuest={selectGuest}
+                onSelectEdge={selectEdge}
+                onHover={setHover}
+                onFocusNode={setKeyFocus}
+                onClear={clear}
+                panelOpen={panelOpen}
+              />
+            )}
           </Box>
           {selectedZone && (
             <ZonePanel

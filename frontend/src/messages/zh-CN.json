@@ -13059,7 +13059,20 @@
         "groups": "分组",
         "groupsHint": "以圆圈表示区域并包含其虚拟机",
         "compact": "紧凑区域",
-        "compactHint": "每个区域一个方框，适合区域较多时"
+        "compactHint": "每个区域一个方框，适合区域较多时",
+        "matrix": "矩阵",
+        "matrixHint": "来源 × 目标，适合任意数量的区域"
+      },
+      "matrix": {
+        "label": "区域之间的流：来源 × 目标",
+        "corner": "来源 → 目标",
+        "sort": "排序区域",
+        "sortName": "按名称",
+        "sortLayer": "按层级（地图的阅读方向）",
+        "hits": "{count, plural, other {# 次命中}}",
+        "noFlow": "无流",
+        "observedChip": "{service}：{count, plural, other {# 次命中}}",
+        "openZone": "打开区域 {name} 的面板"
       }
     },
     "preflight": {

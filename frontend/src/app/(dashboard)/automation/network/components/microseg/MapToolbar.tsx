@@ -10,9 +10,9 @@ const STORAGE_KEY = 'microseg.map.flows'
 const VIEW_KEY = 'microseg.map.view'
 
 /** The renderings of the map; Groups (circles holding their guests) is the reference and the default. */
-export const MAP_VIEWS = ['groups', 'compact'] as const
+export const MAP_VIEWS = ['groups', 'compact', 'matrix'] as const
 export type MapView = (typeof MAP_VIEWS)[number]
-const VIEW_ICONS: Record<MapView, string> = { groups: 'ri-bubble-chart-line', compact: 'ri-flow-chart' }
+const VIEW_ICONS: Record<MapView, string> = { groups: 'ri-bubble-chart-line', compact: 'ri-flow-chart', matrix: 'ri-grid-line' }
 
 /** The rendering of the map, kept in this browser (a blocked storage, or an unknown value, just means Groups). */
 export function useMapView(): [MapView, (next: MapView) => void] {

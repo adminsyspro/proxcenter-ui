@@ -74,7 +74,8 @@ function ClusterChip({ clusterPhase, firewallMode, firewallOn, policyIn, stopped
 export default function PostureChips(props: Props) {
   const t = useTranslations('networkPage.dashboard')
   const format = useFormatter()
-  const now = useNow(NOW_REFRESH_MS, props.lastCheck)
+  // The time as the key, not the Date: a new Date each render would restart the clock on every render.
+  const now = useNow(NOW_REFRESH_MS, props.lastCheck?.getTime())
   const { zones, guests, lastCheck } = props
 
   let zonesChip = <ChipSkeleton testId='chip-zones-loading' />

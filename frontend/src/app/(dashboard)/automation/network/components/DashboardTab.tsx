@@ -4,12 +4,13 @@ import { useMemo, useState } from 'react'
 import { Box } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
-import { useVMFirewallCoverage } from '@/hooks/useZeroTrust'
+import { useVMFirewallCoverage, type FirewallCoverage } from '@/hooks/useZeroTrust'
 import { PVE_DEFAULT_POLICY_IN } from '@/lib/firewall/pveDefaults'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { useMicrosegDrifts, useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 import type { ListSuggestionsParams } from '@/lib/microseg/api'
+import type { MicrosegPolicy, MicrosegStatus, MicrosegSuggestion } from '@/lib/microseg/types'
 
 import DashboardTodo, { type TodoActions } from './DashboardTodo'
 import { dashboardPhase, missingManagementPorts, todoItems, type BlockPhase } from './dashboardModel'
@@ -25,6 +26,7 @@ import { coverage as microsegCoverage } from './microseg/coverage'
 import type { MicrosegSubTab } from './microseg/microsegTabTypes'
 import { clusterFirewallOff, lastCheckAt, unzonedRunning } from './microseg/summaryModel'
 import { useZoneGuests } from './microseg/useZoneGuests'
+import type { PolicyGuest } from './microseg/zoneModel'
 
 /** The guest filter Firewalling > VMs opens with from the "To do" list. */
 export type GuestFilter = 'unprotected'
@@ -79,6 +81,29 @@ function microsegPhase(reads: { data?: unknown; error?: unknown }[]): BlockPhase
   return reads.every(r => r.data) ? 'ready' : 'loading'
 }
 
+/** What the header chips say of the engine: undefined while its status is read, null when it could not be. */
+function engineFigures(status: MicrosegStatus | undefined, failed: boolean) {
+  if (status) return { zones: zonesEnforced(status), lastCheck: lastCheckAt(status) }
+  return failed ? { zones: null, lastCheck: null } : { zones: undefined, lastCheck: undefined }
+}
+
+/** The figures of the observed traffic blocks, from the policy, the pending flows and the guests. */
+function usePostureFigures(policy: MicrosegPolicy | undefined, suggestions: MicrosegSuggestion[] | undefined, rows: FirewallCoverage['guests'], listed: PolicyGuest[] | null, groupBy: GroupBy) {
+  return useMemo(() => {
+    const zones = policy?.zones ?? []
+    const tagPrefix = policy?.policy.tag_prefix ?? ''
+    const flows = policy?.flows ?? []
+    const seen = suggestions ?? []
+    const addresses = listed !== null
+    const guests = postureGuests(rows, listed)
+    return {
+      traffic: postureTraffic({ groupBy, zones, tagPrefix, suggestions: seen, guests, addresses }),
+      distribution: postureDistribution({ zones, tagPrefix, flows, suggestions: seen, guests, addresses }),
+      services: topServices(seen, flows),
+    }
+  }, [policy, suggestions, rows, listed, groupBy])
+}
+
 /**
  * The "Posture" Dashboard of /automation/network (UA50): the header chips (cluster firewall and inbound policy, or the
  * emergency stop; zones enforced; running guests protected; last check), the observed traffic per zone (donut and
@@ -127,20 +152,10 @@ export default function DashboardTab({
   })
 
   const addresses = guestsWanted && zoneGuests.status === 'ready'
-  let trafficPhase = microsegPhase([microsegPolicy, pending])
-  if (trafficPhase === 'ready' && groupBy !== 'zone' && zoneGuests.status === 'loading') trafficPhase = 'loading'
-
-  const posture = useMemo(() => {
-    const zones = policy?.zones ?? []
-    const tagPrefix = policy?.policy.tag_prefix ?? ''
-    const suggestions = pending.data ?? []
-    const guests = postureGuests(coverage?.guests, addresses ? zoneGuests.guests : null)
-    return {
-      traffic: postureTraffic({ groupBy, zones, tagPrefix, suggestions, guests, addresses }),
-      distribution: postureDistribution({ zones, tagPrefix, flows: policy?.flows ?? [], suggestions, guests, addresses }),
-      services: topServices(suggestions, policy?.flows ?? []),
-    }
-  }, [policy, pending.data, coverage?.guests, addresses, zoneGuests.guests, groupBy])
+  const listsPhase = microsegPhase([microsegPolicy, pending])
+  // A grouping by VLAN or node waits for the guests it is made of.
+  const trafficPhase = listsPhase === 'ready' && groupBy !== 'zone' && zoneGuests.status === 'loading' ? 'loading' : listsPhase
+  const posture = usePostureFigures(policy, pending.data, coverage?.guests, addresses ? zoneGuests.guests : null, groupBy)
 
   const items = todoItems({
     firewallOn,
@@ -178,12 +193,7 @@ export default function DashboardTab({
 
   if (!selectedConnection) return <Box sx={{ p: 3 }} />
 
-  let zonesFigure: ReturnType<typeof zonesEnforced> | undefined
-  if (status) zonesFigure = zonesEnforced(status)
-  else if (microsegStatus.error) zonesFigure = null
-  let lastCheck: Date | null | undefined
-  if (status) lastCheck = lastCheckAt(status)
-  else if (microsegStatus.error) lastCheck = null
+  const engine = engineFigures(status, !!microsegStatus.error)
 
   return (
     <Box sx={{ p: 3 }}>
@@ -208,9 +218,9 @@ export default function DashboardTab({
         policyIn={policyIn}
         stopped={stopped}
         stopHoldsFirewall={stopHoldsFirewall}
-        zones={zonesFigure}
+        zones={engine.zones}
         guests={protectedRunning(coverage)}
-        lastCheck={lastCheck}
+        lastCheck={engine.lastCheck}
         onOpenCluster={stopped ? () => openMicroseg('overview') : openRules(0)}
         onOpenMicroseg={() => openMicroseg()}
         onOpenGuests={() => openGuests()}
@@ -229,8 +239,8 @@ export default function DashboardTab({
           />
         </Box>
         <Box sx={{ gridColumn: { xs: 'span 12', lg: 'span 5' }, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-          <TrafficDistribution phase={microsegPhase([microsegPolicy, pending])} distribution={posture.distribution} />
-          <TopServices phase={microsegPhase([microsegPolicy, pending])} rows={posture.services} />
+          <TrafficDistribution phase={listsPhase} distribution={posture.distribution} />
+          <TopServices phase={listsPhase} rows={posture.services} />
         </Box>
       </Box>
 

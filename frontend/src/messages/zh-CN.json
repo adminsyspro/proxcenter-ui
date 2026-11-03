@@ -12986,26 +12986,13 @@
         "destination": "目标",
         "service": "服务",
         "stateColumn": "状态",
-        "hitsColumn": "24 小时命中",
         "actions": "操作",
-        "hitsHint": "过去 24 小时内从源区域到目标区域记录的流量。历史只保存区域而不保存端口：相同区域之间的流量规则共享同一计数。",
-        "hitsZeroHint": "过去 24 小时无命中：可考虑清理",
         "outside": "区域之外",
         "addFlowInto": "新建流向 {zone} 的流量规则",
         "addFlowShort": "流量规则",
         "filter": "按区域或服务筛选",
-        "sort": "排序方式",
-        "sortSource": "源",
-        "sortHits": "24 小时命中",
         "noMatch": "没有与筛选条件匹配的流量规则。",
-        "hits": "{count, plural, other {# 次命中}}",
         "groupCount": "{count, plural, other {# 条流量规则}}",
-        "hitsNone": {
-          "cidrSource": "历史不保存源地址",
-          "cidrDestination": "v1 中未应用：不计命中",
-          "unavailable": "无法读取流量历史",
-          "loading": "正在读取流量历史..."
-        },
         "state": {
           "applied": "已应用",
           "appliedHint": "在已应用的修订版中",
@@ -13018,7 +13005,9 @@
           "notApplied": "v1 中未应用",
           "notAppliedHint": "未应用（v1 不管理出站）",
           "unknownHint": "正在与已应用的修订版比较..."
-        }
+        },
+        "uncovered": "{count, plural, other {未覆盖 24 小时：# 次命中}}",
+        "uncoveredHint": "进入该区域且未被任何流量规则覆盖的流量（由该区域成员在过去 24 小时内记录）"
       }
     },
     "plan": {

@@ -17,7 +17,7 @@ import ZoneDialog from './ZoneDialog'
 import type { ZoneFormValues } from './zoneForm'
 import ZoneList from './ZoneList'
 import { ZoneStateConfirm, useFlowEditor } from './ZonePanelActions'
-import { useFlowHits } from './useFlowHits'
+import { useZoneUncovered } from './useZoneUncovered'
 import { usePendingChanges } from './usePendingChanges'
 import { useZoneEdits } from './useZoneEdits'
 import { useZoneGuests } from './useZoneGuests'
@@ -27,11 +27,12 @@ type Editing<T> = { item: T | null } | null
 /**
  * The Policy sub-tab: zones of the draft (one compact line each, members and flows side by side under the chevron),
  * then its flows as one table grouped by destination zone, each zone and flow marked with how it differs from the
- * applied revision and each flow with its hits of the last 24 hours (one history read for the tab, no Proxmox call).
+ * applied revision, each zone group with the traffic into it no flow covered over 24 hours (one history read for the
+ * tab, no Proxmox call).
  * Every write carries the draft version; a VERSION_CONFLICT reloads the policy and keeps the dialog (and its input)
  * open. A zone state change starts a run, followed in the strip of the tab (it survives a switch of sub-tab).
  */
-export default function PolicyPanel({ connectionId, policy, reloadPolicy, startRun, onOpenPlan, onOpenPreflight }: MicrosegSubTabProps) {
+export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, onOpenPreflight }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.policy')
   const inSlot = useContext(MicrosegActionsSlot) !== null
   const { guests, status: guestsStatus } = useZoneGuests(connectionId)
@@ -45,7 +46,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
   const flowEditor = useFlowEditor(edits)
   const { diff } = usePendingChanges(connectionId, policy)
-  const hits = useFlowHits(connectionId)
+  const uncovered = useZoneUncovered(connectionId)
 
   const saveZone = (zone: MicrosegZone | null) => async (values: ZoneFormValues) => {
     await edits.saveZone(zone, values)
@@ -99,8 +100,8 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, startR
         flows={policy.flows}
         zones={policy.zones}
         diff={diff}
-        pairs={hits.pairs}
-        hitsFailed={hits.failed}
+        uncovered={uncovered.byZone}
+        onOpenObservation={zoneId => goToSubTab('observation', { zoneId })}
         onAdd={dst => flowEditor.create(dst ? { dst_zone_id: dst } : {})}
         onEdit={flowEditor.edit}
         onDelete={flowEditor.remove}

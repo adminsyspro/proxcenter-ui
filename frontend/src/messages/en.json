@@ -12986,26 +12986,13 @@
         "destination": "Destination",
         "service": "Service",
         "stateColumn": "State",
-        "hitsColumn": "Hits 24 h",
         "actions": "Actions",
-        "hitsHint": "Traffic logged over the last 24 hours from the source zone to the destination zone. The history keeps the zones, not the port: flows between the same zones share their count.",
-        "hitsZeroHint": "No hit in the last 24 h: candidate for cleanup",
         "outside": "Outside the zones",
         "addFlowInto": "New flow into {zone}",
         "addFlowShort": "Flow",
         "filter": "Filter by zone or service",
-        "sort": "Sort by",
-        "sortSource": "Source",
-        "sortHits": "Hits 24 h",
         "noMatch": "No flow matches the filter.",
-        "hits": "{count, plural, one {# hit} other {# hits}}",
         "groupCount": "{count, plural, one {# flow} other {# flows}}",
-        "hitsNone": {
-          "cidrSource": "The history does not keep the source address",
-          "cidrDestination": "Not applied in v1: no hit is counted",
-          "unavailable": "The traffic history could not be read",
-          "loading": "Reading the traffic history..."
-        },
         "state": {
           "applied": "Applied",
           "appliedHint": "In the applied revision",
@@ -13018,7 +13005,9 @@
           "notApplied": "Not applied in v1",
           "notAppliedHint": "Not applied (egress not managed in v1)",
           "unknownHint": "Comparing with the applied revision..."
-        }
+        },
+        "uncovered": "{count, plural, one {Uncovered 24 h: # hit} other {Uncovered 24 h: # hits}}",
+        "uncoveredHint": "Traffic into this zone that no flow covers (logged by the zone's members over the last 24 h)"
       }
     },
     "plan": {

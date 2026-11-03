@@ -26,10 +26,12 @@ export type MicrosegSubTabProps = {
   policy: MicrosegPolicy
   /** Re-reads the draft (after a write, or on a VERSION_CONFLICT). */
   reloadPolicy: () => Promise<unknown>
-  /** Opens a sub-tab; the Drifts sub-tab can open on one zone's drifts. */
+  /** Opens a sub-tab; the Drifts and Observation sub-tabs can open on one zone. */
   goToSubTab: (tab: MicrosegSubTab, options?: { zoneId?: string }) => void
   /** The zone the Drifts sub-tab is filtered on (opened from a zone panel), null for every drift. */
   driftsZone?: string | null
+  /** The zone the Observation sub-tab opens filtered on (from a Policy zone group), null for every zone. */
+  observationZone?: string | null
   /** Opens the plan window (computes the plan, then applies it). */
   onOpenPlan: () => void
   /** Follow a run in the strip under the banner; the policy and the status are refreshed when it ends. */

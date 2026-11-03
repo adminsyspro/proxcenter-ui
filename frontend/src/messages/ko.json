@@ -12986,26 +12986,13 @@
         "destination": "대상",
         "service": "서비스",
         "stateColumn": "상태",
-        "hitsColumn": "24시간 히트",
         "actions": "작업",
-        "hitsHint": "지난 24시간 동안 소스 영역에서 대상 영역으로 기록된 트래픽입니다. 기록은 포트가 아니라 영역을 보관하므로 같은 영역 사이의 플로우는 같은 수를 공유합니다.",
-        "hitsZeroHint": "지난 24시간 동안 히트 없음: 정리 후보",
         "outside": "영역 외부",
         "addFlowInto": "{zone}(으)로 새 플로우",
         "addFlowShort": "플로우",
         "filter": "영역 또는 서비스로 필터",
-        "sort": "정렬 기준",
-        "sortSource": "소스",
-        "sortHits": "24시간 히트",
         "noMatch": "필터와 일치하는 플로우가 없습니다.",
-        "hits": "{count, plural, other {히트 #회}}",
         "groupCount": "{count, plural, other {플로우 #개}}",
-        "hitsNone": {
-          "cidrSource": "기록은 소스 주소를 보관하지 않습니다",
-          "cidrDestination": "v1에서는 적용되지 않음: 히트를 세지 않습니다",
-          "unavailable": "트래픽 기록을 읽을 수 없습니다",
-          "loading": "트래픽 기록을 읽는 중..."
-        },
         "state": {
           "applied": "적용됨",
           "appliedHint": "적용된 리비전에 있음",
@@ -13018,7 +13005,9 @@
           "notApplied": "v1에서 적용 안 됨",
           "notAppliedHint": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",
           "unknownHint": "적용된 리비전과 비교하는 중..."
-        }
+        },
+        "uncovered": "{count, plural, other {미허용 24시간: 히트 #회}}",
+        "uncoveredHint": "어떤 플로우도 허용하지 않는 이 영역으로의 트래픽 (지난 24시간 동안 영역 구성원이 기록)"
       }
     },
     "plan": {

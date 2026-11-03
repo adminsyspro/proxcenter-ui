@@ -12654,26 +12654,13 @@
         "destination": "Ziel",
         "service": "Dienst",
         "stateColumn": "Status",
-        "hitsColumn": "Treffer 24 h",
         "actions": "Aktionen",
-        "hitsHint": "In den letzten 24 Stunden protokollierter Verkehr von der Quellzone zur Zielzone. Der Verlauf speichert die Zonen, nicht den Port: Flüsse zwischen denselben Zonen teilen sich ihre Zahl.",
-        "hitsZeroHint": "Kein Treffer in den letzten 24 h: Kandidat zum Aufräumen",
         "outside": "Außerhalb der Zonen",
         "addFlowInto": "Neuer Fluss nach {zone}",
         "addFlowShort": "Fluss",
         "filter": "Nach Zone oder Dienst filtern",
-        "sort": "Sortieren nach",
-        "sortSource": "Quelle",
-        "sortHits": "Treffer 24 h",
         "noMatch": "Kein Fluss entspricht dem Filter.",
-        "hits": "{count, plural, one {# Treffer} other {# Treffer}}",
         "groupCount": "{count, plural, one {# Fluss} other {# Flüsse}}",
-        "hitsNone": {
-          "cidrSource": "Der Verlauf speichert die Quelladresse nicht",
-          "cidrDestination": "In v1 nicht angewendet: keine Treffer gezählt",
-          "unavailable": "Der Verkehrsverlauf konnte nicht gelesen werden",
-          "loading": "Verkehrsverlauf wird gelesen..."
-        },
         "state": {
           "applied": "Angewendet",
           "appliedHint": "In der angewendeten Revision",
@@ -12686,7 +12673,9 @@
           "notApplied": "In v1 nicht angewendet",
           "notAppliedHint": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",
           "unknownHint": "Vergleich mit der angewendeten Revision..."
-        }
+        },
+        "uncovered": "{count, plural, one {Nicht abgedeckt 24 h: # Treffer} other {Nicht abgedeckt 24 h: # Treffer}}",
+        "uncoveredHint": "Verkehr in diese Zone, den kein Fluss abdeckt (von den Mitgliedern der Zone in den letzten 24 h protokolliert)"
       }
     },
     "plan": {

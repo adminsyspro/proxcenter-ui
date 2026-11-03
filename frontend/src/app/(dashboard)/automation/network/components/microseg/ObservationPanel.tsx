@@ -31,9 +31,10 @@ type Resolved = { action: SuggestionAction; count: number }
  * Filtering and paging are the server's. Accepting turns a flow into a learned
  * flow of the draft (the plan applies it); dismissing hides it for good.
  */
-export default function ObservationPanel({ connectionId, policy, reloadPolicy, onOpenSettings }: MicrosegSubTabProps) {
+export default function ObservationPanel({ connectionId, policy, reloadPolicy, onOpenSettings, observationZone = null }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.observation')
-  const [filters, setFilters] = useState<ObservationFilterValues>({ kind: '', status: 'pending', zone: '' })
+  // Opened from a Policy zone group: filtered on that zone (it stays a filter the user can clear).
+  const [filters, setFilters] = useState<ObservationFilterValues>(() => ({ kind: '', status: 'pending', zone: observationZone ?? '' }))
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [resolved, setResolved] = useState<Resolved | null>(null)

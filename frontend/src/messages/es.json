@@ -12986,26 +12986,13 @@
         "destination": "Destino",
         "service": "Servicio",
         "stateColumn": "Estado",
-        "hitsColumn": "Impactos 24 h",
         "actions": "Acciones",
-        "hitsHint": "Tráfico registrado en las últimas 24 horas de la zona de origen a la zona de destino. El historial guarda las zonas, no el puerto: los flujos entre las mismas zonas comparten su recuento.",
-        "hitsZeroHint": "Ningún impacto en las últimas 24 h: candidato a limpieza",
         "outside": "Fuera de las zonas",
         "addFlowInto": "Nuevo flujo hacia {zone}",
         "addFlowShort": "Flujo",
         "filter": "Filtrar por zona o servicio",
-        "sort": "Ordenar por",
-        "sortSource": "Origen",
-        "sortHits": "Impactos 24 h",
         "noMatch": "Ningún flujo coincide con el filtro.",
-        "hits": "{count, plural, one {# impacto} other {# impactos}}",
         "groupCount": "{count, plural, one {# flujo} other {# flujos}}",
-        "hitsNone": {
-          "cidrSource": "El historial no guarda la dirección de origen",
-          "cidrDestination": "No aplicado en v1: no se cuenta ningún impacto",
-          "unavailable": "No se pudo leer el historial de tráfico",
-          "loading": "Leyendo el historial de tráfico..."
-        },
         "state": {
           "applied": "Aplicado",
           "appliedHint": "En la revisión aplicada",
@@ -13018,7 +13005,9 @@
           "notApplied": "No aplicado en v1",
           "notAppliedHint": "No aplicado (salida no gestionada en v1)",
           "unknownHint": "Comparando con la revisión aplicada..."
-        }
+        },
+        "uncovered": "{count, plural, one {Sin cubrir 24 h: # impacto} other {Sin cubrir 24 h: # impactos}}",
+        "uncoveredHint": "Tráfico hacia esta zona que ningún flujo cubre (registrado por los miembros de la zona en las últimas 24 h)"
       }
     },
     "plan": {

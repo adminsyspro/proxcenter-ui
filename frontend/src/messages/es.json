@@ -9088,7 +9088,11 @@
       "postureTimelineLabel": "Eventos observados cada 5 minutos, apilados por grupo",
       "postureTimelineEvents": "{count, plural, one {# evento} other {# eventos}}",
       "postureTimelineUnavailable": "Eventos observados no disponibles",
-      "postureTimelineEmpty": "Ningún evento observado en la memoria del orquestador"
+      "postureTimelineEmpty": "Ningún evento observado en la memoria del orquestador",
+      "postureVolumeTab": "Volumen (sFlow)",
+      "postureVolumeCaptionSent": "bytes enviados por grupo, últimas 2 horas (sFlow)",
+      "postureVolumeCaptionReceived": "bytes recibidos por grupo, últimas 2 horas (sFlow)",
+      "postureVolumeEmpty": "Ningún volumen sFlow en las últimas 2 horas"
     },
     "rulesOnDemand": {
       "chip": "Reglas al abrir",

@@ -9088,7 +9088,11 @@
       "postureTimelineLabel": "Événements observés par tranche de 5 minutes, empilés par groupe",
       "postureTimelineEvents": "{count, plural, one {# événement} other {# événements}}",
       "postureTimelineUnavailable": "Événements observés indisponibles",
-      "postureTimelineEmpty": "Aucun événement observé dans la mémoire de l'orchestrateur"
+      "postureTimelineEmpty": "Aucun événement observé dans la mémoire de l'orchestrateur",
+      "postureVolumeTab": "Volume de trafic (sFlow)",
+      "postureVolumeCaptionSent": "octets envoyés par groupe, 2 dernières heures (sFlow)",
+      "postureVolumeCaptionReceived": "octets reçus par groupe, 2 dernières heures (sFlow)",
+      "postureVolumeEmpty": "Aucun volume sFlow sur les 2 dernières heures"
     },
     "rulesOnDemand": {
       "chip": "Règles à l'ouverture",

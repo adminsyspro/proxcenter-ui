@@ -9088,7 +9088,11 @@
       "postureTimelineLabel": "Observed events per 5 minutes, stacked per group",
       "postureTimelineEvents": "{count, plural, one {# event} other {# events}}",
       "postureTimelineUnavailable": "Observed events not available",
-      "postureTimelineEmpty": "No observed event in the orchestrator memory"
+      "postureTimelineEmpty": "No observed event in the orchestrator memory",
+      "postureVolumeTab": "Volume (sFlow)",
+      "postureVolumeCaptionSent": "bytes sent per group, last 2 hours (sFlow)",
+      "postureVolumeCaptionReceived": "bytes received per group, last 2 hours (sFlow)",
+      "postureVolumeEmpty": "No sFlow volume in the last 2 hours"
     },
     "rulesOnDemand": {
       "chip": "Rules on open",

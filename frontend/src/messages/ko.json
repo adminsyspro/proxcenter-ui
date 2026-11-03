@@ -9088,7 +9088,11 @@
       "postureTimelineLabel": "5분 단위 관찰 이벤트, 그룹별 누적",
       "postureTimelineEvents": "{count, plural, other {이벤트 #개}}",
       "postureTimelineUnavailable": "관찰된 이벤트 정보 없음",
-      "postureTimelineEmpty": "오케스트레이터 메모리에 관찰된 이벤트 없음"
+      "postureTimelineEmpty": "오케스트레이터 메모리에 관찰된 이벤트 없음",
+      "postureVolumeTab": "볼륨 (sFlow)",
+      "postureVolumeCaptionSent": "그룹별 송신 바이트, 최근 2시간 (sFlow)",
+      "postureVolumeCaptionReceived": "그룹별 수신 바이트, 최근 2시간 (sFlow)",
+      "postureVolumeEmpty": "최근 2시간 동안 sFlow 볼륨 없음"
     },
     "rulesOnDemand": {
       "chip": "열 때 규칙 로드",

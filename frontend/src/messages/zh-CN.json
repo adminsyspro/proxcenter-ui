@@ -9088,7 +9088,11 @@
       "postureTimelineLabel": "每 5 分钟观察到的事件，按组堆叠",
       "postureTimelineEvents": "{count, plural, other {# 个事件}}",
       "postureTimelineUnavailable": "观察到的事件不可用",
-      "postureTimelineEmpty": "编排器内存中没有观察到的事件"
+      "postureTimelineEmpty": "编排器内存中没有观察到的事件",
+      "postureVolumeTab": "流量 (sFlow)",
+      "postureVolumeCaptionSent": "每组发送的字节，最近 2 小时（sFlow）",
+      "postureVolumeCaptionReceived": "每组接收的字节，最近 2 小时（sFlow）",
+      "postureVolumeEmpty": "最近 2 小时没有 sFlow 流量"
     },
     "rulesOnDemand": {
       "chip": "打开时加载规则",

@@ -9035,7 +9035,11 @@
       "postureTimelineLabel": "Beobachtete Ereignisse pro 5 Minuten, nach Gruppe gestapelt",
       "postureTimelineEvents": "{count, plural, one {# Ereignis} other {# Ereignisse}}",
       "postureTimelineUnavailable": "Beobachtete Ereignisse nicht verfügbar",
-      "postureTimelineEmpty": "Kein beobachtetes Ereignis im Speicher des Orchestrators"
+      "postureTimelineEmpty": "Kein beobachtetes Ereignis im Speicher des Orchestrators",
+      "postureVolumeTab": "Volumen (sFlow)",
+      "postureVolumeCaptionSent": "gesendete Bytes pro Gruppe, letzte 2 Stunden (sFlow)",
+      "postureVolumeCaptionReceived": "empfangene Bytes pro Gruppe, letzte 2 Stunden (sFlow)",
+      "postureVolumeEmpty": "Kein sFlow-Volumen in den letzten 2 Stunden"
     },
     "rulesOnDemand": {
       "chip": "Regeln beim Öffnen",

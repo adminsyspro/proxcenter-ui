@@ -1,4 +1,4 @@
-import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, UNZONED_KEY, zoneKey } from '@/lib/microseg/trafficLens'
+import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, UNZONED_KEY, buildResolver, groupKeyOf, zoneKey, type LensPair } from '@/lib/microseg/trafficLens'
 import type { MicrosegEvent, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
 
 import { NO_VLAN_KEY, type GroupBy, type PostureGuest, type PostureSlice } from './dashboardPosture'
@@ -89,7 +89,6 @@ export function postureTimeline(input: {
   const zoneByName = new Map(input.zones.map(z => [z.name.toLowerCase(), z]))
   const guestByKey = new Map(input.guests.map(g => [g.key, g]))
   const guestIps = input.addresses ? new Set(input.guests.flatMap(g => g.ips.map(bareIp))) : null
-  const shown = new Set(slices.map(s => s.key))
 
   const times = events.map(e => Date.parse(e.ts)).filter(t => Number.isFinite(t))
   const oldest = times.length ? Math.min(...times) : null
@@ -100,24 +99,86 @@ export function postureTimeline(input: {
 
   const last = Math.floor(now / BUCKET_MS) * BUCKET_MS
   const first = Math.max(Math.floor(oldest / BUCKET_MS) * BUCKET_MS, last - (MAX_BUCKETS - 1) * BUCKET_MS)
+  const items = kept.map(e => ({ at: Date.parse(e.ts), group: groupOfEvent(e, groupBy, zoneByName, guestByKey, guestIps), value: 1 }))
+  return { ...stack(first, last, items, slices), windowMinutes }
+}
+
+/**
+ * The values per 5-minute bucket from `first` to `last` (bucket starts), one series per slice of the donut that has
+ * a value (in its order and colour), a group the donut does not show in "Other". Values outside the range are left out.
+ */
+function stack(first: number, last: number, items: readonly { at: number; group: string; value: number }[], slices: readonly TimelineSeries[]) {
+  const shown = new Set(slices.map(s => s.key))
   const buckets: TimelineBucket[] = []
   for (let start = first; start <= last; start += BUCKET_MS) buckets.push({ start, total: 0, counts: {} })
 
   const used = new Set<string>()
   let total = 0
-  for (const e of kept) {
-    const at = Date.parse(e.ts)
-    if (!Number.isFinite(at) || at < first) continue
-    const bucket = buckets[Math.min(buckets.length - 1, Math.floor((at - first) / BUCKET_MS))]
-    const group = groupOfEvent(e, groupBy, zoneByName, guestByKey, guestIps)
-    const key = shown.has(group) ? group : OTHER_KEY
-    bucket.counts[key] = (bucket.counts[key] ?? 0) + 1
-    bucket.total += 1
+  for (const item of items) {
+    if (!Number.isFinite(item.at) || item.at < first || item.at >= last + BUCKET_MS || item.value <= 0) continue
+    const bucket = buckets[Math.floor((item.at - first) / BUCKET_MS)]
+    const key = shown.has(item.group) ? item.group : OTHER_KEY
+    bucket.counts[key] = (bucket.counts[key] ?? 0) + item.value
+    bucket.total += item.value
     used.add(key)
-    total += 1
+    total += item.value
   }
 
   const series: TimelineSeries[] = slices.filter(s => used.has(s.key))
   if (used.has(OTHER_KEY) && !shown.has(OTHER_KEY)) series.push({ key: OTHER_KEY, kind: 'other', name: '', color: GROUP_COLORS.other })
-  return { series, buckets, max: Math.max(0, ...buckets.map(b => b.total)), total, windowMinutes }
+  return { series, buckets, max: Math.max(0, ...buckets.map(b => b.total)), total }
+}
+
+/** The window of the sFlow volume chart: the last 2 hours, on 5-minute bucket edges (the read changes every 5 minutes). */
+export const VOLUME_WINDOW_MS = 2 * 60 * 60_000
+
+export function volumeWindow(now: number): { from: number; to: number } {
+  const to = Math.floor(now / BUCKET_MS) * BUCKET_MS + BUCKET_MS
+  return { from: to - VOLUME_WINDOW_MS, to }
+}
+
+/** The VMID of a guest key ("qemu/101"). */
+const vmidOf = (g: PostureGuest) => Number(g.key.slice(g.key.indexOf('/') + 1))
+
+/** The guests of the connection the sFlow pairs name (by VMID, either end), sorted: none means no sFlow data for it. */
+export function connectionVmids(pairs: readonly LensPair[], guests: readonly PostureGuest[]): number[] {
+  const mine = new Set(guests.map(vmidOf))
+  const seen = new Set<number>()
+  for (const p of pairs) for (const vmid of [p.src_vmid, p.dst_vmid]) if (vmid && mine.has(vmid)) seen.add(vmid)
+  return [...seen].sort((a, b) => a - b)
+}
+
+/** One VM of /sflow/timeseries/all-vms: its points, `time` in Unix seconds. */
+export type VmSeries = { vmid: number; vm_name?: string; points: { time: number; bytes_in: number; bytes_out: number }[] | null }
+
+/**
+ * The sFlow bytes per 5-minute bucket of the window, per group of the donut: by zone, what the members SENT (the
+ * donut groups by source zone; the zone from the guest tags, through the lens resolver); by VLAN or node, what the
+ * guests RECEIVED (the donut groups by destination). A VM the connection does not hold is Unknown.
+ */
+export function postureVolume(input: {
+  series: readonly VmSeries[]
+  groupBy: GroupBy
+  zones: readonly MicrosegZone[]
+  tagPrefix: string
+  guests: readonly PostureGuest[]
+  slices: readonly TimelineSeries[]
+  from: number
+  to: number
+}): PostureTimeline {
+  const { groupBy, guests } = input
+  const byVmid = new Map(guests.map(g => [vmidOf(g), g]))
+  const resolve = buildResolver([...input.zones], input.tagPrefix, guests.map(g => ({ vmid: vmidOf(g), name: g.key, tags: g.tags, ips: [] })))
+  const groupOfVm = (vmid: number): string => {
+    if (groupBy === 'zone') return groupKeyOf(resolve('', vmid))
+    const guest = byVmid.get(vmid)
+    if (!guest) return EXTERNAL_KEY
+    if (groupBy === 'node') return `node:${guest.node}`
+    return guest.vlans.length ? `vlan:${guest.vlans[0]}` : NO_VLAN_KEY
+  }
+  const items = input.series.flatMap(vm => {
+    const group = groupOfVm(vm.vmid)
+    return (vm.points ?? []).map(p => ({ at: p.time * 1000, group, value: groupBy === 'zone' ? p.bytes_out : p.bytes_in }))
+  })
+  return { ...stack(input.from, input.to - BUCKET_MS, items, input.slices), windowMinutes: VOLUME_WINDOW_MS / 60_000 }
 }

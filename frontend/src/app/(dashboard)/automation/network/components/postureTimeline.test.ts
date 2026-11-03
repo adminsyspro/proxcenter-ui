@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import type { MicrosegEvent, MicrosegZone } from '@/lib/microseg/types'
 
 import type { PostureGuest } from './dashboardPosture'
-import { BUCKET_MS, MAX_BUCKETS, mergeEvents, postureTimeline, type TimelineSeries } from './postureTimeline'
+import {
+  BUCKET_MS, MAX_BUCKETS, VOLUME_WINDOW_MS, connectionVmids, mergeEvents, postureTimeline, postureVolume, volumeWindow, type TimelineSeries, type VmSeries,
+} from './postureTimeline'
 
 const NOW = Date.parse('2026-11-03T10:02:00Z')
 const at = (minutesAgo: number) => new Date(NOW - minutesAgo * 60_000).toISOString()
@@ -113,5 +115,53 @@ describe('mergeEvents', () => {
     expect(mergeEvents([e(10)], [e(3), e(2)])).toBeNull()
     expect(mergeEvents([], [e(1)])).toBeNull()
     expect(mergeEvents([e(10)], [])).toEqual([])
+  })
+})
+
+describe('sFlow volume', () => {
+  const { from, to } = volumeWindow(NOW)
+  const point = (minutesAgo: number, bytes_in: number, bytes_out: number) => ({ time: Math.floor((NOW - minutesAgo * 60_000) / 1000), bytes_in, bytes_out })
+  const SERIES: VmSeries[] = [
+    { vmid: 101, points: [point(1, 10, 1000), point(7, 20, 2000)] },
+    { vmid: 102, points: [point(1, 500, 5)] },
+    { vmid: 104, points: [point(1, 30, 300)] },
+    { vmid: 999, points: [point(1, 1, 7)] },
+  ]
+  const vol = (over: Partial<Parameters<typeof postureVolume>[0]> = {}) => postureVolume({
+    series: SERIES, groupBy: 'zone', zones: ZONES, tagPrefix: 'zone-', guests: GUESTS, slices: [...ZONE_SLICES, slice('zone:zdb', 'zone', '#444444', 'db')], from, to, ...over,
+  })
+
+  it('reads the last 2 hours on 5-minute edges', () => {
+    expect(to - from).toBe(VOLUME_WINDOW_MS)
+    expect(to % BUCKET_MS).toBe(0)
+    expect(to).toBeGreaterThan(NOW)
+  })
+
+  it('takes the guests of the connection the sFlow pairs name, either end', () => {
+    const pairs = [
+      { src_ip: 'a', dst_ip: 'b', src_vmid: 101, dst_vmid: 999, bytes: 1, packets: 1, protocol: 'TCP', dst_port: 22 },
+      { src_ip: 'c', dst_ip: 'd', dst_vmid: 104, bytes: 1, packets: 1, protocol: 'TCP', dst_port: 22 },
+    ]
+    expect(connectionVmids(pairs, GUESTS)).toEqual([101, 104])
+    expect(connectionVmids(pairs.slice(0, 0), GUESTS)).toEqual([])
+  })
+
+  it('stacks by zone the bytes the members sent, per 5-minute bucket, a VM the connection does not hold as Unknown', () => {
+    const v = vol()
+    expect(v.buckets).toHaveLength(VOLUME_WINDOW_MS / BUCKET_MS)
+    expect(v.buckets.at(-1)!.counts).toEqual({ 'zone:zweb': 1000, 'zone:zdb': 5, unzoned: 300, external: 7 })
+    expect(v.buckets.at(-2)!.counts).toEqual({ 'zone:zweb': 2000 })
+    expect(v.series.map(s => s.key)).toEqual(['zone:zweb', 'external', 'unzoned', 'zone:zdb'])
+    expect(v.total).toBe(3312)
+  })
+
+  it('stacks by VLAN or node the bytes the guests received', () => {
+    const slices = [slice('vlan:10', 'vlan', '#1', '10'), slice('vlan:20', 'vlan', '#2', '20'), slice('vlan:none', 'novlan', '#3'), slice('external', 'external', '#4')]
+    expect(vol({ groupBy: 'vlan', slices }).buckets.at(-1)!.counts).toEqual({ 'vlan:10': 10, 'vlan:20': 500, 'vlan:none': 30, external: 1 })
+    expect(vol({ groupBy: 'node', slices: [slice('node:pve2', 'node', '#5', 'pve2')] }).buckets.at(-1)!.counts).toEqual({ 'node:pve2': 530, other: 11 })
+  })
+
+  it('leaves out the points outside the window', () => {
+    expect(vol({ series: [{ vmid: 101, points: [point(3 * 60, 1, 1)] }, { vmid: 102, points: null }] }).total).toBe(0)
   })
 })

@@ -23,8 +23,9 @@ import { TopServices, TrafficDistribution } from './ObservedTraffic'
 import PostureChips from './PostureChips'
 import TrafficByZone from './TrafficByZone'
 import TrafficTimeline from './TrafficTimeline'
-import { postureTimeline, type TimelineVerdict } from './postureTimeline'
+import { postureTimeline, postureVolume, type TimelineVerdict } from './postureTimeline'
 import { usePostureEvents } from './usePostureEvents'
+import { usePostureVolume } from './usePostureVolume'
 import { useNow } from './microseg/useNow'
 import { coverage as microsegCoverage } from './microseg/coverage'
 import type { MicrosegSubTab } from './microseg/microsegTabTypes'
@@ -109,14 +110,22 @@ function usePostureFigures(policy: MicrosegPolicy | undefined, suggestions: Micr
   }, [policy, suggestions, rows, listed, groupBy])
 }
 
-/** The time chart, on the groups of the donut. A minute clock: the last bucket follows the time. */
+/** The time charts, on the groups of the donut: the events of the ring, and the sFlow bytes when sFlow sees the connection. */
 function useTimelineFigures(
-  events: MicrosegEvent[] | undefined, policy: MicrosegPolicy | undefined, posture: ReturnType<typeof usePostureFigures>, groupBy: GroupBy, verdict: TimelineVerdict, addresses: boolean,
+  connection: string | null, events: MicrosegEvent[] | undefined, policy: MicrosegPolicy | undefined, posture: ReturnType<typeof usePostureFigures>,
+  groupBy: GroupBy, verdict: TimelineVerdict, addresses: boolean,
 ) {
+  // A minute clock: the last bucket follows the time, the sFlow window moves every 5 minutes.
   const now = useNow(60_000, events)
-  return useMemo(() => postureTimeline({
+  const sflow = usePostureVolume(connection, posture.guests, now)
+  const timeline = useMemo(() => postureTimeline({
     events: events ?? [], groupBy, verdict, zones: policy?.zones ?? [], guests: posture.guests, addresses, slices: posture.traffic.slices, now,
   }), [events, groupBy, verdict, policy, posture, addresses, now])
+  const volume = useMemo(() => (sflow.available ? postureVolume({
+    series: sflow.series, groupBy, zones: policy?.zones ?? [], tagPrefix: policy?.policy.tag_prefix ?? '', guests: posture.guests,
+    slices: posture.traffic.slices, from: sflow.from, to: sflow.to,
+  }) : null), [sflow.available, sflow.series, sflow.from, sflow.to, groupBy, policy, posture])
+  return { timeline, volume }
 }
 
 /**
@@ -124,7 +133,8 @@ function useTimelineFigures(
  * emergency stop; zones enforced; running guests protected; last check), the observed traffic per zone (donut and
  * chords), its distribution and top services, then the "To do" list. Its reads: the firewall data the page loads, the
  * coverage route (computed and cached on the server), the micro-segmentation status, policy, drifts and pending flows
- * (orchestrator memory), the events ring for the time chart (orchestrator memory, every minute). The guest list (the inventory route, one guest config per guest on Proxmox) is read only once
+ * (orchestrator memory), the events ring for the time chart (orchestrator memory, every minute), the sFlow pairs and
+ * time series for its Volume tab (orchestrator and InfluxDB). The guest list (the inventory route, one guest config per guest on Proxmox) is read only once
  * a grouping by VLAN or node asks for it, shared with the zone map.
  */
 export default function DashboardTab({
@@ -173,7 +183,7 @@ export default function DashboardTab({
   // A grouping by VLAN or node waits for the guests it is made of.
   const trafficPhase = listsPhase === 'ready' && groupBy !== 'zone' && zoneGuests.status === 'loading' ? 'loading' : listsPhase
   const posture = usePostureFigures(policy, pending.data, coverage?.guests, addresses ? zoneGuests.guests : null, groupBy)
-  const timeline = useTimelineFigures(ring.events, policy, posture, groupBy, verdict, addresses)
+  const { timeline, volume } = useTimelineFigures(connection, ring.events, policy, posture, groupBy, verdict, addresses)
   const timelinePhase = microsegPhase([microsegPolicy, { data: ring.events, error: ring.error }])
 
   const items = todoItems({
@@ -258,7 +268,7 @@ export default function DashboardTab({
             onGroupBy={changeGroupBy}
             truncated={(pending.data?.length ?? 0) >= POSTURE_SUGGESTIONS_LIMIT}
             addresses={addresses}
-            footer={<TrafficTimeline phase={timelinePhase} timeline={timeline} verdict={verdict} onVerdict={setVerdict} />}
+            footer={<TrafficTimeline phase={timelinePhase} timeline={timeline} verdict={verdict} onVerdict={setVerdict} volume={volume} volumeSent={groupBy === 'zone'} />}
           />
         </Box>
         <Box sx={{ gridColumn: { xs: 'span 12', lg: 'span 5' }, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2.5 }}>

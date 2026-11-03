@@ -42,6 +42,8 @@ type Stub = {
   suggestions?: unknown[] | 'pending' | 'error'
   vms?: unknown[] | 'pending'
   events?: unknown[] | 'pending' | 'error'
+  pairs?: unknown[]
+  sflowSeries?: unknown[] | 'error'
 }
 
 const pending = () => new Promise<never>(() => {})
@@ -76,6 +78,11 @@ function stubReads(over: Stub = {}) {
     if (url.endsWith('/drifts')) {
       if (over.drifts === 'pending') return pending()
       return answer({ drifts: [], computed: true, ...(over.drifts ?? {}) })
+    }
+    if (url.startsWith('/api/v1/orchestrator/sflow?')) {
+      if (url.includes('endpoint=ip-pairs')) return answer(over.pairs ?? [])
+      if (over.sflowSeries === 'error') return answer({ error: 'InfluxDB not configured' }, 500)
+      return answer(over.sflowSeries ?? [])
     }
     if (url.includes('/events?')) {
       if (over.events === 'pending') return pending()
@@ -371,6 +378,46 @@ describe('DashboardTab: traffic over time', () => {
     postureReads({ events: 'error' })
     renderDashboard({ enable: 1 })
     expect(await screen.findByTestId('timeline-unavailable')).toBeInTheDocument()
+  })
+})
+
+describe('DashboardTab: Volume (sFlow)', () => {
+  const PAIRS = [{ src_ip: '10.0.0.1', dst_ip: '10.0.0.2', src_vmid: 101, dst_vmid: 102, bytes: 1000, packets: 10, protocol: 'TCP', dst_port: 5432 }]
+  const SERIES = [
+    { vmid: 101, vm_name: 'web1', points: [{ time: Math.floor(Date.now() / 1000), bytes_in: 100, bytes_out: 2048 }] },
+    { vmid: 102, vm_name: 'db1', points: [{ time: Math.floor(Date.now() / 1000), bytes_in: 2048, bytes_out: 1024 }] },
+  ]
+
+  it('adds the Volume tab when sFlow has data for the connection: bytes sent per zone over the last 2 hours', async () => {
+    postureReads({ events: [ev(0)], pairs: PAIRS, sflowSeries: SERIES })
+    renderDashboard({ enable: 1 })
+
+    fireEvent.click(await screen.findByTestId('volume-tab'))
+    expect(screen.getByTestId('timeline-caption').textContent).toBe('bytes sent per group, last 2 hours (sFlow)')
+    expect(screen.getByTestId('timeline-max').textContent).toBe('3 KiB')
+    const series = fetchedUrls().find(u => u.includes('endpoint=timeseries%2Fall-vms'))!
+    expect(series).toContain('vmids=101%2C102')
+    expect(series).toContain('granularity=5m')
+    // The verdict toggle belongs to the events only.
+    expect(within(screen.getByTestId('timeline')).queryByRole('button', { name: 'Blocked' })).not.toBeInTheDocument()
+  })
+
+  it('shows no Volume tab when sFlow sees none of the connection guests, and reads no time series then', async () => {
+    postureReads({ events: [ev(0)], pairs: [{ ...PAIRS[0], src_vmid: 777, dst_vmid: 778 }], sflowSeries: SERIES })
+    renderDashboard({ enable: 1 })
+
+    await screen.findByTestId('timeline-caption')
+    await waitFor(() => expect(fetchedUrls().some(u => u.includes('endpoint=ip-pairs'))).toBe(true))
+    expect(screen.queryByTestId('volume-tab')).not.toBeInTheDocument()
+    expect(fetchedUrls().some(u => u.includes('timeseries'))).toBe(false)
+  })
+
+  it('shows no Volume tab when the time series cannot be read', async () => {
+    postureReads({ events: [ev(0)], pairs: PAIRS, sflowSeries: 'error' })
+    renderDashboard({ enable: 1 })
+
+    await waitFor(() => expect(fetchedUrls().some(u => u.includes('timeseries'))).toBe(true))
+    expect(screen.queryByTestId('volume-tab')).not.toBeInTheDocument()
   })
 })
 

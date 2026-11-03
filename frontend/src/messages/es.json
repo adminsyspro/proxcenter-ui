@@ -9110,7 +9110,8 @@
       "postureGroupDstZone": "Zona de destino",
       "postureTrafficByDstZone": "Tráfico por zona de destino",
       "postureCaptionEmitted": "coincidencias emitidas por zona",
-      "postureCaptionReceived": "coincidencias recibidas por zona"
+      "postureCaptionReceived": "coincidencias recibidas por zona",
+      "postureDirectionBoth": "Ambos"
     },
     "rulesOnDemand": {
       "chip": "Reglas al abrir",
@@ -13397,7 +13398,19 @@
         "memberStopped": "Detenido",
         "memberFirewallOff": "Cortafuegos de NIC apagado (última comprobación del motor)",
         "zoneRules": "Reglas de su zona",
-        "guestTrafficEmpty": "Ningún evento observado para este invitado en la memoria del orquestador (últimas ~2 h)"
+        "guestTrafficEmpty": "Ningún evento observado para este invitado en la memoria del orquestador (últimas ~2 h)",
+        "emptyInboundHint": "Ningún tráfico entrante en este intervalo · {count, plural, one {# coincidencia} other {# coincidencias}} salientes",
+        "emptyOutboundHint": "Ningún tráfico saliente en este intervalo · {count, plural, one {# coincidencia} other {# coincidencias}} entrantes",
+        "showOutbound": "Ver saliente",
+        "showInbound": "Ver entrante",
+        "summaryBothIn": "entrante {count, plural, one {# coincidencia} other {# coincidencias}}",
+        "summaryBothInTop": "entrante {count, plural, one {# coincidencia} other {# coincidencias}} (fuente principal {source} {share} %)",
+        "summaryBothOut": "saliente {count, plural, one {# coincidencia} other {# coincidencias}}",
+        "summaryBothOutTop": "saliente {count, plural, one {# coincidencia} other {# coincidencias}} (destino principal {source} {share} %)",
+        "topBoth": "Fuentes y destinos principales",
+        "topBothEmpty": "Ninguna fuente ni destino en este intervalo",
+        "fromInto": "Hacia esta zona, desde {name}",
+        "toFrom": "Desde esta zona, hacia {name}"
       }
     },
     "preflight": {

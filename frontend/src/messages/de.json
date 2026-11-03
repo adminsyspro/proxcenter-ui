@@ -9057,7 +9057,8 @@
       "postureGroupDstZone": "Zielzone",
       "postureTrafficByDstZone": "Verkehr nach Zielzone",
       "postureCaptionEmitted": "gesendete Treffer pro Zone",
-      "postureCaptionReceived": "empfangene Treffer pro Zone"
+      "postureCaptionReceived": "empfangene Treffer pro Zone",
+      "postureDirectionBoth": "Beide"
     },
     "rulesOnDemand": {
       "chip": "Regeln beim Öffnen",
@@ -13065,7 +13066,19 @@
         "memberStopped": "Gestoppt",
         "memberFirewallOff": "NIC-Firewall aus (letzte Prüfung der Engine)",
         "zoneRules": "Regeln seiner Zone",
-        "guestTrafficEmpty": "Kein beobachtetes Ereignis für diesen Gast im Speicher des Orchestrators (letzte ~2 h)"
+        "guestTrafficEmpty": "Kein beobachtetes Ereignis für diesen Gast im Speicher des Orchestrators (letzte ~2 h)",
+        "emptyInboundHint": "Kein eingehender Verkehr in diesem Zeitraum · {count, plural, one {# Treffer} other {# Treffer}} ausgehend",
+        "emptyOutboundHint": "Kein ausgehender Verkehr in diesem Zeitraum · {count, plural, one {# Treffer} other {# Treffer}} eingehend",
+        "showOutbound": "Ausgehend anzeigen",
+        "showInbound": "Eingehend anzeigen",
+        "summaryBothIn": "eingehend {count, plural, one {# Treffer} other {# Treffer}}",
+        "summaryBothInTop": "eingehend {count, plural, one {# Treffer} other {# Treffer}} (wichtigste Quelle {source} {share} %)",
+        "summaryBothOut": "ausgehend {count, plural, one {# Treffer} other {# Treffer}}",
+        "summaryBothOutTop": "ausgehend {count, plural, one {# Treffer} other {# Treffer}} (wichtigstes Ziel {source} {share} %)",
+        "topBoth": "Wichtigste Quellen und Ziele",
+        "topBothEmpty": "Weder Quelle noch Ziel in diesem Zeitraum",
+        "fromInto": "In diese Zone, von {name}",
+        "toFrom": "Aus dieser Zone, nach {name}"
       }
     },
     "preflight": {

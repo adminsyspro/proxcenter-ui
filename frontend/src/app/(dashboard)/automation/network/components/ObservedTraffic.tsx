@@ -15,8 +15,14 @@ const STATUS_LABEL: Record<ServiceStatus, string> = { allowed: 'postureAllowed',
 function Tile({ testId, label, value, caption, color }: { testId: string; label: string; value: string; caption: string; color: string }) {
   const theme = useTheme()
   return (
-    <Box data-testid={testId} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, p: 1.5, borderRadius: 2, bgcolor: alpha(theme.palette.text.primary, 0.035), minWidth: 0 }}>
-      <Typography variant='caption' noWrap sx={{ textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 11, color: 'text.secondary', fontWeight: 600 }}>{label}</Typography>
+    <Box data-testid={testId} sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 0.5, p: 1.5, borderRadius: 2, bgcolor: alpha(theme.palette.text.primary, 0.035), minWidth: 0 }}>
+      {/* Up to two lines: a title is never cut when five tiles share a row. */}
+      <Typography
+        variant='caption'
+        sx={{ textTransform: 'uppercase', letterSpacing: 0.4, fontSize: 10, lineHeight: 1.3, color: 'text.secondary', fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+      >
+        {label}
+      </Typography>
       <Typography sx={{ fontSize: 24, fontWeight: 700, lineHeight: 1.15, color }} data-testid={`${testId}-value`}>{value}</Typography>
       <Tooltip title={caption}>
         <Typography variant='caption' color='text.secondary' noWrap>{caption}</Typography>
@@ -25,11 +31,22 @@ function Tile({ testId, label, value, caption, color }: { testId: string; label:
   )
 }
 
-const TILE_GRID = { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1.5 } as const
+/**
+ * The tiles spread over the whole card: as many per row as hold 180 px (five on a wide card, 3 + 2 or 2 + 2 + 1 when
+ * narrower), the rows of equal height filling the card's height (no empty band under them).
+ */
+const TILE_GRID = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(180px, 100%), 1fr))',
+  gridAutoRows: '1fr',
+  alignContent: 'stretch',
+  gap: 1.5,
+  flex: '1 1 auto',
+} as const
 
 const textOf = (color: string, mode: 'light' | 'dark') => (mode === 'dark' ? lighten(color, 0.3) : darken(color, 0.2))
 
-/** "Observed traffic distribution": where the hits come from, and the allowed, would-be-blocked and blocked flows (3 + 2 tiles). */
+/** "Observed traffic distribution": where the hits come from, and the allowed, would-be-blocked and blocked flows (five tiles). */
 export function TrafficDistribution({ phase, distribution }: { phase: BlockPhase; distribution: PostureDistribution }) {
   const t = useTranslations('networkPage.dashboard')
   const format = useFormatter()
@@ -62,7 +79,7 @@ export function TrafficDistribution({ phase, distribution }: { phase: BlockPhase
     )
   }
 
-  return <PostureCard testId='distribution-card' title={t('postureDistributionTitle')}>{body}</PostureCard>
+  return <PostureCard testId='distribution-card' title={t('postureDistributionTitle')} grow>{body}</PostureCard>
 }
 
 /** "Top services by hits": service (name, raw port in the tooltip), flows, hits, status. */

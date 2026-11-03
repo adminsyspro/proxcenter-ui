@@ -9110,7 +9110,8 @@
       "postureGroupDstZone": "Par zone de destination",
       "postureTrafficByDstZone": "Trafic par zone de destination",
       "postureCaptionEmitted": "occurrences émises par zone",
-      "postureCaptionReceived": "occurrences reçues par zone"
+      "postureCaptionReceived": "occurrences reçues par zone",
+      "postureDirectionBoth": "Les deux"
     },
     "rulesOnDemand": {
       "chip": "Règles à l'ouverture",
@@ -13398,7 +13399,19 @@
         "memberStopped": "Arrêté",
         "memberFirewallOff": "Pare-feu de carte réseau coupé (dernière vérification du moteur)",
         "zoneRules": "Règles de sa zone",
-        "guestTrafficEmpty": "Aucun événement observé pour cet invité dans la mémoire de l'orchestrateur (environ 2 dernières heures)"
+        "guestTrafficEmpty": "Aucun événement observé pour cet invité dans la mémoire de l'orchestrateur (environ 2 dernières heures)",
+        "emptyInboundHint": "Aucun trafic entrant sur cette période · {count, plural, one {# occurrence} other {# occurrences}} en sortie",
+        "emptyOutboundHint": "Aucun trafic sortant sur cette période · {count, plural, one {# occurrence} other {# occurrences}} en entrée",
+        "showOutbound": "Voir le sortant",
+        "showInbound": "Voir l'entrant",
+        "summaryBothIn": "entrant {count, plural, one {# occurrence} other {# occurrences}}",
+        "summaryBothInTop": "entrant {count, plural, one {# occurrence} other {# occurrences}} (première source {source} {share} %)",
+        "summaryBothOut": "sortant {count, plural, one {# occurrence} other {# occurrences}}",
+        "summaryBothOutTop": "sortant {count, plural, one {# occurrence} other {# occurrences}} (première destination {source} {share} %)",
+        "topBoth": "Principales sources et destinations",
+        "topBothEmpty": "Aucune source ni destination sur cette période",
+        "fromInto": "Vers cette zone, depuis {name}",
+        "toFrom": "Depuis cette zone, vers {name}"
       }
     },
     "preflight": {

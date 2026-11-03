@@ -44,7 +44,7 @@ describe('zone panel sections', () => {
     const panel = await openDb()
 
     const titles = [...panel.querySelectorAll('section[data-section]')].map(s => s.getAttribute('aria-label'))
-    expect(titles).toEqual(['Observed traffic', 'Top sources', 'Pending suggestions', 'Members', 'Incoming flows', 'Outgoing flows'])
+    expect(titles).toEqual(['Observed traffic', 'Top sources and destinations', 'Pending suggestions', 'Members', 'Incoming flows', 'Outgoing flows'])
     await waitFor(() => expect(within(panel).getByTestId('section-zone.members-count').textContent).toBe('1'))
     expect(within(panel).getByTestId('section-zone.suggestions-count').textContent).toBe('1')
     expect(within(panel).getByTestId('panel-body')).toBeTruthy()
@@ -107,6 +107,7 @@ describe('zone panel: drifts', () => {
 
 describe('zone panel: Observed traffic and Top sources', () => {
   it('charts the events logged in the zone (asked with zone=), stacked by source zone, and ranks its sources with their share', async () => {
+    window.localStorage.setItem(PANEL_DIRECTION_KEY, 'in')
     mock.routes[EVENTS_OF_DB] = () => reply(200, {
       events: [event('web'), event('web'), event('web', { verdict: 'blocked' }), event('')], truncated: false, oldest: null,
     })
@@ -165,6 +166,7 @@ describe('zone panel: direction', () => {
   })
 
   it('reads the persisted history and not the ring while the history answers, one read for both directions', async () => {
+    window.localStorage.setItem(PANEL_DIRECTION_KEY, 'in')
     mock.routes['GET /traffic*'] = () => reply(200, {
       step: 300, from: new Date(Date.now() - 3_600_000).toISOString(), to: new Date(Date.now() + 300_000).toISOString(),
       buckets: [
@@ -183,8 +185,57 @@ describe('zone panel: direction', () => {
   })
 })
 
+// The rows sit in the bucket of now, the last one the chart draws (the one a pointer at the far right reads).
+const HISTORY = (buckets: { zone: string; src_zone: string; verdict: string; hits: number }[]) => () => reply(200, {
+  step: 300, from: new Date(Date.now() - 3_600_000).toISOString(), to: new Date(Date.now() + 1000).toISOString(),
+  buckets: buckets.map(b => ({ at: new Date(Math.floor(Date.now() / 300_000) * 300_000).toISOString(), ...b })),
+})
+
+describe('zone panel: both directions (the default)', () => {
+  it('mirrors the chart: inbound by source zone above the baseline, outbound by destination zone below it', async () => {
+    mock.routes['GET /traffic*'] = HISTORY([
+      { zone: 'db', src_zone: 'web', verdict: 'would_block', hits: 4 },
+      { zone: 'web', src_zone: 'db', verdict: 'blocked', hits: 2 },
+    ])
+    setup()
+    const panel = await openDb()
+    const traffic = section(panel, 'Observed traffic')
+
+    expect(within(panel).getByTestId('direction-both').getAttribute('aria-pressed')).toBe('true')
+    await waitFor(() => expect(within(traffic).getAllByTestId(/^area-/).map(a => a.getAttribute('data-testid'))).toEqual(['area-in:zone:zw', 'area-out:zone:zw']))
+    expect(within(traffic).getByTestId('timeline-baseline')).toBeTruthy()
+    expect(within(traffic).getByTestId('timeline-max-below').textContent).toBe('4')
+    expect(within(traffic).getByTestId('traffic-summary').textContent).toBe('in 4 hits (top source web 100%) · out 2 hits (top destination web 100%)')
+    expect(within(traffic).getByTestId('timeline-legend').textContent).toBe('↓ web↑ web')
+
+    fireEvent.mouseMove(within(traffic).getByTestId('timeline-overlay'), { clientX: 10_000 })
+    const tip = screen.getByTestId('timeline-tip')
+    expect(tip.textContent).toContain('↓ Inbound · 4 events')
+    expect(tip.textContent).toContain('↑ Outbound · 2 events')
+
+    const top = within(panel).getByRole('region', { name: 'Top sources and destinations' })
+    expect(within(top).getAllByRole('listitem').map(r => r.getAttribute('data-source'))).toEqual(['in:zone:zw', 'out:zone:zw'])
+    expect(within(panel).getByTestId('section-zone.sources-count').textContent).toBe('2')
+  })
+
+  it('says one direction is empty while the other has traffic, with a way to it', async () => {
+    window.localStorage.setItem(PANEL_DIRECTION_KEY, 'in')
+    mock.routes['GET /traffic*'] = HISTORY([{ zone: 'web', src_zone: 'db', verdict: 'blocked', hits: 7 }])
+    setup()
+    const panel = await openDb()
+    const traffic = section(panel, 'Observed traffic')
+
+    const empty = await within(traffic).findByTestId('timeline-empty')
+    expect(empty.textContent).toBe('No inbound traffic in this range · 7 hits outbound · Show outbound')
+    fireEvent.click(within(traffic).getByTestId('timeline-empty-action'))
+    await waitFor(() => expect(within(panel).getByTestId('direction-out').getAttribute('aria-pressed')).toBe('true'))
+    expect(window.localStorage.getItem(PANEL_DIRECTION_KEY)).toBe('out')
+  })
+})
+
 describe('guest panel: Observed traffic', () => {
   it('charts the events the guest logged (its VMID) from the ring, without range chips', async () => {
+    window.localStorage.setItem(PANEL_DIRECTION_KEY, 'in')
     mock.routes['GET /events?limit=500'] = () => reply(200, {
       events: [event('web', { vmid: 101 }), event('web', { vmid: 101 }), event('', { vmid: 999 })], truncated: false, oldest: null,
     })

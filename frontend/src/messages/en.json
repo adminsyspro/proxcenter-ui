@@ -9110,7 +9110,8 @@
       "postureGroupDstZone": "Destination zone",
       "postureTrafficByDstZone": "Traffic by destination zone",
       "postureCaptionEmitted": "hits emitted per zone",
-      "postureCaptionReceived": "hits received per zone"
+      "postureCaptionReceived": "hits received per zone",
+      "postureDirectionBoth": "Both"
     },
     "rulesOnDemand": {
       "chip": "Rules read when opened",
@@ -13397,7 +13398,19 @@
         "memberStopped": "Stopped",
         "memberFirewallOff": "NIC firewall off (engine's last check)",
         "zoneRules": "Rules of its zone",
-        "guestTrafficEmpty": "No observed event for this guest in the orchestrator memory (last ~2 h)"
+        "guestTrafficEmpty": "No observed event for this guest in the orchestrator memory (last ~2 h)",
+        "emptyInboundHint": "No inbound traffic in this range · {count, plural, one {# hit} other {# hits}} outbound",
+        "emptyOutboundHint": "No outbound traffic in this range · {count, plural, one {# hit} other {# hits}} inbound",
+        "showOutbound": "Show outbound",
+        "showInbound": "Show inbound",
+        "summaryBothIn": "in {count, plural, one {# hit} other {# hits}}",
+        "summaryBothInTop": "in {count, plural, one {# hit} other {# hits}} (top source {source} {share}%)",
+        "summaryBothOut": "out {count, plural, one {# hit} other {# hits}}",
+        "summaryBothOutTop": "out {count, plural, one {# hit} other {# hits}} (top destination {source} {share}%)",
+        "topBoth": "Top sources and destinations",
+        "topBothEmpty": "No source nor destination in this range",
+        "fromInto": "Into this zone, from {name}",
+        "toFrom": "From this zone, to {name}"
       }
     },
     "preflight": {

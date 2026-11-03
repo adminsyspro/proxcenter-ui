@@ -9110,7 +9110,8 @@
       "postureGroupDstZone": "目的区域",
       "postureTrafficByDstZone": "按目的区域的流量",
       "postureCaptionEmitted": "每个区域发出的命中",
-      "postureCaptionReceived": "每个区域接收的命中"
+      "postureCaptionReceived": "每个区域接收的命中",
+      "postureDirectionBoth": "双向"
     },
     "rulesOnDemand": {
       "chip": "打开时加载规则",
@@ -13397,7 +13398,19 @@
         "memberStopped": "已停止",
         "memberFirewallOff": "网卡防火墙已关闭（引擎上次检查）",
         "zoneRules": "其所在区域的规则",
-        "guestTrafficEmpty": "编排器内存中没有此客户机的观察事件（最近约 2 小时）"
+        "guestTrafficEmpty": "编排器内存中没有此客户机的观察事件（最近约 2 小时）",
+        "emptyInboundHint": "此时间范围内没有入站流量 · 出站 {count, plural, other {# 次命中}}",
+        "emptyOutboundHint": "此时间范围内没有出站流量 · 入站 {count, plural, other {# 次命中}}",
+        "showOutbound": "查看出站",
+        "showInbound": "查看入站",
+        "summaryBothIn": "入站 {count, plural, other {# 次命中}}",
+        "summaryBothInTop": "入站 {count, plural, other {# 次命中}}（主要来源 {source} {share}%）",
+        "summaryBothOut": "出站 {count, plural, other {# 次命中}}",
+        "summaryBothOutTop": "出站 {count, plural, other {# 次命中}}（主要目的地 {source} {share}%）",
+        "topBoth": "主要来源和目的地",
+        "topBothEmpty": "此时间范围内没有来源或目的地",
+        "fromInto": "从 {name} 进入此区域",
+        "toFrom": "从此区域到 {name}"
       }
     },
     "preflight": {

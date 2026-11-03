@@ -13,7 +13,7 @@ import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import PolicyPager, { usePaged } from './PolicyPager'
-import { SelectionTrafficChart, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
+import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
 import { MemberChangeChip } from './ZoneRow'
 import ZoneStateChip from './ZoneStateChip'
 import { FlowRowActions, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
@@ -141,7 +141,6 @@ export default function ZonePanel({
   const sourcesSection = usePanelSection('zone.sources')
   // Nothing is read for the chart while both sections it feeds are folded.
   const traffic = useSelectionTraffic(connectionId, zones, { kind: 'zone', zone }, trafficSection[0] || sourcesSection[0])
-  const outbound = traffic.direction === 'out'
   const { data: drifts } = useMicrosegDrifts(connectionId, { once: true })
   const { ignored } = useIgnoredDrifts(connectionId)
   const signals = useMemo(
@@ -195,11 +194,11 @@ export default function ZonePanel({
 
       <PanelSection
         id='zone.sources'
-        title={tsec(outbound ? 'topDestinations' : 'topSources')}
+        title={tsec(TOP_TITLE[traffic.direction])}
         count={traffic.phase === 'ready' ? traffic.summary.count : null}
         state={sourcesSection}
       >
-        <TopSourcesList top={traffic.summary.top} phase={traffic.phase} outbound={outbound} />
+        <TopSourcesList top={traffic.summary.top} phase={traffic.phase} mode={traffic.direction} />
       </PanelSection>
 
       <PanelSection id='zone.suggestions' title={tsec('suggestions')} count={pending.length}>

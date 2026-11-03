@@ -330,16 +330,18 @@ export function bucketXs(count: number, box: PlotBox): number[] {
 const r2 = (n: number) => Math.round(n * 100) / 100
 
 /**
- * The stacked areas of the series, in their order (the first at the bottom): for each, the closed path of its band
- * and the line on top of it, straight segments from bucket to bucket.
+ * The stacked areas of the series, in their order (the first on the baseline): for each, the closed path of its band
+ * and the line on its outer edge, straight segments from bucket to bucket. `invert` stacks downwards from the top of
+ * the box (the lower half of a mirrored chart).
  */
-export function areaPaths(timeline: Pick<PostureTimeline, 'buckets' | 'series' | 'max'>, box: PlotBox): { key: string; area: string; line: string }[] {
+export function areaPaths(timeline: Pick<PostureTimeline, 'buckets' | 'series' | 'max'>, box: PlotBox, invert = false): { key: string; area: string; line: string }[] {
   const { buckets, series, max } = timeline
   if (!buckets.length || max <= 0) return []
   const xs = bucketXs(buckets.length, box)
   const values = buckets.length === 1 ? [buckets[0], buckets[0]] : buckets
-  const base = box.top + box.height
-  const y = (v: number) => base - (v / max) * box.height
+  // Upright: from the bottom of the box up. Inverted (the outbound side of a mirrored chart): from its top down.
+  const base = invert ? box.top : box.top + box.height
+  const y = (v: number) => (invert ? base + (v / max) * box.height : base - (v / max) * box.height)
   const below = values.map(() => 0)
   return series.map(s => {
     const lower = below.map(v => y(v))
@@ -370,4 +372,25 @@ export function topSources(timeline: Pick<PostureTimeline, 'series' | 'buckets' 
     .filter(s => s.hits > 0)
     .sort((a, b) => b.hits - a.hits || byText(a.key, b.key))
     .slice(0, max)
+}
+
+/**
+ * Two charts of one selection on the same buckets, for a mirrored chart (inbound above the baseline, outbound below):
+ * the union of their bucket starts (the events path starts each one at its own oldest event), a missing bucket empty,
+ * both on the larger of their two scales so the halves compare.
+ */
+export function alignTimelines(above: PostureTimeline, below: PostureTimeline): { above: PostureTimeline; below: PostureTimeline } {
+  const stepMs = above.buckets.length ? above.stepMs : below.stepMs
+  const starts = [...above.buckets, ...below.buckets].map(b => b.start)
+  if (!starts.length) return { above, below }
+  const first = Math.min(...starts)
+  const last = Math.max(...starts)
+  const align = (t: PostureTimeline): PostureTimeline => {
+    const byStart = new Map(t.buckets.map(b => [b.start, b]))
+    const buckets: TimelineBucket[] = []
+    for (let start = first; start <= last; start += stepMs) buckets.push(byStart.get(start) ?? { start, total: 0, counts: {} })
+    return { ...t, stepMs, buckets }
+  }
+  const max = Math.max(above.max, below.max)
+  return { above: { ...align(above), max }, below: { ...align(below), max } }
 }

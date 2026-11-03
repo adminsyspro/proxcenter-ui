@@ -9110,7 +9110,8 @@
       "postureGroupDstZone": "목적지 영역",
       "postureTrafficByDstZone": "목적지 영역별 트래픽",
       "postureCaptionEmitted": "영역별 송신 적중",
-      "postureCaptionReceived": "영역별 수신 적중"
+      "postureCaptionReceived": "영역별 수신 적중",
+      "postureDirectionBoth": "양방향"
     },
     "rulesOnDemand": {
       "chip": "열 때 규칙 로드",
@@ -13397,7 +13398,19 @@
         "memberStopped": "중지됨",
         "memberFirewallOff": "NIC 방화벽 꺼짐 (엔진의 마지막 점검)",
         "zoneRules": "해당 영역의 규칙",
-        "guestTrafficEmpty": "오케스트레이터 메모리에 이 게스트의 관찰된 이벤트 없음 (최근 약 2시간)"
+        "guestTrafficEmpty": "오케스트레이터 메모리에 이 게스트의 관찰된 이벤트 없음 (최근 약 2시간)",
+        "emptyInboundHint": "이 기간에 인바운드 트래픽 없음 · 아웃바운드 {count, plural, other {적중 #회}}",
+        "emptyOutboundHint": "이 기간에 아웃바운드 트래픽 없음 · 인바운드 {count, plural, other {적중 #회}}",
+        "showOutbound": "아웃바운드 보기",
+        "showInbound": "인바운드 보기",
+        "summaryBothIn": "인바운드 {count, plural, other {적중 #회}}",
+        "summaryBothInTop": "인바운드 {count, plural, other {적중 #회}} (주요 출발지 {source} {share}%)",
+        "summaryBothOut": "아웃바운드 {count, plural, other {적중 #회}}",
+        "summaryBothOutTop": "아웃바운드 {count, plural, other {적중 #회}} (주요 목적지 {source} {share}%)",
+        "topBoth": "주요 출발지 및 목적지",
+        "topBothEmpty": "이 기간에 출발지나 목적지 없음",
+        "fromInto": "{name}에서 이 영역으로",
+        "toFrom": "이 영역에서 {name}(으)로"
       }
     },
     "preflight": {

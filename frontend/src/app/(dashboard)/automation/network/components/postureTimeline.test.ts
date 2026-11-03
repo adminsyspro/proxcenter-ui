@@ -5,7 +5,7 @@ import type { MicrosegEvent, MicrosegTraffic, MicrosegZone } from '@/lib/microse
 
 import type { PostureGuest } from './dashboardPosture'
 import {
-  BUCKET_MS, MAX_BUCKETS, MAX_VOLUME_VMIDS, RANGE_SPEC, TIMELINE_RANGES, accumulateVmids, areaPaths, asRange, bucketXs, busiestVmids, historyWindow, mergeEvents, nearestBucket, postureHistory, postureTimeline, postureVolume, stepMsOf, topSources, volumeWindow, type TimelineRange, type TimelineSeries, type VmSeries,
+  BUCKET_MS, MAX_BUCKETS, MAX_VOLUME_VMIDS, RANGE_SPEC, alignTimelines, TIMELINE_RANGES, accumulateVmids, areaPaths, asRange, bucketXs, busiestVmids, historyWindow, mergeEvents, nearestBucket, postureHistory, postureTimeline, postureVolume, stepMsOf, topSources, volumeWindow, type TimelineRange, type TimelineSeries, type VmSeries,
 } from './postureTimeline'
 
 const NOW = Date.parse('2026-11-03T10:02:00Z')
@@ -394,5 +394,38 @@ describe('stacked areas', () => {
     expect(nearestBucket(-50, 4, box)).toBe(0)
     expect(nearestBucket(10_000, 4, box)).toBe(3)
     expect(nearestBucket(5, 1, box)).toBe(0)
+  })
+})
+
+describe('mirrored chart', () => {
+  const box = { left: 0, width: 100, top: 0, height: 10 }
+  const bucket = (start: number, counts: Record<string, number>) => ({ start, total: Object.values(counts).reduce((a, b) => a + b, 0), counts })
+  const line = (start: number, counts: Record<string, number>[], series: TimelineSeries[]) => {
+    const buckets = counts.map((c, i) => bucket(start + i * BUCKET_MS, c))
+    return { stepMs: BUCKET_MS, series, buckets, max: Math.max(...buckets.map(b => b.total)), total: buckets.reduce((a, b) => a + b.total, 0), windowMinutes: null }
+  }
+
+  it('stacks the outbound side downwards from the baseline', () => {
+    const paths = areaPaths({ series: [slice('a', 'zone', '#1', 'a')], max: 4, buckets: [bucket(0, { a: 2 }), bucket(1, { a: 4 })] }, { ...box, top: 10 }, true)
+    // Baseline at y 10, a value of 2 out of 4 goes to y 15, 4 to y 20.
+    expect(paths[0]).toEqual({ key: 'a', line: 'M 25 15 L 75 20', area: 'M 25 15 L 75 20 L 75 10 L 25 10 Z' })
+  })
+
+  it('puts both sides on the same buckets and the same scale', () => {
+    const above = line(0, [{ a: 1 }], [slice('a', 'zone', '#1', 'a')])
+    const below = line(BUCKET_MS, [{ b: 3 }, { b: 5 }], [slice('b', 'zone', '#2', 'b')])
+    const { above: up, below: down } = alignTimelines(above, below)
+    expect(up.buckets.map(b => [b.start, b.total])).toEqual([[0, 1], [BUCKET_MS, 0], [2 * BUCKET_MS, 0]])
+    expect(down.buckets.map(b => [b.start, b.total])).toEqual([[0, 0], [BUCKET_MS, 3], [2 * BUCKET_MS, 5]])
+    expect(up.max).toBe(5)
+    expect(down.max).toBe(5)
+  })
+
+  it('keeps an empty side empty', () => {
+    const above = line(0, [], [])
+    const below = line(0, [{ b: 2 }], [slice('b', 'zone', '#2', 'b')])
+    const { above: up } = alignTimelines(above, below)
+    expect(up.buckets).toHaveLength(1)
+    expect(up.total).toBe(0)
   })
 })

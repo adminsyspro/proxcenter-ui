@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Box, Chip, FormControl, MenuItem, Paper, Select, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, useTheme } from '@mui/material'
+import { Box, Chip, FormControl, Link, MenuItem, Paper, Select, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
@@ -41,9 +41,13 @@ type Props = {
   emptyText?: string
   /** No verdict toggle (nothing in any verdict). */
   hideVerdict?: boolean
+  /** A way out of an empty chart, after its message (switch the direction). */
+  emptyAction?: { label: string; onClick: () => void }
+  /** Both directions (map panel): `timeline` inbound above the baseline, this one outbound under it. */
+  mirror?: PostureTimeline | null
 }
 
-export type TimelineDirection = 'in' | 'out'
+export type TimelineDirection = 'both' | 'in' | 'out'
 
 type Unit = 'events' | 'bytes'
 
@@ -71,28 +75,56 @@ function tickIndexes(count: number): number[] {
   return [...new Set([0, 1, 2, 3, 4].map(k => Math.round((k * (count - 1)) / 4)))]
 }
 
+/** The breakdown of one bucket in the tooltip: a dot, a group, its value, for each group with a value. */
+function TipRows({ series, counts, value }: { series: PostureTimeline['series']; counts: Record<string, number>; value: (n: number) => string }) {
+  const nameOf = useSliceName()
+  return (
+    <>
+      {series.filter(s => counts[s.key]).map(s => (
+        <Box key={s.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+          <Box sx={objectDotSx(s.color)} />
+          <Typography variant='caption' noWrap sx={{ flex: 1, minWidth: 0 }}>{nameOf(s)}</Typography>
+          <Typography variant='caption' sx={{ fontWeight: 600 }}>{value(counts[s.key])}</Typography>
+        </Box>
+      ))}
+    </>
+  )
+}
+
 /**
- * The stacked areas of the buckets (one per group, in the donut's order and colours, a line on top of each), with the
- * scale, the time labels, and on hover a guide at the nearest bucket with its breakdown.
+ * The stacked areas of the buckets (one per group, in the donut's order and colours, a line on each), with the scale,
+ * the time labels, and on hover a guide at the nearest bucket with its breakdown. With `below` the chart is mirrored
+ * like an interface graph: `timeline` (inbound) above the baseline, `below` (outbound) under it, on one scale.
  */
-function Areas({ timeline, measured, unit, height = TIMELINE_HEIGHT }: { timeline: PostureTimeline; measured: number | null; unit: Unit; height?: number }) {
+function Areas({ timeline, below = null, measured, unit, height = TIMELINE_HEIGHT }: {
+  timeline: PostureTimeline
+  below?: PostureTimeline | null
+  measured: number | null
+  unit: Unit
+  height?: number
+}) {
   const width = measured ?? FALLBACK_WIDTH
   const theme = useTheme()
   const format = useFormatter()
   const t = useTranslations('networkPage.dashboard')
-  const nameOf = useSliceName()
   const [hover, setHover] = useState<number | null>(null)
-  const { buckets, series, max } = timeline
+  const { buckets, max } = timeline
   const box = { left: LEFT, width: Math.max(40, width - LEFT - RIGHT), top: TOP, height: height - TOP - BOTTOM }
+  const half = below ? box.height / 2 : box.height
+  const baseline = TOP + half
   const xs = bucketXs(buckets.length, box)
-  const paths = areaPaths(timeline, box)
-  const colourOf = new Map(series.map(s => [s.key, s.color]))
+  const layers = [
+    ...areaPaths(timeline, { ...box, height: half }).map(p => ({ ...p, id: below ? `in:${p.key}` : p.key, colour: timeline.series.find(s => s.key === p.key)?.color })),
+    ...(below ? areaPaths(below, { ...box, top: baseline, height: half }, true).map(p => ({ ...p, id: `out:${p.key}`, colour: below.series.find(s => s.key === p.key)?.color })) : []),
+  ]
   const value = (n: number) => (unit === 'bytes' ? formatBytes(n, 1) : format.number(n))
+  const scaleText = unit === 'bytes' ? formatBytes(max, 0) : format.number(max, { notation: 'compact' })
   // Up to a day the labels are times; over a longer range they carry the weekday (the tooltip the date).
   const longRange = buckets.length > 1 && buckets[buckets.length - 1].start - buckets[0].start > DAY_MS
   const clock = (at: number) => format.dateTime(new Date(at), longRange ? { weekday: 'short', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' })
   const stamp = (at: number) => format.dateTime(new Date(at), longRange ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' })
   const hovered = hover === null ? null : buckets[hover]
+  const hoveredBelow = hover === null || !below ? null : below.buckets[hover]
   const guideX = hover === null ? 0 : xs[buckets.length === 1 ? 0 : hover]
   const tipLeft = Math.min(Math.max(0, guideX - TIP_WIDTH / 2), Math.max(0, width - TIP_WIDTH))
   const pointAt = (e: React.MouseEvent<SVGRectElement>) => {
@@ -101,6 +133,8 @@ function Areas({ timeline, measured, unit, height = TIMELINE_HEIGHT }: { timelin
     const x = rect?.width ? ((e.clientX - rect.left) * width) / rect.width : e.clientX
     setHover(nearestBucket(x, buckets.length, box))
   }
+  const events = (n: number) => (unit === 'bytes' ? value(n) : t('postureTimelineEvents', { count: n }))
+  const span = hovered ? `${stamp(hovered.start)} - ${stamp(hovered.start + timeline.stepMs)}` : ''
 
   return (
     <>
@@ -113,13 +147,15 @@ function Areas({ timeline, measured, unit, height = TIMELINE_HEIGHT }: { timelin
         style={{ display: 'block' }}
       >
         <line x1={box.left} x2={box.left + box.width} y1={TOP} y2={TOP} stroke={alpha(theme.palette.text.primary, 0.08)} />
-        <line x1={box.left} x2={box.left + box.width} y1={TOP + box.height} y2={TOP + box.height} stroke={alpha(theme.palette.text.primary, 0.2)} />
-        <text x={LEFT - 6} y={TOP + 4} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max'>{unit === 'bytes' ? formatBytes(max, 0) : format.number(max, { notation: 'compact' })}</text>
-        <text x={LEFT - 6} y={TOP + box.height} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary}>0</text>
-        {paths.map(p => (
-          <g key={p.key} data-testid={`area-${p.key}`}>
-            <path d={p.area} fill={colourOf.get(p.key)} fillOpacity={0.75} stroke='none' />
-            <path d={p.line} fill='none' stroke={colourOf.get(p.key)} strokeWidth={1.5} strokeLinejoin='round' />
+        {below && <line x1={box.left} x2={box.left + box.width} y1={TOP + box.height} y2={TOP + box.height} stroke={alpha(theme.palette.text.primary, 0.08)} />}
+        <line data-testid='timeline-baseline' x1={box.left} x2={box.left + box.width} y1={baseline} y2={baseline} stroke={alpha(theme.palette.text.primary, 0.3)} />
+        <text x={LEFT - 6} y={TOP + 4} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max'>{scaleText}</text>
+        <text x={LEFT - 6} y={baseline + (below ? 3 : 0)} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary}>0</text>
+        {below && <text x={LEFT - 6} y={TOP + box.height} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max-below'>{scaleText}</text>}
+        {layers.map(p => (
+          <g key={p.id} data-testid={`area-${p.id}`}>
+            <path d={p.area} fill={p.colour} fillOpacity={0.75} stroke='none' />
+            <path d={p.line} fill='none' stroke={p.colour} strokeWidth={1.5} strokeLinejoin='round' />
           </g>
         ))}
         {tickIndexes(buckets.length).map(i => (
@@ -141,34 +177,42 @@ function Areas({ timeline, measured, unit, height = TIMELINE_HEIGHT }: { timelin
       </svg>
       {hovered && (
         <Paper data-testid='timeline-tip' elevation={4} sx={{ position: 'absolute', top: 0, left: tipLeft, width: TIP_WIDTH, p: 1, pointerEvents: 'none', zIndex: 1 }}>
-          <Typography variant='caption' component='div' sx={{ fontWeight: 700, mb: 0.5 }}>
-            {`${stamp(hovered.start)} - ${stamp(hovered.start + timeline.stepMs)} · ${unit === 'bytes' ? value(hovered.total) : t('postureTimelineEvents', { count: hovered.total })}`}
-          </Typography>
-          {series.filter(s => hovered.counts[s.key]).map(s => (
-            <Box key={s.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-              <Box sx={objectDotSx(s.color)} />
-              <Typography variant='caption' noWrap sx={{ flex: 1, minWidth: 0 }}>{nameOf(s)}</Typography>
-              <Typography variant='caption' sx={{ fontWeight: 600 }}>{value(hovered.counts[s.key])}</Typography>
-            </Box>
-          ))}
+          {below ? (
+            <>
+              <Typography variant='caption' component='div' sx={{ fontWeight: 700, mb: 0.5 }}>{span}</Typography>
+              <Typography variant='caption' component='div' sx={{ fontWeight: 600 }}>{`↓ ${t('postureDirectionIn')} · ${events(hovered.total)}`}</Typography>
+              <TipRows series={timeline.series} counts={hovered.counts} value={value} />
+              <Typography variant='caption' component='div' sx={{ fontWeight: 600, mt: 0.5 }}>{`↑ ${t('postureDirectionOut')} · ${events(hoveredBelow?.total ?? 0)}`}</Typography>
+              <TipRows series={below.series} counts={hoveredBelow?.counts ?? {}} value={value} />
+            </>
+          ) : (
+            <>
+              <Typography variant='caption' component='div' sx={{ fontWeight: 700, mb: 0.5 }}>{`${span} · ${events(hovered.total)}`}</Typography>
+              <TipRows series={timeline.series} counts={hovered.counts} value={value} />
+            </>
+          )}
         </Paper>
       )}
     </>
   )
 }
 
-/** The groups of a compact chart as one row of chips (dot and name), cut at the end of the row. */
-function LegendChips({ timeline }: { timeline: PostureTimeline }) {
+/** The groups of a compact chart as one row of chips (dot and name), cut at the end of the row; ↓ in, ↑ out when mirrored. */
+function LegendChips({ timeline, below = null }: { timeline: PostureTimeline; below?: PostureTimeline | null }) {
   const nameOf = useSliceName()
+  const chips = [
+    ...timeline.series.map(s => ({ s, id: below ? `in:${s.key}` : s.key, mark: below ? '↓ ' : '' })),
+    ...(below?.series ?? []).map(s => ({ s, id: `out:${s.key}`, mark: '↑ ' })),
+  ]
   return (
     <Box data-testid='timeline-legend' sx={{ display: 'flex', gap: 0.5, overflow: 'hidden', flexWrap: 'nowrap', minWidth: 0 }}>
-      {timeline.series.map(s => (
+      {chips.map(({ s, id, mark }) => (
         <Chip
-          key={s.key}
+          key={id}
           size='small'
           variant='outlined'
           icon={<Box component='span' sx={{ ...objectDotSx(s.color), ml: 1 }} />}
-          label={nameOf(s)}
+          label={`${mark}${nameOf(s)}`}
           sx={{ flexShrink: 0, height: 22, fontSize: 11 }}
         />
       ))}
@@ -183,7 +227,7 @@ function LegendChips({ timeline }: { timeline: PostureTimeline }) {
  * second tab, "Volume (sFlow)", shows the sFlow bytes of the same groups over the same range, only when sFlow has data
  * for the connection.
  */
-export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, showRange = true, direction, onDirection, emptyText, hideVerdict = false }: Props) {
+export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, showRange = true, direction, onDirection, emptyText, hideVerdict = false, emptyAction, mirror = null }: Props) {
   const t = useTranslations('networkPage.dashboard')
   const [ref, size] = useBoxSize<HTMLDivElement>()
   const [chosen, setChosen] = useState<Unit>('events')
@@ -196,8 +240,22 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   if (unit === 'bytes' && volume) body = volume.total > 0 ? <Areas timeline={volume} measured={measured} unit='bytes' height={height} /> : <Typography variant='body2' color='text.secondary' data-testid='volume-empty'>{t('postureVolumeEmpty')}</Typography>
   else if (phase === 'loading') body = <Skeleton data-testid='timeline-loading' variant='rounded' height={height} />
   else if (phase === 'unavailable') body = <Typography variant='body2' color='text.secondary' data-testid='timeline-unavailable'>{t('postureTimelineUnavailable')}</Typography>
-  else if (timeline.total === 0) body = <Typography variant='body2' color='text.secondary' data-testid='timeline-empty'>{emptyText ?? t(timeline.range ? 'postureTimelineEmptyRange' : 'postureTimelineEmpty')}</Typography>
-  else body = <Areas timeline={timeline} measured={measured} unit='events' height={height} />
+  else if (timeline.total === 0 && !mirror?.total) {
+    body = (
+      <Typography variant='body2' color='text.secondary' data-testid='timeline-empty'>
+        {emptyText ?? t(timeline.range ? 'postureTimelineEmptyRange' : 'postureTimelineEmpty')}
+        {emptyAction && (
+          <>
+            {' · '}
+            <Link component='button' type='button' variant='body2' onClick={emptyAction.onClick} data-testid='timeline-empty-action' sx={{ verticalAlign: 'baseline' }}>
+              {emptyAction.label}
+            </Link>
+          </>
+        )}
+      </Typography>
+    )
+  }
+  else body = <Areas timeline={timeline} below={mirror} measured={measured} unit='events' height={height} />
 
   let caption: string | null = null
   if (unit === 'bytes') caption = t(volumeSent ? 'postureVolumeCaptionSent' : 'postureVolumeCaptionReceived', { range: t(RANGE_LABEL[range]) })
@@ -210,7 +268,20 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   // The memory chart (a grouping by VLAN or node, or no history served) has one window; the Volume tab follows the range.
   const locked = unit === 'events' && rangeLock !== null
   // The map panel is narrow: its toggles are smaller, and the verdict a select, so they hold on one row.
-  const toggleSx = { '& .MuiToggleButton-root': compact ? { py: 0, px: 0.75, textTransform: 'none', fontSize: 11 } : { py: 0.25, px: 1, textTransform: 'none', fontSize: 12 } }
+  // The selected button is filled with the primary colour, the others outlined in the secondary text colour: legible
+  // in both themes (the default selected tint is too faint on a dark paper).
+  const toggleSx = {
+    '& .MuiToggleButton-root': {
+      ...(compact ? { py: 0, px: 0.75, fontSize: 11 } : { py: 0.25, px: 1, fontSize: 12 }),
+      textTransform: 'none',
+      color: 'text.secondary',
+    },
+    '& .MuiToggleButton-root.Mui-selected': {
+      bgcolor: 'primary.main',
+      color: 'primary.contrastText',
+      '&:hover': { bgcolor: 'primary.dark' },
+    },
+  }
   const chips = (
     <Tooltip title={locked ? t(RANGE_LOCK_MESSAGE[rangeLock]) : ''}>
       <span data-testid='timeline-range-wrap' style={{ flexShrink: 0 }}>
@@ -237,6 +308,7 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
       aria-label={t('postureDirectionLabel')}
       sx={{ ...toggleSx, flexShrink: 0 }}
     >
+      <ToggleButton value='both' data-testid='direction-both'>{t('postureDirectionBoth')}</ToggleButton>
       <ToggleButton value='in' data-testid='direction-in'>{t('postureDirectionIn')}</ToggleButton>
       <ToggleButton value='out' data-testid='direction-out'>{t('postureDirectionOut')}</ToggleButton>
     </ToggleButtonGroup>
@@ -287,7 +359,7 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
         {captionLine}
         <Box data-testid='timeline-toggles' sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'nowrap', overflowX: 'auto', minWidth: 0 }}>{toggles}</Box>
         {chart}
-        {phase === 'ready' && timeline.total > 0 && <LegendChips timeline={timeline} />}
+        {phase === 'ready' && (timeline.total > 0 || !!mirror?.total) && <LegendChips timeline={timeline} below={mirror} />}
       </Box>
     )
   }

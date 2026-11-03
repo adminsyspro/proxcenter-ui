@@ -32,7 +32,8 @@ const Dot = ({ colour }: { colour: string }) => (
   <Box component='span' aria-hidden sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colour, flexShrink: 0, display: 'inline-block' }} />
 )
 
-export function DfwHead({ allChecked, someChecked, onCheckAll, canCheck }: { allChecked: boolean; someChecked: boolean; onCheckAll: (checked: boolean) => void; canCheck: boolean }) {
+/** `show` false: no rule of the table can be checked, the cell stays empty (as on a zone header). */
+export function DfwHead({ allChecked, someChecked, onCheckAll, canCheck, show = true }: { allChecked: boolean; someChecked: boolean; onCheckAll: (checked: boolean) => void; canCheck: boolean; show?: boolean }) {
   const t = useTranslations()
   const theme = useTheme()
   return (
@@ -40,8 +41,10 @@ export function DfwHead({ allChecked, someChecked, onCheckAll, canCheck }: { all
       <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.6) }}>
         <TableCell sx={{ ...HEAD, width: 28 }} />
         <TableCell sx={{ ...HEAD, width: 36 }} padding='checkbox'>
-          <Checkbox size='small' sx={CHECK_SX} checked={allChecked} indeterminate={someChecked && !allChecked} disabled={!canCheck}
-            onChange={e => onCheckAll(e.target.checked)} inputProps={{ 'aria-label': t('microsegPilot.dfw.selectAll') }} />
+          {show && (
+            <Checkbox size='small' sx={CHECK_SX} checked={allChecked} indeterminate={someChecked && !allChecked} disabled={!canCheck}
+              onChange={e => onCheckAll(e.target.checked)} inputProps={{ 'aria-label': t('microsegPilot.dfw.selectAll') }} />
+          )}
         </TableCell>
         <TableCell sx={{ ...HEAD, width: 34 }}>#</TableCell>
         <TableCell sx={{ ...HEAD, width: 56 }}>{t('common.active')}</TableCell>
@@ -288,6 +291,18 @@ export function SectionRow({ title, icon, open, onToggle, badges, right, check, 
           {right}
           {menu}
         </Box>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+/** "No rules" (or "no match") of an open section: a quiet caption under the Name column, not a full-width row. */
+export function EmptyRulesRow({ text }: { text: string }) {
+  return (
+    <TableRow data-testid='dfw-empty'>
+      <TableCell colSpan={4} sx={{ ...CELL, py: 0.5 }} />
+      <TableCell colSpan={DFW_COLUMNS - 4} sx={{ ...CELL, py: 0.5 }}>
+        <Typography component='span' sx={{ fontSize: 12, color: 'text.secondary' }}>{text}</Typography>
       </TableCell>
     </TableRow>
   )

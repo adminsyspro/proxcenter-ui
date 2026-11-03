@@ -27,7 +27,7 @@ import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pv
 import RuleFormDialog, { type RuleFormData } from './RuleFormDialog'
 import GroupPager, { GROUP_PAGE_SIZE, pageCount, useGroupPages } from './shared/GroupPager'
 import { ZONE_GROUP_PREFIX } from './shared/groupMembership'
-import { DfwHead, DefaultDenyRow, RuleRow, SectionRow, WideRow, Badge } from './DfwTableParts'
+import { DfwHead, DefaultDenyRow, EmptyRulesRow, RuleRow, SectionRow, WideRow, Badge } from './DfwTableParts'
 import { ActionBar, StatusBar, ViewToolbar } from './DfwToolbar'
 import { AddSectionDialog, MoveToSectionDialog, ScopeOptionsDialog, type SectionTarget } from './DfwDialogs'
 import {
@@ -528,7 +528,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
     const rows = visibleEntries(s)
     const deployedZone = s.zone?.state === 'enforce' || s.zone?.state === 'observe'
     const deny = s.zone && deployedZone ? <DefaultDenyRow key={`${s.key}|deny`} enforce={s.zone.state === 'enforce'} appliedTo={s.appliedTo} hits={zoneDenyHits(hits, s.zone.zone)} hitsTitle={denyTitle()} /> : null
-    if (rows.length === 0) return deny ?? <WideRow><Typography variant='body2' color='text.secondary'>{q ? t('noMatch') : tg('networkPage.noRules')}</Typography></WideRow>
+    if (rows.length === 0) return deny ?? <EmptyRulesRow text={q ? t('noMatch') : tg('networkPage.noRules')} />
     const ruleRows = rows.map(({ e, i }) => {
       const managed = s.managed || isEngineComment(e.rule.comment)
       const editable = canEdit && !managed
@@ -606,12 +606,15 @@ export default function FirewallingView(p: FirewallingViewProps) {
 
   /** The rules of a section the user may check: none in a zone group, never the engine's rules of a guest. */
   const selectableIds = (s: Section) => (s.managed ? [] : visibleEntries(s).filter(({ e }) => !isEngineComment(e.rule.comment)).map(({ e }) => e.id))
-  /** No checkbox on a zone group (nothing in it is ever selected); disabled while the section holds no selectable rule. */
+  /**
+   * A checkbox only on a section whose rules are known and hold at least one the user may check; an empty cell
+   * otherwise (a zone group, an empty or unread section), as on a zone header. Disabled for a read-only user.
+   */
   const sectionCheck = (s: Section) => {
-    if (s.managed) return undefined
     const ids = selectableIds(s)
+    if (ids.length === 0) return undefined
     const on = ids.filter(id => selected.has(selKey(s.key, id))).length
-    return { checked: ids.length > 0 && on === ids.length, indeterminate: on > 0 && on < ids.length, disabled: !canEdit || ids.length === 0, onChange: (c: boolean) => toggleSel(s.key, ids, c) }
+    return { checked: on === ids.length, indeterminate: on > 0 && on < ids.length, disabled: !canEdit, onChange: (c: boolean) => toggleSel(s.key, ids, c) }
   }
 
   const sectionMenu = (s: Section) => (s.scope ? (
@@ -743,7 +746,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
 
       <TableContainer component={Paper} variant='outlined' sx={{ borderRadius: 2.5 }}>
         <Table size='small' sx={{ minWidth: 1180 }}>
-          <DfwHead allChecked={allVisibleChecked} someChecked={selectedCount > 0} canCheck={canWrite && visibleSelectable.length > 0}
+          <DfwHead show={visibleSelectable.length > 0} allChecked={allVisibleChecked} someChecked={selectedCount > 0} canCheck={canEdit}
             onCheckAll={on => setSelected(on ? new Set(visibleSelectable) : new Set())} />
           <TableBody>
             {shownFixed.map(s => renderSection(s))}

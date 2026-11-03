@@ -396,12 +396,21 @@ describe('Firewalling: checkboxes (bench report: "the boxes cannot be checked")'
     for (const name of ['[pc-microseg] app -> db', '[pc-microseg] db -> db']) expect(within(ruleRow(name)).queryByRole('checkbox')).toBeNull()
   })
 
-  it('disables a section header checkbox while the section holds no selectable rule', () => {
-    renderView(props({ clusterRules: [] }), true, true)
+  it('shows no section or table checkbox while no rule can be checked, and a quiet "No rules" caption', () => {
+    renderView(props({ clusterRules: [] }))
+    expect(within(screen.getByTestId('dfw-section-cluster')).queryByRole('checkbox')).toBeNull()
+    // A host whose rules were never read: nothing to check either.
+    expect(within(screen.getByTestId('dfw-section-host:pve1')).queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'Select every rule shown' })).toBeNull()
+    const empty = screen.getByTestId('dfw-empty')
+    expect(empty).toHaveTextContent('No rules')
+    // Under the Name column: four leading cells, then the caption.
+    expect(empty.querySelectorAll('td')[0]).toHaveAttribute('colspan', '4')
+  })
+
+  it('a read-only user sees the section checkbox of a section with rules, disabled', () => {
+    renderView(props(), false)
     expect(within(screen.getByTestId('dfw-section-cluster')).getByRole('checkbox')).toBeDisabled()
-    // A host whose rules were never read: nothing to select either.
-    expect(within(screen.getByTestId('dfw-section-host:pve1')).getByRole('checkbox')).toBeDisabled()
-    expect(screen.getAllByRole('checkbox', { name: 'Select every rule shown' })[0]).toBeDisabled()
   })
 
   it('a section header checks only the selectable rules of a guest, collapsed or not; the head checkbox likewise', () => {

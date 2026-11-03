@@ -23,6 +23,8 @@ type Accumulated = {
   /** The last page read was full or truncated: older events may exist. */
   more: boolean
   truncated: boolean
+  /** Moves on every reset to a fresh page: a Load older started before it no longer applies. */
+  epoch: number
 }
 
 type Stamped = MicrosegEventList & { stamp: string }
@@ -30,21 +32,28 @@ type Stamped = MicrosegEventList & { stamp: string }
 const isMore = (list: MicrosegEventList) => list.truncated || list.events.length >= EVENTS_LIMIT
 
 /**
- * A refresh replaces the newest page. The older pages loaded below it stay, minus what the new page now covers, and the
- * events between the two pages are the ones of the page it replaces: nothing falls in a gap.
+ * A refresh replaces the newest page. The older pages loaded below it stay, minus what the new page now covers, as
+ * long as the new page reaches down to them. When more events came in than one page holds (its oldest is above the
+ * newest one shown plus one), the lines in between were never read: the list starts again from the new page rather
+ * than show a gap as if nothing happened there.
  */
 export function mergeFresh(prev: Accumulated | null, stamp: string, fresh: MicrosegEventList): Accumulated {
+  const epoch = prev?.epoch ?? 0
   if (prev && prev.key === stamp && prev.loadedOlder && fresh.truncated && fresh.events.length > 0) {
-    const cut = fresh.events[fresh.events.length - 1]?.seq ?? Infinity
-    return {
-      key: stamp,
-      rows: [...fresh.events, ...prev.rows.filter(e => e.seq < cut)],
-      loadedOlder: true,
-      more: prev.more,
-      truncated: prev.truncated,
+    const cut = fresh.events.at(-1)?.seq ?? Infinity
+    const newestShown = prev.rows[0]?.seq ?? -Infinity
+    if (cut <= newestShown + 1) {
+      return {
+        key: stamp,
+        rows: [...fresh.events, ...prev.rows.filter(e => e.seq < cut)],
+        loadedOlder: true,
+        more: prev.more,
+        truncated: prev.truncated,
+        epoch,
+      }
     }
   }
-  return { key: stamp, rows: fresh.events, loadedOlder: false, more: isMore(fresh), truncated: fresh.truncated }
+  return { key: stamp, rows: fresh.events, loadedOlder: false, more: isMore(fresh), truncated: fresh.truncated, epoch: epoch + 1 }
 }
 
 /**
@@ -83,16 +92,20 @@ export function useMicrosegEvents(connId: string | null | undefined, filters: Ev
   const truncated = current ? current.truncated : fresh?.truncated ?? false
 
   const loadOlder = useCallback(async () => {
-    const last = events[events.length - 1]
+    const last = events.at(-1)
     if (!api || !last || busy.current) return
+    // The list this page goes below: if a refresh started it again meanwhile, the page no longer follows it.
+    const startedOn = acc?.key === stamp ? acc.epoch : null
     busy.current = true
     setOlderBusy(true)
     setOlderError(null)
     try {
       const res = await api.getMicrosegEvents({ limit: EVENTS_LIMIT, before_seq: last.seq, zone, verdict: verdict || undefined, q })
       setAcc(prev => {
-        const base = prev?.key === stamp ? prev : { key: stamp, rows: events, loadedOlder: false, more, truncated }
-        return { key: stamp, rows: [...base.rows, ...res.events], loadedOlder: true, more: isMore(res), truncated: res.truncated }
+        const same = prev?.key === stamp
+        if (startedOn !== null && (!same || prev.epoch !== startedOn)) return prev
+        const base = same ? prev : { key: stamp, rows: events, loadedOlder: false, more, truncated, epoch: 0 }
+        return { key: stamp, rows: [...base.rows, ...res.events], loadedOlder: true, more: isMore(res), truncated: res.truncated, epoch: base.epoch }
       })
     } catch (e) {
       setOlderError(e)
@@ -100,7 +113,7 @@ export function useMicrosegEvents(connId: string | null | undefined, filters: Ev
       busy.current = false
       setOlderBusy(false)
     }
-  }, [api, events, zone, verdict, q, stamp, more, truncated])
+  }, [api, acc, events, zone, verdict, q, stamp, more, truncated])
 
   return {
     events,

@@ -1,19 +1,21 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Box, Button, Card, CardContent, Chip, Skeleton, Tooltip, Typography, alpha } from '@mui/material'
+import { Box, Button, Chip, Skeleton, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
 import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
+import { useMicrosegDrifts } from '@/lib/microseg/useMicrosegLists'
 import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 
+import DashboardStateCard, { STATE_AMBER, STATE_GREEN, STATE_GREY, STATE_RED, StateRow } from '../DashboardStateCard'
 import { coverage } from './coverage'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import { useDialogAction } from './dialogParts'
 import { MicrosegWriteContext, WriteTip, useCanManageMicroseg } from './microsegAccess'
-import { adminRunsMark, clusterFirewallOff, deployedCounts, formatWhen, lastCheckAt, policyNotSetUp, stillPaused } from './summaryModel'
+import { adminRunsMark, clusterFirewallOff, deployedCounts, formatWhen, lastCheckAt, policyNotSetUp, stillPaused, unzonedRunning } from './summaryModel'
 import { NOW_REFRESH_MS, useNow } from './useNow'
 
 type Props = {
@@ -24,28 +26,10 @@ type Props = {
   onOpen: () => void
 }
 
-const GREEN = '#22c55e'
-const AMBER = '#f59e0b'
-const RED = '#ef4444'
-const GREY = '#94a3b8'
-
-function Row({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, minWidth: 0 }}>
-      <Box component='i' className={icon} aria-hidden sx={{ fontSize: 18, mt: 0.25, color: 'text.secondary' }} />
-      <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography variant='caption' component='div' sx={{ color: 'text.secondary', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          {label}
-        </Typography>
-        {children}
-      </Box>
-    </Box>
-  )
-}
-
 /**
- * The Micro-segmentation at a glance, for the Dashboard tab: what is deployed (the LAST REVISION, not the draft),
- * how many guests are protected, and what the engine is doing, in plain words. One click opens the tab.
+ * The Micro-segmentation at a glance, one of the three state cards of the Dashboard tab: what is deployed (the LAST
+ * REVISION, not the draft), its zones by state, how many zone members are protected (in an enforced zone with no
+ * drift) and on which denominator, the drifts, and what the engine is doing, in plain words. One click opens the tab.
  */
 export default function MicrosegSummaryCard({ connectionId, connectionName, onOpen }: Props) {
   const t = useTranslations('microsegPilot')
@@ -53,6 +37,8 @@ export default function MicrosegSummaryCard({ connectionId, connectionName, onOp
   const format = useFormatter()
   const { data: status, error: statusError, reload } = useMicrosegStatus(connectionId)
   const { data: policy, error: policyError, reload: reloadPolicy } = useMicrosegPolicy(connectionId)
+  // The engine's memory of its last full run (no Proxmox call); the Dashboard's "To do" list reads the same key.
+  const { data: drifts, error: driftsError } = useMicrosegDrifts(connectionId)
   // The status is polled, the policy read once: a deployment, a removal or a restore started anywhere else (another
   // browser, the API) moves the status' admin runs, and the deployed state is read again then (UA44).
   const runsMark = status ? adminRunsMark(status) : null
@@ -79,7 +65,7 @@ export default function MicrosegSummaryCard({ connectionId, connectionName, onOp
 
   const stopped = status?.emergency_stop ?? policy?.policy.emergency_stop ?? false
   const cov = status ? coverage(status) : null
-  const unzoned = cov ? cov.running - cov.zoned : 0
+  const unzoned = unzonedRunning(cov, drifts) ?? 0
   const checkedAt = status ? lastCheckAt(status) : null
   const pausedUntil = status?.engine.paused_until
   const held = !!status?.engine.held
@@ -105,10 +91,23 @@ export default function MicrosegSummaryCard({ connectionId, connectionName, onOp
       <>
         <Typography variant='body2'>{t('dashboard.protection.protected', { protected: cov.protected, members: cov.members })}</Typography>
         <Typography variant='body2' color={unzoned > 0 ? 'warning.main' : 'text.secondary'}>
-          {unzoned > 0 ? t('dashboard.protection.unzoned', { count: unzoned }) : t('dashboard.protection.allZoned')}
+          {unzoned > 0 ? t('dashboard.protection.unzoned', { count: unzoned, running: cov.running }) : t('dashboard.protection.allZoned', { running: cov.running })}
         </Typography>
       </>
     )
+  })()
+
+  const zonesLine = (() => {
+    const z = status?.zones_by_state
+    if (!z) return null
+    return <Typography variant='body2' color='text.secondary'>{t('dashboard.zones', { enforce: z.enforce ?? 0, observe: z.observe ?? 0, disabled: z.disabled ?? 0 })}</Typography>
+  })()
+
+  const driftsLine = (() => {
+    if (!drifts) return driftsError ? <Typography variant='body2'>{t('dashboard.unavailable')}</Typography> : <Skeleton width={120} />
+    if (!drifts.computed) return <Typography variant='body2' color='text.secondary'>{t('waitingFirstCheck')}</Typography>
+    const count = drifts.drifts.length
+    return <Typography variant='body2' color={count > 0 ? 'warning.main' : 'text.secondary'}>{count > 0 ? t('dashboard.drifts.count', { count }) : t('dashboard.drifts.none')}</Typography>
   })()
 
   const paused = stillPaused(pausedUntil, now) && !!pausedUntil
@@ -147,75 +146,38 @@ export default function MicrosegSummaryCard({ connectionId, connectionName, onOp
   const settled = (!!status || !!statusError) && (!!policy || !!policyError)
   const notSetUp = !stopped && !!policy && policyNotSetUp(policy)
   let body = (
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
-      <Row icon='ri-rocket-line' label={t('dashboard.deployment.label')}>{deployment}</Row>
-      <Row icon='ri-shield-check-line' label={t('dashboard.protection.label')}>{protection}</Row>
-      <Row icon='ri-settings-3-line' label={t('dashboard.engine.label')}>{engineLine}</Row>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+      <StateRow label={t('dashboard.deployment.label')}>{deployment}{zonesLine}</StateRow>
+      <StateRow label={t('dashboard.protection.label')}>{protection}</StateRow>
+      <StateRow label={t('dashboard.drifts.label')}>{driftsLine}</StateRow>
+      <StateRow label={t('dashboard.engine.label')}>{engineLine}</StateRow>
     </Box>
   )
-  if (!settled) {
-    body = (
-      <Box data-testid='microseg-card-loading' sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
-        {[0, 1, 2].map(i => (
-          <Box key={i}>
-            <Skeleton width={90} height={16} />
-            <Skeleton width={180} height={22} />
-          </Box>
-        ))}
-      </Box>
-    )
-  } else if (notSetUp) {
+  if (notSetUp) {
     body = <Typography variant='body2' color='text.secondary' sx={{ minHeight: 38, display: 'flex', alignItems: 'center' }}>{t('dashboard.notSetUp')}</Typography>
   }
 
-  let accent = GREY
-  if (stopped) accent = RED
-  else if (statusError && !status) accent = AMBER
-  else if (held || paused) accent = AMBER
-  else if (policy?.last_revision) accent = GREEN
+  let accent = STATE_GREY
+  if (stopped) accent = STATE_RED
+  else if (statusError && !status) accent = STATE_AMBER
+  else if (held || paused) accent = STATE_AMBER
+  else if (policy?.last_revision) accent = STATE_GREEN
 
   return (
     <MicrosegWriteContext.Provider value={canWrite}>
-      <Card
-        onClick={onOpen}
-        sx={{
-          mb: 3,
-          cursor: 'pointer',
-          position: 'relative',
-          overflow: 'hidden',
-          background: `linear-gradient(135deg, ${alpha(accent, 0.12)} 0%, ${alpha(accent, 0.05)} 100%)`,
-          border: `1px solid ${alpha(accent, 0.3)}`,
-          transition: 'all 0.2s',
-          '&:hover': { boxShadow: `0 8px 24px ${alpha(accent, 0.2)}` },
-          '&::before': { content: '""', position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: accent },
-        }}
+      <DashboardStateCard
+        testId='microseg-card'
+        icon='ri-shield-keyhole-line'
+        title={t('tab.title')}
+        subtitle={connectionName}
+        accent={accent}
+        onOpen={onOpen}
+        openLabel={t('dashboard.openShort')}
+        openAriaLabel={t('dashboard.open')}
+        loading={!settled}
       >
-        <CardContent sx={{ p: 2.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-            <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: alpha(accent, 0.2), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <i className='ri-shield-keyhole-line' style={{ fontSize: 20, color: accent }} />
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flex: 1, minWidth: 0 }}>
-              <Typography variant='subtitle1' sx={{ fontWeight: 700, flexShrink: 0 }}>{t('tab.title')}</Typography>
-              {connectionName && (
-                <Tooltip title={connectionName}>
-                  <Typography variant='body2' color='text.secondary' noWrap data-testid='microseg-card-connection'>{connectionName}</Typography>
-                </Tooltip>
-              )}
-            </Box>
-            <Button
-              size='small'
-              aria-label={t('dashboard.open')}
-              onClick={e => { e.stopPropagation(); onOpen() }}
-              endIcon={<i className='ri-arrow-right-line' />}
-              sx={{ flexShrink: 0 }}
-            >
-              {t('dashboard.openShort')}
-            </Button>
-          </Box>
-          {body}
-        </CardContent>
-      </Card>
+        {body}
+      </DashboardStateCard>
       <MicrosegConfirmDialog
         open={confirmOpen}
         title={t('banner.confirmWritesTitle')}

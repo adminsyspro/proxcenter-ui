@@ -1,6 +1,8 @@
 import type { useFormatter } from 'next-intl'
 
-import type { MicrosegPolicy, MicrosegSnapshot, MicrosegStatus } from '@/lib/microseg/types'
+import type { MicrosegDriftList, MicrosegPolicy, MicrosegSnapshot, MicrosegStatus } from '@/lib/microseg/types'
+
+import type { Coverage } from './coverage'
 
 /** A pause whose end is past `now` is over (the engine clears the field on its next pass). */
 export function stillPaused(pausedUntil: string | null | undefined, now: number = Date.now()): boolean {
@@ -62,4 +64,14 @@ export function adminRunsMark(status: Pick<MicrosegStatus, 'engine' | 'emergency
 /** No policy on this connection yet: the orchestrator answers its empty draft, version 0, never deployed. */
 export function policyNotSetUp(policy: Pick<MicrosegPolicy, 'version' | 'last_revision' | 'zones'>): boolean {
   return !policy.last_revision && policy.version === 0 && (policy.zones ?? []).length === 0
+}
+
+/**
+ * Running guests in no zone: the engine's `unzoned_running` drifts once its full run computed them (what the Drifts
+ * sub-tab lists, ambiguous guests left out), else running minus zoned from the status. Null when neither is known.
+ */
+export function unzonedRunning(cov: Coverage | null, drifts: MicrosegDriftList | undefined): number | null {
+  if (drifts?.computed) return drifts.drifts.filter(d => d.kind === 'unzoned_running').length
+  if (!cov) return null
+  return Math.max(0, cov.running - cov.zoned)
 }

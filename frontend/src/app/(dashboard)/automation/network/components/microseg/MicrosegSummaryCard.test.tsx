@@ -87,21 +87,42 @@ describe('deployment', () => {
 describe('protection', () => {
   it('tells how many guests are protected and how many running guests sit in no zone', async () => {
     renderCard()
-    expect(await screen.findByText('2 of 3 guests protected')).toBeTruthy()
-    expect(screen.getByText('2 running guests in no zone')).toBeTruthy()
+    expect(await screen.findByText('2 of 3 zone members protected')).toBeTruthy()
+    expect(screen.getByText('2 running guests in no zone, of 5 running')).toBeTruthy()
   })
 
   it('says every running guest is in a zone when none is left out', async () => {
     mock.routes['GET /status'] = () => reply(200, status({ coverage: { running: 4, zoned: 4, members: 4, protected: 4 } }))
     renderCard()
-    expect(await screen.findByText('Every running guest is in a zone')).toBeTruthy()
-    expect(screen.getByText('4 of 4 guests protected')).toBeTruthy()
+    expect(await screen.findByText('All 4 running guests are in a zone')).toBeTruthy()
+    expect(screen.getByText('4 of 4 zone members protected')).toBeTruthy()
   })
 
   it('uses the singular for one guest', async () => {
     mock.routes['GET /status'] = () => reply(200, status({ coverage: { running: 4, zoned: 3, members: 3, protected: 3 } }))
     renderCard()
-    expect(await screen.findByText('1 running guest in no zone')).toBeTruthy()
+    expect(await screen.findByText('1 running guest in no zone, of 4 running')).toBeTruthy()
+  })
+
+  it('counts the running guests in no zone from the engine drifts once they are computed, and shows the drifts', async () => {
+    mock.routes['GET /drifts'] = () => reply(200, {
+      drifts: [
+        { kind: 'unzoned_running', guest: { type: 'lxc', vmid: 301 } },
+        { kind: 'nic_firewall_off', guest: { type: 'lxc', vmid: 302 } },
+      ],
+      computed: true,
+    })
+    renderCard()
+    expect(await screen.findByText('1 running guest in no zone, of 5 running')).toBeTruthy()
+    expect(screen.getByText('2 drifts')).toBeTruthy()
+  })
+
+  it('says there is no drift, and the zones by state', async () => {
+    mock.routes['GET /drifts'] = () => reply(200, { drifts: [], computed: true })
+    mock.routes['GET /status'] = () => reply(200, status({ zones_by_state: { disabled: 0, observe: 1, enforce: 2 } }))
+    renderCard()
+    expect(await screen.findByText('No drift')).toBeTruthy()
+    expect(screen.getByText('Zones: 2 enforced, 1 observing, 0 disabled')).toBeTruthy()
   })
 
   it('says nothing was measured before the first full check', async () => {
@@ -114,7 +135,7 @@ describe('protection', () => {
     mock.routes['GET /status'] = () => reply(200, status({ coverage: null }))
     renderCard()
     expect(await screen.findByText('Waiting for the first full check')).toBeTruthy()
-    expect(screen.queryByText(/guests protected/)).toBeNull()
+    expect(screen.queryByText(/members protected/)).toBeNull()
     expect(screen.queryByText(/in no zone/)).toBeNull()
   })
 })
@@ -186,8 +207,10 @@ describe('engine', () => {
 
   it('says "Not available" for the protection and the engine when /status fails, and keeps the deployment line', async () => {
     mock.routes['GET /status'] = () => reply(504, { code: 'ORCHESTRATOR_TIMEOUT', error: 't' })
+    mock.routes['GET /drifts'] = () => reply(200, { drifts: [], computed: true })
     renderCard()
-    // The protection and the engine both come from /status.
+    // The protection and the engine both come from /status; the drifts have their own read.
+    expect(await screen.findByText('No drift')).toBeTruthy()
     await waitFor(() => expect(screen.getAllByText('Not available')).toHaveLength(2))
     expect(screen.getByText('Deployed: 0 zones enforced, 1 observing')).toBeTruthy()
   })
@@ -214,8 +237,8 @@ describe('plain words', () => {
 describe('opening the Micro-segmentation tab', () => {
   it('opens it from the card and from its button', async () => {
     const onOpen = renderCard()
-    await screen.findByText('2 of 3 guests protected')
-    fireEvent.click(screen.getByText('2 of 3 guests protected'))
+    await screen.findByText('2 of 3 zone members protected')
+    fireEvent.click(screen.getByText('2 of 3 zone members protected'))
     fireEvent.click(screen.getByRole('button', { name: 'Open Micro-segmentation' }))
     expect(onOpen).toHaveBeenCalledTimes(2)
   })
@@ -256,7 +279,7 @@ describe('coherence (UA44)', () => {
   it('names the connection it is about', async () => {
     renderTab(<MicrosegSummaryCard connectionId='c1' connectionName='PVE-DR' onOpen={vi.fn()} />)
 
-    expect((await screen.findByTestId('microseg-card-connection')).textContent).toBe('PVE-DR')
+    expect((await screen.findByTestId('microseg-card-subtitle')).textContent).toBe('PVE-DR')
   })
 
   it('reads the deployed state again when the status shows a new deployment made elsewhere', async () => {

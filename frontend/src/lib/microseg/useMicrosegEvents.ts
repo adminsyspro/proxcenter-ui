@@ -39,7 +39,7 @@ const isMore = (list: MicrosegEventList) => list.truncated || list.events.length
  */
 export function mergeFresh(prev: Accumulated | null, stamp: string, fresh: MicrosegEventList): Accumulated {
   const epoch = prev?.epoch ?? 0
-  if (prev && prev.key === stamp && prev.loadedOlder && fresh.truncated && fresh.events.length > 0) {
+  if (prev?.key === stamp && prev.loadedOlder && fresh.truncated && fresh.events.length > 0) {
     const cut = fresh.events.at(-1)?.seq ?? Infinity
     const newestShown = prev.rows[0]?.seq ?? -Infinity
     if (cut <= newestShown + 1) {
@@ -88,7 +88,9 @@ export function useMicrosegEvents(connId: string | null | undefined, filters: Ev
   const current = acc?.key === stamp ? acc : null
   const fresh = data?.stamp === stamp ? data : null
   const events = useMemo(() => current?.rows ?? fresh?.events ?? [], [current, fresh])
-  const more = current ? current.more : fresh ? isMore(fresh) : false
+  let more = false
+  if (current) more = current.more
+  else if (fresh) more = isMore(fresh)
   const truncated = current ? current.truncated : fresh?.truncated ?? false
 
   const loadOlder = useCallback(async () => {

@@ -9049,6 +9049,16 @@
       "detachNoRule": "{guest} 没有 {group} 的规则",
       "alreadyMember": "{guests} 已带有 {group}：未重复附加",
       "expandAllHint": "展开 VLAN 组；打开客户机所在行时才加载其规则"
+    },
+    "vmPager": {
+      "groupCount": "{count, plural, other {# 个 VM}}",
+      "groupCountPaged": "{count, plural, other {# 个 VM}} · 第 {page, number}/{pages, number} 页",
+      "page": "第 {page, number} 页，共 {pages, number} 页",
+      "previous": "上一页",
+      "next": "下一页",
+      "perPage": "每页",
+      "perPageLabel": "{group} 中每页的客户机数",
+      "navigation": "{group} 的分页"
     }
   },
   "deployWizard": {

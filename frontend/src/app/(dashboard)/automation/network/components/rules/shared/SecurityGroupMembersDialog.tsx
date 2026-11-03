@@ -13,6 +13,7 @@ import type { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
 
 import type { GroupMembers } from './groupMembership'
+import GroupPager, { useGroupPages } from './GroupPager'
 
 interface SecurityGroupMembersDialogProps {
   open: boolean
@@ -55,6 +56,8 @@ export default function SecurityGroupMembersDialog({
 
   const [selected, setSelected] = useState<VMFirewallInfo[]>([])
   const [busy, setBusy] = useState(false)
+  // A zone group can hold many guests: the list is paged like the VM rows (UA47).
+  const pager = useGroupPages()
 
   const members = membership.members
 
@@ -179,7 +182,7 @@ export default function SecurityGroupMembersDialog({
           </Typography>
         ) : (
           <List dense disablePadding>
-            {members.map(guest => (
+            {pager.slice('members', members).map(guest => (
               <ListItem
                 key={guest.vmid}
                 secondaryAction={
@@ -201,6 +204,14 @@ export default function SecurityGroupMembersDialog({
             ))}
           </List>
         )}
+        <GroupPager
+          count={members.length}
+          page={pager.pageOf('members', members.length)}
+          size={pager.size}
+          onPage={page => pager.setPage('members', page)}
+          onSize={pager.setSize}
+          label={groupName}
+        />
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t('common.close')}</Button>

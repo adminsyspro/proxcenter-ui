@@ -9049,6 +9049,16 @@
       "detachNoRule": "{guest} ne porte aucune règle de {group}",
       "alreadyMember": "{guests} portent déjà {group} : pas rattachés une seconde fois",
       "expandAllHint": "Ouvre les groupes VLAN ; les règles d'un invité se chargent quand vous ouvrez sa ligne"
+    },
+    "vmPager": {
+      "groupCount": "{count, plural, one {# VM} other {# VMs}}",
+      "groupCountPaged": "{count, plural, one {# VM} other {# VMs}} · page {page, number}/{pages, number}",
+      "page": "Page {page, number} sur {pages, number}",
+      "previous": "Page précédente",
+      "next": "Page suivante",
+      "perPage": "Par page",
+      "perPageLabel": "Invités par page dans {group}",
+      "navigation": "Pages de {group}"
     }
   },
   "deployWizard": {

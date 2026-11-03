@@ -24,6 +24,7 @@ import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pv
 import RulesTableHead from './shared/RulesTableHead'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
 import AliasIpsetAutocomplete, { useAliasIpsetOptions } from './shared/AliasIpsetAutocomplete'
+import GroupPager, { GROUP_PAGE_SIZE, pageCount, useGroupPages } from './shared/GroupPager'
 
 interface VMRulesPanelProps {
   vmFirewallData: VMFirewallInfo[]
@@ -62,6 +63,8 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
   const [vmDragState, setVmDragState] = useState<{ vmid: number; draggedPos: number | null; dragOverPos: number | null }>({ vmid: 0, draggedPos: null, dragOverPos: null })
 
   const [expandedVlans, setExpandedVlans] = useState<Set<string>>(new Set())
+  // The guests of a group are paged (UA47): a page per group, one page size; the open rows stay open across pages.
+  const pager = useGroupPages()
   // Guests whose rules are being read: the request goes out when the row is opened, one guest at a time (UA44).
   const [readingRules, setReadingRules] = useState<Set<number>>(new Set())
   const [rulesReadFailed, setRulesReadFailed] = useState<Set<number>>(new Set())
@@ -265,7 +268,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <TextField
             size="small" placeholder={t('networkPage.searchVm')} value={vmSearchQuery}
-            onChange={e => setVmSearchQuery(e.target.value)}
+            onChange={e => { setVmSearchQuery(e.target.value); pager.reset() }}
             InputProps={{
               startAdornment: <i className="ri-search-line" style={{ marginRight: 6, fontSize: 16, color: theme.palette.text.disabled }} />,
               sx: { fontSize: 13 }
@@ -300,6 +303,8 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                 const vlanLabel = isUntagged ? t('networkPage.untagged') : `VLAN ${vlanKey}`
                 const isVlanExpanded = expandedVlans.has(vlanKey)
                 const vlanVmCount = vms.length
+                const vlanPages = pageCount(vlanVmCount, pager.size)
+                const vlanPage = pager.pageOf(vlanKey, vlanVmCount)
                 // A count of the rules read so far would be wrong: it shows once every guest of the group was opened.
                 const vlanRulesCount = vms.every(v => v.rulesLoaded) ? vms.reduce((acc, v) => acc + v.rules.length, 0) : null
                 const vlanColor = getVlanColor(vlanKey, vlanIdx)
@@ -324,7 +329,13 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                           />
                           <i className={isUntagged ? 'ri-ethernet-line' : 'ri-git-branch-line'} style={{ fontSize: 16, color: vlanColor }} />
                           <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: 13, color: vlanColor }}>{vlanLabel}</Typography>
-                          <Chip label={`${vlanVmCount} VM${vlanVmCount > 1 ? 's' : ''}`} size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: alpha(vlanColor, 0.18), color: vlanColor }} />
+                          <Chip
+                            label={vlanPages > 1
+                              ? t('networkPage.vmPager.groupCountPaged', { count: vlanVmCount, page: vlanPage + 1, pages: vlanPages })
+                              : t('networkPage.vmPager.groupCount', { count: vlanVmCount })}
+                            size="small"
+                            sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: alpha(vlanColor, 0.18), color: vlanColor }}
+                          />
                           {vlanRulesCount !== null && (
                             <Chip label={t('networkPage.totalRules', { count: vlanRulesCount })} size="small" sx={{ height: 20, fontSize: 10, bgcolor: alpha(vlanColor, 0.12) }} />
                           )}
@@ -333,7 +344,7 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                     </TableRow>
 
                     {/* VMs in this VLAN group */}
-                    {isVlanExpanded && vms.map(vm => {
+                    {isVlanExpanded && pager.slice(vlanKey, vms).map(vm => {
                       const isExpanded = expandedVMs.has(vm.vmid)
 
                       return (
@@ -498,6 +509,20 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                         </Fragment>
                       )
                     })}
+                    {isVlanExpanded && vlanVmCount > GROUP_PAGE_SIZE && (
+                      <TableRow key={`pager-${vlanKey}`}>
+                        <TableCell colSpan={11} sx={{ py: 0, px: 2 }}>
+                          <GroupPager
+                            count={vlanVmCount}
+                            page={vlanPage}
+                            size={pager.size}
+                            onPage={page => pager.setPage(vlanKey, page)}
+                            onSize={pager.setSize}
+                            label={vlanLabel}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </Fragment>
                 )
               })}

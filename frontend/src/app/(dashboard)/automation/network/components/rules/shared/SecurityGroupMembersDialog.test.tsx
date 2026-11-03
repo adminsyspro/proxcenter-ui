@@ -375,4 +375,15 @@ describe('SecurityGroupMembersDialog with rules read on demand (UA44)', () => {
     await waitFor(() => expect(showToast).toHaveBeenCalledWith('hidden-member (160) already carry sg-web: not attached again', 'info'))
     expect(dialogProps.onChanged).toHaveBeenCalledWith([unreadOther])
   })
+
+  it('pages a long member list, 25 at a time (UA47)', () => {
+    const many = Array.from({ length: 30 }, (_, i) => guest(300 + i, { name: `m-${300 + i}`, rules: [groupRule(GROUP, 0)] }))
+
+    renderDialog({ guests: many })
+
+    expect(screen.getAllByText(/^m-\d+ \(\d+\)$/)).toHaveLength(25)
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(screen.getAllByText(/^m-\d+ \(\d+\)$/)).toHaveLength(5)
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument()
+  })
 })

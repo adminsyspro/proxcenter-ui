@@ -8996,6 +8996,16 @@
       "detachNoRule": "{guest} trägt keine Regel von {group}",
       "alreadyMember": "{guests} tragen {group} bereits: nicht erneut zugeordnet",
       "expandAllHint": "Öffnet die VLAN-Gruppen; die Regeln eines Gasts werden beim Öffnen seiner Zeile geladen"
+    },
+    "vmPager": {
+      "groupCount": "{count, plural, one {# VM} other {# VMs}}",
+      "groupCountPaged": "{count, plural, one {# VM} other {# VMs}} · Seite {page, number}/{pages, number}",
+      "page": "Seite {page, number} von {pages, number}",
+      "previous": "Vorherige Seite",
+      "next": "Nächste Seite",
+      "perPage": "Pro Seite",
+      "perPageLabel": "Gäste pro Seite in {group}",
+      "navigation": "Seiten von {group}"
     }
   },
   "deployWizard": {

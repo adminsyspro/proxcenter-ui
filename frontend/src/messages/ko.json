@@ -9049,6 +9049,16 @@
       "detachNoRule": "{guest}에 {group} 규칙이 없습니다",
       "alreadyMember": "{guests}에 이미 {group}이(가) 있어 다시 연결하지 않았습니다",
       "expandAllHint": "VLAN 그룹을 엽니다. 게스트의 규칙은 해당 행을 열 때 로드됩니다"
+    },
+    "vmPager": {
+      "groupCount": "{count, plural, other {#개 VM}}",
+      "groupCountPaged": "{count, plural, other {#개 VM}} · {page, number}/{pages, number} 페이지",
+      "page": "{pages, number}페이지 중 {page, number}페이지",
+      "previous": "이전 페이지",
+      "next": "다음 페이지",
+      "perPage": "페이지당",
+      "perPageLabel": "{group}의 페이지당 게스트 수",
+      "navigation": "{group} 페이지"
     }
   },
   "deployWizard": {

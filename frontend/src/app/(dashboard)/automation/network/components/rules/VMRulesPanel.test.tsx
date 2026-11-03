@@ -226,6 +226,96 @@ describe('VMRulesPanel', () => {
     expect(screen.queryByText('web-01')).not.toBeInTheDocument()
   })
 
+  describe('paged guest rows (UA47)', () => {
+    // 60 untagged guests, named so their order is the vmid order; the first one has its rules read.
+    const many: VMFirewallInfo[] = Array.from({ length: 60 }, (_, i) => ({
+      ...DB, vmid: 200 + i, name: `g-${String(i + 1).padStart(2, '0')}`, rulesLoaded: i === 0, rules: i === 0 ? [FULL_RULE] : [],
+    }))
+    const shownGuests = () => screen.queryAllByText(/^g-\d\d$/).map(n => n.textContent)
+
+    it('shows 25 guests per page inside the group, with the page in its header', () => {
+      renderPanel({ vmFirewallData: many })
+      expect(screen.getByText('60 VMs · page 1/3')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByText('Untagged'))
+      expect(shownGuests()).toHaveLength(25)
+      expect(shownGuests()[0]).toBe('g-01')
+      expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+      expect(shownGuests()[0]).toBe('g-26')
+      expect(screen.getByText('60 VMs · page 2/3')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+      expect(shownGuests()).toHaveLength(10)
+      expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled()
+    })
+
+    it('filters before paging, and a new search starts again from the first page', () => {
+      renderPanel({ vmFirewallData: many })
+      fireEvent.click(screen.getByText('Untagged'))
+      fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+      expect(shownGuests()[0]).toBe('g-26')
+
+      fireEvent.change(screen.getByPlaceholderText('Search VM...'), { target: { value: 'g-' } })
+
+      expect(shownGuests()[0]).toBe('g-01')
+      expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByPlaceholderText('Search VM...'), { target: { value: 'g-5' } })
+      // 10 matches fit one page: no pager.
+      expect(shownGuests()).toHaveLength(10)
+      expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+    })
+
+    it('changes the page size from the group pager and starts again from the first page', () => {
+      renderPanel({ vmFirewallData: many })
+      fireEvent.click(screen.getByText('Untagged'))
+      fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+
+      fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Guests per page in Untagged' }))
+      fireEvent.click(screen.getByRole('option', { name: '50' }))
+
+      expect(shownGuests()).toHaveLength(50)
+      expect(shownGuests()[0]).toBe('g-01')
+      expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
+    })
+
+    it('keeps an open guest open across pages', () => {
+      const p = renderPanel({ vmFirewallData: many })
+      expandTo('g-01', 'Untagged')
+      expect(screen.getByText('https in')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+      expect(screen.queryByText('https in')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Previous page' }))
+
+      expect(screen.getByText('https in')).toBeInTheDocument()
+      expect(p.loadGuestRules).not.toHaveBeenCalled()
+    })
+
+    it('leaves Expand all opening the groups only, on the first page', () => {
+      const p = renderPanel({ vmFirewallData: many })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Expand all' }))
+
+      expect(shownGuests()).toHaveLength(25)
+      expect(screen.queryByText('https in')).not.toBeInTheDocument()
+      expect(p.loadGuestRules).not.toHaveBeenCalled()
+    })
+
+    it('can be paged from the keyboard', () => {
+      renderPanel({ vmFirewallData: many })
+      fireEvent.click(screen.getByText('Untagged'))
+      const next = screen.getByRole('button', { name: 'Next page' })
+
+      next.focus()
+      expect(document.activeElement).toBe(next)
+      expect(screen.getByRole('navigation', { name: 'Pages of Untagged' })).toBeInTheDocument()
+    })
+  })
+
   describe('rules on demand (UA44)', () => {
     it('reads no guest rules on mount, nor when a VLAN opens', () => {
       const p = renderPanel({ vmFirewallData: [WEB, DB, APP] })

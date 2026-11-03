@@ -13151,6 +13151,37 @@
         "sources": "Côté sources",
         "destinations": "Côté destinations",
         "empty": "Aucun flux à tracer avec ces filtres."
+      },
+      "target": {
+        "label": "Cibler une VM",
+        "placeholder": "Nom, VMID ou IP",
+        "noOptions": "Aucun invité démarré ne correspond",
+        "clear": "Effacer la cible",
+        "openList": "Afficher les invités",
+        "closeList": "Masquer les invités",
+        "noZone": "aucune zone",
+        "option": "{name}, invité {vmid}, {zone}",
+        "type": {
+          "qemu": "Machine virtuelle",
+          "lxc": "Conteneur"
+        },
+        "chip": "Cible : {name}",
+        "chipHint": "La carte reste centrée sur {name} : cliquez pour afficher son panneau, sur la croix pour effacer la cible",
+        "cellMarker": "Flux observés de {name} dans cette case",
+        "panel": {
+          "label": "Invité {name}",
+          "where": "{type} {vmid} sur {node}",
+          "noZone": "Dans aucune zone",
+          "openZone": "Ouvrir la zone",
+          "observed": "Flux observés",
+          "noObserved": "Aucun flux observé en attente ne concerne les adresses de cet invité.",
+          "noIps": "Aucune adresse IP connue : les flux observés ne peuvent pas être rattachés à cet invité.",
+          "allowed": "Flux autorisés de sa zone",
+          "noZoneFlows": "Cet invité n'est dans aucune zone : aucun flux autorisé ne s'applique à lui.",
+          "incoming": "Entrant, depuis {peer}",
+          "outgoing": "Sortant, vers {peer}",
+          "acceptTip": "Accepter comme flux {from} → {to} {service} : le moteur garde une paire d'invités exemple par flux observé, le flux couvre donc toute la paire de zones."
+        }
       }
     },
     "preflight": {

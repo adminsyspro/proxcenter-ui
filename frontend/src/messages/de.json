@@ -12818,6 +12818,37 @@
         "sources": "Quellen",
         "destinations": "Ziele",
         "empty": "Mit diesen Filtern gibt es keinen Fluss zu zeichnen."
+      },
+      "target": {
+        "label": "VM anvisieren",
+        "placeholder": "Name, VMID oder IP",
+        "noOptions": "Kein laufender Gast passt",
+        "clear": "Ziel entfernen",
+        "openList": "Gäste anzeigen",
+        "closeList": "Gäste ausblenden",
+        "noZone": "keine Zone",
+        "option": "{name}, Gast {vmid}, {zone}",
+        "type": {
+          "qemu": "Virtuelle Maschine",
+          "lxc": "LXC-Container"
+        },
+        "chip": "Ziel: {name}",
+        "chipHint": "Die Karte bleibt auf {name} fokussiert: Klicken zeigt sein Panel, das Kreuz entfernt das Ziel",
+        "cellMarker": "Beobachtete Flüsse von {name} in dieser Zelle",
+        "panel": {
+          "label": "Gast {name}",
+          "where": "{type} {vmid} auf {node}",
+          "noZone": "In keiner Zone",
+          "openZone": "Zone öffnen",
+          "observed": "Beobachtete Flüsse",
+          "noObserved": "Kein ausstehender beobachteter Fluss betrifft die Adressen dieses Gasts.",
+          "noIps": "Keine IP-Adresse bekannt: die beobachteten Flüsse können diesem Gast nicht zugeordnet werden.",
+          "allowed": "Erlaubte Flüsse seiner Zone",
+          "noZoneFlows": "Dieser Gast ist in keiner Zone: kein erlaubter Fluss gilt für ihn.",
+          "incoming": "Eingehend, von {peer}",
+          "outgoing": "Ausgehend, zu {peer}",
+          "acceptTip": "Als Fluss {from} → {to} {service} akzeptieren: die Engine behält ein Beispielpaar von Gästen pro beobachtetem Fluss, der Fluss gilt also für das ganze Zonenpaar."
+        }
       }
     },
     "preflight": {

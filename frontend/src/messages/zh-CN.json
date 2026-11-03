@@ -13150,6 +13150,37 @@
         "sources": "来源",
         "destinations": "目标",
         "empty": "在这些筛选条件下没有可绘制的流。"
+      },
+      "target": {
+        "label": "定位虚拟机",
+        "placeholder": "名称、VMID 或 IP",
+        "noOptions": "没有匹配的运行中客户机",
+        "clear": "清除目标",
+        "openList": "显示客户机",
+        "closeList": "隐藏客户机",
+        "noZone": "无区域",
+        "option": "{name}，客户机 {vmid}，{zone}",
+        "type": {
+          "qemu": "虚拟机",
+          "lxc": "容器"
+        },
+        "chip": "目标：{name}",
+        "chipHint": "地图保持聚焦于 {name}：点击显示其面板，点击叉号清除目标",
+        "cellMarker": "此单元格中 {name} 的观测流量",
+        "panel": {
+          "label": "客户机 {name}",
+          "where": "{node} 上的{type} {vmid}",
+          "noZone": "不在任何区域",
+          "openZone": "打开区域",
+          "observed": "观测到的流量",
+          "noObserved": "没有待处理的观测流量涉及此客户机的地址。",
+          "noIps": "没有已知的 IP 地址：无法将观测流量关联到此客户机。",
+          "allowed": "其区域的允许流量",
+          "noZoneFlows": "此客户机不在任何区域：没有适用于它的允许流量。",
+          "incoming": "入站，来自 {peer}",
+          "outgoing": "出站，前往 {peer}",
+          "acceptTip": "接受为流量 {from} → {to} {service}：引擎为每条观测流量只保留一对示例客户机，因此该流量覆盖整个区域对。"
+        }
       }
     },
     "preflight": {

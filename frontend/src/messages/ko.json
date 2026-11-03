@@ -13150,6 +13150,37 @@
         "sources": "출발지",
         "destinations": "목적지",
         "empty": "이 필터로 그릴 흐름이 없습니다."
+      },
+      "target": {
+        "label": "VM 지정",
+        "placeholder": "이름, VMID 또는 IP",
+        "noOptions": "일치하는 실행 중인 게스트가 없습니다",
+        "clear": "대상 지우기",
+        "openList": "게스트 보기",
+        "closeList": "게스트 숨기기",
+        "noZone": "영역 없음",
+        "option": "{name}, 게스트 {vmid}, {zone}",
+        "type": {
+          "qemu": "VM",
+          "lxc": "컨테이너"
+        },
+        "chip": "대상: {name}",
+        "chipHint": "지도가 {name}에 고정됩니다. 클릭하면 패널이 열리고, X를 누르면 대상이 지워집니다",
+        "cellMarker": "이 셀의 {name} 관찰 흐름",
+        "panel": {
+          "label": "게스트 {name}",
+          "where": "{node}의 {type} {vmid}",
+          "noZone": "영역 없음",
+          "openZone": "영역 열기",
+          "observed": "관찰된 흐름",
+          "noObserved": "이 게스트의 주소와 관련된 대기 중인 관찰 흐름이 없습니다.",
+          "noIps": "알려진 IP 주소가 없어 관찰된 흐름을 이 게스트와 연결할 수 없습니다.",
+          "allowed": "해당 영역의 허용된 흐름",
+          "noZoneFlows": "이 게스트는 어느 영역에도 속하지 않아 적용되는 허용 흐름이 없습니다.",
+          "incoming": "수신, {peer}에서",
+          "outgoing": "송신, {peer}(으)로",
+          "acceptTip": "{from} → {to} {service} 흐름으로 허용: 엔진은 관찰된 흐름마다 게스트 예시 쌍 하나만 보관하므로 이 흐름은 영역 쌍 전체에 적용됩니다."
+        }
       }
     },
     "preflight": {

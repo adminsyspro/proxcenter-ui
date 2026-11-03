@@ -13150,6 +13150,37 @@
         "sources": "Sources",
         "destinations": "Destinations",
         "empty": "No flow to draw with these filters."
+      },
+      "target": {
+        "label": "Target a VM",
+        "placeholder": "Name, VMID or IP",
+        "noOptions": "No running guest matches",
+        "clear": "Clear the target",
+        "openList": "Show the guests",
+        "closeList": "Hide the guests",
+        "noZone": "no zone",
+        "option": "{name}, guest {vmid}, {zone}",
+        "type": {
+          "qemu": "VM",
+          "lxc": "Container"
+        },
+        "chip": "Targeting {name}",
+        "chipHint": "The map stays focused on {name}: click to show its panel, the cross to clear the target",
+        "cellMarker": "Observed flows of {name} in this cell",
+        "panel": {
+          "label": "Guest {name}",
+          "where": "{type} {vmid} on {node}",
+          "noZone": "In no zone",
+          "openZone": "Open zone",
+          "observed": "Observed flows",
+          "noObserved": "No pending observed flow involves the addresses of this guest.",
+          "noIps": "No IP address known: the observed flows cannot be matched to this guest.",
+          "allowed": "Allowed flows of its zone",
+          "noZoneFlows": "This guest is in no zone: no allowed flow applies to it.",
+          "incoming": "Incoming, from {peer}",
+          "outgoing": "Outgoing, to {peer}",
+          "acceptTip": "Accept as flow {from} → {to} {service}: the engine keeps one sample pair of guests per observed flow, so the flow covers the whole zone pair."
+        }
       }
     },
     "preflight": {

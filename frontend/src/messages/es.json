@@ -13150,6 +13150,37 @@
         "sources": "Orígenes",
         "destinations": "Destinos",
         "empty": "Ningún flujo que dibujar con estos filtros."
+      },
+      "target": {
+        "label": "Apuntar a una VM",
+        "placeholder": "Nombre, VMID o IP",
+        "noOptions": "Ningún invitado en ejecución coincide",
+        "clear": "Quitar el objetivo",
+        "openList": "Mostrar los invitados",
+        "closeList": "Ocultar los invitados",
+        "noZone": "sin zona",
+        "option": "{name}, invitado {vmid}, {zone}",
+        "type": {
+          "qemu": "Máquina virtual",
+          "lxc": "Contenedor"
+        },
+        "chip": "Objetivo: {name}",
+        "chipHint": "El mapa sigue centrado en {name}: haga clic para ver su panel, en la cruz para quitar el objetivo",
+        "cellMarker": "Flujos observados de {name} en esta celda",
+        "panel": {
+          "label": "Invitado {name}",
+          "where": "{type} {vmid} en {node}",
+          "noZone": "En ninguna zona",
+          "openZone": "Abrir la zona",
+          "observed": "Flujos observados",
+          "noObserved": "Ningún flujo observado pendiente afecta a las direcciones de este invitado.",
+          "noIps": "Ninguna dirección IP conocida: los flujos observados no se pueden asociar a este invitado.",
+          "allowed": "Flujos permitidos de su zona",
+          "noZoneFlows": "Este invitado no está en ninguna zona: ningún flujo permitido se le aplica.",
+          "incoming": "Entrante, desde {peer}",
+          "outgoing": "Saliente, hacia {peer}",
+          "acceptTip": "Aceptar como flujo {from} → {to} {service}: el motor guarda un par de invitados de ejemplo por flujo observado, así que el flujo cubre todo el par de zonas."
+        }
       }
     },
     "preflight": {

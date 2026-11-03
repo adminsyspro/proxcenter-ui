@@ -388,7 +388,7 @@ export default function SecurityGroupsPanel({
               <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{section.name}</span>
               {section.comment && (
                 <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  — {section.comment}
+                  · {section.comment}
                 </Typography>
               )}
               <Chip
@@ -432,7 +432,7 @@ export default function SecurityGroupsPanel({
                 ].filter(Boolean)
 
                 return (
-                  <Tooltip title={parts.join(' — ')}>
+                  <Tooltip title={parts.join(' · ')}>
                     <Chip
                       icon={<i className="ri-server-line" style={{ fontSize: 12 }} />}
                       label={scope.cluster ? t('firewall.cluster') : scope.nodes.length}

@@ -204,7 +204,7 @@ export default function MicrosegEventsView({ connectionId, zones, guests }: Prop
                     </Tooltip>
                   </TableCell>
                   <TableCell sx={{ ...CELL_SX, fontVariantNumeric: 'tabular-nums' }}>{fmtTime(e.ts)}</TableCell>
-                  <TableCell sx={CELL_SX}>{e.src_ip || '—'}</TableCell>
+                  <TableCell sx={CELL_SX}>{e.src_ip || '-'}</TableCell>
                   <TableCell sx={CELL_SX}>
                     {guestName ? (
                       <Tooltip title={`${e.dst_ip ? `${e.dst_ip} · ` : ''}${t('guestTip', { name: guestName, vmid: String(e.vmid), node: e.node })}`}>
@@ -214,14 +214,14 @@ export default function MicrosegEventsView({ connectionId, zones, guests }: Prop
                           <Typography component='span' variant='caption' sx={{ color: 'text.disabled' }}>#{e.vmid}</Typography>
                         </Box>
                       </Tooltip>
-                    ) : (e.dst_ip || '—')}
+                    ) : (e.dst_ip || '-')}
                   </TableCell>
                   <TableCell sx={CELL_SX}>
                     {e.proto ? (
                       <Tooltip title={serviceTitle(e.proto, port)}>
                         <span>{serviceLabel(e.proto, port)}</span>
                       </Tooltip>
-                    ) : '—'}
+                    ) : '-'}
                   </TableCell>
                   <TableCell sx={CELL_SX}>
                     <Tooltip title={e.src_zone ? t('zoneFlowTip', { from: e.src_zone, to: e.zone }) : ''}>

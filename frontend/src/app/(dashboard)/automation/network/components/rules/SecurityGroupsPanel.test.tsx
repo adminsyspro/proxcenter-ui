@@ -152,7 +152,7 @@ describe('SecurityGroupsPanel', () => {
     renderPanel()
 
     expect(screen.getByText('sg-web')).toBeInTheDocument()
-    expect(screen.getByText('— front tier')).toBeInTheDocument()
+    expect(screen.getByText('· front tier')).toBeInTheDocument()
     expect(screen.getByText('2 rules')).toBeInTheDocument()
     expect(screen.getByText('0 rules')).toBeInTheDocument()
 
@@ -355,6 +355,16 @@ describe('SecurityGroupsPanel', () => {
 
     // sg-db is referenced nowhere, so it carries no scope chip at all.
     expect(within(sectionRow('sg-db')).queryByText('Cluster')).not.toBeInTheDocument()
+  })
+
+  it('joins the cluster and node scopes of the chip tooltip with a middle dot, not a dash (D5)', async () => {
+    renderPanel({ clusterRules: [groupRule('sg-web', 0)], hostRulesByNode: { pve1: [groupRule('sg-web')] } })
+
+    fireEvent.mouseOver(within(sectionRow('sg-web')).getByText('Cluster'))
+
+    const tip = await screen.findByRole('tooltip')
+    expect(tip.textContent).toContain(' · ')
+    expect(tip.textContent).not.toContain('\u2014')
   })
 
   it('counts the nodes whose own rules reference the group', () => {

@@ -10598,7 +10598,11 @@
     "searchFilter": "Filter",
     "searchMatches": "{count, plural, one {# matching flow} other {# matching flows}}",
     "searchNoMatch": "No flow matches \"{query}\"",
-    "searchEnterHint": "Press Enter to open the details of the top match"
+    "searchEnterHint": "Press Enter to open the details of the top match",
+    "groupBy": "Group by",
+    "groupByVm": "VM",
+    "groupByIp": "IP",
+    "groupByZone": "Zone"
   },
   "vdc": {
     "catalogGrantTitle": "Catalogue",
@@ -13316,6 +13320,44 @@
         "notRun": "not run"
       },
       "runAgain": "Run again"
+    },
+    "trafficLens": {
+      "connection": "Connection",
+      "setupFirst": "Set up micro-segmentation first",
+      "setupLink": "Open the Micro-segmentation tab",
+      "loadingZones": "Loading the micro-segmentation zones...",
+      "loadError": "The micro-segmentation of this connection could not be read",
+      "unknownExternal": "Unknown / External",
+      "unzoned": "Unzoned",
+      "other": "Other",
+      "status": {
+        "allowed": "Allowed",
+        "notCovered": "Not covered",
+        "blocked": "Blocked",
+        "unknown": "Unknown"
+      },
+      "tip": {
+        "allowedFlow": "Allowed by the flow {src} → {dst} {service}",
+        "intraZone": "Inside the zone {zone}: its members may talk to each other",
+        "notCovered": "No flow from {src} to {dst} covers {service}",
+        "wouldBlock": "No flow from {src} to {dst} covers {service}: the zone would block it once enforced ({hits, plural, one {# hit} other {# hits}} observed)",
+        "blocked": "Blocked: no flow from {src} to {dst} covers {service} ({hits, plural, one {# hit} other {# hits}} observed)",
+        "unknown": "{src} → {dst}: one end is in no zone, the policy does not apply"
+      },
+      "accept": "Accept",
+      "acceptTip": "Accept the observed flow: it is added to the draft",
+      "createFlow": "Create flow",
+      "createFlowTip": "Add a flow for this service to the draft",
+      "draftNote": "Read against the draft, which has changes not applied yet",
+      "openFlowsTip": "Open the Network flows page grouped by zone",
+      "summary": {
+        "title": "Traffic by zone",
+        "intra": "Intra-zone",
+        "between": "Between zones",
+        "toOutside": "To outside",
+        "fromUnknown": "From unknown",
+        "bySourceZone": "Bytes per source zone"
+      }
     }
   }
 }

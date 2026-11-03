@@ -10599,7 +10599,11 @@
     "searchFilter": "Filtrer",
     "searchMatches": "{count, plural, one {# flux correspondant} other {# flux correspondants}}",
     "searchNoMatch": "Aucun flux ne correspond à « {query} »",
-    "searchEnterHint": "Entrée ouvre le détail du meilleur résultat"
+    "searchEnterHint": "Entrée ouvre le détail du meilleur résultat",
+    "groupBy": "Grouper par",
+    "groupByVm": "VM",
+    "groupByIp": "IP",
+    "groupByZone": "Zone"
   },
   "vdc": {
     "catalogGrantTitle": "Catalogue",
@@ -13317,6 +13321,44 @@
         "notRun": "non exécuté"
       },
       "runAgain": "Relancer"
+    },
+    "trafficLens": {
+      "connection": "Connexion",
+      "setupFirst": "Configurez d'abord la micro-segmentation",
+      "setupLink": "Ouvrir l'onglet Micro-segmentation",
+      "loadingZones": "Chargement des zones de micro-segmentation...",
+      "loadError": "Impossible de lire la micro-segmentation de cette connexion",
+      "unknownExternal": "Inconnu / Externe",
+      "unzoned": "Hors zone",
+      "other": "Autres",
+      "status": {
+        "allowed": "Autorisé",
+        "notCovered": "Non couvert",
+        "blocked": "Bloqué",
+        "unknown": "Inconnu"
+      },
+      "tip": {
+        "allowedFlow": "Autorisé par le flux {src} → {dst} {service}",
+        "intraZone": "Dans la zone {zone} : ses membres peuvent communiquer entre eux",
+        "notCovered": "Aucun flux de {src} vers {dst} ne couvre {service}",
+        "wouldBlock": "Aucun flux de {src} vers {dst} ne couvre {service} : la zone le bloquerait une fois appliquée ({hits, plural, one {# occurrence observée} other {# occurrences observées}})",
+        "blocked": "Bloqué : aucun flux de {src} vers {dst} ne couvre {service} ({hits, plural, one {# occurrence observée} other {# occurrences observées}})",
+        "unknown": "{src} → {dst} : une extrémité n'est dans aucune zone, la politique ne s'applique pas"
+      },
+      "accept": "Accepter",
+      "acceptTip": "Accepter le flux observé : il est ajouté au brouillon",
+      "createFlow": "Créer un flux",
+      "createFlowTip": "Ajouter au brouillon un flux pour ce service",
+      "draftNote": "Évalué d'après le brouillon, qui contient des changements non appliqués",
+      "openFlowsTip": "Ouvrir la page Flux réseau groupée par zone",
+      "summary": {
+        "title": "Trafic par zone",
+        "intra": "Dans une zone",
+        "between": "Entre zones",
+        "toOutside": "Vers l'extérieur",
+        "fromUnknown": "Depuis l'inconnu",
+        "bySourceZone": "Octets par zone source"
+      }
     }
   }
 }

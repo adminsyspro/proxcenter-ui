@@ -10598,7 +10598,11 @@
     "searchFilter": "筛选",
     "searchMatches": "{count} 条匹配的流量",
     "searchNoMatch": "没有与“{query}”匹配的流量",
-    "searchEnterHint": "按 Enter 键打开最佳匹配项的详情"
+    "searchEnterHint": "按 Enter 键打开最佳匹配项的详情",
+    "groupBy": "分组方式",
+    "groupByVm": "虚拟机",
+    "groupByIp": "IP",
+    "groupByZone": "区域"
   },
   "myVdc": {
     "title": "我的数据中心",
@@ -13316,6 +13320,44 @@
         "notRun": "未运行"
       },
       "runAgain": "重新运行"
+    },
+    "trafficLens": {
+      "connection": "连接",
+      "setupFirst": "请先设置微分段",
+      "setupLink": "打开“微分段”选项卡",
+      "loadingZones": "正在加载微分段区域...",
+      "loadError": "无法读取此连接的微分段",
+      "unknownExternal": "未知 / 外部",
+      "unzoned": "未分区",
+      "other": "其他",
+      "status": {
+        "allowed": "已允许",
+        "notCovered": "未覆盖",
+        "blocked": "已阻止",
+        "unknown": "未知"
+      },
+      "tip": {
+        "allowedFlow": "由流量规则 {src} → {dst} {service} 允许",
+        "intraZone": "位于区域 {zone} 内：其成员之间可以互相通信",
+        "notCovered": "没有从 {src} 到 {dst} 的流量规则覆盖 {service}",
+        "wouldBlock": "没有从 {src} 到 {dst} 的流量规则覆盖 {service}：区域强制执行后将阻止它（已观察到 {hits} 次）",
+        "blocked": "已阻止：没有从 {src} 到 {dst} 的流量规则覆盖 {service}（已观察到 {hits} 次）",
+        "unknown": "{src} → {dst}：有一端不属于任何区域，策略不适用"
+      },
+      "accept": "接受",
+      "acceptTip": "接受观察到的流量：它将被添加到草稿",
+      "createFlow": "创建流量规则",
+      "createFlowTip": "将此服务的流量规则添加到草稿",
+      "draftNote": "按草稿评估，草稿中有未应用的更改",
+      "openFlowsTip": "打开按区域分组的“网络流量”页面",
+      "summary": {
+        "title": "按区域的流量",
+        "intra": "区域内",
+        "between": "区域之间",
+        "toOutside": "流向外部",
+        "fromUnknown": "来自未知来源",
+        "bySourceZone": "按源区域的字节数"
+      }
     }
   }
 }

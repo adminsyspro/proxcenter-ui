@@ -4,6 +4,7 @@ import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProvide
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
 import SankeyChart from './SankeyChart'
+import { PAIRS, makeLens } from './lensTestKit'
 
 describe('SankeyChart', () => {
   afterEach(cleanup)
@@ -101,5 +102,32 @@ describe('SankeyChart', () => {
     // answers. Wait for that reload so no request outlives the file: once MSW
     // is closed it would go to the real network and reject unhandled.
     await waitFor(() => expect(served).toHaveBeenCalledWith('nothing'))
+  })
+
+  it('shows the addresses alone when grouped by IP', async () => {
+    server.use(http.get('*/api/v1/orchestrator/sflow', () => HttpResponse.json([
+      { src_ip: '10.0.0.1', src_vmid: 101, src_name: 'web-01', dst_ip: '10.0.0.2', bytes: 4096, packets: 4, protocol: 'tcp', dst_port: 443 },
+    ])))
+
+    renderWithProviders(<SankeyChart groupBy="ip" />)
+
+    expect(await screen.findByText('10.0.0.1')).toBeInTheDocument()
+    expect(screen.queryByText('web-01 (10.0.0.1)')).not.toBeInTheDocument()
+  })
+
+  it('draws one node per zone in Zone mode, in the zone colour, the service column kept', async () => {
+    server.use(http.get('*/api/v1/orchestrator/sflow', () => HttpResponse.json(PAIRS)))
+
+    const { container } = renderWithProviders(<SankeyChart groupBy="zone" lens={makeLens()} />)
+
+    expect(await screen.findAllByText('web')).not.toHaveLength(0)
+    expect(screen.getAllByText('db').length).toBeGreaterThan(0)
+    expect(screen.getByText('Unzoned')).toBeInTheDocument()
+    expect(screen.getByText('Unknown / External')).toBeInTheDocument()
+    expect(screen.getByText('PostgreSQL')).toBeInTheDocument()
+    expect(screen.queryByText('10.0.0.1')).not.toBeInTheDocument()
+    const fills = Array.from(container.querySelectorAll('rect')).map(r => r.getAttribute('fill'))
+    expect(fills).toContain('#3b82f6')
+    expect(fills).toContain('#10b981')
   })
 })

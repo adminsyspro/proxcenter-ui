@@ -10598,7 +10598,11 @@
     "searchFilter": "필터",
     "searchMatches": "일치하는 플로우 {count}개",
     "searchNoMatch": "\"{query}\"와(과) 일치하는 플로우가 없습니다",
-    "searchEnterHint": "Enter 키를 누르면 가장 일치하는 항목의 세부 정보가 열립니다"
+    "searchEnterHint": "Enter 키를 누르면 가장 일치하는 항목의 세부 정보가 열립니다",
+    "groupBy": "그룹 기준",
+    "groupByVm": "VM",
+    "groupByIp": "IP",
+    "groupByZone": "영역"
   },
   "vdc": {
     "catalogGrantTitle": "카탈로그",
@@ -13316,6 +13320,44 @@
         "notRun": "실행 안 됨"
       },
       "runAgain": "다시 실행"
+    },
+    "trafficLens": {
+      "connection": "연결",
+      "setupFirst": "먼저 마이크로 세분화를 설정하세요",
+      "setupLink": "마이크로 세분화 탭 열기",
+      "loadingZones": "마이크로 세분화 영역을 불러오는 중...",
+      "loadError": "이 연결의 마이크로 세분화를 읽을 수 없습니다",
+      "unknownExternal": "알 수 없음 / 외부",
+      "unzoned": "영역 없음",
+      "other": "기타",
+      "status": {
+        "allowed": "허용됨",
+        "notCovered": "적용 안 됨",
+        "blocked": "차단됨",
+        "unknown": "알 수 없음"
+      },
+      "tip": {
+        "allowedFlow": "{src} → {dst} {service} 플로우로 허용됨",
+        "intraZone": "{zone} 영역 내부: 구성원끼리 통신할 수 있습니다",
+        "notCovered": "{src}에서 {dst}(으)로 {service}을(를) 허용하는 플로우가 없습니다",
+        "wouldBlock": "{src}에서 {dst}(으)로 {service}을(를) 허용하는 플로우가 없습니다. 영역이 적용되면 차단됩니다({hits}회 관찰됨)",
+        "blocked": "차단됨: {src}에서 {dst}(으)로 {service}을(를) 허용하는 플로우가 없습니다({hits}회 관찰됨)",
+        "unknown": "{src} → {dst}: 한쪽 끝이 어떤 영역에도 속하지 않아 정책이 적용되지 않습니다"
+      },
+      "accept": "수락",
+      "acceptTip": "관찰된 플로우를 수락합니다. 초안에 추가됩니다",
+      "createFlow": "플로우 만들기",
+      "createFlowTip": "이 서비스에 대한 플로우를 초안에 추가합니다",
+      "draftNote": "적용되지 않은 변경이 있는 초안을 기준으로 평가했습니다",
+      "openFlowsTip": "영역별로 그룹화된 네트워크 플로우 페이지 열기",
+      "summary": {
+        "title": "영역별 트래픽",
+        "intra": "영역 내부",
+        "between": "영역 간",
+        "toOutside": "외부로",
+        "fromUnknown": "알 수 없는 출발지에서",
+        "bySourceZone": "출발 영역별 바이트"
+      }
     }
   }
 }

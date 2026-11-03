@@ -18,10 +18,15 @@ import dagre from '@dagrejs/dagre'
 
 import { Box, Chip, CircularProgress, Typography, useTheme } from '@mui/material'
 import { formatBytes } from '@/utils/format'
+import { aggregateByGroup } from '@/lib/microseg/trafficLens'
+
+import type { TrafficLens } from './useTrafficLens'
 
 interface IPPair {
   src_ip: string
   dst_ip: string
+  src_vmid?: number
+  dst_vmid?: number
   bytes: number
   packets: number
   protocol: string
@@ -30,6 +35,8 @@ interface IPPair {
 
 interface DependencyGraphProps {
   connectionId: string
+  /** Set in Zone mode: one node per micro-segmentation zone, in its colour. */
+  lens?: TrafficLens | null
 }
 
 async function fetchIPPairs(): Promise<IPPair[]> {
@@ -69,7 +76,7 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], direction = 'LR') {
   return { nodes: layoutedNodes, edges }
 }
 
-export default function DependencyGraph({ connectionId }: DependencyGraphProps) {
+export default function DependencyGraph({ connectionId, lens = null }: DependencyGraphProps) {
   const t = useTranslations()
   const theme = useTheme()
   const [pairs, setPairs] = useState<IPPair[]>([])
@@ -95,12 +102,13 @@ export default function DependencyGraph({ connectionId }: DependencyGraphProps) 
   // Build nodes and edges from IP pairs
   const { initialNodes, initialEdges } = useMemo(() => {
     if (pairs.length === 0) return { initialNodes: [], initialEdges: [] }
+    const shown: IPPair[] = lens ? aggregateByGroup(pairs, lens.resolve) : pairs
 
     const ipSet = new Set<string>()
     const ipBytes = new Map<string, number>()
 
     // Collect unique IPs and total bytes
-    for (const pair of pairs) {
+    for (const pair of shown) {
       ipSet.add(pair.src_ip)
       ipSet.add(pair.dst_ip)
       ipBytes.set(pair.src_ip, (ipBytes.get(pair.src_ip) || 0) + pair.bytes)
@@ -110,7 +118,9 @@ export default function DependencyGraph({ connectionId }: DependencyGraphProps) 
     // Create nodes
     const nodes: Node[] = Array.from(ipSet).map((ip) => {
       const totalBytes = ipBytes.get(ip) || 0
-      const isInfra = ip.startsWith('10.99.99.10') // Node IPs — adjust as needed
+      const isInfra = !lens && ip.startsWith('10.99.99.10') // Node IPs — adjust as needed
+      const ipBorder = isInfra ? theme.palette.warning.main : primaryColor
+      const border = lens ? lens.colorOf(ip) : ipBorder
 
       return {
         id: ip,
@@ -118,9 +128,9 @@ export default function DependencyGraph({ connectionId }: DependencyGraphProps) 
           label: (
             <Box sx={{ textAlign: 'center', p: 0.5 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mb: 0.25 }}>
-                <i className={isInfra ? 'ri-server-line' : 'ri-computer-line'} style={{ fontSize: 12 }} />
+                <i className={isInfra ? 'ri-server-line' : 'ri-computer-line'} style={{ fontSize: 12, color: lens ? border : undefined }} />
                 <Typography variant="caption" fontWeight={600} sx={{ fontSize: '0.7rem' }}>
-                  {ip}
+                  {lens ? lens.labelOf(ip) : ip}
                 </Typography>
               </Box>
               <Typography variant="caption" sx={{ fontSize: '0.6rem', opacity: 0.7 }}>
@@ -131,7 +141,7 @@ export default function DependencyGraph({ connectionId }: DependencyGraphProps) 
         },
         style: {
           background: isDark ? '#1e293b' : '#f8fafc',
-          border: `1px solid ${isInfra ? theme.palette.warning.main : primaryColor}`,
+          border: `1px solid ${border}`,
           borderRadius: 8,
           padding: 4,
           fontSize: 11,
@@ -142,8 +152,8 @@ export default function DependencyGraph({ connectionId }: DependencyGraphProps) 
     })
 
     // Create edges
-    const maxBytes = Math.max(...pairs.map(p => p.bytes), 1)
-    const edges: Edge[] = pairs.map((pair, idx) => {
+    const maxBytes = Math.max(...shown.map(p => p.bytes), 1)
+    const edges: Edge[] = shown.map((pair, idx) => {
       const thickness = Math.max(1, Math.min(6, (pair.bytes / maxBytes) * 6))
 
       return {
@@ -172,7 +182,7 @@ export default function DependencyGraph({ connectionId }: DependencyGraphProps) 
     // Apply dagre layout
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges)
     return { initialNodes: layoutedNodes, initialEdges: layoutedEdges }
-  }, [pairs, primaryColor, isDark, theme])
+  }, [pairs, primaryColor, isDark, theme, lens])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)

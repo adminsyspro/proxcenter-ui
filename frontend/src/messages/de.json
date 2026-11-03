@@ -10544,7 +10544,11 @@
     "searchFilter": "Filtern",
     "searchMatches": "{count, plural, one {# passender Fluss} other {# passende Flüsse}}",
     "searchNoMatch": "Kein Fluss passt zu „{query}“",
-    "searchEnterHint": "Eingabetaste öffnet die Details des besten Treffers"
+    "searchEnterHint": "Eingabetaste öffnet die Details des besten Treffers",
+    "groupBy": "Gruppieren nach",
+    "groupByVm": "VM",
+    "groupByIp": "IP",
+    "groupByZone": "Zone"
   },
   "myVdc": {
     "title": "Mein Datacenter",
@@ -12984,6 +12988,44 @@
         "notRun": "nicht ausgeführt"
       },
       "runAgain": "Erneut ausführen"
+    },
+    "trafficLens": {
+      "connection": "Verbindung",
+      "setupFirst": "Richten Sie zuerst die Mikrosegmentierung ein",
+      "setupLink": "Registerkarte Mikrosegmentierung öffnen",
+      "loadingZones": "Die Zonen der Mikrosegmentierung werden geladen...",
+      "loadError": "Die Mikrosegmentierung dieser Verbindung konnte nicht gelesen werden",
+      "unknownExternal": "Unbekannt / Extern",
+      "unzoned": "Ohne Zone",
+      "other": "Andere",
+      "status": {
+        "allowed": "Erlaubt",
+        "notCovered": "Nicht abgedeckt",
+        "blocked": "Blockiert",
+        "unknown": "Unbekannt"
+      },
+      "tip": {
+        "allowedFlow": "Erlaubt durch den Fluss {src} → {dst} {service}",
+        "intraZone": "Innerhalb der Zone {zone}: ihre Mitglieder dürfen miteinander kommunizieren",
+        "notCovered": "Kein Fluss von {src} nach {dst} deckt {service} ab",
+        "wouldBlock": "Kein Fluss von {src} nach {dst} deckt {service} ab: die Zone würde ihn nach der Durchsetzung blockieren ({hits, plural, one {# Treffer} other {# Treffer}} beobachtet)",
+        "blocked": "Blockiert: kein Fluss von {src} nach {dst} deckt {service} ab ({hits, plural, one {# Treffer} other {# Treffer}} beobachtet)",
+        "unknown": "{src} → {dst}: ein Ende liegt in keiner Zone, die Richtlinie gilt nicht"
+      },
+      "accept": "Akzeptieren",
+      "acceptTip": "Den beobachteten Fluss akzeptieren: er wird dem Entwurf hinzugefügt",
+      "createFlow": "Fluss anlegen",
+      "createFlowTip": "Dem Entwurf einen Fluss für diesen Dienst hinzufügen",
+      "draftNote": "Bewertet nach dem Entwurf, der nicht angewendete Änderungen enthält",
+      "openFlowsTip": "Die Seite Netzwerk-Flows nach Zone gruppiert öffnen",
+      "summary": {
+        "title": "Datenverkehr nach Zone",
+        "intra": "Innerhalb einer Zone",
+        "between": "Zwischen Zonen",
+        "toOutside": "Nach außen",
+        "fromUnknown": "Von unbekannt",
+        "bySourceZone": "Bytes pro Quellzone"
+      }
     }
   }
 }

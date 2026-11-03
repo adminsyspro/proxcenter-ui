@@ -10598,7 +10598,11 @@
     "searchFilter": "Filtrar",
     "searchMatches": "{count, plural, one {# flujo coincidente} other {# flujos coincidentes}}",
     "searchNoMatch": "Ningún flujo coincide con «{query}»",
-    "searchEnterHint": "Pulse Intro para abrir los detalles del mejor resultado"
+    "searchEnterHint": "Pulse Intro para abrir los detalles del mejor resultado",
+    "groupBy": "Agrupar por",
+    "groupByVm": "VM",
+    "groupByIp": "IP",
+    "groupByZone": "Zona"
   },
   "vdc": {
     "catalogGrantTitle": "Catálogo",
@@ -13316,6 +13320,44 @@
         "notRun": "no ejecutado"
       },
       "runAgain": "Volver a ejecutar"
+    },
+    "trafficLens": {
+      "connection": "Conexión",
+      "setupFirst": "Configure primero la microsegmentación",
+      "setupLink": "Abrir la pestaña Microsegmentación",
+      "loadingZones": "Cargando las zonas de microsegmentación...",
+      "loadError": "No se pudo leer la microsegmentación de esta conexión",
+      "unknownExternal": "Desconocido / Externo",
+      "unzoned": "Sin zona",
+      "other": "Otros",
+      "status": {
+        "allowed": "Permitido",
+        "notCovered": "No cubierto",
+        "blocked": "Bloqueado",
+        "unknown": "Desconocido"
+      },
+      "tip": {
+        "allowedFlow": "Permitido por el flujo {src} → {dst} {service}",
+        "intraZone": "Dentro de la zona {zone}: sus miembros pueden comunicarse entre sí",
+        "notCovered": "Ningún flujo de {src} a {dst} cubre {service}",
+        "wouldBlock": "Ningún flujo de {src} a {dst} cubre {service}: la zona lo bloquearía una vez aplicada ({hits, plural, one {# coincidencia observada} other {# coincidencias observadas}})",
+        "blocked": "Bloqueado: ningún flujo de {src} a {dst} cubre {service} ({hits, plural, one {# coincidencia observada} other {# coincidencias observadas}})",
+        "unknown": "{src} → {dst}: un extremo no está en ninguna zona, la política no se aplica"
+      },
+      "accept": "Aceptar",
+      "acceptTip": "Aceptar el flujo observado: se añade al borrador",
+      "createFlow": "Crear flujo",
+      "createFlowTip": "Añadir al borrador un flujo para este servicio",
+      "draftNote": "Evaluado según el borrador, que tiene cambios sin aplicar",
+      "openFlowsTip": "Abrir la página Flujos de red agrupada por zona",
+      "summary": {
+        "title": "Tráfico por zona",
+        "intra": "Dentro de una zona",
+        "between": "Entre zonas",
+        "toOutside": "Hacia el exterior",
+        "fromUnknown": "Desde lo desconocido",
+        "bySourceZone": "Bytes por zona de origen"
+      }
     }
   }
 }

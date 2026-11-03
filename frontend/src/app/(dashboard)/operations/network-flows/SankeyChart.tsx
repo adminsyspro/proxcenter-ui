@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { sankey, sankeyLinkHorizontal } from 'd3-sankey'
 import {
@@ -31,6 +31,7 @@ import {
 } from '@mui/material'
 
 import { formatBytes } from '@/utils/format'
+import { groupKeyOf } from '@/lib/microseg/trafficLens'
 
 import {
   buildEndpointIndex,
@@ -40,6 +41,7 @@ import {
   normalizeQuery,
   type IPPair,
 } from './flowSearch'
+import type { GroupBy, TrafficLens } from './useTrafficLens'
 
 interface SankeyNodeData {
   name: string
@@ -123,7 +125,14 @@ interface LinkDetail {
 
 type DetailData = NodeDetail | LinkDetail
 
-export default function SankeyChart() {
+type Props = {
+  /** VM labels an attributed address with its guest, IP shows the address alone, Zone draws one node per zone. */
+  groupBy?: GroupBy
+  /** The zones to group by; set only in Zone mode. */
+  lens?: TrafficLens | null
+}
+
+export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {}) {
   const t = useTranslations()
   const theme = useTheme()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -165,6 +174,16 @@ export default function SankeyChart() {
 
   const endpointIndex = useMemo(() => buildEndpointIndex([...pairs, ...matchedPairs]), [pairs, matchedPairs])
   const q = normalizeQuery(query)
+
+  // The node an address is drawn in (its zone in Zone mode) and the label of a node.
+  const endpointKey = useCallback(
+    (ip: string, vmid?: number) => (lens ? groupKeyOf(lens.resolve(ip, vmid)) : ip),
+    [lens],
+  )
+  const nodeLabel = useCallback((name: string) => {
+    if (lens) return lens.labelOf(name)
+    return groupBy === 'ip' ? name : endpointLabel(name, endpointIndex.get(name))
+  }, [lens, groupBy, endpointIndex])
 
   // Track container width (the container only mounts once data is loaded)
   useEffect(() => {
@@ -212,8 +231,8 @@ export default function SankeyChart() {
       if (category === 'service') {
         nodes.push({ name, label: name, category, matched: false })
       } else {
-        const info = endpointIndex.get(name)
-        nodes.push({ name, label: endpointLabel(name, info), category, vmid: info?.vmid, matched: matches(name) })
+        const info = lens ? undefined : endpointIndex.get(name)
+        nodes.push({ name, label: nodeLabel(name), category, vmid: info?.vmid, matched: matches(name) })
       }
       return idx
     }
@@ -223,20 +242,24 @@ export default function SankeyChart() {
 
     for (const pair of sourcePairs) {
       const service = portToService(pair.dst_port, pair.protocol)
-      const key = `${pair.src_ip}|${service}|${pair.dst_ip}`
+      const srcKey = endpointKey(pair.src_ip, pair.src_vmid)
+      const dstKey = endpointKey(pair.dst_ip, pair.dst_vmid)
+      const key = `${srcKey}|${service}|${dstKey}`
 
       const existing = aggregated.get(key)
       if (existing) {
         existing.bytes += pair.bytes
         existing.packets += pair.packets
+        // In Zone mode a node gathers several addresses: it matches when one of them does.
+        existing.matched = existing.matched || (!!q && pairMatches(pair))
       } else {
         aggregated.set(key, {
           bytes: pair.bytes,
           packets: pair.packets,
           protocol: pair.protocol,
           port: pair.dst_port,
-          srcIP: pair.src_ip,
-          dstIP: pair.dst_ip,
+          srcIP: srcKey,
+          dstIP: dstKey,
           matched: !!q && pairMatches(pair),
         })
       }
@@ -268,7 +291,7 @@ export default function SankeyChart() {
     }
 
     return { nodes, links, matchCount: matchedFlows.length }
-  }, [pairs, matchedPairs, endpointIndex, q, mode])
+  }, [pairs, matchedPairs, endpointIndex, q, mode, endpointKey, nodeLabel, lens])
 
   // Compute Sankey layout
   const layout = useMemo(() => {
@@ -627,7 +650,7 @@ export default function SankeyChart() {
                 {/* Nodes */}
                 {layoutNodes.map((node: any, idx: number) => {
                   const nodeHeight = Math.max(4, (node.y1 || 0) - (node.y0 || 0))
-                  const color = categoryColors[node.category] || theme.palette.primary.main
+                  const color = lens && node.category !== 'service' ? lens.colorOf(node.name) : (categoryColors[node.category] || theme.palette.primary.main)
                   const highlighted = isNodeHighlighted(idx)
                   const opacity = hovering ? (highlighted ? 1 : 0.3) : emphasizing ? (layout.litNodes.has(idx) ? 1 : 0.2) : 0.9
                   const isMatch = emphasizing && node.matched
@@ -822,7 +845,7 @@ export default function SankeyChart() {
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="caption" color="text.secondary" display="block">{t('networkFlows.source')}</Typography>
                   <Typography fontFamily="JetBrains Mono, monospace" fontWeight={700} fontSize={13} color="warning.main">
-                    {endpointLabel(detail.srcIP, endpointIndex.get(detail.srcIP))}
+                    {nodeLabel(detail.srcIP)}
                   </Typography>
                 </Box>
                 <i className="ri-arrow-right-line" style={{ fontSize: 18, color: theme.palette.text.secondary }} />
@@ -839,7 +862,7 @@ export default function SankeyChart() {
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography variant="caption" color="text.secondary" display="block">{t('networkFlows.destination')}</Typography>
                   <Typography fontFamily="JetBrains Mono, monospace" fontWeight={700} fontSize={13} color="success.main">
-                    {endpointLabel(detail.dstIP, endpointIndex.get(detail.dstIP))}
+                    {nodeLabel(detail.dstIP)}
                   </Typography>
                 </Box>
               </Box>

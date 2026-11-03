@@ -47,6 +47,12 @@ import {
   type TelemetryHealth,
   type TelemetryState,
 } from '@/lib/sflow/telemetryState'
+import { MicrosegWriteContext, useCanManageMicroseg } from '@/app/(dashboard)/automation/network/components/microseg/microsegAccess'
+
+import GroupBySelector from './GroupBySelector'
+import { MicrosegPairStatus, ZoneEndpointCell, usePairActions } from './MicrosegPairStatus'
+import TrafficByZoneStrip from './TrafficByZoneStrip'
+import { useGroupBy, useLensConnection, useTrafficLens } from './useTrafficLens'
 
 const SankeyChart = dynamic(() => import('./SankeyChart'), { ssr: false })
 
@@ -74,6 +80,8 @@ interface TopTalker {
 interface IPPair {
   src_ip: string
   dst_ip: string
+  src_vmid?: number
+  dst_vmid?: number
   bytes: number
   packets: number
   protocol: string
@@ -190,6 +198,16 @@ export default function FlowsTab() {
   const [pairTsLoading, setPairTsLoading] = useState(false)
 
   const primaryColor = theme.palette.primary.main
+
+  // Micro-segmentation lens (UA35): the pairs read through the zones of one connection.
+  const [groupBy, setGroupBy] = useGroupBy()
+  const lensConnection = useLensConnection()
+  const lensRead = useTrafficLens(lensConnection.connectionId)
+  const lens = groupBy === 'zone' ? lensRead.lens : null
+  // Zone stays the choice while the zones load (or cannot be used): the page shows the VM grouping meanwhile.
+  const shownGroupBy = lens || groupBy !== 'zone' ? groupBy : 'vm'
+  const pairActions = usePairActions(lensRead)
+  const canWriteMicroseg = useCanManageMicroseg(lensConnection.connectionId ?? '')
 
   // Sparkline data for top talkers (keyed by vmid)
   const [sparklineData, setSparklineData] = useState<Map<number, { time: number; total: number }[]>>(new Map())
@@ -493,11 +511,12 @@ export default function FlowsTab() {
         </Alert>
       )}
 
-      {/* Sub-tabs */}
+      {/* Sub-tabs, and the grouping of the pairs on the right */}
+      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, borderBottom: 1, borderColor: 'divider' }}>
       <Tabs
         value={subTab}
         onChange={(_, v) => setSubTab(v)}
-        sx={{ borderBottom: 1, borderColor: 'divider' }}
+        sx={{ flex: '1 1 320px', minWidth: 0 }}
       >
         <Tab
           icon={<i className="ri-dashboard-line" style={{ fontSize: 16 }} />}
@@ -512,6 +531,17 @@ export default function FlowsTab() {
           sx={{ textTransform: 'none', fontSize: 13 }}
         />
       </Tabs>
+      <GroupBySelector
+        value={shownGroupBy}
+        onChange={setGroupBy}
+        lensState={lensRead.state}
+        connections={lensConnection.connections}
+        connectionId={lensConnection.connectionId}
+        onConnection={lensConnection.choose}
+      />
+      </Box>
+
+      {lens && topPairs.length > 0 && <TrafficByZoneStrip pairs={topPairs} lens={lens} />}
 
       {/* Overview sub-tab */}
       {subTab === 0 && (
@@ -834,7 +864,7 @@ export default function FlowsTab() {
           </Box>
 
           {/* Top Talkers + Top Sources/Destinations */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: lens ? '1fr' : '1fr 1fr' }, gap: 2 }}>
 
             {/* Top Talkers */}
             <Card variant="outlined" sx={{ borderRadius: 2 }}>
@@ -943,9 +973,11 @@ export default function FlowsTab() {
                     sx: { fontSize: '0.8rem', height: 32 }
                   }}
                 />
+                {lens && pairActions.failure}
                 {topPairs.length === 0 ? (
                   <FlowPanelEmptyState totalFlows={status?.total_flows ?? 0} activeVMs={status?.active_vms ?? 0} />
                 ) : (
+                  <MicrosegWriteContext.Provider value={canWriteMicroseg}>
                   <TableContainer sx={{ maxHeight: 400 }}>
                     <Table size="small" stickyHeader>
                       <TableHead>
@@ -955,6 +987,7 @@ export default function FlowsTab() {
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Destination</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Bytes</TableCell>
                           <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>Proto</TableCell>
+                          {lens && <TableCell sx={{ fontWeight: 600, fontSize: '0.75rem', py: 0.5 }}>{t('microsegPilot.tab.title')}</TableCell>}
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -962,14 +995,22 @@ export default function FlowsTab() {
                           .filter(p => !pairSearch || p.src_ip.includes(pairSearch) || p.dst_ip.includes(pairSearch) || String(p.dst_port).includes(pairSearch))
                           .map((pair, idx) => (
                           <TableRow key={idx} hover sx={{ cursor: 'pointer' }} onClick={() => setSelectedPair(pair)}>
-                            <TableCell sx={{ py: 0.75 }}>
-                              <Typography variant="body2" fontSize="0.8rem" fontFamily="JetBrains Mono, monospace">{pair.src_ip}</Typography>
+                            <TableCell sx={{ py: 0.75, maxWidth: 260 }}>
+                              {lens ? (
+                                <ZoneEndpointCell ip={pair.src_ip} endpoint={lens.resolve(pair.src_ip, pair.src_vmid)} lens={lens} />
+                              ) : (
+                                <Typography variant="body2" fontSize="0.8rem" fontFamily="JetBrains Mono, monospace">{pair.src_ip}</Typography>
+                              )}
                             </TableCell>
                             <TableCell sx={{ py: 0.75, textAlign: 'center' }}>
                               <i className="ri-arrow-right-line" style={{ fontSize: 14, opacity: 0.4 }} />
                             </TableCell>
-                            <TableCell sx={{ py: 0.75 }}>
-                              <Typography variant="body2" fontSize="0.8rem" fontFamily="JetBrains Mono, monospace">{pair.dst_ip}</Typography>
+                            <TableCell sx={{ py: 0.75, maxWidth: 260 }}>
+                              {lens ? (
+                                <ZoneEndpointCell ip={pair.dst_ip} endpoint={lens.resolve(pair.dst_ip, pair.dst_vmid)} lens={lens} />
+                              ) : (
+                                <Typography variant="body2" fontSize="0.8rem" fontFamily="JetBrains Mono, monospace">{pair.dst_ip}</Typography>
+                              )}
                             </TableCell>
                             <TableCell align="right" sx={{ py: 0.75, fontSize: '0.8rem', fontFamily: 'monospace' }}>
                               {formatBytes(pair.bytes)}
@@ -977,12 +1018,19 @@ export default function FlowsTab() {
                             <TableCell sx={{ py: 0.75 }}>
                               <Chip label={portToService(pair.dst_port, pair.protocol)} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
                             </TableCell>
+                            {lens && (
+                              <TableCell sx={{ py: 0.75 }}>
+                                <MicrosegPairStatus pair={pair} lens={lens} actions={pairActions} />
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </TableContainer>
+                  </MicrosegWriteContext.Provider>
                 )}
+                {lens && pairActions.dialog}
               </CardContent>
             </Card>
           </Box>
@@ -1041,7 +1089,7 @@ export default function FlowsTab() {
 
       {/* Sankey Flow Diagram sub-tab */}
       {subTab === 1 && (
-        <SankeyChart />
+        <SankeyChart groupBy={shownGroupBy} lens={lens} />
       )}
 
 

@@ -21,6 +21,7 @@ vi.mock('@xyflow/react', () => ({
 }))
 
 import DependencyGraph from './DependencyGraph'
+import { PAIRS, makeLens } from './lensTestKit'
 
 describe('DependencyGraph', () => {
   afterEach(cleanup)
@@ -47,5 +48,14 @@ describe('DependencyGraph', () => {
     server.use(http.get('*/api/v1/orchestrator/sflow', () => HttpResponse.json({}, { status: 503 })))
     renderWithProviders(<DependencyGraph connectionId="c1" />)
     expect(await screen.findByText('Waiting for sFlow data...', { exact: false })).toBeInTheDocument()
+  })
+
+  it('draws the zones instead of the addresses in Zone mode', async () => {
+    server.use(http.get('*/api/v1/orchestrator/sflow', () => HttpResponse.json(PAIRS)))
+    renderWithProviders(<DependencyGraph connectionId="c1" lens={makeLens()} />)
+
+    await waitFor(() => expect(screen.getByTestId('nodes')).toHaveTextContent('external,unzoned,zone:db,zone:web'))
+    expect(screen.getByTestId('edges')).toHaveTextContent('zone:web>zone:db')
+    expect(screen.getByTestId('edges')).toHaveTextContent('unzoned>zone:db')
   })
 })

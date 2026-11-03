@@ -12981,7 +12981,8 @@
         "guestNoIp": "No IP address known",
         "guestPending": "Queued for the zone, applied with the next plan",
         "moreHint": "{count, plural, one {# more member} other {# more members}}: the zone panel lists them all",
-        "moreUnzonedHint": "{count, plural, one {# more guest} other {# more guests}} in no zone: Drifts lists them all"
+        "moreUnzonedHint": "{count, plural, one {# more guest} other {# more guests}} in no zone: Drifts lists them all",
+        "ipHint": "{ip}: an address in no zone and no guest that talked to this zone"
       },
       "edge": {
         "outside": "Not applied in v1: {services}",
@@ -13061,7 +13062,9 @@
         "compact": "Compact zones",
         "compactHint": "one box per zone, for many zones",
         "matrix": "Matrix",
-        "matrixHint": "sources by destinations, for any number of zones"
+        "matrixHint": "sources by destinations, for any number of zones",
+        "guests": "Guest view",
+        "guestsHint": "one zone and its guests, with what talks to them"
       },
       "matrix": {
         "label": "Flows between the zones: sources by destinations",
@@ -13073,6 +13076,11 @@
         "noFlow": "no flow",
         "observedChip": "{service}: {count, plural, one {# hit} other {# hits}}",
         "openZone": "Open the panel of zone {name}"
+      },
+      "guestView": {
+        "zone": "Zone in the centre",
+        "option": "{name} · {count, plural, one {# hit} other {# hits}}",
+        "hint": "Click another zone to put it in the centre."
       }
     },
     "preflight": {

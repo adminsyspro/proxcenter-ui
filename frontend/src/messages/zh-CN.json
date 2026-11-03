@@ -12981,7 +12981,8 @@
         "guestNoIp": "没有已知的 IP 地址",
         "guestPending": "已排队加入该区域，随下一个计划应用",
         "moreHint": "{count, plural, other {还有 # 个成员}}：区域面板列出全部",
-        "moreUnzonedHint": "{count, plural, other {还有 # 个无区域客户机}}：偏差中列出全部"
+        "moreUnzonedHint": "{count, plural, other {还有 # 个无区域客户机}}：偏差中列出全部",
+        "ipHint": "{ip}：与此区域通信、不属于任何区域或虚拟机的地址"
       },
       "edge": {
         "outside": "v1 中未应用：{services}",
@@ -13061,7 +13062,9 @@
         "compact": "紧凑区域",
         "compactHint": "每个区域一个方框，适合区域较多时",
         "matrix": "矩阵",
-        "matrixHint": "来源 × 目标，适合任意数量的区域"
+        "matrixHint": "来源 × 目标，适合任意数量的区域",
+        "guests": "虚拟机视图",
+        "guestsHint": "一个区域及其虚拟机，以及与之通信的对象"
       },
       "matrix": {
         "label": "区域之间的流：来源 × 目标",
@@ -13073,6 +13076,11 @@
         "noFlow": "无流",
         "observedChip": "{service}：{count, plural, other {# 次命中}}",
         "openZone": "打开区域 {name} 的面板"
+      },
+      "guestView": {
+        "zone": "中心区域",
+        "option": "{name} · {count, plural, other {# 次命中}}",
+        "hint": "点击另一个区域可将其置于中心。"
       }
     },
     "preflight": {

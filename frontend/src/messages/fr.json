@@ -12982,7 +12982,8 @@
         "guestNoIp": "Aucune adresse IP connue",
         "guestPending": "En attente pour la zone, appliqué avec le prochain plan",
         "moreHint": "{count, plural, one {# membre de plus} other {# membres de plus}} : le panneau de la zone les liste tous",
-        "moreUnzonedHint": "{count, plural, one {# invité de plus} other {# invités de plus}} sans zone : Écarts les liste tous"
+        "moreUnzonedHint": "{count, plural, one {# invité de plus} other {# invités de plus}} sans zone : Écarts les liste tous",
+        "ipHint": "{ip} : une adresse hors zone et hors invité qui a parlé à cette zone"
       },
       "edge": {
         "outside": "Non appliqué en v1 : {services}",
@@ -13062,7 +13063,9 @@
         "compact": "Zones compactes",
         "compactHint": "une boîte par zone, pour beaucoup de zones",
         "matrix": "Matrice",
-        "matrixHint": "sources par destinations, pour tout nombre de zones"
+        "matrixHint": "sources par destinations, pour tout nombre de zones",
+        "guests": "Vue par invité",
+        "guestsHint": "une zone et ses invités, avec ce qui leur parle"
       },
       "matrix": {
         "label": "Flux entre les zones : sources par destinations",
@@ -13074,6 +13077,11 @@
         "noFlow": "aucun flux",
         "observedChip": "{service} : {count, plural, one {# occurrence} other {# occurrences}}",
         "openZone": "Ouvrir le panneau de la zone {name}"
+      },
+      "guestView": {
+        "zone": "Zone au centre",
+        "option": "{name} · {count, plural, one {# occurrence} other {# occurrences}}",
+        "hint": "Cliquez sur une autre zone pour la mettre au centre."
       }
     },
     "preflight": {

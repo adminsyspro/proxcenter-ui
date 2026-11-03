@@ -6,7 +6,7 @@ import { Box, Tooltip, Typography, alpha } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { BOX_H, BOX_W } from './compactGraph'
-import type { ZoneNodeData } from './zoneGraph'
+import { NODE_H, NODE_W, type IpNodeData, type ZoneNodeData } from './zoneGraph'
 import { FOCUS_RING, Handles, MapActionsContext, ZoneShield, onKeys, tint } from './ZoneNode'
 
 /**
@@ -56,3 +56,25 @@ function ZoneBoxNodeComponent({ id, data, selected }: NodeProps) {
 }
 
 export const ZoneBoxNode = memo(ZoneBoxNodeComponent)
+
+/** An address in no zone and no guest that talked to the zone of the guest view: a box with the address. */
+function IpNodeComponent({ data }: NodeProps) {
+  const d = data as unknown as IpNodeData
+  const t = useTranslations('microsegPilot.overview.node')
+  return (
+    <Tooltip title={t('ipHint', { ip: d.ip })}>
+      <Box
+        sx={{
+          width: NODE_W, height: NODE_H, boxSizing: 'border-box', border: '1px dashed', borderColor: 'text.disabled', borderRadius: 1.5,
+          px: 1.25, display: 'flex', alignItems: 'center', gap: 0.75, color: 'text.secondary', bgcolor: 'background.paper',
+        }}
+      >
+        <Handles />
+        <i className='ri-map-pin-line' style={{ fontSize: 16, flexShrink: 0 }} />
+        <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0, fontSize: '0.85rem' }}>{d.ip}</Typography>
+      </Box>
+    </Tooltip>
+  )
+}
+
+export const IpNode = memo(IpNodeComponent)

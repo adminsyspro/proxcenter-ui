@@ -11,6 +11,8 @@ import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
 import EdgePanel from './EdgePanel'
+import GuestViewBar from './GuestViewBar'
+import { defaultCentre } from './guestViewModel'
 import { MapNamesContext, edgeAria, type EdgeT, type MapNames } from './FlowEdge'
 import MapToolbar, { useFlowFilters, useMapView, type MapView } from './MapToolbar'
 import { mapViewGraph } from './mapViewGraph'
@@ -57,10 +59,11 @@ const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_z
   && a.dst_zone_id === b.dst_zone_id && a.dst_cidr === b.dst_cidr && a.proto === b.proto && a.dport === b.dport
 
 /**
- * The Overview sub-tab: the draft as a map, in one of three renderings chosen in the toolbar (kept in the browser).
+ * The Overview sub-tab: the draft as a map, in one of four renderings chosen in the toolbar (kept in the browser).
  * Groups, like the security groups view of NSX: a circle per zone holding its guests, the running guests in no zone
  * in a dashed circle, the allowed flows circle to circle, the observed ones (unprotected, blocked) guest to guest.
- * Compact zones: a box per zone, every flow zone to zone. Matrix: sources by destinations. Hover or select something
+ * Compact zones: a box per zone, every flow zone to zone. Matrix: sources by destinations. Guest view: one zone and
+ * its guests in the centre, what talks to it on the left, what it talks to on the right. Hover or select something
  * to light it and its flows; click a zone for its panel, an edge (or a cell) for its flows. Nothing polls beyond the
  * shared hooks (one inventory read, one suggestions read).
  */
@@ -80,6 +83,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null)
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
   const [view, setView] = useMapView()
+  const [centre, setCentre] = useState<string | null>(null)
 
   const { zones, flows, pending_members: pendingMembers } = policy
   const tagPrefix = policy.policy.tag_prefix
@@ -106,8 +110,10 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     const unzoned = membersKnown ? guests.filter(g => g.status === 'running' && !zoned.has(guestKey(g))).map(guestToMember) : null
     return { zones, flows, suggestions: suggestions.data ?? [], members, unzoned, unapplied }
   }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied])
+  // The zone of the guest view: the one picked, else (or once it is deleted) the one with the most observed traffic.
+  const centreId = centre && zonesById.has(centre) ? centre : defaultCentre(zones, input.suggestions)
   const matrix = useMemo(() => (view === 'matrix' ? buildMatrix(input) : null), [view, input])
-  const graph = useMemo(() => mapViewGraph(view, input), [view, input])
+  const graph = useMemo(() => mapViewGraph(view, input, centreId), [view, input, centreId])
 
   // "Refreshed at": the first answer, then the end of every refresh (a refresh that changes nothing still moves it).
   const loaded = !!suggestions.data || membersKnown
@@ -134,6 +140,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     if (nodeId === EXTERNAL_ID) return tNode('external')
     if (nodeId === OUTSIDE_ID) return tNode('outside')
     if (nodeId.startsWith('zone:')) return zonesById.get(nodeId.slice(5))?.name ?? nodeId
+    if (nodeId.startsWith('ip:')) return nodeId.slice(3)
     const node = graph.nodes.find(n => n.id === nodeId)
     const d = node?.data as unknown as MapNodeData | undefined
     if (!d) return nodeId
@@ -172,7 +179,17 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     }
   }), [graph.edges, filters, lit, tEdge, names])
 
-  const selectZone = useCallback((zoneId: string) => { setSelection({ kind: 'zone', id: zoneId }); setResolved(null) }, [])
+  // In the guest view another zone is not opened but put in the centre; the zone in the centre opens its panel.
+  const selectZone = useCallback((zoneId: string) => {
+    setResolved(null)
+    if (view === 'guests' && zoneId !== centreId) {
+      setCentre(zoneId)
+      setSelection(null)
+      setHover(null)
+      return
+    }
+    setSelection({ kind: 'zone', id: zoneId })
+  }, [view, centreId])
   // A zone panel stays open across renderings; an edge, a cell or a guest belongs to the rendering it was picked in.
   const changeView = useCallback((next: MapView) => {
     setView(next)
@@ -180,6 +197,10 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     setHover(null)
     setKeyFocus(null)
   }, [setView])
+  const changeCentre = useCallback((zoneId: string) => {
+    setCentre(zoneId)
+    setSelection(s => (s?.kind === 'zone' ? s : null))
+  }, [])
   const endName = useCallback((e: MatrixEnd) => e.zone?.name ?? tNode(e.kind === 'outside' ? 'outside' : 'external'), [tNode])
   const selectGuest = useCallback((nodeId: string) => setSelection({ kind: 'guest', id: nodeId }), [])
   const selectEdge = useCallback((edgeId: string) => { setSelection({ kind: 'edge', id: edgeId }); setResolved(null) }, [])
@@ -223,6 +244,9 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
         <Alert severity='success' onClose={() => setResolved(null)} sx={{ mb: 1 }}>
           {tObs(resolved === 'dismiss' ? 'resolvedDismiss' : 'resolvedAccept', { count: 1 })}
         </Alert>
+      )}
+      {view === 'guests' && (
+        <GuestViewBar zones={zones} suggestions={input.suggestions} centre={centreId} onCentre={changeCentre} />
       )}
       <MapNamesContext.Provider value={names}>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', flexWrap: { xs: 'wrap', lg: 'nowrap' }, flex: 1, minHeight: 560 }}>

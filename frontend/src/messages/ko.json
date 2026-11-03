@@ -12981,7 +12981,8 @@
         "guestNoIp": "알려진 IP 주소 없음",
         "guestPending": "영역에 대기 중, 다음 계획으로 적용됨",
         "moreHint": "{count, plural, other {멤버 #개 더}}: 영역 패널에 모두 나열됩니다",
-        "moreUnzonedHint": "{count, plural, other {영역 없는 게스트 #개 더}}: 편차에 모두 나열됩니다"
+        "moreUnzonedHint": "{count, plural, other {영역 없는 게스트 #개 더}}: 편차에 모두 나열됩니다",
+        "ipHint": "{ip}: 이 영역과 통신한, 영역과 게스트에 속하지 않는 주소"
       },
       "edge": {
         "outside": "v1에서 적용되지 않음: {services}",
@@ -13061,7 +13062,9 @@
         "compact": "간결한 영역",
         "compactHint": "영역마다 상자 하나, 영역이 많을 때",
         "matrix": "행렬",
-        "matrixHint": "출발지 × 목적지, 영역 수와 관계없이"
+        "matrixHint": "출발지 × 목적지, 영역 수와 관계없이",
+        "guests": "게스트 보기",
+        "guestsHint": "한 영역과 그 게스트, 그리고 이들과 통신하는 대상"
       },
       "matrix": {
         "label": "영역 간 흐름: 출발지 × 목적지",
@@ -13073,6 +13076,11 @@
         "noFlow": "흐름 없음",
         "observedChip": "{service}: {count, plural, other {#회 히트}}",
         "openZone": "{name} 영역 패널 열기"
+      },
+      "guestView": {
+        "zone": "가운데 영역",
+        "option": "{name} · {count, plural, other {#회 히트}}",
+        "hint": "다른 영역을 클릭하면 가운데로 옮깁니다."
       }
     },
     "preflight": {

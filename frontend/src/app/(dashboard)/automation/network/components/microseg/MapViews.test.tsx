@@ -32,7 +32,7 @@ describe('the rendering selector', () => {
     demo()
     await node('zone:zw')
     const group = screen.getByRole('group', { name: 'Map rendering' })
-    expect(within(group).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual(['Groups', 'Compact zones', 'Matrix'])
+    expect(within(group).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual(['Groups', 'Compact zones', 'Matrix', 'Guest view'])
     expect(pressed('Groups')).toBe('true')
   })
 
@@ -179,5 +179,41 @@ describe('the matrix', () => {
     expect(window.localStorage.getItem('microseg.map.matrixSort')).toBe('layer')
     fireEvent.click(screen.getByRole('button', { name: 'By name' }))
     await waitFor(() => expect(screen.getAllByRole('rowheader').map(h => h.textContent)).toEqual(['db', 'web', 'Unknown / External']))
+  })
+})
+
+describe('the guest view', () => {
+  it('opens on the zone with the most observed traffic, its guests in the centre, the sample pairs said so', async () => {
+    window.localStorage.setItem('microseg.map.view', 'guests')
+    demo({ zones: [web(), db(), { ...web(), id: 'zq', name: 'quiet' }] })
+    const picker = await screen.findByRole('combobox', { name: 'Zone in the centre' })
+    await waitFor(() => expect(picker.textContent).toBe('db · 12 hits'))
+    expect(screen.getByText('The engine keeps one sample pair of guests per observed flow: the hits count the whole zone pair.')).toBeTruthy()
+    expect((await node('guest:zd:qemu/200')).getAttribute('data-parent')).toBe('zone:zd')
+    expect(await pathOf('unprotected:guest:zw:qemu/100>guest:zd:qemu/200')).toBeTruthy()
+    expect(screen.queryByTestId('node-zone:zq')).toBeNull()
+  })
+
+  it('puts another zone in the centre on a click, and opens the panel of the zone in the centre', async () => {
+    window.localStorage.setItem('microseg.map.view', 'guests')
+    demo()
+    const picker = await screen.findByRole('combobox', { name: 'Zone in the centre' })
+    await waitFor(() => expect(picker.textContent).toBe('db · 12 hits'))
+    fireEvent.click(await node('zone:zw'))
+    await waitFor(() => expect(picker.textContent).toBe('web · 12 hits'))
+    expect(screen.queryByRole('complementary')).toBeNull()
+    fireEvent.click(await node('zone:zw'))
+    expect(await screen.findByRole('complementary', { name: 'Zone web' })).toBeTruthy()
+  })
+
+  it('changes the zone in the centre from the picker', async () => {
+    window.localStorage.setItem('microseg.map.view', 'guests')
+    demo()
+    const picker = await screen.findByRole('combobox', { name: 'Zone in the centre' })
+    await waitFor(() => expect(picker.textContent).toBe('db · 12 hits'))
+    fireEvent.mouseDown(picker)
+    fireEvent.click(await screen.findByRole('option', { name: 'web · 12 hits' }))
+    await waitFor(() => expect(picker.textContent).toBe('web · 12 hits'))
+    expect((await node('guest:zw:qemu/100')).getAttribute('data-parent')).toBe('zone:zw')
   })
 })

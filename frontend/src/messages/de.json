@@ -12649,7 +12649,8 @@
         "guestNoIp": "Keine IP-Adresse bekannt",
         "guestPending": "Für die Zone vorgemerkt, mit dem nächsten Plan angewendet",
         "moreHint": "{count, plural, one {# weiteres Mitglied} other {# weitere Mitglieder}}: der Zonenbereich listet alle",
-        "moreUnzonedHint": "{count, plural, one {# weiterer Gast} other {# weitere Gäste}} ohne Zone: Abweichungen listet alle"
+        "moreUnzonedHint": "{count, plural, one {# weiterer Gast} other {# weitere Gäste}} ohne Zone: Abweichungen listet alle",
+        "ipHint": "{ip}: eine Adresse ohne Zone und ohne Gast, die mit dieser Zone gesprochen hat"
       },
       "edge": {
         "outside": "In v1 nicht angewendet: {services}",
@@ -12729,7 +12730,9 @@
         "compact": "Kompakte Zonen",
         "compactHint": "ein Kasten pro Zone, für viele Zonen",
         "matrix": "Matrixansicht",
-        "matrixHint": "Quellen nach Zielen, für jede Anzahl von Zonen"
+        "matrixHint": "Quellen nach Zielen, für jede Anzahl von Zonen",
+        "guests": "Gastansicht",
+        "guestsHint": "eine Zone und ihre Gäste, mit allem, was mit ihnen spricht"
       },
       "matrix": {
         "label": "Flüsse zwischen den Zonen: Quellen nach Zielen",
@@ -12741,6 +12744,11 @@
         "noFlow": "kein Fluss",
         "observedChip": "{service}: {count, plural, one {# Treffer} other {# Treffer}}",
         "openZone": "Bereich der Zone {name} öffnen"
+      },
+      "guestView": {
+        "zone": "Zone in der Mitte",
+        "option": "{name} · {count, plural, one {# Treffer} other {# Treffer}}",
+        "hint": "Klicken Sie auf eine andere Zone, um sie in die Mitte zu setzen."
       }
     },
     "preflight": {

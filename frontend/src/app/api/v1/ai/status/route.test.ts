@@ -18,6 +18,10 @@ vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: unknown[]) => h.checkPermission(...a),
 }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'default' }))
+// The IaaS case is covered by src/lib/ai/iaasTenantAi.test.ts; the caller here is the provider.
+vi.mock('@/lib/tenant/iaasGuard', () => ({
+  resolveCallerInfraScope: async () => ({ ok: true, tenantId: 'default', infra: { kind: 'provider' } }),
+}))
 vi.mock('@/lib/auth/requireEnterprise', () => ({
   requireFeature: async () => (h.licensed ? null : new Response(JSON.stringify({ error: 'Feature not licensed' }), { status: 403 })),
   hasServerFeature: async () => {

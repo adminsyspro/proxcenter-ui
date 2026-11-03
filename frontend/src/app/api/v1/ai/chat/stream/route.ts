@@ -22,6 +22,7 @@ import type { CatalogTool, ToolContext } from '@/lib/tools/types'
 import { encodeFrame, withoutFrameMarks } from '@/lib/ai/streamFrames'
 import { requireFeature } from '@/lib/auth/requireEnterprise'
 import { Features } from '@/lib/license/features'
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 // Récupérer les paramètres IA (tenant-scoped)
 async function getAISettings() {
@@ -312,6 +313,10 @@ async function streamAgenticConversation(opts: {
 
 // POST /api/v1/ai/chat/stream - Chat avec streaming
 export async function POST(request: Request) {
+  // No AI assistant for an IaaS (vDC) tenant (lib/tenant/iaasGuard).
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
     if (denied) return denied

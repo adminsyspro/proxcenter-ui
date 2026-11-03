@@ -61,6 +61,20 @@ describe('deployment', () => {
     expect(screen.queryByText(/^Deployed/)).toBeNull()
   })
 
+  it('says that the cluster firewall is disabled when the stop turned it off', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ emergency_stop: true, engine: engine({ cluster_firewall: 'disabled' }) }))
+    renderCard()
+    const text = await screen.findByText('Emergency stop active: cluster firewall disabled')
+    expect(text.closest('.MuiChip-colorError')).toBeTruthy()
+  })
+
+  it.each(['enabled', 'unknown'] as const)('keeps the short wording while the cluster firewall is %s', async state => {
+    mock.routes['GET /status'] = () => reply(200, status({ emergency_stop: true, engine: engine({ cluster_firewall: state }) }))
+    renderCard()
+    expect(await screen.findByText('Emergency stop active')).toBeTruthy()
+    expect(screen.queryByText(/cluster firewall disabled/)).toBeNull()
+  })
+
   it('says "Not available" when the policy cannot be read', async () => {
     mock.routes['GET /policy'] = () => reply(502, { code: 'ORCHESTRATOR_ERROR', error: 'x' })
     renderCard()

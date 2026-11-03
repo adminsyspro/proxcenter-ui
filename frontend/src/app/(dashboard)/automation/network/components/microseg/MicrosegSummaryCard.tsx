@@ -74,7 +74,10 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
   const held = !!status?.engine.held
 
   const deployment = (() => {
-    if (stopped) return <Chip size='small' color='error' label={t('dashboard.deployment.stopped')} />
+    if (stopped) {
+      const label = status?.engine.cluster_firewall === 'disabled' ? t('dashboard.deployment.stoppedFirewall') : t('dashboard.deployment.stopped')
+      return <Chip size='small' color='error' label={label} sx={{ maxWidth: '100%' }} />
+    }
     if (policyError && !policy) return <Typography variant='body2'>{t('dashboard.unavailable')}</Typography>
     if (!policy) return <Skeleton width={180} />
     if (!policy.last_revision) return <Typography variant='body2'>{t('dashboard.deployment.none')}</Typography>

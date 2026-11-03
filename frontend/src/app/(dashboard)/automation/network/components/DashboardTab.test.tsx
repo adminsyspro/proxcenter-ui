@@ -156,4 +156,27 @@ describe('DashboardTab load error', () => {
     expect(screen.getByTestId('firewall-loading-placeholder')).toBeInTheDocument()
     expect(screen.queryByText('Cluster firewall not configured')).not.toBeInTheDocument()
   })
+
+  it('shows no score nor advice computed from empty data when the load failed', () => {
+    stubMicrosegRelay()
+    renderDashboard({ enable: 0 }, { loadError: 'HTTP 502' })
+
+    expect(screen.getByTestId('zero-trust-unavailable')).toBeInTheDocument()
+    expect(screen.getAllByText('Not available').length).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByText('/100')).not.toBeInTheDocument()
+    expect(screen.queryByText('Excellent')).not.toBeInTheDocument()
+    expect(screen.queryByText('To improve')).not.toBeInTheDocument()
+    expect(screen.queryByText('IN: DROP')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Firewall (OFF|ON)/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Policy IN permissive')).not.toBeInTheDocument()
+    expect(screen.queryByText('Firewall disabled')).not.toBeInTheDocument()
+  })
+
+  it('shows the score again once the load succeeds', () => {
+    stubMicrosegRelay()
+    renderDashboard({ enable: 1 })
+
+    expect(screen.queryByTestId('zero-trust-unavailable')).not.toBeInTheDocument()
+    expect(screen.getByText('/100')).toBeInTheDocument()
+  })
 })

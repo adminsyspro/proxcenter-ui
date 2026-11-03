@@ -106,7 +106,10 @@ export default function DashboardTab({
   const scoreVmCoverage = Math.round(vmCoverage * 0.45)
   const score = scoreFirewall + scorePolicy + scoreVmCoverage
 
-  const scoreColor = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444'
+  // A failed load leaves the lists empty: the score and the recommendations computed from them would be false.
+  const unavailable = !!loadError
+
+  const scoreColor = unavailable ? theme.palette.text.disabled : score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444'
   const scoreLabel = score >= 80 ? t('networkPage.excellent') : score >= 50 ? t('networkPage.moderate') : t('networkPage.toImprove')
 
   return (
@@ -171,7 +174,20 @@ export default function DashboardTab({
       }}>
         <Box sx={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: `radial-gradient(circle, ${alpha(scoreColor, 0.15)} 0%, transparent 70%)` }} />
         <CardContent sx={{ p: 3, position: 'relative' }}>
-          {loadingVMRules ? (
+          {unavailable ? (
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={4} alignItems="center" data-testid="zero-trust-unavailable">
+              <Box sx={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+                <CircularProgress variant="determinate" value={100} size={140} thickness={3} sx={{ color: alpha(scoreColor, 0.22) }} />
+                <Box sx={{ top: 0, left: 0, bottom: 0, right: 0, position: 'absolute', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Typography variant="h2" fontWeight={800} sx={{ color: scoreColor, lineHeight: 1 }} aria-hidden>-</Typography>
+                </Box>
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="h5" fontWeight={700} sx={{ mb: 0.5 }}>{t('networkPage.zeroTrustScore')}</Typography>
+                <Chip label={t('common.notAvailable')} sx={{ bgcolor: alpha(scoreColor, 0.2), color: 'text.secondary', fontWeight: 700, fontSize: '0.85rem', height: 28 }} />
+              </Box>
+            </Stack>
+          ) : loadingVMRules ? (
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={4} alignItems="center">
               <Skeleton variant="circular" width={140} height={140} />
               <Box sx={{ flex: 1 }}>
@@ -362,7 +378,9 @@ export default function DashboardTab({
           {t('network.zeroTrustRecommendations')}
         </Typography>
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-          {(() => {
+          {unavailable ? (
+            <Typography variant="body2" color="text.secondary" data-testid="recommendations-unavailable">{t('common.notAvailable')}</Typography>
+          ) : (() => {
             const recommendations: Array<{ severity: string; icon: string; title: string; description: string; action: string | null; onClick: (() => void) | null }> = []
 
             if (currentOptions?.enable !== 1) {

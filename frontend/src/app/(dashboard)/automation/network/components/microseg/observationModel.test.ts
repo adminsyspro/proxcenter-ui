@@ -36,6 +36,7 @@ describe('hitsShare', () => {
     expect(hitsShare(0, 200)).toBe(0)
     expect(hitsShare(5, 0)).toBe(0)
     expect(hitsShare(300, 200)).toBe(100)
+    expect(hitsShare(Number.NaN, 200)).toBe(0)
   })
 
   it('takes the most hits of the page', () => {

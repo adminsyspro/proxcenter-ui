@@ -31,7 +31,8 @@ export class MicrosegConflictError extends MicrosegApiError {
   }
 }
 
-const KNOWN_CODES = new Set([
+/** The error codes that have their own message in the microsegPilot catalogue (the others read as generic). */
+export const KNOWN_CODES: ReadonlySet<string> = new Set([
   'VERSION_CONFLICT', 'BUSY', 'ZONE_NAME_TAKEN', 'IN_USE', 'CONFLICT', 'INVALID', 'FEATURE_REQUIRED',
   'FORBIDDEN', 'NOT_FOUND', 'UNAUTHORIZED', 'NOT_LEADER', 'MICROSEG_UNAVAILABLE', 'ENGINE_STOPPED',
   'ORCHESTRATOR_ERROR', 'ORCHESTRATOR_TIMEOUT', 'PVE_ERROR', 'NETWORK',

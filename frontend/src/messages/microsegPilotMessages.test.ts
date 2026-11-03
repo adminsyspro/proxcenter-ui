@@ -6,6 +6,8 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { KNOWN_CODES } from '@/lib/microseg/api'
+
 import de from './de.json'
 import en from './en.json'
 import es from './es.json'
@@ -15,11 +17,8 @@ import zhCN from './zh-CN.json'
 
 const locales: Record<string, any> = { en, fr, de, es, ko, 'zh-CN': zhCN }
 
-const ERROR_CODES = [
-  'VERSION_CONFLICT', 'BUSY', 'ZONE_NAME_TAKEN', 'IN_USE', 'INVALID', 'FEATURE_REQUIRED', 'FORBIDDEN', 'NOT_FOUND',
-  'UNAUTHORIZED', 'NOT_LEADER', 'MICROSEG_UNAVAILABLE', 'ENGINE_STOPPED', 'ORCHESTRATOR_ERROR', 'ORCHESTRATOR_TIMEOUT',
-  'PVE_ERROR', 'CONFLICT', 'NETWORK', 'generic',
-]
+// Every code the client maps to a message of its own, and the fallback.
+const ERROR_CODES = [...KNOWN_CODES, 'generic']
 
 function flatten(node: unknown, prefix = ''): Record<string, string> {
   if (typeof node === 'string') return { [prefix]: node }

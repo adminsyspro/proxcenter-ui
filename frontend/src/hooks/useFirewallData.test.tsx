@@ -148,16 +148,18 @@ describe('useFirewallData', () => {
     expect(result.current.nodeRules).toEqual([])
   })
 
-  it('falls back to a nodeless standalone view when the nodes request fails', async () => {
+  it('keeps the cluster mode (unknown) and no node when the nodes request fails', async () => {
     for (const failure of ['fail', 'throw'] as const) {
       mockNodes(failure)
 
       const { result, unmount } = renderHook(() => useFirewallData('conn-1', true))
 
-      await waitFor(() => expect(result.current.connectionInfo).not.toBeNull())
+      await waitFor(() => expect(result.current.loadError).not.toBeNull())
+      await waitFor(() => expect(result.current.loading).toBe(false))
 
-      expect(result.current.firewallMode).toBe('standalone')
-      expect(result.current.connectionInfo).toMatchObject({ primary_node: '', has_node_fw: false })
+      expect(result.current.firewallMode).toBe('cluster')
+      expect(result.current.nodesList).toEqual([])
+      expect(result.current.connectionInfo).toBeNull()
       expect(api.getNodeOptions).not.toHaveBeenCalled()
       unmount()
     }
@@ -168,25 +170,24 @@ describe('useFirewallData', () => {
 
     const thrown = renderHook(() => useFirewallData('conn-1', true))
 
-    await waitFor(() => expect(thrown.result.current.connectionInfo).not.toBeNull())
-    expect(thrown.result.current.loadError).toBe('network down')
+    await waitFor(() => expect(thrown.result.current.loadError).toBe('network down'))
+    expect(thrown.result.current.firewallMode).toBe('cluster')
     thrown.unmount()
 
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 502, json: async () => ({ error: 'Bad gateway' }) }) as Response))
 
     const refused = renderHook(() => useFirewallData('conn-1', true))
 
-    await waitFor(() => expect(refused.result.current.connectionInfo).not.toBeNull())
-    expect(refused.result.current.firewallMode).toBe('standalone')
-    expect(refused.result.current.loadError).toBe('Bad gateway')
+    await waitFor(() => expect(refused.result.current.loadError).toBe('Bad gateway'))
+    expect(refused.result.current.firewallMode).toBe('cluster')
     refused.unmount()
 
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => { throw new Error('not json') } }) as unknown as Response))
 
     const opaque = renderHook(() => useFirewallData('conn-1', true))
 
-    await waitFor(() => expect(opaque.result.current.connectionInfo).not.toBeNull())
-    expect(opaque.result.current.loadError).toBe('HTTP 500')
+    await waitFor(() => expect(opaque.result.current.loadError).toBe('HTTP 500'))
+    expect(opaque.result.current.firewallMode).toBe('cluster')
   })
 
   it('keeps the node list error next to the other load errors', async () => {
@@ -195,8 +196,7 @@ describe('useFirewallData', () => {
 
     const { result } = renderHook(() => useFirewallData('conn-1', true))
 
-    await waitFor(() => expect(result.current.connectionInfo).not.toBeNull())
-    expect(result.current.loadError).toBe('HTTP 500 · network down')
+    await waitFor(() => expect(result.current.loadError).toBe('HTTP 500 · network down'))
   })
 
   it('loads nothing without a connection or an Enterprise license', async () => {

@@ -86,9 +86,10 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
 
       // Fetch nodes list from dedicated nodes API (includes nodes without VMs)
       let nodes: string[] = []
+      let nodesLoaded = false
 
-      // A node list that cannot be read must not pass for a one-node host: the mode below falls back to
-      // standalone, and the failure is kept in loadError like every other fetch of this load.
+      // A node list that cannot be read must not pass for a one-node host: the mode stays 'cluster'
+      // (unknown), the list stays empty and the failure is kept in loadError like every other fetch.
       try {
         const nodesResp = await fetch(`/api/v1/connections/${connectionId}/nodes`)
 
@@ -97,6 +98,7 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
           const nodesData = nodesJson?.data || []
 
           nodes = nodesData.map((n: any) => n.node || n.name).filter(Boolean)
+          nodesLoaded = true
           if (isLatest()) setNodesList(nodes)
         } else {
           const body = await nodesResp.json().catch(() => null)
@@ -105,10 +107,17 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
         }
       } catch (err) {
         errors.add(errorMessage(err))
-        if (isLatest()) setNodesList([])
       }
 
       if (!isLatest()) return
+
+      if (!nodesLoaded) {
+        setNodesList([])
+        setFirewallMode('cluster')
+        setConnectionInfo(null)
+
+        return
+      }
 
       // Detect mode: standalone if only 1 node, cluster if multiple nodes
       const isStandalone = nodes.length <= 1

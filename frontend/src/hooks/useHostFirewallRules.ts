@@ -17,16 +17,20 @@ export function useHostFirewallRules(connectionId: string | null, nodesList: str
   const [loadingHostRules, setLoadingHostRules] = useState(false)
   const [hostRulesError, setHostRulesError] = useState<string | null>(null)
 
-  // Each load takes a number; only the latest one may write state, so a slow answer of the connection
-  // that was just left never lands on the new one.
+  // Each load takes a number and the connection it is for; only the latest load of the current connection may write
+  // state, so a slow answer of the connection that was just left never lands on the new one.
   const latestLoad = useRef(0)
+  const currentConnection = useRef(connectionId)
+  useEffect(() => { currentConnection.current = connectionId }, [connectionId])
 
-  useEffect(() => {
-    latestLoad.current += 1
+  // Another connection starts from nothing (adjusted while rendering, not in an effect).
+  const [loadedConnection, setLoadedConnection] = useState(connectionId)
+  if (loadedConnection !== connectionId) {
+    setLoadedConnection(connectionId)
     setHostRulesByNode({})
     setLoadingHostRules(false)
     setHostRulesError(null)
-  }, [connectionId])
+  }
 
   const loadHostRules = useCallback(async (connectionIdOverride?: string, nodesOverride?: string[]) => {
     const connId = connectionIdOverride || connectionId
@@ -35,7 +39,7 @@ export function useHostFirewallRules(connectionId: string | null, nodesList: str
     if (!connId || nodeList.length === 0) return
 
     const loadId = ++latestLoad.current
-    const isLatest = () => latestLoad.current === loadId
+    const isLatest = () => latestLoad.current === loadId && currentConnection.current === connectionId
 
     setLoadingHostRules(true)
 
@@ -79,7 +83,7 @@ export function useHostFirewallRules(connectionId: string | null, nodesList: str
     try {
       const rules = await firewallAPI.getNodeRules(connectionId, node)
 
-      if (latestLoad.current !== loadId) return
+      if (latestLoad.current !== loadId || currentConnection.current !== connectionId) return
       setHostRulesByNode(prev => ({
         ...prev,
         [node]: Array.isArray(rules) ? rules : []

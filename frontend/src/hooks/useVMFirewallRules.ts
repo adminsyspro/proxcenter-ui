@@ -74,24 +74,29 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
   const [guestsNotScanned, setGuestsNotScanned] = useState(0)
   const [loaded, setLoaded] = useState(false)
 
-  // Each scan takes a number; only the latest one may write state. Without it, the slow scan of the
-  // connection that was just left finished after the switch, set `loaded` and left the new one at 0/0.
+  // Each scan takes a number and the connection it is for; only the latest scan of the current connection may write
+  // state. Without it, the slow scan of the connection that was just left finished after the switch, set `loaded` and
+  // left the new one at 0/0.
   const latestScan = useRef(0)
+  const currentConnection = useRef(connectionId)
+  useEffect(() => { currentConnection.current = connectionId }, [connectionId])
 
-  useEffect(() => {
-    latestScan.current += 1
+  // Another connection starts from nothing (adjusted while rendering, not in an effect).
+  const [scannedConnection, setScannedConnection] = useState(connectionId)
+  if (scannedConnection !== connectionId) {
+    setScannedConnection(connectionId)
     setVMFirewallData([])
     setLoadingVMRules(false)
     setVMRulesError(null)
     setGuestsNotScanned(0)
     setLoaded(false)
-  }, [connectionId])
+  }
 
   const loadVMFirewallData = useCallback(async () => {
     if (!connectionId || loaded) return
 
     const scanId = ++latestScan.current
-    const isLatest = () => latestScan.current === scanId
+    const isLatest = () => latestScan.current === scanId && currentConnection.current === connectionId
 
     setLoadingVMRules(true)
 
@@ -195,7 +200,7 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
       ])
 
       // Another connection or a new scan since: this guest's answer no longer belongs to the list.
-      if (latestScan.current !== scanId) return
+      if (latestScan.current !== scanId || currentConnection.current !== connectionId) return
 
       const vlans = configResp?.data ? extractVLANs(configResp.data) : []
 

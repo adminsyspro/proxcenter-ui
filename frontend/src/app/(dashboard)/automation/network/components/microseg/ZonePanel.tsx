@@ -11,15 +11,17 @@ import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, SuggestionAction }
 import FlowSummary from './FlowSummary'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
-import PanelSection, { PanelFrame } from './PanelSection'
+import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { SelectionTrafficChart, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
 import { MemberChangeChip } from './ZoneRow'
 import ZoneStateChip from './ZoneStateChip'
 import { FlowRowActions, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
 import type { ZoneEdits } from './useZoneEdits'
-import { flowsOfZone, type ZoneMember } from './zoneModel'
-import { zonePosture, zoneSuggestions } from './zonePanelModel'
+import { useIgnoredDrifts } from './driftIgnore'
+import { OneLine } from './dialogParts'
+import { flowsOfZone, guestKey, type ZoneMember } from './zoneModel'
+import { zoneDriftSignals, zoneSuggestions } from './zonePanelModel'
 
 const FLOWS_PAGE_SIZE = 5
 
@@ -44,19 +46,31 @@ type Props = {
   onResolved: (action: SuggestionAction) => void
   /** Opens the Drifts sub-tab on this zone's drifts. */
   onOpenDrifts?: (zoneId: string) => void
+  /** The map read only the first `limit` pending observed flows: the suggestions may miss some. */
+  partialLimit?: number | null
 }
 
 type FlowEditor = ReturnType<typeof useFlowEditor>
 
-function MemberLine({ member, zoneId, edits }: { member: ZoneMember; zoneId: string; edits: ZoneEdits }) {
+function MemberLine({ member, zoneId, edits, firewallOff }: { member: ZoneMember; zoneId: string; edits: ZoneEdits; firewallOff: boolean }) {
   const t = useTranslations('microsegPilot.overview.panel')
+  const tsec = useTranslations('microsegPilot.overview.sections')
   const { guest, ref } = member
   const name = guest?.name ?? `${ref.type}/${ref.vmid}`
   return (
     <Box role='listitem' aria-label={name} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 28 }}>
       {guest
-        ? <StatusIcon type='vm' vmType={guest.type} status={guest.status} />
+        ? (
+          <Tooltip title={guest.status === 'running' ? tsec('memberRunning') : tsec('memberStopped')}>
+            <span style={{ display: 'inline-flex' }}><StatusIcon type='vm' vmType={guest.type} status={guest.status} /></span>
+          </Tooltip>
+        )
         : <i className='ri-question-line' style={{ opacity: 0.6 }} />}
+      {firewallOff && (
+        <Tooltip title={tsec('memberFirewallOff')}>
+          <i className='ri-shield-flash-line' data-testid='member-firewall-off' style={{ color: 'var(--mui-palette-error-main)', flexShrink: 0 }} aria-label={tsec('memberFirewallOff')} />
+        </Tooltip>
+      )}
       <Tooltip title={name}><Typography noWrap sx={{ flex: '0 1 auto' }}>{name}</Typography></Tooltip>
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{`${ref.vmid} · ${ref.node}`}</Typography>
       {member.pending && <Chip size='small' color='warning' variant='outlined' label={t('pending')} sx={{ flexShrink: 0 }} />}
@@ -102,59 +116,38 @@ function SuggestionLine({ suggestion: s, zonesById, busy, onResolve }: {
   )
 }
 
-/** The Posture section: state, members running and stopped, NIC firewall off, the drifts of the zone and a way to them. */
-function PostureLines({ zone, members, membersKnown, zones, connectionId, onOpenDrifts }: {
-  zone: MicrosegZone
-  members: ZoneMember[]
-  membersKnown: boolean
-  zones: MicrosegZone[]
-  connectionId: string
-  onOpenDrifts?: (zoneId: string) => void
-}) {
-  const t = useTranslations('microsegPilot.overview.sections')
-  const { data } = useMicrosegDrifts(connectionId)
-  const posture = zonePosture(zone, members, data?.computed ? data.drifts : null, zones)
-  let drifts = t('driftsUnknown')
-  if (posture.driftsKnown) drifts = posture.drifts ? t('drifts', { count: posture.drifts }) : t('driftsNone')
-  const firewall = posture.firewallOff ? t('firewallOff', { count: posture.firewallOff }) : t('firewallOffNone')
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }} data-testid='zone-posture'>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-        <ZoneStateChip state={zone.state} />
-        <Typography noWrap variant='body2' sx={{ flex: '1 1 0', minWidth: 0 }} data-testid='posture-members'>
-          {membersKnown ? t('membersStatus', { running: posture.running, stopped: posture.stopped }) : t('membersStatusUnknown')}
-        </Typography>
-      </Box>
-      <Typography noWrap variant='body2' color={posture.firewallOff ? 'warning.main' : 'text.secondary'} data-testid='posture-firewall'>{firewall}</Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-        <Typography noWrap variant='body2' color={posture.drifts ? 'warning.main' : 'text.secondary'} sx={{ flex: '1 1 0', minWidth: 0 }} data-testid='posture-drifts'>{drifts}</Typography>
-        {onOpenDrifts && posture.drifts > 0 && (
-          <Button size='small' onClick={() => onOpenDrifts(zone.id)} endIcon={<i className='ri-arrow-right-line' />} sx={{ flexShrink: 0 }}>{t('openDrifts')}</Button>
-        )}
-      </Box>
-    </Box>
-  )
-}
-
 /**
  * The zone clicked on the map, as tall as the map with its body scrolling, in foldable sections (remembered per
- * browser): the observed traffic over time (the Dashboard's chart filtered on the flows logged in this zone, with a
- * one-line summary), its posture, its top sources, the pending suggestions towards it (resolved as in Observation),
- * its members (ten per page), the flows in and out, all editable in place.
+ * browser): the observed traffic over time (the Dashboard's chart filtered on this zone, inbound or outbound, with a
+ * one-line summary), its top sources (or destinations), the pending suggestions towards it (resolved as in
+ * Observation), its members (ten per page; NIC firewall off and stopped told on each), the flows in and out, all
+ * editable in place. A chip in the header says the zone's drifts and opens the Drifts sub-tab on them. The engine's
+ * drifts are read once per selection (the Drifts sub-tab's key), no refresh on focus.
  */
 export default function ZonePanel({
   zone, members, membersKnown, flows, zonesById, edits, onClose, onAssign,
-  connectionId, version, suggestions, reloadPolicy, reloadSuggestions, onResolved, onOpenDrifts,
+  connectionId, version, suggestions, reloadPolicy, reloadSuggestions, onResolved, onOpenDrifts, partialLimit = null,
 }: Props) {
   const t = useTranslations('microsegPilot.overview.panel')
   const tz = useTranslations('microsegPilot.overview.zonePanel')
   const tsec = useTranslations('microsegPilot.overview.sections')
   const ts = useTranslations('microsegPilot.policy.zone')
+  const tt = useTranslations('microsegPilot.overview.target.panel')
   const paged = usePaged(members)
   const editor = useFlowEditor(edits)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
   const zones = useMemo(() => [...zonesById.values()], [zonesById])
-  const traffic = useSelectionTraffic(connectionId, zones, { kind: 'zone', zone })
+  const trafficSection = usePanelSection('zone.traffic')
+  const sourcesSection = usePanelSection('zone.sources')
+  // Nothing is read for the chart while both sections it feeds are folded.
+  const traffic = useSelectionTraffic(connectionId, zones, { kind: 'zone', zone }, trafficSection[0] || sourcesSection[0])
+  const outbound = traffic.direction === 'out'
+  const { data: drifts } = useMicrosegDrifts(connectionId, { once: true })
+  const { ignored } = useIgnoredDrifts(connectionId)
+  const signals = useMemo(
+    () => zoneDriftSignals(zone, members, drifts?.computed ? drifts.drifts : null, zones, ignored),
+    [zone, members, drifts, zones, ignored],
+  )
   const pending = useMemo(() => zoneSuggestions(suggestions, zone.id), [suggestions, zone.id])
   const pendingPage = usePaged(pending, FLOWS_PAGE_SIZE)
   const { busy, failure, clearFailure, resolve } = useResolveSuggestions(connectionId, version, reloadPolicy, reloadSuggestions)
@@ -169,6 +162,18 @@ export default function ZonePanel({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
         <i className='ri-shield-fill' style={{ fontSize: 18, color: zone.color || undefined }} />
         <Tooltip title={zone.name}><Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{zone.name}</Typography></Tooltip>
+        {!!signals?.count && (
+          <Chip
+            size='small'
+            color='warning'
+            variant='outlined'
+            data-testid='zone-drifts-chip'
+            icon={<i className='ri-error-warning-line' />}
+            label={tsec('drifts', { count: signals.count })}
+            onClick={onOpenDrifts ? () => onOpenDrifts(zone.id) : undefined}
+            sx={{ flexShrink: 0 }}
+          />
+        )}
         <ZoneStateChip state={zone.state} />
         <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
       </Box>
@@ -183,21 +188,23 @@ export default function ZonePanel({
 
   return (
     <PanelFrame label={t('label', { name: zone.name })} width={400} header={header}>
-      <PanelSection id='zone.traffic' title={tsec('traffic')}>
+      <PanelSection id='zone.traffic' title={tsec('traffic')} state={trafficSection}>
         <SelectionTrafficChart traffic={traffic} />
         <TrafficSummaryLine traffic={traffic} />
       </PanelSection>
 
-      <PanelSection id='zone.posture' title={tsec('posture')}>
-        <PostureLines zone={zone} members={members} membersKnown={membersKnown} zones={zones} connectionId={connectionId} onOpenDrifts={onOpenDrifts} />
-      </PanelSection>
-
-      <PanelSection id='zone.sources' title={tsec('topSources')} count={traffic.phase === 'ready' ? traffic.summary.top.length : null}>
-        <TopSourcesList top={traffic.summary.top} phase={traffic.phase} />
+      <PanelSection
+        id='zone.sources'
+        title={tsec(outbound ? 'topDestinations' : 'topSources')}
+        count={traffic.phase === 'ready' ? traffic.summary.count : null}
+        state={sourcesSection}
+      >
+        <TopSourcesList top={traffic.summary.top} phase={traffic.phase} outbound={outbound} />
       </PanelSection>
 
       <PanelSection id='zone.suggestions' title={tsec('suggestions')} count={pending.length}>
         {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1 }}>{failure}</Alert>}
+        {partialLimit !== null && <OneLine text={tt('partial', { count: partialLimit })} />}
         {pending.length === 0 && <Typography variant='body2' color='text.disabled'>{tsec('suggestionsEmpty')}</Typography>}
         <Box role='list'>
           {pendingPage.rows.map(s => (
@@ -212,7 +219,7 @@ export default function ZonePanel({
         {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
         {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
         <Box role='list'>
-          {paged.rows.map(m => <MemberLine key={`${m.ref.type}/${m.ref.vmid}`} member={m} zoneId={zone.id} edits={edits} />)}
+          {paged.rows.map(m => <MemberLine key={`${m.ref.type}/${m.ref.vmid}`} member={m} zoneId={zone.id} edits={edits} firewallOff={!!signals?.firewallOff.has(guestKey(m.ref))} />)}
         </Box>
         <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
       </PanelSection>

@@ -12,12 +12,16 @@ export const DRIFTS_REFRESH_MS = 60_000
 
 const shouldRetry = (e: MicrosegApiError) => !FATAL_CODES.has(e?.code)
 
-/** GET /drifts: what differs between the policy and Proxmox, as the last full run found it. */
-export function useMicrosegDrifts(connId: string | null | undefined) {
+/**
+ * GET /drifts: what differs between the policy and Proxmox, as the last full run found it. `once`: read when the
+ * component mounts and not again (no interval, no refresh on focus), the map panels; the key is the Drifts sub-tab's.
+ */
+export function useMicrosegDrifts(connId: string | null | undefined, options: { once?: boolean } = {}) {
   const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
   const key = connId ? `${microsegBaseUrl(connId)}/drifts` : null
   const { data, error, isLoading, mutate } = useSWR<MicrosegDriftList, MicrosegApiError>(key, () => api!.getDrifts(), {
-    refreshInterval: DRIFTS_REFRESH_MS,
+    refreshInterval: options.once ? 0 : DRIFTS_REFRESH_MS,
+    revalidateOnFocus: !options.once,
     shouldRetryOnError: shouldRetry,
   })
   return { data, loading: isLoading, error, reload: () => mutate() }

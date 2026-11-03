@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { Box, ButtonBase, Chip, Collapse, Divider, Typography } from '@mui/material'
+import { Box, ButtonBase, Collapse, Divider, Typography } from '@mui/material'
 
 /** The sections of the map panels the user folded, remembered per browser (their ids). */
 export const PANEL_SECTIONS_KEY = 'proxcenter.microseg.panelSections'
@@ -28,29 +28,31 @@ function storeFolded(id: string, folded: boolean) {
   }
 }
 
+/** The open state of a section, remembered per browser: for a panel that needs to know it (a read to hold). */
+export function usePanelSection(id: string): [boolean, () => void] {
+  const [open, setOpen] = useState(() => !readFolded().has(id))
+  const toggle = () => {
+    const next = !open
+    storeFolded(id, !next)
+    setOpen(next)
+  }
+  return [open, toggle]
+}
+
 type Props = {
   /** Stable id of the section ("zone.members"): its folded state is remembered under it. */
   id: string
   title: string
-  /** Shown as a chip after the title; nothing when null or undefined. */
+  /** Shown as a count after the title; nothing when null or undefined. */
   count?: number | null
   /** Something on the right of the header (a button): its clicks do not fold the section. */
   action?: ReactNode
+  /** Held by the panel (`usePanelSection`), when it must know whether the section is open. */
+  state?: [boolean, () => void]
   children: ReactNode
 }
 
-/**
- * A foldable section of a map panel, the look of the inventory's group headers: a chevron, a caption-size title, a
- * count chip, a divider under it. Open by default; the folded ones are remembered per browser.
- */
-export default function PanelSection({ id, title, count, action, children }: Props) {
-  const [open, setOpen] = useState(() => !readFolded().has(id))
-  const toggle = () => {
-    setOpen(prev => {
-      storeFolded(id, prev)
-      return !prev
-    })
-  }
+function SectionBody({ id, title, count, action, open, toggle, children }: Omit<Props, 'state'> & { open: boolean; toggle: () => void }) {
   return (
     <Box component='section' aria-label={title} data-section={id} sx={{ minWidth: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, minHeight: 32 }}>
@@ -61,10 +63,14 @@ export default function PanelSection({ id, title, count, action, children }: Pro
           sx={{ flex: '1 1 0', minWidth: 0, justifyContent: 'flex-start', gap: 0.75, py: 0.5, borderRadius: 1 }}
         >
           <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 16, opacity: 0.7 }} aria-hidden />
-          <Typography variant='caption' noWrap sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4, minWidth: 0 }}>
+          <Typography variant='caption' component='span' noWrap sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4, minWidth: 0 }}>
             {title}
           </Typography>
-          {count !== null && count !== undefined && <Chip size='small' label={count} sx={{ height: 18, fontSize: 11, flexShrink: 0 }} />}
+          {count !== null && count !== undefined && (
+            <Box component='span' data-testid={`section-${id}-count`} sx={{ px: 0.75, minWidth: 18, height: 18, lineHeight: '18px', borderRadius: 9, fontSize: 11, textAlign: 'center', bgcolor: 'action.selected', flexShrink: 0 }}>
+              {count}
+            </Box>
+          )}
         </ButtonBase>
         {action && <Box sx={{ flexShrink: 0 }}>{action}</Box>}
       </Box>
@@ -74,6 +80,20 @@ export default function PanelSection({ id, title, count, action, children }: Pro
       </Collapse>
     </Box>
   )
+}
+
+function OwnSection(props: Omit<Props, 'state'>) {
+  const [open, toggle] = usePanelSection(props.id)
+  return <SectionBody {...props} open={open} toggle={toggle} />
+}
+
+/**
+ * A foldable section of a map panel, the look of the inventory's group headers: a chevron, a caption-size title, a
+ * count, a divider under it. Open by default; the folded ones are remembered per browser.
+ */
+export default function PanelSection({ state, ...props }: Props) {
+  if (state) return <SectionBody {...props} open={state[0]} toggle={state[1]} />
+  return <OwnSection {...props} />
 }
 
 /**

@@ -9043,7 +9043,7 @@
       "postureTrafficCaption": "hits of the pending observed flows",
       "postureTrafficCaptionFirst": "hits of the first {count, number} pending observed flows",
       "postureGroupBy": "Group by",
-      "postureGroupZone": "Zone",
+      "postureGroupZone": "Source zone",
       "postureGroupVlan": "VLAN",
       "postureGroupNode": "Node",
       "postureCentreLabel": "hits",
@@ -9103,7 +9103,14 @@
       "postureRangeGrouping": "VLAN and node grouping use the orchestrator memory (last events only)",
       "postureRangeUnavailable": "The history is not available on this orchestrator: showing the last events from its memory",
       "postureTimelineHistory": "history, last {range}",
-      "postureTimelineEmptyRange": "No observed event in this range"
+      "postureTimelineEmptyRange": "No observed event in this range",
+      "postureDirectionLabel": "Direction",
+      "postureDirectionIn": "Inbound",
+      "postureDirectionOut": "Outbound",
+      "postureGroupDstZone": "Destination zone",
+      "postureTrafficByDstZone": "Traffic by destination zone",
+      "postureCaptionEmitted": "hits emitted per zone",
+      "postureCaptionReceived": "hits received per zone"
     },
     "rulesOnDemand": {
       "chip": "Rules read when opened",
@@ -13048,7 +13055,7 @@
         "object_collision": "Name taken",
         "generic": "Drift"
       },
-      "zoneFilter": "Zone {name}",
+      "zoneFilter": "Zone {name} only",
       "zoneFilterClear": "Show every zone"
     },
     "observation": {
@@ -13310,23 +13317,21 @@
       },
       "sections": {
         "traffic": "Observed traffic",
-        "posture": "Posture",
         "topSources": "Top sources",
         "suggestions": "Pending suggestions",
         "guest": "Guest",
         "flows": "Flows",
         "summary": "{hits, plural, one {# hit} other {# hits}} · top source {source} ({share}%) · {wouldBlock, number} would be blocked, {blocked, number} blocked",
         "summaryNone": "No traffic in this range",
-        "membersStatus": "{running, number} running, {stopped, number} stopped",
-        "membersStatusUnknown": "Members not known (guest list not read)",
-        "firewallOff": "{count, plural, one {# member with its NIC firewall off} other {# members with their NIC firewall off}}",
-        "firewallOffNone": "Every member has its NIC firewall on",
         "drifts": "{count, plural, one {# drift} other {# drifts}}",
-        "driftsNone": "No drift",
-        "driftsUnknown": "Drifts not computed yet",
-        "openDrifts": "Open Drifts",
         "topSourcesEmpty": "No source in this range",
-        "suggestionsEmpty": "No pending suggestion for this zone"
+        "suggestionsEmpty": "No pending suggestion for this zone",
+        "summaryOut": "{hits, plural, one {# hit} other {# hits}} · top destination {source} ({share}%) · {wouldBlock, number} would be blocked, {blocked, number} blocked",
+        "topDestinations": "Top destinations",
+        "topDestinationsEmpty": "No destination in this range",
+        "memberRunning": "Running",
+        "memberStopped": "Stopped",
+        "memberFirewallOff": "NIC firewall off (engine's last check)"
       }
     },
     "preflight": {

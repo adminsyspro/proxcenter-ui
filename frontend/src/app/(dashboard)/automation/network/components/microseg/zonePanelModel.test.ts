@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
 
 import type { ZoneMember } from './zoneModel'
-import { zonePosture, zoneSuggestions } from './zonePanelModel'
+import { driftKey } from './driftLabels'
+import { zoneDriftSignals, zoneSuggestions } from './zonePanelModel'
 import { suggestion } from './policyTestKit'
 
 const zone = (id: string, name: string) => ({ id, name } as MicrosegZone)
@@ -14,7 +15,7 @@ const member = (vmid: number, status: string | null): ZoneMember => ({
   pending: false,
 })
 
-describe('zonePosture', () => {
+describe('zoneDriftSignals', () => {
   const members = [member(1, 'running'), member(2, 'running'), member(3, 'stopped'), member(4, null)]
   const drifts: MicrosegDrift[] = [
     { kind: 'nic_firewall_off', guest: { node: 'pve1', type: 'qemu', vmid: 1 } },
@@ -25,12 +26,22 @@ describe('zonePosture', () => {
     { kind: 'nic_firewall_off', guest: { node: 'pve1', type: 'qemu', vmid: 99 } },
   ]
 
-  it('counts members by status, members with the NIC firewall off once each, and the drifts of the zone or its members', () => {
-    expect(zonePosture(ZONES[0], members, drifts, ZONES)).toEqual({ running: 2, stopped: 1, firewallOff: 1, drifts: 4, driftsKnown: true })
+  it('counts the drifts of the zone or of its members, and tells the members with their NIC firewall off', () => {
+    const s = zoneDriftSignals(ZONES[0], members, drifts, ZONES, new Set())!
+    expect(s.count).toBe(4)
+    expect([...s.firewallOff]).toEqual(['qemu/1'])
   })
 
-  it('says the drifts are not known before the engine computed them', () => {
-    expect(zonePosture(ZONES[0], members, null, ZONES)).toMatchObject({ drifts: 0, driftsKnown: false, firewallOff: 0 })
+  it('leaves out the drifts ignored in this browser, as the Drifts sub-tab does', () => {
+    // A guest drift is keyed by type and VMID (the node moves on a migration): ignoring one ignores both of qemu/1.
+    const ignored = new Set([driftKey(drifts[3]), driftKey(drifts[0])])
+    const s = zoneDriftSignals(ZONES[0], members, drifts, ZONES, ignored)!
+    expect(s.count).toBe(1)
+    expect(s.firewallOff.size).toBe(0)
+  })
+
+  it('is not known before the engine computed the drifts', () => {
+    expect(zoneDriftSignals(ZONES[0], members, null, ZONES, new Set())).toBeNull()
   })
 })
 

@@ -24,8 +24,15 @@ export const MAX_CHORDS = 6
 /** Rows of the top services table. */
 export const MAX_SERVICES = 8
 
-export type GroupBy = 'zone' | 'vlan' | 'node'
-export const GROUP_BYS: readonly GroupBy[] = ['zone', 'vlan', 'node']
+/**
+ * How the observed traffic is grouped: by the zone that EMITS it (`zone`, the source zone), by the zone that RECEIVES
+ * it (`dstzone`, the zone of the guest that logged it), or by the VLAN / node of the destination guest.
+ */
+export type GroupBy = 'zone' | 'dstzone' | 'vlan' | 'node'
+export const GROUP_BYS: readonly GroupBy[] = ['zone', 'dstzone', 'vlan', 'node']
+
+/** A grouping on zones (source or destination): the history carries it, the guest list is not needed. */
+export const isZoneGrouping = (g: GroupBy) => g === 'zone' || g === 'dstzone'
 
 export const NO_VLAN_KEY = 'vlan:none'
 const vlanKey = (vlan: number) => `vlan:${vlan}`
@@ -98,7 +105,7 @@ function lookupOf(zones: readonly MicrosegZone[], tagPrefix: string, guests: rea
 
 /** The group of one end of an observed flow. Without the guest list, a source in no zone is Unknown / External. */
 function groupOf(groupBy: GroupBy, zoneId: string, ip: string, look: Lookup): string {
-  if (groupBy === 'zone') {
+  if (isZoneGrouping(groupBy)) {
     if (look.zonesById.has(zoneId)) return zoneKey(zoneId)
     return ip && look.guestOf?.(ip) ? UNZONED_KEY : EXTERNAL_KEY
   }

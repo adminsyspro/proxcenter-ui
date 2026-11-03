@@ -96,6 +96,14 @@ describe('postureTimeline: grouping', () => {
   })
 })
 
+describe('postureTimeline: by destination zone', () => {
+  it('groups the events by the zone that logged them', () => {
+    const slices = [slice('zone:zweb', 'zone', '#1', 'web'), slice('zone:zdb', 'zone', '#2', 'db')]
+    const t = run({ groupBy: 'dstzone', slices, events: [event({}), event({}), event({ zone: 'web', src_zone: 'db' }), event({ zone: 'gone' })] })
+    expect(t.buckets.at(-1)!.counts).toEqual({ 'zone:zdb': 2, 'zone:zweb': 1, other: 1 })
+  })
+})
+
 describe('postureTimeline: one guest (map panel)', () => {
   it('keeps the events of that guest only, the window being the one of what is kept', () => {
     const events = [event({ vmid: 102, ts: at(1) }), event({ vmid: 104, ts: at(30) }), event({ vmid: 102, type: 'lxc', ts: at(40) })]
@@ -255,6 +263,16 @@ describe('the persisted history (UA55)', () => {
     expect(run('1h', rows, { zone: 'db' }).total).toBe(7)
     expect(run('1h', rows, { zone: 'web' }).total).toBe(2)
     expect(run('1h', rows).total).toBe(9)
+  })
+
+  it('groups by the zone that received the flows (destination), and keeps one zone\'s emitted flows for a panel', () => {
+    const last = win('1h').to - 300_000
+    const rows = [row(last, { hits: 3 }), row(last, { hits: 2, zone: 'web', src_zone: 'db' }), row(last, { hits: 4, zone: 'web', src_zone: '' })]
+    const dst = run('1h', rows, { by: 'dst', slices: [slice('zone:zdb', 'zone', '#2', 'db'), ...ZONE_SLICES] })
+    expect(dst.buckets.at(-1)!.counts).toEqual({ 'zone:zdb': 3, 'zone:zweb': 6 })
+    // Outbound of db: what db emitted, by destination.
+    const out = run('1h', rows, { by: 'dst', zone: 'db', slices: [slice('zone:zdb', 'zone', '#2', 'db'), ...ZONE_SLICES] })
+    expect(out.buckets.at(-1)!.counts).toEqual({ 'zone:zweb': 2 })
   })
 
   it('ranks the sources of the range by hits with their share, the 5 busiest', () => {

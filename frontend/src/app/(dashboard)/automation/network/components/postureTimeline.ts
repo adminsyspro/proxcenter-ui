@@ -87,6 +87,11 @@ export type PostureTimeline = {
 function groupOfEvent(
   e: MicrosegEvent, groupBy: GroupBy, zoneByName: ReadonlyMap<string, MicrosegZone>, guestByKey: ReadonlyMap<string, PostureGuest>, guestIps: ReadonlySet<string> | null,
 ): string {
+  if (groupBy === 'dstzone') {
+    // The zone that received it: the zone of the guest that logged it.
+    const zone = zoneByName.get(e.zone.toLowerCase())
+    return zone ? zoneKey(zone.id) : OTHER_KEY
+  }
   if (groupBy !== 'zone') {
     // A guest the connection does not list (deleted since, another connection): Unknown, by node as by VLAN.
     const guest = guestByKey.get(`${e.type}/${e.vmid}`)
@@ -152,10 +157,10 @@ export function historyWindow(now: number, range: TimelineRange): { from: number
 }
 
 /**
- * The persisted history as the time chart: the hits per bucket of the range, by SOURCE zone as the donut and the
- * events path group them (the route does not carry guests, so it serves the zone grouping only). A source in no zone
- * is "Unknown" (the history does not tell an unzoned guest from a foreign address), a zone renamed or deleted since
- * is "Other".
+ * The persisted history as the time chart: the hits per bucket of the range, by SOURCE or DESTINATION zone as the
+ * donut and the events path group them (the route does not carry guests, so it serves the zone groupings only). A
+ * source in no zone is "Unknown" (the history does not tell an unzoned guest from a foreign address), a zone renamed or
+ * deleted since is "Other". One read serves every direction and every zone: the filters are applied here.
  */
 export function postureHistory(input: {
   history: MicrosegTraffic
@@ -163,21 +168,29 @@ export function postureHistory(input: {
   verdict: TimelineVerdict
   zones: readonly MicrosegZone[]
   slices: readonly TimelineSeries[]
-  /** Only the flows logged in this zone (its name, as the history carries it): the zone panel of the map. */
+  /** `src`: by the zone that emitted the flows (the default); `dst`: by the zone that received them (logged them). */
+  by?: 'src' | 'dst'
+  /**
+   * One zone of the map panel (its name, as the history carries it): grouped by source, the flows it received
+   * (inbound); grouped by destination, the flows it emitted (outbound).
+   */
   zone?: string | null
 }): PostureTimeline {
-  const { history, range, verdict, slices } = input
-  const logging = input.zone?.toLowerCase() ?? null
+  const { history, range, verdict, slices, by = 'src' } = input
+  const only = input.zone?.toLowerCase() ?? null
   const stepMs = stepMsOf(range)
   const zoneByName = new Map(input.zones.map(z => [z.name.toLowerCase(), z]))
-  const groupOf = (srcZone: string) => {
-    if (!srcZone) return EXTERNAL_KEY
-    const zone = zoneByName.get(srcZone.toLowerCase())
+  const groupOf = (name: string) => {
+    if (!name) return EXTERNAL_KEY
+    const zone = zoneByName.get(name.toLowerCase())
     return zone ? zoneKey(zone.id) : OTHER_KEY
   }
+  // The side the chart groups on, and the side one zone is kept on: the other one.
+  const grouped = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? b.src_zone : b.zone)
+  const kept = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? b.zone : b.src_zone)
   const items = history.buckets
-    .filter(b => (verdict === 'all' || b.verdict === verdict) && (logging === null || b.zone.toLowerCase() === logging))
-    .map(b => ({ at: Date.parse(b.at), group: groupOf(b.src_zone), value: b.hits }))
+    .filter(b => (verdict === 'all' || b.verdict === verdict) && (only === null || kept(b).toLowerCase() === only))
+    .map(b => ({ at: Date.parse(b.at), group: groupOf(grouped(b)), value: b.hits }))
   const first = Math.ceil(Date.parse(history.from) / stepMs) * stepMs
   const last = Math.floor((Date.parse(history.to) - 1) / stepMs) * stepMs
   return { ...stack(first, last, items, slices, stepMs), stepMs, range, windowMinutes: RANGE_SPEC[range].ms / 60_000 }
@@ -268,8 +281,8 @@ export type VmSeries = { vmid: number; vm_name?: string; points: { time: number;
 
 /**
  * The sFlow bytes per 5-minute bucket of the window, per group of the donut: by zone, what the members SENT (the
- * donut groups by source zone; the zone from the guest tags, through the lens resolver); by VLAN or node, what the
- * guests RECEIVED (the donut groups by destination). A VM the connection does not hold is Unknown.
+ * donut groups by source zone; the zone from the guest tags, through the lens resolver); by destination zone, VLAN or
+ * node, what the guests RECEIVED (the donut groups by destination). A VM the connection does not hold is Unknown.
  */
 export function postureVolume(input: {
   series: readonly VmSeries[]
@@ -288,7 +301,7 @@ export function postureVolume(input: {
   const byVmid = new Map(guests.map(g => [vmidOf(g), g]))
   const resolve = buildResolver([...input.zones], input.tagPrefix, guests.map(g => ({ vmid: vmidOf(g), name: g.key, tags: g.tags, ips: [] })))
   const groupOfVm = (vmid: number): string => {
-    if (groupBy === 'zone') return groupKeyOf(resolve('', vmid))
+    if (groupBy === 'zone' || groupBy === 'dstzone') return groupKeyOf(resolve('', vmid))
     const guest = byVmid.get(vmid)
     if (!guest) return EXTERNAL_KEY
     if (groupBy === 'node') return `node:${guest.node}`

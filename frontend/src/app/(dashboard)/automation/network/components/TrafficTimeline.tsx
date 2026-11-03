@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Box, Chip, Paper, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, useTheme } from '@mui/material'
+import { Box, Chip, FormControl, MenuItem, Paper, Select, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
+import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
 import { formatBytes } from '@/utils/format'
 
 import type { BlockPhase } from './dashboardModel'
@@ -33,7 +34,12 @@ type Props = {
   compact?: boolean
   /** False for a chart of the orchestrator's memory only (a guest): no range chips. */
   showRange?: boolean
+  /** A map panel's direction (inbound / outbound), on the line of the verdict; none on the Dashboard. */
+  direction?: TimelineDirection
+  onDirection?: (direction: TimelineDirection) => void
 }
+
+export type TimelineDirection = 'in' | 'out'
 
 type Unit = 'events' | 'bytes'
 
@@ -173,7 +179,7 @@ function LegendChips({ timeline }: { timeline: PostureTimeline }) {
  * second tab, "Volume (sFlow)", shows the sFlow bytes of the same groups over the same range, only when sFlow has data
  * for the connection.
  */
-export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, showRange = true }: Props) {
+export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, showRange = true, direction, onDirection }: Props) {
   const t = useTranslations('networkPage.dashboard')
   const [ref, size] = useBoxSize<HTMLDivElement>()
   const [chosen, setChosen] = useState<Unit>('events')
@@ -199,9 +205,11 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
 
   // The memory chart (a grouping by VLAN or node, or no history served) has one window; the Volume tab follows the range.
   const locked = unit === 'events' && rangeLock !== null
+  // The map panel is narrow: its toggles are smaller, and the verdict a select, so they hold on one row.
+  const toggleSx = { '& .MuiToggleButton-root': compact ? { py: 0, px: 0.75, textTransform: 'none', fontSize: 11 } : { py: 0.25, px: 1, textTransform: 'none', fontSize: 12 } }
   const chips = (
     <Tooltip title={locked ? t(RANGE_LOCK_MESSAGE[rangeLock]) : ''}>
-      <span data-testid='timeline-range-wrap'>
+      <span data-testid='timeline-range-wrap' style={{ flexShrink: 0 }}>
         <ToggleButtonGroup
           size='small'
           exclusive
@@ -209,15 +217,77 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
           disabled={locked}
           onChange={(_, next: TimelineRange | null) => { if (next) onRange(next) }}
           aria-label={t('postureRangeLabel')}
-          sx={{ '& .MuiToggleButton-root': { py: 0.25, px: 1, textTransform: 'none', fontSize: 12 } }}
+          sx={toggleSx}
         >
           {TIMELINE_RANGES.map(r => <ToggleButton key={r} value={r} data-testid={`range-${r}`}>{t(RANGE_LABEL[r])}</ToggleButton>)}
         </ToggleButtonGroup>
       </span>
     </Tooltip>
   )
+  const directionToggle = direction && onDirection && (
+    <ToggleButtonGroup
+      size='small'
+      exclusive
+      value={direction}
+      onChange={(_, next: TimelineDirection | null) => { if (next) onDirection(next) }}
+      aria-label={t('postureDirectionLabel')}
+      sx={{ ...toggleSx, flexShrink: 0 }}
+    >
+      <ToggleButton value='in' data-testid='direction-in'>{t('postureDirectionIn')}</ToggleButton>
+      <ToggleButton value='out' data-testid='direction-out'>{t('postureDirectionOut')}</ToggleButton>
+    </ToggleButtonGroup>
+  )
+  let verdictControl: React.ReactNode = null
+  if (unit === 'events' && compact) {
+    verdictControl = (
+      <FormControl size='small' sx={{ minWidth: 96, flexShrink: 0 }}>
+        <Select
+          value={verdict}
+          onChange={e => onVerdict(e.target.value as TimelineVerdict)}
+          inputProps={{ 'aria-label': t('postureTimelineVerdict') }}
+          sx={{ ...SMALL_SELECT_SX, fontSize: 12 }}
+        >
+          {VERDICTS.map(v => <MenuItem key={v} value={v}>{t(VERDICT_LABEL[v])}</MenuItem>)}
+        </Select>
+      </FormControl>
+    )
+  } else if (unit === 'events') {
+    verdictControl = (
+      <ToggleButtonGroup
+        size='small'
+        exclusive
+        value={verdict}
+        onChange={(_, next: TimelineVerdict | null) => { if (next) onVerdict(next) }}
+        aria-label={t('postureTimelineVerdict')}
+        sx={toggleSx}
+      >
+        {VERDICTS.map(v => <ToggleButton key={v} value={v}>{t(VERDICT_LABEL[v])}</ToggleButton>)}
+      </ToggleButtonGroup>
+    )
+  }
+  const toggles = (
+    <>
+      {directionToggle}
+      {verdictControl}
+      {showRange && chips}
+    </>
+  )
+  const captionLine = caption && <Typography variant='caption' color='text.secondary' noWrap={compact} data-testid='timeline-caption'>{caption}</Typography>
+  const chart = <Box ref={ref} sx={{ position: 'relative', width: '100%', minWidth: 0 }}>{body}</Box>
 
-  let title: React.ReactNode = volume ? (
+  if (compact) {
+    // Two rows at most: the caption, then the toggles on one row (scrolled sideways rather than wrapped).
+    return (
+      <Box data-testid='timeline' sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, minWidth: 0 }}>
+        {captionLine}
+        <Box data-testid='timeline-toggles' sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'nowrap', overflowX: 'auto', minWidth: 0 }}>{toggles}</Box>
+        {chart}
+        {phase === 'ready' && timeline.total > 0 && <LegendChips timeline={timeline} />}
+      </Box>
+    )
+  }
+
+  const title: React.ReactNode = volume ? (
     <Tabs value={unit} onChange={(_, next: Unit) => setChosen(next)} sx={{ minHeight: 32, '& .MuiTab-root': { minHeight: 32, py: 0.5, px: 1.5, textTransform: 'none' } }}>
       <Tab value='events' label={t('postureTimelineTitle')} />
       <Tab value='bytes' label={t('postureVolumeTab')} data-testid='volume-tab' />
@@ -225,31 +295,15 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   ) : (
     <Typography variant='subtitle2' component='h3' sx={{ fontWeight: 700 }}>{t('postureTimelineTitle')}</Typography>
   )
-  if (compact) title = null
 
   return (
     <Box data-testid='timeline' sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
         {title}
-        {caption && <Typography variant='caption' color='text.secondary' data-testid='timeline-caption'>{caption}</Typography>}
-        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          {unit === 'events' && (
-            <ToggleButtonGroup
-              size='small'
-              exclusive
-              value={verdict}
-              onChange={(_, next: TimelineVerdict | null) => { if (next) onVerdict(next) }}
-              aria-label={t('postureTimelineVerdict')}
-              sx={{ '& .MuiToggleButton-root': { py: 0.25, px: 1, textTransform: 'none', fontSize: 12 } }}
-            >
-              {VERDICTS.map(v => <ToggleButton key={v} value={v}>{t(VERDICT_LABEL[v])}</ToggleButton>)}
-            </ToggleButtonGroup>
-          )}
-          {showRange && chips}
-        </Box>
+        {captionLine}
+        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>{toggles}</Box>
       </Box>
-      <Box ref={ref} sx={{ position: 'relative', width: '100%', minWidth: 0 }}>{body}</Box>
-      {compact && phase === 'ready' && timeline.total > 0 && <LegendChips timeline={timeline} />}
+      {chart}
     </Box>
   )
 }

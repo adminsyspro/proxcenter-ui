@@ -15,7 +15,7 @@ import type { MicrosegPolicy, MicrosegStatus, MicrosegSuggestion, MicrosegZone }
 import DashboardTodo, { type TodoActions } from './DashboardTodo'
 import { dashboardPhase, missingManagementPorts, todoItems, type BlockPhase } from './dashboardModel'
 import {
-  POSTURE_SUGGESTIONS_LIMIT, postureDistribution, postureGuests, postureTraffic, protectedRunning, topServices, zonesEnforced, type GroupBy,
+  GROUP_BYS, POSTURE_SUGGESTIONS_LIMIT, isZoneGrouping, postureDistribution, postureGuests, postureTraffic, protectedRunning, topServices, zonesEnforced, type GroupBy,
 } from './dashboardPosture'
 import DeploymentWizard from './DeploymentWizard'
 import FirewallLoadAlert from './FirewallLoadAlert'
@@ -26,6 +26,7 @@ import TrafficTimeline from './TrafficTimeline'
 import { postureVolume, type TimelineRange, type TimelineVerdict } from './postureTimeline'
 import { useTimelineRange } from './useTimelineRange'
 import { useTrafficTimeline } from './useTrafficTimeline'
+import { useStoredChoice } from './microseg/useStoredChoice'
 import { usePostureVolume } from './usePostureVolume'
 import { coverage as microsegCoverage } from './microseg/coverage'
 import type { MicrosegSubTab } from './microseg/microsegTabTypes'
@@ -111,6 +112,8 @@ function usePostureFigures(policy: MicrosegPolicy | undefined, suggestions: Micr
 }
 
 const NO_ZONES: MicrosegZone[] = []
+/** The grouping of the traffic block, remembered per browser. */
+export const GROUP_BY_KEY = 'proxcenter.microseg.postureGroupBy'
 
 /**
  * The time charts, on the groups of the donut. The events chart reads the persisted history of the range chosen when
@@ -149,9 +152,9 @@ export default function DashboardTab({
   reload, onNavigateTab, onNavigateRulesSubTab, onOpenGuests, onOpenMicroseg,
 }: DashboardTabProps) {
   const [deployWizardOpen, setDeployWizardOpen] = useState(false)
-  const [groupBy, setGroupBy] = useState<GroupBy>('zone')
+  const [groupBy, setGroupBy] = useStoredChoice<GroupBy>(GROUP_BY_KEY, GROUP_BYS, 'zone')
   // Once a grouping by VLAN or node asked for the guests, they stay (a zone grouping then tells the unzoned apart).
-  const [guestsWanted, setGuestsWanted] = useState(false)
+  const [guestsWanted, setGuestsWanted] = useState(() => !isZoneGrouping(groupBy))
   const [verdict, setVerdict] = useState<TimelineVerdict>('all')
   const [range, setRange] = useTimelineRange()
   const connection = selectedConnection || null
@@ -186,7 +189,7 @@ export default function DashboardTab({
   const addresses = guestsWanted && zoneGuests.status === 'ready'
   const listsPhase = microsegPhase([microsegPolicy, pending])
   // A grouping by VLAN or node waits for the guests it is made of.
-  const trafficPhase = listsPhase === 'ready' && groupBy !== 'zone' && zoneGuests.status === 'loading' ? 'loading' : listsPhase
+  const trafficPhase = listsPhase === 'ready' && !isZoneGrouping(groupBy) && zoneGuests.status === 'loading' ? 'loading' : listsPhase
   const posture = usePostureFigures(policy, pending.data, coverage?.guests, addresses ? zoneGuests.guests : null, groupBy)
   const { timeline, volume, answer, rangeLock } = useTimelineFigures(connection, policy, posture, groupBy, verdict, addresses, range)
   const timelinePhase = microsegPhase([microsegPolicy, answer])
@@ -222,7 +225,7 @@ export default function DashboardTab({
   }
   const changeGroupBy = (next: GroupBy) => {
     setGroupBy(next)
-    if (next !== 'zone') setGuestsWanted(true)
+    if (!isZoneGrouping(next)) setGuestsWanted(true)
   }
 
   if (!selectedConnection) return <Box sx={{ p: 3 }} />

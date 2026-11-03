@@ -9043,7 +9043,7 @@
       "postureTrafficCaption": "待处理观察流量的命中次数",
       "postureTrafficCaptionFirst": "前 {count, number} 个待处理观察流量的命中次数",
       "postureGroupBy": "分组依据",
-      "postureGroupZone": "区域",
+      "postureGroupZone": "源区域",
       "postureGroupVlan": "VLAN",
       "postureGroupNode": "节点",
       "postureCentreLabel": "命中",
@@ -9103,7 +9103,14 @@
       "postureRangeGrouping": "按 VLAN 和节点分组使用编排器内存（仅最近的事件）",
       "postureRangeUnavailable": "此编排器没有历史记录：显示其内存中最近的事件",
       "postureTimelineHistory": "历史记录，最近 {range}",
-      "postureTimelineEmptyRange": "此时间范围内没有观察到的事件"
+      "postureTimelineEmptyRange": "此时间范围内没有观察到的事件",
+      "postureDirectionLabel": "方向",
+      "postureDirectionIn": "入站",
+      "postureDirectionOut": "出站",
+      "postureGroupDstZone": "目的区域",
+      "postureTrafficByDstZone": "按目的区域的流量",
+      "postureCaptionEmitted": "每个区域发出的命中",
+      "postureCaptionReceived": "每个区域接收的命中"
     },
     "rulesOnDemand": {
       "chip": "打开时加载规则",
@@ -13048,7 +13055,7 @@
         "object_collision": "名称已占用",
         "generic": "偏差"
       },
-      "zoneFilter": "区域 {name}",
+      "zoneFilter": "仅区域 {name}",
       "zoneFilterClear": "显示所有区域"
     },
     "observation": {
@@ -13310,23 +13317,21 @@
       },
       "sections": {
         "traffic": "观察到的流量",
-        "posture": "安全态势",
         "topSources": "主要来源",
         "suggestions": "待处理的建议",
         "guest": "客户机",
         "flows": "流量",
         "summary": "{hits, plural, other {# 次命中}} · 主要来源 {source}（{share}%）· 将被阻止 {wouldBlock, number}，已阻止 {blocked, number}",
         "summaryNone": "此时间范围内没有流量",
-        "membersStatus": "{running, number} 个运行中，{stopped, number} 个已停止",
-        "membersStatusUnknown": "成员未知（未读取客户机列表）",
-        "firewallOff": "{count, plural, other {# 个成员的网卡防火墙已关闭}}",
-        "firewallOffNone": "所有成员的网卡防火墙均已开启",
         "drifts": "{count, plural, other {# 个偏差}}",
-        "driftsNone": "无偏差",
-        "driftsUnknown": "偏差尚未计算",
-        "openDrifts": "打开偏差",
         "topSourcesEmpty": "此时间范围内没有来源",
-        "suggestionsEmpty": "此区域没有待处理的建议"
+        "suggestionsEmpty": "此区域没有待处理的建议",
+        "summaryOut": "{hits, plural, other {# 次命中}} · 主要目的地 {source}（{share}%）· 将被阻止 {wouldBlock, number}，已阻止 {blocked, number}",
+        "topDestinations": "主要目的地",
+        "topDestinationsEmpty": "此时间范围内没有目的地",
+        "memberRunning": "运行中",
+        "memberStopped": "已停止",
+        "memberFirewallOff": "网卡防火墙已关闭（引擎上次检查）"
       }
     },
     "preflight": {

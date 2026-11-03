@@ -8990,7 +8990,7 @@
       "postureTrafficCaption": "Treffer der offenen beobachteten Flüsse",
       "postureTrafficCaptionFirst": "Treffer der ersten {count, number} offenen beobachteten Flüsse",
       "postureGroupBy": "Gruppieren nach",
-      "postureGroupZone": "Zone",
+      "postureGroupZone": "Quellzone",
       "postureGroupVlan": "VLAN",
       "postureGroupNode": "Knoten",
       "postureCentreLabel": "Treffer",
@@ -9050,7 +9050,14 @@
       "postureRangeGrouping": "Die Gruppierung nach VLAN und Knoten nutzt den Speicher des Orchestrators (nur die letzten Ereignisse)",
       "postureRangeUnavailable": "Der Verlauf ist auf diesem Orchestrator nicht verfügbar: die letzten Ereignisse aus seinem Speicher werden angezeigt",
       "postureTimelineHistory": "Verlauf, letzte {range}",
-      "postureTimelineEmptyRange": "Kein beobachtetes Ereignis in diesem Zeitraum"
+      "postureTimelineEmptyRange": "Kein beobachtetes Ereignis in diesem Zeitraum",
+      "postureDirectionLabel": "Richtung",
+      "postureDirectionIn": "Eingehend",
+      "postureDirectionOut": "Ausgehend",
+      "postureGroupDstZone": "Zielzone",
+      "postureTrafficByDstZone": "Verkehr nach Zielzone",
+      "postureCaptionEmitted": "gesendete Treffer pro Zone",
+      "postureCaptionReceived": "empfangene Treffer pro Zone"
     },
     "rulesOnDemand": {
       "chip": "Regeln beim Öffnen",
@@ -12716,7 +12723,7 @@
         "object_collision": "Name belegt",
         "generic": "Abweichung"
       },
-      "zoneFilter": "Zone {name}",
+      "zoneFilter": "Nur Zone {name}",
       "zoneFilterClear": "Alle Zonen anzeigen"
     },
     "observation": {
@@ -12978,23 +12985,21 @@
       },
       "sections": {
         "traffic": "Beobachteter Verkehr",
-        "posture": "Sicherheitslage",
         "topSources": "Wichtigste Quellen",
         "suggestions": "Offene Vorschläge",
         "guest": "Gast",
         "flows": "Flüsse",
         "summary": "{hits, plural, one {# Treffer} other {# Treffer}} · wichtigste Quelle {source} ({share} %) · {wouldBlock, number} würden blockiert, {blocked, number} blockiert",
         "summaryNone": "Kein Verkehr in diesem Zeitraum",
-        "membersStatus": "{running, number} laufend, {stopped, number} gestoppt",
-        "membersStatusUnknown": "Mitglieder unbekannt (Gästeliste nicht gelesen)",
-        "firewallOff": "{count, plural, one {# Mitglied mit ausgeschalteter NIC-Firewall} other {# Mitglieder mit ausgeschalteter NIC-Firewall}}",
-        "firewallOffNone": "Alle Mitglieder haben die NIC-Firewall an",
         "drifts": "{count, plural, one {# Abweichung} other {# Abweichungen}}",
-        "driftsNone": "Keine Abweichung",
-        "driftsUnknown": "Abweichungen noch nicht berechnet",
-        "openDrifts": "Abweichungen öffnen",
         "topSourcesEmpty": "Keine Quelle in diesem Zeitraum",
-        "suggestionsEmpty": "Kein offener Vorschlag für diese Zone"
+        "suggestionsEmpty": "Kein offener Vorschlag für diese Zone",
+        "summaryOut": "{hits, plural, one {# Treffer} other {# Treffer}} · wichtigstes Ziel {source} ({share} %) · {wouldBlock, number} würden blockiert, {blocked, number} blockiert",
+        "topDestinations": "Wichtigste Ziele",
+        "topDestinationsEmpty": "Kein Ziel in diesem Zeitraum",
+        "memberRunning": "Läuft",
+        "memberStopped": "Gestoppt",
+        "memberFirewallOff": "NIC-Firewall aus (letzte Prüfung der Engine)"
       }
     },
     "preflight": {

@@ -9043,7 +9043,7 @@
       "postureTrafficCaption": "coincidencias de los flujos observados pendientes",
       "postureTrafficCaptionFirst": "coincidencias de los {count, number} primeros flujos observados pendientes",
       "postureGroupBy": "Agrupar por",
-      "postureGroupZone": "Zona",
+      "postureGroupZone": "Zona de origen",
       "postureGroupVlan": "VLAN",
       "postureGroupNode": "Nodo",
       "postureCentreLabel": "coincidencias",
@@ -9103,7 +9103,14 @@
       "postureRangeGrouping": "La agrupación por VLAN y por nodo usa la memoria del orquestador (solo los últimos eventos)",
       "postureRangeUnavailable": "El historial no está disponible en este orquestador: se muestran los últimos eventos de su memoria",
       "postureTimelineHistory": "historial, periodo de {range}",
-      "postureTimelineEmptyRange": "Ningún evento observado en este periodo"
+      "postureTimelineEmptyRange": "Ningún evento observado en este periodo",
+      "postureDirectionLabel": "Dirección",
+      "postureDirectionIn": "Entrante",
+      "postureDirectionOut": "Saliente",
+      "postureGroupDstZone": "Zona de destino",
+      "postureTrafficByDstZone": "Tráfico por zona de destino",
+      "postureCaptionEmitted": "coincidencias emitidas por zona",
+      "postureCaptionReceived": "coincidencias recibidas por zona"
     },
     "rulesOnDemand": {
       "chip": "Reglas al abrir",
@@ -13048,7 +13055,7 @@
         "object_collision": "Nombre ocupado",
         "generic": "Desviación"
       },
-      "zoneFilter": "Zona {name}",
+      "zoneFilter": "Solo zona {name}",
       "zoneFilterClear": "Mostrar todas las zonas"
     },
     "observation": {
@@ -13310,23 +13317,21 @@
       },
       "sections": {
         "traffic": "Tráfico observado",
-        "posture": "Postura",
         "topSources": "Fuentes principales",
         "suggestions": "Sugerencias pendientes",
         "guest": "Invitado",
         "flows": "Flujos",
         "summary": "{hits, plural, one {# coincidencia} other {# coincidencias}} · fuente principal {source} ({share} %) · {wouldBlock, number} se bloquearían, {blocked, number} bloqueados",
         "summaryNone": "Ningún tráfico en este intervalo",
-        "membersStatus": "{running, number} en ejecución, {stopped, number} detenidos",
-        "membersStatusUnknown": "Miembros desconocidos (lista de invitados no leída)",
-        "firewallOff": "{count, plural, one {# miembro con el cortafuegos de NIC apagado} other {# miembros con el cortafuegos de NIC apagado}}",
-        "firewallOffNone": "Todos los miembros tienen el cortafuegos de NIC activado",
         "drifts": "{count, plural, one {# desviación} other {# desviaciones}}",
-        "driftsNone": "Ninguna desviación",
-        "driftsUnknown": "Desviaciones aún no calculadas",
-        "openDrifts": "Abrir desviaciones",
         "topSourcesEmpty": "Ninguna fuente en este intervalo",
-        "suggestionsEmpty": "Ninguna sugerencia pendiente para esta zona"
+        "suggestionsEmpty": "Ninguna sugerencia pendiente para esta zona",
+        "summaryOut": "{hits, plural, one {# coincidencia} other {# coincidencias}} · destino principal {source} ({share} %) · {wouldBlock, number} se bloquearían, {blocked, number} bloqueados",
+        "topDestinations": "Destinos principales",
+        "topDestinationsEmpty": "Ningún destino en este intervalo",
+        "memberRunning": "En ejecución",
+        "memberStopped": "Detenido",
+        "memberFirewallOff": "Cortafuegos de NIC apagado (última comprobación del motor)"
       }
     },
     "preflight": {

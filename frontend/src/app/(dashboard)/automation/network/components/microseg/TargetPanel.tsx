@@ -11,7 +11,7 @@ import { serviceTitle } from '@/lib/network/serviceNames'
 import { OneLine } from './dialogParts'
 import FlowSummary from './FlowSummary'
 import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
-import PanelSection, { PanelFrame } from './PanelSection'
+import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { SelectionTrafficChart, useSelectionTraffic } from './SelectionTraffic'
 import { targetSuggestions, type TargetFlow, type TargetGuest } from './targetModel'
@@ -111,7 +111,8 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
   const allowedPage = usePaged(allowed, ROWS_PER_PAGE)
   const { busy, failure, clearFailure, resolve: resolveIds } = useResolveSuggestions(connectionId, version, reloadPolicy, reloadSuggestions)
   const zones = useMemo(() => [...zonesById.values()], [zonesById])
-  const traffic = useSelectionTraffic(connectionId, zones, { kind: 'guest', type: target.type, vmid: target.vmid })
+  const trafficSection = usePanelSection('guest.traffic')
+  const traffic = useSelectionTraffic(connectionId, zones, { kind: 'guest', type: target.type, vmid: target.vmid, ips: target.ips }, trafficSection[0])
   const ips = target.ips.length ? t('node.guestIps', { ips: target.ips.join(', ') }) : t('node.guestNoIp')
 
   async function resolve(id: string, action: SuggestionAction) {
@@ -189,7 +190,7 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
         </Section>
       </PanelSection>
 
-      <PanelSection id='guest.traffic' title={t('sections.traffic')}>
+      <PanelSection id='guest.traffic' title={t('sections.traffic')} state={trafficSection}>
         <SelectionTrafficChart traffic={traffic} />
       </PanelSection>
     </PanelFrame>

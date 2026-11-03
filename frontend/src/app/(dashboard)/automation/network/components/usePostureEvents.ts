@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo } from 'react'
 import useSWR from 'swr'
 
 import { MicrosegApiError, microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
@@ -23,6 +23,24 @@ async function readWindow(api: Api, zone: string | undefined): Promise<MicrosegE
 }
 
 /**
+ * The events held per connection and zone filter, at the module level: a panel that mounts again (another guest picked,
+ * the Dashboard opened again) reads only the newest page on top of them, never the 4 pages again. A few keys at most.
+ */
+const HELD = new Map<string, MicrosegEvent[]>()
+const MAX_HELD = 16
+
+function hold(stamp: string, events: MicrosegEvent[]) {
+  HELD.delete(stamp)
+  HELD.set(stamp, events)
+  if (HELD.size > MAX_HELD) HELD.delete(HELD.keys().next().value as string)
+}
+
+/** Test hook: forget what is held. */
+export function forgetHeldEvents() {
+  HELD.clear()
+}
+
+/**
  * The events of the orchestrator's ring for the Posture time chart (no Proxmox call): up to 2000 on the first read
  * (4 pages of 500), then every minute while the Dashboard shows, only the newest page put on top of what is held
  * (the whole window again when more came in than a page holds). SWR pauses the refresh while the tab is hidden.
@@ -30,18 +48,17 @@ async function readWindow(api: Api, zone: string | undefined): Promise<MicrosegE
  */
 export function usePostureEvents(connId: string | null, zone?: string) {
   const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
-  const held = useRef<{ conn: string | null; events: MicrosegEvent[] }>({ conn: null, events: [] })
   const stamp = `${connId}|${zone ?? ''}`
   const key = connId ? [`${microsegBaseUrl(connId)}/events`, 'posture', EVENTS_PAGE * EVENTS_PAGES, zone ?? ''] : null
 
   const { data, error } = useSWR<MicrosegEvent[], MicrosegApiError>(
     key,
     async () => {
-      const mine = held.current.conn === stamp ? held.current.events : []
+      const mine = HELD.get(stamp) ?? []
       let events: MicrosegEvent[] | null = null
       if (mine.length) events = mergeEvents(mine, (await api!.getMicrosegEvents({ limit: EVENTS_PAGE, zone })).events)
       events ??= await readWindow(api!, zone)
-      held.current = { conn: stamp, events }
+      hold(stamp, events)
       return events
     },
     {

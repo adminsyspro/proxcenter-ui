@@ -32,8 +32,10 @@ const VIEW = 2 * (R + RING / 2 + 4)
 /** Space between two slices, taken from each end (radians), when the slice is wide enough. */
 const GAP = 0.012
 
-const TITLE: Record<GroupBy, string> = { zone: 'postureTrafficByZone', vlan: 'postureTrafficByVlan', node: 'postureTrafficByNode' }
-const GROUP_LABEL: Record<GroupBy, string> = { zone: 'postureGroupZone', vlan: 'postureGroupVlan', node: 'postureGroupNode' }
+const TITLE: Record<GroupBy, string> = { zone: 'postureTrafficByZone', dstzone: 'postureTrafficByDstZone', vlan: 'postureTrafficByVlan', node: 'postureTrafficByNode' }
+const GROUP_LABEL: Record<GroupBy, string> = { zone: 'postureGroupZone', dstzone: 'postureGroupDstZone', vlan: 'postureGroupVlan', node: 'postureGroupNode' }
+/** What a zone grouping counts: the hits each zone emitted, or received. */
+const DIRECTION_NOTE: Partial<Record<GroupBy, string>> = { zone: 'postureCaptionEmitted', dstzone: 'postureCaptionReceived' }
 
 /** The name of a group of the donut (and of a series of the time chart) in the words of the page. */
 export function useSliceName() {
@@ -149,8 +151,8 @@ function TrafficSkeleton() {
 }
 
 /**
- * "Traffic by zone" of the Posture Dashboard: a donut of the hits of the pending observed flows per source zone (or
- * per VLAN / node of the destination guest), chords between the groups that exchange traffic, and its legend.
+ * "Traffic by zone" of the Posture Dashboard: a donut of the hits of the pending observed flows per source zone, per
+ * destination zone (the zone that logged them), or per VLAN / node of the destination guest, chords between the groups that exchange traffic, and its legend.
  */
 export default function TrafficByZone({ phase, traffic, groupBy, onGroupBy, truncated, addresses, footer }: Props) {
   const t = useTranslations('networkPage.dashboard')
@@ -158,8 +160,12 @@ export default function TrafficByZone({ phase, traffic, groupBy, onGroupBy, trun
   const nameOf = useSliceName()
 
   const base = truncated ? t('postureTrafficCaptionFirst', { count: POSTURE_SUGGESTIONS_LIMIT }) : t('postureTrafficCaption')
+  const parts = [base]
+  const direction = DIRECTION_NOTE[groupBy]
+  if (direction) parts.push(t(direction))
   // Until the guest list is read (a VLAN or node grouping), a source in no zone cannot be told from an unknown one.
-  const caption = addresses ? base : `${base} · ${t('postureUnknownIncludesUnzoned')}`
+  if (!addresses && groupBy === 'zone') parts.push(t('postureUnknownIncludesUnzoned'))
+  const caption = parts.join(' · ')
   const select = (
     <FormControl size='small' sx={{ minWidth: 140 }}>
       <InputLabel shrink id='posture-group-by'>{t('postureGroupBy')}</InputLabel>

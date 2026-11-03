@@ -9,6 +9,8 @@ import type { ReactElement } from 'react'
 
 import { renderWithProviders } from '@/__tests__/setup/renderWithProviders'
 import { forgetSharedReads } from '@/lib/microseg/api'
+
+import { forgetHeldEvents } from '../usePostureEvents'
 import type { MicrosegFlow, MicrosegPolicy, MicrosegRevision, MicrosegStatus, MicrosegZone } from '@/lib/microseg/types'
 
 import MicrosegTab from './MicrosegTab'
@@ -55,12 +57,13 @@ export const revisionWithSnapshot = (zones: MicrosegZone[], flows: MicrosegFlow[
 export type Routes = Record<string, (init?: RequestInit) => unknown | Promise<unknown>>
 export const reply = (httpStatus: number, body: unknown) => ({ ok: httpStatus < 400, status: httpStatus, text: async () => JSON.stringify(body) })
 
-/** Keys are "METHOD /route" relative to the connection's relay base. */
+/** Keys are "METHOD /route" relative to the connection's relay base; "METHOD /prefix*" answers every route it starts. */
 export const mock: { routes: Routes } = { routes: {} }
 
 export const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
   const key = `${init?.method ?? 'GET'} ${url.replace(BASE, '')}`
-  const handler = mock.routes[key]
+  // A key ending with "*" answers every route it starts (a query with times in it, such as the traffic history).
+  const handler = mock.routes[key] ?? Object.entries(mock.routes).find(([k]) => k.endsWith('*') && key.startsWith(k.slice(0, -1)))?.[1]
   if (!handler) return reply(404, { code: 'NOT_FOUND', error: `no mock for ${key}` })
   return handler(init)
 })
@@ -72,6 +75,7 @@ export const calls = (key: string) =>
 export function resetMocks() {
   window.localStorage.clear()
   forgetSharedReads()
+  forgetHeldEvents()
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
   mock.routes = {

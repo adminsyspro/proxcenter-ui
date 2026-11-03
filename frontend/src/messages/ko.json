@@ -9043,7 +9043,7 @@
       "postureTrafficCaption": "대기 중인 관찰 흐름의 적중 수",
       "postureTrafficCaptionFirst": "대기 중인 관찰 흐름 처음 {count, number}개의 적중 수",
       "postureGroupBy": "그룹 기준",
-      "postureGroupZone": "영역",
+      "postureGroupZone": "출발지 영역",
       "postureGroupVlan": "VLAN",
       "postureGroupNode": "노드",
       "postureCentreLabel": "적중",
@@ -9103,7 +9103,14 @@
       "postureRangeGrouping": "VLAN 및 노드별 그룹화는 오케스트레이터 메모리를 사용합니다(최근 이벤트만)",
       "postureRangeUnavailable": "이 오케스트레이터에서는 기록을 사용할 수 없습니다: 메모리의 최근 이벤트를 표시합니다",
       "postureTimelineHistory": "기록, 최근 {range}",
-      "postureTimelineEmptyRange": "이 기간에 관찰된 이벤트 없음"
+      "postureTimelineEmptyRange": "이 기간에 관찰된 이벤트 없음",
+      "postureDirectionLabel": "방향",
+      "postureDirectionIn": "인바운드",
+      "postureDirectionOut": "아웃바운드",
+      "postureGroupDstZone": "목적지 영역",
+      "postureTrafficByDstZone": "목적지 영역별 트래픽",
+      "postureCaptionEmitted": "영역별 송신 적중",
+      "postureCaptionReceived": "영역별 수신 적중"
     },
     "rulesOnDemand": {
       "chip": "열 때 규칙 로드",
@@ -13048,7 +13055,7 @@
         "object_collision": "이름 사용 중",
         "generic": "불일치"
       },
-      "zoneFilter": "영역 {name}",
+      "zoneFilter": "영역 {name}만",
       "zoneFilterClear": "모든 영역 표시"
     },
     "observation": {
@@ -13310,23 +13317,21 @@
       },
       "sections": {
         "traffic": "관찰된 트래픽",
-        "posture": "보안 상태",
         "topSources": "주요 출발지",
         "suggestions": "대기 중인 제안",
         "guest": "게스트",
         "flows": "흐름",
         "summary": "{hits, plural, other {적중 #회}} · 주요 출발지 {source} ({share}%) · 차단 예정 {wouldBlock, number}, 차단됨 {blocked, number}",
         "summaryNone": "이 기간에 트래픽 없음",
-        "membersStatus": "실행 중 {running, number}, 중지됨 {stopped, number}",
-        "membersStatusUnknown": "구성원 알 수 없음 (게스트 목록을 읽지 못함)",
-        "firewallOff": "{count, plural, other {NIC 방화벽이 꺼진 구성원 #개}}",
-        "firewallOffNone": "모든 구성원의 NIC 방화벽이 켜져 있음",
         "drifts": "{count, plural, other {편차 #개}}",
-        "driftsNone": "편차 없음",
-        "driftsUnknown": "편차가 아직 계산되지 않음",
-        "openDrifts": "편차 열기",
         "topSourcesEmpty": "이 기간에 출발지 없음",
-        "suggestionsEmpty": "이 영역에 대기 중인 제안 없음"
+        "suggestionsEmpty": "이 영역에 대기 중인 제안 없음",
+        "summaryOut": "{hits, plural, other {적중 #회}} · 주요 목적지 {source} ({share}%) · 차단 예정 {wouldBlock, number}, 차단됨 {blocked, number}",
+        "topDestinations": "주요 목적지",
+        "topDestinationsEmpty": "이 기간에 목적지 없음",
+        "memberRunning": "실행 중",
+        "memberStopped": "중지됨",
+        "memberFirewallOff": "NIC 방화벽 꺼짐 (엔진의 마지막 점검)"
       }
     },
     "preflight": {

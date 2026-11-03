@@ -9043,7 +9043,7 @@
       "postureTrafficCaption": "occurrences des flux observés en attente",
       "postureTrafficCaptionFirst": "occurrences des {count, number} premiers flux observés en attente",
       "postureGroupBy": "Regrouper par",
-      "postureGroupZone": "Par zone",
+      "postureGroupZone": "Par zone source",
       "postureGroupVlan": "Par VLAN",
       "postureGroupNode": "Par nœud",
       "postureCentreLabel": "occurrences",
@@ -9103,7 +9103,14 @@
       "postureRangeGrouping": "Le regroupement par VLAN et par nœud lit la mémoire de l'orchestrateur (derniers événements seulement)",
       "postureRangeUnavailable": "L'historique n'est pas disponible sur cet orchestrateur : derniers événements de sa mémoire affichés",
       "postureTimelineHistory": "historique, sur {range}",
-      "postureTimelineEmptyRange": "Aucun événement observé sur cette période"
+      "postureTimelineEmptyRange": "Aucun événement observé sur cette période",
+      "postureDirectionLabel": "Sens du trafic",
+      "postureDirectionIn": "Entrant",
+      "postureDirectionOut": "Sortant",
+      "postureGroupDstZone": "Par zone de destination",
+      "postureTrafficByDstZone": "Trafic par zone de destination",
+      "postureCaptionEmitted": "occurrences émises par zone",
+      "postureCaptionReceived": "occurrences reçues par zone"
     },
     "rulesOnDemand": {
       "chip": "Règles à l'ouverture",
@@ -13311,23 +13318,21 @@
       },
       "sections": {
         "traffic": "Trafic observé",
-        "posture": "Posture de sécurité",
         "topSources": "Principales sources",
         "suggestions": "Suggestions en attente",
         "guest": "Invité",
         "flows": "Flux",
         "summary": "{hits, plural, one {# occurrence} other {# occurrences}} · première source {source} ({share} %) · {wouldBlock, number} seraient bloqués, {blocked, number} bloqués",
         "summaryNone": "Aucun trafic sur cette période",
-        "membersStatus": "{running, number} en marche, {stopped, number} arrêtés",
-        "membersStatusUnknown": "Membres inconnus (liste des invités non lue)",
-        "firewallOff": "{count, plural, one {# membre avec le pare-feu de carte réseau coupé} other {# membres avec le pare-feu de carte réseau coupé}}",
-        "firewallOffNone": "Chaque membre a le pare-feu de carte réseau activé",
         "drifts": "{count, plural, one {# écart} other {# écarts}}",
-        "driftsNone": "Aucun écart",
-        "driftsUnknown": "Écarts pas encore calculés",
-        "openDrifts": "Voir les écarts",
         "topSourcesEmpty": "Aucune source sur cette période",
-        "suggestionsEmpty": "Aucune suggestion en attente pour cette zone"
+        "suggestionsEmpty": "Aucune suggestion en attente pour cette zone",
+        "summaryOut": "{hits, plural, one {# occurrence} other {# occurrences}} · première destination {source} ({share} %) · {wouldBlock, number} seraient bloqués, {blocked, number} bloqués",
+        "topDestinations": "Principales destinations",
+        "topDestinationsEmpty": "Aucune destination sur cette période",
+        "memberRunning": "En marche",
+        "memberStopped": "Arrêté",
+        "memberFirewallOff": "Pare-feu de carte réseau coupé (dernière vérification du moteur)"
       }
     },
     "preflight": {

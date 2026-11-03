@@ -13,11 +13,13 @@ import { fireEvent, renderWithProviders, screen, waitFor } from '@/__tests__/set
 import type * as firewallAPIType from '@/lib/api/firewall'
 
 import DashboardTab from './DashboardTab'
+import { forgetHeldEvents } from './usePostureEvents'
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
   try { window.localStorage.clear() } catch { /* no storage */ }
+  forgetHeldEvents()
 })
 
 const row = (vmid: number, status: string, enabled: boolean) => ({
@@ -279,7 +281,7 @@ describe('DashboardTab: traffic by zone', () => {
     expect(screen.getByTestId('donut-total').textContent).toBe('450')
     expect(screen.getByTestId('slice-zone:zweb')).toBeInTheDocument()
     expect(screen.getByTestId('chord-zone:zweb>zone:zdb')).toBeInTheDocument()
-    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
+    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows · hits emitted per zone · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
   })
 
   it('highlights a slice when its legend row is hovered', async () => {
@@ -315,7 +317,7 @@ describe('DashboardTab: traffic by zone', () => {
     postureReads({ suggestions: Array.from({ length: 200 }, (_, i) => seen({ dport: String(1000 + i) })) })
     renderDashboard({ enable: 1 })
 
-    expect((await screen.findByTestId('traffic-card-caption')).textContent).toBe('hits of the first 200 pending observed flows · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
+    expect((await screen.findByTestId('traffic-card-caption')).textContent).toBe('hits of the first 200 pending observed flows · hits emitted per zone · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
   })
 
   it('says when there is no observed flow', async () => {
@@ -332,6 +334,27 @@ let evSeq = 5000
 const ev = (minutesAgo: number, over: Record<string, unknown> = {}) => ({
   seq: evSeq--, ts: new Date(Date.now() - minutesAgo * 60_000).toISOString(), node: 'pve2', vmid: 102, type: 'qemu', guest: 'db1', zone: 'db',
   src_zone: 'web', src_ip: '10.0.0.1', dst_ip: '10.0.0.2', proto: 'tcp', dport: 5432, verdict: 'would_block', ...over,
+})
+
+describe('DashboardTab: group by destination zone', () => {
+  it('groups the donut and the chart by the zone that received the flows, says so, reads no guest list, and remembers it', async () => {
+    postureReads({ events: [ev(0), ev(0), ev(0, { zone: 'web', src_zone: 'db' })] })
+    renderDashboard({ enable: 1 })
+
+    await screen.findByTestId('traffic-legend')
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Group by' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Destination zone' }))
+
+    // web to db 300, unknown to web 100, db to web 50: db received 300, web 150.
+    const legend = await screen.findByTestId('traffic-legend')
+    await waitFor(() => expect([...legend.querySelectorAll('[data-testid^="legend-"]')].filter(e => !e.getAttribute('data-testid')!.endsWith('-members')).map(e => e.getAttribute('data-testid'))).toEqual(['legend-zone:zdb', 'legend-zone:zweb']))
+    expect(within(legend).getByTestId('legend-zone:zdb').textContent).toContain('300')
+    expect(screen.getByText('Traffic by destination zone')).toBeTruthy()
+    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows · hits received per zone')
+    await waitFor(() => expect(within(screen.getByTestId('timeline')).getAllByTestId(/^area-/).map(a => a.getAttribute('data-testid'))).toEqual(['area-zone:zdb', 'area-zone:zweb']))
+    expect(fetchedUrls().some(u => u.startsWith('/api/v1/vms?'))).toBe(false)
+    expect(window.localStorage.getItem('proxcenter.microseg.postureGroupBy')).toBe('dstzone')
+  })
 })
 
 describe('DashboardTab: traffic over time', () => {
@@ -508,7 +531,7 @@ describe('DashboardTab: time range (UA55)', () => {
 
     // Back to the zones: the history again.
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Group by' }))
-    fireEvent.click(await screen.findByRole('option', { name: 'Zone' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Source zone' }))
     await waitFor(() => expect(screen.getByTestId('timeline-caption').textContent).toBe('history, last 1 h'))
     expect(chip('24h')).toBeEnabled()
   })

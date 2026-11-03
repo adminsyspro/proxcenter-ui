@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 
 import {
   Alert, Autocomplete, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
-  IconButton, List, ListItem, ListItemText, TextField, Tooltip, Typography
+  IconButton, List, ListItem, ListItemText, TextField, Typography
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
@@ -14,6 +14,7 @@ import { useToast } from '@/contexts/ToastContext'
 
 import type { GroupMembers } from './groupMembership'
 import GroupPager, { useGroupPages } from './GroupPager'
+import { WriteTip, useMicrosegWrite } from '../../microseg/microsegAccess'
 
 interface SecurityGroupMembersDialogProps {
   open: boolean
@@ -52,6 +53,7 @@ export default function SecurityGroupMembersDialog({
   open, groupName, connectionId, guests, membership, loadGuestRules, guestsNotScanned, onClose, onChanged
 }: SecurityGroupMembersDialogProps) {
   const t = useTranslations()
+  const { canWrite } = useMicrosegWrite()
   const { showToast } = useToast()
 
   const [selected, setSelected] = useState<VMFirewallInfo[]>([])
@@ -157,6 +159,7 @@ export default function SecurityGroupMembersDialog({
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: 2 }}>
           <Autocomplete
             multiple
+            disabled={!canWrite}
             size="small"
             sx={{ flex: 1 }}
             options={candidates}
@@ -166,9 +169,11 @@ export default function SecurityGroupMembersDialog({
             isOptionEqualToValue={(a, b) => a.vmid === b.vmid}
             renderInput={params => <TextField {...params} label={t('firewall.membersAttachLabel')} />}
           />
-          <Button variant="contained" onClick={attach} disabled={busy || selected.length === 0} sx={{ mt: 0.25 }}>
-            {t('firewall.membersAttach')}
-          </Button>
+          <WriteTip>
+            <Button variant="contained" onClick={attach} disabled={!canWrite || busy || selected.length === 0} sx={{ mt: 0.25 }}>
+              {t('firewall.membersAttach')}
+            </Button>
+          </WriteTip>
         </Box>
 
         <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
@@ -186,13 +191,11 @@ export default function SecurityGroupMembersDialog({
               <ListItem
                 key={guest.vmid}
                 secondaryAction={
-                  <Tooltip title={t('firewall.membersDetach')}>
-                    <span>
-                      <IconButton aria-label={t('firewall.membersDetach')} edge="end" size="small" disabled={busy} onClick={() => detach(guest)}>
-                        <i className="ri-link-unlink" style={{ fontSize: 16 }} />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
+                  <WriteTip title={t('firewall.membersDetach')}>
+                    <IconButton aria-label={t('firewall.membersDetach')} edge="end" size="small" disabled={!canWrite || busy} onClick={() => detach(guest)}>
+                      <i className="ri-link-unlink" style={{ fontSize: 16 }} />
+                    </IconButton>
+                  </WriteTip>
                 }
               >
                 <i

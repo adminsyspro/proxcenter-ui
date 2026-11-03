@@ -7,7 +7,7 @@ import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, IconButton, InputLabel, MenuItem, Paper, Select, Switch,
   Table, TableBody, TableCell, TableContainer, TableRow,
-  Tooltip, Typography, useTheme, alpha
+  Typography, useTheme, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
@@ -19,6 +19,7 @@ import { PolicySection } from '../../types'
 import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
 import RulesTableHead from './shared/RulesTableHead'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
+import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
 
 // ── Props ──
 
@@ -43,6 +44,9 @@ export default function FirewallPolicyTable({
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
+  // A read-only user (no node.manage on the connection) sees every write control disabled, with the reason.
+  const { canWrite } = useMicrosegWrite()
+  const writable = canWrite && !!selectedConnection
 
   // ── State ──
 
@@ -211,14 +215,14 @@ export default function FirewallPolicyTable({
     return (
       <TableRow
         key={`cluster-rule-${idx}`}
-        hover draggable
+        hover draggable={canWrite}
         onDragStart={e => handleDragStart(e, rule.pos)}
         onDragEnd={handleDragEnd}
         onDragOver={e => handleDragOver(e, rule.pos)}
         onDragLeave={handleDragLeave}
         onDrop={e => handleDrop(e, rule.pos)}
         sx={{
-          cursor: 'grab', opacity: isDragging ? 0.5 : 1,
+          cursor: canWrite ? 'grab' : 'default', opacity: isDragging ? 0.5 : 1,
           borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined,
           '&:active': { cursor: 'grabbing' }
         }}
@@ -249,13 +253,15 @@ export default function FirewallPolicyTable({
               <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Cluster Firewall</Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Switch
-                checked={clusterOptions?.enable === 1}
-                onChange={handleToggleClusterFirewall}
-                color="success"
-                size="small"
-                disabled={!selectedConnection}
-              />
+              <WriteTip>
+                <Switch
+                  checked={clusterOptions?.enable === 1}
+                  onChange={handleToggleClusterFirewall}
+                  color="success"
+                  size="small"
+                  disabled={!writable}
+                />
+              </WriteTip>
               <Typography variant="caption" sx={{ fontWeight: 600, color: clusterOptions?.enable === 1 ? '#22c55e' : 'text.secondary', fontSize: 11 }}>
                 {clusterOptions?.enable === 1 ? 'ON' : 'OFF'}
               </Typography>
@@ -269,7 +275,7 @@ export default function FirewallPolicyTable({
                   value={clusterOptions?.policy_in || PVE_DEFAULT_POLICY_IN}
                   onChange={(e) => handlePolicyChange('policy_in', e.target.value)}
                   sx={{ fontSize: 12, height: 28, '& .MuiSelect-select': { py: 0.3 } }}
-                  disabled={!selectedConnection}
+                  disabled={!writable}
                 >
                   <MenuItem value="ACCEPT">ACCEPT</MenuItem>
                   <MenuItem value="DROP">DROP</MenuItem>
@@ -284,7 +290,7 @@ export default function FirewallPolicyTable({
                   value={clusterOptions?.policy_out || PVE_DEFAULT_POLICY_OUT}
                   onChange={(e) => handlePolicyChange('policy_out', e.target.value)}
                   sx={{ fontSize: 12, height: 28, '& .MuiSelect-select': { py: 0.3 } }}
-                  disabled={!selectedConnection}
+                  disabled={!writable}
                 >
                   <MenuItem value="ACCEPT">ACCEPT</MenuItem>
                   <MenuItem value="DROP">DROP</MenuItem>
@@ -292,13 +298,11 @@ export default function FirewallPolicyTable({
                 </Select>
               </FormControl>
             </Box>
-            <Tooltip title={t('networkPage.addRule')}>
-              <span>
-                <IconButton aria-label={t('networkPage.addRule')} size="small" onClick={openAddRule} disabled={!selectedConnection}>
-                  <i className="ri-add-line" style={{ fontSize: 18 }} />
-                </IconButton>
-              </span>
-            </Tooltip>
+            <WriteTip title={t('networkPage.addRule')}>
+              <IconButton aria-label={t('networkPage.addRule')} size="small" onClick={openAddRule} disabled={!writable}>
+                <i className="ri-add-line" style={{ fontSize: 18 }} />
+              </IconButton>
+            </WriteTip>
           </Box>
         </Box>
 
@@ -322,9 +326,11 @@ export default function FirewallPolicyTable({
 
         {/* Add Rule button */}
         <Box sx={{ p: 1.5, display: 'flex', justifyContent: 'flex-end', borderTop: `1px solid ${alpha(theme.palette.divider, 0.08)}` }}>
-          <Button size="small" startIcon={<i className="ri-add-line" />} onClick={openAddRule} disabled={!selectedConnection}>
-            {t('networkPage.addRule')}
-          </Button>
+          <WriteTip>
+            <Button size="small" startIcon={<i className="ri-add-line" />} onClick={openAddRule} disabled={!writable}>
+              {t('networkPage.addRule')}
+            </Button>
+          </WriteTip>
         </Box>
       </Paper>
 

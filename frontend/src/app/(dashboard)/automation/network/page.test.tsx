@@ -49,18 +49,26 @@ vi.mock('./components/DashboardTab', () => ({
     </div>
   ),
 }))
-vi.mock('./components/RulesTab', () => ({
-  default: ({ loadError, activeSubTab, guestFilter, onClearGuestFilter }: { loadError?: string | null; activeSubTab: number; guestFilter?: string | null; onClearGuestFilter?: () => void }) => (
-    <div data-subtab={activeSubTab} data-filter={guestFilter ?? ''}>
-      rules tab{loadError ? ` (error: ${loadError})` : ''}
-      <button onClick={onClearGuestFilter}>clear filter</button>
-    </div>
-  ),
-}))
+vi.mock('./components/RulesTab', async () => {
+  const { useMicrosegWrite } = await import('./components/microseg/microsegAccess')
+  return {
+    default: function RulesTabMock({ loadError, activeSubTab, guestFilter, onClearGuestFilter }: { loadError?: string | null; activeSubTab: number; guestFilter?: string | null; onClearGuestFilter?: () => void }) {
+      const { canWrite } = useMicrosegWrite()
+      return (
+        <div data-subtab={activeSubTab} data-filter={guestFilter ?? ''} data-can-write={String(canWrite)}>
+          rules tab{loadError ? ` (error: ${loadError})` : ''}
+          <button onClick={onClearGuestFilter}>clear filter</button>
+        </div>
+      )
+    },
+  }
+})
 vi.mock('./components/ObjectsTab', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>objects tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
 vi.mock('./components/rules/SecurityGroupsPanel', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>groups tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
 vi.mock('./components/LoggingTab', () => ({ default: () => <div>logging tab</div> }))
 vi.mock('./components/microseg/MicrosegTab', () => ({ default: ({ initialSubTab }: { initialSubTab?: string }) => <div data-subtab={initialSubTab ?? ''}>microseg tab</div> }))
+
+import RBACContext, { type RBACContextValue } from '@/contexts/RBACContext'
 
 import NetworkAutomationPage from './page'
 
@@ -190,5 +198,21 @@ describe('network page: the Dashboard "To do" links (UA46)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'todo drifts' }))
 
     expect((await screen.findByText('microseg tab')).dataset.subtab).toBe('drifts')
+  })
+})
+
+describe('network page: write access of the firewall tabs', () => {
+  const rbac = (grant: boolean): RBACContextValue => ({
+    permissions: [], roles: [], isAdmin: false, scopeTypes: [], hiddenWidgets: [], loading: false,
+    hasPermission: () => grant, hasAnyPermission: () => grant, hasAllPermissions: () => grant,
+    hasPermissionOn: (permission: string, type: string, id: string) => grant && permission === 'node.manage' && type === 'connection' && id === 'c1',
+    refresh: () => undefined,
+  })
+
+  it.each([[false, 'false'], [true, 'true']])('hands node.manage on the connection (%s) down to the Firewalling tab', async (grant, shown) => {
+    renderWithProviders(<RBACContext.Provider value={rbac(grant)}><NetworkAutomationPage /></RBACContext.Provider>)
+    fireEvent.click(await screen.findByRole('tab', { name: /Firewalling/ }))
+
+    expect((await screen.findByText(/rules tab/)).dataset.canWrite).toBe(shown)
   })
 })

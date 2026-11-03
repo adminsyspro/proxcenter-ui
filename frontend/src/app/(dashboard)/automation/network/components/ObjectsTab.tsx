@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import {
   Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
   IconButton, Paper, Stack, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TextField, Tooltip, Typography, useTheme, alpha
+  TableHead, TableRow, TextField, Typography, useTheme, alpha
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
@@ -15,6 +15,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 
 import FirewallLoadAlert from './FirewallLoadAlert'
+import { WriteTip, useMicrosegWrite } from './microseg/microsegAccess'
 import { objectChipSx, objectColour, objectDotSx } from './microseg/objectColour'
 
 interface ObjectsTabProps {
@@ -32,6 +33,9 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
+  // A read-only user (no node.manage on the connection) sees every write control disabled, with the reason.
+  const { canWrite } = useMicrosegWrite()
+  const writable = canWrite && !!selectedConnection
   const { data: microsegPolicy } = useMicrosegPolicy(selectedConnection || null)
   const zones = microsegPolicy?.zones ?? []
 
@@ -158,9 +162,11 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('firewall.aliases')}</Typography>
             <Chip label={t('firewall.aliasesCount', { count: aliases.length })} size="small" />
           </Box>
-          <Button variant="contained" startIcon={<i className="ri-add-line" />} onClick={() => setAliasDialogOpen(true)} disabled={!selectedConnection}>
-            {t('networkPage.new')}
-          </Button>
+          <WriteTip>
+            <Button variant="contained" startIcon={<i className="ri-add-line" />} onClick={() => setAliasDialogOpen(true)} disabled={!writable}>
+              {t('networkPage.new')}
+            </Button>
+          </WriteTip>
         </Box>
 
         <TableContainer>
@@ -189,16 +195,16 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
                   <TableCell sx={{ color: 'text.secondary', fontSize: 13 }}>{alias.comment || '-'}</TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <Tooltip title={t('networkPage.edit')}>
-                        <IconButton size="small" onClick={() => setEditingAlias({ ...alias })}>
+                      <WriteTip title={t('networkPage.edit')}>
+                        <IconButton size="small" aria-label={t('networkPage.edit')} disabled={!writable} onClick={() => setEditingAlias({ ...alias })}>
                           <i className="ri-edit-line" style={{ fontSize: 16 }} />
                         </IconButton>
-                      </Tooltip>
-                      <Tooltip title={t('networkPage.delete')}>
-                        <IconButton size="small" color="error" onClick={() => handleDeleteAlias(alias.name)}>
+                      </WriteTip>
+                      <WriteTip title={t('networkPage.delete')}>
+                        <IconButton size="small" aria-label={t('networkPage.delete')} color="error" disabled={!writable} onClick={() => handleDeleteAlias(alias.name)}>
                           <i className="ri-delete-bin-line" style={{ fontSize: 16 }} />
                         </IconButton>
-                      </Tooltip>
+                      </WriteTip>
                     </Box>
                   </TableCell>
                 </TableRow>
@@ -222,9 +228,11 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('firewall.ipSets')}</Typography>
             <Chip label={t('networkPage.setsAndEntries', { sets: ipsets.length, entries: totalIPSetEntries })} size="small" />
           </Box>
-          <Button variant="contained" startIcon={<i className="ri-add-line" />} onClick={() => setIPSetDialogOpen(true)} disabled={!selectedConnection}>
-            {t('networkPage.new')}
-          </Button>
+          <WriteTip>
+            <Button variant="contained" startIcon={<i className="ri-add-line" />} onClick={() => setIPSetDialogOpen(true)} disabled={!writable}>
+              {t('networkPage.new')}
+            </Button>
+          </WriteTip>
         </Box>
 
         <Box sx={{ p: 2 }}>
@@ -246,19 +254,21 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                     <Chip label={`${ipset.members?.length || 0} ${t('networkPage.entries')}`} size="small" />
-                    <Button size="small" startIcon={<i className="ri-add-line" />} onClick={() => setIPSetEntryDialog({ open: true, ipsetName: ipset.name })}>
-                      {t('networkPage.add')}
-                    </Button>
-                    <Tooltip title={t('networkPage.edit')}>
-                      <IconButton size="small" onClick={() => setEditingIPSet({ name: ipset.name, comment: ipset.comment || '' })}>
+                    <WriteTip>
+                      <Button size="small" startIcon={<i className="ri-add-line" />} disabled={!writable} onClick={() => setIPSetEntryDialog({ open: true, ipsetName: ipset.name })}>
+                        {t('networkPage.add')}
+                      </Button>
+                    </WriteTip>
+                    <WriteTip title={t('networkPage.edit')}>
+                      <IconButton size="small" aria-label={t('networkPage.edit')} disabled={!writable} onClick={() => setEditingIPSet({ name: ipset.name, comment: ipset.comment || '' })}>
                         <i className="ri-edit-line" />
                       </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('networkPage.delete')}>
-                      <IconButton size="small" color="error" onClick={() => handleDeleteIPSet(ipset.name)}>
+                    </WriteTip>
+                    <WriteTip title={t('networkPage.delete')}>
+                      <IconButton size="small" aria-label={t('networkPage.delete')} color="error" disabled={!writable} onClick={() => handleDeleteIPSet(ipset.name)}>
                         <i className="ri-delete-bin-line" />
                       </IconButton>
-                    </Tooltip>
+                    </WriteTip>
                   </Box>
                 </Box>
                 {ipset.members && ipset.members.length > 0 && (
@@ -270,7 +280,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
                           label={<span style={{ fontSize: 12 }}>{member.cidr}</span>}
                           size="small"
                           variant="outlined"
-                          onDelete={() => handleDeleteIPSetEntry(ipset.name, member.cidr)}
+                          onDelete={writable ? () => handleDeleteIPSetEntry(ipset.name, member.cidr) : undefined}
                           data-testid={`ipset-entry-${ipset.name}`}
                           sx={objectChipSx(colour, theme)}
                         />

@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import {
   Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, Grid, IconButton, InputLabel, LinearProgress, MenuItem, Paper, Select, Stack,
-  Switch, Table, TableBody, TableCell, TableContainer, TableRow, TextField, Tooltip,
+  Switch, Table, TableBody, TableCell, TableContainer, TableRow, TextField,
   Typography, useTheme, alpha
 } from '@mui/material'
 
@@ -19,6 +19,7 @@ import { DEFAULT_LOG_LEVEL } from '@/components/firewall/logLevels'
 import { DEFAULT_RULE } from '../../types'
 import RulesTableHead from './shared/RulesTableHead'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
+import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
 import AliasIpsetAutocomplete, { useAliasIpsetOptions } from './shared/AliasIpsetAutocomplete'
 
 interface HostRulesPanelProps {
@@ -39,6 +40,9 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
+  // A read-only user (no node.manage on the connection) sees every write control disabled, with the reason.
+  const { canWrite } = useMicrosegWrite()
+  const writable = canWrite && !!selectedConnection
 
   const [expandedHosts, setExpandedHosts] = useState<Set<string>>(new Set())
   const [hostSearchQuery, setHostSearchQuery] = useState('')
@@ -262,28 +266,30 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                               sx={{ height: 20, fontSize: 10, ml: 0.5 }}
                             />
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }} onClick={e => e.stopPropagation()}>
-                              <Switch
-                                checked={nodeEnabled}
-                                onChange={() => handleToggleNodeFirewall(node)}
-                                color="success"
-                                size="small"
-                                disabled={!selectedConnection}
-                              />
+                              <WriteTip>
+                                <Switch
+                                  checked={nodeEnabled}
+                                  onChange={() => handleToggleNodeFirewall(node)}
+                                  color="success"
+                                  size="small"
+                                  disabled={!writable}
+                                />
+                              </WriteTip>
                               <Typography variant="caption" sx={{ fontWeight: 600, color: nodeEnabled ? '#22c55e' : 'text.secondary', fontSize: 11 }}>
                                 {nodeEnabled ? 'ON' : 'OFF'}
                               </Typography>
                             </Box>
                           </Box>
                           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                            <Tooltip title={t('networkPage.addRule')}>
-                              <IconButton size="small" onClick={() => {
+                            <WriteTip title={t('networkPage.addRule')}>
+                              <IconButton size="small" aria-label={t('networkPage.addRule')} disabled={!writable} onClick={() => {
                                 setEditingHostRule({ node, rule: null, isNew: true })
                                 setNewHostRule({ ...DEFAULT_RULE })
                                 setHostRuleDialogOpen(true)
                               }}>
                                 <i className="ri-add-line" style={{ fontSize: 16 }} />
                               </IconButton>
-                            </Tooltip>
+                            </WriteTip>
                           </Box>
                         </Box>
                       </TableCell>
@@ -298,14 +304,14 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                       return (
                         <TableRow
                           key={`${node}-rule-${idx}`}
-                          hover draggable
+                          hover draggable={canWrite}
                           onDragStart={e => handleDragStart(e, node, rule.pos)}
                           onDragEnd={handleDragEnd}
                           onDragOver={e => handleDragOver(e, node, rule.pos)}
                           onDragLeave={handleDragLeave}
                           onDrop={e => handleDrop(e, node, rule.pos)}
                           sx={{
-                            cursor: 'grab', opacity: isDragging ? 0.5 : 1,
+                            cursor: canWrite ? 'grab' : 'default', opacity: isDragging ? 0.5 : 1,
                             borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined,
                             '&:active': { cursor: 'grabbing' }
                           }}
@@ -333,13 +339,15 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
                       <TableRow key={`empty-${node}`}>
                         <TableCell colSpan={11} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
                           <Typography variant="body2">{t('networkPage.noRuleConfigured')}</Typography>
-                          <Button size="small" sx={{ mt: 1 }} onClick={() => {
-                            setEditingHostRule({ node, rule: null, isNew: true })
-                            setNewHostRule({ ...DEFAULT_RULE })
-                            setHostRuleDialogOpen(true)
-                          }}>
-                            {t('networkPage.addRule')}
-                          </Button>
+                          <WriteTip>
+                            <Button size="small" sx={{ mt: 1 }} disabled={!writable} onClick={() => {
+                              setEditingHostRule({ node, rule: null, isNew: true })
+                              setNewHostRule({ ...DEFAULT_RULE })
+                              setHostRuleDialogOpen(true)
+                            }}>
+                              {t('networkPage.addRule')}
+                            </Button>
+                          </WriteTip>
                         </TableCell>
                       </TableRow>
                     ))}

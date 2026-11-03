@@ -26,6 +26,7 @@ import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { groupMembers } from './shared/groupMembership'
 import { objectColour, objectDotSx } from '../microseg/objectColour'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
+import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
 
 // ── Props ──
 
@@ -82,6 +83,9 @@ export default function SecurityGroupsPanel({
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
+  // A read-only user (no node.manage on the connection) sees every write control disabled, with the reason.
+  const { canWrite } = useMicrosegWrite()
+  const writable = canWrite && !!selectedConnection
 
   // Membership without reading every guest's rules (UA44): the zone groups of the deployed micro-segmentation
   // revision have their members from the zone tags; any other group only knows the guests whose rules were read.
@@ -306,14 +310,14 @@ export default function SecurityGroupsPanel({
     return (
       <TableRow
         key={`${section.id}-rule-${idx}`}
-        hover draggable
+        hover draggable={canWrite}
         onDragStart={e => handleDragStart(e, section.id, rule.pos)}
         onDragEnd={handleDragEnd}
         onDragOver={e => handleDragOver(e, section.id, rule.pos)}
         onDragLeave={handleDragLeave}
         onDrop={e => handleDrop(e, section, rule.pos)}
         sx={{
-          cursor: 'grab', opacity: isDragging ? 0.5 : 1,
+          cursor: canWrite ? 'grab' : 'default', opacity: isDragging ? 0.5 : 1,
           borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined,
           '&:active': { cursor: 'grabbing' }
         }}
@@ -440,16 +444,16 @@ export default function SecurityGroupsPanel({
                   <i className="ri-terminal-box-line" style={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
-              <Tooltip title={t('networkPage.addRule')}>
-                <IconButton size="small" onClick={() => openAddRule(section.id)}>
+              <WriteTip title={t('networkPage.addRule')}>
+                <IconButton size="small" aria-label={t('networkPage.addRule')} disabled={!writable} onClick={() => openAddRule(section.id)}>
                   <i className="ri-add-line" style={{ fontSize: 16 }} />
                 </IconButton>
-              </Tooltip>
-              <Tooltip title={t('networkPage.delete')}>
-                <IconButton size="small" color="error" onClick={() => handleDeleteGroup(section.id)}>
+              </WriteTip>
+              <WriteTip title={t('networkPage.delete')}>
+                <IconButton size="small" aria-label={t('networkPage.delete')} color="error" disabled={!writable} onClick={() => handleDeleteGroup(section.id)}>
                   <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
                 </IconButton>
-              </Tooltip>
+              </WriteTip>
             </Box>
           </Box>
         </TableCell>
@@ -466,9 +470,11 @@ export default function SecurityGroupsPanel({
         <TableRow key={`empty-${section.id}`}>
           <TableCell colSpan={11} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
             <Typography variant="body2">{t('networkPage.noRules')}</Typography>
-            <Button size="small" sx={{ mt: 1 }} onClick={() => openAddRule(section.id)}>
-              {t('networkPage.addRule')}
-            </Button>
+            <WriteTip>
+              <Button size="small" sx={{ mt: 1 }} disabled={!writable} onClick={() => openAddRule(section.id)}>
+                {t('networkPage.addRule')}
+              </Button>
+            </WriteTip>
           </TableCell>
         </TableRow>
       )
@@ -546,9 +552,11 @@ export default function SecurityGroupsPanel({
           <Button size="small" variant="outlined" onClick={collapseAll}>{t('common.collapseAll')}</Button>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Button size="small" variant="contained" startIcon={<i className="ri-add-line" />} onClick={() => setGroupDialogOpen(true)} disabled={!selectedConnection}>
-            {t('networkPage.newPolicy')}
-          </Button>
+          <WriteTip>
+            <Button size="small" variant="contained" startIcon={<i className="ri-add-line" />} onClick={() => setGroupDialogOpen(true)} disabled={!writable}>
+              {t('networkPage.newPolicy')}
+            </Button>
+          </WriteTip>
           <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" />} onClick={reload}>
             {t('networkPage.refresh')}
           </Button>
@@ -571,7 +579,9 @@ export default function SecurityGroupsPanel({
         <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.3)}` }}>
           <i className="ri-shield-line" style={{ fontSize: 48, opacity: 0.3 }} />
           <Typography variant="body1" sx={{ mt: 2, color: 'text.secondary' }}>{t('networkPage.noSecurityGroup')}</Typography>
-          <Button sx={{ mt: 2 }} onClick={() => setGroupDialogOpen(true)}>{t('networkPage.createGroup')}</Button>
+          <WriteTip>
+            <Button sx={{ mt: 2 }} disabled={!writable} onClick={() => setGroupDialogOpen(true)}>{t('networkPage.createGroup')}</Button>
+          </WriteTip>
         </Paper>
       )}
 

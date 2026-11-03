@@ -23,6 +23,7 @@ import { DEFAULT_RULE } from '../../types'
 import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 import RulesTableHead from './shared/RulesTableHead'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
+import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
 import AliasIpsetAutocomplete, { useAliasIpsetOptions } from './shared/AliasIpsetAutocomplete'
 import GroupPager, { GROUP_PAGE_SIZE, pageCount, useGroupPages } from './shared/GroupPager'
 
@@ -53,6 +54,9 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
+  // A read-only user (no node.manage on the connection) sees every write control disabled, with the reason.
+  const { canWrite } = useMicrosegWrite()
+  const writable = canWrite && !!selectedConnection
 
   const [expandedVMs, setExpandedVMs] = useState<Set<number>>(new Set())
   const [vmSearchQuery, setVmSearchQuery] = useState('')
@@ -388,44 +392,50 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                                 <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.5 }}>
                                     <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 10 }}>IN:</Typography>
-                                    <FormControl size="small">
-                                      <Select
-                                        value={vm.options?.policy_in || PVE_DEFAULT_POLICY_IN}
-                                        onChange={(e) => handleVMPolicyChange(vm, 'policy_in', e.target.value)}
-                                        sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
-                                        disabled={!selectedConnection}
-                                      >
-                                        <MenuItem value="ACCEPT">ACCEPT</MenuItem>
-                                        <MenuItem value="DROP">DROP</MenuItem>
-                                        <MenuItem value="REJECT">REJECT</MenuItem>
-                                      </Select>
-                                    </FormControl>
+                                    <WriteTip>
+                                      <FormControl size="small">
+                                        <Select
+                                          value={vm.options?.policy_in || PVE_DEFAULT_POLICY_IN}
+                                          onChange={(e) => handleVMPolicyChange(vm, 'policy_in', e.target.value)}
+                                          sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
+                                          disabled={!writable}
+                                        >
+                                          <MenuItem value="ACCEPT">ACCEPT</MenuItem>
+                                          <MenuItem value="DROP">DROP</MenuItem>
+                                          <MenuItem value="REJECT">REJECT</MenuItem>
+                                        </Select>
+                                      </FormControl>
+                                    </WriteTip>
                                     <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 10 }}>OUT:</Typography>
-                                    <FormControl size="small">
-                                      <Select
-                                        value={vm.options?.policy_out || PVE_DEFAULT_POLICY_OUT}
-                                        onChange={(e) => handleVMPolicyChange(vm, 'policy_out', e.target.value)}
-                                        sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
-                                        disabled={!selectedConnection}
-                                      >
-                                        <MenuItem value="ACCEPT">ACCEPT</MenuItem>
-                                        <MenuItem value="DROP">DROP</MenuItem>
-                                        <MenuItem value="REJECT">REJECT</MenuItem>
-                                      </Select>
-                                    </FormControl>
+                                    <WriteTip>
+                                      <FormControl size="small">
+                                        <Select
+                                          value={vm.options?.policy_out || PVE_DEFAULT_POLICY_OUT}
+                                          onChange={(e) => handleVMPolicyChange(vm, 'policy_out', e.target.value)}
+                                          sx={{ fontSize: 10, height: 22, minWidth: 72, '& .MuiSelect-select': { py: 0.1 } }}
+                                          disabled={!writable}
+                                        >
+                                          <MenuItem value="ACCEPT">ACCEPT</MenuItem>
+                                          <MenuItem value="DROP">DROP</MenuItem>
+                                          <MenuItem value="REJECT">REJECT</MenuItem>
+                                        </Select>
+                                      </FormControl>
+                                    </WriteTip>
                                   </Box>
-                                  <Tooltip title={t('networkPage.addRule')}>
-                                    <IconButton size="small" onClick={() => openVMRuleDialog(vm)}>
+                                  <WriteTip title={t('networkPage.addRule')}>
+                                    <IconButton size="small" aria-label={t('networkPage.addRule')} disabled={!writable} onClick={() => openVMRuleDialog(vm)}>
                                       <i className="ri-add-line" style={{ fontSize: 16 }} />
                                     </IconButton>
-                                  </Tooltip>
-                                  <Switch
-                                    checked={vm.firewallEnabled}
-                                    onChange={() => handleToggleVMFirewall(vm)}
-                                    color="success"
-                                    size="small"
-                                    disabled={!selectedConnection}
-                                  />
+                                  </WriteTip>
+                                  <WriteTip>
+                                    <Switch
+                                      checked={vm.firewallEnabled}
+                                      onChange={() => handleToggleVMFirewall(vm)}
+                                      color="success"
+                                      size="small"
+                                      disabled={!writable}
+                                    />
+                                  </WriteTip>
                                   <Typography variant="caption" sx={{ fontWeight: 600, color: vm.firewallEnabled ? '#22c55e' : 'text.secondary', fontSize: 11, minWidth: 24 }}>
                                     {vm.firewallEnabled ? 'ON' : 'OFF'}
                                   </Typography>
@@ -468,14 +478,14 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                       return (
                         <TableRow
                           key={`${vm.vmid}-rule-${idx}`}
-                          hover draggable
+                          hover draggable={canWrite}
                           onDragStart={e => handleDragStart(e, vm.vmid, rule.pos)}
                           onDragEnd={handleDragEnd}
                           onDragOver={e => handleDragOver(e, vm.vmid, rule.pos)}
                           onDragLeave={handleDragLeave}
                           onDrop={e => handleDrop(e, vm, rule.pos)}
                           sx={{
-                            cursor: 'grab', opacity: isDragging ? 0.5 : (isRuleEnabled(rule) ? 1 : 0.5),
+                            cursor: canWrite ? 'grab' : 'default', opacity: isDragging ? 0.5 : (isRuleEnabled(rule) ? 1 : 0.5),
                             borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined,
                             '&:active': { cursor: 'grabbing' }
                           }}
@@ -500,9 +510,11 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
                       <TableRow key={`empty-${vm.vmid}`}>
                         <TableCell colSpan={11} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
                           <Typography variant="body2">{t('networkPage.noRuleConfigured')}</Typography>
-                          <Button size="small" sx={{ mt: 1 }} startIcon={<i className="ri-add-line" />} onClick={() => openVMRuleDialog(vm)}>
-                            {t('networkPage.addRule')}
-                          </Button>
+                          <WriteTip>
+                            <Button size="small" sx={{ mt: 1 }} startIcon={<i className="ri-add-line" />} disabled={!writable} onClick={() => openVMRuleDialog(vm)}>
+                              {t('networkPage.addRule')}
+                            </Button>
+                          </WriteTip>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -693,29 +705,33 @@ export default function VMRulesPanel({ vmFirewallData, securityGroups, loadingVM
             <>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 11 }}>Log IN:</Typography>
-                <FormControl size="small">
-                  <Select
-                    value={logVm.options?.log_level_in || DEFAULT_LOG_LEVEL}
-                    onChange={(e) => { void handleVMLogLevelChange(logVm, 'log_level_in', e.target.value) }}
-                    sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
-                    disabled={!selectedConnection}
-                  >
-                    {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
-                  </Select>
-                </FormControl>
+                <WriteTip>
+                  <FormControl size="small">
+                    <Select
+                      value={logVm.options?.log_level_in || DEFAULT_LOG_LEVEL}
+                      onChange={(e) => { void handleVMLogLevelChange(logVm, 'log_level_in', e.target.value) }}
+                      sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
+                      disabled={!writable}
+                    >
+                      {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                </WriteTip>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: 11 }}>Log OUT:</Typography>
-                <FormControl size="small">
-                  <Select
-                    value={logVm.options?.log_level_out || DEFAULT_LOG_LEVEL}
-                    onChange={(e) => { void handleVMLogLevelChange(logVm, 'log_level_out', e.target.value) }}
-                    sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
-                    disabled={!selectedConnection}
-                  >
-                    {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
-                  </Select>
-                </FormControl>
+                <WriteTip>
+                  <FormControl size="small">
+                    <Select
+                      value={logVm.options?.log_level_out || DEFAULT_LOG_LEVEL}
+                      onChange={(e) => { void handleVMLogLevelChange(logVm, 'log_level_out', e.target.value) }}
+                      sx={{ fontSize: 11, height: 28, minWidth: 90, '& .MuiSelect-select': { py: 0.3 } }}
+                      disabled={!writable}
+                    >
+                      {LOG_LEVELS.map(l => <MenuItem key={l} value={l} sx={{ fontSize: 11 }}>{l}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                </WriteTip>
               </Box>
             </>
           }

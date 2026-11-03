@@ -26,6 +26,7 @@ import ObjectsTab from './components/ObjectsTab'
 import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
 import LoggingTab from './components/LoggingTab'
 import MicrosegTab from './components/microseg/MicrosegTab'
+import { MicrosegWriteContext, useCanManageMicroseg } from './components/microseg/microsegAccess'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN PAGE — 7 tabs: Dashboard, Firewalling, Aliases, IP Sets, Security Groups, Logging, Micro-segmentation
@@ -69,6 +70,10 @@ export default function NetworkAutomationPage() {
   const {
     hostRulesByNode, loadingHostRules, hostRulesError, loadHostRules, reloadHostRulesForNode, setHostRulesByNode,
   } = useHostFirewallRules(isEnterprise ? selectedConnection || null : null, nodesList)
+
+  // The firewall tabs write with node.manage on the connection, like the micro-segmentation: a read-only user sees
+  // every write control of Firewalling, Aliases, IP Sets and Security Groups disabled, with the reason (WriteTip).
+  const canWriteFirewall = useCanManageMicroseg(selectedConnection)
 
   // ── Derived values ──
   const currentOptions = firewallMode === 'cluster' ? clusterOptions : nodeOptions
@@ -134,6 +139,7 @@ export default function NetworkAutomationPage() {
         )}
 
         {/* Main Content Card */}
+        <MicrosegWriteContext.Provider value={canWriteFirewall}>
         <Card sx={{ background: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(10px)', border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Tabs value={activeTab} onChange={(_, v) => changeTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, flex: '1 1 460px', minWidth: 0 }}>
@@ -275,6 +281,7 @@ export default function NetworkAutomationPage() {
           )}
 
         </Card>
+        </MicrosegWriteContext.Provider>
       </Box>
     </EnterpriseGuard>
     </ProviderTenantGuard>

@@ -8,6 +8,8 @@ import * as firewallAPI from '@/lib/api/firewall'
 import { formatLogLevel } from '@/components/firewall/logLevels'
 import RuleLogsButton from '@/components/firewall/RuleLogsButton'
 
+import { WriteTip, useMicrosegWrite } from '../../microseg/microsegAccess'
+
 /**
  * The cells a firewall rule row is made of, shared by the four rules tables
  * (cluster policy, hosts, VMs/CTs, security groups).
@@ -62,15 +64,18 @@ interface RuleLeadingCellsProps extends RuleCellsProps {
 /** Drag handle, position, Active switch and direction chip. */
 export function RuleRowLeadingCells({ rule, isGroupRule = false, enabled, onToggleEnable }: RuleLeadingCellsProps) {
   const theme = useTheme()
+  const { canWrite } = useMicrosegWrite()
 
   return (
     <>
-      <TableCell sx={{ p: 0.5, cursor: 'grab', width: 30 }}>
+      <TableCell sx={{ p: 0.5, cursor: canWrite ? 'grab' : 'default', width: 30 }}>
         <i className="ri-draggable" style={{ fontSize: 14, color: theme.palette.text.disabled }} />
       </TableCell>
       <TableCell sx={{ fontSize: RULE_CELL_FONT_SIZE, color: 'text.secondary', p: 0.5, width: 35 }}>{rule.pos}</TableCell>
       <TableCell sx={{ p: 0.5, width: 55 }}>
-        <Switch checked={enabled} onChange={onToggleEnable} size="small" color="success" />
+        <WriteTip>
+          <Switch checked={enabled} onChange={onToggleEnable} size="small" color="success" disabled={!canWrite} />
+        </WriteTip>
       </TableCell>
       <TableCell sx={{ p: 0.5, width: 65 }}>
         <Chip
@@ -155,21 +160,22 @@ export function RuleRowActionsCell({ onEdit, onDelete, logs }: {
   logs?: { rule: Pick<firewallAPI.FirewallRule, 'type' | 'log'>; onOpen: () => void }
 }) {
   const t = useTranslations()
+  const { canWrite } = useMicrosegWrite()
 
   return (
     <TableCell sx={{ p: 0.5, width: logs ? 100 : 70 }}>
       <Box sx={{ display: 'flex', gap: 0 }}>
         {logs && <RuleLogsButton rule={logs.rule} onClick={logs.onOpen} />}
-        <Tooltip title={t('networkPage.edit')}>
-          <IconButton size="small" onClick={onEdit}>
+        <WriteTip title={t('networkPage.edit')}>
+          <IconButton size="small" aria-label={t('networkPage.edit')} onClick={onEdit} disabled={!canWrite}>
             <i className="ri-pencil-line" style={{ fontSize: 14 }} />
           </IconButton>
-        </Tooltip>
-        <Tooltip title={t('networkPage.delete')}>
-          <IconButton size="small" color="error" onClick={onDelete}>
+        </WriteTip>
+        <WriteTip title={t('networkPage.delete')}>
+          <IconButton size="small" aria-label={t('networkPage.delete')} color="error" onClick={onDelete} disabled={!canWrite}>
             <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
           </IconButton>
-        </Tooltip>
+        </WriteTip>
       </Box>
     </TableCell>
   )

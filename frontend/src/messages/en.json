@@ -13222,6 +13222,7 @@
         "held": "Waiting for your confirmation (write cap reached)"
       }
     },
-    "waitingFirstCheck": "Waiting for the first full check"
+    "waitingFirstCheck": "Waiting for the first full check",
+    "readOnly": "Read-only: you need node management rights"
   }
 }

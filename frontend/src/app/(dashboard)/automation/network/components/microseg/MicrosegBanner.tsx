@@ -11,6 +11,7 @@ import PendingChangesBar from './PendingChangesBar'
 import { formatWhen, stillPaused } from './summaryModel'
 import type { ControlAction, MicrosegControls } from './useMicrosegControls'
 import { NOW_REFRESH_MS, useNow } from './useNow'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 type Props = {
   connectionId: string
@@ -27,6 +28,7 @@ type Props = {
  */
 export default function MicrosegBanner({ connectionId, policy, controls, onOpenPlan }: Props) {
   const t = useTranslations()
+  const { canWrite } = useMicrosegWrite()
   const format = useFormatter()
   const { status, statusError, reload, action, open, busy, actionError, notice } = controls
 
@@ -55,7 +57,7 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
             <Alert
               severity='error'
               variant='filled'
-              action={<Button color='inherit' size='small' onClick={() => controls.ask('resume')}>{t('microsegPilot.stop.resume')}</Button>}
+              action={<WriteTip><Button color='inherit' size='small' disabled={!canWrite} onClick={() => controls.ask('resume')}>{t('microsegPilot.stop.resume')}</Button></WriteTip>}
             >
               {t('microsegPilot.stop.active')}
             </Alert>
@@ -64,7 +66,7 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
           {status?.engine.held && (
             <Alert
               severity='warning'
-              action={<Button color='inherit' size='small' onClick={() => controls.ask('confirmWrites')}>{t('microsegPilot.banner.confirmWrites')}</Button>}
+              action={<WriteTip><Button color='inherit' size='small' disabled={!canWrite} onClick={() => controls.ask('confirmWrites')}>{t('microsegPilot.banner.confirmWrites')}</Button></WriteTip>}
             >
               <Typography variant='body2' component='span' sx={{ fontWeight: 600, mr: 1 }}>{t('microsegPilot.banner.held')}</Typography>
               {t('microsegPilot.banner.heldBody')}

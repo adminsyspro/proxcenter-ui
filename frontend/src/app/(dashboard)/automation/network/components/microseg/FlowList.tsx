@@ -8,6 +8,7 @@ import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
 
 import FlowSummary from './FlowSummary'
 import PolicyPager, { usePaged } from './PolicyPager'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 type Props = {
   flows: MicrosegFlow[]
@@ -20,6 +21,7 @@ type Props = {
 function FlowRow({ flow, zonesById, onEdit, onDelete }: { flow: MicrosegFlow; zonesById: Map<string, MicrosegZone> } & Pick<Props, 'onEdit' | 'onDelete'>) {
   const t = useTranslations('microsegPilot.policy')
   const [open, setOpen] = useState(false)
+  const { canWrite } = useMicrosegWrite()
   const details = [flow.comment, flow.created_by ? t('flow.createdBy', { user: flow.created_by }) : ''].filter(Boolean)
 
   return (
@@ -30,12 +32,12 @@ function FlowRow({ flow, zonesById, onEdit, onDelete }: { flow: MicrosegFlow; zo
         </IconButton>
         <i className='ri-route-line' style={{ flexShrink: 0, opacity: 0.8 }} />
         <FlowSummary flow={flow} zonesById={zonesById} />
-        <Tooltip title={t('flow.edit')}>
-          <IconButton size='small' aria-label={t('flow.edit')} onClick={() => onEdit(flow)}><i className='ri-pencil-line' /></IconButton>
-        </Tooltip>
-        <Tooltip title={t('flow.delete')}>
-          <IconButton size='small' aria-label={t('flow.delete')} onClick={() => onDelete(flow)}><i className='ri-delete-bin-line' /></IconButton>
-        </Tooltip>
+        <WriteTip title={t('flow.edit')}>
+          <IconButton size='small' aria-label={t('flow.edit')} disabled={!canWrite} onClick={() => onEdit(flow)}><i className='ri-pencil-line' /></IconButton>
+        </WriteTip>
+        <WriteTip title={t('flow.delete')}>
+          <IconButton size='small' aria-label={t('flow.delete')} disabled={!canWrite} onClick={() => onDelete(flow)}><i className='ri-delete-bin-line' /></IconButton>
+        </WriteTip>
       </Box>
       <Collapse in={open} unmountOnExit>
         <Box sx={{ pl: 7, pr: 2, pb: 1, minWidth: 0 }}>
@@ -52,6 +54,7 @@ function FlowRow({ flow, zonesById, onEdit, onDelete }: { flow: MicrosegFlow; zo
 export default function FlowList({ flows, zones, onAdd, onEdit, onDelete }: Props) {
   const t = useTranslations('microsegPilot.policy')
   const paged = usePaged(flows)
+  const { canWrite } = useMicrosegWrite()
   const zonesById = new Map(zones.map(z => [z.id, z]))
 
   return (
@@ -59,13 +62,11 @@ export default function FlowList({ flows, zones, onAdd, onEdit, onDelete }: Prop
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
         <Typography variant='subtitle1' fontWeight={600} sx={{ flex: 1 }}>{t('flowsTitle')}</Typography>
         {/* A disabled button fires no hover: the tooltip sits on a wrapper. */}
-        <Tooltip title={zones.length === 0 ? t('addFlowNeedsZone') : ''}>
-          <Box component='span'>
-            <Button size='small' variant='outlined' startIcon={<i className='ri-add-line' />} onClick={onAdd} disabled={zones.length === 0}>
-              {t('addFlow')}
-            </Button>
-          </Box>
-        </Tooltip>
+        <WriteTip title={zones.length === 0 ? t('addFlowNeedsZone') : ''}>
+          <Button size='small' variant='outlined' startIcon={<i className='ri-add-line' />} onClick={onAdd} disabled={!canWrite || zones.length === 0}>
+            {t('addFlow')}
+          </Button>
+        </WriteTip>
       </Box>
       {flows.length === 0 ? (
         <Typography color='text.secondary' sx={{ py: 2 }}>{t('flowsEmpty')}</Typography>

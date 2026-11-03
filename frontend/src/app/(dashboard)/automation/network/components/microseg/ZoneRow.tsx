@@ -10,6 +10,7 @@ import type { GuestRef, MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/micr
 import FlowSummary from './FlowSummary'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { flowsOfZone, type ZoneMember } from './zoneModel'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 const STATES: ZoneState[] = ['observe', 'enforce', 'disabled']
 export const STATE_DOT: Record<ZoneState, string> = { disabled: '#9e9e9e', observe: '#ed6c02', enforce: '#4caf50' }
@@ -50,6 +51,7 @@ function ZoneGlyph({ zone, label }: { zone: MicrosegZone; label: string }) {
 
 function MemberLine({ member, busy, onRemove }: { member: ZoneMember; busy: boolean; onRemove: () => void }) {
   const t = useTranslations('microsegPilot.policy.zone')
+  const { canWrite } = useMicrosegWrite()
   const { guest, ref } = member
   const name = guest?.name ?? `${ref.type}/${ref.vmid}`
   const where = `${ref.vmid} · ${ref.node}`
@@ -71,13 +73,11 @@ function MemberLine({ member, busy, onRemove }: { member: ZoneMember; busy: bool
           <Chip size='small' color='warning' variant='outlined' label={t('memberMove', { zone: member.change.zoneName })} sx={{ flexShrink: 1, minWidth: 0, maxWidth: 200 }} />
         </Tooltip>
       )}
-      <Tooltip title={t('removeMember')}>
-        <span>
-          <IconButton size='small' aria-label={t('removeMember')} disabled={busy || member.change?.kind === 'removal'} onClick={onRemove} sx={{ flexShrink: 0 }}>
-            <i className='ri-close-line' />
-          </IconButton>
-        </span>
-      </Tooltip>
+      <WriteTip title={t('removeMember')}>
+        <IconButton size='small' aria-label={t('removeMember')} disabled={!canWrite || busy || member.change?.kind === 'removal'} onClick={onRemove} sx={{ flexShrink: 0 }}>
+          <i className='ri-close-line' />
+        </IconButton>
+      </WriteTip>
     </Box>
   )
 }
@@ -120,6 +120,7 @@ export default function ZoneRow({ zone, members, membersKnown, flows, zonesById,
   const tp = useTranslations('microsegPilot.policy')
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const { canWrite } = useMicrosegWrite()
   const running = members.filter(m => m.guest?.status === 'running').length
   const summary = membersKnown ? t('memberSummary', { count: members.length, running }) : '-'
 
@@ -134,20 +135,20 @@ export default function ZoneRow({ zone, members, membersKnown, flows, zonesById,
         <Tooltip title={zone.label}><Typography noWrap color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{zone.label}</Typography></Tooltip>
         <Chip size='small' variant='outlined' label={t(`state.${zone.state}`)} sx={{ flexShrink: 0 }} />
         <Typography noWrap variant='body2' color='text.secondary' sx={{ flexShrink: 0 }}>{summary}</Typography>
-        <Tooltip title={t('changeState')}>
-          <IconButton size='small' aria-label={t('changeState')} aria-haspopup='menu' onClick={e => setAnchor(e.currentTarget)}>
+        <WriteTip title={t('changeState')}>
+          <IconButton size='small' aria-label={t('changeState')} aria-haspopup='menu' disabled={!canWrite} onClick={e => setAnchor(e.currentTarget)}>
             <i className='ri-toggle-line' />
           </IconButton>
-        </Tooltip>
-        <Tooltip title={t('assign')}>
-          <IconButton size='small' aria-label={t('assign')} onClick={() => onAssign(zone)}><i className='ri-add-circle-line' /></IconButton>
-        </Tooltip>
-        <Tooltip title={t('edit')}>
-          <IconButton size='small' aria-label={t('edit')} onClick={() => onEdit(zone)}><i className='ri-pencil-line' /></IconButton>
-        </Tooltip>
-        <Tooltip title={t('delete')}>
-          <IconButton size='small' aria-label={t('delete')} onClick={() => onDelete(zone)}><i className='ri-delete-bin-line' /></IconButton>
-        </Tooltip>
+        </WriteTip>
+        <WriteTip title={t('assign')}>
+          <IconButton size='small' aria-label={t('assign')} disabled={!canWrite} onClick={() => onAssign(zone)}><i className='ri-add-circle-line' /></IconButton>
+        </WriteTip>
+        <WriteTip title={t('edit')}>
+          <IconButton size='small' aria-label={t('edit')} disabled={!canWrite} onClick={() => onEdit(zone)}><i className='ri-pencil-line' /></IconButton>
+        </WriteTip>
+        <WriteTip title={t('delete')}>
+          <IconButton size='small' aria-label={t('delete')} disabled={!canWrite} onClick={() => onDelete(zone)}><i className='ri-delete-bin-line' /></IconButton>
+        </WriteTip>
         <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
           {STATES.map(state => (
             <MenuItem

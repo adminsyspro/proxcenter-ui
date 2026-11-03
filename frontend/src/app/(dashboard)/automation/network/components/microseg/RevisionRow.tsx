@@ -8,6 +8,7 @@ import type { MicrosegRevision } from '@/lib/microseg/types'
 
 import { OneLine } from './dialogParts'
 import { formatWhen } from './summaryModel'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 type Props = {
   revision: MicrosegRevision
@@ -22,6 +23,7 @@ export default function RevisionRow({ revision, latest, onRestore }: Props) {
   const tp = useTranslations('microsegPilot.policy')
   const format = useFormatter()
   const [open, setOpen] = useState(false)
+  const { canWrite } = useMicrosegWrite()
 
   const when = formatWhen(format, revision.created_at)
   const zones = revision.snapshot?.zones ?? []
@@ -50,7 +52,9 @@ export default function RevisionRow({ revision, latest, onRestore }: Props) {
         <Tooltip title={counts}>
           <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{counts}</Typography>
         </Tooltip>
-        <Button size='small' variant='outlined' onClick={onRestore} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{t('restore')}</Button>
+        <WriteTip>
+          <Button size='small' variant='outlined' onClick={onRestore} disabled={!canWrite} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{t('restore')}</Button>
+        </WriteTip>
       </Box>
       <Collapse in={open} unmountOnExit>
         <Box sx={{ pl: 7, pr: 2, pb: 1.5, minWidth: 0 }}>

@@ -10,6 +10,7 @@ import type { MicrosegDrift } from '@/lib/microseg/types'
 import type { DriftLabel } from './driftLabels'
 import { OneLine } from './dialogParts'
 import type { PolicyGuest } from './zoneModel'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 /** Cluster objects have no guest: one glyph per kind, with the amber dot every drift carries. */
 const OBJECT_GLYPH: Record<string, string> = {
@@ -53,6 +54,7 @@ export type DriftRowProps = {
 export default function DriftRow({ drift, label, subject, guest, ignored, hasZones, onFix, onIgnore, onRestore }: DriftRowProps) {
   const t = useTranslations('microsegPilot.drifts')
   const tp = useTranslations('microsegPilot.policy')
+  const { canWrite } = useMicrosegWrite()
   const [open, setOpen] = useState(false)
   const assign = label.fix === 'assign'
   const noZone = assign && !hasZones
@@ -75,20 +77,18 @@ export default function DriftRow({ drift, label, subject, guest, ignored, hasZon
         )}
         {ignored && <Chip size='small' variant='outlined' label={t('ignoredChip')} sx={{ flexShrink: 0 }} />}
         {!ignored && label.fix && (
-          <Tooltip title={noZone ? t('noZone') : ''}>
-            <span>
-              <Button
+          <WriteTip title={noZone ? t('noZone') : ''}>
+            <Button
                 size='small'
                 variant='outlined'
-                disabled={noZone}
+                disabled={!canWrite || noZone}
                 aria-haspopup={assign ? 'menu' : undefined}
                 onClick={e => onFix(e.currentTarget)}
                 sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
               >
                 {assign ? t('fixAssign') : t('fixPlan')}
-              </Button>
-            </span>
-          </Tooltip>
+            </Button>
+          </WriteTip>
         )}
         {ignored ? (
           <Button size='small' onClick={onRestore} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{t('restore')}</Button>

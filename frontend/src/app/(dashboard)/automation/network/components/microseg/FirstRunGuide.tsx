@@ -4,6 +4,7 @@ import { Box, Button, Paper, Step, StepContent, StepLabel, Stepper, Typography }
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegSubTab } from './microsegTabTypes'
+import { useMicrosegWrite } from './microsegAccess'
 
 type Props = {
   goToSubTab: (tab: MicrosegSubTab) => void
@@ -14,11 +15,13 @@ type Props = {
 /** Three steps from an empty policy to a first plan. Buttons only navigate. */
 export default function FirstRunGuide({ goToSubTab, onOpenPlan, onOpenPreflight }: Props) {
   const t = useTranslations('microsegPilot.firstRun')
+  const { canWrite } = useMicrosegWrite()
 
   const steps: Array<{ id: string; icon: string; action?: () => void }> = [
     { id: 'step1', icon: 'ri-heart-pulse-line', action: onOpenPreflight },
     { id: 'step2', icon: 'ri-shape-line', action: () => goToSubTab('policy') },
-    { id: 'step3', icon: 'ri-file-list-3-line', action: onOpenPlan },
+    // Computing the plan is a write of the relay: read-only users cannot.
+    { id: 'step3', icon: 'ri-file-list-3-line', action: canWrite ? onOpenPlan : undefined },
   ]
 
   return (

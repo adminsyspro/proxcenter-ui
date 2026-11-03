@@ -13222,6 +13222,7 @@
         "held": "확인 대기 중 (쓰기 한도 도달)"
       }
     },
-    "waitingFirstCheck": "첫 번째 전체 점검을 기다리는 중"
+    "waitingFirstCheck": "첫 번째 전체 점검을 기다리는 중",
+    "readOnly": "읽기 전용: 노드 관리 권한이 필요합니다"
   }
 }

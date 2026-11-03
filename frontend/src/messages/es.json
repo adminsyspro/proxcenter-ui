@@ -13222,6 +13222,7 @@
         "held": "A la espera de su confirmación (límite de escrituras alcanzado)"
       }
     },
-    "waitingFirstCheck": "A la espera de la primera comprobación completa"
+    "waitingFirstCheck": "A la espera de la primera comprobación completa",
+    "readOnly": "Solo lectura: necesita el permiso de gestión de nodos"
   }
 }

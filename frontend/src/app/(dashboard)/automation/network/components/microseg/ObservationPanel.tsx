@@ -14,6 +14,7 @@ import ObservationRow from './ObservationRow'
 import { useResolveSuggestions } from './observationParts'
 import { Notice } from './PlanNotices'
 import { PrevNextPager } from './PolicyPager'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 /** Flows per page. The request asks for one more, which tells whether a next page exists. */
 export const OBSERVATION_PAGE_SIZE = 25
@@ -27,6 +28,7 @@ type Resolved = { action: SuggestionAction; count: number }
  */
 export default function ObservationPanel({ connectionId, policy, reloadPolicy, onOpenSettings }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.observation')
+  const { canWrite } = useMicrosegWrite()
   const [filters, setFilters] = useState<ObservationFilterValues>({ kind: '', status: 'pending', zone: '' })
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
@@ -126,13 +128,15 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
               <>
                 <Typography noWrap variant='body2' sx={{ flexShrink: 0 }}>{t('selected', { count: chosen.length })}</Typography>
                 <Box sx={{ flex: 1 }} />
-                <Tooltip title={noZoneAmongChosen ? t('bulkAcceptBlocked') : ''}>
-                  <span><Button size='small' disabled={busy || noZoneAmongChosen} onClick={() => bulk('accept')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkAccept')}</Button></span>
-                </Tooltip>
-                <Tooltip title={noIpAmongChosen ? t('bulkCidrBlocked') : ''}>
-                  <span><Button size='small' disabled={busy || noIpAmongChosen} onClick={() => bulk('accept_cidr')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkAcceptCidr')}</Button></span>
-                </Tooltip>
-                <Button size='small' color='inherit' disabled={busy} onClick={() => bulk('dismiss')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkDismiss')}</Button>
+                <WriteTip title={noZoneAmongChosen ? t('bulkAcceptBlocked') : ''}>
+                  <Button size='small' disabled={!canWrite || busy || noZoneAmongChosen} onClick={() => bulk('accept')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkAccept')}</Button>
+                </WriteTip>
+                <WriteTip title={noIpAmongChosen ? t('bulkCidrBlocked') : ''}>
+                  <Button size='small' disabled={!canWrite || busy || noIpAmongChosen} onClick={() => bulk('accept_cidr')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkAcceptCidr')}</Button>
+                </WriteTip>
+                <WriteTip>
+                  <Button size='small' color='inherit' disabled={!canWrite || busy} onClick={() => bulk('dismiss')} sx={{ whiteSpace: 'nowrap' }}>{t('bulkDismiss')}</Button>
+                </WriteTip>
               </>
             ) : <Box sx={{ flex: 1 }} />}
             <PrevNextPager page={page} hasNext={hasNext} onPage={goToPage} />

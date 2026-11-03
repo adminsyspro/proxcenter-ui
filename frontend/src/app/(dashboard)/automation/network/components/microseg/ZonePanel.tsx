@@ -10,6 +10,7 @@ import FlowSummary from './FlowSummary'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { STATE_DOT } from './ZoneRow'
 import { flowsOfZone, type ZoneMember } from './zoneModel'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 const FLOWS_PAGE_SIZE = 5
 
@@ -60,6 +61,7 @@ function FlowsOf({ title, flows, zonesById }: { title: string; flows: MicrosegFl
 export default function ZonePanel({ zone, members, membersKnown, flows, zonesById, onClose, onEdit, onAssign }: Props) {
   const t = useTranslations('microsegPilot.overview.panel')
   const ts = useTranslations('microsegPilot.policy.zone')
+  const { canWrite } = useMicrosegWrite()
   const paged = usePaged(members)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
 
@@ -85,7 +87,9 @@ export default function ZonePanel({ zone, members, membersKnown, flows, zonesByI
 
       <Box sx={{ display: 'flex', gap: 1, my: 1.5, flexWrap: 'wrap' }}>
         <Button size='small' variant='outlined' startIcon={<i className='ri-pencil-line' />} onClick={onEdit}>{t('editInPolicy')}</Button>
-        <Button size='small' variant='contained' startIcon={<i className='ri-add-circle-line' />} onClick={onAssign}>{t('assign')}</Button>
+        <WriteTip>
+          <Button size='small' variant='contained' startIcon={<i className='ri-add-circle-line' />} onClick={onAssign} disabled={!canWrite}>{t('assign')}</Button>
+        </WriteTip>
       </Box>
 
       <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('members')}</Typography>

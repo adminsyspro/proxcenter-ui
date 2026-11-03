@@ -18,6 +18,7 @@ import type { TrackedRun } from './microsegTabTypes'
 import { groupPlanSteps } from './planGroups'
 import { planState } from './planState'
 import { useZoneGuests } from './useZoneGuests'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 type BodyProps = {
   connectionId: string
@@ -29,6 +30,7 @@ type BodyProps = {
 
 function PlanBody({ connectionId, policy, reloadPolicy, startRun, onClose }: BodyProps) {
   const t = useTranslations('microsegPilot.plan')
+  const { canWrite } = useMicrosegWrite()
   const api = useMemo(() => microsegApi(connectionId), [connectionId])
   const { guests } = useZoneGuests(connectionId)
 
@@ -87,7 +89,7 @@ function PlanBody({ connectionId, policy, reloadPolicy, startRun, onClose }: Bod
   const { steps } = state
   const canApply = state.applicable && !state.stale && !busy && !applyRunId
 
-  const recomputeButton = <Button color='inherit' size='small' onClick={recompute}>{t('recompute')}</Button>
+  const recomputeButton = <WriteTip><Button color='inherit' size='small' disabled={!canWrite} onClick={recompute}>{t('recompute')}</Button></WriteTip>
 
   return (
     <>
@@ -132,7 +134,7 @@ function PlanBody({ connectionId, policy, reloadPolicy, startRun, onClose }: Bod
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose}>{t('close')}</Button>
         {!applyRunId && (
-          <Button variant='contained' onClick={apply} disabled={!canApply}>{t('apply')}</Button>
+          <WriteTip><Button variant='contained' onClick={apply} disabled={!canWrite || !canApply}>{t('apply')}</Button></WriteTip>
         )}
       </DialogActions>
     </>

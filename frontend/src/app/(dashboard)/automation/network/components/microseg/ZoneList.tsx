@@ -8,6 +8,7 @@ import type { MicrosegFlow, MicrosegZone, PendingMember } from '@/lib/microseg/t
 import PolicyPager, { usePaged } from './PolicyPager'
 import ZoneRow, { type ZoneRowProps } from './ZoneRow'
 import { zoneMembers, type PolicyGuest } from './zoneModel'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onAssign' | 'onRemoveMember' | 'removeBusy'> & {
   zones: MicrosegZone[]
@@ -23,13 +24,16 @@ type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onAssign
 export default function ZoneList({ zones, flows, tagPrefix, guests, guestsStatus, pendingMembers, onAdd, ...handlers }: Props) {
   const t = useTranslations('microsegPilot.policy')
   const paged = usePaged(zones)
+  const { canWrite } = useMicrosegWrite()
   const zonesById = new Map(zones.map(z => [z.id, z]))
 
   return (
     <Box component='section' aria-label={t('zonesTitle')}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
         <Typography variant='subtitle1' fontWeight={600} sx={{ flex: 1 }}>{t('zonesTitle')}</Typography>
-        <Button size='small' variant='contained' startIcon={<i className='ri-add-line' />} onClick={onAdd}>{t('addZone')}</Button>
+        <WriteTip>
+          <Button size='small' variant='contained' startIcon={<i className='ri-add-line' />} onClick={onAdd} disabled={!canWrite}>{t('addZone')}</Button>
+        </WriteTip>
       </Box>
       {zones.length === 0 ? (
         <Typography color='text.secondary' sx={{ py: 2 }}>{t('zonesEmpty')}</Typography>

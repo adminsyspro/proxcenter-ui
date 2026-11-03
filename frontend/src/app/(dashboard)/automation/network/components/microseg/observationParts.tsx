@@ -8,6 +8,7 @@ import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegSuggestion, SuggestionAction, SuggestionKind } from '@/lib/microseg/types'
 
 import { isVersionConflict, writeErrorMessage } from './dialogParts'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 // Same semantics as the edges of the zone map (EDGE_COLORS): a flow an enforced zone blocked is blue, a flow
 // that would be blocked once its zone enforces (unprotected today) is red.
@@ -50,24 +51,19 @@ type ResolveActionsProps = {
 export function ResolveActions({ suggestion: s, busy, onResolve, acceptLabel }: ResolveActionsProps) {
   const t = useTranslations('microsegPilot.observation')
   const accept = acceptLabel ?? t('accept')
+  const { canWrite } = useMicrosegWrite()
 
   return (
     <>
-      <Tooltip title={s.src_zone_id ? accept : t('acceptNoZone')}>
-        <span>
-          <IconButton size='small' aria-label={accept} disabled={busy || !s.src_zone_id} onClick={() => onResolve('accept')}><i className='ri-check-line' /></IconButton>
-        </span>
-      </Tooltip>
-      <Tooltip title={s.src_ip ? t('acceptCidr') : t('acceptCidrNoIp')}>
-        <span>
-          <IconButton size='small' aria-label={t('acceptCidr')} disabled={busy || !s.src_ip} onClick={() => onResolve('accept_cidr')}><i className='ri-checkbox-multiple-line' /></IconButton>
-        </span>
-      </Tooltip>
-      <Tooltip title={t('dismiss')}>
-        <span>
-          <IconButton size='small' aria-label={t('dismiss')} disabled={busy} onClick={() => onResolve('dismiss')}><i className='ri-close-line' /></IconButton>
-        </span>
-      </Tooltip>
+      <WriteTip title={s.src_zone_id ? accept : t('acceptNoZone')}>
+        <IconButton size='small' aria-label={accept} disabled={!canWrite || busy || !s.src_zone_id} onClick={() => onResolve('accept')}><i className='ri-check-line' /></IconButton>
+      </WriteTip>
+      <WriteTip title={s.src_ip ? t('acceptCidr') : t('acceptCidrNoIp')}>
+        <IconButton size='small' aria-label={t('acceptCidr')} disabled={!canWrite || busy || !s.src_ip} onClick={() => onResolve('accept_cidr')}><i className='ri-checkbox-multiple-line' /></IconButton>
+      </WriteTip>
+      <WriteTip title={t('dismiss')}>
+        <IconButton size='small' aria-label={t('dismiss')} disabled={!canWrite || busy} onClick={() => onResolve('dismiss')}><i className='ri-close-line' /></IconButton>
+      </WriteTip>
     </>
   )
 }

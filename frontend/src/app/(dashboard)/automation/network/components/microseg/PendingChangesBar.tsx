@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import type { MicrosegPolicy } from '@/lib/microseg/types'
 
 import { usePendingChanges } from './usePendingChanges'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 type Props = {
   connectionId: string
@@ -23,6 +24,7 @@ type Props = {
 export default function PendingChangesBar({ connectionId, policy, onOpenPlan }: Props) {
   const t = useTranslations()
   const { pending, count } = usePendingChanges(connectionId, policy)
+  const { canWrite } = useMicrosegWrite()
 
   if (!pending) return null
 
@@ -30,7 +32,7 @@ export default function PendingChangesBar({ connectionId, policy, onOpenPlan }: 
     <Alert
       severity='warning'
       icon={<i className='ri-draft-line' />}
-      action={<Button color='inherit' size='small' onClick={onOpenPlan} disabled={!onOpenPlan}>{t('microsegPilot.pending.viewPlan')}</Button>}
+      action={<WriteTip><Button color='inherit' size='small' onClick={onOpenPlan} disabled={!canWrite || !onOpenPlan}>{t('microsegPilot.pending.viewPlan')}</Button></WriteTip>}
     >
       {count ? t('microsegPilot.pending.withCount', { count }) : t('microsegPilot.pending.noCount')}
     </Alert>

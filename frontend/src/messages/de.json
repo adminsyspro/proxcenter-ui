@@ -12890,6 +12890,7 @@
         "held": "Wartet auf Ihre Bestätigung (Schreibgrenze erreicht)"
       }
     },
-    "waitingFirstCheck": "Warten auf die erste vollständige Prüfung"
+    "waitingFirstCheck": "Warten auf die erste vollständige Prüfung",
+    "readOnly": "Nur Lesezugriff: Sie benötigen das Recht zur Knotenverwaltung"
   }
 }

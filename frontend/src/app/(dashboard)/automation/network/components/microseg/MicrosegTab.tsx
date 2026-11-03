@@ -22,6 +22,7 @@ import PreflightPanel from './PreflightPanel'
 import RunStrip from './RunStrip'
 import SettingsDialog from './SettingsDialog'
 import { useMicrosegControls } from './useMicrosegControls'
+import { MicrosegWriteContext, useCanManageMicroseg } from './microsegAccess'
 import ZoneMap from './ZoneMap'
 import {
   MICROSEG_SUBTABS, isMicrosegSubTab, type FirewallWizardData, type MicrosegSubTab, type MicrosegSubTabProps, type TrackedRun,
@@ -72,6 +73,8 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
   const t = useTranslations('microsegPilot')
   const { data: policy, loading, error, reload } = useMicrosegPolicy(connectionId || null)
   const controls = useMicrosegControls(connectionId)
+  // A read-only user (no node.manage on the connection) sees every write control disabled, with the reason.
+  const canWrite = useCanManageMicroseg(connectionId)
   // Read once: nothing of the sub-tab shows before the policy has loaded, so this never differs from a server render.
   const [subTab, setSubTab] = useState<MicrosegSubTab>(() => readStoredSubTab() ?? 'overview')
 
@@ -128,6 +131,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
   }
 
   return (
+    <MicrosegWriteContext.Provider value={canWrite}>
     <Box sx={{ p: 3 }}>
       <MicrosegBanner connectionId={connectionId} policy={policy} controls={controls} onOpenPlan={onOpenPlan} />
       <RunStrip connectionId={connectionId} runs={runs} onFinished={refreshAfterRun} onRemove={removeRun} />
@@ -200,5 +204,6 @@ export default function MicrosegTab({ connectionId, connectionName, firewall }: 
         />
       )}
     </Box>
+    </MicrosegWriteContext.Provider>
   )
 }

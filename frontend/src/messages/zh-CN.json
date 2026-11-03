@@ -13222,6 +13222,7 @@
         "held": "等待您的确认（已达写入上限）"
       }
     },
-    "waitingFirstCheck": "正在等待首次完整检查"
+    "waitingFirstCheck": "正在等待首次完整检查",
+    "readOnly": "只读：您需要节点管理权限"
   }
 }

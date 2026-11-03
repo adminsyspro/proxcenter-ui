@@ -4,6 +4,7 @@ import { Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegControls } from './useMicrosegControls'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 /**
  * The Emergency stop, at the right end of the sub-tabs row. Reachable whatever the status: the stop is idempotent,
@@ -11,19 +12,23 @@ import type { MicrosegControls } from './useMicrosegControls'
  */
 export default function EmergencyStopButton({ controls }: { controls: MicrosegControls }) {
   const t = useTranslations('microsegPilot.stop')
+  const { canWrite } = useMicrosegWrite()
 
   if (controls.status?.emergency_stop) return null
 
   return (
+    <WriteTip>
     <Button
       size='small'
       variant='outlined'
       color='error'
       startIcon={<i className='ri-stop-circle-line' />}
       onClick={() => controls.ask('stop')}
+      disabled={!canWrite}
       sx={{ flexShrink: 0 }}
     >
       {t('button')}
     </Button>
+    </WriteTip>
   )
 }

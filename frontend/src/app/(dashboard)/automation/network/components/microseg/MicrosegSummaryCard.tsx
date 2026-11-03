@@ -12,6 +12,7 @@ import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 import { coverage } from './coverage'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import { useDialogAction } from './dialogParts'
+import { MicrosegWriteContext, WriteTip, useCanManageMicroseg } from './microsegAccess'
 import { deployedCounts, formatWhen, lastCheckAt, stillPaused } from './summaryModel'
 import { NOW_REFRESH_MS, useNow } from './useNow'
 
@@ -46,6 +47,7 @@ function Row({ icon, label, children }: { icon: string; label: string; children:
  */
 export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
   const t = useTranslations('microsegPilot')
+  const canWrite = useCanManageMicroseg(connectionId)
   const format = useFormatter()
   const { data: status, error: statusError, reload } = useMicrosegStatus(connectionId)
   const { data: policy, error: policyError } = useMicrosegPolicy(connectionId)
@@ -104,14 +106,17 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
         {held && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Typography variant='body2' color='warning.main'>{t('dashboard.engine.held')}</Typography>
-            <Button
-              size='small'
-              variant='outlined'
-              color='warning'
-              onClick={e => { e.stopPropagation(); reset(); setConfirmOpen(true) }}
-            >
-              {t('banner.confirmWrites')}
-            </Button>
+            <WriteTip>
+              <Button
+                size='small'
+                variant='outlined'
+                color='warning'
+                disabled={!canWrite}
+                onClick={e => { e.stopPropagation(); reset(); setConfirmOpen(true) }}
+              >
+                {t('banner.confirmWrites')}
+              </Button>
+            </WriteTip>
           </Box>
         )}
         {paused && pausedUntil && <Typography variant='body2' color='warning.main'>{t('banner.pausedUntil', { time: formatWhen(format, pausedUntil) })}</Typography>}
@@ -131,7 +136,7 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
   else if (policy?.last_revision) accent = GREEN
 
   return (
-    <>
+    <MicrosegWriteContext.Provider value={canWrite}>
       <Card
         onClick={onOpen}
         sx={{
@@ -180,6 +185,6 @@ export default function MicrosegSummaryCard({ connectionId, onOpen }: Props) {
         onConfirm={confirmWrites}
         onCancel={() => setConfirmOpen(false)}
       />
-    </>
+    </MicrosegWriteContext.Provider>
   )
 }

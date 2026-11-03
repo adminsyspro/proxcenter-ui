@@ -15,6 +15,7 @@ import {
   SETTING_UNITS, changedUpdate, formFromSettings, validateSettingsForm, type SettingNumberKey, type SettingsForm,
 } from './settingsModel'
 import type { TrackedRun } from './microsegTabTypes'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 type Props = {
   connectionId: string
@@ -38,6 +39,7 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
   const api = useMemo(() => microsegApi(connectionId), [connectionId])
   const save = useDialogAction()
   const removal = useDialogAction()
+  const { canWrite } = useMicrosegWrite()
 
   // The form at opening: what "changed" is measured against, even if the draft moves meanwhile.
   const [baseline] = useState(() => formFromSettings(policy.policy.tag_prefix, policy.policy.settings))
@@ -108,16 +110,18 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
             <Tooltip title={t('remove.hint')}>
               <Typography noWrap sx={{ flex: '1 1 0', minWidth: 0 }}>{t('remove.row')}</Typography>
             </Tooltip>
+            <WriteTip>
             <Button
               size='small'
               color='error'
               variant='outlined'
-              disabled={busy}
+              disabled={!canWrite || busy}
               onClick={() => { removal.reset(); setRemoving(true) }}
               sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
             >
               {t('remove.button')}
             </Button>
+            </WriteTip>
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
@@ -125,7 +129,9 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
             {errorLine ? <DialogErrorLine message={errorLine} /> : null}
           </Box>
           <Button onClick={onClose} disabled={busy}>{tc('cancel')}</Button>
-          <Button onClick={() => (prefixChanged ? setConfirmingPrefix(true) : void submit())} variant='contained' disabled={busy || !update || !!firstProblem}>{tc('save')}</Button>
+          <WriteTip>
+            <Button onClick={() => (prefixChanged ? setConfirmingPrefix(true) : void submit())} variant='contained' disabled={!canWrite || busy || !update || !!firstProblem}>{tc('save')}</Button>
+          </WriteTip>
         </DialogActions>
       </Dialog>
       {confirmingPrefix && (

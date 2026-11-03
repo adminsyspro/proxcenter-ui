@@ -13223,6 +13223,7 @@
         "held": "En attente de votre confirmation (plafond d'écritures atteint)"
       }
     },
-    "waitingFirstCheck": "En attente du premier contrôle complet"
+    "waitingFirstCheck": "En attente du premier contrôle complet",
+    "readOnly": "Lecture seule : il vous faut le droit de gérer les nœuds"
   }
 }

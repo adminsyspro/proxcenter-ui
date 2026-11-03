@@ -7,13 +7,14 @@ import type { PolicyGuest, ZoneMember } from './zoneModel'
 /**
  * The guest the Overview is targeted on (UA43). Not kept anywhere: a link with `?vm=<vmid>` targets that guest when
  * the map opens, until the admin picks another one or clears it (the parameter then leaves the address, so a reload
- * or a re-render does not target it again). The target follows the inventory (a guest that
+ * or a re-render does not target it again). The page hands the VMID of the link (`linkedVm`); without it (the map
+ * on its own) the address is read here. The target follows the inventory (a guest that
  * stops or goes away is no longer targeted). Its panel shows while no zone or edge panel is asked for.
  */
-export function useMapTarget(guests: PolicyGuest[], membersByZone: ReadonlyMap<string, ZoneMember[]>) {
+export function useMapTarget(guests: PolicyGuest[], membersByZone: ReadonlyMap<string, ZoneMember[]>, linkedVm?: string | null) {
   const params = useSearchParams()
   const pathname = usePathname()
-  const linked = params?.get('vm')?.trim() ?? ''
+  const linked = (linkedVm === undefined ? params?.get('vm') : linkedVm)?.trim() ?? ''
   const candidates = useMemo(() => targetCandidates(guests, membersByZone), [guests, membersByZone])
   const peers = useMemo(() => targetPeers(guests), [guests])
   // undefined: nothing picked yet, the link (if any) decides; null: cleared.

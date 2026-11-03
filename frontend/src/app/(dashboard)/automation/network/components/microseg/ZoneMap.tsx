@@ -73,7 +73,7 @@ const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_z
  * to light it and its flows; click a zone for its panel, an edge (or a cell) for its flows. Nothing polls beyond the
  * shared hooks (one inventory read, one suggestions read).
  */
-export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan }: MicrosegSubTabProps) {
+export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, targetVm }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.overview')
   const tObs = useTranslations('microsegPilot.observation')
   const { guests, status: guestsStatus, reload: reloadGuests } = useZoneGuests(connectionId)
@@ -99,7 +99,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   )
   const membersKnown = guestsStatus === 'ready'
   const zonesById = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
-  const mapTarget = useMapTarget(guests, membersByZone)
+  const mapTarget = useMapTarget(guests, membersByZone, targetVm)
   const { target } = mapTarget
 
   // The flows of the draft that the last applied revision does not have (null: not known yet, nothing marked).

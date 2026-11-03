@@ -70,12 +70,14 @@ type Props = {
   connectionName?: string
   /** What the deployment wizard needs; without it a failed pre-flight check has no wizard to open. */
   firewall?: FirewallWizardData
-  /** The sub-tab to open on, from a line of the Dashboard's "To do" list; else the one last shown. */
+  /** The sub-tab to open on, from a link or a line of the Dashboard's "To do" list; else the one last shown. */
   initialSubTab?: MicrosegSubTab
+  /** The VMID of a `?vm=` link: the Overview targets that guest (the page also opens the Overview for it). */
+  targetVm?: string | null
 }
 
 /** The Micro-segmentation tab of /automation/network: banner, first run guide and the five sub-tabs. */
-export default function MicrosegTab({ connectionId, connectionName, firewall, initialSubTab }: Props) {
+export default function MicrosegTab({ connectionId, connectionName, firewall, initialSubTab, targetVm }: Props) {
   const t = useTranslations('microsegPilot')
   const { data: policy, loading, error, reload } = useMicrosegPolicy(connectionId || null)
   // While a manual check waits in the queue, the status (shared with the banner and the button) is read faster.
@@ -143,7 +145,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
 
   const firstRun = !policy.last_revision && policy.zones.length === 0
   const contentProps: MicrosegSubTabProps = {
-    connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun, onOpenSettings, onOpenPreflight,
+    connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun, onOpenSettings, onOpenPreflight, targetVm,
   }
 
   return (

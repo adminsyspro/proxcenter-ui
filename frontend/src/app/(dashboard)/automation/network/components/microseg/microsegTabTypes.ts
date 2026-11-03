@@ -35,6 +35,8 @@ export type MicrosegSubTabProps = {
   onOpenSettings?: () => void
   /** Opens the pre-flight checks. */
   onOpenPreflight?: () => void
+  /** The VMID of a `?vm=` link, handed by the page: the Overview targets that guest. */
+  targetVm?: string | null
 }
 
 /** What the deployment wizard (opened from a failed pre-flight check) needs from the firewall page. */

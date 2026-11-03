@@ -69,6 +69,22 @@ describe('the target of the map', () => {
   })
 })
 
+describe('the VMID handed by the page (D1)', () => {
+  const renderWith = (search: string, linkedVm: string | null) => {
+    navigation.search = search
+    return renderHook(() => useMapTarget([web1, db1], members, linkedVm))
+  }
+
+  it('targets the guest the page hands, whatever the address says', () => {
+    expect(renderWith('', '200').result.current.target?.name).toBe('db-1')
+    expect(renderWith('vm=100', '200').result.current.target?.name).toBe('db-1')
+  })
+
+  it('targets nothing when the page hands no VMID, even with one in the address', () => {
+    expect(renderWith('vm=100', null).result.current.target).toBeNull()
+  })
+})
+
 describe('the ?vm= link once used', () => {
   it('leaves the address on a pick or a clear, keeping the other parameters', () => {
     const hook = render('vm=200&tab=x')

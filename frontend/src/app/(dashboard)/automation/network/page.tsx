@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -15,6 +16,7 @@ import { Features, useLicense } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
 import * as firewallAPI from '@/lib/api/firewall'
 import { usePVEConnections } from '@/hooks/useConnections'
+import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { useFirewallData, Connection } from '@/hooks/useFirewallData'
 import { useVMFirewallRules } from '@/hooks/useVMFirewallRules'
 import { useHostFirewallRules } from '@/hooks/useHostFirewallRules'
@@ -27,9 +29,10 @@ import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
 import LoggingTab from './components/LoggingTab'
 import MicrosegTab from './components/microseg/MicrosegTab'
 import { MicrosegWriteContext, useCanManageMicroseg } from './components/microseg/microsegAccess'
+import { connectionOfVm, parseNetworkLink, pickConnection, readStoredConnection, storeConnection } from './networkLink'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN PAGE — 7 tabs: Dashboard, Firewalling, Aliases, IP Sets, Security Groups, Logging, Micro-segmentation
+   MAIN PAGE, 7 tabs: Dashboard, Firewalling, Aliases, IP Sets, Security Groups, Logging, Micro-segmentation
 ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function NetworkAutomationPage() {
@@ -40,12 +43,17 @@ export default function NetworkAutomationPage() {
   const { showToast } = useToast()
 
   // ── State ──
-  const [activeTab, setActiveTab] = useState(0)
+  // A link (?tab, ?sub, ?connection, ?vm) decides the tab, the sub-tab and the connection the page opens on; read once.
+  const params = useSearchParams()
+  const [link] = useState(() => parseNetworkLink(params))
+  const [activeTab, setActiveTab] = useState(link.tab ?? 0)
   const [rulesSubTab, setRulesSubTab] = useState(0)
-  const [selectedConnection, setSelectedConnection] = useState<string>('')
+  // The connection picked in the selector; until then the link's, the one remembered in the browser, or the first.
+  const [pickedConnection, setPickedConnection] = useState('')
+  const [storedConnection] = useState(readStoredConnection)
   // Set by a line of the Dashboard's "To do" list, for the tab it opens; dropped on any other tab change.
   const [guestFilter, setGuestFilter] = useState<GuestFilter | null>(null)
-  const [microsegSubTab, setMicrosegSubTab] = useState<MicrosegSubTab | null>(null)
+  const [microsegSubTab, setMicrosegSubTab] = useState<MicrosegSubTab | null>(link.sub)
   const changeTab = (tab: number) => {
     setActiveTab(tab)
     setGuestFilter(null)
@@ -54,7 +62,19 @@ export default function NetworkAutomationPage() {
 
   // ── Connections ──
   const { data: connectionsData } = usePVEConnections()
-  const connections: Connection[] = isEnterprise ? (connectionsData?.data || []) : []
+  const connections: Connection[] = useMemo(() => (isEnterprise ? (connectionsData?.data || []) : []), [isEnterprise, connectionsData])
+
+  // A ?vm= link without ?connection=: the connection holding that guest, from the inventory the app keeps cached
+  // server side (no Proxmox call when it is warm). Nothing is selected while it is read, so no other connection's
+  // data is computed meanwhile; a refusal or a guest found nowhere falls back to the usual choice.
+  const vmLookup = isEnterprise && link.vm !== null && !link.connection && !pickedConnection
+  const { data: inventory, error: inventoryError } = useSWRFetch(vmLookup ? '/api/v1/inventory' : null, { revalidateOnFocus: false, dedupingInterval: 60000 })
+  const vmConnection = vmLookup && inventory && link.vm !== null ? connectionOfVm(inventory, link.vm) : null
+  const waitingForVm = vmLookup && !inventory && !inventoryError
+  const selectedConnection = pickedConnection
+    || (waitingForVm ? '' : pickConnection(connections, [link.connection, vmConnection, storedConnection]))
+  // The live ?vm= (the Overview drops it from the address once the admin picks or clears a target).
+  const linkedVm = params?.get('vm') ?? null
 
   // ── Data hooks ──
   const {
@@ -92,23 +112,18 @@ export default function NetworkAutomationPage() {
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
+  // The connection shown is remembered: a reopen of the page starts on it, not on the first connection.
   useEffect(() => {
-    if (connections.length > 0 && !selectedConnection) {
-      setSelectedConnection(connections[0].id)
-    }
-  }, [connections, selectedConnection])
+    if (selectedConnection) storeConnection(selectedConnection)
+  }, [selectedConnection])
 
   useEffect(() => {
     setVMFirewallData([])
     setHostRulesByNode({})
-  }, [selectedConnection])
+  }, [selectedConnection, setVMFirewallData, setHostRulesByNode])
 
-  // If standalone mode detected, switch away from Cluster sub-tab
-  useEffect(() => {
-    if (firewallMode === 'standalone' && activeTab === 1 && rulesSubTab === 0) {
-      setRulesSubTab(1)
-    }
-  }, [firewallMode, activeTab, rulesSubTab])
+  // A standalone node has no cluster firewall: Firewalling opens on its host rules instead.
+  const shownRulesSubTab = firewallMode === 'standalone' && rulesSubTab === 0 ? 1 : rulesSubTab
 
   // The guest list (firewall state, VLANs, tags) on Firewalling > VMs (tab 1, subTab 2)
   // and Security Groups (tab 4) only: one request to the coverage route, computed and
@@ -116,11 +131,11 @@ export default function NetworkAutomationPage() {
   // are read when its row is opened, never for every guest on mount.
   useEffect(() => {
     if (isEnterprise && selectedConnection && !loadingVMRules && vmFirewallData.length === 0) {
-      if (activeTab === 4 || (activeTab === 1 && rulesSubTab === 2)) {
+      if (activeTab === 4 || (activeTab === 1 && shownRulesSubTab === 2)) {
         void loadVMFirewallData()
       }
     }
-  }, [activeTab, rulesSubTab, selectedConnection, vmFirewallData.length, loadingVMRules, loadVMFirewallData])
+  }, [isEnterprise, activeTab, shownRulesSubTab, selectedConnection, vmFirewallData.length, loadingVMRules, loadVMFirewallData])
 
   // The Aliases and IP Sets tabs are the same objects view on the same data.
   const objectsProps = {
@@ -156,7 +171,7 @@ export default function NetworkAutomationPage() {
               <FormControl size="small" sx={{ minWidth: 200 }}>
                 <InputLabel>{t('firewall.connection')}</InputLabel>
                 <Select value={selectedConnection} label={t('firewall.connection')} onChange={(e) => {
-                  setSelectedConnection(e.target.value)
+                  setPickedConnection(e.target.value)
                   setVMFirewallData([])
                 }}>
                   {connections.map((c) => (
@@ -198,7 +213,7 @@ export default function NetworkAutomationPage() {
           {/* Tab 1: Firewalling */}
           {activeTab === 1 && (
             <RulesTab
-              activeSubTab={rulesSubTab}
+              activeSubTab={shownRulesSubTab}
               onSubTabChange={setRulesSubTab}
               guestFilter={guestFilter}
               onClearGuestFilter={() => setGuestFilter(null)}
@@ -276,6 +291,7 @@ export default function NetworkAutomationPage() {
               connectionId={selectedConnection}
               connectionName={connections.find(c => c.id === selectedConnection)?.name}
               initialSubTab={microsegSubTab ?? undefined}
+              targetVm={linkedVm}
               firewall={{ clusterOptions, clusterRules, nodesList, firewallMode, onComplete: loadFirewallData }}
             />
           )}

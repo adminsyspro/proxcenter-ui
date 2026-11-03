@@ -5,10 +5,11 @@ import { Alert, Box, Button, Chip, Collapse, IconButton, Tooltip, Typography } f
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
+import { serviceLabel, serviceTitle, serviceTokensTitle, useServiceNames } from '@/lib/network/serviceNames'
 
 import { OneLine } from './dialogParts'
 import { MapNamesContext, isSampled, observedHits, type EdgeT } from './FlowEdge'
-import FlowSummary from './FlowSummary'
+import FlowSummary, { flowService } from './FlowSummary'
 import { ObservedKindGlyph, ResolveActions, useResolveSuggestions } from './observationParts'
 import PolicyPager, { usePaged } from './PolicyPager'
 import type { PanelEdgeData } from './zoneGraph'
@@ -51,7 +52,7 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
   const format = useFormatter()
   const [open, setOpen] = useState(false)
   const when = (iso: string) => formatWhen(format, iso)
-  const service = s.dport ? `${s.proto}/${s.dport}` : s.proto
+  const service = serviceTitle(s.proto, s.dport)
   const zoneName = (id: string) => zonesById.get(id)?.name ?? to('deletedZone')
   const source = s.src_zone_id ? zoneName(s.src_zone_id) : s.src_ip || to('unknownEndpoint')
   const destination = zoneName(s.dst_zone_id)
@@ -67,7 +68,9 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
         <Tooltip title={`${source} → ${destination}`}>
           <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{`${source} → ${destination}`}</Typography>
         </Tooltip>
-        <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{service}</Typography>
+        <Tooltip title={service}>
+          <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{serviceLabel(s.proto, s.dport)}</Typography>
+        </Tooltip>
         <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{to('hits', { count: s.hits })}</Typography>
         <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptLabel={accept} />
       </Box>
@@ -93,7 +96,10 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
  */
 export default function EdgePanel({ edgeId, source, target, data, from, to, zonesById, unapplied, connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onClose, onEdit }: Props) {
   const t = useTranslations('microsegPilot.overview')
+  useServiceNames()
   const observedKind = data.kind === 'unprotected' || data.kind === 'blocked'
+  const tokens = [...new Set([...data.flows, ...data.observed].map(f => flowService(f)))].sort()
+  const servicesTip = tokens.length ? serviceTokensTitle(tokens) : data.label
   const observed = observedKind || data.observed.length > 0
   const allowed = !observedKind || data.flows.length > 0
   const names = useContext(MapNamesContext)
@@ -123,7 +129,7 @@ export default function EdgePanel({ edgeId, source, target, data, from, to, zone
         <Chip size='small' variant='outlined' label={t(`legend.${data.kind === 'outside' ? 'allowed' : data.kind}`)} sx={{ flexShrink: 0 }} />
         <IconButton size='small' aria-label={t('panel.close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
       </Box>
-      <Tooltip title={data.label}>
+      <Tooltip title={servicesTip}>
         <Typography noWrap variant='body2' color='text.secondary'>{data.label}</Typography>
       </Tooltip>
       {failure && <Alert severity='error' onClose={clearFailure} sx={{ mt: 1.5 }}>{failure}</Alert>}

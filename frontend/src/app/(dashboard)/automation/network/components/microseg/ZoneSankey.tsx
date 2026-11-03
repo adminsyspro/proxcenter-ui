@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react'
 import { Box, Tooltip, Typography, useTheme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
+import { serviceTokensTitle } from '@/lib/network/serviceNames'
+
 import type { MatrixEnd } from './matrixModel'
 import type { Ribbon, SankeyLayout, SankeyNode } from './sankeyModel'
 import { EDGE_COLORS, EXTERNAL_ID } from './zoneGraph'
@@ -123,7 +125,7 @@ export default function ZoneSankey({ layout, selectedCell, selectedZone, onSelec
     const to = nameOf(nodeOf.get(`t:${r.target}`)!, 'target')
     const amount = r.hits ? t('matrix.hits', { count: r.hits }) : t('sankey.flows', { count: r.count })
     const legend = t(r.kind === 'outside' ? 'legend.allowed' : `legend.${r.kind}`)
-    const services = r.services.join(', ')
+    const services = serviceTokensTitle(r.services)
     const line = `${legend}: ${services}`
     return { title: `${from} → ${to}`, line, amount, aria: t('edge.aria', { from, to, services: `${line}, ${amount}` }) }
   }

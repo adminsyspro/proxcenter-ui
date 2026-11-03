@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
-import { renderWithProviders, screen, fireEvent } from '@/__tests__/setup/renderWithProviders'
+import { renderWithProviders, screen, fireEvent, userEvent } from '@/__tests__/setup/renderWithProviders'
 
 import { demoInput, zone } from './mapViewsTestKit'
 import { buildMatrix } from './matrixModel'
@@ -36,6 +36,17 @@ function show(model = buildMatrix(demoInput())) {
 }
 
 describe('ZoneMatrix', () => {
+  it('writes a known service as its name in the chip of a cell, with the protocol and the port in its tooltip', async () => {
+    const web = zone('zw', 'web')
+    const db = zone('zd', 'db')
+    const flow = (id: string, dport: string) => ({ ...demoInput().flows[0], id, src_zone_id: 'zw', src_cidr: '', dst_zone_id: 'zd', dst_cidr: '', proto: 'tcp', dport })
+    show(buildMatrix({ zones: [web, db], flows: [flow('f1', '5432'), flow('f2', '42001')], suggestions: [] }))
+    expect(screen.getByText('PostgreSQL')).toBeTruthy()
+    expect(screen.getByText('tcp/42001')).toBeTruthy()
+    await userEvent.hover(screen.getByText('PostgreSQL'))
+    expect((await screen.findByRole('tooltip')).textContent).toBe('PostgreSQL (tcp/5432)')
+  })
+
   it('fills the map: the frame takes all of it, the zone columns and rows share the room left (1fr)', () => {
     show()
     const frame = screen.getByTestId('matrix-frame')

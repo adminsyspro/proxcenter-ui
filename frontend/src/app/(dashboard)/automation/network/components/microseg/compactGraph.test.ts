@@ -34,7 +34,7 @@ describe('compact zones', () => {
   it('draws one green edge per ordered pair, its label grouping the ports', () => {
     const g = buildCompactGraph({ zones: [web, db], flows: [flow('f1'), flow('f2', { dport: '22' }), flow('f3', { src_zone_id: 'zd', dst_zone_id: 'zw' })], suggestions: [] })
     expect(g.edges.map(e => e.id).sort()).toEqual(['allowed:zone:zd>zone:zw', 'allowed:zone:zw>zone:zd'])
-    expect(data(g.edges.find(e => e.id === 'allowed:zone:zw>zone:zd')!).label).toBe('tcp/22, 443')
+    expect(data(g.edges.find(e => e.id === 'allowed:zone:zw>zone:zd')!).label).toBe('SSH, HTTPS')
     expect(data(g.edges[0]).count).toBeGreaterThan(0)
   })
 
@@ -48,7 +48,7 @@ describe('compact zones', () => {
     expect(ids).toEqual(['allowed:zone:zw>zone:zd', 'blocked:zone:zw>zone:zd', 'unprotected:external>zone:zd', 'unprotected:zone:zw>zone:zd'])
     const unprotected = data(g.edges.find(e => e.id === 'unprotected:zone:zw>zone:zd')!)
     expect(unprotected.count).toBe(2)
-    expect(unprotected.label).toBe('tcp/22, 80')
+    expect(unprotected.label).toBe('SSH, HTTP')
     expect(g.nodes.some(n => n.id === 'external')).toBe(true)
   })
 

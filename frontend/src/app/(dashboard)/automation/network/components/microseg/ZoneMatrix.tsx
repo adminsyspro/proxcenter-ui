@@ -4,6 +4,8 @@ import { useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type Mo
 import { Box, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, type Theme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
+import { serviceTokensTitle } from '@/lib/network/serviceNames'
+
 import MatrixCell, { type CellHandlers } from './MatrixCell'
 import { MATRIX_SORTS, cellId, cellView, sortEnds, type CellView, type MatrixEnd, type MatrixModel, type MatrixSort } from './matrixModel'
 import { useStoredChoice } from './useStoredChoice'
@@ -107,7 +109,7 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
 
   const ariaOf = (row: MatrixEnd, col: MatrixEnd, view: CellView | null) => {
     const parts: string[] = []
-    if (view?.services.length) parts.push(tEdge('allowed', { services: view.services.join(', ') }))
+    if (view?.services.length) parts.push(tEdge('allowed', { services: serviceTokensTitle(view.services) }))
     if (view?.unprotected) parts.push(tEdge('countUnprotected', { count: view.unprotected }))
     if (view?.blocked) parts.push(tEdge('countBlocked', { count: view.blocked }))
     if (view?.hits) parts.push(t('matrix.hits', { count: view.hits }))

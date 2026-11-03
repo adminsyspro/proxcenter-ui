@@ -58,8 +58,14 @@ describe('the tooltip of an edge', () => {
   it('lists the grouped ports of an allowed edge', async () => {
     renderEdge('zone:zw', 'zone:zd', edgeData('allowed'))
     const text = await hoverDetails('tcp/22, 443')
-    expect(text).toContain('Allowed: tcp/22, tcp/443')
+    expect(text).toContain('Allowed: SSH (tcp/22), HTTPS (tcp/443)')
     expect(text).not.toContain('In the draft')
+  })
+
+  it('shows the label it was given and puts the name and the port of every service in the tooltip', async () => {
+    renderEdge('zone:zw', 'zone:zd', edgeData('allowed', { services: ['tcp/22', 'tcp/8080', 'tcp/42001'], label: 'SSH, HTTP-alt, tcp/42001' }))
+    const text = await hoverDetails('SSH, HTTP-alt, tcp/42001')
+    expect(text).toContain('Allowed: SSH (tcp/22), HTTP-alt (tcp/8080), tcp/42001')
   })
 
   it('says a draft-only allowed edge is applied with the next plan', async () => {
@@ -69,7 +75,7 @@ describe('the tooltip of an edge', () => {
 
   it('says a flow to Outside is not applied in v1', async () => {
     renderEdge('zone:zw', 'outside', edgeData('outside', { services: ['udp/53'], label: 'udp/53', color: '#9e9e9e' }))
-    expect(await hoverDetails('udp/53')).toContain('Not applied in v1: udp/53')
+    expect(await hoverDetails('udp/53')).toContain('Not applied in v1: DNS (udp/53)')
   })
 
   it('shows the sample pair and the zone hits of an unprotected edge between guests', async () => {
@@ -78,7 +84,7 @@ describe('the tooltip of an edge', () => {
     const text = await hoverDetails('tcp/22')
     expect(text).toContain('2 observed flows that no flow allows (unprotected)')
     expect(text).toContain('Example: short(guest:zw:qemu/100) → short(guest:zd:qemu/200)')
-    expect(text).toContain('14 hits between zone web and zone db on tcp/22 (sample pair shown)')
+    expect(text).toContain('14 hits between zone web and zone db on SSH (tcp/22) (sample pair shown)')
     expect(text).toContain('1 hit between zone web and zone db on icmp (sample pair shown)')
     expect(text).toMatch(/Last seen \S/)
   })
@@ -93,8 +99,8 @@ describe('the tooltip of an edge', () => {
     const text = await hoverDetails('tcp/22')
     expect(text).toContain('7 flows blocked by an enforced zone')
     expect(text).not.toContain('Example:')
-    expect(text).toContain('14 hits from 203.0.113.9 to zone db on tcp/22')
-    expect(text).toContain('14 hits from Unknown to zone db on tcp/22')
+    expect(text).toContain('14 hits from 203.0.113.9 to zone db on SSH (tcp/22)')
+    expect(text).toContain('14 hits from Unknown to zone db on SSH (tcp/22)')
     expect(text).not.toContain('(sample pair shown)')
     expect(text).toContain('Last seen not a date')
     expect(text).toContain('+2 more')
@@ -104,7 +110,7 @@ describe('the tooltip of an edge', () => {
 describe('the label of an edge', () => {
   it('names the edge for a screen reader and opens it on a click, Enter or Space', () => {
     const onClick = renderEdge('zone:zw', 'zone:zd', edgeData('allowed'))
-    const label = screen.getByRole('button', { name: 'end(zone:zw) to end(zone:zd): tcp/22, tcp/443' })
+    const label = screen.getByRole('button', { name: 'end(zone:zw) to end(zone:zd): SSH (tcp/22), HTTPS (tcp/443)' })
     fireEvent.click(label)
     fireEvent.keyDown(label, { key: 'Enter' })
     fireEvent.keyDown(label, { key: ' ' })

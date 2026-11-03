@@ -56,7 +56,7 @@ describe('guests on the map', () => {
     setup({ vms: withIps, suggestions: [wouldBlock('s1', { src_ip: '10.0.0.1', dst_ip: '10.0.0.2', dport: '5432' })] })
     const path = await pathOf('unprotected:guest:zw:qemu/100>guest:zd:qemu/200')
     expect(path.getAttribute('data-dash')).not.toBe('')
-    expect(await screen.findByText('tcp/5432')).toBeTruthy()
+    expect(await screen.findByText('PostgreSQL')).toBeTruthy()
     expect(screen.getByTestId('edge-unprotected:guest:zw:qemu/100>guest:zd:qemu/200').getAttribute('aria-label')).toBe('web-1 (web) to db-1 (db): 1 unprotected flow')
   })
 
@@ -172,12 +172,12 @@ describe('panel of an edge', () => {
     expect(within(panel).getByText('The engine keeps one sample pair of guests per observed flow: the hits count the whole zone pair.')).toBeTruthy()
     const row = within(panel).getByRole('listitem', { name: 'web to db' })
     expect(within(row).getByText('web → db')).toBeTruthy()
-    expect(within(row).getByText('tcp/80')).toBeTruthy()
+    expect(within(row).getByText('HTTP')).toBeTruthy()
     expect(within(row).getByText('14 hits')).toBeTruthy()
     expect(within(row).queryByText('Pending')).toBeNull()
     expect(within(row).queryByText(/^First seen/)).toBeNull()
     fireEvent.click(within(row).getByRole('button', { name: 'Show details' }))
-    expect(await within(row).findByText('14 hits between zone web and zone db on tcp/80 (sample pair shown)')).toBeTruthy()
+    expect(await within(row).findByText('14 hits between zone web and zone db on HTTP (tcp/80) (sample pair shown)')).toBeTruthy()
     expect(within(row).getByText('Example: web-1 → db-1')).toBeTruthy()
     expect(within(row).getByText('Sample addresses: 10.0.0.1 → 10.0.0.2')).toBeTruthy()
     expect(within(row).getByText(/^First seen/)).toBeTruthy()
@@ -192,7 +192,7 @@ describe('panel of an edge', () => {
     expect(within(panel).queryByText(/^Example:/)).toBeNull()
     const row = within(panel).getByRole('listitem', { name: '203.0.113.9 to db' })
     fireEvent.click(within(row).getByRole('button', { name: 'Show details' }))
-    expect(await within(row).findByText('2 hits from 203.0.113.9 to zone db on tcp/80')).toBeTruthy()
+    expect(await within(row).findByText('2 hits from 203.0.113.9 to zone db on HTTP (tcp/80)')).toBeTruthy()
     expect(within(panel).queryByText(/sample pair/)).toBeNull()
   })
 
@@ -208,7 +208,7 @@ describe('panel of an edge', () => {
 
   it('opens the panel of an allowed edge with Space on its label', async () => {
     setup({ flows: [flowOf('f1')] })
-    fireEvent.keyDown(await screen.findByRole('button', { name: 'web to db: tcp/443' }), { key: ' ' })
+    fireEvent.keyDown(await screen.findByRole('button', { name: 'web to db: HTTPS (tcp/443)' }), { key: ' ' })
     expect(await screen.findByRole('complementary', { name: 'Flow web to db' })).toBeTruthy()
   })
 
@@ -217,7 +217,7 @@ describe('panel of an edge', () => {
     const panel = await open()
     const before = calls(SUGGESTIONS).length
     mock.routes[SUGGESTIONS] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
-    fireEvent.click(within(panel).getByRole('button', { name: 'Accept as flow web → db tcp/80' }))
+    fireEvent.click(within(panel).getByRole('button', { name: 'Accept as flow web → db HTTP (tcp/80)' }))
     await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
     expect(body(calls('POST /suggestions/resolve')[0][1])).toEqual({ version: 3, ids: ['s1'], action: 'accept' })
     expect(await screen.findByText('1 flow accepted into the draft')).toBeTruthy()
@@ -277,7 +277,7 @@ describe('panel of an edge', () => {
 
   it('opens the panel from the label of the edge too', async () => {
     setup({ flows: [flowOf('f1')] })
-    fireEvent.click(await screen.findByText('tcp/443'))
+    fireEvent.click(await screen.findByText('HTTPS'))
     expect(await screen.findByRole('complementary', { name: 'Flow web to db' })).toBeTruthy()
   })
 })

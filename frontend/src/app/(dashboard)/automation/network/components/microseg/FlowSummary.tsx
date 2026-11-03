@@ -4,6 +4,7 @@ import { Box, Chip, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
+import { serviceLabel, serviceTitle, useServiceNames } from '@/lib/network/serviceNames'
 
 type Props = {
   flow: MicrosegFlow
@@ -34,12 +35,15 @@ export function flowService(flow: Pick<MicrosegFlow, 'proto' | 'dport'>): string
  */
 export default function FlowSummary({ flow, zonesById }: Props) {
   const t = useTranslations('microsegPilot.policy.flow')
+  useServiceNames()
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: '1 1 auto' }}>
       <Side zoneId={flow.src_zone_id} cidr={flow.src_cidr} zonesById={zonesById} />
       <i className='ri-arrow-right-line' style={{ flexShrink: 0 }} />
       <Side zoneId={flow.dst_zone_id} cidr={flow.dst_cidr} zonesById={zonesById} />
-      <Chip size='small' variant='outlined' label={flowService(flow)} sx={{ flexShrink: 0 }} />
+      <Tooltip title={serviceTitle(flow.proto, flow.dport)}>
+        <Chip size='small' variant='outlined' label={serviceLabel(flow.proto, flow.dport)} sx={{ flexShrink: 0 }} />
+      </Tooltip>
       {flow.origin === 'learned' && <Chip size='small' color='info' variant='outlined' label={t('learned')} sx={{ flexShrink: 0 }} />}
       {flow.dst_cidr && (
         <Tooltip title={t('notApplied')}>

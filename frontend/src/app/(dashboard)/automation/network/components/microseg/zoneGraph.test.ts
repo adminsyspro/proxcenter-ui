@@ -102,9 +102,9 @@ describe('allowed flows', () => {
     })
     expect(edges).toHaveLength(2)
     const wd = edges.find(e => e.id === 'allowed:zone:zw>zone:zd')!
-    expect(data(wd)).toMatchObject({ kind: 'allowed', label: 'tcp/22, 443, 8080', count: 3, particle: true, color: EDGE_COLORS.allowed })
+    expect(data(wd)).toMatchObject({ kind: 'allowed', label: 'SSH, HTTPS, HTTP-alt', count: 3, particle: true, color: EDGE_COLORS.allowed })
     expect(wd.style?.strokeDasharray).toBeUndefined()
-    expect(data(edges.find(e => e.id === 'allowed:zone:zd>zone:za')!).label).toBe('tcp 5432 · udp 53')
+    expect(data(edges.find(e => e.id === 'allowed:zone:zd>zone:za')!).label).toBe('PostgreSQL · DNS')
     expect((wd.markerEnd as { type: string }).type).toBe(MarkerType.ArrowClosed)
   })
 
@@ -156,7 +156,7 @@ describe('observed flows, guest to guest', () => {
   it('resolves the addresses of an observed flow to the guests it went between', () => {
     const { edges } = buildZoneGraph({ zones: [web, db], flows: [], suggestions: [seen('s1', { src_ip: '10.0.1.2', dst_ip: '10.0.2.1', dport: '5432' }), seen('s2', { src_ip: '10.0.1.2', dst_ip: '10.0.2.1', dport: '22' })], members })
     expect(edges.map(e => e.id)).toEqual(['unprotected:guest:zw:qemu/101>guest:zd:qemu/200'])
-    expect(data(edges[0])).toMatchObject({ kind: 'unprotected', label: 'tcp/22, 5432', count: 2, small: true, fromGroup: 'zone:zw', toGroup: 'zone:zd', color: EDGE_COLORS.unprotected })
+    expect(data(edges[0])).toMatchObject({ kind: 'unprotected', label: 'SSH, PostgreSQL', count: 2, small: true, fromGroup: 'zone:zw', toGroup: 'zone:zd', color: EDGE_COLORS.unprotected })
     expect(edges[0].style?.strokeDasharray).toBeTruthy()
     expect(data(edges[0]).observed.map(s => s.id)).toEqual(['s1', 's2'])
   })
@@ -278,11 +278,19 @@ describe('filters and focus', () => {
 
 describe('groupServices', () => {
   it('groups the ports of one protocol after its name, several protocols apart, ports in numeric order', () => {
-    expect(groupServices(['tcp/8080', 'tcp/22'])).toBe('tcp/22, 8080')
-    expect(groupServices(['udp/53', 'tcp/5432'])).toBe('tcp 5432 · udp 53')
-    expect(groupServices(['icmp', 'tcp/443', 'tcp/80'])).toBe('icmp · tcp 80, 443')
-    expect(groupServices(['tcp/80,443', 'tcp/8000-8100'])).toBe('tcp/80, 443, 8000-8100')
+    expect(groupServices(['tcp/42002', 'tcp/42001'])).toBe('tcp/42001, 42002')
+    expect(groupServices(['udp/42001', 'tcp/42002'])).toBe('tcp 42002 · udp 42001')
+    expect(groupServices(['icmp', 'tcp/42002', 'tcp/42001'])).toBe('icmp · tcp 42001, 42002')
     expect(groupServices(['icmp'])).toBe('icmp')
+  })
+
+  it('reads a known port as its name: one protocol, several protocols, a name with an unknown port or a range', () => {
+    expect(groupServices(['tcp/8080', 'tcp/22'])).toBe('SSH, HTTP-alt')
+    expect(groupServices(['udp/53', 'tcp/5432'])).toBe('PostgreSQL · DNS')
+    expect(groupServices(['icmp', 'tcp/443', 'tcp/80'])).toBe('icmp · HTTP, HTTPS')
+    expect(groupServices(['tcp/80,443', 'tcp/8000-8100'])).toBe('HTTP, HTTPS, tcp/8000-8100')
+    expect(groupServices(['tcp/22', 'tcp/42001'])).toBe('SSH, tcp/42001')
+    expect(groupServices(['tcp/5900', 'tcp/5901'])).toBe('VNC')
   })
 })
 

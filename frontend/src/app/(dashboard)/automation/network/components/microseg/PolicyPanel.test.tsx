@@ -85,8 +85,8 @@ describe('zone list', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Show details' }))
     expect(within(row).getByText('Incoming flows')).toBeTruthy()
     expect(within(row).getByText('Outgoing flows')).toBeTruthy()
-    expect(within(row).getByText('tcp/443')).toBeTruthy()
-    expect(within(row).getByText('tcp/8080')).toBeTruthy()
+    expect(within(row).getByText('HTTPS')).toBeTruthy()
+    expect(within(row).getByText('HTTP-alt')).toBeTruthy()
   })
 })
 
@@ -123,13 +123,13 @@ describe('flow list', () => {
   })
 
   it('paginates the flows', async () => {
-    const flows = Array.from({ length: 11 }, (_, i) => ({ ...flow(`f${i}`), src_zone_id: 'zw', dst_zone_id: 'zd', dport: String(1000 + i) }))
+    const flows = Array.from({ length: 11 }, (_, i) => ({ ...flow(`f${i}`), src_zone_id: 'zw', dst_zone_id: 'zd', dport: String(42000 + i) }))
     setup({ zones: [web(), db()], flows })
     const region = await screen.findByRole('region', { name: 'Flows' })
-    expect(within(region).getByText('tcp/1009')).toBeTruthy()
-    expect(within(region).queryByText('tcp/1010')).toBeNull()
+    expect(within(region).getByText('tcp/42009')).toBeTruthy()
+    expect(within(region).queryByText('tcp/42010')).toBeNull()
     fireEvent.click(within(region).getByRole('button', { name: /next page/i }))
-    expect(await within(region).findByText('tcp/1010')).toBeTruthy()
+    expect(await within(region).findByText('tcp/42010')).toBeTruthy()
   })
 })
 

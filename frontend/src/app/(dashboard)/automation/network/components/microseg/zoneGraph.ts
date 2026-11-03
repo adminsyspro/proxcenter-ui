@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
 
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import { serviceName } from '@/lib/network/serviceNames'
 
 import { flowService } from './FlowSummary'
 import { placeEdges, type EdgeEnds, type Obstacle, type PlacedEdge } from './zoneGraphEdges'
@@ -164,7 +165,8 @@ const portOrder = (a: string, b: string) => (Number.parseInt(a, 10) - Number.par
 
 /**
  * The ports grouped per protocol: "tcp/22, 8080" for one protocol, "tcp 5432 · udp 53" for several; a protocol
- * without port is its name alone ("icmp").
+ * without port is its name alone ("icmp"). A known port reads as its name ("SSH, HTTP-alt", "PostgreSQL · DNS");
+ * a part with a name and an unknown port keeps that one raw ("SSH, tcp/9999").
  */
 export function groupServices(services: string[]): string {
   const ports = new Map<string, Set<string>>()
@@ -178,7 +180,10 @@ export function groupServices(services: string[]): string {
   const protos = [...ports.keys()].sort(byText)
   const part = (proto: string, sep: string) => {
     const list = [...ports.get(proto)!].sort(portOrder)
-    return list.length ? `${proto}${sep}${list.join(', ')}` : proto
+    if (!list.length) return proto
+    const names = list.map(p => serviceName(proto, p))
+    if (names.every(n => n === null)) return `${proto}${sep}${list.join(', ')}`
+    return [...new Set(list.map((p, i) => names[i] ?? `${proto}/${p}`))].join(', ')
   }
   return protos.length === 1 ? part(protos[0], '/') : protos.map(p => part(p, ' ')).join(' · ')
 }

@@ -4,6 +4,8 @@ import { memo, type FocusEvent, type KeyboardEvent, type MouseEvent } from 'reac
 import { Box, Chip, Tooltip, Typography, alpha, type Theme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
+import { serviceTokenLabel, serviceTokenTitle } from '@/lib/network/serviceNames'
+
 import type { CellTone, CellView, ObservedChip } from './matrixModel'
 import { EDGE_COLORS } from './zoneGraph'
 
@@ -45,8 +47,8 @@ function ChipLine({ items, color, dashed, draft, shown }: { items: ChipItem[]; c
 /** What a cell holds: the hits in its corner, the allowed ports, the unprotected ones, the blocked ones. */
 function CellBody({ view, chips }: { view: CellView; chips: number }) {
   const t = useTranslations('microsegPilot.overview.matrix')
-  const allowed = view.services.map(s => ({ key: s, label: s, tip: s }))
-  const chip = (c: ObservedChip) => ({ key: c.service, label: c.service, tip: t('observedChip', { service: c.service, count: c.hits }) })
+  const allowed = view.services.map(s => ({ key: s, label: serviceTokenLabel(s), tip: serviceTokenTitle(s) }))
+  const chip = (c: ObservedChip) => ({ key: c.service, label: serviceTokenLabel(c.service), tip: t('observedChip', { service: serviceTokenTitle(c.service), count: c.hits }) })
   return (
     <>
       {view.hits > 0 && (

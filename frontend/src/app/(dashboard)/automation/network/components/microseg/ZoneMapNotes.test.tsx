@@ -46,15 +46,15 @@ describe('keyboard', () => {
     expect((await node('zone:zw')).getAttribute('data-focusable')).toBe('false')
     const edge = await screen.findByTestId('edge-allowed:zone:zw>zone:zd')
     expect(edge.getAttribute('data-focusable')).toBe('false')
-    expect(edge.getAttribute('aria-label')).toBe('web to db: tcp/443')
+    expect(edge.getAttribute('aria-label')).toBe('web to db: HTTPS (tcp/443)')
   })
 
   it('names the edges to External and Outside', async () => {
     setup({
       flows: [flowOf('f1', { src_zone_id: '', src_cidr: '10.0.0.0/8' }), flowOf('f2', { dst_zone_id: '', dst_cidr: '8.8.8.0/24', proto: 'udp', dport: '53' })],
     })
-    expect((await screen.findByTestId('edge-allowed:external>zone:zd')).getAttribute('aria-label')).toBe('Unknown / External to db: tcp/443')
-    expect((await screen.findByTestId('edge-outside:zone:zw>outside')).getAttribute('aria-label')).toBe('web to Outside: udp/53')
+    expect((await screen.findByTestId('edge-allowed:external>zone:zd')).getAttribute('aria-label')).toBe('Unknown / External to db: HTTPS (tcp/443)')
+    expect((await screen.findByTestId('edge-outside:zone:zw>outside')).getAttribute('aria-label')).toBe('web to Outside: DNS (udp/53)')
   })
 })
 

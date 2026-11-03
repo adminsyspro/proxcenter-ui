@@ -82,7 +82,7 @@ describe('cellView', () => {
 
   it('gives the flow panel the pair: its flows, its observed flows, the kind and colour of the tone', () => {
     const d = cellEdgeData(cellView(cell, ALL_FLOWS, null)!, 'zone:zd')
-    expect(d).toMatchObject({ kind: 'unprotected', color: EDGE_COLORS.unprotected, label: 'tcp 22, 80, 443 · udp 53' })
+    expect(d).toMatchObject({ kind: 'unprotected', color: EDGE_COLORS.unprotected, label: 'SSH, HTTP, HTTPS · DNS' })
     expect(d.flows.map(f => f.id)).toEqual(['f1', 'f2'])
     expect(d.observed.map(s => s.id)).toEqual(['s1', 's2'])
     const outside = buildMatrix({ zones: [web], flows: [flow('f9', { dst_zone_id: '', dst_cidr: '10.0.0.0/8' })], suggestions: [] })

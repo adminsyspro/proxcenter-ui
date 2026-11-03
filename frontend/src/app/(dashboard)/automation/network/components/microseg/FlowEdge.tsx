@@ -6,6 +6,7 @@ import { Box, Tooltip, Typography, useMediaQuery } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion } from '@/lib/microseg/types'
+import { serviceTitle, serviceTokensTitle } from '@/lib/network/serviceNames'
 
 import type { MapEdgeData } from './zoneGraph'
 import { formatWhen } from './summaryModel'
@@ -34,7 +35,7 @@ export function edgeAria(t: EdgeT, names: MapNames, source: string, target: stri
 function edgeContent(t: EdgeT, d: MapEdgeData): string {
   if (d.kind === 'unprotected') return t('countUnprotected', { count: d.count })
   if (d.kind === 'blocked') return t('countBlocked', { count: d.count })
-  return d.services.join(', ')
+  return serviceTokensTitle(d.services)
 }
 
 /**
@@ -42,7 +43,7 @@ function edgeContent(t: EdgeT, d: MapEdgeData): string {
  * from a guest (`sampled`, see isSampled) it adds "(sample pair shown)", since the guests are only the example kept.
  */
 export function observedHits(t: EdgeT, names: MapNames, s: MicrosegSuggestion, unknown: string, sampled: boolean): string {
-  const service = s.dport ? `${s.proto}/${s.dport}` : s.proto
+  const service = serviceTitle(s.proto, s.dport)
   const to = names.zone(s.dst_zone_id)
   if (s.src_zone_id) return t(sampled ? 'zoneHitsSampled' : 'zoneHits', { count: s.hits, from: names.zone(s.src_zone_id), to, service })
   return t(sampled ? 'sourceHitsSampled' : 'sourceHits', { count: s.hits, from: s.src_ip || unknown, to, service })
@@ -58,7 +59,7 @@ function EdgeDetails({ d, source, target }: { d: MapEdgeData; source: string; ta
   if (d.kind === 'allowed' || d.kind === 'outside') {
     return (
       <Box>
-        <Typography variant='caption' sx={{ display: 'block' }}>{t(d.kind, { services: d.services.join(', ') })}</Typography>
+        <Typography variant='caption' sx={{ display: 'block' }}>{t(d.kind, { services: serviceTokensTitle(d.services) })}</Typography>
         {d.draft && <Typography variant='caption' sx={{ display: 'block' }}>{t('draft')}</Typography>}
       </Box>
     )
@@ -81,7 +82,7 @@ function EdgeDetails({ d, source, target }: { d: MapEdgeData; source: string; ta
 
 /**
  * An edge of the zone map, drawn from the shape the graph computed (React Flow's handle positions are not used):
- * the arrow, the grouped ports as an ellipsized label with the details in a tooltip, and, on an applied allowed
+ * the arrow, the grouped services (names of the known ports) as an ellipsized label with the details in a tooltip, and, on an applied allowed
  * flow only, a particle that follows the edge (not drawn under prefers-reduced-motion). A dimmed edge (focus mode)
  * dims its label too.
  */

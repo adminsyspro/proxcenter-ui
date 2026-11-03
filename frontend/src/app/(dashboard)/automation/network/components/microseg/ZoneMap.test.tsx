@@ -61,7 +61,7 @@ describe('edges', () => {
     expect(path.getAttribute('data-dash')).toBe('')
     expect(path.getAttribute('data-stroke')).toBe('#2e7d32')
     expect(screen.getAllByTestId(/^edge-/)).toHaveLength(1)
-    expect(await screen.findByText('tcp 22, 443 · udp 53')).toBeTruthy()
+    expect(await screen.findByText('SSH, HTTPS · DNS')).toBeTruthy()
   })
 
   it('draws the pending would_block flows as a dashed red edge and the blocked ones as a solid blue edge', async () => {
@@ -69,7 +69,7 @@ describe('edges', () => {
     const path = await pathOf('unprotected:zone:zw>zone:zd')
     expect(path.getAttribute('data-dash')).not.toBe('')
     expect(path.getAttribute('data-stroke')).toBe('#e53935')
-    expect(await screen.findByText('tcp/22, 80')).toBeTruthy()
+    expect(await screen.findByText('SSH, HTTP')).toBeTruthy()
     const blocked = await pathOf('blocked:zone:zw>zone:zd')
     expect(blocked.getAttribute('data-dash')).toBe('')
     expect(blocked.getAttribute('data-stroke')).toBe('#1565c0')
@@ -157,8 +157,8 @@ describe('side panel', () => {
     expect(ct.querySelector('i.ri-instance-fill')).toBeTruthy()
     expect(within(panel).getByText('Incoming flows')).toBeTruthy()
     expect(within(panel).getByText('Outgoing flows')).toBeTruthy()
-    expect(within(panel).getByText('tcp/443')).toBeTruthy()
-    expect(within(panel).getByText('tcp/5432')).toBeTruthy()
+    expect(within(panel).getByText('HTTPS')).toBeTruthy()
+    expect(within(panel).getByText('PostgreSQL')).toBeTruthy()
   })
 
   it('paginates the members ten per page', async () => {

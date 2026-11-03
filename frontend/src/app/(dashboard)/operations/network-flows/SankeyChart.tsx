@@ -32,6 +32,7 @@ import {
 
 import { formatBytes } from '@/utils/format'
 import { groupKeyOf } from '@/lib/microseg/trafficLens'
+import { serviceLabel, useServiceNames } from '@/lib/network/serviceNames'
 
 import {
   buildEndpointIndex,
@@ -67,18 +68,6 @@ type SearchMode = 'highlight' | 'filter'
 
 // Flows drawn at once, beyond which the diagram becomes unreadable
 const MAX_FLOWS = 30
-
-// Well-known port → service name
-function portToService(port: number, protocol: string): string {
-  const services: Record<number, string> = {
-    22: 'SSH', 53: 'DNS', 80: 'HTTP', 443: 'HTTPS', 3306: 'MySQL',
-    5432: 'PostgreSQL', 6379: 'Redis', 8006: 'PVE API', 8080: 'HTTP-Alt',
-    25: 'SMTP', 110: 'POP3', 143: 'IMAP', 3389: 'RDP', 5900: 'VNC',
-    6789: 'Ceph MON', 3300: 'Ceph MON', 2049: 'NFS', 445: 'SMB',
-    9090: 'Prometheus', 9100: 'Node Exp', 5044: 'Logstash',
-  }
-  return services[port] || `${port}/${protocol}`
-}
 
 // Color palette for flows
 const FLOW_COLORS = [
@@ -134,6 +123,7 @@ type Props = {
 
 export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {}) {
   const t = useTranslations()
+  const serviceNamesVersion = useServiceNames()
   const theme = useTheme()
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -240,7 +230,7 @@ export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {})
     const aggregated = new Map<string, { bytes: number; packets: number; protocol: string; port: number; srcIP: string; dstIP: string; matched: boolean }>()
 
     for (const pair of sourcePairs) {
-      const service = portToService(pair.dst_port, pair.protocol)
+      const service = serviceLabel(pair.protocol, pair.dst_port)
       const srcKey = endpointKey(pair.src_ip, pair.src_vmid)
       const dstKey = endpointKey(pair.dst_ip, pair.dst_vmid)
       const key = `${srcKey}|${service}|${dstKey}`
@@ -278,7 +268,7 @@ export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {})
     }
 
     for (const flow of sortedFlows) {
-      const service = portToService(flow.port, flow.protocol)
+      const service = serviceLabel(flow.protocol, flow.port)
       const srcIdx = getOrCreateNode(flow.srcIP, 'source')
       const svcIdx = getOrCreateNode(service, 'service')
       const dstIdx = getOrCreateNode(flow.dstIP, 'destination')
@@ -290,7 +280,8 @@ export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {})
     }
 
     return { nodes, links, matchCount: matchedFlows.length }
-  }, [pairs, matchedPairs, endpointIndex, q, mode, endpointKey, nodeLabel, lens])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the version only rebuilds the service names once the full table is loaded
+  }, [pairs, matchedPairs, endpointIndex, q, mode, endpointKey, nodeLabel, lens, serviceNamesVersion])
 
   // Compute Sankey layout
   const layout = useMemo(() => {
@@ -418,7 +409,7 @@ export default function SankeyChart({ groupBy = 'vm', lens = null }: Props = {})
       sourceName: srcNode.name,
       targetName: tgtNode.name,
       srcIP,
-      service: service || portToService(link.port, link.protocol),
+      service: service || serviceLabel(link.protocol, link.port),
       dstIP,
       bytes: link.value,
       packets: link.packets || 0,

@@ -18,7 +18,7 @@ describe('SankeyChart', () => {
 
         return HttpResponse.json([
           { src_ip: '10.0.0.1', dst_ip: '10.0.0.2', bytes: 4096, packets: 4, protocol: 'tcp', dst_port: 443 },
-          { src_ip: '10.0.0.3', dst_ip: '10.0.0.2', bytes: 2048, packets: 2, protocol: 'udp', dst_port: 5555 },
+          { src_ip: '10.0.0.3', dst_ip: '10.0.0.2', bytes: 2048, packets: 2, protocol: 'udp', dst_port: 42555 },
         ])
       }),
     )
@@ -27,7 +27,7 @@ describe('SankeyChart', () => {
 
     expect(await screen.findByText('10.0.0.1')).toBeInTheDocument()
     expect(screen.getByText('HTTPS')).toBeInTheDocument()
-    expect(screen.getByText('5555/udp')).toBeInTheDocument()
+    expect(screen.getByText('udp/42555')).toBeInTheDocument()
     expect(screen.getByText('10.0.0.2')).toBeInTheDocument()
     expect(queries).toEqual(['?endpoint=ip-pairs&n=100'])
   })

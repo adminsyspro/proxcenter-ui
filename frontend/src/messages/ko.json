@@ -6124,7 +6124,12 @@
     "openBulkMigration": "이 일괄 마이그레이션의 진행 상황 열기",
     "openArchive": "작업 보관 기록 열기",
     "search": "작업 검색",
-    "clearSearch": "검색 지우기"
+    "clearSearch": "검색 지우기",
+    "moveProgress": {
+      "label": "이동 진행률",
+      "bytes": "{total} 중 {done}",
+      "eta": "약 {eta} 남음"
+    }
   },
   "events": {
     "title": "이벤트",
@@ -7949,7 +7954,10 @@
     },
     "cloneHa": "고가용성 사용",
     "cloneHaHelp": "복제가 끝나면 HA 관리자에 추가되고 시작됩니다.",
-    "cloneHaLocal": "공유 스토리지가 필요합니다: 대상 스토리지는 노드 로컬입니다."
+    "cloneHaLocal": "공유 스토리지가 필요합니다: 대상 스토리지는 노드 로컬입니다.",
+    "sharedDisksStay": "공유 스토리지의 디스크는 현재 위치에 그대로 남습니다",
+    "targetStorageLocalOnly": "로컬 디스크에만 적용됩니다",
+    "tpmMoveWhileRunning": "VM이 실행 중일 때는 TPM 상태를 이동할 수 없습니다. 먼저 VM을 종료하세요."
   },
   "ldap": {
     "description": "사용자가 회사 자격 증명으로 로그인할 수 있도록 LDAP/Active Directory 인증을 구성합니다.",

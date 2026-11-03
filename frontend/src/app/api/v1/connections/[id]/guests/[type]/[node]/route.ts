@@ -3,6 +3,7 @@ import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
 import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
 import { enforceGuestTagAccess } from "@/lib/proxmox/tagAccessServer"
 import { sensitiveNicPermissions, NicConfigError } from "@/lib/rbac/nicPermissions"
@@ -343,6 +344,9 @@ async function handler(
       }
       throw err
     }
+
+    // roadmap#192: the new guest shows on the next reload, not after the TTL.
+    await refreshCachedGuests(id, conn, { type, vmid: body.vmid })
 
     return NextResponse.json({
       data: result,

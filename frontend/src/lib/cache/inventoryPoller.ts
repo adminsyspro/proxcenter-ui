@@ -14,6 +14,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getSetting } from "@/lib/db/settings"
 import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
 import { getFailureCount, getNodeIps } from "@/lib/cache/nodeIpCache"
+import { reconcileCachedGuests } from "@/lib/cache/inventoryCache"
 
 // ---------- Types ----------
 
@@ -263,6 +264,11 @@ async function pollConnection(connId: string, connConfig: any): Promise<Inventor
         }
       }
     }
+
+    // roadmap#192: the events above reach the trees open right now, the cached
+    // inventory is what a reload reads. Align it on this same read, the
+    // bootstrap poll included: no extra Proxmox call.
+    reconcileCachedGuests(connId, resources)
 
     // Mark this poller as bootstrapped so subsequent polls emit real diffs.
     poller.firstPollComplete = true

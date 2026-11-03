@@ -52,6 +52,19 @@ async function handler(
 
     const resourceTypePve = type === 'lxc' ? 'lxc' : 'qemu'
 
+    // roadmap#193: PVE starts the task, then fails it with "cannot move TPM
+    // state while VM is running". Said here instead, before any task exists.
+    if (resourceTypePve === 'qemu' && /^tpmstate\d+$/.test(disk)) {
+      const current = await pveFetch<{ status?: string } | null>(
+        conn, `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(vmid)}/status/current`)
+      if (current?.status === 'running') {
+        return NextResponse.json(
+          { error: 'The TPM state cannot be moved while the VM is running. Shut the VM down, then move it.', code: 'TPM_MOVE_WHILE_RUNNING' },
+          { status: 409 },
+        )
+      }
+    }
+
     // vDC guard (spec §5.3 / §6): target storage must be in scope, the node
     // must be authorised for the tenant's vDC, and a move onto a policied
     // storage is metered against that tier's quota. Provider tenants take

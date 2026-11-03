@@ -6,6 +6,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { deleteGuestIpEntry, guestKey } from "@/lib/cache/guestIpCache"
+import { forgetCachedGuest } from "@/lib/cache/inventoryCache"
 import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -111,6 +112,10 @@ async function handler(
 
     // A guest created later with the same vmid must not inherit these addresses.
     deleteGuestIpEntry(id, guestKey(type, vmid))
+
+    // roadmap#192: out of every cached inventory now, so a reload during or
+    // after the destroy task never brings it back. No Proxmox call.
+    forgetCachedGuest(id, type, vmid)
 
     // Release every IPAM reservation tied to this (connection, vmid).
     // Our IPAM is keyed on vmid so we don't need to re-parse netN/ipconfigN

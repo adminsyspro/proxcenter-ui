@@ -212,6 +212,76 @@ describe('MigrateVmDialog - no affinity involvement', () => {
   })
 })
 
+describe('MigrateVmDialog - target storage applies to local disks only (roadmap#193)', () => {
+  function seedDisks(config: Record<string, string>) {
+    seedHandlers({ haResources: [{ sid: 'vm:999', state: 'started' }] })
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/guests/qemu/${CURRENT_NODE}/${VMID}/config`, () =>
+        HttpResponse.json({ data: { ...config, cpu: 'x86-64-v2-AES' } }),
+      ),
+    )
+  }
+
+  it('offers no target storage for a VM on shared storage only, lists its disks as staying, and sends none', async () => {
+    seedDisks({
+      scsi0: 'ceph:vm-100-disk-0,size=10G',
+      efidisk0: 'ceph:vm-100-disk-1,efitype=4m,size=1M',
+      tpmstate0: 'ceph:vm-100-disk-2,size=4M,version=v2.0',
+    })
+    const props = makeProps()
+    renderWithProviders(<MigrateVmDialog {...props} />)
+    await waitForNodesLoaded()
+
+    const notice = await screen.findByTestId('migrate-shared-disks')
+    expect(within(notice).getByText('Disks on shared storage stay where they are')).toBeInTheDocument()
+    for (const id of ['scsi0', 'efidisk0', 'tpmstate0']) {
+      expect(within(notice).getByText(new RegExp(`^${id}: ceph `))).toBeInTheDocument()
+    }
+    expect(screen.queryByText('Target storage:')).not.toBeInTheDocument()
+
+    const migrate = screen.getByRole('button', { name: /migrate/i })
+    await waitFor(() => expect(migrate).not.toBeDisabled())
+    fireEvent.click(migrate)
+
+    await waitFor(() => expect(props.onMigrate).toHaveBeenCalled())
+    const [, , targetStorage, withLocalDisks] = props.onMigrate.mock.calls[0]
+    expect(targetStorage).toBeUndefined()
+    expect(withLocalDisks).toBe(false)
+  })
+
+  it('offers the target storage for the local disks and still names the shared ones', async () => {
+    seedDisks({
+      scsi0: 'ceph:vm-100-disk-0,size=10G',
+      scsi1: 'local-lvm:vm-100-disk-3,size=20G',
+    })
+    renderWithProviders(<MigrateVmDialog {...makeProps()} />)
+    await waitForNodesLoaded()
+
+    expect(await screen.findByText('Target storage:')).toBeInTheDocument()
+    expect(screen.getByText('Applies to the local disks only')).toBeInTheDocument()
+    const notice = screen.getByTestId('migrate-shared-disks')
+    expect(within(notice).getByText(/^scsi0: ceph /)).toBeInTheDocument()
+    expect(within(notice).queryByText(/scsi1/)).not.toBeInTheDocument()
+    // "Keep current" names the storage of the local disk, not the shared one.
+    expect(screen.getByText('Keep: local-lvm')).toBeInTheDocument()
+  })
+
+  it('ignores a CD-ROM drive: a local ISO is not a disk to move', async () => {
+    seedDisks({
+      scsi0: 'ceph:vm-100-disk-0,size=10G',
+      ide2: 'local:iso/debian-13.iso,media=cdrom,size=700M',
+      ide0: 'none,media=cdrom',
+    })
+    renderWithProviders(<MigrateVmDialog {...makeProps()} />)
+    await waitForNodesLoaded()
+
+    const notice = await screen.findByTestId('migrate-shared-disks')
+    expect(within(notice).getByText(/^scsi0: ceph /)).toBeInTheDocument()
+    expect(screen.queryByText(/ide2/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Target storage:')).not.toBeInTheDocument()
+  })
+})
+
 
 const REMOTE_CONN_ID = 'conn-2'
 const REMOTE_MIGRATE_URL = `*/api/v1/connections/${CONN_ID}/guests/qemu/${CURRENT_NODE}/${VMID}/remote-migrate`

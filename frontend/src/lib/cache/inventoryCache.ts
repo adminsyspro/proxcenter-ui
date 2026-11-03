@@ -139,7 +139,268 @@ export function getInventoryFromCache(tenantId = 'default', vdcContext: string |
 export function setCachedInventory(data: CachedInventory, tenantId = 'default', vdcContext: string | null = null, epoch?: number): void {
   if (epoch !== undefined && epoch !== inventoryCacheEpoch()) return
   const store = getCacheStore()
-  store.set(inventoryCacheKey(tenantId, vdcContext), { data, timestamp: Date.now(), version: SCHEMA_VERSION })
+  store.set(inventoryCacheKey(tenantId, vdcContext), { data: withoutTombstoned(data), timestamp: Date.now(), version: SCHEMA_VERSION })
+}
+
+/* ------------------------------------------------------------------ */
+/* Guest-set patches (roadmap#192)                                     */
+/* ------------------------------------------------------------------ */
+//
+// A fresh entry used to be corrected by its TTL alone: a guest destroyed in
+// Proxmox came back on every reload for up to FRESH_TTL_MS, and a new one
+// stayed missing as long. The inventory poller, which already reads
+// /cluster/resources every 15 s, and the routes that add or destroy guests
+// now patch the guest set of every entry holding the connection instead.
+// Patching rather than invalidating: an invalidation costs a full Proxmox
+// fan-out per tenant and vDC context on the next read, a patch costs none.
+// The timestamp of a patched entry is kept, so its freshness is unchanged.
+
+/** A guest row as /cluster/resources lists it. */
+export type ResourceGuestRow = {
+  vmid: string | number
+  type: string
+  node?: string
+  status?: string
+  name?: string
+  cpu?: number
+  maxcpu?: number
+  mem?: number
+  maxmem?: number
+  disk?: number
+  maxdisk?: number
+  uptime?: number
+  pool?: string
+  tags?: string
+  lock?: string
+  template?: number | boolean
+  netin?: number
+  netout?: number
+  diskread?: number
+  diskwrite?: number
+  memhost?: number
+}
+
+// Guests ProxCenter just destroyed, by `${connId}:${type}/${vmid}`, with the
+// time the mark lapses. Proxmox keeps listing a guest until its destroy task
+// ends, so a read made in between (a fetch, a poll) would put it back.
+const TOMBSTONE_KEY = '__proxcenter_inventory_tombstones__' as const
+
+function getTombstones(): Map<string, number> {
+  if (!(globalThis as any)[TOMBSTONE_KEY]) {
+    ;(globalThis as any)[TOMBSTONE_KEY] = new Map<string, number>()
+  }
+  return (globalThis as any)[TOMBSTONE_KEY]
+}
+
+function liveTombstones(): Map<string, number> {
+  const tombstones = getTombstones()
+  const now = Date.now()
+  for (const [key, lapsesAt] of tombstones) {
+    if (lapsesAt <= now) tombstones.delete(key)
+  }
+  return tombstones
+}
+
+const guestId = (type: unknown, vmid: unknown) => `${type}/${vmid}`
+const tombstoneKey = (connId: string, id: string) => `${connId}:${id}`
+
+const isGuestType = (type: unknown) => type === 'qemu' || type === 'lxc'
+
+/** The guest projection both inventory producers build from the same row. */
+function guestFromRow(r: ResourceGuestRow): any {
+  return {
+    vmid: r.vmid,
+    name: r.name || guestId(r.type, r.vmid),
+    type: r.type || 'qemu',
+    status: r.status || 'unknown',
+    node: r.node,
+    cpu: r.cpu,
+    maxcpu: r.maxcpu,
+    mem: r.mem,
+    maxmem: r.maxmem,
+    disk: r.disk,
+    maxdisk: r.maxdisk,
+    uptime: r.uptime,
+    pool: r.pool,
+    tags: r.tags,
+    lock: r.lock,
+    template: r.template === 1 || r.template === true,
+    netin: r.netin,
+    netout: r.netout,
+    diskread: r.diskread,
+    diskwrite: r.diskwrite,
+    cores: r.maxcpu,
+    memhost: r.memhost,
+  }
+}
+
+// What a patch refreshes on a guest the entry already holds: placement and
+// state. The usage counters move every poll and are left to the next full
+// read, which also owns the fields no /cluster/resources row carries (HA
+// state, disk totals).
+const SYNCED_FIELDS = ['node', 'status', 'name', 'pool', 'tags', 'lock', 'template'] as const
+
+function syncGuest(cachedGuest: any, r: ResourceGuestRow): any {
+  const fresh = guestFromRow(r)
+  if (SYNCED_FIELDS.every(f => cachedGuest[f] === fresh[f])) return cachedGuest
+  const next = { ...cachedGuest }
+  for (const f of SYNCED_FIELDS) next[f] = fresh[f]
+  return next
+}
+
+function byVmid(a: any, b: any): number {
+  return (Number.parseInt(String(a.vmid), 10) || 0) - (Number.parseInt(String(b.vmid), 10) || 0)
+}
+
+/** Rebuilds the nodes of `cluster` from guests already placed by node name. */
+function withPlacedGuests(cluster: any, placed: Map<string, any[]>): any {
+  const nodes = cluster.nodes.map((n: any) => ({ ...n, guests: (placed.get(n.node) ?? []).sort(byVmid) }))
+  for (const [node, guests] of placed) {
+    if (!cluster.nodes.some((n: any) => n.node === node)) nodes.push({ node, status: 'unknown', guests: guests.sort(byVmid) })
+  }
+  nodes.sort((a: any, b: any) => String(a.node).localeCompare(String(b.node)))
+  return { ...cluster, nodes }
+}
+
+function place(placed: Map<string, any[]>, guest: any): void {
+  const list = placed.get(guest.node)
+  if (list) list.push(guest)
+  else placed.set(guest.node, [guest])
+}
+
+/** `cluster` with exactly the guests of `rows`, or itself when it already has them. */
+function reconcileCluster(cluster: any, rows: Map<string, ResourceGuestRow>): any {
+  const placed = new Map<string, any[]>()
+  const seen = new Set<string>()
+  let changed = false
+  for (const node of cluster.nodes) {
+    for (const g of node.guests ?? []) {
+      const id = guestId(g.type, g.vmid)
+      const r = rows.get(id)
+      if (!r || seen.has(id)) {
+        changed = true
+        continue
+      }
+      seen.add(id)
+      const next = syncGuest(g, r)
+      if (next !== g) changed = true
+      place(placed, next)
+    }
+  }
+  for (const [id, r] of rows) {
+    if (seen.has(id)) continue
+    changed = true
+    place(placed, guestFromRow(r))
+  }
+  return changed ? withPlacedGuests(cluster, placed) : cluster
+}
+
+/** `cluster` without guest `id`, or itself when it does not hold it. */
+function dropGuest(cluster: any, id: string): any {
+  const holds = (cluster.nodes ?? []).some((n: any) => (n.guests ?? []).some((g: any) => guestId(g.type, g.vmid) === id))
+  if (!holds) return cluster
+  return {
+    ...cluster,
+    nodes: cluster.nodes.map((n: any) => ({ ...n, guests: (n.guests ?? []).filter((g: any) => guestId(g.type, g.vmid) !== id) })),
+  }
+}
+
+/** `data` with `clusters`, and the guest counters recomputed from them. */
+function withClusters(data: CachedInventory, clusters: any[]): CachedInventory {
+  let totalGuests = 0
+  let runningGuests = 0
+  for (const cluster of clusters) {
+    for (const node of cluster?.nodes ?? []) {
+      for (const g of node.guests ?? []) {
+        totalGuests++
+        if (g.status === 'running') runningGuests++
+      }
+    }
+  }
+  return { ...data, clusters, stats: { ...data.stats, totalGuests, runningGuests } }
+}
+
+/** Applies `patch` to the clusters of `data`; `data` itself when none changed. */
+function patchClusters(data: CachedInventory, patch: (cluster: any) => any): CachedInventory {
+  if (!Array.isArray(data?.clusters)) return data
+  let changed = false
+  const clusters = data.clusters.map(cluster => {
+    const next = patch(cluster)
+    if (next !== cluster) changed = true
+    return next
+  })
+  return changed ? withClusters(data, clusters) : data
+}
+
+/** Patches the cluster `connId` in every current entry, keeping each timestamp. */
+function patchCachedConnection(connId: string, patch: (cluster: any) => any): void {
+  const store = getCacheStore()
+  for (const [key, entry] of store) {
+    if (entry.version !== SCHEMA_VERSION) continue
+    const data = patchClusters(entry.data, c => (c?.id === connId ? patch(c) : c))
+    if (data !== entry.data) store.set(key, { ...entry, data })
+  }
+}
+
+function withoutTombstoned(data: CachedInventory): CachedInventory {
+  const tombstones = liveTombstones()
+  if (tombstones.size === 0) return data
+  return patchClusters(data, cluster => {
+    let next = cluster
+    for (const key of tombstones.keys()) {
+      const prefix = `${cluster?.id}:`
+      if (key.startsWith(prefix)) next = dropGuest(next, key.slice(prefix.length))
+    }
+    return next
+  })
+}
+
+/**
+ * Aligns the guest set of connection `connId`, in every cached inventory, on
+ * `rows`: the full guest list Proxmox just returned for it (/cluster/resources,
+ * other resource types are skipped). Guests it no longer lists are dropped,
+ * new ones added, relocated ones moved; a cluster whose last read failed (no
+ * node) is left to the next full read. A guest ProxCenter is destroying stays
+ * out until a list shows it gone, after which its vmid may be reused.
+ */
+export function reconcileCachedGuests(connId: string, rows: ResourceGuestRow[]): void {
+  const tombstones = liveTombstones()
+  const listed = new Set<string>()
+  const current = new Map<string, ResourceGuestRow>()
+  for (const r of rows) {
+    if (!r?.node || !isGuestType(r.type)) continue
+    const id = guestId(r.type, r.vmid)
+    listed.add(id)
+    if (!tombstones.has(tombstoneKey(connId, id))) current.set(id, r)
+  }
+  for (const key of tombstones.keys()) {
+    const prefix = `${connId}:`
+    if (key.startsWith(prefix) && !listed.has(key.slice(prefix.length))) tombstones.delete(key)
+  }
+  patchCachedConnection(connId, cluster => (cluster.nodes?.length ? reconcileCluster(cluster, current) : cluster))
+}
+
+/**
+ * A guest ProxCenter destroyed: out of every cached inventory now, and out of
+ * whatever is read while Proxmox still lists it, for one fresh window at most.
+ */
+export function forgetCachedGuest(connId: string, type: string, vmid: string | number): void {
+  const id = guestId(type, vmid)
+  getTombstones().set(tombstoneKey(connId, id), Date.now() + FRESH_TTL_MS)
+  patchCachedConnection(connId, cluster => dropGuest(cluster, id))
+}
+
+/** A guest ProxCenter is creating under this vmid: no longer the destroyed one. */
+export function clearGuestTombstone(connId: string, type: string, vmid: string | number): void {
+  getTombstones().delete(tombstoneKey(connId, guestId(type, vmid)))
+}
+
+/** Whether any current cached inventory holds connection `connId`. */
+export function hasCachedConnection(connId: string): boolean {
+  for (const entry of getCacheStore().values()) {
+    if (entry.version === SCHEMA_VERSION && entry.data?.clusters?.some((c: any) => c?.id === connId)) return true
+  }
+  return false
 }
 
 /**

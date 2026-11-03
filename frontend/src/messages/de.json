@@ -6105,7 +6105,12 @@
     "openBulkMigration": "Verlauf dieser Massenmigration öffnen",
     "openArchive": "Aufgabenarchiv öffnen",
     "search": "Aufgaben suchen",
-    "clearSearch": "Suche löschen"
+    "clearSearch": "Suche löschen",
+    "moveProgress": {
+      "label": "Fortschritt der Verschiebung",
+      "bytes": "{done} von {total}",
+      "eta": "noch etwa {eta}"
+    }
   },
   "events": {
     "title": "Ereignisse",
@@ -7925,7 +7930,10 @@
     },
     "cloneHa": "Hochverfügbarkeit aktivieren",
     "cloneHaHelp": "Wird dem HA-Manager hinzugefügt und nach dem Klonen gestartet.",
-    "cloneHaLocal": "Benötigt gemeinsamen Speicher: der Zielspeicher ist lokal auf seinem Knoten."
+    "cloneHaLocal": "Benötigt gemeinsamen Speicher: der Zielspeicher ist lokal auf seinem Knoten.",
+    "sharedDisksStay": "Disks auf gemeinsamem Speicher bleiben, wo sie sind",
+    "targetStorageLocalOnly": "Gilt nur für die lokalen Disks",
+    "tpmMoveWhileRunning": "Der TPM-Zustand kann nicht verschoben werden, solange die VM läuft. Fahren Sie die VM zuerst herunter."
   },
   "ldap": {
     "description": "Konfigurieren Sie LDAP/Active Directory-Authentifizierung, damit Benutzer sich mit ihren Unternehmensanmeldedaten anmelden können.",

@@ -6124,7 +6124,12 @@
     "openBulkMigration": "Open the follow-up of this bulk migration",
     "openArchive": "Open the task archive",
     "search": "Search tasks",
-    "clearSearch": "Clear the search"
+    "clearSearch": "Clear the search",
+    "moveProgress": {
+      "label": "Move progress",
+      "bytes": "{done} of {total}",
+      "eta": "about {eta} left"
+    }
   },
   "events": {
     "title": "Events",
@@ -7949,7 +7954,10 @@
     },
     "cloneHa": "Enable high availability",
     "cloneHaHelp": "Added to the HA manager and started once the clone is done.",
-    "cloneHaLocal": "Needs shared storage: the target storage is local to its node."
+    "cloneHaLocal": "Needs shared storage: the target storage is local to its node.",
+    "sharedDisksStay": "Disks on shared storage stay where they are",
+    "targetStorageLocalOnly": "Applies to the local disks only",
+    "tpmMoveWhileRunning": "The TPM state cannot be moved while the VM is running. Shut the VM down first."
   },
   "ldap": {
     "description": "Configure LDAP/Active Directory authentication to allow users to sign in with their corporate credentials.",

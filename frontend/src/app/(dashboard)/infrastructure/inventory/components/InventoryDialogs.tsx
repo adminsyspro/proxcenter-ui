@@ -2718,6 +2718,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
               existingDisks={data?.disksInfo?.map((d: any) => d.id) || []}
               controller={selectedDisk ? diskControllerLabel(selectedDisk.id, data?.optionsInfo?.scsihw || data?.systemInfo?.scsihw)?.label : undefined}
               initialTab={editDiskInitialTab}
+              guestRunning={['running', 'paused'].includes(data?.vmRealStatus || data?.status)}
             />
 
             <EditNetworkDialog

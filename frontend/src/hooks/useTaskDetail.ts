@@ -1,5 +1,8 @@
 import { useSWRFetch } from './useSWRFetch'
 
+/** How often a running PVE task is asked about while it is shown. */
+export const TASK_POLL_MS = 2000
+
 export function useTaskDetail(
   connectionId: string | undefined,
   node: string | undefined,
@@ -11,7 +14,7 @@ export function useTaskDetail(
     : null
 
   return useSWRFetch(url, {
-    refreshInterval: isRunning ? 2000 : 0,
+    refreshInterval: isRunning ? TASK_POLL_MS : 0,
     revalidateOnFocus: false,
   })
 }

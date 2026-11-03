@@ -362,6 +362,26 @@ describe('EditDiskDialog — resize in the unit PVE wrote (#1036)', () => {
     expect(screen.queryByRole('tab', { name: 'Resize' })).toBeNull()
   })
 
+  it('disables Move on the TPM state of a running VM and says why (roadmap#193)', async () => {
+    const tpm = { id: 'tpmstate0', size: '4M', storage: 'ceph', isTpm: true, rawValue: 'ceph:vm-100-disk-2,size=4M,version=v2.0' }
+
+    renderWithProviders(<EditDiskDialog {...resizeProps(tpm)} guestRunning />)
+    const move = screen.getByRole('tab', { name: 'Move' })
+    expect(move).toBeDisabled()
+
+    await userEvent.hover(move.parentElement!)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('The TPM state cannot be moved while the VM is running')
+
+    cleanup()
+    // Stopped VM, or any other disk of a running one: Move stays offered.
+    renderWithProviders(<EditDiskDialog {...resizeProps(tpm)} />)
+    expect(screen.getByRole('tab', { name: 'Move' })).not.toBeDisabled()
+    cleanup()
+    const efi = { id: 'efidisk0', size: '528K', storage: 'ceph', isEfi: true, rawValue: 'ceph:vm-100-disk-1,efitype=4m,size=528K' }
+    renderWithProviders(<EditDiskDialog {...resizeProps(efi)} guestRunning />)
+    expect(screen.getByRole('tab', { name: 'Move' })).not.toBeDisabled()
+  })
+
   it('starts a 512M disk at 512 MB and sends the increase in megabytes', async () => {
     const props = resizeProps({ id: 'scsi1', size: '512M', storage: 'local-lvm', rawValue: 'local-lvm:vm-100-disk-3,size=512M' })
 

@@ -7,13 +7,13 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { EMPTY_DRAFT, addRule, currentEntries, deriveOps, enableGuestFirewall, moveRule, removeRules, toFields, updateRules, type FirewallDraft } from './draft'
+import { EMPTY_DRAFT, addRule, cloneRules, currentEntries, deriveOps, enableGuestFirewall, moveRule, rebaseDraft, removeRules, toFields, updateRules, type FirewallDraft } from './draft'
 import { executePublish, publishStatus, publishSummary, type PublishIO } from './publish'
 import { type DraftScope, type RuleFields, parsePublishBody, isFail } from './publishOps'
 
 type Stored = Partial<RuleFields> & { type: string; action: string }
 
-const RULE_KEYS = ['type', 'action', 'enable', 'source', 'dest', 'proto', 'dport', 'sport', 'macro', 'iface', 'log', 'comment'] as const
+const RULE_KEYS = ['type', 'action', 'enable', 'source', 'dest', 'proto', 'dport', 'sport', 'macro', 'iface', 'log', 'comment', 'icmp-type'] as const
 
 /** A Proxmox that holds rule lists, options and configs, and logs every call. */
 class FakePve implements PublishIO {
@@ -198,14 +198,76 @@ describe('executePublish', () => {
     expect(result.failed?.code).toBe('NOT_OURS')
   })
 
-  it('stops once its time is spent, before the next operation', async () => {
+  it('starts no operation that could end past 55 s, its calls counted 8 s each', async () => {
     const pve = setup(['a', 'b', 'c'])
     const d = updateRules(EMPTY_DRAFT, CLUSTER, await readList(pve), ['b0', 'b1', 'b2'], { log: 'info' })
-    let clock = 0
-    const result = await publish(pve, d, { budgetMs: 100, now: () => (clock += 60) })
-    expect(result.applied).toBe(1)
-    expect(result.failed?.code).toBe('TIME_BUDGET')
+    // 0 s, then 38 s, then 40 s: the third edit (2 calls, 16 s) would end at 56 s.
+    const clock = [0, 0, 38_000, 40_000]
+    let tick = 0
+    const result = await publish(pve, d, { now: () => clock[Math.min(tick++, clock.length - 1)] })
+    expect(result.applied).toBe(2)
+    expect(result.failed).toMatchObject({ index: 2, code: 'TIME_BUDGET' })
     expect(publishStatus(result)).toBe(503)
+  })
+
+  it('stops on a list changed under the same digest: the rule at the position is not the one expected', async () => {
+    const pve = setup(['a', 'b'])
+    const d = updateRules(EMPTY_DRAFT, CLUSTER, await readList(pve), ['b1'], { enable: 0 })
+    // Someone renamed rule 1 and the digest did not move (another write path, a restored file).
+    pve.lists.get(CLUSTER_PATH)![1].comment = 'renamed'
+    pve.calls = []
+    const result = await publish(pve, d)
+    expect(result.failed).toMatchObject({ code: 'STALE_POSITION', index: 0 })
+    expect(pve.calls).toEqual([`GET ${CLUSTER_PATH}`])
+  })
+
+  it('refuses a move across a rule of the engine, and a creation among its leading or trailing rules', async () => {
+    const pve = new FakePve()
+    pve.lists.set(GUEST_PATH, [stored('[pc-microseg]', { type: 'group', action: 'pcz-db' }), stored('u1'), stored('u2'), stored('[pc-microseg] observe')])
+    const move = await executePublish([{ kind: 'rule.move', scope: GUEST, pos: 2, to: 0 }], {}, pve)
+    expect(move.failed?.code).toBe('MANAGED_RULE')
+    const rule = toFields({ type: 'in', action: 'ACCEPT', comment: 'x', enable: 1 })
+    for (const index of [0, 4]) expect((await executePublish([{ kind: 'rule.add', scope: GUEST, rule, index }], {}, pve)).failed?.code).toBe('MANAGED_RULE')
+    expect(pve.calls.filter(c => !c.startsWith('GET'))).toEqual([])
+    const ok = await executePublish([{ kind: 'rule.add', scope: GUEST, rule, index: 3 }], {}, pve)
+    expect(ok.failed).toBeUndefined()
+    expect(pve.rules(GUEST_PATH).map(r => r.comment)).toEqual(['[pc-microseg]', 'u1', 'u2', 'x', '[pc-microseg] observe'])
+  })
+
+  it('a creation done whose move failed hands back the digest before it: the retry stops on a conflict, never creates twice', async () => {
+    const pve = setup(['a', 'b'])
+    const base = await readList(pve)
+    const d = addRule(EMPTY_DRAFT, CLUSTER, base, toFields({ type: 'in', action: 'DROP', comment: 'mine', enable: 1 }), 1)
+    const sent = deriveOps(d)
+    pve.failOn = (method, path) => (method === 'PUT' && path.endsWith('/0') ? new Error('timeout') : null)
+    const first = await executePublish(sent.ops, sent.digests, pve)
+    expect(first).toMatchObject({ applied: 0, failed: { code: 'PVE_ERROR' } })
+    expect(first.scopes.cluster.digest).toBe('d0')
+    expect(first.scopes.cluster.rules).toHaveLength(3)
+    pve.failOn = null
+    const rebased = rebaseDraft(d, sent, first.applied, { cluster: first.scopes.cluster.digest })
+    const again = deriveOps(rebased)
+    const retry = await executePublish(again.ops, again.digests, pve)
+    expect(retry.failed?.code).toBe('DIGEST_CONFLICT')
+    expect(pve.rules(CLUSTER_PATH).filter(r => r.comment === 'mine')).toHaveLength(1)
+  })
+
+  it('never writes the guest options the engine owns on a guest of a zone', async () => {
+    const pve = new FakePve()
+    pve.lists.set(GUEST_PATH, [stored('[pc-microseg]', { type: 'group', action: 'pcz-db' })])
+    pve.options.set('/nodes/pve1/qemu/101/firewall/options', { enable: 1, policy_in: 'DROP' })
+    for (const options of [{ enable: 0 }, { policy_in: 'ACCEPT' }, { log_level_in: 'nolog' }]) {
+      expect((await executePublish([{ kind: 'options.set', scope: GUEST, options }], {}, pve)).failed?.code).toBe('MANAGED_RULE')
+    }
+    expect((await executePublish([{ kind: 'options.set', scope: GUEST, options: { policy_out: 'DROP' } }], {}, pve)).failed).toBeUndefined()
+  })
+
+  it('creates a clone of an ICMP rule with its ICMP type', async () => {
+    const pve = new FakePve()
+    pve.lists.set(CLUSTER_PATH, [stored('ping', { proto: 'icmp', 'icmp-type': 'echo-request' })])
+    const base = await readList(pve)
+    expect((await publish(pve, cloneRules(EMPTY_DRAFT, CLUSTER, base, ['b0']))).failed).toBeUndefined()
+    expect(pve.rules(CLUSTER_PATH).map(r => r['icmp-type'])).toEqual(['echo-request', 'echo-request'])
   })
 
   it('turns a guest firewall on: its options switch, then the flag on every NIC, each with its digest', async () => {
@@ -223,7 +285,7 @@ describe('executePublish', () => {
 
   it('summarises a publish for its audit row', () => {
     const ops = deriveOps(removeRules(addRule(EMPTY_DRAFT, GUEST, [], toFields({ comment: 'x' })), CLUSTER, [{ type: 'in', action: 'ACCEPT', digest: 'd' }], ['b0'])).ops
-    expect(publishSummary(ops)).toEqual({ kinds: { 'rule.add': 1, 'rule.delete': 1 }, scopes: { guest: 1, cluster: 1 } })
+    expect(publishSummary(ops)).toEqual({ kinds: { 'rule.add': 1, 'rule.delete': 1 }, scopes: { guest: 1, cluster: 1 }, scopeKeys: ['guest:qemu/101', 'cluster'], moreScopes: 0 })
   })
 })
 
@@ -267,6 +329,9 @@ describe('parsePublishBody', () => {
   it('accepts the operations of a draft and refuses anything else', () => {
     const ok = parsePublishBody({ ops: deriveOps(addRule(EMPTY_DRAFT, CLUSTER, [], toFields({ comment: 'x' }))).ops, digests: { cluster: '' } })
     expect(isFail(ok)).toBe(false)
+    const withExpect = parsePublishBody({ ops: deriveOps(removeRules(EMPTY_DRAFT, CLUSTER, [{ type: 'in', action: 'ACCEPT', comment: 'a', digest: 'd' }], ['b0'])).ops })
+    expect(withExpect).toMatchObject({ ok: true, value: { ops: [{ expect: { comment: 'a', type: 'in', action: 'ACCEPT' } }] } })
+    expect(isFail(parsePublishBody({ ops: Array.from({ length: 200 }, () => ({ kind: 'rule.delete', scope, pos: 0 })) }))).toBe(false)
     const bad = [
       {},
       { ops: [] },
@@ -280,7 +345,11 @@ describe('parsePublishBody', () => {
       { ops: [{ kind: 'rule.move', scope, pos: 1, to: 1 }] },
       { ops: [{ kind: 'options.set', scope, options: { policy_in: 'MAYBE' } }] },
       { ops: [{ kind: 'guest.enable', scope }] },
-      { ops: Array.from({ length: 101 }, () => ({ kind: 'rule.delete', scope, pos: 0 })) },
+      { ops: Array.from({ length: 201 }, () => ({ kind: 'rule.delete', scope, pos: 0 })) },
+      // 101 creations below the top are 202 writes.
+      { ops: Array.from({ length: 101 }, () => ({ kind: 'rule.add', scope, index: 1, rule: { type: 'in', action: 'ACCEPT' } })) },
+      { ops: [{ kind: 'rule.add', scope, index: 0, rule: { type: 'group', action: 'pcz-db' } }] },
+      { ops: [{ kind: 'rule.delete', scope, pos: 0, expect: { comment: 'a\nb' } }] },
     ]
     for (const body of bad) expect(isFail(parsePublishBody(body)), JSON.stringify(body).slice(0, 80)).toBe(true)
   })

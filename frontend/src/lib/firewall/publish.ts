@@ -8,15 +8,20 @@
 //    again after each write: the next operation on that list uses that digest and sees the positions as they are;
 //  - a creation lands at the top (Proxmox ignores `pos` on a POST): a rule wanted lower is then moved, PUT <list>/0
 //    moveto=index+1, only when the rule on top is the one just created (Go: firewall.addRuleAt);
-//  - a rule carrying the engine's marker is never edited, moved or deleted;
+//  - each edit, delete and move names the rule it expects at its position (type, action, addresses, service,
+//    comment): a list changed under the same digest stops with STALE_POSITION;
+//  - a rule carrying the engine's marker is never edited, moved, crossed by a move, nor has a rule put among the
+//    engine's leading or trailing rules; the engine's guest options (enable, inbound policy and log level) stay;
 //  - the first failure stops the publish: what was applied, the operation that failed and Proxmox's message come
 //    back, the remaining operations are not sent.
 // Load: one write per operation (two for a creation lower than the top, up to two for a guest switched on), one read
 // after each rule write, one read of each list and options before its first write. Nothing runs in parallel, and no
-// operation starts once `budgetMs` is spent (nginx cuts an API route at 60 s).
+// operation starts when it could end past PUBLISH_DEADLINE_MS, its calls counted PUBLISH_CALL_ESTIMATE_MS each.
 
-import type { DraftScope, PublishFailureCode, PublishOp, PublishResult, RuleFields, ScopeOptions } from './publishOps'
-import { RULE_TEXT_FIELDS, configPath, isEngineComment, optionsKey, optionsPath, rulesPath, scopeKey } from './publishOps'
+import type { DraftScope, PublishFailureCode, PublishOp, PublishResult, RuleExpect, RuleFields, ScopeOptions } from './publishOps'
+import {
+  ENGINE_GUEST_OPTIONS, EXPECT_FIELDS, RULE_TEXT_FIELDS, configPath, isEngineComment, opCalls, optionsKey, optionsPath, rulesPath, scopeKey,
+} from './publishOps'
 
 /** What the executor needs from Proxmox: a read, and a write that sends `form` (urlencoded) or nothing. */
 export type PublishIO = {
@@ -26,7 +31,10 @@ export type PublishIO = {
   guestWritten?: (scope: Extract<DraftScope, { kind: 'guest' }>, what: 'options' | 'nic') => void
 }
 
-export const PUBLISH_BUDGET_MS = 45_000
+/** No operation starts when it could end past this (nginx cuts an API route at 60 s). */
+export const PUBLISH_DEADLINE_MS = 55_000
+/** What one Proxmox call is counted for when deciding whether an operation still fits. */
+export const PUBLISH_CALL_ESTIMATE_MS = 8_000
 
 type Rule = Partial<RuleFields> & { pos?: number; digest?: string }
 
@@ -127,15 +135,19 @@ class Executor {
     const list = await this.read(scope)
     const expected = this.expected[key]
     if (expected !== undefined && expected !== this.digest.get(key)) {
-      throw new PublishError('DIGEST_CONFLICT', 'The rules of this scope were changed in Proxmox since they were read: refresh, then publish again')
+      throw new PublishError('DIGEST_CONFLICT', 'The rules of this scope were changed in Proxmox since they were read: discard this section\'s changes, then publish again')
     }
     return list
   }
 
-  private async target(scope: DraftScope, pos: number): Promise<Rule> {
+  /** The rule at `pos`, which must be the one the draft was derived on (Go: microseg checkOurRule), and not the engine's. */
+  private async target(scope: DraftScope, pos: number, expect?: RuleExpect): Promise<Rule> {
     const rule = (await this.list(scope))[pos]
     if (!rule) throw new PublishError('STALE_POSITION', `There is no rule at position ${pos} any more`)
     if (isEngineComment(rule.comment)) throw new PublishError('MANAGED_RULE', 'This rule belongs to the micro-segmentation engine')
+    if (expect && EXPECT_FIELDS.some(k => String(rule[k] ?? '') !== String(expect[k] ?? ''))) {
+      throw new PublishError('STALE_POSITION', `The rule at position ${pos} is not the one the draft was made on`)
+    }
     return rule
   }
 
@@ -144,20 +156,24 @@ class Executor {
       case 'rule.add':
         return this.add(op.scope, op.rule, op.index)
       case 'rule.edit':
-        await this.target(op.scope, op.pos)
+        await this.target(op.scope, op.pos, op.expect)
         await this.io.write('PUT', `${rulesPath(op.scope)}/${op.pos}`, editForm(op.patch, this.digest.get(scopeKey(op.scope)) ?? ''))
         await this.read(op.scope)
         return
       case 'rule.delete':
-        await this.target(op.scope, op.pos)
+        await this.target(op.scope, op.pos, op.expect)
         await this.io.write('DELETE', withDigest(`${rulesPath(op.scope)}/${op.pos}`, this.digest.get(scopeKey(op.scope)) ?? ''))
         await this.read(op.scope)
         return
-      case 'rule.move':
-        await this.target(op.scope, op.pos)
+      case 'rule.move': {
+        await this.target(op.scope, op.pos, op.expect)
+        const list = await this.list(op.scope)
+        const crossed = list.slice(Math.min(op.pos, op.to), Math.max(op.pos, op.to) + 1).filter((_, i) => i + Math.min(op.pos, op.to) !== op.pos)
+        if (crossed.some(r => isEngineComment(r.comment))) throw new PublishError('MANAGED_RULE', 'A rule cannot be moved across a rule of the micro-segmentation engine')
         await this.moveTo(op.scope, op.pos, op.to)
         await this.read(op.scope)
         return
+      }
       case 'options.set':
         return this.setOptions(op.scope, op.options)
       case 'guest.enable':
@@ -175,12 +191,19 @@ class Executor {
   }
 
   private async add(scope: DraftScope, rule: RuleFields, index: number) {
-    await this.list(scope)
+    const before = await this.list(scope)
+    // Never among the engine's leading rules (its zone group on top) or trailing ones (its final observe rule).
+    let lead = 0
+    while (lead < before.length && isEngineComment(before[lead].comment)) lead++
+    let trail = 0
+    while (trail < before.length - lead && isEngineComment(before[before.length - 1 - trail].comment)) trail++
+    if (index < lead || index > before.length - trail) throw new PublishError('MANAGED_RULE', 'A rule cannot be put among the rules of the micro-segmentation engine')
     await this.io.write('POST', rulesPath(scope), createForm(rule))
     const after = await this.read(scope)
     if (index <= 0) return
     const top = after[0]
-    if (!top || top.type !== rule.type || top.action !== rule.action || (top.comment ?? '') !== rule.comment) {
+    const same = (k: (typeof EXPECT_FIELDS)[number]) => String(top?.[k] ?? '') === String(rule[k] ?? '')
+    if (!top || !EXPECT_FIELDS.every(same)) {
       throw new PublishError('NOT_OURS', `Rule created at the top, not moved to position ${index}: the rule at the top is not the one just created`)
     }
     await this.moveTo(scope, 0, index)
@@ -190,6 +213,11 @@ class Executor {
   /** Options are read once for their digest, then written with it (a draft holds one options change per scope). */
   private async setOptions(scope: DraftScope, options: ScopeOptions) {
     const key = optionsKey(scope)
+    // The engine sets these on the guests of its zones: a guest holding its rules keeps them as the engine wants.
+    if (scope.kind === 'guest' && ENGINE_GUEST_OPTIONS.some(k => options[k] !== undefined)) {
+      const rules = await this.list(scope)
+      if (rules.some(r => isEngineComment(r.comment))) throw new PublishError('MANAGED_RULE', 'The micro-segmentation engine owns the firewall switch, the inbound policy and log level of this guest')
+    }
     const current = await this.io.get<{ digest?: string } | null>(optionsPath(scope))
     const digest = current?.digest ?? ''
     const expected = this.expected[key]
@@ -223,23 +251,31 @@ export async function executePublish(
   ops: PublishOp[],
   digests: Record<string, string>,
   io: PublishIO,
-  opts: { budgetMs?: number; now?: () => number } = {},
+  opts: { deadlineMs?: number; callEstimateMs?: number; now?: () => number } = {},
 ): Promise<PublishResult> {
   const now = opts.now ?? Date.now
   const started = now()
-  const budget = opts.budgetMs ?? PUBLISH_BUDGET_MS
+  const deadline = opts.deadlineMs ?? PUBLISH_DEADLINE_MS
+  const perCall = opts.callEstimateMs ?? PUBLISH_CALL_ESTIMATE_MS
   const exec = new Executor(io, digests)
   let applied = 0
   for (const [index, op] of ops.entries()) {
+    const key = scopeKey(op.scope)
     const failedAt = (code: PublishFailureCode, message: string): PublishResult => ({
       applied, total: ops.length, scopes: exec.scopes,
-      failed: { index, kind: op.kind, scope: scopeKey(op.scope), code, message },
+      failed: { index, kind: op.kind, scope: key, code, message },
     })
-    if (now() - started > budget) return failedAt('TIME_BUDGET', 'The publish took too long and stopped: publish again for the remaining changes')
+    if (now() - started + opCalls(op) * perCall > deadline) {
+      return failedAt('TIME_BUDGET', 'The publish stopped before running out of time: publish again for the remaining changes')
+    }
+    // A failure inside an operation (a creation done, its move refused) leaves a list the draft does not know: the
+    // digest handed back is the one before it, so the next publish stops on a conflict instead of writing twice.
+    const digestBefore = exec.scopes[key]?.digest
     try {
       await exec.run(op)
     } catch (err) {
       const e = classify(err)
+      if (exec.scopes[key]) exec.scopes[key].digest = digestBefore ?? digests[key] ?? ''
       return failedAt(e.code, e.message)
     }
     applied++
@@ -265,7 +301,10 @@ export function publishStatus(result: PublishResult): number {
 }
 
 /** The audit details of a publish: how many operations of each kind, on how many scopes of each kind. */
-export function publishSummary(ops: PublishOp[]): { kinds: Record<string, number>; scopes: Record<string, number> } {
+/** At most this many scope keys in an audit row. */
+const AUDIT_SCOPE_KEYS = 20
+
+export function publishSummary(ops: PublishOp[]): { kinds: Record<string, number>; scopes: Record<string, number>; scopeKeys: string[]; moreScopes: number } {
   const kinds: Record<string, number> = {}
   const seen = new Map<string, string>()
   for (const op of ops) {
@@ -274,5 +313,6 @@ export function publishSummary(ops: PublishOp[]): { kinds: Record<string, number
   }
   const scopes: Record<string, number> = {}
   for (const kind of seen.values()) scopes[kind] = (scopes[kind] ?? 0) + 1
-  return { kinds, scopes }
+  const keys = [...seen.keys()]
+  return { kinds, scopes, scopeKeys: keys.slice(0, AUDIT_SCOPE_KEYS), moreScopes: Math.max(0, keys.length - AUDIT_SCOPE_KEYS) }
 }

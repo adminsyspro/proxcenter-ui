@@ -26,9 +26,16 @@ export type RuleFields = {
   iface: string
   log: string
   comment: string
+  /** Kept as read: a clone or a move of an ICMP rule must not drop it and widen the rule to every ICMP type. */
+  'icmp-type': string
 }
 
-export const RULE_TEXT_FIELDS = ['source', 'dest', 'proto', 'dport', 'sport', 'macro', 'iface', 'log', 'comment'] as const
+export const RULE_TEXT_FIELDS = ['source', 'dest', 'proto', 'dport', 'sport', 'macro', 'iface', 'log', 'comment', 'icmp-type'] as const
+
+/** What a positional operation expects at `pos`: the rule it was derived on (Go: microseg checkOurRule). */
+export type RuleExpect = Pick<RuleFields, 'type' | 'action' | 'source' | 'dest' | 'proto' | 'dport' | 'comment'>
+
+export const EXPECT_FIELDS = ['type', 'action', 'source', 'dest', 'proto', 'dport', 'comment'] as const
 
 export type ScopeOptions = {
   enable?: number
@@ -45,9 +52,9 @@ export type ScopeOptions = {
  */
 export type PublishOp =
   | { kind: 'rule.add'; scope: DraftScope; rule: RuleFields; index: number; ref?: string }
-  | { kind: 'rule.edit'; scope: DraftScope; pos: number; patch: Partial<RuleFields>; ref?: string }
-  | { kind: 'rule.delete'; scope: DraftScope; pos: number; ref?: string }
-  | { kind: 'rule.move'; scope: DraftScope; pos: number; to: number; ref?: string }
+  | { kind: 'rule.edit'; scope: DraftScope; pos: number; patch: Partial<RuleFields>; expect?: RuleExpect; ref?: string }
+  | { kind: 'rule.delete'; scope: DraftScope; pos: number; expect?: RuleExpect; ref?: string }
+  | { kind: 'rule.move'; scope: DraftScope; pos: number; to: number; expect?: RuleExpect; ref?: string }
   | { kind: 'options.set'; scope: DraftScope; options: ScopeOptions }
   | { kind: 'guest.enable'; scope: Extract<DraftScope, { kind: 'guest' }> }
 
@@ -55,7 +62,10 @@ export type PublishOpKind = PublishOp['kind']
 
 export type PublishBody = {
   ops: PublishOp[]
-  /** The digest of each scope's rule list (key scopeKey) and options (key `${scopeKey}#options`) as the draft read it. */
+  /**
+   * The digest of each scope's rule list (key scopeKey) as the draft read it. The options of a scope are written with
+   * the digest read just before the write (a draft holds one options change per scope, made of plain values).
+   */
   digests: Record<string, string>
   /** Set once the user confirmed a publish of more than PUBLISH_CONFIRM_ABOVE operations. */
   confirmed?: boolean
@@ -63,10 +73,26 @@ export type PublishBody = {
 
 /** A publish of more operations than this asks a confirmation stating the count. */
 export const PUBLISH_CONFIRM_ABOVE = 50
-/** At most this many operations in one publish: each is up to four Proxmox calls, the route must answer within 60 s. */
-export const PUBLISH_MAX_OPS = 100
+/** At most this many Proxmox writes in one publish (the route must answer within nginx's 60 s). */
+export const PUBLISH_MAX_WRITES = 200
+
+/** The writes an operation makes: a creation below the top is a POST then a move, a guest switch its options then its NICs. */
+export function opWrites(op: PublishOp): number {
+  if (op.kind === 'rule.add') return op.index > 0 ? 2 : 1
+  return op.kind === 'guest.enable' ? 2 : 1
+}
+
+/** The Proxmox calls an operation makes at most, reads included (the first read of its list aside). */
+export function opCalls(op: PublishOp): number {
+  if (op.kind === 'rule.add') return op.index > 0 ? 4 : 2
+  if (op.kind === 'guest.enable' || op.kind === 'options.set') return 4
+  return 2
+}
 
 export type PublishFailureCode = 'DIGEST_CONFLICT' | 'MANAGED_RULE' | 'STALE_POSITION' | 'NOT_OURS' | 'TIME_BUDGET' | 'PVE_ERROR'
+
+/** The guest options the engine sets on the guests of a zone: never written from the Firewalling draft. */
+export const ENGINE_GUEST_OPTIONS = ['enable', 'policy_in', 'log_level_in'] as const
 
 export type PublishResult = {
   /** Operations applied, from the first: the remaining ones were not sent. */
@@ -79,6 +105,9 @@ export type PublishResult = {
 
 /** The engine's marker: a rule whose comment starts with it belongs to the micro-segmentation (Go: microseg.Marker). */
 export const ENGINE_MARKER = '[pc-microseg]'
+
+/** The security groups of the engine's zones (Go: microseg.ObjectName). */
+export const ZONE_GROUP_PREFIX = 'pcz-'
 
 export const isEngineComment = (comment: unknown): boolean => typeof comment === 'string' && comment.startsWith(ENGINE_MARKER)
 
@@ -143,7 +172,10 @@ function parseScope(raw: unknown): Parsed<DraftScope> {
 function checkTypeAction(type: unknown, action: unknown): string | null {
   if (type !== 'in' && type !== 'out' && type !== 'group') return 'rule.type must be in, out or group'
   if (typeof action !== 'string') return 'rule.action is missing'
-  if (type === 'group') return GROUP_RE.test(action) ? null : 'rule.action is not a security group name'
+  if (type === 'group') {
+    if (action.startsWith(ZONE_GROUP_PREFIX)) return 'the zone groups of the micro-segmentation are attached by its engine only'
+    return GROUP_RE.test(action) ? null : 'rule.action is not a security group name'
+  }
   return ACTIONS.has(action) ? null : 'rule.action must be ACCEPT, DROP or REJECT'
 }
 
@@ -199,6 +231,19 @@ function parseOptions(raw: unknown): Parsed<ScopeOptions> {
 
 const refOf = (raw: Record<string, unknown>) => (typeof raw.ref === 'string' && raw.ref.length <= 64 ? { ref: raw.ref } : {})
 
+/** The `expect` of a positional operation, when given: every field a bounded string. */
+function parseExpect(raw: unknown): Parsed<{ expect?: RuleExpect }> {
+  if (raw === undefined) return { ok: true, value: {} }
+  if (!isRecord(raw)) return fail('expect must be an object')
+  const out: Record<string, string> = {}
+  for (const key of EXPECT_FIELDS) {
+    const value = raw[key] ?? ''
+    if (!isText(value)) return fail(`expect.${key} is not acceptable`)
+    out[key] = value
+  }
+  return { ok: true, value: { expect: out as RuleExpect } }
+}
+
 function parseRuleOp(raw: Record<string, unknown>, scope: DraftScope): Parsed<PublishOp> {
   const ref = refOf(raw)
   if (raw.kind === 'rule.add') {
@@ -208,15 +253,18 @@ function parseRuleOp(raw: Record<string, unknown>, scope: DraftScope): Parsed<Pu
     return { ok: true, value: { kind: 'rule.add', scope, rule: rule.value as RuleFields, index: raw.index, ...ref } }
   }
   if (!isIndex(raw.pos)) return fail(`${String(raw.kind)} needs a pos`)
-  if (raw.kind === 'rule.delete') return { ok: true, value: { kind: 'rule.delete', scope, pos: raw.pos, ...ref } }
+  const expect = parseExpect(raw.expect)
+  if (isFail(expect)) return expect
+  const extra = { ...expect.value, ...ref }
+  if (raw.kind === 'rule.delete') return { ok: true, value: { kind: 'rule.delete', scope, pos: raw.pos, ...extra } }
   if (raw.kind === 'rule.move') {
     if (!isIndex(raw.to) || raw.to === raw.pos) return fail('rule.move needs another position to go to')
-    return { ok: true, value: { kind: 'rule.move', scope, pos: raw.pos, to: raw.to, ...ref } }
+    return { ok: true, value: { kind: 'rule.move', scope, pos: raw.pos, to: raw.to, ...extra } }
   }
   const patch = parseRuleFields(raw.patch, true)
   if (isFail(patch)) return patch
   if (Object.keys(patch.value).length === 0) return fail('rule.edit has nothing to change')
-  return { ok: true, value: { kind: 'rule.edit', scope, pos: raw.pos, patch: patch.value, ...ref } }
+  return { ok: true, value: { kind: 'rule.edit', scope, pos: raw.pos, patch: patch.value, ...extra } }
 }
 
 function parseOp(raw: unknown): Parsed<PublishOp> {
@@ -246,13 +294,14 @@ function parseOp(raw: unknown): Parsed<PublishOp> {
 export function parsePublishBody(raw: unknown): Parsed<PublishBody> {
   if (!isRecord(raw) || !Array.isArray(raw.ops)) return fail('ops must be a list')
   if (raw.ops.length === 0) return fail('nothing to publish')
-  if (raw.ops.length > PUBLISH_MAX_OPS) return fail(`at most ${PUBLISH_MAX_OPS} operations per publish`)
+  if (raw.ops.length > PUBLISH_MAX_WRITES) return fail(`at most ${PUBLISH_MAX_WRITES} writes per publish`)
   const ops: PublishOp[] = []
   for (const [i, item] of raw.ops.entries()) {
     const op = parseOp(item)
     if (isFail(op)) return fail(`operation ${i + 1}: ${op.error}`)
     ops.push(op.value)
   }
+  if (ops.reduce((n, op) => n + opWrites(op), 0) > PUBLISH_MAX_WRITES) return fail(`at most ${PUBLISH_MAX_WRITES} writes per publish`)
   const digests: Record<string, string> = {}
   if (raw.digests !== undefined) {
     if (!isRecord(raw.digests)) return fail('digests must be an object')

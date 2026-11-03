@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   EMPTY_DRAFT, addRule, cloneRules, currentEntries, deriveOps, enableGuestFirewall, entryStates, moveRule, moveRulesToScope,
-  parseStoredDraft, pendingCount, rebaseDraft, removeRules, serializeDraft, setScopeOptions, shiftRules, toFields, updateRules,
+  deriveScopeOps, parseStoredDraft, pendingCount, rebaseDraft, removeRules, serializeDraft, setScopeOptions, shiftRules, toFields, updateRules,
 } from './draft'
 import type { DraftScope, RuleFields } from './publishOps'
 
@@ -21,12 +21,32 @@ const read = (...comments: string[]) => comments.map((comment, pos) => ({ pos, t
 const BASE = read('a', 'b', 'c', 'd')
 
 describe('draft: operations of a scope', () => {
-  it('adds a rule at the top by default, with the digest of the list it was made on', () => {
+  it('adds a rule at the end of the list by default, with the digest of the list it was made on', () => {
     const d = addRule(EMPTY_DRAFT, CLUSTER, BASE, rule('new'))
     const { ops, digests } = deriveOps(d)
-    expect(ops).toEqual([expect.objectContaining({ kind: 'rule.add', index: 0, rule: expect.objectContaining({ comment: 'new' }) })])
+    expect(ops).toEqual([expect.objectContaining({ kind: 'rule.add', index: 4, rule: expect.objectContaining({ comment: 'new' }) })])
     expect(digests).toEqual({ cluster: 'D1' })
-    expect(currentEntries(d, CLUSTER, BASE).map(e => e.rule.comment)).toEqual(['new', 'a', 'b', 'c', 'd'])
+    expect(currentEntries(d, CLUSTER, BASE).map(e => e.rule.comment)).toEqual(['a', 'b', 'c', 'd', 'new'])
+  })
+
+  it('names the rule each edit, delete and move expects at its position, as it is then', () => {
+    let d = updateRules(EMPTY_DRAFT, CLUSTER, BASE, ['b1'], { dport: '22', proto: 'tcp' })
+    d = removeRules(d, CLUSTER, BASE, ['b0'])
+    d = moveRule(d, CLUSTER, BASE, 'b3', 0)
+    const ops = deriveOps(d).ops
+    const base = { type: 'in', action: 'ACCEPT', source: '', dest: '', proto: '', dport: '' }
+    expect(ops[0]).toMatchObject({ kind: 'rule.delete', pos: 0, expect: { ...base, comment: 'a' } })
+    expect(ops[1]).toMatchObject({ kind: 'rule.edit', pos: 0, expect: { ...base, comment: 'b' } })
+    expect(ops[2]).toMatchObject({ kind: 'rule.move', pos: 2, to: 0, expect: { ...base, comment: 'd' } })
+    expect(deriveOps(moveRule(EMPTY_DRAFT, CLUSTER, BASE, 'b1', 0)).ops[0]).toMatchObject({ expect: { comment: 'b' } })
+  })
+
+  it('keeps the ICMP type of a rule through a clone and a move to another section', () => {
+    const icmp = [{ pos: 0, type: 'in', action: 'ACCEPT', enable: 1, proto: 'icmp', 'icmp-type': 'echo-request', comment: 'ping', digest: 'D1' }]
+    const cloned = deriveOps(cloneRules(EMPTY_DRAFT, CLUSTER, icmp, ['b0'])).ops[0]
+    expect(cloned).toMatchObject({ kind: 'rule.add', rule: { proto: 'icmp', 'icmp-type': 'echo-request' } })
+    const moved = deriveOps(moveRulesToScope(EMPTY_DRAFT, { scope: CLUSTER, baseRules: icmp }, ['b0'], { scope: HOST, baseRules: [] })).ops
+    expect(moved[1]).toMatchObject({ kind: 'rule.add', rule: { 'icmp-type': 'echo-request' } })
   })
 
   it('folds an edit of a rule added in the draft into its creation', () => {
@@ -40,7 +60,7 @@ describe('draft: operations of a scope', () => {
 
   it('cancels a rule added then deleted: nothing to publish, the scope leaves the draft', () => {
     let d = addRule(EMPTY_DRAFT, CLUSTER, BASE, rule('new'))
-    const id = currentEntries(d, CLUSTER, BASE)[0].id
+    const id = currentEntries(d, CLUSTER, BASE).find(e => e.rule.comment === 'new')!.id
     d = removeRules(d, CLUSTER, BASE, [id])
     expect(deriveOps(d).ops).toEqual([])
     expect(d.scopes).toEqual({})
@@ -163,5 +183,49 @@ describe('draft: storage', () => {
     const tampered = JSON.parse(serializeDraft(d))
     tampered.draft.scopes.cluster.scope = { kind: 'host', node: 'x' }
     expect(parseStoredDraft(JSON.stringify(tampered)).scopes).toEqual({})
+  })
+})
+
+describe('draft: the engine block of a guest stays where the engine put it', () => {
+  // A guest of a zone: the zone group on top, the user's rules, the final observe rule.
+  const engine = (comment: string, extra: Record<string, unknown> = {}) => ({ type: 'in', action: 'ACCEPT', enable: 1, comment, digest: 'D1', ...extra })
+  const ZONED = [
+    engine('[pc-microseg]', { type: 'group', action: 'pcz-db' }),
+    engine('u1'),
+    engine('u2'),
+    engine('[pc-microseg] observe', { log: 'info' }),
+  ]
+  const order = (d: ReturnType<typeof addRule>) => currentEntries(d, GUEST, ZONED).map(e => e.rule.comment)
+
+  it('Up and Down never pass a rule of the engine', () => {
+    expect(shiftRules(EMPTY_DRAFT, GUEST, ZONED, ['b1'], -1).scopes).toEqual({})
+    expect(shiftRules(EMPTY_DRAFT, GUEST, ZONED, ['b2'], 1).scopes).toEqual({})
+  })
+
+  it('a drag stops at the engine rules: onto the zone group it lands right below it, past the observe rule right above it', () => {
+    let d = moveRule(EMPTY_DRAFT, GUEST, ZONED, 'b2', 0)
+    expect(order(d)).toEqual(['[pc-microseg]', 'u2', 'u1', '[pc-microseg] observe'])
+    expect(deriveOps(d).ops).toEqual([expect.objectContaining({ kind: 'rule.move', pos: 2, to: 1 })])
+    d = moveRule(EMPTY_DRAFT, GUEST, ZONED, 'b1', 3)
+    expect(order(d)).toEqual(['[pc-microseg]', 'u2', 'u1', '[pc-microseg] observe'])
+  })
+
+  it('adds before the observe rule, and never above the zone group', () => {
+    expect(deriveOps(addRule(EMPTY_DRAFT, GUEST, ZONED, rule('new'))).ops[0]).toMatchObject({ kind: 'rule.add', index: 3 })
+    expect(deriveOps(addRule(EMPTY_DRAFT, GUEST, ZONED, rule('new'), 0)).ops[0]).toMatchObject({ kind: 'rule.add', index: 1 })
+  })
+
+  it('a rule moved to the guest goes before its observe rule', () => {
+    const d = moveRulesToScope(EMPTY_DRAFT, { scope: CLUSTER, baseRules: BASE }, ['b0'], { scope: GUEST, baseRules: ZONED })
+    expect(order(d)).toEqual(['[pc-microseg]', 'u1', 'u2', 'a', '[pc-microseg] observe'])
+    expect(deriveOps(d).ops.at(-1)).toMatchObject({ kind: 'rule.add', index: 3 })
+  })
+
+  it('never moves a rule of the engine, even where the longest run would rather move it', () => {
+    // A draft out of reach of the UI: the user rules wanted above the zone group.
+    const base = currentEntries(EMPTY_DRAFT, GUEST, ZONED.slice(0, 3))
+    const sd = { scope: GUEST, baseDigest: 'D1', base, rules: [base[1], base[2], base[0]] }
+    // Without the engine rules held in place, the longest run (u1, u2) would move the zone group to the bottom.
+    expect(deriveScopeOps(sd).ops.filter(op => 'ref' in op && op.ref === 'b0')).toEqual([])
   })
 })

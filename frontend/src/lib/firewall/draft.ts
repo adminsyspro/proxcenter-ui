@@ -7,8 +7,8 @@
 // from the two lists, never recorded one by one, so an edit of a rule added in the draft is part of its creation, a
 // rule added then deleted costs nothing, and a rule dragged back where it was is no move.
 
-import type { DraftScope, PublishOp, RuleFields, ScopeOptions } from './publishOps'
-import { RULE_TEXT_FIELDS, isEngineComment, scopeKey } from './publishOps'
+import type { DraftScope, PublishOp, RuleExpect, RuleFields, ScopeOptions } from './publishOps'
+import { EXPECT_FIELDS, RULE_TEXT_FIELDS, isEngineComment, scopeKey } from './publishOps'
 
 export type DraftEntry = { id: string; rule: RuleFields }
 
@@ -46,6 +46,7 @@ export function toFields(rule: RuleLike): RuleFields {
     iface: rule.iface ?? '',
     log: rule.log || 'nolog',
     comment: rule.comment ?? '',
+    'icmp-type': rule['icmp-type'] ?? '',
   }
 }
 
@@ -121,10 +122,35 @@ export function editRules(
 /** Rules owned by the engine (its marker in the comment) are never edited, moved or deleted from the draft. */
 const editable = (e: DraftEntry) => !isEngineComment(e.rule.comment)
 
-export const addRule = (draft: FirewallDraft, scope: DraftScope, baseRules: RuleLike[] | null, rule: RuleFields, index = 0) =>
+/**
+ * Where the user's rules may go in a list holding the engine's: after its leading rules (the zone group on top of a
+ * guest) and before its trailing ones (the final observe rule), as insertion indexes [lo, hi].
+ */
+export function userRange(rules: DraftEntry[]): [number, number] {
+  let lo = 0
+  while (lo < rules.length && !editable(rules[lo])) lo++
+  let hi = rules.length
+  while (hi > lo && !editable(rules[hi - 1])) hi--
+  return [lo, hi]
+}
+
+/** The insertion indexes around position `at` that cross no rule of the engine (the segment it sits in). */
+function segmentAround(rules: DraftEntry[], at: number): [number, number] {
+  let lo = at
+  while (lo > 0 && editable(rules[lo - 1])) lo--
+  let hi = at
+  while (hi < rules.length && editable(rules[hi])) hi++
+  return [lo, hi]
+}
+
+const clamp = (value: number, [lo, hi]: [number, number]) => Math.max(lo, Math.min(value, hi))
+
+/** Adds a rule at `index`, at the end of the user's rules by default; never among the engine's leading or trailing rules. */
+export const addRule = (draft: FirewallDraft, scope: DraftScope, baseRules: RuleLike[] | null, rule: RuleFields, index?: number) =>
   editRules(draft, scope, baseRules, (rules, newId) => {
+    const range = userRange(rules)
     const next = [...rules]
-    next.splice(Math.max(0, Math.min(index, next.length)), 0, { id: newId(), rule })
+    next.splice(clamp(index ?? range[1], range), 0, { id: newId(), rule })
     return next
   })
 
@@ -134,14 +160,14 @@ export const updateRules = (draft: FirewallDraft, scope: DraftScope, baseRules: 
 export const removeRules = (draft: FirewallDraft, scope: DraftScope, baseRules: RuleLike[] | null, ids: string[]) =>
   editRules(draft, scope, baseRules, rules => rules.filter(e => !ids.includes(e.id) || !editable(e)))
 
-/** Puts one rule at `toIndex` of its list (the index it will have once moved). */
+/** Puts one rule at `toIndex` of its list (the index it will have once moved), never across a rule of the engine. */
 export const moveRule = (draft: FirewallDraft, scope: DraftScope, baseRules: RuleLike[] | null, id: string, toIndex: number) =>
   editRules(draft, scope, baseRules, rules => {
     const from = rules.findIndex(e => e.id === id)
     if (from < 0 || !editable(rules[from])) return rules
     const next = [...rules]
     const [moved] = next.splice(from, 1)
-    next.splice(Math.max(0, Math.min(toIndex, next.length)), 0, moved)
+    next.splice(clamp(toIndex, segmentAround(next, from)), 0, moved)
     return next
   })
 
@@ -152,7 +178,7 @@ export const shiftRules = (draft: FirewallDraft, scope: DraftScope, baseRules: R
     const order = delta < 0 ? next.map((_, i) => i) : next.map((_, i) => next.length - 1 - i)
     for (const i of order) {
       const j = i + delta
-      const movable = ids.includes(next[i].id) && editable(next[i]) && j >= 0 && j < next.length && !ids.includes(next[j].id)
+      const movable = ids.includes(next[i].id) && editable(next[i]) && j >= 0 && j < next.length && !ids.includes(next[j].id) && editable(next[j])
       if (movable) {
         const held = next[i]
         next[i] = next[j]
@@ -178,7 +204,10 @@ export function moveRulesToScope(
   const moving = currentEntries(draft, from.scope, from.baseRules).filter(e => ids.includes(e.id) && editable(e))
   if (moving.length === 0) return draft
   const removed = removeRules(draft, from.scope, from.baseRules, moving.map(e => e.id))
-  return editRules(removed, to.scope, to.baseRules, (rules, newId) => [...rules, ...moving.map(e => ({ id: newId(), rule: { ...e.rule } }))])
+  return editRules(removed, to.scope, to.baseRules, (rules, newId) => {
+    const at = userRange(rules)[1]
+    return [...rules.slice(0, at), ...moving.map(e => ({ id: newId(), rule: { ...e.rule } })), ...rules.slice(at)]
+  })
 }
 
 /** Sets options of a scope; a value equal to the one read is no change. */
@@ -244,6 +273,12 @@ class ScopeSim {
     this.fields = Object.fromEntries((sd.base ?? []).map(e => [e.id, e.rule]))
   }
 
+  /** What the server must find at the position of a rule before writing it. */
+  private expectOf(id: string): RuleExpect {
+    const f = this.fields[id]
+    return Object.fromEntries(EXPECT_FIELDS.map(k => [k, f[k]])) as RuleExpect
+  }
+
   push(op: PublishOp) {
     this.ops.push(op)
     this.states.push({ key: this.key, ids: [...this.cur], fields: { ...this.fields }, options: this.options, enable: this.enable })
@@ -253,9 +288,10 @@ class ScopeSim {
     for (let i = this.cur.length - 1; i >= 0; i--) {
       const id = this.cur[i]
       if (wanted.has(id)) continue
+      const expect = this.expectOf(id)
       this.cur.splice(i, 1)
       delete this.fields[id]
-      this.push({ kind: 'rule.delete', scope: this.sd.scope, pos: i, ref: id })
+      this.push({ kind: 'rule.delete', scope: this.sd.scope, pos: i, expect, ref: id })
     }
   }
 
@@ -264,8 +300,9 @@ class ScopeSim {
     this.cur.forEach((id, pos) => {
       const patch = diffFields(this.fields[id], desired.get(id)!)
       if (!patch) return
+      const expect = this.expectOf(id)
       this.fields[id] = desired.get(id)!
-      this.push({ kind: 'rule.edit', scope: this.sd.scope, pos, patch, ref: id })
+      this.push({ kind: 'rule.edit', scope: this.sd.scope, pos, patch, expect, ref: id })
     })
   }
 
@@ -273,6 +310,8 @@ class ScopeSim {
     const rules = this.sd.rules ?? []
     const kept = rules.filter(e => e.id in this.fields)
     const stable = stableIds(kept.map(e => e.id), kept.map(e => this.cur.indexOf(e.id)))
+    // The engine's rules never move: they are placed whatever the longest run says.
+    for (const e of kept) if (!editable(e)) stable.add(e.id)
     let previous: string | null = null
     for (const e of rules) {
       if (!stable.has(e.id)) this.place(e, previous === null ? 0 : this.cur.indexOf(previous) + 1)
@@ -292,9 +331,10 @@ class ScopeSim {
     }
     const to = from < target ? target - 1 : target
     if (to === from) return
+    const expect = this.expectOf(e.id)
     this.cur.splice(from, 1)
     this.cur.splice(to, 0, e.id)
-    this.push({ kind: 'rule.move', scope: this.sd.scope, pos: from, to, ref: e.id })
+    this.push({ kind: 'rule.move', scope: this.sd.scope, pos: from, to, expect, ref: e.id })
   }
 
   settings() {

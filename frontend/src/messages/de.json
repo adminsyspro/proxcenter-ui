@@ -9029,7 +9029,7 @@
       "postureRefreshSoon": "Berechnet {time} · Zahlen jünger als 30 Sekunden",
       "postureRefreshComputing": "Abdeckung wird berechnet",
       "postureTimelineTitle": "Beobachteter Verkehr im Zeitverlauf",
-      "postureTimelineWindow": "abgedecktes Fenster: letzte {minutes, number} Min. (Speicher des Orchestrators)",
+      "postureTimelineWindow": "abgedecktes Fenster: {minutes, plural, one {letzte Minute} other {letzte # Min.}} (Speicher des Orchestrators)",
       "postureTimelineVerdict": "Urteil",
       "postureTimelineAll": "Alle",
       "postureTimelineLabel": "Beobachtete Ereignisse pro 5 Minuten, nach Gruppe gestapelt",
@@ -9039,7 +9039,9 @@
       "postureVolumeTab": "Volumen (sFlow)",
       "postureVolumeCaptionSent": "gesendete Bytes pro Gruppe, letzte 2 Stunden (sFlow)",
       "postureVolumeCaptionReceived": "empfangene Bytes pro Gruppe, letzte 2 Stunden (sFlow)",
-      "postureVolumeEmpty": "Kein sFlow-Volumen in den letzten 2 Stunden"
+      "postureVolumeEmpty": "Kein sFlow-Volumen in den letzten 2 Stunden",
+      "postureVolumeLabel": "sFlow-Bytes pro 5 Minuten, nach Gruppe gestapelt",
+      "postureTimelineWindowHours": "abgedecktes Fenster: {hours, plural, one {letzte Stunde} other {letzte # Stunden}} (Speicher des Orchestrators)"
     },
     "rulesOnDemand": {
       "chip": "Regeln beim Öffnen",

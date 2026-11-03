@@ -30,8 +30,10 @@ const LEFT = 36
 const RIGHT = 4
 const TOP = 8
 const BOTTOM = 20
-/** Before the box is measured (and where the browser cannot measure it). */
+/** The drawing width before the box is measured (and where the browser cannot measure it): scaled to 100 % of the card. */
 const FALLBACK_WIDTH = 600
+/** Past a day, the covered window is said in hours. */
+const DAY_MINUTES = 24 * 60
 const TIP_WIDTH = 220
 const VERDICTS: readonly TimelineVerdict[] = ['all', 'would_block', 'blocked']
 const VERDICT_LABEL: Record<TimelineVerdict, string> = { all: 'postureTimelineAll', would_block: 'postureWouldBlock', blocked: 'postureBlocked' }
@@ -43,7 +45,8 @@ function tickIndexes(count: number): number[] {
 }
 
 /** The stacked bars of the buckets, with the scale, the time labels and the breakdown of the bucket under the pointer. */
-function Bars({ timeline, width, unit }: { timeline: PostureTimeline; width: number; unit: Unit }) {
+function Bars({ timeline, measured, unit }: { timeline: PostureTimeline; measured: number | null; unit: Unit }) {
+  const width = measured ?? FALLBACK_WIDTH
   const theme = useTheme()
   const format = useFormatter()
   const t = useTranslations('networkPage.dashboard')
@@ -62,7 +65,15 @@ function Bars({ timeline, width, unit }: { timeline: PostureTimeline; width: num
 
   return (
     <>
-      <svg width={width} height={TIMELINE_HEIGHT} role='img' aria-label={t('postureTimelineLabel')} style={{ display: 'block' }} onMouseLeave={() => setHover(null)}>
+      <svg
+        width={measured ?? '100%'}
+        height={measured ? TIMELINE_HEIGHT : undefined}
+        viewBox={`0 0 ${width} ${TIMELINE_HEIGHT}`}
+        role='img'
+        aria-label={unit === 'bytes' ? t('postureVolumeLabel') : t('postureTimelineLabel')}
+        style={{ display: 'block' }}
+        onMouseLeave={() => setHover(null)}
+      >
         <line x1={LEFT} x2={LEFT + plotW} y1={TOP} y2={TOP} stroke={alpha(theme.palette.text.primary, 0.08)} />
         <line x1={LEFT} x2={LEFT + plotW} y1={TOP + plotH} y2={TOP + plotH} stroke={alpha(theme.palette.text.primary, 0.2)} />
         <text x={LEFT - 6} y={TOP + 4} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max'>{unit === 'bytes' ? formatBytes(max, 0) : format.number(max, { notation: 'compact' })}</text>
@@ -116,18 +127,21 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   const [chosen, setChosen] = useState<Unit>('events')
   // The Volume tab only exists while sFlow has data for the connection.
   const unit: Unit = volume ? chosen : 'events'
-  const width = size?.width ?? FALLBACK_WIDTH
+  const measured = size?.width ?? null
 
   let body: React.ReactNode
-  if (unit === 'bytes' && volume) body = volume.total > 0 ? <Bars timeline={volume} width={width} unit='bytes' /> : <Typography variant='body2' color='text.secondary' data-testid='volume-empty'>{t('postureVolumeEmpty')}</Typography>
+  if (unit === 'bytes' && volume) body = volume.total > 0 ? <Bars timeline={volume} measured={measured} unit='bytes' /> : <Typography variant='body2' color='text.secondary' data-testid='volume-empty'>{t('postureVolumeEmpty')}</Typography>
   else if (phase === 'loading') body = <Skeleton data-testid='timeline-loading' variant='rounded' height={TIMELINE_HEIGHT} />
   else if (phase === 'unavailable') body = <Typography variant='body2' color='text.secondary' data-testid='timeline-unavailable'>{t('postureTimelineUnavailable')}</Typography>
   else if (timeline.total === 0) body = <Typography variant='body2' color='text.secondary' data-testid='timeline-empty'>{t('postureTimelineEmpty')}</Typography>
-  else body = <Bars timeline={timeline} width={width} unit='events' />
+  else body = <Bars timeline={timeline} measured={measured} unit='events' />
 
   let caption: string | null = null
   if (unit === 'bytes') caption = volumeSent ? t('postureVolumeCaptionSent') : t('postureVolumeCaptionReceived')
-  else if (timeline.windowMinutes !== null) caption = t('postureTimelineWindow', { minutes: timeline.windowMinutes })
+  else if (timeline.windowMinutes !== null) {
+    const minutes = timeline.windowMinutes
+    caption = minutes > DAY_MINUTES ? t('postureTimelineWindowHours', { hours: Math.round(minutes / 60) }) : t('postureTimelineWindow', { minutes })
+  }
 
   const title = volume ? (
     <Tabs value={unit} onChange={(_, next: Unit) => setChosen(next)} sx={{ minHeight: 32, '& .MuiTab-root': { minHeight: 32, py: 0.5, px: 1.5, textTransform: 'none' } }}>

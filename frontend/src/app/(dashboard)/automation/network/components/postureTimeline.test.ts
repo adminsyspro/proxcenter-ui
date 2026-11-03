@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
+import type { LensPair } from '@/lib/microseg/trafficLens'
 import type { MicrosegEvent, MicrosegZone } from '@/lib/microseg/types'
 
 import type { PostureGuest } from './dashboardPosture'
 import {
-  BUCKET_MS, MAX_BUCKETS, VOLUME_WINDOW_MS, connectionVmids, mergeEvents, postureTimeline, postureVolume, volumeWindow, type TimelineSeries, type VmSeries,
+  BUCKET_MS, MAX_BUCKETS, MAX_VOLUME_VMIDS, VOLUME_WINDOW_MS, accumulateVmids, busiestVmids, mergeEvents, postureTimeline, postureVolume, volumeWindow, type TimelineSeries, type VmSeries,
 } from './postureTimeline'
 
 const NOW = Date.parse('2026-11-03T10:02:00Z')
@@ -48,6 +49,12 @@ describe('postureTimeline: buckets', () => {
     expect(t.windowMinutes).toBe(3 * 24 * 60)
   })
 
+  it('counts an event stamped less than 5 minutes ahead of the clock in the last bucket, not one further ahead', () => {
+    const t = run({ events: [event({ ts: at(1) }), event({ ts: new Date(NOW + 4 * 60_000).toISOString() }), event({ ts: new Date(NOW + 9 * 60_000).toISOString() })] })
+    expect(t.buckets.at(-1)!.total).toBe(2)
+    expect(t.total).toBe(2)
+  })
+
   it('has no bucket and no window without an event', () => {
     expect(run()).toEqual({ series: [], buckets: [], max: 0, total: 0, windowMinutes: null })
   })
@@ -83,8 +90,9 @@ describe('postureTimeline: grouping', () => {
     const events = [event({ vmid: 102, node: 'pve2' }), event({ vmid: 104, node: 'pve2' }), event({ vmid: 999, node: 'pve3' })]
     const vlan = run({ groupBy: 'vlan', events, slices: [slice('vlan:20', 'vlan', '#222222', '20'), slice('vlan:none', 'novlan', '#64748b'), slice('external', 'external', '#616161')] })
     expect(vlan.buckets.at(-1)!.counts).toEqual({ 'vlan:20': 1, 'vlan:none': 1, external: 1 })
-    const node = run({ groupBy: 'node', events, slices: [slice('node:pve2', 'node', '#333333', 'pve2')] })
-    expect(node.buckets.at(-1)!.counts).toEqual({ 'node:pve2': 2, other: 1 })
+    const node = run({ groupBy: 'node', events, slices: [slice('node:pve2', 'node', '#333333', 'pve2'), slice('external', 'external', '#616161')] })
+    // A guest the connection does not list is Unknown by node as by VLAN, whatever node the event names.
+    expect(node.buckets.at(-1)!.counts).toEqual({ 'node:pve2': 2, external: 1 })
   })
 })
 
@@ -120,12 +128,13 @@ describe('mergeEvents', () => {
 
 describe('sFlow volume', () => {
   const { from, to } = volumeWindow(NOW)
-  const point = (minutesAgo: number, bytes_in: number, bytes_out: number) => ({ time: Math.floor((NOW - minutesAgo * 60_000) / 1000), bytes_in, bytes_out })
+  /** A point as InfluxDB's aggregateWindow stamps it: at the END of its 5-minute window, `ago` windows before the last. */
+  const point = (ago: number, bytes_in: number, bytes_out: number) => ({ time: (to - ago * BUCKET_MS) / 1000, bytes_in, bytes_out })
   const SERIES: VmSeries[] = [
-    { vmid: 101, points: [point(1, 10, 1000), point(7, 20, 2000)] },
-    { vmid: 102, points: [point(1, 500, 5)] },
-    { vmid: 104, points: [point(1, 30, 300)] },
-    { vmid: 999, points: [point(1, 1, 7)] },
+    { vmid: 101, points: [point(0, 10, 1000), point(1, 20, 2000)] },
+    { vmid: 102, points: [point(0, 500, 5)] },
+    { vmid: 104, points: [point(0, 30, 300)] },
+    { vmid: 999, points: [point(0, 1, 7)] },
   ]
   const vol = (over: Partial<Parameters<typeof postureVolume>[0]> = {}) => postureVolume({
     series: SERIES, groupBy: 'zone', zones: ZONES, tagPrefix: 'zone-', guests: GUESTS, slices: [...ZONE_SLICES, slice('zone:zdb', 'zone', '#444444', 'db')], from, to, ...over,
@@ -137,13 +146,12 @@ describe('sFlow volume', () => {
     expect(to).toBeGreaterThan(NOW)
   })
 
-  it('takes the guests of the connection the sFlow pairs name, either end', () => {
-    const pairs = [
-      { src_ip: 'a', dst_ip: 'b', src_vmid: 101, dst_vmid: 999, bytes: 1, packets: 1, protocol: 'TCP', dst_port: 22 },
-      { src_ip: 'c', dst_ip: 'd', dst_vmid: 104, bytes: 1, packets: 1, protocol: 'TCP', dst_port: 22 },
-    ]
-    expect(connectionVmids(pairs, GUESTS)).toEqual([101, 104])
-    expect(connectionVmids(pairs.slice(0, 0), GUESTS)).toEqual([])
+  it('puts a point in the window it closes: the one stamped with the window end is the last bucket, none is dropped', () => {
+    const v = vol({ series: [{ vmid: 101, points: [point(0, 0, 1), point(23, 0, 2), point(24, 0, 4)] }] })
+    // point(0) closes the last bucket; point(23) closes the first; point(24) closes the window before `from`.
+    expect(v.buckets.at(-1)!.total).toBe(1)
+    expect(v.buckets[0].total).toBe(2)
+    expect(v.total).toBe(3)
   })
 
   it('stacks by zone the bytes the members sent, per 5-minute bucket, a VM the connection does not hold as Unknown', () => {
@@ -162,6 +170,38 @@ describe('sFlow volume', () => {
   })
 
   it('leaves out the points outside the window', () => {
-    expect(vol({ series: [{ vmid: 101, points: [point(3 * 60, 1, 1)] }, { vmid: 102, points: null }] }).total).toBe(0)
+    expect(vol({ series: [{ vmid: 101, points: [point(36, 1, 1)] }, { vmid: 102, points: null }] }).total).toBe(0)
+  })
+})
+
+describe('the VMIDs of the volume read', () => {
+  const pair = (over: Partial<LensPair>): LensPair => ({ src_ip: '10.0.0.1', dst_ip: '10.0.0.2', src_vmid: 101, dst_vmid: 102, bytes: 100, packets: 1, protocol: 'TCP', dst_port: 22, ...over })
+  const NO_IPS = GUESTS.map(g => ({ ...g, ips: [] }))
+
+  it('takes the guests of the connection the pairs name, either end, with the most bytes seen', () => {
+    const seen = accumulateVmids(new Map(), [pair({}), pair({ src_vmid: 999, src_ip: '10.9.9.9', bytes: 300 })], GUESTS)
+    expect([...seen.keys()]).toEqual([101, 102])
+    expect(seen.get(102)!.bytes).toBe(300)
+    expect(busiestVmids(seen, GUESTS)).toEqual([101, 102])
+  })
+
+  it('takes a VMID for a guest only when a pair carried one of its addresses, once they are known', () => {
+    // Another connection's VM 101 at 172.16.0.1: not this connection's web1 (10.0.0.1).
+    const other = accumulateVmids(new Map(), [pair({ src_ip: '172.16.0.1', dst_vmid: undefined })], NO_IPS)
+    // Without addresses (guest list not read), the VMID alone; once they are read, it no longer counts.
+    expect(busiestVmids(other, NO_IPS)).toEqual([101])
+    expect(busiestVmids(other, GUESTS)).toEqual([])
+  })
+
+  it('keeps every VMID seen so far (the read keeps its key), and asks the busiest 100 in number order', () => {
+    const first = accumulateVmids(new Map(), [pair({})], GUESTS)
+    const next = accumulateVmids(first, [pair({ src_vmid: 104, src_ip: '10.0.0.4', dst_vmid: undefined })], GUESTS)
+    expect(busiestVmids(next, GUESTS)).toEqual([101, 102, 104])
+    const guests = Array.from({ length: 150 }, (_, i) => ({ key: `qemu/${1000 + i}`, node: 'pve1', tags: [], vlans: [], ips: [] }))
+    const many = new Map(guests.map((g, i) => [1000 + i, { bytes: i, ips: new Set<string>() }] as const))
+    const ids = busiestVmids(many, guests)
+    expect(ids).toHaveLength(MAX_VOLUME_VMIDS)
+    expect(ids[0]).toBe(1050)
+    expect(ids.at(-1)).toBe(1149)
   })
 })

@@ -9082,7 +9082,7 @@
       "postureRefreshSoon": "{time} 계산됨 · 30초 이내의 새 수치",
       "postureRefreshComputing": "적용 범위 계산 중",
       "postureTimelineTitle": "시간별 관찰 트래픽",
-      "postureTimelineWindow": "포함 구간: 최근 {minutes, number}분 (오케스트레이터 메모리)",
+      "postureTimelineWindow": "포함 구간: {minutes, plural, other {최근 #분}} (오케스트레이터 메모리)",
       "postureTimelineVerdict": "판정",
       "postureTimelineAll": "전체",
       "postureTimelineLabel": "5분 단위 관찰 이벤트, 그룹별 누적",
@@ -9092,7 +9092,9 @@
       "postureVolumeTab": "볼륨 (sFlow)",
       "postureVolumeCaptionSent": "그룹별 송신 바이트, 최근 2시간 (sFlow)",
       "postureVolumeCaptionReceived": "그룹별 수신 바이트, 최근 2시간 (sFlow)",
-      "postureVolumeEmpty": "최근 2시간 동안 sFlow 볼륨 없음"
+      "postureVolumeEmpty": "최근 2시간 동안 sFlow 볼륨 없음",
+      "postureVolumeLabel": "5분 단위 sFlow 바이트, 그룹별 누적",
+      "postureTimelineWindowHours": "포함 구간: {hours, plural, other {최근 #시간}} (오케스트레이터 메모리)"
     },
     "rulesOnDemand": {
       "chip": "열 때 규칙 로드",

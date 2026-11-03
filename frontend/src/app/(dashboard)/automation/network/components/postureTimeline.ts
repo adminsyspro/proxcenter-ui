@@ -55,10 +55,11 @@ export type PostureTimeline = {
 function groupOfEvent(
   e: MicrosegEvent, groupBy: GroupBy, zoneByName: ReadonlyMap<string, MicrosegZone>, guestByKey: ReadonlyMap<string, PostureGuest>, guestIps: ReadonlySet<string> | null,
 ): string {
-  if (groupBy === 'node') return `node:${e.node}`
-  if (groupBy === 'vlan') {
+  if (groupBy !== 'zone') {
+    // A guest the connection does not list (deleted since, another connection): Unknown, by node as by VLAN.
     const guest = guestByKey.get(`${e.type}/${e.vmid}`)
     if (!guest) return EXTERNAL_KEY
+    if (groupBy === 'node') return `node:${e.node}`
     return guest.vlans.length ? `vlan:${guest.vlans[0]}` : NO_VLAN_KEY
   }
   if (e.src_zone) {
@@ -99,7 +100,9 @@ export function postureTimeline(input: {
 
   const last = Math.floor(now / BUCKET_MS) * BUCKET_MS
   const first = Math.max(Math.floor(oldest / BUCKET_MS) * BUCKET_MS, last - (MAX_BUCKETS - 1) * BUCKET_MS)
-  const items = kept.map(e => ({ at: Date.parse(e.ts), group: groupOfEvent(e, groupBy, zoneByName, guestByKey, guestIps), value: 1 }))
+  // An event stamped a little ahead of this clock (node clocks drift) counts in the last bucket.
+  const clamp = (at: number) => (at >= last + BUCKET_MS && at < now + BUCKET_MS ? last : at)
+  const items = kept.map(e => ({ at: clamp(Date.parse(e.ts)), group: groupOfEvent(e, groupBy, zoneByName, guestByKey, guestIps), value: 1 }))
   return { ...stack(first, last, items, slices), windowMinutes }
 }
 
@@ -140,12 +143,44 @@ export function volumeWindow(now: number): { from: number; to: number } {
 /** The VMID of a guest key ("qemu/101"). */
 const vmidOf = (g: PostureGuest) => Number(g.key.slice(g.key.indexOf('/') + 1))
 
-/** The guests of the connection the sFlow pairs name (by VMID, either end), sorted: none means no sFlow data for it. */
-export function connectionVmids(pairs: readonly LensPair[], guests: readonly PostureGuest[]): number[] {
+/** The VMIDs of the volume chart at most: the busiest ones, so the series read stays bounded. */
+export const MAX_VOLUME_VMIDS = 100
+
+/** What the pairs told of one VMID of the connection: the most bytes a pair of it carried, and the addresses it had. */
+export type VmidSeen = { bytes: number; ips: ReadonlySet<string> }
+
+/**
+ * The guests of the connection (by VMID) the sFlow pairs name at either end, on top of the ones seen before: the set
+ * only grows, so the series read keeps its key.
+ */
+export function accumulateVmids(seen: ReadonlyMap<number, VmidSeen>, pairs: readonly LensPair[], guests: readonly PostureGuest[]): Map<number, VmidSeen> {
   const mine = new Set(guests.map(vmidOf))
-  const seen = new Set<number>()
-  for (const p of pairs) for (const vmid of [p.src_vmid, p.dst_vmid]) if (vmid && mine.has(vmid)) seen.add(vmid)
-  return [...seen].sort((a, b) => a - b)
+  const next = new Map(seen)
+  const take = (vmid: number | undefined, ip: string, bytes: number) => {
+    if (!vmid || !mine.has(vmid)) return
+    const prev = next.get(vmid)
+    next.set(vmid, { bytes: Math.max(prev?.bytes ?? 0, bytes), ips: new Set([...(prev?.ips ?? []), bareIp(ip)]) })
+  }
+  for (const p of pairs) {
+    take(p.src_vmid, p.src_ip, p.bytes)
+    take(p.dst_vmid, p.dst_ip, p.bytes)
+  }
+  return next
+}
+
+/**
+ * The VMIDs the series read asks: the `max` busiest seen, in number order (a stable key). sFlow names VMs by VMID
+ * across the fleet: once a guest's addresses are known, its VMID is only kept when a pair carried one of them (a VM
+ * of another connection with the same VMID is not taken for it).
+ */
+export function busiestVmids(seen: ReadonlyMap<number, VmidSeen>, guests: readonly PostureGuest[], max = MAX_VOLUME_VMIDS): number[] {
+  const ipsOf = new Map(guests.map(g => [vmidOf(g), new Set(g.ips.map(bareIp))]))
+  const isMine = (vmid: number, s: VmidSeen) => {
+    const ips = ipsOf.get(vmid)
+    return !!ips && (ips.size === 0 || [...s.ips].some(ip => ips.has(ip)))
+  }
+  return [...seen.entries()].filter(([vmid, s]) => isMine(vmid, s))
+    .sort((a, b) => b[1].bytes - a[1].bytes || a[0] - b[0]).slice(0, max).map(([vmid]) => vmid).sort((a, b) => a - b)
 }
 
 /** One VM of /sflow/timeseries/all-vms: its points, `time` in Unix seconds. */
@@ -178,7 +213,9 @@ export function postureVolume(input: {
   }
   const items = input.series.flatMap(vm => {
     const group = groupOfVm(vm.vmid)
-    return (vm.points ?? []).map(p => ({ at: p.time * 1000, group, value: groupBy === 'zone' ? p.bytes_out : p.bytes_in }))
+    // InfluxDB's aggregateWindow stamps each sum with the END of its window (internal/sflow/influx.go, the
+    // `aggregateWindow(every: ..., fn: sum)` queries): the bucket starts one step before.
+    return (vm.points ?? []).map(p => ({ at: p.time * 1000 - BUCKET_MS, group, value: groupBy === 'zone' ? p.bytes_out : p.bytes_in }))
   })
   return { ...stack(input.from, input.to - BUCKET_MS, items, input.slices), windowMinutes: VOLUME_WINDOW_MS / 60_000 }
 }

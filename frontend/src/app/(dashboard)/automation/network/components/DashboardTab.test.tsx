@@ -383,9 +383,11 @@ describe('DashboardTab: traffic over time', () => {
 
 describe('DashboardTab: Volume (sFlow)', () => {
   const PAIRS = [{ src_ip: '10.0.0.1', dst_ip: '10.0.0.2', src_vmid: 101, dst_vmid: 102, bytes: 1000, packets: 10, protocol: 'TCP', dst_port: 5432 }]
+  // InfluxDB stamps each 5-minute sum with the end of its window: the window holding now ends at the next edge.
+  const windowEnd = (Math.floor(Date.now() / 300_000) + 1) * 300
   const SERIES = [
-    { vmid: 101, vm_name: 'web1', points: [{ time: Math.floor(Date.now() / 1000), bytes_in: 100, bytes_out: 2048 }] },
-    { vmid: 102, vm_name: 'db1', points: [{ time: Math.floor(Date.now() / 1000), bytes_in: 2048, bytes_out: 1024 }] },
+    { vmid: 101, vm_name: 'web1', points: [{ time: windowEnd, bytes_in: 100, bytes_out: 2048 }] },
+    { vmid: 102, vm_name: 'db1', points: [{ time: windowEnd, bytes_in: 2048, bytes_out: 1024 }] },
   ]
 
   it('adds the Volume tab when sFlow has data for the connection: bytes sent per zone over the last 2 hours', async () => {
@@ -395,6 +397,7 @@ describe('DashboardTab: Volume (sFlow)', () => {
     fireEvent.click(await screen.findByTestId('volume-tab'))
     expect(screen.getByTestId('timeline-caption').textContent).toBe('bytes sent per group, last 2 hours (sFlow)')
     expect(screen.getByTestId('timeline-max').textContent).toBe('3 KiB')
+    expect(screen.getByRole('img', { name: 'sFlow bytes per 5 minutes, stacked per group' })).toBeInTheDocument()
     const series = fetchedUrls().find(u => u.includes('endpoint=timeseries%2Fall-vms'))!
     expect(series).toContain('vmids=101%2C102')
     expect(series).toContain('granularity=5m')
@@ -410,6 +413,18 @@ describe('DashboardTab: Volume (sFlow)', () => {
     await waitFor(() => expect(fetchedUrls().some(u => u.includes('endpoint=ip-pairs'))).toBe(true))
     expect(screen.queryByTestId('volume-tab')).not.toBeInTheDocument()
     expect(fetchedUrls().some(u => u.includes('timeseries'))).toBe(false)
+  })
+
+  it('does not take another connection\'s VM with the same VMID once the guest addresses are known', async () => {
+    postureReads({ events: [ev(0)], pairs: [{ ...PAIRS[0], src_ip: '172.16.0.1', dst_ip: '172.16.0.2' }], sflowSeries: SERIES, vms: VMS })
+    renderDashboard({ enable: 1 })
+
+    // Group by VLAN reads the guest addresses (10.0.0.1, 10.0.0.2): the pair's addresses are not theirs.
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Group by' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'VLAN' }))
+    await screen.findByTestId('legend-vlan:20')
+    await waitFor(() => expect(fetchedUrls().filter(u => u.includes('endpoint=ip-pairs')).length).toBeGreaterThan(0))
+    expect(screen.queryByTestId('volume-tab')).not.toBeInTheDocument()
   })
 
   it('shows no Volume tab when the time series cannot be read', async () => {

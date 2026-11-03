@@ -9082,7 +9082,7 @@
       "postureRefreshSoon": "{time}计算 · 数据不足 30 秒",
       "postureRefreshComputing": "正在计算覆盖率",
       "postureTimelineTitle": "观察流量随时间变化",
-      "postureTimelineWindow": "覆盖窗口：最近 {minutes, number} 分钟（编排器内存）",
+      "postureTimelineWindow": "覆盖窗口：{minutes, plural, other {最近 # 分钟}}（编排器内存）",
       "postureTimelineVerdict": "判定",
       "postureTimelineAll": "全部",
       "postureTimelineLabel": "每 5 分钟观察到的事件，按组堆叠",
@@ -9092,7 +9092,9 @@
       "postureVolumeTab": "流量 (sFlow)",
       "postureVolumeCaptionSent": "每组发送的字节，最近 2 小时（sFlow）",
       "postureVolumeCaptionReceived": "每组接收的字节，最近 2 小时（sFlow）",
-      "postureVolumeEmpty": "最近 2 小时没有 sFlow 流量"
+      "postureVolumeEmpty": "最近 2 小时没有 sFlow 流量",
+      "postureVolumeLabel": "每 5 分钟的 sFlow 字节，按组堆叠",
+      "postureTimelineWindowHours": "覆盖窗口：{hours, plural, other {最近 # 小时}}（编排器内存）"
     },
     "rulesOnDemand": {
       "chip": "打开时加载规则",

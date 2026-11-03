@@ -9082,7 +9082,7 @@
       "postureRefreshSoon": "Computed {time} · new figures less than 30 seconds ago",
       "postureRefreshComputing": "Computing the coverage",
       "postureTimelineTitle": "Observed traffic over time",
-      "postureTimelineWindow": "covered window: last {minutes, number} min (orchestrator memory)",
+      "postureTimelineWindow": "covered window: last {minutes, plural, one {# min} other {# min}} (orchestrator memory)",
       "postureTimelineVerdict": "Verdict",
       "postureTimelineAll": "All",
       "postureTimelineLabel": "Observed events per 5 minutes, stacked per group",
@@ -9092,7 +9092,9 @@
       "postureVolumeTab": "Volume (sFlow)",
       "postureVolumeCaptionSent": "bytes sent per group, last 2 hours (sFlow)",
       "postureVolumeCaptionReceived": "bytes received per group, last 2 hours (sFlow)",
-      "postureVolumeEmpty": "No sFlow volume in the last 2 hours"
+      "postureVolumeEmpty": "No sFlow volume in the last 2 hours",
+      "postureVolumeLabel": "sFlow bytes per 5 minutes, stacked per group",
+      "postureTimelineWindowHours": "covered window: last {hours, plural, one {# hour} other {# hours}} (orchestrator memory)"
     },
     "rulesOnDemand": {
       "chip": "Rules on open",

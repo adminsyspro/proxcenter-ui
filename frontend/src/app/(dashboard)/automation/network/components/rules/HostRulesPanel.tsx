@@ -56,11 +56,12 @@ export default function HostRulesPanel({ hostRulesByNode, nodesList, securityGro
   const [nodeOptionsByNode, setNodeOptionsByNode] = useState<Record<string, firewallAPI.NodeOptions>>({})
 
   // Load host rules on mount if not already loaded
+  const noHostRules = Object.keys(hostRulesByNode).length === 0
   useEffect(() => {
-    if (selectedConnection && nodesList.length > 0 && Object.keys(hostRulesByNode).length === 0) {
+    if (selectedConnection && nodesList.length > 0 && noHostRules) {
       void loadHostRules()
     }
-  }, [selectedConnection, nodesList, loadHostRules])
+  }, [selectedConnection, nodesList, noHostRules, loadHostRules])
 
   // Load node options for all nodes
   useEffect(() => {

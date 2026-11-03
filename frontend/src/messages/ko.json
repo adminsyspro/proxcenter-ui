@@ -13064,7 +13064,9 @@
         "matrix": "행렬",
         "matrixHint": "출발지 × 목적지, 영역 수와 관계없이",
         "guests": "게스트 보기",
-        "guestsHint": "한 영역과 그 게스트, 그리고 이들과 통신하는 대상"
+        "guestsHint": "한 영역과 그 게스트, 그리고 이들과 통신하는 대상",
+        "sankey": "생키 다이어그램",
+        "sankeyHint": "관찰된 트래픽을 띠로 표시, 히트가 많을수록 넓게"
       },
       "matrix": {
         "label": "영역 간 흐름: 출발지 × 목적지",
@@ -13081,6 +13083,14 @@
         "zone": "가운데 영역",
         "option": "{name} · {count, plural, other {#회 히트}}",
         "hint": "다른 영역을 클릭하면 가운데로 옮깁니다."
+      },
+      "sankey": {
+        "label": "영역 간 트래픽을 띠로 표시",
+        "note": "띠의 너비는 관찰된 흐름의 히트 수를 따릅니다. 허용된 흐름은 카운터가 없어 가늘게 그립니다.",
+        "flows": "{count, plural, other {허용된 흐름 #개}}",
+        "sources": "출발지",
+        "destinations": "목적지",
+        "empty": "이 필터로 그릴 흐름이 없습니다."
       }
     },
     "preflight": {

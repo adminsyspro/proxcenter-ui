@@ -22,6 +22,8 @@ import { useZoneEdits } from './useZoneEdits'
 import { useZoneGuests } from './useZoneGuests'
 import ZoneCanvas from './ZoneCanvas'
 import ZoneMatrix from './ZoneMatrix'
+import ZoneSankey from './ZoneSankey'
+import { buildSankey } from './sankeyModel'
 import {
   EXTERNAL_ID, OUTSIDE_ID, UNZONED_ID, filterEdges, focusSets, zoneNodeId,
   type MapEdgeData, type MapInput, type MapMember, type MapNodeData, type PanelEdgeData,
@@ -59,11 +61,12 @@ const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_z
   && a.dst_zone_id === b.dst_zone_id && a.dst_cidr === b.dst_cidr && a.proto === b.proto && a.dport === b.dport
 
 /**
- * The Overview sub-tab: the draft as a map, in one of four renderings chosen in the toolbar (kept in the browser).
+ * The Overview sub-tab: the draft as a map, in one of five renderings chosen in the toolbar (kept in the browser).
  * Groups, like the security groups view of NSX: a circle per zone holding its guests, the running guests in no zone
  * in a dashed circle, the allowed flows circle to circle, the observed ones (unprotected, blocked) guest to guest.
  * Compact zones: a box per zone, every flow zone to zone. Matrix: sources by destinations. Guest view: one zone and
- * its guests in the centre, what talks to it on the left, what it talks to on the right. Hover or select something
+ * its guests in the centre, what talks to it on the left, what it talks to on the right. Sankey: the traffic as
+ * ribbons from the sources to the destinations, wider with more hits. Hover or select something
  * to light it and its flows; click a zone for its panel, an edge (or a cell) for its flows. Nothing polls beyond the
  * shared hooks (one inventory read, one suggestions read).
  */
@@ -112,7 +115,9 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied])
   // The zone of the guest view: the one picked, else (or once it is deleted) the one with the most observed traffic.
   const centreId = centre && zonesById.has(centre) ? centre : defaultCentre(zones, input.suggestions)
-  const matrix = useMemo(() => (view === 'matrix' ? buildMatrix(input) : null), [view, input])
+  // The matrix holds the pairs of the matrix and of the Sankey diagram (their flow panel).
+  const matrix = useMemo(() => (view === 'matrix' || view === 'sankey' ? buildMatrix(input) : null), [view, input])
+  const sankey = useMemo(() => (view === 'sankey' && matrix ? buildSankey(matrix, filters) : null), [view, matrix, filters])
   const graph = useMemo(() => mapViewGraph(view, input, centreId), [view, input, centreId])
 
   // "Refreshed at": the first answer, then the end of every refresh (a refresh that changes nothing still moves it).
@@ -201,7 +206,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     setCentre(zoneId)
     setSelection(s => (s?.kind === 'zone' ? s : null))
   }, [])
-  const endName = useCallback((e: MatrixEnd) => e.zone?.name ?? tNode(e.kind === 'outside' ? 'outside' : 'external'), [tNode])
+  const endName = useCallback((e: Pick<MatrixEnd, 'kind' | 'zone'>) => e.zone?.name ?? tNode(e.kind === 'outside' ? 'outside' : 'external'), [tNode])
   const selectGuest = useCallback((nodeId: string) => setSelection({ kind: 'guest', id: nodeId }), [])
   const selectEdge = useCallback((edgeId: string) => { setSelection({ kind: 'edge', id: edgeId }); setResolved(null) }, [])
   const clear = useCallback(() => setSelection(null), [])
@@ -255,7 +260,17 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
             aria-label={t('mapLabel')}
             sx={{ flex: '1 1 0', minWidth: 0, width: '100%', minHeight: 560, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
           >
-            {matrix && (
+            {sankey && (
+              <ZoneSankey
+                layout={sankey}
+                selectedCell={selectedEdge?.id ?? null}
+                selectedZone={selectedZone ? selectedNode : null}
+                onSelectCell={selectEdge}
+                onSelectZone={selectZone}
+                names={{ end: endName }}
+              />
+            )}
+            {matrix && !sankey && (
               <ZoneMatrix
                 model={matrix}
                 filters={filters}

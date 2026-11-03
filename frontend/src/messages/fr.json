@@ -13065,7 +13065,9 @@
         "matrix": "Matrice",
         "matrixHint": "sources par destinations, pour tout nombre de zones",
         "guests": "Vue par invité",
-        "guestsHint": "une zone et ses invités, avec ce qui leur parle"
+        "guestsHint": "une zone et ses invités, avec ce qui leur parle",
+        "sankey": "Diagramme de Sankey",
+        "sankeyHint": "le trafic observé en rubans, plus larges avec plus d’occurrences"
       },
       "matrix": {
         "label": "Flux entre les zones : sources par destinations",
@@ -13082,6 +13084,14 @@
         "zone": "Zone au centre",
         "option": "{name} · {count, plural, one {# occurrence} other {# occurrences}}",
         "hint": "Cliquez sur une autre zone pour la mettre au centre."
+      },
+      "sankey": {
+        "label": "Trafic entre les zones en rubans",
+        "note": "La largeur d'un ruban suit les occurrences des flux observés. Les flux autorisés n'ont pas de compteur : ils sont tracés fins.",
+        "flows": "{count, plural, one {# flux autorisé} other {# flux autorisés}}",
+        "sources": "Côté sources",
+        "destinations": "Côté destinations",
+        "empty": "Aucun flux à tracer avec ces filtres."
       }
     },
     "preflight": {

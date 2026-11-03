@@ -13064,7 +13064,9 @@
         "matrix": "Matriz",
         "matrixHint": "orígenes por destinos, para cualquier número de zonas",
         "guests": "Vista por invitado",
-        "guestsHint": "una zona y sus invitados, con lo que les habla"
+        "guestsHint": "una zona y sus invitados, con lo que les habla",
+        "sankey": "Diagrama de Sankey",
+        "sankeyHint": "el tráfico observado como cintas, más anchas con más impactos"
       },
       "matrix": {
         "label": "Flujos entre las zonas: orígenes por destinos",
@@ -13081,6 +13083,14 @@
         "zone": "Zona en el centro",
         "option": "{name} · {count, plural, one {# impacto} other {# impactos}}",
         "hint": "Haga clic en otra zona para ponerla en el centro."
+      },
+      "sankey": {
+        "label": "Tráfico entre las zonas como cintas",
+        "note": "El ancho de una cinta sigue los impactos de los flujos observados. Los flujos permitidos no tienen contador: se dibujan finos.",
+        "flows": "{count, plural, one {# flujo permitido} other {# flujos permitidos}}",
+        "sources": "Orígenes",
+        "destinations": "Destinos",
+        "empty": "Ningún flujo que dibujar con estos filtros."
       }
     },
     "preflight": {

@@ -12732,7 +12732,9 @@
         "matrix": "Matrixansicht",
         "matrixHint": "Quellen nach Zielen, für jede Anzahl von Zonen",
         "guests": "Gastansicht",
-        "guestsHint": "eine Zone und ihre Gäste, mit allem, was mit ihnen spricht"
+        "guestsHint": "eine Zone und ihre Gäste, mit allem, was mit ihnen spricht",
+        "sankey": "Sankey-Diagramm",
+        "sankeyHint": "der beobachtete Verkehr als Bänder, breiter mit mehr Treffern"
       },
       "matrix": {
         "label": "Flüsse zwischen den Zonen: Quellen nach Zielen",
@@ -12749,6 +12751,14 @@
         "zone": "Zone in der Mitte",
         "option": "{name} · {count, plural, one {# Treffer} other {# Treffer}}",
         "hint": "Klicken Sie auf eine andere Zone, um sie in die Mitte zu setzen."
+      },
+      "sankey": {
+        "label": "Verkehr zwischen den Zonen als Bänder",
+        "note": "Die Bandbreite folgt den Treffern der beobachteten Flüsse. Erlaubte Flüsse haben keinen Zähler: sie werden dünn gezeichnet.",
+        "flows": "{count, plural, one {# erlaubter Fluss} other {# erlaubte Flüsse}}",
+        "sources": "Quellen",
+        "destinations": "Ziele",
+        "empty": "Mit diesen Filtern gibt es keinen Fluss zu zeichnen."
       }
     },
     "preflight": {

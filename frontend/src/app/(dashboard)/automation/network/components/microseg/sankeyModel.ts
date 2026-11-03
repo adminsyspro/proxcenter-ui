@@ -1,0 +1,123 @@
+import type { MicrosegZone } from '@/lib/microseg/types'
+
+import { flowService } from './FlowSummary'
+import { cellView, type MatrixModel } from './matrixModel'
+import { OUTSIDE_ID, type FlowFilters, type MapEdgeKind } from './zoneGraph'
+import { byText } from './zoneLayout'
+
+/** The widest observed ribbon (the busiest pair), the thinnest one, and the width of an allowed ribbon (no counter). */
+export const MAX_W = 48
+export const MIN_W = 2
+export const ALLOWED_W = 3
+/** Room between two nodes of a column. */
+export const NODE_GAP = 24
+
+export type SankeyNode = { id: string; zone: MicrosegZone | null; hits: number; y: number; height: number }
+
+export type Ribbon = {
+  /** `${kind}:${cell id}`: a pair of the matrix has up to three ribbons. */
+  id: string
+  /** The cell of the matrix the ribbon belongs to: the flow panel of its pair. */
+  cell: string
+  source: string
+  target: string
+  kind: MapEdgeKind
+  /** The hits of its observed flows (0 for an allowed ribbon). */
+  hits: number
+  /** How many flows (allowed) or observed flows the ribbon stands for. */
+  count: number
+  services: string[]
+  width: number
+  /** The top of the ribbon at its source and at its target. */
+  y0: number
+  y1: number
+}
+
+export type SankeyLayout = { sources: SankeyNode[]; targets: SankeyNode[]; ribbons: Ribbon[]; height: number }
+
+const KIND_ORDER: Record<MapEdgeKind, number> = { unprotected: 0, blocked: 1, allowed: 2, outside: 3 }
+const round = (v: number) => Math.round(v * 10) / 10
+
+/** The width of an observed ribbon: the square root of its hits against the busiest one, never under MIN_W. */
+export function ribbonWidth(hits: number, maxHits: number): number {
+  if (hits <= 0 || maxHits <= 0) return MIN_W
+  return Math.max(MIN_W, round(MAX_W * Math.sqrt(hits / maxHits)))
+}
+
+type Draft = Omit<Ribbon, 'width' | 'y0' | 'y1'>
+
+/** The ribbons of every cell the checkboxes leave something in: unprotected, blocked, allowed. */
+function draftRibbons(model: MatrixModel, filters: FlowFilters): Draft[] {
+  const out: Draft[] = []
+  for (const cell of model.cells.values()) {
+    const view = cellView(cell, filters, null)
+    if (!view) continue
+    const base = { cell: cell.id, source: cell.source, target: cell.target }
+    for (const kind of ['unprotected', 'blocked'] as const) {
+      const seen = view.observed.filter(s => (s.kind === 'blocked') === (kind === 'blocked'))
+      if (seen.length) {
+        out.push({ ...base, id: `${kind}:${cell.id}`, kind, hits: seen.reduce((sum, s) => sum + s.hits, 0), count: seen.length, services: [...new Set(seen.map(s => flowService(s)))].sort(byText) })
+      }
+    }
+    if (view.flows.length) {
+      const kind: MapEdgeKind = cell.target === OUTSIDE_ID ? 'outside' : 'allowed'
+      out.push({ ...base, id: `${kind}:${cell.id}`, kind, hits: 0, count: view.flows.length, services: view.services })
+    }
+  }
+  return out
+}
+
+const nameOf = (zone: MicrosegZone | null, id: string) => zone?.name ?? id
+
+/** The nodes of a column, busiest first (ties by name), stacked from the top with NODE_GAP between them. */
+function stack(ids: string[], ribbons: Ribbon[], end: 'source' | 'target', zoneOf: (id: string) => MicrosegZone | null): SankeyNode[] {
+  const nodes = ids.map(id => {
+    const own = ribbons.filter(r => r[end] === id)
+    return { id, zone: zoneOf(id), hits: own.reduce((s, r) => s + r.hits, 0), y: 0, height: round(own.reduce((s, r) => s + r.width, 0)) }
+  })
+  nodes.sort((a, b) => b.hits - a.hits || byText(nameOf(a.zone, a.id), nameOf(b.zone, b.id)) || byText(a.id, b.id))
+  let top = 0
+  for (const n of nodes) {
+    n.y = round(top)
+    top += n.height + NODE_GAP
+  }
+  return nodes
+}
+
+/** The ribbons of each node side by side, in the order of their other end, then unprotected, blocked, allowed. */
+function placeEnds(nodes: SankeyNode[], ribbons: Ribbon[], end: 'source' | 'target', otherRank: Map<string, number>) {
+  const other = end === 'source' ? 'target' : 'source'
+  const key = end === 'source' ? 'y0' : 'y1'
+  for (const n of nodes) {
+    let y = n.y
+    const own = ribbons.filter(r => r[end] === n.id)
+    own.sort((a, b) => otherRank.get(a[other])! - otherRank.get(b[other])! || KIND_ORDER[a.kind] - KIND_ORDER[b.kind])
+    for (const r of own) {
+      r[key] = round(y)
+      y += r.width
+    }
+  }
+}
+
+/**
+ * The Sankey rendering of the matrix: the sources on the left (zones, Unknown / External), the destinations on the
+ * right (zones, Outside), one ribbon per pair and kind. An observed ribbon is as wide as the square root of its
+ * hits (the busiest at MAX_W, never under MIN_W); an allowed one has no counter and stays ALLOWED_W wide. A node is
+ * as tall as its ribbons. The three checkboxes filter the ribbons. Pure and deterministic.
+ */
+export function buildSankey(model: MatrixModel, filters: FlowFilters): SankeyLayout {
+  const drafts = draftRibbons(model, filters)
+  if (!drafts.length) return { sources: [], targets: [], ribbons: [], height: 0 }
+  const maxHits = Math.max(0, ...drafts.map(d => d.hits))
+  const ribbons: Ribbon[] = drafts.map(d => ({ ...d, width: d.hits ? ribbonWidth(d.hits, maxHits) : ALLOWED_W, y0: 0, y1: 0 }))
+  const zones = new Map([...model.rows, ...model.cols].map(e => [e.id, e.zone]))
+  const zoneOf = (id: string) => zones.get(id) ?? null
+  const sources = stack([...new Set(ribbons.map(r => r.source))], ribbons, 'source', zoneOf)
+  const targets = stack([...new Set(ribbons.map(r => r.target))], ribbons, 'target', zoneOf)
+  const rank = (nodes: SankeyNode[]) => new Map(nodes.map((n, i) => [n.id, i]))
+  placeEnds(sources, ribbons, 'source', rank(targets))
+  placeEnds(targets, ribbons, 'target', rank(sources))
+  ribbons.sort((a, b) => byText(a.id, b.id))
+  const height = Math.max(...[...sources, ...targets].map(n => n.y + n.height))
+  return { sources, targets, ribbons, height: round(height) }
+}

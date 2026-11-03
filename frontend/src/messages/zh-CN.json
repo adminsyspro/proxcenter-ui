@@ -13064,7 +13064,9 @@
         "matrix": "矩阵",
         "matrixHint": "来源 × 目标，适合任意数量的区域",
         "guests": "虚拟机视图",
-        "guestsHint": "一个区域及其虚拟机，以及与之通信的对象"
+        "guestsHint": "一个区域及其虚拟机，以及与之通信的对象",
+        "sankey": "桑基图",
+        "sankeyHint": "以条带显示观察到的流量，命中越多越宽"
       },
       "matrix": {
         "label": "区域之间的流：来源 × 目标",
@@ -13081,6 +13083,14 @@
         "zone": "中心区域",
         "option": "{name} · {count, plural, other {# 次命中}}",
         "hint": "点击另一个区域可将其置于中心。"
+      },
+      "sankey": {
+        "label": "以条带显示区域之间的流量",
+        "note": "条带宽度取决于观察到的流的命中次数。允许的流没有计数器：以细线绘制。",
+        "flows": "{count, plural, other {# 条允许的流}}",
+        "sources": "来源",
+        "destinations": "目标",
+        "empty": "在这些筛选条件下没有可绘制的流。"
       }
     },
     "preflight": {

@@ -13064,7 +13064,9 @@
         "matrix": "Matrix",
         "matrixHint": "sources by destinations, for any number of zones",
         "guests": "Guest view",
-        "guestsHint": "one zone and its guests, with what talks to them"
+        "guestsHint": "one zone and its guests, with what talks to them",
+        "sankey": "Sankey diagram",
+        "sankeyHint": "the observed traffic as ribbons, wider with more hits"
       },
       "matrix": {
         "label": "Flows between the zones: sources by destinations",
@@ -13081,6 +13083,14 @@
         "zone": "Zone in the centre",
         "option": "{name} · {count, plural, one {# hit} other {# hits}}",
         "hint": "Click another zone to put it in the centre."
+      },
+      "sankey": {
+        "label": "Traffic between the zones as ribbons",
+        "note": "Ribbon width follows the hits of the observed flows. Allowed flows have no counter: they are drawn thin.",
+        "flows": "{count, plural, one {# allowed flow} other {# allowed flows}}",
+        "sources": "Sources",
+        "destinations": "Destinations",
+        "empty": "No flow to draw with these filters."
       }
     },
     "preflight": {

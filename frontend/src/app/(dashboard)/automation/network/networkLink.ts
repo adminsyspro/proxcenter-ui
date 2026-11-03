@@ -1,8 +1,10 @@
 import { isMicrosegSubTab, type MicrosegSubTab } from './components/microseg/microsegTabTypes'
 
 /** The tabs of /automation/network as a link names them (`?tab=`), in the order of the page. */
-export const NETWORK_TABS = ['dashboard', 'firewalling', 'aliases', 'ipsets', 'groups', 'logging', 'microseg'] as const
-export const MICROSEG_TAB_INDEX = NETWORK_TABS.indexOf('microseg')
+export const NETWORK_TABS = ['dashboard', 'microseg', 'firewalling', 'logging', 'groups', 'ipsets', 'aliases'] as const
+/** The index of each tab by its link name: the page compares `activeTab` to these, never to a number. */
+export const TAB = Object.fromEntries(NETWORK_TABS.map((name, i) => [name, i])) as Record<(typeof NETWORK_TABS)[number], number>
+export const MICROSEG_TAB_INDEX = TAB.microseg
 
 /** What a link to the page asks: `?tab=`, `?connection=`, `?sub=` (Micro-segmentation) and `?vm=`. */
 export type NetworkLink = {

@@ -27,10 +27,10 @@ import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
 import LoggingTab from './components/LoggingTab'
 import MicrosegTab from './components/microseg/MicrosegTab'
 import { MicrosegWriteContext, useCanManageMicroseg } from './components/microseg/microsegAccess'
-import { connectionOfVm, parseNetworkLink, pickConnection, readStoredConnection, storeConnection } from './networkLink'
+import { connectionOfVm, parseNetworkLink, pickConnection, readStoredConnection, storeConnection, TAB } from './networkLink'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN PAGE, 7 tabs: Dashboard, Firewalling, Aliases, IP Sets, Security Groups, Logging, Micro-segmentation
+   MAIN PAGE, 7 tabs: Dashboard, Micro-segmentation, Firewalling, Logging, Security Groups, IP Sets, Aliases (order = NETWORK_TABS)
 ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function NetworkAutomationPage() {
@@ -123,12 +123,12 @@ export default function NetworkAutomationPage() {
   const shownRulesSubTab = firewallMode === 'standalone' && rulesSubTab === 0 ? 1 : rulesSubTab
 
   // The guest list (firewall state, VLANs, tags) on Firewalling (tab 1: its guest sections and the VMs covered of its
-  // status bar) and Security Groups (tab 4) only: one request to the coverage route, computed and cached on the
+  // status bar) and Security Groups only: one request to the coverage route, computed and cached on the
   // server with one Proxmox call per guest at most (UA44). A guest's rules are read when its section is opened,
   // never for every guest on mount.
   useEffect(() => {
     if (isEnterprise && selectedConnection && !loadingVMRules && vmFirewallData.length === 0) {
-      if (activeTab === 4 || activeTab === 1) {
+      if (activeTab === TAB.groups || activeTab === TAB.firewalling) {
         void loadVMFirewallData()
       }
     }
@@ -156,12 +156,12 @@ export default function NetworkAutomationPage() {
           <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
           <Tabs value={activeTab} onChange={(_, v) => changeTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, flex: '1 1 460px', minWidth: 0 }}>
             <Tab icon={<i className="ri-dashboard-line" />} iconPosition="start" label={t('firewall.dashboard')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
-            <Tab icon={<i className="ri-shield-flash-line" />} iconPosition="start" label={t('networkPage.tabFirewalling')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
-            <Tab icon={<i className="ri-price-tag-3-line" />} iconPosition="start" label={t('networkPage.tabAliases')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
-            <Tab icon={<i className="ri-database-2-line" />} iconPosition="start" label={t('networkPage.tabIpSets')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
-            <Tab icon={<i className="ri-shield-check-line" />} iconPosition="start" label={t('networkPage.tabSecurityGroups')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
-            <Tab icon={<i className="ri-terminal-box-line" />} iconPosition="start" label={t('networkPage.tabLogging')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-shield-keyhole-line" />} iconPosition="start" label={t('microsegPilot.tab.title')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-shield-flash-line" />} iconPosition="start" label={t('networkPage.tabFirewalling')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-terminal-box-line" />} iconPosition="start" label={t('networkPage.tabLogging')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-shield-check-line" />} iconPosition="start" label={t('networkPage.tabSecurityGroups')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-database-2-line" />} iconPosition="start" label={t('networkPage.tabIpSets')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-price-tag-3-line" />} iconPosition="start" label={t('networkPage.tabAliases')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
           </Tabs>
             {/* Connection selector: right end of the tabs row, below the tabs on a narrow width */}
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0, ml: 'auto', px: 2, py: 1 }}>
@@ -182,8 +182,8 @@ export default function NetworkAutomationPage() {
             </Box>
           </Box>
 
-          {/* Tab 0: Dashboard */}
-          {activeTab === 0 && (
+          {/* Tab: Dashboard */}
+          {activeTab === TAB.dashboard && (
             <DashboardTab
               securityGroups={securityGroups}
               clusterOptions={clusterOptions}
@@ -202,13 +202,13 @@ export default function NetworkAutomationPage() {
               reload={loadFirewallData}
               onNavigateTab={changeTab}
               onNavigateRulesSubTab={setRulesSubTab}
-              onOpenGuests={filter => { changeTab(1); setRulesSubTab(2); setGuestFilter(filter ?? null) }}
-              onOpenMicroseg={subTab => { changeTab(6); setMicrosegSubTab(subTab ?? null) }}
+              onOpenGuests={filter => { changeTab(TAB.firewalling); setRulesSubTab(2); setGuestFilter(filter ?? null) }}
+              onOpenMicroseg={subTab => { changeTab(TAB.microseg); setMicrosegSubTab(subTab ?? null) }}
             />
           )}
 
-          {/* Tab 1: Firewalling */}
-          {activeTab === 1 && (
+          {/* Tab: Firewalling */}
+          {activeTab === TAB.firewalling && (
             <RulesTab
               activeSubTab={shownRulesSubTab}
               onSubTabChange={setRulesSubTab}
@@ -234,22 +234,22 @@ export default function NetworkAutomationPage() {
               connectionName={connections.find(c => c.id === selectedConnection)?.name}
               loadError={firewallLoadError || null}
               reload={loadFirewallData}
-              onOpenMicroseg={() => changeTab(6)}
+              onOpenMicroseg={() => changeTab(TAB.microseg)}
             />
           )}
 
-          {/* Tab 2: Aliases */}
-          {activeTab === 2 && (
+          {/* Tab: Aliases */}
+          {activeTab === TAB.aliases && (
             <ObjectsTab {...objectsProps} view="aliases" />
           )}
 
-          {/* Tab 3: IP Sets */}
-          {activeTab === 3 && (
+          {/* Tab: IP Sets */}
+          {activeTab === TAB.ipsets && (
             <ObjectsTab {...objectsProps} view="ipsets" />
           )}
 
-          {/* Tab 4: Security Groups */}
-          {activeTab === 4 && (
+          {/* Tab: Security Groups */}
+          {activeTab === TAB.groups && (
             <SecurityGroupsPanel
               securityGroups={securityGroups}
               vmFirewallData={vmFirewallData}
@@ -269,8 +269,8 @@ export default function NetworkAutomationPage() {
             />
           )}
 
-          {/* Tab 5: Logging (keyed: another connection starts from no element) */}
-          {activeTab === 5 && selectedConnection && (
+          {/* Tab: Logging (keyed: another connection starts from no element) */}
+          {activeTab === TAB.logging && selectedConnection && (
             <LoggingTab
               key={selectedConnection}
               selectedConnection={selectedConnection}
@@ -280,8 +280,8 @@ export default function NetworkAutomationPage() {
             />
           )}
 
-          {/* Tab 6: Micro-segmentation (keyed: another connection starts from no state) */}
-          {activeTab === 6 && (
+          {/* Tab: Micro-segmentation (keyed: another connection starts from no state) */}
+          {activeTab === TAB.microseg && (
             <MicrosegTab
               key={selectedConnection}
               connectionId={selectedConnection}

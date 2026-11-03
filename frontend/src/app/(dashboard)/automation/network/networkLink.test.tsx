@@ -1,20 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { connectionOfVm, parseNetworkLink, pickConnection, readStoredConnection, storeConnection } from './networkLink'
+import { connectionOfVm, NETWORK_TABS, parseNetworkLink, pickConnection, readStoredConnection, storeConnection, TAB } from './networkLink'
 
 const link = (search: string) => parseNetworkLink(new URLSearchParams(search))
 
 describe('parseNetworkLink', () => {
+  it('keeps the page order: Dashboard, Micro-segmentation, Firewalling, Logging, Security Groups, IP Sets, Aliases', () => {
+    expect([...NETWORK_TABS]).toEqual(['dashboard', 'microseg', 'firewalling', 'logging', 'groups', 'ipsets', 'aliases'])
+    expect(TAB.microseg).toBe(1)
+    expect(TAB.aliases).toBe(6)
+  })
+
   it('reads the tab, the connection and the Micro-segmentation sub-tab', () => {
-    expect(link('tab=groups&connection=dr')).toEqual({ tab: 4, sub: null, connection: 'dr', vm: null })
-    expect(link('tab=microseg&sub=history')).toEqual({ tab: 6, sub: 'history', connection: null, vm: null })
+    expect(link('tab=groups&connection=dr')).toEqual({ tab: TAB.groups, sub: null, connection: 'dr', vm: null })
+    expect(link('tab=microseg&sub=history')).toEqual({ tab: TAB.microseg, sub: 'history', connection: null, vm: null })
     expect(link('tab=firewalling&sub=history').sub).toBeNull()
     expect(link('tab=nope').tab).toBeNull()
     expect(parseNetworkLink(null)).toEqual({ tab: null, sub: null, connection: null, vm: null })
   })
 
   it('opens Micro-segmentation > Overview for a VMID, whatever tab and sub say; a VMID that is no number is ignored', () => {
-    expect(link('vm=98010&tab=aliases&sub=drifts')).toEqual({ tab: 6, sub: 'overview', connection: null, vm: 98010 })
+    expect(link('vm=98010&tab=aliases&sub=drifts')).toEqual({ tab: TAB.microseg, sub: 'overview', connection: null, vm: 98010 })
     expect(link('vm=abc').vm).toBeNull()
     expect(link('vm=%20').vm).toBeNull()
   })

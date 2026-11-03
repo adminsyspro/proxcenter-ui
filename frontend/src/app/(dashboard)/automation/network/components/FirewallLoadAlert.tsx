@@ -30,7 +30,7 @@ export default function FirewallLoadAlert({ error, onRetry }: Props) {
   if (causes.length === 0) return null
 
   const more = causes.length - 1
-  const summary = t('networkPage.loadError', { error: causes[0] }) + (more > 0 ? ` ${t('networkPage.loadErrorMore', { count: more })}` : '')
+  const summary = t('networkPage.loadError', { error: causes[0] })
 
   return (
     <Alert
@@ -48,7 +48,11 @@ export default function FirewallLoadAlert({ error, onRetry }: Props) {
       )}
     >
       <Tooltip title={<Box component='span' sx={{ whiteSpace: 'pre-line' }}>{causes.join('\n')}</Box>}>
-        <Typography variant='body2' noWrap>{summary}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, minWidth: 0 }}>
+          <Typography variant='body2' noWrap sx={{ minWidth: 0 }}>{summary}</Typography>
+          {/* Never shrunk: a long first cause is cut by the ellipsis, not the count of the others. */}
+          {more > 0 && <Typography variant='body2' sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{t('networkPage.loadErrorMore', { count: more })}</Typography>}
+        </Box>
       </Tooltip>
       <Collapse in={open} unmountOnExit>
         <Box component='ul' sx={{ m: 0, mt: 0.5, pl: 2.5 }}>

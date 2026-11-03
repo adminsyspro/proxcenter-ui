@@ -43,7 +43,8 @@ describe('FirewallLoadAlert', () => {
     const error = 'connect ECONNREFUSED 127.0.0.1:9 · HTTP 502 · HTTP 500 · HTTP 502'
     renderWithProviders(<FirewallLoadAlert error={error} onRetry={vi.fn()} />)
     const alert = screen.getByRole('alert')
-    expect(alert.textContent).toContain('may be incomplete: connect ECONNREFUSED 127.0.0.1:9 and 2 more')
+    expect(alert.textContent).toContain('may be incomplete: connect ECONNREFUSED 127.0.0.1:9')
+    expect(within(alert).getByText('and 2 more')).toBeTruthy()
     expect(within(alert).queryByText('HTTP 500')).toBeNull()
 
     fireEvent.click(within(alert).getByRole('button', { name: 'Details' }))
@@ -51,6 +52,18 @@ describe('FirewallLoadAlert', () => {
     expect(within(alert).getByText('HTTP 502')).toBeTruthy()
     expect(within(alert).getByRole('button', { name: 'Hide details' }).getAttribute('aria-expanded')).toBe('true')
     expect(within(alert).getByRole('button', { name: 'Retry' })).toBeTruthy()
+  })
+
+  it('keeps "and N more" out of the ellipsis of a long first cause', () => {
+    const long = `failed to get aliases: ${'x'.repeat(400)}`
+    renderWithProviders(<FirewallLoadAlert error={`${long} · HTTP 500 · HTTP 502`} />)
+    const alert = screen.getByRole('alert')
+    const first = within(alert).getByText(`Some firewall data could not be loaded, so the lists below may be incomplete: ${long}`)
+    const more = within(alert).getByText('and 2 more')
+    expect(first.contains(more)).toBe(false)
+    expect(getComputedStyle(first).textOverflow).toBe('ellipsis')
+    expect(getComputedStyle(more).flexShrink).toBe('0')
+    expect(getComputedStyle(more).textOverflow).not.toBe('ellipsis')
   })
 
   it('has no Details button for a single cause', () => {

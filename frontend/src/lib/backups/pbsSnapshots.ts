@@ -3,6 +3,7 @@
 // fleet-wide freshness aggregation and the PBS route share ONE implementation.
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { formatBytes } from "@/utils/format"
+import { fetchPbsGroupNotes, pbsSnapshotName } from "@/lib/backups/pbsGroupNotes"
 import {
   type CachedBackup,
   getPbsBackupsFromCache,
@@ -47,22 +48,27 @@ export async function fetchAllPbsBackups(
         // Older PBS versions may not support namespace endpoint — use root only
       }
 
-      // Fetch snapshots for each namespace in parallel
+      // Fetch snapshots for each namespace in parallel. The group notes are
+      // read alongside, not after, so a slow snapshot walk is not followed by
+      // a second round trip (the route sits behind a 60s proxy timeout).
       const nsPromises = namespaces.map(async (ns) => {
         const nsParam = ns ? `?ns=${encodeURIComponent(ns)}` : ''
-        const snapshots = await pbsFetch<any[]>(
-          conn,
-          `/admin/datastore/${encodeURIComponent(storeName)}/snapshots${nsParam}`,
-          {},
-          { slowRead: true }
-        )
+        const [snapshots, groupNotes] = await Promise.all([
+          pbsFetch<any[]>(
+            conn,
+            `/admin/datastore/${encodeURIComponent(storeName)}/snapshots${nsParam}`,
+            {},
+            { slowRead: true }
+          ),
+          fetchPbsGroupNotes(conn, storeName, ns),
+        ])
 
         return (snapshots || []).map(snap => {
           const backupTime = snap['backup-time']
             ? new Date(snap['backup-time'] * 1000)
             : null
 
-          const vmName = snap.comment || ''
+          const vmName = pbsSnapshotName(snap, groupNotes)
 
           return {
             id: `${storeName}/${ns ? ns + '/' : ''}${snap['backup-type']}/${snap['backup-id']}/${snap['backup-time']}`,

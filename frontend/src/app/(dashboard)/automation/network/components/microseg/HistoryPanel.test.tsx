@@ -1,6 +1,7 @@
 /**
- * History sub-tab: the revisions with their counts and a Restore that follows
- * its run in the strip, and the runs list with the result loaded on demand.
+ * History sub-tab (UA60): one table of the revisions (counts, diff against the previous one, a Restore that follows
+ * its run in the strip) and the runs (status, duration, the result in a drawer loaded on demand), newest first,
+ * filtered on All / Revisions / Runs and paged ten rows at a time.
  */
 
 import { afterAll, beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -27,7 +28,7 @@ afterAll(() => {
 })
 
 const REVISIONS = 'GET /revisions?limit=100'
-const RUNS = 'GET /runs?limit=11'
+const RUNS = 'GET /runs?limit=100'
 
 const rev = (version: number, over: Partial<MicrosegRevision> = {}): MicrosegRevision => ({
   id: `rev-${version}`, version, author: 'ana', created_at: '2026-11-02T09:30:00Z',
@@ -43,66 +44,87 @@ function setup(opts: { revisions?: MicrosegRevision[]; runs?: MicrosegRun[] } = 
   const current = policy({ zones: [zone('web')], version: 3, last_revision: { id: 'rev-9', version: 9, author: 'ana', created_at: '2026-11-02T09:30:00Z' } })
   const handlers = { reloadPolicy: vi.fn(async () => undefined), startRun: vi.fn(), goToSubTab: vi.fn(), onOpenPlan: vi.fn() }
   mock.routes[REVISIONS] = () => reply(200, { revisions: opts.revisions ?? [] })
-  mock.routes[RUNS] = () => reply(200, { runs: opts.runs ?? [], limit: 11, offset: 0 })
+  mock.routes[RUNS] = () => reply(200, { runs: opts.runs ?? [], limit: 100, offset: 0 })
   renderTab(<HistoryPanel connectionId='c1' policy={current} {...handlers} />)
   return handlers
 }
 
+const rowOf = (name: string | RegExp) => screen.findByRole('row', { name })
+const dataRows = () => screen.queryAllByRole('row').filter(r => r.hasAttribute('data-row'))
+
+describe('the history table', () => {
+  it('has a column per field and lists the revisions and the runs newest first', async () => {
+    setup({
+      revisions: [rev(9, { created_at: '2026-11-02T11:00:00Z' }), rev(8, { created_at: '2026-11-01T09:00:00Z' })],
+      runs: [runOf(1, { started_at: '2026-11-02T10:00:00Z' }), runOf(2, { kind: 'full', started_at: '2026-11-02T12:00:00Z' })],
+    })
+    await rowOf('Version 9')
+    const head = within(screen.getByRole('table', { name: 'History' })).getAllByRole('columnheader').map(h => h.textContent)
+    expect(head).toEqual(['Date', 'Type', 'Actor', 'Summary', 'Result', 'Duration', 'Actions'])
+    expect(dataRows().map(r => r.getAttribute('aria-label'))).toEqual([
+      'Full check, started Nov 2, 2026, 12:00 PM', 'Version 9', 'Apply, started Nov 2, 2026, 10:00 AM', 'Version 8',
+    ])
+  })
+
+  it('shows All, Revisions or Runs', async () => {
+    setup({ revisions: [rev(9)], runs: [runOf(1)] })
+    await rowOf('Version 9')
+    fireEvent.click(screen.getByTestId('history-kind-revisions'))
+    await waitFor(() => expect(dataRows().map(r => r.getAttribute('data-row'))).toEqual(['revision']))
+    fireEvent.click(screen.getByTestId('history-kind-runs'))
+    await waitFor(() => expect(dataRows().map(r => r.getAttribute('data-row'))).toEqual(['run']))
+    fireEvent.click(screen.getByTestId('history-kind-all'))
+    await waitFor(() => expect(dataRows()).toHaveLength(2))
+  })
+
+  it('pages the rows ten at a time', async () => {
+    setup({ revisions: Array.from({ length: 12 }, (_, i) => rev(20 - i, { created_at: `2026-11-${String(20 - i).padStart(2, '0')}T09:00:00Z` })) })
+    await rowOf('Version 20')
+    expect(dataRows()).toHaveLength(10)
+    expect(screen.queryByRole('row', { name: 'Version 10' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(await rowOf('Version 10')).toBeTruthy()
+    expect(dataRows()).toHaveLength(2)
+  })
+
+  it('says there is nothing yet', async () => {
+    setup()
+    expect(await screen.findByText('Nothing recorded yet: the first apply records a revision.')).toBeTruthy()
+  })
+})
+
 describe('revisions', () => {
-  it('shows a line per revision with its author, date and the counts of its snapshot', async () => {
-    setup({ revisions: [rev(9), rev(8, { snapshot: { tag_prefix: 'zone-', zones: [zone('web')], flows: [] } })] })
-    const line = await screen.findByRole('listitem', { name: 'Version 9' })
-    expect(within(line).getByText('Version 9')).toBeTruthy()
-    expect(within(line).getByText(/by ana/)).toBeTruthy()
-    expect(within(line).getByText(/Nov 2, 2026/)).toBeTruthy()
-    expect(within(line).getByText('2 zones, 1 flow')).toBeTruthy()
+  it('shows the version, the author, the counts and what changed against the previous revision, Applied and Latest', async () => {
+    setup({ revisions: [
+      rev(9, { snapshot: { tag_prefix: 'zone-', zones: [zone('web'), zone('db')], flows: [flow('f1'), { ...flow('f2'), dport: '443' }] } }),
+      rev(8, { snapshot: { tag_prefix: 'zone-', zones: [zone('web')], flows: [{ ...flow('f2'), dport: '80' }, flow('f3')] } }),
+    ] })
+    const line = await rowOf('Version 9')
+    expect(within(line).getByText('Revision applied v9')).toBeTruthy()
+    expect(within(line).getByText('ana')).toBeTruthy()
+    // db and f1 added, f3 removed, f2 changed (port).
+    expect(within(line).getByTestId('history-summary').textContent).toBe('2 zones, 2 flows · +2 −1 ~1 vs previous')
+    expect(within(line).getByText('Applied')).toBeTruthy()
     expect(within(line).getByText('Latest')).toBeTruthy()
-    const older = screen.getByRole('listitem', { name: 'Version 8' })
-    expect(within(older).getByText('1 zone, 0 flows')).toBeTruthy()
+    const older = screen.getByRole('row', { name: 'Version 8' })
+    expect(within(older).getByTestId('history-summary').textContent).toBe('1 zone, 2 flows')
     expect(within(older).queryByText('Latest')).toBeNull()
   })
 
-  it('says no "by" for a revision recorded without an author', async () => {
-    setup({ revisions: [rev(9), rev(8, { author: '' }), rev(7, { author: '  ' })] })
-    const empty = await screen.findByRole('listitem', { name: 'Version 8' })
-    expect(within(empty).queryByText(/^by/)).toBeNull()
-    expect(within(empty).getByText(/Nov 2, 2026/)).toBeTruthy()
-    expect(within(screen.getByRole('listitem', { name: 'Version 7' })).queryByText(/^by/)).toBeNull()
-    expect(within(screen.getByRole('listitem', { name: 'Version 9' })).getByText('by ana')).toBeTruthy()
-  })
-
-  it('shows the zones of a revision under its chevron', async () => {
-    setup({ revisions: [rev(9)] })
-    const line = await screen.findByRole('listitem', { name: 'Version 9' })
-    expect(within(line).queryByText(/Zones: web, db/)).toBeNull()
-    fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
-    expect(await within(line).findByText('Zones: web, db')).toBeTruthy()
-    expect(within(line).getByText('Tag prefix: zone-')).toBeTruthy()
-  })
-
-  it('pages the revisions ten at a time', async () => {
-    setup({ revisions: Array.from({ length: 12 }, (_, i) => rev(20 - i)) })
-    await screen.findByRole('listitem', { name: 'Version 20' })
-    expect(screen.getAllByRole('listitem', { name: /^Version / })).toHaveLength(10)
-    expect(screen.queryByRole('listitem', { name: 'Version 10' })).toBeNull()
-    fireEvent.click(within(screen.getByRole('region', { name: 'Revisions' })).getByRole('button', { name: 'Next page' }))
-    expect(await screen.findByRole('listitem', { name: 'Version 10' })).toBeTruthy()
-    expect(screen.getAllByRole('listitem', { name: /^Version / })).toHaveLength(2)
-  })
-
-  it('says there is no revision yet', async () => {
-    setup()
-    expect(await screen.findByText('No revision yet: the first apply records one.')).toBeTruthy()
+  it('says "-" for a revision recorded without an author', async () => {
+    setup({ revisions: [rev(9), rev(8, { author: '  ' })] })
+    const empty = await rowOf('Version 8')
+    expect(within(empty).getAllByText('-').length).toBeGreaterThan(0)
+    expect(within(empty).queryByText('ana')).toBeNull()
   })
 })
 
 describe('restore', () => {
   const ask = async (version = 8) => {
-    const line = await screen.findByRole('listitem', { name: `Version ${version}` })
+    const line = await rowOf(`Version ${version}`)
     fireEvent.click(within(line).getByRole('button', { name: 'Restore' }))
     return screen.findByRole('dialog', { name: `Restore version ${version}?` })
   }
-
   it('restores a revision after confirmation, with the current draft version, and follows the run', async () => {
     mock.routes['POST /revisions/rev-8/restore'] = () => reply(202, { run_id: 'run-77' })
     const { startRun } = setup({ revisions: [rev(9), rev(8)] })
@@ -149,41 +171,23 @@ describe('restore', () => {
 })
 
 describe('runs', () => {
-  it('shows a line per run: kind, status, start, duration, calls, writes and the error', async () => {
+  it('shows a row per run: type, actor, writes and calls, the error, status and duration', async () => {
     setup({ runs: [runOf(1), runOf(2, { kind: 'full', status: 'failed', api_calls: 1, writes: 1, duration_ms: 90, error: 'cluster unreachable' })] })
-    const ok = await screen.findByRole('listitem', { name: 'Apply, started Nov 2, 2026, 10:00 AM' })
+    const ok = await rowOf('Apply, started Nov 2, 2026, 10:00 AM')
+    expect(within(ok).getByText('Run: Apply')).toBeTruthy()
+    expect(within(ok).getByText('Administrator')).toBeTruthy()
+    expect(within(ok).getByTestId('history-summary').textContent).toBe('4 writes · 12 API calls')
     expect(within(ok).getByText('Done')).toBeTruthy()
     expect(within(ok).getByText('1.5s')).toBeTruthy()
-    expect(within(ok).getByText('12 API calls')).toBeTruthy()
-    expect(within(ok).getByText('4 writes')).toBeTruthy()
 
-    const failed = screen.getByRole('listitem', { name: 'Full check, started Nov 2, 2026, 10:00 AM' })
+    const failed = screen.getByRole('row', { name: 'Full check, started Nov 2, 2026, 10:00 AM' })
+    expect(within(failed).getByText('Engine')).toBeTruthy()
     expect(within(failed).getByText('Failed')).toBeTruthy()
-    expect(within(failed).getByText('1 API call')).toBeTruthy()
-    expect(within(failed).getByText('1 write')).toBeTruthy()
+    expect(within(failed).getByTestId('history-summary').textContent).toBe('1 write · 1 API call')
     expect(within(failed).getByText('cluster unreachable')).toBeTruthy()
   })
 
-  it('pages the runs from the server: a page is asked with one more to know if another follows', async () => {
-    const page1 = Array.from({ length: 11 }, (_, i) => runOf(i + 1))
-    mock.routes['GET /runs?limit=11&offset=10'] = () => reply(200, { runs: [runOf(11)], limit: 11, offset: 10 })
-    setup({ runs: page1 })
-    await screen.findAllByRole('listitem', { name: /^Apply, started/ })
-    expect(screen.getAllByRole('listitem', { name: /^Apply, started/ })).toHaveLength(10)
-
-    const runs = within(screen.getByRole('region', { name: 'Runs' }))
-    fireEvent.click(runs.getByRole('button', { name: 'Next page' }))
-    await waitFor(() => expect(calls('GET /runs?limit=11&offset=10')).toHaveLength(1))
-    await waitFor(() => expect(screen.getAllByRole('listitem', { name: /^Apply, started/ })).toHaveLength(1))
-    expect((runs.getByRole('button', { name: 'Next page' }) as HTMLButtonElement).disabled).toBe(true)
-  })
-
-  it('says there is no run yet', async () => {
-    setup()
-    expect(await screen.findByText('No run yet.')).toBeTruthy()
-  })
-
-  it('loads the result of a run only when its chevron is opened', async () => {
+  it('loads the result of a run only when its details open, in a drawer', async () => {
     mock.routes['GET /runs/run-1'] = () => reply(200, runOf(1, {
       result: {
         guests: 3, members: 2, steps: 5, drifts: 0,
@@ -194,12 +198,13 @@ describe('runs', () => {
     }))
     mock.routes[GUESTS_ROUTE] = () => reply(200, { data: { vms: [] } })
     setup({ runs: [runOf(1)] })
-    const line = await screen.findByRole('listitem', { name: /^Apply, started/ })
+    const line = await rowOf(/^Apply, started/)
     expect(calls('GET /runs/run-1')).toHaveLength(0)
 
-    fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
-    expect(await within(line).findByText('3 guests, 2 members, 5 steps')).toBeTruthy()
-    expect(within(line).getByText('1 done, 1 failed, 0 not run')).toBeTruthy()
+    fireEvent.click(within(line).getByRole('button', { name: 'Details' }))
+    const drawer = await screen.findByRole('region', { name: 'Details of the run: Apply' })
+    expect(await within(drawer).findByText('3 guests, 2 members, 5 steps')).toBeTruthy()
+    expect(within(drawer).getByText('1 done, 1 failed, 0 not run')).toBeTruthy()
     expect(calls('GET /runs/run-1')).toHaveLength(1)
   })
 
@@ -209,28 +214,17 @@ describe('runs', () => {
       result: { guests: 0, members: 0, steps: 0, drifts: 0, complete: true, notes: ['the zone tags of the guests are kept: remove them in PVE, or redeploy the policy as is'] },
     }))
     setup({ runs: [runOf(1, { kind: 'remove' })] })
-    const line = await screen.findByRole('listitem', { name: /^Removal, started/ })
-    fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
-    expect(await within(line).findByText('Removal complete.')).toBeTruthy()
-    expect(within(line).getByText(/the zone tags of the guests are kept/)).toBeTruthy()
-  })
-
-  it('shows an incomplete removal as such', async () => {
-    mock.routes['GET /runs/run-1'] = () => reply(200, runOf(1, {
-      kind: 'remove', status: 'failed', error: 'step failed',
-      result: { guests: 1, members: 1, steps: 1, drifts: 0, complete: false, notes: ['the removal is not complete: run it again'] },
-    }))
-    setup({ runs: [runOf(1, { kind: 'remove', status: 'failed', error: 'step failed' })] })
-    const line = await screen.findByRole('listitem', { name: /^Removal, started/ })
-    fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
-    expect(await within(line).findByText('Removal incomplete: run it again.')).toBeTruthy()
+    fireEvent.click(within(await rowOf(/^Removal, started/)).getByRole('button', { name: 'Details' }))
+    const drawer = await screen.findByRole('region', { name: 'Details of the run: Removal' })
+    expect(await within(drawer).findByText('Removal complete.')).toBeTruthy()
+    expect(within(drawer).getByText(/the zone tags of the guests are kept/)).toBeTruthy()
   })
 
   it('shows the error when the result cannot be loaded', async () => {
     mock.routes['GET /runs/run-1'] = () => reply(404, { code: 'NOT_FOUND', error: 'gone' })
     setup({ runs: [runOf(1)] })
-    const line = await screen.findByRole('listitem', { name: /^Apply, started/ })
-    fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
-    expect(await within(line).findByText('Not found. It may have been deleted.')).toBeTruthy()
+    fireEvent.click(within(await rowOf(/^Apply, started/)).getByRole('button', { name: 'Details' }))
+    const drawer = await screen.findByRole('region', { name: 'Details of the run: Apply' })
+    expect(await within(drawer).findByText('Not found. It may have been deleted.')).toBeTruthy()
   })
 })

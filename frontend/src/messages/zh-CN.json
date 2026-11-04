@@ -13596,7 +13596,8 @@
           "targeted": "定向运行",
           "plan": "计划",
           "apply": "应用",
-          "remove": "移除"
+          "remove": "移除",
+          "restore": "恢复"
         },
         "calls": "{count} 次 API 调用",
         "writes": "{count} 次写入",
@@ -13605,6 +13606,34 @@
           "removeComplete": "移除完成。",
           "removeIncomplete": "移除未完成：请重新运行。"
         }
+      },
+      "table": {
+        "title": "历史",
+        "kindLabel": "显示",
+        "kind": {
+          "all": "全部",
+          "revisions": "修订",
+          "runs": "运行"
+        },
+        "colDate": "日期",
+        "colType": "类型",
+        "colActor": "执行者",
+        "colSummary": "摘要",
+        "colResult": "结果",
+        "colDuration": "耗时",
+        "colActions": "操作",
+        "revision": "已应用修订 v{version}",
+        "run": "运行：{kind}",
+        "engine": "引擎",
+        "admin": "管理员",
+        "applied": "已应用",
+        "diff": "相比上一版 +{added, number} −{removed, number} ~{changed, number}",
+        "details": "详情",
+        "detailsOf": "运行详情：{kind}",
+        "closeDetails": "关闭",
+        "empty": "尚无记录：首次应用会记录一个修订。",
+        "loading": "正在加载历史...",
+        "capped": "仅读取最近 {count, number} 个修订和最近 {count, number} 次运行。"
       }
     },
     "waitingFirstCheck": "正在等待首次完整检查",

@@ -13596,7 +13596,8 @@
           "targeted": "Targeted pass",
           "plan": "Plan",
           "apply": "Apply",
-          "remove": "Removal"
+          "remove": "Removal",
+          "restore": "Restore"
         },
         "calls": "{count, plural, one {# API call} other {# API calls}}",
         "writes": "{count, plural, one {# write} other {# writes}}",
@@ -13605,6 +13606,34 @@
           "removeComplete": "Removal complete.",
           "removeIncomplete": "Removal incomplete: run it again."
         }
+      },
+      "table": {
+        "title": "History",
+        "kindLabel": "Show",
+        "kind": {
+          "all": "All",
+          "revisions": "Revisions",
+          "runs": "Runs"
+        },
+        "colDate": "Date",
+        "colType": "Type",
+        "colActor": "Actor",
+        "colSummary": "Summary",
+        "colResult": "Result",
+        "colDuration": "Duration",
+        "colActions": "Actions",
+        "revision": "Revision applied v{version}",
+        "run": "Run: {kind}",
+        "engine": "Engine",
+        "admin": "Administrator",
+        "applied": "Applied",
+        "diff": "+{added, number} −{removed, number} ~{changed, number} vs previous",
+        "details": "Details",
+        "detailsOf": "Details of the run: {kind}",
+        "closeDetails": "Close",
+        "empty": "Nothing recorded yet: the first apply records a revision.",
+        "loading": "Loading the history...",
+        "capped": "Only the last {count, number} revisions and the last {count, number} runs are read."
       }
     },
     "waitingFirstCheck": "Waiting for the first full check",

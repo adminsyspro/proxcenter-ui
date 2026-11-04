@@ -93,9 +93,9 @@ describe('read-only user', () => {
     expect((screen.getByRole('button', { name: 'Accept' }) as HTMLButtonElement).disabled).toBe(true)
 
     mock.routes['GET /revisions?limit=100'] = () => reply(200, { revisions: [{ ...REVISION_HEAD, snapshot: { tag_prefix: 'zone-', zones: [], flows: [] } }] })
-    mock.routes['GET /runs?limit=11'] = () => reply(200, { runs: [], limit: 11, offset: 0 })
+    mock.routes['GET /runs?limit=100'] = () => reply(200, { runs: [], limit: 100, offset: 0 })
     fireEvent.click(screen.getByRole('tab', { name: 'History' }))
-    const line = await screen.findByRole('listitem', { name: 'Version 2' })
+    const line = await screen.findByRole('row', { name: 'Version 2' })
     expect((within(line).getByRole('button', { name: 'Restore' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })

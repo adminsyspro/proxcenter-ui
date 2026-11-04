@@ -161,7 +161,7 @@ describe('removal run', () => {
   it('shows the progress, then the result with its notes, and keeps it until dismissed', async () => {
     window.localStorage.setItem('microseg.subTab', 'history')
     mock.routes['GET /revisions?limit=100'] = () => reply(200, { revisions: [] })
-    mock.routes['GET /runs?limit=11'] = () => reply(200, { runs: [], limit: 11, offset: 0 })
+    mock.routes['GET /runs?limit=100'] = () => reply(200, { runs: [], limit: 100, offset: 0 })
     mock.routes['POST /remove'] = () => reply(202, { run_id: 'rm1' })
     let finish: (r: MicrosegRun) => void = () => undefined
     const pending = new Promise<MicrosegRun>(resolve => { finish = resolve })
@@ -173,7 +173,7 @@ describe('removal run', () => {
     expect(await screen.findByText('prod: removing micro-segmentation...')).toBeTruthy()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Micro-segmentation settings' })).toBeNull())
 
-    const runsReads = calls('GET /runs?limit=11').length
+    const runsReads = calls('GET /runs?limit=100').length
     await act(async () => { finish(removeRun('done')) })
     expect(await screen.findByText('prod: removal complete, the zone tags stay on the guests', undefined, { timeout: 5000 })).toBeTruthy()
     expect(screen.getByText('the zone tags of the guests are kept')).toBeTruthy()
@@ -183,7 +183,7 @@ describe('removal run', () => {
     const note = screen.getByText('the zone tags of the guests are kept')
     expect(summary.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(separator.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    await waitFor(() => expect(calls('GET /runs?limit=11').length).toBeGreaterThan(runsReads))
+    await waitFor(() => expect(calls('GET /runs?limit=100').length).toBeGreaterThan(runsReads))
   })
 
   it('keeps a finished removal past the ten seconds of the other runs, until dismissed', async () => {
@@ -212,21 +212,21 @@ describe('history', () => {
     mock.routes['GET /revisions?limit=100'] = () => reply(200, {
       revisions: [{ ...REVISION_HEAD, snapshot: { tag_prefix: 'zone-', zones: [zone('a')], flows: [] } }],
     })
-    mock.routes['GET /runs?limit=11'] = () => reply(200, { runs: [], limit: 11, offset: 0 })
+    mock.routes['GET /runs?limit=100'] = () => reply(200, { runs: [], limit: 100, offset: 0 })
     mock.routes['POST /revisions/r1/restore'] = () => reply(202, { run_id: 'rs1' })
     mock.routes['GET /runs/rs1'] = () => reply(200, { ...run('done', { guests: 1, members: 1, steps: 1, drifts: 0, done: [{ index: 0, kind: 'guest.tags', object: 'g', summary: 's' }] }), id: 'rs1' })
     renderConfigured()
 
-    const line = await screen.findByRole('listitem', { name: 'Version 2' })
+    const line = await screen.findByRole('row', { name: 'Version 2' })
     fireEvent.click(within(line).getByRole('button', { name: 'Restore' }))
     const dialog = await screen.findByRole('dialog', { name: 'Restore version 2?' })
     const policyReads = calls('GET /policy').length
     fireEvent.click(within(dialog).getByRole('button', { name: 'Restore' }))
 
-    const runsReads = calls('GET /runs?limit=11').length
+    const runsReads = calls('GET /runs?limit=100').length
     expect(await screen.findByText('Restore of version 2: 1 done, 0 failed, 0 not run')).toBeTruthy()
     await waitFor(() => expect(calls('GET /policy').length).toBeGreaterThan(policyReads))
-    await waitFor(() => expect(calls('GET /runs?limit=11').length).toBeGreaterThan(runsReads))
+    await waitFor(() => expect(calls('GET /runs?limit=100').length).toBeGreaterThan(runsReads))
   })
 })
 
@@ -238,19 +238,19 @@ describe('revisions after a run', () => {
     const older = { ...REVISION_HEAD, snapshot: { tag_prefix: 'zone-', zones: [zone('a')], flows: [] } }
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: restored ? head : REVISION_HEAD }))
     mock.routes['GET /revisions?limit=100'] = () => reply(200, { revisions: restored ? [{ ...head, snapshot: older.snapshot }, older] : [older] })
-    mock.routes['GET /runs?limit=11'] = () => reply(200, { runs: [], limit: 11, offset: 0 })
+    mock.routes['GET /runs?limit=100'] = () => reply(200, { runs: [], limit: 100, offset: 0 })
     mock.routes['POST /revisions/r1/restore'] = () => { restored = true; return reply(202, { run_id: 'rs1' }) }
     mock.routes['GET /runs/rs1'] = () => reply(200, { ...run('done', { guests: 1, members: 1, steps: 0, drifts: 0 }), id: 'rs1' })
     renderConfigured()
 
-    const line = await screen.findByRole('listitem', { name: 'Version 2' })
+    const line = await screen.findByRole('row', { name: 'Version 2' })
     expect(within(line).getByText('Latest')).toBeTruthy()
     fireEvent.click(within(line).getByRole('button', { name: 'Restore' }))
     fireEvent.click(within(await screen.findByRole('dialog', { name: 'Restore version 2?' })).getByRole('button', { name: 'Restore' }))
 
-    const added = await screen.findByRole('listitem', { name: 'Version 3' })
+    const added = await screen.findByRole('row', { name: 'Version 3' })
     expect(within(added).getByText('Latest')).toBeTruthy()
-    expect(within(screen.getByRole('listitem', { name: 'Version 2' })).queryByText('Latest')).toBeNull()
+    expect(within(screen.getByRole('row', { name: 'Version 2' })).queryByText('Latest')).toBeNull()
   })
 })
 
@@ -258,9 +258,9 @@ describe('sub-tab', () => {
   it('shows the History panel instead of the placeholder', async () => {
     window.localStorage.setItem('microseg.subTab', 'history')
     mock.routes['GET /revisions?limit=100'] = () => reply(200, { revisions: [] })
-    mock.routes['GET /runs?limit=11'] = () => reply(200, { runs: [], limit: 11, offset: 0 })
+    mock.routes['GET /runs?limit=100'] = () => reply(200, { runs: [], limit: 100, offset: 0 })
     renderConfigured()
-    expect(await screen.findByText('No revision yet: the first apply records one.')).toBeTruthy()
+    expect(await screen.findByText('Nothing recorded yet: the first apply records a revision.')).toBeTruthy()
     expect(screen.queryByText('This section is not available yet.')).toBeNull()
   })
 })

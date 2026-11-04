@@ -13264,7 +13264,8 @@
           "targeted": "Gezielter Durchlauf",
           "plan": "Plan",
           "apply": "Anwenden",
-          "remove": "Entfernen"
+          "remove": "Entfernen",
+          "restore": "Wiederherstellung"
         },
         "calls": "{count, plural, one {# API-Aufruf} other {# API-Aufrufe}}",
         "writes": "{count, plural, one {# Schreibvorgang} other {# Schreibvorgänge}}",
@@ -13273,6 +13274,34 @@
           "removeComplete": "Entfernung abgeschlossen.",
           "removeIncomplete": "Entfernung unvollständig: erneut ausführen."
         }
+      },
+      "table": {
+        "title": "Verlauf",
+        "kindLabel": "Anzeigen",
+        "kind": {
+          "all": "Alle",
+          "revisions": "Revisionen",
+          "runs": "Läufe"
+        },
+        "colDate": "Datum",
+        "colType": "Typ",
+        "colActor": "Akteur",
+        "colSummary": "Zusammenfassung",
+        "colResult": "Ergebnis",
+        "colDuration": "Dauer",
+        "colActions": "Aktionen",
+        "revision": "Revision angewendet v{version}",
+        "run": "Lauf: {kind}",
+        "engine": "Engine",
+        "admin": "Administrator",
+        "applied": "Angewendet",
+        "diff": "+{added, number} −{removed, number} ~{changed, number} gegenüber der vorherigen",
+        "details": "Details",
+        "detailsOf": "Details des Laufs: {kind}",
+        "closeDetails": "Schließen",
+        "empty": "Noch nichts aufgezeichnet: die erste Anwendung zeichnet eine Revision auf.",
+        "loading": "Verlauf wird geladen...",
+        "capped": "Nur die letzten {count, number} Revisionen und die letzten {count, number} Läufe werden gelesen."
       }
     },
     "waitingFirstCheck": "Warten auf die erste vollständige Prüfung",

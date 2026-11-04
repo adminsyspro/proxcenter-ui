@@ -13596,7 +13596,8 @@
           "targeted": "Pasada dirigida",
           "plan": "Plan",
           "apply": "Aplicación",
-          "remove": "Retirada"
+          "remove": "Retirada",
+          "restore": "Restauración"
         },
         "calls": "{count, plural, one {# llamada API} other {# llamadas API}}",
         "writes": "{count, plural, one {# escritura} other {# escrituras}}",
@@ -13605,6 +13606,34 @@
           "removeComplete": "Retirada completa.",
           "removeIncomplete": "Retirada incompleta: vuelva a ejecutarla."
         }
+      },
+      "table": {
+        "title": "Historial",
+        "kindLabel": "Mostrar",
+        "kind": {
+          "all": "Todo",
+          "revisions": "Revisiones",
+          "runs": "Ejecuciones"
+        },
+        "colDate": "Fecha",
+        "colType": "Tipo",
+        "colActor": "Autor",
+        "colSummary": "Resumen",
+        "colResult": "Resultado",
+        "colDuration": "Duración",
+        "colActions": "Acciones",
+        "revision": "Revisión aplicada v{version}",
+        "run": "Ejecución: {kind}",
+        "engine": "Motor",
+        "admin": "Administrador",
+        "applied": "Aplicada",
+        "diff": "+{added, number} −{removed, number} ~{changed, number} respecto a la anterior",
+        "details": "Detalles",
+        "detailsOf": "Detalles de la ejecución: {kind}",
+        "closeDetails": "Cerrar",
+        "empty": "Nada registrado aún: la primera aplicación registra una revisión.",
+        "loading": "Cargando el historial...",
+        "capped": "Solo se leen las últimas {count, number} revisiones y las últimas {count, number} ejecuciones."
       }
     },
     "waitingFirstCheck": "A la espera de la primera comprobación completa",

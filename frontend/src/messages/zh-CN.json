@@ -2271,7 +2271,14 @@
     "nodeActionDrainDesc": "共享存储上的客户机由编排器清空，每个客户机都迁往放置引擎选择的节点。可在 Task Center 中跟踪。",
     "nodeActionDrainFailed": "无法启动清空：{error}",
     "diskControllerTooltip": "磁盘所连接的控制器",
-    "diskController": "控制器"
+    "diskController": "控制器",
+    "networkGuests": {
+      "guest": "客户机",
+      "node": "节点",
+      "interfaces": "接口",
+      "bridge": "网桥",
+      "toggle": "显示或隐藏 {name} 上的客户机"
+    }
   },
   "inventoryPage": {
     "newTag": "新标签...",

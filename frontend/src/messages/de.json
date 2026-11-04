@@ -2256,7 +2256,14 @@
     "nodeActionDrainDesc": "Gäste auf Shared Storage werden vom Orchestrator evakuiert, jeder auf den Knoten, den die Platzierungs-Engine wählt. Verfolgen Sie sie im Task Center.",
     "nodeActionDrainFailed": "Der Drain konnte nicht starten: {error}",
     "diskControllerTooltip": "Controller, an dem die Disk hängt",
-    "diskController": "Controller"
+    "diskController": "Controller",
+    "networkGuests": {
+      "guest": "Gast",
+      "node": "Knoten",
+      "interfaces": "Schnittstellen",
+      "bridge": "Bridge",
+      "toggle": "Gäste von {name} ein- oder ausblenden"
+    }
   },
   "inventoryPage": {
     "newTag": "Neuer Tag...",

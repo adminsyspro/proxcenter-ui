@@ -13,6 +13,8 @@ import { BulkBar, ObservationLegend } from './ObservationActions'
 import ObservationFilters, { type ObservationFilterValues } from './ObservationFilters'
 import { decodeCollapsed, encodeCollapsed } from './observationModel'
 import ObservationTable from './ObservationTable'
+import { endpoint } from './ObservationRow'
+import ObservedFlowDialog from './ObservedFlowDialog'
 import { useResolveSuggestions } from './observationParts'
 import { PrevNextPager } from './PolicyPager'
 import { useNow } from './useNow'
@@ -58,6 +60,8 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [resolved, setResolved] = useState<Resolved | null>(null)
+  // The flow opened in its dialog.
+  const [detail, setDetail] = useState<MicrosegSuggestion | null>(null)
 
   const { data, loading, error, reload } = useMicrosegSuggestions(connectionId, {
     kind: filters.kind || undefined,
@@ -123,6 +127,12 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
   }
 
   const one = (s: MicrosegSuggestion, action: SuggestionAction) => resolve([s.id], action)
+  // An action from the dialog closes it: the outcome (or the failure) shows above the table, as for a row's action.
+  const fromDialog = (s: MicrosegSuggestion, action: SuggestionAction) => {
+    setDetail(null)
+    void resolve([s.id], action)
+  }
+  const endName = (zoneId: string, ip: string) => endpoint(zoneId, ip, zonesById, t)
   const bulk = (action: SuggestionAction) => resolve(chosen.map(r => r.id), action)
 
   return (
@@ -168,12 +178,25 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
               onToggleAll={toggleAll}
               onToggle={toggle}
               onResolve={one}
+              onOpenDetails={setDetail}
               nextZoneId={hasNext ? data[OBSERVATION_PAGE_SIZE].dst_zone_id : undefined}
               collapsed={collapsed}
               onToggleGroup={toggleGroup}
             />
           )}
         </>
+      )}
+      {detail && (
+        <ObservedFlowDialog
+          connectionId={connectionId}
+          suggestion={detail}
+          zones={zonesById}
+          source={endName(detail.src_zone_id, detail.src_ip)}
+          destination={endName(detail.dst_zone_id, detail.dst_ip)}
+          busy={busy}
+          onResolve={action => fromDialog(detail, action)}
+          onClose={() => setDetail(null)}
+        />
       )}
     </Box>
   )

@@ -13201,7 +13201,6 @@
       "detail": {
         "firstSeen": "First seen {time}",
         "lastSeen": "Last seen {time}",
-        "addresses": "Sample addresses: {from} → {to}",
         "sampleNote": "The engine keeps one sample pair of addresses per observed flow: the hits count the whole flow, not only this pair."
       },
       "resolvedAccept": "{count, plural, one {# flow accepted into the draft} other {# flows accepted into the draft}}",
@@ -13239,7 +13238,35 @@
       },
       "acceptUnknownSource": "Unknown source: use As CIDR",
       "zoneBanner": "Suggestions for zone {zone} · {count, plural, one {# uncovered hit} other {# uncovered hits}} in 24 h",
-      "zoneBannerNoCount": "Suggestions for zone {zone}"
+      "zoneBannerNoCount": "Suggestions for zone {zone}",
+      "dialog": {
+        "open": "Details",
+        "openFor": "Details of the flow from {source} to {destination}",
+        "title": "{source} → {destination} · {service}",
+        "close": "Close",
+        "summary": "Summary",
+        "service": "Service",
+        "hits": "Hits",
+        "firstSeen": "First seen",
+        "lastSeen": "Last seen",
+        "addresses": "Sample addresses",
+        "trafficTitle": "Traffic over the last 24 hours",
+        "trafficTotal": "{count, plural, one {# hit} other {# hits}}",
+        "trafficLoading": "Reading the history...",
+        "trafficAria": "{count, plural, one {Traffic over the last 24 hours: # hit} other {Traffic over the last 24 hours: # hits}}",
+        "trafficBar": "{from} to {to}: {count, plural, one {# hit} other {# hits}}",
+        "now": "Now",
+        "trafficScope": "Every service from {source} into {destination} with this verdict: the history keeps the zones, not the services.",
+        "trafficScopeNoZone": "Every source outside the zones into {destination} with this verdict: the history keeps the zones, not the addresses.",
+        "recentTitle": "Recent occurrences",
+        "recentSince": "since {time}",
+        "recentEmpty": "None in the engine's memory: it holds the last few thousand events of the connection.",
+        "colTime": "Time",
+        "colSource": "Source",
+        "colGuest": "Guest reached",
+        "colNode": "Node",
+        "guest": "{name} ({vmid}) · {ip}"
+      }
     },
     "overview": {
       "empty": "No zone to draw yet.",

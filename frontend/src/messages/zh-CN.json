@@ -13201,7 +13201,6 @@
       "detail": {
         "firstSeen": "首次出现 {time}",
         "lastSeen": "最后出现 {time}",
-        "addresses": "示例地址：{from} → {to}",
         "sampleNote": "引擎对每个观察到的流只保留一对示例地址：命中数统计的是整个流，而不只是这一对。"
       },
       "resolvedAccept": "{count, plural, other {已将 # 条流量接受到草稿}}",
@@ -13239,7 +13238,35 @@
       },
       "acceptUnknownSource": "未知来源：请使用“按 CIDR”",
       "zoneBanner": "{zone} 区域的建议 · 24 小时内 {count, plural, other {# 次未覆盖命中}}",
-      "zoneBannerNoCount": "{zone} 区域的建议"
+      "zoneBannerNoCount": "{zone} 区域的建议",
+      "dialog": {
+        "open": "详情",
+        "openFor": "从 {source} 到 {destination} 的流量详情",
+        "title": "流量 {source} → {destination} · {service}",
+        "close": "关闭",
+        "summary": "摘要",
+        "service": "服务",
+        "hits": "命中",
+        "firstSeen": "首次出现",
+        "lastSeen": "最后出现",
+        "addresses": "示例地址",
+        "trafficTitle": "最近 24 小时的流量",
+        "trafficTotal": "{count} 次命中",
+        "trafficLoading": "正在读取历史记录...",
+        "trafficAria": "最近 24 小时的流量：{count} 次命中",
+        "trafficBar": "{from} 至 {to}：{count} 次命中",
+        "now": "现在",
+        "trafficScope": "以此判定从 {source} 到 {destination} 的所有服务：历史记录保存区域，而非服务。",
+        "trafficScopeNoZone": "以此判定从区域外所有来源到 {destination}：历史记录保存区域，而非地址。",
+        "recentTitle": "最近出现",
+        "recentSince": "自 {time} 起",
+        "recentEmpty": "引擎内存中没有：它只保存连接最近的几千个事件。",
+        "colTime": "时间",
+        "colSource": "来源",
+        "colGuest": "到达的客户机",
+        "colNode": "节点",
+        "guest": "{name}（{vmid}）· IP {ip}"
+      }
     },
     "overview": {
       "empty": "还没有可绘制的区域。",

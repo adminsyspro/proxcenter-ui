@@ -13202,7 +13202,6 @@
       "detail": {
         "firstSeen": "Vu pour la première fois {time}",
         "lastSeen": "Vu pour la dernière fois {time}",
-        "addresses": "Adresses d'exemple : {from} → {to}",
         "sampleNote": "Le moteur ne garde qu'une paire d'adresses d'exemple par flux observé : les occurrences comptent tout le flux, pas seulement cette paire."
       },
       "resolvedAccept": "{count, plural, one {# flux accepté dans le brouillon} other {# flux acceptés dans le brouillon}}",
@@ -13240,7 +13239,35 @@
       },
       "acceptUnknownSource": "Source inconnue : utilisez En CIDR",
       "zoneBanner": "Suggestions pour la zone {zone} · {count, plural, one {# occurrence non couverte} other {# occurrences non couvertes}} en 24 h",
-      "zoneBannerNoCount": "Suggestions pour la zone {zone}"
+      "zoneBannerNoCount": "Suggestions pour la zone {zone}",
+      "dialog": {
+        "open": "Détails",
+        "openFor": "Détails du flux de {source} vers {destination}",
+        "title": "Flux {source} → {destination} · {service}",
+        "close": "Fermer",
+        "summary": "Résumé",
+        "service": "Service observé",
+        "hits": "Occurrences",
+        "firstSeen": "Vu la première fois",
+        "lastSeen": "Vu la dernière fois",
+        "addresses": "Adresses d'exemple",
+        "trafficTitle": "Trafic sur les dernières 24 heures",
+        "trafficTotal": "{count, plural, one {# occurrence} other {# occurrences}}",
+        "trafficLoading": "Lecture de l'historique...",
+        "trafficAria": "{count, plural, one {Trafic sur les dernières 24 heures : # occurrence} other {Trafic sur les dernières 24 heures : # occurrences}}",
+        "trafficBar": "{from} à {to} : {count, plural, one {# occurrence} other {# occurrences}}",
+        "now": "Maintenant",
+        "trafficScope": "Tous les services de {source} vers {destination} avec ce verdict : l'historique garde les zones, pas les services.",
+        "trafficScopeNoZone": "Toutes les sources hors zones vers {destination} avec ce verdict : l'historique garde les zones, pas les adresses.",
+        "recentTitle": "Occurrences récentes",
+        "recentSince": "depuis {time}",
+        "recentEmpty": "Aucune dans la mémoire du moteur : elle garde les quelques milliers de derniers événements de la connexion.",
+        "colTime": "Heure",
+        "colSource": "Origine",
+        "colGuest": "Invité atteint",
+        "colNode": "Nœud",
+        "guest": "{name} ({vmid}) · IP {ip}"
+      }
     },
     "overview": {
       "empty": "Aucune zone à dessiner pour l'instant.",

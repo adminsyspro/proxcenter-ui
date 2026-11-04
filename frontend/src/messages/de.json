@@ -12869,7 +12869,6 @@
       "detail": {
         "firstSeen": "Erstmals gesehen {time}",
         "lastSeen": "Zuletzt gesehen {time}",
-        "addresses": "Beispieladressen: {from} → {to}",
         "sampleNote": "Die Engine behält pro beobachtetem Fluss nur ein Beispieladresspaar: Die Treffer zählen den ganzen Fluss, nicht nur dieses Paar."
       },
       "resolvedAccept": "{count, plural, one {# Fluss in den Entwurf übernommen} other {# Flüsse in den Entwurf übernommen}}",
@@ -12907,7 +12906,35 @@
       },
       "acceptUnknownSource": "Unbekannte Quelle: Als CIDR verwenden",
       "zoneBanner": "Vorschläge für Zone {zone} · {count, plural, one {# nicht abgedeckter Treffer} other {# nicht abgedeckte Treffer}} in 24 h",
-      "zoneBannerNoCount": "Vorschläge für Zone {zone}"
+      "zoneBannerNoCount": "Vorschläge für Zone {zone}",
+      "dialog": {
+        "open": "Einzelheiten",
+        "openFor": "Details des Flusses von {source} nach {destination}",
+        "title": "Fluss {source} → {destination} · {service}",
+        "close": "Schließen",
+        "summary": "Übersicht",
+        "service": "Dienst",
+        "hits": "Treffer",
+        "firstSeen": "Zuerst gesehen",
+        "lastSeen": "Zuletzt gesehen",
+        "addresses": "Beispieladressen",
+        "trafficTitle": "Verkehr der letzten 24 Stunden",
+        "trafficTotal": "{count, plural, one {# Treffer} other {# Treffer}}",
+        "trafficLoading": "Verlauf wird gelesen...",
+        "trafficAria": "{count, plural, one {Verkehr der letzten 24 Stunden: # Treffer} other {Verkehr der letzten 24 Stunden: # Treffer}}",
+        "trafficBar": "{from} bis {to}: {count, plural, one {# Treffer} other {# Treffer}}",
+        "now": "Jetzt",
+        "trafficScope": "Alle Dienste von {source} nach {destination} mit diesem Ergebnis: der Verlauf speichert die Zonen, nicht die Dienste.",
+        "trafficScopeNoZone": "Alle Quellen außerhalb der Zonen nach {destination} mit diesem Ergebnis: der Verlauf speichert die Zonen, nicht die Adressen.",
+        "recentTitle": "Letzte Vorkommen",
+        "recentSince": "seit {time}",
+        "recentEmpty": "Keine im Speicher der Engine: er hält die letzten paar tausend Ereignisse der Verbindung.",
+        "colTime": "Zeit",
+        "colSource": "Quelle",
+        "colGuest": "Erreichter Gast",
+        "colNode": "Knoten",
+        "guest": "{name} ({vmid}) · IP {ip}"
+      }
     },
     "overview": {
       "empty": "Noch keine Zone zum Zeichnen.",

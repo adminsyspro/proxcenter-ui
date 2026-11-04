@@ -1,13 +1,12 @@
 'use client'
 
-import { Box, Tooltip, Typography, useTheme } from '@mui/material'
+import { Box, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { ZoneState } from '@/lib/microseg/types'
 
-/** The drawing box of the bars: one 10-unit slot per bucket (8 of bar, 2 of gap), stretched to the card's width. */
-const SLOT = 10
-const BAR = 8
+import HourlyBars from './HourlyBars'
+
 const HEIGHT = 24
 
 type Props = {
@@ -28,7 +27,6 @@ type Props = {
 export default function ZoneSparkline({ state, series, from, stepMs }: Readonly<Props>) {
   const t = useTranslations('microsegPilot.policy.zone.sparkline')
   const format = useFormatter()
-  const theme = useTheme()
 
   if (state === 'disabled') {
     return (
@@ -40,7 +38,6 @@ export default function ZoneSparkline({ state, series, from, stepMs }: Readonly<
 
   const colour = state === 'enforce' ? 'error.main' : 'warning.main'
   const total = series?.reduce((a, b) => a + b, 0) ?? null
-  const peak = series ? Math.max(0, ...series) : 0
   const hour = (i: number) => format.dateTime(new Date(from + i * stepMs), { hour: '2-digit', minute: '2-digit' })
   // The total in short (278K): the exact count is in the tooltip and the accessible name.
   const short = total === null ? '' : format.number(total, { notation: 'compact', maximumFractionDigits: 1 })
@@ -54,26 +51,14 @@ export default function ZoneSparkline({ state, series, from, stepMs }: Readonly<
           <Typography variant='caption' color='text.primary' fontWeight={600} noWrap data-testid='zone-sparkline-total' sx={{ flexShrink: 0 }}>{label}</Typography>
         </Tooltip>
       </Box>
-      <Box
-        component='svg'
-        role='img'
-        aria-label={total === null ? t('loading') : t('aria', { count: total })}
-        viewBox={`0 0 ${(series?.length || 24) * SLOT} ${HEIGHT}`}
-        preserveAspectRatio='none'
-        sx={{ display: 'block', width: '100%', height: HEIGHT, mt: 0.25, color: colour }}
-      >
-        {(series ?? new Array<number>(24).fill(0)).map((n, i) => {
-          const h = peak > 0 && n > 0 ? Math.max(2, (n / peak) * HEIGHT) : 1
-          return (
-            <Tooltip key={i} title={series ? t('bar', { from: hour(i), to: hour(i + 1), count: n }) : ''} disableInteractive>
-              <g data-bucket={i} data-hits={n}>
-                {/* The hit target is the whole slot height, bigger than the bar. */}
-                <rect x={i * SLOT} y={0} width={SLOT} height={HEIGHT} fill='transparent' />
-                <rect x={i * SLOT + (SLOT - BAR) / 2} y={HEIGHT - h} width={BAR} height={h} style={{ fill: n > 0 ? 'currentColor' : theme.palette.divider }} />
-              </g>
-            </Tooltip>
-          )
-        })}
+      <Box sx={{ mt: 0.25 }}>
+        <HourlyBars
+          series={series}
+          colour={colour}
+          height={HEIGHT}
+          ariaLabel={total === null ? t('loading') : t('aria', { count: total })}
+          barLabel={(i, n) => t('bar', { from: hour(i), to: hour(i + 1), count: n })}
+        />
       </Box>
     </Box>
   )

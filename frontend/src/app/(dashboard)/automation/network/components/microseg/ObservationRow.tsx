@@ -1,13 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { Box, Checkbox, Chip, Collapse, IconButton, TableCell, TableRow, Tooltip, Typography } from '@mui/material'
+import { Box, Checkbox, Chip, IconButton, TableCell, TableRow, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 
-import { OneLine } from './dialogParts'
 import { hitsShare } from './observationModel'
 import { FlowActions } from './ObservationActions'
 import { ObservedKindGlyph } from './observationParts'
@@ -21,7 +19,7 @@ const CELL_SX = { py: 0.5, px: 1, whiteSpace: 'nowrap' } as const
 const NAME_SX = { maxWidth: 200, minWidth: 0 } as const
 
 /** What a zone-less endpoint is called: its IP, or "Unknown". */
-function endpoint(zoneId: string, ip: string, zones: Map<string, MicrosegZone>, t: (key: string) => string): string {
+export function endpoint(zoneId: string, ip: string, zones: Map<string, MicrosegZone>, t: (key: string) => string): string {
   if (zoneId) return zones.get(zoneId)?.name ?? t('deletedZone')
   return ip || t('unknownEndpoint')
 }
@@ -49,14 +47,14 @@ export type ObservationRowProps = {
   now: number
   onToggle: () => void
   onResolve: (action: SuggestionAction) => void
+  /** Opens the flow in its dialog (details, traffic, recent occurrences). */
+  onOpenDetails: () => void
 }
 
-/** One observed flow, one row of the table; the sample addresses and the first and last time sit under the chevron. */
-export default function ObservationRow({ suggestion: s, zones, checked, busy, maxHits, now, onToggle, onResolve }: ObservationRowProps) {
+/** One observed flow, one row of the table; its details open in a centred dialog (ObservedFlowDialog). */
+export default function ObservationRow({ suggestion: s, zones, checked, busy, maxHits, now, onToggle, onResolve, onOpenDetails }: ObservationRowProps) {
   const t = useTranslations('microsegPilot.observation')
-  const tp = useTranslations('microsegPilot.policy')
   const format = useFormatter()
-  const [open, setOpen] = useState(false)
 
   const when = (iso: string) => formatWhen(format, iso)
   const source = endpoint(s.src_zone_id, s.src_ip, zones, t)
@@ -69,7 +67,7 @@ export default function ObservationRow({ suggestion: s, zones, checked, busy, ma
 
   return (
     <>
-      <TableRow hover data-suggestion={s.id} aria-label={t('rowLabel', { source, destination })} sx={{ '& > td': { borderBottom: open ? 0 : undefined } }}>
+      <TableRow hover data-suggestion={s.id} aria-label={t('rowLabel', { source, destination })}>
         <TableCell padding='checkbox' sx={{ py: 0.5 }}>
           <Checkbox
             size='small'
@@ -81,9 +79,11 @@ export default function ObservationRow({ suggestion: s, zones, checked, busy, ma
           />
         </TableCell>
         <TableCell sx={{ ...CELL_SX, px: 0 }}>
-          <IconButton size='small' aria-expanded={open} aria-label={open ? tp('hideDetails') : tp('showDetails')} onClick={() => setOpen(v => !v)}>
-            <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
-          </IconButton>
+          <Tooltip title={t('dialog.open')}>
+            <IconButton size='small' aria-haspopup='dialog' aria-label={t('dialog.openFor', { source, destination })} onClick={onOpenDetails}>
+              <i className='ri-file-list-3-line' />
+            </IconButton>
+          </Tooltip>
         </TableCell>
         <TableCell sx={CELL_SX}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
@@ -121,20 +121,6 @@ export default function ObservationRow({ suggestion: s, zones, checked, busy, ma
           )}
         </TableCell>
       </TableRow>
-      {open && (
-        <TableRow data-detail={s.id}>
-          <TableCell colSpan={OBSERVATION_COLUMNS} sx={{ py: 0, px: 0 }}>
-            <Collapse in appear unmountOnExit>
-              <Box sx={{ pl: 11, pr: 2, pb: 1.5, minWidth: 0, maxWidth: '100%' }}>
-                <OneLine text={t('detail.addresses', { from: s.src_ip || t('unknownEndpoint'), to: s.dst_ip || t('unknownEndpoint') })} />
-                <OneLine text={t('detail.sampleNote')} />
-                <OneLine text={t('detail.firstSeen', { time: when(s.first_seen) })} />
-                <OneLine text={t('detail.lastSeen', { time: when(s.last_seen) })} />
-              </Box>
-            </Collapse>
-          </TableCell>
-        </TableRow>
-      )}
     </>
   )
 }

@@ -65,7 +65,7 @@ export function uncoveredSeriesOf(series: UncoveredSeries, name: string, previou
   return Array.from({ length: series.size }, (_, i) => rows.reduce((sum, row) => sum + (row?.[i] ?? 0), 0))
 }
 
-export function useZoneUncovered(connId: string | null): { byZone: Map<string, number> | null; series: UncoveredSeries | null; failed: boolean } {
+export function useZoneUncovered(connId: string | null): { byZone: Map<string, number> | null; series: UncoveredSeries | null; traffic: MicrosegTraffic | null; failed: boolean } {
   const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
   const key = connId ? [`${microsegBaseUrl(connId)}/traffic`, 'zone-uncovered-24h'] : null
   // A held answer serves a new reader (the Observation banner after the Policy table) until the next refresh.
@@ -81,7 +81,7 @@ export function useZoneUncovered(connId: string | null): { byZone: Map<string, n
   )
   const byZone = useMemo(() => (data ? uncoveredByZone(data) : null), [data])
   const series = useMemo(() => (data ? uncoveredSeriesByZone(data) : null), [data])
-  return { byZone, series, failed: !!error && !data }
+  return { byZone, series, traffic: data ?? null, failed: !!error && !data }
 }
 
 /**

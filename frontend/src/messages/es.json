@@ -13201,7 +13201,6 @@
       "detail": {
         "firstSeen": "Visto por primera vez {time}",
         "lastSeen": "Visto por última vez {time}",
-        "addresses": "Direcciones de ejemplo: {from} → {to}",
         "sampleNote": "El motor guarda un solo par de direcciones de ejemplo por flujo observado: las coincidencias cuentan todo el flujo, no solo este par."
       },
       "resolvedAccept": "{count, plural, one {# flujo aceptado en el borrador} other {# flujos aceptados en el borrador}}",
@@ -13239,7 +13238,35 @@
       },
       "acceptUnknownSource": "Origen desconocido: use Como CIDR",
       "zoneBanner": "Sugerencias para la zona {zone} · {count, plural, one {# impacto sin cubrir} other {# impactos sin cubrir}} en 24 h",
-      "zoneBannerNoCount": "Sugerencias para la zona {zone}"
+      "zoneBannerNoCount": "Sugerencias para la zona {zone}",
+      "dialog": {
+        "open": "Detalles",
+        "openFor": "Detalles del flujo de {source} a {destination}",
+        "title": "Flujo {source} → {destination} · {service}",
+        "close": "Cerrar",
+        "summary": "Resumen",
+        "service": "Servicio",
+        "hits": "Impactos",
+        "firstSeen": "Visto por primera vez",
+        "lastSeen": "Visto por última vez",
+        "addresses": "Direcciones de ejemplo",
+        "trafficTitle": "Tráfico de las últimas 24 horas",
+        "trafficTotal": "{count, plural, one {# impacto} other {# impactos}}",
+        "trafficLoading": "Leyendo el historial...",
+        "trafficAria": "{count, plural, one {Tráfico de las últimas 24 horas: # impacto} other {Tráfico de las últimas 24 horas: # impactos}}",
+        "trafficBar": "{from} a {to}: {count, plural, one {# impacto} other {# impactos}}",
+        "now": "Ahora",
+        "trafficScope": "Todos los servicios de {source} a {destination} con este veredicto: el historial guarda las zonas, no los servicios.",
+        "trafficScopeNoZone": "Todas las fuentes fuera de las zonas hacia {destination} con este veredicto: el historial guarda las zonas, no las direcciones.",
+        "recentTitle": "Apariciones recientes",
+        "recentSince": "desde {time}",
+        "recentEmpty": "Ninguna en la memoria del motor: guarda los últimos miles de eventos de la conexión.",
+        "colTime": "Hora",
+        "colSource": "Origen",
+        "colGuest": "Invitado alcanzado",
+        "colNode": "Nodo",
+        "guest": "{name} ({vmid}) · IP {ip}"
+      }
     },
     "overview": {
       "empty": "Aún no hay ninguna zona que dibujar.",

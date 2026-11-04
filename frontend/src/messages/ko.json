@@ -13201,7 +13201,6 @@
       "detail": {
         "firstSeen": "처음 확인 {time}",
         "lastSeen": "마지막 확인 {time}",
-        "addresses": "예시 주소: {from} → {to}",
         "sampleNote": "엔진은 관찰된 흐름마다 예시 주소 쌍 하나만 보관합니다. 적중 수는 이 쌍만이 아니라 흐름 전체를 셉니다."
       },
       "resolvedAccept": "{count, plural, other {#개 흐름을 초안에 수락했습니다}}",
@@ -13239,7 +13238,35 @@
       },
       "acceptUnknownSource": "알 수 없는 출발지: CIDR로를 사용하세요",
       "zoneBanner": "{zone} 영역의 제안 · 24시간 동안 미허용 히트 {count, plural, other {#회}}",
-      "zoneBannerNoCount": "{zone} 영역의 제안"
+      "zoneBannerNoCount": "{zone} 영역의 제안",
+      "dialog": {
+        "open": "세부 정보",
+        "openFor": "{source}에서 {destination}(으)로의 흐름 세부 정보",
+        "title": "흐름 {source} → {destination} · {service}",
+        "close": "닫기",
+        "summary": "요약",
+        "service": "서비스",
+        "hits": "히트",
+        "firstSeen": "처음 확인",
+        "lastSeen": "마지막 확인",
+        "addresses": "예시 주소",
+        "trafficTitle": "최근 24시간 트래픽",
+        "trafficTotal": "히트 {count}개",
+        "trafficLoading": "기록을 읽는 중...",
+        "trafficAria": "최근 24시간 트래픽: 히트 {count}개",
+        "trafficBar": "{from}~{to}: 히트 {count}개",
+        "now": "지금",
+        "trafficScope": "이 판정으로 {source}에서 {destination}(으)로 가는 모든 서비스: 기록은 서비스가 아닌 영역을 보관합니다.",
+        "trafficScopeNoZone": "이 판정으로 {destination}(으)로 가는 영역 밖의 모든 소스: 기록은 주소가 아닌 영역을 보관합니다.",
+        "recentTitle": "최근 발생",
+        "recentSince": "{time} 이후",
+        "recentEmpty": "엔진 메모리에 없음: 연결의 최근 수천 개 이벤트만 보관합니다.",
+        "colTime": "시간",
+        "colSource": "소스",
+        "colGuest": "도달한 게스트",
+        "colNode": "노드",
+        "guest": "{name} ({vmid}) · IP {ip}"
+      }
     },
     "overview": {
       "empty": "아직 그릴 영역이 없습니다.",

@@ -118,15 +118,63 @@ describe('observation list', () => {
     expect((within(line).getByRole('button', { name: 'Accept' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('keeps the sample addresses, the sample pair wording and the times under the chevron', async () => {
+  it('opens a flow in a centred dialog: summary, 24-hour traffic between its zones, recent occurrences, actions', async () => {
+    const from = '2026-11-01T13:00:00Z'
+    mock.routes['GET /traffic*'] = () => reply(200, {
+      step: 3600, from, to: '2026-11-02T13:00:00Z',
+      buckets: [
+        { at: '2026-11-02T12:00:00Z', zone: 'db', src_zone: 'web', verdict: 'would_block', hits: 7 },
+        { at: '2026-11-02T11:00:00Z', zone: 'db', src_zone: 'web', verdict: 'would_block', hits: 3 },
+        { at: '2026-11-02T11:00:00Z', zone: 'db', src_zone: 'web', verdict: 'blocked', hits: 50 },
+        { at: '2026-11-02T11:00:00Z', zone: 'web', src_zone: 'db', verdict: 'would_block', hits: 90 },
+      ],
+    })
+    const ev = (seq: number, over: Record<string, unknown> = {}) => ({
+      seq, ts: '2026-11-02T12:00:00Z', node: 'pve1', vmid: 101, type: 'lxc', guest: 'db-1', zone: 'db', src_zone: 'web',
+      src_ip: '10.0.0.5', dst_ip: '10.0.0.9', proto: 'tcp', dport: 443, verdict: 'would_block', ...over,
+    })
+    mock.routes['GET /events*'] = () => reply(200, { events: [ev(3), ev(2, { dport: 4430 }), ev(1, { src_zone: 'app' })], truncated: false, oldest: null })
+    setup([sug('s1')])
+    const line = await row('web to db')
+    expect(within(line).queryByRole('button', { name: 'Show details' })).toBeNull()
+    fireEvent.click(within(line).getByRole('button', { name: 'Details of the flow from web to db' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'web → db · HTTPS' })
+    expect(within(dialog).getByText('Would be blocked')).toBeTruthy()
+    const summary = within(dialog).getByRole('region', { name: 'Summary' })
+    expect(within(summary).getByText(/Nov 1, 2026, 10:00\sAM/)).toBeTruthy()
+    expect(within(summary).getByText(/Nov 2, 2026, 12:00\sPM/)).toBeTruthy()
+    expect(within(summary).getByText('Unknown → 10.0.0.9')).toBeTruthy()
+    expect(within(dialog).getByText(/one sample pair of addresses per observed flow/)).toBeTruthy()
+
+    // The bars: web into db with the flow's verdict only (7 + 3), the other verdict and direction left out.
+    expect(await within(dialog).findByRole('img', { name: 'Traffic over the last 24 hours: 10 hits' })).toBeTruthy()
+    expect(within(dialog).getByText(/Every service from web into db/)).toBeTruthy()
+
+    // Recent occurrences: the event of the flow only (same port, same source zone), with the guest it reached.
+    const recent = await within(dialog).findByRole('table', { name: 'Recent occurrences' })
+    await waitFor(() => expect(within(recent).getAllByRole('row')).toHaveLength(2))
+    expect(within(recent).getByText('db-1 (101) · 10.0.0.9')).toBeTruthy()
+    expect(within(recent).getByText('pve1')).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
+    expect(body(calls('POST /suggestions/resolve')[0][1] as RequestInit)).toMatchObject({ ids: ['s1'], action: 'dismiss' })
+  })
+
+  it('shows the flow of a zone-less source with its address and no accept into a zone', async () => {
+    mock.routes['GET /traffic*'] = () => reply(200, { step: 3600, from: '2026-11-01T13:00:00Z', to: '2026-11-02T13:00:00Z', buckets: [] })
+    mock.routes['GET /events*'] = () => reply(200, { events: [], truncated: false, oldest: null })
     setup([unknownSource])
-    const line = await row('192.168.1.50 to db')
-    expect(screen.queryByText(/First seen/)).toBeNull()
-    fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
-    expect(await screen.findByText(/First seen Nov 1, 2026, 10:00\sAM/)).toBeTruthy()
-    expect(screen.getByText(/Last seen Nov 2, 2026, 12:00\sPM/)).toBeTruthy()
-    expect(screen.getByText('Sample addresses: 192.168.1.50 \u2192 10.0.0.9')).toBeTruthy()
-    expect(screen.getByText(/one sample pair of addresses per observed flow/)).toBeTruthy()
+    fireEvent.click(within(await row('192.168.1.50 to db')).getByRole('button', { name: 'Details of the flow from 192.168.1.50 to db' }))
+    const dialog = await screen.findByRole('dialog', { name: '192.168.1.50 → db · HTTPS' })
+    expect(within(dialog).getByText('192.168.1.50 → 10.0.0.9')).toBeTruthy()
+    expect(await within(dialog).findByText(/Every source outside the zones into db/)).toBeTruthy()
+    expect(await within(dialog).findByText(/None in the engine's memory/)).toBeTruthy()
+    expect((within(dialog).getByRole('button', { name: 'Accept' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(within(dialog).getAllByRole('button', { name: 'Close' }).at(-1)!)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
   it('says there is nothing to show', async () => {

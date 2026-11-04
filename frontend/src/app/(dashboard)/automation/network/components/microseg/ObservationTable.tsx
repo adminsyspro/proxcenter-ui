@@ -25,6 +25,7 @@ type Props = {
   onToggleAll: () => void
   onToggle: (id: string) => void
   onResolve: (s: MicrosegSuggestion, action: SuggestionAction) => void
+  onOpenDetails: (s: MicrosegSuggestion) => void
   /** The destination zone of the first flow of the next page, when there is one: its group may go on there. */
   nextZoneId?: string
   /** The folded destination zones ('' = unknown destination), and the fold or unfold of one. */
@@ -62,7 +63,7 @@ function GroupHeader({ group, color, collapsed, onToggle }: { group: Observation
  * busiest first) that folds its flows (the panel keeps the folded zones). The grouping covers the page only:
  * the caption says so when the next page goes on with a zone.
  */
-export default function ObservationTable({ rows, zones, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, nextZoneId, collapsed, onToggleGroup }: Props) {
+export default function ObservationTable({ rows, zones, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, onOpenDetails, nextZoneId, collapsed, onToggleGroup }: Props) {
   const t = useTranslations('microsegPilot.observation')
   const max = maxHits(rows)
 
@@ -113,6 +114,7 @@ export default function ObservationTable({ rows, zones, selected, busy, now, all
                     now={now}
                     onToggle={() => onToggle(s.id)}
                     onResolve={action => onResolve(s, action)}
+                    onOpenDetails={() => onOpenDetails(s)}
                   />
                 ))}
               </Fragment>

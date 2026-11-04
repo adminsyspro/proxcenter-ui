@@ -13,6 +13,7 @@ import { syncIpamForVmConfig } from "@/lib/vdc/ipamSync"
 import { stripMacFromNet } from "@/lib/vdc/ipamScan"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { waitForTask } from "@/lib/proxmox/tasks"
+import { parseMemoryProperty } from "@/lib/proxmox/memoryProperty"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
@@ -113,7 +114,10 @@ async function handler(
           `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/config`
         )
         const vcpus = (vmConfig?.cores || 1) * (vmConfig?.sockets || 1)
-        const ramMb = vmConfig?.memory || 512
+        // PVE sends `memory` as a property string ("2048", "current=2048"):
+        // added raw to the vDC usage it concatenated (5760 + "256" = "5760256") and
+        // refused the clone as soon as the vDC already used some RAM.
+        const ramMb = parseMemoryProperty(vmConfig?.memory).current || 512
 
         // PVE forces a full clone for non-template sources regardless of the
         // `full` param, so metering only on body.full would undercount.
@@ -277,7 +281,8 @@ async function handler(
 
       after(async () => {
         try {
-          if (upid) await waitForTask(conn, cloneNode, upid)
+          // The clone task runs on the source node, even with a target (#1293).
+          if (upid) await waitForTask(conn, node, upid)
           let cloneConfig = await pveFetch<any>(conn, cloneConfigPath)
 
           // ── Regenerate MACs on IPAM-managed NICs ──
@@ -352,7 +357,7 @@ async function handler(
       const cloneLogTag = `[clone-qos-stamp] vmid=${safeLog(body.newid)}`
       after(async () => {
         try {
-          if (stampUpid) await waitForTask(conn, stampNode, stampUpid)
+          if (stampUpid) await waitForTask(conn, node, stampUpid)
         } catch (err: any) {
           console.error(`${cloneLogTag} waitForTask failed: ${safeLog(err?.message ?? err)}`)
           return
@@ -366,13 +371,14 @@ async function handler(
     // ── Post-clone HA registration ──
     // The clone holds a lock until PVE finishes copying: register it only
     // once the task is done, so HA never tries to start a half-cloned guest.
+    // The task runs on the source node, even when the clone lands on another
+    // one (#1293): waiting on the target failed and left the clone off HA.
     if (body.ha && body.newid) {
-      const haNode = String(body.target || node)
       const haUpid = String(result || '')
       const haVmid = Number(body.newid)
       after(async () => {
         try {
-          if (haUpid) await waitForTask(conn, haNode, haUpid, { acceptWarnings: true })
+          if (haUpid) await waitForTask(conn, node, haUpid, { acceptWarnings: true })
           await registerHaResource(conn, haVmid, 'started', type as 'qemu' | 'lxc')
         } catch (err: any) {
           console.error(`[clone-ha] vmid=${safeLog(haVmid)} HA registration failed: ${safeLog(err?.message ?? err)}`)

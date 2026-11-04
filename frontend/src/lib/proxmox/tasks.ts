@@ -11,6 +11,7 @@
 
 import type { ProxmoxClientOptions } from './client'
 import { pveFetch } from './client'
+import { parseUpid } from './upid'
 
 export interface WaitForTaskOptions {
   /** Total timeout in ms before we give up. Default 10 min. */
@@ -41,11 +42,16 @@ export async function waitForTask(
   const timeoutMs = options.timeoutMs ?? 600_000
   const intervalMs = options.intervalMs ?? 3_000
   const start = Date.now()
+  // The UPID names the node that runs the task. It is the only node that
+  // knows it: a clone with `target` runs on the source node and answers
+  // 400 "no such task" on the target (#1293). `node` is the fallback for a
+  // value that is not a UPID.
+  const taskNode = parseUpid(upid)?.node ?? node
 
   while (Date.now() - start < timeoutMs) {
     const status = await pveFetch<any>(
       conn,
-      `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`,
+      `/nodes/${encodeURIComponent(taskNode)}/tasks/${encodeURIComponent(upid)}/status`,
     )
 
     if (status?.status === 'stopped') {

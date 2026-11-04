@@ -18,6 +18,7 @@ import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PolicyPager, { usePaged } from './PolicyPager'
 import RunDetail from './RunDetail'
+import { runHasDetails, runSummaryParts } from './runDetailModel'
 import { RowsPerPageSelect, useRowsPerPage } from './useRowsPerPage'
 import { formatWhen } from './summaryModel'
 import TruncatedText from './TruncatedText'
@@ -70,7 +71,7 @@ function RevisionLine({ row, latestId, onRestore }: Omit<RowProps, 'onDetails'> 
   )
 }
 
-/** A run on one row: when, "Run: Apply", the engine or an administrator, its writes and calls (its error), its status, its duration, Details. */
+/** A run on one row: when, "Run: Apply", the engine or an administrator, what an engine run read then its writes and calls (its error), its status, its duration, Details when the row does not say it all. */
 function RunLine({ row, onDetails }: Pick<RowProps, 'onDetails'> & { row: Extract<HistoryRow, { type: 'run' }> }) {
   const t = useTranslations('microsegPilot.history')
   const tb = useTranslations('microsegPilot.banner.runStatus')
@@ -79,7 +80,11 @@ function RunLine({ row, onDetails }: Pick<RowProps, 'onDetails'> & { row: Extrac
   const kind = KNOWN_RUN_KINDS.has(run.kind) ? t(`runs.kind.${run.kind}`) : run.kind
   const started = formatWhen(format, run.started_at)
   const duration = format.number(run.duration_ms / 1000, { style: 'unit', unit: 'second', unitDisplay: 'narrow', maximumFractionDigits: 1 })
-  const summary = `${t('runs.writes', { count: run.writes })} · ${t('runs.calls', { count: run.api_calls })}`
+  const figures = runSummaryParts(run).map(p => ('count' in p ? t(`runs.summary.${p.key}`, { count: p.count, total: p.total ?? 0 }) : t(`runs.summary.${p.key}`, { nodes: p.text })))
+  // An engine run says what it read; its writes only when it wrote (most loops read only).
+  const writes = figures.length > 0 && run.writes === 0 ? [] : [t('runs.writes', { count: run.writes })]
+  const summary = [...figures, ...writes, t('runs.calls', { count: run.api_calls })].join(' · ')
+  const byAdmin = !ENGINE_KINDS.has(run.kind) || run.result?.trigger === 'check'
   return (
     <TableRow aria-label={t('runs.rowLabel', { kind, time: started })} data-row='run'>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>{started}</TableCell>
@@ -90,12 +95,12 @@ function RunLine({ row, onDetails }: Pick<RowProps, 'onDetails'> & { row: Extrac
         </Box>
       </TableCell>
       <TableCell>
-        <Tooltip title={t('table.actorInferred')}>
-          <Typography variant='body2' color='text.secondary' sx={{ display: 'inline' }}>{ENGINE_KINDS.has(run.kind) ? t('table.engine') : t('table.admin')}</Typography>
+        <Tooltip title={run.result?.trigger === 'check' ? t('table.actorCheck') : t('table.actorInferred')}>
+          <Typography variant='body2' color='text.secondary' sx={{ display: 'inline' }}>{byAdmin ? t('table.admin') : t('table.engine')}</Typography>
         </Tooltip>
       </TableCell>
-      <TableCell sx={{ maxWidth: 320 }}>
-        <Typography variant='body2' noWrap data-testid='history-summary'>{summary}</Typography>
+      <TableCell sx={{ maxWidth: 420 }}>
+        <TruncatedText text={summary} variant='body2' component='div' data-testid='history-summary' />
         {run.error && (
           <TruncatedText text={run.error} variant='caption' color='error' component='div' />
         )}
@@ -103,9 +108,11 @@ function RunLine({ row, onDetails }: Pick<RowProps, 'onDetails'> & { row: Extrac
       <TableCell><Chip size='small' variant='outlined' color={STATUS_COLOR[run.status] ?? 'default'} label={tb(run.status)} /></TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>{duration}</TableCell>
       <TableCell align='right'>
-        <Tooltip title={t('table.details')}>
-          <IconButton size='small' aria-label={t('table.details')} onClick={() => onDetails(run)}><i className='ri-file-list-3-line' /></IconButton>
-        </Tooltip>
+        {runHasDetails(run) && (
+          <Tooltip title={t('table.details')}>
+            <IconButton size='small' aria-label={t('table.details')} onClick={() => onDetails(run)}><i className='ri-file-list-3-line' /></IconButton>
+          </Tooltip>
+        )}
       </TableCell>
     </TableRow>
   )

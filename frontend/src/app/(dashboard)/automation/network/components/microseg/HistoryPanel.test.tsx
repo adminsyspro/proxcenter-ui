@@ -298,6 +298,30 @@ describe('runs', () => {
     expect(lineValues(drawer)).toEqual([['Zone members', '4'], ['Members with an IP', '3'], ['Members without an IP', '1']])
   })
 
+  it('says what an engine run read on its row, without a drawer when the row says it all', async () => {
+    setup({
+      runs: [
+        runOf(1, { kind: 'log', writes: 0, api_calls: 4, result: { guests: 0, members: 0, steps: 0, drifts: 0, events: 428, suggestions: 14 } }),
+        runOf(2, { kind: 'ips', writes: 0, api_calls: 34, started_at: '2026-11-02T09:59:00Z', result: { guests: 0, members: 33, steps: 0, drifts: 0, with_ips: 31 } }),
+        runOf(3, { kind: 'light', writes: 0, api_calls: 16, started_at: '2026-11-02T09:58:00Z', result: { guests: 0, members: 0, steps: 0, drifts: 0 } }),
+      ],
+    })
+    const log = await rowOf(/^Log read, started/)
+    expect(within(log).getByTestId('history-summary').textContent).toBe('428 log lines · 14 uncovered flows · 4 API calls')
+    expect(within(log).queryByRole('button', { name: 'Details' })).toBeNull()
+    expect(within(await rowOf(/^IP read, started/)).getByTestId('history-summary').textContent).toBe('31 of 33 members with an IP · 34 API calls')
+    expect(within(await rowOf(/^Light check, started/)).getByTestId('history-summary').textContent).toBe('no correction · 16 API calls')
+  })
+
+  it('shows a full check started with Check now as an administrator\'s, its writes when it wrote, and a drawer for its steps', async () => {
+    const step = { index: 0, kind: 'ipset.sync', object: 'pcz-web', summary: 'sync the web IP set' }
+    setup({ runs: [runOf(1, { kind: 'full', writes: 1, api_calls: 114, result: { guests: 33, members: 33, steps: 1, drifts: 12, trigger: 'check', done: [step] } })] })
+    const line = await rowOf(/^Full check, started/)
+    expect(within(line).getByTestId('history-summary').textContent).toBe('33 guests read · 12 drifts · 1 correction · 1 write · 114 API calls')
+    expect(within(line).getByText('Administrator')).toBeTruthy()
+    expect(within(line).getByRole('button', { name: 'Details' })).toBeTruthy()
+  })
+
   it('shows the error when the result cannot be loaded', async () => {
     mock.routes['GET /runs/run-1'] = () => reply(404, { code: 'NOT_FOUND', error: 'gone' })
     setup({ runs: [runOf(1)] })

@@ -1,7 +1,6 @@
 import type { MicrosegRun } from '@/lib/microseg/types'
 
-/** The kinds of run the engine schedules on its own: each reads something else, so each has its own lines. */
-export const ENGINE_RUN_KINDS = new Set(['light', 'ips', 'full', 'log', 'targeted'])
+import { ENGINE_KINDS } from './historyModel'
 
 export type RunDetailRow =
   | { key: string; count: number; warn?: boolean }
@@ -69,4 +68,50 @@ export function runDetailRows(run: MicrosegRun): RunDetailRow[] {
 export function hasStepOutcome(run: MicrosegRun): boolean {
   const r = run.result
   return !!r && (r.done?.length ?? 0) + (r.failed?.length ?? 0) + (r.not_run?.length ?? 0) > 0
+}
+
+export type RunSummaryPart = { key: string; count: number; total?: number } | { key: string; text: string }
+
+/**
+ * The figures of an engine run said on its History row, the list carrying the result of a loop's
+ * run: what it read, then what is worth a look (drifts, guests not read, corrections). The usual
+ * zeroes stay out, except a light check that corrected nothing ("no correction"). Empty for a
+ * plan, an apply or a removal (their result is read in the drawer) and when the list has no result.
+ */
+export function runSummaryParts(run: MicrosegRun): RunSummaryPart[] {
+  const r = run.result
+  if (!r || !ENGINE_KINDS.has(run.kind)) return []
+  const parts: RunSummaryPart[] = []
+  const add = (key: string, n: number | undefined, always = false) => { if (always || positive(n)) parts.push({ key, count: n ?? 0 }) }
+  switch (run.kind) {
+    case 'log':
+      add('events', r.events, true)
+      add('suggestions', r.suggestions, true)
+      add('droppedForeignDst', r.dropped_foreign_dst)
+      if (positive(r.log_truncated?.length)) parts.push({ key: 'logTruncated', text: r.log_truncated!.join(', ') })
+      break
+    case 'ips':
+      parts.push({ key: 'withIps', count: r.with_ips ?? 0, total: r.members ?? 0 })
+      break
+    case 'full':
+    case 'targeted':
+      add('guests', r.guests, true)
+      if (run.kind === 'full') add('drifts', r.drifts, true)
+      add('unread', r.unread?.length)
+      add('steps', r.steps)
+      break
+    default:
+      if (positive(r.steps)) add('steps', r.steps)
+      else parts.push({ key: 'noCorrection', count: 0 })
+  }
+  return parts
+}
+
+/**
+ * True when a run has more than its row says: a plan, an apply or a removal (their steps), an
+ * engine run that carried out steps or met read errors, or a run the list gave without a result.
+ */
+export function runHasDetails(run: MicrosegRun): boolean {
+  if (!ENGINE_KINDS.has(run.kind) || !run.result) return true
+  return hasStepOutcome(run) || positive(run.result.errors?.length) || positive(run.result.ambiguous?.length)
 }

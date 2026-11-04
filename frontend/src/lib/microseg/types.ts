@@ -198,7 +198,7 @@ export type MicrosegRun = {
   duration_ms: number
   api_calls: number
   writes: number
-  /** Omitted by GET /runs (list), present on GET /runs/{id}. */
+  /** On GET /runs/{id}; GET /runs (list) carries it for the engine loops only (light, ips, full, log, targeted). */
   result?: MicrosegRunResult | null
   error: string
 }

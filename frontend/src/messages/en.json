@@ -13637,6 +13637,18 @@
           "failed": "The run failed.",
           "failedWith": "The run failed: {error}",
           "errors": "Errors: {list}"
+        },
+        "summary": {
+          "events": "{count, plural, one {# log line} other {# log lines}}",
+          "suggestions": "{count, plural, one {# uncovered flow} other {# uncovered flows}}",
+          "droppedForeignDst": "{count, plural, one {# event left out} other {# events left out}}",
+          "logTruncated": "logs cut on {nodes}",
+          "withIps": "{count, number} of {total, plural, one {# member} other {# members}} with an IP",
+          "guests": "{count, plural, one {# guest read} other {# guests read}}",
+          "drifts": "{count, plural, one {# drift} other {# drifts}}",
+          "unread": "{count, plural, one {# not read} other {# not read}}",
+          "steps": "{count, plural, one {# correction} other {# corrections}}",
+          "noCorrection": "no correction"
         }
       },
       "table": {
@@ -13666,7 +13678,8 @@
         "empty": "Nothing recorded yet: the first apply records a revision.",
         "loading": "Loading the history...",
         "capped": "Only the last {count, number} revisions and the last {count, number} runs are read.",
-        "actorInferred": "Deduced from the kind of run"
+        "actorInferred": "Deduced from the kind of run",
+        "actorCheck": "Started with Check now"
       }
     },
     "waitingFirstCheck": "Waiting for the first full check",

@@ -13637,6 +13637,18 @@
           "failed": "运行失败。",
           "failedWith": "运行失败：{error}",
           "errors": "错误：{list}"
+        },
+        "summary": {
+          "events": "{count} 行日志",
+          "suggestions": "{count} 条未覆盖流量",
+          "droppedForeignDst": "已忽略 {count} 个事件",
+          "logTruncated": "{nodes} 上的日志被截断",
+          "withIps": "{total} 个成员中 {count} 个有 IP",
+          "guests": "已读取 {count} 台客户机",
+          "drifts": "{count} 个偏差",
+          "unread": "{count} 个未读取",
+          "steps": "{count} 项修正",
+          "noCorrection": "无修正"
         }
       },
       "table": {
@@ -13666,7 +13678,8 @@
         "empty": "尚无记录：首次应用会记录一个修订。",
         "loading": "正在加载历史...",
         "capped": "仅读取最近 {count, number} 个修订和最近 {count, number} 次运行。",
-        "actorInferred": "根据运行类型推断"
+        "actorInferred": "根据运行类型推断",
+        "actorCheck": "通过“立即检查”启动"
       }
     },
     "waitingFirstCheck": "正在等待首次完整检查",

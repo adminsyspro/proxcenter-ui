@@ -9,7 +9,8 @@ import ApplyResult from './ApplyResult'
 import { OneLine } from './dialogParts'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { Notice } from './PlanNotices'
-import { ENGINE_RUN_KINDS, hasStepOutcome, runDetailRows, type RunDetailRow } from './runDetailModel'
+import { ENGINE_KINDS } from './historyModel'
+import { hasStepOutcome, runDetailRows, type RunDetailRow } from './runDetailModel'
 import TruncatedText from './TruncatedText'
 import { useZoneGuests } from './useZoneGuests'
 
@@ -42,7 +43,7 @@ export default function RunDetail({ connectionId, runId }: Props) {
   if (!run) return <CircularProgress size={18} />
 
   const result = run.result
-  const engine = ENGINE_RUN_KINDS.has(run.kind)
+  const engine = ENGINE_KINDS.has(run.kind)
   const errors = result?.errors ?? []
   // An engine run that wrote nothing tells its errors itself; one that carried out steps, a plan,
   // an apply and a removal draw their outcome (errors included) as an apply's.

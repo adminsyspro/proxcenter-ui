@@ -13638,6 +13638,18 @@
           "failed": "L'exécution a échoué.",
           "failedWith": "L'exécution a échoué : {error}",
           "errors": "Erreurs : {list}"
+        },
+        "summary": {
+          "events": "{count, plural, one {# ligne de journal} other {# lignes de journal}}",
+          "suggestions": "{count, plural, one {# flux non couvert} other {# flux non couverts}}",
+          "droppedForeignDst": "{count, plural, one {# événement écarté} other {# événements écartés}}",
+          "logTruncated": "journaux coupés sur {nodes}",
+          "withIps": "{count, number} {total, plural, one {membre sur #} other {membres sur #}} avec une IP",
+          "guests": "{count, plural, one {# invité lu} other {# invités lus}}",
+          "drifts": "{count, plural, one {# écart} other {# écarts}}",
+          "unread": "{count, plural, one {# non lu} other {# non lus}}",
+          "steps": "{count, plural, one {# correctif} other {# correctifs}}",
+          "noCorrection": "aucun correctif"
         }
       },
       "table": {
@@ -13667,7 +13679,8 @@
         "empty": "Rien d'enregistré pour l'instant : la première application enregistre une révision.",
         "loading": "Chargement de l'historique...",
         "capped": "Seules les {count, number} dernières révisions et les {count, number} dernières exécutions sont lues.",
-        "actorInferred": "Déduit du type d'exécution"
+        "actorInferred": "Déduit du type d'exécution",
+        "actorCheck": "Lancé par Vérifier maintenant"
       }
     },
     "waitingFirstCheck": "En attente du premier contrôle complet",

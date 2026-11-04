@@ -13637,6 +13637,18 @@
           "failed": "La ejecución falló.",
           "failedWith": "La ejecución falló: {error}",
           "errors": "Errores: {list}"
+        },
+        "summary": {
+          "events": "{count, plural, one {# línea de registro} other {# líneas de registro}}",
+          "suggestions": "{count, plural, one {# flujo no cubierto} other {# flujos no cubiertos}}",
+          "droppedForeignDst": "{count, plural, one {# evento descartado} other {# eventos descartados}}",
+          "logTruncated": "registros cortados en {nodes}",
+          "withIps": "{count, number} de {total, plural, one {# miembro} other {# miembros}} con IP",
+          "guests": "{count, plural, one {# invitado leído} other {# invitados leídos}}",
+          "drifts": "{count, plural, one {# desviación} other {# desviaciones}}",
+          "unread": "{count, plural, one {# no leído} other {# no leídos}}",
+          "steps": "{count, plural, one {# corrección} other {# correcciones}}",
+          "noCorrection": "ninguna corrección"
         }
       },
       "table": {
@@ -13666,7 +13678,8 @@
         "empty": "Nada registrado aún: la primera aplicación registra una revisión.",
         "loading": "Cargando el historial...",
         "capped": "Solo se leen las últimas {count, number} revisiones y las últimas {count, number} ejecuciones.",
-        "actorInferred": "Deducido del tipo de ejecución"
+        "actorInferred": "Deducido del tipo de ejecución",
+        "actorCheck": "Iniciado con Comprobar ahora"
       }
     },
     "waitingFirstCheck": "A la espera de la primera comprobación completa",

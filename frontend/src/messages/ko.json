@@ -13637,6 +13637,18 @@
           "failed": "실행이 실패했습니다.",
           "failedWith": "실행이 실패했습니다: {error}",
           "errors": "오류: {list}"
+        },
+        "summary": {
+          "events": "로그 {count}줄",
+          "suggestions": "미적용 흐름 {count}개",
+          "droppedForeignDst": "제외된 이벤트 {count}개",
+          "logTruncated": "{nodes}에서 로그 잘림",
+          "withIps": "멤버 {total}개 중 {count}개 IP 있음",
+          "guests": "게스트 {count}개 읽음",
+          "drifts": "드리프트 {count}개",
+          "unread": "{count}개 읽지 못함",
+          "steps": "수정 {count}개",
+          "noCorrection": "수정 없음"
         }
       },
       "table": {
@@ -13666,7 +13678,8 @@
         "empty": "아직 기록 없음: 첫 적용 시 리비전이 기록됩니다.",
         "loading": "기록을 불러오는 중...",
         "capped": "최근 리비전 {count, number}개와 최근 실행 {count, number}개만 읽습니다.",
-        "actorInferred": "실행 유형에서 추론됨"
+        "actorInferred": "실행 유형에서 추론됨",
+        "actorCheck": "지금 확인으로 시작됨"
       }
     },
     "waitingFirstCheck": "첫 번째 전체 점검을 기다리는 중",

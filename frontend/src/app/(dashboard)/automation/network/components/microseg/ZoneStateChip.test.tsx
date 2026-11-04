@@ -1,5 +1,5 @@
 /**
- * The state of a zone as a coloured chip with an icon (UA40): the chip on its own, in the list row, in the panel header
+ * The state of a zone as a coloured chip with an icon (UA40): the chip on its own, on the zone card, in the panel header
  * and in the state menu.
  */
 
@@ -11,7 +11,7 @@ import type { ZoneState } from '@/lib/microseg/types'
 
 import { installFreshMocks, web } from './policyTestKit'
 import { node, setup } from './zoneMapTestKit'
-import ZoneRow from './ZoneRow'
+import ZoneCard from './ZoneCard'
 import ZoneStateChip from './ZoneStateChip'
 
 installFreshMocks()
@@ -49,18 +49,18 @@ describe('where the state shows', () => {
   const rowProps = {
     members: [], membersKnown: true, flows: [], zonesById: new Map(),
     onEdit: vi.fn(), onDelete: vi.fn(), onSetState: vi.fn(), onAssign: vi.fn(), onRemoveMember: vi.fn(),
-    flowDiff: null, open: false, onToggle: vi.fn(), onAddFlow: vi.fn(), onEditFlow: vi.fn(), onDeleteFlow: vi.fn(),
+    flowDiff: null, open: false, onToggle: vi.fn(), onAddFlow: vi.fn(), onEditFlow: vi.fn(), onDeleteFlow: vi.fn(), drifts: null,
   }
 
-  it('puts the chip in the list row', () => {
-    renderWithProviders(<ZoneRow zone={web({ state: 'enforce' })} {...rowProps} />)
+  it('puts the chip on the zone card', () => {
+    renderWithProviders(<ZoneCard zone={web({ state: 'enforce' })} {...rowProps} />)
     const chip = within(screen.getByRole('listitem', { name: 'web' })).getByText('Enforced').closest('.MuiChip-root') as HTMLElement
     expect(chip.classList.contains('MuiChip-colorSuccess')).toBe(true)
     expect(chip.querySelector('i.ri-shield-check-line')).toBeTruthy()
   })
 
   it('gives each option of the state menu its icon and keeps the current state disabled', async () => {
-    renderWithProviders(<ZoneRow zone={web({ state: 'observe' })} {...rowProps} />)
+    renderWithProviders(<ZoneCard zone={web({ state: 'observe' })} {...rowProps} />)
     fireEvent.click(screen.getByRole('button', { name: 'Change state' }))
     const observe = await screen.findByRole('menuitem', { name: 'Observe' })
     expect(observe.getAttribute('aria-disabled')).toBe('true')

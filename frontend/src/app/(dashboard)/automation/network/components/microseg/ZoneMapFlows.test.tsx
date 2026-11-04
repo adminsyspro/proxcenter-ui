@@ -265,7 +265,7 @@ describe('panel of an edge', () => {
     const panel = await screen.findByRole('complementary', { name: 'Flow web to db' })
     expect(within(panel).getAllByText('Draft')).toHaveLength(2)
     fireEvent.click(within(panel).getByRole('button', { name: 'Edit in Policy' }))
-    expect(await screen.findByRole('button', { name: 'New zone' })).toBeTruthy()
+    expect((await screen.findAllByRole('button', { name: 'New zone' })).length).toBeGreaterThan(0)
   })
 
   it('marks only the flows the last applied revision does not have', async () => {

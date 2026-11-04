@@ -17,7 +17,7 @@ installFreshMocks()
 describe('zone dialog', () => {
   const open = async () => {
     setup({ zones: [db()] })
-    fireEvent.click(await screen.findByRole('button', { name: 'New zone' }))
+    fireEvent.click((await screen.findAllByRole('button', { name: 'New zone' }))[0])
     return screen.findByRole('dialog')
   }
   const typeName = (dialog: HTMLElement, value: string) => fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value } })

@@ -18,11 +18,15 @@ const manyGuests = (n: number) => Array.from({ length: n }, (_, i) => vm(1000 + 
 
 async function openDialog() {
   const row = await screen.findByRole('listitem', { name: 'web' })
-  // The members sit under the chevron, with their Assign guests button.
-  const chevron = within(row).queryByRole('button', { name: 'Show details' })
-  if (chevron) fireEvent.click(chevron)
   fireEvent.click(await within(row).findByRole('button', { name: 'Assign guests' }))
   return screen.findByRole('dialog', { name: 'Assign guests to web' })
+}
+
+/** Opens a zone card's details (members and flows, full width below the row of cards) and returns them. */
+async function openDetails(name: string) {
+  const card = await screen.findByRole('listitem', { name })
+  fireEvent.click(await within(card).findByRole('button', { name: 'Show details' }))
+  return screen.findByRole('region', { name: `Details of ${name}` })
 }
 
 const assignButton = (dialog: HTMLElement, name: RegExp | string) => within(dialog).getByRole('button', { name })
@@ -241,8 +245,7 @@ describe('remove from zone', () => {
   it('moves a member out of its zone through members with an empty zone id', async () => {
     mock.routes['POST /members'] = () => reply(200, { version: 4 })
     setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])] })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    const row = await openDetails('web')
     const member = (await within(row).findByText('web-2')).closest('div') as HTMLElement
     const before = calls('GET /policy').length
     fireEvent.click(within(member).getByRole('button', { name: 'Remove from zone' }))
@@ -260,8 +263,7 @@ describe('remove from zone', () => {
       zones: [web()], vms: [],
       pending_members: [{ id: 'p1', policy_id: 'p1', node: 'pve9', type: 'lxc', vmid: 400, zone_id: 'zw' }],
     })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    const row = await openDetails('web')
     fireEvent.click(await within(row).findByRole('button', { name: 'Remove from zone' }))
     await waitFor(() => expect(calls('POST /members')).toHaveLength(1))
     expect(body(calls('POST /members')[0][1] as RequestInit)).toEqual({
@@ -272,8 +274,7 @@ describe('remove from zone', () => {
   it('shows the error and reloads the policy when the removal hits a version conflict', async () => {
     mock.routes['POST /members'] = () => reply(409, { code: 'VERSION_CONFLICT', error: 'stale' })
     setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web'])] })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    const row = await openDetails('web')
     const before = calls('GET /policy').length
     fireEvent.click(await within(row).findByRole('button', { name: 'Remove from zone' }))
     await waitFor(() => expect(calls('GET /policy').length).toBeGreaterThan(before))
@@ -289,8 +290,7 @@ describe('queued removals and moves of tagged members', () => {
     mock.routes['POST /members'] = () => { pendingRows = queued(''); return reply(200, { version: 4 }) }
     setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])], pending_members: pendingRows, pending_changes: true })
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web()], pending_members: pendingRows, last_revision: REVISION_HEAD, pending_changes: pendingRows.length > 0 }))
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    const row = await openDetails('web')
     const member = (await within(row).findByText('web-1')).closest('div') as HTMLElement
     fireEvent.click(within(member).getByRole('button', { name: 'Remove from zone' }))
 
@@ -302,16 +302,14 @@ describe('queued removals and moves of tagged members', () => {
 
   it('shows a tagged member queued for another zone as moving', async () => {
     setup({ zones: [web(), db()], vms: [vm(100, 'web-1', ['zone-web'])], pending_members: queued('zd') })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    const row = await openDetails('web')
     expect(await within(row).findByText('Moving to db')).toBeTruthy()
     expect(within(row).queryByText('Pending')).toBeNull()
   })
 
   it('matches the pending row by type and vmid, whatever the node', async () => {
     setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web'])], pending_members: queued('', 'pve-old') })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    const row = await openDetails('web')
     expect(await within(row).findByText('Pending removal')).toBeTruthy()
     expect(within(row).getAllByText('web-1')).toHaveLength(1)
   })
@@ -377,8 +375,7 @@ describe('queued removals and moves of tagged members', () => {
     let release: (v: unknown) => void = () => undefined
     mock.routes['POST /members'] = () => new Promise(resolve => { release = resolve })
     setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])] })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
+    const row = await openDetails('web')
     await within(row).findByText('web-2')
     const buttons = () => within(row).getAllByRole('button', { name: 'Remove from zone' }) as HTMLButtonElement[]
     fireEvent.click(buttons()[0])

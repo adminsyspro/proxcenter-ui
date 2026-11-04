@@ -89,6 +89,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         onEdit={zone => setZoneDialog({ item: zone })}
         onDelete={zone => { removal.reset(); setDeleting(zone) }}
         onAddFlow={zone => flowEditor.create({ dst_zone_id: zone.id })}
+        onOpenDrifts={zone => goToSubTab('drifts', { zoneId: zone.id })}
         onEditFlow={flowEditor.edit}
         onDeleteFlow={flowEditor.remove}
         onSetState={onSetState}

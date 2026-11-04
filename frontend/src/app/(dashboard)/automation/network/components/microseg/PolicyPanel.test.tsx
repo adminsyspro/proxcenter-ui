@@ -30,116 +30,152 @@ describe('zone list', () => {
     expect(within(list).queryByText('zone00')).toBeNull()
   })
 
-  it('shows the state of a zone and how many members it has', async () => {
-    setup({ zones: [web({ state: 'enforce' })], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'], { status: 'stopped' }), vm(102, 'other', [])] })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    expect(within(row).getByText('Enforced')).toBeTruthy()
-    expect(await within(row).findByText('2 members · 0 incoming · 0 outgoing')).toBeTruthy()
-  })
-
-  it('counts the members, the incoming and the outgoing flows of a zone on its one line', async () => {
+  it('shows each zone as a card: state, the three counters, a preview of its members and flows', async () => {
     const flows: MicrosegFlow[] = [
       { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: 'zd' },
       { ...flow('f2'), src_zone_id: 'zd', dst_zone_id: 'zw' },
       { ...flow('f3'), src_zone_id: 'zd', dst_zone_id: 'zw', dport: '22' },
+      { ...flow('f4'), src_zone_id: '', src_cidr: '10.0.0.0/8', dst_zone_id: 'zw', dport: '80' },
     ]
-    setup({ zones: [web({ label: 'Front web servers' }), db()], flows, vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])] })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    expect(await within(row).findByText('2 members · 2 incoming · 1 outgoing')).toBeTruthy()
-    expect(within(row).getByText('Front web servers')).toBeTruthy()
-    expect(within(screen.getByRole('listitem', { name: 'db' })).getByText('0 members · 1 incoming · 2 outgoing')).toBeTruthy()
-    for (const name of ['Edit zone', 'Change state', 'New flow into web', 'Delete zone']) expect(within(row).getByRole('button', { name })).toBeTruthy()
+    const vms = [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'], { status: 'stopped' }), vm(102, 'web-3', ['zone-web']), vm(103, 'web-4', ['zone-web']), vm(104, 'other', [])]
+    setup({ zones: [web({ state: 'enforce', label: 'Front web servers' }), db()], flows, vms })
+    const card = await screen.findByRole('listitem', { name: 'web' })
+    expect(within(card).getByText('Enforced')).toBeTruthy()
+    expect(within(card).getByText('Front web servers')).toBeTruthy()
+    const stat = (c: HTMLElement, name: string) => c.querySelector(`[data-stat="${name}"]`)?.firstElementChild?.textContent
+    await waitFor(() => expect(stat(card, 'members')).toBe('4'))
+    expect(stat(card, 'incoming')).toBe('3')
+    expect(stat(card, 'outgoing')).toBe('1')
+    const dbCard = screen.getByRole('listitem', { name: 'db' })
+    expect([stat(dbCard, 'members'), stat(dbCard, 'incoming'), stat(dbCard, 'outgoing')]).toEqual(['0', '1', '2'])
+
+    // The first three members (status dot), "+1"; the first three flows in and out, "+1 more flow".
+    for (const name of ['web-1', 'web-2', 'web-3']) expect(within(card).getByText(name)).toBeTruthy()
+    expect(within(card).queryByText('web-4')).toBeNull()
+    expect(within(card).getByText('+1')).toBeTruthy()
+    expect(within(card).queryByText('other')).toBeNull()
+    const lines = Array.from(card.querySelectorAll('[data-flow-preview]')).map(l => l.textContent)
+    expect(lines).toEqual(['db → web HTTPS', 'db → web SSH', '10.0.0.0/8 → web HTTP'])
+    expect(within(card).getByText('+1 more flow')).toBeTruthy()
+
+    for (const name of ['Edit zone', 'Change state', 'New flow into web', 'Assign guests', 'Delete zone']) expect(within(card).getByRole('button', { name })).toBeTruthy()
   })
 
   it('opens the state menu from the state chip too', async () => {
     setup({ zones: [web()] })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(within(row).getByText('Observation'))
+    const card = await screen.findByRole('listitem', { name: 'web' })
+    fireEvent.click(within(card).getByText('Observation'))
     expect(await screen.findByRole('menuitem', { name: 'Enforce' })).toBeTruthy()
   })
 
-  it('opens a new flow into the zone from its line, with the zone as destination', async () => {
+  it('opens a new flow into the zone from its card, with the zone as destination', async () => {
     setup({ zones: [web(), db()] })
-    const row = await screen.findByRole('listitem', { name: 'db' })
-    fireEvent.click(within(row).getByRole('button', { name: 'New flow into db' }))
+    const card = await screen.findByRole('listitem', { name: 'db' })
+    fireEvent.click(within(card).getByRole('button', { name: 'New flow into db' }))
     const dialog = await screen.findByRole('dialog', { name: 'New flow' })
     expect(within(dialog).getByRole('combobox', { name: 'Destination zone' }).textContent).toContain('db')
   })
 
-  it('opens the members and the flows side by side, and remembers it for the zone', async () => {
+  it('opens the details full width below the row: members and flows side by side, remembered for the zone', async () => {
     const out: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: 'zd' }
     const view = setup({ zones: [web(), db()], flows: [out], vms: [vm(100, 'web-1', ['zone-web'])] })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(within(row).getByRole('button', { name: 'Show details' }))
-    const members = await within(row).findByRole('region', { name: 'Members' })
-    const flowsColumn = within(row).getByRole('region', { name: 'Flows of the zone' })
+    const card = await screen.findByRole('listitem', { name: 'web' })
+    expect(screen.queryByRole('region', { name: 'Details of web' })).toBeNull()
+    const chevron = within(card).getByRole('button', { name: 'Show details' })
+    expect(chevron.textContent).toContain('Details')
+    fireEvent.click(chevron)
+
+    const details = await screen.findByRole('region', { name: 'Details of web' })
+    expect(chevron.getAttribute('aria-controls')).toBe(details.id)
+    expect(card.contains(details)).toBe(false)
+    expect(getComputedStyle(details.parentElement as HTMLElement).gridColumn).toMatch(/^1\s*\/\s*-1$/)
+    const members = within(details).getByRole('region', { name: 'Members' })
+    const flowsColumn = within(details).getByRole('region', { name: 'Flows of the zone' })
     expect(members.parentElement).toBe(flowsColumn.parentElement)
     expect(await within(members).findByText('web-1')).toBeTruthy()
-    expect(within(members).getByRole('button', { name: 'Assign guests' })).toBeTruthy()
     expect(within(flowsColumn).getByText('Outgoing flows')).toBeTruthy()
     expect(within(flowsColumn).getByRole('button', { name: 'Edit flow' })).toBeTruthy()
-    expect(within(flowsColumn).getByRole('button', { name: 'Delete flow' })).toBeTruthy()
     expect(JSON.parse(window.localStorage.getItem('microseg.policy.openZones.c1') ?? '[]')).toEqual(['zw'])
 
     view.unmount()
     setup({ zones: [web(), db()], flows: [out], vms: [vm(100, 'web-1', ['zone-web'])] })
-    const again = await screen.findByRole('listitem', { name: 'web' })
-    expect(await within(again).findByText('web-1')).toBeTruthy()
-    expect(within(screen.getByRole('listitem', { name: 'db' })).getByRole('button', { name: 'Show details' })).toBeTruthy()
+    expect(await screen.findByRole('region', { name: 'Details of web' })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Details of db' })).toBeNull()
   })
 
-  it('says so when there is no zone', async () => {
+  it('says so when there is no zone, with the new-zone card', async () => {
     setup()
     expect(await screen.findByText(/No zone yet/)).toBeTruthy()
+    expect(screen.getByTestId('new-zone-card')).toBeTruthy()
   })
 
-  it('lists the zone members with StatusIcon under the chevron', async () => {
+  it('ends the grid with a dashed new-zone card that opens the zone dialog', async () => {
+    setup({ zones: [web(), db()] })
+    const zones = await screen.findByRole('region', { name: 'Zones' })
+    const cards = within(zones).getAllByRole('listitem')
+    expect(within(cards.at(-1)!).getByTestId('new-zone-card')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('new-zone-card'))
+    expect(await screen.findByRole('dialog', { name: 'New zone' })).toBeTruthy()
+  })
+
+  it('lists the zone members with StatusIcon in the details', async () => {
     setup({
       zones: [web()],
       vms: [vm(100, 'web-1', ['zone-web']), vm(200, 'web-ct', ['zone-web'], { type: 'lxc', status: 'stopped' }), vm(300, 'elsewhere', ['zone-db'])],
       pending_members: [{ id: 'p1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 400, zone_id: 'zw' }],
     })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    expect(within(row).queryByText('web-1')).toBeNull()
-
-    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
-    expect(await within(row).findByText('web-1')).toBeTruthy()
-    expect(within(row).getByText('web-ct')).toBeTruthy()
-    expect(within(row).queryByText('elsewhere')).toBeNull()
-    expect(within(row).getByText('Pending')).toBeTruthy()
-    expect(row.querySelector('i.ri-computer-fill')).toBeTruthy()
-    expect(row.querySelector('i.ri-instance-fill')).toBeTruthy()
+    const card = await screen.findByRole('listitem', { name: 'web' })
+    fireEvent.click(await within(card).findByRole('button', { name: 'Show details' }))
+    const details = await screen.findByRole('region', { name: 'Details of web' })
+    expect(await within(details).findByText('web-1')).toBeTruthy()
+    expect(within(details).getByText('web-ct')).toBeTruthy()
+    expect(within(details).queryByText('elsewhere')).toBeNull()
+    expect(within(details).getByText('Pending')).toBeTruthy()
+    expect(details.querySelector('i.ri-computer-fill')).toBeTruthy()
+    expect(details.querySelector('i.ri-instance-fill')).toBeTruthy()
   })
 
-  it('paginates the members under the chevron', async () => {
+  it('paginates the members in the details', async () => {
     const vms = Array.from({ length: 12 }, (_, i) => vm(100 + i, `web-${String(i).padStart(2, '0')}`, ['zone-web']))
     setup({ zones: [web()], vms })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(await within(row).findByRole('button', { name: 'Show details' }))
-    expect(await within(row).findByText('web-09')).toBeTruthy()
-    expect(within(row).queryByText('web-10')).toBeNull()
-    expect(within(row).queryByRole('button', { name: /show all/i })).toBeNull()
-    fireEvent.click(within(row).getByRole('button', { name: /next page/i }))
-    expect(await within(row).findByText('web-10')).toBeTruthy()
-    expect(within(row).queryByText('web-00')).toBeNull()
+    const card = await screen.findByRole('listitem', { name: 'web' })
+    fireEvent.click(await within(card).findByRole('button', { name: 'Show details' }))
+    const details = await screen.findByRole('region', { name: 'Details of web' })
+    expect(await within(details).findByText('web-09')).toBeTruthy()
+    expect(within(details).queryByText('web-10')).toBeNull()
+    fireEvent.click(within(details).getByRole('button', { name: /next page/i }))
+    expect(await within(details).findByText('web-10')).toBeTruthy()
+    expect(within(details).queryByText('web-00')).toBeNull()
   })
 
   it('matches the zone tag whatever the case', async () => {
     setup({ zones: [web()], vms: [vm(100, 'upper', ['Zone-Web']), vm(101, 'lower', ['zone-web'])] })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    expect(await within(row).findByText(/2 members/)).toBeTruthy()
+    const card = await screen.findByRole('listitem', { name: 'web' })
+    await waitFor(() => expect(card.querySelector('[data-stat="members"]')?.firstElementChild?.textContent).toBe('2'))
   })
 
-  it('lists the incoming and outgoing flows of a zone under the chevron', async () => {
+  it('lists the incoming and outgoing flows of a zone in the details', async () => {
     const out: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: 'zd' }
     const inn: MicrosegFlow = { ...flow('f2'), src_zone_id: 'zd', dst_zone_id: 'zw', dport: '8080' }
     setup({ zones: [web(), db()], flows: [out, inn] })
-    const row = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(within(row).getByRole('button', { name: 'Show details' }))
-    expect(within(row).getByText('Incoming flows')).toBeTruthy()
-    expect(within(row).getByText('Outgoing flows')).toBeTruthy()
-    expect(within(row).getByText('HTTPS')).toBeTruthy()
-    expect(within(row).getByText('HTTP-alt')).toBeTruthy()
+    const card = await screen.findByRole('listitem', { name: 'web' })
+    fireEvent.click(within(card).getByRole('button', { name: 'Show details' }))
+    const details = await screen.findByRole('region', { name: 'Details of web' })
+    expect(within(details).getByText('Incoming flows')).toBeTruthy()
+    expect(within(details).getByText('Outgoing flows')).toBeTruthy()
+    expect(within(details).getByText('HTTPS')).toBeTruthy()
+    expect(within(details).getByText('HTTP-alt')).toBeTruthy()
+  })
+
+  it('chips the drifts of a zone and opens the Drifts sub-tab on them', async () => {
+    const { mock, reply } = await import('./microsegTestKit')
+    mock.routes['GET /drifts'] = () => reply(200, { computed: true, drifts: [{ kind: 'nic_firewall_off', guest: { node: 'pve1', type: 'qemu', vmid: 100 } }] })
+    setup({ zones: [web(), db()], vms: [vm(100, 'web-1', ['zone-web'])] })
+    const card = await screen.findByRole('listitem', { name: 'web' })
+    const chip = await within(card).findByText('1 drift')
+    expect(within(screen.getByRole('listitem', { name: 'db' })).queryByText(/drift/)).toBeNull()
+    fireEvent.click(chip)
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Drifts' }).getAttribute('aria-selected')).toBe('true'))
   })
 })
 
@@ -162,9 +198,8 @@ describe('flow list', () => {
     expect(within(flows).getAllByText('Not applied in v1')).toHaveLength(1)
     expect(within(flows).getByText('10.0.0.0/8')).toBeTruthy()
 
-    const row = screen.getByRole('listitem', { name: 'web' })
-    fireEvent.click(within(row).getByRole('button', { name: 'Show details' }))
-    expect(within(row).getAllByText(pill)).toHaveLength(1)
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Show details' }))
+    expect(within(await screen.findByRole('region', { name: 'Details of web' })).getAllByText(pill)).toHaveLength(1)
   })
 
   it('does not show the pill for a CIDR source', async () => {
@@ -200,7 +235,9 @@ describe('actions row', () => {
     const row = slot.parentElement as HTMLElement
     const names = within(row).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)
     expect(names.indexOf('New flow')).toBeLessThan(names.findIndex(n => /Emergency stop/.test(n ?? '')))
-    expect(within(await screen.findByRole('region', { name: 'Zones' })).queryByRole('button', { name: 'New zone' })).toBeNull()
+    // In the Zones region only the dashed card leads to a new zone (its button sits on the row of the sub-tabs).
+    const inRegion = within(await screen.findByRole('region', { name: 'Zones' })).getAllByRole('button', { name: 'New zone' })
+    expect(inRegion).toEqual([screen.getByTestId('new-zone-card')])
     expect(screen.getByText('Zones')).toBeTruthy()
     expect(screen.getByText('Flows')).toBeTruthy()
   })
@@ -220,7 +257,7 @@ describe('actions row', () => {
       <PolicyPanel connectionId='c1' policy={makePolicy({ zones: [web()] })} reloadPolicy={async () => undefined} goToSubTab={() => undefined} onOpenPlan={() => undefined} startRun={() => undefined} onOpenPreflight={() => undefined} />,
     )
     const zones = await screen.findByRole('region', { name: 'Zones' })
-    expect(within(zones).getByRole('button', { name: 'New zone' })).toBeTruthy()
+    expect(within(zones).getByTestId('new-zone-card')).toBeTruthy()
     expect(within(screen.getByRole('region', { name: 'Flows' })).getByRole('button', { name: 'New flow' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Pre-flight checks' })).toBeTruthy()
   })

@@ -49,7 +49,7 @@ describe('zone nodes', () => {
     setup({ zones: [] })
     expect(await screen.findByText('No zone to draw yet.')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Create a zone' }))
-    expect(await screen.findByRole('button', { name: 'New zone' })).toBeTruthy()
+    expect((await screen.findAllByRole('button', { name: 'New zone' })).length).toBeGreaterThan(0)
     expect(window.localStorage.getItem('microseg.subTab')).toBe('policy')
   })
 })

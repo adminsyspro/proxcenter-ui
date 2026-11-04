@@ -12852,11 +12852,14 @@
           "enforce": "只有允许的流量可以进入",
           "disabled": "该区域未被应用"
         },
-        "counters": "{members} · 入站 {incoming, number} 条 · 出站 {outgoing, number} 条",
-        "memberCountUnknown": "成员未知",
         "addFlowInto": "新建流向 {zone} 的流量规则",
         "flowsTitle": "该区域的流量规则",
-        "memberCount": "{count, plural, other {# 个成员}}"
+        "statMembers": "成员",
+        "statIncoming": "入站",
+        "statOutgoing": "出站",
+        "details": "详情",
+        "detailsOf": "{zone} 的详情",
+        "moreFlows": "{count, plural, other {另有 # 条流量规则}}"
       },
       "flow": {
         "notApplied": "未应用（v1 不管理出站）",

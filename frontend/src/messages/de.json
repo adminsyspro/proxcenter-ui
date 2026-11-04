@@ -12520,11 +12520,14 @@
           "enforce": "Nur die erlaubten Flüsse kommen durch",
           "disabled": "Die Zone wird nicht angewendet"
         },
-        "counters": "{members} · {incoming, number} eingehend · {outgoing, number} ausgehend",
-        "memberCountUnknown": "Mitglieder unbekannt",
         "addFlowInto": "Neuer Fluss nach {zone}",
         "flowsTitle": "Flüsse der Zone",
-        "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}"
+        "statMembers": "Mitglieder",
+        "statIncoming": "Eingehend",
+        "statOutgoing": "Ausgehend",
+        "details": "Einzelheiten",
+        "detailsOf": "Einzelheiten zu {zone}",
+        "moreFlows": "{count, plural, one {+# weiterer Fluss} other {+# weitere Flüsse}}"
       },
       "flow": {
         "notApplied": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",

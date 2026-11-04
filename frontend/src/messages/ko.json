@@ -12852,11 +12852,14 @@
           "enforce": "허용된 흐름만 통과합니다",
           "disabled": "영역이 적용되지 않습니다"
         },
-        "counters": "{members} · 수신 {incoming, number}개 · 송신 {outgoing, number}개",
-        "memberCountUnknown": "구성원 알 수 없음",
         "addFlowInto": "{zone}(으)로 새 플로우",
         "flowsTitle": "영역의 플로우",
-        "memberCount": "{count, plural, other {구성원 #개}}"
+        "statMembers": "구성원",
+        "statIncoming": "수신",
+        "statOutgoing": "송신",
+        "details": "세부 정보",
+        "detailsOf": "{zone} 세부 정보",
+        "moreFlows": "{count, plural, other {플로우 #개 더}}"
       },
       "flow": {
         "notApplied": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",

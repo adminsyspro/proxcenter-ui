@@ -52,8 +52,6 @@ describe('read-only user', () => {
     renderAs(value)
     const zoneRow = await screen.findByRole('listitem', { name: 'web' })
     await waitFor(() => expect(screen.getByRole('button', { name: 'View plan' })).toBeTruthy())
-    // Assign guests sits with the members, under the chevron (never a write).
-    fireEvent.click(within(zoneRow).getByRole('button', { name: 'Show details' }))
 
     for (const name of WRITE_BUTTONS) {
       const button = within(name.includes('zone') && name !== 'New zone' ? zoneRow : document.body).getAllByRole('button', { name })[0] as HTMLButtonElement
@@ -108,8 +106,6 @@ describe('user with node.manage', () => {
     renderAs(rbac(true))
     const zoneRow = await screen.findByRole('listitem', { name: 'web' })
     await waitFor(() => expect(screen.getByRole('button', { name: 'View plan' })).toBeTruthy())
-    // Assign guests sits with the members, under the chevron (never a write).
-    fireEvent.click(within(zoneRow).getByRole('button', { name: 'Show details' }))
     for (const name of WRITE_BUTTONS) {
       const button = within(name.includes('zone') && name !== 'New zone' ? zoneRow : document.body).getAllByRole('button', { name })[0] as HTMLButtonElement
       expect(button.disabled, name).toBe(false)
@@ -120,6 +116,6 @@ describe('user with node.manage', () => {
   it('leaves the controls enabled while the rights are still loading', async () => {
     setupPolicy()
     renderAs(rbac(false, true))
-    expect((await screen.findByRole('button', { name: 'New zone' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(((await screen.findAllByRole('button', { name: 'New zone' }))[0] as HTMLButtonElement).disabled).toBe(false)
   })
 })

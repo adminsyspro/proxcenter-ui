@@ -12852,11 +12852,14 @@
           "enforce": "Solo entran los flujos permitidos",
           "disabled": "La zona no se aplica"
         },
-        "counters": "{members} · {incoming, number} entrantes · {outgoing, number} salientes",
-        "memberCountUnknown": "miembros desconocidos",
         "addFlowInto": "Nuevo flujo hacia {zone}",
         "flowsTitle": "Flujos de la zona",
-        "memberCount": "{count, plural, one {# miembro} other {# miembros}}"
+        "statMembers": "Miembros",
+        "statIncoming": "Entrantes",
+        "statOutgoing": "Salientes",
+        "details": "Detalles",
+        "detailsOf": "Detalles de {zone}",
+        "moreFlows": "{count, plural, one {+# flujo más} other {+# flujos más}}"
       },
       "flow": {
         "notApplied": "No aplicado (salida no gestionada en v1)",

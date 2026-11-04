@@ -12852,11 +12852,14 @@
           "enforce": "Only the allowed flows get in",
           "disabled": "The zone is not applied"
         },
-        "counters": "{members} · {incoming, number} incoming · {outgoing, number} outgoing",
-        "memberCountUnknown": "members unknown",
         "addFlowInto": "New flow into {zone}",
         "flowsTitle": "Flows of the zone",
-        "memberCount": "{count, plural, one {# member} other {# members}}"
+        "statMembers": "Members",
+        "statIncoming": "Incoming",
+        "statOutgoing": "Outgoing",
+        "details": "Details",
+        "detailsOf": "Details of {zone}",
+        "moreFlows": "{count, plural, one {+# more flow} other {+# more flows}}"
       },
       "flow": {
         "notApplied": "Not applied (egress not managed in v1)",

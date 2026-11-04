@@ -35,7 +35,37 @@ export function uncoveredByZone(traffic: Pick<MicrosegTraffic, 'buckets'>): Map<
  * the page is visible. A failure (an
  * older orchestrator, a follower) is not retried: the table shows no count.
  */
-export function useZoneUncovered(connId: string | null): { byZone: Map<string, number> | null; failed: boolean } {
+/** The hourly hits of each zone over the window, oldest first, plus where the window starts and its step. */
+export type UncoveredSeries = { from: number; stepMs: number; size: number; byZone: Map<string, number[]> }
+
+/**
+ * The hits of each destination zone per bucket of the answer (24 hourly buckets for the Policy window), by name whatever
+ * the case, every source and verdict together: a bucket with no row is 0. A bucket outside the window is dropped.
+ */
+export function uncoveredSeriesByZone(traffic: Pick<MicrosegTraffic, 'buckets' | 'from' | 'to' | 'step'>): UncoveredSeries {
+  const from = Date.parse(traffic.from)
+  const stepMs = Math.max(1, traffic.step) * 1000
+  const size = Math.max(0, Math.round((Date.parse(traffic.to) - from) / stepMs))
+  const byZone = new Map<string, number[]>()
+  for (const b of traffic.buckets) {
+    const i = Math.floor((Date.parse(b.at) - from) / stepMs)
+    if (!(i >= 0 && i < size)) continue
+    const key = b.zone.toLowerCase()
+    let row = byZone.get(key)
+    if (!row) byZone.set(key, (row = new Array<number>(size).fill(0)))
+    row[i] += b.hits
+  }
+  return { from, stepMs, size, byZone }
+}
+
+/** The hourly series of a zone, with the name it had in the applied revision when the draft renamed it (as uncoveredOf). */
+export function uncoveredSeriesOf(series: UncoveredSeries, name: string, previousName?: string): number[] {
+  const pick = (n: string) => series.byZone.get(n.toLowerCase())
+  const rows = [pick(name), previousName && previousName.toLowerCase() !== name.toLowerCase() ? pick(previousName) : undefined]
+  return Array.from({ length: series.size }, (_, i) => rows.reduce((sum, row) => sum + (row?.[i] ?? 0), 0))
+}
+
+export function useZoneUncovered(connId: string | null): { byZone: Map<string, number> | null; series: UncoveredSeries | null; failed: boolean } {
   const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
   const key = connId ? [`${microsegBaseUrl(connId)}/traffic`, 'zone-uncovered-24h'] : null
   // A held answer serves a new reader (the Observation banner after the Policy table) until the next refresh.
@@ -50,7 +80,8 @@ export function useZoneUncovered(connId: string | null): { byZone: Map<string, n
     { refreshInterval: UNCOVERED_REFRESH_MS, refreshWhenHidden: false, revalidateOnFocus: false, revalidateOnMount: !held, shouldRetryOnError: false },
   )
   const byZone = useMemo(() => (data ? uncoveredByZone(data) : null), [data])
-  return { byZone, failed: !!error && !data }
+  const series = useMemo(() => (data ? uncoveredSeriesByZone(data) : null), [data])
+  return { byZone, series, failed: !!error && !data }
 }
 
 /**

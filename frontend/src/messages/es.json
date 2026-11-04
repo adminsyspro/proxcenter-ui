@@ -12863,7 +12863,16 @@
         "detailsOf": "Detalles de {zone}",
         "moreFlows": "{count, plural, one {+# flujo más} other {+# flujos más}}",
         "showDetailsOf": "Mostrar los detalles de {zone}",
-        "hideDetailsOf": "Ocultar los detalles de {zone}"
+        "hideDetailsOf": "Ocultar los detalles de {zone}",
+        "sparkline": {
+          "title": "Tráfico no cubierto · 24 h",
+          "wouldBlock": "{count, plural, one {# impacto se bloquearía} other {# impactos se bloquearían}}",
+          "blocked": "{count, plural, one {# impacto bloqueado} other {# impactos bloqueados}}",
+          "loading": "Leyendo el historial...",
+          "disabled": "Zona desactivada: su tráfico no se registra",
+          "aria": "{count, plural, one {Tráfico no cubierto en las últimas 24 horas: # impacto} other {Tráfico no cubierto en las últimas 24 horas: # impactos}}",
+          "bar": "{from} a {to}: {count, plural, one {# impacto} other {# impactos}}"
+        }
       },
       "flow": {
         "notApplied": "No aplicado (salida no gestionada en v1)",

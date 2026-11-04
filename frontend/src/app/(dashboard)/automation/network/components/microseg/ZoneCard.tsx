@@ -13,6 +13,7 @@ import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import { endText } from './policyTableModel'
 import { flowsOfZone, type ZoneMember } from './zoneModel'
 import { HOVER_ACTIONS, ZoneDetails, ZoneGlyph, ZoneStateMenu, type ZoneRowProps } from './ZoneRow'
+import ZoneSparkline from './ZoneSparkline'
 import ZoneStateChip from './ZoneStateChip'
 import TruncatedText from './TruncatedText'
 
@@ -25,6 +26,11 @@ export type ZoneCardProps = ZoneRowProps & {
   onOpenDrifts?: (zone: MicrosegZone) => void
   /** Measures the card (the first of the page gives the new-zone card its height). */
   boxRef?: (el: HTMLElement | null) => void
+  /**
+   * The zone's uncovered traffic of the last 24 hours, one count per hour: `series` null while the history is read.
+   * The whole value is null when the history cannot be read (an older orchestrator): no sparkline then.
+   */
+  uncovered?: { series: number[] | null; from: number; stepMs: number } | null
 }
 
 export const detailsId = (zoneId: string) => `zone-details-${zoneId}`
@@ -99,7 +105,7 @@ function FlowPreview({ zone, flows, zonesById }: { zone: MicrosegZone; flows: Mi
  * and the flows opened full width below the row of cards) and the actions, shown on hover or focus (always on touch).
  */
 export default function ZoneCard(props: ZoneCardProps) {
-  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onAssign, onAddFlow, drifts, onOpenDrifts, boxRef } = props
+  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onAssign, onAddFlow, drifts, onOpenDrifts, boxRef, uncovered } = props
   const t = useTranslations('microsegPilot.policy.zone')
   const ts = useTranslations('microsegPilot.overview.sections')
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
@@ -139,6 +145,7 @@ export default function ZoneCard(props: ZoneCardProps) {
           <Stat name='incoming' value={incoming.length} label={t('statIncoming')} />
           <Stat name='outgoing' value={outgoing.length} label={t('statOutgoing')} />
         </Box>
+        {uncovered && <ZoneSparkline state={zone.state} series={uncovered.series} from={uncovered.from} stepMs={uncovered.stepMs} />}
         <MemberPreview members={members} known={membersKnown} />
         <FlowPreview zone={zone} flows={flows} zonesById={zonesById} />
       </Box>

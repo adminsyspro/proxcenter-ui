@@ -12863,7 +12863,16 @@
         "detailsOf": "Details of {zone}",
         "moreFlows": "{count, plural, one {+# more flow} other {+# more flows}}",
         "showDetailsOf": "Show details of {zone}",
-        "hideDetailsOf": "Hide details of {zone}"
+        "hideDetailsOf": "Hide details of {zone}",
+        "sparkline": {
+          "title": "Uncovered traffic · 24 h",
+          "wouldBlock": "{count, plural, one {# hit would be blocked} other {# hits would be blocked}}",
+          "blocked": "{count, plural, one {# hit blocked} other {# hits blocked}}",
+          "loading": "Reading the history...",
+          "disabled": "Zone disabled: its traffic is not logged",
+          "aria": "{count, plural, one {Uncovered traffic over the last 24 hours: # hit} other {Uncovered traffic over the last 24 hours: # hits}}",
+          "bar": "{from} to {to}: {count, plural, one {# hit} other {# hits}}"
+        }
       },
       "flow": {
         "notApplied": "Not applied (egress not managed in v1)",

@@ -16,6 +16,7 @@ import ZoneCard, { NewZoneCard, RemovedZoneCard, ZoneCardDetails, type ZoneCardP
 import type { ZoneRowProps } from './ZoneRow'
 import { zoneDriftSignals } from './zonePanelModel'
 import { zoneMembers, type PolicyGuest, type ZoneMember } from './zoneModel'
+import { uncoveredSeriesOf, type UncoveredSeries } from './useZoneUncovered'
 import { MicrosegActionsSlot, SlotActions, WriteTip, useMicrosegWrite } from './microsegAccess'
 
 type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onAssign' | 'onRemoveMember' | 'removeBusy' | 'onAddFlow' | 'onEditFlow' | 'onDeleteFlow'>
@@ -30,6 +31,8 @@ type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onAssign
   /** What the draft changes over the applied revision; null while the revision is read. */
   diff: PolicyDiff | null
   onAdd: () => void
+  /** The uncovered traffic of the last 24 hours per zone (one read for the tab): null while read, 'failed' when it cannot be. */
+  uncovered?: UncoveredSeries | null | 'failed'
 }
 
 /** The zones opened under their chevron, remembered per connection in this browser. */
@@ -92,7 +95,7 @@ export function cardColumns(width: number | undefined): number {
  * (struck through until the next apply), ten per page, "+ New zone" as a dashed card at the end. An opened card shows
  * its members and flows full width below its row. The drifts are read once (the engine's last full run, no Proxmox call).
  */
-export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests, guestsStatus, pendingMembers, diff, onAdd, onOpenDrifts, ...handlers }: Props) {
+export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests, guestsStatus, pendingMembers, diff, onAdd, onOpenDrifts, uncovered = 'failed', ...handlers }: Props) {
   const t = useTranslations('microsegPilot.policy')
   const inSlot = useContext(MicrosegActionsSlot) !== null
   const { canWrite } = useMicrosegWrite()
@@ -135,6 +138,11 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
         drifts={signals?.count ?? null}
         boxRef={item === first ? firstCardRef : undefined}
         onOpenDrifts={onOpenDrifts}
+        uncovered={uncovered === 'failed' ? null : {
+          series: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id)) : null,
+          from: uncovered?.from ?? 0,
+          stepMs: uncovered?.stepMs ?? 3_600_000,
+        }}
         {...handlers}
       />
     )

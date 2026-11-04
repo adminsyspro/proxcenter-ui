@@ -12531,7 +12531,16 @@
         "detailsOf": "Einzelheiten zu {zone}",
         "moreFlows": "{count, plural, one {+# weiterer Fluss} other {+# weitere Flüsse}}",
         "showDetailsOf": "Einzelheiten zu {zone} anzeigen",
-        "hideDetailsOf": "Einzelheiten zu {zone} ausblenden"
+        "hideDetailsOf": "Einzelheiten zu {zone} ausblenden",
+        "sparkline": {
+          "title": "Nicht abgedeckter Verkehr · 24 h",
+          "wouldBlock": "{count, plural, one {# Treffer würde blockiert} other {# Treffer würden blockiert}}",
+          "blocked": "{count, plural, one {# Treffer blockiert} other {# Treffer blockiert}}",
+          "loading": "Verlauf wird gelesen...",
+          "disabled": "Zone deaktiviert: ihr Verkehr wird nicht protokolliert",
+          "aria": "{count, plural, one {Nicht abgedeckter Verkehr der letzten 24 Stunden: # Treffer} other {Nicht abgedeckter Verkehr der letzten 24 Stunden: # Treffer}}",
+          "bar": "{from} bis {to}: {count, plural, one {# Treffer} other {# Treffer}}"
+        }
       },
       "flow": {
         "notApplied": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",

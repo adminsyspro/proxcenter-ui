@@ -61,3 +61,18 @@ describe('removed zone card', () => {
     expect(within(card).queryByRole('button')).toBeNull()
   })
 })
+
+describe('zone card traffic sparkline', () => {
+  it('shows the uncovered traffic of the last 24 hours when the history is read', () => {
+    const series = new Array<number>(24).fill(0)
+    series[23] = 3
+    renderWithProviders(<ZoneCard {...props()} uncovered={{ series, from: Date.parse('2026-11-04T00:00:00Z'), stepMs: 3_600_000 }} />)
+    const card = screen.getByRole('listitem', { name: 'web' })
+    expect(within(card).getByTestId('zone-sparkline-total').textContent).toBe('3 hits would be blocked')
+  })
+
+  it('has no sparkline when the history cannot be read', () => {
+    renderWithProviders(<ZoneCard {...props()} uncovered={null} />)
+    expect(screen.queryByTestId('zone-sparkline-total')).toBeNull()
+  })
+})

@@ -12863,7 +12863,16 @@
         "detailsOf": "{zone} 的详情",
         "moreFlows": "{count, plural, other {另有 # 条流量规则}}",
         "showDetailsOf": "显示 {zone} 的详情",
-        "hideDetailsOf": "隐藏 {zone} 的详情"
+        "hideDetailsOf": "隐藏 {zone} 的详情",
+        "sparkline": {
+          "title": "未覆盖流量 · 24 小时",
+          "wouldBlock": "{count} 次命中将被阻止",
+          "blocked": "{count} 次命中已阻止",
+          "loading": "正在读取历史记录...",
+          "disabled": "区域已禁用：其流量未被记录",
+          "aria": "最近 24 小时的未覆盖流量：{count} 次命中",
+          "bar": "{from} 至 {to}：{count} 次命中"
+        }
       },
       "flow": {
         "notApplied": "未应用（v1 不管理出站）",

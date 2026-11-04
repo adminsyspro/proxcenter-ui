@@ -12863,7 +12863,16 @@
         "detailsOf": "{zone} 세부 정보",
         "moreFlows": "{count, plural, other {플로우 #개 더}}",
         "showDetailsOf": "{zone} 세부 정보 표시",
-        "hideDetailsOf": "{zone} 세부 정보 숨기기"
+        "hideDetailsOf": "{zone} 세부 정보 숨기기",
+        "sparkline": {
+          "title": "미적용 트래픽 · 24시간",
+          "wouldBlock": "차단될 히트 {count}개",
+          "blocked": "차단된 히트 {count}개",
+          "loading": "기록을 읽는 중...",
+          "disabled": "영역 비활성화됨: 트래픽이 기록되지 않음",
+          "aria": "최근 24시간 미적용 트래픽: 히트 {count}개",
+          "bar": "{from}~{to}: 히트 {count}개"
+        }
       },
       "flow": {
         "notApplied": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",

@@ -177,6 +177,16 @@ describe('observation list', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
+  it('puts the three filters on the row of the sub-tabs, before Check now', async () => {
+    setup([sug('s1')])
+    await row('web to db')
+    const slot = await screen.findByTestId('microseg-actions-slot')
+    const filters = within(slot).getByTestId('observation-filters')
+    for (const name of ['Type', 'Status', 'Zone']) expect(within(filters).getByRole('combobox', { name })).toBeTruthy()
+    const check = screen.getByRole('button', { name: /Check now/ })
+    expect(filters.compareDocumentPosition(check) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('says there is nothing to show', async () => {
     setup([])
     expect(await screen.findByText('No observed flow matches these filters.')).toBeTruthy()

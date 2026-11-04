@@ -13608,9 +13608,35 @@
         "calls": "{count, plural, one {# API call} other {# API calls}}",
         "writes": "{count, plural, one {# write} other {# writes}}",
         "detail": {
-          "stats": "{guests, plural, one {# guest} other {# guests}}, {members, plural, one {# member} other {# members}}, {steps, plural, one {# step} other {# steps}}",
           "removeComplete": "Removal complete.",
-          "removeIncomplete": "Removal incomplete: run it again."
+          "removeIncomplete": "Removal incomplete: run it again.",
+          "scope": {
+            "light": "Reads the cluster IP sets, security groups and firewall options",
+            "ips": "Reads the IP addresses of the zone members",
+            "full": "Reads the firewall of every guest and lists the drifts",
+            "log": "Reads the node firewall logs since the previous read",
+            "targeted": "Reads the guests whose zone or tags changed"
+          },
+          "rows": {
+            "events": "Log lines read",
+            "suggestions": "Uncovered flows aggregated",
+            "droppedForeignDst": "Events left out (flooded bridge)",
+            "logTruncated": "Logs cut at the read limit",
+            "members": "Zone members",
+            "withIps": "Members with an IP",
+            "withoutIp": "Members without an IP",
+            "guests": "Guests read",
+            "drifts": "Drifts found",
+            "unread": "Guests not read",
+            "ambiguous": "Guests in several zones",
+            "steps": "Corrections",
+            "trigger": "Started by"
+          },
+          "triggerCheck": "Check now",
+          "triggerSchedule": "Schedule",
+          "failed": "The run failed.",
+          "failedWith": "The run failed: {error}",
+          "errors": "Errors: {list}"
         }
       },
       "table": {

@@ -13608,9 +13608,35 @@
         "calls": "API 호출 {count}회",
         "writes": "쓰기 {count}회",
         "detail": {
-          "stats": "게스트 {guests}개, 멤버 {members}개, 단계 {steps}개",
           "removeComplete": "제거가 완료되었습니다.",
-          "removeIncomplete": "제거가 완료되지 않았습니다. 다시 실행하세요."
+          "removeIncomplete": "제거가 완료되지 않았습니다. 다시 실행하세요.",
+          "scope": {
+            "light": "클러스터 IP 세트, 보안 그룹 및 방화벽 옵션을 읽습니다",
+            "ips": "영역 멤버의 IP 주소를 읽습니다",
+            "full": "모든 게스트의 방화벽을 읽고 드리프트를 나열합니다",
+            "log": "이전 읽기 이후 노드 방화벽 로그를 읽습니다",
+            "targeted": "영역 또는 태그가 변경된 게스트를 읽습니다"
+          },
+          "rows": {
+            "events": "읽은 로그 줄",
+            "suggestions": "집계된 미적용 흐름",
+            "droppedForeignDst": "제외된 이벤트(플러딩된 브리지)",
+            "logTruncated": "읽기 한도에서 잘린 로그",
+            "members": "영역 멤버",
+            "withIps": "IP가 있는 멤버",
+            "withoutIp": "IP가 없는 멤버",
+            "guests": "읽은 게스트",
+            "drifts": "발견된 드리프트",
+            "unread": "읽지 못한 게스트",
+            "ambiguous": "여러 영역에 속한 게스트",
+            "steps": "수정",
+            "trigger": "시작 주체"
+          },
+          "triggerCheck": "지금 확인",
+          "triggerSchedule": "일정",
+          "failed": "실행이 실패했습니다.",
+          "failedWith": "실행이 실패했습니다: {error}",
+          "errors": "오류: {list}"
         }
       },
       "table": {

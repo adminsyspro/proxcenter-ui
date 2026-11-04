@@ -50,6 +50,9 @@ function setup(opts: { revisions?: MicrosegRevision[]; runs?: MicrosegRun[] } = 
 }
 
 const rowOf = (name: string | RegExp) => screen.findByRole('row', { name })
+/** The label and value of each figure line of the run drawer. */
+const lineValues = (drawer: HTMLElement) =>
+  within(drawer).queryAllByTestId('run-detail-line').map(l => [...l.children].map(c => c.textContent))
 const dataRows = () => screen.queryAllByRole('row').filter(r => r.hasAttribute('data-row'))
 
 describe('the history table', () => {
@@ -238,7 +241,8 @@ describe('runs', () => {
 
     fireEvent.click(within(line).getByRole('button', { name: 'Details' }))
     const drawer = await screen.findByRole('region', { name: 'Details of the run: Apply' })
-    expect(await within(drawer).findByText('3 guests, 2 members, 5 steps')).toBeTruthy()
+    expect(await within(drawer).findByText('Guests read')).toBeTruthy()
+    expect(lineValues(drawer)).toEqual([['Guests read', '3'], ['Zone members', '2'], ['Corrections', '5']])
     expect(within(drawer).getByText('1 done, 1 failed, 0 not run')).toBeTruthy()
     expect(calls('GET /runs/run-1')).toHaveLength(1)
   })
@@ -253,6 +257,45 @@ describe('runs', () => {
     const drawer = await screen.findByRole('region', { name: 'Details of the run: Removal' })
     expect(await within(drawer).findByText('Removal complete.')).toBeTruthy()
     expect(within(drawer).getByText(/the zone tags of the guests are kept/)).toBeTruthy()
+  })
+
+  it('tells what a log read counted, not the guests of an apply', async () => {
+    mock.routes['GET /runs/run-1'] = () => reply(200, runOf(1, {
+      kind: 'log', writes: 0, result: { guests: 0, members: 0, steps: 0, drifts: 0, events: 423, suggestions: 14, dropped_foreign_dst: 3, log_truncated: ['pve2'] },
+    }))
+    setup({ runs: [runOf(1, { kind: 'log', writes: 0 })] })
+    fireEvent.click(within(await rowOf(/^Log read, started/)).getByRole('button', { name: 'Details' }))
+    const drawer = await screen.findByRole('region', { name: 'Details of the run: Log read' })
+    expect(await within(drawer).findByText('Reads the node firewall logs since the previous read')).toBeTruthy()
+    expect(lineValues(drawer)).toEqual([
+      ['Log lines read', '423'], ['Uncovered flows aggregated', '14'], ['Events left out (flooded bridge)', '3'], ['Logs cut at the read limit', 'pve2'],
+    ])
+    expect(within(drawer).queryByText(/done, .* failed/)).toBeNull()
+  })
+
+  it('tells who started a full check, its drifts and the guests it could not read', async () => {
+    mock.routes['GET /runs/run-1'] = () => reply(200, runOf(1, {
+      kind: 'full', result: { guests: 33, members: 33, steps: 0, drifts: 12, trigger: 'check', unread: [{ node: 'pve1', type: 'lxc', vmid: 98001 }] },
+    }))
+    setup({ runs: [runOf(1, { kind: 'full' })] })
+    fireEvent.click(within(await rowOf(/^Full check, started/)).getByRole('button', { name: 'Details' }))
+    const drawer = await screen.findByRole('region', { name: 'Details of the run: Full check' })
+    await within(drawer).findByText('Started by')
+    expect(lineValues(drawer)).toEqual([
+      ['Started by', 'Check now'], ['Guests read', '33'], ['Zone members', '33'], ['Drifts found', '12'], ['Guests not read', '1'], ['Corrections', '0'],
+    ])
+  })
+
+  it('shows the error of a failed engine run and its read errors', async () => {
+    mock.routes['GET /runs/run-1'] = () => reply(200, runOf(1, {
+      kind: 'ips', status: 'failed', error: 'cluster read failed', result: { guests: 0, members: 4, steps: 0, drifts: 0, with_ips: 3, errors: ['node pve3: timeout'] },
+    }))
+    setup({ runs: [runOf(1, { kind: 'ips', status: 'failed', error: 'cluster read failed' })] })
+    fireEvent.click(within(await rowOf(/^IP read, started/)).getByRole('button', { name: 'Details' }))
+    const drawer = await screen.findByRole('region', { name: 'Details of the run: IP read' })
+    expect(await within(drawer).findByText('The run failed: cluster read failed')).toBeTruthy()
+    expect(within(drawer).getByText('Errors: node pve3: timeout')).toBeTruthy()
+    expect(lineValues(drawer)).toEqual([['Zone members', '4'], ['Members with an IP', '3'], ['Members without an IP', '1']])
   })
 
   it('shows the error when the result cannot be loaded', async () => {

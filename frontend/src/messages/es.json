@@ -13608,9 +13608,35 @@
         "calls": "{count, plural, one {# llamada API} other {# llamadas API}}",
         "writes": "{count, plural, one {# escritura} other {# escrituras}}",
         "detail": {
-          "stats": "{guests, plural, one {# invitado} other {# invitados}}, {members, plural, one {# miembro} other {# miembros}}, {steps, plural, one {# paso} other {# pasos}}",
           "removeComplete": "Retirada completa.",
-          "removeIncomplete": "Retirada incompleta: vuelva a ejecutarla."
+          "removeIncomplete": "Retirada incompleta: vuelva a ejecutarla.",
+          "scope": {
+            "light": "Lee los IP sets, grupos de seguridad y opciones del cortafuegos del clúster",
+            "ips": "Lee las direcciones IP de los miembros de las zonas",
+            "full": "Lee el cortafuegos de cada invitado y lista las desviaciones",
+            "log": "Lee los registros del cortafuegos de los nodos desde la lectura anterior",
+            "targeted": "Lee los invitados cuya zona o etiquetas cambiaron"
+          },
+          "rows": {
+            "events": "Líneas de registro leídas",
+            "suggestions": "Flujos no cubiertos agregados",
+            "droppedForeignDst": "Eventos descartados (bridge inundado)",
+            "logTruncated": "Registros cortados en el límite de lectura",
+            "members": "Miembros de las zonas",
+            "withIps": "Miembros con IP",
+            "withoutIp": "Miembros sin IP",
+            "guests": "Invitados leídos",
+            "drifts": "Desviaciones encontradas",
+            "unread": "Invitados no leídos",
+            "ambiguous": "Invitados en varias zonas",
+            "steps": "Correcciones",
+            "trigger": "Iniciado por"
+          },
+          "triggerCheck": "Comprobar ahora",
+          "triggerSchedule": "Planificación",
+          "failed": "La ejecución falló.",
+          "failedWith": "La ejecución falló: {error}",
+          "errors": "Errores: {list}"
         }
       },
       "table": {

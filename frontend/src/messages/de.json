@@ -13276,9 +13276,35 @@
         "calls": "{count, plural, one {# API-Aufruf} other {# API-Aufrufe}}",
         "writes": "{count, plural, one {# Schreibvorgang} other {# Schreibvorgänge}}",
         "detail": {
-          "stats": "{guests, plural, one {# Gast} other {# Gäste}}, {members, plural, one {# Mitglied} other {# Mitglieder}}, {steps, plural, one {# Schritt} other {# Schritte}}",
           "removeComplete": "Entfernung abgeschlossen.",
-          "removeIncomplete": "Entfernung unvollständig: erneut ausführen."
+          "removeIncomplete": "Entfernung unvollständig: erneut ausführen.",
+          "scope": {
+            "light": "Liest die IP-Sets, Sicherheitsgruppen und Firewall-Optionen des Clusters",
+            "ips": "Liest die IP-Adressen der Zonenmitglieder",
+            "full": "Liest die Firewall jedes Gasts und listet die Abweichungen",
+            "log": "Liest die Firewall-Protokolle der Knoten seit dem letzten Lesen",
+            "targeted": "Liest die Gäste, deren Zone oder Tags sich geändert haben"
+          },
+          "rows": {
+            "events": "Gelesene Protokollzeilen",
+            "suggestions": "Zusammengefasste nicht abgedeckte Flüsse",
+            "droppedForeignDst": "Ausgelassene Ereignisse (gefluteter Bridge)",
+            "logTruncated": "An der Lesegrenze abgeschnittene Protokolle",
+            "members": "Zonenmitglieder",
+            "withIps": "Mitglieder mit IP",
+            "withoutIp": "Mitglieder ohne IP",
+            "guests": "Gelesene Gäste",
+            "drifts": "Gefundene Abweichungen",
+            "unread": "Nicht gelesene Gäste",
+            "ambiguous": "Gäste in mehreren Zonen",
+            "steps": "Korrekturen",
+            "trigger": "Gestartet durch"
+          },
+          "triggerCheck": "Jetzt prüfen",
+          "triggerSchedule": "Zeitplan",
+          "failed": "Der Lauf ist fehlgeschlagen.",
+          "failedWith": "Der Lauf ist fehlgeschlagen: {error}",
+          "errors": "Fehler: {list}"
         }
       },
       "table": {

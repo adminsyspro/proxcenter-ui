@@ -13609,9 +13609,35 @@
         "calls": "{count, plural, one {# appel API} other {# appels API}}",
         "writes": "{count, plural, one {# écriture} other {# écritures}}",
         "detail": {
-          "stats": "{guests, plural, one {# invité} other {# invités}}, {members, plural, one {# membre} other {# membres}}, {steps, plural, one {# étape} other {# étapes}}",
           "removeComplete": "Retrait terminé.",
-          "removeIncomplete": "Retrait incomplet : relancez-le."
+          "removeIncomplete": "Retrait incomplet : relancez-le.",
+          "scope": {
+            "light": "Lit les IP sets, groupes de sécurité et options du pare-feu du cluster",
+            "ips": "Lit les adresses IP des membres des zones",
+            "full": "Lit le pare-feu de chaque invité et liste les écarts",
+            "log": "Lit les journaux du pare-feu des nœuds depuis la lecture précédente",
+            "targeted": "Lit les invités dont la zone ou les tags ont changé"
+          },
+          "rows": {
+            "events": "Lignes de journal lues",
+            "suggestions": "Flux non couverts agrégés",
+            "droppedForeignDst": "Événements écartés (bridge inondé)",
+            "logTruncated": "Journaux coupés à la limite de lecture",
+            "members": "Membres des zones",
+            "withIps": "Membres avec une IP",
+            "withoutIp": "Membres sans IP",
+            "guests": "Invités lus",
+            "drifts": "Écarts trouvés",
+            "unread": "Invités non lus",
+            "ambiguous": "Invités dans plusieurs zones",
+            "steps": "Correctifs",
+            "trigger": "Lancé par"
+          },
+          "triggerCheck": "Vérifier maintenant",
+          "triggerSchedule": "Planification",
+          "failed": "L'exécution a échoué.",
+          "failedWith": "L'exécution a échoué : {error}",
+          "errors": "Erreurs : {list}"
         }
       },
       "table": {

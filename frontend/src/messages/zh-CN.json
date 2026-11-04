@@ -13608,9 +13608,35 @@
         "calls": "{count} 次 API 调用",
         "writes": "{count} 次写入",
         "detail": {
-          "stats": "{guests} 台客户机，{members} 个成员，{steps} 个步骤",
           "removeComplete": "移除完成。",
-          "removeIncomplete": "移除未完成：请重新运行。"
+          "removeIncomplete": "移除未完成：请重新运行。",
+          "scope": {
+            "light": "读取集群的 IP 集、安全组和防火墙选项",
+            "ips": "读取区域成员的 IP 地址",
+            "full": "读取每台客户机的防火墙并列出偏差",
+            "log": "读取自上次读取以来的节点防火墙日志",
+            "targeted": "读取区域或标签已更改的客户机"
+          },
+          "rows": {
+            "events": "已读取的日志行",
+            "suggestions": "已聚合的未覆盖流量",
+            "droppedForeignDst": "已忽略的事件（泛洪网桥）",
+            "logTruncated": "在读取上限处截断的日志",
+            "members": "区域成员",
+            "withIps": "有 IP 的成员",
+            "withoutIp": "无 IP 的成员",
+            "guests": "已读取的客户机",
+            "drifts": "发现的偏差",
+            "unread": "未读取的客户机",
+            "ambiguous": "属于多个区域的客户机",
+            "steps": "修正",
+            "trigger": "启动方式"
+          },
+          "triggerCheck": "立即检查",
+          "triggerSchedule": "计划",
+          "failed": "运行失败。",
+          "failedWith": "运行失败：{error}",
+          "errors": "错误：{list}"
         }
       },
       "table": {

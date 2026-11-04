@@ -18,6 +18,15 @@ describe('waitForTask', () => {
     expect(pveFetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('polls the node named in the UPID, which runs the task (#1293)', async () => {
+    // A clone with `target` runs on the source node and only moves the guest
+    // at the end: the target node answers 400 "no such task" for this UPID.
+    pveFetchMock.mockResolvedValue(stopped('OK'))
+    const upid = 'UPID:pve1:000BF9C8:005C7EA2:6AEB315D:qmclone:99293:root@pam!root:'
+    await waitForTask(conn, 'pve2', upid)
+    expect(pveFetchMock).toHaveBeenCalledWith(conn, `/nodes/pve1/tasks/${encodeURIComponent(upid)}/status`)
+  })
+
   it('treats WARNINGS as a failure by default', async () => {
     pveFetchMock.mockResolvedValue(stopped('WARNINGS: 1'))
     await expect(waitForTask(conn, 'pve1', 'UPID:x')).rejects.toThrow('PVE task failed: WARNINGS: 1')

@@ -64,6 +64,8 @@ vi.mock('@/lib/vdc/ipamSync', () => ({ syncIpamForVmConfig: syncIpamForVmConfigM
 vi.mock('@/lib/vdc/ipam', () => ({ releaseAllocationsForVm: vi.fn() }))
 vi.mock('@/lib/proxmox/tasks', () => ({ waitForTask: waitForTaskMock }))
 vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
+const { restampGuestDrivesMock } = vi.hoisted(() => ({ restampGuestDrivesMock: vi.fn(async () => ({ stamped: [] })) }))
+vi.mock('@/lib/vdc/driveGuard', () => ({ restampGuestDrives: restampGuestDrivesMock }))
 const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/tenant/infraScope', () => ({
   getTenantInfrastructureScope: (...a: any[]) => getTenantInfrastructureScopeMock(...a),
@@ -118,6 +120,35 @@ describe('POST clone — MSP VMID range enforcement', () => {
       (c) => String(c[1]).endsWith('/clone') && c[2]?.method === 'POST',
     )
     expect(cloneCall).toBeUndefined()
+  })
+})
+
+describe('POST clone: vDC quota metering (#1293)', () => {
+  it('meters the source RAM as a number although PVE sends `memory` as a string', async () => {
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'vdc-pool', quota: { maxRamMb: 65536 }, storagePolicies: [] })
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:pve3:1:clone'
+      if (path === '/nodes/pve3/qemu/100/config') return { memory: '2048', cores: 2, template: 1 }
+      return {}
+    })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 101 } })
+    expect(res.status).toBe(200)
+    const op = checkVdcQuotaMock.mock.calls[0][3]
+    expect(op.addRamMb).toBe(2048)
+    expect(op.addVcpus).toBe(2)
+  })
+
+  it('reads a `current=` memory property string', async () => {
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'vdc-pool', quota: { maxRamMb: 65536 }, storagePolicies: [] })
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:pve3:1:clone'
+      if (path === '/nodes/pve3/qemu/100/config') return { memory: 'current=4096', template: 1 }
+      return {}
+    })
+    const POST = await loadPost()
+    await callRoute(POST, { params: baseParams, body: { newid: 101 } })
+    expect(checkVdcQuotaMock.mock.calls[0][3].addRamMb).toBe(4096)
   })
 })
 
@@ -209,6 +240,26 @@ describe('POST clone — IPAM-managed source', () => {
 
     // IPAM allocation is then reconciled against the fresh config.
     expect(syncIpamForVmConfigMock).toHaveBeenCalled()
+  })
+
+  it('waits on the source node and rewrites the clone on the target node (#1293)', async () => {
+    pveFetchMock.mockImplementation(async (_conn, _path, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'PUT') return null
+      return { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA' }
+    })
+    resolveSubnetForBridgeMock.mockImplementation(async (_id, bridge) =>
+      bridge === 'tenantA' ? { subnetId: 's1' } : null,
+    )
+
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 101, full: true, target: 'pve2' } })
+    expect(res.status).toBe(200)
+    for (const cb of h.afterCbs) await cb()
+
+    expect(waitForTaskMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve3', 'UPID:clone:1')
+    const putCall = pveFetchMock.mock.calls.find((c) => c[2]?.method === 'PUT')
+    expect(putCall?.[1]).toBe('/nodes/pve2/qemu/101/config')
   })
 
   it('does not touch MACs when no NIC is on a managed VNet', async () => {
@@ -361,7 +412,8 @@ describe('POST clone — high availability on the clone (#181)', () => {
 
     await runAfterCbs()
 
-    expect(waitForTaskMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve2', 'UPID:clone:1', { acceptWarnings: true })
+    // The clone task runs on the source node (pve3), not on the target (#1293).
+    expect(waitForTaskMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve3', 'UPID:clone:1', { acceptWarnings: true })
     expect(haCalls()).toHaveLength(1)
     expect(Object.fromEntries(new URLSearchParams(haCalls()[0][2].body))).toEqual({ sid: 'vm:150', state: 'started' })
   })
@@ -422,3 +474,20 @@ describe('POST clone — high availability on the clone (#181)', () => {
     expect(checkPermissionMock).not.toHaveBeenCalledWith('node.manage', 'connection', 'conn-1')
   })
 })
+
+describe('POST clone: storage-tier QoS restamp on another node (#1293)', () => {
+  it('waits on the source node and restamps the clone on the target node', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({
+      kind: 'iaas',
+      vdcScope: { storagePoliciesByConnection: new Map([['conn-1', new Map([['ceph', { iops_rd: 100 }]])]]) },
+    })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 150, full: true, target: 'pve2' } })
+    expect(res.status).toBe(200)
+    await runAfterCbs()
+
+    expect(waitForTaskMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve3', 'UPID:clone:1')
+    expect(restampGuestDrivesMock).toHaveBeenCalledWith(expect.objectContaining({ configPath: '/nodes/pve2/qemu/150/config' }))
+  })
+})
+

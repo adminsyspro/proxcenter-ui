@@ -13266,7 +13266,8 @@
         "colGuest": "到达的客户机",
         "colNode": "节点",
         "guest": "{name}（{vmid}）· IP {ip}"
-      }
+      },
+      "actionTip": "{action}：{tip}"
     },
     "overview": {
       "empty": "还没有可绘制的区域。",

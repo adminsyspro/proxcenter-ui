@@ -13267,7 +13267,8 @@
         "colGuest": "Invité atteint",
         "colNode": "Nœud",
         "guest": "{name} ({vmid}) · IP {ip}"
-      }
+      },
+      "actionTip": "{action} : {tip}"
     },
     "overview": {
       "empty": "Aucune zone à dessiner pour l'instant.",

@@ -12934,7 +12934,8 @@
         "colGuest": "Erreichter Gast",
         "colNode": "Knoten",
         "guest": "{name} ({vmid}) · IP {ip}"
-      }
+      },
+      "actionTip": "{action} – {tip}"
     },
     "overview": {
       "empty": "Noch keine Zone zum Zeichnen.",

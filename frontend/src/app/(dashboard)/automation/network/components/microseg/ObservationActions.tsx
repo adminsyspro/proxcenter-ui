@@ -19,34 +19,51 @@ type FlowActionsProps = {
   destination: string
   busy: boolean
   onResolve: (action: SuggestionAction) => void
+  /** Coloured icons for the rows of the table (the default), labelled buttons where there is room (the flow dialog). */
+  variant?: 'icons' | 'buttons'
 }
 
+/** The three ways out, their icon and colour (Accept green, As CIDR blue, Dismiss red). */
+const FLOW_ACTIONS = [
+  { action: 'accept', icon: 'ri-checkbox-circle-line', color: 'success' },
+  { action: 'accept_cidr', icon: 'ri-global-line', color: 'info' },
+  { action: 'dismiss', icon: 'ri-close-circle-line', color: 'error' },
+] as const
+
 /**
- * The three ways out of an observed flow of the table, as labelled buttons whose tooltip says what each does: Accept
- * (a flow between the zones in the draft), As CIDR (the same with the source as an address range) and Dismiss.
+ * The three ways out of an observed flow, whose tooltip says what each does: Accept (a flow between the zones in the
+ * draft), As CIDR (the same with the source as an address range) and Dismiss. In the rows they are coloured icons
+ * named by the action; in the dialog, labelled buttons.
  */
-export function FlowActions({ suggestion: s, source, destination, busy, onResolve }: FlowActionsProps) {
+export function FlowActions({ suggestion: s, source, destination, busy, onResolve, variant = 'icons' }: FlowActionsProps) {
   const t = useTranslations('microsegPilot.observation')
   const { canWrite } = useMicrosegWrite()
   const service = serviceTitle(s.proto, s.dport)
+  const spec = {
+    accept: { label: t('accept'), tip: s.src_zone_id ? t('acceptTip', { from: source, to: destination, service }) : t('acceptUnknownSource'), off: !s.src_zone_id },
+    accept_cidr: { label: t('asCidr'), tip: s.src_ip ? t('cidrTip', { ip: s.src_ip }) : t('acceptCidrNoIp'), off: !s.src_ip },
+    dismiss: { label: t('dismiss'), tip: t('dismissTip'), off: false },
+  }
 
   return (
-    <Box sx={{ display: 'inline-flex', gap: 0.5 }}>
-      <WriteTip title={s.src_zone_id ? t('acceptTip', { from: source, to: destination, service }) : t('acceptUnknownSource')}>
-        <Button size='small' variant='outlined' disabled={!canWrite || busy || !s.src_zone_id} onClick={() => onResolve('accept')} sx={ACTION_SX}>
-          {t('accept')}
-        </Button>
-      </WriteTip>
-      <WriteTip title={s.src_ip ? t('cidrTip', { ip: s.src_ip }) : t('acceptCidrNoIp')}>
-        <Button size='small' variant='outlined' disabled={!canWrite || busy || !s.src_ip} onClick={() => onResolve('accept_cidr')} sx={ACTION_SX}>
-          {t('asCidr')}
-        </Button>
-      </WriteTip>
-      <WriteTip title={t('dismissTip')}>
-        <Button size='small' variant='outlined' color='inherit' disabled={!canWrite || busy} onClick={() => onResolve('dismiss')} sx={ACTION_SX}>
-          {t('dismiss')}
-        </Button>
-      </WriteTip>
+    <Box sx={{ display: 'inline-flex', gap: variant === 'icons' ? 0 : 0.5 }}>
+      {FLOW_ACTIONS.map(({ action, icon, color }) => {
+        const { label, tip, off } = spec[action]
+        const disabled = !canWrite || busy || off
+        return (
+          <WriteTip key={action} title={variant === 'icons' ? t('actionTip', { action: label, tip }) : tip}>
+            {variant === 'icons' ? (
+              <IconButton size='small' color={color} aria-label={label} disabled={disabled} onClick={() => onResolve(action)}>
+                <i className={icon} />
+              </IconButton>
+            ) : (
+              <Button size='small' variant='outlined' color={action === 'dismiss' ? 'inherit' : 'primary'} disabled={disabled} onClick={() => onResolve(action)} sx={ACTION_SX}>
+                {label}
+              </Button>
+            )}
+          </WriteTip>
+        )
+      })}
     </Box>
   )
 }

@@ -163,7 +163,7 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 1.5, gap: 1 }}>
-        {s.status === 'pending' && <FlowActions suggestion={s} source={source} destination={destination} busy={busy} onResolve={onResolve} />}
+        {s.status === 'pending' && <FlowActions suggestion={s} source={source} destination={destination} busy={busy} onResolve={onResolve} variant='buttons' />}
         <Button onClick={onClose} sx={{ ml: 'auto' }}>{t('dialog.close')}</Button>
       </DialogActions>
     </Dialog>

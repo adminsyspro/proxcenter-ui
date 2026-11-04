@@ -13266,7 +13266,8 @@
         "colGuest": "Guest reached",
         "colNode": "Node",
         "guest": "{name} ({vmid}) · {ip}"
-      }
+      },
+      "actionTip": "{action}: {tip}"
     },
     "overview": {
       "empty": "No zone to draw yet.",

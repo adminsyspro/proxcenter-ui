@@ -295,24 +295,30 @@ describe('legend and labelled actions', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('labels the three actions of a row and says what each does', async () => {
+  it('shows the three actions of a row as coloured icons named by the action, the tooltip saying what each does', async () => {
     setup([sug('s1', { src_ip: '10.0.0.5' })])
     const line = await row('web to db')
-    for (const name of ['Accept', 'As CIDR', 'Dismiss']) expect(within(line).getByRole('button', { name }).textContent).toBe(name)
-    expect(await tip(within(line).getByRole('button', { name: 'Accept' }))).toBe('Creates the flow web \u2192 db HTTPS (tcp/443) in the draft.')
+    const icons = { Accept: ['ri-checkbox-circle-line', 'Success'], 'As CIDR': ['ri-global-line', 'Info'], Dismiss: ['ri-close-circle-line', 'Error'] }
+    for (const [name, [icon, colour]] of Object.entries(icons)) {
+      const button = within(line).getByRole('button', { name })
+      expect(button.textContent).toBe('')
+      expect(button.querySelector(`i.${icon}`)).toBeTruthy()
+      expect(button.className).toContain(`MuiIconButton-color${colour}`)
+    }
+    expect(await tip(within(line).getByRole('button', { name: 'Accept' }))).toBe('Accept: Creates the flow web \u2192 db HTTPS (tcp/443) in the draft.')
   })
 
   it('explains As CIDR with the IP of the source', async () => {
     setup([unknownSource])
     const line = await row('192.168.1.50 to db')
-    expect(await tip(within(line).getByRole('button', { name: 'As CIDR' }))).toMatch(/source 192\.168\.1\.50 as an address range: needed when the source is an unknown IP/)
+    expect(await tip(within(line).getByRole('button', { name: 'As CIDR' }))).toMatch(/^As CIDR: .*source 192\.168\.1\.50 as an address range: needed when the source is an unknown IP/)
   })
 
   it('says why Accept is disabled for a source in no zone', async () => {
     setup([unknownSource])
     const accept = within(await row('192.168.1.50 to db')).getByRole('button', { name: 'Accept' }) as HTMLButtonElement
     expect(accept.disabled).toBe(true)
-    expect(await tip(accept)).toBe('Unknown source: use As CIDR')
+    expect(await tip(accept)).toBe('Accept: Unknown source: use As CIDR')
   })
 
   it('lets the keyboard reach the tooltip of the source name', async () => {
@@ -322,7 +328,7 @@ describe('legend and labelled actions', () => {
 
   it('tells what Dismiss does', async () => {
     setup([sug('s1')])
-    expect(await tip(within(await row('web to db')).getByRole('button', { name: 'Dismiss' }))).toBe('Hides this suggestion for this pair.')
+    expect(await tip(within(await row('web to db')).getByRole('button', { name: 'Dismiss' }))).toBe('Dismiss: Hides this suggestion for this pair.')
   })
 
   it('shows the bulk bar with the count and the labelled actions once flows are checked', async () => {

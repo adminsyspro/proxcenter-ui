@@ -13266,7 +13266,8 @@
         "colGuest": "도달한 게스트",
         "colNode": "노드",
         "guest": "{name} ({vmid}) · IP {ip}"
-      }
+      },
+      "actionTip": "{action} – {tip}"
     },
     "overview": {
       "empty": "아직 그릴 영역이 없습니다.",

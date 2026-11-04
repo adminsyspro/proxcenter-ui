@@ -1,5 +1,6 @@
 'use client'
 
+import { paletteAlpha } from '../paletteAlpha'
 import { Fragment, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
@@ -373,7 +374,7 @@ export default function SecurityGroupsPanel({
           bgcolor: sectionRowBg,
           '&:hover': { bgcolor: sectionRowHoverBg },
           cursor: 'pointer',
-          '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }
+          '& td': { borderBottom: `1px solid ${paletteAlpha(theme, 'divider', 0.15)}` }
         }}
         onClick={() => toggleSection(section.id)}
       >
@@ -511,7 +512,7 @@ export default function SecurityGroupsPanel({
         <Typography variant="body1" sx={{ color: 'text.secondary', maxWidth: 500, mx: 'auto', mb: 3 }}>
           {t('network.securityGroupsClusterFeature')}
         </Typography>
-        <Box sx={{ p: 3, bgcolor: alpha(theme.palette.divider, 0.05), borderRadius: 2, maxWidth: 600, mx: 'auto' }}>
+        <Box sx={{ p: 3, bgcolor: paletteAlpha(theme, 'divider', 0.05), borderRadius: 2, maxWidth: 600, mx: 'auto' }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2 }}>{t('network.availableAlternatives')}</Typography>
           {/* Centred as a group: the panel is textAlign center, so leaving the
               rows flex-start gave centred labels above left-anchored rows. */}
@@ -582,7 +583,7 @@ export default function SecurityGroupsPanel({
 
       {/* SG flat table */}
       {filteredSections.length > 0 ? (
-        <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+        <TableContainer component={Paper} sx={{ border: `1px solid ${paletteAlpha(theme, 'divider', 0.1)}` }}>
           <Table size="small">
             <RulesTableHead withLogs />
             <TableBody>
@@ -593,7 +594,7 @@ export default function SecurityGroupsPanel({
           </Table>
         </TableContainer>
       ) : (
-        <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.3)}` }}>
+        <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${paletteAlpha(theme, 'divider', 0.3)}` }}>
           <i className="ri-shield-line" style={{ fontSize: 48, opacity: 0.3 }} />
           <Typography variant="body1" sx={{ mt: 2, color: 'text.secondary' }}>{t('networkPage.noSecurityGroup')}</Typography>
           <WriteTip>

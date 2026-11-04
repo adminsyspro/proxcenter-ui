@@ -1,5 +1,6 @@
 'use client'
 
+import { paletteAlpha } from './paletteAlpha'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 
@@ -160,8 +161,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
       <FirewallLoadAlert error={loadError} onRetry={reload} />
 
       {/* ── Aliases Section ── */}
-      {(!view || view === 'aliases') && <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.15)}`, mb: 3 }}>
-        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>
+      {(!view || view === 'aliases') && <Paper sx={{ border: `1px solid ${paletteAlpha(theme, 'divider', 0.15)}`, mb: 3 }}>
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${paletteAlpha(theme, 'divider', 0.15)}` }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('firewall.aliases')}</Typography>
             <Chip label={t('firewall.aliasesCount', { count: aliases.length })} size="small" />
@@ -226,8 +227,8 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
       </Paper>}
 
       {/* ── IP Sets Section ── */}
-      {(!view || view === 'ipsets') && <Paper sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>
-        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>
+      {(!view || view === 'ipsets') && <Paper sx={{ border: `1px solid ${paletteAlpha(theme, 'divider', 0.15)}` }}>
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${paletteAlpha(theme, 'divider', 0.15)}` }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('firewall.ipSets')}</Typography>
             <Chip label={t('networkPage.setsAndEntries', { sets: ipsets.length, entries: totalIPSetEntries })} size="small" />
@@ -244,7 +245,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
             {ipsets.map((ipset) => {
               const colour = objectColour(ipset.name, zones)
               return (
-              <Paper key={ipset.name} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.15)}`, overflow: 'hidden' }}>
+              <Paper key={ipset.name} sx={{ border: `1px solid ${paletteAlpha(theme, 'divider', 0.15)}`, overflow: 'hidden' }}>
                 <Box
                   data-testid={`ipset-header-${ipset.name}`}
                   sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha(theme.palette.background.default, 0.5), borderLeft: `4px solid ${colour}` }}
@@ -296,7 +297,7 @@ export default function ObjectsTab({ aliases, ipsets, selectedConnection, loadin
               )
             })}
             {ipsets.length === 0 && !loading && (
-              <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.4)}` }}>
+              <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${paletteAlpha(theme, 'divider', 0.4)}` }}>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>{t('networkPage.noIpSetConfigured')}</Typography>
               </Paper>
             )}

@@ -1,5 +1,6 @@
 'use client'
 
+import { paletteAlpha } from '../paletteAlpha'
 import { useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import { Box, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, useTheme, type Theme } from '@mui/material'
 import { useTranslations } from 'next-intl'
@@ -186,7 +187,7 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
   // The lit row and column: one rule on the grid, in a neutral tint (red and blue tell the traffic, orange is the brand).
   const litSx = (theme: Theme) => {
     // The dark theme's text colour is an `rgb(var(...) / a)` string MUI's alpha() cannot recolour: use its channel.
-    const tint = theme.vars ? `rgb(${theme.vars.palette.text.primaryChannel} / 0.06)` : alpha(theme.palette.text.primary, 0.06)
+    const tint = theme.vars ? `rgb(${theme.vars.palette.text.primaryChannel} / 0.06)` : paletteAlpha(theme, 'text.primary', 0.06)
     const heads: string[] = []
     const cells: string[] = []
     if (lit.row) {

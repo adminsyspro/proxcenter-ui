@@ -1,5 +1,6 @@
 'use client'
 
+import { paletteAlpha } from './paletteAlpha'
 import { Box, Chip, Skeleton, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography, alpha, darken, lighten, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
@@ -15,7 +16,7 @@ const STATUS_LABEL: Record<ServiceStatus, string> = { allowed: 'postureAllowed',
 function Tile({ testId, label, value, caption, color }: { testId: string; label: string; value: string; caption: string; color: string }) {
   const theme = useTheme()
   return (
-    <Box data-testid={testId} sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 0.5, p: 1.5, borderRadius: 2, bgcolor: alpha(theme.palette.text.primary, 0.035), minWidth: 0 }}>
+    <Box data-testid={testId} sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 0.5, p: 1.5, borderRadius: 2, bgcolor: paletteAlpha(theme, 'text.primary', 0.035), minWidth: 0 }}>
       {/* Up to two lines: a title is never cut when five tiles share a row. */}
       <Typography
         variant='caption'

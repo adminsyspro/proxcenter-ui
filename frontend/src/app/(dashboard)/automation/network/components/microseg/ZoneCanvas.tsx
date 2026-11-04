@@ -1,11 +1,12 @@
 'use client'
 
+import { paletteAlpha } from '../paletteAlpha'
 import { useCallback, useEffect, useMemo } from 'react'
 import {
   Background, ControlButton, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow, type AriaLabelConfig, type Edge, type EdgeMouseHandler, type Node, type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Box, alpha, useTheme, type Theme } from '@mui/material'
+import { Box, useTheme, type Theme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { EdgeClickContext, FlowEdge } from './FlowEdge'
@@ -191,7 +192,7 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
               nodeColor={minimapColor}
               nodeStrokeWidth={0}
               bgColor={theme.palette.background.paper}
-              maskColor={alpha(theme.palette.text.primary, 0.08)}
+              maskColor={paletteAlpha(theme, 'text.primary', 0.08)}
               style={{ width: 160, height: 100 }}
             />
           </ReactFlow>

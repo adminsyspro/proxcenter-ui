@@ -1,5 +1,6 @@
 'use client'
 
+import { paletteAlpha } from '../paletteAlpha'
 import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 
@@ -300,7 +301,7 @@ export function SectionRow({ title, icon, open, onToggle, badges, right, check, 
     [theme.breakpoints.down('md')]: { [`& .${ADD_CLASS}`]: { opacity: 1 } },
   }
   return (
-    <TableRow data-testid={testId ?? 'dfw-section'} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.06), '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.3)}` }, ...reveal }}>
+    <TableRow data-testid={testId ?? 'dfw-section'} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.06), '& td': { borderBottom: `1px solid ${paletteAlpha(theme, 'divider', 0.3)}` }, ...reveal }}>
       <TableCell sx={{ ...CELL, width: 28 }} />
       <TableCell padding='checkbox' sx={{ width: 36 }}>
         {check && (
@@ -357,7 +358,7 @@ export function EmptyRulesRow({ text, action }: { text: string; action?: { label
 export function WideRow({ children, testId, tone = 'plain' }: { children: ReactNode; testId?: string; tone?: 'plain' | 'group' }) {
   const theme = useTheme()
   return (
-    <TableRow data-testid={testId} sx={tone === 'group' ? { bgcolor: alpha(theme.palette.text.primary, 0.04) } : undefined}>
+    <TableRow data-testid={testId} sx={tone === 'group' ? { bgcolor: paletteAlpha(theme, 'text.primary', 0.04) } : undefined}>
       <TableCell colSpan={DFW_COLUMNS} sx={{ ...CELL, py: tone === 'group' ? 0.75 : 1 }}>{children}</TableCell>
     </TableRow>
   )

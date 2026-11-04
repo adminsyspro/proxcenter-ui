@@ -1,5 +1,6 @@
 'use client'
 
+import { paletteAlpha } from '../paletteAlpha'
 import { memo, type FocusEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import { Box, Chip, Tooltip, Typography, alpha, type Theme } from '@mui/material'
 import { useTranslations } from 'next-intl'
@@ -14,7 +15,7 @@ const TONE_TINT: Record<CellTone, number> = { unprotected: 0.12, blocked: 0.12, 
 
 function cellBackground(theme: Theme, view: CellView | null, diagonal: boolean): string {
   if (view) return alpha(EDGE_COLORS[view.tone], TONE_TINT[view.tone])
-  if (diagonal) return `repeating-linear-gradient(45deg, transparent 0 6px, ${alpha(theme.palette.text.primary, 0.05)} 6px 8px)`
+  if (diagonal) return `repeating-linear-gradient(45deg, transparent 0 6px, ${paletteAlpha(theme, 'text.primary', 0.05)} 6px 8px)`
   return 'transparent'
 }
 

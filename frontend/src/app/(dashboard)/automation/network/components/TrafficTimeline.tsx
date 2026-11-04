@@ -1,7 +1,8 @@
 'use client'
 
+import { paletteAlpha } from './paletteAlpha'
 import { useState } from 'react'
-import { Box, Chip, FormControl, Link, MenuItem, Paper, Select, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, useTheme } from '@mui/material'
+import { Box, Chip, FormControl, Link, MenuItem, Paper, Select, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
@@ -146,9 +147,9 @@ function Areas({ timeline, below = null, measured, unit, height = TIMELINE_HEIGH
         aria-label={unit === 'bytes' ? t('postureVolumeLabel') : t('postureTimelineLabel')}
         style={{ display: 'block' }}
       >
-        <line x1={box.left} x2={box.left + box.width} y1={TOP} y2={TOP} stroke={alpha(theme.palette.text.primary, 0.08)} />
-        {below && <line x1={box.left} x2={box.left + box.width} y1={TOP + box.height} y2={TOP + box.height} stroke={alpha(theme.palette.text.primary, 0.08)} />}
-        <line data-testid='timeline-baseline' x1={box.left} x2={box.left + box.width} y1={baseline} y2={baseline} stroke={alpha(theme.palette.text.primary, 0.3)} />
+        <line x1={box.left} x2={box.left + box.width} y1={TOP} y2={TOP} stroke={paletteAlpha(theme, 'text.primary', 0.08)} />
+        {below && <line x1={box.left} x2={box.left + box.width} y1={TOP + box.height} y2={TOP + box.height} stroke={paletteAlpha(theme, 'text.primary', 0.08)} />}
+        <line data-testid='timeline-baseline' x1={box.left} x2={box.left + box.width} y1={baseline} y2={baseline} stroke={paletteAlpha(theme, 'text.primary', 0.3)} />
         <text x={LEFT - 6} y={TOP + 4} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max'>{scaleText}</text>
         <text x={LEFT - 6} y={baseline + (below ? 3 : 0)} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary}>0</text>
         {below && <text x={LEFT - 6} y={TOP + box.height} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max-below'>{scaleText}</text>}

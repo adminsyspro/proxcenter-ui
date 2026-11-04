@@ -1,6 +1,7 @@
 'use client'
 
-import { Box, Paper, Typography, alpha, useTheme } from '@mui/material'
+import { paletteAlpha } from './paletteAlpha'
+import { Box, Paper, Typography, useTheme } from '@mui/material'
 
 type Props = {
   testId: string
@@ -18,7 +19,7 @@ type Props = {
 export default function PostureCard({ testId, title, caption, action, grow = false, children }: Props) {
   const theme = useTheme()
   return (
-    <Paper data-testid={testId} sx={{ p: 2.5, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, minWidth: 0, height: grow ? 'auto' : '100%', flex: grow ? '1 1 auto' : undefined, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+    <Paper data-testid={testId} sx={{ p: 2.5, border: `1px solid ${paletteAlpha(theme, 'divider', 0.1)}`, minWidth: 0, height: grow ? 'auto' : '100%', flex: grow ? '1 1 auto' : undefined, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', minWidth: 0 }}>
         <Typography variant='subtitle1' component='h2' sx={{ fontWeight: 700 }}>{title}</Typography>
         {caption && <Typography variant='caption' color='text.secondary' data-testid={`${testId}-caption`}>{caption}</Typography>}

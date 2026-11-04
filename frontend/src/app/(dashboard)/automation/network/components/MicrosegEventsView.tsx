@@ -5,12 +5,13 @@
 // refreshes every minute while this source is shown (and the tab visible), unlike the firewall logs of the other
 // sources which are read from the nodes.
 
+import { paletteAlpha } from './paletteAlpha'
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 
 import {
   Box, Button, Chip, CircularProgress, IconButton, InputAdornment, LinearProgress, MenuItem, Table, TableBody, TableCell,
-  TableContainer, TableHead, TablePagination, TableRow, TextField, Tooltip, Typography, alpha, useTheme,
+  TableContainer, TableHead, TablePagination, TableRow, TextField, Tooltip, Typography, useTheme,
 } from '@mui/material'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
@@ -254,7 +255,7 @@ export default function MicrosegEventsView({ connectionId, zones, guests }: Prop
         </Table>
       </TableContainer>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', px: 2, borderTop: `1px solid ${alpha(theme.palette.divider, 0.15)}` }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', px: 2, borderTop: `1px solid ${paletteAlpha(theme, 'divider', 0.15)}` }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 0.5, minWidth: 0, flex: '1 1 320px' }}>
           {events.length > 0 && (
             <Typography variant='caption' sx={{ color: 'text.secondary' }}>

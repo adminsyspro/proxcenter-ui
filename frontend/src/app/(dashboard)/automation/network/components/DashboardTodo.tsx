@@ -1,5 +1,6 @@
 'use client'
 
+import { paletteAlpha } from './paletteAlpha'
 import { Box, Button, Paper, Skeleton, Stack, Tooltip, Typography, alpha, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
@@ -120,7 +121,7 @@ export default function DashboardTodo({ phase, items, actions }: Props) {
   }
 
   return (
-    <Paper data-testid='todo-card' sx={{ p: 2.5, border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+    <Paper data-testid='todo-card' sx={{ p: 2.5, border: `1px solid ${paletteAlpha(theme, 'divider', 0.1)}` }}>
       <Typography variant='subtitle2' sx={{ fontWeight: 700, color: 'text.secondary', mb: 1.5 }}>{t('todoTitle')}</Typography>
       {body}
     </Paper>

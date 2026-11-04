@@ -1,9 +1,10 @@
 'use client'
 
+import { paletteAlpha } from '../paletteAlpha'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, Button, Divider, Menu, MenuItem, Select, TextField, Tooltip, Typography, alpha, useTheme } from '@mui/material'
+import { Box, Button, Divider, Menu, MenuItem, Select, TextField, Tooltip, Typography, useTheme } from '@mui/material'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
 
@@ -166,7 +167,7 @@ export function ActionBar(p: ActionBarProps) {
         <TextField size='small' value={p.filter} onChange={e => p.onFilter(e.target.value)} placeholder={t('filter')}
           inputProps={{ 'aria-label': t('filter') }}
           InputProps={{ startAdornment: <i className='ri-search-line' style={{ marginRight: 6, fontSize: 16, color: theme.palette.text.disabled }} />, sx: { fontSize: 13 } }}
-          sx={{ width: 240, '& fieldset': { borderColor: alpha(theme.palette.divider, 0.6) } }} />
+          sx={{ width: 240, '& fieldset': { borderColor: paletteAlpha(theme, 'divider', 0.6) } }} />
       </Box>
     </Box>
   )

@@ -125,35 +125,20 @@ describe('zone list', () => {
     expect(title.compareDocumentPosition(within(card).getByText('Front web servers')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('sizes the new-zone card as a zone card: it fills its grid cell, and alone on its row takes the height of a card', async () => {
-    const heights = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      return { height: this.getAttribute('role') === 'listitem' ? 212 : 0, width: 0, top: 0, left: 0, bottom: 0, right: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
-    })
-    const observers: Array<(entries: unknown[]) => void> = []
-    vi.stubGlobal('ResizeObserver', class { constructor(cb: (entries: unknown[]) => void) { observers.push(cb) } observe() { observers.forEach(cb => cb([])) } disconnect() {} })
-    try {
-      setup({ zones: [web()] })
-      const cell = (await screen.findByTestId('new-zone-card')).parentElement as HTMLElement
-      await waitFor(() => expect(getComputedStyle(cell).minHeight).toBe('212px'))
-      expect(getComputedStyle(cell).flexGrow).toBe('1')
-      expect(getComputedStyle(cell.closest('[role="listitem"]') as HTMLElement).display).toBe('flex')
-    } finally {
-      heights.mockRestore()
-    }
-  })
-
-  it('says so when there is no zone, with the new-zone card', async () => {
+  it('says so when there is no zone, the + of the title still there', async () => {
     setup()
     expect(await screen.findByText(/No zone yet/)).toBeTruthy()
-    expect(screen.getByTestId('new-zone-card')).toBeTruthy()
+    expect(screen.getByTestId('new-zone-button')).toBeTruthy()
   })
 
-  it('ends the grid with a dashed new-zone card that opens the zone dialog', async () => {
+  it('puts a + right of the Zones title that opens the zone dialog, and no card in the grid for it', async () => {
     setup({ zones: [web(), db()] })
     const zones = await screen.findByRole('region', { name: 'Zones' })
-    const cards = within(zones).getAllByRole('listitem')
-    expect(within(cards.at(-1)!).getByTestId('new-zone-card')).toBeTruthy()
-    fireEvent.click(screen.getByTestId('new-zone-card'))
+    const plus = within(zones).getByTestId('new-zone-button')
+    expect(plus.getAttribute('aria-label')).toBe('New zone')
+    expect(plus.previousElementSibling?.textContent ?? plus.parentElement?.previousElementSibling?.textContent).toBe('Zones')
+    expect(within(zones).getAllByRole('listitem').map(c => c.getAttribute('aria-label'))).toEqual(['web', 'db'])
+    fireEvent.click(plus)
     expect(await screen.findByRole('dialog', { name: 'New zone' })).toBeTruthy()
   })
 
@@ -274,9 +259,9 @@ describe('actions row', () => {
     const row = slot.parentElement as HTMLElement
     const names = within(row).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)
     expect(names.indexOf('New flow')).toBeLessThan(names.findIndex(n => /Emergency stop/.test(n ?? '')))
-    // In the Zones region only the dashed card leads to a new zone (its button sits on the row of the sub-tabs).
+    // In the Zones region only the + of the title leads to a new zone (the labelled button sits on the row of the sub-tabs).
     const inRegion = within(await screen.findByRole('region', { name: 'Zones' })).getAllByRole('button', { name: 'New zone' })
-    expect(inRegion).toEqual([screen.getByTestId('new-zone-card')])
+    expect(inRegion).toEqual([screen.getByTestId('new-zone-button')])
     expect(screen.getByText('Zones')).toBeTruthy()
     expect(screen.getByText('Flows')).toBeTruthy()
   })
@@ -296,7 +281,7 @@ describe('actions row', () => {
       <PolicyPanel connectionId='c1' policy={makePolicy({ zones: [web()] })} reloadPolicy={async () => undefined} goToSubTab={() => undefined} onOpenPlan={() => undefined} startRun={() => undefined} onOpenPreflight={() => undefined} />,
     )
     const zones = await screen.findByRole('region', { name: 'Zones' })
-    expect(within(zones).getByTestId('new-zone-card')).toBeTruthy()
+    expect(within(zones).getByTestId('new-zone-button')).toBeTruthy()
     expect(within(screen.getByRole('region', { name: 'Flows' })).getByRole('button', { name: 'New flow' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Pre-flight checks' })).toBeTruthy()
   })

@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { Box, Button, Typography } from '@mui/material'
+import { useCallback, useContext, useMemo, useState } from 'react'
+import { Box, Button, IconButton, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { PolicyDiff } from '@/lib/microseg/pendingChanges'
@@ -12,7 +12,7 @@ import { useMicrosegDrifts } from '@/lib/microseg/useMicrosegLists'
 import { useIgnoredDrifts } from './driftIgnore'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { useBoxSize } from './useBoxSize'
-import ZoneCard, { NewZoneCard, RemovedZoneCard, ZoneCardDetails, type ZoneCardProps } from './ZoneCard'
+import ZoneCard, { RemovedZoneCard, ZoneCardDetails, type ZoneCardProps } from './ZoneCard'
 import type { ZoneRowProps } from './ZoneRow'
 import { zoneDriftSignals } from './zonePanelModel'
 import { zoneMembers, type PolicyGuest, type ZoneMember } from './zoneModel'
@@ -65,22 +65,6 @@ function useOpenZones(connectionId: string) {
 
 type Item = { zone: MicrosegZone; removed: boolean; members: ZoneMember[] }
 
-/** The outer height of an element (borders included), followed with a ResizeObserver; null until measured. */
-function useBorderHeight(): [(el: HTMLElement | null) => void, number | null] {
-  const [element, setElement] = useState<HTMLElement | null>(null)
-  const [height, setHeight] = useState<number | null>(null)
-  useEffect(() => {
-    if (!element || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => {
-      const next = Math.round(element.getBoundingClientRect().height)
-      setHeight(prev => (prev === next ? prev : next))
-    })
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [element])
-  return [setElement, height]
-}
-
 /** The smallest card width, and the gap between cards (px). */
 export const CARD_MIN = 280
 const CARD_GAP = 16
@@ -92,7 +76,7 @@ export function cardColumns(width: number | undefined): number {
 
 /**
  * The zones of the draft as cards in a grid (auto-fill, 280 px at least, equal heights per row), then those it removed
- * (struck through until the next apply), ten per page, "+ New zone" as a dashed card at the end. An opened card shows
+ * (struck through until the next apply), ten per page, "+" right of the title for a new zone. An opened card shows
  * its members and flows full width below its row. The drifts are read once (the engine's last full run, no Proxmox call).
  */
 export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests, guestsStatus, pendingMembers, diff, onAdd, onOpenDrifts, uncovered = 'failed', ...handlers }: Props) {
@@ -101,7 +85,6 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
   const { canWrite } = useMicrosegWrite()
   const { open, toggle } = useOpenZones(connectionId)
   const [gridRef, size] = useBoxSize<HTMLDivElement>()
-  const [firstCardRef, cardHeight] = useBorderHeight()
   const { data: drifts } = useMicrosegDrifts(connectionId, { once: true })
   const { ignored } = useIgnoredDrifts(connectionId)
 
@@ -112,14 +95,12 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
   const paged = usePaged(items)
   const zonesById = useMemo(() => new Map([...(diff?.removedZones ?? []), ...zones].map(z => [z.id, z])), [zones, diff])
   const columns = cardColumns(size?.width)
-  const lastPage = paged.page === Math.max(0, Math.ceil(paged.count / paged.size) - 1)
   const membersKnown = guestsStatus === 'ready'
 
   // Rows of cards, each followed by the details of its opened cards (full width, below the row).
   const rows: Item[][] = []
   for (let i = 0; i < paged.rows.length; i += columns) rows.push(paged.rows.slice(i, i + columns))
 
-  const first = paged.rows.find(item => !item.removed)
   const card = (item: Item) => {
     if (item.removed) return <RemovedZoneCard key={`removed-${item.zone.id}`} zone={item.zone} />
     const signals = zoneDriftSignals(item.zone, item.members, drifts?.computed ? drifts.drifts : null, zones, ignored)
@@ -136,7 +117,6 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
         open={open.has(item.zone.id)}
         onToggle={() => toggle(item.zone.id)}
         drifts={signals?.count ?? null}
-        boxRef={item === first ? firstCardRef : undefined}
         onOpenDrifts={onOpenDrifts}
         uncovered={uncovered === 'failed' ? null : {
           series: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id)) : null,
@@ -166,8 +146,15 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
   return (
     <Box component='section' aria-label={t('zonesTitle')}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-        <Typography variant='subtitle1' fontWeight={600} sx={{ flex: 1 }}>{t('zonesTitle')}</Typography>
-        {/* On the row of the sub-tabs; in place, the dashed card is the way to a new zone. */}
+        <Typography variant='subtitle1' fontWeight={600}>{t('zonesTitle')}</Typography>
+        {/* "+" right of the title: no card spends a grid cell on it. */}
+        <WriteTip title={t('addZone')}>
+          <IconButton size='small' color='primary' aria-label={t('addZone')} data-testid='new-zone-button' onClick={onAdd} disabled={!canWrite}>
+            <i className='ri-add-line' />
+          </IconButton>
+        </WriteTip>
+        <Box sx={{ flex: 1 }} />
+        {/* Also on the row of the sub-tabs. */}
         {inSlot && (
           <SlotActions order={2}>
             <WriteTip>
@@ -186,7 +173,6 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
           ...row.map(card),
           ...row.filter(item => !item.removed && open.has(item.zone.id)).map(details),
         ])}
-        {lastPage && <Box role='listitem' sx={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}><NewZoneCard onAdd={onAdd} height={cardHeight} /></Box>}
       </Box>
       <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
     </Box>

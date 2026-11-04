@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Box, Button, ButtonBase, Chip, IconButton, Tooltip, Typography } from '@mui/material'
+import { Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
@@ -24,8 +24,6 @@ export type ZoneCardProps = ZoneRowProps & {
   /** The zone's drifts (ignored ones left out), null while the engine has not computed them. */
   drifts: number | null
   onOpenDrifts?: (zone: MicrosegZone) => void
-  /** Measures the card (the first of the page gives the new-zone card its height). */
-  boxRef?: (el: HTMLElement | null) => void
   /**
    * The zone's uncovered traffic of the last 24 hours, one count per hour: `series` null while the history is read.
    * The whole value is null when the history cannot be read (an older orchestrator): no sparkline then.
@@ -105,7 +103,7 @@ function FlowPreview({ zone, flows, zonesById }: { zone: MicrosegZone; flows: Mi
  * and the flows opened full width below the row of cards) and the actions, shown on hover or focus (always on touch).
  */
 export default function ZoneCard(props: ZoneCardProps) {
-  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onAssign, onAddFlow, drifts, onOpenDrifts, boxRef, uncovered } = props
+  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onAssign, onAddFlow, drifts, onOpenDrifts, uncovered } = props
   const t = useTranslations('microsegPilot.policy.zone')
   const ts = useTranslations('microsegPilot.overview.sections')
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
@@ -114,7 +112,6 @@ export default function ZoneCard(props: ZoneCardProps) {
 
   return (
     <Box
-      ref={boxRef}
       role='listitem'
       aria-label={zone.name}
       sx={{ ...CARD_SX, borderTop: 4, borderTopColor: zone.color || 'divider', ...(open ? { borderColor: 'primary.main', borderTopColor: zone.color || 'primary.main' } : {}), ...HOVER_ACTIONS }}
@@ -225,35 +222,5 @@ export function RemovedZoneCard({ zone }: { zone: MicrosegZone }) {
         <Typography noWrap variant='body2' color='text.secondary' sx={{ textDecoration: 'line-through', minHeight: 20 }}>{zone.label}</Typography>
       </Box>
     </Box>
-  )
-}
-
-/** The height of the new-zone card when no zone card gives one (no zone yet). */
-export const NEW_ZONE_MIN_HEIGHT = 160
-
-/**
- * "+ New zone" as a dashed card at the end of the grid: it fills its grid cell (the row's height), and alone on its
- * row it takes `height`, the height of a zone card, never a taller or shorter box.
- */
-export function NewZoneCard({ onAdd, height = null }: { onAdd: () => void; height?: number | null }) {
-  const t = useTranslations('microsegPilot.policy')
-  const { canWrite, hint } = useMicrosegWrite()
-  return (
-    <Tooltip title={canWrite ? '' : hint}>
-      <Box data-new-zone-cell sx={{ minWidth: 0, flex: '1 1 auto', minHeight: height ?? NEW_ZONE_MIN_HEIGHT, display: 'flex' }}>
-        <ButtonBase
-          data-testid='new-zone-card'
-          disabled={!canWrite}
-          onClick={onAdd}
-          sx={{
-            flex: 1, border: 2, borderStyle: 'dashed', borderColor: 'divider', borderRadius: 1, color: 'text.secondary', gap: 1,
-            '&:hover': { borderColor: 'primary.main', color: 'primary.main' }, '&.Mui-disabled': { opacity: 0.5 },
-          }}
-        >
-          <i className='ri-add-line' style={{ fontSize: 20 }} />
-          <Typography fontWeight={600}>{t('addZone')}</Typography>
-        </ButtonBase>
-      </Box>
-    </Tooltip>
   )
 }

@@ -126,7 +126,7 @@ export function MatrixCellView({ id, r, c, rowId, colId, view, aria, selected, t
       sx={theme => ({
         position: 'relative', minHeight: CELL_MIN_H, minWidth: 0, p: 0.75, pt: 2.25, boxSizing: 'border-box',
         display: 'flex', flexDirection: 'column', gap: 0.5, justifyContent: 'center',
-        borderBottom: 1, borderRight: 1, borderColor: 'divider', cursor: view ? 'pointer' : 'default',
+        borderBottom: 1, borderRight: 1, borderColor: alpha(theme.palette.divider, 0.4), cursor: view ? 'pointer' : 'default',
         background: cellBackground(theme, view, diagonal),
         outline: selected ? `2px solid ${theme.palette.primary.main}` : 'none', outlineOffset: -2,
         '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: -2 },

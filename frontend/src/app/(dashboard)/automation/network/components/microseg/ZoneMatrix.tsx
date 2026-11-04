@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent } from 'react'
-import { Box, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, type Theme } from '@mui/material'
+import { Box, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, useTheme, type Theme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { serviceTokensTitle } from '@/lib/network/serviceNames'
@@ -179,7 +179,9 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
     }
   }, [rows.length, cols.length, onSelectCell])
 
-  const sticky = { position: 'sticky', bgcolor: 'background.paper', borderColor: 'divider' } as const
+  const theme = useTheme()
+  // Grid lines in the soft divider tint the rest of the page uses (a solid divider reads as white lines in the dark theme, black in the light one).
+  const sticky = { position: 'sticky', bgcolor: 'background.paper', borderColor: alpha(theme.palette.divider, 0.4) } as const
   // The lit row and column: one rule on the grid, in a neutral tint (red and blue tell the traffic, orange is the brand).
   const litSx = (theme: Theme) => {
     const tint = alpha(theme.palette.text.primary, 0.06)

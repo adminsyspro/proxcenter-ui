@@ -1,16 +1,17 @@
 /**
- * Drifts sub-tab (UA41): a coloured chip with an icon per drift kind at the start of the row, and the zone glyph with
- * its state chip on the drifts that name a zone.
+ * Drifts sub-tab (UA41, UA60): a coloured chip with an icon per drift kind (group headers and the summary strip), and
+ * the zone glyph in the Zone column of the drifts that name a zone.
  */
 
 import { describe, expect, it, vi } from 'vitest'
 import { within } from '@testing-library/react'
+import { Table, TableBody } from '@mui/material'
 
 import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
 
 import { zoneOfDrift } from './driftLabels'
-import DriftRow from './DriftRow'
+import DriftRow, { KindChip } from './DriftRow'
 import { installFreshMocks, web } from './policyTestKit'
 
 installFreshMocks()
@@ -31,39 +32,46 @@ const KINDS: Array<{ drift: MicrosegDrift; chip: string; colorClass: string; ico
 function renderRow(drift: MicrosegDrift, zone: MicrosegZone | null = null) {
   const label = { title: 'Some title', detail: 'Some detail', fixable: false, fix: null, hint: null }
   renderWithProviders(
-    <DriftRow
-      drift={drift} label={label} subject='subject' guest={null} zone={zone} ignored={false} hasZones
-      onFix={vi.fn()} onIgnore={vi.fn()} onRestore={vi.fn()}
-    />,
+    <Table><TableBody>
+      <DriftRow
+        drift={drift} label={label} subject='subject' guest={null} zone={zone} since='-' ignored={false} hasZones selected={false}
+        onSelect={vi.fn()} onFix={vi.fn()} onIgnore={vi.fn()} onRestore={vi.fn()}
+      />
+    </TableBody></Table>,
   )
-  return screen.getByRole('listitem')
+  return screen.getByRole('row')
 }
 
 describe('drift kind chip', () => {
-  it.each(KINDS)('shows $chip for $drift.kind in its colour with its icon, before the title', ({ drift, chip, colorClass, icon }) => {
-    const line = renderRow(drift)
-    const el = within(line).getByText(chip).closest('.MuiChip-root') as HTMLElement
+  it.each(KINDS)('shows $chip for $drift.kind in its colour with its icon', ({ drift, chip, colorClass, icon }) => {
+    renderWithProviders(<KindChip kind={drift.kind} />)
+    const el = screen.getByText(chip).closest('.MuiChip-root') as HTMLElement
     expect(el.classList.contains(colorClass)).toBe(true)
     expect(el.querySelector(`i.${icon}`)).toBeTruthy()
-    const title = within(line).getByText('Some title')
-    expect(el.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('carries its count as a filter, pressed when it is the kind shown', () => {
+    const onClick = vi.fn()
+    renderWithProviders(<KindChip kind='unzoned_running' count={10} selected onClick={onClick} />)
+    const el = screen.getByTestId('drift-kind-filter-unzoned_running')
+    expect(el.textContent).toBe('No zone · 10')
+    expect(el.getAttribute('aria-pressed')).toBe('true')
   })
 })
 
 describe('drift zone', () => {
-  it('shows the shield in the zone colour with its state dot, the name, then the state chip', () => {
+  it('shows the shield in the zone colour with its state dot and the name', () => {
     const line = renderRow({ kind: 'member_without_ip', guest: g, detail: { zone: 'web' } }, web({ state: 'enforce' }))
     const zone = within(line).getByTestId('drift-zone')
     expect((zone.querySelector('i.ri-shield-fill') as HTMLElement).style.color).toBe('rgb(59, 130, 246)')
     expect(zone.querySelector('[data-state="enforce"]')).toBeTruthy()
     expect(within(zone).getByText('web')).toBeTruthy()
-    const chip = within(zone).getByText('Enforced').closest('.MuiChip-root') as HTMLElement
-    expect(chip.classList.contains('MuiChip-colorSuccess')).toBe(true)
-    expect(chip.querySelector('i.ri-shield-check-line')).toBeTruthy()
   })
 
-  it('shows no zone block on a drift that names none', () => {
-    expect(within(renderRow({ kind: 'nic_firewall_off', guest: g })).queryByTestId('drift-zone')).toBeNull()
+  it('says none on a drift that names no zone', () => {
+    const line = renderRow({ kind: 'nic_firewall_off', guest: g })
+    expect(within(line).queryByTestId('drift-zone')).toBeNull()
+    expect(within(line).getByText('none')).toBeTruthy()
   })
 
   it('finds the zone by name or id, and none when the policy lacks it', () => {

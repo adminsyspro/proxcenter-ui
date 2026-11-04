@@ -13111,7 +13111,34 @@
         "generic": "불일치"
       },
       "zoneFilter": "영역 {name}만",
-      "zoneFilterClear": "모든 영역 표시"
+      "zoneFilterClear": "모든 영역 표시",
+      "groups": {
+        "unzoned_running": "영역 없는 실행 중 게스트 ({count, number})",
+        "nic_firewall_off": "게스트 방화벽 꺼짐 ({count, number})",
+        "foreign_accept": "수동으로 변경된 규칙 ({count, number})",
+        "ipset_out_of_sync": "동기화되지 않은 IP 세트 ({count, number})",
+        "member_without_ip": "알려진 IP가 없는 구성원 ({count, number})",
+        "ambiguous_zone": "여러 영역에 있는 게스트 ({count, number})",
+        "object_collision": "Proxmox에서 이미 사용 중인 이름 ({count, number})",
+        "generic": "{kind} (개수 {count, number})"
+      },
+      "noneZone": "없음",
+      "select": "{name} 선택",
+      "selectGroup": "{group}의 모든 편차 선택",
+      "foldGroup": "그룹 접기",
+      "unfoldGroup": "그룹 펼치기",
+      "kindsLabel": "유형별 편차",
+      "allKinds": "전체 · {count, number}",
+      "bulkSelected": "{count, plural, other {편차 #개 선택됨}}",
+      "bulkAssign": "게스트 {count, plural, other {#개}}를 영역에 할당…",
+      "bulkIgnore": "{count, number}개 무시",
+      "bulkClear": "선택 해제",
+      "tableLabel": "편차",
+      "colObject": "대상",
+      "colZone": "영역",
+      "colDiffers": "차이점",
+      "colSince": "시점",
+      "colActions": "작업"
     },
     "observation": {
       "sampling": "Proxmox는 기본적으로 체인당 초당 최대 한 줄만 기록하므로 트래픽이 많은 흐름은 적게 집계될 수 있습니다.",

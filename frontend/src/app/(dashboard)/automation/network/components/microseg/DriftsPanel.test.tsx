@@ -1,6 +1,6 @@
 /**
- * Drifts sub-tab: the list read from GET /drifts, the labels, the fix that goes
- * to the assign dialog or the plan, and the local "Ignore".
+ * Drifts sub-tab (UA60): the table grouped by kind read from GET /drifts, the strip of kinds, the labels, the fix that
+ * goes to the assign dialog or the plan, the bulk assign and ignore, and the local "Ignore".
  */
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -54,19 +54,42 @@ function setup(drifts: MicrosegDrift[] = DRIFTS, over: { lastFull?: string | nul
   return renderTab()
 }
 
-const row = (name: RegExp | string) => screen.findByRole('listitem', { name })
+const row = (name: RegExp | string) => screen.findByRole('row', { name })
+/** The drift rows of the table: the group headers and the column head carry no "title: subject" name. */
+const driftRows = () => screen.queryAllByRole('row').filter(r => (r.getAttribute('aria-label') ?? '').includes(': '))
+const differs = (line: HTMLElement) => within(line).getByTestId('drift-differs').textContent
 
 describe('drift list', () => {
-  it('shows one line per drift with its title and the guest or object concerned', async () => {
+  it('groups the drifts by kind in a table, a header per kind with its count, one row per drift', async () => {
     setup()
-    expect(await screen.findByText('Running guest without a zone')).toBeTruthy()
-    expect(screen.getByText('Network card firewall off')).toBeTruthy()
-    expect(screen.getAllByText('Rule not managed by ProxCenter')).toHaveLength(2)
-    expect(screen.getByText('IP set out of sync')).toBeTruthy()
-    expect(screen.getByText('Member without a known IP')).toBeTruthy()
-    expect(screen.getByText('Guest in several zones')).toBeTruthy()
-    expect(screen.getByText('Name already used in Proxmox')).toBeTruthy()
-    expect(screen.getAllByRole('listitem')).toHaveLength(8)
+    expect((await screen.findByTestId('drift-group-unzoned_running')).textContent).toBe('Running guests in no zone (1)')
+    const groups = [...document.querySelectorAll('tbody[data-group]')].map(g => g.getAttribute('data-group'))
+    expect(groups).toEqual(['unzoned_running', 'nic_firewall_off', 'foreign_accept', 'ipset_out_of_sync', 'member_without_ip', 'ambiguous_zone', 'object_collision'])
+    expect(screen.getByTestId('drift-group-foreign_accept').textContent).toBe('Rules changed by hand (2)')
+    expect(driftRows()).toHaveLength(8)
+    const head = within(screen.getByRole('table', { name: 'Drifts' })).getAllByRole('columnheader').map(h => h.textContent)
+    expect(head).toEqual(['', 'Object', 'Zone', 'What differs', 'Since', 'Actions'])
+  })
+
+  it('counts the drifts of each kind in a strip of chips, a click showing that kind only, again showing all', async () => {
+    setup()
+    const strip = await screen.findByTestId('drift-kinds')
+    expect(within(strip).getByTestId('drift-kind-filter-all').textContent).toBe('All · 8')
+    expect(within(strip).getByTestId('drift-kind-filter-foreign_accept').textContent).toBe('Foreign rule · 2')
+    fireEvent.click(within(strip).getByTestId('drift-kind-filter-foreign_accept'))
+    await waitFor(() => expect(driftRows()).toHaveLength(2))
+    expect(within(strip).getByTestId('drift-kind-filter-foreign_accept').getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(within(strip).getByTestId('drift-kind-filter-all'))
+    await waitFor(() => expect(driftRows()).toHaveLength(8))
+  })
+
+  it('gives the object with its vmid and node, the zone or none, and the run time as Since', async () => {
+    setup()
+    const line = await row('Member without a known IP: app-1')
+    expect(line.textContent).toContain('103 · pve1')
+    expect(within(line).getByTestId('drift-zone').textContent).toBe('web')
+    expect(within(await row('Network card firewall off: db-1')).getByText('none')).toBeTruthy()
+    expect(line.textContent).toMatch(/Nov 2, 2026, 12:00\sPM/)
   })
 
   it('names a guest with its status glyph, taken from the inventory by type and vmid', async () => {
@@ -86,12 +109,17 @@ describe('drift list', () => {
     expect(within(await row('Name already used in Proxmox: pcz-db')).getByText('pcz-db')).toBeTruthy()
   })
 
-  it('keeps the detail under the chevron', async () => {
+  it('says what differs in its row', async () => {
     setup()
-    const line = await row('Network card firewall off: db-1')
-    expect(within(line).queryByText(/The firewall is off on net0/)).toBeNull()
-    fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
-    expect(within(line).getByText('The firewall is off on net0: the rules do not apply there.')).toBeTruthy()
+    expect(differs(await row('Network card firewall off: db-1'))).toBe('The firewall is off on net0: the rules do not apply there.')
+    expect(differs(await row('IP set out of sync: pcz-web'))).toBe('pcz-web holds - instead of 10.0.0.1/32.')
+  })
+
+  it('folds a group', async () => {
+    setup()
+    const header = await screen.findByTestId('drift-group-foreign_accept')
+    fireEvent.click(within(header.closest('tr')!).getByRole('button', { name: 'Fold the group' }))
+    await waitFor(() => expect(driftRows()).toHaveLength(6))
   })
 
   it('says it reads the last full run, with its time', async () => {
@@ -109,7 +137,7 @@ describe('drift list', () => {
     mock.routes['GET /drifts'] = () => reply(200, { drifts: [], computed: false })
     expect(await screen.findByText('Waiting for the first full check')).toBeTruthy()
     expect(screen.queryByText('No drift: Proxmox matches the policy.')).toBeNull()
-    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+    expect(driftRows()).toHaveLength(0)
   })
 
   it('says there is no drift', async () => {
@@ -117,11 +145,11 @@ describe('drift list', () => {
     expect(await screen.findByText('No drift: Proxmox matches the policy.')).toBeTruthy()
   })
 
-  it('paginates the list 10 per page', async () => {
+  it('pages each group 10 rows at a time', async () => {
     const many: MicrosegDrift[] = Array.from({ length: 23 }, (_, i) => ({ kind: 'object_collision', object: `pcz-${String(i).padStart(2, '0')}` }))
     setup(many)
     expect(await screen.findByText('pcz-00')).toBeTruthy()
-    expect(screen.getAllByRole('listitem')).toHaveLength(10)
+    expect(driftRows()).toHaveLength(10)
     expect(screen.getByText('1-10 of 23')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /next page/i }))
     expect(await screen.findByText('pcz-10')).toBeTruthy()
@@ -144,10 +172,11 @@ describe('drifts without a fix', () => {
     ['Name already used in Proxmox: pcz-db', 'An object named pcz-* exists in Proxmox without the micro-segmentation marker: rename or delete it in Proxmox.'],
   ]
 
-  it.each(NO_FIX)('shows %s with its hint in the row and no Fix button', async (name, hint) => {
+  it.each(NO_FIX)('shows %s with its hint on what differs and no Fix button', async (name, hint) => {
     setup()
     const line = await row(name)
-    expect(within(line).getByText(hint)).toBeTruthy()
+    fireEvent.mouseOver(within(line).getByTestId('drift-differs'))
+    expect((await screen.findByRole('tooltip')).textContent).toContain(hint)
     expect(within(line).queryByRole('button', { name: 'Open the plan' })).toBeNull()
     expect(within(line).queryByRole('button', { name: 'Assign to a zone' })).toBeNull()
     expect(within(line).getByRole('button', { name: 'Ignore' })).toBeTruthy()
@@ -164,8 +193,7 @@ describe('drifts without a fix', () => {
   it('writes the rule of a foreign accept in its detail', async () => {
     setup()
     const line = await row('Rule not managed by ProxCenter: db-1')
-    fireEvent.click(within(line).getByRole('button', { name: 'Show details' }))
-    expect(within(line).getByText(/position 3 \(10\.0\.0\.0\/8 SSH\)/)).toBeTruthy()
+    expect(differs(line)).toMatch(/position 3 \(10\.0\.0\.0\/8 SSH\)/)
   })
 })
 
@@ -219,6 +247,32 @@ describe('fixing a drift', () => {
     expect(box.disabled).toBe(false)
   })
 
+  it('assigns the guests selected to a zone at once: the bulk bar opens the assign dialog with all of them', async () => {
+    setup()
+    for (const name of ['Select web-1', 'Select dual-1', 'Select pcz-db']) fireEvent.click(await screen.findByRole('checkbox', { name }))
+    const bar = screen.getByTestId('drift-bulk')
+    expect(bar.textContent).toContain('3 drifts selected')
+    fireEvent.click(within(bar).getByRole('button', { name: 'Assign 2 guests to a zone…' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'web' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Assign guests to web' })
+    expect((await within(dialog).findByRole('checkbox', { name: 'web-1' }) as HTMLInputElement).checked).toBe(true)
+    expect((within(dialog).getByRole('checkbox', { name: 'dual-1' }) as HTMLInputElement).checked).toBe(true)
+    expect(within(dialog).getByRole('button', { name: 'Assign 2 guests' })).toBeTruthy()
+  })
+
+  it('selects a whole group from its header and ignores the selection at once', async () => {
+    setup()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select every drift of Rules changed by hand (2)' }))
+    const bar = screen.getByTestId('drift-bulk')
+    expect(bar.textContent).toContain('2 drifts selected')
+    // No guest to assign among them? db-1 is one: the assign button counts it.
+    expect(within(bar).getByRole('button', { name: 'Assign 1 guest to a zone…' })).toBeTruthy()
+    fireEvent.click(within(bar).getByRole('button', { name: 'Ignore 2' }))
+    await waitFor(() => expect(screen.queryByTestId('drift-group-foreign_accept')).toBeNull())
+    expect(screen.queryByTestId('drift-bulk')).toBeNull()
+    expect(JSON.parse(window.localStorage.getItem('microseg.ignoredDrifts.c1') ?? '[]')).toHaveLength(2)
+  })
+
   it('cannot assign without a zone and says why', async () => {
     setup(DRIFTS, { zones: [] })
     const line = await row('Running guest without a zone: web-1')
@@ -232,31 +286,31 @@ describe('ignoring a drift', () => {
     const view = setup()
     const line = await row('Name already used in Proxmox: pcz-db')
     fireEvent.click(within(line).getByRole('button', { name: 'Ignore' }))
-    await waitFor(() => expect(screen.queryByText('Name already used in Proxmox')).toBeNull())
-    expect(screen.getAllByRole('listitem')).toHaveLength(7)
+    await waitFor(() => expect(screen.queryByTestId('drift-group-object_collision')).toBeNull())
+    expect(driftRows()).toHaveLength(7)
     expect(JSON.parse(window.localStorage.getItem('microseg.ignoredDrifts.c1') ?? '[]')).toHaveLength(1)
 
     view.unmount()
     cleanup()
     setup()
-    expect(await screen.findByText('Running guest without a zone')).toBeTruthy()
-    expect(screen.queryByText('Name already used in Proxmox')).toBeNull()
+    expect(await screen.findByTestId('drift-group-unzoned_running')).toBeTruthy()
+    expect(screen.queryByTestId('drift-group-object_collision')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Show ignored (1)' }))
     const again = await row('Name already used in Proxmox: pcz-db')
     expect(within(again).getByText('Ignored')).toBeTruthy()
     fireEvent.click(within(again).getByRole('button', { name: 'Show again' }))
     await waitFor(() => expect(screen.queryByRole('button', { name: /Show ignored/ })).toBeNull())
-    expect(screen.getByText('Name already used in Proxmox')).toBeTruthy()
+    expect(screen.getByTestId('drift-group-object_collision')).toBeTruthy()
     expect(JSON.parse(window.localStorage.getItem('microseg.ignoredDrifts.c1') ?? '[]')).toEqual([])
   })
 
   it('ignores one foreign rule without hiding the other one of the same guest', async () => {
     setup()
     fireEvent.click(within(await row('Rule not managed by ProxCenter: pcz-web')).getByRole('button', { name: 'Ignore' }))
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(7))
-    expect(screen.getAllByText('Rule not managed by ProxCenter')).toHaveLength(1)
-    expect(screen.getByRole('listitem', { name: 'Rule not managed by ProxCenter: db-1' })).toBeTruthy()
+    await waitFor(() => expect(driftRows()).toHaveLength(7))
+    expect(screen.getByTestId('drift-group-foreign_accept').textContent).toBe('Rules changed by hand (1)')
+    expect(screen.getByRole('row', { name: 'Rule not managed by ProxCenter: db-1' })).toBeTruthy()
   })
 
   it('still ignores for the session when the storage is blocked', async () => {
@@ -264,7 +318,7 @@ describe('ignoring a drift', () => {
     const blocked = vi.spyOn(window.Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
     try {
       fireEvent.click(within(await row('Name already used in Proxmox: pcz-db')).getByRole('button', { name: 'Ignore' }))
-      await waitFor(() => expect(screen.queryByText('Name already used in Proxmox')).toBeNull())
+      await waitFor(() => expect(screen.queryByTestId('drift-group-object_collision')).toBeNull())
     } finally {
       blocked.mockRestore()
     }

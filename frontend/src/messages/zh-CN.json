@@ -13111,7 +13111,34 @@
         "generic": "偏差"
       },
       "zoneFilter": "仅区域 {name}",
-      "zoneFilterClear": "显示所有区域"
+      "zoneFilterClear": "显示所有区域",
+      "groups": {
+        "unzoned_running": "不在区域内的运行中客户机（{count, number}）",
+        "nic_firewall_off": "客户机防火墙已关闭（{count, number}）",
+        "foreign_accept": "手动更改的规则（{count, number}）",
+        "ipset_out_of_sync": "未同步的 IP 集（{count, number}）",
+        "member_without_ip": "没有已知 IP 的成员（{count, number}）",
+        "ambiguous_zone": "位于多个区域的客户机（{count, number}）",
+        "object_collision": "Proxmox 中已使用的名称（{count, number}）",
+        "generic": "{kind}（{count, number}）"
+      },
+      "noneZone": "无",
+      "select": "选择 {name}",
+      "selectGroup": "选择 {group} 的所有偏差",
+      "foldGroup": "折叠分组",
+      "unfoldGroup": "展开分组",
+      "kindsLabel": "按类型的偏差",
+      "allKinds": "全部 · {count, number}",
+      "bulkSelected": "{count, plural, other {已选择 # 个偏差}}",
+      "bulkAssign": "将 {count, plural, other {# 个客户机}} 分配到区域…",
+      "bulkIgnore": "忽略 {count, number} 个",
+      "bulkClear": "清除选择",
+      "tableLabel": "偏差",
+      "colObject": "对象",
+      "colZone": "区域",
+      "colDiffers": "差异",
+      "colSince": "起始",
+      "colActions": "操作"
     },
     "observation": {
       "sampling": "Proxmox 默认每条链每秒最多记录一行日志，因此繁忙的流量可能被少计。",

@@ -13112,7 +13112,34 @@
         "generic": "Dérive"
       },
       "zoneFilter": "Zone {name} seulement",
-      "zoneFilterClear": "Afficher toutes les zones"
+      "zoneFilterClear": "Afficher toutes les zones",
+      "groups": {
+        "unzoned_running": "Invités en marche sans zone ({count, number})",
+        "nic_firewall_off": "Pare-feu d'invité coupé ({count, number})",
+        "foreign_accept": "Règles modifiées à la main ({count, number})",
+        "ipset_out_of_sync": "Ensembles d'IP désynchronisés ({count, number})",
+        "member_without_ip": "Membres sans IP connue ({count, number})",
+        "ambiguous_zone": "Invités dans plusieurs zones ({count, number})",
+        "object_collision": "Noms déjà utilisés dans Proxmox ({count, number})",
+        "generic": "{kind} (nombre : {count, number})"
+      },
+      "noneZone": "aucune",
+      "select": "Sélectionner {name}",
+      "selectGroup": "Sélectionner tous les écarts de {group}",
+      "foldGroup": "Replier le groupe",
+      "unfoldGroup": "Déplier le groupe",
+      "kindsLabel": "Écarts par type",
+      "allKinds": "Tous · {count, number}",
+      "bulkSelected": "{count, plural, one {# écart sélectionné} other {# écarts sélectionnés}}",
+      "bulkAssign": "Affecter {count, plural, one {# invité} other {# invités}} à une zone…",
+      "bulkIgnore": "Ignorer {count, number}",
+      "bulkClear": "Vider la sélection",
+      "tableLabel": "Écarts",
+      "colObject": "Objet",
+      "colZone": "Zone concernée",
+      "colDiffers": "Ce qui diffère",
+      "colSince": "Depuis",
+      "colActions": "Actions possibles"
     },
     "observation": {
       "sampling": "Par défaut, Proxmox journalise au plus une ligne par seconde et par chaîne : les flux très actifs peuvent être sous-comptés.",

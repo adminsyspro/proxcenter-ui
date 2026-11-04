@@ -12779,7 +12779,34 @@
         "generic": "Abweichung"
       },
       "zoneFilter": "Nur Zone {name}",
-      "zoneFilterClear": "Alle Zonen anzeigen"
+      "zoneFilterClear": "Alle Zonen anzeigen",
+      "groups": {
+        "unzoned_running": "Laufende Gäste ohne Zone ({count, number})",
+        "nic_firewall_off": "Gast-Firewall aus ({count, number})",
+        "foreign_accept": "Von Hand geänderte Regeln ({count, number})",
+        "ipset_out_of_sync": "Nicht synchrone IP-Sets ({count, number})",
+        "member_without_ip": "Mitglieder ohne bekannte IP ({count, number})",
+        "ambiguous_zone": "Gäste in mehreren Zonen ({count, number})",
+        "object_collision": "Bereits in Proxmox verwendete Namen ({count, number})",
+        "generic": "{kind} (Anzahl: {count, number})"
+      },
+      "noneZone": "keine",
+      "select": "{name} auswählen",
+      "selectGroup": "Alle Abweichungen von {group} auswählen",
+      "foldGroup": "Gruppe einklappen",
+      "unfoldGroup": "Gruppe ausklappen",
+      "kindsLabel": "Abweichungen nach Art",
+      "allKinds": "Alle · {count, number}",
+      "bulkSelected": "{count, plural, one {# Abweichung ausgewählt} other {# Abweichungen ausgewählt}}",
+      "bulkAssign": "{count, plural, one {# Gast} other {# Gäste}} einer Zone zuweisen…",
+      "bulkIgnore": "{count, number} ignorieren",
+      "bulkClear": "Auswahl aufheben",
+      "tableLabel": "Abweichungen",
+      "colObject": "Objekt",
+      "colZone": "Betroffene Zone",
+      "colDiffers": "Was abweicht",
+      "colSince": "Seit",
+      "colActions": "Aktionen"
     },
     "observation": {
       "sampling": "Proxmox protokolliert standardmäßig höchstens eine Zeile pro Sekunde und Kette, daher können stark ausgelastete Flüsse zu niedrig gezählt werden.",

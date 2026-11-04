@@ -34,6 +34,8 @@ export function useIgnoredDrifts(connectionId: string) {
   }, [connectionId, ignored])
 
   const ignore = useCallback((key: string) => update(keys => keys.add(key)), [update])
+  /** Several at once (the bulk bar): one write, so none is lost to a stale set. */
+  const ignoreAll = useCallback((list: readonly string[]) => update(keys => { for (const k of list) keys.add(k) }), [update])
   const restore = useCallback((key: string) => update(keys => keys.delete(key)), [update])
-  return { ignored, ignore, restore }
+  return { ignored, ignore, ignoreAll, restore }
 }

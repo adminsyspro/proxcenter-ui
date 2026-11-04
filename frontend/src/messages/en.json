@@ -13111,7 +13111,34 @@
         "generic": "Drift"
       },
       "zoneFilter": "Zone {name} only",
-      "zoneFilterClear": "Show every zone"
+      "zoneFilterClear": "Show every zone",
+      "groups": {
+        "unzoned_running": "Running guests in no zone ({count, number})",
+        "nic_firewall_off": "Guest firewall off ({count, number})",
+        "foreign_accept": "Rules changed by hand ({count, number})",
+        "ipset_out_of_sync": "IP sets out of sync ({count, number})",
+        "member_without_ip": "Members without a known IP ({count, number})",
+        "ambiguous_zone": "Guests in several zones ({count, number})",
+        "object_collision": "Names already used in Proxmox ({count, number})",
+        "generic": "{kind} ({count, number})"
+      },
+      "noneZone": "none",
+      "select": "Select {name}",
+      "selectGroup": "Select every drift of {group}",
+      "foldGroup": "Fold the group",
+      "unfoldGroup": "Unfold the group",
+      "kindsLabel": "Drifts by kind",
+      "allKinds": "All · {count, number}",
+      "bulkSelected": "{count, plural, one {# drift selected} other {# drifts selected}}",
+      "bulkAssign": "Assign {count, plural, one {# guest} other {# guests}} to a zone…",
+      "bulkIgnore": "Ignore {count, number}",
+      "bulkClear": "Clear the selection",
+      "tableLabel": "Drifts",
+      "colObject": "Object",
+      "colZone": "Zone",
+      "colDiffers": "What differs",
+      "colSince": "Since",
+      "colActions": "Actions"
     },
     "observation": {
       "sampling": "Proxmox logs at most one line per second per chain by default, so busy flows may be under-counted.",

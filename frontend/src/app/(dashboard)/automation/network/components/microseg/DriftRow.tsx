@@ -1,18 +1,15 @@
 'use client'
 
-import { useState } from 'react'
-import { Box, Button, Chip, Collapse, IconButton, Tooltip, Typography } from '@mui/material'
+import { Box, Button, Checkbox, Chip, IconButton, TableCell, TableRow, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
 
 import type { DriftLabel } from './driftLabels'
-import { OneLine } from './dialogParts'
 import type { PolicyGuest } from './zoneModel'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import { ZoneShield } from './ZoneNode'
-import ZoneStateChip from './ZoneStateChip'
 
 /** Cluster objects have no guest: one glyph per kind, with the amber dot every drift carries. */
 const OBJECT_GLYPH: Record<string, string> = {
@@ -35,30 +32,37 @@ export const KIND_CHIP: Record<string, { color: KindChipColor; icon: string }> =
 }
 const UNKNOWN_KIND_CHIP = { color: 'error', icon: 'ri-alert-line' } as const
 
-function KindChip({ kind }: { kind: string }) {
+/**
+ * The chip of a drift kind in its colour with its icon; with a count, a filter of the summary strip (filled when it is
+ * the kind shown).
+ */
+export function KindChip({ kind, count, selected = false, onClick }: { kind: string; count?: number; selected?: boolean; onClick?: () => void }) {
   const t = useTranslations('microsegPilot.drifts.chip')
   const { color, icon } = KIND_CHIP[kind] ?? UNKNOWN_KIND_CHIP
   const label = t(kind in KIND_CHIP ? kind : 'generic')
   return (
     <Chip
       size='small'
-      variant='outlined'
+      variant={selected ? 'filled' : 'outlined'}
       color={color}
       icon={<i className={icon} style={{ fontSize: 14 }} />}
-      label={label}
-      data-testid='drift-kind-chip'
-      sx={{ flexShrink: 0, maxWidth: 140 }}
+      label={count === undefined ? label : `${label} · ${count}`}
+      onClick={onClick}
+      aria-pressed={onClick ? selected : undefined}
+      data-testid={count === undefined ? 'drift-kind-chip' : `drift-kind-filter-${kind}`}
+      sx={{ flexShrink: 0, maxWidth: 200 }}
     />
   )
 }
 
-/** The zone a drift is about: its shield in its colour with the state dot, its name, then its state. */
-function DriftZone({ zone }: { zone: MicrosegZone }) {
+/** The zone a drift is about: its shield in its colour with the state dot and its name; "none" when it names none. */
+function DriftZone({ zone }: { zone: MicrosegZone | null }) {
+  const t = useTranslations('microsegPilot.drifts')
+  if (!zone) return <Typography variant='body2' color='text.disabled'>{t('noneZone')}</Typography>
   return (
-    <Box data-testid='drift-zone' sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0, minWidth: 0, maxWidth: 260 }}>
+    <Box data-testid='drift-zone' sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
       <ZoneShield color={zone.color || 'currentColor'} state={zone.state} />
       <Tooltip title={zone.name}><Typography noWrap variant='body2' fontWeight={600} sx={{ minWidth: 0 }}>{zone.name}</Typography></Tooltip>
-      <ZoneStateChip state={zone.state} />
     </Box>
   )
 }
@@ -88,67 +92,71 @@ export type DriftRowProps = {
   guest: PolicyGuest | null
   /** The zone the drift is about, when it names one that exists. */
   zone?: MicrosegZone | null
+  /** When the drift was found: the last full run. */
+  since: string
   ignored: boolean
   /** The assign fix needs a zone to assign to. */
   hasZones: boolean
+  selected: boolean
+  onSelect: (selected: boolean) => void
   onFix: (anchor: HTMLElement) => void
   onIgnore: () => void
   onRestore: () => void
 }
 
-/** One drift on one line: chevron, glyph, title, subject, then Fix and Ignore; the detail sits under the chevron. */
-export default function DriftRow({ drift, label, subject, guest, zone = null, ignored, hasZones, onFix, onIgnore, onRestore }: DriftRowProps) {
+/**
+ * One drift on one row of the Drifts table: a checkbox, the object (glyph, name, vmid and node, or the cluster
+ * object), its zone, what differs, since when, and Fix (assign to a zone or open the plan) and Ignore.
+ */
+export default function DriftRow({ drift, label, subject, guest, zone = null, since, ignored, hasZones, selected, onSelect, onFix, onIgnore, onRestore }: DriftRowProps) {
   const t = useTranslations('microsegPilot.drifts')
-  const tp = useTranslations('microsegPilot.policy')
   const { canWrite } = useMicrosegWrite()
-  const [open, setOpen] = useState(false)
   const assign = label.fix === 'assign'
   const noZone = assign && !hasZones
+  const where = drift.guest ? `${drift.guest.vmid} · ${guest?.node ?? drift.guest.node}` : null
+  const differs = label.hint ? `${label.detail} ${label.hint}` : label.detail
 
   return (
-    <Box role='listitem' aria-label={`${label.title}: ${subject}`} sx={{ borderBottom: 1, borderColor: 'divider', opacity: ignored ? 0.6 : 1 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 44, px: 1, minWidth: 0 }}>
-        <IconButton size='small' aria-expanded={open} aria-label={open ? tp('hideDetails') : tp('showDetails')} onClick={() => setOpen(v => !v)}>
-          <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
-        </IconButton>
-        <KindChip kind={drift.kind} />
-        <DriftGlyph drift={drift} guest={guest} />
-        <Tooltip title={label.title}><Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', maxWidth: 260 }}>{label.title}</Typography></Tooltip>
-        <Tooltip title={subject}>
-          <Typography noWrap color={label.hint ? 'text.primary' : 'text.secondary'} sx={label.hint ? { flex: '0 1 auto', maxWidth: 200 } : { flex: '1 1 0', minWidth: 0 }}>{subject}</Typography>
-        </Tooltip>
-        {zone && <DriftZone zone={zone} />}
-        {label.hint && (
-          <Tooltip title={label.hint}>
-            <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{label.hint}</Typography>
-          </Tooltip>
-        )}
-        {ignored && <Chip size='small' variant='outlined' label={t('ignoredChip')} sx={{ flexShrink: 0 }} />}
+    <TableRow aria-label={`${label.title}: ${subject}`} selected={selected} sx={{ opacity: ignored ? 0.6 : 1 }}>
+      <TableCell padding='checkbox'>
+        <Checkbox size='small' checked={selected} onChange={e => onSelect(e.target.checked)} slotProps={{ input: { 'aria-label': t('select', { name: subject }) } }} />
+      </TableCell>
+      <TableCell sx={{ maxWidth: 260 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+          <DriftGlyph drift={drift} guest={guest} />
+          <Tooltip title={subject}><Typography noWrap fontWeight={600} sx={{ minWidth: 0 }}>{subject}</Typography></Tooltip>
+          {where && <Typography noWrap variant='body2' color='text.secondary' sx={{ flexShrink: 0 }}>{where}</Typography>}
+        </Box>
+      </TableCell>
+      <TableCell sx={{ maxWidth: 180 }}><DriftZone zone={zone} /></TableCell>
+      <TableCell sx={{ maxWidth: 380 }}>
+        <Tooltip title={differs}><Typography noWrap variant='body2' data-testid='drift-differs'>{label.detail}</Typography></Tooltip>
+      </TableCell>
+      <TableCell sx={{ whiteSpace: 'nowrap' }}><Typography variant='body2' color='text.secondary'>{since}</Typography></TableCell>
+      <TableCell align='right' sx={{ whiteSpace: 'nowrap' }}>
+        {ignored && <Chip size='small' variant='outlined' label={t('ignoredChip')} sx={{ mr: 1 }} />}
         {!ignored && label.fix && (
           <WriteTip title={noZone ? t('noZone') : ''}>
             <Button
-                size='small'
-                variant='outlined'
-                disabled={!canWrite || noZone}
-                aria-haspopup={assign ? 'menu' : undefined}
-                onClick={e => onFix(e.currentTarget)}
-                sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
-              >
-                {assign ? t('fixAssign') : t('fixPlan')}
+              size='small'
+              variant='outlined'
+              disabled={!canWrite || noZone}
+              aria-haspopup={assign ? 'menu' : undefined}
+              onClick={e => onFix(e.currentTarget)}
+              sx={{ whiteSpace: 'nowrap', mr: 0.5 }}
+            >
+              {assign ? t('fixAssign') : t('fixPlan')}
             </Button>
           </WriteTip>
         )}
         {ignored ? (
-          <Button size='small' onClick={onRestore} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{t('restore')}</Button>
+          <Button size='small' onClick={onRestore} sx={{ whiteSpace: 'nowrap' }}>{t('restore')}</Button>
         ) : (
           <Tooltip title={t('ignore')}>
-            <IconButton size='small' aria-label={t('ignore')} onClick={onIgnore} sx={{ flexShrink: 0 }}><i className='ri-eye-off-line' /></IconButton>
+            <IconButton size='small' aria-label={t('ignore')} onClick={onIgnore}><i className='ri-eye-off-line' /></IconButton>
           </Tooltip>
         )}
-      </Box>
-      <Collapse in={open} unmountOnExit>
-        <Box sx={{ pl: 7, pr: 2, pb: 1.5, minWidth: 0 }}><OneLine text={label.detail} /></Box>
-      </Collapse>
-    </Box>
+      </TableCell>
+    </TableRow>
   )
 }

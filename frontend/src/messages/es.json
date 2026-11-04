@@ -13111,7 +13111,34 @@
         "generic": "Desviación"
       },
       "zoneFilter": "Solo zona {name}",
-      "zoneFilterClear": "Mostrar todas las zonas"
+      "zoneFilterClear": "Mostrar todas las zonas",
+      "groups": {
+        "unzoned_running": "Invitados en ejecución sin zona ({count, number})",
+        "nic_firewall_off": "Cortafuegos de invitado apagado ({count, number})",
+        "foreign_accept": "Reglas cambiadas a mano ({count, number})",
+        "ipset_out_of_sync": "Conjuntos de IP desincronizados ({count, number})",
+        "member_without_ip": "Miembros sin IP conocida ({count, number})",
+        "ambiguous_zone": "Invitados en varias zonas ({count, number})",
+        "object_collision": "Nombres ya usados en Proxmox ({count, number})",
+        "generic": "{kind} (cantidad: {count, number})"
+      },
+      "noneZone": "ninguna",
+      "select": "Seleccionar {name}",
+      "selectGroup": "Seleccionar todas las desviaciones de {group}",
+      "foldGroup": "Plegar el grupo",
+      "unfoldGroup": "Desplegar el grupo",
+      "kindsLabel": "Desviaciones por tipo",
+      "allKinds": "Todos · {count, number}",
+      "bulkSelected": "{count, plural, one {# desviación seleccionada} other {# desviaciones seleccionadas}}",
+      "bulkAssign": "Asignar {count, plural, one {# invitado} other {# invitados}} a una zona…",
+      "bulkIgnore": "Ignorar {count, number}",
+      "bulkClear": "Borrar la selección",
+      "tableLabel": "Desviaciones",
+      "colObject": "Objeto",
+      "colZone": "Zona",
+      "colDiffers": "Qué difiere",
+      "colSince": "Desde",
+      "colActions": "Acciones"
     },
     "observation": {
       "sampling": "Por defecto Proxmox registra como máximo una línea por segundo y por cadena, por lo que los flujos muy activos pueden contarse de menos.",

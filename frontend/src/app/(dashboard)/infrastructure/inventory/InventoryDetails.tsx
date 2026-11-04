@@ -2973,6 +2973,8 @@ return vm?.isCluster ?? false
           <NetworkDashboard
             connectionIds={[...new Set(clusterStorages.map(cs => cs.connId))]}
             connectionNames={Object.fromEntries(clusterStorages.map(cs => [cs.connId, cs.connName]))}
+            hosts={hosts}
+            onSelect={onSelect}
           />
         </Box>
       ) : selection?.type === 'net-conn' || selection?.type === 'net-node' || selection?.type === 'net-vlan' || selection?.type === 'net-bridge' ? (

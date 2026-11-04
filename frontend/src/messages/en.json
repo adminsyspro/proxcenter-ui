@@ -2267,7 +2267,14 @@
     "nodeActionDrainDesc": "Guests on shared storage are evacuated by the orchestrator, each one to the node the placement engine picks. Follow them in the Task Center.",
     "nodeActionDrainFailed": "The drain could not start: {error}",
     "diskControllerTooltip": "Controller the disk is attached to",
-    "diskController": "Controller"
+    "diskController": "Controller",
+    "networkGuests": {
+      "guest": "Guest",
+      "node": "Node",
+      "interfaces": "Interfaces",
+      "bridge": "Bridge",
+      "toggle": "Show or hide the guests on {name}"
+    }
   },
   "inventoryPage": {
     "newTag": "New tag...",

@@ -2267,7 +2267,14 @@
     "nodeActionDrainDesc": "공유 스토리지의 게스트는 오케스트레이터가 배치 엔진이 선택한 노드로 각각 비웁니다. Task Center에서 확인하세요.",
     "nodeActionDrainFailed": "드레인을 시작할 수 없습니다: {error}",
     "diskControllerTooltip": "디스크가 연결된 컨트롤러",
-    "diskController": "컨트롤러"
+    "diskController": "컨트롤러",
+    "networkGuests": {
+      "guest": "게스트",
+      "node": "노드",
+      "interfaces": "인터페이스",
+      "bridge": "브리지",
+      "toggle": "{name}의 게스트 표시 또는 숨기기"
+    }
   },
   "inventoryPage": {
     "newTag": "새 태그...",

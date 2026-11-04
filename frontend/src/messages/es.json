@@ -2267,7 +2267,14 @@
     "nodeActionDrainDesc": "Los invitados en almacenamiento compartido los evacua el orquestador, cada uno al nodo elegido por el motor de ubicación. Sígalos en el Task Center.",
     "nodeActionDrainFailed": "El drenaje no pudo iniciarse: {error}",
     "diskControllerTooltip": "Controlador al que está conectado el disco",
-    "diskController": "Controlador"
+    "diskController": "Controlador",
+    "networkGuests": {
+      "guest": "Invitado",
+      "node": "Nodo",
+      "interfaces": "Interfaces",
+      "bridge": "Bridge",
+      "toggle": "Mostrar u ocultar los invitados de {name}"
+    }
   },
   "inventoryPage": {
     "newTag": "Nueva etiqueta...",

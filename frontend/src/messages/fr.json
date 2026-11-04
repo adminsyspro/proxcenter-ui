@@ -2267,7 +2267,14 @@
     "nodeActionDrainDesc": "Les invités sur stockage partagé sont évacués par l'orchestrateur, chacun vers le nœud choisi par le moteur de placement. Suivez-les dans le Task Center.",
     "nodeActionDrainFailed": "Le drain n'a pas pu démarrer : {error}",
     "diskControllerTooltip": "Contrôleur auquel le disque est rattaché",
-    "diskController": "Contrôleur"
+    "diskController": "Contrôleur",
+    "networkGuests": {
+      "guest": "Invité",
+      "node": "Nœud",
+      "interfaces": "Interfaces",
+      "bridge": "Bridge",
+      "toggle": "Afficher ou masquer les invités de {name}"
+    }
   },
   "inventoryPage": {
     "newTag": "Nouveau tag...",

@@ -25,6 +25,7 @@ interface RulesTabProps {
   hostRulesByNode: Record<string, firewallAPI.FirewallRule[]>
   setHostRulesByNode: React.Dispatch<React.SetStateAction<Record<string, firewallAPI.FirewallRule[]>>>
   nodesList: string[]
+  nodeStatus?: Record<string, string>
   vmFirewallData: VMFirewallInfo[]
   setVMFirewallData: React.Dispatch<React.SetStateAction<VMFirewallInfo[]>>
   loadingVMRules: boolean
@@ -48,7 +49,7 @@ interface RulesTabProps {
 export default function RulesTab({
   activeSubTab, guestFilter, onClearGuestFilter,
   clusterRules, setClusterRules, clusterOptions, setClusterOptions,
-  hostRulesByNode, setHostRulesByNode, nodesList,
+  hostRulesByNode, setHostRulesByNode, nodesList, nodeStatus,
   vmFirewallData, setVMFirewallData, loadingVMRules, loadVMFirewallData, loadGuestRules,
   securityGroups, aliases, ipsets, firewallMode, selectedConnection, connectionName, loadError, reload,
 }: RulesTabProps) {
@@ -79,6 +80,7 @@ export default function RulesTab({
           connectionName={connectionName}
           firewallMode={firewallMode}
           nodesList={nodesList}
+          nodeStatus={nodeStatus}
           clusterRules={clusterRules}
           setClusterRules={setClusterRules}
           clusterOptions={clusterOptions}

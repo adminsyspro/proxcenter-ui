@@ -76,7 +76,7 @@ export default function NetworkAutomationPage() {
   // ── Data hooks ──
   const {
     aliases, ipsets, securityGroups, clusterOptions, clusterRules,
-    nodeOptions, firewallMode, nodesList,
+    nodeOptions, firewallMode, nodesList, nodeStatus,
     loading, loadError, reload: loadFirewallData, setClusterRules, setClusterOptions,
   } = useFirewallData(isEnterprise ? selectedConnection || null : null, isEnterprise)
 
@@ -221,6 +221,7 @@ export default function NetworkAutomationPage() {
               hostRulesByNode={hostRulesByNode}
               setHostRulesByNode={setHostRulesByNode}
               nodesList={nodesList}
+              nodeStatus={nodeStatus}
               vmFirewallData={vmFirewallData}
               setVMFirewallData={setVMFirewallData}
               loadingVMRules={loadingVMRules}

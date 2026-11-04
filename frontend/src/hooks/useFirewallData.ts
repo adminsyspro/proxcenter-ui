@@ -20,6 +20,8 @@ interface UseFirewallDataReturn {
   firewallMode: firewallAPI.FirewallMode
   connectionInfo: firewallAPI.ConnectionFirewallInfo | null
   nodesList: string[]
+  /** The PVE status of each node of nodesList (online, offline), as the nodes route gives it. */
+  nodeStatus: Record<string, string>
   loading: boolean
   /** What failed on the last load, null when everything loaded. */
   loadError: string | null
@@ -39,6 +41,7 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
   const [firewallMode, setFirewallMode] = useState<firewallAPI.FirewallMode>('cluster')
   const [connectionInfo, setConnectionInfo] = useState<firewallAPI.ConnectionFirewallInfo | null>(null)
   const [nodesList, setNodesList] = useState<string[]>([])
+  const [nodeStatus, setNodeStatus] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -56,6 +59,7 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
 
     // Clear previous data first
     setNodesList([])
+    setNodeStatus({})
 
     // Each fetch still degrades to an empty value so the rest of the page
     // loads, but the failure is kept and shown: swallowing it rendered a
@@ -99,7 +103,10 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
 
           nodes = nodesData.map((n: any) => n.node || n.name).filter(Boolean)
           nodesLoaded = true
-          if (isLatest()) setNodesList(nodes)
+          if (isLatest()) {
+            setNodesList(nodes)
+            setNodeStatus(Object.fromEntries(nodesData.filter((n: any) => (n.node || n.name) && n.status).map((n: any) => [n.node || n.name, String(n.status)])))
+          }
         } else {
           const body = await nodesResp.json().catch(() => null)
 
@@ -113,6 +120,7 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
 
       if (!nodesLoaded) {
         setNodesList([])
+        setNodeStatus({})
         setFirewallMode('cluster')
         setConnectionInfo(null)
 
@@ -188,6 +196,7 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
     setNodeOptions(null)
     setNodeRules([])
     setNodesList([])
+    setNodeStatus({})
     setFirewallMode('cluster')
     setConnectionInfo(null)
     setLoadError(null)
@@ -211,6 +220,7 @@ export function useFirewallData(connectionId: string | null, isEnterprise: boole
     firewallMode,
     connectionInfo,
     nodesList,
+    nodeStatus,
     loading,
     loadError,
     reload: loadFirewallData,

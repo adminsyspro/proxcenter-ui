@@ -29,12 +29,12 @@ const api = vi.mocked(firewallAPI)
 const rule = (pos: number): FirewallRule => ({ pos, type: 'in', action: 'ACCEPT', enable: 1 })
 
 /** Answer the nodes request with these node names, or with a failed response. */
-function mockNodes(nodes: string[] | 'fail' | 'throw') {
+function mockNodes(nodes: string[] | 'fail' | 'throw', status: Record<string, string> = {}) {
   vi.stubGlobal('fetch', vi.fn(async () => {
     if (nodes === 'throw') throw new Error('network down')
     if (nodes === 'fail') return { ok: false, json: async () => ({}) } as Response
 
-    return { ok: true, json: async () => ({ data: nodes.map(node => ({ node })) }) } as Response
+    return { ok: true, json: async () => ({ data: nodes.map(node => ({ node, ...(status[node] ? { status: status[node] } : {}) })) }) } as Response
   }))
 }
 
@@ -69,6 +69,15 @@ describe('useFirewallData', () => {
     expect(result.current.aliases).toHaveLength(1)
     expect(result.current.connectionInfo).toMatchObject({ mode: 'cluster', node_count: 2 })
     expect(api.getNodeOptions).not.toHaveBeenCalled()
+  })
+
+  it('keeps the PVE status of each node the nodes route gives one for', async () => {
+    mockNodes(['pve1', 'pve2', 'pve3'], { pve1: 'online', pve2: 'offline' })
+
+    const { result } = renderHook(() => useFirewallData('conn-1', true))
+
+    await waitFor(() => expect(result.current.nodesList).toEqual(['pve1', 'pve2', 'pve3']))
+    expect(result.current.nodeStatus).toEqual({ pve1: 'online', pve2: 'offline' })
   })
 
   it('keeps what loaded and reports every distinct failure, unwrapped', async () => {
@@ -159,6 +168,7 @@ describe('useFirewallData', () => {
 
       expect(result.current.firewallMode).toBe('cluster')
       expect(result.current.nodesList).toEqual([])
+      expect(result.current.nodeStatus).toEqual({})
       expect(result.current.connectionInfo).toBeNull()
       expect(api.getNodeOptions).not.toHaveBeenCalled()
       unmount()

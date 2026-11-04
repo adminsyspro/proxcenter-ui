@@ -18,7 +18,7 @@ import { ENGINE_GUEST_OPTIONS, isEngineComment, scopeKey, type DraftScope, type 
 import { useMicrosegEvents } from '@/lib/microseg/useMicrosegEvents'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
-import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
+import { NodeIcon, StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 
 import MicrosegConfirmDialog from '../microseg/MicrosegConfirmDialog'
 import { useMicrosegWrite, WriteTip } from '../microseg/microsegAccess'
@@ -46,6 +46,8 @@ export type FirewallingViewProps = {
   connectionName?: string
   firewallMode: firewallAPI.FirewallMode
   nodesList: string[]
+  /** The PVE status of each node (online, offline): the host sections show it on the Proxmox logo. */
+  nodeStatus?: Record<string, string>
   clusterRules: Rules
   setClusterRules: React.Dispatch<React.SetStateAction<Rules>>
   clusterOptions: firewallAPI.ClusterOptions | null
@@ -662,7 +664,7 @@ export default function FirewallingView(p: FirewallingViewProps) {
     <Fragment key={s.key}>
       <SectionRow
         title={s.title}
-        icon={sectionIcon(s, theme.palette.text.secondary)}
+        icon={sectionIcon(s, theme.palette.text.secondary, p.nodeStatus)}
         open={open.has(s.key)}
         onToggle={() => toggleSection(s)}
         badges={sectionBadges(s)}
@@ -938,8 +940,9 @@ function objectName(s: Section, t: ReturnType<typeof useTranslations<'microsegPi
   return t('object.guest', { vmid: s.guest!.vmid, node: s.guest!.node })
 }
 
-function sectionIcon(s: Section, colour: string): ReactNode {
+function sectionIcon(s: Section, colour: string, nodeStatus: Record<string, string> | undefined): ReactNode {
   if (s.kind === 'guest' && s.guest) return <StatusIcon type='vm' status={s.guest.status} vmType={s.guest.type} size={16} />
+  if (s.kind === 'host') return <NodeIcon status={nodeStatus?.[s.node!]} size={16} />
   const icon: Record<Section['kind'], string> = { zone: 'ri-shield-keyhole-line', cluster: 'ri-server-line', host: 'ri-hard-drive-2-line', guest: 'ri-computer-line' }
   return <i className={icon[s.kind]} aria-hidden style={{ fontSize: 16, color: colour }} />
 }

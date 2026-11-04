@@ -182,7 +182,8 @@ describe('observation list', () => {
     await row('web to db')
     const slot = await screen.findByTestId('microseg-actions-slot')
     const filters = within(slot).getByTestId('observation-filters')
-    for (const name of ['Type', 'Status', 'Zone']) expect(within(filters).getByRole('combobox', { name })).toBeTruthy()
+    const shown = { Type: 'TypeAll types', Status: 'StatusPending', Zone: 'ZoneAll zones' }
+    for (const [name, text] of Object.entries(shown)) expect(within(filters).getByRole('combobox', { name }).textContent).toBe(text)
     const check = screen.getByRole('button', { name: /Check now/ })
     expect(filters.compareDocumentPosition(check) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })

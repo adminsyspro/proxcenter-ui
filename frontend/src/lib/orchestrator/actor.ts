@@ -17,6 +17,11 @@ function headerSafe(value: string): string {
 
 export async function actorHeaders(): Promise<Record<string, string>> {
   try {
+    // Called from inside a principal resolution (the token license check of
+    // roadmap#208): resolving again would re-enter that same check, forever.
+    const { isResolvingPrincipal } = await import('@/lib/auth/principalResolution')
+    if (isResolvingPrincipal()) return {}
+
     // Imported on use: principal.ts pulls next/headers and the auth chain,
     // which the callers of lib/orchestrator/headers.ts must not load upfront.
     const { getPrincipal } = await import('@/lib/auth/principal')

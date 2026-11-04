@@ -65,6 +65,23 @@ describe('orchestratorHeaders', () => {
     expect(out['X-API-Key']).toBe('baseline')
   })
 
+  describe('orchestratorServiceHeaders (roadmap#208)', () => {
+    it('sends the server identity and never resolves the principal', async () => {
+      process.env.ORCHESTRATOR_API_KEY = 'svc-key'
+      const { orchestratorServiceHeaders } = await import('./headers')
+      expect(orchestratorServiceHeaders({ 'X-API-Key': 'caller', Accept: 'application/json' })).toEqual({
+        Accept: 'application/json',
+        'X-API-Key': 'svc-key',
+      })
+      expect(getPrincipalMock).not.toHaveBeenCalled()
+    })
+
+    it('sends no key when none is configured', async () => {
+      const { orchestratorServiceHeaders } = await import('./headers')
+      expect(orchestratorServiceHeaders()).toEqual({})
+    })
+  })
+
   describe('actor headers (#1105)', () => {
     it('names a session user by id and email', async () => {
       getPrincipalMock.mockResolvedValue({

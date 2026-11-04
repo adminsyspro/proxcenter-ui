@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { effectiveHasFeature } from "@/lib/license/features"
-import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { orchestratorServiceHeaders } from "@/lib/orchestrator/headers"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
@@ -45,7 +45,7 @@ export type ServerLicense = {
 export async function getServerLicense(): Promise<ServerLicense> {
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/v1/license/status`, {
-      headers: await orchestratorHeaders(),
+      headers: orchestratorServiceHeaders(),
       cache: "no-store",
       signal: AbortSignal.timeout(LICENSE_STATUS_TIMEOUT_MS),
     })

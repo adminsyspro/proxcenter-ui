@@ -1,9 +1,10 @@
 'use client'
 
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { DialogErrorLine, ONE_LINE_SX, OneLine } from './dialogParts'
+import TruncatedText from './TruncatedText'
 
 /** A line of explanation under the body: an icon and one line of text. */
 export type ConfirmInfoLine = { icon: string; text: string }
@@ -38,9 +39,7 @@ export default function MicrosegConfirmDialog({ open, title, body, infoLines = [
         {title}
       </DialogTitle>
       <DialogContent>
-        <Tooltip title={body}>
-          <Typography noWrap>{body}</Typography>
-        </Tooltip>
+        <TruncatedText text={body} />
         {infoLines.length > 0 && (
           <Stack spacing={1} sx={{ mt: 2 }}>
             {infoLines.map(line => (

@@ -16,6 +16,7 @@ import { useTrafficTimeline } from '../useTrafficTimeline'
 import { objectDotSx } from './objectColour'
 import { useStoredChoice } from './useStoredChoice'
 import { bareIp } from './zoneGraph'
+import TruncatedText from './TruncatedText'
 
 /** Sources (or destinations) listed in the panel; the header counts them all. */
 const TOP_SOURCES = 5
@@ -188,7 +189,7 @@ export function TopSourcesList({ top, phase, mode = 'in' }: { top: TopEntry[]; p
               </Tooltip>
             )}
             <Box sx={objectDotSx(s.color)} />
-            <Tooltip title={both ? where : name}><Typography noWrap sx={{ flex: '1 1 0', minWidth: 0 }}>{name}</Typography></Tooltip>
+            <TruncatedText text={name} title={both ? where : name} sx={{ flex: '1 1 0', minWidth: 0 }} />
             <Typography variant='body2' sx={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{format.number(s.hits)}</Typography>
             <Typography variant='caption' color='text.secondary' sx={{ flexShrink: 0, width: 40, textAlign: 'right' }}>{`${Math.round(s.share)}%`}</Typography>
           </Box>

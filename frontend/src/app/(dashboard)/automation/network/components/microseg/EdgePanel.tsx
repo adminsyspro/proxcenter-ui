@@ -14,6 +14,7 @@ import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions }
 import PolicyPager, { usePaged } from './PolicyPager'
 import type { PanelEdgeData } from './zoneGraph'
 import { formatWhen } from './summaryModel'
+import TruncatedText from './TruncatedText'
 
 const ROWS_PER_PAGE = 5
 
@@ -119,15 +120,11 @@ export default function EdgePanel({ edgeId, source, target, data, from, to, zone
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
         <Box component='span' aria-hidden sx={{ width: 18, borderTop: `2px ${data.kind === 'unprotected' || data.kind === 'outside' ? 'dashed' : 'solid'} ${data.color}`, flexShrink: 0 }} />
-        <Tooltip title={title}>
-          <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{title}</Typography>
-        </Tooltip>
+        <TruncatedText text={title} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
         <Chip size='small' variant='outlined' label={t(`legend.${data.kind === 'outside' ? 'allowed' : data.kind}`)} sx={{ flexShrink: 0 }} />
         <IconButton size='small' aria-label={t('panel.close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
       </Box>
-      <Tooltip title={servicesTip}>
-        <Typography noWrap variant='body2' color='text.secondary'>{data.label}</Typography>
-      </Tooltip>
+      <TruncatedText text={data.label} title={servicesTip} variant='body2' color='text.secondary' />
       {failure && <Alert severity='error' onClose={clearFailure} sx={{ mt: 1.5 }}>{failure}</Alert>}
 
       {observed && (

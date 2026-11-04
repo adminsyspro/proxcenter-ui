@@ -17,6 +17,7 @@ import { SelectionTrafficChart, useSelectionTraffic } from './SelectionTraffic'
 import { targetSuggestions, type TargetFlow, type TargetGuest } from './targetModel'
 import { bareIp } from './zoneGraph'
 import ZoneStateChip from './ZoneStateChip'
+import TruncatedText from './TruncatedText'
 
 const ROWS_PER_PAGE = 5
 /** A guest name keeps at least this much of the row (a 12-character name such as "pcz-demo-34"), cut beyond. */
@@ -66,9 +67,7 @@ function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
       <Tooltip title={where}>
         <i className={row.direction === 'out' ? 'ri-arrow-right-up-line' : 'ri-arrow-left-down-line'} style={{ flexShrink: 0 }} aria-hidden />
       </Tooltip>
-      <Tooltip title={where}>
-        <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: NAME_MIN_WIDTH }}>{peer}</Typography>
-      </Tooltip>
+      <TruncatedText text={peer} title={where} fontWeight={600} sx={{ flex: '1 1 0', minWidth: NAME_MIN_WIDTH }} />
       <ServiceHits suggestion={s} />
       {/* The kind gives way before the peer's name: it is cut first, its full label stays in the tooltip. */}
       <Tooltip title={t(`legend.${kind}`)}>
@@ -118,7 +117,7 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
   const header = (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
       <StatusIcon type='vm' vmType={target.type} status={target.status} />
-      <Tooltip title={target.name}><Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto', minWidth: NAME_MIN_WIDTH }}>{target.name}</Typography></Tooltip>
+      <TruncatedText text={target.name} fontWeight={600} sx={{ flex: '0 1 auto', minWidth: NAME_MIN_WIDTH }} />
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>
         {t('target.panel.where', { type: t(`target.type.${target.type}`), vmid: target.vmid, node: target.node })}
       </Typography>
@@ -149,9 +148,7 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
             </Button>
           )}
         </Box>
-        <Tooltip title={ips}>
-          <Typography noWrap variant='body2' color='text.secondary' sx={{ mt: 0.5 }}>{ips}</Typography>
-        </Tooltip>
+        <TruncatedText text={ips} variant='body2' color='text.secondary' sx={{ mt: 0.5 }} />
       </PanelSection>
 
       <PanelSection id='guest.flows' title={t('sections.flows')} count={observed.length}>

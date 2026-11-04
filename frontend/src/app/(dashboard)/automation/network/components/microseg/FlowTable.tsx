@@ -16,6 +16,7 @@ import PolicyPager, { usePaged } from './PolicyPager'
 import { OUTSIDE_GROUP, flowGroups, type FlowGroup, type FlowRowModel, type FlowState } from './policyTableModel'
 import { SlotActions, WriteTip, useMicrosegWrite } from './microsegAccess'
 import { uncoveredOf } from './useZoneUncovered'
+import TruncatedText from './TruncatedText'
 
 const COLUMNS = 5
 const STRUCK = { textDecoration: 'line-through', opacity: 0.7 }
@@ -42,7 +43,7 @@ function End({ zoneId, cidr, zonesById }: { zoneId: string; cidr: string; zonesB
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
       {zone && <Box component='span' sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: zone.color || 'text.disabled', flexShrink: 0 }} />}
-      <Tooltip title={text}><Typography noWrap variant='body2' fontWeight={zone ? 600 : 400}>{text}</Typography></Tooltip>
+      <TruncatedText text={text} variant='body2' fontWeight={zone ? 600 : 400} />
     </Box>
   )
 }

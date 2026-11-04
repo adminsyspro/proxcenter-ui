@@ -203,14 +203,14 @@ describe('the guest panel', () => {
     const aside = await panel('Guest db-1')
     const row = within(within(aside).getByRole('region', { name: 'Flows' })).getAllByRole('listitem')[0]
     // The peer name holds 96 px; the kind chip gives way first.
-    expect(within(row).getByText('web-2')).toHaveStyle({ minWidth: '96px' })
+    expect(within(row).getByText('web-2').parentElement!).toHaveStyle({ minWidth: '96px' })
     expect(within(row).getByText('Blocked').closest('.MuiChip-root')).toHaveStyle({ minWidth: '0' })
     fireEvent.mouseOver(within(row).getByText('web-2'))
     expect(await screen.findByRole('tooltip', { name: 'Incoming, from web-2' })).toBeTruthy()
     // Each side of an allowed flow holds 48 px before its ellipsis.
     fireEvent.click(within(aside).getByTestId('section-guest.zoneRules'))
     const allowed = within(within(aside).getByRole('region', { name: 'Rules of its zone' })).getAllByRole('listitem')[0]
-    expect(within(allowed).getAllByText(/^(web|db)$/)[0].parentElement!).toHaveStyle({ minWidth: '48px' })
+    expect(within(allowed).getAllByText(/^(web|db)$/)[0].parentElement!.parentElement!).toHaveStyle({ minWidth: '48px' })
   })
 
   it('resolves an observed flow from its row, with the sample note in the accept tooltip', async () => {

@@ -1,10 +1,11 @@
 'use client'
 
-import { Box, Chip, Tooltip, Typography } from '@mui/material'
+import { Box, Chip, Tooltip } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
 import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
+import TruncatedText from './TruncatedText'
 
 type Props = {
   flow: MicrosegFlow
@@ -19,9 +20,7 @@ function Side({ zoneId, cidr, zonesById, minWidth = 0 }: { zoneId: string; cidr:
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth, flex: '0 1 auto' }}>
       {zone && <Box component='span' sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: zone.color || 'text.disabled', flexShrink: 0 }} />}
-      <Tooltip title={text}>
-        <Typography noWrap fontWeight={zone ? 600 : 400}>{text}</Typography>
-      </Tooltip>
+      <TruncatedText text={text} fontWeight={zone ? 600 : 400} />
     </Box>
   )
 }

@@ -10,6 +10,7 @@ import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
 
 import { isVersionConflict, writeErrorMessage } from './dialogParts'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import TruncatedText from './TruncatedText'
 
 // Same semantics as the edges of the zone map (EDGE_COLORS): a flow an enforced zone blocked is blue, a flow
 // that would be blocked once its zone enforces (unprotected today) is red.
@@ -45,9 +46,7 @@ export function ServiceHits({ suggestion: s }: { suggestion: Pick<MicrosegSugges
   const t = useTranslations('microsegPilot.observation')
   return (
     <>
-      <Tooltip title={serviceTitle(s.proto, s.dport)}>
-        <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{serviceLabel(s.proto, s.dport)}</Typography>
-      </Tooltip>
+      <TruncatedText text={serviceLabel(s.proto, s.dport)} title={serviceTitle(s.proto, s.dport)} color='text.secondary' sx={{ flexShrink: 0 }} />
       <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{t('hits', { count: s.hits })}</Typography>
     </>
   )

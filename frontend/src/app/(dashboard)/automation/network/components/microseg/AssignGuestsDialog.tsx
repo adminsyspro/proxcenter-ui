@@ -14,6 +14,7 @@ import { assignRows, filterRows, GUESTS_PAGE_SIZE, isSelectable, MAX_ASSIGN, mem
 import { DialogErrorLine, isVersionConflict, ONE_LINE_SX, OneLine, useDialogAction } from './dialogParts'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { useZoneGuests } from './useZoneGuests'
+import TruncatedText from './TruncatedText'
 
 type Props = {
   open: boolean
@@ -47,7 +48,7 @@ function GuestLine({ row, zoneName, checked, selectable, onToggle }: { row: Assi
         sx={{ p: 0.5 }}
       />
       <StatusIcon type='vm' vmType={guest.type} status={guest.status} />
-      <Tooltip title={guest.name}><Typography noWrap sx={{ flex: '0 1 auto' }}>{guest.name}</Typography></Tooltip>
+      <TruncatedText text={guest.name} sx={{ flex: '0 1 auto' }} />
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{`${guest.vmid} · ${guest.node}`}</Typography>
       {row.member === 'tag' && !row.change && <Chip size='small' variant='outlined' label={t('member')} sx={{ flexShrink: 0 }} />}
       {row.change?.kind === 'removal' && (

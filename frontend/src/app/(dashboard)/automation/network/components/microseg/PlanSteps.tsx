@@ -11,6 +11,7 @@ import type { GuestRef, PlanStep } from '@/lib/microseg/types'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { findGuest, groupPlanSteps, guestKey } from './planGroups'
 import type { PolicyGuest } from './zoneModel'
+import TruncatedText from './TruncatedText'
 
 export const GUESTS_PER_PAGE = 20
 
@@ -58,7 +59,7 @@ function GuestHeader({ guest, inventory }: { guest: GuestRef; inventory: PolicyG
       {inventory
         ? <StatusIcon type='vm' vmType={inventory.type} status={inventory.status} />
         : <i className='ri-question-line' style={{ opacity: 0.6 }} />}
-      <Tooltip title={name}><Typography noWrap fontWeight={600} sx={{ flex: '0 1 auto' }}>{name}</Typography></Tooltip>
+      <TruncatedText text={name} fontWeight={600} sx={{ flex: '0 1 auto' }} />
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{`${guest.vmid} · ${guest.node}`}</Typography>
     </>
   )

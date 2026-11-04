@@ -14,6 +14,7 @@ import { endText } from './policyTableModel'
 import { flowsOfZone, type ZoneMember } from './zoneModel'
 import { HOVER_ACTIONS, ZoneDetails, ZoneGlyph, ZoneStateMenu, type ZoneRowProps } from './ZoneRow'
 import ZoneStateChip from './ZoneStateChip'
+import TruncatedText from './TruncatedText'
 
 /** How many members and flows a card previews. */
 export const CARD_PREVIEW = 3
@@ -116,7 +117,7 @@ export default function ZoneCard(props: ZoneCardProps) {
         {/* One line: the name at the left, the state, diff and drifts chips at the right; the description below. */}
         <Box data-zone-title sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
           <ZoneGlyph zone={zone} label={t(`state.${zone.state}`)} />
-          <Tooltip title={zone.name}><Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{zone.name}</Typography></Tooltip>
+          <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
             <ZoneStateChip state={zone.state} onClick={canWrite ? setAnchor : undefined} />
             <DiffChip kind={diffKind} />
@@ -132,9 +133,7 @@ export default function ZoneCard(props: ZoneCardProps) {
             )}
           </Box>
         </Box>
-        <Tooltip title={zone.label}>
-          <Typography noWrap variant='body2' color='text.secondary' sx={{ minHeight: 20 }}>{zone.label}</Typography>
-        </Tooltip>
+        <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ minHeight: 20 }} />
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Stat name='members' value={membersKnown ? members.length : null} label={t('statMembers')} />
           <Stat name='incoming' value={incoming.length} label={t('statIncoming')} />

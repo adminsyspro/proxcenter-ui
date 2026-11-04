@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { Box, Checkbox, FormControl, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from '@mui/material'
+import { Box, Checkbox, FormControl, InputAdornment, MenuItem, Select, TextField, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
@@ -11,6 +11,7 @@ import { Notice } from './PlanNotices'
 import {
   NOTIFY_KEYS, RATE_UNITS, SETTING_NUMBER_KEYS, SETTING_UNITS, type RateUnit, type SettingNumberKey, type SettingsForm, type SettingsProblems,
 } from './settingsModel'
+import TruncatedText from './TruncatedText'
 
 const FIELD_WIDTH = 190
 
@@ -24,9 +25,7 @@ const NUMBER_SECTIONS: Array<{ title: string; keys: SettingNumberKey[] }> = [
 function FieldRow({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minHeight: 44, minWidth: 0 }}>
-      <Tooltip title={hint ?? label}>
-        <Typography noWrap sx={{ flex: '1 1 0', minWidth: 0 }}>{label}</Typography>
-      </Tooltip>
+      <TruncatedText text={label} title={hint ?? label} sx={{ flex: '1 1 0', minWidth: 0 }} />
       {children}
     </Box>
   )

@@ -52,7 +52,7 @@ describe('the stop dialog', () => {
     ]) {
       const line = within(dialog).getByText(text)
       expect(line.className).toContain('MuiTypography-noWrap')
-      expect(line.previousElementSibling?.tagName).toBe('I')
+      expect(line.parentElement?.previousElementSibling?.tagName).toBe('I')
     }
     expect(calls('POST /emergency-stop')).toHaveLength(0)
   })

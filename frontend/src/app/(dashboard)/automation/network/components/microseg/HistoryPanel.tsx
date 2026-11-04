@@ -20,6 +20,7 @@ import PolicyPager, { usePaged } from './PolicyPager'
 import RunDetail from './RunDetail'
 import { RowsPerPageSelect, useRowsPerPage } from './useRowsPerPage'
 import { formatWhen } from './summaryModel'
+import TruncatedText from './TruncatedText'
 
 /** The runs the table reads at once (the newest), merged with the revisions and paged with them. */
 export const RUNS_READ = 100
@@ -53,9 +54,7 @@ function RevisionLine({ row, latestId, onRestore }: Omit<RowProps, 'onDetails'> 
       </TableCell>
       <TableCell><Typography variant='body2' color={author ? 'text.primary' : 'text.disabled'}>{author || '-'}</Typography></TableCell>
       <TableCell sx={{ maxWidth: 320 }}>
-        <Tooltip title={t('revisions.detail.zones', { names: (revision.snapshot?.zones ?? []).map(z => z.name).join(', ') || t('revisions.detail.none') })}>
-          <Typography variant='body2' noWrap data-testid='history-summary'>{summary}</Typography>
-        </Tooltip>
+        <TruncatedText text={summary} title={t('revisions.detail.zones', { names: (revision.snapshot?.zones ?? []).map(z => z.name).join(', ') || t('revisions.detail.none') })} variant='body2' data-testid='history-summary' />
       </TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}>
         <Chip size='small' variant='outlined' color='success' label={t('table.applied')} sx={{ mr: 0.5 }} />
@@ -98,7 +97,7 @@ function RunLine({ row, onDetails }: Pick<RowProps, 'onDetails'> & { row: Extrac
       <TableCell sx={{ maxWidth: 320 }}>
         <Typography variant='body2' noWrap data-testid='history-summary'>{summary}</Typography>
         {run.error && (
-          <Tooltip title={run.error}><Typography variant='caption' color='error' noWrap component='div'>{run.error}</Typography></Tooltip>
+          <TruncatedText text={run.error} variant='caption' color='error' component='div' />
         )}
       </TableCell>
       <TableCell><Chip size='small' variant='outlined' color={STATUS_COLOR[run.status] ?? 'default'} label={tb(run.status)} /></TableCell>

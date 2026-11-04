@@ -12,6 +12,7 @@ import { hitsShare } from './observationModel'
 import { FlowActions } from './ObservationActions'
 import { ObservedKindGlyph } from './observationParts'
 import { formatWhen } from './summaryModel'
+import TruncatedText from './TruncatedText'
 
 /** Columns of the table: select, details, source, arrow, destination, service, hits, last seen, status, actions. */
 export const OBSERVATION_COLUMNS = 10
@@ -88,12 +89,12 @@ export default function ObservationRow({ suggestion: s, zones, checked, busy, ma
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
             <ObservedKindGlyph kind={s.kind} />
             <Box component='span' data-source-dot={dot} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: dot, flexShrink: 0 }} />
-            <Tooltip title={source}><Typography noWrap fontWeight={600} tabIndex={0} sx={NAME_SX}>{source}</Typography></Tooltip>
+            <TruncatedText text={source} fontWeight={600} tabIndex={0} sx={NAME_SX} />
           </Box>
         </TableCell>
         <TableCell sx={{ ...CELL_SX, px: 0 }} aria-hidden><i className='ri-arrow-right-line' style={{ opacity: 0.6 }} /></TableCell>
         <TableCell sx={CELL_SX}>
-          <Tooltip title={destination}><Typography noWrap fontWeight={600} sx={NAME_SX}>{destination}</Typography></Tooltip>
+          <TruncatedText text={destination} fontWeight={600} sx={NAME_SX} />
         </TableCell>
         <TableCell sx={CELL_SX}><Tooltip title={serviceTip}><Chip size='small' variant='outlined' label={service} /></Tooltip></TableCell>
         <TableCell sx={CELL_SX}>

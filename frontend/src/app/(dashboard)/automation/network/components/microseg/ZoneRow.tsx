@@ -13,6 +13,7 @@ import PolicyPager, { usePaged } from './PolicyPager'
 import { flowsOfZone, type ZoneMember } from './zoneModel'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import { STATE_VISUAL } from './ZoneStateChip'
+import TruncatedText from './TruncatedText'
 
 const STATES: ZoneState[] = ['observe', 'enforce', 'disabled']
 export const STATE_DOT: Record<ZoneState, string> = { disabled: '#9e9e9e', observe: '#ed6c02', enforce: '#4caf50' }
@@ -113,7 +114,7 @@ function MemberLine({ member, busy, onRemove }: { member: ZoneMember; busy: bool
       {guest
         ? <StatusIcon type='vm' vmType={guest.type} status={guest.status} />
         : <i className='ri-question-line' style={{ opacity: 0.6 }} />}
-      <Tooltip title={name}><Typography noWrap sx={{ flex: '0 1 auto' }}>{name}</Typography></Tooltip>
+      <TruncatedText text={name} sx={{ flex: '0 1 auto' }} />
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{where}</Typography>
       {member.pending && <Chip size='small' color='warning' variant='outlined' label={t('memberPending')} sx={{ flexShrink: 0 }} />}
       <MemberChangeChip member={member} />

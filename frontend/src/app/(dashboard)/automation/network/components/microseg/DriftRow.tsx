@@ -10,6 +10,7 @@ import type { DriftLabel } from './driftLabels'
 import type { PolicyGuest } from './zoneModel'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import { ZoneShield } from './ZoneNode'
+import TruncatedText from './TruncatedText'
 
 /** Cluster objects have no guest: one glyph per kind, with the amber dot every drift carries. */
 const OBJECT_GLYPH: Record<string, string> = {
@@ -62,7 +63,7 @@ function DriftZone({ zone }: { zone: MicrosegZone | null }) {
   return (
     <Box data-testid='drift-zone' sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
       <ZoneShield color={zone.color || 'currentColor'} state={zone.state} />
-      <Tooltip title={zone.name}><Typography noWrap variant='body2' fontWeight={600} sx={{ minWidth: 0 }}>{zone.name}</Typography></Tooltip>
+      <TruncatedText text={zone.name} variant='body2' fontWeight={600} sx={{ minWidth: 0 }} />
     </Box>
   )
 }
@@ -124,13 +125,13 @@ export default function DriftRow({ drift, label, subject, guest, zone = null, si
       <TableCell sx={{ maxWidth: 260 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
           <DriftGlyph drift={drift} guest={guest} />
-          <Tooltip title={subject}><Typography noWrap fontWeight={600} sx={{ minWidth: 0 }}>{subject}</Typography></Tooltip>
+          <TruncatedText text={subject} fontWeight={600} sx={{ minWidth: 0 }} />
           {where && <Typography noWrap variant='body2' color='text.secondary' sx={{ flexShrink: 0 }}>{where}</Typography>}
         </Box>
       </TableCell>
       <TableCell sx={{ maxWidth: 180 }}><DriftZone zone={zone} /></TableCell>
       <TableCell sx={{ maxWidth: 380 }}>
-        <Tooltip title={differs}><Typography noWrap variant='body2' data-testid='drift-differs'>{label.detail}</Typography></Tooltip>
+        <TruncatedText text={label.detail} title={differs} variant='body2' data-testid='drift-differs' />
       </TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}><Typography variant='body2' color='text.secondary'>{since}</Typography></TableCell>
       <TableCell align='right' sx={{ whiteSpace: 'nowrap' }}>

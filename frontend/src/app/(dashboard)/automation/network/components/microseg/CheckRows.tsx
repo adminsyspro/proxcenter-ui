@@ -9,6 +9,7 @@ import PolicyPager, { usePaged } from './PolicyPager'
 import { guestName } from './planGroups'
 import type { CheckRow, CheckStatus, LoggedStep } from './checkModel'
 import type { PolicyGuest } from './zoneModel'
+import TruncatedText from './TruncatedText'
 
 const STATUS_ICON: Record<Exclude<CheckStatus, 'pending'>, { icon: string; color: string }> = {
   pass: { icon: 'ri-checkbox-circle-fill', color: 'success.main' },
@@ -47,10 +48,8 @@ function CheckLine({ row, guests, onOpenDrifts }: RowProps) {
           <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
         </IconButton>
         <StatusGlyph status={row.status} />
-        <Tooltip title={label}><Typography noWrap fontWeight={600} sx={{ flex: '0 0 auto', width: 200 }}>{label}</Typography></Tooltip>
-        <Tooltip title={figure}>
-          <Typography noWrap color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{figure}</Typography>
-        </Tooltip>
+        <TruncatedText text={label} fontWeight={600} sx={{ flex: '0 0 auto', width: 200 }} />
+        <TruncatedText text={figure} color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
         {row.id === 'drifts' && row.status === 'warn' && (
           <Button size='small' variant='outlined' onClick={onOpenDrifts} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{t('rows.drifts.open')}</Button>
         )}

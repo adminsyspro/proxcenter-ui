@@ -1,19 +1,18 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { Alert, Tooltip, Typography } from '@mui/material'
+import { Alert } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { MicrosegApiError, microsegErrorKeyOf } from '@/lib/microseg/api'
+import TruncatedText from './TruncatedText'
 
 export const ONE_LINE_SX = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const
 
 /** A line of a dialog: one line, cut with an ellipsis and shown in full as a tooltip. */
 export function OneLine({ text, color = 'text.secondary' }: { text: string; color?: string }) {
   return (
-    <Tooltip title={text}>
-      <Typography noWrap color={color} sx={{ minWidth: 0 }}>{text}</Typography>
-    </Tooltip>
+    <TruncatedText text={text} color={color} sx={{ minWidth: 0 }} />
   )
 }
 
@@ -21,9 +20,7 @@ export function OneLine({ text, color = 'text.secondary' }: { text: string; colo
 export function DialogErrorLine({ message }: { message: string }) {
   return (
     <Alert severity='error' sx={{ '& .MuiAlert-message': { minWidth: 0, overflow: 'hidden' } }}>
-      <Tooltip title={message}>
-        <Typography variant='body2' noWrap>{message}</Typography>
-      </Tooltip>
+      <TruncatedText text={message} variant='body2' />
     </Alert>
   )
 }

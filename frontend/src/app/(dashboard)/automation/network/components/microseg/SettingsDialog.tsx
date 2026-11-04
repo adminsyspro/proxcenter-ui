@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Tooltip, Typography } from '@mui/material'
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
@@ -16,6 +16,7 @@ import {
 } from './settingsModel'
 import type { TrackedRun } from './microsegTabTypes'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import TruncatedText from './TruncatedText'
 
 type Props = {
   connectionId: string
@@ -107,9 +108,7 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
           />
           <SectionTitle>{t('sections.removal')}</SectionTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minHeight: 44, minWidth: 0 }}>
-            <Tooltip title={t('remove.hint')}>
-              <Typography noWrap sx={{ flex: '1 1 0', minWidth: 0 }}>{t('remove.row')}</Typography>
-            </Tooltip>
+            <TruncatedText text={t('remove.row')} title={t('remove.hint')} sx={{ flex: '1 1 0', minWidth: 0 }} />
             <WriteTip>
             <Button
               size='small'

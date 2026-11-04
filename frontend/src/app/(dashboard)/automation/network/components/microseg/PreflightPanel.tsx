@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Tooltip, Typography } from '@mui/material'
+import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { MicrosegApiError, microsegApi, microsegErrorKeyOf } from '@/lib/microseg/api'
@@ -9,6 +9,7 @@ import type { PreflightCheck, PreflightStatus } from '@/lib/microseg/types'
 
 import { ONE_LINE_SX } from './dialogParts'
 import { heldByStop, opensWizard, parseRate, preflightMessage } from './preflightModel'
+import TruncatedText from './TruncatedText'
 
 const STATUS_ICON: Record<PreflightStatus, { icon: string; color: string }> = {
   pass: { icon: 'ri-checkbox-circle-fill', color: 'success.main' },
@@ -31,8 +32,8 @@ function CheckRow({ check, onOpenWizard, onResume }: { check: PreflightCheck; on
   return (
     <Box role='listitem' aria-label={`${name}: ${t(`status.${check.status}`)}`} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minHeight: 48, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
       <Box component='i' className={icon.icon} sx={{ color: icon.color, fontSize: 20, flexShrink: 0 }} />
-      <Tooltip title={name}><Typography noWrap fontWeight={600} sx={{ flex: '0 0 auto', width: 170 }}>{name}</Typography></Tooltip>
-      <Tooltip title={message}><Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{message}</Typography></Tooltip>
+      <TruncatedText text={name} fontWeight={600} sx={{ flex: '0 0 auto', width: 170 }} />
+      <TruncatedText text={message} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
       {onResume && heldByStop(check) && (
         <Button size='small' variant='outlined' color='error' onClick={onResume} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{tStop('resume')}</Button>
       )}

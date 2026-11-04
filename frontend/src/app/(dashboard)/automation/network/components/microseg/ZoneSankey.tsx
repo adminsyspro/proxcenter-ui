@@ -11,6 +11,7 @@ import { BAR_W, FILL_ENTER_WIDTH, FILL_MIN_WIDTH, FOOT, HEAD, buildSankey, type 
 import { useBoxSize } from './useBoxSize'
 import { EDGE_COLORS, EXTERNAL_ID, type FlowFilters } from './zoneGraph'
 import { onKeys } from './ZoneNode'
+import TruncatedText from './TruncatedText'
 
 const MAX_NAME = 22
 
@@ -175,9 +176,7 @@ export default function ZoneSankey({ model, filters, selectedCell, selectedZone,
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 1.5, boxSizing: 'border-box', ...FOCUS_SX(theme.palette.primary.main) }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, minWidth: 0, flexShrink: 0 }}>
         <Box component='i' className='ri-information-line' aria-hidden sx={{ color: 'text.secondary', flexShrink: 0 }} />
-        <Tooltip title={t('sankey.note')}>
-          <Typography noWrap variant='caption' color='text.secondary' sx={{ minWidth: 0 }}>{t('sankey.note')}</Typography>
-        </Tooltip>
+        <TruncatedText text={t('sankey.note')} variant='caption' color='text.secondary' sx={{ minWidth: 0 }} />
       </Box>
       <Box ref={measure} data-testid='sankey-box' sx={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, overflow: 'auto' }}>
         {/* A named figure, not an image: its ribbons and zones are buttons that assistive technology must reach. */}

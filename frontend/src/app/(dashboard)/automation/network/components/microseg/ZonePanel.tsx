@@ -22,6 +22,7 @@ import { useIgnoredDrifts } from './driftIgnore'
 import { OneLine } from './dialogParts'
 import { flowsOfZone, guestKey, type ZoneMember } from './zoneModel'
 import { zoneDriftSignals, zoneSuggestions } from './zonePanelModel'
+import TruncatedText from './TruncatedText'
 
 const FLOWS_PAGE_SIZE = 5
 
@@ -71,7 +72,7 @@ function MemberLine({ member, zoneId, edits, firewallOff }: { member: ZoneMember
           <i className='ri-shield-flash-line' data-testid='member-firewall-off' style={{ color: 'var(--mui-palette-error-main)', flexShrink: 0 }} aria-label={tsec('memberFirewallOff')} />
         </Tooltip>
       )}
-      <Tooltip title={name}><Typography noWrap sx={{ flex: '0 1 auto' }}>{name}</Typography></Tooltip>
+      <TruncatedText text={name} sx={{ flex: '0 1 auto' }} />
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{`${ref.vmid} · ${ref.node}`}</Typography>
       {member.pending && <Chip size='small' color='warning' variant='outlined' label={t('pending')} sx={{ flexShrink: 0 }} />}
       <MemberChangeChip member={member} />
@@ -109,7 +110,7 @@ function SuggestionLine({ suggestion: s, zonesById, busy, onResolve }: {
   return (
     <Box role='listitem' aria-label={source} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minHeight: 36, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
       <ObservedKindGlyph kind={s.kind} />
-      <Tooltip title={source}><Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{source}</Typography></Tooltip>
+      <TruncatedText text={source} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
       <ServiceHits suggestion={s} />
       <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} />
     </Box>
@@ -160,7 +161,7 @@ export default function ZonePanel({
     <>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
         <i className='ri-shield-fill' style={{ fontSize: 18, color: zone.color || undefined }} />
-        <Tooltip title={zone.name}><Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{zone.name}</Typography></Tooltip>
+        <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
         {!!signals?.count && (
           <Chip
             size='small'
@@ -177,9 +178,7 @@ export default function ZonePanel({
         <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: 1 }}>
-        <Tooltip title={zone.label}>
-          <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{zone.label}</Typography>
-        </Tooltip>
+        <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
         <ZoneHeaderActions zone={zone} edits={edits} onAssign={onAssign} onDeleted={onClose} />
       </Box>
     </>

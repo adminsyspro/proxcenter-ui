@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Box, FormControl, InputLabel, MenuItem, Select, Tooltip, Typography } from '@mui/material'
+import { Box, FormControl, InputLabel, MenuItem, Select, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
@@ -9,6 +9,7 @@ import type { MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import { zoneTraffic } from './guestViewModel'
 import { byText } from './zoneLayout'
+import TruncatedText from './TruncatedText'
 
 type Props = {
   zones: MicrosegZone[]
@@ -45,9 +46,7 @@ export default function GuestViewBar({ zones, suggestions, centre, onCentre }: P
       </FormControl>
       <Typography noWrap variant='caption' color='text.secondary' sx={{ flexShrink: 0 }}>{t('guestView.hint')}</Typography>
       <Box component='i' className='ri-information-line' aria-hidden sx={{ color: 'text.secondary', flexShrink: 0 }} />
-      <Tooltip title={note}>
-        <Typography noWrap variant='caption' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{note}</Typography>
-      </Tooltip>
+      <TruncatedText text={note} variant='caption' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
     </Box>
   )
 }

@@ -12818,7 +12818,9 @@
         "next": "Next page",
         "first": "First page",
         "last": "Last page",
-        "range": "{from}-{to} of {count}"
+        "range": "{from}-{to} of {count}",
+        "rowsPerPage": "Rows per page",
+        "rowsAuto": "Auto"
       },
       "zone": {
         "membersTitle": "Members",
@@ -13142,8 +13144,9 @@
       "colObject": "Object",
       "colZone": "Zone",
       "colDiffers": "What differs",
-      "colSince": "Since",
-      "colActions": "Actions"
+      "colSince": "Seen at last full run",
+      "colActions": "Actions",
+      "colSinceHint": "The engine gives no first-seen time per drift: this is when its last full run found them."
     },
     "observation": {
       "sampling": "Proxmox logs at most one line per second per chain by default, so busy flows may be under-counted.",
@@ -13635,7 +13638,8 @@
         "closeDetails": "Close",
         "empty": "Nothing recorded yet: the first apply records a revision.",
         "loading": "Loading the history...",
-        "capped": "Only the last {count, number} revisions and the last {count, number} runs are read."
+        "capped": "Only the last {count, number} revisions and the last {count, number} runs are read.",
+        "actorInferred": "Deduced from the kind of run"
       }
     },
     "waitingFirstCheck": "Waiting for the first full check",

@@ -12818,7 +12818,9 @@
         "next": "다음 페이지",
         "first": "첫 페이지",
         "last": "마지막 페이지",
-        "range": "{count}개 중 {from}-{to}"
+        "range": "{count}개 중 {from}-{to}",
+        "rowsPerPage": "페이지당 행 수",
+        "rowsAuto": "자동"
       },
       "zone": {
         "membersTitle": "구성원",
@@ -13142,8 +13144,9 @@
       "colObject": "대상",
       "colZone": "영역",
       "colDiffers": "차이점",
-      "colSince": "시점",
-      "colActions": "작업"
+      "colSince": "마지막 전체 점검에서 확인",
+      "colActions": "작업",
+      "colSinceHint": "엔진은 편차별 최초 발견 시각을 제공하지 않습니다: 마지막 전체 점검 시각입니다."
     },
     "observation": {
       "sampling": "Proxmox는 기본적으로 체인당 초당 최대 한 줄만 기록하므로 트래픽이 많은 흐름은 적게 집계될 수 있습니다.",
@@ -13635,7 +13638,8 @@
         "closeDetails": "닫기",
         "empty": "아직 기록 없음: 첫 적용 시 리비전이 기록됩니다.",
         "loading": "기록을 불러오는 중...",
-        "capped": "최근 리비전 {count, number}개와 최근 실행 {count, number}개만 읽습니다."
+        "capped": "최근 리비전 {count, number}개와 최근 실행 {count, number}개만 읽습니다.",
+        "actorInferred": "실행 유형에서 추론됨"
       }
     },
     "waitingFirstCheck": "첫 번째 전체 점검을 기다리는 중",

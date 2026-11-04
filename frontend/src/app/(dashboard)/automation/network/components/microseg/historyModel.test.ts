@@ -27,4 +27,11 @@ describe('the history rows', () => {
     expect(rows[0]).toMatchObject({ type: 'revision', zones: 2, flows: 2, diff: { added: 2, removed: 2, changed: 1 } })
     expect(rows[1]).toMatchObject({ diff: null })
   })
+
+  it('gives each revision the same diff whatever the filter', () => {
+    const revs = [rev(1, '2026-11-01T10:00:00Z', [zone('web')], [flow('f1')]), rev(2, '2026-11-02T10:00:00Z', [zone('web')], [flow('f1'), flow('f2')])]
+    const all = historyRows(revs, [run('r1', '2026-11-03T10:00:00Z')])
+    const only = historyRows(revs, [], 'revisions')
+    expect(only.map(r => (r.type === 'revision' ? r.diff : null))).toEqual(all.filter(r => r.type === 'revision').map(r => (r.type === 'revision' ? r.diff : null)))
+  })
 })

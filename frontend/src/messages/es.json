@@ -12818,7 +12818,9 @@
         "next": "Página siguiente",
         "first": "Primera página",
         "last": "Última página",
-        "range": "{from}-{to} de {count}"
+        "range": "{from}-{to} de {count}",
+        "rowsPerPage": "Filas por página",
+        "rowsAuto": "Según la altura"
       },
       "zone": {
         "membersTitle": "Miembros",
@@ -13142,8 +13144,9 @@
       "colObject": "Objeto",
       "colZone": "Zona",
       "colDiffers": "Qué difiere",
-      "colSince": "Desde",
-      "colActions": "Acciones"
+      "colSince": "Visto en la última comprobación completa",
+      "colActions": "Acciones",
+      "colSinceHint": "El motor no da una fecha de primera detección por desviación: es la hora de su última comprobación completa."
     },
     "observation": {
       "sampling": "Por defecto Proxmox registra como máximo una línea por segundo y por cadena, por lo que los flujos muy activos pueden contarse de menos.",
@@ -13635,7 +13638,8 @@
         "closeDetails": "Cerrar",
         "empty": "Nada registrado aún: la primera aplicación registra una revisión.",
         "loading": "Cargando el historial...",
-        "capped": "Solo se leen las últimas {count, number} revisiones y las últimas {count, number} ejecuciones."
+        "capped": "Solo se leen las últimas {count, number} revisiones y las últimas {count, number} ejecuciones.",
+        "actorInferred": "Deducido del tipo de ejecución"
       }
     },
     "waitingFirstCheck": "A la espera de la primera comprobación completa",

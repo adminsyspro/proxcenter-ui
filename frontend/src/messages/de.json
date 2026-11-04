@@ -12486,7 +12486,9 @@
         "next": "Nächste Seite",
         "first": "Erste Seite",
         "last": "Letzte Seite",
-        "range": "{from}-{to} von {count}"
+        "range": "{from}-{to} von {count}",
+        "rowsPerPage": "Zeilen pro Seite",
+        "rowsAuto": "Passend"
       },
       "zone": {
         "membersTitle": "Mitglieder",
@@ -12810,8 +12812,9 @@
       "colObject": "Objekt",
       "colZone": "Betroffene Zone",
       "colDiffers": "Was abweicht",
-      "colSince": "Seit",
-      "colActions": "Aktionen"
+      "colSince": "Bei der letzten Vollprüfung gesehen",
+      "colActions": "Aktionen",
+      "colSinceHint": "Die Engine liefert keine Erstsichtung pro Abweichung: das ist der Zeitpunkt ihrer letzten Vollprüfung."
     },
     "observation": {
       "sampling": "Proxmox protokolliert standardmäßig höchstens eine Zeile pro Sekunde und Kette, daher können stark ausgelastete Flüsse zu niedrig gezählt werden.",
@@ -13294,16 +13297,17 @@
         "colActions": "Aktionen",
         "revision": "Revision angewendet v{version}",
         "run": "Lauf: {kind}",
-        "engine": "Engine",
-        "admin": "Administrator",
+        "engine": "Engine (automatisch)",
+        "admin": "Admin",
         "applied": "Angewendet",
         "diff": "+{added, number} −{removed, number} ~{changed, number} gegenüber der vorherigen",
-        "details": "Details",
+        "details": "Einzelheiten",
         "detailsOf": "Details des Laufs: {kind}",
         "closeDetails": "Schließen",
         "empty": "Noch nichts aufgezeichnet: die erste Anwendung zeichnet eine Revision auf.",
         "loading": "Verlauf wird geladen...",
-        "capped": "Nur die letzten {count, number} Revisionen und die letzten {count, number} Läufe werden gelesen."
+        "capped": "Nur die letzten {count, number} Revisionen und die letzten {count, number} Läufe werden gelesen.",
+        "actorInferred": "Aus der Art des Laufs abgeleitet"
       }
     },
     "waitingFirstCheck": "Warten auf die erste vollständige Prüfung",

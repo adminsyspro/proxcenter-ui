@@ -18,10 +18,13 @@ import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PolicyPager, { usePaged } from './PolicyPager'
 import RunDetail from './RunDetail'
+import { RowsPerPageSelect, useRowsPerPage } from './useRowsPerPage'
 import { formatWhen } from './summaryModel'
 
 /** The runs the table reads at once (the newest), merged with the revisions and paged with them. */
 export const RUNS_READ = 100
+/** The rows per page of the table, remembered per browser. */
+export const HISTORY_ROWS_KEY = 'proxcenter.microseg.historyRows'
 
 const KNOWN_RUN_KINDS = new Set(['light', 'ips', 'full', 'log', 'targeted', 'plan', 'apply', 'remove', 'restore'])
 const STATUS_COLOR: Record<string, 'success' | 'error' | 'info'> = { done: 'success', failed: 'error', running: 'info' }
@@ -87,7 +90,11 @@ function RunLine({ row, onDetails }: Pick<RowProps, 'onDetails'> & { row: Extrac
           <Typography variant='body2'>{t('table.run', { kind })}</Typography>
         </Box>
       </TableCell>
-      <TableCell><Typography variant='body2' color='text.secondary'>{ENGINE_KINDS.has(run.kind) ? t('table.engine') : t('table.admin')}</Typography></TableCell>
+      <TableCell>
+        <Tooltip title={t('table.actorInferred')}>
+          <Typography variant='body2' color='text.secondary' sx={{ display: 'inline' }}>{ENGINE_KINDS.has(run.kind) ? t('table.engine') : t('table.admin')}</Typography>
+        </Tooltip>
+      </TableCell>
       <TableCell sx={{ maxWidth: 320 }}>
         <Typography variant='body2' noWrap data-testid='history-summary'>{summary}</Typography>
         {run.error && (
@@ -108,7 +115,8 @@ function RunLine({ row, onDetails }: Pick<RowProps, 'onDetails'> & { row: Extrac
 /**
  * The History sub-tab as one table, the newest first: the revisions of the policy (restorable, with what each changed
  * against the one before) and the runs of the engine (their result in a drawer, read when it opens), filtered on All,
- * Revisions or Runs, ten rows per page. The last 100 revisions and the last 100 runs are read.
+ * Revisions or Runs, as many rows per page as the sub-tab's height holds (or 10, 25, 50), the table scrolling inside
+ * and its pager pinned at the bottom. The last 100 revisions and the last 100 runs are read.
  */
 export default function HistoryPanel({ connectionId, policy, reloadPolicy, startRun }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.history')
@@ -121,7 +129,9 @@ export default function HistoryPanel({ connectionId, policy, reloadPolicy, start
   const restore = useDialogAction()
   const latestId = policy.last_revision?.id
   const rows = useMemo(() => historyRows(revisions.data ?? [], runs.data ?? [], kind), [revisions.data, runs.data, kind])
-  const paged = usePaged(rows)
+  // As many rows as the height holds (Auto), or the size chosen; the table body scrolls inside the sub-tab.
+  const { ref: scrollRef, size: pageSize, choice: rowsChoice, setChoice: setRowsChoice } = useRowsPerPage(HISTORY_ROWS_KEY)
+  const paged = usePaged(rows, pageSize)
 
   // The draft is re-read when a run ends (the tab does it); a new head there means a revision was recorded.
   const seenLatest = useRef(latestId)
@@ -159,7 +169,7 @@ export default function HistoryPanel({ connectionId, policy, reloadPolicy, start
   const emptyText: Record<HistoryKind, string> = { all: t('table.empty'), revisions: t('revisions.empty'), runs: t('runs.empty') }
 
   return (
-    <Box sx={{ px: 3, pb: 3 }}>
+    <Box sx={{ px: 3, pb: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40, mb: 1, flexWrap: 'wrap' }}>
         <Typography variant='subtitle1' fontWeight={600} sx={{ flex: 1 }}>{t('table.title')}</Typography>
         <ToggleButtonGroup
@@ -184,8 +194,8 @@ export default function HistoryPanel({ connectionId, policy, reloadPolicy, start
       {empty && <Typography color='text.secondary' sx={{ py: 2 }}>{emptyText[kind]}</Typography>}
       {rows.length > 0 && (
         <>
-          <Box sx={{ overflowX: 'auto' }}>
-            <Table size='small' aria-label={t('table.title')} sx={{ '& td, & th': { px: 1 } }}>
+          <Box ref={scrollRef} data-testid='history-scroll' sx={{ flex: '1 1 0', minHeight: 240, overflow: 'auto' }}>
+            <Table size='small' stickyHeader aria-label={t('table.title')} sx={{ '& td, & th': { px: 1 } }}>
               <TableHead>
                 <TableRow>
                   <TableCell>{t('table.colDate')}</TableCell>
@@ -204,10 +214,14 @@ export default function HistoryPanel({ connectionId, policy, reloadPolicy, start
               </TableBody>
             </Table>
           </Box>
-          <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
-          {((revisions.data?.length ?? 0) >= REVISIONS_LIMIT || (runs.data?.length ?? 0) >= RUNS_READ) && (
-            <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('table.capped', { count: RUNS_READ })}</Typography>
-          )}
+          {/* Pinned under the table: the caps, the rows per page and the pager. */}
+          <Box data-testid='history-footer' sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, pt: 1, borderTop: 1, borderColor: 'divider', minHeight: 48 }}>
+            <Typography variant='caption' color='text.secondary' sx={{ flex: 1, minWidth: 0 }} noWrap>
+              {((revisions.data?.length ?? 0) >= REVISIONS_LIMIT || (runs.data?.length ?? 0) >= RUNS_READ) ? t('table.capped', { count: RUNS_READ }) : ''}
+            </Typography>
+            <RowsPerPageSelect choice={rowsChoice} onChoice={setRowsChoice} />
+            <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
+          </Box>
         </>
       )}
 

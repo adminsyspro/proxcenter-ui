@@ -28,6 +28,8 @@ type Props = {
    */
   preselect?: string[]
   onClose: () => void
+  /** The assignment was saved (called before onClose): a caller holding a selection clears it then, not on Cancel. */
+  onAssigned?: () => void
 }
 
 function GuestLine({ row, zoneName, checked, selectable, onToggle }: { row: AssignRow; zoneName: string; checked: boolean; selectable: boolean; onToggle: () => void }) {
@@ -85,7 +87,7 @@ function GuestLine({ row, zoneName, checked, selectable, onToggle }: { row: Assi
  * of another zone is flagged and will be moved. Select-all covers every
  * filtered guest, across pages.
  */
-export default function AssignGuestsDialog({ open, connectionId, zone, policy, reloadPolicy, preselect, onClose }: Props) {
+export default function AssignGuestsDialog({ open, connectionId, zone, policy, reloadPolicy, preselect, onClose, onAssigned }: Props) {
   const t = useTranslations('microsegPilot.policy.assign')
   const tc = useTranslations('common')
   const { guests, status } = useZoneGuests(connectionId)
@@ -138,7 +140,10 @@ export default function AssignGuestsDialog({ open, connectionId, zone, policy, r
       }
       await reloadPolicy().catch(() => undefined)
     })
-    if (ok) onClose()
+    if (ok) {
+      onAssigned?.()
+      onClose()
+    }
   }
 
   return (

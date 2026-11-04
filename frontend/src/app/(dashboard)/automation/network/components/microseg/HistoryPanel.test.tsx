@@ -87,6 +87,41 @@ describe('the history table', () => {
     expect(dataRows()).toHaveLength(2)
   })
 
+  it('keeps each revision\'s diff against the one before it on page 2 and under the Revisions filter', async () => {
+    const revs = Array.from({ length: 12 }, (_, i) => rev(20 - i, {
+      created_at: `2026-11-${String(20 - i).padStart(2, '0')}T09:00:00Z`,
+      snapshot: { tag_prefix: 'zone-', zones: [zone('web')], flows: Array.from({ length: 20 - i }, (_, k) => flow(`f${k}`)) },
+    }))
+    setup({ revisions: revs, runs: [runOf(1, { started_at: '2026-11-15T09:30:00Z' })] })
+    await rowOf('Version 20')
+    fireEvent.click(screen.getByTestId('history-kind-revisions'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Next page' }))
+    const v10 = await rowOf('Version 10')
+    expect(within(v10).getByTestId('history-summary').textContent).toBe('1 zone, 10 flows · +1 −0 ~0 vs previous')
+  })
+
+  it('fits as many rows as the height holds (Auto), or the size chosen, remembered', async () => {
+    const OriginalRO = globalThis.ResizeObserver
+    class SizedObserver {
+      constructor(private cb: ResizeObserverCallback) {}
+      observe() { this.cb([{ contentRect: { width: 900, height: 40 + 44 * 15 } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver) }
+      disconnect() { /* nothing to stop */ }
+      unobserve() { /* nothing to stop */ }
+    }
+    vi.stubGlobal('ResizeObserver', SizedObserver)
+    try {
+      setup({ revisions: Array.from({ length: 30 }, (_, i) => rev(40 - i, { created_at: new Date(Date.UTC(2026, 10, 2, 0, 30 - i)).toISOString() })) })
+      await rowOf('Version 40')
+      await waitFor(() => expect(dataRows()).toHaveLength(15))
+      fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Rows per page' }))
+      fireEvent.click(await screen.findByRole('option', { name: '25' }))
+      await waitFor(() => expect(dataRows()).toHaveLength(25))
+      expect(window.localStorage.getItem('proxcenter.microseg.historyRows')).toBe('25')
+    } finally {
+      vi.stubGlobal('ResizeObserver', OriginalRO)
+    }
+  })
+
   it('says there is nothing yet', async () => {
     setup()
     expect(await screen.findByText('Nothing recorded yet: the first apply records a revision.')).toBeTruthy()

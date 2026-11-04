@@ -68,7 +68,7 @@ describe('drift list', () => {
     expect(screen.getByTestId('drift-group-foreign_accept').textContent).toBe('Rules changed by hand (2)')
     expect(driftRows()).toHaveLength(8)
     const head = within(screen.getByRole('table', { name: 'Drifts' })).getAllByRole('columnheader').map(h => h.textContent)
-    expect(head).toEqual(['', 'Object', 'Zone', 'What differs', 'Since', 'Actions'])
+    expect(head).toEqual(['', 'Object', 'Zone', 'What differs', 'Seen at last full run', 'Actions'])
   })
 
   it('counts the drifts of each kind in a strip of chips, a click showing that kind only, again showing all', async () => {
@@ -265,12 +265,46 @@ describe('fixing a drift', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Select every drift of Rules changed by hand (2)' }))
     const bar = screen.getByTestId('drift-bulk')
     expect(bar.textContent).toContain('2 drifts selected')
-    // No guest to assign among them? db-1 is one: the assign button counts it.
-    expect(within(bar).getByRole('button', { name: 'Assign 1 guest to a zone…' })).toBeTruthy()
+    // Foreign rules are not fixed by an assignment: no assign button for them, even on a guest.
+    expect(within(bar).queryByRole('button', { name: /^Assign/ })).toBeNull()
     fireEvent.click(within(bar).getByRole('button', { name: 'Ignore 2' }))
     await waitFor(() => expect(screen.queryByTestId('drift-group-foreign_accept')).toBeNull())
     expect(screen.queryByTestId('drift-bulk')).toBeNull()
     expect(JSON.parse(window.localStorage.getItem('microseg.ignoredDrifts.c1') ?? '[]')).toHaveLength(2)
+  })
+
+  it('keeps the selection when the assign dialog is cancelled, clears it once the guests are assigned', async () => {
+    mock.routes['POST /members'] = () => reply(200, { version: 4 })
+    setup()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select web-1' }))
+    fireEvent.click(within(screen.getByTestId('drift-bulk')).getByRole('button', { name: 'Assign 1 guest to a zone…' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'web' }))
+    let dialog = await screen.findByRole('dialog', { name: 'Assign guests to web' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByTestId('drift-bulk').textContent).toContain('1 drift selected')
+
+    fireEvent.click(within(screen.getByTestId('drift-bulk')).getByRole('button', { name: 'Assign 1 guest to a zone…' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'web' }))
+    dialog = await screen.findByRole('dialog', { name: 'Assign guests to web' })
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Assign 1 guest' }))
+    await waitFor(() => expect(calls('POST /members')).toHaveLength(1))
+    await waitFor(() => expect(screen.queryByTestId('drift-bulk')).toBeNull())
+  })
+
+  it('adds the bulk ignore to what was already ignored', async () => {
+    setup()
+    fireEvent.click(within(await row('Name already used in Proxmox: pcz-db')).getByRole('button', { name: 'Ignore' }))
+    await waitFor(() => expect(screen.queryByTestId('drift-group-object_collision')).toBeNull())
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select every drift of Rules changed by hand (2)' }))
+    fireEvent.click(within(screen.getByTestId('drift-bulk')).getByRole('button', { name: 'Ignore 2' }))
+    await waitFor(() => expect(screen.queryByTestId('drift-group-foreign_accept')).toBeNull())
+    expect(JSON.parse(window.localStorage.getItem('microseg.ignoredDrifts.c1') ?? '[]')).toHaveLength(3)
+  })
+
+  it('shows a kind this version does not know under its generic title', async () => {
+    setup([{ kind: 'brand_new', object: 'thing' }, { kind: 'brand_new', object: 'other' }])
+    expect((await screen.findByTestId('drift-group-brand_new')).textContent).toBe('Drift: brand_new (2)')
   })
 
   it('cannot assign without a zone and says why', async () => {

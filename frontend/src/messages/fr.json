@@ -12819,7 +12819,9 @@
         "next": "Page suivante",
         "first": "Première page",
         "last": "Dernière page",
-        "range": "{from}-{to} sur {count}"
+        "range": "{from}-{to} sur {count}",
+        "rowsPerPage": "Lignes par page",
+        "rowsAuto": "Selon la hauteur"
       },
       "zone": {
         "membersTitle": "Membres",
@@ -13143,8 +13145,9 @@
       "colObject": "Objet",
       "colZone": "Zone concernée",
       "colDiffers": "Ce qui diffère",
-      "colSince": "Depuis",
-      "colActions": "Actions possibles"
+      "colSince": "Vu au dernier contrôle complet",
+      "colActions": "Actions possibles",
+      "colSinceHint": "Le moteur ne donne pas de date de première détection par écart : c'est l'heure de son dernier contrôle complet."
     },
     "observation": {
       "sampling": "Par défaut, Proxmox journalise au plus une ligne par seconde et par chaîne : les flux très actifs peuvent être sous-comptés.",
@@ -13636,7 +13639,8 @@
         "closeDetails": "Fermer",
         "empty": "Rien d'enregistré pour l'instant : la première application enregistre une révision.",
         "loading": "Chargement de l'historique...",
-        "capped": "Seules les {count, number} dernières révisions et les {count, number} dernières exécutions sont lues."
+        "capped": "Seules les {count, number} dernières révisions et les {count, number} dernières exécutions sont lues.",
+        "actorInferred": "Déduit du type d'exécution"
       }
     },
     "waitingFirstCheck": "En attente du premier contrôle complet",

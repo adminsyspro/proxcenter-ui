@@ -12818,7 +12818,9 @@
         "next": "下一页",
         "first": "第一页",
         "last": "最后一页",
-        "range": "第 {from}-{to} 项，共 {count} 项"
+        "range": "第 {from}-{to} 项，共 {count} 项",
+        "rowsPerPage": "每页行数",
+        "rowsAuto": "自动"
       },
       "zone": {
         "membersTitle": "成员",
@@ -13142,8 +13144,9 @@
       "colObject": "对象",
       "colZone": "区域",
       "colDiffers": "差异",
-      "colSince": "起始",
-      "colActions": "操作"
+      "colSince": "上次完整检查时发现",
+      "colActions": "操作",
+      "colSinceHint": "引擎不提供每个偏差的首次发现时间：这是其上次完整检查的时间。"
     },
     "observation": {
       "sampling": "Proxmox 默认每条链每秒最多记录一行日志，因此繁忙的流量可能被少计。",
@@ -13635,7 +13638,8 @@
         "closeDetails": "关闭",
         "empty": "尚无记录：首次应用会记录一个修订。",
         "loading": "正在加载历史...",
-        "capped": "仅读取最近 {count, number} 个修订和最近 {count, number} 次运行。"
+        "capped": "仅读取最近 {count, number} 个修订和最近 {count, number} 次运行。",
+        "actorInferred": "根据运行类型推断"
       }
     },
     "waitingFirstCheck": "正在等待首次完整检查",

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Alert, Box, Button, Checkbox, Chip, CircularProgress, IconButton, Menu, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
+import { Alert, Box, Button, Checkbox, Chip, CircularProgress, IconButton, Menu, MenuItem, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
@@ -127,7 +127,8 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
   const byKey = useMemo(() => new Map(visible.map(d => [driftKey(d), d])), [visible])
   // The selection keeps only what is still shown.
   const chosen = [...selected].map(k => byKey.get(k)).filter((d): d is MicrosegDrift => !!d && (!shownKind || d.kind === shownKind))
-  const chosenGuests = [...new Set(chosen.filter(d => d.guest).map(d => guestKey(d.guest!)))]
+  // Only the drifts an assignment fixes (a running guest in no zone, a guest in several zones) go to the assign dialog.
+  const chosenGuests = [...new Set(chosen.filter(d => d.guest && driftLabel(d, tk).fix === 'assign').map(d => guestKey(d.guest!)))]
 
   const lastFull = status?.engine.last_runs?.full?.started_at
   let asOf = status ? t('asOfNone') : ''
@@ -200,7 +201,7 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
   }
 
   return (
-    <Box sx={{ px: 3, pb: 3 }}>
+    <Box sx={{ px: 3, pb: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {error && <MicrosegErrorAlert error={error} onRetry={reload} />}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 36, mb: 1 }}>
         <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: 1, minWidth: 0 }}>{asOf}</Typography>
@@ -233,8 +234,28 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
             ))}
           </Box>
 
+          {/* The groups scroll inside the sub-tab; the bulk bar stays pinned under them. */}
+          <Box data-testid='drift-scroll' sx={{ flex: '1 1 0', minHeight: 240, overflow: 'auto' }}>
+            <Table size='small' stickyHeader aria-label={t('tableLabel')} sx={{ '& td, & th': { px: 1 } }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell padding='checkbox' />
+                  <TableCell>{t('colObject')}</TableCell>
+                  <TableCell>{t('colZone')}</TableCell>
+                  <TableCell>{t('colDiffers')}</TableCell>
+                  <TableCell>
+                    <Tooltip title={t('colSinceHint')}><span>{t('colSince')}</span></Tooltip>
+                  </TableCell>
+                  <TableCell align='right'>{t('colActions')}</TableCell>
+                </TableRow>
+              </TableHead>
+              {groups.map(group => (
+                <DriftGroupBody key={group.kind} group={group} render={renderRow} selectedKeys={selected} onSelectAll={select} />
+              ))}
+            </Table>
+          </Box>
           {chosen.length > 0 && (
-            <Box data-testid='drift-bulk' sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40, px: 1.5, mb: 1, borderRadius: 1, bgcolor: 'action.selected' }}>
+            <Box data-testid='drift-bulk' sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40, px: 1.5, mt: 1, flexShrink: 0, borderRadius: 1, bgcolor: 'action.selected' }}>
               <Typography variant='body2' fontWeight={600} sx={{ flex: 1, minWidth: 0 }} noWrap>{t('bulkSelected', { count: chosen.length })}</Typography>
               {chosenGuests.length > 0 && (
                 <WriteTip title={policy.zones.length ? '' : t('noZone')}>
@@ -254,23 +275,6 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
             </Box>
           )}
 
-          <Box sx={{ overflowX: 'auto' }}>
-            <Table size='small' aria-label={t('tableLabel')} sx={{ '& td, & th': { px: 1 } }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell padding='checkbox' />
-                  <TableCell>{t('colObject')}</TableCell>
-                  <TableCell>{t('colZone')}</TableCell>
-                  <TableCell>{t('colDiffers')}</TableCell>
-                  <TableCell>{t('colSince')}</TableCell>
-                  <TableCell align='right'>{t('colActions')}</TableCell>
-                </TableRow>
-              </TableHead>
-              {groups.map(group => (
-                <DriftGroupBody key={group.kind} group={group} render={renderRow} selectedKeys={selected} onSelectAll={select} />
-              ))}
-            </Table>
-          </Box>
         </>
       )}
 
@@ -285,7 +289,8 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
           policy={policy}
           reloadPolicy={reloadPolicy}
           preselect={assigning.preselect}
-          onClose={() => { setAssigning(null); setSelected(new Set()) }}
+          onClose={() => setAssigning(null)}
+          onAssigned={() => setSelected(new Set())}
         />
       )}
     </Box>

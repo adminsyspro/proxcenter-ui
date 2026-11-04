@@ -2,13 +2,13 @@
  * Policy sub-tab: the zone and flow lists, through the real client (fetch mocked at the Next relay).
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegFlow } from '@/lib/microseg/types'
 
-import { flow, zone } from './microsegTestKit'
+import { flow, mock, reply, revisionWithSnapshot, zone } from './microsegTestKit'
 import { db, setup, installFreshMocks, vm, web } from './policyTestKit'
 
 installFreshMocks()
@@ -51,6 +51,8 @@ describe('zone list', () => {
 
     // The first three members (status dot), "+1"; the first three flows in and out, "+1 more flow".
     for (const name of ['web-1', 'web-2', 'web-3']) expect(within(card).getByText(name)).toBeTruthy()
+    // Each member chip carries the guest glyph with its status dot.
+    expect((within(card).getByText('web-1').closest('.MuiChip-root') as HTMLElement).querySelector('i.ri-computer-fill')).toBeTruthy()
     expect(within(card).queryByText('web-4')).toBeNull()
     expect(within(card).getByText('+1')).toBeTruthy()
     expect(within(card).queryByText('other')).toBeNull()
@@ -81,7 +83,7 @@ describe('zone list', () => {
     const view = setup({ zones: [web(), db()], flows: [out], vms: [vm(100, 'web-1', ['zone-web'])] })
     const card = await screen.findByRole('listitem', { name: 'web' })
     expect(screen.queryByRole('region', { name: 'Details of web' })).toBeNull()
-    const chevron = within(card).getByRole('button', { name: 'Show details' })
+    const chevron = within(card).getByRole('button', { name: 'Show details of web' })
     expect(chevron.textContent).toContain('Details')
     fireEvent.click(chevron)
 
@@ -95,12 +97,49 @@ describe('zone list', () => {
     expect(await within(members).findByText('web-1')).toBeTruthy()
     expect(within(flowsColumn).getByText('Outgoing flows')).toBeTruthy()
     expect(within(flowsColumn).getByRole('button', { name: 'Edit flow' })).toBeTruthy()
-    expect(JSON.parse(window.localStorage.getItem('microseg.policy.openZones.c1') ?? '[]')).toEqual(['zw'])
+    expect(JSON.parse(window.localStorage.getItem('microseg.policy.openCards.c1') ?? '[]')).toEqual(['zw'])
 
     view.unmount()
     setup({ zones: [web(), db()], flows: [out], vms: [vm(100, 'web-1', ['zone-web'])] })
     expect(await screen.findByRole('region', { name: 'Details of web' })).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Details of db' })).toBeNull()
+  })
+
+  it('opens no card on first display, whatever the former list remembered', async () => {
+    window.localStorage.setItem('microseg.policy.openZones.c1', JSON.stringify(['zw', 'zd']))
+    setup({ zones: [web(), db()] })
+    const card = await screen.findByRole('listitem', { name: 'web' })
+    expect(within(card).getByRole('button', { name: 'Show details of web' }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('region', { name: /Details of/ })).toBeNull()
+  })
+
+  it('puts the state, diff and drifts chips on the line of the name, the description below', async () => {
+    mock.routes['GET /revisions?limit=1'] = () => reply(200, { revisions: [revisionWithSnapshot([web({ state: 'enforce' })], [])] })
+    setup({ zones: [web({ label: 'Front web servers' })], pending_changes: true })
+    const card = await screen.findByRole('listitem', { name: 'web' })
+    const title = card.querySelector('[data-zone-title]') as HTMLElement
+    expect(within(title).getByText('web')).toBeTruthy()
+    expect(within(title).getByText('Observation')).toBeTruthy()
+    expect(await within(title).findByText('Changed')).toBeTruthy()
+    expect(within(title).queryByText('Front web servers')).toBeNull()
+    expect(title.compareDocumentPosition(within(card).getByText('Front web servers')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('sizes the new-zone card as a zone card: it fills its grid cell, and alone on its row takes the height of a card', async () => {
+    const heights = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { height: this.getAttribute('role') === 'listitem' ? 212 : 0, width: 0, top: 0, left: 0, bottom: 0, right: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+    })
+    const observers: Array<(entries: unknown[]) => void> = []
+    vi.stubGlobal('ResizeObserver', class { constructor(cb: (entries: unknown[]) => void) { observers.push(cb) } observe() { observers.forEach(cb => cb([])) } disconnect() {} })
+    try {
+      setup({ zones: [web()] })
+      const cell = (await screen.findByTestId('new-zone-card')).parentElement as HTMLElement
+      await waitFor(() => expect(getComputedStyle(cell).minHeight).toBe('212px'))
+      expect(getComputedStyle(cell).flexGrow).toBe('1')
+      expect(getComputedStyle(cell.closest('[role="listitem"]') as HTMLElement).display).toBe('flex')
+    } finally {
+      heights.mockRestore()
+    }
   })
 
   it('says so when there is no zone, with the new-zone card', async () => {
@@ -125,7 +164,7 @@ describe('zone list', () => {
       pending_members: [{ id: 'p1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 400, zone_id: 'zw' }],
     })
     const card = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(await within(card).findByRole('button', { name: 'Show details' }))
+    fireEvent.click(await within(card).findByRole('button', { name: 'Show details of web' }))
     const details = await screen.findByRole('region', { name: 'Details of web' })
     expect(await within(details).findByText('web-1')).toBeTruthy()
     expect(within(details).getByText('web-ct')).toBeTruthy()
@@ -139,7 +178,7 @@ describe('zone list', () => {
     const vms = Array.from({ length: 12 }, (_, i) => vm(100 + i, `web-${String(i).padStart(2, '0')}`, ['zone-web']))
     setup({ zones: [web()], vms })
     const card = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(await within(card).findByRole('button', { name: 'Show details' }))
+    fireEvent.click(await within(card).findByRole('button', { name: 'Show details of web' }))
     const details = await screen.findByRole('region', { name: 'Details of web' })
     expect(await within(details).findByText('web-09')).toBeTruthy()
     expect(within(details).queryByText('web-10')).toBeNull()
@@ -159,7 +198,7 @@ describe('zone list', () => {
     const inn: MicrosegFlow = { ...flow('f2'), src_zone_id: 'zd', dst_zone_id: 'zw', dport: '8080' }
     setup({ zones: [web(), db()], flows: [out, inn] })
     const card = await screen.findByRole('listitem', { name: 'web' })
-    fireEvent.click(within(card).getByRole('button', { name: 'Show details' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Show details of web' }))
     const details = await screen.findByRole('region', { name: 'Details of web' })
     expect(within(details).getByText('Incoming flows')).toBeTruthy()
     expect(within(details).getByText('Outgoing flows')).toBeTruthy()
@@ -198,7 +237,7 @@ describe('flow list', () => {
     expect(within(flows).getAllByText('Not applied in v1')).toHaveLength(1)
     expect(within(flows).getByText('10.0.0.0/8')).toBeTruthy()
 
-    fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Show details' }))
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Show details of web' }))
     expect(within(await screen.findByRole('region', { name: 'Details of web' })).getAllByText(pill)).toHaveLength(1)
   })
 

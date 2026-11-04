@@ -12859,7 +12859,9 @@
         "statOutgoing": "出站",
         "details": "详情",
         "detailsOf": "{zone} 的详情",
-        "moreFlows": "{count, plural, other {另有 # 条流量规则}}"
+        "moreFlows": "{count, plural, other {另有 # 条流量规则}}",
+        "showDetailsOf": "显示 {zone} 的详情",
+        "hideDetailsOf": "隐藏 {zone} 的详情"
       },
       "flow": {
         "notApplied": "未应用（v1 不管理出站）",

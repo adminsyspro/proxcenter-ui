@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useContext, useMemo, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { Box, Button, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -33,7 +33,8 @@ type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onAssign
 }
 
 /** The zones opened under their chevron, remembered per connection in this browser. */
-export const openZonesKey = (connectionId: string) => `microseg.policy.openZones.${connectionId}`
+// A new key for the cards: the open rows of the former list are not carried over, every card starts closed.
+export const openZonesKey = (connectionId: string) => `microseg.policy.openCards.${connectionId}`
 
 function readOpen(connectionId: string): Set<string> {
   try {
@@ -61,6 +62,22 @@ function useOpenZones(connectionId: string) {
 
 type Item = { zone: MicrosegZone; removed: boolean; members: ZoneMember[] }
 
+/** The outer height of an element (borders included), followed with a ResizeObserver; null until measured. */
+function useBorderHeight(): [(el: HTMLElement | null) => void, number | null] {
+  const [element, setElement] = useState<HTMLElement | null>(null)
+  const [height, setHeight] = useState<number | null>(null)
+  useEffect(() => {
+    if (!element || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      const next = Math.round(element.getBoundingClientRect().height)
+      setHeight(prev => (prev === next ? prev : next))
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [element])
+  return [setElement, height]
+}
+
 /** The smallest card width, and the gap between cards (px). */
 export const CARD_MIN = 280
 const CARD_GAP = 16
@@ -81,6 +98,7 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
   const { canWrite } = useMicrosegWrite()
   const { open, toggle } = useOpenZones(connectionId)
   const [gridRef, size] = useBoxSize<HTMLDivElement>()
+  const [firstCardRef, cardHeight] = useBorderHeight()
   const { data: drifts } = useMicrosegDrifts(connectionId, { once: true })
   const { ignored } = useIgnoredDrifts(connectionId)
 
@@ -98,6 +116,7 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
   const rows: Item[][] = []
   for (let i = 0; i < paged.rows.length; i += columns) rows.push(paged.rows.slice(i, i + columns))
 
+  const first = paged.rows.find(item => !item.removed)
   const card = (item: Item) => {
     if (item.removed) return <RemovedZoneCard key={`removed-${item.zone.id}`} zone={item.zone} />
     const signals = zoneDriftSignals(item.zone, item.members, drifts?.computed ? drifts.drifts : null, zones, ignored)
@@ -114,6 +133,7 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
         open={open.has(item.zone.id)}
         onToggle={() => toggle(item.zone.id)}
         drifts={signals?.count ?? null}
+        boxRef={item === first ? firstCardRef : undefined}
         onOpenDrifts={onOpenDrifts}
         {...handlers}
       />
@@ -158,7 +178,7 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
           ...row.map(card),
           ...row.filter(item => !item.removed && open.has(item.zone.id)).map(details),
         ])}
-        {lastPage && <Box role='listitem' sx={{ minWidth: 0 }}><NewZoneCard onAdd={onAdd} /></Box>}
+        {lastPage && <Box role='listitem' sx={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}><NewZoneCard onAdd={onAdd} height={cardHeight} /></Box>}
       </Box>
       <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
     </Box>

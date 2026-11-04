@@ -12859,7 +12859,9 @@
         "statOutgoing": "송신",
         "details": "세부 정보",
         "detailsOf": "{zone} 세부 정보",
-        "moreFlows": "{count, plural, other {플로우 #개 더}}"
+        "moreFlows": "{count, plural, other {플로우 #개 더}}",
+        "showDetailsOf": "{zone} 세부 정보 표시",
+        "hideDetailsOf": "{zone} 세부 정보 숨기기"
       },
       "flow": {
         "notApplied": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",

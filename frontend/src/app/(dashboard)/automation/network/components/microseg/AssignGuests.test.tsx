@@ -25,7 +25,7 @@ async function openDialog() {
 /** Opens a zone card's details (members and flows, full width below the row of cards) and returns them. */
 async function openDetails(name: string) {
   const card = await screen.findByRole('listitem', { name })
-  fireEvent.click(await within(card).findByRole('button', { name: 'Show details' }))
+  fireEvent.click(await within(card).findByRole('button', { name: `Show details of ${name}` }))
   return screen.findByRole('region', { name: `Details of ${name}` })
 }
 

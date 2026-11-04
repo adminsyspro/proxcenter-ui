@@ -12859,7 +12859,9 @@
         "statOutgoing": "Outgoing",
         "details": "Details",
         "detailsOf": "Details of {zone}",
-        "moreFlows": "{count, plural, one {+# more flow} other {+# more flows}}"
+        "moreFlows": "{count, plural, one {+# more flow} other {+# more flows}}",
+        "showDetailsOf": "Show details of {zone}",
+        "hideDetailsOf": "Hide details of {zone}"
       },
       "flow": {
         "notApplied": "Not applied (egress not managed in v1)",

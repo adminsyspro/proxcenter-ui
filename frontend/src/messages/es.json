@@ -12859,7 +12859,9 @@
         "statOutgoing": "Salientes",
         "details": "Detalles",
         "detailsOf": "Detalles de {zone}",
-        "moreFlows": "{count, plural, one {+# flujo más} other {+# flujos más}}"
+        "moreFlows": "{count, plural, one {+# flujo más} other {+# flujos más}}",
+        "showDetailsOf": "Mostrar los detalles de {zone}",
+        "hideDetailsOf": "Ocultar los detalles de {zone}"
       },
       "flow": {
         "notApplied": "No aplicado (salida no gestionada en v1)",

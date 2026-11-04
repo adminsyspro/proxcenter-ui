@@ -12860,7 +12860,9 @@
         "statOutgoing": "Sortants",
         "details": "Détails",
         "detailsOf": "Détails de {zone}",
-        "moreFlows": "{count, plural, one {+# autre flux} other {+# autres flux}}"
+        "moreFlows": "{count, plural, one {+# autre flux} other {+# autres flux}}",
+        "showDetailsOf": "Afficher les détails de {zone}",
+        "hideDetailsOf": "Masquer les détails de {zone}"
       },
       "flow": {
         "notApplied": "Non appliqué (sortie non gérée en v1)",

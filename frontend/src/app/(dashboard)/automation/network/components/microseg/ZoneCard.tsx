@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Box, Button, ButtonBase, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
+import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
 import { serviceLabel } from '@/lib/network/serviceNames'
 
@@ -21,6 +22,8 @@ export type ZoneCardProps = ZoneRowProps & {
   /** The zone's drifts (ignored ones left out), null while the engine has not computed them. */
   drifts: number | null
   onOpenDrifts?: (zone: MicrosegZone) => void
+  /** Measures the card (the first of the page gives the new-zone card its height). */
+  boxRef?: (el: HTMLElement | null) => void
 }
 
 export const detailsId = (zoneId: string) => `zone-details-${zoneId}`
@@ -48,13 +51,16 @@ function MemberPreview({ members, known }: { members: ZoneMember[]; known: boole
     <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', minWidth: 0 }}>
       {members.slice(0, CARD_PREVIEW).map(m => {
         const name = m.guest?.name ?? `${m.ref.type}/${m.ref.vmid}`
-        const running = m.guest?.status === 'running'
+        // The guest glyph with its status dot, as in the Members column and the map panel (list-row rule).
+        const glyph = m.guest
+          ? <StatusIcon type='vm' vmType={m.guest.type} status={m.guest.status} size={14} />
+          : <i className='ri-question-line' style={{ fontSize: 14, opacity: 0.6 }} />
         return (
           <Chip
             key={`${m.ref.node}/${m.ref.type}/${m.ref.vmid}`}
             size='small'
             variant='outlined'
-            icon={<Box component='span' aria-hidden sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: running ? 'success.main' : 'text.disabled', flexShrink: 0, ml: '6px !important' }} />}
+            icon={<Box component='span' sx={{ display: 'inline-flex', ml: '6px !important', mr: '-2px !important' }}>{glyph}</Box>}
             label={name}
             sx={{ maxWidth: 140 }}
           />
@@ -92,9 +98,8 @@ function FlowPreview({ zone, flows, zonesById }: { zone: MicrosegZone; flows: Mi
  * and the flows opened full width below the row of cards) and the actions, shown on hover or focus (always on touch).
  */
 export default function ZoneCard(props: ZoneCardProps) {
-  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onAssign, onAddFlow, drifts, onOpenDrifts } = props
+  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onAssign, onAddFlow, drifts, onOpenDrifts, boxRef } = props
   const t = useTranslations('microsegPilot.policy.zone')
-  const tp = useTranslations('microsegPilot.policy')
   const ts = useTranslations('microsegPilot.overview.sections')
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const { canWrite } = useMicrosegWrite()
@@ -102,32 +107,34 @@ export default function ZoneCard(props: ZoneCardProps) {
 
   return (
     <Box
+      ref={boxRef}
       role='listitem'
       aria-label={zone.name}
       sx={{ ...CARD_SX, borderTop: 4, borderTopColor: zone.color || 'divider', ...(open ? { borderColor: 'primary.main', borderTopColor: zone.color || 'primary.main' } : {}), ...HOVER_ACTIONS }}
     >
       <Box sx={{ p: 1.5, pb: 1, flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+        {/* One line: the name at the left, the state, diff and drifts chips at the right; the description below. */}
+        <Box data-zone-title sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
           <ZoneGlyph zone={zone} label={t(`state.${zone.state}`)} />
           <Tooltip title={zone.name}><Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{zone.name}</Typography></Tooltip>
-          <DiffChip kind={diffKind} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+            <ZoneStateChip state={zone.state} onClick={canWrite ? setAnchor : undefined} />
+            <DiffChip kind={diffKind} />
+            {!!drifts && (
+              <Chip
+                size='small'
+                color='warning'
+                variant='outlined'
+                icon={<i className='ri-error-warning-line' />}
+                label={ts('drifts', { count: drifts })}
+                onClick={onOpenDrifts ? () => onOpenDrifts(zone) : undefined}
+              />
+            )}
+          </Box>
         </Box>
         <Tooltip title={zone.label}>
           <Typography noWrap variant='body2' color='text.secondary' sx={{ minHeight: 20 }}>{zone.label}</Typography>
         </Tooltip>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-          <ZoneStateChip state={zone.state} onClick={canWrite ? setAnchor : undefined} />
-          {!!drifts && (
-            <Chip
-              size='small'
-              color='warning'
-              variant='outlined'
-              icon={<i className='ri-error-warning-line' />}
-              label={ts('drifts', { count: drifts })}
-              onClick={onOpenDrifts ? () => onOpenDrifts(zone) : undefined}
-            />
-          )}
-        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Stat name='members' value={membersKnown ? members.length : null} label={t('statMembers')} />
           <Stat name='incoming' value={incoming.length} label={t('statIncoming')} />
@@ -141,7 +148,7 @@ export default function ZoneCard(props: ZoneCardProps) {
           size='small'
           aria-expanded={open}
           aria-controls={detailsId(zone.id)}
-          aria-label={open ? tp('hideDetails') : tp('showDetails')}
+          aria-label={open ? t('hideDetailsOf', { zone: zone.name }) : t('showDetailsOf', { zone: zone.name })}
           endIcon={<i className={open ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'} />}
           onClick={onToggle}
           sx={{ mr: 'auto' }}
@@ -210,13 +217,19 @@ export function RemovedZoneCard({ zone }: { zone: MicrosegZone }) {
   )
 }
 
-/** "+ New zone" as a dashed card at the end of the grid. */
-export function NewZoneCard({ onAdd }: { onAdd: () => void }) {
+/** The height of the new-zone card when no zone card gives one (no zone yet). */
+export const NEW_ZONE_MIN_HEIGHT = 160
+
+/**
+ * "+ New zone" as a dashed card at the end of the grid: it fills its grid cell (the row's height), and alone on its
+ * row it takes `height`, the height of a zone card, never a taller or shorter box.
+ */
+export function NewZoneCard({ onAdd, height = null }: { onAdd: () => void; height?: number | null }) {
   const t = useTranslations('microsegPilot.policy')
   const { canWrite, hint } = useMicrosegWrite()
   return (
     <Tooltip title={canWrite ? '' : hint}>
-      <Box sx={{ minWidth: 0, minHeight: 160, display: 'flex' }}>
+      <Box data-new-zone-cell sx={{ minWidth: 0, flex: '1 1 auto', minHeight: height ?? NEW_ZONE_MIN_HEIGHT, display: 'flex' }}>
         <ButtonBase
           data-testid='new-zone-card'
           disabled={!canWrite}

@@ -12527,7 +12527,9 @@
         "statOutgoing": "Ausgehend",
         "details": "Einzelheiten",
         "detailsOf": "Einzelheiten zu {zone}",
-        "moreFlows": "{count, plural, one {+# weiterer Fluss} other {+# weitere Flüsse}}"
+        "moreFlows": "{count, plural, one {+# weiterer Fluss} other {+# weitere Flüsse}}",
+        "showDetailsOf": "Einzelheiten zu {zone} anzeigen",
+        "hideDetailsOf": "Einzelheiten zu {zone} ausblenden"
       },
       "flow": {
         "notApplied": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",

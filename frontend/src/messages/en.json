@@ -12865,9 +12865,9 @@
         "showDetailsOf": "Show details of {zone}",
         "hideDetailsOf": "Hide details of {zone}",
         "sparkline": {
-          "title": "Uncovered traffic · 24 h",
-          "wouldBlock": "{count, plural, one {# hit would be blocked} other {# hits would be blocked}}",
-          "blocked": "{count, plural, one {# hit blocked} other {# hits blocked}}",
+          "title": "Uncovered · 24 h",
+          "wouldBlock": "{count, plural, one {{short} would be blocked} other {{short} would be blocked}}",
+          "blocked": "{count, plural, one {{short} blocked} other {{short} blocked}}",
           "loading": "Reading the history...",
           "disabled": "Zone disabled: its traffic is not logged",
           "aria": "{count, plural, one {Uncovered traffic over the last 24 hours: # hit} other {Uncovered traffic over the last 24 hours: # hits}}",

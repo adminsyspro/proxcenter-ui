@@ -12533,9 +12533,9 @@
         "showDetailsOf": "Einzelheiten zu {zone} anzeigen",
         "hideDetailsOf": "Einzelheiten zu {zone} ausblenden",
         "sparkline": {
-          "title": "Nicht abgedeckter Verkehr · 24 h",
-          "wouldBlock": "{count, plural, one {# Treffer würde blockiert} other {# Treffer würden blockiert}}",
-          "blocked": "{count, plural, one {# Treffer blockiert} other {# Treffer blockiert}}",
+          "title": "Nicht abgedeckt · 24 h",
+          "wouldBlock": "{count, plural, one {{short} würde blockiert} other {{short} würden blockiert}}",
+          "blocked": "{count, plural, one {{short} blockiert} other {{short} blockiert}}",
           "loading": "Verlauf wird gelesen...",
           "disabled": "Zone deaktiviert: ihr Verkehr wird nicht protokolliert",
           "aria": "{count, plural, one {Nicht abgedeckter Verkehr der letzten 24 Stunden: # Treffer} other {Nicht abgedeckter Verkehr der letzten 24 Stunden: # Treffer}}",

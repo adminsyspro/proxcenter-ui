@@ -42,13 +42,17 @@ export default function ZoneSparkline({ state, series, from, stepMs }: Readonly<
   const total = series?.reduce((a, b) => a + b, 0) ?? null
   const peak = series ? Math.max(0, ...series) : 0
   const hour = (i: number) => format.dateTime(new Date(from + i * stepMs), { hour: '2-digit', minute: '2-digit' })
-  const label = total === null ? t('loading') : t(state === 'enforce' ? 'blocked' : 'wouldBlock', { count: total })
+  // The total in short (278K): the exact count is in the tooltip and the accessible name.
+  const short = total === null ? '' : format.number(total, { notation: 'compact', maximumFractionDigits: 1 })
+  const label = total === null ? t('loading') : t(state === 'enforce' ? 'blocked' : 'wouldBlock', { count: total, short })
 
   return (
     <Box data-zone-sparkline sx={{ minWidth: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1, minWidth: 0 }}>
         <Typography variant='caption' color='text.secondary' noWrap>{t('title')}</Typography>
-        <Typography variant='caption' color='text.primary' fontWeight={600} noWrap data-testid='zone-sparkline-total'>{label}</Typography>
+        <Tooltip title={total === null ? '' : t('aria', { count: total })} disableInteractive>
+          <Typography variant='caption' color='text.primary' fontWeight={600} noWrap data-testid='zone-sparkline-total' sx={{ flexShrink: 0 }}>{label}</Typography>
+        </Tooltip>
       </Box>
       <Box
         component='svg'

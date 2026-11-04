@@ -12866,9 +12866,9 @@
         "showDetailsOf": "Afficher les détails de {zone}",
         "hideDetailsOf": "Masquer les détails de {zone}",
         "sparkline": {
-          "title": "Trafic non couvert · 24 h",
-          "wouldBlock": "{count, plural, one {# occurrence serait bloquée} other {# occurrences seraient bloquées}}",
-          "blocked": "{count, plural, one {# occurrence bloquée} other {# occurrences bloquées}}",
+          "title": "Non couvert · 24 h",
+          "wouldBlock": "{count, plural, one {{short} serait bloquée} other {{short} seraient bloquées}}",
+          "blocked": "{count, plural, one {{short} bloquée} other {{short} bloquées}}",
           "loading": "Lecture de l'historique...",
           "disabled": "Zone désactivée : son trafic n'est pas journalisé",
           "aria": "{count, plural, one {Trafic non couvert sur les dernières 24 heures : # occurrence} other {Trafic non couvert sur les dernières 24 heures : # occurrences}}",

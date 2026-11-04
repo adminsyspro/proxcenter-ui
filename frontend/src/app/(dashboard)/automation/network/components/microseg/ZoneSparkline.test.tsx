@@ -14,8 +14,8 @@ const bars = () => [...document.querySelectorAll('[data-bucket]')]
 describe('ZoneSparkline', () => {
   it('draws one bar per hour, scaled on the peak, and says what an observed zone would block', () => {
     renderWithProviders(<ZoneSparkline state='observe' series={series()} from={FROM} stepMs={3_600_000} />)
-    expect(screen.getByText('Uncovered traffic · 24 h')).toBeTruthy()
-    expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 hits would be blocked')
+    expect(screen.getByText('Uncovered · 24 h')).toBeTruthy()
+    expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 would be blocked')
     expect(screen.getByRole('img', { name: 'Uncovered traffic over the last 24 hours: 50 hits' })).toBeTruthy()
     expect(bars()).toHaveLength(24)
     const height = (i: number) => Number(bars()[i].querySelectorAll('rect')[1].getAttribute('height'))
@@ -24,9 +24,17 @@ describe('ZoneSparkline', () => {
     expect(height(0)).toBe(1)
   })
 
+  it('writes a large total in short, the exact count in its tooltip', async () => {
+    renderWithProviders(<ZoneSparkline state='observe' series={[278_053, 0]} from={FROM} stepMs={3_600_000} />)
+    const total = screen.getByTestId('zone-sparkline-total')
+    expect(total.textContent).toBe('278.1K would be blocked')
+    fireEvent.mouseOver(total)
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Uncovered traffic over the last 24 hours: 278,053 hits')
+  })
+
   it('says what an enforced zone blocked', () => {
     renderWithProviders(<ZoneSparkline state='enforce' series={[1, 0]} from={FROM} stepMs={3_600_000} />)
-    expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('1 hit blocked')
+    expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('1 blocked')
     expect(bars()).toHaveLength(2)
   })
 

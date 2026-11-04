@@ -12865,9 +12865,9 @@
         "showDetailsOf": "显示 {zone} 的详情",
         "hideDetailsOf": "隐藏 {zone} 的详情",
         "sparkline": {
-          "title": "未覆盖流量 · 24 小时",
-          "wouldBlock": "{count} 次命中将被阻止",
-          "blocked": "{count} 次命中已阻止",
+          "title": "未覆盖 · 24 小时",
+          "wouldBlock": "{count, plural, other {{short} 次将被阻止}}",
+          "blocked": "{count, plural, other {{short} 次已阻止}}",
           "loading": "正在读取历史记录...",
           "disabled": "区域已禁用：其流量未被记录",
           "aria": "最近 24 小时的未覆盖流量：{count} 次命中",

@@ -68,7 +68,7 @@ describe('zone card traffic sparkline', () => {
     series[23] = 3
     renderWithProviders(<ZoneCard {...props()} uncovered={{ series, from: Date.parse('2026-11-04T00:00:00Z'), stepMs: 3_600_000 }} />)
     const card = screen.getByRole('listitem', { name: 'web' })
-    expect(within(card).getByTestId('zone-sparkline-total').textContent).toBe('3 hits would be blocked')
+    expect(within(card).getByTestId('zone-sparkline-total').textContent).toBe('3 would be blocked')
   })
 
   it('has no sparkline when the history cannot be read', () => {

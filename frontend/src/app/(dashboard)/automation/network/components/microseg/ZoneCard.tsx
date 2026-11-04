@@ -145,9 +145,14 @@ export default function ZoneCard(props: ZoneCardProps) {
           <Stat name='incoming' value={incoming.length} label={t('statIncoming')} />
           <Stat name='outgoing' value={outgoing.length} label={t('statOutgoing')} />
         </Box>
-        {uncovered && <ZoneSparkline state={zone.state} series={uncovered.series} from={uncovered.from} stepMs={uncovered.stepMs} />}
         <MemberPreview members={members} known={membersKnown} />
         <FlowPreview zone={zone} flows={flows} zonesById={zonesById} />
+        {/* At the bottom of the card: the cards of a row share their height, so the bars line up across the row. */}
+        {uncovered && (
+          <Box sx={{ mt: 'auto', pt: 0.5 }}>
+            <ZoneSparkline state={zone.state} series={uncovered.series} from={uncovered.from} stepMs={uncovered.stepMs} />
+          </Box>
+        )}
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.5, borderTop: 1, borderColor: 'divider' }}>
         <Button

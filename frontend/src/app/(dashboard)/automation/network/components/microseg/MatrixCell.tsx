@@ -64,6 +64,13 @@ function CellBody({ view, chips }: { view: CellView; chips: number }) {
 }
 
 /** The handlers of the grid: one set for every cell, each reading the cell from its data attributes. */
+/**
+ * The grid line of the matrix: the theme's own divider (a faint tint of the text colour in the dark theme). It is
+ * written as a full `1px solid <colour>` so no later shorthand resets the colour to the text colour, and it reads
+ * the CSS variable because MUI's alpha() cannot recolour the dark theme's `rgb(var(...) / 0.12)` divider.
+ */
+export const gridLine = (theme: Theme): string => theme.vars?.palette.divider ?? theme.palette.divider
+
 export type CellHandlers = {
   onEnter: (event: MouseEvent<HTMLElement>) => void
   onFocus: (event: FocusEvent<HTMLElement>) => void
@@ -126,7 +133,7 @@ export function MatrixCellView({ id, r, c, rowId, colId, view, aria, selected, t
       sx={theme => ({
         position: 'relative', minHeight: CELL_MIN_H, minWidth: 0, p: 0.75, pt: 2.25, boxSizing: 'border-box',
         display: 'flex', flexDirection: 'column', gap: 0.5, justifyContent: 'center',
-        borderBottom: 1, borderRight: 1, borderColor: alpha(theme.palette.divider, 0.4), cursor: view ? 'pointer' : 'default',
+        borderBottom: `1px solid ${gridLine(theme)}`, borderRight: `1px solid ${gridLine(theme)}`, cursor: view ? 'pointer' : 'default',
         background: cellBackground(theme, view, diagonal),
         outline: selected ? `2px solid ${theme.palette.primary.main}` : 'none', outlineOffset: -2,
         '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: -2 },

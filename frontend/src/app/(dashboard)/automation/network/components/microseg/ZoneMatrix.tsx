@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 
 import { serviceTokensTitle } from '@/lib/network/serviceNames'
 
-import MatrixCell, { type CellHandlers } from './MatrixCell'
+import MatrixCell, { gridLine, type CellHandlers } from './MatrixCell'
 import { MATRIX_SORTS, cellId, cellView, sortEnds, type CellView, type MatrixEnd, type MatrixModel, type MatrixSort } from './matrixModel'
 import { involvesAddresses, targetAddresses, type TargetGuest } from './targetModel'
 import { useStoredChoice } from './useStoredChoice'
@@ -180,11 +180,13 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
   }, [rows.length, cols.length, onSelectCell])
 
   const theme = useTheme()
-  // Grid lines in the soft divider tint the rest of the page uses (a solid divider reads as white lines in the dark theme, black in the light one).
-  const sticky = { position: 'sticky', bgcolor: 'background.paper', borderColor: alpha(theme.palette.divider, 0.4) } as const
+  // Header cells draw the same grid line as the cells (see gridLine), as a full border so nothing resets its colour.
+  const line = `1px solid ${gridLine(theme)}`
+  const sticky = { position: 'sticky', bgcolor: 'background.paper', borderBottom: line, borderRight: line } as const
   // The lit row and column: one rule on the grid, in a neutral tint (red and blue tell the traffic, orange is the brand).
   const litSx = (theme: Theme) => {
-    const tint = alpha(theme.palette.text.primary, 0.06)
+    // The dark theme's text colour is an `rgb(var(...) / a)` string MUI's alpha() cannot recolour: use its channel.
+    const tint = theme.vars ? `rgb(${theme.vars.palette.text.primaryChannel} / 0.06)` : alpha(theme.palette.text.primary, 0.06)
     const heads: string[] = []
     const cells: string[] = []
     if (lit.row) {
@@ -218,7 +220,7 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
         })}
       >
         <Box role='row' sx={{ display: 'contents' }}>
-          <Box role='columnheader' sx={{ ...sticky, top: 0, left: 0, zIndex: 3, borderBottom: 1, borderRight: 1, p: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Box role='columnheader' sx={{ ...sticky, top: 0, left: 0, zIndex: 3, p: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             <ToggleButtonGroup exclusive size='small' value={sort} aria-label={t('matrix.sort')} onChange={(_e, next: MatrixSort | null) => { if (next) setSort(next) }} sx={{ '& .MuiToggleButton-root': { px: 0.75, py: 0.25 } }}>
               <Tooltip title={t('matrix.sortName')}><ToggleButton value='name' aria-label={t('matrix.sortName')}><i className='ri-sort-alphabet-asc' aria-hidden /></ToggleButton></Tooltip>
               <Tooltip title={t('matrix.sortLayer')}><ToggleButton value='layer' aria-label={t('matrix.sortLayer')}><i className='ri-flow-chart' aria-hidden /></ToggleButton></Tooltip>
@@ -226,14 +228,14 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
             <Typography noWrap variant='caption' color='text.secondary'>{t('matrix.corner')}</Typography>
           </Box>
           {cols.map(col => (
-            <Box key={col.id} role='columnheader' data-col={col.id} sx={{ ...sticky, top: 0, zIndex: 2, borderBottom: 1, borderRight: 1, px: 1, display: 'flex', alignItems: 'flex-end', pb: 1, minWidth: 0 }}>
+            <Box key={col.id} role='columnheader' data-col={col.id} sx={{ ...sticky, top: 0, zIndex: 2, px: 1, display: 'flex', alignItems: 'flex-end', pb: 1, minWidth: 0 }}>
               <EndHead end={col} name={names.end(col)} onSelectZone={onSelectZone} />
             </Box>
           ))}
         </Box>
         {rows.map((row, r) => (
           <Box key={row.id} role='row' sx={{ display: 'contents' }}>
-            <Box role='rowheader' data-row={row.id} sx={{ ...sticky, left: 0, zIndex: 1, borderBottom: 1, borderRight: 1, px: 1, display: 'flex', alignItems: 'center', minWidth: 0 }}>
+            <Box role='rowheader' data-row={row.id} sx={{ ...sticky, left: 0, zIndex: 1, px: 1, display: 'flex', alignItems: 'center', minWidth: 0 }}>
               <EndHead end={row} name={names.end(row)} onSelectZone={onSelectZone} />
             </Box>
             {cols.map((col, c) => {

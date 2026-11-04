@@ -328,4 +328,57 @@ describe('fetchAllPbsBackups', () => {
     expect(backup.backupTimeIso).toBe('')
     expect(backup.verifiedAt).toBeNull()
   })
+
+  it('names a snapshot without notes after its PBS group notes, never after another namespace\'s group', async () => {
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'ds1' }]
+      if (path === '/admin/datastore/ds1/namespace') return [{ ns: 'HTC' }, { ns: 'OKC' }]
+      if (path === '/admin/datastore/ds1/snapshots') return []
+      if (path === '/admin/datastore/ds1/groups') return []
+      if (path === '/admin/datastore/ds1/snapshots?ns=HTC') {
+        return [
+          { 'backup-type': 'vm', 'backup-id': '102', 'backup-time': 3 },
+          { 'backup-type': 'vm', 'backup-id': '101', 'backup-time': 2, comment: 'HTCAVM' },
+        ]
+      }
+      if (path === '/admin/datastore/ds1/groups?ns=HTC') {
+        return [
+          { 'backup-type': 'vm', 'backup-id': '102', comment: 'HTC-TASKHOST' },
+          { 'backup-type': 'vm', 'backup-id': '101', comment: 'group note loses to the snapshot note' },
+        ]
+      }
+      if (path === '/admin/datastore/ds1/snapshots?ns=OKC') {
+        return [{ 'backup-type': 'vm', 'backup-id': '102', 'backup-time': 1 }]
+      }
+      if (path === '/admin/datastore/ds1/groups?ns=OKC') return []
+      throw new Error(`unexpected path ${path}`)
+    })
+
+    const { data, warnings } = await fetchAllPbsBackups(conn, 'en-US')
+    const byNs = (ns: string, id: string) => data.find(b => b.namespace === ns && b.backupId === id)!
+
+    expect(warnings).toEqual([])
+    expect(byNs('HTC', '102').vmName).toBe('HTC-TASKHOST')
+    expect(byNs('HTC', '102').comment).toBe('')
+    expect(byNs('HTC', '101').vmName).toBe('HTCAVM')
+    expect(byNs('OKC', '102').vmName).toBe('')
+  })
+
+  it('keeps the snapshots and adds no warning when the group list cannot be read', async () => {
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'ds1' }]
+      if (path === '/admin/datastore/ds1/namespace') return []
+      if (path === '/admin/datastore/ds1/snapshots') {
+        return [{ 'backup-type': 'vm', 'backup-id': '102', 'backup-time': 3 }]
+      }
+      if (path === '/admin/datastore/ds1/groups') throw new Error('PBS API error 403')
+      throw new Error(`unexpected path ${path}`)
+    })
+
+    const { data, warnings } = await fetchAllPbsBackups(conn, 'en-US')
+
+    expect(warnings).toEqual([])
+    expect(data).toHaveLength(1)
+    expect(data[0].vmName).toBe('')
+  })
 })

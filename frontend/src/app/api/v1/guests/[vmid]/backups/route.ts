@@ -5,6 +5,7 @@ import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { listGuestVzdumpBackups } from "@/lib/backups/pveVzdump"
+import { fetchPbsGroupNotes, pbsSnapshotName } from "@/lib/backups/pbsGroupNotes"
 import { pbsFetch } from "@/lib/proxmox/pbs-client"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -41,6 +42,43 @@ function normalizeHost(s?: string | null): string {
  * - node: nœud courant du guest (optionnel, priorise son balayage)
  * - scanVzdump: '1' pour balayer les stockages PVE (opt-in, voir plus bas)
  */
+type NamespacePlan = Array<{ storeName: string; namespaces: string[] }>
+
+/** The datastores and namespaces bound to a tenant's vDCs, nothing else. */
+function tenantNamespacePlan(pairs: ReadonlyArray<{ datastore: string; namespace: string }>): NamespacePlan {
+  const byStore = new Map<string, string[]>()
+
+  for (const { datastore, namespace } of pairs) {
+    const namespaces = byStore.get(datastore) ?? []
+    if (!namespaces.includes(namespace)) namespaces.push(namespace)
+    byStore.set(datastore, namespaces)
+  }
+
+  return [...byStore].map(([storeName, namespaces]) => ({ storeName, namespaces }))
+}
+
+/** Every datastore of the PBS, each with its root and sub-namespaces. */
+async function fullNamespacePlan(conn: any): Promise<NamespacePlan> {
+  const datastores = await pbsFetch<any[]>(conn, "/admin/datastore")
+  const storeNames = (datastores || []).map(ds => ds.store || ds.name).filter(Boolean)
+
+  return Promise.all(storeNames.map(async (storeName: string) => {
+    let namespaces: string[] = ['']
+
+    try {
+      const nsData = await pbsFetch<any[]>(conn, `/admin/datastore/${encodeURIComponent(storeName)}/namespace`)
+
+      if (Array.isArray(nsData)) {
+        namespaces = ['', ...nsData.map(n => n.ns || '').filter(Boolean)]
+      }
+    } catch {
+      // Older PBS versions may not support namespace endpoint
+    }
+
+    return { storeName, namespaces }
+  }))
+}
+
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ vmid: string }> | { vmid: string } }
@@ -181,34 +219,23 @@ export async function GET(
         insecureDev: !!pbs.insecureTLS,
       }
 
+      // An iaas tenant reaches a provider-owned PBS that also holds other
+      // tenants' namespaces: only its own vDC bindings are read, the same
+      // (datastore, namespace) rule as every /api/v1/pbs/[id] route.
+      const tenantPairs = infra.kind === 'iaas'
+        ? (infra.vdcScope.pbsNamespacesByConnection?.get(pbs.id) ?? [])
+        : null
+
+      if (tenantPairs?.length === 0) return []
+
       try {
-        // Récupérer la liste des datastores
-        const datastores = await pbsFetch<any[]>(conn, "/admin/datastore")
+        const plan = tenantPairs
+          ? tenantNamespacePlan(tenantPairs)
+          : await fullNamespacePlan(conn)
 
         // Pour chaque datastore, chercher les backups de cette VM
-        const datastorePromises = (datastores || []).map(async (ds) => {
-          const storeName = ds.store || ds.name
-
-          if (!storeName) return []
-
+        const datastorePromises = plan.map(async ({ storeName, namespaces }) => {
           try {
-            // List all namespaces (empty string = root, plus sub-namespaces)
-            let namespaces: string[] = ['']
-
-            try {
-              const nsData = await pbsFetch<any[]>(
-                conn,
-                `/admin/datastore/${encodeURIComponent(storeName)}/namespace`
-              )
-
-              if (Array.isArray(nsData)) {
-                const subNs = nsData.map(n => n.ns || '').filter(Boolean)
-                namespaces = ['', ...subNs]
-              }
-            } catch {
-              // Older PBS versions may not support namespace endpoint
-            }
-
             // Fetch snapshots for each namespace in parallel
             const nsPromises = namespaces.map(async (ns) => {
               const nsParam = ns ? `?ns=${encodeURIComponent(ns)}` : ''
@@ -219,14 +246,21 @@ export async function GET(
                 { slowRead: true }
               )
 
-              return (snapshots || [])
-                .filter(snap => {
-                  const backupId = String(snap['backup-id'] || '')
-                  const matchVmid = backupId === String(vmid)
-                  const matchType = !typeFilter || snap['backup-type'] === typeFilter
+              const guestSnapshots = (snapshots || []).filter(snap => {
+                const backupId = String(snap['backup-id'] || '')
+                const matchVmid = backupId === String(vmid)
+                const matchType = !typeFilter || snap['backup-type'] === typeFilter
 
-                  return matchVmid && matchType
-                })
+                return matchVmid && matchType
+              })
+
+              // Group notes only matter for a snapshot of this guest that has
+              // no notes of its own, so the other namespaces cost no call.
+              const groupNotes = guestSnapshots.some(snap => !pbsSnapshotName(snap))
+                ? await fetchPbsGroupNotes(conn, storeName, ns)
+                : undefined
+
+              return guestSnapshots
                 .map(snap => {
                   const backupTime = snap['backup-time']
                     ? new Date(snap['backup-time'] * 1000)
@@ -254,7 +288,7 @@ export async function GET(
                     // Infos backup
                     backupType: snap['backup-type'],
                     backupId: snap['backup-id'],
-                    vmName: snap.comment || '',
+                    vmName: pbsSnapshotName(snap, groupNotes),
                     backupTime: snap['backup-time'] || 0,
                     backupTimeFormatted: backupTime?.toLocaleString(dateLocale) || '-',
                     backupTimeIso: backupTimeIso,

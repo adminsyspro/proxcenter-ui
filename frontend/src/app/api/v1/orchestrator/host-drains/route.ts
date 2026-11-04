@@ -2,12 +2,12 @@ import { NextResponse } from "next/server"
 
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
-import { checkPermission, buildNodeResourceId, PERMISSIONS } from "@/lib/rbac"
+import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { DrainConfigError, sanitizeDrainConfig } from "@/lib/hostDrain/config"
 import { drainCluster, DrainTargetDenied, filterViewableDrains, publicDrain, restrictDrainTargets } from "@/lib/hostDrain/access"
 import { loadOrchestratorSshAccess } from "@/lib/orchestrator/sshCredentials"
-import { assertNodeName } from "@/lib/ssh/validate"
+import { checkScopePermission, parseDrainScope, scopeError, scopeNode, scopeNodes } from "@/lib/hostDrain/scope"
 import { isConnectionNotFoundError } from "@/lib/connections/getConnection"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -67,31 +67,19 @@ async function handlePost(req: Request) {
   try {
     const body = await req.json().catch(() => null)
     const connectionId = body?.connection_id
-    const node = body?.node
-    // A selection of guests (#1218): config.vmids and no node. It needs the
-    // right to migrate each guest and to manage each target, which
-    // restrictDrainTargets checks below, as migrating them one by one would.
-    const selection = Array.isArray(body?.config?.vmids) && body.config.vmids.length > 0
+    // One node, a group of nodes (roadmap#198) or a selection of guests
+    // (#1218). A selection needs the right to migrate each guest and to
+    // manage each target, which restrictDrainTargets checks below, as
+    // migrating them one by one would; a node or a group needs the right
+    // to manage every node it empties.
+    const parsed = parseDrainScope(body)
+    if (!connectionId) return scopeError("connection_id and node are required")
+    if ("error" in parsed) return scopeError(parsed.error)
+    const { scope } = parsed
+    const safeNode = scopeNode(scope)
 
-    if (!connectionId || (!node && !selection)) {
-      return NextResponse.json({ error: "connection_id and node are required" }, { status: 400 })
-    }
-    if (node && selection) {
-      return NextResponse.json({ error: "a selection of guests has no node" }, { status: 400 })
-    }
-
-    let safeNode = ""
-    if (!selection) {
-      try {
-        safeNode = assertNodeName(node)
-      } catch {
-        return NextResponse.json({ error: "Invalid node name" }, { status: 400 })
-      }
-      // Same permission as entering maintenance or migrating from the node,
-      // on a cluster the caller owns.
-      const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "node", buildNodeResourceId(connectionId, safeNode))
-      if (denied) return denied
-    }
+    const denied = await checkScopePermission(connectionId, scope, PERMISSIONS.NODE_MANAGE)
+    if (denied) return denied
     if (!canMigrateConnections(await getTenantInfrastructureScope(await getCurrentTenantId()), connectionId)) {
       return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     }
@@ -100,7 +88,7 @@ async function handlePost(req: Request) {
     let config: Record<string, unknown>
     try {
       const requested = sanitizeDrainConfig(body.config)
-      config = { ...(await restrictDrainTargets(await drainCluster(connectionId), connectionId, safeNode, requested)) }
+      config = { ...(await restrictDrainTargets(await drainCluster(connectionId), connectionId, scopeNodes(scope), requested)) }
     } catch (e) {
       if (e instanceof DrainConfigError) return NextResponse.json({ error: e.message }, { status: 400 })
       if (isConnectionNotFoundError(e)) return NextResponse.json({ error: "Connection not found" }, { status: 404 })

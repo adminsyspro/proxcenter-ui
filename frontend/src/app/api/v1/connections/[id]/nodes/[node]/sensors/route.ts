@@ -5,6 +5,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { parseHwmon } from "@/lib/sensors/hwmon"
 import { executeSSH } from "@/lib/ssh/exec"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -53,6 +54,9 @@ export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> | { id: string; node: string } }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id

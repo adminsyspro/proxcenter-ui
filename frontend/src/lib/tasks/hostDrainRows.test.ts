@@ -131,3 +131,10 @@ describe("a selection of guests (#1218)", () => {
     expect(b.metadata.sourceNode).toBe("pve2")
   })
 })
+
+describe('hostDrainJobRows, a group of nodes (roadmap#198)', () => {
+  it('names the drain by its nodes', () => {
+    const rows = hostDrainJobRows([{ id: 'g', connection_id: 'c', node: 'pve1,pve3', status: 'running', config: { nodes: ['pve1', 'pve3'] }, guests: [] }], () => 'PROD')
+    expect(rows[0].name).toBe('Group maintenance - pve1, pve3')
+  })
+})

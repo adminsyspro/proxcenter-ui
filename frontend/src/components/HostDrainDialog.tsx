@@ -89,6 +89,19 @@ export interface HostDrainPlan {
   projection?: HostDrainNodeProjection[]
   /** Running HA guests ha-manager places itself, not counted on any target. */
   ha_unplaced?: number
+  /** A group of nodes (roadmap#198): the guests the nodes left outside cannot take. */
+  blocked?: string[]
+}
+
+/**
+ * The plan of an answer, or null when it holds none (an answer of another
+ * shape, such as a stub): the dialog never reads a list that is not there.
+ */
+export function readHostDrainPlan(raw: any): HostDrainPlan | null {
+  if (!raw || !Array.isArray(raw.guests)) return null
+  const list = (v: unknown) => (Array.isArray(v) ? v : [])
+
+  return { ...raw, candidates: list(raw.candidates), projection: list(raw.projection), ...(raw.blocked === undefined ? {} : { blocked: list(raw.blocked) }) }
 }
 
 export interface HostDrainDialogProps {
@@ -102,6 +115,11 @@ export interface HostDrainDialogProps {
   otherNodes: string[]
   /** The guests of a selection (#1218), anywhere in the cluster. */
   vmids?: number[]
+  /**
+   * A group of nodes entering maintenance together (roadmap#198): one plan
+   * that never targets a node of the group. `node` is then empty.
+   */
+  nodes?: string[]
   /** Entering maintenance runs ha-manager over SSH. */
   sshEnabled?: boolean
   onStarted?: (drain: any) => void
@@ -139,6 +157,7 @@ export function buildHostDrainConfig(opts: {
   includeStopped: boolean
   overrides?: Record<number, string>
   vmids?: number[]
+  nodes?: string[]
 }) {
   const selection = opts.mode === 'selection'
   const entries = Object.entries(opts.overrides || {}).filter(([, v]) => !!v)
@@ -154,6 +173,7 @@ export function buildHostDrainConfig(opts: {
     ...(Object.keys(targets).length > 0 ? { guest_targets: targets } : {}),
     ...(keep.length > 0 ? { keep_vmids: keep } : {}),
     ...(selection ? { vmids: opts.vmids || [] } : {}),
+    ...(opts.mode === 'maintenance' && (opts.nodes?.length ?? 0) > 1 ? { nodes: opts.nodes } : {}),
   }
 }
 
@@ -297,8 +317,11 @@ function ProjectionBlock({ plan, memCeiling, title }: Readonly<{ plan: HostDrain
 }
 
 export default function HostDrainDialog(props: HostDrainDialogProps) {
-  const { open, onClose, connId, node, mode, otherNodes, vmids, sshEnabled = true, onStarted, onMaintenanceOnly } = props
+  const { open, onClose, connId, node, mode, otherNodes, vmids, nodes, sshEnabled = true, onStarted, onMaintenanceOnly } = props
   const selection = mode === 'selection'
+  // A group always evacuates: half a site in maintenance with its guests
+  // still on it is not a state worth offering.
+  const group = mode === 'maintenance' && (nodes?.length ?? 0) > 1
   const t = useTranslations()
   const toast = useToast()
   const theme = useTheme()
@@ -324,19 +347,20 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
   const [error, setError] = useState<string | null>(null)
   // The per-host Ceph noout of a node entering maintenance (ui#1164), set
   // before the drain or the ha-manager call so the OSDs are covered first.
-  const noout = useCephNoout({ connId, node, open: open && mode === 'maintenance', mode: 'enter' })
+  // The per-host check is one node's: a group gets a warning instead.
+  const noout = useCephNoout({ connId, node, open: open && mode === 'maintenance' && !group, mode: 'enter' })
   const { active: nooutWanted, setFlag: setNoout, rollback: rollbackNoout } = noout
 
   const config = useMemo(
-    () => buildHostDrainConfig({ mode, maxParallel, memCeiling, includeStopped, overrides, vmids }),
-    [mode, maxParallel, memCeiling, includeStopped, overrides, vmids],
+    () => buildHostDrainConfig({ mode, maxParallel, memCeiling, includeStopped, overrides, vmids, nodes }),
+    [mode, maxParallel, memCeiling, includeStopped, overrides, vmids, nodes],
   )
-  // A selection has no node: the request names the guests instead.
-  const scope = useMemo(() => (selection ? { connection_id: connId } : { connection_id: connId, node }), [selection, connId, node])
+  // A selection or a group has no node: the request names the guests or the nodes instead.
+  const scope = useMemo(() => (selection || group ? { connection_id: connId } : { connection_id: connId, node }), [selection, group, connId, node])
 
   const needsSsh = mode === 'maintenance'
   const sshBlocked = needsSsh && !sshEnabled
-  const drainWanted = mode !== 'maintenance' || evacuate
+  const drainWanted = mode !== 'maintenance' || evacuate || group
   const planWanted = open && drainWanted
   const planKey = useMemo(() => JSON.stringify({ connId, node, config }), [connId, node, config])
   // The last plan stays on screen while the next one loads, so the list does
@@ -361,7 +385,8 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
         if (!res.ok) {
           setPlanState({ key: planKey, plan: null, error: json?.error || `HTTP ${res.status}` })
         } else {
-          setPlanState({ key: planKey, plan: json?.data ?? json, error: null })
+          const read = readHostDrainPlan(json?.data ?? json)
+          setPlanState({ key: planKey, plan: read, error: read ? null : t('hostDrain.orchestratorUnavailable') })
         }
       } catch (e: any) {
         if (cancelled) return
@@ -398,7 +423,10 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
         setError(json?.error || `HTTP ${res.status}`)
         return
       }
-      toast.success(selection ? t('hostDrain.startedSelection', { count: vmids?.length ?? 0 }) : t('hostDrain.started', { node }))
+      let started = t('hostDrain.started', { node })
+      if (selection) started = t('hostDrain.startedSelection', { count: vmids?.length ?? 0 })
+      else if (group) started = t('hostGroup.started', { nodes: (nodes || []).join(', ') })
+      toast.success(started)
       onStarted?.(json?.data ?? json)
       onClose()
     } catch (e: any) {
@@ -407,7 +435,7 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
     } finally {
       setStarting(false)
     }
-  }, [nooutWanted, setNoout, rollbackNoout, drainWanted, onMaintenanceOnly, onClose, scope, selection, vmids, node, config, toast, t, onStarted])
+  }, [nooutWanted, setNoout, rollbackNoout, drainWanted, onMaintenanceOnly, onClose, scope, selection, group, nodes, vmids, node, config, toast, t, onStarted])
 
   const modeLabel = (m: string) => {
     switch (m) {
@@ -427,7 +455,9 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
   let startLabel = t('common.confirm')
   if (selection) startLabel = t('hostDrain.startSelection')
   else if (drainWanted) startLabel = t('hostDrain.start')
-  const canStart = !starting && !sshBlocked && !noout.blocked && (!drainWanted || (!!plan && !planLoading && !planError))
+  // A group starts only when the nodes left outside take every guest.
+  const blocked = group ? (plan?.blocked || []) : []
+  const canStart = !starting && !sshBlocked && !noout.blocked && blocked.length === 0 && (!drainWanted || (!!plan && !planLoading && !planError))
   const canKeep = mode === 'migrate-all'
   // A guest gets a target selector when it will move, or when the operator
   // already chose for it (a refused choice stays editable). HA guests of a
@@ -461,7 +491,11 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
   let title = t('bulkActions.migrateAllVms')
   let intro = t('hostDrain.introMigrateAll')
   let titleIcon = 'ri-logout-box-r-line'
-  if (mode === 'maintenance') {
+  if (group) {
+    title = t('hostGroup.enterTitle', { nodes: (nodes || []).join(', ') })
+    intro = t('hostGroup.enterIntro')
+    titleIcon = 'ri-tools-fill'
+  } else if (mode === 'maintenance') {
     title = t('inventory.enterMaintenance')
     intro = t('hostDrain.introMaintenance')
     titleIcon = 'ri-tools-fill'
@@ -494,7 +528,7 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
           </Alert>
         )}
 
-        {mode === 'maintenance' && (
+        {mode === 'maintenance' && !group && (
           <Box>
             <FormControlLabel
               control={<Switch checked={evacuate} onChange={e => setEvacuate(e.target.checked)} />}
@@ -508,7 +542,12 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
           </Box>
         )}
 
-        {mode === 'maintenance' && <CephNooutOption state={noout} disabled={starting} />}
+        {mode === 'maintenance' && !group && <CephNooutOption state={noout} disabled={starting} />}
+        {group && (
+          <Alert severity="info" icon={<i className="ri-database-2-line" style={{ fontSize: 18 }} />} data-testid="host-group-ceph-hint">
+            {t('hostGroup.cephHint')}
+          </Alert>
+        )}
 
         {drainWanted && (
           <>
@@ -582,6 +621,15 @@ export default function HostDrainDialog(props: HostDrainDialogProps) {
                 {planLoading && <CircularProgress size={14} />}
               </Box>
               {planError && <Alert severity="error" sx={{ mb: 1 }}>{planError}</Alert>}
+              {blocked.length > 0 && !planError && (
+                <Alert severity="error" sx={{ mb: 1 }} data-testid="host-group-blocked">
+                  {t('hostGroup.blocked', { count: blocked.length })}
+                  <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2.5 }}>
+                    {blocked.slice(0, 8).map(line => <li key={line}><Typography variant="caption">{line}</Typography></li>)}
+                  </Box>
+                  {blocked.length > 8 && <Typography variant="caption">{t('hostGroup.blockedMore', { count: blocked.length - 8 })}</Typography>}
+                </Alert>
+              )}
               {plan && !planError && (
                 <>
                   {plan.candidates.length === 0 && (

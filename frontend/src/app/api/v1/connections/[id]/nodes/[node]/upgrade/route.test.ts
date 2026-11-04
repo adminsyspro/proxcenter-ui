@@ -3,6 +3,10 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+// The IaaS tenant gate of this route is covered by lib/tenant/iaasGuard.routes.test.ts (roadmap#189).
+vi.mock("@/lib/tenant/iaasGuard", () => ({ denyIaasTenant: async () => null }))
+
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 import { PveLicenseExcludedError } from '@/lib/license/exclusions'
 

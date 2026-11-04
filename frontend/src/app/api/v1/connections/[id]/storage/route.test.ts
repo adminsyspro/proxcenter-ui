@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+
+// The IaaS tenant gate of this route is covered by lib/tenant/iaasGuard.routes.test.ts
+// and lib/connections/iaasView.routes.test.ts (roadmap#189); the caller here is the provider.
+vi.mock("@/lib/tenant/iaasGuard", () => ({
+  denyIaasTenant: async () => null,
+  resolveCallerInfraScope: async () => ({ ok: true, tenantId: "default", infra: { kind: "provider" } }),
+}))
+
 // The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
 // pass-through so this file keeps testing the handler, as for a session caller.
 vi.mock('@/lib/api-tokens/routeGuard', () => ({

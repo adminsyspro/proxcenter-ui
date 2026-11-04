@@ -1,5 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
+
+// The IaaS tenant gate of this route is covered by lib/tenant/iaasGuard.routes.test.ts (roadmap#189).
+vi.mock("@/lib/tenant/iaasGuard", () => ({ denyIaasTenant: async () => null }))
+
 vi.mock('@/lib/rbac', () => ({ checkPermission: vi.fn(), PERMISSIONS: { CONNECTION_VIEW: 'connection.view' } }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: vi.fn() }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn() }))

@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+
+// The IaaS tenant gate is covered by src/lib/ai/iaasTenantAi.test.ts; the caller here is the provider.
+vi.mock("@/lib/tenant/iaasGuard", () => ({ denyIaasTenant: async () => null }))
+
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const { checkPermissionMock } = vi.hoisted(() => ({ checkPermissionMock: vi.fn() }))

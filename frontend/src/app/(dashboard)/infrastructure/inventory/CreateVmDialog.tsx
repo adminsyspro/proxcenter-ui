@@ -50,6 +50,9 @@ import NumericTextField from '@/components/ui/NumericTextField'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
 import { usedVmidsOnConnection } from '@/components/hardware/utils'
 import { IsoUploadControls } from '@/components/hardware/IsoUploadControls'
+import BridgePicker from '@/components/hardware/BridgePicker'
+import { sortNetworkChoices, typedBridgeOption } from '@/components/hardware/bridgeChoices'
+import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { blankVmVdcs } from '@/lib/vdc/blankVms'
 import { formatBytes } from '@/utils/format'
@@ -274,6 +277,7 @@ function CreateVmDialog({
   const [tenantVdcId, setTenantVdcId] = useState('')
   const [networks, setNetworks] = useState<any[]>([])
   const [bridges, setBridges] = useState<any[]>([])
+  const bridgeOptions = useMemo(() => bridges.map(typedBridgeOption), [bridges])
   const [pools, setPools] = useState<any[]>([])
   // True when the API narrowed the list to the caller's own pools: the guest
   // must land in one of them, so the picker is shown even to a non-admin.
@@ -396,7 +400,8 @@ function CreateVmDialog({
       )
       if (res.ok) {
         const json = await res.json()
-        const choices = Array.isArray(json.data) ? json.data : []
+        // Natural order, bridges then VNets then shared bridges (#195).
+        const choices = sortNetworkChoices(Array.isArray(json.data) ? json.data : [])
         const bridgeList = choices.map((c: any) => ({
           iface: c.name,
           // VNets carry a hashed iface (the actual PVE ID) but a friendly
@@ -2259,49 +2264,17 @@ return
                     <Box sx={{ px: 2, pb: 2, pt: 1 }}>
                       {/* Essential fields */}
                       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, mb: 2 }}>
-                        <FormControl size="small" error={bridges.length === 0}>
-                          <InputLabel>{t('inventory.createVm.bridge')}</InputLabel>
-                          <Select
-                            value={bridges.some((b: any) => b.iface === nic.bridge) ? nic.bridge : ''}
-                            onChange={(e) => updateNic(nicIdx, { bridge: e.target.value })}
-                            label={t('inventory.createVm.bridge')}
-                            disabled={bridges.length === 0}
-                          >
-                            {bridges.length > 0 ? (
-                              bridges.map((b: any) => {
-                                const tag =
-                                  b.type === 'vnet' ? 'VNet'
-                                  : b.type === 'shared' ? 'Shared'
-                                  : b.type === 'OVSBridge' ? 'OVS' : null
-                                // For VNets the iface is the hashed PVE ID and
-                                // b.label is the friendly display name — lead
-                                // with the friendly part, demote the hash.
-                                const primary = b.type === 'vnet' && b.label ? b.label : b.iface
-                                const showHash = b.type === 'vnet' && b.label && b.label !== b.iface
-                                return (
-                                  <MenuItem key={b.iface} value={b.iface}>
-                                    {primary}{tag ? ` (${tag})` : ''}
-                                    {showHash && (
-                                      <span style={{ opacity: 0.45, marginLeft: 6, fontSize: '0.75em' }}>{b.iface}</span>
-                                    )}
-                                    {!showHash && b.label && b.label !== b.iface ? ` — ${b.label}` : ''}
-                                    {b.vdc && b.vdc !== '*' ? ` — ${b.vdc}` : ''}
-                                  </MenuItem>
-                                )
-                              })
-                            ) : (
-                              <MenuItem value="" disabled>
-                                {t('inventory.createVm.emptyState.noBridge')}
-                              </MenuItem>
-                            )}
-                          </Select>
-                          {bridges.length === 0 && (
-                            <FormHelperText>
-                              {t('inventory.createVm.emptyState.bridgeHint')}
-                            </FormHelperText>
-                          )}
-                        </FormControl>
-                        <FormControl size="small">
+                        <BridgePicker
+                          options={bridgeOptions}
+                          value={nic.bridge}
+                          onChange={(iface) => updateNic(nicIdx, { bridge: iface })}
+                          label={t('inventory.createVm.bridge')}
+                          noOptionsText={t('inventory.createVm.emptyState.noBridge')}
+                          disabled={bridges.length === 0}
+                          error={bridges.length === 0}
+                          helperText={bridges.length === 0 ? t('inventory.createVm.emptyState.bridgeHint') : undefined}
+                        />
+                        <FormControl size="small" sx={SMALL_SELECT_SX}>
                           <InputLabel>{t('inventory.createVm.model')}</InputLabel>
                           <Select value={nic.model} onChange={(e) => updateNic(nicIdx, { model: e.target.value })} label={t('inventory.createVm.model')}>
                             <MenuItem value="virtio">VirtIO (paravirtualized)</MenuItem>

@@ -1311,10 +1311,10 @@ export default function InventoryDetails({
   // like HostItem.key (`${connId}:${node}`).
   const nodeStatuses = useMemo(() => new Map(hosts.map(h => [h.key, h.status])), [hosts])
 
-  // "Migrate selection" (#1218) in the Guests, Nodes, Pools and Tags views:
+  // The guest selection (#1218, power actions roadmap#197) in the Guests, Nodes, Pools and Tags views:
   // the rows of every table share the ids built here.
   const selectableVms = useMemo(
-    () => displayVms.map(vm => ({ id: `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`, connId: vm.connId, vmid: vm.vmid, template: vm.template })),
+    () => displayVms.map(vm => ({ id: `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}`, connId: vm.connId, vmid: vm.vmid, template: vm.template, node: vm.node, type: vm.type, status: vm.status, name: vm.name })),
     [displayVms],
   )
   const rootGuestSelection = useGuestSelection({
@@ -3882,7 +3882,7 @@ return vm?.isCluster ?? false
           {/* Node Tabs */}
           {selection?.type === 'node' && data.vmsData && data.status !== 'crit' && (
             <NodeTabs
-              {...{canShowRrd, clusterConfigLoaded, clusterConfigLoading, cveAvailable, data, deleteReplicationDialogOpen, deletingReplicationJob,
+              {...{allVms, canShowRrd, clusterConfigLoaded, clusterConfigLoading, cveAvailable, data, deleteReplicationDialogOpen, deletingReplicationJob,
                 dnsFormData, editDnsDialogOpen, editHostsDialogOpen, editTimeDialogOpen, editingReplicationJob,
                 error, expandedVmsTable, favorites, handleTableMigrate, handleTableVmAction, hosts,
                 hostsFormData, loadClusterConfig, loadVmTrendsBatch, loading, migratingVmIds,

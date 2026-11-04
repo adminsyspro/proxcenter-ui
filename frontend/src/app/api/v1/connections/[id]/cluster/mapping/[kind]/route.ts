@@ -3,6 +3,9 @@ import { NextResponse } from "next/server"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, guestPerimeterAllows, PERMISSIONS } from "@/lib/rbac"
+import { maskingScope } from "@/lib/tenant/infraScope"
+import { resolveCallerInfraScope } from "@/lib/tenant/iaasGuard"
+import { iaasMappingsView, iaasNodeAllowed } from "@/lib/connections/iaasView"
 
 export const runtime = "nodejs"
 
@@ -32,13 +35,23 @@ export async function GET(
 
     if (denied && !(await guestPerimeterAllows(id, PERMISSIONS.VM_VIEW))) return denied
 
+    // An IaaS tenant gets the mappings that cover its vDC nodes, without the
+    // host device addresses behind them (lib/connections/iaasView).
+    const caller = await resolveCallerInfraScope()
+    if (caller.ok === false) return caller.response
+    const vdcScope = maskingScope(caller.infra)
+
     const conn = await getConnectionById(id)
     const node = new URL(req.url).searchParams.get("node")
+    if (vdcScope && node && !iaasNodeAllowed(vdcScope, id, node)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
     const query = node ? `?check-node=${encodeURIComponent(node)}` : ""
 
     const data = await pveFetch<unknown>(conn, `/cluster/mapping/${kind}${query}`)
+    const list = Array.isArray(data) ? data : []
 
-    return NextResponse.json({ data: Array.isArray(data) ? data : [] })
+    return NextResponse.json({ data: vdcScope ? iaasMappingsView(list, vdcScope, id) : list })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

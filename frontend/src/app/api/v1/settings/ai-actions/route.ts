@@ -7,6 +7,7 @@ import { requireFeature } from '@/lib/auth/requireEnterprise'
 import { Features } from '@/lib/license/features'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 // Approved actions are an add-on of the assistant: both features are required,
 // and the API refuses them too so a direct call cannot get round the UI.
@@ -20,6 +21,10 @@ async function guard() {
 
 // GET /api/v1/settings/ai-actions - Read the tenant's approved-actions settings
 export async function GET() {
+  // No AI assistant for an IaaS (vDC) tenant (lib/tenant/iaasGuard).
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const denied = await guard()
     if (denied) return denied
@@ -33,6 +38,10 @@ export async function GET() {
 
 // PUT /api/v1/settings/ai-actions - Save them, normalised
 async function handlePut(request: Request) {
+  // No AI assistant for an IaaS (vDC) tenant (lib/tenant/iaasGuard).
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const denied = await guard()
     if (denied) return denied

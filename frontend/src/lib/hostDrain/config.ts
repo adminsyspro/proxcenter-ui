@@ -18,6 +18,8 @@ export interface DrainConfigInput {
   keep_vmids?: number[]
   /** A selection of guests anywhere in the cluster (#1218): no source node. */
   vmids?: number[]
+  /** A group of nodes entering maintenance together (roadmap#198): no single node. */
+  nodes?: string[]
 }
 
 /** Whether the request migrates a selection of guests rather than a node. */
@@ -90,6 +92,19 @@ export function sanitizeDrainConfig(raw: unknown): DrainConfigInput {
     config.vmids = [...new Set(input.vmids.map(v => vmid(v, "vmids")))]
     if (config.vmids.length > 0 && (config.enter_maintenance || (config.keep_vmids?.length ?? 0) > 0)) {
       throw new DrainConfigError("a selection of guests neither enters maintenance nor keeps guests")
+    }
+  }
+
+  if (input.nodes !== undefined) {
+    if (!Array.isArray(input.nodes) || input.nodes.length > 64) throw new DrainConfigError("nodes must be a list of node names")
+    config.nodes = input.nodes.map(n => nodeName(n, "nodes"))
+    if (config.nodes.length > 0) {
+      if (config.nodes.length < 2 || new Set(config.nodes).size !== config.nodes.length) {
+        throw new DrainConfigError("a group holds two distinct nodes at least")
+      }
+      if (!config.enter_maintenance || (config.vmids?.length ?? 0) > 0) {
+        throw new DrainConfigError("a group of nodes only enters maintenance, without a selection of guests")
+      }
     }
   }
 

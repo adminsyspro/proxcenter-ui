@@ -147,6 +147,45 @@ describe('DELETE /api/v1/connections/[id]/guests/[type]/[node]/[vmid]', () => {
     )
   })
 
+  // roadmap#192: a reload right after the delete used to bring the guest back
+  // from the cached inventory for up to two minutes.
+  describe('cached inventory', () => {
+    async function seededCache() {
+      const cache = await import('@/lib/cache/inventoryCache')
+      cache.invalidateInventoryCache()
+      cache.clearGuestTombstone(CONN_ID, 'qemu', VMID)
+      cache.setCachedInventory({
+        clusters: [{ id: CONN_ID, nodes: [{ node: NODE, status: 'online', guests: [
+          { vmid: 100, type: 'qemu', node: NODE, status: 'stopped' },
+          { vmid: 101, type: 'qemu', node: NODE, status: 'stopped' },
+        ] }] }],
+        pbsServers: [], externalHypervisors: [], storageResources: [],
+        stats: { totalClusters: 1, totalNodes: 1, totalGuests: 2, onlineNodes: 1, runningGuests: 0, totalPbsServers: 0, totalDatastores: 0, totalBackups: 0 },
+      } as any)
+      return () => {
+        const hit = cache.getInventoryFromCache()
+        return hit.status === 'miss' ? null : hit.data.clusters[0].nodes[0].guests.map((g: any) => g.vmid)
+      }
+    }
+
+    it('drops the deleted guest from the cached inventory', async () => {
+      const cachedVmids = await seededCache()
+      pveFetchMock.mockResolvedValueOnce({ status: 'stopped' }).mockResolvedValueOnce('UPID:delete:task')
+      const res = await DELETE(makeReq(), { params: Promise.resolve(baseParams) })
+      expect(res.status).toBe(200)
+      expect(cachedVmids()).toEqual([100])
+    })
+
+    it('keeps the guest when Proxmox refused the delete', async () => {
+      const cachedVmids = await seededCache()
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      pveFetchMock.mockResolvedValueOnce({ status: 'stopped' }).mockRejectedValueOnce(new Error('PVE 500'))
+      const res = await DELETE(makeReq(), { params: Promise.resolve(baseParams) })
+      expect(res.status).toBe(500)
+      expect(cachedVmids()).toEqual([100, 101])
+    })
+  })
+
   it('200 happy path: qemu VM deleted with purge and destroy-unreferenced-disks flags', async () => {
     pveFetchMock
       .mockResolvedValueOnce({ status: 'stopped' })

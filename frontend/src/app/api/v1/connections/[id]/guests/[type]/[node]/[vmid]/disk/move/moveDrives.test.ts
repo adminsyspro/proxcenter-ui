@@ -320,3 +320,49 @@ describe('POST disk/move: read-only ISO library target (#894)', () => {
     expect(res.status).not.toBe(403)
   })
 })
+
+describe('POST disk/move: TPM state of a running VM (roadmap#193)', () => {
+  /** Guest status as PVE reports it; the move POST returns a UPID. */
+  function guestStatus(status: string) {
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:move:1'
+      if (String(path).endsWith('/status/current')) return { status }
+      return {}
+    })
+  }
+  const moveCalls = () => pveFetchMock.mock.calls.filter(c => c[2]?.method === 'POST')
+
+  it('409 before any task when the VM runs', async () => {
+    guestStatus('running')
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { disk: 'tpmstate0', storage: 'ceph-nvme', deleteSource: true } })
+
+    expect(res.status).toBe(409)
+    const json = (await res.json()) as { error: string; code: string }
+    expect(json.code).toBe('TPM_MOVE_WHILE_RUNNING')
+    expect(json.error).toMatch(/TPM state cannot be moved while the VM is running/)
+    expect(pveFetchMock.mock.calls[0][1]).toBe('/nodes/pve3/qemu/100/status/current')
+    expect(moveCalls()).toHaveLength(0)
+  })
+
+  it('moves the TPM state of a stopped VM', async () => {
+    guestStatus('stopped')
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { disk: 'tpmstate0', storage: 'ceph-nvme', deleteSource: true } })
+
+    expect(res.status).toBe(200)
+    expect(moveCalls()).toHaveLength(1)
+  })
+
+  it('asks no status for the other disks, which move online', async () => {
+    guestStatus('running')
+    const POST = await loadPost()
+    const responses = await Promise.all(['efidisk0', 'scsi0'].map(disk =>
+      callRoute(POST, { params: baseParams, body: { disk, storage: 'ceph-nvme', deleteSource: true } }),
+    ))
+    expect(responses.map(res => res.status)).toEqual([200, 200])
+
+    expect(pveFetchMock.mock.calls.some(c => String(c[1]).endsWith('/status/current'))).toBe(false)
+    expect(moveCalls()).toHaveLength(2)
+  })
+})

@@ -8,6 +8,7 @@ import { assertNodeName } from "@/lib/ssh/validate"
 import { safeLog } from "@/lib/log/sanitize"
 import { formatSshEndpoint, resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -80,6 +81,9 @@ export async function GET(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, node } = await ctx.params
 
@@ -104,10 +108,13 @@ export async function GET(
  *
  * Enter maintenance mode via SSH: ha-manager crm-command node-maintenance enable <node>
  */
-function handlePost(
+async function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   return toggleMaintenance(ctx, true)
 }
 
@@ -116,10 +123,13 @@ function handlePost(
  *
  * Exit maintenance mode via SSH: ha-manager crm-command node-maintenance disable <node>
  */
-function handleDelete(
+async function handleDelete(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   return toggleMaintenance(ctx, false)
 }
 

@@ -10,6 +10,8 @@ vi.mock('@/lib/db/settings', () => ({ getSetting: (...a: unknown[]) => getSettin
 vi.mock('@/lib/auth/requireEnterprise', () => ({ hasServerFeature: (...a: unknown[]) => hasFeatureMock(...a) }))
 vi.mock('./settingsSecrets', () => ({ openAiSecrets: (s: Record<string, unknown>) => s }))
 vi.mock('./url-guard', () => ({ validateAIUrl: (...a: unknown[]) => validateMock(...a) }))
+// Tenant t1 is a provider-side tenant here; the IaaS case is in src/lib/ai/iaasTenantAi.test.ts.
+vi.mock('@/lib/tenant/infraScope', () => ({ getTenantInfrastructureScope: async () => ({ kind: 'msp', connectionIds: new Set() }) }))
 
 import { aiTargetId, completeText, extractJsonObject, resolveAiTarget, type AiTarget } from './complete'
 

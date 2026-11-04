@@ -39,6 +39,8 @@ import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { onPrimaryTextColor } from '@/lib/theme/onPrimary'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { usedVmidsOnConnection } from '@/components/hardware/utils'
+import BridgePicker from '@/components/hardware/BridgePicker'
+import { FALLBACK_BRIDGES, bridgeEntryOption, toBridgeEntries, type BridgeEntry } from '@/components/hardware/bridgeChoices'
 import { AllVmItem } from './InventoryTree'
 
 function CreateLxcDialog({
@@ -86,7 +88,8 @@ function CreateLxcDialog({
   // True when the API narrowed the list to the caller's own pools: the
   // container must land in one of them, so the picker is shown to non-admins.
   const [poolsRestricted, setPoolsRestricted] = useState(false)
-  const [bridges, setBridges] = useState<string[]>([])
+  const [bridges, setBridges] = useState<BridgeEntry[]>([])
+  const bridgeOptions = useMemo(() => bridges.map(bridgeEntryOption), [bridges])
   const [loadingData, setLoadingData] = useState(false)
 
   // Formulaire - Général
@@ -528,23 +531,23 @@ return
       )
       if (res.ok) {
         const json = await res.json()
-        const choices = Array.isArray(json.data) ? json.data : []
-        const bridgeList = choices.map((c: any) => c.name)
+        // Natural order, bridges then VNets then shared bridges (#195).
+        const bridgeList = toBridgeEntries(json.data)
 
         if (bridgeList.length > 0) {
           setBridges(bridgeList)
-          if (!bridgeList.includes(networkBridge)) {
-            setNetworkBridge(bridgeList[0])
+          if (!bridgeList.some(b => b.iface === networkBridge)) {
+            setNetworkBridge(bridgeList[0].iface)
           }
         } else {
-          setBridges(['vmbr0', 'vmbr1'])
+          setBridges([...FALLBACK_BRIDGES])
         }
       } else {
-        setBridges(['vmbr0', 'vmbr1'])
+        setBridges([...FALLBACK_BRIDGES])
       }
     } catch (e) {
       console.error('Error loading bridges:', e)
-      setBridges(['vmbr0', 'vmbr1'])
+      setBridges([...FALLBACK_BRIDGES])
     }
   }
 
@@ -1298,11 +1301,12 @@ return
                     onChange={(e) => setNetworkName(e.target.value)}
                     size="small"
                   />
-                  <TextField
-                    label={t('inventory.createLxc.bridge')}
+                  <BridgePicker
+                    freeSolo
+                    options={bridgeOptions}
                     value={networkBridge}
-                    onChange={(e) => setNetworkBridge(e.target.value)}
-                    size="small"
+                    onChange={setNetworkBridge}
+                    label={t('inventory.createLxc.bridge')}
                   />
                 </Box>
 

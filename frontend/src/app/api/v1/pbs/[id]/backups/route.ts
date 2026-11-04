@@ -98,7 +98,8 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
       )
     }
 
-    // Keep names from the snapshot metadata only. A live VMID match, even
+    // Keep names from PBS metadata only: the snapshot notes, else the notes
+    // of its own group (lib/backups/pbsGroupNotes.ts). A live VMID match, even
     // if unique, cannot establish which cluster produced this backup (the
     // source may be offline, removed, or the VMID reused). Unknown names stay
     // empty rather than labelling a snapshot with another guest's name.

@@ -410,16 +410,20 @@ export function MigrateVmDialog({
   const [restoreReplSchedule, setRestoreReplSchedule] = useState<string>('*/15')
   const [restoreReplRate, setRestoreReplRate] = useState<number | ''>('')
   
-  // Calculer les stockages actuels uniques
+  // PVE applies a target storage to the local disks only (roadmap#193): a disk
+  // on shared storage stays where it is, whatever storage is picked.
+  const localDisks = useMemo(() => vmDisks.filter(d => d.isLocal), [vmDisks])
+  const sharedDisks = useMemo(() => vmDisks.filter(d => !d.isLocal), [vmDisks])
+  const hasLocalDisks = localDisks.length > 0
+
+  // Storages the local disks sit on now, the "keep current" choice.
   const currentStorageNames = useMemo(() => {
-    const names = [...new Set(vmDisks.map(d => d.storage))]
+    const names = [...new Set(localDisks.map(d => d.storage))]
     return names.sort((a, b) => a.localeCompare(b))
-  }, [vmDisks])
-  
-  // Vérifier si la VM a des disques locaux
-  const hasLocalDisks = useMemo(() => {
-    return vmDisks.some(d => d.isLocal)
-  }, [vmDisks])
+  }, [localDisks])
+
+  // The storage sent to PVE: none unless a local disk is there to land on it.
+  const effectiveTargetStorage = hasLocalDisks && selectedStorage !== '__current__' ? selectedStorage : undefined
 
   const vmSid = `${vmType === 'lxc' ? 'ct' : 'vm'}:${vmid}`
 
@@ -558,7 +562,8 @@ export function MigrateVmDialog({
         } catch {}
 
         for (const [key, value] of Object.entries(config)) {
-          if (diskPatterns.test(key) && typeof value === 'string') {
+          // A CD-ROM drive (ISO or empty) holds no guest disk: never offer to move it.
+          if (diskPatterns.test(key) && typeof value === 'string' && !/(^|,)media=cdrom(,|$)/.test(value)) {
             const diskStr = value as string
             const storageMatch = diskStr.match(/^([^:]+):/)
 
@@ -885,9 +890,7 @@ export function MigrateVmDialog({
     setError(null)
     
     try {
-      const targetStorage = selectedStorage !== '__current__' ? selectedStorage : undefined
-      const withLocalDisks = hasLocalDisks || !!targetStorage
-      await onMigrate(selectedNode, onlineMigration, targetStorage, withLocalDisks)
+      await onMigrate(selectedNode, onlineMigration, effectiveTargetStorage, hasLocalDisks)
       onClose()
     } catch (e: any) {
       setError(e.message || t('hardware.migrationError'))
@@ -1007,7 +1010,7 @@ export function MigrateVmDialog({
   const [snapshotCheck, setSnapshotCheck] = useState<{ key: string; live: SnapshotMigrationBlocker[]; offline: SnapshotMigrationBlocker[] } | null>(null)
   const [snapshotCheckRound, setSnapshotCheckRound] = useState(0)
   const snapshotCheckUrl = open && activeTab === 0 && connId && selectedNode
-    ? `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vmType}/${encodeURIComponent(currentNode)}/${encodeURIComponent(vmid)}/migrate/snapshot-check?target=${encodeURIComponent(selectedNode)}${selectedStorage === '__current__' ? '' : `&targetstorage=${encodeURIComponent(selectedStorage)}`}`
+    ? `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vmType}/${encodeURIComponent(currentNode)}/${encodeURIComponent(vmid)}/migrate/snapshot-check?target=${encodeURIComponent(selectedNode)}${effectiveTargetStorage ? `&targetstorage=${encodeURIComponent(effectiveTargetStorage)}` : ''}`
     : null
   const snapshotCheckKey = snapshotCheckUrl ? `${snapshotCheckUrl}#${snapshotCheckRound}` : null
 
@@ -1446,9 +1449,23 @@ export function MigrateVmDialog({
                 <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
                   {t('hardware.localDiskMigration')}
                 </Typography>
-                {vmDisks.filter(d => d.isLocal).map((disk, idx) => (
+                {localDisks.map((disk, idx) => (
                   <Typography key={idx} variant="caption" component="div" sx={{ opacity: 0.9 }}>
                     {disk.storage}:{vmid}/{disk.id}{disk.format ? `.${disk.format}` : ''} ({disk.size.toFixed(2)} GiB)
+                  </Typography>
+                ))}
+              </Alert>
+            )}
+
+            {/* roadmap#193: a migration never moves a disk off shared storage */}
+            {sharedDisks.length > 0 && (
+              <Alert severity="info" icon={<i className="ri-database-2-line" />} data-testid="migrate-shared-disks">
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                  {t('hardware.sharedDisksStay')}
+                </Typography>
+                {sharedDisks.map(disk => (
+                  <Typography key={disk.id} variant="caption" component="div" sx={{ opacity: 0.9 }}>
+                    {disk.id}: {disk.storage} ({disk.size.toFixed(2)} GiB)
                   </Typography>
                 ))}
               </Alert>
@@ -1567,13 +1584,18 @@ export function MigrateVmDialog({
               </Alert>
             )}
 
-            {/* Storage selector */}
-            {nodes.length > 0 && selectedNode && (
+            {/* Storage selector: only the local disks can land on it (roadmap#193) */}
+            {nodes.length > 0 && selectedNode && hasLocalDisks && (
               <>
-                <Typography variant="subtitle2" sx={{ mt: 2 }}>
-                  {t('hardware.targetStorageLabel')}
-                </Typography>
-                
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mt: 2 }}>
+                  <Typography variant="subtitle2">
+                    {t('hardware.targetStorageLabel')}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    {t('hardware.targetStorageLocalOnly')}
+                  </Typography>
+                </Box>
+
                 {storagesLoading ? (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}>
                     <CircularProgress size={16} />

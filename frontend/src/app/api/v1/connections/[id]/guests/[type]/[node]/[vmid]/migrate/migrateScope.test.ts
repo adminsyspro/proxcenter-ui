@@ -54,7 +54,7 @@ vi.mock("@/lib/schemas", () => ({
   },
 }))
 
-vi.mock("@/lib/cache/inventoryCache", () => ({ invalidateInventoryCache: vi.fn() }))
+vi.mock("@/lib/cache/guestSetRefresh", () => ({ refreshCachedGuests: vi.fn() }))
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
 
 const STUB_CONN = { id: "conn-1", baseUrl: "https://pve:8006", apiToken: "tok" }

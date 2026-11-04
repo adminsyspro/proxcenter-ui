@@ -38,3 +38,35 @@ export async function fetchTaskFirstLine(conn: PveConn, node: string, upid: stri
 
   return Array.isArray(batch) && batch[0]?.t ? batch[0].t : null
 }
+
+/** Lines a progress poll reads at most per call (roadmap#196). */
+export const TASK_LOG_TAIL = 50
+
+/**
+ * The lines of a task log written since line `from`, at most the last
+ * TASK_LOG_TAIL of them, and the line count of the whole log. A follower
+ * passes back the `total` it got, so a running task costs one window read per
+ * poll; only a log that grew past the window since (a first poll on an old
+ * task) takes a second read, for its last window.
+ */
+export async function fetchTaskLogTail(
+  conn: PveConn,
+  node: string,
+  upid: string,
+  from = 0,
+  window = TASK_LOG_TAIL,
+): Promise<{ lines: TaskLogLine[]; total: number }> {
+  const read = async (start: number) => {
+    const body = await pveFetch<{ data?: TaskLogLine[]; total?: number } | null>(
+      conn, logPath(node, upid, start, window), {}, { envelope: true },
+    )
+    const lines = Array.isArray(body?.data) ? body.data : []
+
+    return { lines, total: typeof body?.total === 'number' ? body.total : start + lines.length }
+  }
+
+  const start = Math.max(0, from)
+  const first = await read(start)
+
+  return first.total > start + window ? read(first.total - window) : first
+}

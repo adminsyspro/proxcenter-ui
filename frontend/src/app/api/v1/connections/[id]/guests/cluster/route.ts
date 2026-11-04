@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 
 import { pveFetch } from '@/lib/proxmox/client'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = 'nodejs'
 
@@ -20,6 +21,9 @@ function round1(n: number) {
 }
 
 export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   const { id } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.VM_VIEW, "connection", id)

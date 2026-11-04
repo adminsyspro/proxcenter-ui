@@ -436,6 +436,28 @@ describe('CreateLxcDialog - tab navigation', () => {
     expect(screen.getByLabelText('Name')).toBeInTheDocument()
   })
 
+  it('Network tab bridge picker suggests bridges in natural order and keeps free text', async () => {
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/network-choices`, () =>
+        HttpResponse.json({ data: [{ name: 'vmbr10' }, { kind: 'vnet', name: 'h1', displayName: 'lan' }, { name: 'vmbr0' }, { name: 'vmbr2' }] }),
+      ),
+    )
+    renderWithProviders(<CreateLxcDialog {...makeProps()} />)
+    await waitForDataLoad()
+    fireEvent.click(screen.getByRole('tab', { name: 'Network' }))
+
+    const input = (await screen.findByDisplayValue('vmbr0')) as HTMLInputElement
+    fireEvent.mouseDown(input)
+    expect(within(screen.getByRole('listbox')).getAllByRole('option').map(o => o.textContent))
+      .toEqual(['vmbr0', 'vmbr2', 'vmbr10', 'lanh1'])
+    fireEvent.click(screen.getByRole('option', { name: /lan/ }))
+    expect(input.value).toBe('h1')
+
+    input.focus()
+    fireEvent.change(input, { target: { value: 'vmbr42' } })
+    expect(input.value).toBe('vmbr42')
+  })
+
   it('clicking the DNS tab activates the DNS tab and renders DNS fields', async () => {
     renderWithProviders(<CreateLxcDialog {...makeProps()} />)
     await waitForDataLoad()

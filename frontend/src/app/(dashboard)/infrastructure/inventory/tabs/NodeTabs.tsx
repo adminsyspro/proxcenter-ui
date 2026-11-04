@@ -185,6 +185,7 @@ export default function NodeTabs(props: any) {
 
   const {
     clusterConfigLoaded,
+    allVms,
     canShowRrd,
     clusterConfigLoading,
     cveAvailable,
@@ -488,6 +489,7 @@ export default function NodeTabs(props: any) {
     nodes: hosts || [],
     migratingVmIds,
     resetKey: selection?.id,
+    liveVms: allVms,
   })
 
   return (

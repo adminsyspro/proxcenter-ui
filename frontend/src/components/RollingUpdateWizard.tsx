@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
+import { paletteColor } from '@/utils/paletteColor'
 import { useTranslations } from 'next-intl'
 
 import ConfirmCloseDialog from '@/components/ConfirmCloseDialog'
@@ -57,10 +58,10 @@ import NodeSshEndpointsEditor, { type NodeSshValue } from '@/components/ssh/Node
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 
 // RemixIcon replacements for @mui/icons-material
-const CheckCircleIcon = (props: any) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
-const ErrorIcon = (props: any) => <i className="ri-error-warning-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
-const WarningIcon = (props: any) => <i className="ri-alert-line" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
-const InfoIcon = (props: any) => <i className="ri-information-line" style={{ fontSize: props?.sx?.fontSize || 20, color: props?.sx?.color, ...props?.style }} />
+const CheckCircleIcon = (props: any) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const ErrorIcon = (props: any) => <i className="ri-error-warning-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const WarningIcon = (props: any) => <i className="ri-alert-line" style={{ fontSize: props?.sx?.fontSize || 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const InfoIcon = (props: any) => <i className="ri-information-line" style={{ fontSize: props?.sx?.fontSize || 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
 
 // Small "i" carrying the explanation of a configuration parameter. Every
 // switch, slider and field of the Configuration step gets one so the user
@@ -180,13 +181,13 @@ function EstimateBreakdownTable({ rows, t }: { rows: NodeEstimate[]; t: ReturnTy
     </Box>
   )
 }
-const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PauseIcon = (props: any) => <i className="ri-pause-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const ExpandMoreIcon = (props: any) => <i className="ri-arrow-down-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const ExpandLessIcon = (props: any) => <i className="ri-arrow-up-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const DragIndicatorIcon = (props: any) => <i className="ri-drag-move-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const PauseIcon = (props: any) => <i className="ri-pause-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const ExpandMoreIcon = (props: any) => <i className="ri-arrow-down-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const ExpandLessIcon = (props: any) => <i className="ri-arrow-up-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const DragIndicatorIcon = (props: any) => <i className="ri-drag-move-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
 
 // Types
 interface NodeInfo {

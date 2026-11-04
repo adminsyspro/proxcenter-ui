@@ -8,7 +8,7 @@ import { hasServerFeature, requireFeature } from '@/lib/auth/requireEnterprise'
 import { getSetting } from '@/lib/db/settings'
 import { Features } from '@/lib/license/features'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
-import { getCurrentTenantId } from '@/lib/tenant'
+import { resolveCallerInfraScope } from '@/lib/tenant/iaasGuard'
 
 const MODEL_FIELDS: Record<string, string> = { ollama: 'ollamaModel', openai: 'openaiModel', anthropic: 'anthropicModel' }
 
@@ -52,12 +52,20 @@ export async function GET() {
 
     if (unlicensed) return unlicensed
 
-    const settings = await getSetting<Record<string, unknown>>('ai', await getCurrentTenantId())
+    // An IaaS (vDC) tenant has no assistant: "off", so the widget and its
+    // navbar entry never show, whatever its own settings row says.
+    const caller = await resolveCallerInfraScope()
+    if (caller.ok === false) return caller.response
+    if (caller.infra.kind === 'iaas') {
+      return NextResponse.json({ data: { enabled: false, provider: 'ollama', model: null, actionsEnabled: false, actionKinds: [] } })
+    }
+
+    const settings = await getSetting<Record<string, unknown>>('ai', caller.tenantId)
     const provider = typeof settings?.provider === 'string' ? settings.provider : 'ollama'
     const modelField = MODEL_FIELDS[provider] ?? 'ollamaModel'
     const model = typeof settings?.[modelField] === 'string' ? (settings[modelField] as string) : null
 
-    const actionKinds = await readActionKinds(await getCurrentTenantId())
+    const actionKinds = await readActionKinds(caller.tenantId)
 
     return NextResponse.json({
       data: { enabled: settings?.enabled === true, provider, model, actionsEnabled: actionKinds.length > 0, actionKinds },

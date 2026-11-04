@@ -8,6 +8,7 @@ import { sensitiveNicPermissions, NicConfigError } from "@/lib/rbac/nicPermissio
 import { authOptions } from "@/lib/auth/config"
 import { deploySchema } from "@/lib/schemas"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
 import { pveFetch } from "@/lib/proxmox/client"
 import { downloadToStorage } from "@/lib/proxmox/download"
 import { isNodeUrlFetchRefused, URL_IMAGE_REFUSED } from "@/lib/vdc/nodeUrlFetch"
@@ -680,6 +681,8 @@ async function handlePost(req: Request) {
           await updateDeployment(deployment.id, "creating", { taskUpid: String(createResult) })
           await waitForTask(conn, body.node, String(createResult))
         }
+        // roadmap#192: the deployed guest shows on the next reload.
+        await refreshCachedGuests(body.connectionId, conn, { type: 'qemu', vmid: body.vmid })
 
         // Step 3: Configure cloud-init
         await updateDeployment(deployment.id, "configuring", { taskUpid: null })
@@ -986,6 +989,8 @@ async function runIsoDeploy(args: {
     await updateDeployment(deploymentId, "creating", { taskUpid: String(createResult) })
     await waitForTask(conn, body.node, String(createResult))
   }
+  // roadmap#192: the deployed guest shows on the next reload.
+  await refreshCachedGuests(body.connectionId, conn, { type: 'qemu', vmid: body.vmid })
 
   // ── Step 3: Done — VM stays stopped, user installs via console ──
   // HA keeps it stopped too: the user starts the installer when ready.

@@ -9,11 +9,12 @@ interface DrainRecord {
 }
 
 /**
- * The nodes a drain acts on: its node, or for a selection of guests (#1218),
- * which has none, every node one of its guests leaves.
+ * The nodes a drain acts on: its node, the nodes of a group (roadmap#198),
+ * whose node field lists them comma separated, or for a selection of guests
+ * (#1218), which has none, every node one of its guests leaves.
  */
 export function drainNodes(d: DrainRecord): string[] {
-  if (d.node) return [d.node]
+  if (d.node) return d.node.split(",").filter(Boolean)
 
   return [...new Set((d.guests || []).map(g => g?.source_node).filter((n): n is string => !!n))]
 }
@@ -101,9 +102,10 @@ const haManaged = (r: DrainClusterResource) => !!r.hastate && r.hastate !== "ign
  *   when the guests were migrated one by one. The HA guests of a node entering
  *   maintenance are moved by Proxmox HA, under the right to manage the node,
  *   as before; the guests left on the node are not moved.
- * A selection of guests (#1218) has no source node (`sourceNode` is empty):
+ * A selection of guests (#1218) has no source node (`sourceNodes` is empty):
  * its guests are the selected ones wherever they run, and any node may
- * receive them, under the same two rights.
+ * receive them, under the same two rights. A group of nodes (roadmap#198)
+ * empties every node it names.
  * Returns the config with the exclusions merged in.
  */
 export async function restrictDrainTargets<C extends {
@@ -117,10 +119,11 @@ export async function restrictDrainTargets<C extends {
 }>(
   cluster: DrainClusterResource[],
   connectionId: string,
-  sourceNode: string,
+  sourceNodes: string[],
   config: C,
 ): Promise<C> {
-  const nodes = [...new Set(cluster.filter(r => r.type === "node" && r.node).map(r => r.node as string))].filter(n => n !== sourceNode)
+  const sources = new Set(sourceNodes)
+  const nodes = [...new Set(cluster.filter(r => r.type === "node" && r.node).map(r => r.node as string))].filter(n => !sources.has(n))
   const managed = await Promise.all(nodes.map(async n =>
     !(await checkPermission(PERMISSIONS.NODE_MANAGE, "node", buildNodeResourceId(connectionId, n)))))
   const denied = nodes.filter((_, i) => !managed[i])
@@ -147,7 +150,7 @@ export async function restrictDrainTargets<C extends {
   } else {
     const kept = new Set(config.enter_maintenance ? [] : (config.keep_vmids || []))
     checked = cluster.filter(r =>
-      isGuest(r) && r.node === sourceNode && r.template !== 1 &&
+      isGuest(r) && sources.has(r.node as string) && r.template !== 1 &&
       !kept.has(r.vmid as number) &&
       (r.status === "running" || config.include_stopped !== false) &&
       !(config.enter_maintenance && r.status === "running" && haManaged(r)))

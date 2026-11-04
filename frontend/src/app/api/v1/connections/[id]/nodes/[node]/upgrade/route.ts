@@ -6,6 +6,7 @@ import { executeSSH, type SSHResult } from "@/lib/ssh/exec"
 import { checkPermission, PERMISSIONS, buildNodeResourceId } from "@/lib/rbac"
 import { verifyNodeTarget, sshTargetError } from "@/lib/ssh/verify-node-target"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -29,6 +30,9 @@ const REBOOT_REQUIRED_TEST =
  * The command runs in background (nohup) so the HTTP request returns immediately.
  */
 async function handlePost(req: Request, ctx: Ctx) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   const { id, node } = await ctx.params
 
   const denied = await checkPermission(
@@ -104,6 +108,9 @@ if [ $? -eq 0 ]; then ${successCmd}; else echo FAILED > ${STATUS_FILE}; fi
  * GET — Poll the upgrade status + logs from the node.
  */
 export async function GET(_req: Request, ctx: Ctx) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   const { id, node } = await ctx.params
 
   const denied = await checkPermission(

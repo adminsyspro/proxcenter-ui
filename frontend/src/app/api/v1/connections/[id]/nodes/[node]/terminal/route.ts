@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { putSingleUse, takeSingleUse } from "@/lib/console/session"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -48,6 +49,9 @@ async function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, node } = await ctx.params
 

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -27,6 +27,9 @@ import {
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { useNicIdentityPermissions } from '@/hooks/useNicIdentityPermissions'
+import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
+import BridgePicker from './BridgePicker'
+import { FALLBACK_BRIDGES, bridgeEntryOption, toBridgeEntries, type BridgeEntry } from './bridgeChoices'
 
 // ==================== ADD NETWORK DIALOG ====================
 type AddNetworkDialogProps = {
@@ -52,7 +55,8 @@ export function AddNetworkDialog({ open, onClose, onSave, connId, node, vmid, vm
   const isLxc = vmType === 'lxc'
 
   // Bridges disponibles
-  const [bridges, setBridges] = useState<string[]>([])
+  const [bridges, setBridges] = useState<BridgeEntry[]>([])
+  const bridgeOptions = useMemo(() => bridges.map(bridgeEntryOption), [bridges])
   const [bridgesLoading, setBridgesLoading] = useState(false)
 
   // Network config — common
@@ -90,27 +94,27 @@ export function AddNetworkDialog({ open, onClose, onSave, connId, node, vmid, vm
         )
         if (res.ok) {
           const json = await res.json()
-          const choices = Array.isArray(json.data) ? json.data : []
-          const bridgeList = choices.map((c: any) => c.name)
+          // Natural order, bridges then VNets then shared bridges (#195).
+          const bridgeList = toBridgeEntries(json.data)
 
           if (bridgeList.length > 0) {
             setBridges(bridgeList)
-            setBridge(bridgeList[0])
+            setBridge(bridgeList[0].iface)
           } else {
             // Pas de bridges trouvés, utiliser fallback
-            setBridges(['vmbr0', 'vmbr1'])
+            setBridges([...FALLBACK_BRIDGES])
             setBridge('vmbr0')
           }
         } else {
           // Réponse invalide, utiliser fallback
-          setBridges(['vmbr0', 'vmbr1'])
+          setBridges([...FALLBACK_BRIDGES])
           setBridge('vmbr0')
         }
       } catch (e) {
         console.error('Error loading bridges:', e)
 
         // Fallback
-        setBridges(['vmbr0', 'vmbr1'])
+        setBridges([...FALLBACK_BRIDGES])
         setBridge('vmbr0')
       } finally {
         setBridgesLoading(false)
@@ -230,20 +234,8 @@ return match ? Number.parseInt(match[1]) : -1
             </Box>
           ) : (
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Bridge</InputLabel>
-                <Select
-                  value={bridge}
-                  onChange={(e) => setBridge(e.target.value)}
-                  label="Bridge"
-                  disabled={bridgesLoading}
-                >
-                  {bridges.map((b) => (
-                    <MenuItem key={b} value={b}>{b}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl fullWidth size="small">
+              <BridgePicker options={bridgeOptions} value={bridge} onChange={setBridge} label="Bridge" disabled={bridgesLoading} />
+              <FormControl fullWidth size="small" sx={SMALL_SELECT_SX}>
                 <InputLabel>Model</InputLabel>
                 <Select value={model} onChange={(e) => setModel(e.target.value)} label="Model">
                   <MenuItem value="e1000">Intel E1000</MenuItem>
@@ -258,19 +250,7 @@ return match ? Number.parseInt(match[1]) : -1
 
           {/* LXC: Bridge below Name+MAC */}
           {isLxc && (
-            <FormControl fullWidth size="small">
-              <InputLabel>Bridge</InputLabel>
-              <Select
-                value={bridge}
-                onChange={(e) => setBridge(e.target.value)}
-                label="Bridge"
-                disabled={bridgesLoading}
-              >
-                {bridges.map((b) => (
-                  <MenuItem key={b} value={b}>{b}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <BridgePicker options={bridgeOptions} value={bridge} onChange={setBridge} label="Bridge" disabled={bridgesLoading} />
           )}
 
           {/* VLAN & MAC (QEMU) / VLAN alone (LXC) */}

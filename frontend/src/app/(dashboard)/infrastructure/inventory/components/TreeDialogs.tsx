@@ -281,7 +281,6 @@ export interface TreeDialogsProps {
   // Bulk action dialog
   bulkActionDialog: { open: boolean; action: 'start-all' | 'shutdown-all' | 'migrate-all' | null; connId: string; node: string; targetNode: string }
   setBulkActionDialog: React.Dispatch<React.SetStateAction<{ open: boolean; action: 'start-all' | 'shutdown-all' | 'migrate-all' | null; connId: string; node: string; targetNode: string }>>
-  bulkActionBusy: boolean
   handleBulkActionConfirm: () => Promise<void>
 
   // Snapshot handler
@@ -332,7 +331,7 @@ export default function TreeDialogs(props: TreeDialogsProps) {
     onCreateVm, onCreateLxc, onNodeAction, clusters, isAdmin,
     maintenanceBusy, maintenanceTarget, setMaintenanceTarget, maintenanceError,
     handleMaintenanceConfirm, getNodeVms, getOtherNodes,
-    bulkActionDialog, setBulkActionDialog, bulkActionBusy, handleBulkActionConfirm,
+    bulkActionDialog, setBulkActionDialog, handleBulkActionConfirm,
     handleTakeSnapshot, handleBackupNow, handleOpenConsole, handleUnlock,
   } = props
 
@@ -859,8 +858,6 @@ export default function TreeDialogs(props: TreeDialogsProps) {
             onClick={handleBulkActionConfirm}
             variant="contained"
             color={bulkActionDialog.action === 'start-all' ? 'success' : 'warning'}
-            disabled={bulkActionBusy}
-            startIcon={bulkActionBusy ? <CircularProgress size={16} /> : undefined}
           >
             {t('common.confirm')}
           </Button>

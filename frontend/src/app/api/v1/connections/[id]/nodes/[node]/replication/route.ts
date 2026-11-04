@@ -4,6 +4,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardSessionGuest, isVmid, replicationJobVmid, sessionGuestVisibility } from "@/lib/vdc/guestGuard"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -12,6 +13,9 @@ export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   const { id, node } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", id)
@@ -115,6 +119,9 @@ async function handlePost(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   const { id } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
@@ -192,6 +199,9 @@ async function handlePut(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   const { id } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)
@@ -257,6 +267,9 @@ async function handleDelete(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   const { id } = await ctx.params
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", id)

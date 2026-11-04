@@ -284,3 +284,50 @@ describe("inventoryPoller cycles", () => {
     }
   })
 })
+
+/**
+ * roadmap#192: the poll that sees a guest gone or new also corrects the cached
+ * inventory, so a reload never brings a destroyed guest back. The vm:removed
+ * event alone only reached a tree that was open at the time.
+ */
+describe("inventoryPoller cache patching", () => {
+  async function cacheWith(vmids: number[]) {
+    const cache = await import("./inventoryCache")
+    cache.invalidateInventoryCache()
+    cache.setCachedInventory({
+      clusters: [{ id: "connA", nodes: [{ node: "n1", status: "online", guests: vmids.map(vmid => ({ vmid, type: "qemu", node: "n1", status: "running", name: `vm-${vmid}`, template: false })) }] }],
+      pbsServers: [], externalHypervisors: [], storageResources: [],
+      stats: { totalClusters: 1, totalNodes: 1, totalGuests: vmids.length, onlineNodes: 1, runningGuests: vmids.length, totalPbsServers: 0, totalDatastores: 0, totalBackups: 0 },
+    })
+    return () => {
+      const hit = cache.getInventoryFromCache()
+      return hit.status === "miss" ? null : hit.data.clusters[0].nodes[0].guests.map((g: any) => g.vmid)
+    }
+  }
+  const row = (vmid: number) => ({ type: "qemu", vmid, node: "n1", status: "running", name: `vm-${vmid}` })
+
+  it("drops a destroyed guest and adds a created one on the poll that sees it", async () => {
+    const cachedVmids = await cacheWith([100, 101])
+    await pollTwice([row(100), row(101)], [row(100), row(102)])
+    expect(cachedVmids()).toEqual([100, 102])
+  })
+
+  it("corrects the cache on the bootstrap poll too, which emits nothing", async () => {
+    const cachedVmids = await cacheWith([100, 101])
+    pveFetchMock.mockResolvedValue([row(100)])
+    const unsubscribe = poller.subscribe(() => {})
+    await settle()
+    unsubscribe()
+    expect(cachedVmids()).toEqual([100])
+  })
+
+  it("leaves the cache alone when the read fails", async () => {
+    const cachedVmids = await cacheWith([100, 101])
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    pveFetchMock.mockRejectedValue(new Error("down"))
+    const unsubscribe = poller.subscribe(() => {})
+    await settle()
+    unsubscribe()
+    expect(cachedVmids()).toEqual([100, 101])
+  })
+})

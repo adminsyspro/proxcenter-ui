@@ -871,6 +871,30 @@ describe('CreateVmDialog - NIC tuning and machine version (#1194)', () => {
     expect(body).not.toHaveProperty('machine')
   })
 
+  it('lists bridges then VNets in natural order and sends the picked VNet id', async () => {
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/network-choices`, () =>
+        HttpResponse.json({ data: [
+          { kind: 'bridge', name: 'vmbr10', type: 'bridge' },
+          { kind: 'vnet', name: 'h2961', displayName: 'VLAN2961', vdc: 'acme' },
+          { kind: 'bridge', name: 'vmbr0', type: 'bridge' },
+          { kind: 'vnet', name: 'h2042', displayName: 'VLAN2042', vdc: 'acme' },
+        ] }),
+      ),
+    )
+    const body = await create(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Network' }))
+      const input = await screen.findByDisplayValue('vmbr0')
+      fireEvent.mouseDown(input)
+      expect(screen.getAllByRole('option').map(o => o.textContent))
+        .toEqual(['vmbr0', 'vmbr10', 'VLAN2042h2042VNet · acme', 'VLAN2961h2961VNet · acme'])
+      fireEvent.click(screen.getByRole('option', { name: /VLAN2961/ }))
+      expect(input).toHaveValue('VLAN2961')
+    })
+
+    expect(String(body.net0)).toContain('bridge=h2961')
+  })
+
   it('sends the MTU and the Multiqueue value typed for a VirtIO NIC', async () => {
     const body = await create(async () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Network' }))

@@ -41,7 +41,7 @@ vi.mock('@/lib/rbac', () => ({
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
-vi.mock('@/lib/cache/inventoryCache', () => ({ invalidateInventoryCache: vi.fn() }))
+vi.mock('@/lib/cache/guestSetRefresh', () => ({ refreshCachedGuests: vi.fn() }))
 const requireProviderTenantMock = vi.fn<() => Promise<Response | null>>()
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1', requireProviderTenant: () => requireProviderTenantMock() }))
 vi.mock('@/lib/vdc/quota', () => ({
@@ -131,6 +131,16 @@ describe('POST clone — full flag normalization', () => {
     expect(body.get('full')).toBe('1')
     expect(body.get('newid')).toBe('101')
     expect(body.has('unique')).toBe(false)
+  })
+
+  // roadmap#192: the clone patches the cached inventories with one read of
+  // its connection, never a global invalidation.
+  it('refreshes the cached guests of the connection, naming the new vmid', async () => {
+    const { refreshCachedGuests } = await import('@/lib/cache/guestSetRefresh')
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 101, full: true } })
+    expect(res.status).toBe(200)
+    expect(refreshCachedGuests).toHaveBeenCalledWith('conn-1', { id: 'conn-1' }, { type: 'qemu', vmid: 101 })
   })
 
   it('sends full=0 for a linked clone', async () => {

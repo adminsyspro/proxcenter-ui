@@ -75,3 +75,22 @@ describe("sanitizeDrainConfig, a selection of guests (#1218)", () => {
     expect(() => sanitizeDrainConfig(raw)).toThrow(message)
   })
 })
+
+describe("sanitizeDrainConfig, a group of nodes (roadmap#198)", () => {
+  it("keeps a group entering maintenance", () => {
+    expect(sanitizeDrainConfig({ nodes: ["pve1", "pve3"], enter_maintenance: true })).toEqual({ nodes: ["pve1", "pve3"], enter_maintenance: true })
+    expect(sanitizeDrainConfig({ nodes: [] })).toEqual({ nodes: [] })
+  })
+
+  it.each([
+    [{ nodes: "pve1" }, "nodes must be a list of node names"],
+    [{ nodes: Array.from({ length: 65 }, (_, i) => `n${i}`) }, "nodes must be a list of node names"],
+    [{ nodes: ["pve1", "bad node"] }, "nodes is not a valid node name"],
+    [{ nodes: ["pve1"], enter_maintenance: true }, "a group holds two distinct nodes at least"],
+    [{ nodes: ["pve1", "pve1"], enter_maintenance: true }, "a group holds two distinct nodes at least"],
+    [{ nodes: ["pve1", "pve3"] }, "a group of nodes only enters maintenance"],
+    [{ nodes: ["pve1", "pve3"], vmids: [1], enter_maintenance: true }, "a selection of guests neither enters maintenance"],
+  ])("refuses %j", (raw, message) => {
+    expect(() => sanitizeDrainConfig(raw)).toThrow(message)
+  })
+})

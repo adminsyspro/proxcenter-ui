@@ -4,6 +4,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { guardSessionGuest, replicationJobVmid } from "@/lib/vdc/guestGuard"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -12,6 +13,9 @@ async function handlePost(
   _req: Request,
   ctx: { params: Promise<{ id: string; node: string; jobId: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   const { id, node, jobId } = await ctx.params
   // PVE job ids are <vmid>-<n>: the guest whose job this is comes from the id itself.
   const vmid = replicationJobVmid(jobId)

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { paletteColor } from '@/utils/paletteColor'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -27,7 +28,7 @@ import {
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 
-const SaveIcon = (props: any) => <i className="ri-save-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const SaveIcon = (props: any) => <i className="ri-save-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
 
 type HaGroupDialogProps = {
   open: boolean

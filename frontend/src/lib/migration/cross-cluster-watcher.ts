@@ -8,6 +8,8 @@ import { executeSSHDirect, shellEscape, type SSHResult } from '@/lib/ssh/exec'
 import { assertVmid } from '@/lib/ssh/validate'
 import type { PveConn } from '@/lib/connections/getConnection'
 import { safeLog } from '@/lib/log/sanitize'
+import { forgetCachedGuest } from '@/lib/cache/inventoryCache'
+import { refreshCachedGuests } from '@/lib/cache/guestSetRefresh'
 import { orchestratorHeaders } from '@/lib/orchestrator/headers'
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://proxcenter-orchestrator:8080'
@@ -195,6 +197,10 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
     return
   }
 
+  // roadmap#192: the guest now lives on the target cluster; its cached
+  // inventories show it on the next reload, not after the TTL.
+  if (targetConn) await refreshCachedGuests(targetConn.id, targetConn, { type: guestType || 'qemu', vmid: targetVmid || vmid })
+
   let sourceGone = false
   let unlocked = false
   try {
@@ -245,6 +251,7 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
         { method: 'DELETE' },
       )
       console.log(`${tag} deleted source VM on ${sourceNode}`)
+      forgetCachedGuest(connectionId, guestType || 'qemu', vmid)
     } catch (e: any) {
       const msg = String(e?.message || '')
       if (msg.includes('404')) {

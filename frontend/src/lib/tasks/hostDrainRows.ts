@@ -54,8 +54,14 @@ function guestRoute(d: any, g: any): string {
   return `${g?.source_node || d.node} → ${target}`
 }
 
-/** A selection of guests (#1218) has no node: it is named by its size. */
+/**
+ * A selection of guests (#1218) has no node: it is named by its size. A group
+ * of nodes (roadmap#198) is named by its nodes.
+ */
 function drainName(d: any, total: number): string {
+  const group: string[] = Array.isArray(d.config?.nodes) ? d.config.nodes : []
+  if (group.length > 1) return `Group maintenance - ${group.join(', ')}`
+
   return d.node ? `Host drain - ${d.node}` : `Migrate selection - ${total} guest(s)`
 }
 

@@ -9,9 +9,11 @@ import { resolveManagementAddress } from "@/lib/proxmox/resolveManagementIp"
 import { orderedIps, persistNodeIps } from "@/lib/proxmox/nodeIpPersistence"
 import { extractHostFromUrl, extractPortFromUrl } from "@/lib/proxmox/urlUtils"
 import { setNodeIps } from "@/lib/cache/nodeIpCache"
-import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
+import { getSessionPrisma } from "@/lib/tenant"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
-import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { maskingScope } from "@/lib/tenant/infraScope"
+import { resolveCallerInfraScope } from "@/lib/tenant/iaasGuard"
+import { iaasNodeView } from "@/lib/connections/iaasView"
 
 export const runtime = "nodejs"
 
@@ -43,8 +45,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const narrow = (list: any[]) => (allowed ? list.filter((n: any) => allowed.has(n.node || n.name)) : list)
   const shownNode = (node: string | null) => (node && (!allowed || allowed.has(node)) ? node : null)
 
-  // Resolve tenant for vDC-aware caching and filtering
-  const tenantId = await getCurrentTenantId()
+  // Resolve tenant for vDC-aware caching and filtering, from the tenant the
+  // principal carries (no silent fallback to the provider tenant).
+  const caller = await resolveCallerInfraScope({ ignoreVdcContext: false })
+  if (caller.ok === false) return caller.response
+  const { tenantId } = caller
 
   // The 30s response cache must not serve an MSP-owned cluster's node list,
   // fetched by an authorized NOC user, to a narrowly scoped default-tenant
@@ -230,12 +235,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   // Node filtering: iaas (vDC) tenants see only their vDC's nodes; provider and
   // msp tenants see the full node list (msp owns the whole cluster). maskingScope
   // is null for provider + msp, so they skip filtering entirely.
-  const mask = maskingScope(await getTenantInfrastructureScope(tenantId))
+  // Their rows keep the placement capacity only (lib/connections/iaasView):
+  // no node address, certificate or SSH endpoint, and no API endpoint node.
+  const mask = maskingScope(caller.infra)
   if (mask) {
     const allowedNodes = mask.nodesByConnection.get(id)
     nodesWithSsh = allowedNodes
-      ? nodesWithSsh.filter((n: any) => allowedNodes.has(n.node || n.name))
+      ? nodesWithSsh.filter((n: any) => allowedNodes.has(n.node || n.name)).map((n: any) => iaasNodeView(n))
       : []
+    connectedNode = null
   }
 
   // Cache the response for 30s (keyed by tenant)

@@ -4,6 +4,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { keepOwnVnets, keepZonesOf, sdnOwnVnets } from "@/lib/vdc/sdnReadScope"
+import { iaasSdnZoneView } from "@/lib/connections/iaasView"
 
 export const runtime = "nodejs"
 
@@ -28,7 +29,8 @@ export async function GET(
     const own = await sdnOwnVnets(id)
     if (!own) return NextResponse.json({ data: { zones } })
     const vnets = keepOwnVnets((await pveFetch<any[]>(conn, "/cluster/sdn/vnets?pending=1")) ?? [], own)
-    return NextResponse.json({ data: { zones: keepZonesOf(zones, vnets) } })
+    // Nor the peer addresses of those zones (lib/connections/iaasView).
+    return NextResponse.json({ data: { zones: keepZonesOf(zones, vnets).map(z => iaasSdnZoneView(z)) } })
   } catch (e: any) {
     console.error("Error fetching SDN zones:", e)
     return NextResponse.json({ error: e?.message || String(e) }, { status: 502 })

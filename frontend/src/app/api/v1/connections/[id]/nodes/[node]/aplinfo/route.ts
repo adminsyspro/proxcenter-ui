@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { buildStorageResourceId, checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { audit } from "@/lib/audit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -42,6 +43,11 @@ async function postHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }> }
 ) {
+  // The template lands on a storage of the provider's node, outside any vDC
+  // write guard: an IaaS tenant never downloads one (lib/tenant/iaasGuard).
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, node } = await ctx.params
     const body = await req.json()

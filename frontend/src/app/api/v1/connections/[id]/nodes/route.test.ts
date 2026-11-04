@@ -1,5 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+
+// The IaaS tenant gate decides on the principal's own tenant; here it follows
+// this file's tenant mocks (lib/tenant/iaasGuard.routes.test.ts covers the gate).
+vi.mock("@/lib/tenant/iaasGuard", async () => {
+  const { NextResponse } = await import("next/server")
+  const resolveCallerInfraScope = async (opts: { ignoreVdcContext?: boolean } = {}) => {
+    const { getCurrentTenantId } = await import("@/lib/tenant")
+    const { getTenantInfrastructureScope } = await import("@/lib/tenant/infraScope")
+    const tenantId = await getCurrentTenantId()
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: opts.ignoreVdcContext ?? true })
+    return { ok: true as const, tenantId, infra }
+  }
+  const denyIaasTenant = async () => {
+    const caller = await resolveCallerInfraScope()
+    return caller.infra?.kind === "iaas" ? NextResponse.json({ error: "Not found" }, { status: 404 }) : null
+  }
+  return { resolveCallerInfraScope, denyIaasTenant }
+})
+
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()

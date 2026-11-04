@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
@@ -29,7 +29,10 @@ import {
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { useNicIdentityPermissions } from '@/hooks/useNicIdentityPermissions'
+import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
 import { mergeNetworkConfig } from './networkConfig'
+import BridgePicker from './BridgePicker'
+import { FALLBACK_BRIDGES, bridgeEntryOption, toBridgeEntries, type BridgeEntry } from './bridgeChoices'
 import { QEMU_NIC_MODELS } from '@/lib/rbac/nicPermissions'
 
 // ==================== EDIT NETWORK DIALOG ====================
@@ -98,7 +101,8 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
   // VNets); label is the user-friendly display name; kind tells us whether
   // this is a SDN VNet, a shared bridge, or a raw physical bridge — used to
   // gate the per-NIC VLAN tag field which PVE rejects on VXLAN VNets.
-  const [bridges, setBridges] = useState<Array<{ iface: string; label: string; kind: 'vnet' | 'shared' | 'bridge' }>>([])
+  const [bridges, setBridges] = useState<BridgeEntry[]>([])
+  const bridgeOptions = useMemo(() => bridges.map(bridgeEntryOption), [bridges])
 
   // Network config — common
   const [bridge, setBridge] = useState('vmbr0')
@@ -132,33 +136,15 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
         )
         if (res.ok) {
           const json = await res.json()
-          const choices = Array.isArray(json.data) ? json.data : []
-          const bridgeList = choices.map((c: any) => ({
-            iface: c.name,
-            label: c.kind === 'vnet'
-              ? (c.displayName ?? c.name)
-              : c.kind === 'shared'
-                ? (c.label ?? c.name)
-                : c.name,
-            kind: (c.kind === 'vnet' || c.kind === 'shared' ? c.kind : 'bridge') as 'vnet' | 'shared' | 'bridge',
-          }))
+          // Natural order, bridges then VNets then shared bridges (#195).
+          const bridgeList = toBridgeEntries(json.data)
 
-          const fallback = [
-            { iface: 'vmbr0', label: 'vmbr0', kind: 'bridge' as const },
-            { iface: 'vmbr1', label: 'vmbr1', kind: 'bridge' as const },
-          ]
-          setBridges(bridgeList.length > 0 ? bridgeList : fallback)
+          setBridges(bridgeList.length > 0 ? bridgeList : [...FALLBACK_BRIDGES])
         } else {
-          setBridges([
-            { iface: 'vmbr0', label: 'vmbr0', kind: 'bridge' },
-            { iface: 'vmbr1', label: 'vmbr1', kind: 'bridge' },
-          ])
+          setBridges([...FALLBACK_BRIDGES])
         }
-      } catch (e) {
-        setBridges([
-          { iface: 'vmbr0', label: 'vmbr0', kind: 'bridge' },
-          { iface: 'vmbr1', label: 'vmbr1', kind: 'bridge' },
-        ])
+      } catch {
+        setBridges([...FALLBACK_BRIDGES])
       }
     }
 
@@ -323,20 +309,8 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
             </Box>
           ) : (
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Bridge</InputLabel>
-                <Select value={bridge} onChange={(e) => setBridge(e.target.value)} label="Bridge">
-                  {bridges.map((b) => (
-                    <MenuItem key={b.iface} value={b.iface}>
-                      {b.label}
-                      {b.label !== b.iface && (
-                        <span style={{ opacity: 0.45, marginLeft: 8, fontSize: '0.75em' }}>{b.iface}</span>
-                      )}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl fullWidth size="small">
+              <BridgePicker options={bridgeOptions} value={bridge} onChange={setBridge} label="Bridge" />
+              <FormControl fullWidth size="small" sx={SMALL_SELECT_SX}>
                 <InputLabel>Model</InputLabel>
                 <Select value={model} onChange={(e) => setModel(e.target.value)} label="Model">
                   {!['virtio', 'e1000', 'e1000e', 'rtl8139', 'vmxnet3'].includes(model) && <MenuItem value={model}>{model}</MenuItem>}
@@ -352,19 +326,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
 
           {/* LXC: Bridge on its own row (after Name+MAC) */}
           {isLxc && (
-            <FormControl fullWidth size="small">
-              <InputLabel>Bridge</InputLabel>
-              <Select value={bridge} onChange={(e) => setBridge(e.target.value)} label="Bridge">
-                {bridges.map((b) => (
-                  <MenuItem key={b.iface} value={b.iface}>
-                    {b.label}
-                    {b.label !== b.iface && (
-                      <span style={{ opacity: 0.45, marginLeft: 8, fontSize: '0.75em' }}>{b.iface}</span>
-                    )}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <BridgePicker options={bridgeOptions} value={bridge} onChange={setBridge} label="Bridge" />
           )}
 
           {/* VLAN & MAC (QEMU) / VLAN alone (LXC, MAC already shown above) */}

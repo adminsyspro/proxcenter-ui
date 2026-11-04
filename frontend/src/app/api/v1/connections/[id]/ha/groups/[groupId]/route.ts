@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -14,6 +15,9 @@ async function getHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; groupId: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, groupId } = await ctx.params
 
@@ -44,6 +48,9 @@ async function putHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; groupId: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, groupId } = await ctx.params
 
@@ -103,6 +110,9 @@ async function deleteHandler(
   req: Request,
   ctx: { params: Promise<{ id: string; groupId: string }> }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id, groupId } = await ctx.params
 

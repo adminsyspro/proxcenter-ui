@@ -271,4 +271,33 @@ describe('watchMigrationAndCleanup', () => {
       ],
     ])
   })
+
+  // roadmap#192: once the guest moved, a reload shows it on the target and no
+  // longer on the source, instead of waiting out the inventory TTL.
+  it('moves the guest across the cached inventories once the migration is done', async () => {
+    const cache = await import('@/lib/cache/inventoryCache')
+    cache.invalidateInventoryCache()
+    const cluster = (id: string, vmids: number[]) => ({
+      id, nodes: [{ node: 'n1', status: 'online', guests: vmids.map(vmid => ({ vmid, type: 'qemu', node: 'n1', status: 'running' })) }],
+    })
+    cache.setCachedInventory({
+      clusters: [cluster('source-connection', [100]), cluster('target-connection', [])],
+      pbsServers: [], externalHypervisors: [], storageResources: [], stats: {} as any,
+    })
+    pveFetchMock.mockImplementation(async (conn: any, path: string, init?: any) => {
+      if (path.includes('/tasks/')) return { status: 'stopped', exitstatus: 'OK' }
+      if (path === '/cluster/resources?type=vm') return conn === TARGET_CONN ? [{ vmid: 100, type: 'qemu', node: 'n1', status: 'running' }] : []
+      if (init?.method === 'DELETE') return 'UPID:delete'
+      return {}
+    })
+
+    await watchMigrationAndCleanup({ ...BASE_OPTS, deleteSource: true, targetConn: TARGET_CONN })
+
+    const hit = cache.getInventoryFromCache()
+    const vmidsOf = (id: string) => hit.status === 'miss' ? null
+      : hit.data.clusters.find((c: any) => c.id === id).nodes[0].guests.map((g: any) => g.vmid)
+    expect(vmidsOf('source-connection')).toEqual([])
+    expect(vmidsOf('target-connection')).toEqual([100])
+    expect(deleteCalls()).toHaveLength(1)
+  })
 })

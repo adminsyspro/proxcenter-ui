@@ -21,6 +21,8 @@ export interface WaitForPveTaskResult {
    * back to the exitstatus. Only set when outcome === 'failed'.
    */
   reason?: string
+  /** Set on an accepted `WARNINGS: n` ending (acceptWarnings): what PVE warned about. */
+  warning?: string
 }
 
 export interface WaitForPveTaskOptions {
@@ -33,6 +35,12 @@ export interface WaitForPveTaskOptions {
    * navigated to another VM) — the caller then knows not to touch its state.
    */
   shouldContinue?: () => boolean
+  /**
+   * Count a `WARNINGS: n` ending as done, as the server-side waitForTask can
+   * (#181): PVE ends so a task that did its job but logged a warning (a
+   * container started without nesting on a recent systemd, ...).
+   */
+  acceptWarnings?: boolean
 }
 
 /**
@@ -64,6 +72,7 @@ export async function waitForPveTask(
         if (status?.status === 'stopped') {
           if (status.exitstatus === 'OK') return { outcome: 'ok' }
           const error = status.exitstatus || ''
+          if (options.acceptWarnings && error.startsWith('WARNINGS')) return { outcome: 'ok', warning: status.failureReason || error }
           return { outcome: 'failed', error, reason: status.failureReason || error }
         }
       }

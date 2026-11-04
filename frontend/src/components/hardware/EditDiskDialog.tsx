@@ -24,6 +24,8 @@ import {
   LinearProgress,
   Tabs,
   Tab,
+  type TabProps,
+  Tooltip,
   Chip,
   Radio,
   RadioGroup,
@@ -105,9 +107,23 @@ type EditDiskDialogProps = {
   controller?: string
   availableStorages?: Array<{ storage: string; type: string; avail?: number; total?: number; used?: number; formats?: string[]; defaultFormat?: string; policy?: StoragePolicyCaps }>
   initialTab?: number
+  /** The guest runs: PVE refuses to move a TPM state then (roadmap#193). */
+  guestRunning?: boolean
 }
 
-export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardware, canChangeMedia, onResize, onMoveStorage, connId, node, guestType, vmid, canDeleteSnapshots = false, disk, existingDisks, controller, availableStorages, initialTab }: Readonly<EditDiskDialogProps>) {
+// A disabled Tab passes no pointer events, so the reason hangs on a wrapper.
+// The props Tabs hands its children (value, selected, onChange...) go through.
+function TooltipTab({ tooltip, ...tabProps }: Readonly<{ tooltip: string } & TabProps>) {
+  return (
+    <Tooltip title={tooltip}>
+      <span>
+        <Tab {...tabProps} />
+      </span>
+    </Tooltip>
+  )
+}
+
+export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardware, canChangeMedia, onResize, onMoveStorage, connId, node, guestType, vmid, canDeleteSnapshots = false, disk, existingDisks, controller, availableStorages, initialTab, guestRunning = false }: Readonly<EditDiskDialogProps>) {
   const t = useTranslations()
   const [tab, setTab] = useState(initialTab ?? 0)
 
@@ -342,6 +358,8 @@ export function EditDiskDialog({ open, onClose, onSave, onDelete, canEditHardwar
   // PVE only resizes a disk on a storage bus: the EFI vars and TPM state
   // volumes keep the size their firmware expects (#1036).
   const canResize = !!onResize && !disk?.isEfi && !disk?.isTpm
+  // PVE: "cannot move TPM state while VM is running" (EFI and data disks do move online).
+  const tpmMoveBlocked = guestRunning && (!!disk?.isTpm || /^tpmstate\d+$/.test(disk?.id || ''))
 
   const handleResize = async () => {
     if (!disk || !onResize || !canResize) return
@@ -770,7 +788,9 @@ return
         <Tab label="Options" />
         <Tab label="Bandwidth" />
         {canResize && <Tab value={2} label="Resize" icon={<i className="ri-expand-diagonal-line" style={{ fontSize: 16 }} />} iconPosition="start" />}
-        {onMoveStorage && <Tab value={3} label="Move" icon={<i className="ri-folder-transfer-line" style={{ fontSize: 16 }} />} iconPosition="start" />}
+        {onMoveStorage && (tpmMoveBlocked
+          ? <TooltipTab tooltip={t('hardware.tpmMoveWhileRunning')} value={3} disabled label="Move" icon={<i className="ri-folder-transfer-line" style={{ fontSize: 16 }} />} iconPosition="start" />
+          : <Tab value={3} label="Move" icon={<i className="ri-folder-transfer-line" style={{ fontSize: 16 }} />} iconPosition="start" />)}
       </Tabs>
 
       <DialogContent>
@@ -1030,7 +1050,7 @@ return
                   variant="contained"
                   color="primary"
                   onClick={handleMoveStorage}
-                  disabled={isWorking || !targetStorage || targetStorage === disk.storage}
+                  disabled={isWorking || tpmMoveBlocked || !targetStorage || targetStorage === disk.storage}
                   startIcon={moving ? <CircularProgress size={16} /> : <i className="ri-folder-transfer-line" />}
                   fullWidth
                 >

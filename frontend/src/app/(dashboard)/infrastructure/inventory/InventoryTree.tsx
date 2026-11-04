@@ -1,11 +1,14 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { paletteColor } from '@/utils/paletteColor'
 import { useTranslations } from 'next-intl'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { fetchConnectionsNetworks, type HostBridgeItem, type HostVlanItem, type SdnVnetItem } from '@/lib/proxmox/fetchConnectionsNetworks'
 import { guestMatchesSearch } from '@/lib/inventory/guestSearch'
-import { bulkPowerSeverity, runBulkGuestPower } from '@/lib/inventory/bulkGuestPower'
+import { bulkPowerMessage, bulkPowerSeverity, readPerNodePreference, runBulkGuestPower, type BulkPowerAction } from '@/lib/inventory/bulkGuestPower'
+import { GuestSelectionBar, hasPowerRight, useGuestPowerRights, usePickedGuestSelection } from '@/components/GuestSelection'
+import { useTreeGuestPick } from './hooks/useTreeGuestPick'
 import { bridgeLabel } from '@/lib/proxmox/hostVlanMap'
 import { sdnSegmentLabel, type SdnVnet } from '@/lib/proxmox/sdnVnetMap'
 
@@ -45,12 +48,12 @@ import {
   useTheme
 } from '@mui/material'
 // RemixIcon replacements for @mui/icons-material
-const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const SearchIcon = (props: any) => <i className="ri-search-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const ClearIcon = (props: any) => <i className="ri-close-circle-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const SearchIcon = (props: any) => <i className="ri-search-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const ClearIcon = (props: any) => <i className="ri-close-circle-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const StopIcon = (props: any) => <i className="ri-stop-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
 /* PauseIcon, TerminalIcon, MoveUpIcon, ContentCopyIcon, DescriptionIcon → ./components/TreeDialogs */
 
 import EntityTagManager from './components/EntityTagManager'
@@ -1032,7 +1035,6 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     node: string
     targetNode: string
   }>({ open: false, action: null, connId: '', node: '', targetNode: '' })
-  const [bulkActionBusy, setBulkActionBusy] = useState(false)
 
   const [unlocking, setUnlocking] = useState(false)
   const [unlockErrorDialog, setUnlockErrorDialog] = useState<{
@@ -1234,7 +1236,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
 
     const vms = getNodeVms(connId, node)
     let vmsToProcess: typeof vms = []
-    let apiAction = ''
+    let apiAction: BulkPowerAction = 'start'
     let description = ''
 
     switch (action) {
@@ -1258,25 +1260,21 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       return
     }
 
-    setBulkActionBusy(true)
-    try {
-      // Every refused guest is counted: the operator is told how many really
-      // received the order, as the host view's bulk action does.
-      const outcome = await runBulkGuestPower(vmsToProcess.map(vm => ({ connId, node, type: vm.type, vmid: vm.vmid })), apiAction)
-      const severity = bulkPowerSeverity(outcome)
-      const detail = outcome.firstError ? ` (${outcome.firstError})` : ''
-      let message = t('vmActions.bulkFailed', { description, errors: outcome.errors }) + detail
+    // The batch runs until its last task ends (roadmap#197): the dialog closes
+    // at once and the verdict comes as a snackbar, as in the host view.
+    setBulkActionDialog({ open: false, action: null, connId: '', node: '', targetNode: '' })
+    setSnackbar({ open: true, message: `${description} (${vmsToProcess.length})...`, severity: 'info' })
 
-      if (severity === 'success') message = t('vmActions.bulkSuccess', { description, count: outcome.success })
-      else if (severity === 'warning') message = t('vmActions.bulkPartial', { description, success: outcome.success, errors: outcome.errors }) + detail
+    // Every refused guest is counted, at most N tasks per host at a time.
+    const outcome = await runBulkGuestPower(
+      vmsToProcess.map(vm => ({ connId, node, type: vm.type, vmid: vm.vmid })),
+      apiAction,
+      { perNode: readPerNodePreference() },
+    )
 
-      setSnackbar({ open: true, message, severity })
-      // Trigger immediate SSE poll — tree will be updated via persistent EventSource
-      if (outcome.success > 0) setTimeout(() => fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {}), 2000)
-    } finally {
-      setBulkActionBusy(false)
-      setBulkActionDialog({ open: false, action: null, connId: '', node: '', targetNode: '' })
-    }
+    setSnackbar({ open: true, message: bulkPowerMessage(outcome, description, t), severity: bulkPowerSeverity(outcome) })
+    // Trigger immediate SSE poll — tree will be updated via persistent EventSource
+    if (outcome.success > 0) setTimeout(() => fetch('/api/v1/inventory/poll', { method: 'POST' }).catch(() => {}), 2000)
   }
 
   // Exécuter une action sur la VM
@@ -2314,6 +2312,15 @@ return a.pool.localeCompare(b.pool)
     node.vms.some(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === vmId) ||
     node.children.some(child => poolSubtreeHasVm(child, vmId))
 
+  // roadmap#197: Ctrl/Cmd+click picks guests for a power action or the drain planner.
+  const powerRights = useGuestPowerRights()
+  const guestPick = useTreeGuestPick(allVms, hasPowerRight(powerRights) || hasPermission('vm.migrate'), selected?.type === 'vm' ? selected.id : null)
+  const pickNodes = useMemo(
+    () => clusters.flatMap(c => c.nodes.map(n => ({ connId: c.connId, connName: c.name, node: n.node, status: n.status }))),
+    [clusters],
+  )
+  const pickSelection = usePickedGuestSelection({ vms: guestPick.pickedVms, nodes: pickNodes, menuAt: guestPick.menuAt, closeMenu: guestPick.closeMenu, clear: guestPick.clear })
+
   // Props communes aux six sites de rendu de VmItem (modes vms, favoris, hôtes, pools, tags, templates)
   type VmRowSource = {
     connId: string
@@ -3312,7 +3319,13 @@ return favorites.has(vmKey)
       <Box sx={{ flexShrink: 0 }}>
         {header}
       </Box>
-      <Box ref={virtualScrollRef} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <Box
+        ref={virtualScrollRef}
+        onClickCapture={guestPick.onClickCapture}
+        onContextMenuCapture={guestPick.onContextMenuCapture}
+        sx={{ flex: 1, minHeight: 0, overflow: 'auto', ...guestPick.rowsSx }}
+      >
+      <GuestSelectionBar selection={pickSelection} sticky compact />
 
       {error ? <Alert severity='error'>{error}</Alert> : null}
 
@@ -5008,7 +5021,6 @@ return (
         getOtherNodes={getOtherNodes}
         bulkActionDialog={bulkActionDialog}
         setBulkActionDialog={setBulkActionDialog}
-        bulkActionBusy={bulkActionBusy}
         handleBulkActionConfirm={handleBulkActionConfirm}
         handleTakeSnapshot={handleTakeSnapshot}
         handleBackupNow={handleBackupNow}

@@ -314,3 +314,58 @@ describe('GET /api/v1/guests/[vmid]/backups — both collections run concurrentl
     expect(body.data.backups.map((b: any) => b.source)).toEqual(['pbs', 'vzdump'])
   })
 })
+
+describe('GET /api/v1/guests/[vmid]/backups — snapshot name from the PBS group notes', () => {
+  const PBS_ROW = { id: 'pbs-1', name: 'PBS', baseUrl: 'https://10.0.0.1:8007', insecureTLS: false, apiTokenEnc: 'enc' }
+
+  it('names a snapshot without notes after the notes of its own group, in its own namespace', async () => {
+    findManyMock.mockResolvedValue([PBS_ROW])
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'store1' }]
+      if (path === '/admin/datastore/store1/namespace') return [{ ns: 'HTC' }]
+      if (path === '/admin/datastore/store1/snapshots') return []
+      if (path === '/admin/datastore/store1/snapshots?ns=HTC') {
+        return [
+          { 'backup-id': '1105', 'backup-type': 'vm', 'backup-time': 1786100000 },
+          { 'backup-id': '1105', 'backup-type': 'ct', 'backup-time': 1786000000 },
+          { 'backup-id': '9', 'backup-type': 'vm', 'backup-time': 1786000000 },
+        ]
+      }
+      if (path === '/admin/datastore/store1/groups?ns=HTC') {
+        return [
+          { 'backup-id': '1105', 'backup-type': 'vm', comment: 'HTC-TASKHOST' },
+          { 'backup-id': '9', 'backup-type': 'vm', comment: 'other guest' },
+        ]
+      }
+      throw new Error(`unexpected path ${path}`)
+    })
+
+    const body = await call()
+    const byType = (type: string) => body.data.backups.find((b: any) => b.backupType === type)
+
+    expect(body.data.backups).toHaveLength(2)
+    expect(byType('vm').vmName).toBe('HTC-TASKHOST')
+    expect(byType('vm').comment).toBe('')
+    expect(byType('ct').vmName).toBe('')
+  })
+
+  it('does not read the group list of a namespace where the guest has no nameless snapshot', async () => {
+    findManyMock.mockResolvedValue([PBS_ROW])
+    pbsFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/admin/datastore') return [{ store: 'store1' }]
+      if (path === '/admin/datastore/store1/namespace') return [{ ns: 'OKC' }]
+      if (path === '/admin/datastore/store1/snapshots') {
+        return [{ 'backup-id': '1105', 'backup-type': 'vm', 'backup-time': 1786100000, comment: 'own-name' }]
+      }
+      if (path === '/admin/datastore/store1/snapshots?ns=OKC') {
+        return [{ 'backup-id': '9', 'backup-type': 'vm', 'backup-time': 1786000000 }]
+      }
+      throw new Error(`unexpected path ${path}`)
+    })
+
+    const body = await call()
+
+    expect(body.data.backups.map((b: any) => b.vmName)).toEqual(['own-name'])
+    expect(pbsFetchMock.mock.calls.some(([, path]) => String(path).includes('/groups'))).toBe(false)
+  })
+})

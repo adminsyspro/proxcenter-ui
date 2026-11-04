@@ -702,4 +702,22 @@ describe('VmsTable - selection for Migrate selection (#1218)', () => {
     expect(rowCheckbox('db-lxc').checked).toBe(true)
     expect(rowCheckbox('web-01').checked).toBe(false)
   })
+
+  it('hands a right click on a ticked row to the selection, a lone or unticked row keeps its own menu (roadmap#197)', () => {
+    const onSelectionContextMenu = vi.fn()
+    const row = (name: string) => screen.getByText(name).closest('[role="row"]')!
+    const view = renderWithProviders(
+      <VmsTable vms={vmRowsFixture} selectedIds={new Set(['conn1:100', 'conn1:101'])} onSelectionChange={vi.fn()} onSelectionContextMenu={onSelectionContextMenu} />,
+    )
+
+    fireEvent.contextMenu(row('web-01'))
+    expect(onSelectionContextMenu).toHaveBeenCalledTimes(1)
+    view.unmount()
+
+    renderWithProviders(
+      <VmsTable vms={vmRowsFixture} selectedIds={new Set(['conn1:100'])} onSelectionChange={vi.fn()} onSelectionContextMenu={onSelectionContextMenu} onVmAction={vi.fn()} />,
+    )
+    fireEvent.contextMenu(row('web-01'))
+    expect(onSelectionContextMenu).toHaveBeenCalledTimes(1)
+  })
 })

@@ -46,3 +46,57 @@ describe('fetchTaskFirstLine', () => {
     expect(await fetchTaskFirstLine(conn, 'pve1', UPID)).toBeNull()
   })
 })
+
+describe('fetchTaskLogTail', () => {
+  /** A log of `total` lines, served the way PVE pages it, with its `total`. */
+  function servedLog(total: number) {
+    pveFetchMock.mockImplementation(async (_c: any, path: string) => {
+      const q = new URL(`http://x${path}`).searchParams
+      const start = Number(q.get('start'))
+      const limit = Number(q.get('limit'))
+      return { data: lines(start, Math.max(0, Math.min(limit, total - start))), total }
+    })
+  }
+
+  it('one window read when the new lines fit in it', async () => {
+    const { fetchTaskLogTail } = await import('./taskLog')
+    servedLog(42)
+    const out = await fetchTaskLogTail(conn, 'pve1', UPID, 40)
+    expect(out.total).toBe(42)
+    expect(out.lines.map(l => l.t)).toEqual(['l40', 'l41'])
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    expect(pveFetchMock.mock.calls[0][1]).toContain('start=40&limit=50')
+    expect(pveFetchMock.mock.calls[0][3]).toEqual({ envelope: true })
+  })
+
+  it('a second read for the last window when the log grew past it', async () => {
+    const { fetchTaskLogTail } = await import('./taskLog')
+    servedLog(500)
+    const out = await fetchTaskLogTail(conn, 'pve1', UPID)
+    expect(out.total).toBe(500)
+    expect(out.lines).toHaveLength(50)
+    expect(out.lines[49].t).toBe('l499')
+    expect(pveFetchMock).toHaveBeenCalledTimes(2)
+    expect(pveFetchMock.mock.calls[1][1]).toContain('start=450&limit=50')
+  })
+
+  it('no new line: an empty window and the same total', async () => {
+    const { fetchTaskLogTail } = await import('./taskLog')
+    servedLog(42)
+    expect(await fetchTaskLogTail(conn, 'pve1', UPID, 42)).toEqual({ lines: [], total: 42 })
+  })
+
+  it('a negative start reads from the first line; a body without total counts what it got', async () => {
+    const { fetchTaskLogTail } = await import('./taskLog')
+    pveFetchMock.mockResolvedValue({ data: lines(0, 3) })
+    const out = await fetchTaskLogTail(conn, 'pve1', UPID, -5)
+    expect(out.total).toBe(3)
+    expect(pveFetchMock.mock.calls[0][1]).toContain('start=0&limit=50')
+  })
+
+  it('an empty answer reads as no line', async () => {
+    const { fetchTaskLogTail } = await import('./taskLog')
+    pveFetchMock.mockResolvedValue(null)
+    expect(await fetchTaskLogTail(conn, 'pve1', UPID, 7)).toEqual({ lines: [], total: 7 })
+  })
+})

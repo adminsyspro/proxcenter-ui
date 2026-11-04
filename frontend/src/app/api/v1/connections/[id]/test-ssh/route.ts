@@ -9,6 +9,7 @@ import { getNodeIp } from "@/lib/ssh/node-ip"
 import { buildOrchestratorSshOverrides, normalizeSshAddress, pickNodeSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 import { executeSSHDirect } from "@/lib/ssh/exec"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -24,6 +25,9 @@ export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> | { id: string } }
 ) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const prisma = await getSessionPrisma()
     const params = await Promise.resolve(ctx.params)

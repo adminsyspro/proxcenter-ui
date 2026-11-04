@@ -1,5 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+
+// The IaaS tenant gate decides on the principal's own tenant; here it follows
+// this file's tenant mocks (lib/tenant/iaasGuard.routes.test.ts covers the gate).
+vi.mock("@/lib/tenant/iaasGuard", async () => {
+  const { NextResponse } = await import("next/server")
+  const resolveCallerInfraScope = async (opts: { ignoreVdcContext?: boolean } = {}) => {
+    const { getCurrentTenantId } = await import("@/lib/tenant")
+    const { getTenantInfrastructureScope } = await import("@/lib/tenant/infraScope")
+    const tenantId = await getCurrentTenantId()
+    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: opts.ignoreVdcContext ?? true })
+    return { ok: true as const, tenantId, infra }
+  }
+  const denyIaasTenant = async () => {
+    const caller = await resolveCallerInfraScope()
+    return caller.infra?.kind === "iaas" ? NextResponse.json({ error: "Not found" }, { status: 404 }) : null
+  }
+  return { resolveCallerInfraScope, denyIaasTenant }
+})
+
 import { callRoute } from "../../../../__tests__/setup/route-test"
 
 const { findManyGlobalMock, findManySessionMock, getInfraMock, checkPermissionMock, getRBACContextMock, getRbacInfraScopeMock, getGuestVisibleConnectionIdsMock } = vi.hoisted(() => ({
@@ -89,6 +108,35 @@ describe("GET /api/v1/connections scope", () => {
     const res = await callRoute(GET, { method: "GET" })
     expect(res.status).toBe(200)
     expect(new Set(findManyGlobalMock.mock.calls[0][0].where.id.in)).toEqual(new Set(["p1", "p2", "pbs1"]))
+  })
+
+  it("iaas: each row is the name and type only, never the address, nodes, SSH or location (roadmap#189)", async () => {
+    const vdcScope = { connectionIds: new Set(["p1"]), pbsConnectionIds: new Set<string>() }
+    getInfraMock.mockResolvedValue({ kind: "iaas", vdcScope })
+    findManyGlobalMock.mockResolvedValue([{
+      ...connRow("p1"), name: "PVE-PROD", baseUrl: "https://10.0.0.1:8006", subType: null, behindProxy: true, insecureTLS: true,
+      hosts: [{ id: "h1", node: "pve1", ip: "10.0.0.1", enabled: true }], sshEnabled: true, sshKeyEnc: "k",
+      fingerprint: "AA:BB", latitude: 45.7, longitude: 4.8, locationLabel: "Lyon", country: "FR", replicationNetwork: "10.9.0.0/24",
+    }])
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET" })
+    expect(res.status).toBe(200)
+    const [row] = (await res.json()).data
+    expect(Object.keys(row).sort((a, b) => a.localeCompare(b))).toEqual(["createdAt", "hasCeph", "id", "name", "subType", "type", "updatedAt"])
+    expect(row).toMatchObject({ id: "p1", name: "PVE-PROD", type: "pve", hasCeph: false })
+  })
+
+  it("provider and msp keep the full rows", async () => {
+    for (const infra of [{ kind: "provider" }, { kind: "msp", connectionIds: new Set(["p1"]) }]) {
+      getInfraMock.mockResolvedValue(infra)
+      const row = { ...connRow("p1"), baseUrl: "https://10.0.0.1:8006", hosts: [{ id: "h1", node: "pve1", ip: "10.0.0.1", enabled: true }] }
+      findManyGlobalMock.mockResolvedValue([row])
+      findManySessionMock.mockResolvedValue([row])
+      const { GET } = await import("./route")
+      const [out] = (await (await callRoute(GET, { method: "GET" })).json()).data
+      expect(out.baseUrl).toBe("https://10.0.0.1:8006")
+      expect(out.hosts).toEqual([{ id: "h1", node: "pve1", ip: "10.0.0.1", enabled: true }])
+    }
   })
 
   it("provider + node/connection-scoped RBAC user: list filtered to the scoped connection only", async () => {

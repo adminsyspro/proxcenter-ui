@@ -2,9 +2,20 @@ import { createServer, type Server, type ServerResponse, type RequestListener } 
 import type { AddressInfo } from 'node:net'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { pveFetch } from './client'
-import { setNodeIps, incrementFailures } from '../cache/nodeIpCache'
+import { setNodeIps, incrementFailures, getFailureCount } from '../cache/nodeIpCache'
 
 vi.mock('../connections/getConnection', () => ({ invalidateConnectionCache: vi.fn() }))
+// No managed host rows unless a test says so: the node IP cache each test
+// sets is then the whole list.
+const managedHosts = vi.hoisted(() => ({ rows: [] as Array<{ ip: string }> }))
+vi.mock('../db/prisma', () => ({
+  prisma: {
+    managedHost: {
+      count: async () => managedHosts.rows.length,
+      findMany: async () => managedHosts.rows,
+    },
+  },
+}))
 // The write guard (roadmap#58) would otherwise ask the database on every POST.
 vi.mock('../license/exclusions', async importOriginal => ({ ...(await importOriginal<typeof import('../license/exclusions')>()), isConnectionLicenseExcluded: async () => false }))
 
@@ -14,6 +25,14 @@ async function listen(host: string, handler: RequestListener, port = 0) {
   servers.push(server)
   await new Promise<void>(resolve => server.listen(port, host, resolve))
   return (server.address() as AddressInfo).port
+}
+/** A port nothing listens on, on any loopback address. */
+async function freePort() {
+  const probe = createServer()
+  await new Promise<void>(resolve => probe.listen(0, '127.0.0.1', resolve))
+  const { port } = probe.address() as AddressInfo
+  await new Promise<void>(resolve => probe.close(() => resolve()))
+  return port
 }
 function answer(res: ServerResponse, data = { ticket: 'test-ticket', port: 5900 }) {
   res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -182,4 +201,103 @@ it('preserves and uses a newer fallback when an in-flight request to the old one
   await expect(pveFetch(conn, '/nodes', {}, { onResponse: url => { endpoint = url } })).resolves.toBeDefined()
   expect(endpoint).toBe(replacement.url)
   expect((globalThis as any).__proxcenter_failover_url_cache__.get(conn.id)).toBe(replacement)
+})
+
+// roadmap#194: the first request that meets a dead primary used to fail with a
+// 500 because the circuit only opens on the second failure. It now goes
+// through another node once, for itself, and leaves the circuit closed.
+describe('below the failure threshold', () => {
+  function freshConnection(port: number, ips = ['127.0.0.2', '127.0.0.1']) {
+    const conn = { id: `below-threshold-${++sequence}`, baseUrl: `http://127.0.0.2:${port}`, apiToken: 'test-token' }
+    setNodeIps(conn.id, ips, port, 'http')
+    return conn
+  }
+  const failoverCache = () => (globalThis as any).__proxcenter_failover_url_cache__ as Map<string, unknown> | undefined
+
+  it('serves a write through a peer, once, without opening the circuit', async () => {
+    const peerHits: string[] = []
+    const port = await listen('127.0.0.1', (req, res) => { peerHits.push(`${req.method} ${req.url}`); answer(res) })
+    const conn = freshConnection(port)
+    let endpoint: string | undefined
+    const result = await pveFetch(conn, '/nodes/pve2/qemu/100/vncproxy', { method: 'POST' }, {
+      onResponse: url => { endpoint = url },
+    })
+    expect(result).toEqual({ ticket: 'test-ticket', port: 5900 })
+    expect(endpoint).toBe(`http://127.0.0.1:${port}`)
+    expect(peerHits).toEqual(['GET /api2/json/version', 'POST /api2/json/nodes/pve2/qemu/100/vncproxy'])
+    expect(getFailureCount(conn.id)).toBe(1)
+    expect(failoverCache()?.has(conn.id)).toBeFalsy()
+  })
+
+  it('keeps the threshold: the next failure still opens the circuit', async () => {
+    const port = await listen('127.0.0.1', (_req, res) => answer(res))
+    const conn = freshConnection(port)
+    await pveFetch(conn, '/nodes')
+    expect(failoverCache()?.has(conn.id)).toBeFalsy()
+    await pveFetch(conn, '/nodes')
+    expect((failoverCache()?.get(conn.id) as any)?.url).toBe(`http://127.0.0.1:${port}`)
+  })
+
+  it('finds its peers in the managed hosts when the node IP cache is empty', async () => {
+    const port = await listen('127.0.0.1', (_req, res) => answer(res))
+    const conn = { id: `below-threshold-${++sequence}`, baseUrl: `http://127.0.0.2:${port}`, apiToken: 'test-token' }
+    managedHosts.rows = [{ ip: '127.0.0.1' }]
+    try {
+      let endpoint: string | undefined
+      await pveFetch(conn, '/nodes', {}, { onResponse: url => { endpoint = url } })
+      expect(endpoint).toBe(`http://127.0.0.1:${port}`)
+    } finally {
+      managedHosts.rows = []
+    }
+  })
+
+  it('rethrows the primary error when no peer answers', async () => {
+    const conn = freshConnection(await freePort(), ['127.0.0.2', '127.0.0.3'])
+    await expect(pveFetch(conn, '/nodes')).rejects.toThrow(/ECONNREFUSED/)
+    expect(getFailureCount(conn.id)).toBe(1)
+  })
+
+  it('still fails fast on a standalone node', async () => {
+    const conn = freshConnection(await freePort(), ['127.0.0.2'])
+    await expect(pveFetch(conn, '/nodes')).rejects.toThrow(/ECONNREFUSED/)
+    expect(getFailureCount(conn.id)).toBe(0)
+  })
+
+  it('honours the caller signal while it looks for a peer', async () => {
+    const controller = new AbortController()
+    const peerHits: string[] = []
+    // The peer takes the probe, then the caller goes away before any answer.
+    const port = await listen('127.0.0.1', req => { peerHits.push(req.url!); controller.abort() })
+    const conn = freshConnection(port)
+    await expect(pveFetch(conn, '/nodes', { signal: controller.signal })).rejects.toThrow(/ECONNREFUSED/)
+    expect(peerHits).toEqual(['/api2/json/version'])
+  })
+
+  it('never replays a write whose connection was reset after it was sent', async () => {
+    const peerHits: string[] = []
+    const port = await listen('127.0.0.1', (req, res) => { peerHits.push(req.url!); answer(res) })
+    const conn = freshConnection(port)
+    await listen('127.0.0.2', req => { req.socket.resetAndDestroy() }, port)
+    await expect(pveFetch(conn, '/nodes/pve2/qemu', { method: 'POST' })).rejects.toThrow()
+    expect(peerHits).toEqual([])
+    expect(getFailureCount(conn.id)).toBe(1)
+  })
+
+  it('does not go through a peer on an answer the primary rejected', async () => {
+    const peerHits: string[] = []
+    const port = await listen('127.0.0.1', (req, res) => { peerHits.push(req.url!); answer(res) })
+    const conn = freshConnection(port)
+    await listen('127.0.0.2', (_req, res) => { res.writeHead(500); res.end('boom') }, port)
+    await expect(pveFetch(conn, '/nodes')).rejects.toThrow(/PVE 500/)
+    expect(peerHits).toEqual([])
+    expect(getFailureCount(conn.id)).toBe(0)
+  })
+})
+
+it('probes failover candidates with a read, so the scan sends a write only once', async () => {
+  const hits: string[] = []
+  const port = await listen('127.0.0.1', (req, res) => { hits.push(`${req.method} ${req.url}`); answer(res) })
+  const conn = connection(port)
+  await pveFetch(conn, '/nodes/pve2/qemu', { method: 'POST' })
+  expect(hits).toEqual(['GET /api2/json/version', 'POST /api2/json/nodes/pve2/qemu'])
 })

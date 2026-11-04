@@ -5,6 +5,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = "nodejs"
 
@@ -25,6 +26,9 @@ async function loadSettings(connId: string): Promise<AutoHaSettings> {
 }
 
 async function getHandler(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id } = await ctx.params
     // Scoped to the connection like the PUT below, then resolved through the
@@ -47,6 +51,9 @@ async function getHandler(_req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 async function putHandler(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   try {
     const { id } = await ctx.params
     // The settings cover the whole connection: node.manage on it, for a

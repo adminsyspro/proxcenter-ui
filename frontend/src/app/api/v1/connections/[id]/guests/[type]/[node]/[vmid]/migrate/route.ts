@@ -6,7 +6,7 @@ import { getConnectionById } from "@/lib/connections/getConnection"
 import { describeSnapshotBlockers, snapshotMigrationGuard } from "@/lib/migration/snapshotMigrationCheck"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { migrateVmSchema } from "@/lib/schemas"
-import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
+import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
 import { migrationTenantDenied } from "@/lib/tenant/migrationGuard"
 import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
@@ -122,7 +122,10 @@ async function handler(
       }
     )
     
-    invalidateInventoryCache()
+    // roadmap#192: one read of this connection patches the cached inventories
+    // (migration lock now; the new node once the poller sees the task end),
+    // instead of a full fan-out per tenant on the next read.
+    await refreshCachedGuests(id, conn)
 
     // Audit
     const { audit } = await import("@/lib/audit")

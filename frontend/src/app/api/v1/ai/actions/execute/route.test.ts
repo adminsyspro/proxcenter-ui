@@ -11,6 +11,10 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+
+// The IaaS tenant gate of the routes driven here is covered by lib/tenant/iaasGuard.routes.test.ts (roadmap#189).
+vi.mock("@/lib/tenant/iaasGuard", () => ({ denyIaasTenant: async () => null }))
+
 import type { InventorySnapshot, SnapshotGuest, SnapshotNode } from '@/lib/tools/snapshot'
 
 const h = vi.hoisted(() => ({

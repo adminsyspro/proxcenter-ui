@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { paletteColor } from '@/utils/paletteColor'
 import { useLocale, useTranslations } from 'next-intl'
 import { formatBytes } from '@/utils/format'
 import { getDateLocale } from '@/lib/i18n/date'
@@ -48,23 +49,23 @@ import {
 } from '@mui/material'
 
 // RemixIcon replacements for @mui/icons-material
-const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const CheckIcon = (props: any) => <i className="ri-check-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const CloseIcon = (props: any) => <i className="ri-close-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const ExpandMoreIcon = (props: any) => <i className="ri-arrow-down-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const ExpandLessIcon = (props: any) => <i className="ri-arrow-up-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const StorageIcon = (props: any) => <i className="ri-hard-drive-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const MemoryIcon = (props: any) => <i className="ri-cpu-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const DnsIcon = (props: any) => <i className="ri-server-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const TrendingUpIcon = (props: any) => <i className="ri-arrow-up-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const TrendingDownIcon = (props: any) => <i className="ri-arrow-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const SwapHorizIcon = (props: any) => <i className="ri-arrow-left-right-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const WarningAmberIcon = (props: any) => <i className="ri-alert-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const CheckCircleIcon = (props: any) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const BuildIcon = (props: any) => <i className="ri-hammer-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const AccessTimeIcon = (props: any) => <i className="ri-time-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
-const HardwareIcon = (props: any) => <i className="ri-cpu-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: props?.sx?.color, ...props?.style }} />
+const RefreshIcon = (props: any) => <i className="ri-refresh-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const PlayArrowIcon = (props: any) => <i className="ri-play-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const CheckIcon = (props: any) => <i className="ri-check-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const CloseIcon = (props: any) => <i className="ri-close-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const ExpandMoreIcon = (props: any) => <i className="ri-arrow-down-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const ExpandLessIcon = (props: any) => <i className="ri-arrow-up-s-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const StorageIcon = (props: any) => <i className="ri-hard-drive-2-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const MemoryIcon = (props: any) => <i className="ri-cpu-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const DnsIcon = (props: any) => <i className="ri-server-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const TrendingUpIcon = (props: any) => <i className="ri-arrow-up-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const TrendingDownIcon = (props: any) => <i className="ri-arrow-down-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const SwapHorizIcon = (props: any) => <i className="ri-arrow-left-right-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const WarningAmberIcon = (props: any) => <i className="ri-alert-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const CheckCircleIcon = (props: any) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const BuildIcon = (props: any) => <i className="ri-hammer-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const AccessTimeIcon = (props: any) => <i className="ri-time-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
+const HardwareIcon = (props: any) => <i className="ri-cpu-line" style={{ fontSize: props?.fontSize === 'small' ? 18 : 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
 
 import { computeDrsHealthScore, type DrsHealthBreakdown } from '@/lib/utils/drs-health'
 

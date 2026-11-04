@@ -5,7 +5,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { cloneVmSchema } from "@/lib/schemas"
-import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
+import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { getAllowedNetworksForTenant, validateNetAgainstScope, parseBridgeFromNet, resolveSubnetForBridge } from "@/lib/vdc/vnets"
@@ -257,7 +257,9 @@ async function handler(
       }
     })
 
-    invalidateInventoryCache()
+    // roadmap#192: one read of this connection patches the cached inventories
+    // with the new guest, instead of a full fan-out per tenant on the next read.
+    await refreshCachedGuests(id, conn, body.newid ? { type, vmid: body.newid } : undefined)
 
     // ── Post-clone IPAM sync ──
     // The clone runs as a PVE task (UPID returned in `result`). We schedule

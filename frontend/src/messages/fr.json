@@ -12948,6 +12948,7 @@
         "search": "Rechercher par nom ou VMID",
         "selectAll": "Tous les invités correspondants",
         "selectAllCount": "Tous les invités correspondants ({count, number})",
+        "selectAllCountOf": "Tous les invités correspondants ({count, number} sur {total, number} sélectionnables)",
         "selected": "Sélection : {count, number}",
         "member": "Membre",
         "pending": "En attente",

@@ -12947,6 +12947,7 @@
         "search": "按名称或 VMID 搜索",
         "selectAll": "所有匹配的客户机",
         "selectAllCount": "所有匹配的客户机（{count, number}）",
+        "selectAllCountOf": "所有匹配的客户机（{total, number} 个中 {count, number} 个可选）",
         "selected": "已选择 {count, number} 个",
         "member": "成员",
         "pending": "待处理",

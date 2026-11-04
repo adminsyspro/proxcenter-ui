@@ -12947,6 +12947,7 @@
         "search": "이름 또는 VMID로 검색",
         "selectAll": "일치하는 모든 게스트",
         "selectAllCount": "일치하는 모든 게스트 ({count, number})",
+        "selectAllCountOf": "일치하는 모든 게스트 ({total, number}개 중 {count, number}개 선택 가능)",
         "selected": "{count, number}개 선택됨",
         "member": "구성원",
         "pending": "대기 중",

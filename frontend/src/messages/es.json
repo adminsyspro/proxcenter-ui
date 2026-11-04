@@ -12947,6 +12947,7 @@
         "search": "Buscar por nombre o VMID",
         "selectAll": "Todos los invitados coincidentes",
         "selectAllCount": "Todos los invitados coincidentes ({count, number})",
+        "selectAllCountOf": "Todos los invitados coincidentes ({count, number} de {total, number} seleccionables)",
         "selected": "Selección: {count, number}",
         "member": "Miembro",
         "pending": "Pendiente",

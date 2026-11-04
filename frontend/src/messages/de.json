@@ -12615,6 +12615,7 @@
         "search": "Nach Name oder VMID suchen",
         "selectAll": "Alle passenden Gäste",
         "selectAllCount": "Alle passenden Gäste ({count, number})",
+        "selectAllCountOf": "Alle passenden Gäste ({count, number} von {total, number} auswählbar)",
         "selected": "Ausgewählt: {count, number}",
         "member": "Mitglied",
         "pending": "Ausstehend",

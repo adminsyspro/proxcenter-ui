@@ -93,6 +93,20 @@ describe('assign guests dialog: list', () => {
     expect((within(dialog).getByRole('checkbox', { name: 'free' }) as HTMLInputElement).disabled).toBe(false)
   })
 
+  it('counts the tickable guests out of the paged total when members are in the list', async () => {
+    setup({
+      zones: [web()],
+      vms: [...manyGuests(60), vm(100, 'tagged', ['zone-web']), vm(101, 'queued', [])],
+      pending_members: [{ id: 'p1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 101, zone_id: 'zw' }],
+    })
+    const dialog = await openDialog()
+    expect(await within(dialog).findByText('1-25 of 62')).toBeTruthy()
+    expect(within(dialog).getByText('All matching guests (60 of 62 can be selected)')).toBeTruthy()
+    fireEvent.click(selectAll(dialog))
+    expect(within(dialog).getByText('Selected: 60')).toBeTruthy()
+    expect(selectAll(dialog).checked).toBe(true)
+  })
+
   it('flags a guest that carries another zone tag and says it will be moved', async () => {
     setup({
       zones: [web(), db()],

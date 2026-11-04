@@ -12947,6 +12947,7 @@
         "search": "Search by name or VMID",
         "selectAll": "All matching guests",
         "selectAllCount": "All matching guests ({count, number})",
+        "selectAllCountOf": "All matching guests ({count, number} of {total, number} can be selected)",
         "selected": "Selected: {count, number}",
         "member": "Member",
         "pending": "Pending",

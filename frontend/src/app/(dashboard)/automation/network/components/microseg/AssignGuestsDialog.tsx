@@ -178,7 +178,7 @@ export default function AssignGuestsDialog({ open, connectionId, zone, policy, r
                 slotProps={{ input: { 'aria-label': t('selectAll') } }}
                 sx={{ p: 0.5 }}
               />
-              <Typography noWrap sx={{ flex: 1, minWidth: 0 }}>{t('selectAllCount', { count: selectable.length })}</Typography>
+              <Typography noWrap sx={{ flex: 1, minWidth: 0 }}>{selectable.length === filtered.length ? t('selectAllCount', { count: selectable.length }) : t('selectAllCountOf', { count: selectable.length, total: filtered.length })}</Typography>
               <Typography noWrap variant='body2' color='text.secondary' sx={{ flexShrink: 0 }}>{t('selected', { count: chosen.length })}</Typography>
             </Box>
             {filtered.length === 0 ? (

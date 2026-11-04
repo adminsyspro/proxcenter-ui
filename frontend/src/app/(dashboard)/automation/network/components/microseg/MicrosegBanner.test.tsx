@@ -26,8 +26,8 @@ const bannerReady = async () => {
 }
 
 describe('banner: nothing to say, nothing drawn (UA27)', () => {
-  /** The row of the sub-tabs, where the Emergency stop button lives. */
-  const tabsRow = async () => (await screen.findByRole('button', { name: 'Emergency stop' })).parentElement as HTMLElement
+  /** The row of the sub-tabs, where the Emergency stop button lives (in the group of the row's actions). */
+  const tabsRow = async () => (await screen.findByRole('button', { name: 'Emergency stop' })).closest('[data-testid="microseg-actions"]')!.parentElement as HTMLElement
 
   it('draws no strip above the sub-tabs when there is no stop, no held writes, no pause, no stale status and nothing pending', async () => {
     renderTab()

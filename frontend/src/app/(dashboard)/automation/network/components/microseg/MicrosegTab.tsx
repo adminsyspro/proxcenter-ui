@@ -173,7 +173,8 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
           variant='scrollable'
           scrollButtons='auto'
           aria-label={t('subTabs.label')}
-          sx={{ flex: '1 1 320px', minWidth: 0 }}
+          // Never narrower than the five sub-tabs from md up: the actions go to the next line instead of the tabs scrolling.
+          sx={{ flex: '1 1 auto', minWidth: { xs: 0, md: 'max-content' } }}
         >
           {MICROSEG_SUBTABS.map(tab => (
             <Tab
@@ -186,31 +187,34 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
             />
           ))}
         </Tabs>
-        <Box ref={setActionsSlot} data-testid='microseg-actions-slot' sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }} />
-        {subTab === 'overview' && (
-          <Tooltip describeChild title={t('trafficLens.openFlowsTip')}>
-            <Link component={NextLink} href={`/operations/network-flows?groupBy=zone&connection=${encodeURIComponent(connectionId)}`} underline='hover' sx={{ fontSize: 13, flexShrink: 0 }}>
-              {t('trafficLens.summary.title')}
-            </Link>
+        {/* The actions of the row as one group: it wraps whole, to the right, when the row is too narrow. */}
+        <Box data-testid='microseg-actions' sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap', ml: 'auto', minWidth: 0 }}>
+          <Box ref={setActionsSlot} data-testid='microseg-actions-slot' sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }} />
+          {subTab === 'overview' && (
+            <Tooltip describeChild title={t('trafficLens.openFlowsTip')}>
+              <Link component={NextLink} href={`/operations/network-flows?groupBy=zone&connection=${encodeURIComponent(connectionId)}`} underline='hover' sx={{ fontSize: 13, flexShrink: 0 }}>
+                {t('trafficLens.summary.title')}
+              </Link>
+            </Tooltip>
+          )}
+          <CheckNowButton
+            connectionId={connectionId}
+            deployed={!!policy.last_revision}
+            status={controls.status}
+            statusError={controls.statusError}
+            reloadStatus={controls.reload}
+            onQueued={setCheckQueued}
+            startRun={startRun}
+            onDone={refreshAfterCheck}
+            onOpenDrifts={() => goToSubTab('drifts')}
+          />
+          <EmergencyStopButton controls={controls} deployed={!!policy.last_revision} />
+          <Tooltip title={t('settings.open')}>
+            <IconButton aria-label={t('settings.open')} onClick={onOpenSettings} sx={{ flexShrink: 0 }}>
+              <i className='ri-settings-3-line' />
+            </IconButton>
           </Tooltip>
-        )}
-        <CheckNowButton
-          connectionId={connectionId}
-          deployed={!!policy.last_revision}
-          status={controls.status}
-          statusError={controls.statusError}
-          reloadStatus={controls.reload}
-          onQueued={setCheckQueued}
-          startRun={startRun}
-          onDone={refreshAfterCheck}
-          onOpenDrifts={() => goToSubTab('drifts')}
-        />
-        <EmergencyStopButton controls={controls} deployed={!!policy.last_revision} />
-        <Tooltip title={t('settings.open')}>
-          <IconButton aria-label={t('settings.open')} onClick={onOpenSettings} sx={{ flexShrink: 0 }}>
-            <i className='ri-settings-3-line' />
-          </IconButton>
-        </Tooltip>
+        </Box>
       </Box>
       <SubTabContent tab={subTab} {...contentProps} />
       <PlanDialog

@@ -97,6 +97,24 @@ describe('the resume dialog', () => {
     expect(within(dialog).getByRole('button', { name: 'Resume' })).toBeTruthy()
   })
 
+  it('says, in the dialog, that the detected address is internal to Docker and which addresses the rules leave out', async () => {
+    mock.routes['POST /emergency-stop'] = () => reply(409, {
+      code: 'SOCLE_MISSING',
+      error: 'the emergency stop is kept: … (not accepted from 10.43.0.250)',
+      detail: { web: false, ssh: false, reason: 'docker_internal', self_ip: '172.17.0.3', uncovered: ['10.43.0.250', '10.44.0.250'] },
+    })
+    renderConfigured()
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Resume' }))
+
+    expect(await within(dialog).findByText(/so the cluster firewall was not re-enabled/)).toBeTruthy()
+    expect(within(dialog).getByText('The detected address is internal to Docker: in Settings > Advanced, enter the address of the host as Proxmox sees it.')).toBeTruthy()
+    expect(within(dialog).getByText('Addresses the rules do not accept: 10.43.0.250, 10.44.0.250')).toBeTruthy()
+    // The localized lines replace the English wording of the orchestrator.
+    expect(within(dialog).queryByText(/the emergency stop is kept/)).toBeNull()
+  })
+
   it('opens the deployment wizard from the refusal and closes the dialog', async () => {
     mock.routes['POST /emergency-stop'] = () => reply(409, { code: 'SOCLE_MISSING', error: 'x' })
     renderConfigured()

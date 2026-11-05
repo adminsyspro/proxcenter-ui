@@ -12758,7 +12758,8 @@
       "resumeInfoSocle": "Refused if the management rules (SSH 22, web 8006) are missing: fix them in the Dashboard deployment wizard first",
       "openWizard": "Open the deployment wizard",
       "clusterFirewallOff": "Cluster firewall disabled",
-      "notDeployed": "Nothing deployed"
+      "notDeployed": "Nothing deployed",
+      "socleUncovered": "Addresses the rules do not accept: {ips}"
     },
     "pending": {
       "noCount": "Unapplied changes",

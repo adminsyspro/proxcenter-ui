@@ -12426,7 +12426,8 @@
       "resumeInfoSocle": "Abgelehnt, wenn die Verwaltungsregeln (SSH 22, Web 8006) fehlen: Beheben Sie dies zuerst im Bereitstellungsassistenten des Dashboards",
       "openWizard": "Bereitstellungsassistenten öffnen",
       "clusterFirewallOff": "Cluster-Firewall deaktiviert",
-      "notDeployed": "Nichts bereitgestellt"
+      "notDeployed": "Nichts bereitgestellt",
+      "socleUncovered": "Von den Regeln nicht akzeptierte Adressen: {ips}"
     },
     "pending": {
       "noCount": "Nicht angewendete Änderungen",

@@ -10,6 +10,7 @@ import LogNodeLines from './LogNodeLines'
 import MicrosegConfirmDialog, { type ConfirmInfoLine } from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PendingChangesBar from './PendingChangesBar'
+import { socleRefusalLines } from './preflightModel'
 import { clusterFirewallOff, formatWhen, stillPaused } from './summaryModel'
 import type { ControlAction, MicrosegControls } from './useMicrosegControls'
 import { NOW_REFRESH_MS, useNow } from './useNow'
@@ -35,6 +36,10 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
   const { canWrite } = useMicrosegWrite()
   const format = useFormatter()
   const { status, statusError, reload, action, open, busy, actionError, dialogError, notice } = controls
+  // A socle refusal names the addresses the rules leave out, and the Docker reason, in the user's language.
+  const refusalLines = dialogError?.code === 'SOCLE_MISSING'
+    ? socleRefusalLines(dialogError.detail).map(line => t(`microsegPilot.${line.key}`, line.values))
+    : []
 
   const dialog: Record<ControlAction, { title: string; body: string; label: string; color: 'primary' | 'warning' | 'error' }> = {
     stop: { title: t('microsegPilot.stop.title'), body: t('microsegPilot.stop.body'), label: t('microsegPilot.stop.button'), color: 'error' },
@@ -147,7 +152,8 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
         color={dialog[action].color}
         busy={busy}
         error={dialogError ? t(microsegErrorKeyOf(dialogError)) : null}
-        errorDetail={dialogError?.serverMessage}
+        errorDetail={refusalLines.length > 0 ? null : dialogError?.serverMessage}
+        errorLines={refusalLines}
         extraAction={dialogError && onOpenWizard ? { label: t('microsegPilot.stop.openWizard'), onClick: () => { controls.close(); onOpenWizard() } } : undefined}
         onConfirm={controls.run}
         onCancel={controls.close}

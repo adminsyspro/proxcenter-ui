@@ -13,13 +13,16 @@ export class MicrosegApiError extends Error {
   readonly status: number
   readonly code: string
   readonly serverMessage?: string
+  /** What the orchestrator adds to some refusals (SOCLE_MISSING: the failed socle check detail). */
+  readonly detail?: Record<string, unknown>
 
-  constructor(status: number, code: string, serverMessage?: string) {
+  constructor(status: number, code: string, serverMessage?: string, detail?: Record<string, unknown>) {
     super(serverMessage || code)
     this.name = 'MicrosegApiError'
     this.status = status
     this.code = code
     this.serverMessage = serverMessage
+    this.detail = detail
   }
 }
 
@@ -75,7 +78,8 @@ async function toError(res: Response): Promise<MicrosegApiError> {
   const code = typeof body?.code === 'string' && body.code ? body.code : fallbackCode(res.status)
   const message = typeof body?.error === 'string' ? body.error : undefined
   if (res.status === 409 && code === 'VERSION_CONFLICT') return new MicrosegConflictError(message)
-  return new MicrosegApiError(res.status, code, message)
+  const detail = body?.detail && typeof body.detail === 'object' && !Array.isArray(body.detail) ? (body.detail as Record<string, unknown>) : undefined
+  return new MicrosegApiError(res.status, code, message, detail)
 }
 
 export type RunStarted = { run_id: string }

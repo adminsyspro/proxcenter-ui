@@ -68,6 +68,20 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
   }
 }
 
+/**
+ * What a SOCLE_MISSING refusal says beyond its fixed message, from the failed
+ * socle check it carries: the Docker reason and the addresses the rules leave
+ * out, as keys under microsegPilot.
+ */
+export function socleRefusalLines(detail: Record<string, unknown> | undefined): Array<{ key: string; values?: Record<string, string> }> {
+  if (!detail) return []
+  const lines: Array<{ key: string; values?: Record<string, string> }> = []
+  if (detail.reason === 'docker_internal') lines.push({ key: 'preflight.checks.self_in_zone.dockerInternal' })
+  const uncovered = (Array.isArray(detail.uncovered) ? detail.uncovered : []).filter((ip): ip is string => typeof ip === 'string')
+  if (uncovered.length > 0) lines.push({ key: 'stop.socleUncovered', values: { ips: uncovered.join(', ') } })
+  return lines
+}
+
 export type RateUnit = 'second' | 'minute' | 'hour' | 'day'
 
 const RATE_RE = /^\s*(\d+)\s*\/\s*(second|minute|hour|day)\s*$/

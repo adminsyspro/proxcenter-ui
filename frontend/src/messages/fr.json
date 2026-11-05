@@ -12759,7 +12759,8 @@
       "resumeInfoSocle": "Refusé si les règles d'administration (SSH 22, web 8006) sont absentes : corrigez-les d'abord dans l'assistant de déploiement du tableau de bord",
       "openWizard": "Ouvrir l'assistant de déploiement",
       "clusterFirewallOff": "Pare-feu de cluster désactivé",
-      "notDeployed": "Rien de déployé"
+      "notDeployed": "Rien de déployé",
+      "socleUncovered": "Adresses que les règles n'acceptent pas : {ips}"
     },
     "pending": {
       "noCount": "Changements non appliqués",

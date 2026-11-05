@@ -404,17 +404,19 @@ EOF
 # The installer writes the host's addresses to PROXCENTER_HOST_IPS so the
 # preflight checks the right ones.
 
-# docker_bridge_ips: the addresses of the virtual interfaces of this host
-# that Proxmox never sees ProxCenter come from (Docker bridges and veth
-# pairs, libvirt, CNI/flannel/calico/weave/VXLAN overlays, Tailscale), one
-# per line. Without `ip`, the default docker0 gateway.
+# docker_bridge_ips: the addresses of the container interfaces of this host,
+# which Proxmox never sees ProxCenter come from (Docker bridges and veth
+# pairs, CNI, flannel, calico), one per line. Without `ip`, the default
+# docker0 gateway. Any other address is kept: the preflight then asks the
+# rules to accept it too, which can only be stricter (Tailscale, a libvirt
+# NAT or an overlay may be how this host reaches Proxmox).
 docker_bridge_ips() {
     if ! command -v ip > /dev/null 2>&1; then
         echo "172.17.0.1"
         return 0
     fi
     ip -o addr show 2>/dev/null \
-        | awk '$2 ~ /^(docker[0-9]*|docker_gwbridge|br-[0-9a-f]+|veth[^ ]*|virbr[^ ]*|cni[^ ]*|flannel[^ ]*|tailscale[^ ]*|cali[^ ]*|vxlan[^ ]*|weave[^ ]*)(@.*)?:?$/ { split($4, a, "/"); print a[1] }'
+        | awk '$2 ~ /^(docker[0-9]*|docker_gwbridge|br-[0-9a-f]+|veth[^ ]*|cni[^ ]*|flannel[^ ]*|cali[^ ]*)(@.*)?:?$/ { split($4, a, "/"); print a[1] }'
 }
 
 # filter_host_ips CANDIDATES EXCLUDED: the CANDIDATES (space separated, as

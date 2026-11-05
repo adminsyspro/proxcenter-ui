@@ -12758,7 +12758,8 @@
       "resumeInfoSocle": "관리 규칙(SSH 22, 웹 8006)이 없으면 거부됩니다. 먼저 대시보드의 배포 마법사에서 수정하세요",
       "openWizard": "배포 마법사 열기",
       "clusterFirewallOff": "클러스터 방화벽 비활성화됨",
-      "notDeployed": "배포된 항목 없음"
+      "notDeployed": "배포된 항목 없음",
+      "socleUncovered": "규칙이 허용하지 않는 주소: {ips}"
     },
     "pending": {
       "noCount": "적용되지 않은 변경",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { heldByStop, opensWizard, parseRate, preflightMessage } from './preflightModel'
+import { heldByStop, opensWizard, parseRate, preflightMessage, socleRefusalLines } from './preflightModel'
 
 describe('parseRate', () => {
   it('splits the rate PVE writes into a count and a unit', () => {
@@ -79,5 +79,19 @@ describe('outbound checks', () => {
   it('says the outbound variant of self_in_zone', () => {
     const check = { id: 'self_in_zone', status: 'warn' as const, detail: { zone: 'web', self_ip: '10.0.0.5', egress: true } }
     expect(preflightMessage(check).detail).toEqual({ key: 'checks.self_in_zone.inZoneEgress', values: { zone: 'web', self_ip: '10.0.0.5' } })
+  })
+})
+
+describe('a SOCLE_MISSING refusal', () => {
+  it('says the Docker reason and the addresses left out', () => {
+    expect(socleRefusalLines({ reason: 'docker_internal', uncovered: ['10.0.0.1', 7, '10.0.0.2'] })).toEqual([
+      { key: 'preflight.checks.self_in_zone.dockerInternal' },
+      { key: 'stop.socleUncovered', values: { ips: '10.0.0.1, 10.0.0.2' } },
+    ])
+  })
+
+  it('says nothing more without a detail', () => {
+    expect(socleRefusalLines(undefined)).toEqual([])
+    expect(socleRefusalLines({ web: false, ssh: true })).toEqual([])
   })
 })

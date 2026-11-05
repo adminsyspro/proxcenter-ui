@@ -12758,7 +12758,8 @@
       "resumeInfoSocle": "如果缺少管理规则（SSH 22、Web 8006）将被拒绝：请先在仪表板的部署向导中修复",
       "openWizard": "打开部署向导",
       "clusterFirewallOff": "集群防火墙已禁用",
-      "notDeployed": "尚未部署任何内容"
+      "notDeployed": "尚未部署任何内容",
+      "socleUncovered": "规则未接受的地址：{ips}"
     },
     "pending": {
       "noCount": "未应用的更改",

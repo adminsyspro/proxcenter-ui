@@ -12758,7 +12758,8 @@
       "resumeInfoSocle": "Se rechaza si faltan las reglas de administración (SSH 22, web 8006): corríjalas antes en el asistente de despliegue del panel",
       "openWizard": "Abrir el asistente de despliegue",
       "clusterFirewallOff": "Cortafuegos de clúster desactivado",
-      "notDeployed": "Nada desplegado"
+      "notDeployed": "Nada desplegado",
+      "socleUncovered": "Direcciones que las reglas no aceptan: {ips}"
     },
     "pending": {
       "noCount": "Cambios sin aplicar",

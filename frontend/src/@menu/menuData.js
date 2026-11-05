@@ -165,8 +165,9 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.reports'),
         icon: 'ri-file-chart-line',
         href: '/operations/reports',
-        // Permissions removed to expose the page in vDC tenant menus for
-        // scoping evaluation. API still enforces REPORTS_VIEW at runtime.
+        // Every tenant system role carries reports.view, so vDC tenant menus
+        // keep the entry; a custom role without it no longer lands on a 403 page.
+        permissions: ['reports.view'],
         requiredFeature: 'reports'
       }
     ]

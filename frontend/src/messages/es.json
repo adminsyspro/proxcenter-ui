@@ -8484,7 +8484,7 @@
     "permissionsCount": "Permisos ({count})",
     "widgetVisibility": {
       "title": "Visibilidad de widgets",
-      "desc": "Marque los widgets que se ocultarán del dashboard para los usuarios con este rol. Se suma al filtro automático basado en ámbito.",
+      "desc": "Los widgets marcados están disponibles en el dashboard para los usuarios con este rol; desmarque un widget para ocultarlo. Se suma al filtro automático basado en ámbito.",
       "hiddenCount": "{count} ocultos"
     },
     "defaultScope": {

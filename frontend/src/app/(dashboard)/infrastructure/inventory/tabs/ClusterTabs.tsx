@@ -68,6 +68,9 @@ import MetricServerTab from '@/components/MetricServerTab'
 import NotificationsTab from '@/components/NotificationsTab'
 import SnapshotsTab from '@/components/SnapshotsTab'
 import AttachPbsStorageDialog from '@/components/storage/AttachPbsStorageDialog'
+import ClusterStorageDialog from '@/components/storage/ClusterStorageDialog'
+import RemoveClusterStorageDialog from '@/components/storage/RemoveClusterStorageDialog'
+import { isClusterStorageType } from '@/lib/storage/clusterStorageTypes'
 import DetachPbsStorageDialog from '@/components/storage/DetachPbsStorageDialog'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 
@@ -272,6 +275,9 @@ export default function ClusterTabs(props: any) {
   const [clusterTagsLoaded, setClusterTagsLoaded] = useState<string | null>(null)
   const [attachPbsOpen, setAttachPbsOpen] = useState(false)
   const [detachPbsTarget, setDetachPbsTarget] = useState<{ connId: string; connName?: string | null; storage: string } | null>(null)
+  // roadmap#202: edit and removal of the other storage types.
+  const [editStorage, setEditStorage] = useState<string | null>(null)
+  const [removeStorage, setRemoveStorage] = useState<string | null>(null)
   const theme = useTheme()
   const chartTooltipStyle = { backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: 4, color: theme.palette.text.primary }
   const toast = useToast()
@@ -3114,7 +3120,7 @@ export default function ClusterTabs(props: any) {
                                   </TableCell>
                                   <TableCell>
                                     <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                                      {typeof storage.content === 'string' ? storage.content.split(',').join(', ') : (storage.content || '—')}
+                                      {(Array.isArray(storage.content) ? storage.content : String(storage.content || '').split(',')).filter(Boolean).join(', ') || '—'}
                                     </Typography>
                                   </TableCell>
                                   <TableCell>
@@ -3137,10 +3143,24 @@ export default function ClusterTabs(props: any) {
                                     )}
                                   </TableCell>
                                   {canManageCluster && (
-                                    <TableCell align="right">
-                                      {/* Seul un stockage PBS se détache d'ici: les autres
-                                          types ne sont pas rattachables depuis ProxCenter,
-                                          donc les proposer au retrait serait un piège. */}
+                                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                                      {/* Un PBS se détache (jeton révoqué) ; les autres types
+                                          s'éditent et se retirent, avec le contrôle d'usage
+                                          (roadmap#202). */}
+                                      {isClusterStorageType(storage.type) && (
+                                        <MuiTooltip title={t('storage.clusterStorage.edit')}>
+                                          <IconButton size="small" aria-label={t('storage.clusterStorage.edit')} onClick={() => setEditStorage(storage.storage)}>
+                                            <i className="ri-pencil-line" style={{ fontSize: 16 }} />
+                                          </IconButton>
+                                        </MuiTooltip>
+                                      )}
+                                      {storage.type !== 'pbs' && (
+                                        <MuiTooltip title={t('storage.clusterStorage.remove')}>
+                                          <IconButton size="small" color="error" aria-label={t('storage.clusterStorage.remove')} onClick={() => setRemoveStorage(storage.storage)}>
+                                            <i className="ri-delete-bin-line" style={{ fontSize: 16 }} />
+                                          </IconButton>
+                                        </MuiTooltip>
+                                      )}
                                       {storage.type === 'pbs' && (
                                         <MuiTooltip title={t('storage.attachPbs.detach')}>
                                           <IconButton
@@ -3183,6 +3203,24 @@ export default function ClusterTabs(props: any) {
                         onClose={() => setAttachPbsOpen(false)}
                         cluster={{ id: clusterConnId, name: data?.title }}
                         onAttached={() => loadClusterStorage?.(clusterConnId)}
+                      />
+                    )}
+
+                    {editStorage && (
+                      <ClusterStorageDialog
+                        cluster={{ id: clusterConnId, name: data?.title }}
+                        mode="edit"
+                        storage={editStorage}
+                        onClose={() => setEditStorage(null)}
+                        onSaved={() => loadClusterStorage?.(clusterConnId)}
+                      />
+                    )}
+
+                    {removeStorage && (
+                      <RemoveClusterStorageDialog
+                        target={{ connId: clusterConnId, storage: removeStorage }}
+                        onClose={() => setRemoveStorage(null)}
+                        onRemoved={() => loadClusterStorage?.(clusterConnId)}
                       />
                     )}
 

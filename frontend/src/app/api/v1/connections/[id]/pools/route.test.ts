@@ -44,12 +44,16 @@ vi.mock('@/lib/proxmox/client', () => {
 
 vi.mock('@/lib/audit', () => ({ audit: vi.fn<(...args: any[]) => Promise<string>>() }))
 vi.mock('@/lib/cache/inventoryCache', () => ({ invalidateInventoryCache: vi.fn<() => void>() }))
-vi.mock('@/lib/db/prisma', () => ({ prisma: { vdc: { findFirst: vi.fn<(...args: any[]) => Promise<any>>() } } }))
+vi.mock('@/lib/cache/guestSetRefresh', () => ({ refreshCachedGuests: vi.fn<(...args: any[]) => Promise<void>>() }))
+vi.mock('@/lib/db/prisma', () => ({
+  prisma: { vdc: { findFirst: vi.fn<(...args: any[]) => Promise<any>>(), findMany: vi.fn<(...args: any[]) => Promise<any[]>>() } },
+}))
 
 import { GET, POST, PUT, DELETE } from './route'
 import { audit } from '@/lib/audit'
 import { invalidateInventoryCache } from '@/lib/cache/inventoryCache'
 import { prisma } from '@/lib/db/prisma'
+import { refreshCachedGuests } from '@/lib/cache/guestSetRefresh'
 import { checkPermission, getRequestGuestScopePerimeter } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch, PveApplicationError } from '@/lib/proxmox/client'
@@ -66,6 +70,7 @@ beforeEach(() => {
   getRequestGuestScopePerimeterMock.mockResolvedValue(null)
   getConnectionByIdMock.mockResolvedValue({ id: 'c1' })
   ;(prisma.vdc.findFirst as any).mockResolvedValue(null)
+  ;(prisma.vdc.findMany as any).mockResolvedValue([])
   pveFetchMock.mockResolvedValue([
     { poolid: 'p1', comment: 'first pool' },
     { poolid: 'p2', comment: null },
@@ -348,5 +353,183 @@ describe('pools writes: failures', () => {
 
     expect(res.status).toBe(404)
     expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/v1/connections/[id]/pools?poolid=: members', () => {
+  const members = [
+    { id: 'lxc/7001', type: 'lxc', vmid: 7001, node: 'n2', name: 'web', status: 'running', template: 0 },
+    { id: 'qemu/101', type: 'qemu', vmid: 101, node: 'n1', name: 'db', status: 'stopped', template: 1 },
+    { id: 'storage/n1/local-lvm', type: 'storage', storage: 'local-lvm', node: 'n1', plugintype: 'lvmthin', shared: 0 },
+    { id: 'storage/n1/ceph', type: 'storage', storage: 'ceph', node: 'n1', plugintype: 'rbd', shared: 1 },
+    { id: 'storage/n2/ceph', type: 'storage', storage: 'ceph', node: 'n2', plugintype: 'rbd', shared: 1 },
+  ]
+
+  it('reads the members on the PVE 8.1+ form and lists each storage once', async () => {
+    pveFetchMock
+      .mockResolvedValueOnce([{ poolid: 'p1', comment: 'first pool' }])
+      .mockResolvedValueOnce([{ poolid: 'p1', comment: 'first pool', members }])
+
+    const res = await callRoute(GET as any, { method: 'GET', params: { id: 'c1' }, searchParams: { poolid: 'p1' } })
+    const body = await readJson<any>(res)
+
+    expect(res.status).toBe(200)
+    expect(pveFetchMock.mock.calls[1][1]).toBe('/pools?poolid=p1')
+    expect(body.data.comment).toBe('first pool')
+    expect(body.data.guests).toEqual([
+      { vmid: 101, type: 'qemu', node: 'n1', name: 'db', status: 'stopped', template: true },
+      { vmid: 7001, type: 'lxc', node: 'n2', name: 'web', status: 'running', template: false },
+    ])
+    expect(body.data.storages).toEqual([
+      { storage: 'ceph', type: 'rbd', shared: true, nodes: ['n1', 'n2'] },
+      { storage: 'local-lvm', type: 'lvmthin', shared: false, nodes: ['n1'] },
+    ])
+  })
+
+  it('falls back to /pools/{poolid} on a PVE 8.0 that refuses the parameter', async () => {
+    pveFetchMock
+      .mockResolvedValueOnce([{ poolid: 'p1' }])
+      .mockRejectedValueOnce(new (PveApplicationError as any)('PVE 400 /pools: bad param', 400))
+      .mockResolvedValueOnce({ members: members.slice(0, 1) })
+
+    const res = await callRoute(GET as any, { method: 'GET', params: { id: 'c1' }, searchParams: { poolid: 'p1' } })
+    const body = await readJson<any>(res)
+
+    expect(pveFetchMock.mock.calls[2][1]).toBe('/pools/p1')
+    expect(body.data.guests.map((g: any) => g.vmid)).toEqual([7001])
+  })
+
+  it('falls back too when PVE 8.0 ignores the parameter and lists the pools', async () => {
+    pveFetchMock
+      .mockResolvedValueOnce([{ poolid: 'p1' }])
+      .mockResolvedValueOnce([{ poolid: 'p1' }])
+      .mockResolvedValueOnce({})
+
+    const body = await readJson<any>(await callRoute(GET as any, { method: 'GET', params: { id: 'c1' }, searchParams: { poolid: 'p1' } }))
+
+    expect(body.data).toEqual({ poolid: 'p1', comment: null, guests: [], storages: [] })
+  })
+
+  it('never reads the legacy path for a nested id', async () => {
+    pveFetchMock.mockResolvedValueOnce([{ poolid: 'a/b' }]).mockResolvedValueOnce([])
+
+    const body = await readJson<any>(await callRoute(GET as any, { method: 'GET', params: { id: 'c1' }, searchParams: { poolid: 'a/b' } }))
+
+    expect(pveFetchMock).toHaveBeenCalledTimes(2)
+    expect(body.data.guests).toEqual([])
+  })
+
+  it('relays any other Proxmox failure', async () => {
+    pveFetchMock.mockResolvedValueOnce([{ poolid: 'p1' }]).mockRejectedValueOnce(new Error('boom'))
+
+    const res = await callRoute(GET as any, { method: 'GET', params: { id: 'c1' }, searchParams: { poolid: 'p1' } })
+
+    expect(res.status).toBe(500)
+  })
+
+  it.each(['p9', '../x'])('answers 404 for a pool outside the visible list (%j)', async poolid => {
+    const res = await callRoute(GET as any, { method: 'GET', params: { id: 'c1' }, searchParams: { poolid } })
+
+    expect(res.status).toBe(404)
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('PUT /api/v1/connections/[id]/pools: members', () => {
+  const put = (body: any) => callRoute(PUT as any, { method: 'PUT', params: { id: 'c1' }, body: { poolid: 'p1', ...body } })
+
+  it('adds guests and storages in one PVE 8.1+ call and patches the cached guests', async () => {
+    pveFetchMock.mockResolvedValue(null)
+
+    const res = await put({ vms: [101, '102', 101], storage: ['local-lvm'] })
+    const body = await readJson<any>(res)
+
+    expect(res.status).toBe(200)
+    expect(pveCall()).toEqual({ path: '/pools', method: 'PUT', body: { poolid: 'p1', vms: '101,102', storage: 'local-lvm' } })
+    expect(body.data).toEqual({ poolid: 'p1', vms: [101, 102], storage: ['local-lvm'], delete: false })
+    expect(refreshCachedGuests).toHaveBeenCalledWith('c1', { id: 'c1' })
+    expect(invalidateInventoryCache).not.toHaveBeenCalled()
+    expect((audit as any).mock.calls[0][0]).toMatchObject({ action: 'pool.update', status: 'success', details: { members: 'add', vms: ['101', '102'] } })
+  })
+
+  it('removes members with delete, and leaves the guest cache alone for storages only', async () => {
+    pveFetchMock.mockResolvedValue(null)
+
+    await put({ storage: ['local-lvm'], delete: true, allowMove: true })
+
+    expect(pveCall().body).toEqual({ poolid: 'p1', storage: 'local-lvm', delete: '1' })
+    expect(refreshCachedGuests).not.toHaveBeenCalled()
+  })
+
+  it('moves a guest from a plain pool with allow-move', async () => {
+    pveFetchMock.mockResolvedValueOnce([{ vmid: 101, pool: 'other' }, { vmid: 200, pool: 'vdc-x' }]).mockResolvedValueOnce(null)
+
+    const res = await put({ vms: [101], allowMove: true })
+
+    expect(res.status).toBe(200)
+    expect((prisma.vdc.findMany as any).mock.calls[1][0].where.pvePoolName.in).toEqual(['other'])
+    expect(pveCall(1).body).toEqual({ poolid: 'p1', vms: '101', 'allow-move': '1' })
+  })
+
+  it('refuses to move a guest out of a vDC pool', async () => {
+    pveFetchMock.mockResolvedValueOnce([{ vmid: 101, pool: 'acme' }])
+    ;(prisma.vdc.findMany as any).mockResolvedValueOnce([]).mockResolvedValueOnce([{ pvePoolName: 'acme' }])
+
+    const res = await put({ vms: [101], allowMove: true })
+    const body = await readJson<any>(res)
+
+    expect(res.status).toBe(409)
+    expect(body.code).toBe('GUEST_IN_VDC_POOL')
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['a vDC row', 'p1', [{ pvePoolName: 'p1' }]],
+    ['the vdc- prefix', 'vdc-acme-prod', []],
+  ])('keeps a vDC pool out of reach (%s)', async (_label, poolid, rows) => {
+    ;(prisma.vdc.findMany as any).mockResolvedValueOnce(rows)
+
+    for (const extra of [{ vms: [101] }, { storage: ['ceph'], delete: true }]) {
+      const res = await callRoute(PUT as any, { method: 'PUT', params: { id: 'c1' }, body: { poolid, ...extra } })
+
+      expect(res.status).toBe(409)
+      ;(prisma.vdc.findMany as any).mockResolvedValueOnce(rows)
+    }
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [{ vms: '101' }, 'vms and storage must be arrays'],
+    [{ vms: [] }, 'Nothing to add or remove'],
+    [{ vms: ['12'] }, 'Invalid guest id'],
+    [{ storage: ['bad id'] }, 'Invalid storage id'],
+  ])('refuses the malformed change %j', async (extra, error) => {
+    const res = await put(extra)
+
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res)).error).toBe(error)
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('relays and audits a Proxmox refusal', async () => {
+    pveFetchMock.mockRejectedValueOnce(new (PveApplicationError as any)(
+      'PVE 500 /pools: {"message":"VM 101 belongs already to pool \'x\' and \'allow-move\' is not set"}', 500))
+
+    const res = await put({ vms: [101] })
+
+    expect(res.status).toBe(500)
+    expect((await readJson<any>(res)).error).toContain('allow-move')
+    expect((audit as any).mock.calls[0][0]).toMatchObject({ status: 'failure' })
+    expect(refreshCachedGuests).not.toHaveBeenCalled()
+  })
+
+  it('falls back to /pools/{poolid} on PVE 8.0 with the same fields', async () => {
+    pveFetchMock
+      .mockRejectedValueOnce(new (PveApplicationError as any)('PVE 501 /pools: not implemented', 501))
+      .mockResolvedValueOnce(null)
+
+    await put({ vms: [101], delete: true })
+
+    expect(pveCall(1)).toEqual({ path: '/pools/p1', method: 'PUT', body: { vms: '101', delete: '1' } })
   })
 })

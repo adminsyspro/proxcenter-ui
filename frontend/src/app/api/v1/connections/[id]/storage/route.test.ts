@@ -34,9 +34,18 @@ vi.mock('@/lib/connections/getConnection', () => ({
   getConnectionById: vi.fn<(id: string) => Promise<any>>(),
 }))
 
-vi.mock('@/lib/proxmox/client', () => ({
-  pveFetch: vi.fn<(...args: any[]) => Promise<any>>(),
-}))
+vi.mock('@/lib/proxmox/client', () => {
+  class PveApplicationError extends Error {
+    statusCode: number
+
+    constructor(message: string, statusCode: number) {
+      super(message)
+      this.statusCode = statusCode
+    }
+  }
+
+  return { pveFetch: vi.fn<(...args: any[]) => Promise<any>>(), PveApplicationError }
+})
 
 vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: vi.fn<() => Promise<string>>(),
@@ -73,7 +82,7 @@ import { GET, POST } from './route'
 import { checkPermission, getCurrentRbacInfraScope, getRequestGuestScopePerimeter, PERMISSIONS } from '@/lib/rbac'
 import { deriveRbacInfraScope } from '@/lib/rbac/infraScope'
 import { getConnectionById } from '@/lib/connections/getConnection'
-import { pveFetch } from '@/lib/proxmox/client'
+import { pveFetch, PveApplicationError } from '@/lib/proxmox/client'
 import { getCurrentTenantId, getSessionPrisma } from '@/lib/tenant'
 import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraScope'
 import { audit } from '@/lib/audit'
@@ -283,13 +292,23 @@ describe('POST /api/v1/connections/[id]/storage', () => {
     expect(attachPbsStorage).not.toHaveBeenCalled()
   })
 
-  it('rejects a non-PBS storage type', async () => {
+  it('rejects a storage type it does not know', async () => {
+    const res = await callRoute(POST, {
+      method: 'POST', params: { id: 'c1' }, body: { ...registeredBody, type: 'glusterfs' },
+    })
+
+    expect(res.status).toBe(400)
+    expect(await readJson(res)).toEqual({ error: 'Unsupported storage type' })
+    expect(attachPbsStorage).not.toHaveBeenCalled()
+  })
+
+  it('sends another type to the cluster storage path, never to the PBS attach (roadmap#202)', async () => {
     const res = await callRoute(POST, {
       method: 'POST', params: { id: 'c1' }, body: { ...registeredBody, type: 'nfs' },
     })
 
     expect(res.status).toBe(400)
-    expect(await readJson(res)).toEqual({ error: expect.stringContaining('Unsupported storage type "nfs"') })
+    expect(await readJson(res)).toEqual({ error: 'server is required', code: 'invalid_request' })
     expect(attachPbsStorage).not.toHaveBeenCalled()
   })
 
@@ -388,6 +407,66 @@ describe('POST /api/v1/connections/[id]/storage', () => {
 
 // Issue #921: a caller granted connection.view on a node or a storage of the
 // cluster gets the storages that grant covers instead of a 403.
+describe('POST /api/v1/connections/[id]/storage: cluster storage types (roadmap#202)', () => {
+  const nfs = { type: 'nfs', storage: 'nfs-main', fields: { server: '10.0.0.5', export: '/srv' }, content: ['images', 'iso'], nodes: ['n1'], bwlimit: { default: 10 } }
+  const cifs = { type: 'cifs', storage: 'smb', fields: { server: 's', share: 'x', username: 'u', password: 'pa55-word' }, content: ['iso'] }
+
+  beforeEach(() => {
+    vi.mocked(audit).mockReset()
+    getConnectionByIdMock.mockResolvedValue({ id: 'c1', name: 'prod' })
+  })
+
+  it('creates the storage in one Proxmox call and audits it without its secrets', async () => {
+    const calls: Array<{ path: string; body?: Record<string, string> }> = []
+    pveFetchMock.mockImplementation(async (_c: any, path: string, init?: any) => {
+      calls.push({ path, body: init?.body ? Object.fromEntries(init.body) : undefined })
+      return path === '/nodes' ? [{ node: 'n1' }] : null
+    })
+
+    const res = await callRoute(POST, { method: 'POST', params: { id: 'c1' }, body: nfs })
+
+    expect(res.status).toBe(201)
+    expect(await readJson(res)).toEqual({ data: { storage: 'nfs-main', type: 'nfs' } })
+    expect(calls).toEqual([
+      { path: '/nodes', body: undefined },
+      { path: '/storage', body: { storage: 'nfs-main', type: 'nfs', server: '10.0.0.5', export: '/srv', content: 'images,iso', nodes: 'n1', bwlimit: 'default=10240' } },
+    ])
+    expect(vi.mocked(audit).mock.calls[0][0]).toMatchObject({ action: 'create', status: 'success', resourceId: 'nfs-main' })
+
+    pveFetchMock.mockResolvedValue(null)
+    await callRoute(POST, { method: 'POST', params: { id: 'c1' }, body: cifs })
+    expect(JSON.stringify(vi.mocked(audit).mock.calls)).not.toContain('pa55-word')
+  })
+
+  it('refuses a node that is not part of the cluster', async () => {
+    pveFetchMock.mockResolvedValue([{ node: 'n1' }])
+
+    const res = await callRoute(POST, { method: 'POST', params: { id: 'c1' }, body: { ...nfs, nodes: ['n9'] } })
+
+    expect(res.status).toBe(400)
+    expect(await readJson(res)).toEqual({ error: 'Unknown node(s) on this cluster: n9' })
+  })
+
+  it('relays a Proxmox refusal with the password masked, and audits the failure', async () => {
+    pveFetchMock.mockRejectedValue(new (PveApplicationError as any)('PVE 400 /storage: {"message":"mount failed for pa55-word"}', 400))
+
+    const res = await callRoute(POST, { method: 'POST', params: { id: 'c1' }, body: cifs })
+
+    expect(res.status).toBe(400)
+    expect(await readJson(res)).toEqual({ error: 'mount failed for ***' })
+    expect(vi.mocked(audit).mock.calls[0][0]).toMatchObject({ status: 'failure', errorMessage: 'mount failed for ***' })
+  })
+
+  it('answers 500 for an error that is not a Proxmox refusal', async () => {
+    pveFetchMock.mockRejectedValue(new Error('socket hang up'))
+
+    const res = await callRoute(POST, { method: 'POST', params: { id: 'c1' }, body: { ...nfs, nodes: [] } })
+
+    expect(res.status).toBe(500)
+    expect(await readJson(res)).toEqual({ error: 'socket hang up' })
+  })
+})
+
 describe('GET /api/v1/connections/[id]/storage: node- and storage-scoped callers', () => {
   const cluster = () => {
     pveFetchMock.mockImplementation((_conn: any, path: string) => {

@@ -25,6 +25,30 @@ const keys: Record<string, string[]> = {
   poolUpdated: ['{pool}'],
   poolDeleted: ['{pool}'],
   poolOwnedByVdc: ['{vdc}'],
+  // Pool members (roadmap#200).
+  poolMembersMenu: [],
+  poolMembersTitle: ['{pool}'],
+  poolMembersGuests: [],
+  poolMembersStorages: [],
+  poolMembersAddGuests: [],
+  poolMembersAddStorages: [],
+  poolMembersNoGuests: [],
+  poolMembersNoStorages: [],
+  poolMembersMoves: ['count'],
+  poolMembersUpdated: ['{pool}'],
+  poolMembersVdc: [],
+  poolMembersGuestInVdc: [],
+  poolMembersRemove: [],
+  poolMembersUndo: [],
+  poolMembersShared: [],
+  guestPool: [],
+  guestPoolNone: [],
+  guestPoolVdc: [],
+  // Options rows PVE keeps to root@pam (roadmap#201).
+  rootOnlyOption: [],
+  // Container CPU card (roadmap#201 recette).
+  lxcCores: [],
+  lxcCpuCount: ['count'],
 }
 
 describe('pool management i18n parity across the 6 served locales', () => {

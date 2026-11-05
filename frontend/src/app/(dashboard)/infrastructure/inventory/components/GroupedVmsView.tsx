@@ -45,9 +45,13 @@ type GroupedVmsViewProps = {
   vdcNameByConn?: Map<string, string>
   nodeStatuses?: Map<string, string | undefined>  // #666: node column pastille, keyed `${connId}:${node}`
   guestSelection?: GuestSelection  // #1218: "Migrate selection" across the groups
+  /** Action next to the expand/collapse buttons of the header (the Pools view's Create pool). */
+  headerAction?: React.ReactNode
+  /** Action at the end of a group row, before its count (the Pools view's Members). */
+  groupAction?: (group: { key: string; label: string }) => React.ReactNode
 }
 
-function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, onMigrate, onLoadTrendsBatch, onSelect, favorites, onToggleFavorite, migratingVmIds, showVdcColumn, vdcNameByConn, nodeStatuses, guestSelection }: GroupedVmsViewProps) {
+function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, onMigrate, onLoadTrendsBatch, onSelect, favorites, onToggleFavorite, migratingVmIds, showVdcColumn, vdcNameByConn, nodeStatuses, guestSelection, headerAction, groupAction }: GroupedVmsViewProps) {
   const t = useTranslations()
   // Par défaut, TOUS les groupes sont repliés
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -120,6 +124,7 @@ return next
             </Typography>
             <Stack direction="row" spacing={0.5} alignItems="center">
               {guestSelection && <GuestSelectionBar selection={guestSelection} inline />}
+              {headerAction}
               <MuiTooltip title={t('inventoryPage.expandAll')}>
                 <IconButton size="small" onClick={expandAll}>
                   <i className="ri-expand-up-down-line" style={{ fontSize: 16 }} />
@@ -183,6 +188,7 @@ return next
                         {group.sublabel}
                       </Typography>
                     )}
+                    {groupAction?.(group)}
                     <Chip
                       size="small"
                       label={`${runningCount}/${group.vms.length}`}

@@ -33,6 +33,7 @@ import {
   canEditLxcFeature,
   humanizePveError,
   optionSaveBody,
+  memoryChipLabel,
   guestNameOptionEdit,
   formatRrdTick,
   formatRrdTooltipTs,
@@ -1397,6 +1398,9 @@ describe('optionSaveBody', () => {
 
   it('turns an emptied features string into a delete, which PVE accepts', () => {
     expect(optionSaveBody('features', '')).toEqual({ delete: 'features' })
+    // roadmap#201: an emptied state storage goes back to automatic.
+    expect(optionSaveBody('vmstatestorage', '')).toEqual({ delete: 'vmstatestorage' })
+    expect(optionSaveBody('vmstatestorage', 'local-lvm')).toEqual({ vmstatestorage: 'local-lvm' })
   })
 })
 
@@ -1925,5 +1929,15 @@ describe('fetchDetails: Hyper-V host and hypervisor group', () => {
     expect(payload?.extTypeInfo?.hosts[0].vms).toEqual([hvVm])
     expect(urls).toContain('/api/v1/hyperv/conn-hv/vms')
     expect(urls.some(u => u.startsWith('/api/v1/vmware/'))).toBe(false)
+  })
+})
+
+describe('memoryChipLabel', () => {
+  it('shows MB under 1 GB and GB with one decimal above', () => {
+    expect(memoryChipLabel(128)).toBe('128 MB')
+    expect(memoryChipLabel(1024)).toBe('1 GB')
+    expect(memoryChipLabel(1536)).toBe('1.5 GB')
+    expect(memoryChipLabel(0)).toBe('0 MB')
+    expect(memoryChipLabel(Number.NaN)).toBe('0 MB')
   })
 })

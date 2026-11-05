@@ -110,6 +110,20 @@ describe('enforceTenantDrives', () => {
     expect(result).toEqual({ addStorageMbByStorage: { 'ceph-nvme': 1024 }, totalAddMb: 1024, importRefs: [] })
   })
 
+  it('iaas: vmstatestorage must name a storage of the vDC (roadmap#201)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
+    await expect(enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: 'other' } }))
+      .rejects.toThrow('vmstatestorage: this storage is not part of your vDC.')
+    await expect(enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: 'gold' } })).resolves.not.toBeNull()
+    // Emptied: back to the default, nothing to check.
+    await expect(enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: '' } })).resolves.not.toBeNull()
+  })
+
+  it('provider: vmstatestorage is not checked', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    await expect(enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: 'any' } })).resolves.toBeNull()
+  })
+
   it('iaas: non-disk keys (net0, cores) are ignored', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme']))
     const body = { net0: 'virtio,bridge=vmbr0', cores: '4' }

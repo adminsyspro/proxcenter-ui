@@ -531,7 +531,7 @@ export async function pveFetch<T>(
 
         const shouldFailover = incrementFailures(opts.id)
         if (!shouldFailover) {
-          console.warn(`[failover] Connection ${safeLog(opts.id)} failure ${getFailureCount(opts.id)}/${FAILURE_THRESHOLD} for ${safeLog(path)} (${classifyPveError(err)})`)
+          console.warn(`[failover] Connection ${safeLog(opts.id)} failure ${getFailureCount(opts.id)}/${FAILURE_THRESHOLD} for ${safeLog(path.split('?')[0])} (${classifyPveError(err)})`)
           // roadmap#194: below the threshold the circuit stays closed, but
           // the request that met the dead primary need not fail for it.
           if (isConnectPhaseFailure(err, replaySafe)) return viaPeerOnce(opts.id, err)

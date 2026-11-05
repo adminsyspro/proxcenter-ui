@@ -42,7 +42,7 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
     'gfr-probe', 'gfr-job-create', 'gfr-job-cancel',
   ],
   storage: [
-    'storage-attach-pbs', 'storage-detach', 'storage-content-delete', 'storage-download-url', 'aplinfo-download',
+    'storage-attach-pbs', 'storage-detach', 'storage-update', 'storage-scan', 'storage-content-delete', 'storage-download-url', 'aplinfo-download',
   ],
   ha: [
     'ha-resource-upsert', 'ha-resource-delete', 'ha-group-create', 'ha-group-update', 'ha-group-delete',

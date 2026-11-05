@@ -112,7 +112,7 @@
       },
       "VmConfigUpdateRequest": {
         "type": "object",
-        "description": "Proxmox configuration keys to write. QEMU: name, description, tags, onboot, protection, startup, cores, sockets, cpu, vcpus, cpulimit, cpuunits, numa, memory, balloon, shares, boot, bootdisk, bios, machine, agent, scsihw, vga, ostype, hotplug, tablet, localtime, freeze, kvm, acpi, args, cloud-init keys, netN, scsiN/virtioN/ideN/sataN, unusedN, hostpciN, usbN, ipconfigN, efidiskN, tpmstateN, serialN, audioN, rng0. LXC: hostname, description, tags, onboot, protection, startup, cores, cpulimit, cpuunits, memory, swap, unprivileged, features, netN, unusedN. Other keys are dropped.",
+        "description": "Proxmox configuration keys to write. QEMU: name, description, tags, onboot, protection, startup, cores, sockets, cpu, vcpus, cpulimit, cpuunits, numa, memory, balloon, shares, boot, bootdisk, bios, machine, agent, scsihw, vga, ostype, hotplug, tablet, localtime, freeze, kvm, acpi, startdate, vmstatestorage, args, cloud-init keys, netN, scsiN/virtioN/ideN/sataN, unusedN, hostpciN, usbN, ipconfigN, efidiskN, tpmstateN, serialN, audioN, rng0. LXC: hostname, description, tags, onboot, protection, startup, cores, cpulimit, cpuunits, memory, swap, unprivileged, features, netN, unusedN. Other keys are dropped.",
         "properties": {
           "delete": {
             "type": "string",
@@ -1583,6 +1583,212 @@
           }
         }
       },
+      "StorageCreateRequest": {
+        "description": "A PBS datastore (StorageAttachPbsRequest) or one of the cluster storage types below.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StorageAttachPbsRequest"
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "storage",
+              "fields",
+              "content"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "nfs",
+                  "cifs",
+                  "iscsi",
+                  "lvm",
+                  "rbd",
+                  "cephfs",
+                  "zfs",
+                  "dir"
+                ]
+              },
+              "storage": {
+                "type": "string",
+                "description": "Name of the new PVE storage"
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Type fields by Proxmox key. nfs: server, export, options. cifs: server, share, username, password, domain, smbversion, subdir. iscsi: portal, target. lvm: vgname, base, saferemove. rbd: monhost, pool, username, keyring, krbd. cephfs: monhost, username, keyring (the client key), fs-name. zfs: portal, pool, target, iscsiprovider, lio_tpg, blocksize, sparse, nowritecache. dir: path, is_mountpoint. Secrets are never returned."
+              },
+              "content": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Allowed contents for this type (iscsi: images to use the LUNs directly, or none)"
+              },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Nodes allowed to use the storage; empty = every node"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "shared": {
+                "type": "boolean",
+                "description": "dir and lvm only"
+              },
+              "bwlimit": {
+                "type": "object",
+                "description": "Bandwidth limits in MiB/s; a missing or null kind has no limit",
+                "properties": {
+                  "default": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "migration": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "restore": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "clone": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "move": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "StorageUpdateRequest": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "description": "Fields Proxmox fixes at creation are ignored; a blank secret keeps the stored one; an emptied optional field is cleared.",
+        "properties": {
+          "fields": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Type fields by Proxmox key. nfs: server, export, options. cifs: server, share, username, password, domain, smbversion, subdir. iscsi: portal, target. lvm: vgname, base, saferemove. rbd: monhost, pool, username, keyring, krbd. cephfs: monhost, username, keyring (the client key), fs-name. zfs: portal, pool, target, iscsiprovider, lio_tpg, blocksize, sparse, nowritecache. dir: path, is_mountpoint. Secrets are never returned."
+          },
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Allowed contents for this type (iscsi: images to use the LUNs directly, or none)"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Nodes allowed to use the storage; empty = every node"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "shared": {
+            "type": "boolean",
+            "description": "dir and lvm only"
+          },
+          "bwlimit": {
+            "type": "object",
+            "description": "Bandwidth limits in MiB/s; a missing or null kind has no limit",
+            "properties": {
+              "default": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "migration": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "restore": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "clone": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "move": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "StorageScanRequest": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "nfs",
+              "cifs",
+              "iscsi",
+              "lvm"
+            ]
+          },
+          "server": {
+            "type": "string",
+            "description": "nfs, cifs"
+          },
+          "username": {
+            "type": "string",
+            "description": "cifs"
+          },
+          "password": {
+            "type": "string",
+            "description": "cifs"
+          },
+          "domain": {
+            "type": "string",
+            "description": "cifs"
+          },
+          "portal": {
+            "type": "string",
+            "description": "iscsi"
+          }
+        }
+      },
       "StorageAttachPbsRequest": {
         "type": "object",
         "required": [
@@ -1596,7 +1802,7 @@
             "enum": [
               "pbs"
             ],
-            "description": "Only pbs can be attached; defaults to pbs"
+            "description": "pbs (the default); see StorageCreateRequest for the other types"
           },
           "storage": {
             "type": "string",
@@ -1884,8 +2090,7 @@
       "PoolUpdateRequest": {
         "type": "object",
         "required": [
-          "poolid",
-          "comment"
+          "poolid"
         ],
         "properties": {
           "poolid": {
@@ -1894,7 +2099,29 @@
           },
           "comment": {
             "type": "string",
-            "description": "Empty string clears it"
+            "description": "Empty string clears it. Required when neither vms nor storage is given"
+          },
+          "vms": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Guests to add, or to remove with delete"
+          },
+          "storage": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Storages to add, or to remove with delete"
+          },
+          "delete": {
+            "type": "boolean",
+            "description": "Remove vms and storage from the pool instead of adding them"
+          },
+          "allowMove": {
+            "type": "boolean",
+            "description": "Move a guest that belongs to another pool"
           }
         }
       },
@@ -4409,6 +4636,79 @@
           }
         }
       },
+      "StorageCreateResponse": {
+        "description": "Answered with HTTP 201: the PBS attach result, or the new storage and its type.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StorageAttachPbsResponse"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "storage": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "StorageConfigResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "storage.cfg entry, secrets left out"
+          }
+        }
+      },
+      "StorageUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "storage": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "StorageScanResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "nfs: export paths, cifs: shares, iscsi: targets, lvm: volume groups"
+          }
+        }
+      },
       "StorageDetachResponse": {
         "type": "object",
         "properties": {
@@ -4437,6 +4737,10 @@
                   "type": "string"
                 },
                 "description": "kept-in-use: the clusters still using the token"
+              },
+              "removed": {
+                "type": "boolean",
+                "description": "Any other type: the storage was removed from storage.cfg"
               }
             }
           }
@@ -4600,21 +4904,102 @@
         "type": "object",
         "properties": {
           "data": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "poolid": {
-                  "type": "string"
-                },
-                "comment": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "poolid": {
+                      "type": "string"
+                    },
+                    "comment": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "poolid": {
+                    "type": "string"
+                  },
+                  "comment": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "guests": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "vmid": {
+                          "type": "integer"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "qemu",
+                            "lxc"
+                          ]
+                        },
+                        "node": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "status": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "template": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  },
+                  "storages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "storage": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "shared": {
+                          "type": "boolean"
+                        },
+                        "nodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
-            }
+            ],
+            "description": "The pools, or with `poolid` that pool and its members"
           },
           "restricted": {
             "type": "boolean",
@@ -4626,18 +5011,45 @@
         "type": "object",
         "properties": {
           "data": {
-            "type": "object",
-            "properties": {
-              "poolid": {
-                "type": "string"
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "poolid": {
+                    "type": "string"
+                  },
+                  "comment": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
               },
-              "comment": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+              {
+                "type": "object",
+                "properties": {
+                  "poolid": {
+                    "type": "string"
+                  },
+                  "vms": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  },
+                  "storage": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "delete": {
+                    "type": "boolean"
+                  }
+                }
               }
-            }
+            ]
           }
         }
       },
@@ -6943,7 +7355,7 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "description": "Proxmox configuration keys to write. QEMU: name, description, tags, onboot, protection, startup, cores, sockets, cpu, vcpus, cpulimit, cpuunits, numa, memory, balloon, shares, boot, bootdisk, bios, machine, agent, scsihw, vga, ostype, hotplug, tablet, localtime, freeze, kvm, acpi, args, cloud-init keys, netN, scsiN/virtioN/ideN/sataN, unusedN, hostpciN, usbN, ipconfigN, efidiskN, tpmstateN, serialN, audioN, rng0. LXC: hostname, description, tags, onboot, protection, startup, cores, cpulimit, cpuunits, memory, swap, unprivileged, features, netN, unusedN. Other keys are dropped.",
+                "description": "Proxmox configuration keys to write. QEMU: name, description, tags, onboot, protection, startup, cores, sockets, cpu, vcpus, cpulimit, cpuunits, numa, memory, balloon, shares, boot, bootdisk, bios, machine, agent, scsihw, vga, ostype, hotplug, tablet, localtime, freeze, kvm, acpi, startdate, vmstatestorage, args, cloud-init keys, netN, scsiN/virtioN/ideN/sataN, unusedN, hostpciN, usbN, ipconfigN, efidiskN, tpmstateN, serialN, audioN, rng0. LXC: hostname, description, tags, onboot, protection, startup, cores, cpulimit, cpuunits, memory, swap, unprivileged, features, netN, unusedN. Other keys are dropped.",
                 "properties": {
                   "delete": {
                     "type": "string",
@@ -16898,8 +17310,8 @@
       },
       "post": {
         "operationId": "storage-attach-pbs",
-        "summary": "Attach a PBS datastore to a cluster",
-        "description": "Adds a `pbs:` storage pointing at a datastore of the PBS connection `pbsConnectionId`, which must also be inside the token perimeter. ProxCenter mints a PBS token scoped to that datastore for the cluster. Answers 201. Not available to a vDC tenant token.\n\nRequired scope: `storage:write`",
+        "summary": "Add a storage to a cluster",
+        "description": "With `type: pbs` (the default), adds a `pbs:` storage pointing at a datastore of the PBS connection `pbsConnectionId`, which must also be inside the token perimeter; ProxCenter mints a PBS token scoped to that datastore for the cluster. With nfs, cifs, iscsi, lvm, rbd (external Ceph), cephfs, zfs (ZFS over iSCSI) or dir, adds that storage with its fields, contents, nodes and bandwidth limits; secrets are never returned. Answers 201. Not available to a vDC tenant token.\n\nRequired scope: `storage:write`",
         "tags": [
           "Storage"
         ],
@@ -16922,44 +17334,102 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "required": [
-                  "storage",
-                  "datastore",
-                  "pbsConnectionId"
-                ],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "pbs"
+                "description": "A PBS datastore (StorageAttachPbsRequest) or one of the cluster storage types below.",
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/StorageAttachPbsRequest"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "storage",
+                      "fields",
+                      "content"
                     ],
-                    "description": "Only pbs can be attached; defaults to pbs"
-                  },
-                  "storage": {
-                    "type": "string",
-                    "description": "Name of the new PVE storage"
-                  },
-                  "datastore": {
-                    "type": "string",
-                    "description": "Datastore of the PBS"
-                  },
-                  "namespace": {
-                    "type": "string",
-                    "description": "PBS namespace, created when missing; empty = root"
-                  },
-                  "nodes": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "Nodes allowed to use the storage; empty = every node"
-                  },
-                  "pbsConnectionId": {
-                    "type": "string",
-                    "description": "PBS connection id; must be inside the token perimeter"
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "nfs",
+                          "cifs",
+                          "iscsi",
+                          "lvm",
+                          "rbd",
+                          "cephfs",
+                          "zfs",
+                          "dir"
+                        ]
+                      },
+                      "storage": {
+                        "type": "string",
+                        "description": "Name of the new PVE storage"
+                      },
+                      "fields": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "Type fields by Proxmox key. nfs: server, export, options. cifs: server, share, username, password, domain, smbversion, subdir. iscsi: portal, target. lvm: vgname, base, saferemove. rbd: monhost, pool, username, keyring, krbd. cephfs: monhost, username, keyring (the client key), fs-name. zfs: portal, pool, target, iscsiprovider, lio_tpg, blocksize, sparse, nowritecache. dir: path, is_mountpoint. Secrets are never returned."
+                      },
+                      "content": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Allowed contents for this type (iscsi: images to use the LUNs directly, or none)"
+                      },
+                      "nodes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Nodes allowed to use the storage; empty = every node"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "shared": {
+                        "type": "boolean",
+                        "description": "dir and lvm only"
+                      },
+                      "bwlimit": {
+                        "type": "object",
+                        "description": "Bandwidth limits in MiB/s; a missing or null kind has no limit",
+                        "properties": {
+                          "default": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "migration": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "restore": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "clone": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "move": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
                   }
-                }
+                ]
               }
             }
           }
@@ -16990,49 +17460,28 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "description": "Answered with HTTP 201.",
-                  "properties": {
-                    "data": {
+                  "description": "Answered with HTTP 201: the PBS attach result, or the new storage and its type.",
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/StorageAttachPbsResponse"
+                    },
+                    {
                       "type": "object",
                       "properties": {
-                        "storage": {
-                          "type": "string"
-                        },
-                        "server": {
-                          "type": "string"
-                        },
-                        "datastore": {
-                          "type": "string"
-                        },
-                        "namespace": {
-                          "type": "string"
-                        },
-                        "nodes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "credentials": {
-                          "type": "string",
-                          "enum": [
-                            "scoped-token"
-                          ]
-                        },
-                        "tokenId": {
-                          "type": "string",
-                          "description": "The PBS token the cluster holds"
-                        },
-                        "steps": {
+                        "data": {
                           "type": "object",
-                          "additionalProperties": {
-                            "type": "string"
+                          "properties": {
+                            "storage": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            }
                           }
                         }
                       }
                     }
-                  }
+                  ]
                 }
               }
             }
@@ -17101,8 +17550,8 @@
     "/api/v1/connections/{id}/storage/{storage}": {
       "delete": {
         "operationId": "storage-detach",
-        "summary": "Detach a PBS storage from a cluster",
-        "description": "Removes the `pbs:` storage {storage} from the cluster and revokes the PBS token ProxCenter minted for it, unless another cluster still uses that token (`data.token` says which). The backups stay on the PBS. Not available to a vDC tenant token.\n\nRequired scope: `storage:write`",
+        "summary": "Remove a storage from a cluster",
+        "description": "A `pbs:` storage is detached and the PBS token ProxCenter minted for it revoked, unless another cluster still uses that token (`data.token` says which); the backups stay on the PBS. Any other storage is removed from storage.cfg, its data left in place: refused with 409 `STORAGE_IN_USE` while a guest volume sits on it, a backup job writes to it or another storage is built on it, and with 409 `STORAGE_USAGE_UNVERIFIED` when a node could not be read, unless `force=1`. Not available to a vDC tenant token.\n\nRequired scope: `storage:write`",
         "tags": [
           "Storage"
         ],
@@ -17127,6 +17576,15 @@
               "type": "string"
             },
             "description": "Path parameter."
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "1 removes it although a node could not be read"
           }
         ],
         "responses": {
@@ -17182,6 +17640,10 @@
                             "type": "string"
                           },
                           "description": "kept-in-use: the clusters still using the token"
+                        },
+                        "removed": {
+                          "type": "boolean",
+                          "description": "Any other type: the storage was removed from storage.cfg"
                         }
                       }
                     }
@@ -17233,6 +17695,534 @@
                 "example": {
                   "error": "Method not allowed for this API token route",
                   "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "storage-config-read",
+        "summary": "Configuration of a cluster storage",
+        "description": "The storage.cfg entry of {storage}, without its secrets (password, keyring). Needs connection.manage. Not available to a vDC tenant token.\n\nRequired scope: `storage:read` or `storage:write`",
+        "tags": [
+          "Storage"
+        ],
+        "x-required-scopes": [
+          "storage:read",
+          "storage:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "storage",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "storage.cfg entry, secrets left out"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/storage/{storage}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "storage-update",
+        "summary": "Edit a cluster storage",
+        "description": "Changes the contents, nodes, enabled flag, bandwidth limits and the editable fields of an nfs, cifs, iscsi, lvm, rbd, cephfs, zfs or dir storage; the fields Proxmox fixes at creation are ignored and a blank secret keeps the stored one. Not available to a vDC tenant token.\n\nRequired scope: `storage:write`",
+        "tags": [
+          "Storage"
+        ],
+        "x-required-scopes": [
+          "storage:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "storage",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "content"
+                ],
+                "description": "Fields Proxmox fixes at creation are ignored; a blank secret keeps the stored one; an emptied optional field is cleared.",
+                "properties": {
+                  "fields": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "Type fields by Proxmox key. nfs: server, export, options. cifs: server, share, username, password, domain, smbversion, subdir. iscsi: portal, target. lvm: vgname, base, saferemove. rbd: monhost, pool, username, keyring, krbd. cephfs: monhost, username, keyring (the client key), fs-name. zfs: portal, pool, target, iscsiprovider, lio_tpg, blocksize, sparse, nowritecache. dir: path, is_mountpoint. Secrets are never returned."
+                  },
+                  "content": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Allowed contents for this type (iscsi: images to use the LUNs directly, or none)"
+                  },
+                  "nodes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Nodes allowed to use the storage; empty = every node"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "shared": {
+                    "type": "boolean",
+                    "description": "dir and lvm only"
+                  },
+                  "bwlimit": {
+                    "type": "object",
+                    "description": "Bandwidth limits in MiB/s; a missing or null kind has no limit",
+                    "properties": {
+                      "default": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "migration": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "restore": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "clone": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "move": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "storage": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/storage/{storage}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/nodes/{node}/storage-scan": {
+      "post": {
+        "operationId": "storage-scan",
+        "summary": "Test a storage target from a node",
+        "description": "Runs one Proxmox scan from {node}: NFS exports, CIFS shares (wrong credentials are reported), iSCSI targets, or the node's LVM volume groups. One scan at a time per node: 409 `SCAN_BUSY` while one runs, 504 `SCAN_TIMEOUT` after 20 s (the node may still be working on it). Not available to a vDC tenant token.\n\nRequired scope: `storage:write`",
+        "tags": [
+          "Storage"
+        ],
+        "x-required-scopes": [
+          "storage:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "nfs",
+                      "cifs",
+                      "iscsi",
+                      "lvm"
+                    ]
+                  },
+                  "server": {
+                    "type": "string",
+                    "description": "nfs, cifs"
+                  },
+                  "username": {
+                    "type": "string",
+                    "description": "cifs"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "cifs"
+                  },
+                  "domain": {
+                    "type": "string",
+                    "description": "cifs"
+                  },
+                  "portal": {
+                    "type": "string",
+                    "description": "iscsi"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "string"
+                          },
+                          "detail": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      },
+                      "description": "nfs: export paths, cifs: shares, iscsi: targets, lvm: volume groups"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/nodes/{node}/storage-scan"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
                 }
               }
             }
@@ -20180,7 +21170,7 @@
       "get": {
         "operationId": "pools-list",
         "summary": "Resource pools of a cluster",
-        "description": "The Proxmox resource pools of the cluster with their comment.\n\nRequired scope: `nodes:read` or `pools:write`",
+        "description": "The Proxmox resource pools of the cluster with their comment. With `poolid`, that one pool with its members instead: its guests, and its storages once each with the nodes they are listed on; 404 for a pool outside the caller's list.\n\nRequired scope: `nodes:read` or `pools:write`",
         "tags": [
           "Pools"
         ],
@@ -20197,6 +21187,15 @@
               "type": "string"
             },
             "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "poolid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Read this pool's members"
           }
         ],
         "responses": {
@@ -20228,21 +21227,102 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "poolid": {
-                            "type": "string"
-                          },
-                          "comment": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
+                      "oneOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "poolid": {
+                                "type": "string"
+                              },
+                              "comment": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "poolid": {
+                              "type": "string"
+                            },
+                            "comment": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "guests": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "vmid": {
+                                    "type": "integer"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "qemu",
+                                      "lxc"
+                                    ]
+                                  },
+                                  "node": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "template": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            },
+                            "storages": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "storage": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "shared": {
+                                    "type": "boolean"
+                                  },
+                                  "nodes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            }
                           }
                         }
-                      }
+                      ],
+                      "description": "The pools, or with `poolid` that pool and its members"
                     },
                     "restricted": {
                       "type": "boolean",
@@ -20385,18 +21465,45 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "object",
-                      "properties": {
-                        "poolid": {
-                          "type": "string"
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "poolid": {
+                              "type": "string"
+                            },
+                            "comment": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          }
                         },
-                        "comment": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
+                        {
+                          "type": "object",
+                          "properties": {
+                            "poolid": {
+                              "type": "string"
+                            },
+                            "vms": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              }
+                            },
+                            "storage": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "delete": {
+                              "type": "boolean"
+                            }
+                          }
                         }
-                      }
+                      ]
                     }
                   }
                 }
@@ -20465,8 +21572,8 @@
       },
       "put": {
         "operationId": "pool-update",
-        "summary": "Update the comment of a resource pool",
-        "description": "Sets the comment of the pool `poolid` (named in the body); an empty comment clears it. Not available to a vDC tenant token.\n\nRequired scope: `pools:write`",
+        "summary": "Update a resource pool's comment or members",
+        "description": "Sets the comment of the pool `poolid` (named in the body); an empty comment clears it. With `vms` and/or `storage`, adds those guests and storages to the pool instead, or removes them with `delete: true`; `allowMove: true` moves a guest that belongs to another pool. A pool backing a vDC answers 409 `POOL_OWNED_BY_VDC`, a guest moved out of one 409 `GUEST_IN_VDC_POOL`. Not available to a vDC tenant token.\n\nRequired scope: `pools:write`",
         "tags": [
           "Pools"
         ],
@@ -20491,8 +21598,7 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "poolid",
-                  "comment"
+                  "poolid"
                 ],
                 "properties": {
                   "poolid": {
@@ -20501,7 +21607,29 @@
                   },
                   "comment": {
                     "type": "string",
-                    "description": "Empty string clears it"
+                    "description": "Empty string clears it. Required when neither vms nor storage is given"
+                  },
+                  "vms": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "description": "Guests to add, or to remove with delete"
+                  },
+                  "storage": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Storages to add, or to remove with delete"
+                  },
+                  "delete": {
+                    "type": "boolean",
+                    "description": "Remove vms and storage from the pool instead of adding them"
+                  },
+                  "allowMove": {
+                    "type": "boolean",
+                    "description": "Move a guest that belongs to another pool"
                   }
                 }
               }
@@ -20537,18 +21665,45 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "object",
-                      "properties": {
-                        "poolid": {
-                          "type": "string"
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "poolid": {
+                              "type": "string"
+                            },
+                            "comment": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          }
                         },
-                        "comment": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
+                        {
+                          "type": "object",
+                          "properties": {
+                            "poolid": {
+                              "type": "string"
+                            },
+                            "vms": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer"
+                              }
+                            },
+                            "storage": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "delete": {
+                              "type": "boolean"
+                            }
+                          }
                         }
-                      }
+                      ]
                     }
                   }
                 }

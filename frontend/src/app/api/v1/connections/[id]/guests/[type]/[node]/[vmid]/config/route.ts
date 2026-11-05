@@ -51,6 +51,10 @@ const ALLOWED_QEMU_FIELDS = new Set([
 
   // Options
   'ostype', 'hotplug', 'tablet', 'localtime', 'freeze', 'kvm', 'acpi',
+  // Options the Options tab edits too (roadmap#201): RTC start date and the
+  // hibernation state storage. SPICE enhancements and AMD SEV stay out: PVE
+  // lets root@pam alone set them, never the API token a connection uses.
+  'startdate', 'vmstatestorage',
 
   // Args
   'args',

@@ -28,3 +28,30 @@ describe('GroupedVmsView group header', () => {
     expect(screen.getByText('team').nextElementSibling).toHaveTextContent('PVE-PROD')
   })
 })
+
+describe('GroupedVmsView actions (roadmap#200)', () => {
+  it('shows the header action and a row action that does not toggle the group', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    const onCreate = vi.fn()
+    const onMembers = vi.fn()
+
+    renderWithProviders(
+      <GroupedVmsView
+        title="By pool"
+        icon="ri-folder-line"
+        groups={[{ key: 'team', label: 'team', vms: [] }, { key: 'vdc-x', label: 'vdc-x', vms: [] }]}
+        allVms={[]}
+        onVmAction={vi.fn()}
+        onLoadTrendsBatch={vi.fn().mockResolvedValue({})}
+        headerAction={<button onClick={onCreate}>Create pool</button>}
+        groupAction={group => (group.key.startsWith('vdc-') ? null : <button onClick={e => { e.stopPropagation(); onMembers(group.key) }}>Members</button>)}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create pool' }))
+    expect(onCreate).toHaveBeenCalled()
+    expect(screen.getAllByRole('button', { name: 'Members' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Members' }))
+    expect(onMembers).toHaveBeenCalledWith('team')
+  })
+})

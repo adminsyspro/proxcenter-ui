@@ -21,6 +21,7 @@ export const READ_ONLY_MUTATION_ROUTES: Readonly<Record<string, string>> = {
   'v1/backups/restore-drills/preflight': 'Preflight checks, read-only',
   'v1/connections/[id]/check': 'Connection health check, read-only',
   'v1/connections/[id]/test-ssh': 'SSH connectivity test',
+  'v1/connections/[id]/nodes/[node]/storage-scan': 'Storage target scan before adding a storage, read-only (its body may carry a CIFS password)',
   'v1/connections/[id]/guests/[type]/[node]/[vmid]/remote-migrate/check': 'Remote migration preflight, read-only',
   'v1/connections/[id]/guests/trends': 'Metrics query (POST for a large body)',
   'v1/connections/[id]/nodes/trends': 'Metrics query (POST for a large body)',

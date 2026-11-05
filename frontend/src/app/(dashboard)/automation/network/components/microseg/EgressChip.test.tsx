@@ -52,4 +52,20 @@ describe('on the zone card', () => {
     renderWithProviders(<ZoneCard zone={web({ state: 'disabled', egress_state: 'enforce' })} {...rowProps} />)
     expect(within(screen.getByRole('listitem', { name: 'web' })).getByText('Outbound: off')).toBeTruthy()
   })
+
+  it('keeps the name first on one line: the chips shrink and the outbound chip goes icon-only in a narrow card', () => {
+    renderWithProviders(<ZoneCard zone={web({ egress_state: 'observe' })} diffKind='added' {...rowProps} />)
+    const card = screen.getByRole('listitem', { name: 'web' })
+    const title = card.querySelector('[data-zone-title]') as HTMLElement
+    const name = title.children[1] as HTMLElement
+    const chips = title.children[2] as HTMLElement
+    const css = Array.from(document.querySelectorAll('style')).map(s => s.textContent).join('\n')
+    expect(getComputedStyle(title).containerType).toBe('inline-size')
+    expect(getComputedStyle(name).minWidth).not.toBe('0px')
+    expect(getComputedStyle(chips).flexShrink).not.toBe('0')
+    const label = within(card).getByText('Outbound: observing')
+    expect(label.hasAttribute('data-egress-label')).toBe(true)
+    expect(css).toMatch(/@container[^{]*max-width/)
+    expect(within(card).getByText('Added')).toBeTruthy()
+  })
 })

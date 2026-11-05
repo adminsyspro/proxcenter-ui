@@ -34,6 +34,11 @@ export type ZoneCardProps = ZoneRowProps & {
   uncovered?: { series: number[] | null; outSeries?: number[] | null; from: number; stepMs: number } | null
 }
 
+/** The zone name keeps at least this width (px) before it is cut; the chips give way first. */
+const NAME_MIN_WIDTH = 72
+/** Below this card title width (px), the outbound chip keeps its icon and tooltip only. */
+const EGRESS_ICON_ONLY_BELOW = 400
+
 export const detailsId = (zoneId: string) => `zone-details-${zoneId}`
 
 const CARD_SX = {
@@ -121,12 +126,12 @@ export default function ZoneCard(props: ZoneCardProps) {
     >
       <Box sx={{ p: 1.5, pb: 1, flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
         {/* One line: the name at the left, the state, diff and drifts chips at the right; the description below. */}
-        <Box data-zone-title sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+        <Box data-zone-title sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, containerType: 'inline-size' }}>
           <ZoneGlyph zone={zone} label={t(`state.${zone.state}`)} />
-          <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+          <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: NAME_MIN_WIDTH }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 1, minWidth: 0 }}>
             <ZoneStateChip state={zone.state} onClick={canWrite ? setAnchor : undefined} />
-            <EgressChip state={zoneEgress(zone)} ready={egressReady} />
+            <EgressChip state={zoneEgress(zone)} ready={egressReady} iconOnlyBelow={EGRESS_ICON_ONLY_BELOW} />
             <DiffChip kind={diffKind} />
             {!!drifts && (
               <Chip

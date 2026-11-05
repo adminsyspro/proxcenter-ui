@@ -12,7 +12,7 @@ export type HistoryRow =
 
 /** The fields that make a flow what it is: two flows with the same id and these differ are a change. */
 const flowShape = (f: MicrosegFlow) => [f.src_zone_id, f.src_cidr, f.dst_zone_id, f.dst_cidr, f.proto, f.dport].join('|')
-const zoneShape = (z: MicrosegZone) => [z.name, z.state, z.enforcement, z.isolate_members ? 1 : 0].join('|')
+const zoneShape = (z: MicrosegZone) => [z.name, z.state, z.enforcement, z.isolate_members ? 1 : 0, z.egress_state ?? 'off', z.egress_mode ?? 'local'].join('|')
 
 /** The zones and flows a revision added, removed and changed against the previous one, by id. */
 export function revisionDiff(current: MicrosegRevision, previous: MicrosegRevision | undefined): RevisionDiff | null {

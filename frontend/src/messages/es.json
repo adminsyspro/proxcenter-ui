@@ -4241,7 +4241,7 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "Tokens de API",
-      "subtitle": "Cuentas de servicio para herramientas externas: monitorización (Prometheus, Zabbix, PRTG) y automatización (CI, scripts). Cada scope se concede de forma explícita.",
+      "subtitle": "Cuentas de servicio: monitorización (Prometheus, Zabbix, PRTG) y automatización (CI, Terraform, Ansible). Scopes concedidos explícitamente.",
       "newToken": "Nuevo token",
       "referenceButton": "Referencia de la API",
       "reference": {

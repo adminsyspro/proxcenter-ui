@@ -4241,7 +4241,7 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "API 토큰",
-      "subtitle": "외부 도구를 위한 서비스 계정입니다: 모니터링(Prometheus, Zabbix, PRTG) 및 자동화(CI, 스크립트). 각 스코프는 명시적으로 부여됩니다.",
+      "subtitle": "모니터링(Prometheus, Zabbix, PRTG) 및 자동화(CI, Terraform, Ansible)를 위한 서비스 계정입니다. 각 스코프는 명시적으로 부여됩니다.",
       "newToken": "새 토큰",
       "referenceButton": "API 레퍼런스",
       "reference": {

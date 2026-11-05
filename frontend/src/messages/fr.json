@@ -4241,7 +4241,7 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "Jetons API",
-      "subtitle": "Comptes de service pour les outils externes : supervision (Prometheus, Zabbix, PRTG) et automatisation (CI, scripts). Chaque scope est accordé explicitement.",
+      "subtitle": "Comptes de service : supervision (Prometheus, Zabbix, PRTG) et automatisation (CI, Terraform, Ansible). Scopes accordés explicitement.",
       "newToken": "Nouveau jeton",
       "referenceButton": "Référence de l'API",
       "reference": {

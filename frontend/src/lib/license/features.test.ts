@@ -89,6 +89,11 @@ describe('registry and edition mapping invariants', () => {
     expect(optionDisplayName('control_plane_ha')).toBe('ProxCenter HA')
     expect(optionDisplayName('mystery_cap')).toBe('mystery_cap')
   })
+  it('describes the API Access option as covering reads and writes', () => {
+    const { description } = OPTION_REGISTRY.api_access
+    expect(description).toMatch(/read and write/i)
+    expect(description).not.toMatch(/read-only/i)
+  })
 
   it('grants incidents to both enterprise tiers and not to community', () => {
     expect(Features.INCIDENTS).toBe('incidents')

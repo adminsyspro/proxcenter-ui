@@ -2,7 +2,13 @@ import { describe, it, expect } from 'vitest'
 
 import { menuData } from './menuData'
 
-const findByHref = (items, href) => {
+interface MenuNode {
+  href?: string
+  permissions?: string[]
+  children?: MenuNode[]
+}
+
+const findByHref = (items: MenuNode[], href: string): MenuNode | null => {
   for (const item of items) {
     if (item.href === href) return item
     const hit = item.children && findByHref(item.children, href)
@@ -24,6 +30,6 @@ describe('menuData permissions', () => {
     const item = findByHref(menuData(), href)
 
     expect(item).not.toBeNull()
-    expect(item.permissions).toContain(permission)
+    expect(item?.permissions).toContain(permission)
   })
 })

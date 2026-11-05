@@ -17,6 +17,7 @@ const checkVdcQuotaMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const syncIpamForVmConfigMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
+const tenantAddsGpuMock = vi.fn<(...args: any[]) => Promise<'adds' | 'none' | 'unknown'>>()
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
@@ -64,6 +65,15 @@ vi.mock('@/lib/vdc/ipamSync', () => ({
   IpamExhaustedError: class IpamExhaustedError extends Error {},
 }))
 vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
+// The GPU guard runs for real on one test (#672): its collection and the
+// connection row it reads are stubbed.
+const { getConnectionGpusMock } = vi.hoisted(() => ({ getConnectionGpusMock: vi.fn() }))
+vi.mock('@/lib/gpu/collect', () => ({ getConnectionGpus: (...a: any[]) => getConnectionGpusMock(...a) }))
+vi.mock('@/lib/db/prisma', () => ({ prisma: { connection: { findFirst: async () => ({ id: 'conn-1', tenantId: 'default', name: 'PROD' }) } } }))
+vi.mock('@/lib/gpu/vdcGuard', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/gpu/vdcGuard')>('@/lib/gpu/vdcGuard')
+  return { tenantAddsGpu: tenantAddsGpuMock, gpuAddRefusal: actual.gpuAddRefusal, heldHostpci: actual.heldHostpci }
+})
 const enforceGuestTagAccessMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 vi.mock('@/lib/proxmox/tagAccessServer', () => ({ enforceGuestTagAccess: enforceGuestTagAccessMock }))
 
@@ -100,6 +110,7 @@ beforeEach(() => {
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
+  tenantAddsGpuMock.mockReset().mockResolvedValue('none')
   getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
   syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
   // This suite is about the net0 allow-list; the disk-drive guard (Task 8) is
@@ -669,3 +680,117 @@ describe('PUT config: datacenter User Tag Access (#1208)', () => {
     expect(enforceGuestTagAccessMock).not.toHaveBeenCalled()
   })
 })
+
+const gpuSnapshot = {
+  error: null, mappingsError: null, guestsError: null,
+  nodes: [{ node: 'pve1', online: true, error: null }, { node: 'pve3', online: true, error: null }, { node: 'pve9', online: true, error: null }],
+  devices: [{ key: 'conn-1:pve9:0000:03:00', connId: 'conn-1', node: 'pve9', id: '0000:03:00.0', slot: '0000:03:00', functions: ['0000:03:00.0'], displayFunctions: ['0000:03:00.0'], vendorId: '0x10de', deviceId: '0x2231', kind: 'gpu', mappings: ['gpu-pve9-03-00'] }],
+  allocations: [],
+}
+
+describe('PUT config: GPUs of a vDC go through its GPU section (#672)', () => {
+  const vdc = { vdcId: 'v1', poolName: 'vdc-a', quota: null, storagePolicies: [], computePolicy: { cpuModelMode: 'unrestricted', cpuAllowedModels: [], cpuDefaultModel: null, cpuAdvancedSettings: true } }
+  /** The VM as PVE reads it: /config (pending values) and /pending rows (current and pending). */
+  const pveConfig = (config: Record<string, unknown>, rows?: unknown[]) =>
+    pveFetchMock.mockImplementation(async (_conn: any, path: any, opts?: any) => {
+      if (opts?.method) return null
+      if (String(path).endsWith('/pending')) return rows ?? Object.entries(config).map(([key, value]) => ({ key, value }))
+      return config
+    })
+
+  beforeEach(() => {
+    pveConfig({})
+  })
+
+  it('409 gpu_via_my_vdc: a vDC tenant adding a GPU never reaches PVE', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    tenantAddsGpuMock.mockResolvedValue('adds')
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { hostpci0: 'mapping=gpu-n1-03-00' } })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'gpu_via_my_vdc' })
+    expect(tenantAddsGpuMock).toHaveBeenCalledWith('conn-1', 'pve3', { hostpci0: 'mapping=gpu-n1-03-00' }, {}, {})
+    expect(configWriteBody()).toBeNull()
+  })
+
+  it('409 gpu_via_my_vdc: a GPU mapping of another node of the cluster, on the real guard', async () => {
+    const real = await vi.importActual<typeof import('@/lib/gpu/vdcGuard')>('@/lib/gpu/vdcGuard')
+    tenantAddsGpuMock.mockImplementation(real.tenantAddsGpu)
+    getConnectionGpusMock.mockResolvedValue(gpuSnapshot)
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { hostpci0: 'mapping=gpu-pve9-03-00' } })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'gpu_via_my_vdc' })
+    expect(configWriteBody()).toBeNull()
+  })
+
+  it('503 gpu_check_unavailable: the GPU collection cannot tell, nothing reaches PVE', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    tenantAddsGpuMock.mockResolvedValue('unknown')
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { hostpci0: 'mapping=nic' } })
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'gpu_check_unavailable' })
+    expect(configWriteBody()).toBeNull()
+  })
+
+  it('a hostpciN that adds no GPU (a NIC) reaches PVE, compared with the current value', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    pveConfig({ hostpci1: '0000:05:00' })
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { hostpci1: '0000:06:00' } })
+    expect(res.status).toBe(200)
+    expect(tenantAddsGpuMock).toHaveBeenCalledWith('conn-1', 'pve3', { hostpci1: '0000:06:00' }, { hostpci1: '0000:05:00' }, { hostpci1: ['0000:05:00'] })
+    expect(configWriteBody()?.get('hostpci1')).toBe('0000:06:00')
+  })
+
+  it('409 gpu_via_my_vdc: a write over a slot whose GPU removal is pending, on the real guard', async () => {
+    const real = await vi.importActual<typeof import('@/lib/gpu/vdcGuard')>('@/lib/gpu/vdcGuard')
+    tenantAddsGpuMock.mockImplementation(real.tenantAddsGpu)
+    getConnectionGpusMock.mockResolvedValue(gpuSnapshot)
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    // The VM runs the GPU of hostpci0: /config no longer shows it, /pending does.
+    pveConfig({ digest: 'd1' }, [{ key: 'digest', value: 'd1' }, { key: 'hostpci0', value: 'mapping=gpu-pve9-03-00', delete: 1 }])
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { hostpci0: 'mapping=nic' } })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'gpu_via_my_vdc' })
+    expect(configWriteBody()).toBeNull()
+  })
+
+  it('503 gpu_check_unavailable when the pending view of the VM cannot be read', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    pveFetchMock.mockImplementation(async (_conn: any, path: any, opts?: any) => {
+      if (opts?.method) return null
+      if (String(path).endsWith('/pending')) throw new Error('PVE 500')
+      return {}
+    })
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { hostpci0: 'mapping=nic' } })
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'gpu_check_unavailable' })
+    expect(tenantAddsGpuMock).not.toHaveBeenCalled()
+    expect(configWriteBody()).toBeNull()
+  })
+
+  it('reads /pending once, and only when a hostpciN is written', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { hostpci0: 'mapping=nic' } })
+    expect(pveFetchMock.mock.calls.filter((c) => String(c[1]).endsWith('/pending'))).toHaveLength(1)
+    pveFetchMock.mockClear()
+    await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { onboot: 1 } })
+    expect(pveFetchMock.mock.calls.filter((c) => String(c[1]).endsWith('/pending'))).toHaveLength(0)
+  })
+
+  it('a removal or an unchanged entry is never looked at', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    pveConfig({ hostpci0: 'mapping=a5000' })
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { hostpci0: 'mapping=a5000', delete: 'hostpci1' } })
+    expect(res.status).toBe(200)
+    expect(tenantAddsGpuMock).not.toHaveBeenCalled()
+    expect(checkVdcQuotaMock).not.toHaveBeenCalled()
+  })
+
+  it('the provider adds a GPU without the check', async () => {
+    const res = await callRoute(await loadPut(), { method: 'PUT', params: baseParams, body: { hostpci0: 'mapping=gpu-n1-03-00' } })
+    expect(res.status).toBe(200)
+    expect(tenantAddsGpuMock).not.toHaveBeenCalled()
+    expect(configWriteBody()?.get('hostpci0')).toBe('mapping=gpu-n1-03-00')
+  })
+})
+

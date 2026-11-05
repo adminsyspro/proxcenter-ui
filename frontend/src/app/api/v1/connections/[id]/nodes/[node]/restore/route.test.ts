@@ -7,6 +7,7 @@ vi.mock("@/lib/api-tokens/routeGuard", () => ({
 }))
 
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
+import { pendingVdcGpus, resetVdcPending } from "@/lib/gpu/vdcPending"
 
 // Hoisted mocks -- referenced from vi.mock factories below, which vitest
 // hoists above these imports/consts, so they must themselves be created
@@ -22,6 +23,10 @@ const {
   syncIpamForVmConfigMock,
   releaseAllocationsForVmMock,
   resolveVisibleMock,
+  archiveGpuConfigMock,
+  restoreContingentCheckMock,
+  vdcFindFirstMock,
+  waitForTaskStoppedMock,
   afterCbs,
 } = vi.hoisted(() => ({
   getConnectionByIdMock: vi.fn(),
@@ -34,6 +39,10 @@ const {
   syncIpamForVmConfigMock: vi.fn(),
   releaseAllocationsForVmMock: vi.fn(),
   resolveVisibleMock: vi.fn(),
+  archiveGpuConfigMock: vi.fn(),
+  restoreContingentCheckMock: vi.fn(),
+  vdcFindFirstMock: vi.fn(),
+  waitForTaskStoppedMock: vi.fn(),
   afterCbs: [] as Array<() => Promise<void>>,
 }))
 
@@ -85,7 +94,10 @@ vi.mock("@/lib/vdc/scope", async (io) => {
   const actual = await io<typeof import("@/lib/vdc/scope")>()
   return { ...actual, assertVdcPbsAccess: vi.fn() }
 })
-vi.mock("@/lib/proxmox/tasks", () => ({ waitForTask: (...a: any[]) => waitForTaskMock(...a) }))
+vi.mock("@/lib/proxmox/tasks", () => ({
+  waitForTask: (...a: any[]) => waitForTaskMock(...a),
+  waitForTaskStopped: (...a: any[]) => waitForTaskStoppedMock(...a),
+}))
 vi.mock("@/lib/vdc/ipamSync", () => ({ syncIpamForVmConfig: (...a: any[]) => syncIpamForVmConfigMock(...a) }))
 vi.mock("@/lib/vdc/ipam", () => ({ releaseAllocationsForVm: (...a: any[]) => releaseAllocationsForVmMock(...a) }))
 // Guards prisma.vdc.findFirst (pool-placement lookup, isTenant only) and
@@ -93,13 +105,18 @@ vi.mock("@/lib/vdc/ipam", () => ({ releaseAllocationsForVm: (...a: any[]) => rel
 // real database.
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
-    vdc: { findFirst: vi.fn().mockResolvedValue(null) },
+    vdc: { findFirst: (...a: any[]) => vdcFindFirstMock(...a) },
     connection: { findUnique: vi.fn() },
   },
 }))
 // Dynamically imported by the route (`await import("@/lib/audit")`); vi.mock
 // intercepts dynamic imports too.
 vi.mock("@/lib/audit", () => ({ audit: vi.fn().mockResolvedValue("audit-1") }))
+vi.mock("@/lib/gpu/vdcGuard", async () => ({
+  contingentRefusal: (await vi.importActual<typeof import("@/lib/gpu/vdcGuard")>("@/lib/gpu/vdcGuard")).contingentRefusal,
+  archiveGpuConfig: (...a: any[]) => archiveGpuConfigMock(...a),
+  restoreContingentCheck: (...a: any[]) => restoreContingentCheckMock(...a),
+}))
 vi.mock("@/lib/api-tokens/scope", () => ({ resolveVisibleConnectionIds: (...a: any[]) => resolveVisibleMock(...a) }))
 
 beforeEach(() => {
@@ -120,6 +137,11 @@ beforeEach(() => {
   waitForTaskMock.mockReset().mockResolvedValue(undefined)
   syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
   releaseAllocationsForVmMock.mockReset()
+  archiveGpuConfigMock.mockReset().mockResolvedValue({})
+  restoreContingentCheckMock.mockReset().mockResolvedValue({ ok: true, demand: [] })
+  vdcFindFirstMock.mockReset().mockResolvedValue(null)
+  waitForTaskStoppedMock.mockReset().mockResolvedValue({ stopped: true, exitstatus: "OK" })
+  resetVdcPending()
 })
 
 /** Decode the URL-encoded form body of a pveFetch(conn, path, opts) call. */
@@ -800,5 +822,161 @@ describe("POST restore -- API token and the nested PBS source", () => {
     resolveVisibleMock.mockClear()
     expect((await call(pbsBody("pbs-out"))).status).toBe(404)
     expect(resolveVisibleMock).not.toHaveBeenCalled()
+  })
+})
+
+// A restored VM holds the GPUs of its backed-up config (#672): for a vDC
+// tenant they draw on the contingent, under the vDC lock, and stay reserved
+// until the restore task ends.
+describe("POST restore -- vDC GPU contingent", () => {
+  const RESTORE_UPID = "UPID:pve-1:00000000:00000000:00000000:qmrestore:111:root@pam:"
+  const q12 = { kind: "vgpu", modelKey: "0x10de:0x2231", profileName: "RTXA5000-12Q" }
+  const gpuArchive = { hostpci0: "mapping=vgpu-n1-03-00,mdev=nvidia-665" }
+
+  function vdcTenant() {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-x")
+    getInfraMock.mockResolvedValue({
+      kind: "iaas",
+      vdcScope: {
+        connectionIds: new Set(["pve-1"]),
+        pbsConnectionIds: new Set<string>(),
+        nodesByConnection: new Map([["pve-1", new Set(["node1"])]]),
+        storagesByConnection: new Map([["pve-1", new Set(["local"])]]),
+        writableStoragesByConnection: new Map([["pve-1", new Set(["local"])]]),
+        storagePoliciesByConnection: new Map<string, Map<string, any>>(),
+        poolsByConnection: new Map([["pve-1", new Set(["pool-1"])]]),
+        vnetsByConnection: new Map<string, Set<string>>(),
+        sharedBridgesByConnection: new Map<string, Set<string>>(),
+        pbsNamespacesByConnection: new Map<string, Array<{ datastore: string; namespace: string }>>(),
+        pbsNamespacesByPveConnection: new Map<string, Set<string>>(),
+      },
+    })
+    resolveVdcForTenantMock.mockResolvedValue({ vdcId: "vdc-1", poolName: "pool-1", quota: null })
+    vdcFindFirstMock.mockResolvedValue({ id: "vdc-1", pvePoolName: "pool-1" })
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string) =>
+      path === "/cluster/resources?type=vm" ? [{ vmid: 111, node: "node1", type: "qemu", pool: "pool-1" }] : RESTORE_UPID)
+  }
+
+  const restorePosts = () => pveFetchMock.mock.calls.filter(c => c[1] === "/nodes/node1/qemu")
+
+  async function restore(body: Record<string, unknown> = {}) {
+    const { POST } = await import("./route")
+    return callRoute(POST, {
+      method: "POST",
+      params: { id: "pve-1", node: "node1" },
+      body: { vmid: 111, archive: VZDUMP_QEMU_VOLID, type: "qemu", ...body },
+    })
+  }
+
+  it("409 quota_exhausted: the archive holds a vGPU its line has no room for", async () => {
+    vdcTenant()
+    archiveGpuConfigMock.mockResolvedValue(gpuArchive)
+    restoreContingentCheckMock.mockResolvedValue({ ok: false, code: "quota_exhausted", used: 2, count: 2 })
+
+    const res = await restore()
+
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: "quota_exhausted", used: 2, count: 2 })
+    expect(archiveGpuConfigMock).toHaveBeenCalledWith(expect.anything(), "node1", VZDUMP_QEMU_VOLID)
+    expect(restoreContingentCheckMock).toHaveBeenCalledWith("vdc-1", "pve-1", "pool-1", "node1", gpuArchive, null)
+    expect(restorePosts()).toHaveLength(0)
+  })
+
+  it("over the VM that holds that vGPU: judged without it, restored, the vGPU held until the task ends", async () => {
+    vdcTenant()
+    archiveGpuConfigMock.mockResolvedValue(gpuArchive)
+    restoreContingentCheckMock.mockResolvedValue({ ok: true, demand: [q12] })
+
+    const res = await restore({ force: true })
+
+    expect(res.status).toBe(200)
+    expect(restoreContingentCheckMock).toHaveBeenCalledWith("vdc-1", "pve-1", "pool-1", "node1", gpuArchive, "111")
+    expect(restorePosts()).toHaveLength(1)
+    expect(pendingVdcGpus("vdc-1")).toEqual([{ vmid: "111", demand: [q12] }])
+    for (const cb of afterCbs) await cb()
+    expect(waitForTaskStoppedMock).toHaveBeenCalledWith(expect.anything(), "pve-1", RESTORE_UPID, expect.objectContaining({ timeoutMs: expect.any(Number) }))
+    expect(pendingVdcGpus("vdc-1")).toEqual([])
+  })
+
+  it("a restore task whose end was not seen (timeout, polls failing) keeps the vGPU reserved", async () => {
+    vdcTenant()
+    archiveGpuConfigMock.mockResolvedValue(gpuArchive)
+    restoreContingentCheckMock.mockResolvedValue({ ok: true, demand: [q12] })
+    waitForTaskMock.mockRejectedValue(new Error("PVE task timed out after 600s"))
+    waitForTaskStoppedMock.mockResolvedValue({ stopped: false })
+
+    expect((await restore()).status).toBe(200)
+    for (const cb of afterCbs) await cb()
+
+    expect(pendingVdcGpus("vdc-1")).toHaveLength(1)
+  })
+
+  it("two vDCs on the node: judged on the contingent of the vDC whose pool receives the VM", async () => {
+    vdcTenant()
+    vdcFindFirstMock.mockResolvedValue({ id: "vdc-2", pvePoolName: "pool-2" })
+    archiveGpuConfigMock.mockResolvedValue(gpuArchive)
+    restoreContingentCheckMock.mockResolvedValue({ ok: true, demand: [q12] })
+
+    expect((await restore()).status).toBe(200)
+    expect(restoreContingentCheckMock).toHaveBeenCalledWith("vdc-2", "pve-1", "pool-2", "node1", gpuArchive, null)
+    expect(pendingVdcGpus("vdc-2")).toHaveLength(1)
+    for (const cb of afterCbs) await cb()
+    expect(pveFetchMock.mock.calls.some(c => c[1] === "/pools/pool-2" && c[2]?.method === "PUT")).toBe(true)
+  })
+
+  it("503 gpu_check_unavailable when the contingent cannot be checked now", async () => {
+    vdcTenant()
+    archiveGpuConfigMock.mockResolvedValue(gpuArchive)
+    restoreContingentCheckMock.mockResolvedValue({ ok: false, code: "gpu_check_unavailable" })
+
+    const res = await restore()
+
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: "gpu_check_unavailable" })
+    expect(restorePosts()).toHaveLength(0)
+  })
+
+  it("503 gpu_check_unavailable when no vDC pool would receive a VM holding GPUs", async () => {
+    vdcTenant()
+    vdcFindFirstMock.mockResolvedValue(null)
+    archiveGpuConfigMock.mockResolvedValue(gpuArchive)
+
+    const res = await restore()
+
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: "gpu_check_unavailable" })
+    expect(restoreContingentCheckMock).not.toHaveBeenCalled()
+    expect(restorePosts()).toHaveLength(0)
+  })
+
+  it("an archive without GPU is restored after the one config read", async () => {
+    vdcTenant()
+
+    const res = await restore()
+
+    expect(res.status).toBe(200)
+    expect(archiveGpuConfigMock).toHaveBeenCalledTimes(1)
+    expect(restoreContingentCheckMock).not.toHaveBeenCalled()
+    expect(restorePosts()).toHaveLength(1)
+  })
+
+  it("503 gpu_check_unavailable when the backed-up config cannot be read", async () => {
+    vdcTenant()
+    archiveGpuConfigMock.mockResolvedValue(null)
+
+    const res = await restore()
+
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: "gpu_check_unavailable" })
+    expect(restorePosts()).toHaveLength(0)
+  })
+
+  it("the provider and a container restore never read the backed-up config", async () => {
+    pveFetchMock.mockResolvedValue(RESTORE_UPID)
+    expect((await restore()).status).toBe(200)
+    vdcTenant()
+    archiveGpuConfigMock.mockClear()
+    await restore({ archive: VZDUMP_LXC_VOLID, type: "lxc", storage: "local" })
+    expect(archiveGpuConfigMock).not.toHaveBeenCalled()
   })
 })

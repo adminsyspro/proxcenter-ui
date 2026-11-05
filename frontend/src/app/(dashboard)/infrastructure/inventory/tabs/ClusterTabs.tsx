@@ -99,6 +99,7 @@ import { CephScopedFlagChips } from '@/components/ceph/CephFlagChips'
 import CephHealthCheckDetail from '@/components/ceph/CephHealthCheckDetail'
 import { isNodeReachable, nodeStatusMeta } from '../nodeStatusMeta'
 import { jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
+import GpuInventoryPanel, { GPU_TAB_VALUE } from '@/components/gpu/GpuInventoryPanel'
 
 const INVENTORY_OSD_STYLE: Record<OsdGridState, { color: string; label: string; opacity: number }> = {
   down: { color: '#ef4444', label: 'Down', opacity: 1 },
@@ -898,6 +899,16 @@ export default function ClusterTabs(props: any) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                       <i className="ri-notification-3-line" style={{ fontSize: 16 }} />
                       {t('inventory.tabNotifications')}
+                    </Box>
+                  }
+                />
+                {/* GPU inventory (#672): explicit value, so it never shifts the indexed tabs above */}
+                <Tab
+                  value={GPU_TAB_VALUE}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-cpu-line" style={{ fontSize: 16 }} />
+                      {t('gpu.tab')}
                     </Box>
                   }
                 />
@@ -4144,6 +4155,10 @@ export default function ClusterTabs(props: any) {
                   <NotificationsTab
                     connectionId={selection?.id || ''}
                   />
+                )}
+
+                {clusterTab === GPU_TAB_VALUE && selection?.id && (
+                  <GpuInventoryPanel connId={selection.id} />
                 )}
               </CardContent>
             </Card>

@@ -604,6 +604,35 @@ describe('RestoreVmDialog - restore error', () => {
   })
 })
 
+describe('RestoreVmDialog - GPU contingent refusal (#672)', () => {
+  beforeEach(() => {
+    seedBaseHandlers()
+  })
+
+  it.each([
+    [{ error: 'quota_exhausted', used: 2, count: 2 }, 409, 'Your GPU contingent has no room for this (2 of 2 used).'],
+    [{ error: 'gpu_check_unavailable' }, 503, 'The GPU contingent cannot be checked right now. Try again shortly.'],
+  ])('shows the sentence of %j, never the code', async (reply, status, sentence) => {
+    server.use(
+      http.post(
+        `*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/restore`,
+        async () => HttpResponse.json(reply, { status }),
+      ),
+    )
+
+    renderWithProviders(<RestoreVmDialog {...makeProps()} />)
+
+    await waitForDataLoad()
+    await screen.findByText(`VM ${SOURCE_VMID} exists and will be overwritten`)
+    const submitBtn = screen.getAllByRole('button').find((b) => b.textContent?.trim() === 'Restore VM')
+    fireEvent.click(submitBtn!)
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm overwrite' }))
+
+    expect(await screen.findByText(sentence)).toBeInTheDocument()
+    expect(screen.queryByText(String(reply.error))).toBeNull()
+  })
+})
+
 // ------------------------------------------------------------------ //
 // 6. Cancel button calls onClose
 // ------------------------------------------------------------------ //

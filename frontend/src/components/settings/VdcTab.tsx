@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 
 import {
   Alert,
@@ -42,6 +42,8 @@ import StoragePoliciesSection from './StoragePoliciesSection'
 import VdcPbsBindingsSection from './VdcPbsBindingsSection'
 import TenantNetworksSection from './TenantNetworksSection'
 import VdcHelpSection from './VdcHelpSection'
+import VdcGpuQuotaEditor, { type VdcGpuQuotaHandle } from './VdcGpuQuotaEditor'
+import { QUOTA_INPUT_SX, QUOTA_ROW_SX, QUOTA_TRAIL_SX, QuotaRowLead, SMALL_SELECT_SX } from './VdcQuotaRow'
 import VdcUsageHistorySettings from './VdcUsageHistorySettings'
 import DeletedVdcUsageHistory from './DeletedVdcUsageHistory'
 import TransportModeDiagram, { TRANSPORT_MODE_KEYS } from './TransportModeDiagram'
@@ -170,8 +172,6 @@ const EDGE_MODEL_KEYS: Record<VdcEdgeModel, { label: string; hint: string }> = {
   tenant: { label: 'vdc.edgeModelTenant', hint: 'vdc.edgeModelTenantHint' },
   platform: { label: 'vdc.edgeModelPlatform', hint: 'vdc.edgeModelPlatformHint' },
 }
-
-const SMALL_SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } } as const
 
 interface ZoneStatus {
   zoneName: string | null
@@ -330,6 +330,9 @@ const emptyForm: VdcFormState = {
 // using the existing time.* keys, so we don't ship a new dependency.
 // Dialog tab panel. Inactive panels stay MOUNTED (display: none) so the
 // per-section effects keep running and unsaved edits survive a tab switch.
+// Index of the Quotas tab of the vDC dialog.
+const QUOTAS_TAB = 4
+
 function TabPanel({ value, index, children }: { value: number; index: number; children: ReactNode }) {
   return (
     <Box role="tabpanel" hidden={value !== index} sx={{ display: value === index ? 'flex' : 'none', flexDirection: 'column', gap: 2 }}>
@@ -369,6 +372,9 @@ export default function VdcTab() {
   const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks' | 'usage-history' | 'help'>('vdcs')
   const [editingVdc, setEditingVdc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
+  // GPU contingent row of the Quotas tab (#672): written by the dialog's save.
+  const gpuQuotaRef = useRef<VdcGpuQuotaHandle>(null)
+  const [gpuQuotaInvalid, setGpuQuotaInvalid] = useState(false)
 
   // Form
   const [form, setForm] = useState<VdcFormState>(emptyForm)
@@ -1201,6 +1207,15 @@ export default function VdcTab() {
           const err = await res.json().catch(() => ({}))
           throw new Error(err.error || t('vdc.failedSave'))
         }
+
+        // The vDC is saved; a refused GPU contingent keeps the dialog open on
+        // the Quotas tab, where the row shows the error.
+        const gpuSaved = (await gpuQuotaRef.current?.save(editingVdc.id)) ?? true
+        if (!gpuSaved) {
+          setDialogTab(QUOTAS_TAB)
+          void fetchVdcs()
+          return
+        }
       } else {
         // POST - create. An empty Name field falls back to the derived
         // "tenant — cluster" name (see computeVdcName).
@@ -1239,6 +1254,9 @@ export default function VdcTab() {
           throw new Error(err.error || t('vdc.failedSave'))
         }
 
+        const created = await res.json().catch(() => ({}))
+        const newVdcId: string | undefined = created?.data?.id
+
         // Optional second step: bind a PBS datastore right after the
         // vDC is created. The vDC stays even if this fails — the admin
         // can retry from the edit dialog. We surface a partial-success
@@ -1250,8 +1268,6 @@ export default function VdcTab() {
           pbsDraft.datastore &&
           pbsDraft.namespace
         ) {
-          const created = await res.json().catch(() => ({}))
-          const newVdcId = created?.data?.id
           if (newVdcId) {
             try {
               const bindRes = await fetch(
@@ -1281,6 +1297,11 @@ export default function VdcTab() {
               setError(t('vdc.pbsBindCreatedVdcFailedBind', { error: e?.message || String(e) }))
             }
           }
+        }
+
+        // Same for the GPU contingent: the vDC stays, the edit dialog can retry.
+        if (newVdcId && !((await gpuQuotaRef.current?.save(newVdcId)) ?? true)) {
+          setError(t('vdc.gpuQuota.errors.save'))
         }
       }
 
@@ -1782,29 +1803,18 @@ export default function VdcTab() {
     const barColor = overCap || pct >= 90 ? 'error' : pct >= 70 ? 'warning' : 'success'
 
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Typography variant="body2" sx={{ minWidth: 130 }}>
-          {label}
-        </Typography>
-        <FormControlLabel
-          control={
-            <Switch
-              size="small"
-              checked={unlimited}
-              onChange={(e) => {
-                const v = e.target.checked
-                setForm((f) => ({
-                  ...f,
-                  [unlimitedKey]: v,
-                  ...(v ? { [valueKey]: '' } : {}),
-                }))
-              }}
-            />
-          }
-          label={
-            <Typography variant="caption">{t('vdc.quotaUnlimited')}</Typography>
-          }
-          sx={{ minWidth: 120 }}
+      <Box sx={QUOTA_ROW_SX}>
+        <QuotaRowLead
+          label={label}
+          checked={unlimited}
+          caption={t('vdc.quotaUnlimited')}
+          onChange={(v) => {
+            setForm((f) => ({
+              ...f,
+              [unlimitedKey]: v,
+              ...(v ? { [valueKey]: '' } : {}),
+            }))
+          }}
         />
         <TextField
           type="number"
@@ -1828,11 +1838,11 @@ export default function VdcTab() {
           disabled={unlimited}
           error={overCap}
           helperText={overCap ? t('vdc.quotaExceedsCluster', { total: cluster!.total, unit: cluster!.unit }) : undefined}
-          sx={{ width: 120 }}
+          sx={QUOTA_INPUT_SX}
           slotProps={{ htmlInput: { min: 0, max: cluster?.total } }}
         />
         {cluster && cluster.total > 0 && (
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: 'auto', minWidth: 220 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={QUOTA_TRAIL_SX}>
             <LinearProgress
               variant="determinate"
               value={pct}
@@ -3499,7 +3509,7 @@ export default function VdcTab() {
           </TabPanel>
 
           {/* Quotas */}
-          <TabPanel value={dialogTab} index={4}>
+          <TabPanel value={dialogTab} index={QUOTAS_TAB}>
               <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className="ri-bar-chart-box-line" />
                 {t('vdc.quotas')}
@@ -3519,6 +3529,8 @@ export default function VdcTab() {
               {renderQuotaField(t('vdc.maxBackups'), 'maxBackups', 'unlimitedBackups')}
 
               {renderQuotaField(t('vdc.maxVnets'), 'maxVnets', 'unlimitedVnets')}
+
+              <VdcGpuQuotaEditor ref={gpuQuotaRef} vdcId={editingVdc?.id ?? null} onInvalidChange={setGpuQuotaInvalid} />
           </TabPanel>
         </DialogContent>
         <DialogActions>
@@ -3549,7 +3561,9 @@ export default function VdcTab() {
               )) ||
               // One vDC per (tenant, connection): unreachable through the
               // filtered picker — defense-in-depth only.
-              occupiedConnectionIds.has(form.connectionId)
+              occupiedConnectionIds.has(form.connectionId) ||
+              // A GPU contingent count out of range.
+              gpuQuotaInvalid
             }
           >
             {saving ? t('vdc.saving') : editingVdc ? t('common.update') : t('common.create')}

@@ -65,3 +65,34 @@ export async function waitForTask(
 
   throw new Error(`PVE task timed out after ${Math.round(timeoutMs / 1000)}s`)
 }
+
+/**
+ * Wait until a task is known to have stopped, whatever its exit status. A
+ * failed poll is retried and never ends the wait, only `timeoutMs` does: for
+ * a caller that must not act on a task whose end it did not see.
+ */
+export async function waitForTaskStopped(
+  conn: ProxmoxClientOptions,
+  node: string,
+  upid: string,
+  options: Pick<WaitForTaskOptions, 'timeoutMs' | 'intervalMs'> = {},
+): Promise<{ stopped: true; exitstatus: string } | { stopped: false }> {
+  const timeoutMs = options.timeoutMs ?? 600_000
+  const intervalMs = options.intervalMs ?? 3_000
+  const start = Date.now()
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const status = await pveFetch<any>(
+        conn,
+        `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(upid)}/status`,
+      )
+      if (status?.status === 'stopped') return { stopped: true, exitstatus: String(status.exitstatus ?? '') }
+    } catch {
+      // A transient failure: poll again.
+    }
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+
+  return { stopped: false }
+}

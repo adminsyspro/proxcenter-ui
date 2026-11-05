@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { hostpciEntries } from "@/lib/gpu/quota"
+import { gpuAddRefusal, tenantAddsGpu } from "@/lib/gpu/vdcGuard"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
 import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/lib/rbac"
@@ -184,6 +186,13 @@ async function handler(
             drives.addStorageMbByStorage[storage] = (drives.addStorageMbByStorage[storage] ?? 0) + mb
           }
           drives.totalAddMb += imported.totalAddMb
+        }
+
+        // GPUs (#672): a vDC tenant gets a GPU from the GPU section of its
+        // vDC, which draws on the contingent, never with the create.
+        if (type === 'qemu') {
+          const gpuRefused = gpuAddRefusal(await tenantAddsGpu(id, node, hostpciEntries(body), {}))
+          if (gpuRefused) return gpuRefused
         }
 
         // Estimate resources from body

@@ -28,6 +28,7 @@ function tierBar(): HTMLElement {
 vi.mock('./MyVmsMetricsCharts', () => ({ default: () => null }))
 vi.mock('./MyDatacentersMapCard', () => ({ default: () => null }))
 vi.mock('./MyGreenCard', () => ({ default: () => null }))
+vi.mock('./MyGpuCard', () => ({ default: ({ vdcId }: { vdcId: string }) => <div data-testid="my-gpu-card">{vdcId}</div> }))
 vi.mock('@/components/vdc/VdcUsageHistoryChart', () => ({
   default: ({ historyUrl }: { historyUrl: string }) => <div data-testid="usage-history-chart">{historyUrl}</div>,
 }))
@@ -169,5 +170,14 @@ describe('MyVdcOverview, usage history (#902)', () => {
     renderWithProviders(<MyVdcOverview vdc={makeVdc({ id: 'vdc/1' })} />)
 
     expect(screen.getByTestId('usage-history-chart')).toHaveTextContent('/api/v1/vdcs/vdc%2F1/usage/history')
+  })
+})
+
+describe('MyVdcOverview, GPU section (#672)', () => {
+  afterEach(() => cleanup())
+
+  it('mounts the GPU card for the vDC', () => {
+    renderWithProviders(<MyVdcOverview vdc={makeVdc()} />)
+    expect(screen.getByTestId('my-gpu-card').textContent).toBe('vdc-1')
   })
 })

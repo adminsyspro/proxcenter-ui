@@ -14,6 +14,8 @@ import { classifyConfigBody } from "@/lib/rbac/configClassifier"
 import { isOpticalDrive } from "@/lib/proxmox/cdrom"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { hostpciEntries } from "@/lib/gpu/quota"
+import { gpuAddRefusal, heldHostpci, tenantAddsGpu } from "@/lib/gpu/vdcGuard"
 import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
 import { parseGuestTarget } from "@/lib/vdc/guestGuard"
 import { validateCpuAgainstPolicy, parseCpuProperty, loadCpuCapabilitiesIfNeeded } from "@/lib/vdc/computePolicy"
@@ -340,6 +342,25 @@ async function putHandler(
               violations: quotaCheck.violations,
             }, { status: 409 })
           }
+        }
+      }
+
+      // GPUs (#672): a vDC tenant gets a GPU from the GPU section of its vDC,
+      // which draws on the contingent, never through the hardware dialog or
+      // the API. Removals and unchanged entries are always allowed. The config
+      // read above holds pending values only: a slot whose GPU the VM still
+      // runs (removal pending) or takes at its next start is read from
+      // /pending, one more GET only when a hostpciN is written. Any write
+      // over such a slot would drop that GPU from the contingent count.
+      if (vdcInfo && type === 'qemu') {
+        const written = Object.fromEntries(
+          Object.entries(hostpciEntries(body)).filter(([k, v]) => v !== undefined && v !== null && v !== '' && String(v) !== String(currentConfig?.[k] ?? '')),
+        )
+        if (Object.keys(written).length > 0) {
+          const previous = Object.fromEntries(Object.keys(written).filter(k => currentConfig?.[k] !== undefined).map(k => [k, currentConfig[k]]))
+          const held = await heldHostpci(conn, node, vmid)
+          const gpuRefused = gpuAddRefusal(held ? await tenantAddsGpu(id, node, written, previous, held) : 'unknown')
+          if (gpuRefused) return gpuRefused
         }
       }
     } catch (e: any) {

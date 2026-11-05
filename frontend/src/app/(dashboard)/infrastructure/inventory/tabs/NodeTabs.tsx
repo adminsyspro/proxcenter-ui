@@ -78,6 +78,7 @@ import NotificationsTab from '@/components/NotificationsTab'
 import NetworkInterfaceDialog from '@/components/network/NetworkInterfaceDialog'
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
+import GpuInventoryPanel, { GPU_TAB_VALUE } from '@/components/gpu/GpuInventoryPanel'
 import { formatBps, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd } from '../helpers'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
@@ -698,6 +699,16 @@ export default function NodeTabs(props: any) {
                     }
                   />
                 )}
+                {/* GPU inventory (#672): last, with an explicit value, so the conditional tabs above keep their indexes */}
+                <Tab
+                  value={GPU_TAB_VALUE}
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <i className="ri-cpu-line" style={{ fontSize: 16 }} />
+                      {t('gpu.tab')}
+                    </Box>
+                  }
+                />
               </Tabs>
 
               <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
@@ -4255,6 +4266,10 @@ export default function NodeTabs(props: any) {
 
                 {isAdmin && nodeTab === 18 && !data.clusterName && (
                   <NotificationsTab connectionId={parseNodeId(selection?.id || '').connId} />
+                )}
+
+                {nodeTab === GPU_TAB_VALUE && (
+                  <GpuInventoryPanel connId={parseNodeId(selection?.id || '').connId} node={parseNodeId(selection?.id || '').node} />
                 )}
               </CardContent>
             </Card>

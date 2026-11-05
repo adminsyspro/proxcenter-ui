@@ -15,6 +15,7 @@ vi.mock('@/lib/branding/importDiskAssets', () => ({
 vi.mock('@/lib/db/prisma', () => ({ prisma: {} }))
 
 vi.mock('@/lib/vdc/usageHistory/sampler', () => ({ startVdcUsageSampler: startSamplerMock }))
+vi.mock('@/lib/gpu/billing/sampler', () => ({ startGpuUsageSampler: vi.fn() }))
 
 vi.mock('@/lib/migration/orphan-sweep', () => ({
   sweepOrphanedMigrationJobs: sweepMock,

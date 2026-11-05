@@ -24,6 +24,7 @@ const resolveVdcForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const checkVdcQuotaMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
+const tenantAddsGpuMock = vi.fn<(...args: any[]) => Promise<'adds' | 'none' | 'unknown'>>()
 const { checkVmidAgainstTenantRangeMock } = vi.hoisted(() => ({ checkVmidAgainstTenantRangeMock: vi.fn() }))
 
 vi.mock('@/lib/rbac', () => ({
@@ -49,6 +50,15 @@ vi.mock('@/lib/vdc/vnets', async (io) => {
     resolveSubnetForBridge: vi.fn(async () => null),
     parseBridgeFromNet: () => null,
   }
+})
+// The GPU guard runs for real on one test (#672): its collection and the
+// connection row it reads are stubbed.
+const { getConnectionGpusMock } = vi.hoisted(() => ({ getConnectionGpusMock: vi.fn() }))
+vi.mock('@/lib/gpu/collect', () => ({ getConnectionGpus: (...a: any[]) => getConnectionGpusMock(...a) }))
+vi.mock('@/lib/db/prisma', () => ({ prisma: { connection: { findFirst: async () => ({ id: 'conn-1', tenantId: 'default', name: 'PROD' }) } } }))
+vi.mock('@/lib/gpu/vdcGuard', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/gpu/vdcGuard')>('@/lib/gpu/vdcGuard')
+  return { tenantAddsGpu: tenantAddsGpuMock, gpuAddRefusal: actual.gpuAddRefusal }
 })
 vi.mock('@/lib/vdc/sdn', () => ({ generatePveMacAddress: () => 'BC:24:11:00:00:01' }))
 vi.mock('@/lib/vdc/ipam', () => ({ allocateIp: vi.fn(), allocateIpTracked: vi.fn(), releaseIp: vi.fn(), IpamExhaustedError: class extends Error {} }))
@@ -96,6 +106,7 @@ beforeEach(() => {
   getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
+  tenantAddsGpuMock.mockReset().mockResolvedValue('none')
   getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
 })
 
@@ -324,5 +335,57 @@ describe('POST guests create: blank VMs and the cdrom alias (#1171)', () => {
     const lxc = await callRoute(POST, { params: lxcParams, body: { vmid: 106, cdrom: 'x' } })
     expect(lxc.status).toBe(200)
     expect(createdBody('pve1', 'lxc').cdrom).toBe('x')
+  })
+})
+
+describe('POST guests create: GPUs of a vDC go through its GPU section (#672)', () => {
+  it('409 gpu_via_my_vdc: a vDC tenant creating a VM with a GPU never reaches PVE', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['ceph-nvme'], { 'ceph-nvme': gold }))
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-1', allowBlankVms: true, quota: null, storagePolicies: [] })
+    tenantAddsGpuMock.mockResolvedValue('adds')
+    const res = await callRoute(await loadPost(), { params: qemuParams, body: { vmid: 105, scsi0: 'ceph-nvme:10', hostpci0: 'mapping=gpu-n1-03-00,pcie=1' } })
+    expect(res.status).toBe(409)
+    expect(await readJson(res)).toEqual({ error: 'gpu_via_my_vdc' })
+    expect(tenantAddsGpuMock).toHaveBeenCalledWith('conn-1', 'pve1', { hostpci0: 'mapping=gpu-n1-03-00,pcie=1' }, {})
+    expect(pveFetchMock.mock.calls.some(c => c[2]?.method === 'POST')).toBe(false)
+  })
+
+  it('409 gpu_via_my_vdc: a GPU mapping of another node of the cluster, on the real guard', async () => {
+    const real = await vi.importActual<typeof import('@/lib/gpu/vdcGuard')>('@/lib/gpu/vdcGuard')
+    tenantAddsGpuMock.mockImplementation(real.tenantAddsGpu)
+    getConnectionGpusMock.mockResolvedValue({
+      error: null, mappingsError: null, guestsError: null,
+      nodes: [{ node: 'pve1', online: true, error: null }, { node: 'pve9', online: true, error: null }],
+      devices: [{ key: 'conn-1:pve9:0000:03:00', connId: 'conn-1', node: 'pve9', id: '0000:03:00.0', slot: '0000:03:00', functions: ['0000:03:00.0'], displayFunctions: ['0000:03:00.0'], vendorId: '0x10de', deviceId: '0x2231', kind: 'gpu', mappings: ['gpu-pve9-03-00'] }],
+      allocations: [],
+    })
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['ceph-nvme'], { 'ceph-nvme': gold }))
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-1', allowBlankVms: true, quota: null, storagePolicies: [] })
+    const res = await callRoute(await loadPost(), { params: qemuParams, body: { vmid: 105, scsi0: 'ceph-nvme:10', hostpci0: 'mapping=gpu-pve9-03-00' } })
+    expect(res.status).toBe(409)
+    expect(await readJson(res)).toEqual({ error: 'gpu_via_my_vdc' })
+    expect(pveFetchMock.mock.calls.some(c => c[2]?.method === 'POST')).toBe(false)
+  })
+
+  it('503 gpu_check_unavailable: the GPU collection cannot tell, nothing reaches PVE', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['ceph-nvme'], { 'ceph-nvme': gold }))
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-1', allowBlankVms: true, quota: null, storagePolicies: [] })
+    tenantAddsGpuMock.mockResolvedValue('unknown')
+    const res = await callRoute(await loadPost(), { params: qemuParams, body: { vmid: 105, scsi0: 'ceph-nvme:10', hostpci0: 'mapping=nic' } })
+    expect(res.status).toBe(503)
+    expect(await readJson(res)).toEqual({ error: 'gpu_check_unavailable' })
+    expect(pveFetchMock.mock.calls.some(c => c[2]?.method === 'POST')).toBe(false)
+  })
+
+  it('a create adding no GPU goes through, the provider is never looked at', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['ceph-nvme'], { 'ceph-nvme': gold }))
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-1', allowBlankVms: true, quota: null, storagePolicies: [] })
+    expect((await callRoute(await loadPost(), { params: qemuParams, body: { vmid: 105, scsi0: 'ceph-nvme:10' } })).status).toBe(200)
+    expect(tenantAddsGpuMock).toHaveBeenCalledWith('conn-1', 'pve1', {}, {})
+    tenantAddsGpuMock.mockClear()
+    resolveVdcForTenantMock.mockResolvedValue(null)
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    expect((await callRoute(await loadPost(), { params: qemuParams, body: { vmid: 106, hostpci0: 'mapping=gpu-n1-03-00' } })).status).toBe(200)
+    expect(tenantAddsGpuMock).not.toHaveBeenCalled()
   })
 })

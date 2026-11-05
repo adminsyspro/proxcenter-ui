@@ -12404,7 +12404,7 @@
         "failed": "Fehlgeschlagen",
         "running": "Läuft"
       },
-      "logNode": "{node} · {rate} Zeilen/Min. · {lag} s Verzug",
+      "logNode": "{node} · {rate} Zeilen/Min. · {lag} Verzug",
       "logBehind": "Protokoll im Rückstand"
     },
     "stop": {
@@ -12553,7 +12553,9 @@
           "bar": "{from} bis {to}: {count, plural, one {# Treffer} other {# Treffer}}",
           "barBoth": "{from} bis {to}: {count, plural, one {# Treffer} other {# Treffer}} eingehend, {out, plural, one {# Treffer} other {# Treffer}} ausgehend",
           "legendIn": "Eingehend",
-          "legendOut": "Ausgehend"
+          "legendOut": "Ausgehend",
+          "outBlocked": "{short} ausgehend blockiert",
+          "outWouldBlock": "{short} ausgehend würden blockiert"
         },
         "egress": {
           "state": {
@@ -12882,6 +12884,9 @@
           "title": "Ausgang ohne bekanntes Subnetz",
           "detail": "{name} von {zone} hat kein bekanntes Subnetz: sein lokales Netz beschränkt sich auf die eigenen IPs.",
           "hint": "Kein Subnetz bekannt: prüfen Sie die Netzwerkkonfiguration des Gastes in Proxmox (eine IP mit Präfixlänge oder den QEMU-Gastagenten)."
+        },
+        "verdict": {
+          "disabled": "deaktiviert"
         }
       },
       "chip": {

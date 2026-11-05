@@ -206,6 +206,25 @@ describe('DashboardTab: header chips', () => {
     await waitFor(() => expect(screen.getByTestId('chip-check').textContent).toMatch(/^Last check .*2 minutes ago/))
   })
 
+  it('lists the log reader of each node on hover of the last check chip, and adds no tooltip without log_nodes', async () => {
+    const engine = { paused_until: null, held: false, last_log: null, cluster_firewall: 'enabled', last_runs: { light: { started_at: new Date(Date.now() - 2 * 60_000).toISOString(), status: 'done', api_calls: 1, writes: 0 } } }
+    stubReads({ status: { engine, log_nodes: [{ node: 'pve1', lines_last: 400, lines_per_min_15m: 82, lag_seconds: 12, full_pages_24h: 0 }, { node: 'pve2', lines_last: 1, lines_per_min_15m: 3, lag_seconds: 300, full_pages_24h: 0 }] } })
+    renderDashboard({ enable: 1, policy_in: 'DROP' })
+    const chip = await screen.findByTestId('chip-check')
+    fireEvent.mouseOver(chip)
+    const tip = await screen.findByRole('tooltip')
+    expect(tip.textContent).toContain('pve1 · 82 lines/min · 12 s behind')
+    expect(tip.textContent).toContain('pve2 · 3 lines/min · 5 min behind')
+  })
+
+  it('shows no tooltip on the last check chip when the status carries no log_nodes', async () => {
+    stubReads({ status: { engine: { paused_until: null, held: false, last_log: null, cluster_firewall: 'enabled', last_runs: { light: { started_at: new Date(Date.now() - 2 * 60_000).toISOString(), status: 'done', api_calls: 1, writes: 0 } } } } })
+    renderDashboard({ enable: 1, policy_in: 'DROP' })
+    fireEvent.mouseOver(await screen.findByTestId('chip-check'))
+    await new Promise(r => setTimeout(r, 50))
+    expect(screen.queryByRole('tooltip')).toBeNull()
+  })
+
   it('says "-" while the guests are not measured, and the host firewall in standalone mode', async () => {
     stubReads({ coverage: 'pending' })
     renderDashboard({ enable: 0, policy_in: 'ACCEPT' }, { firewallMode: 'standalone' })

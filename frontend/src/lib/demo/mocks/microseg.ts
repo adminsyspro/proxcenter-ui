@@ -271,7 +271,7 @@ function lastRuns(now: number) {
 const LOG_NODES = [
   { node: 'pve-node-01', lines_last: 410, lines_per_min_15m: 380, lag_seconds: 12, full_pages_24h: 0 },
   { node: 'pve-node-02', lines_last: 365, lines_per_min_15m: 342, lag_seconds: 15, full_pages_24h: 0 },
-  { node: 'pve-node-03', lines_last: 1000, lines_per_min_15m: 910, lag_seconds: 74, full_pages_24h: 6 },
+  { node: 'pve-node-03', lines_last: 1000, lines_per_min_15m: 910, lag_seconds: 74, full_pages_24h: 0 },
 ]
 
 function status(now: number) {

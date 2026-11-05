@@ -151,3 +151,12 @@ describe('outbound drifts', () => {
     expect(driftLabel(by('egress_no_subnet')[0], t).fix).toBeNull()
   })
 })
+
+describe('a disabled outbound rule', () => {
+  it('says "disabled" in the language of the user and keeps the PVE verdict names', () => {
+    const drift: MicrosegDrift = { kind: 'egress_rule_verdict', guest, detail: { want: 'DROP', have: 'DISABLED' } }
+    expect(driftLabel(drift, translator('en')).detail).toBe('The final outbound rule of qemu/101 is disabled instead of DROP.')
+    expect(driftLabel(drift, translator('fr')).detail).toContain('désactivée')
+    expect(driftLabel(drift, translator('fr')).detail).toContain('DROP')
+  })
+})

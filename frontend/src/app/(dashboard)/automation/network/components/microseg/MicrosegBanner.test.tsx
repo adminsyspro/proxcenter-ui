@@ -370,4 +370,14 @@ describe('banner: the log reader load', () => {
     expect(tip.textContent).toContain('pve1 · 82 lines/min · 12 s behind')
     expect(tip.textContent).toContain('pve2 · 5 lines/min · 0 s behind')
   })
+
+  it('says a long lag in minutes, then hours', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ log_nodes: [node({ full_pages_24h: 1, lag_seconds: 120 }), node({ node: 'pve2', lag_seconds: 600 }), node({ node: 'pve3', lag_seconds: 36000 })] }))
+    renderTab()
+    fireEvent.mouseOver(await screen.findByText('Log behind'))
+    const tip = (await screen.findByRole('tooltip')).textContent
+    expect(tip).toContain('pve1 · 82 lines/min · 120 s behind')
+    expect(tip).toContain('pve2 · 82 lines/min · 10 min behind')
+    expect(tip).toContain('pve3 · 82 lines/min · 10 h behind')
+  })
 })

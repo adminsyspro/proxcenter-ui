@@ -73,13 +73,26 @@ describe('ZoneSparkline', () => {
       expect(legend.textContent).toContain('Outbound')
       expect(bars()[5].querySelectorAll('rect')).toHaveLength(3)
       expect(hitsOf(5)).toEqual([24, 12])
-      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('70 would be blocked')
+      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 would be blocked · 20 outbound would be blocked')
     })
 
     it('says both counts on hover', async () => {
       renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
       fireEvent.mouseOver(bars()[5])
       expect((await screen.findByRole('tooltip')).textContent).toMatch(/: 40 hits inbound, 20 hits outbound$/)
+    })
+
+    it('words each side with its own state: inbound enforced and outbound observed, and the reverse', () => {
+      const { unmount } = renderWithProviders(<ZoneSparkline state='enforce' outState='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 blocked · 20 outbound would be blocked')
+      unmount()
+      renderWithProviders(<ZoneSparkline state='observe' outState='enforce' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 would be blocked · 20 outbound blocked')
+    })
+
+    it('says only the outbound part when nothing came in', () => {
+      renderWithProviders(<ZoneSparkline state='enforce' outState='enforce' series={new Array<number>(24).fill(0)} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('20 outbound blocked')
     })
   })
 })

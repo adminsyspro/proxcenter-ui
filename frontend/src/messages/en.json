@@ -12736,7 +12736,7 @@
         "failed": "Failed",
         "running": "Running"
       },
-      "logNode": "{node} · {rate} lines/min · {lag} s behind",
+      "logNode": "{node} · {rate} lines/min · {lag} behind",
       "logBehind": "Log behind"
     },
     "stop": {
@@ -12885,7 +12885,9 @@
           "bar": "{from} to {to}: {count, plural, one {# hit} other {# hits}}",
           "barBoth": "{from} to {to}: {count, plural, one {# hit} other {# hits}} inbound, {out, plural, one {# hit} other {# hits}} outbound",
           "legendIn": "Inbound",
-          "legendOut": "Outbound"
+          "legendOut": "Outbound",
+          "outBlocked": "{short} outbound blocked",
+          "outWouldBlock": "{short} outbound would be blocked"
         },
         "egress": {
           "state": {
@@ -13214,6 +13216,9 @@
           "title": "Outbound without a known subnet",
           "detail": "{name} of {zone} has no known subnet: its local network is reduced to its own IPs.",
           "hint": "No subnet known: check the network configuration of the guest in Proxmox (an IP with its prefix length, or the QEMU guest agent)."
+        },
+        "verdict": {
+          "disabled": "disabled"
         }
       },
       "chip": {

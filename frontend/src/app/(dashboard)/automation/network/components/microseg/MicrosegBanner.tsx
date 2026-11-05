@@ -4,8 +4,9 @@ import { Alert, Box, Button, Chip, Paper, Tooltip, Typography } from '@mui/mater
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { microsegErrorKeyOf } from '@/lib/microseg/api'
-import type { MicrosegLogNode, MicrosegPolicy } from '@/lib/microseg/types'
+import type { MicrosegPolicy } from '@/lib/microseg/types'
 
+import LogNodeLines from './LogNodeLines'
 import MicrosegConfirmDialog, { type ConfirmInfoLine } from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PendingChangesBar from './PendingChangesBar'
@@ -13,20 +14,6 @@ import { clusterFirewallOff, formatWhen, stillPaused } from './summaryModel'
 import type { ControlAction, MicrosegControls } from './useMicrosegControls'
 import { NOW_REFRESH_MS, useNow } from './useNow'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
-
-/** The log reader of each node on one line each: its rate over 15 minutes and how far behind the log it reads. */
-function LogNodeLines({ nodes }: { nodes: readonly MicrosegLogNode[] }) {
-  const t = useTranslations('microsegPilot.banner')
-  return (
-    <Box>
-      {nodes.map(n => (
-        <Typography key={n.node} variant='caption' sx={{ display: 'block', whiteSpace: 'nowrap' }}>
-          {t('logNode', { node: n.node, rate: Math.round(n.lines_per_min_15m), lag: Math.round(n.lag_seconds) })}
-        </Typography>
-      ))}
-    </Box>
-  )
-}
 
 type Props = {
   connectionId: string

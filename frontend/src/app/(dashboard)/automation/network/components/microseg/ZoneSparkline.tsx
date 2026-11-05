@@ -3,7 +3,7 @@
 import { Box, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
-import type { ZoneState } from '@/lib/microseg/types'
+import type { EgressState, ZoneState } from '@/lib/microseg/types'
 
 import HourlyBars from './HourlyBars'
 import { EDGE_COLORS } from './zoneGraph'
@@ -28,6 +28,8 @@ type Props = {
   series: number[] | null
   /** The outbound hits per bucket (the traffic the zone emitted); absent, null or all 0: one series, no legend. */
   outSeries?: number[] | null
+  /** The outbound state of the zone: words the outbound part of the total (blocked or would be blocked). */
+  outState?: EgressState
   /** Start of the first bucket (ms) and the bucket width. */
   from: number
   stepMs: number
@@ -39,7 +41,7 @@ type Props = {
  * same in words with the total, so the colour is never alone; each bar's hour and count show on hover. A disabled
  * zone logs nothing: the line says so and no bars are drawn.
  */
-export default function ZoneSparkline({ state, series, outSeries = null, from, stepMs }: Readonly<Props>) {
+export default function ZoneSparkline({ state, series, outSeries = null, outState = 'observe', from, stepMs }: Readonly<Props>) {
   const t = useTranslations('microsegPilot.policy.zone.sparkline')
   const format = useFormatter()
 
@@ -59,8 +61,12 @@ export default function ZoneSparkline({ state, series, outSeries = null, from, s
   const total = inTotal === null ? null : inTotal + outTotal
   const hour = (i: number) => format.dateTime(new Date(from + i * stepMs), { hour: '2-digit', minute: '2-digit' })
   // The total in short (278K): the exact count is in the tooltip and the accessible name.
-  const short = total === null ? '' : format.number(total, { notation: 'compact', maximumFractionDigits: 1 })
-  const label = total === null ? t('loading') : t(state === 'enforce' ? 'blocked' : 'wouldBlock', { count: total, short })
+  const compact = (n: number) => format.number(n, { notation: 'compact', maximumFractionDigits: 1 })
+  // Each side is worded with its own state: the zone's for the inbound hits, its outbound state for the outbound hits.
+  const inLabel = (n: number) => t(state === 'enforce' ? 'blocked' : 'wouldBlock', { count: n, short: compact(n) })
+  const outLabel = t(outState === 'enforce' ? 'outBlocked' : 'outWouldBlock', { short: compact(outTotal) })
+  let label = t('loading')
+  if (inTotal !== null) label = split ? [inTotal > 0 ? inLabel(inTotal) : '', outLabel].filter(Boolean).join(' · ') : inLabel(inTotal)
 
   return (
     <Box data-zone-sparkline sx={{ minWidth: 0 }}>

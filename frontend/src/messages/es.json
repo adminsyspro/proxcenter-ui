@@ -12736,7 +12736,7 @@
         "failed": "Fallido",
         "running": "En curso"
       },
-      "logNode": "{node} · {rate} líneas/min · retraso {lag} s",
+      "logNode": "{node} · {rate} líneas/min · retraso {lag}",
       "logBehind": "Registro atrasado"
     },
     "stop": {
@@ -12885,7 +12885,9 @@
           "bar": "{from} a {to}: {count, plural, one {# impacto} other {# impactos}}",
           "barBoth": "{from} a {to}: {count, plural, one {# coincidencia} other {# coincidencias}} entrantes, {out, plural, one {# coincidencia} other {# coincidencias}} salientes",
           "legendIn": "Entrante",
-          "legendOut": "Saliente"
+          "legendOut": "Saliente",
+          "outBlocked": "{short} salientes bloqueados",
+          "outWouldBlock": "{short} salientes se bloquearían"
         },
         "egress": {
           "state": {
@@ -13214,6 +13216,9 @@
           "title": "Salida sin subred conocida",
           "detail": "{name} de {zone} no tiene subred conocida: su red local se reduce a sus propias IP.",
           "hint": "Ninguna subred conocida: revise la configuración de red del invitado en Proxmox (una IP con su longitud de prefijo, o el agente invitado QEMU)."
+        },
+        "verdict": {
+          "disabled": "desactivada"
         }
       },
       "chip": {

@@ -34,7 +34,7 @@ afterEach(() => {
 })
 
 describe('Micro-segmentation tab on the demo data', () => {
-  it('draws the zones with their members and, above the sub-tabs, the log alert of the busiest node only', async () => {
+  it('draws the zones with their members and no strip above the sub-tabs', async () => {
     renderWithProviders(
       <SWRConfig value={{ revalidateOnMount: true, dedupingInterval: 0, errorRetryCount: 0, refreshInterval: 0 }}>
         <MicrosegTab connectionId="demo-pve-cluster-001" />
@@ -52,12 +52,7 @@ describe('Micro-segmentation tab on the demo data', () => {
 
     const row = document.querySelector('.MuiTabs-root')!.parentElement as HTMLElement
 
-    // pve-node-03 met full pages of the log: the strip holds that chip and nothing else.
-    const alert = await screen.findByText('Log behind')
-    const strip = alert.closest('.MuiPaper-root') as HTMLElement
-
-    expect(row.parentElement!.firstElementChild).toBe(strip)
-    expect(strip.querySelectorAll('.MuiChip-root')).toHaveLength(1)
+    expect(row.parentElement!.firstElementChild).toBe(row)
     expect(web).toBeTruthy()
   })
 })

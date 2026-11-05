@@ -1,13 +1,16 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { Box, Chip, CircularProgress, IconButton, Skeleton, Tooltip, alpha, darken, lighten, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { FirewallMode } from '@/lib/api/firewall'
+import type { MicrosegLogNode } from '@/lib/microseg/types'
 
 import { STATE_AMBER, STATE_GREEN, STATE_GREY, STATE_RED } from './dashboardColors'
 import type { BlockPhase } from './dashboardModel'
 import { deniesInbound } from './dashboardModel'
+import LogNodeLines from './microseg/LogNodeLines'
 import { NOW_REFRESH_MS, useNow } from './microseg/useNow'
 
 const STATE_BLUE = '#3b82f6'
@@ -27,6 +30,8 @@ type Props = {
   guests: { protected: number; running: number } | null
   /** undefined while the status is read. */
   lastCheck: Date | null | undefined
+  /** The log reader of each node (the engine status); shown on hover of the last check chip. */
+  logNodes?: MicrosegLogNode[]
   /** When the coverage route computed the guest figures (ISO), absent before. */
   coverageAt?: string
   /** A refresh is asked, or the server is computing. */
@@ -38,7 +43,7 @@ type Props = {
 }
 
 /** A rounded chip with a dot in front, tinted with its colour (the header of the Posture Dashboard). */
-function PostureChip({ color, label, testId, tip, onClick }: { color: string; label: string; testId: string; tip?: string; onClick?: () => void }) {
+function PostureChip({ color, label, testId, tip, onClick }: { color: string; label: string; testId: string; tip?: ReactNode; onClick?: () => void }) {
   const theme = useTheme()
   const text = theme.palette.mode === 'dark' ? lighten(color, 0.3) : darken(color, 0.35)
   const chip = (
@@ -128,7 +133,7 @@ export default function PostureChips(props: Props) {
   let checkChip = <ChipSkeleton testId='chip-check-loading' />
   if (lastCheck !== undefined) {
     const label = lastCheck ? t('postureChipLastCheck', { time: format.relativeTime(lastCheck, Math.max(now, lastCheck.getTime())) }) : t('postureChipNoCheck')
-    checkChip = <PostureChip testId='chip-check' color={STATE_GREY} label={label} />
+    checkChip = <PostureChip testId='chip-check' color={STATE_GREY} label={label} tip={props.logNodes?.length ? <LogNodeLines nodes={props.logNodes} /> : undefined} />
   }
 
   return (

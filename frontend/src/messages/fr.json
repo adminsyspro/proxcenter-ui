@@ -12737,7 +12737,7 @@
         "failed": "Échec",
         "running": "En cours"
       },
-      "logNode": "{node} · {rate} lignes/min · retard {lag} s",
+      "logNode": "{node} · {rate} lignes/min · retard {lag}",
       "logBehind": "Journal en retard"
     },
     "stop": {
@@ -12886,7 +12886,9 @@
           "bar": "{from} à {to} : {count, plural, one {# occurrence} other {# occurrences}}",
           "barBoth": "{from} à {to} : {count, plural, one {# occurrence} other {# occurrences}} entrantes, {out, plural, one {# occurrence} other {# occurrences}} sortantes",
           "legendIn": "Entrant",
-          "legendOut": "Sortant"
+          "legendOut": "Sortant",
+          "outBlocked": "{short} sortants bloqués",
+          "outWouldBlock": "{short} sortants seraient bloqués"
         },
         "egress": {
           "state": {
@@ -13185,18 +13187,18 @@
         "egress_rule_missing": {
           "title": "Règle de sortie absente",
           "detail": "La règle finale de sortie de {name} est absente de Proxmox.",
-          "detailCollision": "{name} ne peut pas bloquer sa sortie : pcz-_local appartient à quelqu’un d’autre dans Proxmox.",
+          "detailCollision": "{name} ne peut pas bloquer sa sortie : pcz-_local appartient à quelqu'un d'autre dans Proxmox.",
           "hintCollision": "Un objet nommé pcz-_local existe dans Proxmox sans le marqueur de micro-segmentation : renommez-le ou supprimez-le dans Proxmox."
         },
         "egress_rule_misplaced": {
           "title": "Règle de sortie mal placée",
-          "detail": "La règle finale de sortie de {name} n’est pas la dernière règle, ou apparaît deux fois.",
-          "detailKnown": "La règle des destinations connues de {name} n’est pas juste avant sa règle finale de sortie."
+          "detail": "La règle finale de sortie de {name} n'est pas la dernière règle, ou apparaît deux fois.",
+          "detailKnown": "La règle des destinations connues de {name} n'est pas juste avant sa règle finale de sortie."
         },
         "egress_rule_verdict": {
           "title": "Règle de sortie au mauvais verdict",
           "detail": "La règle finale de sortie de {name} est {have} au lieu de {want}.",
-          "detailCollision": "{name} ne peut pas bloquer : pcz-_local appartient à quelqu’un d’autre dans Proxmox, sa règle de sortie reste {have}.",
+          "detailCollision": "{name} ne peut pas bloquer : pcz-_local appartient à quelqu'un d'autre dans Proxmox, sa règle de sortie reste {have}.",
           "hintCollision": "Un objet nommé pcz-_local existe dans Proxmox sans le marqueur de micro-segmentation : renommez-le ou supprimez-le dans Proxmox."
         },
         "known_rule_missing": {
@@ -13205,7 +13207,7 @@
         },
         "known_rule_extra": {
           "title": "Règle des destinations connues en trop",
-          "detail": "{name} garde une règle du groupe pcz-_known dont son état de sortie n’a plus besoin."
+          "detail": "{name} garde une règle du groupe pcz-_known dont son état de sortie n'a plus besoin."
         },
         "local_set_desync": {
           "title": "Réseau local désynchronisé",
@@ -13213,8 +13215,11 @@
         },
         "egress_no_subnet": {
           "title": "Sortie sans sous-réseau connu",
-          "detail": "{name} de {zone} n’a aucun sous-réseau connu : son réseau local se réduit à ses IP.",
-          "hint": "Aucun sous-réseau connu : vérifiez la configuration réseau de l’invité dans Proxmox (une IP avec sa longueur de préfixe, ou l’agent invité QEMU)."
+          "detail": "{name} de {zone} n'a aucun sous-réseau connu : son réseau local se réduit à ses IP.",
+          "hint": "Aucun sous-réseau connu : vérifiez la configuration réseau de l'invité dans Proxmox (une IP avec sa longueur de préfixe, ou l'agent invité QEMU)."
+        },
+        "verdict": {
+          "disabled": "désactivée"
         }
       },
       "chip": {
@@ -13652,8 +13657,8 @@
         },
         "egress_subnets": {
           "title": "Sous-réseaux de sortie",
-          "pass": "Chaque membre d’une zone à sortie contrôlée a un sous-réseau connu.",
-          "warn": "{count, plural, one {# membre n’a aucun sous-réseau connu} other {# membres n’ont aucun sous-réseau connu}} ({guests}) : leur réseau local se réduit à leurs IP."
+          "pass": "Chaque membre d'une zone à sortie contrôlée a un sous-réseau connu.",
+          "warn": "{count, plural, one {# membre n'a aucun sous-réseau connu} other {# membres n'ont aucun sous-réseau connu}} ({guests}) : leur réseau local se réduit à leurs IP."
         }
       },
       "rateUnits": {

@@ -12736,7 +12736,7 @@
         "failed": "실패",
         "running": "실행 중"
       },
-      "logNode": "{node} · 분당 {rate}줄 · {lag}초 지연",
+      "logNode": "{node} · 분당 {rate}줄 · {lag} 지연",
       "logBehind": "로그 지연"
     },
     "stop": {
@@ -12885,7 +12885,9 @@
           "bar": "{from}~{to}: 히트 {count}개",
           "barBoth": "{from}~{to}: 수신 {count, plural, other {#회}}, 송신 {out, plural, other {#회}}",
           "legendIn": "수신",
-          "legendOut": "송신"
+          "legendOut": "송신",
+          "outBlocked": "송신 {short} 차단됨",
+          "outWouldBlock": "송신 {short} 차단 예정"
         },
         "egress": {
           "state": {
@@ -13214,6 +13216,9 @@
           "title": "알려진 서브넷 없는 송신",
           "detail": "{zone}의 {name}에 알려진 서브넷이 없습니다. 로컬 네트워크가 자신의 IP로 한정됩니다.",
           "hint": "알려진 서브넷이 없습니다. Proxmox에서 게스트의 네트워크 설정(접두사 길이가 있는 IP 또는 QEMU 게스트 에이전트)을 확인하세요."
+        },
+        "verdict": {
+          "disabled": "비활성화됨"
         }
       },
       "chip": {

@@ -60,7 +60,9 @@ function ruleOf(detail: Record<string, unknown>): string {
 }
 
 /** The values the translated detail of a drift reads from its `detail` object. */
-function valuesOf(d: MicrosegDrift): Record<string, string | number> {
+function valuesOf(d: MicrosegDrift, t: Translate): Record<string, string | number> {
+  // PVE names (ACCEPT, DROP) stay as they are; a disabled rule is said in the user's language.
+  const verdict = (v: unknown) => (v === 'DISABLED' ? t('verdict.disabled') : text(v))
   const detail = d.detail ?? {}
   return {
     name: text(detail.name, d.guest ? `${d.guest.type}/${d.guest.vmid}` : '-'),
@@ -71,8 +73,8 @@ function valuesOf(d: MicrosegDrift): Record<string, string | number> {
     desired: list(detail.desired),
     actual: list(detail.actual),
     zone: text(detail.zone),
-    want: text(detail.want),
-    have: text(detail.have),
+    want: verdict(detail.want),
+    have: verdict(detail.have),
     kind: d.kind,
   }
 }
@@ -94,7 +96,7 @@ function hintKeyOf(d: MicrosegDrift, collided: boolean): string {
 
 /** Title, one-line detail and fix of a drift; an unknown kind gets a generic label and no fix. */
 export function driftLabel(d: MicrosegDrift, t: Translate): DriftLabel {
-  const values = valuesOf(d)
+  const values = valuesOf(d, t)
   if (!isKnown(d.kind)) return { title: t('generic.title', values), detail: t('generic.detail', values), fixable: false, fix: null, hint: null }
   // A foreign rule inside one of our groups has no guest: its detail names the group.
   const variant = detailVariant(d)

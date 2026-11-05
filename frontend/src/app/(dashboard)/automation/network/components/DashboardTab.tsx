@@ -89,8 +89,8 @@ function microsegPhase(reads: { data?: unknown; error?: unknown }[]): BlockPhase
 
 /** What the header chips say of the engine: undefined while its status is read, null when it could not be. */
 function engineFigures(status: MicrosegStatus | undefined, failed: boolean) {
-  if (status) return { zones: zonesEnforced(status), lastCheck: lastCheckAt(status) }
-  return failed ? { zones: null, lastCheck: null } : { zones: undefined, lastCheck: undefined }
+  if (status) return { zones: zonesEnforced(status), lastCheck: lastCheckAt(status), logNodes: status.log_nodes }
+  return failed ? { zones: null, lastCheck: null, logNodes: undefined } : { zones: undefined, lastCheck: undefined, logNodes: undefined }
 }
 
 /** The figures of the observed traffic blocks, from the policy, the pending flows and the guests. */
@@ -258,6 +258,7 @@ export default function DashboardTab({
         zones={engine.zones}
         guests={protectedRunning(coverage)}
         lastCheck={engine.lastCheck}
+        logNodes={engine.logNodes}
         coverageAt={coverage?.computedAt}
         coverageBusy={coverageRead.refreshing || !!coverageRead.data?.computing}
         onRefreshCoverage={() => { void coverageRead.refresh() }}

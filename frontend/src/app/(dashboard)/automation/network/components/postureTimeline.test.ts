@@ -445,3 +445,16 @@ describe('mirrored chart', () => {
     expect(up.total).toBe(0)
   })
 })
+
+describe('postureTimeline: outbound events (logged by the emitting zone)', () => {
+  const out = (over: Partial<MicrosegEvent> = {}) => event({ direction: 'out', zone: 'web', src_zone: 'db', ...over })
+  const dstSlices = [slice('zone:zdb', 'zone', '#222222', 'db'), ...ZONE_SLICES]
+
+  it('groups an outbound event by its emitting zone, and by its destination zone or the outside', () => {
+    const events = [out({ ts: at(1) }), out({ ts: at(1), src_zone: '' })]
+    const bySrc = run({ events })
+    expect(bySrc.buckets.at(-1)!.counts).toEqual({ 'zone:zweb': 2 })
+    const byDst = run({ events, groupBy: 'dstzone', slices: dstSlices })
+    expect(byDst.buckets.at(-1)!.counts).toEqual({ 'zone:zdb': 1, external: 1 })
+  })
+})

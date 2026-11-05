@@ -151,7 +151,7 @@ export default function ZoneCard(props: ZoneCardProps) {
         {/* At the bottom of the card: the cards of a row share their height, so the bars line up across the row. */}
         {uncovered && (
           <Box sx={{ mt: 'auto', pt: 0.5 }}>
-            <ZoneSparkline state={zone.state} series={uncovered.series} outSeries={uncovered.outSeries} from={uncovered.from} stepMs={uncovered.stepMs} />
+            <ZoneSparkline state={zone.state} series={uncovered.series} outSeries={uncovered.outSeries} outState={zoneEgress(zone)} from={uncovered.from} stepMs={uncovered.stepMs} />
           </Box>
         )}
       </Box>

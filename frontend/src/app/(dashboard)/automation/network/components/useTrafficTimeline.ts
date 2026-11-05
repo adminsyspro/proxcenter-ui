@@ -46,7 +46,7 @@ export function useTrafficTimeline(o: {
   const zoneName = zone?.name.toLowerCase() ?? null
   const kept = useMemo(() => {
     if (!outbound || zoneName === null) return keep
-    return (e: MicrosegEvent) => e.src_zone.toLowerCase() === zoneName && (!keep || keep(e))
+    return (e: MicrosegEvent) => (e.direction === 'out' ? e.zone : e.src_zone).toLowerCase() === zoneName && (!keep || keep(e))
   }, [outbound, zoneName, keep])
   // A minute clock: the last bucket follows the time.
   const now = useNow(60_000, ring.events)

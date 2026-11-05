@@ -12736,7 +12736,7 @@
         "failed": "失败",
         "running": "运行中"
       },
-      "logNode": "{node} · {rate} 行/分钟 · 延迟 {lag} 秒",
+      "logNode": "{node} · {rate} 行/分钟 · 延迟 {lag}",
       "logBehind": "日志滞后"
     },
     "stop": {
@@ -12885,7 +12885,9 @@
           "bar": "{from} 至 {to}：{count} 次命中",
           "barBoth": "{from} 至 {to}：入站 {count, plural, other {# 次}}，出站 {out, plural, other {# 次}}",
           "legendIn": "入站",
-          "legendOut": "出站"
+          "legendOut": "出站",
+          "outBlocked": "出站已阻断 {short}",
+          "outWouldBlock": "出站将阻断 {short}"
         },
         "egress": {
           "state": {
@@ -13214,6 +13216,9 @@
           "title": "出站无已知子网",
           "detail": "{zone} 中的 {name} 没有已知子网：其本地网络仅限于自身 IP。",
           "hint": "未知子网：请在 Proxmox 中检查客户机的网络配置（带前缀长度的 IP，或 QEMU 客户机代理）。"
+        },
+        "verdict": {
+          "disabled": "已禁用"
         }
       },
       "chip": {

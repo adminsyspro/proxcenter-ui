@@ -87,9 +87,13 @@ export type PostureTimeline = {
 function groupOfEvent(
   e: MicrosegEvent, groupBy: GroupBy, zoneByName: ReadonlyMap<string, MicrosegZone>, guestByKey: ReadonlyMap<string, PostureGuest>, guestIps: ReadonlySet<string> | null,
 ): string {
+  // An outbound event is logged by the emitting zone (`zone`) and names the destination in `src_zone`.
+  const out = e.direction === 'out'
   if (groupBy === 'dstzone') {
-    // The zone that received it: the zone of the guest that logged it.
-    const zone = zoneByName.get(e.zone.toLowerCase())
+    // The zone that received it: the zone of the guest that logged it, or for an outbound event the destination zone.
+    const received = out ? e.src_zone : e.zone
+    if (!received) return EXTERNAL_KEY
+    const zone = zoneByName.get(received.toLowerCase())
     return zone ? zoneKey(zone.id) : OTHER_KEY
   }
   if (groupBy !== 'zone') {
@@ -99,8 +103,9 @@ function groupOfEvent(
     if (groupBy === 'node') return `node:${e.node}`
     return guest.vlans.length ? `vlan:${guest.vlans[0]}` : NO_VLAN_KEY
   }
-  if (e.src_zone) {
-    const zone = zoneByName.get(e.src_zone.toLowerCase())
+  const emitter = out ? e.zone : e.src_zone
+  if (emitter) {
+    const zone = zoneByName.get(emitter.toLowerCase())
     // A zone renamed or deleted since the event: no slice of the donut is it.
     return zone ? zoneKey(zone.id) : OTHER_KEY
   }

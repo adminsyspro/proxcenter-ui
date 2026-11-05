@@ -314,6 +314,7 @@ setup_proxcenter() {
     if [ -z "$SERVER_IP" ]; then
         SERVER_IP="localhost"
     fi
+    HOST_IPS=$(host_ips)
 
     # Create .env file
     cat > "$INSTALL_DIR/.env" << EOF
@@ -350,6 +351,11 @@ TLS_ENABLED=true
 
 # Postgres
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+
+# Addresses of this host, as the Proxmox nodes see ProxCenter coming from
+# (micro-segmentation preflight). Empty lets ProxCenter detect it; an
+# address forced in Settings > Advanced wins over this one.
+PROXCENTER_HOST_IPS=$HOST_IPS
 EOF
 
     # Create orchestrator config. The compose file injects
@@ -388,6 +394,48 @@ EOF
     chmod 600 "$INSTALL_DIR/config/orchestrator.yaml"
 
     log_success "Secrets generated and configuration saved"
+}
+
+# ============================================
+# Host addresses (micro-segmentation preflight)
+# ============================================
+# Behind Docker's bridge network the orchestrator only sees its container
+# address, while the Proxmox nodes see ProxCenter coming from this host's.
+# The installer writes the host's addresses to PROXCENTER_HOST_IPS so the
+# preflight checks the right ones.
+
+# docker_bridge_ips: the addresses of the Docker bridges and veth pairs of
+# this host (docker0, br-*, veth*), one per line. Without `ip`, the default
+# docker0 gateway.
+docker_bridge_ips() {
+    if ! command -v ip > /dev/null 2>&1; then
+        echo "172.17.0.1"
+        return 0
+    fi
+    ip -o addr show 2>/dev/null \
+        | awk '$2 ~ /^(docker[0-9]*|br-[0-9a-f]+|veth[^ ]*)(@.*)?:?$/ { split($4, a, "/"); print a[1] }'
+}
+
+# filter_host_ips CANDIDATES EXCLUDED: the CANDIDATES (space separated, as
+# `hostname -I` prints them) without loopback, link-local, the EXCLUDED ones
+# (space or newline separated) and duplicates, comma separated.
+filter_host_ips() {
+    local candidates="$1" excluded out="" ip
+    excluded=" $(echo "$2" | tr '\n' ' ') "
+    for ip in $candidates; do
+        case "$ip" in
+            127.*|::1|169.254.*|[fF][eE]80:*) continue ;;
+        esac
+        case "$excluded" in *" $ip "*) continue ;; esac
+        case ",$out," in *",$ip,"*) continue ;; esac
+        out="${out:+$out,}$ip"
+    done
+    echo "$out"
+}
+
+# host_ips: this host's addresses for PROXCENTER_HOST_IPS.
+host_ips() {
+    filter_host_ips "$(hostname -I 2>/dev/null)" "$(docker_bridge_ips)"
 }
 
 # ============================================
@@ -481,6 +529,30 @@ refresh_compose() {
             log_info "Added HTTPS_BIND=8443 to .env"
         fi
     fi
+
+    refresh_host_ips
+}
+
+# refresh_host_ips: write this host's current addresses to
+# PROXCENTER_HOST_IPS in .env (the current directory), replacing the value
+# an earlier install wrote. A node of an HA cluster is left alone: the HA
+# deploy sets its own address in its managed block.
+refresh_host_ips() {
+    local ips
+    if grep -q '^# --- Managed by ProxCenter HA deploy' .env; then
+        return 0
+    fi
+    ips=$(host_ips)
+    if [ -z "$ips" ]; then
+        log_warning "Could not list this host's addresses: PROXCENTER_HOST_IPS left as is"
+        return 0
+    fi
+    if grep -q '^PROXCENTER_HOST_IPS=' .env; then
+        sed -i "s|^PROXCENTER_HOST_IPS=.*|PROXCENTER_HOST_IPS=$ips|" .env
+    else
+        printf '\n# Addresses of this host, as the Proxmox nodes see ProxCenter (added by upgrade)\nPROXCENTER_HOST_IPS=%s\n' "$ips" >> .env
+    fi
+    log_info "Set PROXCENTER_HOST_IPS=$ips in .env"
 }
 
 # ============================================

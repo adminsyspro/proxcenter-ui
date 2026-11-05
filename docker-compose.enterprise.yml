@@ -180,6 +180,11 @@ services:
       # Air-gapped instance: the orchestrator never calls proxcenter.io (no
       # portal connection, no check-in). Written by install-airgap.sh.
       - PROXCENTER_OFFLINE=${PROXCENTER_OFFLINE:-}
+      # This host's addresses, as the Proxmox nodes see ProxCenter coming
+      # from (micro-segmentation preflight): behind the bridge network the
+      # orchestrator only sees its container address. Written to .env by the
+      # installers, refreshed on upgrade; empty lets the orchestrator detect it.
+      - PROXCENTER_HOST_IPS=${PROXCENTER_HOST_IPS:-}
       # Outbound HTTP proxy for the Internet downloads (CVE feeds, portal).
       # Written to .env by the installer when it runs behind a proxy; empty
       # keeps direct connections. Proxmox API calls never use it.

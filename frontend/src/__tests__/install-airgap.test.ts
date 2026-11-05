@@ -261,6 +261,8 @@ describe('install', () => {
     expect(env.TEMPLATE_CATALOG_AUTO_UPDATE).toBe('false')
     expect(env.LICENSE_KEY).toBe('')
     expect(env.NEXTAUTH_URL).toBe('http://10.42.0.55:3000')
+    // The host's addresses without the docker0 bridge, for the micro-segmentation preflight.
+    expect(env.PROXCENTER_HOST_IPS).toBe('10.42.0.55')
     expect(env.ORCHESTRATOR_URL).toBe('http://orchestrator:8080')
     expect(env.GHCR_TOKEN).toBe('')
     for (const k of ['APP_SECRET', 'NEXTAUTH_SECRET', 'ORCHESTRATOR_API_KEY']) expect(env[k], k).toMatch(/^[0-9a-f]{64}$/)
@@ -537,6 +539,7 @@ describe('upgrade', () => {
     expect(after.ORCHESTRATOR_API_KEY).toMatch(/^[0-9a-f]{64}$/)
     expect(after.PROXCENTER_OFFLINE).toBe('true')
     expect(after.TEMPLATE_CATALOG_AUTO_UPDATE).toBe('false')
+    expect(after.PROXCENTER_HOST_IPS).toBe('10.42.0.55')
     expect(r.stdout).toMatch(/VERSION=1\.4\.9/) // rollback hint names the previous version
     // The exact rollback sequence: stop the apps, restore the dump, then
     // VERSION, the compose backup and the restart, in that order.
@@ -560,10 +563,10 @@ describe('upgrade', () => {
 
     // Every pre-existing line (including the "# old install" comment), in the
     // same order, is untouched: only VERSION/ORCHESTRATOR_API_KEY change in
-    // place and PROXCENTER_OFFLINE/TEMPLATE_CATALOG_AUTO_UPDATE/comments are
-    // appended — nothing else is rewritten, reordered or duplicated.
+    // place and PROXCENTER_OFFLINE/TEMPLATE_CATALOG_AUTO_UPDATE/PROXCENTER_HOST_IPS/comments
+    // are appended — nothing else is rewritten, reordered or duplicated.
     const stripChanging = (s: string) => s.split('\n').filter(l => l !== '' &&
-      !/^(VERSION=|ORCHESTRATOR_API_KEY=|PROXCENTER_OFFLINE=|TEMPLATE_CATALOG_AUTO_UPDATE=|# (Orchestrator|Postgres|Air-gapped site))/.test(l))
+      !/^(VERSION=|ORCHESTRATOR_API_KEY=|PROXCENTER_OFFLINE=|TEMPLATE_CATALOG_AUTO_UPDATE=|PROXCENTER_HOST_IPS=|# (Orchestrator|Postgres|Air-gapped site))/.test(l))
     expect(stripChanging(readFileSync(join(sb.installDir, '.env'), 'utf8'))).toEqual(stripChanging(beforeRaw))
   })
 

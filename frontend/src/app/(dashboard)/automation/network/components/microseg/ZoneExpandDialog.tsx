@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Box, CircularProgress, Dialog, DialogContent, DialogTitle, IconButton, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
@@ -13,27 +13,45 @@ import { PrevNextPager } from './PolicyPager'
 import { formatWhen } from './summaryModel'
 import TruncatedText from './TruncatedText'
 import { rowsThatFit } from './useRowsPerPage'
-import { useBoxSize } from './useBoxSize'
 
 type TabId = 'traffic' | 'data' | 'logs'
 const TABS: TabId[] = ['traffic', 'data', 'logs']
-/** A log row, and the head row with the pager below the rows, in px. */
+/** The page margin around the dialog (2 x 16 px), and the fixed chrome above the content: title bar, main tabs, content padding. */
+const PAGE_MARGIN_PX = 32
+const DIALOG_CHROME_PX = 64 + 41 + 40
+/** A log row, and what the Logs tab adds around the rows: the table head and the pager. */
 const LOG_ROW_PX = 22
-const LOG_HEAD_PX = 84
-/** A list row of the Data tab (the tallest, a suggestion), and the pager below the rows. */
+const LOG_HEAD_PX = 68
+/** A list row of the Data tab (the tallest, a suggestion), and what it adds around the rows: the sub-tabs and the pager. */
 const LIST_ROW_PX = 37
-const LIST_HEAD_PX = 56
+const LIST_HEAD_PX = 49 + 56
+
+/** The viewport height, followed as the window resizes: the most the dialog can take. */
+function useViewportHeight(): number {
+  const [height, setHeight] = useState(() => (typeof window === 'undefined' ? 0 : window.innerHeight))
+  useEffect(() => {
+    const onResize = () => setHeight(window.innerHeight)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return height
+}
+
+/** The rows of a page when the dialog takes all the height the viewport leaves it. */
+export function rowsForViewport(viewport: number, rowPx: number, extraPx: number): number {
+  return rowsThatFit(viewport - PAGE_MARGIN_PX - DIALOG_CHROME_PX, rowPx, extraPx)
+}
 const CELL_SX = { py: 0.5, px: 1, whiteSpace: 'nowrap' } as const
 
 /** The events of the engine's memory that reached or left the zone, newest first, older ones on demand. */
-function ZoneLogs({ connectionId, zone, height }: { connectionId: string; zone: MicrosegZone; height: number | undefined }) {
+function ZoneLogs({ connectionId, zone, viewport }: { connectionId: string; zone: MicrosegZone; viewport: number }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
   const to = useTranslations('microsegPilot.observation')
   const format = useFormatter()
   const log = useMicrosegEvents(connectionId, { zone: '', verdict: '', q: '' }, true)
   const rows = log.events.filter(e => e.zone === zone.name || e.src_zone === zone.name)
   const known = log.events.length > 0
-  const size = rowsThatFit(height, LOG_ROW_PX, LOG_HEAD_PX)
+  const size = rowsForViewport(viewport, LOG_ROW_PX, LOG_HEAD_PX)
   const [page, setPage] = useState(0)
   const last = Math.max(0, Math.ceil(rows.length / size) - 1)
   const current = Math.min(page, last)
@@ -98,20 +116,20 @@ function ZoneLogs({ connectionId, zone, height }: { connectionId: string; zone: 
 /** One sub-tab of the Data tab: its label (count included), the add button above its content, the content. */
 export type DataTab = { id: string; label: string; action?: ReactNode; content: (size: number) => ReactNode }
 
-function ZoneData({ tabs, height, boxRef }: { tabs: DataTab[]; height: number | undefined; boxRef: (el: HTMLDivElement | null) => void }) {
+function ZoneData({ tabs, viewport }: { tabs: DataTab[]; viewport: number }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
   const [id, setId] = useState(tabs[0]?.id ?? '')
   const current = tabs.find(x => x.id === id) ?? tabs[0]
   if (!current) return null
   return (
-    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, borderBottom: 1, borderColor: 'divider', mb: 1.5 }}>
         <Tabs value={current.id} onChange={(_e, v: string) => setId(v)} variant='scrollable' scrollButtons={false} aria-label={t('tabData')} sx={{ flex: 1, minWidth: 0, minHeight: 36 }}>
           {tabs.map(x => <Tab key={x.id} value={x.id} label={x.label} sx={{ minHeight: 36, py: 0.5, textTransform: 'none' }} />)}
         </Tabs>
         {current.action}
       </Box>
-      <Box ref={boxRef} role='tabpanel' data-subtab={current.id} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>{current.content(rowsThatFit(height, LIST_ROW_PX, LIST_HEAD_PX))}</Box>
+      <Box role='tabpanel' data-subtab={current.id}>{current.content(rowsForViewport(viewport, LIST_ROW_PX, LIST_HEAD_PX))}</Box>
     </Box>
   )
 }
@@ -129,9 +147,9 @@ export default function ZoneExpandDialog({ zone, connectionId, traffic, dataTabs
   const tc = useTranslations('microsegPilot.overview.panel')
   const [tab, setTab] = useState<TabId>('traffic')
   const titleId = 'zone-expand-title'
-  const [boxRef, box] = useBoxSize<HTMLDivElement>()
+  const viewport = useViewportHeight()
   return (
-    <Dialog open onClose={onClose} maxWidth='lg' fullWidth aria-labelledby={titleId} slotProps={{ paper: { sx: { height: 'calc(100vh - 32px)', maxHeight: 'calc(100vh - 32px)', m: 2 } } }}>
+    <Dialog open onClose={onClose} maxWidth='lg' fullWidth aria-labelledby={titleId} slotProps={{ paper: { sx: { maxHeight: 'calc(100vh - 32px)', minHeight: '50vh', m: 2 } } }}>
       <DialogTitle component='div' id='zone-expand-bar' sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <i className='ri-shield-fill' style={{ fontSize: 20, color: zone.color || undefined }} />
         <Typography id={titleId} component='h2' variant='h6' sx={{ flexShrink: 0 }}>{t('detailsTitle', { name: zone.name })}</Typography>
@@ -144,10 +162,10 @@ export default function ZoneExpandDialog({ zone, connectionId, traffic, dataTabs
           <Tab key={id} value={id} label={t(id === 'traffic' ? 'tabTraffic' : id === 'data' ? 'tabData' : 'tabLogs')} sx={{ minHeight: 40 }} />
         ))}
       </Tabs>
-      <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <DialogContent sx={{ pt: 2 }}>
         {tab === 'traffic' && traffic}
-        {tab === 'data' && <ZoneData tabs={dataTabs} height={box?.height} boxRef={boxRef} />}
-        {tab === 'logs' && <Box ref={boxRef} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}><ZoneLogs connectionId={connectionId} zone={zone} height={box?.height} /></Box>}
+        {tab === 'data' && <ZoneData tabs={dataTabs} viewport={viewport} />}
+        {tab === 'logs' && <ZoneLogs connectionId={connectionId} zone={zone} viewport={viewport} />}
       </DialogContent>
     </Dialog>
   )

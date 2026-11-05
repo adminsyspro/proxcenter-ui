@@ -1,8 +1,8 @@
 /**
- * The zone dialog fills the page height and pages every list of it from the rows that fit (ten without a measure).
+ * The zone dialog follows its content up to the page height and pages every list of it from the rows that fit (ten without a measure).
  */
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
@@ -28,13 +28,48 @@ async function openDialog(opts: Parameters<typeof setup>[0]) {
   return screen.findByRole('dialog', { name: 'Zone details · db' })
 }
 
+const setViewport = (h: number) => { Object.defineProperty(window, 'innerHeight', { value: h, configurable: true, writable: true }) }
+const pageSizes: Record<number, number> = {}
+const realHeight = window.innerHeight
+
 describe('zone dialog: page height and paging', () => {
-  it('fills the page height', async () => {
+  beforeEach(() => setViewport(400))
+  afterEach(() => setViewport(realHeight))
+
+  it('follows its content up to the page height', async () => {
     const dialog = await openDialog({})
     const rules = Array.from(document.querySelectorAll('style')).map(s => s.textContent).join('')
     expect(dialog.className).toContain('MuiDialog-paper')
-    expect(rules).toContain('height:calc(100vh - 32px)')
     expect(rules).toContain('max-height:calc(100vh - 32px)')
+    expect(rules).toContain('min-height:50vh')
+    expect(rules).not.toMatch(/(^|[;{])height:calc\(100vh/)
+  })
+
+  it.each([900, 1200])('shows a page of logs sized from a %i px viewport', async h => {
+    setViewport(h)
+    mock.routes['GET /events?limit=200&zone='] = () => reply(200, { events: [], truncated: false, oldest: null })
+    mock.routes['GET /events?limit=200'] = () => reply(200, { events: Array.from({ length: 60 }, event), truncated: false, oldest: null })
+    const dialog = await openDialog({})
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Logs' }))
+    await waitFor(() => expect(within(dialog).getAllByRole('row').length).toBeGreaterThan(1))
+    pageSizes[h] = within(dialog).getAllByRole('row').length - 1
+  })
+
+  it('derives the rows per page from the viewport height', () => {
+    expect(pageSizes[900]).toBeGreaterThan(10)
+    expect(pageSizes[1200]).toBeGreaterThan(pageSizes[900])
+  })
+
+  it('renders a short list without a filler: the list has no fixed height', async () => {
+    mock.routes['GET /events?limit=200&zone='] = () => reply(200, { events: [], truncated: false, oldest: null })
+    mock.routes['GET /events?limit=200'] = () => reply(200, { events: Array.from({ length: 3 }, event), truncated: false, oldest: null })
+    const dialog = await openDialog({})
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Logs' }))
+    await waitFor(() => expect(within(dialog).getAllByRole('row')).toHaveLength(4))
+    const table = within(dialog).getByRole('table')
+    expect(within(dialog).queryByTestId('logs-pager')).toBeNull()
+    expect(table.parentElement?.getAttribute('style') ?? '').not.toMatch(/height/)
+    expect(table.closest('[role=dialog]')?.querySelector('.MuiDialogContent-root')?.getAttribute('style') ?? '').not.toMatch(/height/)
   })
 
   it('pages the pending suggestions', async () => {

@@ -17,16 +17,23 @@ import { useBoxSize } from './useBoxSize'
 
 type TabId = 'traffic' | 'data' | 'logs'
 const TABS: TabId[] = ['traffic', 'data', 'logs']
+/** A log row, and the head row with the pager below the rows, in px. */
+const LOG_ROW_PX = 22
+const LOG_HEAD_PX = 84
+/** A list row of the Data tab (the tallest, a suggestion), and the pager below the rows. */
+const LIST_ROW_PX = 37
+const LIST_HEAD_PX = 56
 const CELL_SX = { py: 0.5, px: 1, whiteSpace: 'nowrap' } as const
 
 /** The events of the engine's memory that reached or left the zone, newest first, older ones on demand. */
-function ZoneLogs({ connectionId, zone, size }: { connectionId: string; zone: MicrosegZone; size: number }) {
+function ZoneLogs({ connectionId, zone, height }: { connectionId: string; zone: MicrosegZone; height: number | undefined }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
   const to = useTranslations('microsegPilot.observation')
   const format = useFormatter()
   const log = useMicrosegEvents(connectionId, { zone: '', verdict: '', q: '' }, true)
   const rows = log.events.filter(e => e.zone === zone.name || e.src_zone === zone.name)
   const known = log.events.length > 0
+  const size = rowsThatFit(height, LOG_ROW_PX, LOG_HEAD_PX)
   const [page, setPage] = useState(0)
   const last = Math.max(0, Math.ceil(rows.length / size) - 1)
   const current = Math.min(page, last)
@@ -91,7 +98,7 @@ function ZoneLogs({ connectionId, zone, size }: { connectionId: string; zone: Mi
 /** One sub-tab of the Data tab: its label (count included), the add button above its content, the content. */
 export type DataTab = { id: string; label: string; action?: ReactNode; content: (size: number) => ReactNode }
 
-function ZoneData({ tabs, size, boxRef }: { tabs: DataTab[]; size: number; boxRef: (el: HTMLDivElement | null) => void }) {
+function ZoneData({ tabs, height, boxRef }: { tabs: DataTab[]; height: number | undefined; boxRef: (el: HTMLDivElement | null) => void }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
   const [id, setId] = useState(tabs[0]?.id ?? '')
   const current = tabs.find(x => x.id === id) ?? tabs[0]
@@ -104,7 +111,7 @@ function ZoneData({ tabs, size, boxRef }: { tabs: DataTab[]; size: number; boxRe
         </Tabs>
         {current.action}
       </Box>
-      <Box ref={boxRef} role='tabpanel' data-subtab={current.id} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>{current.content(size)}</Box>
+      <Box ref={boxRef} role='tabpanel' data-subtab={current.id} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>{current.content(rowsThatFit(height, LIST_ROW_PX, LIST_HEAD_PX))}</Box>
     </Box>
   )
 }
@@ -123,7 +130,6 @@ export default function ZoneExpandDialog({ zone, connectionId, traffic, dataTabs
   const [tab, setTab] = useState<TabId>('traffic')
   const titleId = 'zone-expand-title'
   const [boxRef, box] = useBoxSize<HTMLDivElement>()
-  const size = rowsThatFit(box?.height)
   return (
     <Dialog open onClose={onClose} maxWidth='lg' fullWidth aria-labelledby={titleId} slotProps={{ paper: { sx: { height: 'calc(100vh - 32px)', maxHeight: 'calc(100vh - 32px)', m: 2 } } }}>
       <DialogTitle component='div' id='zone-expand-bar' sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -140,8 +146,8 @@ export default function ZoneExpandDialog({ zone, connectionId, traffic, dataTabs
       </Tabs>
       <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {tab === 'traffic' && traffic}
-        {tab === 'data' && <ZoneData tabs={dataTabs} size={size} boxRef={boxRef} />}
-        {tab === 'logs' && <Box ref={boxRef} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}><ZoneLogs connectionId={connectionId} zone={zone} size={size} /></Box>}
+        {tab === 'data' && <ZoneData tabs={dataTabs} height={box?.height} boxRef={boxRef} />}
+        {tab === 'logs' && <Box ref={boxRef} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}><ZoneLogs connectionId={connectionId} zone={zone} height={box?.height} /></Box>}
       </DialogContent>
     </Dialog>
   )

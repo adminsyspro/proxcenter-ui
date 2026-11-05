@@ -171,7 +171,10 @@ export type MicrosegRunResult = {
   with_ips?: number
   events?: number
   suggestions?: number
+  /** The nodes whose log page was full: the rest is read on the next run. */
   log_truncated?: string[]
+  /** The nodes whose log rotated since the previous read: the last lines of the old file are not read. */
+  log_rotated?: string[]
   errors?: string[]
   /** Ingress events left out because their destination is not the guest that logged them (flooded bridge). */
   dropped_foreign_dst?: number

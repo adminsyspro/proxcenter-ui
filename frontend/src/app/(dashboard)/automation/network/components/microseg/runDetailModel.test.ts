@@ -23,6 +23,9 @@ describe('runDetailRows', () => {
     expect(runDetailRows(run('log', {}))).toEqual([{ key: 'events', count: 0 }, { key: 'suggestions', count: 0 }])
     expect(keys(run('log', { dropped_foreign_dst: 2, log_truncated: ['pve1', 'pve2'] }))).toEqual(['events', 'suggestions', 'droppedForeignDst', 'logTruncated'])
     expect(runDetailRows(run('log', { log_truncated: ['pve1', 'pve2'] }))[2]).toEqual({ key: 'logTruncated', text: 'pve1, pve2' })
+    expect(runDetailRows(run('log', { log_truncated: ['pve1'], log_rotated: ['pve2', 'pve3'] })).slice(2)).toEqual([
+      { key: 'logTruncated', text: 'pve1' }, { key: 'logRotated', text: 'pve2, pve3' },
+    ])
   })
 
   it('counts the members with and without an IP on an IP read', () => {
@@ -73,11 +76,12 @@ describe('runSummaryParts', () => {
     expect(runSummaryParts(run('apply', { steps: 3 }))).toEqual([])
   })
 
-  it('says the log lines and flows of a log read, the left-out events and cut logs when there are some', () => {
+  it('says the log lines and flows of a log read, the left-out events, the logs behind and the rotated ones when there are some', () => {
     expect(runSummaryParts(run('log', { events: 428, suggestions: 14 }))).toEqual([{ key: 'events', count: 428 }, { key: 'suggestions', count: 14 }])
     expect(runSummaryParts(run('log', { dropped_foreign_dst: 2, log_truncated: ['pve1'] })).slice(2)).toEqual([
       { key: 'droppedForeignDst', count: 2 }, { key: 'logTruncated', text: 'pve1' },
     ])
+    expect(runSummaryParts(run('log', { log_rotated: ['pve2'] })).slice(2)).toEqual([{ key: 'logRotated', text: 'pve2' }])
   })
 
   it('says the members with an IP out of all of an IP read', () => {

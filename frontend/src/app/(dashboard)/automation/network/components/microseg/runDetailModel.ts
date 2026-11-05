@@ -30,6 +30,7 @@ export function runDetailRows(run: MicrosegRun): RunDetailRow[] {
       add({ key: 'suggestions', count: r.suggestions ?? 0 })
       if (positive(r.dropped_foreign_dst)) add({ key: 'droppedForeignDst', count: r.dropped_foreign_dst! })
       if (positive(r.log_truncated?.length)) add({ key: 'logTruncated', text: r.log_truncated!.join(', ') })
+      if (positive(r.log_rotated?.length)) add({ key: 'logRotated', text: r.log_rotated!.join(', ') })
       break
     case 'ips': {
       const withIps = r.with_ips ?? 0
@@ -89,6 +90,7 @@ export function runSummaryParts(run: MicrosegRun): RunSummaryPart[] {
       add('suggestions', r.suggestions, true)
       add('droppedForeignDst', r.dropped_foreign_dst)
       if (positive(r.log_truncated?.length)) parts.push({ key: 'logTruncated', text: r.log_truncated!.join(', ') })
+      if (positive(r.log_rotated?.length)) parts.push({ key: 'logRotated', text: r.log_rotated!.join(', ') })
       break
     case 'ips':
       parts.push({ key: 'withIps', count: r.with_ips ?? 0, total: r.members ?? 0 })

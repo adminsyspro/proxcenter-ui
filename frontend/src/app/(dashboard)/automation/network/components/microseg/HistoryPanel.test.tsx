@@ -261,14 +261,15 @@ describe('runs', () => {
 
   it('tells what a log read counted, not the guests of an apply', async () => {
     mock.routes['GET /runs/run-1'] = () => reply(200, runOf(1, {
-      kind: 'log', writes: 0, result: { guests: 0, members: 0, steps: 0, drifts: 0, events: 423, suggestions: 14, dropped_foreign_dst: 3, log_truncated: ['pve2'] },
+      kind: 'log', writes: 0, result: { guests: 0, members: 0, steps: 0, drifts: 0, events: 423, suggestions: 14, dropped_foreign_dst: 3, log_truncated: ['pve2'], log_rotated: ['pve3'] },
     }))
     setup({ runs: [runOf(1, { kind: 'log', writes: 0 })] })
     fireEvent.click(within(await rowOf(/^Log read, started/)).getByRole('button', { name: 'Details' }))
     const drawer = await screen.findByRole('region', { name: 'Details of the run: Log read' })
     expect(await within(drawer).findByText('Reads the node firewall logs since the previous read')).toBeTruthy()
     expect(lineValues(drawer)).toEqual([
-      ['Log lines read', '423'], ['Uncovered flows aggregated', '14'], ['Events left out (flooded bridge)', '3'], ['Logs cut at the read limit', 'pve2'],
+      ['Log lines read', '423'], ['Uncovered flows aggregated', '14'], ['Events left out (flooded bridge)', '3'], ['Logs behind (page full, the rest read on the next run)', 'pve2'],
+      ['Logs rotated (the last lines of the old file not read)', 'pve3'],
     ])
     expect(within(drawer).queryByText(/done, .* failed/)).toBeNull()
   })

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { pveFetchMock } = vi.hoisted(() => ({ pveFetchMock: vi.fn() }))
 vi.mock('./client', () => ({ pveFetch: pveFetchMock }))
 
-import { waitForTask } from './tasks'
+import { waitForTask, waitForTaskStopped } from './tasks'
 
 const conn = { baseUrl: 'https://pve:8006', apiToken: 't' } as any
 const stopped = (exitstatus: string) => ({ status: 'stopped', exitstatus })
@@ -45,5 +45,23 @@ describe('waitForTask', () => {
   it('times out', async () => {
     pveFetchMock.mockResolvedValue({ status: 'running' })
     await expect(waitForTask(conn, 'pve1', 'UPID:x', { timeoutMs: 5, intervalMs: 2 })).rejects.toThrow('timed out')
+  })
+})
+
+describe('waitForTaskStopped', () => {
+  it('ends on a stopped task, whatever its exit status, and retries a failed poll', async () => {
+    pveFetchMock
+      .mockRejectedValueOnce(new Error('ECONNRESET'))
+      .mockResolvedValueOnce({ status: 'running' })
+      .mockResolvedValueOnce(stopped('clone failed: no space left'))
+    await expect(waitForTaskStopped(conn, 'pve1', 'UPID:x', { intervalMs: 1 })).resolves.toEqual({ stopped: true, exitstatus: 'clone failed: no space left' })
+    expect(pveFetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('says the end was not seen on timeout or when every poll fails', async () => {
+    pveFetchMock.mockResolvedValue({ status: 'running' })
+    await expect(waitForTaskStopped(conn, 'pve1', 'UPID:x', { timeoutMs: 5, intervalMs: 2 })).resolves.toEqual({ stopped: false })
+    pveFetchMock.mockRejectedValue(new Error('no such task'))
+    await expect(waitForTaskStopped(conn, 'pve1', 'UPID:x', { timeoutMs: 5, intervalMs: 2 })).resolves.toEqual({ stopped: false })
   })
 })

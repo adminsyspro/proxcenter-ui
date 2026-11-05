@@ -22,6 +22,7 @@ import { startOrchestratorAuditRelay } from '@/lib/syslog/orchestratorRelay'
 import { startCatalogRefresher } from '@/lib/templates/catalogRefresher'
 import { isCatalogAutoUpdateEnabled } from '@/lib/templates/catalogStore'
 import { startVdcUsageSampler } from '@/lib/vdc/usageHistory/sampler'
+import { startGpuUsageSampler } from '@/lib/gpu/billing/sampler'
 import { startTlsListener } from '@/lib/tls/bootstrap'
 import { startTlsReconciler } from '@/lib/tls/reconciler'
 
@@ -114,6 +115,14 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this: the history simply misses the periods
     // until the next boot starts the sampler.
     console.error('[startup] vDC usage sampler failed to start (non-fatal):', err)
+  }
+
+  try {
+    // GPU chargeback (#672): GPU-hours per VM and owner, Enterprise
+    // (gpu_management) only. A database lease lets one replica count.
+    startGpuUsageSampler()
+  } catch (err) {
+    console.error('[startup] GPU usage sampler failed to start (non-fatal):', err)
   }
 
   try {

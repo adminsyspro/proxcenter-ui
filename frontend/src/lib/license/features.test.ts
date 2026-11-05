@@ -107,4 +107,12 @@ describe('registry and edition mapping invariants', () => {
     expect(effectiveHasFeature({ licensed: true, edition: 'community' }, 'sla_monitoring')).toBe(false)
     expect(effectiveHasFeature(enterprise, 'sla_monitoring')).toBe(true)
   })
+
+  it('grants the GPU page to both enterprise tiers and not to community', () => {
+    expect(Features.GPU_MANAGEMENT).toBe('gpu_management')
+    expect(EDITION_FEATURES.enterprise).toContain('gpu_management')
+    expect(EDITION_FEATURES.enterprise_plus).toContain('gpu_management')
+    expect(effectiveHasFeature({ licensed: true, edition: 'community' }, 'gpu_management')).toBe(false)
+    expect(effectiveHasFeature(enterprise, 'gpu_management')).toBe(true)
+  })
 })

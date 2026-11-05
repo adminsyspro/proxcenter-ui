@@ -86,17 +86,24 @@ export function listJsFiles(root, dir = 'src') {
   return out.sort()
 }
 
+// The whole program under --strict outgrows Node's default heap (about 4 GB).
+const TSC_HEAP_MB = 8192
+
 function runTsc(root) {
   const tsc = createRequire(join(root, 'package.json')).resolve('typescript/bin/tsc')
   try {
-    return execFileSync(process.execPath, [tsc, '--noEmit', '--incremental', 'false', '--pretty', 'false', '--strict', '-p', 'tsconfig.json'], {
+    return execFileSync(process.execPath, [`--max-old-space-size=${TSC_HEAP_MB}`, tsc, '--noEmit', '--incremental', 'false', '--pretty', 'false', '--strict', '-p', 'tsconfig.json'], {
       cwd: root,
       encoding: 'utf8',
       maxBuffer: 256 * 1024 * 1024
     })
   } catch (e) {
-    if (typeof e.stdout === 'string') return e.stdout
-    throw e
+    // tsc exits 1 or 2 when it reports diagnostics; anything else (a crash,
+    // out of memory) leaves no diagnostics to read and must not pass as "0 errors".
+    if ((e.status === 1 || e.status === 2) && typeof e.stdout === 'string') return e.stdout
+    console.error(e.stderr || e.message)
+    console.error(`tsc did not finish (exit ${e.status ?? e.signal}): strict check not run.`)
+    process.exit(1)
   }
 }
 

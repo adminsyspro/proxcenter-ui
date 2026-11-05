@@ -143,7 +143,7 @@ export default function VdcGpuQuotaEditor({ vdcId, ref, onInvalidChange }: Props
     if (!licensed || !vdcId) return
     let cancelled = false
     setStatus('loading')
-    ;(async () => {
+    void (async () => {
       try {
         const res = await fetch(`/api/v1/vdcs/${encodeURIComponent(vdcId)}/gpu/quota`)
         if (cancelled) return

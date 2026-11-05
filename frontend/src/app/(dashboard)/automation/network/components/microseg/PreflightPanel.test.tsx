@@ -96,6 +96,21 @@ describe('checks', () => {
     expect(within(line).getByText('The rules of the security group sg-gone could not be read: the management access cannot be checked.')).toBeTruthy()
   })
 
+  it('says every reason of a socle failure on its line', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'socle_rules', status: 'fail', fix: 'socle', detail: {
+        web: false, ssh: false, reason: 'host_rules_unreadable',
+        reasons: [{ reason: 'host_rules_unreadable', node: 'pve2' }, { reason: 'group_unreadable', group: 'sg-gone' }],
+        uncovered: ['10.0.0.1'], uncovered_nodes: ['pve1', 'pve2'],
+      } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'Management access: failed' })
+    expect(within(line).getByText('The firewall rules of node pve2 could not be read: the management access cannot be checked. ' +
+      'The rules of the security group sg-gone could not be read: the management access cannot be checked. ' +
+      'No rule keeps port 8006, 22 open from 10.0.0.1 on pve1: turning the firewall on could cut ProxCenter off.')).toBeTruthy()
+  })
+
   it('names the address the socle rules do not accept', async () => {
     mock.routes['GET /preflight'] = () => reply(200, {
       checks: [{ id: 'socle_rules', status: 'fail', fix: 'socle', detail: { web: true, ssh: false, uncovered: ['192.168.5.1'] } }],

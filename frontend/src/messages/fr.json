@@ -12760,7 +12760,8 @@
       "openWizard": "Ouvrir l'assistant de déploiement",
       "clusterFirewallOff": "Pare-feu de cluster désactivé",
       "notDeployed": "Rien de déployé",
-      "socleUncovered": "Adresses que les règles n'acceptent pas : {ips}"
+      "socleUncovered": "Adresses que les règles n'acceptent pas : {ips}",
+      "socleUncoveredNodes": "Adresses que les règles n'acceptent pas : {ips} (sur {nodes})"
     },
     "pending": {
       "noCount": "Changements non appliqués",
@@ -13713,7 +13714,10 @@
           "missing": "Aucune règle ne laisse le port {ports} ouvert depuis n'importe où : activer le pare-feu pourrait couper votre accès.",
           "missingFor": "Aucune règle ne garde le port {ports} ouvert depuis {ips} : activer le pare-feu pourrait couper ProxCenter.",
           "dockerInternal": "Aucune règle ne garde le port {ports} ouvert pour ProxCenter : l'adresse détectée est interne à Docker, renseignez dans Réglages > Avancé l'adresse de l'hôte vue par Proxmox.",
-          "groupUnreadable": "Les règles du groupe de sécurité {group} n'ont pas pu être lues : impossible de vérifier que l'accès d'administration reste ouvert."
+          "groupUnreadable": "Les règles du groupe de sécurité {group} n'ont pas pu être lues : impossible de vérifier que l'accès d'administration reste ouvert.",
+          "hostRulesUnreadable": "Les règles du pare-feu du nœud {node} n'ont pas pu être lues : impossible de vérifier que l'accès d'administration reste ouvert.",
+          "missingForNodes": "Aucune règle ne garde le port {ports} ouvert depuis {ips} sur {nodes} : activer le pare-feu pourrait couper ProxCenter.",
+          "missingOn": "Aucune règle ne garde le port {ports} ouvert sur {nodes} : activer le pare-feu pourrait couper votre accès."
         },
         "log_ratelimit": {
           "title": "Limite du débit de journal",

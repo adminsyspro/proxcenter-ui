@@ -98,6 +98,37 @@ describe('a SOCLE_MISSING refusal', () => {
     expect(preflightMessage(check).detail).toEqual({ key: 'checks.socle_rules.groupUnreadable', values: { group: 'sg-gone' } })
   })
 
+  it('says every reason of the list, with the nodes left uncovered', () => {
+    const detail = {
+      web: false, ssh: true, reason: 'docker_internal',
+      reasons: [{ reason: 'docker_internal', self_ip: '172.17.0.3' }, { reason: 'host_rules_unreadable', node: 'pve2' }, { reason: 'group_unreadable', group: 'sg-gone' }],
+      uncovered: ['10.0.0.1'], uncovered_nodes: ['pve1', 'pve2'],
+    }
+    expect(socleRefusalLines(detail)).toEqual([
+      { key: 'preflight.checks.self_in_zone.dockerInternal' },
+      { key: 'preflight.checks.socle_rules.hostRulesUnreadable', values: { node: 'pve2' } },
+      { key: 'preflight.checks.socle_rules.groupUnreadable', values: { group: 'sg-gone' } },
+      { key: 'stop.socleUncoveredNodes', values: { ips: '10.0.0.1', nodes: 'pve1, pve2' } },
+    ])
+    const message = preflightMessage({ id: 'socle_rules', status: 'fail', fix: 'socle', detail })
+    expect(message.detail).toEqual({ key: 'checks.socle_rules.dockerInternal', values: { ports: '8006' } })
+    expect(message.more).toEqual([
+      { key: 'checks.socle_rules.hostRulesUnreadable', values: { node: 'pve2' } },
+      { key: 'checks.socle_rules.groupUnreadable', values: { group: 'sg-gone' } },
+    ])
+  })
+
+  it('names the nodes the rules leave ProxCenter out on, without the unreadable ones twice', () => {
+    const check = (detail: Record<string, unknown>) => preflightMessage({ id: 'socle_rules', status: 'fail', fix: 'socle', detail })
+    expect(check({ web: false, ssh: true, uncovered: ['10.0.0.1'], uncovered_nodes: ['pve1'] }).detail)
+      .toEqual({ key: 'checks.socle_rules.missingForNodes', values: { ports: '8006', ips: '10.0.0.1', nodes: 'pve1' } })
+    const m = check({ web: false, ssh: false, uncovered: ['10.0.0.1'], uncovered_nodes: ['pve1', 'pve2'], reasons: [{ reason: 'host_rules_unreadable', node: 'pve2' }], reason: 'host_rules_unreadable' })
+    expect(m.detail).toEqual({ key: 'checks.socle_rules.hostRulesUnreadable', values: { node: 'pve2' } })
+    expect(m.more).toEqual([{ key: 'checks.socle_rules.missingForNodes', values: { ports: '8006, 22', ips: '10.0.0.1', nodes: 'pve1' } }])
+    expect(check({ web: false, ssh: false, uncovered_nodes: ['pve3'] }).detail)
+      .toEqual({ key: 'checks.socle_rules.missingOn', values: { ports: '8006, 22', nodes: 'pve3' } })
+  })
+
   it('says nothing more without a detail', () => {
     expect(socleRefusalLines(undefined)).toEqual([])
     expect(socleRefusalLines({ web: false, ssh: true })).toEqual([])

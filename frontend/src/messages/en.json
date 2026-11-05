@@ -12759,7 +12759,8 @@
       "openWizard": "Open the deployment wizard",
       "clusterFirewallOff": "Cluster firewall disabled",
       "notDeployed": "Nothing deployed",
-      "socleUncovered": "Addresses the rules do not accept: {ips}"
+      "socleUncovered": "Addresses the rules do not accept: {ips}",
+      "socleUncoveredNodes": "Addresses the rules do not accept: {ips} (on {nodes})"
     },
     "pending": {
       "noCount": "Unapplied changes",
@@ -13712,7 +13713,10 @@
           "missing": "No rule keeps port {ports} open from anywhere: turning the firewall on could cut your access.",
           "missingFor": "No rule keeps port {ports} open from {ips}: turning the firewall on could cut ProxCenter off.",
           "dockerInternal": "No rule keeps port {ports} open for ProxCenter: the detected address is internal to Docker, in Settings > Advanced enter the address of the host as Proxmox sees it.",
-          "groupUnreadable": "The rules of the security group {group} could not be read: the management access cannot be checked."
+          "groupUnreadable": "The rules of the security group {group} could not be read: the management access cannot be checked.",
+          "hostRulesUnreadable": "The firewall rules of node {node} could not be read: the management access cannot be checked.",
+          "missingForNodes": "No rule keeps port {ports} open from {ips} on {nodes}: turning the firewall on could cut ProxCenter off.",
+          "missingOn": "No rule keeps port {ports} open on {nodes}: turning the firewall on could cut your access."
         },
         "log_ratelimit": {
           "title": "Log rate limit",

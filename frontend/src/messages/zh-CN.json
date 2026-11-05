@@ -12759,7 +12759,8 @@
       "openWizard": "打开部署向导",
       "clusterFirewallOff": "集群防火墙已禁用",
       "notDeployed": "尚未部署任何内容",
-      "socleUncovered": "规则未接受的地址：{ips}"
+      "socleUncovered": "规则未接受的地址：{ips}",
+      "socleUncoveredNodes": "规则未接受的地址：{ips}（{nodes}）"
     },
     "pending": {
       "noCount": "未应用的更改",
@@ -13712,7 +13713,10 @@
           "missing": "没有任何规则允许从任意来源访问端口 {ports}：开启防火墙可能会切断您的访问。",
           "missingFor": "没有规则从 {ips} 保持端口 {ports} 开放：启用防火墙可能会切断 ProxCenter。",
           "dockerInternal": "没有规则为 ProxCenter 保持端口 {ports} 开放：检测到的地址是 Docker 内部地址，请在 设置 > 高级 中填写 Proxmox 看到的主机地址。",
-          "groupUnreadable": "无法读取安全组 {group} 的规则：无法检查管理访问。"
+          "groupUnreadable": "无法读取安全组 {group} 的规则：无法检查管理访问。",
+          "hostRulesUnreadable": "无法读取节点 {node} 的防火墙规则：无法检查管理访问。",
+          "missingForNodes": "{nodes} 上没有规则从 {ips} 保持端口 {ports} 开放：启用防火墙可能会切断 ProxCenter。",
+          "missingOn": "{nodes} 上没有规则保持端口 {ports} 开放：启用防火墙可能会切断您的访问。"
         },
         "log_ratelimit": {
           "title": "日志速率限制",

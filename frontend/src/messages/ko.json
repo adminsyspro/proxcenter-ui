@@ -12759,7 +12759,8 @@
       "openWizard": "배포 마법사 열기",
       "clusterFirewallOff": "클러스터 방화벽 비활성화됨",
       "notDeployed": "배포된 항목 없음",
-      "socleUncovered": "규칙이 허용하지 않는 주소: {ips}"
+      "socleUncovered": "규칙이 허용하지 않는 주소: {ips}",
+      "socleUncoveredNodes": "규칙이 허용하지 않는 주소: {ips} ({nodes})"
     },
     "pending": {
       "noCount": "적용되지 않은 변경",
@@ -13712,7 +13713,10 @@
           "missing": "어디에서든 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 접근이 차단될 수 있습니다.",
           "missingFor": "{ips}에서 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 ProxCenter가 차단될 수 있습니다.",
           "dockerInternal": "ProxCenter에 대해 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 감지된 주소는 Docker 내부 주소이므로 설정 > 고급에서 Proxmox가 보는 호스트 주소를 입력하세요.",
-          "groupUnreadable": "보안 그룹 {group}의 규칙을 읽을 수 없습니다. 관리 접근을 확인할 수 없습니다."
+          "groupUnreadable": "보안 그룹 {group}의 규칙을 읽을 수 없습니다. 관리 접근을 확인할 수 없습니다.",
+          "hostRulesUnreadable": "노드 {node}의 방화벽 규칙을 읽을 수 없습니다. 관리 접근을 확인할 수 없습니다.",
+          "missingForNodes": "{nodes}에서 {ips}의 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 ProxCenter가 차단될 수 있습니다.",
+          "missingOn": "{nodes}에서 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 접근이 차단될 수 있습니다."
         },
         "log_ratelimit": {
           "title": "로그 속도 제한",

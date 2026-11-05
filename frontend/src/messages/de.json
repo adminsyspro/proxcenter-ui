@@ -12427,7 +12427,8 @@
       "openWizard": "Bereitstellungsassistenten öffnen",
       "clusterFirewallOff": "Cluster-Firewall deaktiviert",
       "notDeployed": "Nichts bereitgestellt",
-      "socleUncovered": "Von den Regeln nicht akzeptierte Adressen: {ips}"
+      "socleUncovered": "Von den Regeln nicht akzeptierte Adressen: {ips}",
+      "socleUncoveredNodes": "Von den Regeln nicht akzeptierte Adressen: {ips} (auf {nodes})"
     },
     "pending": {
       "noCount": "Nicht angewendete Änderungen",
@@ -13380,7 +13381,10 @@
           "missing": "Keine Regel hält Port {ports} von überall offen: Das Einschalten der Firewall könnte Ihren Zugriff abschneiden.",
           "missingFor": "Keine Regel hält Port {ports} von {ips} aus offen: Das Aktivieren der Firewall könnte ProxCenter abschneiden.",
           "dockerInternal": "Keine Regel hält Port {ports} für ProxCenter offen: Die erkannte Adresse ist Docker-intern, tragen Sie unter Einstellungen > Erweitert die Adresse des Hosts ein, die Proxmox sieht.",
-          "groupUnreadable": "Die Regeln der Sicherheitsgruppe {group} konnten nicht gelesen werden: Der Verwaltungszugang kann nicht geprüft werden."
+          "groupUnreadable": "Die Regeln der Sicherheitsgruppe {group} konnten nicht gelesen werden: Der Verwaltungszugang kann nicht geprüft werden.",
+          "hostRulesUnreadable": "Die Firewall-Regeln des Knotens {node} konnten nicht gelesen werden: Der Verwaltungszugang kann nicht geprüft werden.",
+          "missingForNodes": "Keine Regel hält Port {ports} von {ips} auf {nodes} offen: Das Aktivieren der Firewall könnte ProxCenter abschneiden.",
+          "missingOn": "Keine Regel hält Port {ports} auf {nodes} offen: Das Aktivieren der Firewall könnte Ihren Zugang abschneiden."
         },
         "log_ratelimit": {
           "title": "Protokoll-Ratenlimit",

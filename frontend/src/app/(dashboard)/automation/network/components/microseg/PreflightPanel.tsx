@@ -20,13 +20,14 @@ const STATUS_ICON: Record<PreflightStatus, { icon: string; color: string }> = {
 function CheckRow({ check, onOpenWizard, onResume }: { check: PreflightCheck; onOpenWizard?: () => void; onResume?: () => void }) {
   const t = useTranslations('microsegPilot.preflight')
   const tStop = useTranslations('microsegPilot.stop')
-  const { title, detail } = preflightMessage(check)
+  const { title, detail, more = [] } = preflightMessage(check)
   const name = title ? t(`checks.${title}.title`) : check.id
   // The rate PVE writes ("20/second") is said with a translated unit; any other wording is shown as PVE wrote it.
   const rawRate = detail?.values?.rate
   const rate = parseRate(typeof rawRate === 'string' ? rawRate : undefined)
   const values = rate ? { ...detail?.values, rate: t(`rateUnits.${rate.unit}`, { count: rate.count }) } : detail?.values
-  const message = detail ? t(detail.key, values) : ''
+  // Every reason on the same line, in full in the tooltip of the cut text.
+  const message = detail ? [t(detail.key, values), ...more.map(line => t(line.key, line.values))].join(' ') : ''
   const icon = STATUS_ICON[check.status] ?? STATUS_ICON.warn
 
   return (

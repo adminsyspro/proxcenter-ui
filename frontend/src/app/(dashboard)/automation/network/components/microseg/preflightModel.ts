@@ -9,6 +9,8 @@ export type PreflightMessage = {
   title: string | null
   /** Under microsegPilot.preflight, with its values, or null when the check says nothing more. */
   detail: { key: string; values?: Record<string, string | number> } | null
+  /** Further sentences under microsegPilot.preflight, said after the detail (every reason of a socle failure). */
+  more?: Array<{ key: string; values?: Record<string, string | number> }>
 }
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
@@ -27,7 +29,59 @@ function guestList(value: unknown): string {
     .join(', ')
 }
 
-function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
+type SocleReason = { reason: string; group: string; node: string }
+
+/** Every reason of a socle failure: the `reasons` list, or the single `reason` of an older orchestrator. */
+function socleReasons(detail: Record<string, unknown>): SocleReason[] {
+  const list = Array.isArray(detail.reasons) ? detail.reasons : [{ reason: detail.reason, group: detail.group, node: detail.node }]
+  return list
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+    .map(r => ({ reason: text(r.reason), group: text(r.group), node: text(r.node) }))
+    .filter(r => r.reason !== '')
+}
+
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value : []).filter((v): v is string => typeof v === 'string')
+
+type Line = { key: string; values?: Record<string, string> }
+
+/**
+ * The sentences of a socle failure, under microsegPilot.preflight: one per
+ * reason (Docker address, node rules or security group that could not be
+ * read), and the addresses and nodes left uncovered (the nodes whose rules
+ * could not be read are already said).
+ */
+function socleLines(detail: Record<string, unknown>, ports: string): { reasons: Line[]; uncovered: Line | null } {
+  const reasons: Line[] = []
+  const unreadableNodes = new Set<string>()
+  for (const r of socleReasons(detail)) {
+    if (r.reason === 'docker_internal') reasons.push({ key: 'checks.socle_rules.dockerInternal', values: { ports } })
+    else if (r.reason === 'group_unreadable') reasons.push({ key: 'checks.socle_rules.groupUnreadable', values: { group: r.group } })
+    else if (r.reason === 'host_rules_unreadable') {
+      unreadableNodes.add(r.node)
+      reasons.push({ key: 'checks.socle_rules.hostRulesUnreadable', values: { node: r.node } })
+    }
+  }
+  const ips = strings(detail.uncovered)
+  const nodes = strings(detail.uncovered_nodes).filter(n => !unreadableNodes.has(n))
+  let uncovered: Line | null = null
+  if (ips.length > 0 && nodes.length > 0) uncovered = { key: 'checks.socle_rules.missingForNodes', values: { ports, ips: ips.join(', '), nodes: nodes.join(', ') } }
+  else if (ips.length > 0) uncovered = { key: 'checks.socle_rules.missingFor', values: { ports, ips: ips.join(', ') } }
+  else if (nodes.length > 0) uncovered = { key: 'checks.socle_rules.missingOn', values: { ports, nodes: nodes.join(', ') } }
+  return { reasons, uncovered }
+}
+
+function socleMessage(detail: Record<string, unknown>): PreflightMessage['detail'] & { more?: Line[] } {
+  const ports = socleMissing(detail)
+  const { reasons, uncovered } = socleLines(detail, ports)
+  // The Docker sentence already says the ports are not open for ProxCenter: no generic line besides.
+  const docker = reasons.some(r => r.key === 'checks.socle_rules.dockerInternal')
+  const lines = [...reasons, ...(uncovered && !docker ? [uncovered] : [])]
+  if (lines.length === 0) return { key: 'checks.socle_rules.missing', values: { ports } }
+  const [first, ...more] = lines
+  return more.length > 0 ? { ...first, more } : first
+}
+
+function detailOf(check: PreflightCheck): PreflightMessage['detail'] & { more?: Line[] } | null {
   const detail = check.detail ?? {}
   const error = text(detail.error)
   if (check.status === 'fail' && error) return { key: 'readFailed', values: { error } }
@@ -38,12 +92,7 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
       return { key: check.status === 'pass' ? 'checks.cluster_firewall.pass' : 'checks.cluster_firewall.off' }
     case 'socle_rules': {
       if (check.status === 'pass') return { key: detail.node_firewalls === 'off' ? 'checks.socle_rules.nodesOff' : 'checks.socle_rules.pass' }
-      const ports = socleMissing(detail)
-      if (detail.reason === 'docker_internal') return { key: 'checks.socle_rules.dockerInternal', values: { ports } }
-      if (detail.reason === 'group_unreadable') return { key: 'checks.socle_rules.groupUnreadable', values: { group: text(detail.group) } }
-      const uncovered = (Array.isArray(detail.uncovered) ? detail.uncovered : []).filter((ip): ip is string => typeof ip === 'string')
-      if (uncovered.length > 0) return { key: 'checks.socle_rules.missingFor', values: { ports, ips: uncovered.join(', ') } }
-      return { key: 'checks.socle_rules.missing', values: { ports } }
+      return socleMessage(detail)
     }
     case 'log_ratelimit': {
       const rate = text(detail.rate)
@@ -76,11 +125,14 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
  */
 export function socleRefusalLines(detail: Record<string, unknown> | undefined): Array<{ key: string; values?: Record<string, string> }> {
   if (!detail) return []
-  const lines: Array<{ key: string; values?: Record<string, string> }> = []
-  if (detail.reason === 'docker_internal') lines.push({ key: 'preflight.checks.self_in_zone.dockerInternal' })
-  if (detail.reason === 'group_unreadable') lines.push({ key: 'preflight.checks.socle_rules.groupUnreadable', values: { group: text(detail.group) } })
-  const uncovered = (Array.isArray(detail.uncovered) ? detail.uncovered : []).filter((ip): ip is string => typeof ip === 'string')
-  if (uncovered.length > 0) lines.push({ key: 'stop.socleUncovered', values: { ips: uncovered.join(', ') } })
+  const { reasons } = socleLines(detail, '')
+  const lines: Array<{ key: string; values?: Record<string, string> }> = reasons.map(r => (r.key === 'checks.socle_rules.dockerInternal'
+    ? { key: 'preflight.checks.self_in_zone.dockerInternal' }
+    : { key: `preflight.${r.key}`, values: r.values }))
+  const ips = strings(detail.uncovered)
+  const nodes = strings(detail.uncovered_nodes)
+  if (ips.length > 0 && nodes.length > 0) lines.push({ key: 'stop.socleUncoveredNodes', values: { ips: ips.join(', '), nodes: nodes.join(', ') } })
+  else if (ips.length > 0) lines.push({ key: 'stop.socleUncovered', values: { ips: ips.join(', ') } })
   return lines
 }
 
@@ -97,7 +149,10 @@ export function parseRate(raw: string | undefined): { count: number; unit: RateU
 const KNOWN_IDS = new Set(['cluster_firewall', 'socle_rules', 'log_ratelimit', 'self_in_zone', 'egress_subnets'])
 
 export function preflightMessage(check: PreflightCheck): PreflightMessage {
-  return { title: KNOWN_IDS.has(check.id) ? check.id : null, detail: detailOf(check) }
+  const found = detailOf(check)
+  if (!found) return { title: KNOWN_IDS.has(check.id) ? check.id : null, detail: null }
+  const { more, ...detail } = found
+  return { title: KNOWN_IDS.has(check.id) ? check.id : null, detail, ...(more ? { more } : {}) }
 }
 
 /** The cluster firewall is off because the emergency stop switched it off: lifting the stop is the fix, not the wizard. */

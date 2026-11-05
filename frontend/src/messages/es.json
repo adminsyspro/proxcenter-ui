@@ -12759,7 +12759,8 @@
       "openWizard": "Abrir el asistente de despliegue",
       "clusterFirewallOff": "Cortafuegos de clúster desactivado",
       "notDeployed": "Nada desplegado",
-      "socleUncovered": "Direcciones que las reglas no aceptan: {ips}"
+      "socleUncovered": "Direcciones que las reglas no aceptan: {ips}",
+      "socleUncoveredNodes": "Direcciones que las reglas no aceptan: {ips} (en {nodes})"
     },
     "pending": {
       "noCount": "Cambios sin aplicar",
@@ -13712,7 +13713,10 @@
           "missing": "Ninguna regla mantiene abierto el puerto {ports} desde cualquier origen: activar el cortafuegos podría cortar su acceso.",
           "missingFor": "Ninguna regla mantiene abierto el puerto {ports} desde {ips}: activar el cortafuegos podría dejar fuera a ProxCenter.",
           "dockerInternal": "Ninguna regla mantiene abierto el puerto {ports} para ProxCenter: la dirección detectada es interna de Docker, indique en Ajustes > Avanzado la dirección del host que ve Proxmox.",
-          "groupUnreadable": "No se pudieron leer las reglas del grupo de seguridad {group}: no se puede comprobar el acceso de administración."
+          "groupUnreadable": "No se pudieron leer las reglas del grupo de seguridad {group}: no se puede comprobar el acceso de administración.",
+          "hostRulesUnreadable": "No se pudieron leer las reglas del cortafuegos del nodo {node}: no se puede comprobar el acceso de administración.",
+          "missingForNodes": "Ninguna regla mantiene abierto el puerto {ports} desde {ips} en {nodes}: activar el cortafuegos podría dejar fuera a ProxCenter.",
+          "missingOn": "Ninguna regla mantiene abierto el puerto {ports} en {nodes}: activar el cortafuegos podría cortar su acceso."
         },
         "log_ratelimit": {
           "title": "Límite de tasa del registro",

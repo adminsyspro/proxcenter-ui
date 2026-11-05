@@ -129,6 +129,26 @@ describe('the resume dialog', () => {
     expect(await within(dialog).findByText('The rules of the security group sg-gone could not be read: the management access cannot be checked.')).toBeTruthy()
   })
 
+  it('lists every reason of the refusal and the nodes left uncovered', async () => {
+    mock.routes['POST /emergency-stop'] = () => reply(409, {
+      code: 'SOCLE_MISSING',
+      error: 'the emergency stop is kept: …',
+      detail: {
+        web: false, ssh: true, reason: 'docker_internal',
+        reasons: [{ reason: 'docker_internal', self_ip: '172.17.0.3' }, { reason: 'host_rules_unreadable', node: 'pve2' }],
+        uncovered: ['10.42.0.250'], uncovered_nodes: ['pve1'],
+      },
+    })
+    renderConfigured()
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Resume' }))
+
+    expect(await within(dialog).findByText('The detected address is internal to Docker: in Settings > Advanced, enter the address of the host as Proxmox sees it.')).toBeTruthy()
+    expect(within(dialog).getByText('The firewall rules of node pve2 could not be read: the management access cannot be checked.')).toBeTruthy()
+    expect(within(dialog).getByText('Addresses the rules do not accept: 10.42.0.250 (on pve1)')).toBeTruthy()
+  })
+
   it('opens the deployment wizard from the refusal and closes the dialog', async () => {
     mock.routes['POST /emergency-stop'] = () => reply(409, { code: 'SOCLE_MISSING', error: 'x' })
     renderConfigured()

@@ -13255,6 +13255,13 @@
         "member_without_ip": "Membres sans IP connue ({count, number})",
         "ambiguous_zone": "Invités dans plusieurs zones ({count, number})",
         "object_collision": "Noms déjà utilisés dans Proxmox ({count, number})",
+        "egress_rule_missing": "Règles de sortie absentes ({count, number})",
+        "egress_rule_misplaced": "Règles de sortie mal placées ({count, number})",
+        "egress_rule_verdict": "Règles de sortie au mauvais verdict ({count, number})",
+        "known_rule_missing": "Règles d'adresses connues absentes ({count, number})",
+        "known_rule_extra": "Règles d'adresses connues en trop ({count, number})",
+        "local_set_desync": "Ensembles du réseau local désynchronisés ({count, number})",
+        "egress_no_subnet": "Sorties sans sous-réseau local ({count, number})",
         "generic": "{kind} (nombre : {count, number})"
       },
       "noneZone": "aucune",

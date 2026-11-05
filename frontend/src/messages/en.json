@@ -13254,6 +13254,13 @@
         "member_without_ip": "Members without a known IP ({count, number})",
         "ambiguous_zone": "Guests in several zones ({count, number})",
         "object_collision": "Names already used in Proxmox ({count, number})",
+        "egress_rule_missing": "Outbound rule missing ({count, number})",
+        "egress_rule_misplaced": "Outbound rule misplaced ({count, number})",
+        "egress_rule_verdict": "Outbound rule with the wrong verdict ({count, number})",
+        "known_rule_missing": "Known-address rule missing ({count, number})",
+        "known_rule_extra": "Known-address rule left over ({count, number})",
+        "local_set_desync": "Local network set out of sync ({count, number})",
+        "egress_no_subnet": "Outbound without a local subnet ({count, number})",
         "generic": "{kind} ({count, number})"
       },
       "noneZone": "none",

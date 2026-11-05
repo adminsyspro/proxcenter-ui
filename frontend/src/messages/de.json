@@ -12922,6 +12922,13 @@
         "member_without_ip": "Mitglieder ohne bekannte IP ({count, number})",
         "ambiguous_zone": "Gäste in mehreren Zonen ({count, number})",
         "object_collision": "Bereits in Proxmox verwendete Namen ({count, number})",
+        "egress_rule_missing": "Fehlende Ausgangsregeln ({count, number})",
+        "egress_rule_misplaced": "Falsch platzierte Ausgangsregeln ({count, number})",
+        "egress_rule_verdict": "Ausgangsregeln mit falschem Urteil ({count, number})",
+        "known_rule_missing": "Fehlende Regeln für bekannte Adressen ({count, number})",
+        "known_rule_extra": "Überzählige Regeln für bekannte Adressen ({count, number})",
+        "local_set_desync": "Nicht synchrone Sets des lokalen Netzes ({count, number})",
+        "egress_no_subnet": "Ausgang ohne lokales Subnetz ({count, number})",
         "generic": "{kind} (Anzahl: {count, number})"
       },
       "noneZone": "keine",

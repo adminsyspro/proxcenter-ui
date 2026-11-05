@@ -59,6 +59,18 @@ describe('driftLabel', () => {
     }
   })
 
+  it('has a group header label for every drift kind, in the 6 locales, without an em-dash in French', () => {
+    for (const locale of Object.keys(locales)) {
+      const groups = locales[locale].microsegPilot.drifts.groups as Record<string, string>
+      for (const kind of DRIFT_KINDS) {
+        expect(groups[kind], `${locale}: groups.${kind}`).toBeTruthy()
+        expect(groups[kind], `${locale}: groups.${kind}`).toContain('{count, number}')
+        if (locale === 'fr') expect(groups[kind]).not.toContain('\u2014')
+        if (locale !== 'en') expect(groups[kind], `${locale}: groups.${kind} left in English`).not.toBe(locales.en.microsegPilot.drifts.groups[kind])
+      }
+    }
+  })
+
   it('gives the three drifts without a fix a hint on what to do in Proxmox, and the others none', () => {
     for (const locale of Object.keys(locales)) {
       const t = translator(locale)

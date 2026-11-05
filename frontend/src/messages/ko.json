@@ -13254,6 +13254,13 @@
         "member_without_ip": "알려진 IP가 없는 구성원 ({count, number})",
         "ambiguous_zone": "여러 영역에 있는 게스트 ({count, number})",
         "object_collision": "Proxmox에서 이미 사용 중인 이름 ({count, number})",
+        "egress_rule_missing": "누락된 아웃바운드 규칙 ({count, number})",
+        "egress_rule_misplaced": "잘못된 위치의 아웃바운드 규칙 ({count, number})",
+        "egress_rule_verdict": "판정이 잘못된 아웃바운드 규칙 ({count, number})",
+        "known_rule_missing": "누락된 알려진 주소 규칙 ({count, number})",
+        "known_rule_extra": "남아 있는 알려진 주소 규칙 ({count, number})",
+        "local_set_desync": "동기화되지 않은 로컬 네트워크 세트 ({count, number})",
+        "egress_no_subnet": "로컬 서브넷이 없는 아웃바운드 ({count, number})",
         "generic": "{kind} (개수 {count, number})"
       },
       "noneZone": "없음",

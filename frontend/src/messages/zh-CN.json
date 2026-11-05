@@ -13254,6 +13254,13 @@
         "member_without_ip": "没有已知 IP 的成员（{count, number}）",
         "ambiguous_zone": "位于多个区域的客户机（{count, number}）",
         "object_collision": "Proxmox 中已使用的名称（{count, number}）",
+        "egress_rule_missing": "缺失的出站规则（{count, number}）",
+        "egress_rule_misplaced": "位置错误的出站规则（{count, number}）",
+        "egress_rule_verdict": "判定错误的出站规则（{count, number}）",
+        "known_rule_missing": "缺失的已知地址规则（{count, number}）",
+        "known_rule_extra": "多余的已知地址规则（{count, number}）",
+        "local_set_desync": "未同步的本地网络集（{count, number}）",
+        "egress_no_subnet": "没有本地子网的出站（{count, number}）",
         "generic": "{kind}（{count, number}）"
       },
       "noneZone": "无",

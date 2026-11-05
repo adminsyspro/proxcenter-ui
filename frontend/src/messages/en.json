@@ -13746,7 +13746,7 @@
         "load": "Load on Proxmox",
         "enforcement": "Enforcement",
         "observation": "Observation",
-        "address": "ProxCenter address",
+        "address": "ProxCenter addresses",
         "notifications": "Notify me about",
         "removal": "Removal"
       },
@@ -13756,7 +13756,7 @@
         "ips_interval_sec": "Guest IP read interval",
         "full_interval_sec": "Full check interval",
         "log_interval_sec": "Firewall log read interval",
-        "ready_after_hours": "Observation before enforcing",
+        "ready_after_hours": "Observation before blocking (inbound and outbound)",
         "write_cap": "Write cap per run",
         "rate": "Log rate limit",
         "rateUnit": "Log rate unit",
@@ -13814,6 +13814,12 @@
         "body": "Guests keep their old tags, so they leave their zones at the next apply until they are tagged again.",
         "typeName": "Type {prefix} to confirm",
         "confirm": "Change the prefix"
+      },
+      "tips": {
+        "rate": "Cap on log lines per rule, raised during observation so that nothing is lost; applied to the Proxmox cluster.",
+        "logInterval": "Delay between two reads of the firewall log of each node: one read per node and per interval.",
+        "readyAfter": "Time without a new flow that would be blocked before a zone is shown as ready; it is not a lock.",
+        "writeCap": "Past it, the engine stops and asks for a confirmation."
       }
     },
     "history": {

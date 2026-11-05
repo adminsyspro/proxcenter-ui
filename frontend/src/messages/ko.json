@@ -13746,7 +13746,7 @@
         "load": "Proxmox 부하",
         "enforcement": "강제 적용",
         "observation": "관찰",
-        "address": "ProxCenter 주소",
+        "address": "ProxCenter 주소 목록",
         "notifications": "알림 받기",
         "removal": "제거"
       },
@@ -13756,7 +13756,7 @@
         "ips_interval_sec": "게스트 IP 읽기 간격",
         "full_interval_sec": "전체 점검 간격",
         "log_interval_sec": "방화벽 로그 읽기 간격",
-        "ready_after_hours": "강제 적용 전 관찰 시간",
+        "ready_after_hours": "차단 전 관찰 시간 (인바운드 및 아웃바운드)",
         "write_cap": "실행당 쓰기 상한",
         "rate": "로그 속도 제한",
         "rateUnit": "로그 속도 단위",
@@ -13814,6 +13814,12 @@
         "body": "게스트에는 이전 태그가 그대로 남아 있으므로, 다시 태그하기 전까지 다음 적용 때 영역에서 빠집니다.",
         "typeName": "확인하려면 {prefix}을(를) 입력하세요",
         "confirm": "접두사 변경"
+      },
+      "tips": {
+        "rate": "규칙당 로그 줄 수 상한으로, 아무것도 놓치지 않도록 관찰 중에 높게 설정되며 Proxmox 클러스터에 적용됩니다.",
+        "logInterval": "각 노드의 방화벽 로그를 읽는 간격으로, 노드당 간격마다 한 번 읽습니다.",
+        "readyAfter": "차단될 새 플로우가 없는 상태가 이 시간 동안 이어져야 영역이 준비 완료로 표시됩니다. 잠금이 아닙니다.",
+        "writeCap": "초과하면 엔진이 멈추고 확인을 요청합니다."
       }
     },
     "history": {

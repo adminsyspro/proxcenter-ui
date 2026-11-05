@@ -13747,7 +13747,7 @@
         "load": "Charge sur Proxmox",
         "enforcement": "Application",
         "observation": "Observation",
-        "address": "Adresse de ProxCenter",
+        "address": "Adresses de ProxCenter",
         "notifications": "Me notifier de",
         "removal": "Retrait"
       },
@@ -13757,7 +13757,7 @@
         "ips_interval_sec": "Intervalle de lecture des IP des invités",
         "full_interval_sec": "Intervalle de la vérification complète",
         "log_interval_sec": "Intervalle de lecture du journal du pare-feu",
-        "ready_after_hours": "Observation avant application",
+        "ready_after_hours": "Observation avant blocage (entrée et sortie)",
         "write_cap": "Plafond d'écritures par passage",
         "rate": "Débit maximal du journal",
         "rateUnit": "Unité du débit du journal",
@@ -13815,6 +13815,12 @@
         "body": "Les invités gardent leurs anciens tags : ils quittent leur zone à la prochaine application tant qu'ils ne sont pas retaggés.",
         "typeName": "Saisissez {prefix} pour confirmer",
         "confirm": "Changer le préfixe"
+      },
+      "tips": {
+        "rate": "Plafond de lignes de journal par règle, relevé pendant l'observation pour ne rien perdre ; appliqué au cluster Proxmox.",
+        "logInterval": "Délai entre deux lectures du journal pare-feu de chaque nœud : une lecture par nœud et par intervalle.",
+        "readyAfter": "Durée sans nouveau flux qui serait bloqué avant qu'une zone soit indiquée prête ; ce n'est pas un verrou.",
+        "writeCap": "Au-delà, le moteur s'arrête et demande une confirmation."
       }
     },
     "history": {

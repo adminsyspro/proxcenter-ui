@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState, type ReactNode } from 'react'
-import { Alert, Box, Typography } from '@mui/material'
+import { Alert, Box, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { MicrosegApiError, microsegErrorKeyOf } from '@/lib/microseg/api'
@@ -23,17 +23,28 @@ type FormRowProps = {
   htmlFor?: string
   /** Captions under the control, in the control column. */
   below?: ReactNode
+  /** An explanation behind an info icon at the right of the name. */
+  tip?: string
+  /** Width of the name column, for a dialog whose names are longer than the default. */
+  labelWidth?: number
   children: ReactNode
 }
 
 /** A setting of a form dialog: its name in a fixed left column, its control on the right; the name goes above the control on a narrow screen. */
-export function FormRow({ label, htmlFor, below, children }: FormRowProps) {
+export function FormRow({ label, htmlFor, below, tip, labelWidth = FORM_LABEL_WIDTH, children }: FormRowProps) {
   const nameSx = { ...ONE_LINE_SX, display: 'block', lineHeight: { sm: `${FORM_ROW_HEIGHT}px` } }
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: `${FORM_LABEL_WIDTH}px minmax(0, 1fr)` }, columnGap: 4, rowGap: 1, alignItems: 'start' }}>
-      {htmlFor
-        ? <Typography component='label' htmlFor={htmlFor} variant='body2' color='text.secondary' sx={nameSx}>{label}</Typography>
-        : <Typography component='span' variant='body2' color='text.secondary' sx={nameSx}>{label}</Typography>}
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: `${labelWidth}px minmax(0, 1fr)` }, columnGap: 4, rowGap: 1, alignItems: 'start' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, height: { sm: FORM_ROW_HEIGHT } }}>
+        {htmlFor
+          ? <Typography component='label' htmlFor={htmlFor} variant='body2' color='text.secondary' sx={{ ...nameSx, minWidth: 0 }}>{label}</Typography>
+          : <Typography component='span' variant='body2' color='text.secondary' sx={{ ...nameSx, minWidth: 0 }}>{label}</Typography>}
+        {tip ? (
+          <Tooltip title={tip} describeChild>
+            <Box component='i' className='ri-information-line' data-testid='form-row-tip' sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0, cursor: 'help' }} />
+          </Tooltip>
+        ) : null}
+      </Box>
       <Box sx={{ minWidth: 0 }}>
         <Box sx={{ minHeight: FORM_ROW_HEIGHT, display: 'flex', alignItems: 'center', minWidth: 0 }}>{children}</Box>
         {below}

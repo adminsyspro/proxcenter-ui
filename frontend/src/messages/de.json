@@ -13414,7 +13414,7 @@
         "load": "Last auf Proxmox",
         "enforcement": "Durchsetzung",
         "observation": "Beobachtung",
-        "address": "ProxCenter-Adresse",
+        "address": "ProxCenter-Adressen",
         "notifications": "Benachrichtigen bei",
         "removal": "Entfernung"
       },
@@ -13424,7 +13424,7 @@
         "ips_interval_sec": "Intervall des Lesens der Gast-IPs",
         "full_interval_sec": "Intervall der vollständigen Prüfung",
         "log_interval_sec": "Intervall des Lesens des Firewall-Protokolls",
-        "ready_after_hours": "Beobachtung vor der Durchsetzung",
+        "ready_after_hours": "Beobachtung vor dem Blockieren (eingehend und ausgehend)",
         "write_cap": "Schreiblimit pro Durchlauf",
         "rate": "Protokoll-Ratenlimit",
         "rateUnit": "Einheit des Protokoll-Ratenlimits",
@@ -13482,6 +13482,12 @@
         "body": "Die Gäste behalten ihre alten Tags und verlassen ihre Zonen daher bei der nächsten Anwendung, bis sie neu getaggt sind.",
         "typeName": "Geben Sie {prefix} zur Bestätigung ein",
         "confirm": "Präfix ändern"
+      },
+      "tips": {
+        "rate": "Obergrenze der Protokollzeilen pro Regel, während der Beobachtung angehoben, damit nichts verloren geht; wird auf den Proxmox-Cluster angewendet.",
+        "logInterval": "Abstand zwischen zwei Lesevorgängen des Firewall-Protokolls jedes Knotens: ein Lesevorgang pro Knoten und Intervall.",
+        "readyAfter": "Dauer ohne neuen Fluss, der blockiert würde, bevor eine Zone als bereit angezeigt wird; das ist keine Sperre.",
+        "writeCap": "Darüber hält die Engine an und bittet um Bestätigung."
       }
     },
     "history": {

@@ -11,9 +11,13 @@ import { Notice } from './PlanNotices'
 import {
   NOTIFY_KEYS, RATE_UNITS, SETTING_NUMBER_KEYS, SETTING_UNITS, type RateUnit, type SettingNumberKey, type SettingsForm, type SettingsProblems,
 } from './settingsModel'
-import TruncatedText from './TruncatedText'
+import { FLUSH_TOGGLE_SX, FormRow } from './dialogParts'
 
-const FIELD_WIDTH = 190
+/** Width of the name column: the setting names are longer than the zone dialog ones. */
+export const SETTINGS_LABEL_WIDTH = 300
+
+/** The settings that carry an info icon, and the key of their explanation. */
+const TIP_KEYS: Partial<Record<SettingNumberKey, string>> = { log_interval_sec: 'logInterval', ready_after_hours: 'readyAfter', write_cap: 'writeCap' }
 
 /** The load settings (intervals) and the ones about enforcement, each group under its heading. */
 const NUMBER_SECTIONS: Array<{ title: string; keys: SettingNumberKey[] }> = [
@@ -21,19 +25,18 @@ const NUMBER_SECTIONS: Array<{ title: string; keys: SettingNumberKey[] }> = [
   { title: 'enforcement', keys: SETTING_NUMBER_KEYS.slice(4) },
 ]
 
-/** A setting on one line: its name (the hint as a tooltip) and its control. */
-function FieldRow({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+/** A setting on one line: its name (with its info icon) and its control, on the columns of the zone dialog. */
+function FieldRow({ label, hint, tip, children }: { label: string; hint?: string; tip?: string; children: ReactNode }) {
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minHeight: 44, minWidth: 0 }}>
-      <TruncatedText text={label} title={hint ?? label} sx={{ flex: '1 1 0', minWidth: 0 }} />
+    <FormRow label={label} tip={tip} labelWidth={SETTINGS_LABEL_WIDTH}>
       {children}
-    </Box>
+    </FormRow>
   )
 }
 
 export function SectionTitle({ children }: { children: ReactNode }) {
   return (
-    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 2, mb: 0.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
       {children}
     </Typography>
   )
@@ -42,19 +45,19 @@ export function SectionTitle({ children }: { children: ReactNode }) {
 type TextRowProps = {
   label: string
   hint?: string
+  tip?: string
   value: string
   invalid: boolean
   disabled: boolean
   unit?: string
   placeholder?: string
-  width?: number
   numeric?: boolean
   onChange: (value: string) => void
 }
 
-function TextRow({ label, hint, value, invalid, disabled, unit, placeholder, width = FIELD_WIDTH, numeric = false, onChange }: TextRowProps) {
+function TextRow({ label, hint, tip, value, invalid, disabled, unit, placeholder, numeric = false, onChange }: TextRowProps) {
   return (
-    <FieldRow label={label} hint={hint}>
+    <FieldRow label={label} hint={hint} tip={tip}>
       <TextField
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -67,7 +70,7 @@ function TextRow({ label, hint, value, invalid, disabled, unit, placeholder, wid
           htmlInput: { 'aria-label': label, inputMode: numeric ? 'numeric' : undefined },
           input: unit ? { endAdornment: <InputAdornment position='end'>{unit}</InputAdornment> } : undefined,
         }}
-        sx={{ width, flexShrink: 0 }}
+        fullWidth
       />
     </FieldRow>
   )
@@ -107,11 +110,12 @@ export default function SettingsFields({ form, problems, busy, prefixWarning, on
               key={key}
               label={t(`fields.${key}`)}
               hint={key === 'write_cap' ? t('hints.write_cap') : undefined}
+              tip={TIP_KEYS[key] ? t(`tips.${TIP_KEYS[key]}`) : undefined}
               value={form[key]}
               invalid={!!problems[key]}
               disabled={busy}
               numeric
-              unit={SETTING_UNITS[key] === 'writes' ? undefined : t(`unitsLong.${SETTING_UNITS[key]}`)}
+              unit={t(`unitsLong.${SETTING_UNITS[key]}`)}
               onChange={v => onChange(key, v)}
             />
           ))}
@@ -119,7 +123,7 @@ export default function SettingsFields({ form, problems, busy, prefixWarning, on
       ))}
 
       <SectionTitle>{t('sections.observation')}</SectionTitle>
-      <FieldRow label={t('fields.rate')} hint={t('hints.rate')}>
+      <FieldRow label={t('fields.rate')} hint={t('hints.rate')} tip={t('tips.rate')}>
         <TextField
           value={form.rate}
           onChange={e => onChange('rate', e.target.value)}
@@ -129,9 +133,9 @@ export default function SettingsFields({ form, problems, busy, prefixWarning, on
           size='small'
           autoComplete='off'
           slotProps={{ htmlInput: { 'aria-label': t('fields.rate'), inputMode: 'numeric' } }}
-          sx={{ width: 100, flexShrink: 0 }}
+          sx={{ flex: '1 1 0', minWidth: 0, mr: 1 }}
         />
-        <FormControl size='small' sx={{ width: 120, flexShrink: 0 }}>
+        <FormControl size='small' sx={{ width: 130, flexShrink: 0 }}>
           <Select
             value={form.rateUnit}
             disabled={busy}
@@ -162,7 +166,6 @@ export default function SettingsFields({ form, problems, busy, prefixWarning, on
         invalid={!!problems.selfIps}
         disabled={busy}
         placeholder={t('detectedAutomatically')}
-        width={260}
         onChange={v => onChange('selfIps', v)}
       />
 
@@ -171,6 +174,7 @@ export default function SettingsFields({ form, problems, busy, prefixWarning, on
         <FieldRow key={key} label={t(`fields.${key}`)}>
           <Checkbox
             size='small'
+            sx={FLUSH_TOGGLE_SX}
             checked={form[key]}
             disabled={busy}
             onChange={e => onChange(key, e.target.checked)}

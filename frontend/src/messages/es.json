@@ -13746,7 +13746,7 @@
         "load": "Carga sobre Proxmox",
         "enforcement": "Aplicación",
         "observation": "Observación",
-        "address": "Dirección de ProxCenter",
+        "address": "Direcciones de ProxCenter",
         "notifications": "Avisarme de",
         "removal": "Retirada"
       },
@@ -13756,7 +13756,7 @@
         "ips_interval_sec": "Intervalo de lectura de las IP de los invitados",
         "full_interval_sec": "Intervalo de la comprobación completa",
         "log_interval_sec": "Intervalo de lectura del registro del cortafuegos",
-        "ready_after_hours": "Observación antes de aplicar",
+        "ready_after_hours": "Observación antes de bloquear (entrada y salida)",
         "write_cap": "Tope de escrituras por pasada",
         "rate": "Límite de tasa del registro",
         "rateUnit": "Unidad de la tasa del registro",
@@ -13814,6 +13814,12 @@
         "body": "Los invitados conservan sus etiquetas antiguas, así que salen de su zona en la próxima aplicación hasta que se vuelvan a etiquetar.",
         "typeName": "Escriba {prefix} para confirmar",
         "confirm": "Cambiar el prefijo"
+      },
+      "tips": {
+        "rate": "Tope de líneas de registro por regla, elevado durante la observación para no perder nada; se aplica al clúster de Proxmox.",
+        "logInterval": "Tiempo entre dos lecturas del registro del cortafuegos de cada nodo: una lectura por nodo y por intervalo.",
+        "readyAfter": "Tiempo sin ningún flujo nuevo que se bloquearía antes de indicar que una zona está lista; no es un bloqueo.",
+        "writeCap": "Superado el tope, el motor se detiene y pide una confirmación."
       }
     },
     "history": {

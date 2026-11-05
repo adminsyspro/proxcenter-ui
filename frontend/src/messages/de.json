@@ -13180,6 +13180,8 @@
         "detailsTitle": "Zonendetails · {name}",
         "subSuggestions": "Ausstehende Vorschläge",
         "subMembers": "Mitglieder",
+        "addMembers": "Mitglieder hinzufügen",
+        "addFlow": "Neuer Fluss",
         "subIncoming": "Eingehende Flüsse",
         "subOutgoing": "Ausgehende Flüsse",
         "colDirection": "Richtung",

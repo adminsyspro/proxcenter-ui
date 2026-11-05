@@ -168,7 +168,7 @@ describe('zone panel: expanded in a dialog', () => {
     fireEvent.click(within(dialog).getByRole('tab', { name: 'Members (0)' }))
     expect(within(dialog).queryAllByRole('listitem')).toHaveLength(0)
     fireEvent.click(within(dialog).getByRole('tab', { name: 'Incoming flows (0)' }))
-    expect(within(dialog).getByRole('button', { name: 'New incoming flow' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'New flow' })).toBeTruthy()
 
     fireEvent.click(within(dialog).getByRole('tab', { name: 'Logs' }))
     await waitFor(() => expect(within(dialog).getAllByRole('row')).toHaveLength(3))

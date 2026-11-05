@@ -13513,6 +13513,8 @@
         "detailsTitle": "Détails de la zone · {name}",
         "subSuggestions": "Suggestions en attente",
         "subMembers": "Membres",
+        "addMembers": "Ajouter des membres",
+        "addFlow": "Nouveau flux",
         "subIncoming": "Flux entrants",
         "subOutgoing": "Flux sortants",
         "colDirection": "Direction",

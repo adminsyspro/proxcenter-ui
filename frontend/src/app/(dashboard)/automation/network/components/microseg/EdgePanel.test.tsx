@@ -173,7 +173,7 @@ describe('pair panel: expanded in a dialog', () => {
     expect(within(dialog).getAllByRole('tab').map(t => t.textContent).slice(3)).toEqual(['Pending suggestions (1)', 'Declared flows (1)'])
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(1)
     fireEvent.click(within(dialog).getByRole('tab', { name: 'Declared flows (1)' }))
-    expect(within(dialog).getByRole('button', { name: 'New flow between these zones' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'New flow' })).toBeTruthy()
 
     fireEvent.click(within(dialog).getByRole('tab', { name: 'Logs' }))
     await waitFor(() => expect(within(dialog).getAllByRole('row')).toHaveLength(3))

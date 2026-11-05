@@ -13512,6 +13512,8 @@
         "detailsTitle": "영역 상세 · {name}",
         "subSuggestions": "대기 중인 제안",
         "subMembers": "구성원",
+        "addMembers": "구성원 추가",
+        "addFlow": "새 플로우",
         "subIncoming": "수신 플로우",
         "subOutgoing": "송신 플로우",
         "colDirection": "방향",

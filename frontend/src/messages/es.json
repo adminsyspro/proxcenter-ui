@@ -13512,6 +13512,8 @@
         "detailsTitle": "Detalles de la zona · {name}",
         "subSuggestions": "Sugerencias pendientes",
         "subMembers": "Miembros",
+        "addMembers": "Añadir miembros",
+        "addFlow": "Nuevo flujo",
         "subIncoming": "Flujos entrantes",
         "subOutgoing": "Flujos salientes",
         "colDirection": "Dirección",

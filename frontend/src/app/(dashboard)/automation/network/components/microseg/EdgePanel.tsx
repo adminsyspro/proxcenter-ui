@@ -22,7 +22,7 @@ import { formatWhen } from './summaryModel'
 import TruncatedText from './TruncatedText'
 import type { ZoneEdits } from './useZoneEdits'
 import { bareIp, type MapEdgeKind, type PanelEdgeData } from './zoneGraph'
-import { FlowsList, NewFlowButton, useFlowEditor } from './ZonePanelActions'
+import { ExpandAddButton, FlowsList, NewFlowButton, useFlowEditor } from './ZonePanelActions'
 
 const ROWS_PER_PAGE = 5
 
@@ -237,7 +237,7 @@ export default function EdgePanel({
 
   const dataTabs: DataTab[] = [
     { id: 'suggestions', label: withCount(tz('subSuggestions'), pending.length), content: suggestionsBody },
-    { id: 'flows', label: withCount(te('declaredFlows'), declared.length), action: newFlow, content: flowsBody },
+    { id: 'flows', label: withCount(te('declaredFlows'), declared.length), action: initial ? <ExpandAddButton label={tz('addFlow')} onClick={() => editor.create(initial)} /> : undefined, content: flowsBody },
   ]
 
   return (

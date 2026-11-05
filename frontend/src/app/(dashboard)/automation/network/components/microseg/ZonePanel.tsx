@@ -19,7 +19,7 @@ import ExpandDialog, { withCount, type DataTab } from './ExpandDialog'
 import ZoneStateChip from './ZoneStateChip'
 import { destinationName } from './ObservationRow'
 import { bareIp } from './zoneGraph'
-import { FlowsList, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
+import { ExpandAddButton, FlowsList, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
 import type { ZoneEdits } from './useZoneEdits'
 import { useIgnoredDrifts } from './driftIgnore'
 import { OneLine } from './dialogParts'
@@ -241,9 +241,9 @@ export default function ZonePanel({
   // The same bodies in the dialog, one sub-tab each, the count in the label and the add button above the flows.
   const dataTabs: DataTab[] = [
     { id: 'suggestions', label: withCount(tz('subSuggestions'), pending.length), content: suggestionsBody },
-    { id: 'members', label: withCount(tz('subMembers'), membersKnown ? members.length : null), content: membersBody },
-    { id: 'incoming', label: withCount(tz('subIncoming'), incoming.length), action: newIncoming, content: incomingBody },
-    { id: 'outgoing', label: withCount(tz('subOutgoing'), outgoing.length), action: newOutgoing, content: outgoingBody },
+    { id: 'members', label: withCount(tz('subMembers'), membersKnown ? members.length : null), action: <ExpandAddButton label={tz('addMembers')} onClick={onAssign} />, content: membersBody },
+    { id: 'incoming', label: withCount(tz('subIncoming'), incoming.length), action: <ExpandAddButton label={tz('addFlow')} onClick={() => editor.create({ dst_zone_id: zone.id })} />, content: incomingBody },
+    { id: 'outgoing', label: withCount(tz('subOutgoing'), outgoing.length), action: <ExpandAddButton label={tz('addFlow')} onClick={() => editor.create({ src_zone_id: zone.id })} />, content: outgoingBody },
   ]
 
   return (

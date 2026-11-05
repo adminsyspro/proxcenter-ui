@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState, type MouseEvent, type ReactNode } from 'react'
-import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material'
+import { Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { zoneEgress, type MicrosegFlow, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
@@ -213,6 +213,16 @@ export function FlowsList({ flows, zonesById, editor, size, unapplied = null }: 
 
 export function NewFlowButton({ label, onClick }: { label: string; onClick: () => void }) {
   return <WriteIcon label={label} icon='ri-add-line' onClick={onClick} />
+}
+
+/** The add action of a sub-tab of the expand dialog: a small outlined button, icon and label, disabled without the write right. */
+export function ExpandAddButton({ label, onClick }: { label: string; onClick: () => void }) {
+  const { canWrite } = useMicrosegWrite()
+  return (
+    <WriteTip>
+      <Button size='small' variant='outlined' disabled={!canWrite} onClick={onClick} startIcon={<i className='ri-add-line' />} sx={{ height: 30, flexShrink: 0, whiteSpace: 'nowrap' }}>{label}</Button>
+    </WriteTip>
+  )
 }
 
 type FlowInitial = Partial<Pick<FlowSaveValues, 'src_zone_id' | 'dst_zone_id'>>

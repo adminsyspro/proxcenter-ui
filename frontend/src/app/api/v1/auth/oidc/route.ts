@@ -65,6 +65,8 @@ export async function GET(req: Request) {
           default_role: "viewer",
           show_local_login: true,
           force_sso_redirect: false,
+          require_verified_email: true,
+          idp_verifies_email: false,
           // Frontend expects a string here (it does JSON.parse with a string|object guard).
           group_role_mapping: "[]",
           group_mapping_strategy: "first_match",
@@ -105,6 +107,8 @@ export async function GET(req: Request) {
         default_role: config.defaultRole || "viewer",
         show_local_login: config.showLocalLogin,
         force_sso_redirect: config.forceSsoRedirect,
+        require_verified_email: config.requireVerifiedEmail,
+        idp_verifies_email: config.idpVerifiesEmail,
         group_role_mapping: groupRoleMappingStr,
         group_mapping_strategy: normalizeMappingStrategy(config.groupMappingStrategy),
         hasClientSecret: !!config.clientSecretEnc,
@@ -229,6 +233,8 @@ async function handlePut(req: Request) {
       default_role,
       show_local_login,
       force_sso_redirect,
+      require_verified_email,
+      idp_verifies_email,
       group_role_mapping,
       group_mapping_strategy,
       proxy_url,
@@ -303,6 +309,10 @@ async function handlePut(req: Request) {
       defaultRole: default_role || "viewer",
       showLocalLogin: persistShowLocalLogin,
       forceSsoRedirect: persistForceSsoRedirect,
+      // Omitted from an older client: the stored choice is kept (and a new
+      // configuration gets the strict default from the column).
+      ...(typeof require_verified_email === "boolean" ? { requireVerifiedEmail: require_verified_email } : {}),
+      ...(typeof idp_verifies_email === "boolean" ? { idpVerifiesEmail: idp_verifies_email } : {}),
       groupRoleMapping: grants,
       groupMappingStrategy: normalizeMappingStrategy(group_mapping_strategy),
       proxyUrl,

@@ -81,6 +81,9 @@ describe("GET /api/v1/auth/oidc", () => {
     expect(body.data.enabled).toBe(false)
     expect(body.data.show_local_login).toBe(true)
     expect(body.data.force_sso_redirect).toBe(false)
+    // A configuration written from scratch requires a verified e-mail.
+    expect(body.data.require_verified_email).toBe(true)
+    expect(body.data.idp_verifies_email).toBe(false)
     expect(body.data.hasClientSecret).toBe(false)
     // The form always receives the entry-list shape, empty here.
     expect(body.data.group_role_mapping).toBe("[]")
@@ -135,6 +138,8 @@ describe("GET /api/v1/auth/oidc", () => {
       defaultRole: "viewer",
       showLocalLogin: false,
       forceSsoRedirect: true,
+      requireVerifiedEmail: false,
+      idpVerifiesEmail: true,
       groupRoleMapping: { admin: "role_admin" },
       clientSecretEnc: "enc:secret",
     })
@@ -142,6 +147,8 @@ describe("GET /api/v1/auth/oidc", () => {
     const res = await callRoute(GET as any, { method: "GET" })
     expect(res.status).toBe(200)
     const body = await readJson<any>(res)
+    expect(body.data.require_verified_email).toBe(false)
+    expect(body.data.idp_verifies_email).toBe(true)
     expect(body.data.show_local_login).toBe(false)
     expect(body.data.force_sso_redirect).toBe(true)
     expect(body.data.hasClientSecret).toBe(true)
@@ -220,6 +227,25 @@ describe("PUT /api/v1/auth/oidc", () => {
     expect(auditMock).toHaveBeenCalledWith(
       expect.objectContaining({ resourceType: "oidc_config", action: "update" }),
     )
+  })
+
+  it("persists the verified e-mail settings", async () => {
+    const { PUT } = await importRoute()
+    await callRoute(PUT as any, {
+      method: "PUT",
+      body: { enabled: false, require_verified_email: false, idp_verifies_email: true },
+    })
+    const arg = upsertMock.mock.calls[0][0]
+    expect(arg.update.requireVerifiedEmail).toBe(false)
+    expect(arg.update.idpVerifiesEmail).toBe(true)
+  })
+
+  it("keeps the stored verified e-mail settings when a client does not send them", async () => {
+    const { PUT } = await importRoute()
+    await callRoute(PUT as any, { method: "PUT", body: { enabled: false } })
+    const arg = upsertMock.mock.calls[0][0]
+    expect(arg.update).not.toHaveProperty("requireVerifiedEmail")
+    expect(arg.update).not.toHaveProperty("idpVerifiesEmail")
   })
 
   it("coerces the flags to safe values when OIDC is disabled (anti-lockout)", async () => {

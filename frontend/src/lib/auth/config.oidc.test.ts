@@ -42,6 +42,8 @@ function baseConfig(overrides: Record<string, unknown> = {}) {
     userinfoUrl: '',
     claimEmail: 'email',
     claimName: 'name',
+    requireVerifiedEmail: true,
+    idpVerifiesEmail: false,
     ...overrides,
   }
 }
@@ -165,7 +167,20 @@ describe('OIDC sign-in binding a local account found by e-mail (H2)', () => {
     }))
   })
 
-  it('still links an unverified address to an ordinary account', async () => {
+  it('refuses an unverified address for an ordinary account when a verified e-mail is required', async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue(null)
+
+    expect(await signIn({ email_verified: false })).toBe('/login?error=OidcLinkRefused')
+    expect(prisma.user.update).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'login_failed',
+      details: { reason: 'email_not_verified', provider: 'oidc' },
+    }))
+  })
+
+  it('links an unverified address to an ordinary account when only auditing, and audits it', async () => {
+    getOidcConfig.mockResolvedValue(baseConfig({ requireVerifiedEmail: false }))
     ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null })
     ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue(null)
 
@@ -174,6 +189,20 @@ describe('OIDC sign-in binding a local account found by e-mail (H2)', () => {
       where: { id: 'u-local' },
       data: expect.objectContaining({ oidcSub: 'sub-new', authProvider: 'oidc' }),
     }))
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'login',
+      status: 'warning',
+      userEmail: 'admin@example.test',
+      details: { reason: 'email_not_verified', provider: 'oidc', linked: true },
+    }))
+  })
+
+  it('links a verified address without any audit entry', async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue(null)
+
+    await signIn({ email_verified: true })
+    expect(prisma.user.update).toHaveBeenCalled()
     expect(auditMock).not.toHaveBeenCalled()
   })
 

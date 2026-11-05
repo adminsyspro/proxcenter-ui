@@ -25,6 +25,7 @@ import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { WIDGET_REGISTRY, WIDGET_CATEGORIES } from '@/components/dashboard/widgetRegistry'
 import RoleDefaultScopeEditor from './RoleDefaultScopeEditor'
 import { formatScopeTarget, buildScopeOptions, buildVdcScopeOptions, buildVdcNameByPool } from './scope-options'
+import { toggleWidget as toggleHiddenWidget, toggleWidgetCategory, widgetCategoryState } from './widget-visibility'
 
 // Types
 interface Permission { id: string; name: string; category: string; description: string; is_dangerous: boolean }
@@ -90,7 +91,7 @@ function RoleDialog({ open, onClose, role, categories, onSave, t }) {
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#6366f1')
   const [selectedPerms, setSelectedPerms] = useState(new Set())
-  const [hiddenWidgets, setHiddenWidgets] = useState(new Set())
+  const [hiddenWidgets, setHiddenWidgets] = useState<Set<string>>(new Set())
   const [defaultScopes, setDefaultScopes] = useState<{ scopeType: string; scopeTarget: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -115,24 +116,15 @@ function RoleDialog({ open, onClose, role, categories, onSave, t }) {
     setError('')
   }, [role, open, categories])
 
-  const toggleWidget = (widgetType) => setHiddenWidgets(p => { const n = new Set(p);
-
- n.has(widgetType) ? n.delete(widgetType) : n.add(widgetType);
-
-return n })
+  const toggleWidget = (widgetType) => setHiddenWidgets(p => toggleHiddenWidget(p, widgetType))
 
   const toggleWidgetCat = (catId) => {
     const cats = WIDGET_REGISTRY ? Object.values(WIDGET_REGISTRY).filter(w => w.category === catId && !w.isSection) : []
 
     if (cats.length === 0) return
     const types = cats.map(w => w.type)
-    const allHidden = types.every(t => hiddenWidgets.has(t))
 
-    setHiddenWidgets(p => { const n = new Set(p);
-
- types.forEach(t => allHidden ? n.delete(t) : n.add(t));
-
-return n })
+    setHiddenWidgets(p => toggleWidgetCategory(p, types))
   }
 
   const togglePerm = (id) => setSelectedPerms(p => { const n = new Set(p);
@@ -249,8 +241,9 @@ return n })}>
           </Box>
         )}
 
-        {/* Widget visibility (denylist) — admins tick widgets to hide for users
-            carrying this role. Always editable, including on system roles. */}
+        {/* Widget visibility. Stored as a denylist, shown as an allowlist: a ticked
+            box is a visible widget, like the permission boxes above. Always
+            editable, including on system roles. */}
         <Box sx={{ mt: 3 }}>
           <Typography variant='subtitle2' sx={{ mb: 0.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
             <i className='ri-layout-grid-line' style={{ fontSize: '1.1rem' }} />
@@ -267,8 +260,7 @@ return n })}>
               const widgets = Object.values(WIDGET_REGISTRY).filter(w => w.category === wcat.id && !w.isSection)
 
               if (widgets.length === 0) return null
-              const types = widgets.map(w => w.type)
-              const hiddenInCat = types.filter(t2 => hiddenWidgets.has(t2)).length
+              const catState = widgetCategoryState(hiddenWidgets, widgets.map(w => w.type))
               const isExp = widgetExpanded.has(wcat.id)
 
               return (
@@ -281,8 +273,8 @@ return n })}>
                     <IconButton size='small'><i className={isExp ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} /></IconButton>
                     <i className={wcat.icon} style={{ margin: '0 8px' }} />
                     <Typography variant='subtitle2' sx={{ flex: 1 }}>{t(`dashboard.categories.${wcat.id}`, { defaultValue: wcat.name })}</Typography>
-                    <Chip size='small' label={`${hiddenInCat}/${widgets.length}`} color={hiddenInCat > 0 ? 'warning' : 'default'} variant='outlined' sx={{ mr: 1 }} />
-                    <Checkbox checked={hiddenInCat === widgets.length} indeterminate={hiddenInCat > 0 && hiddenInCat < widgets.length} onChange={() => toggleWidgetCat(wcat.id)} onClick={e => e.stopPropagation()} size='small' />
+                    <Chip size='small' label={`${catState.visible}/${catState.total}`} color={catState.checked ? 'primary' : 'warning'} variant='outlined' sx={{ mr: 1 }} />
+                    <Checkbox checked={catState.checked} indeterminate={catState.indeterminate} onChange={() => toggleWidgetCat(wcat.id)} onClick={e => e.stopPropagation()} size='small' />
                   </Box>
                   <Collapse in={isExp}>
                     <List dense disablePadding>
@@ -295,7 +287,7 @@ return n })}>
                           <ListItem key={w.type} sx={{ pl: 6, borderBottom: '1px solid', borderColor: 'divider' }}>
                             <ListItemIcon sx={{ minWidth: 32 }}><i className={w.icon} style={{ fontSize: '1.1rem', opacity: 0.7 }} /></ListItemIcon>
                             <ListItemText primary={widgetName} secondary={widgetDesc} />
-                            <ListItemSecondaryAction><Checkbox checked={hiddenWidgets.has(w.type)} onChange={() => toggleWidget(w.type)} size='small' /></ListItemSecondaryAction>
+                            <ListItemSecondaryAction><Checkbox checked={!hiddenWidgets.has(w.type)} onChange={() => toggleWidget(w.type)} size='small' /></ListItemSecondaryAction>
                           </ListItem>
                         )
                       })}

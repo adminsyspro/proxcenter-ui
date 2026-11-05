@@ -8494,7 +8494,7 @@
     "permissionsCount": "Permissions ({count})",
     "widgetVisibility": {
       "title": "Visibilité des widgets",
-      "desc": "Cochez les widgets à masquer sur le tableau de bord pour les utilisateurs portant ce rôle. S'ajoute au filtre automatique par scope.",
+      "desc": "Les widgets cochés sont disponibles sur le tableau de bord des utilisateurs portant ce rôle ; décochez un widget pour le masquer. S'ajoute au filtre automatique par scope.",
       "hiddenCount": "{count} masqué(s)"
     },
     "defaultScope": {

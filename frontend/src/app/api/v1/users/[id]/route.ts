@@ -107,10 +107,32 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    // Build the Prisma update payload from whitelisted fields only.
+    // The password, the enabled flag and the name are one account for every
+    // tenant the user belongs to. A customer tenant administers its own
+    // memberships and grants; when the user is also a member elsewhere, the
+    // account itself is changed by the provider or by its holder. A field
+    // sent back with its current value (the dialog resends the whole form)
+    // changes nothing and is not held against the caller.
+    const touchesAccount = Boolean(password)
+      || (enabled !== undefined && !!enabled !== user.enabled)
+      || (name !== undefined && name !== user.name)
+    if (!isProviderView && !isSelf && touchesAccount) {
+      const elsewhere = await prisma.userTenant.count({ where: { userId: id, tenantId: { not: tenantId } } })
+      if (elsewhere > 0) {
+        return NextResponse.json(
+          { error: "This user also belongs to other tenants; their account is managed by the provider", code: "SHARED_ACCOUNT" },
+          { status: 403 }
+        )
+      }
+    }
+
+    // Build the Prisma update payload from whitelisted fields only. A field
+    // equal to what was just read is left out: writing it back would also
+    // overwrite whatever another request set in between (a provider
+    // disabling the account while a tenant dialog saves "enabled: true").
     const data: Record<string, unknown> = {}
-    if (name !== undefined) data.name = name
-    if (enabled !== undefined) data.enabled = !!enabled
+    if (name !== undefined && name !== user.name) data.name = name
+    if (enabled !== undefined && !!enabled !== user.enabled) data.enabled = !!enabled
     // Password is owned by the external IdP for SSO/LDAP accounts. Refuse to set
     // a local password on them — it would open a credentials login path that
     // bypasses SSO/MFA. Covers both admin edits and self-service profile changes.
@@ -309,7 +331,10 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
 
     const wantsTokenDeletion = deleteApiTokens === true
 
-    if (Object.keys(data).length === 0 && !tenantsChanged && !rolesChanged && !wantsTokenDeletion) {
+    // Account fields sent back unchanged are a valid no-op (the dialog
+    // resends its form); an empty body is still a client error.
+    const accountFieldsSent = name !== undefined || enabled !== undefined
+    if (Object.keys(data).length === 0 && !tenantsChanged && !rolesChanged && !wantsTokenDeletion && !accountFieldsSent) {
       return NextResponse.json({ error: "No changes provided" }, { status: 400 })
     }
 
@@ -357,7 +382,7 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     // open, otherwise a stolen cookie survives the exact action a compromised
     // user takes to defend themselves. No exception sid: the caller's own
     // session goes too, which is the expected outcome of "change my password".
-    if (password || enabled === false) {
+    if (password || data.enabled === false) {
       try {
         const { revokeAllSessions } = await import("@/lib/auth/sessions")
         const revoked = await revokeAllSessions(id)
@@ -374,8 +399,8 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     // Audit
     const { audit } = await import("@/lib/audit")
     const changes: Record<string, any> = {}
-    if (name !== undefined) changes.name = name
-    if (enabled !== undefined) changes.enabled = enabled
+    if (data.name !== undefined) changes.name = data.name
+    if (data.enabled !== undefined) changes.enabled = data.enabled
     if (password) changes.passwordChanged = true
     if (tenantsChanged && (tenantsChanged.added.length > 0 || tenantsChanged.removed.length > 0)) {
       changes.tenants = tenantsChanged

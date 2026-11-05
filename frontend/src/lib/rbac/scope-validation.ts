@@ -98,3 +98,24 @@ export function validateRoleDefaultScopes(
   }
   return { ok: true, scopes }
 }
+
+export type ScopeRef = { scopeType: string; scopeTarget: string | null | undefined }
+
+/**
+ * Whether `inner` lies entirely inside `outer`, read from the target formats
+ * the permission check matches on: a connection id prefixes the ids of its
+ * nodes ("conn:node"), guests ("conn:node:type:vmid") and storages
+ * ("conn:name"), and a node id prefixes the ids of its guests. "global" holds
+ * everything and an identical scope holds itself. Nothing else can be told
+ * without the inventory (a tag, a pool, an inherited scope), so those hold
+ * only themselves.
+ */
+export function scopeIncludes(outer: ScopeRef, inner: ScopeRef): boolean {
+  if (outer.scopeType === "global") return true
+  if (inner.scopeType === outer.scopeType && (inner.scopeTarget ?? null) === (outer.scopeTarget ?? null)) return true
+  if (!outer.scopeTarget || !inner.scopeTarget) return false
+  const under = inner.scopeTarget.startsWith(`${outer.scopeTarget}:`)
+  if (outer.scopeType === "connection") return under && ["node", "vm", "storage"].includes(inner.scopeType)
+  if (outer.scopeType === "node") return under && inner.scopeType === "vm"
+  return false
+}

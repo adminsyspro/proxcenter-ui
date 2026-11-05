@@ -11,6 +11,10 @@ const {
   dashboardLayoutUpdateMany,
   dashboardLayoutUpsert,
   dashboardLayoutFindFirst,
+  dashboardLayoutFindMany,
+  dashboardLayoutDelete,
+  dashboardLayoutDeleteMany,
+  dashboardLayoutCreate,
   tenantFindUnique,
 } = vi.hoisted(() => ({
   mockGetServerSession: vi.fn(),
@@ -19,6 +23,10 @@ const {
   dashboardLayoutUpdateMany: vi.fn(),
   dashboardLayoutUpsert: vi.fn(),
   dashboardLayoutFindFirst: vi.fn(),
+  dashboardLayoutFindMany: vi.fn(),
+  dashboardLayoutDelete: vi.fn(),
+  dashboardLayoutDeleteMany: vi.fn(),
+  dashboardLayoutCreate: vi.fn(),
   tenantFindUnique: vi.fn(),
 }))
 
@@ -29,12 +37,12 @@ vi.mock("@/lib/tenant", () => ({
       updateMany: dashboardLayoutUpdateMany,
       upsert: dashboardLayoutUpsert,
       findFirst: dashboardLayoutFindFirst,
-      findMany: vi.fn().mockResolvedValue([]),
+      findMany: dashboardLayoutFindMany,
       count: vi.fn().mockResolvedValue(0),
       aggregate: vi.fn().mockResolvedValue({ _max: { sortOrder: 0 } }),
-      create: vi.fn().mockResolvedValue({ id: "new-id", name: "Default", widgets: [], isActive: true, updatedAt: null }),
-      delete: vi.fn().mockResolvedValue({}),
-      deleteMany: vi.fn().mockResolvedValue({}),
+      create: dashboardLayoutCreate,
+      delete: dashboardLayoutDelete,
+      deleteMany: dashboardLayoutDeleteMany,
       update: vi.fn().mockResolvedValue({}),
     },
   }),
@@ -76,6 +84,10 @@ beforeEach(() => {
     updatedAt: new Date(),
   })
   dashboardLayoutFindFirst.mockResolvedValue(null)
+  dashboardLayoutFindMany.mockResolvedValue([])
+  dashboardLayoutDelete.mockResolvedValue({})
+  dashboardLayoutDeleteMany.mockResolvedValue({})
+  dashboardLayoutCreate.mockResolvedValue({ id: "new-id", name: "Default", widgets: [], isActive: true, updatedAt: null })
   tenantFindUnique.mockResolvedValue(null)
 })
 
@@ -203,5 +215,51 @@ describe("GET /api/v1/dashboard/layout — active-layout fallback", () => {
     expect(body.data.widgets).toEqual(storedWidgets)
     // tenant.findUnique must NOT be called when a layout row exists
     expect(tenantFindUnique).not.toHaveBeenCalled()
+  })
+})
+
+// ── No live session ──────────────────────────────────────────────────────────
+
+describe("dashboard layout without a live session", () => {
+  beforeEach(() => {
+    // The cookie still carries a valid JWT, but its server-side session is
+    // revoked: getServerSession answers null.
+    mockGetServerSession.mockResolvedValue(null)
+  })
+
+  it("GET answers 401 and never reads the user named in the query", async () => {
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, { method: "GET", searchParams: { list: "true", userId: "victim" } })
+    expect(res.status).toBe(401)
+    expect(dashboardLayoutFindMany).not.toHaveBeenCalled()
+    expect(dashboardLayoutFindFirst).not.toHaveBeenCalled()
+  })
+
+  it("DELETE answers 401 and never deletes for the user named in the query", async () => {
+    const { DELETE } = await import("./route")
+    const res = await callRoute(DELETE, { method: "DELETE", searchParams: { name: "Ops", userId: "victim" } })
+    expect(res.status).toBe(401)
+    expect(dashboardLayoutFindFirst).not.toHaveBeenCalled()
+    expect(dashboardLayoutDelete).not.toHaveBeenCalled()
+    const reset = await callRoute(DELETE, { method: "DELETE", searchParams: { userId: "victim" } })
+    expect(reset.status).toBe(401)
+    expect(dashboardLayoutDeleteMany).not.toHaveBeenCalled()
+  })
+
+  it("PATCH answers 401 and reorders nothing", async () => {
+    const { PATCH } = await import("./route")
+    const res = await callRoute(PATCH, { method: "PATCH", body: { order: ["Ops", "Default"] } })
+    expect(res.status).toBe(401)
+    expect(dashboardLayoutUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it("PUT and POST answer 401 and write nothing", async () => {
+    const { PUT, POST } = await import("./route")
+    const put = await callRoute(PUT, { method: "PUT", body: { name: "Default", widgets: [] } })
+    expect(put.status).toBe(401)
+    expect(dashboardLayoutUpsert).not.toHaveBeenCalled()
+    const post = await callRoute(POST, { method: "POST", body: { name: "Ops", widgets: [] } })
+    expect(post.status).toBe(401)
+    expect(dashboardLayoutCreate).not.toHaveBeenCalled()
   })
 })

@@ -470,10 +470,14 @@ return
       // propagates it to every membership atomically (and the per-tenant
       // DELETE-then-POST loop below is skipped). In tenant-scoped view
       // we keep the per-tenant assignment flow further down.
+      // Only the account fields the operator actually changed are sent: a
+      // customer tenant may not touch the account of a user shared with
+      // other tenants, and a role-only edit must not be refused for a name
+      // and an Enabled switch it never moved.
       const userBody = isEdit
         ? {
-            name,
-            enabled: enabled ? 1 : 0,
+            ...(name !== (user.name || '') ? { name } : {}),
+            ...(enabled !== !!user.enabled ? { enabled: enabled ? 1 : 0 } : {}),
             ...(password ? { password } : {}),
             ...(enableTenantMgmt && !tenantPickerDisabled ? { tenantIds: selectedTenants } : {}),
             // Only include roleId when the operator actually changed it.
@@ -495,18 +499,23 @@ return
             ...(enableTenantMgmt ? { tenantIds: selectedTenants } : {}),
           }
 
-      const res = await fetch(isEdit ? `/api/v1/users/${user.id}` : '/api/v1/users', {
-        method: isEdit ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userBody),
-      })
+      // Nothing left for the account itself (a role-only edit): skip the
+      // PATCH and go straight to the role assignment below.
+      let data = null
+      if (!isEdit || Object.keys(userBody).length > 0) {
+        const res = await fetch(isEdit ? `/api/v1/users/${user.id}` : '/api/v1/users', {
+          method: isEdit ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(userBody),
+        })
 
-      const data = await res.json()
+        data = await res.json()
 
-      if (!res.ok) {
-        setError(data.error || (t ? t('common.error') : 'Error'))
+        if (!res.ok) {
+          setError(data.error || (t ? t('common.error') : 'Error'))
 
 return
+        }
       }
 
       // A self-edit that sets a new password (or unchecks Enabled) revokes

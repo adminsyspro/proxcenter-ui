@@ -144,5 +144,36 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
     expect(res.status).toBe(404)
     expect(userRoleUpdateManyMock).not.toHaveBeenCalled()
   })
+  it('refuses moving an existing sensitive NIC grant to another node when only scope_target is sent', async () => {
+    isSuperAdminMock.mockResolvedValue(false)
+    userRoleFindFirstMock.mockResolvedValue({ ...existingAssignment, scopeType: 'node', scopeTarget: 'c1:pve1',
+      role: { name: 'NIC identity', permissions: [{ permissionId: 'vm.config.nic.mac' }] } })
+    const res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_target: 'c1:pve2' } })
+    expect(res.status).toBe(403)
+    expect(userRoleUpdateManyMock).not.toHaveBeenCalled()
+  })
+  it('refuses a sideways move of a sensitive NIC grant disguised as a narrowing', async () => {
+    isSuperAdminMock.mockResolvedValue(false)
+    userRoleFindFirstMock.mockResolvedValue({ ...existingAssignment, scopeType: 'node', scopeTarget: 'c1:pve1',
+      role: { name: 'NIC identity', permissions: [{ permissionId: 'vm.config.nic.vlan' }] } })
+    const res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'vm', scope_target: 'c1:pve2:qemu:100' } })
+    expect(res.status).toBe(403)
+    expect(userRoleUpdateManyMock).not.toHaveBeenCalled()
+  })
+  it('lets a non-superadmin narrow a sensitive NIC grant inside its current scope', async () => {
+    isSuperAdminMock.mockResolvedValue(false)
+    const onNode = { ...existingAssignment, scopeType: 'node', scopeTarget: 'c1:pve1',
+      role: { name: 'NIC identity', permissions: [{ permissionId: 'vm.config.nic.mac' }] } }
+    userRoleFindFirstMock.mockResolvedValueOnce(onNode).mockResolvedValueOnce(updatedRow('vm', 'c1:pve1:qemu:100'))
+    const res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'vm', scope_target: 'c1:pve1:qemu:100' } })
+    expect(res.status).toBe(200)
+    expect(userRoleUpdateManyMock.mock.calls[0][0].data).toMatchObject({ scopeType: 'vm', scopeTarget: 'c1:pve1:qemu:100' })
+  })
+  it('drops a scope_target sent alone for an unscoped assignment', async () => {
+    userRoleFindFirstMock.mockResolvedValueOnce(existingAssignment).mockResolvedValueOnce(updatedRow('global', null))
+    const res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_target: 'c1:pve1' } })
+    expect(res.status).toBe(200)
+    expect(userRoleUpdateManyMock.mock.calls[0][0].data).toMatchObject({ scopeType: 'global', scopeTarget: null })
+  })
 
 })

@@ -10,7 +10,7 @@ import { audit } from "@/lib/audit"
 import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
 import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
-import { scopeBreadth, validateAssignmentScope } from "@/lib/rbac/scope-validation"
+import { scopeIncludes, validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -255,13 +255,31 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       if (!guard.ok) return guard.response!
     }
 
-    // A provider admin may still narrow or expire an existing NIC identity
-    // grant; widening or moving it stays reserved to a super admin.
-    const scopeMoves = scope_type !== undefined
-      && (scope_type !== assignment.scopeType || (scope_target ?? null) !== (assignment.scopeTarget ?? null))
+    // The scope this request results in, whatever fields it names: a target
+    // sent alone keeps the type, a type sent alone keeps the target
+    // ("inherit"/"global" drop it). Validated as a whole, so a partial body
+    // obeys the same rules as a full one.
+    const current = { scopeType: assignment.scopeType, scopeTarget: assignment.scopeTarget ?? null }
+    let nextScope: { scopeType: string; scopeTarget: string | null } | null = null
+    if (scope_type !== undefined || scope_target !== undefined) {
+      const check = validateAssignmentScope(
+        scope_type ?? current.scopeType,
+        scope_target !== undefined ? scope_target : current.scopeTarget,
+      )
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: 400 })
+      }
+      nextScope = { scopeType: check.scopeType!, scopeTarget: check.scopeTarget ?? null }
+    }
+    const scopeMoves = nextScope !== null
+      && (nextScope.scopeType !== current.scopeType || nextScope.scopeTarget !== current.scopeTarget)
+
+    // A provider admin may still narrow an existing NIC identity grant inside
+    // its current scope, or expire it; widening it or moving it to another
+    // resource stays reserved to a super admin.
     if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(assignment.role) && scopeMoves
-      && scopeBreadth(scope_type) >= scopeBreadth(assignment.scopeType)) {
-      return NextResponse.json({ error: 'Only a super admin may widen a NIC identity grant' }, { status: 403 })
+      && !scopeIncludes(current, nextScope!)) {
+      return NextResponse.json({ error: 'Only a super admin may widen or move a NIC identity grant' }, { status: 403 })
     }
 
     // Construire le payload Prisma en ne touchant que les champs fournis
@@ -271,18 +289,9 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       data.roleId = role_id
     }
 
-    if (scope_type !== undefined) {
-      // Validate against the effective target (incoming, else the existing one)
-      // so the shared rule applies; "inherit"/"global" normalize to no target.
-      const targetForCheck = scope_target !== undefined ? scope_target : assignment.scopeTarget
-      const check = validateAssignmentScope(scope_type, targetForCheck)
-      if (!check.ok) {
-        return NextResponse.json({ error: check.error }, { status: 400 })
-      }
-      data.scopeType = check.scopeType
-      data.scopeTarget = check.scopeTarget
-    } else if (scope_target !== undefined) {
-      data.scopeTarget = scope_target || null
+    if (nextScope) {
+      data.scopeType = nextScope.scopeType
+      data.scopeTarget = nextScope.scopeTarget
     }
 
     if (expires_at !== undefined) {

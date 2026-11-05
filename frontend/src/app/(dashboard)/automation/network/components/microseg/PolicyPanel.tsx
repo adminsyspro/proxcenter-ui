@@ -14,6 +14,7 @@ import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { MicrosegActionsSlot, SlotActions } from './microsegAccess'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import ZoneDialog from './ZoneDialog'
+import { zoneGateOf } from './zoneGate'
 import type { ZoneFormValues } from './zoneForm'
 import ZoneList from './ZoneList'
 import { ZoneStateConfirm, useFlowEditor } from './ZonePanelActions'
@@ -109,7 +110,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         onDelete={flowEditor.remove}
       />
 
-      {zoneDialog && <ZoneDialog zone={zoneDialog.item} onSave={saveZone(zoneDialog.item)} onClose={() => setZoneDialog(null)} />}
+      {zoneDialog && <ZoneDialog zone={zoneDialog.item} onSave={saveZone(zoneDialog.item)} onClose={() => setZoneDialog(null)} gate={zoneGateOf(edits, () => setZoneDialog(null))} />}
       {flowEditor.dialogs}
       {assigning && (
         <AssignGuestsDialog

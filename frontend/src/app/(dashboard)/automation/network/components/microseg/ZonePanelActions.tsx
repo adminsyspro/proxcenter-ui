@@ -12,6 +12,7 @@ import FlowDialog, { type FlowSaveValues } from './FlowDialog'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import type { ZoneEdits } from './useZoneEdits'
+import { zoneGateOf } from './zoneGate'
 import ZoneDialog from './ZoneDialog'
 import ZoneEnforceDialog from './ZoneEnforceDialog'
 import { ZoneStateMenu } from './ZoneRow'
@@ -110,7 +111,7 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted }: { zone: 
       <WriteIcon label={t('delete')} icon='ri-delete-bin-line' onClick={() => { removal.reset(); setOpen({ kind: 'delete' }) }} />
       <WriteIcon label={t('assign')} icon='ri-add-circle-line' onClick={onAssign} />
       <ZoneStateMenu zone={zone} anchor={anchor} onClose={() => setAnchor(null)} onPick={state => setOpen({ kind: 'state', state })} />
-      {open?.kind === 'edit' && <ZoneDialog zone={zone} onSave={save} onClose={close} />}
+      {open?.kind === 'edit' && <ZoneDialog zone={zone} onSave={save} onClose={close} gate={zoneGateOf(edits, close)} />}
       {open?.kind === 'state' && <ZoneStateConfirm zone={zone} state={open.state} edits={edits} onClose={close} />}
       <MicrosegConfirmDialog
         open={open?.kind === 'delete'}

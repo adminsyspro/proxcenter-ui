@@ -3,6 +3,8 @@
 // is shown at once instead of coming back as a 400. The server stays the
 // authority. Errors are i18n keys, one per field.
 
+import type { EgressMode } from '@/lib/microseg/types'
+
 const V = 'microsegPilot.policy.validation'
 
 export const ZONE_NAME_RE = /^[a-z][a-z0-9-]{0,13}$/
@@ -13,8 +15,6 @@ export const ZONE_COLORS = [
 ] as const
 
 export const FLOW_PROTOS = ['tcp', 'udp', 'icmp', 'icmpv6', 'any'] as const
-
-import type { EgressMode } from '@/lib/microseg/types'
 
 export type ZoneFormValues = {
   name: string

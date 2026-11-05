@@ -10,7 +10,9 @@ import { useTranslations } from 'next-intl'
 import { zoneEgress, type EgressMode, type MicrosegZone } from '@/lib/microseg/types'
 
 import { DialogErrorLine, ONE_LINE_SX, useDialogAction } from './dialogParts'
-import MicrosegConfirmDialog from './MicrosegConfirmDialog'
+import TypedConfirmDialog from './TypedConfirmDialog'
+import ZoneStateGate from './ZoneStateGate'
+import type { ZoneGate } from './zoneGate'
 import { validateZoneForm, ZONE_COLORS, type ZoneFormValues } from './zoneForm'
 
 type Props = {
@@ -19,6 +21,8 @@ type Props = {
   /** Throws when the write fails: the dialog then keeps its input and shows the error. */
   onSave: (values: ZoneFormValues) => Promise<void>
   onClose: () => void
+  /** The pending changes of the draft: an outbound change applies the whole draft, so it is refused while there are some. */
+  gate?: ZoneGate
 }
 
 const HELPER_SX = { ...ONE_LINE_SX, mx: 0 } as const
@@ -69,16 +73,16 @@ function EgressSection({ values, disabled, stateBlocked, set }: EgressProps) {
         {stateBlocked && <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('egressNeedsState')}</Typography>}
       </Box>
       <FormControl disabled={disabled || stateBlocked || !values.egress_control}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-          <Typography component='span' variant='body2' color='text.secondary' sx={ONE_LINE_SX}>{t('egressFilter')}</Typography>
-          <RadioGroup row aria-label={t('egressFilter')} value={values.egress_mode} onChange={e => set('egress_mode', e.target.value as EgressMode)}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'nowrap', minWidth: 0 }}>
+          <Typography component='span' variant='body2' color='text.secondary' sx={{ ...ONE_LINE_SX, flexShrink: 0 }}>{t('egressFilter')}</Typography>
+          <RadioGroup row sx={{ flexWrap: 'nowrap', minWidth: 0 }} aria-label={t('egressFilter')} value={values.egress_mode} onChange={e => set('egress_mode', e.target.value as EgressMode)}>
             {EGRESS_MODES.map(mode => (
               <FormControlLabel
                 key={mode}
                 value={mode}
-                control={<Radio size='small' />}
+                control={<Radio />}
                 label={t(mode === 'local' ? 'egressLocal' : 'egressAll')}
-                sx={{ '& .MuiTypography-root': ONE_LINE_SX }}
+                sx={{ mr: 1, minWidth: 0, '& .MuiTypography-root': ONE_LINE_SX }}
               />
             ))}
           </RadioGroup>
@@ -91,7 +95,7 @@ function EgressSection({ values, disabled, stateBlocked, set }: EgressProps) {
 }
 
 /** Create or edit a zone: name (fixed once created), label, color from a small palette, isolation. */
-export default function ZoneDialog({ zone, onSave, onClose }: Props) {
+export default function ZoneDialog({ zone, onSave, onClose, gate }: Props) {
   const t = useTranslations()
   const editing = zone !== null
   const [values, setValues] = useState<ZoneFormValues>({
@@ -99,6 +103,9 @@ export default function ZoneDialog({ zone, onSave, onClose }: Props) {
     egress_control: zone ? zoneEgress(zone) !== 'off' : false, egress_mode: zone?.egress_mode ?? 'local',
   })
   const [confirming, setConfirming] = useState(false)
+  // The gate as it was when the question was asked: once the dialog has written (its own mode change makes the draft
+  // dirty), a retry must not be refused for that change.
+  const [frozenGate, setFrozenGate] = useState<ZoneGate | null>(null)
   const [touched, setTouched] = useState(false)
   const { busy, error, run } = useDialogAction()
 
@@ -110,13 +117,19 @@ export default function ZoneDialog({ zone, onSave, onClose }: Props) {
   const stateBlocked = !zone || (zone.state !== 'observe' && zone.state !== 'enforce')
   const egressChanged = !!zone && values.egress_control !== (zoneEgress(zone) !== 'off')
 
-  const save = () => run(() => onSave({ ...values, label: values.label.trim() }))
+  const save = () => {
+    setFrozenGate(prev => prev ?? gate ?? null)
+    return run(() => onSave({ ...values, label: values.label.trim() }))
+  }
   const submit = () => {
     if (Object.keys(errors).length > 0) return
     if (egressChanged) setConfirming(true)
     else void save()
   }
-  const egressKey = values.egress_control ? 'On' : 'Off'
+  const egressText = values.egress_control
+    ? { title: 'egressOnTitle', body: 'egressOnBody', confirm: 'egressOnConfirm' }
+    : { title: 'egressOffTitle', body: 'egressOffBody', confirm: 'egressOffConfirm' }
+  const egressGate = frozenGate ?? gate
 
   return (
     <Dialog open onClose={busy ? undefined : onClose} maxWidth='sm' fullWidth aria-labelledby='microseg-zone-title'>
@@ -162,16 +175,20 @@ export default function ZoneDialog({ zone, onSave, onClose }: Props) {
           {editing ? t('microsegPilot.policy.zoneDialog.save') : t('microsegPilot.policy.zoneDialog.create')}
         </Button>
       </DialogActions>
-      <MicrosegConfirmDialog
-        open={confirming}
-        title={t(`microsegPilot.policy.zoneDialog.egress${egressKey}Title`, { name: values.name })}
-        body={t(`microsegPilot.policy.zoneDialog.egress${egressKey}Body`)}
-        confirmLabel={t(`microsegPilot.policy.zoneDialog.egress${egressKey}Confirm`)}
-        color='warning'
-        busy={busy}
-        onConfirm={() => void save().then(ok => { if (!ok) setConfirming(false) })}
-        onCancel={() => setConfirming(false)}
-      />
+      {confirming && (
+        <TypedConfirmDialog
+          title={t(`microsegPilot.policy.zoneDialog.${egressText.title}`, { name: values.name })}
+          lines={[t(`microsegPilot.policy.zoneDialog.${egressText.body}`)]}
+          confirmLabel={t(`microsegPilot.policy.zoneDialog.${egressText.confirm}`)}
+          color='warning'
+          ready={!egressGate?.pending}
+          busy={busy}
+          onConfirm={() => void save().then(ok => { if (!ok) setConfirming(false) })}
+          onCancel={() => setConfirming(false)}
+        >
+          <ZoneStateGate pending={!!egressGate?.pending} count={egressGate?.count ?? null} onViewPlan={egressGate?.onViewPlan} discard={egressGate?.discard} />
+        </TypedConfirmDialog>
+      )}
     </Dialog>
   )
 }

@@ -130,9 +130,9 @@ describe('zone header actions', () => {
 })
 
 describe('zone dialog, Outbound section', () => {
-  const openEdit = async (zone: MicrosegZone = web()) => {
+  const openEdit = async (zone: MicrosegZone = web(), pending = false) => {
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone, db()], last_revision: REVISION_HEAD, version: 3 }))
-    setup({ zones: [zone, db()] })
+    setup({ zones: [zone, db()], pending_changes: pending })
     fireEvent.click(button(await openPanel(), 'Edit zone'))
     return screen.findByRole('dialog', { name: 'Edit zone' })
   }
@@ -178,6 +178,32 @@ describe('zone dialog, Outbound section', () => {
     expect(body(calls('PUT /zones/zw')[0][1] as RequestInit)).toMatchObject({ egress_mode: 'all' })
     expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 4, state: 'observe' })
     expect(await screen.findByText(/web: outbound control in progress/)).toBeTruthy()
+  })
+
+  it('refuses the outbound change while the draft was dirty before the dialog, with the way to the plan, and writes nothing', async () => {
+    const dialog = await openEdit(web(), true)
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }))
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Local network and Internet' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Control outbound traffic of zone web?' })
+    expect((within(confirm).getByRole('button', { name: 'Control' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(confirm).getByRole('button', { name: 'View plan' })).toBeTruthy()
+    expect(calls('PUT /zones/zw')).toHaveLength(0)
+    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
+  })
+
+  it('keeps the dialog usable with the error when the outbound change fails after the zone was written', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(400, { code: 'INVALID', error: 'zone is disabled' })
+    const dialog = await openEdit()
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }))
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Local network and Internet' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Control outbound traffic of zone web?' })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Control' }))
+    expect(await within(dialog).findByText(/zone is disabled/)).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Control outbound traffic of zone web?' })).toBeNull())
+    expect((within(dialog).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('shows an enforced outbound as checked and sends off once unchecked and confirmed', async () => {

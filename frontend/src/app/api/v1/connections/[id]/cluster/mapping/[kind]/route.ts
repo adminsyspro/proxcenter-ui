@@ -6,6 +6,7 @@ import { checkPermission, guestPerimeterAllows, PERMISSIONS } from "@/lib/rbac"
 import { maskingScope } from "@/lib/tenant/infraScope"
 import { resolveCallerInfraScope } from "@/lib/tenant/iaasGuard"
 import { iaasMappingsView, iaasNodeAllowed } from "@/lib/connections/iaasView"
+import { tenantPciMappings } from "@/lib/gpu/vdcGuard"
 
 export const runtime = "nodejs"
 
@@ -18,6 +19,9 @@ const MAPPING_KINDS = new Set(["usb", "pci"])
 // (`checks` for PCI, `error` for USB). A mapping is the only way a non-root
 // caller, which every API token is, can attach a USB or PCI device to a VM
 // (#852): PVE keeps devices given by their real hardware address to root@pam.
+// A vDC tenant never sees a PCI mapping that covers a GPU, nor one the GPU
+// collection could not judge: its GPUs come from the GPU section of its vDC,
+// which draws on the contingent (#672).
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string; kind: string }> }
@@ -48,11 +52,19 @@ export async function GET(
     }
     const query = node ? `?check-node=${encodeURIComponent(node)}` : ""
 
-    const data = await pveFetch<unknown>(conn, `/cluster/mapping/${kind}${query}`)
-    const list = Array.isArray(data) ? data : []
+    const raw = await pveFetch<unknown>(conn, `/cluster/mapping/${kind}${query}`)
+    const list: any[] = Array.isArray(raw) ? raw : []
 
-    return NextResponse.json({ data: vdcScope ? iaasMappingsView(list, vdcScope, id) : list })
+    if (!vdcScope) return NextResponse.json({ data: list })
+
+    // GPU mappings are judged on the full rows, before the masked view drops their paths.
+    const allowed = kind === "pci" ? ((await tenantPciMappings(id, list)) as any[]) : list
+
+    return NextResponse.json({ data: iaasMappingsView(allowed, vdcScope, id) })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+    // The upstream text names the PVE host, which a vDC tenant must never see.
+    console.error("[cluster-mapping] read failed:", e?.message)
+
+    return NextResponse.json({ error: "pve_unreachable" }, { status: 502 })
   }
 }

@@ -923,6 +923,7 @@ model Vdc {
   nodes              VdcNode[]
   storages           VdcStorage[]
   quota              VdcQuota?
+  gpuQuotas          VdcGpuQuota[]
   usageCache         VdcUsageCache?
   sharedBridges      VdcSharedBridge[]
   vnets              VdcVnet[]
@@ -1000,6 +1001,22 @@ model VdcQuota {
   updatedAt    DateTime @default(now()) @map("updated_at")
 
   @@map("vdc_quotas")
+}
+
+// Per-profile GPU contingent of a vDC (#672): vGPU profiles or whole cards of a model.
+model VdcGpuQuota {
+  id          String   @id @default(cuid())
+  vdcId       String   @map("vdc_id")
+  vdc         Vdc      @relation(fields: [vdcId], references: [id], onDelete: Cascade)
+  kind        String
+  modelKey    String   @map("model_key")
+  modelName   String   @map("model_name")
+  profileName String   @default("") @map("profile_name")
+  count       Int
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([vdcId, kind, modelKey, profileName])
+  @@map("vdc_gpu_quotas")
 }
 
 model VdcUsageCache {
@@ -1799,4 +1816,36 @@ model SlaMaintenanceWindow {
 
   @@index([tenantId, startsAt])
   @@map("sla_maintenance_windows")
+}
+
+/// GPU chargeback (#672): how long one VM held one GPU within one hour, split
+/// into running (the VM was started) and reserved (stopped but holding it).
+/// The sampler of lib/gpu/billing adds the time elapsed since its previous
+/// pass to the row of the hour, so a restart or a leader change loses nothing.
+/// The owner (vDC, tenant) and the names are copied as they were, so a month
+/// stays invoiceable after a VM, a vDC or a tenant is deleted.
+model GpuUsageHour {
+  id             String   @id @default(cuid())
+  hour           DateTime
+  connectionId   String   @map("connection_id")
+  connectionName String   @map("connection_name")
+  node           String
+  vmid           Int
+  vmName         String   @map("vm_name")
+  deviceKey      String   @map("device_key")
+  modelKey       String   @map("model_key")
+  modelName      String   @map("model_name")
+  mdev           String?
+  pool           String?
+  vdcId          String?  @map("vdc_id")
+  vdcName        String?  @map("vdc_name")
+  tenantId       String?  @map("tenant_id")
+  tenantName     String?  @map("tenant_name")
+  runningSeconds  Int     @default(0) @map("running_seconds")
+  reservedSeconds Int     @default(0) @map("reserved_seconds")
+
+  @@unique([hour, connectionId, vmid, deviceKey])
+  @@index([hour])
+  @@index([tenantId, hour])
+  @@map("gpu_usage_hours")
 }

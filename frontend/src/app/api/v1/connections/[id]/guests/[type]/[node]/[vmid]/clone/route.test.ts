@@ -13,6 +13,7 @@ vi.mock('@/lib/api-tokens/routeGuard', () => ({
 }))
 
 import { callRoute } from '@/__tests__/setup/route-test'
+import { pendingVdcGpus, resetVdcPending } from '@/lib/gpu/vdcPending'
 
 // Capture the after() callbacks so the test can drive the post-clone work.
 const h = vi.hoisted(() => ({
@@ -32,7 +33,12 @@ const checkVdcQuotaMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const resolveSubnetForBridgeMock = vi.fn<(...args: any[]) => Promise<any>>()
 const syncIpamForVmConfigMock = vi.fn<(...args: any[]) => Promise<any>>()
-const waitForTaskMock = vi.fn<(...args: any[]) => Promise<any>>()
+const { waitForTaskMock, waitForTaskStoppedMock } = vi.hoisted(() => ({
+  waitForTaskMock: vi.fn<(...args: any[]) => Promise<any>>(),
+  waitForTaskStoppedMock: vi.fn<(...args: any[]) => Promise<any>>(),
+}))
+const tenantAddsGpuMock = vi.fn<(...args: any[]) => Promise<'adds' | 'none' | 'unknown'>>()
+const cloneContingentCheckMock = vi.fn<(...args: any[]) => Promise<any>>()
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
@@ -62,10 +68,14 @@ vi.mock('@/lib/vdc/vnets', async (io) => {
 })
 vi.mock('@/lib/vdc/ipamSync', () => ({ syncIpamForVmConfig: syncIpamForVmConfigMock }))
 vi.mock('@/lib/vdc/ipam', () => ({ releaseAllocationsForVm: vi.fn() }))
-vi.mock('@/lib/proxmox/tasks', () => ({ waitForTask: waitForTaskMock }))
+vi.mock('@/lib/proxmox/tasks', () => ({ waitForTask: waitForTaskMock, waitForTaskStopped: waitForTaskStoppedMock }))
 vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
 const { restampGuestDrivesMock } = vi.hoisted(() => ({ restampGuestDrivesMock: vi.fn(async () => ({ stamped: [] })) }))
 vi.mock('@/lib/vdc/driveGuard', () => ({ restampGuestDrives: restampGuestDrivesMock }))
+vi.mock('@/lib/gpu/vdcGuard', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/gpu/vdcGuard')>('@/lib/gpu/vdcGuard')
+  return { tenantAddsGpu: tenantAddsGpuMock, cloneContingentCheck: cloneContingentCheckMock, contingentRefusal: actual.contingentRefusal }
+})
 const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/tenant/infraScope', () => ({
   getTenantInfrastructureScope: (...a: any[]) => getTenantInfrastructureScopeMock(...a),
@@ -94,10 +104,14 @@ beforeEach(() => {
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
+  tenantAddsGpuMock.mockReset().mockResolvedValue('none')
+  cloneContingentCheckMock.mockReset().mockResolvedValue({ ok: true, demand: [] })
+  resetVdcPending()
   getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
   resolveSubnetForBridgeMock.mockReset().mockResolvedValue(null)
   syncIpamForVmConfigMock.mockReset().mockResolvedValue({ bodyOverrides: {}, rollback: vi.fn() })
   waitForTaskMock.mockReset().mockResolvedValue(undefined)
+  waitForTaskStoppedMock.mockReset().mockResolvedValue({ stopped: true, exitstatus: 'OK' })
   checkVmidAgainstTenantRangeMock.mockReset().mockResolvedValue({ ok: true })
   requireProviderTenantMock.mockReset().mockResolvedValue(null)
   getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
@@ -397,7 +411,7 @@ describe('POST clone — high availability on the clone (#181)', () => {
       if (path === '/storage/ceph') return { type: 'rbd' }
       if (path === '/storage/Dir-Images') return { type: 'dir' }
       if (path === '/nodes/pve3/qemu/100/config') return { sata0: 'Dir-Images:100/base-100-disk-1.qcow2,size=60G', efidisk0: 'Dir-Images:100/base-100-disk-0.qcow2' }
-      if (opts?.method === 'POST') return path.endsWith('/clone') ? 'UPID:clone:1' : null
+      if (opts?.method === 'POST') return path.endsWith('/clone') ? 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:' : null
       return {}
     })
   }
@@ -412,8 +426,8 @@ describe('POST clone — high availability on the clone (#181)', () => {
 
     await runAfterCbs()
 
-    // The clone task runs on the source node (pve3), not on the target (#1293).
-    expect(waitForTaskMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve3', 'UPID:clone:1', { acceptWarnings: true })
+    // The task runs on the source node (pve3) even for a clone to pve2.
+    expect(waitForTaskMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve3', 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:', { acceptWarnings: true })
     expect(haCalls()).toHaveLength(1)
     expect(Object.fromEntries(new URLSearchParams(haCalls()[0][2].body))).toEqual({ sid: 'vm:150', state: 'started' })
   })
@@ -491,3 +505,171 @@ describe('POST clone: storage-tier QoS restamp on another node (#1293)', () => {
   })
 })
 
+describe('POST clone: the vDC GPU contingent (#672)', () => {
+  const vdc = { vdcId: 'v1', poolName: 'vdc-a', quota: null, storagePolicies: [] }
+  const withGpu = () => pveFetchMock.mockImplementation(async (_conn, _path, opts?: any) => {
+    if (opts?.method === 'POST') return 'UPID:clone:1'
+    return { cores: 2, memory: 4096, hostpci0: 'mapping=vgpu-n1-03-00,mdev=nvidia-665', template: 1 }
+  })
+  const cloned = () => pveFetchMock.mock.calls.some(c => String(c[1]).endsWith('/clone') && c[2]?.method === 'POST')
+
+  it('409 quota_exhausted: the line of the source GPU is full', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    withGpu()
+    tenantAddsGpuMock.mockResolvedValue('adds')
+    cloneContingentCheckMock.mockResolvedValue({ ok: false, code: 'quota_exhausted', used: 2, count: 2 })
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: false } })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'quota_exhausted', used: 2, count: 2 })
+    expect(tenantAddsGpuMock).toHaveBeenCalledWith('conn-1', 'pve3', { hostpci0: 'mapping=vgpu-n1-03-00,mdev=nvidia-665' }, {})
+    expect(cloneContingentCheckMock).toHaveBeenCalledWith('v1', 'conn-1', 'vdc-a', 'pve3', { hostpci0: 'mapping=vgpu-n1-03-00,mdev=nvidia-665' })
+    expect(cloned()).toBe(false)
+  })
+
+  it('503 gpu_check_unavailable: the contingent cannot be checked now', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    withGpu()
+    tenantAddsGpuMock.mockResolvedValue('adds')
+    cloneContingentCheckMock.mockResolvedValue({ ok: false, code: 'gpu_check_unavailable' })
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: false } })
+    expect(res.status).toBe(503)
+    expect(await res.json()).toEqual({ error: 'gpu_check_unavailable' })
+    expect(cloned()).toBe(false)
+  })
+
+  it('a GPU the source releases while running still goes with the clone: it is judged', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    tenantAddsGpuMock.mockResolvedValue('adds')
+    cloneContingentCheckMock.mockResolvedValue({ ok: false, code: 'quota_exhausted', used: 1, count: 1 })
+    pveFetchMock.mockImplementation(async (_conn, path, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:clone:1'
+      // PVE clones the current config: the pending delete does not reach the clone.
+      if (String(path).endsWith('/qemu/100/pending')) return [{ key: 'cores', value: 2 }, { key: 'hostpci0', value: 'mapping=gpu-w,pcie=1', delete: 1 }]
+      return { cores: 2, memory: 4096 }
+    })
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: true } })
+    expect(res.status).toBe(409)
+    expect(tenantAddsGpuMock).toHaveBeenCalledWith('conn-1', 'pve3', { hostpci0: 'mapping=gpu-w,pcie=1' }, {})
+    expect(cloneContingentCheckMock).toHaveBeenCalledWith('v1', 'conn-1', 'vdc-a', 'pve3', { hostpci0: 'mapping=gpu-w,pcie=1' })
+    expect(cloned()).toBe(false)
+  })
+
+  it('a source the cached collection cannot judge goes to the fresh contingent check', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    withGpu()
+    tenantAddsGpuMock.mockResolvedValue('unknown')
+    cloneContingentCheckMock.mockResolvedValue({ ok: false, code: 'gpu_check_unavailable' })
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: false } })
+    expect(res.status).toBe(503)
+    expect(cloneContingentCheckMock).toHaveBeenCalled()
+    expect(cloned()).toBe(false)
+  })
+
+  it('the clone goes through when the line has room', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    withGpu()
+    tenantAddsGpuMock.mockResolvedValue('adds')
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: false } })
+    expect(res.status).toBe(200)
+    expect(cloned()).toBe(true)
+  })
+
+  it('two clones on the last slot: one goes through, the other is refused, the slot held until the task ends', async () => {
+    const q12 = { kind: 'vgpu', modelKey: '0x10de:0x2231', profileName: 'RTXA5000-12Q' }
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    tenantAddsGpuMock.mockResolvedValue('adds')
+    // One slot left: the check sees the clones PVE already accepted.
+    cloneContingentCheckMock.mockImplementation(async (vdcId: string) => {
+      await new Promise(r => setTimeout(r, 5))
+      return pendingVdcGpus(vdcId).length > 0 ? { ok: false, code: 'quota_exhausted', used: 2, count: 2 } : { ok: true, demand: [q12] }
+    })
+    pveFetchMock.mockImplementation(async (_conn, _path, opts?: any) => {
+      if (opts?.method === 'POST') {
+        await new Promise(r => setTimeout(r, 10))
+        return 'UPID:clone:1'
+      }
+      return { cores: 2, memory: 4096, hostpci0: 'mapping=vgpu-n1-03-00,mdev=nvidia-665', template: 1 }
+    })
+    let finish!: () => void
+    waitForTaskStoppedMock.mockImplementation(() => new Promise(r => { finish = () => r({ stopped: true, exitstatus: 'OK' }) }))
+
+    const POST = await loadPost()
+    const [a, b] = await Promise.all([
+      callRoute(POST, { params: baseParams, body: { newid: 101, full: false } }),
+      callRoute(POST, { params: baseParams, body: { newid: 102, full: false } }),
+    ])
+    expect([a.status, b.status].sort((x, y) => x - y)).toEqual([200, 409])
+    const refused = a.status === 409 ? a : b
+    expect(await refused.json()).toEqual({ error: 'quota_exhausted', used: 2, count: 2 })
+    expect(pveFetchMock.mock.calls.filter(c => String(c[1]).endsWith('/clone') && c[2]?.method === 'POST')).toHaveLength(1)
+    expect(pendingVdcGpus('v1')).toHaveLength(1)
+
+    const done = runAfterCbs()
+    await new Promise(r => setTimeout(r, 0))
+    finish()
+    await done
+    expect(pendingVdcGpus('v1')).toEqual([])
+  })
+
+  it('a clone to another node keeps its vGPU reserved until the source node reports the task stopped', async () => {
+    const q12 = { kind: 'vgpu', modelKey: '0x10de:0x2231', profileName: 'RTXA5000-12Q' }
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    tenantAddsGpuMock.mockResolvedValue('adds')
+    cloneContingentCheckMock.mockResolvedValue({ ok: true, demand: [q12] })
+    pveFetchMock.mockImplementation(async (_conn, _path, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:'
+      return { cores: 2, memory: 4096, hostpci0: 'mapping=vgpu-n1-03-00,mdev=nvidia-665' }
+    })
+    // Timeout or polls that never saw the end: the reservation stays (its TTL ends it).
+    waitForTaskStoppedMock.mockResolvedValue({ stopped: false })
+    expect((await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: true, target: 'pve9' } })).status).toBe(200)
+    await runAfterCbs()
+    expect(waitForTaskStoppedMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve3', 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:', expect.objectContaining({ timeoutMs: expect.any(Number) }))
+    expect(pendingVdcGpus('v1')).toHaveLength(1)
+
+    h.afterCbs.length = 0
+    resetVdcPending()
+    waitForTaskStoppedMock.mockResolvedValue({ stopped: true, exitstatus: 'clone failed: no space left' })
+    expect((await callRoute(await loadPost(), { params: baseParams, body: { newid: 102, full: true, target: 'pve9' } })).status).toBe(200)
+    expect(pendingVdcGpus('v1')).toHaveLength(1)
+    await runAfterCbs()
+    expect(pendingVdcGpus('v1')).toEqual([])
+  })
+
+  it('a source without GPU, or the provider, never reads the contingent', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    expect((await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: false } })).status).toBe(200)
+    resolveVdcForTenantMock.mockResolvedValue(null)
+    withGpu()
+    expect((await callRoute(await loadPost(), { params: baseParams, body: { newid: 102, full: false } })).status).toBe(200)
+    expect(cloneContingentCheckMock).not.toHaveBeenCalled()
+  })
+})
+
+// PVE runs a clone on the source node and keeps its task log there, also for
+// a clone to another node: every follow-up polls the node named in the UPID.
+describe('POST clone: follow-ups poll the node that runs the task', () => {
+  it('IPAM, QoS restamp and HA registration of a clone to another node poll the source node', async () => {
+    const gold = { policyId: 'p-gold', name: 'Gold', iopsRd: 5000, iopsWr: 4000, mbpsRd: 500, mbpsWr: null }
+    getTenantInfrastructureScopeMock.mockResolvedValue({
+      kind: 'iaas',
+      vdcScope: {
+        storagesByConnection: new Map([['conn-1', new Set(['ceph'])]]),
+        storagePoliciesByConnection: new Map([['conn-1', new Map([['ceph', gold]])]]),
+      },
+    })
+    resolveSubnetForBridgeMock.mockImplementation(async (_id, bridge) => (bridge === 'tenantA' ? { subnetId: 's1' } : null))
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'POST') return path.endsWith('/clone') ? 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:' : null
+      if (opts?.method === 'PUT') return null
+      if (path === '/storage/ceph') return { type: 'rbd' }
+      return { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', scsi0: 'ceph:vm-100-disk-0,size=8G' }
+    })
+
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { newid: 150, full: true, target: 'pve9', ha: true } })
+    expect(res.status).toBe(200)
+    await runAfterCbs()
+
+    expect(waitForTaskMock.mock.calls.map(c => c[1])).toEqual(['pve3', 'pve3', 'pve3'])
+  })
+})

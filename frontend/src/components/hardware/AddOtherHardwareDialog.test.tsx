@@ -209,6 +209,20 @@ describe('AddOtherHardwareDialog — mapped USB/PCI passthrough (#852)', () => {
     expect(props.onSave).toHaveBeenCalledWith({ hostpci0: 'mapping=gpu,pcie=1' })
   })
 
+  it('shows the sentence of a GPU contingent refusal, never its code', async () => {
+    seedMappings('pci', [{ id: 'nic', map: ['node=pve1,path=0000:02:00.0,id=8086:1572'] }])
+    const props = makeProps({ onSave: vi.fn().mockRejectedValue(new Error('gpu_via_my_vdc')) })
+
+    renderWithProviders(<AddOtherHardwareDialog {...props} />)
+    await pickOption(0, /PCI Device/i)
+    await openMappingSelect(3)
+    fireEvent.click(await screen.findByRole('option', { name: /nic/ }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Add' }))
+
+    expect(await screen.findByText('GPUs are added from the GPU section of My Datacenter.')).toBeInTheDocument()
+    expect(screen.queryByText('gpu_via_my_vdc')).toBeNull()
+  })
+
   it('explains an empty mapping list', async () => {
     seedMappings('pci', [])
 

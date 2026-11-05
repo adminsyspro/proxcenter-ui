@@ -8,6 +8,7 @@ import { parseLogOffset, sliceJobLogs } from '@/lib/migration/jobLogs'
 
 import mockData from '../mock-data.json'
 
+import { DEMO_GPU_PCI_MAPPINGS } from './gpu'
 import type { DemoMockMap, DemoMockResolver } from './index'
 
 const MOCK: Record<string, any> = mockData as any
@@ -111,17 +112,8 @@ function clusterConfig(connId: string): any {
 function clusterMappings(connId: string, kind: string): any {
   const nodes = hostsOf(connId).map(h => h.node)
 
-  if (kind === 'pci') {
-    return {
-      data: [{
-        id: 'gpu-l40s',
-        description: 'NVIDIA L40S for AI workloads',
-        map: nodes.slice(0, 2).map(n => `node=${n},path=0000:41:00.0,id=10de:26b9,iommugroup=42,subsystem-id=10de:1851`),
-        mdev: 0,
-        checks: [],
-      }],
-    }
-  }
+  // The GPU mappings of the GPU demo (#672): the cards of the production cluster.
+  if (kind === 'pci') return { data: connId === 'demo-pve-cluster-001' ? DEMO_GPU_PCI_MAPPINGS : [] }
   if (kind === 'usb') {
     return {
       data: [{
@@ -1045,7 +1037,8 @@ const HOST_TAGS = (node: string) => {
 
   if (node.startsWith('pve-dr-')) return 'gra'
 
-  return [n <= 6 ? 'rack-a' : 'rack-b', ...(n <= 2 ? ['gpu'] : [])].join(';')
+  // The nodes that carry cards in the GPU demo (#672).
+  return [n <= 6 ? 'rack-a' : 'rack-b', ...([3, 11, 12].includes(n) ? ['gpu'] : [])].join(';')
 }
 
 function hostsList(connFilter: string | null): any {

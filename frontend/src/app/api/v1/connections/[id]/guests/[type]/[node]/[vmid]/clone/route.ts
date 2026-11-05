@@ -8,6 +8,12 @@ import { cloneVmSchema } from "@/lib/schemas"
 import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { hostpciEntries } from "@/lib/gpu/quota"
+import { readQemuConfig } from "@/lib/gpu/guestConfigSource"
+import { cloneContingentCheck, contingentRefusal, tenantAddsGpu } from "@/lib/gpu/vdcGuard"
+import { holdVdcLock } from "@/lib/gpu/vdcLock"
+import { releaseWhenTaskStops, reserveVdcGpus } from "@/lib/gpu/vdcPending"
+import type { GpuDemand } from "@/lib/gpu/vdcQuota"
 import { getAllowedNetworksForTenant, validateNetAgainstScope, parseBridgeFromNet, resolveSubnetForBridge } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig } from "@/lib/vdc/ipamSync"
 import { stripMacFromNet } from "@/lib/vdc/ipamScan"
@@ -35,6 +41,10 @@ async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; type: string; node: string; vmid: string }> | { id: string; type: string; node: string; vmid: string } }
 ) {
+  // GPUs of the clone (#672): the vDC lock is held from the contingent check
+  // until PVE accepted the clone, then the GPUs stay reserved until its task ends.
+  let releaseGpuLock: (() => void) | null = null
+  let gpuClone: { vdcId: string; demand: GpuDemand[] } | null = null
   try {
     const params = await Promise.resolve(ctx.params)
     const { id, type, node, vmid } = params as { id: string; type: string; node: string; vmid: string }
@@ -155,6 +165,19 @@ async function handler(
           }, { status: 409 })
         }
 
+        // GPUs (#672): the clone keeps the GPUs of its source, each drawn on
+        // the line of its profile in the vDC contingent. PVE clones the
+        // current config: a GPU released while the source runs (a pending
+        // delete, absent from the config read above) goes with the clone.
+        const sourceGpus = type === 'qemu' ? hostpciEntries((await readQemuConfig(conn, node, vmid)) ?? vmConfig) : {}
+        // A source the cached collection cannot judge goes to the fresh check.
+        if (type === 'qemu' && await tenantAddsGpu(id, node, sourceGpus, {}) !== 'none') {
+          releaseGpuLock = await holdVdcLock(vdcInfo.vdcId)
+          const gpuCheck = await cloneContingentCheck(vdcInfo.vdcId, id, vdcInfo.poolName, node, sourceGpus)
+          if (gpuCheck.ok === false) return contingentRefusal(gpuCheck)
+          if (gpuCheck.demand.length > 0) gpuClone = { vdcId: vdcInfo.vdcId, demand: gpuCheck.demand }
+        }
+
         // Remember pool name for formData injection below
         vdcPoolName = vdcInfo.poolName
       }
@@ -265,6 +288,20 @@ async function handler(
     // with the new guest, instead of a full fan-out per tenant on the next read.
     await refreshCachedGuests(id, conn, body.newid ? { type, vmid: body.newid } : undefined)
 
+    // The clone task runs on the source node, also for a clone to another
+    // node, and its status is only known there.
+    const taskNode = node
+
+    // The clone writes its hostpciN and joins the pool from inside its task:
+    // its GPUs stay reserved until the task is seen stopped, then the lock goes.
+    if (gpuClone) {
+      const releaseReservation = reserveVdcGpus(gpuClone.vdcId, String(body.newid), gpuClone.demand)
+      const gpuUpid = String(result || '')
+      after(() => releaseWhenTaskStops(conn, gpuUpid, taskNode, releaseReservation))
+    }
+    releaseGpuLock?.()
+    releaseGpuLock = null
+
     // ── Post-clone IPAM sync ──
     // The clone runs as a PVE task (UPID returned in `result`). We schedule
     // the IPAM reconciliation in after() so the HTTP response goes back to
@@ -281,8 +318,7 @@ async function handler(
 
       after(async () => {
         try {
-          // The clone task runs on the source node, even with a target (#1293).
-          if (upid) await waitForTask(conn, node, upid)
+          if (upid) await waitForTask(conn, taskNode, upid)
           let cloneConfig = await pveFetch<any>(conn, cloneConfigPath)
 
           // ── Regenerate MACs on IPAM-managed NICs ──
@@ -357,7 +393,7 @@ async function handler(
       const cloneLogTag = `[clone-qos-stamp] vmid=${safeLog(body.newid)}`
       after(async () => {
         try {
-          if (stampUpid) await waitForTask(conn, node, stampUpid)
+          if (stampUpid) await waitForTask(conn, taskNode, stampUpid)
         } catch (err: any) {
           console.error(`${cloneLogTag} waitForTask failed: ${safeLog(err?.message ?? err)}`)
           return
@@ -378,7 +414,7 @@ async function handler(
       const haVmid = Number(body.newid)
       after(async () => {
         try {
-          if (haUpid) await waitForTask(conn, node, haUpid, { acceptWarnings: true })
+          if (haUpid) await waitForTask(conn, taskNode, haUpid, { acceptWarnings: true })
           await registerHaResource(conn, haVmid, 'started', type as 'qemu' | 'lxc')
         } catch (err: any) {
           console.error(`[clone-ha] vmid=${safeLog(haVmid)} HA registration failed: ${safeLog(err?.message ?? err)}`)
@@ -407,6 +443,8 @@ async function handler(
     console.error('Error cloning VM:', e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  } finally {
+    releaseGpuLock?.()
   }
 }
 

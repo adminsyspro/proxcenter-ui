@@ -14,6 +14,7 @@ import { cleanup } from '@testing-library/react'
 
 import { renderWithProviders, screen, fireEvent, waitFor, within } from '@/__tests__/setup/renderWithProviders'
 import VdcTab from '@/components/settings/VdcTab'
+import LicenseContext from '@/contexts/LicenseContext'
 
 const TENANTS = [
   { id: 'default', name: 'Provider', slug: 'default' },
@@ -347,5 +348,128 @@ describe('VdcTab: blank VM switch (#1171)', () => {
     await submitCreate(scope)
 
     expect(posted.allowBlankVms).toBe(false)
+  })
+})
+
+describe('VdcTab: GPU contingent saved by the dialog (#672)', () => {
+  const ENTRY = {
+    id: 'e1', kind: 'vgpu', modelKey: '0x10de:0x2231', modelName: 'RTX A5000', profileName: 'RTXA5000-12Q',
+    count: 1, held: 1, overCommitted: false,
+  }
+  const OFFER = { kind: 'vgpu', modelKey: '0x10de:0x2231', modelName: 'RTX A5000', profileName: 'RTXA5000-12Q', fbMemory: 12288, freeNow: 3 }
+
+  let gpuPutStatus: number
+  let gpuPuts: Array<{ url: string; body: any }>
+  let writes: string[]
+
+  beforeEach(() => {
+    gpuPutStatus = 200
+    gpuPuts = []
+    writes = []
+    withRoutes((url, init) => {
+      if (init?.method) writes.push(`${init.method} ${url}`)
+      if (url.endsWith('/gpu/quota') && init?.method === 'PUT') {
+        const body = JSON.parse(init.body)
+        gpuPuts.push({ url, body })
+        return gpuPutStatus === 200
+          ? jsonRes({ data: { entries: [], offers: [OFFER], readable: true } })
+          : jsonRes({ error: 'unavailable' }, gpuPutStatus)
+      }
+      if (url.endsWith('/gpu/quota')) return jsonRes({ data: { entries: [ENTRY], offers: [OFFER], readable: true } })
+
+      return undefined
+    })
+  })
+
+  function renderLicensed() {
+    renderWithProviders(
+      <LicenseContext.Provider value={{ hasFeature: () => true } as any}>
+        <VdcTab />
+      </LicenseContext.Provider>,
+    )
+  }
+
+  async function openEditQuotas() {
+    renderLicensed()
+    const row = (await screen.findByText(/^ACME/)).closest('[role="row"]') as HTMLElement
+    fireEvent.click(row.querySelector('.ri-pencil-line')?.closest('button') as HTMLElement)
+    const scope = within(await screen.findByRole('dialog'))
+    fireEvent.click(scope.getByRole('tab', { name: /quotas/i }))
+    await scope.findByText('RTXA5000-12Q')
+
+    return scope
+  }
+
+  async function clickUpdate(scope: ReturnType<typeof within>) {
+    const saveBtn = scope.getByRole('button', { name: 'Update' })
+    await waitFor(() => expect(saveBtn.hasAttribute('disabled')).toBe(false))
+    fireEvent.click(saveBtn)
+    await waitFor(() => expect(putBody).toBeDefined())
+  }
+
+  it('does not write the contingent when it did not change', async () => {
+    const scope = await openEditQuotas()
+    await clickUpdate(scope)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(gpuPuts).toHaveLength(0)
+  })
+
+  it('writes an empty contingent after the vDC once the switch is turned off', async () => {
+    const scope = await openEditQuotas()
+    fireEvent.click(scope.getByRole('checkbox', { name: 'GPU / vGPU' }))
+    expect(scope.getByTestId('gpu-quota-notice').textContent).toMatch(/already attached stay in place/i)
+    await clickUpdate(scope)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(gpuPuts).toEqual([{ url: '/api/v1/vdcs/vdc-1/gpu/quota', body: { entries: [] } }])
+    expect(writes.indexOf('PUT /api/v1/admin/vdcs/vdc-1')).toBeLessThan(writes.indexOf('PUT /api/v1/vdcs/vdc-1/gpu/quota'))
+  })
+
+  it('writes the edited count with the full list', async () => {
+    const scope = await openEditQuotas()
+    fireEvent.change(scope.getByRole('spinbutton', { name: 'RTX A5000 · RTXA5000-12Q' }), { target: { value: '3' } })
+    await clickUpdate(scope)
+    await waitFor(() => expect(gpuPuts).toHaveLength(1))
+    expect(gpuPuts[0].body.entries).toEqual([
+      { kind: 'vgpu', modelKey: '0x10de:0x2231', modelName: 'RTX A5000', profileName: 'RTXA5000-12Q', count: 3 },
+    ])
+  })
+
+  it('holds the save while a count is out of range', async () => {
+    const scope = await openEditQuotas()
+    fireEvent.change(scope.getByRole('spinbutton', { name: 'RTX A5000 · RTXA5000-12Q' }), { target: { value: '0' } })
+    await waitFor(() => expect(scope.getByRole('button', { name: 'Update' }).hasAttribute('disabled')).toBe(true))
+  })
+
+  it('keeps the dialog open on the Quotas tab with the error when the contingent write fails', async () => {
+    gpuPutStatus = 500
+    const scope = await openEditQuotas()
+    fireEvent.click(scope.getByRole('checkbox', { name: 'GPU / vGPU' }))
+    fireEvent.click(scope.getByRole('tab', { name: /general/i }))
+    await clickUpdate(scope)
+    await waitFor(() => expect(gpuPuts).toHaveLength(1))
+    expect(await scope.findByText(/Could not save the GPU contingent/i)).toBeTruthy()
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(scope.getByRole('tab', { name: /quotas/i }).getAttribute('aria-selected')).toBe('true')
+    expect(scope.getByRole('button', { name: 'Update' }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('creates the vDC with the GPU row switched on and writes nothing before profiles can be picked', async () => {
+    renderLicensed()
+    const createBtn = await screen.findByRole('button', { name: 'Create vDC' })
+    await waitFor(() => expect(createBtn.hasAttribute('disabled')).toBe(false))
+    fireEvent.click(createBtn)
+    const scope = within(await screen.findByRole('dialog'))
+    fireEvent.change(scope.getByLabelText(/^Tenant/), { target: { value: 'ACME' } })
+    fireEvent.click(await screen.findByRole('option', { name: 'ACME' }))
+    await pickCluster(scope, 'frankfurt')
+
+    fireEvent.click(scope.getByRole('tab', { name: /quotas/i }))
+    fireEvent.click(scope.getByRole('checkbox', { name: 'GPU / vGPU' }))
+    expect(scope.getByTestId('gpu-quota-notice').textContent).toMatch(/once the vDC is saved/i)
+
+    await submitCreate(scope)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(gpuPuts).toHaveLength(0)
+    expect(writes.some((w) => w.includes('/gpu/quota'))).toBe(false)
   })
 })

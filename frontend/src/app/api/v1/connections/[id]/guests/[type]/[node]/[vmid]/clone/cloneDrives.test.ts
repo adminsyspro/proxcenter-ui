@@ -122,7 +122,7 @@ beforeEach(() => {
   // Default: config reads return an empty config (no disks, no NICs), clone
   // POST returns a UPID.
   pveFetchMock.mockReset().mockImplementation(async (_conn, _path, opts?: any) => {
-    if (opts?.method === 'POST') return 'UPID:clone:1'
+    if (opts?.method === 'POST') return 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:'
     if (opts?.method === 'PUT') return null
     return {}
   })
@@ -165,7 +165,7 @@ describe('POST clone: per-tier storage metering (spec §5.3)', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme', 'ceph-hdd']))
     resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-x', quota: null, storagePolicies: [] })
     pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
-      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'POST') return 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:'
       if (opts?.method === 'PUT') return null
       if (String(path).endsWith('/qemu/100/config')) return sourceConfig
       return {}
@@ -188,7 +188,7 @@ describe('POST clone: per-tier storage metering (spec §5.3)', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme', 'ceph-hdd']))
     resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-x', quota: null, storagePolicies: [] })
     pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
-      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'POST') return 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:'
       if (opts?.method === 'PUT') return null
       if (String(path).endsWith('/qemu/100/config')) return sourceConfig
       return {}
@@ -213,7 +213,7 @@ describe('POST clone: per-tier storage metering (spec §5.3)', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme', 'ceph-hdd']))
     resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-x', quota: null, storagePolicies: [] })
     pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
-      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'POST') return 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:'
       if (opts?.method === 'PUT') return null
       if (String(path).endsWith('/qemu/100/config')) return multiStorageSourceConfig
       return {}
@@ -235,7 +235,7 @@ describe('POST clone: per-tier storage metering (spec §5.3)', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme', 'ceph-hdd']))
     resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-x', quota: null, storagePolicies: [] })
     pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
-      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'POST') return 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:'
       if (opts?.method === 'PUT') return null
       if (String(path).endsWith('/qemu/100/config')) return multiStorageSourceConfig
       return {}
@@ -254,7 +254,7 @@ describe('POST clone: per-tier storage metering (spec §5.3)', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme', 'ceph-hdd']))
     resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-x', quota: null, storagePolicies: [] })
     pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
-      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'POST') return 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:'
       if (opts?.method === 'PUT') return null
       // template is absent/0: a real VM, not a template.
       if (String(path).endsWith('/qemu/100/config')) return sourceConfig
@@ -274,7 +274,7 @@ describe('POST clone: per-tier storage metering (spec §5.3)', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme', 'ceph-hdd']))
     resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-x', quota: null, storagePolicies: [] })
     pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
-      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'POST') return 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:'
       if (opts?.method === 'PUT') return null
       if (String(path).endsWith('/qemu/100/config')) return { ...sourceConfig, template: 1 }
       return {}
@@ -295,7 +295,7 @@ describe('POST clone: post-clone QoS restamp (spec §5.3)', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme'], { 'ceph-nvme': gold }))
     resolveVdcForTenantMock.mockResolvedValue(null) // no vDC quota needed for this assertion
     pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
-      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'POST') return 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:'
       if (opts?.method === 'PUT') return null
       if (String(path).endsWith('/qemu/100/config')) return {} // source: irrelevant here
       if (String(path).endsWith('/qemu/101/config')) return { scsi0: 'ceph-nvme:vm-101-disk-0' }
@@ -309,7 +309,7 @@ describe('POST clone: post-clone QoS restamp (spec §5.3)', () => {
     expect(h.afterCbs.length).toBeGreaterThan(0)
     for (const cb of h.afterCbs) await cb()
 
-    expect(waitForTaskMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve3', 'UPID:clone:1')
+    expect(waitForTaskMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'pve3', 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:')
 
     const putCall = pveFetchMock.mock.calls.find(
       (c) => String(c[1]).endsWith('/qemu/101/config') && c[2]?.method === 'PUT',
@@ -323,7 +323,7 @@ describe('POST clone: post-clone QoS restamp (spec §5.3)', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme']))
     resolveVdcForTenantMock.mockResolvedValue(null)
     pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
-      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'POST') return 'UPID:pve3:0000A1B2:00C0FFEE:6726A000:qmclone:100:root@pam:'
       if (opts?.method === 'PUT') return null
       if (String(path).endsWith('/qemu/101/config')) return { scsi0: 'ceph-nvme:vm-101-disk-0' }
       return {}

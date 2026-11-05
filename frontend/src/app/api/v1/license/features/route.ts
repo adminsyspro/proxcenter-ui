@@ -34,6 +34,7 @@ const DEFAULT_COMMUNITY_FEATURES = {
     { id: 'cve_scanner', name: 'CVE Scanner', enabled: false },
     { id: 'white_label', name: 'White Label', enabled: false },
     { id: 'backup_restore_drills', name: 'Backup Restore Drills', enabled: false },
+    { id: 'gpu_management', name: 'GPU Management', enabled: false },
   ],
   options: [],
 }

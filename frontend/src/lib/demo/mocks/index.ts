@@ -16,6 +16,7 @@
 
 import { BACKUP_MOCKS, resolveBackupMock } from './backups'
 import { CHANGES_MOCKS, resolveChangesMock } from './changes'
+import { GPU_MOCKS, resolveGpuMock } from './gpu'
 import { INVENTORY_MOCKS, resolveInventoryMock } from './inventory'
 import { NODES_MOCKS, resolveNodesMock } from './nodes'
 import { OPERATIONS_MOCKS, resolveOperationsMock } from './operations'
@@ -25,8 +26,8 @@ import { SETTINGS_MOCKS, resolveSettingsMock } from './settings'
 export type DemoMockMap = Record<string, any>
 export type DemoMockResolver = (method: string, cleanPath: string, url: URL) => any | null
 
-export const DOMAIN_MOCKS: DemoMockMap[] = [BACKUP_MOCKS, CHANGES_MOCKS, INVENTORY_MOCKS, NODES_MOCKS, OPERATIONS_MOCKS, PBS_MOCKS, SETTINGS_MOCKS]
-export const DOMAIN_RESOLVERS: DemoMockResolver[] = [resolveBackupMock, resolveChangesMock, resolveInventoryMock, resolveNodesMock, resolveOperationsMock, resolvePbsMock, resolveSettingsMock]
+export const DOMAIN_MOCKS: DemoMockMap[] = [BACKUP_MOCKS, CHANGES_MOCKS, GPU_MOCKS, INVENTORY_MOCKS, NODES_MOCKS, OPERATIONS_MOCKS, PBS_MOCKS, SETTINGS_MOCKS]
+export const DOMAIN_RESOLVERS: DemoMockResolver[] = [resolveBackupMock, resolveChangesMock, resolveGpuMock, resolveInventoryMock, resolveNodesMock, resolveOperationsMock, resolvePbsMock, resolveSettingsMock]
 
 export function domainMock(methodKey: string): any {
   for (const map of DOMAIN_MOCKS) {

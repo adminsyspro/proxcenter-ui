@@ -223,7 +223,7 @@
     "events": "Ereignisse",
     "availability": "Verfügbarkeit",
     "alerts": "Warnmeldungen",
-    "jobs": "Task Ceingeben",
+    "jobs": "Task Center",
     "monitoring": "Überwachung",
     "securityAccess": "Sicherheit & Access",
     "users": "Benutzer",
@@ -5548,7 +5548,7 @@
         "manage": "Manage Warnmeldungen (acknowledge, resolve)"
       },
       "tasks": {
-        "view": "View task ceingeben"
+        "view": "Task Center anzeigen"
       },
       "reports": {
         "view": "View Berichte"
@@ -5909,7 +5909,7 @@
     "actionsScope": "Er fragt Ihre Infrastruktur ab und kann Aktionen vorschlagen; ohne Ihre Genehmigung wird nichts ausgeführt."
   },
   "jobs": {
-    "title": "Task Ceingeben",
+    "title": "Task Center",
     "running": "Laufend",
     "completed": "Abgeschlossen",
     "failed": "Fehlgeschlagen",
@@ -7082,9 +7082,9 @@
       "cephOkDc": "Replikation sicher — {failed}/{max} DC(s) ausgefallen, alle PGs haben ≥ min_size Replikate (Pool: {pool}, size {size}/{minSize})",
       "cephDanger": "DATEN GEFÄHRDET — {failed} Node(s) ausgefallen überschreitet garantierte Toleranz von {max}. Einige PGs können unter min_size={minSize} Replikate fallen (Pool: {pool}, size {size}/{minSize})",
       "cephDangerDc": "DATEN GEFÄHRDET — {failed} DC(s) ausgefallen überschreitet garantierte Toleranz von {max}. Einige PGs können unter min_size={minSize} Replikate fallen (Pool: {pool}, size {size}/{minSize})",
-      "datacenter": "Dataceingeben",
-      "failDatacenter": "Fail entire dataceingeben",
-      "reactivateDatacenter": "Reactivate dataceingeben",
+      "datacenter": "Rechenzentrum",
+      "failDatacenter": "Gesamtes Rechenzentrum ausfallen lassen",
+      "reactivateDatacenter": "Rechenzentrum reaktivieren",
       "loading": "laden Cluster...",
       "verdictSummary": "Surviving {hosts} Nodes — avg CPU {cpu}% ({cpuDelta}), avg RAM {mem}% ({memDelta})",
       "perNodeRam": "RAM-Nutzung pro Node (nach Umverteilung)",
@@ -8455,7 +8455,7 @@
     "permissionsCount": "Berechtigungen ({count})",
     "widgetVisibility": {
       "title": "Widget-Sichtbarkeit",
-      "desc": "Widgets ankreuzen, die für Benutzer mit dieser Rolle ausgeblendet werden sollen. Zusätzlich zum automatischen Scope-Filter.",
+      "desc": "Angekreuzte Widgets stehen Benutzern mit dieser Rolle auf dem Dashboard zur Verfügung; Haken entfernen, um ein Widget auszublenden. Zusätzlich zum automatischen Scope-Filter.",
       "hiddenCount": "{count} ausgeblendet"
     },
     "defaultScope": {
@@ -9264,7 +9264,7 @@
     },
     "bgCategories": {
       "all": "Alle",
-      "brand": "ProxCeingeben",
+      "brand": "ProxCenter",
       "tech": "Technik",
       "design": "Design",
       "nature": "Natur",
@@ -9974,7 +9974,7 @@
     "bridge": "Bridge",
     "vnet": "VNet",
     "sdnZone": "SDN-Zone",
-    "proxcenterRoot": "ProxCeingeben",
+    "proxcenterRoot": "ProxCenter",
     "totalClusters": "gesamt Cluster",
     "infraView": "Infrastruktur",
     "networkView": "Netzwerk (VLAN)",

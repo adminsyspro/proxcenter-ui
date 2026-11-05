@@ -65,7 +65,7 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
   const statusFailed = !!statusError && !status
 
   // A reader that met a full page of the log in 24 hours may have missed lines: the strip says so, the load per node on hover.
-  const logNodes = status?.log_nodes ?? []
+  const logNodes = status?.engine.log_nodes ?? []
   const logBehind = logNodes.some(n => n.full_pages_24h > 0)
 
   const hasContent = !!status?.emergency_stop || !!status?.engine.held || !!shownNotice || actionError != null

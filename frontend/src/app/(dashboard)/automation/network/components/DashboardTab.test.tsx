@@ -208,7 +208,7 @@ describe('DashboardTab: header chips', () => {
 
   it('lists the log reader of each node on hover of the last check chip, and adds no tooltip without log_nodes', async () => {
     const engine = { paused_until: null, held: false, last_log: null, cluster_firewall: 'enabled', last_runs: { light: { started_at: new Date(Date.now() - 2 * 60_000).toISOString(), status: 'done', api_calls: 1, writes: 0 } } }
-    stubReads({ status: { engine, log_nodes: [{ node: 'pve1', lines_last: 400, lines_per_min_15m: 82, lag_seconds: 12, full_pages_24h: 0 }, { node: 'pve2', lines_last: 1, lines_per_min_15m: 3, lag_seconds: 300, full_pages_24h: 0 }] } })
+    stubReads({ status: { engine: { ...engine, log_nodes: [{ node: 'pve1', lines_last: 400, lines_per_min_15m: 82, lag_seconds: 12, full_pages_24h: 0 }, { node: 'pve2', lines_last: 1, lines_per_min_15m: 3, lag_seconds: 300, full_pages_24h: 0 }] } } })
     renderDashboard({ enable: 1, policy_in: 'DROP' })
     const chip = await screen.findByTestId('chip-check')
     fireEvent.mouseOver(chip)

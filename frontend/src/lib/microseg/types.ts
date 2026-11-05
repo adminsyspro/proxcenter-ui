@@ -283,6 +283,8 @@ export type MicrosegStatus = {
     cluster_firewall?: ClusterFirewallState
     last_runs: Record<string, MicrosegRunSummary>
     last_log: string | null
+    /** The log reading per node (absent on an orchestrator without it). */
+    log_nodes?: MicrosegLogNode[]
   }
   /** Null until the first full run after an orchestrator restart or a leader change: nothing is measured yet. */
   coverage: MicrosegCoverage | null
@@ -290,8 +292,6 @@ export type MicrosegStatus = {
   coverage_at?: string
   zones_by_state: Record<ZoneState, number>
   emergency_stop: boolean
-  /** The log reading per node (absent on an orchestrator without it). */
-  log_nodes?: MicrosegLogNode[]
 }
 
 export type MicrosegLogNode = {

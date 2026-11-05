@@ -89,7 +89,7 @@ function microsegPhase(reads: { data?: unknown; error?: unknown }[]): BlockPhase
 
 /** What the header chips say of the engine: undefined while its status is read, null when it could not be. */
 function engineFigures(status: MicrosegStatus | undefined, failed: boolean) {
-  if (status) return { zones: zonesEnforced(status), lastCheck: lastCheckAt(status), logNodes: status.log_nodes }
+  if (status) return { zones: zonesEnforced(status), lastCheck: lastCheckAt(status), logNodes: status.engine.log_nodes }
   return failed ? { zones: null, lastCheck: null, logNodes: undefined } : { zones: undefined, lastCheck: undefined, logNodes: undefined }
 }
 

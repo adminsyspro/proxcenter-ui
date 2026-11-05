@@ -233,7 +233,8 @@ describe('demo micro-segmentation, outbound', () => {
   })
 
   it('reports the log reading of 3 nodes in the status', async () => {
-    const { engine, log_nodes } = await demoGet(`${BASE}/status`)
+    const { engine } = await demoGet(`${BASE}/status`)
+    const log_nodes = engine.log_nodes
 
     expect(engine).toBeDefined()
     expect(log_nodes).toHaveLength(3)

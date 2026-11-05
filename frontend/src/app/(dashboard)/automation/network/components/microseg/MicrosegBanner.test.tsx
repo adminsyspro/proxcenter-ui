@@ -354,14 +354,14 @@ describe('banner: the log reader load', () => {
   const node = (over: Record<string, unknown> = {}) => ({ node: 'pve1', lines_last: 400, lines_per_min_15m: 82, lag_seconds: 12, full_pages_24h: 0, ...over })
 
   it('draws nothing while every reader keeps up', async () => {
-    mock.routes['GET /status'] = () => reply(200, status({ log_nodes: [node()] }))
+    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, log_nodes: [node()] } }))
     renderTab()
     await bannerReady()
     expect(screen.queryByText('Log behind')).toBeNull()
   })
 
   it('shows an alert chip when a reader met a full page, and its load per node on hover', async () => {
-    mock.routes['GET /status'] = () => reply(200, status({ log_nodes: [node(), node({ node: 'pve2', lines_per_min_15m: 5, lag_seconds: 0, full_pages_24h: 1 })] }))
+    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, log_nodes: [node(), node({ node: 'pve2', lines_per_min_15m: 5, lag_seconds: 0, full_pages_24h: 1 })] } }))
     renderTab()
     const chip = await screen.findByText('Log behind')
     expect(chip.closest('.MuiChip-root')).toBeTruthy()
@@ -372,7 +372,7 @@ describe('banner: the log reader load', () => {
   })
 
   it('says a long lag in minutes, then hours', async () => {
-    mock.routes['GET /status'] = () => reply(200, status({ log_nodes: [node({ full_pages_24h: 1, lag_seconds: 120 }), node({ node: 'pve2', lag_seconds: 600 }), node({ node: 'pve3', lag_seconds: 36000 })] }))
+    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, log_nodes: [node({ full_pages_24h: 1, lag_seconds: 120 }), node({ node: 'pve2', lag_seconds: 600 }), node({ node: 'pve3', lag_seconds: 36000 })] } }))
     renderTab()
     fireEvent.mouseOver(await screen.findByText('Log behind'))
     const tip = (await screen.findByRole('tooltip')).textContent

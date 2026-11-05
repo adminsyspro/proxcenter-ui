@@ -288,11 +288,10 @@ function status(now: number) {
   const count = (state: ZoneState) => ZONES.filter(z => z.state === state).length
 
   return {
-    engine: { paused_until: null, held: false, check_pending: false, last_runs: lastRuns(now), last_log: runRow(RUNS[1], now).started_at },
+    engine: { paused_until: null, held: false, check_pending: false, last_runs: lastRuns(now), last_log: runRow(RUNS[1], now).started_at, log_nodes: LOG_NODES },
     coverage: { running: RUNNING, zoned: members, members, protected: enforced },
     zones_by_state: { disabled: count('disabled'), observe: count('observe'), enforce: count('enforce') },
     emergency_stop: false,
-    log_nodes: LOG_NODES,
   }
 }
 

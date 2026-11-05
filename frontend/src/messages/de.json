@@ -8939,6 +8939,8 @@
     "ldapAuth": "LDAP",
     "localAuth": "Lokal",
     "passwordManagedByIdp": "Das Passwort wird vom Identitätsanbieter verwaltet (OIDC / LDAP).",
+    "localLoginAllowed": "Notfallzugang mit lokalem Passwort",
+    "passwordEmergencyAccess": "Notfallzugang: Dieses Passwort meldet ohne den Identitätsanbieter an",
     "emailLabel": "E-Mail",
     "emailHeader": "E-Mail",
     "authHeader": "Auth",

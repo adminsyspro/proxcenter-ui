@@ -8982,6 +8982,8 @@
     "ldapAuth": "LDAP",
     "localAuth": "Local",
     "passwordManagedByIdp": "Le mot de passe est géré par le fournisseur d'identité (OIDC / LDAP).",
+    "localLoginAllowed": "Accès de secours par mot de passe local",
+    "passwordEmergencyAccess": "Accès de secours : ce mot de passe ouvre une session sans le fournisseur d'identité",
     "emailLabel": "Email",
     "emailHeader": "Email",
     "authHeader": "Auth",

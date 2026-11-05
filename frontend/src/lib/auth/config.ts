@@ -7,6 +7,7 @@ import { nanoid } from "nanoid"
 
 import { prisma } from "@/lib/db/prisma"
 import { verifyPassword, hashPassword, needsRehash, burnPasswordCheck } from "./password"
+import { auditKeptForLastSuperAdmin, isExternalProvider, isLastLocalSuperAdmin, localPasswordOnExternalSignIn } from "./localLogin"
 import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdapDetailed, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
 import { getOidcConfig, oidcSeedRoleId, syncOidcRoleAssignment } from "./oidc"
@@ -222,6 +223,7 @@ export const authOptions: NextAuthOptions = {
             avatar: true,
             role: true,
             authProvider: true,
+            localLoginAllowed: true,
             enabled: true,
             totpEnabled: true,
           },
@@ -263,11 +265,29 @@ export const authOptions: NextAuthOptions = {
           throw new Error("This account uses another authentication method")
         }
 
+        // An OIDC or LDAP account signs in through its provider: the local
+        // password left from before the conversion is refused unchecked,
+        // unless it is the emergency access of the account. The last super
+        // admin with a local password keeps it, so that an identity provider
+        // outage never locks the instance out.
+        const keepForLastSuperAdmin = isExternalProvider(user.authProvider) && !user.localLoginAllowed
+          && await isLastLocalSuperAdmin(user.id)
+        if (isExternalProvider(user.authProvider) && !user.localLoginAllowed && !keepForLastSuperAdmin) {
+          await burnPasswordCheck(credentials.password)
+          await logFailure("Local password of an SSO account", "ip")
+          throw new Error("Invalid credentials")
+        }
+
         const isValid = await verifyPassword(credentials.password, user.password)
 
         if (!isValid) {
           await logFailure("Incorrect password")
           throw new Error("Invalid credentials")
+        }
+
+        if (keepForLastSuperAdmin) {
+          await prisma.user.update({ where: { id: user.id }, data: { localLoginAllowed: true } })
+          await auditKeptForLastSuperAdmin(user.email, user.authProvider as "ldap" | "oidc")
         }
 
         // Before the second factor, so a 2FA user is not told "invalid code".
@@ -405,7 +425,7 @@ export const authOptions: NextAuthOptions = {
         // Chercher ou créer l'utilisateur (Postgres)
         let user = await prisma.user.findUnique({
           where: { email },
-          select: { id: true, email: true, name: true, role: true, enabled: true },
+          select: { id: true, email: true, name: true, role: true, enabled: true, password: true, localLoginAllowed: true },
         })
 
         const now = new Date()
@@ -436,11 +456,15 @@ export const authOptions: NextAuthOptions = {
             create: { userId: id, tenantId: "default", isDefault: true, joinedAt: now },
           })
 
-          user = { id, email, name: ldapUser.name, role: "viewer", enabled: true }
+          user = { id, email, name: ldapUser.name, role: "viewer", enabled: true, password: null, localLoginAllowed: false }
         } else {
           if (!user.enabled) {
             throw new Error("Account disabled")
           }
+
+          // The directory now owns the account: it becomes an LDAP account and
+          // its local password goes, unless it is emergency access.
+          const localPassword = await localPasswordOnExternalSignIn(user, now)
 
           // Mettre à jour les infos LDAP, avatar et last_login_at
           await prisma.user.update({
@@ -449,10 +473,15 @@ export const authOptions: NextAuthOptions = {
               name: ldapUser.name,
               avatar: ldapUser.avatar,
               ldapDn: ldapUser.dn,
+              authProvider: "ldap",
               lastLoginAt: now,
               updatedAt: now,
+              ...localPassword.data,
             },
           })
+          if (localPassword.kept === "last_super_admin" && !user.localLoginAllowed) {
+            await auditKeptForLastSuperAdmin(user.email, "ldap")
+          }
 
           // Safety net only — see credentials provider above for rationale.
           const hasAnyLdapTenant = await prisma.userTenant.findFirst({
@@ -556,7 +585,7 @@ export const authOptions: NextAuthOptions = {
         // Look up by oidc_sub first, then by email
         let existing = await prisma.user.findFirst({
           where: { oidcSub: sub },
-          select: { id: true, email: true, name: true, role: true, enabled: true, oidcSub: true },
+          select: { id: true, email: true, name: true, role: true, enabled: true, oidcSub: true, password: true, localLoginAllowed: true },
         })
 
         const matchedByEmail = !existing
@@ -564,7 +593,7 @@ export const authOptions: NextAuthOptions = {
         if (!existing) {
           existing = await prisma.user.findUnique({
             where: { email },
-            select: { id: true, email: true, name: true, role: true, enabled: true, oidcSub: true },
+            select: { id: true, email: true, name: true, role: true, enabled: true, oidcSub: true, password: true, localLoginAllowed: true },
           })
         }
 
@@ -591,6 +620,10 @@ export const authOptions: NextAuthOptions = {
             }
           }
 
+          // The account now belongs to the identity provider: its local
+          // password goes, unless it is emergency access (see localLogin).
+          const localPassword = await localPasswordOnExternalSignIn(existing, now)
+
           // Update existing user. The legacy users.role column is left as-is
           // (mirrors LDAP); the authoritative RBAC assignment is re-synced from
           // the current groups below (issue #383).
@@ -602,8 +635,12 @@ export const authOptions: NextAuthOptions = {
               lastLoginAt: now,
               updatedAt: now,
               authProvider: "oidc",
+              ...localPassword.data,
             },
           })
+          if (localPassword.kept === "last_super_admin" && !existing.localLoginAllowed) {
+            await auditKeptForLastSuperAdmin(existing.email, "oidc")
+          }
 
           // Safety net only — see credentials provider above for rationale.
           const hasAnyTenant = await prisma.userTenant.findFirst({

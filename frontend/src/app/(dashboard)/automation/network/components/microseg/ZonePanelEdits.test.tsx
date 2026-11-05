@@ -172,6 +172,9 @@ describe('zone dialog, Outbound section', () => {
     const confirm = await screen.findByRole('dialog', { name: 'Control outbound traffic of zone web?' })
     expect(calls('PUT /zones/zw')).toHaveLength(0)
     expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
+    // The immediate-revision sentence is said once (by the gate), not again by the body.
+    expect(confirm.textContent?.match(/right away/g) ?? []).toHaveLength(1)
+    expect(within(confirm).getByText('The outbound traffic of the zone goes to observation.')).toBeTruthy()
     fireEvent.click(within(confirm).getByRole('button', { name: 'Control' }))
 
     await waitFor(() => expect(calls('POST /zones/zw/egress-state')).toHaveLength(1))

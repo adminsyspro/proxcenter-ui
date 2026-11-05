@@ -15,8 +15,12 @@ type Props = {
   colour: string
   height: number
   ariaLabel: string
-  /** The tooltip of a bar (its time span and count); none while the series is read. */
-  barLabel: (index: number, count: number) => string
+  /** A second series (outbound), drawn beside the first in each slot; absent or null: one series. */
+  second?: number[] | null
+  /** The colour of the second series, a CSS colour. */
+  secondColour?: string
+  /** The tooltip of a bar (its time span and count, and the second series' count when there is one); none while the series is read. */
+  barLabel: (index: number, count: number, secondCount: number) => string
 }
 
 /**
@@ -25,10 +29,12 @@ type Props = {
  * attributes (an MUI Box would turn width and height into CSS); the colours go through `style` so a CSS-variable
  * palette (dark theme) resolves.
  */
-export default function HourlyBars({ series, size = 24, colour, height, ariaLabel, barLabel }: Readonly<Props>) {
+export default function HourlyBars({ series, size = 24, colour, second = null, secondColour, height, ariaLabel, barLabel }: Readonly<Props>) {
   const theme = useTheme()
   const values = series ?? new Array<number>(size).fill(0)
-  const peak = Math.max(0, ...values)
+  const others = second ? values.map((_, i) => second[i] ?? 0) : null
+  const peak = Math.max(0, ...values, ...(others ?? []))
+  const heightOf = (n: number) => (peak > 0 && n > 0 ? Math.max(2, (n / peak) * height) : 1)
 
   return (
     <Box
@@ -40,12 +46,22 @@ export default function HourlyBars({ series, size = 24, colour, height, ariaLabe
       sx={{ display: 'block', width: '100%', height, color: colour }}
     >
       {values.map((n, i) => {
-        const h = peak > 0 && n > 0 ? Math.max(2, (n / peak) * height) : 1
+        const n2 = others?.[i] ?? 0
+        const h = heightOf(n)
+        const half = BAR / 2
+        const x = i * SLOT + (SLOT - BAR) / 2
         return (
-          <Tooltip key={i} title={series ? barLabel(i, n) : ''} disableInteractive>
+          <Tooltip key={i} title={series ? barLabel(i, n, n2) : ''} disableInteractive>
             <g data-bucket={i} data-hits={n}>
               <rect x={i * SLOT} y={0} width={SLOT} height={height} fill='transparent' />
-              <rect x={i * SLOT + (SLOT - BAR) / 2} y={height - h} width={BAR} height={h} style={{ fill: n > 0 ? 'currentColor' : theme.palette.divider }} />
+              {others ? (
+                <>
+                  <rect x={x} y={height - h} width={half} height={h} style={{ fill: n > 0 ? 'currentColor' : theme.palette.divider }} />
+                  <rect x={x + half} y={height - heightOf(n2)} width={half} height={heightOf(n2)} style={{ fill: n2 > 0 ? secondColour : theme.palette.divider }} />
+                </>
+              ) : (
+                <rect x={x} y={height - h} width={BAR} height={h} style={{ fill: n > 0 ? 'currentColor' : theme.palette.divider }} />
+              )}
             </g>
           </Tooltip>
         )

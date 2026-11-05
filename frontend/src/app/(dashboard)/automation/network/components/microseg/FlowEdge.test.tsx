@@ -73,9 +73,9 @@ describe('the tooltip of an edge', () => {
     expect(await hoverDetails('tcp/22, 443')).toContain('In the draft: applied with the next plan')
   })
 
-  it('says a flow to Outside is not applied in v1', async () => {
+  it('says a flow to Outside is not blocked', async () => {
     renderEdge('zone:zw', 'outside', edgeData('outside', { services: ['udp/53'], label: 'udp/53', color: '#9e9e9e' }))
-    expect(await hoverDetails('udp/53')).toContain('Not applied in v1: DNS (udp/53)')
+    expect(await hoverDetails('udp/53')).toContain('Outbound not blocked: DNS (udp/53)')
   })
 
   it('shows the sample pair and the zone hits of an unprotected edge between guests', async () => {

@@ -28,6 +28,16 @@ const SAMPLES: MicrosegDrift[] = [
   { kind: 'member_without_ip', guest, detail: { zone: 'web' } },
   { kind: 'ambiguous_zone', guest },
   { kind: 'object_collision', object: 'pcz-db' },
+  { kind: 'egress_rule_missing', guest, detail: { zone: 'web' } },
+  { kind: 'egress_rule_missing', guest, detail: { zone: 'web', reason: 'collision', object: 'pcz-_local' } },
+  { kind: 'egress_rule_misplaced', guest, detail: { zone: 'web' } },
+  { kind: 'egress_rule_misplaced', guest, object: 'pcz-_known', detail: { zone: 'web' } },
+  { kind: 'egress_rule_verdict', guest, detail: { want: 'DROP', have: 'ACCEPT' } },
+  { kind: 'egress_rule_verdict', guest, detail: { want: 'DROP', have: 'ACCEPT', reason: 'collision', object: 'pcz-_local' } },
+  { kind: 'known_rule_missing', guest, object: 'pcz-_known' },
+  { kind: 'known_rule_extra', guest, object: 'pcz-_known' },
+  { kind: 'local_set_desync', object: 'pcz-_local', detail: { desired: ['10.0.0.0/24'], actual: [] } },
+  { kind: 'egress_no_subnet', guest, detail: { zone: 'web' } },
 ]
 
 describe('driftLabel', () => {
@@ -84,6 +94,9 @@ describe('driftLabel', () => {
     expect(fixes).toEqual({
       unzoned_running: 'assign', ambiguous_zone: 'assign', nic_firewall_off: 'plan', foreign_accept: null,
       ipset_out_of_sync: 'plan', member_without_ip: null, object_collision: null,
+      // The last sample of a kind wins: the collided ones have no fix (Proxmox holds it), the misplaced known rule is realigned.
+      egress_rule_missing: null, egress_rule_misplaced: 'plan', egress_rule_verdict: null, known_rule_missing: 'plan',
+      known_rule_extra: 'plan', local_set_desync: 'plan', egress_no_subnet: null,
     })
   })
 
@@ -105,5 +118,36 @@ describe('driftKey', () => {
 
   it('ignores the node a guest runs on, like the backend', () => {
     expect(driftKey({ kind: 'ambiguous_zone', guest })).toBe(driftKey({ kind: 'ambiguous_zone', guest: { ...guest, node: 'pve2' } }))
+  })
+})
+
+describe('outbound drifts', () => {
+  const t = translator('en')
+  const by = (kind: string) => SAMPLES.filter(d => d.kind === kind)
+
+  it('knows the 7 new kinds', () => {
+    for (const kind of ['egress_rule_missing', 'egress_rule_misplaced', 'egress_rule_verdict', 'known_rule_missing', 'known_rule_extra', 'local_set_desync', 'egress_no_subnet']) {
+      expect(DRIFT_KINDS as readonly string[]).toContain(kind)
+    }
+  })
+
+  it('says that a zone cannot block when pcz-_local belongs to someone else', () => {
+    const [plain, collided] = by('egress_rule_verdict')
+    expect(driftLabel(plain, t).detail).toBe('The final outbound rule of qemu/101 is ACCEPT instead of DROP.')
+    expect(driftLabel(collided, t).detail).toContain('cannot block')
+    expect(driftLabel(collided, t).detail).toContain('pcz-_local')
+    expect(driftLabel(collided, t).fix).toBeNull()
+    expect(driftLabel(collided, t).hint).toBeTruthy()
+    expect(driftLabel(by('egress_rule_missing')[1], t).detail).toContain('cannot block')
+  })
+
+  it('tells a misplaced known rule from a misplaced outbound rule, and fixes the realignable ones with the plan', () => {
+    const [rule, known] = by('egress_rule_misplaced')
+    expect(driftLabel(known, t).detail).toContain('known')
+    expect(driftLabel(rule, t).detail).not.toContain('known')
+    for (const kind of ['egress_rule_missing', 'egress_rule_misplaced', 'known_rule_missing', 'known_rule_extra', 'local_set_desync']) {
+      expect(driftLabel(by(kind)[0], t).fix, kind).toBe('plan')
+    }
+    expect(driftLabel(by('egress_no_subnet')[0], t).fix).toBeNull()
   })
 })

@@ -4,7 +4,7 @@ import { flowService } from './FlowSummary'
 import type { Point } from './edgeGeometry'
 import {
   BOX_SHAPE, EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, UNZONED_ID, addAllowedPairs, addPair, addressBook, bareIp, cellCenters,
-  comparePairs, groupOf, placeBoundary, placeGroup, placePairs, zoneNodeId,
+  comparePairs, groupOf, outsideEgressOf, placeBoundary, placeGroup, placePairs, zoneNodeId,
   type AddressBooks, type Cell, type Group, type IpNodeData, type MapEdgeKind, type MapInput, type MapMember, type Pair,
   type Placement, type ZoneGraph,
 } from './zoneGraph'
@@ -190,6 +190,7 @@ export function buildGuestView({ zones, flows, suggestions, members = null, unzo
   if (ordered.some(p => p.target === OUTSIDE_ID)) right.push(box(OUTSIDE_ID))
   const grid = [...columnsOf(left).reverse(), [circle(groups.get(zoneNodeId(centre))!)], ...columnsOf(right)]
   const centers = cellCenters(grid)
+  const outsideEgress = outsideEgressOf(around.flows, known)
 
   const out: Placement = { nodes: [], obstacles: [], endShapes: new Map() }
   for (const cell of grid.flat()) {
@@ -197,7 +198,7 @@ export function buildGuestView({ zones, flows, suggestions, members = null, unzo
     const group = groups.get(cell.id)
     if (group) placeGroup(out, group, c)
     else if (cell.id.startsWith('ip:')) placeIp(out, cell.id.slice(3), c)
-    else placeBoundary(out, cell.id, c)
+    else placeBoundary(out, cell.id, c, outsideEgress)
   }
 
   return { nodes: out.nodes, edges: placePairs(ordered, out.endShapes, out.obstacles, unapplied) }

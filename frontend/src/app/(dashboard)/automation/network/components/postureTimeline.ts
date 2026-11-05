@@ -185,9 +185,13 @@ export function postureHistory(input: {
     const zone = zoneByName.get(name.toLowerCase())
     return zone ? zoneKey(zone.id) : OTHER_KEY
   }
+  // A bucket says who logged it: an inbound one is logged by the receiving zone (`zone`, the emitter in `src_zone`), an
+  // outbound one by the emitting zone (`zone`, the destination in `src_zone`, empty outside the zones). Read as a flow:
+  const emitterOf = (b: MicrosegTraffic['buckets'][number]) => (b.direction === 'out' ? b.zone : b.src_zone)
+  const receiverOf = (b: MicrosegTraffic['buckets'][number]) => (b.direction === 'out' ? b.src_zone : b.zone)
   // The side the chart groups on, and the side one zone is kept on: the other one.
-  const grouped = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? b.src_zone : b.zone)
-  const kept = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? b.zone : b.src_zone)
+  const grouped = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? emitterOf(b) : receiverOf(b))
+  const kept = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? receiverOf(b) : emitterOf(b))
   const items = history.buckets
     .filter(b => (verdict === 'all' || b.verdict === verdict) && (only === null || kept(b).toLowerCase() === only))
     .map(b => ({ at: Date.parse(b.at), group: groupOf(grouped(b)), value: b.hits }))

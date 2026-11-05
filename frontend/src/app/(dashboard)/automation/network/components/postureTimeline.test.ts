@@ -265,6 +265,22 @@ describe('the persisted history (UA55)', () => {
     expect(run('1h', rows).total).toBe(9)
   })
 
+  it('reads an outbound bucket (logged by the emitting zone) as the flow it is: emitted by that zone, received by the zone or the outside it names', () => {
+    const last = win('1h').to - 300_000
+    // web emitted 6 hits to db and 4 to the outside (logged by web), and 3 more to db (logged by db).
+    const rows = [
+      row(last, { hits: 6, zone: 'web', src_zone: 'db', direction: 'out' }),
+      row(last, { hits: 4, zone: 'web', src_zone: '', direction: 'out' }),
+      row(last, { hits: 3 }),
+    ]
+    const outOfWeb = run('1h', rows, { by: 'dst', zone: 'web', slices: [slice('zone:zdb', 'zone', '#2', 'db'), ...ZONE_SLICES] })
+    expect(outOfWeb.total).toBe(13)
+    expect(outOfWeb.buckets.at(-1)!.counts['zone:zdb']).toBe(9)
+    const intoDb = run('1h', rows, { zone: 'db' })
+    expect(intoDb.total).toBe(9)
+    expect(intoDb.buckets.at(-1)!.counts['zone:zweb']).toBe(9)
+  })
+
   it('groups by the zone that received the flows (destination), and keeps one zone\'s emitted flows for a panel', () => {
     const last = win('1h').to - 300_000
     const rows = [row(last, { hits: 3 }), row(last, { hits: 2, zone: 'web', src_zone: 'db' }), row(last, { hits: 4, zone: 'web', src_zone: '' })]

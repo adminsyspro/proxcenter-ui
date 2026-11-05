@@ -54,3 +54,16 @@ describe('the ProxCenter address check that could not look at every member', () 
     expect(preflightMessage(hit).detail).toEqual({ key: 'checks.self_in_zone.inZone', values: { zone: 'web', self_ip: '10.0.0.5' } })
   })
 })
+
+describe('outbound checks', () => {
+  it('names the egress_subnets check and its guests', () => {
+    const check = { id: 'egress_subnets', status: 'warn' as const, detail: { guests: [{ node: 'pve1', type: 'qemu', vmid: 101 }, { node: 'pve2', type: 'lxc', vmid: 202 }] } }
+    expect(preflightMessage(check)).toEqual({ title: 'egress_subnets', detail: { key: 'checks.egress_subnets.warn', values: { count: 2, guests: 'qemu/101, lxc/202' } } })
+    expect(preflightMessage({ id: 'egress_subnets', status: 'pass' }).detail).toEqual({ key: 'checks.egress_subnets.pass' })
+  })
+
+  it('says the outbound variant of self_in_zone', () => {
+    const check = { id: 'self_in_zone', status: 'warn' as const, detail: { zone: 'web', self_ip: '10.0.0.5', egress: true } }
+    expect(preflightMessage(check).detail).toEqual({ key: 'checks.self_in_zone.inZoneEgress', values: { zone: 'web', self_ip: '10.0.0.5' } })
+  })
+})

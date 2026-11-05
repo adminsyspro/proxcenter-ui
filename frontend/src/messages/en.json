@@ -12735,7 +12735,9 @@
         "done": "Done",
         "failed": "Failed",
         "running": "Running"
-      }
+      },
+      "logNode": "{node} · {rate} lines/min · {lag} s behind",
+      "logBehind": "Log behind"
     },
     "stop": {
       "button": "Emergency stop",
@@ -12880,7 +12882,10 @@
           "loading": "Reading the history...",
           "disabled": "Zone disabled: its traffic is not logged",
           "aria": "{count, plural, one {Uncovered traffic over the last 24 hours: # hit} other {Uncovered traffic over the last 24 hours: # hits}}",
-          "bar": "{from} to {to}: {count, plural, one {# hit} other {# hits}}"
+          "bar": "{from} to {to}: {count, plural, one {# hit} other {# hits}}",
+          "barBoth": "{from} to {to}: {count, plural, one {# hit} other {# hits}} inbound, {out, plural, one {# hit} other {# hits}} outbound",
+          "legendIn": "Inbound",
+          "legendOut": "Outbound"
         },
         "egress": {
           "state": {
@@ -12898,11 +12903,12 @@
         }
       },
       "flow": {
-        "notApplied": "Not applied (egress not managed in v1)",
+        "notApplied": "Not applied (outbound not controlled)",
         "learned": "Learned",
         "edit": "Edit flow",
         "delete": "Delete flow",
-        "createdBy": "Created by {user}"
+        "createdBy": "Created by {user}",
+        "observed": "Outbound observed"
       },
       "zoneDialog": {
         "createTitle": "New zone",
@@ -13061,9 +13067,11 @@
           "pendingChangeHint": "Changed on the next apply",
           "pendingRemoval": "Pending removal",
           "pendingRemovalHint": "Removed on the next apply",
-          "notApplied": "Not applied in v1",
-          "notAppliedHint": "Not applied (egress not managed in v1)",
-          "unknownHint": "Comparing with the applied revision..."
+          "notApplied": "Not applied",
+          "notAppliedHint": "Not applied (outbound not controlled)",
+          "unknownHint": "Comparing with the applied revision...",
+          "observed": "Outbound observed",
+          "observedHint": "Outbound observed: the zone logs these flows without blocking them yet"
         },
         "uncovered": "{count, plural, one {Uncovered 24 h: # hit} other {Uncovered 24 h: # hits}}",
         "uncoveredHint": "Traffic into this zone that no flow covers (logged by the zone's members over the last 24 h)",
@@ -13172,6 +13180,40 @@
           "title": "Name already used in Proxmox",
           "detail": "{object} already exists in Proxmox and was not created by ProxCenter: it is left untouched.",
           "hint": "An object named pcz-* exists in Proxmox without the micro-segmentation marker: rename or delete it in Proxmox."
+        },
+        "egress_rule_missing": {
+          "title": "Outbound rule missing",
+          "detail": "The final outbound rule of {name} is missing in Proxmox.",
+          "detailCollision": "{name} cannot block its outbound traffic: pcz-_local belongs to someone else in Proxmox.",
+          "hintCollision": "An object named pcz-_local exists in Proxmox without the micro-segmentation marker: rename or delete it in Proxmox."
+        },
+        "egress_rule_misplaced": {
+          "title": "Outbound rule misplaced",
+          "detail": "The final outbound rule of {name} is not the last rule, or appears twice.",
+          "detailKnown": "The known-destinations rule of {name} is not right before its final outbound rule."
+        },
+        "egress_rule_verdict": {
+          "title": "Outbound rule at the wrong verdict",
+          "detail": "The final outbound rule of {name} is {have} instead of {want}.",
+          "detailCollision": "{name} cannot block: pcz-_local belongs to someone else in Proxmox, so its outbound rule stays {have}.",
+          "hintCollision": "An object named pcz-_local exists in Proxmox without the micro-segmentation marker: rename or delete it in Proxmox."
+        },
+        "known_rule_missing": {
+          "title": "Known destinations rule missing",
+          "detail": "The rule of the group pcz-_known is missing on {name}."
+        },
+        "known_rule_extra": {
+          "title": "Known destinations rule in excess",
+          "detail": "{name} still has a rule of the group pcz-_known that its outbound state no longer needs."
+        },
+        "local_set_desync": {
+          "title": "Local network set out of sync",
+          "detail": "{object} holds {actual} instead of {desired}."
+        },
+        "egress_no_subnet": {
+          "title": "Outbound without a known subnet",
+          "detail": "{name} of {zone} has no known subnet: its local network is reduced to its own IPs.",
+          "hint": "No subnet known: check the network configuration of the guest in Proxmox (an IP with its prefix length, or the QEMU guest agent)."
         }
       },
       "chip": {
@@ -13182,7 +13224,14 @@
         "member_without_ip": "No IP",
         "ambiguous_zone": "Several zones",
         "object_collision": "Name taken",
-        "generic": "Drift"
+        "generic": "Drift",
+        "egress_rule_missing": "No outbound rule",
+        "egress_rule_misplaced": "Outbound misplaced",
+        "egress_rule_verdict": "Outbound verdict",
+        "known_rule_missing": "Known rule missing",
+        "known_rule_extra": "Known rule extra",
+        "local_set_desync": "Local set out of sync",
+        "egress_no_subnet": "No subnet"
       },
       "zoneFilter": "Zone {name} only",
       "zoneFilterClear": "Show every zone",
@@ -13354,7 +13403,7 @@
       "mapLabel": "Map of the zones and their flows",
       "suggestionsError": "The pending flows could not be read. The map shows the allowed flows only.",
       "legend": {
-        "outside": "To Outside: not applied in v1",
+        "outside": "To Outside: outbound not enforced",
         "allowed": "Allowed",
         "unprotected": "Unprotected",
         "blocked": "Blocked",
@@ -13365,8 +13414,8 @@
         "external": "Unknown / External",
         "externalHint": "Sources that match no guest: an IP address or a network (CIDR)",
         "outside": "Outside",
-        "outsideHint": "Destinations outside the zones (a CIDR). Flows to them are not applied in v1.",
-        "notApplied": "not applied in v1",
+        "outsideHint": "Destinations outside the zones (a CIDR). Flows to them are applied once the source zone enforces its outbound traffic.",
+        "notApplied": "outbound not controlled",
         "aria": "Zone {name}, {state}, {members}",
         "membersUnknown": "members unknown",
         "unzoned": "Unzoned guests ({count, number})",
@@ -13379,10 +13428,11 @@
         "moreHint": "{count, plural, one {# more member} other {# more members}}: the zone panel lists them all",
         "moreUnzonedHint": "{count, plural, one {# more guest} other {# more guests}} in no zone: Drifts lists them all",
         "ipHint": "{ip}: an address in no zone and no guest that talked to this zone",
-        "inside": "{count, plural, one {# observed flow} other {# observed flows}} inside the zone"
+        "inside": "{count, plural, one {# observed flow} other {# observed flows}} inside the zone",
+        "observed": "outbound observed"
       },
       "edge": {
-        "outside": "Not applied in v1: {services}",
+        "outside": "Outbound not blocked: {services}",
         "aria": "{from} to {to}: {services}",
         "allowed": "Allowed: {services}",
         "unprotected": "{count, plural, one {# observed flow} other {# observed flows}} that no flow allows (unprotected)",
@@ -13596,7 +13646,13 @@
           "unknown": "The address of ProxCenter could not be detected, so this check cannot tell. Set it in the settings.",
           "inZone": "ProxCenter ({self_ip}) is inside the zone {zone}: enforcing it could cut the connection.",
           "uncheckedTimeout": "{count, plural, one {# member} other {# members}} could not be checked (collection cut short): ProxCenter may be inside one of them.",
-          "uncheckedCap": "{count, plural, one {# member} other {# members}} could not be checked (more than the collection cap): ProxCenter may be inside one of them."
+          "uncheckedCap": "{count, plural, one {# member} other {# members}} could not be checked (more than the collection cap): ProxCenter may be inside one of them.",
+          "inZoneEgress": "ProxCenter ({self_ip}) is inside the zone {zone}, which controls its outbound traffic: allow a flow to the Proxmox nodes before blocking, or ProxCenter could lose them."
+        },
+        "egress_subnets": {
+          "title": "Outbound subnets",
+          "pass": "Every member of a zone with outbound control has a known subnet.",
+          "warn": "{count, plural, one {# member has no known subnet} other {# members have no known subnet}} ({guests}): their local network is reduced to their own IPs."
         }
       },
       "rateUnits": {

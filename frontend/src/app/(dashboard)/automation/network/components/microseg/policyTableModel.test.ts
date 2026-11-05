@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { policyDiff } from '@/lib/microseg/pendingChanges'
 import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
 
-import { OUTSIDE_GROUP, flowGroups, flowState, matchesFilter } from './policyTableModel'
-import { hitsWindow, uncoveredByZone, uncoveredOf } from './useZoneUncovered'
+import { OUTSIDE_GROUP, flowGroups, flowState, matchesFilter, outboundFlowStatus } from './policyTableModel'
+import { hitsWindow, uncoveredByZone, uncoveredOf, uncoveredSeriesByZone, uncoveredSeriesOf } from './useZoneUncovered'
 
 const zone = (id: string, name = id): MicrosegZone => ({
   id, policy_id: 'p', name, label: '', color: '#fff', enforcement: 'guest', vnet_id: '', state: 'observe', isolate_members: false, observe_since: null,
@@ -93,5 +93,50 @@ describe('flowGroups', () => {
     expect(matchesFilter(flow('a', { src_zone_id: '', src_cidr: '192.0.2.0/24' }), byId, '192.0.2')).toBe(true)
     expect(matchesFilter(flow('a'), byId, 'ssh')).toBe(false)
     expect(matchesFilter(flow('a'), byId, '  ')).toBe(true)
+  })
+})
+
+describe('outboundFlowStatus', () => {
+  const out = flow('out', { dst_zone_id: '', dst_cidr: '8.8.8.0/24' })
+  const withEgress = (egress_state: MicrosegZone['egress_state'], state: MicrosegZone['state'] = 'enforce'): MicrosegZone => ({ ...web, state, egress_state })
+
+  it('is applied when the source zone enforces its outbound traffic, observed when it observes it, not applied otherwise', () => {
+    expect(outboundFlowStatus(out, withEgress('enforce'))).toBe('applied')
+    expect(outboundFlowStatus(out, withEgress('observe'))).toBe('observed')
+    expect(outboundFlowStatus(out, withEgress('off'))).toBe('notApplied')
+    expect(outboundFlowStatus(out, web)).toBe('notApplied')
+    expect(outboundFlowStatus(out, undefined)).toBe('notApplied')
+  })
+
+  it('counts a disabled zone as not controlling its outbound traffic', () => {
+    expect(outboundFlowStatus(out, withEgress('enforce', 'disabled'))).toBe('notApplied')
+  })
+
+  it('drives the state of a flow to a CIDR: the diff states again once the outbound is enforced', () => {
+    const zones = (z: MicrosegZone) => new Map([[z.id, z]])
+    expect(flowState(out, null, zones(withEgress('off')))).toBe('notApplied')
+    expect(flowState(out, null, zones(withEgress('observe')))).toBe('observed')
+    expect(flowState(out, null, zones(withEgress('enforce')))).toBe('unknown')
+    const diff = policyDiff({ zones: [web, db], flows: [out], pending_members: [] }, revision([web, db], []))
+    expect(flowState(out, diff, zones(withEgress('enforce')))).toBe('pendingAdd')
+  })
+})
+
+describe('uncovered traffic by direction', () => {
+  const traffic = {
+    from: '2026-11-04T00:00:00Z', to: '2026-11-04T03:00:00Z', step: 3600,
+    buckets: [
+      { at: '2026-11-04T00:00:00Z', zone: 'db', src_zone: 'web', verdict: 'would_block', hits: 5 },
+      { at: '2026-11-04T01:00:00Z', zone: 'db', src_zone: '', verdict: 'would_block', hits: 7, direction: 'out' as const },
+    ],
+  }
+
+  it('counts the traffic into a zone from the inbound buckets only, and keeps the outbound series apart', () => {
+    expect(uncoveredByZone(traffic).get('db')).toBe(5)
+    const series = uncoveredSeriesByZone(traffic)
+    expect(series.byZone.get('db')).toEqual([5, 0, 0])
+    expect(series.outByZone.get('db')).toEqual([0, 7, 0])
+    expect(uncoveredSeriesOf(series, 'db', undefined, 'out')).toEqual([0, 7, 0])
+    expect(uncoveredSeriesOf(series, 'db')).toEqual([5, 0, 0])
   })
 })

@@ -12735,7 +12735,9 @@
         "done": "已完成",
         "failed": "失败",
         "running": "运行中"
-      }
+      },
+      "logNode": "{node} · {rate} 行/分钟 · 延迟 {lag} 秒",
+      "logBehind": "日志滞后"
     },
     "stop": {
       "button": "紧急停止",
@@ -12880,7 +12882,10 @@
           "loading": "正在读取历史记录...",
           "disabled": "区域已禁用：其流量未被记录",
           "aria": "最近 24 小时的未覆盖流量：{count} 次命中",
-          "bar": "{from} 至 {to}：{count} 次命中"
+          "bar": "{from} 至 {to}：{count} 次命中",
+          "barBoth": "{from} 至 {to}：入站 {count, plural, other {# 次}}，出站 {out, plural, other {# 次}}",
+          "legendIn": "入站",
+          "legendOut": "出站"
         },
         "egress": {
           "state": {
@@ -12898,11 +12903,12 @@
         }
       },
       "flow": {
-        "notApplied": "未应用（v1 不管理出站）",
+        "notApplied": "未应用（出站未受控）",
         "learned": "已学习",
         "edit": "编辑流量规则",
         "delete": "删除流量规则",
-        "createdBy": "创建者：{user}"
+        "createdBy": "创建者：{user}",
+        "observed": "出站观察中"
       },
       "zoneDialog": {
         "createTitle": "新建区域",
@@ -13061,9 +13067,11 @@
           "pendingChangeHint": "下次应用时更改",
           "pendingRemoval": "待删除",
           "pendingRemovalHint": "下次应用时删除",
-          "notApplied": "v1 中未应用",
-          "notAppliedHint": "未应用（v1 不管理出站）",
-          "unknownHint": "正在与已应用的修订版比较..."
+          "notApplied": "未应用",
+          "notAppliedHint": "未应用（出站未受控）",
+          "unknownHint": "正在与已应用的修订版比较...",
+          "observed": "出站观察中",
+          "observedHint": "出站观察中：该区域记录这些流量，但尚未阻断"
         },
         "uncovered": "{count, plural, other {未覆盖 24 小时：# 次命中}}",
         "uncoveredHint": "进入该区域且未被任何流量规则覆盖的流量（由该区域成员在过去 24 小时内记录）",
@@ -13172,6 +13180,40 @@
           "title": "名称已在 Proxmox 中使用",
           "detail": "{object} 已存在于 Proxmox 中，不是由 ProxCenter 创建的，不会被改动。",
           "hint": "Proxmox 中存在名为 pcz-* 且没有微分段标记的对象：请在 Proxmox 中重命名或删除。"
+        },
+        "egress_rule_missing": {
+          "title": "缺少出站规则",
+          "detail": "Proxmox 中缺少 {name} 的最终出站规则。",
+          "detailCollision": "{name} 无法阻断其出站流量：在 Proxmox 中 pcz-_local 属于他人。",
+          "hintCollision": "Proxmox 中存在名为 pcz-_local 且没有微分段标记的对象：请在 Proxmox 中重命名或删除它。"
+        },
+        "egress_rule_misplaced": {
+          "title": "出站规则位置错误",
+          "detail": "{name} 的最终出站规则不是最后一条规则，或出现了两次。",
+          "detailKnown": "{name} 的已知目标规则不在其最终出站规则之前。"
+        },
+        "egress_rule_verdict": {
+          "title": "出站规则判定不符",
+          "detail": "{name} 的最终出站规则是 {have}，应为 {want}。",
+          "detailCollision": "{name} 无法阻断：在 Proxmox 中 pcz-_local 属于他人，因此其出站规则仍为 {have}。",
+          "hintCollision": "Proxmox 中存在名为 pcz-_local 且没有微分段标记的对象：请在 Proxmox 中重命名或删除它。"
+        },
+        "known_rule_missing": {
+          "title": "缺少已知目标规则",
+          "detail": "{name} 缺少 pcz-_known 组的规则。"
+        },
+        "known_rule_extra": {
+          "title": "多余的已知目标规则",
+          "detail": "{name} 仍保留一条其出站状态不再需要的 pcz-_known 组规则。"
+        },
+        "local_set_desync": {
+          "title": "本地网络集合不同步",
+          "detail": "{object} 包含 {actual}，应为 {desired}。"
+        },
+        "egress_no_subnet": {
+          "title": "出站无已知子网",
+          "detail": "{zone} 中的 {name} 没有已知子网：其本地网络仅限于自身 IP。",
+          "hint": "未知子网：请在 Proxmox 中检查客户机的网络配置（带前缀长度的 IP，或 QEMU 客户机代理）。"
         }
       },
       "chip": {
@@ -13182,7 +13224,14 @@
         "member_without_ip": "无 IP",
         "ambiguous_zone": "多个区域",
         "object_collision": "名称已占用",
-        "generic": "偏差"
+        "generic": "偏差",
+        "egress_rule_missing": "缺少出站规则",
+        "egress_rule_misplaced": "出站规则位置错误",
+        "egress_rule_verdict": "出站判定不符",
+        "known_rule_missing": "缺少已知规则",
+        "known_rule_extra": "多余的已知规则",
+        "local_set_desync": "本地集合不同步",
+        "egress_no_subnet": "无子网"
       },
       "zoneFilter": "仅区域 {name}",
       "zoneFilterClear": "显示所有区域",
@@ -13354,7 +13403,7 @@
       "mapLabel": "区域及其流量规则地图",
       "suggestionsError": "无法读取待处理的流量。地图仅显示已允许的流量。",
       "legend": {
-        "outside": "到外部：v1 中不应用",
+        "outside": "发往外部：出站未阻断",
         "allowed": "允许",
         "unprotected": "未受保护",
         "blocked": "已阻止",
@@ -13365,8 +13414,8 @@
         "external": "未知 / 外部",
         "externalHint": "不匹配任何客户机的来源：IP 地址或网络（CIDR）",
         "outside": "区域之外",
-        "outsideHint": "区域之外的目标（CIDR）。发往这些目标的流量在 v1 中不会被应用。",
-        "notApplied": "v1 中未应用",
+        "outsideHint": "区域之外的目标（CIDR）。源区域阻断其出站流量后，发往这些目标的流量才会生效。",
+        "notApplied": "出站未受控",
         "aria": "区域 {name}，{state}，{members}",
         "membersUnknown": "成员数未知",
         "unzoned": "无区域的客户机（{count, number}）",
@@ -13379,10 +13428,11 @@
         "moreHint": "{count, plural, other {还有 # 个成员}}：区域面板列出全部",
         "moreUnzonedHint": "{count, plural, other {还有 # 个无区域客户机}}：偏差中列出全部",
         "ipHint": "{ip}：与此区域通信、不属于任何区域或虚拟机的地址",
-        "inside": "{count, plural, other {区域内观察到的流 # 条}}"
+        "inside": "{count, plural, other {区域内观察到的流 # 条}}",
+        "observed": "出站观察中"
       },
       "edge": {
-        "outside": "v1 中未应用：{services}",
+        "outside": "出站未阻断：{services}",
         "aria": "{from} 到 {to}：{services}",
         "allowed": "允许：{services}",
         "unprotected": "{count, plural, other {# 个观察到的流量}}没有任何流量规则允许（未受保护）",
@@ -13596,7 +13646,13 @@
           "unknown": "无法检测 ProxCenter 的地址，此项检查无法判断。请在设置中指定。",
           "inZone": "ProxCenter（{self_ip}）位于区域 {zone} 内：强制执行可能会切断连接。",
           "uncheckedTimeout": "{count, plural, other {有 # 个成员无法检查}}（收集被中断）：ProxCenter 可能位于其中之一。",
-          "uncheckedCap": "{count, plural, other {有 # 个成员无法检查}}（超出收集上限）：ProxCenter 可能位于其中之一。"
+          "uncheckedCap": "{count, plural, other {有 # 个成员无法检查}}（超出收集上限）：ProxCenter 可能位于其中之一。",
+          "inZoneEgress": "ProxCenter（{self_ip}）位于控制出站流量的区域 {zone} 内：阻断前请先放行通往 Proxmox 节点的流量，否则 ProxCenter 可能失去与节点的连接。"
+        },
+        "egress_subnets": {
+          "title": "出站子网",
+          "pass": "启用出站控制的区域中，每个成员都有已知子网。",
+          "warn": "{count} 个成员没有已知子网（{guests}）：其本地网络仅限于自身 IP。"
         }
       },
       "rateUnits": {

@@ -55,4 +55,31 @@ describe('ZoneSparkline', () => {
     expect(screen.getByText('Zone disabled: its traffic is not logged')).toBeTruthy()
     expect(bars()).toHaveLength(0)
   })
+
+  describe('by direction', () => {
+    const out = () => { const s = new Array<number>(24).fill(0); s[5] = 20; return s }
+    const hitsOf = (i: number) => [...bars()[i].querySelectorAll('rect')].slice(1).map(r => Number(r.getAttribute('height')))
+
+    it('draws one series and no legend when no outbound traffic exists', () => {
+      renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={new Array<number>(24).fill(0)} from={FROM} stepMs={3_600_000} />)
+      expect(screen.queryByTestId('zone-sparkline-legend')).toBeNull()
+      expect(bars()[5].querySelectorAll('rect')).toHaveLength(2)
+    })
+
+    it('draws an inbound and an outbound series with a legend when outbound traffic exists', () => {
+      renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      const legend = screen.getByTestId('zone-sparkline-legend')
+      expect(legend.textContent).toContain('Inbound')
+      expect(legend.textContent).toContain('Outbound')
+      expect(bars()[5].querySelectorAll('rect')).toHaveLength(3)
+      expect(hitsOf(5)).toEqual([24, 12])
+      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('70 would be blocked')
+    })
+
+    it('says both counts on hover', async () => {
+      renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      fireEvent.mouseOver(bars()[5])
+      expect((await screen.findByRole('tooltip')).textContent).toMatch(/: 40 hits inbound, 20 hits outbound$/)
+    })
+  })
 })

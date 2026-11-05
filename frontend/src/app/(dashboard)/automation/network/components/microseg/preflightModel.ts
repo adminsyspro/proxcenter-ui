@@ -18,6 +18,15 @@ function socleMissing(detail: Record<string, unknown>): string {
   return missing.length > 0 ? missing.join(', ') : '8006, 22'
 }
 
+/** The guests a check names, as "qemu/101, lxc/202". */
+function guestList(value: unknown): string {
+  const refs = Array.isArray(value) ? value : []
+  return refs
+    .map(g => (g && typeof g === 'object' ? `${text((g as Record<string, unknown>).type)}/${String((g as Record<string, unknown>).vmid ?? '')}` : ''))
+    .filter(Boolean)
+    .join(', ')
+}
+
 function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
   const detail = check.detail ?? {}
   const error = text(detail.error)
@@ -40,8 +49,14 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
         const key = detail.reason === 'collect_cap' ? 'checks.self_in_zone.uncheckedCap' : 'checks.self_in_zone.uncheckedTimeout'
         return { key, values: { count: detail.unchecked } }
       }
+      if (check.status === 'warn' && detail.egress === true) return { key: 'checks.self_in_zone.inZoneEgress', values: { zone: text(detail.zone), self_ip: text(detail.self_ip) } }
       if (check.status === 'warn') return { key: 'checks.self_in_zone.inZone', values: { zone: text(detail.zone), self_ip: text(detail.self_ip) } }
       return { key: detail.self_ip === 'unknown' ? 'checks.self_in_zone.unknown' : 'checks.self_in_zone.pass' }
+    case 'egress_subnets': {
+      if (check.status === 'pass') return { key: 'checks.egress_subnets.pass' }
+      const guests = Array.isArray(detail.guests) ? detail.guests : []
+      return { key: 'checks.egress_subnets.warn', values: { count: guests.length, guests: guestList(guests) } }
+    }
     default:
       return null
   }
@@ -57,7 +72,7 @@ export function parseRate(raw: string | undefined): { count: number; unit: RateU
   return m ? { count: Number(m[1]), unit: m[2] as RateUnit } : null
 }
 
-const KNOWN_IDS = new Set(['cluster_firewall', 'socle_rules', 'log_ratelimit', 'self_in_zone'])
+const KNOWN_IDS = new Set(['cluster_firewall', 'socle_rules', 'log_ratelimit', 'self_in_zone', 'egress_subnets'])
 
 export function preflightMessage(check: PreflightCheck): PreflightMessage {
   return { title: KNOWN_IDS.has(check.id) ? check.id : null, detail: detailOf(check) }

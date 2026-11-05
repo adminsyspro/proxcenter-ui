@@ -3,9 +3,13 @@ import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
 
 import { guestKey } from './zoneModel'
 
+/** The group of the known destinations (the orchestrator's KnownGroup): a misplaced rule on it is the known rule. */
+const KNOWN_GROUP = 'pcz-_known'
+
 /** The kinds the engine reports (drift.go), in the order the sub-tab documents them. */
 export const DRIFT_KINDS = [
   'unzoned_running', 'nic_firewall_off', 'foreign_accept', 'ipset_out_of_sync', 'member_without_ip', 'ambiguous_zone', 'object_collision',
+  'egress_rule_missing', 'egress_rule_misplaced', 'egress_rule_verdict', 'known_rule_missing', 'known_rule_extra', 'local_set_desync', 'egress_no_subnet',
 ] as const
 
 /**
@@ -28,6 +32,13 @@ const FIX_OF: Record<(typeof DRIFT_KINDS)[number], DriftFix | null> = {
   ipset_out_of_sync: 'plan',
   member_without_ip: null,
   object_collision: null,
+  egress_rule_missing: 'plan',
+  egress_rule_misplaced: 'plan',
+  egress_rule_verdict: 'plan',
+  known_rule_missing: 'plan',
+  known_rule_extra: 'plan',
+  local_set_desync: 'plan',
+  egress_no_subnet: null,
 }
 
 const isKnown = (kind: string): kind is (typeof DRIFT_KINDS)[number] => (DRIFT_KINDS as readonly string[]).includes(kind)
@@ -60,8 +71,25 @@ function valuesOf(d: MicrosegDrift): Record<string, string | number> {
     desired: list(detail.desired),
     actual: list(detail.actual),
     zone: text(detail.zone),
+    want: text(detail.want),
+    have: text(detail.have),
     kind: d.kind,
   }
+}
+
+type DetailVariant = 'group' | 'collision' | 'known' | null
+
+/** Which wording of the detail a drift takes: a foreign rule in a group, a zone that cannot block, a misplaced known rule. */
+function detailVariant(d: MicrosegDrift): DetailVariant {
+  if (d.kind === 'foreign_accept' && !d.guest) return 'group'
+  if ((d.kind === 'egress_rule_missing' || d.kind === 'egress_rule_verdict') && d.detail?.reason === 'collision') return 'collision'
+  if (d.kind === 'egress_rule_misplaced' && d.object === KNOWN_GROUP) return 'known'
+  return null
+}
+
+function hintKeyOf(d: MicrosegDrift, collided: boolean): string {
+  if (d.kind === 'foreign_accept') return d.guest ? 'foreign_accept.hint' : 'foreign_accept.hintGroup'
+  return collided ? `${d.kind}.hintCollision` : `${d.kind}.hint`
 }
 
 /** Title, one-line detail and fix of a drift; an unknown kind gets a generic label and no fix. */
@@ -69,9 +97,12 @@ export function driftLabel(d: MicrosegDrift, t: Translate): DriftLabel {
   const values = valuesOf(d)
   if (!isKnown(d.kind)) return { title: t('generic.title', values), detail: t('generic.detail', values), fixable: false, fix: null, hint: null }
   // A foreign rule inside one of our groups has no guest: its detail names the group.
-  const detailKey = d.kind === 'foreign_accept' && !d.guest ? 'foreign_accept.detailGroup' : `${d.kind}.detail`
-  const fix = FIX_OF[d.kind]
-  const hintKey = d.kind === 'foreign_accept' ? (d.guest ? 'foreign_accept.hint' : 'foreign_accept.hintGroup') : `${d.kind}.hint`
+  const variant = detailVariant(d)
+  const detailKey = variant ? `${d.kind}.${variant === 'group' ? 'detailGroup' : variant === 'collision' ? 'detailCollision' : 'detailKnown'}` : `${d.kind}.detail`
+  // A verdict the zone cannot reach because pcz-_local is not ours is no plan's job: Proxmox holds the fix.
+  const collided = variant === 'collision'
+  const fix = collided ? null : FIX_OF[d.kind]
+  const hintKey = hintKeyOf(d, collided)
   return { title: t(`${d.kind}.title`, values), detail: t(detailKey, values), fixable: fix !== null, fix, hint: fix === null ? t(hintKey, values) : null }
 }
 

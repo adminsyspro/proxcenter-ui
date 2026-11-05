@@ -3,9 +3,12 @@ import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
 import { serviceLabel } from '@/lib/network/serviceNames'
 
 import { flowService } from './FlowSummary'
+import { outboundFlowStatus } from './outboundStatus'
+
+export { outboundFlowStatus, type OutboundFlowStatus } from './outboundStatus'
 
 /** Where a flow stands against the last applied revision; `unknown` while the revision is read. */
-export type FlowState = 'applied' | 'pendingAdd' | 'pendingChange' | 'pendingRemoval' | 'notApplied' | 'unknown'
+export type FlowState = 'applied' | 'pendingAdd' | 'pendingChange' | 'pendingRemoval' | 'notApplied' | 'observed' | 'unknown'
 
 export type FlowRowModel = { flow: MicrosegFlow; removed: boolean; state: FlowState }
 
@@ -16,13 +19,17 @@ export type FlowGroup = { key: string; zone: MicrosegZone | null; zoneRemoved: b
 export const OUTSIDE_GROUP = '__outside__'
 
 /**
- * The state of a flow: removed first (it is gone from the draft), then not applied in v1 (a CIDR destination, whatever
- * its diff), then added or changed, applied otherwise. Without a diff (the revision is still read) it is unknown.
+ * The state of a flow: removed first (it is gone from the draft), then a CIDR destination the outbound traffic of its
+ * source zone does not enforce (not applied, or observed), then added or changed, applied otherwise. Without a diff
+ * (the revision is still read) it is unknown.
  */
-export function flowState(flow: MicrosegFlow, diff: PolicyDiff | null): FlowState {
+export function flowState(flow: MicrosegFlow, diff: PolicyDiff | null, zonesById: ReadonlyMap<string, MicrosegZone> = new Map()): FlowState {
   const kind = diff?.flows.get(flow.id)
   if (kind === 'removed') return 'pendingRemoval'
-  if (flow.dst_cidr) return 'notApplied'
+  if (flow.dst_cidr) {
+    const status = outboundFlowStatus(flow, zonesById.get(flow.src_zone_id))
+    if (status !== 'applied') return status
+  }
   if (!diff) return 'unknown'
   if (kind === 'added') return 'pendingAdd'
   if (kind === 'changed') return 'pendingChange'
@@ -73,7 +80,7 @@ export function flowGroups(input: {
     ...(diff?.removedFlows ?? []).map(flow => ({ flow, removed: true })),
   ]
     .filter(r => matchesFilter(r.flow, zonesById, filter))
-    .map(r => ({ ...r, state: flowState(r.flow, diff) }))
+    .map(r => ({ ...r, state: flowState(r.flow, diff, zonesById) }))
 
   const byKey = new Map<string, FlowRowModel[]>()
   for (const row of rows) {

@@ -31,7 +31,7 @@ export type ZoneCardProps = ZoneRowProps & {
    * The zone's uncovered traffic of the last 24 hours, one count per hour: `series` null while the history is read.
    * The whole value is null when the history cannot be read (an older orchestrator): no sparkline then.
    */
-  uncovered?: { series: number[] | null; from: number; stepMs: number } | null
+  uncovered?: { series: number[] | null; outSeries?: number[] | null; from: number; stepMs: number } | null
 }
 
 export const detailsId = (zoneId: string) => `zone-details-${zoneId}`
@@ -151,7 +151,7 @@ export default function ZoneCard(props: ZoneCardProps) {
         {/* At the bottom of the card: the cards of a row share their height, so the bars line up across the row. */}
         {uncovered && (
           <Box sx={{ mt: 'auto', pt: 0.5 }}>
-            <ZoneSparkline state={zone.state} series={uncovered.series} from={uncovered.from} stepMs={uncovered.stepMs} />
+            <ZoneSparkline state={zone.state} series={uncovered.series} outSeries={uncovered.outSeries} from={uncovered.from} stepMs={uncovered.stepMs} />
           </Box>
         )}
       </Box>

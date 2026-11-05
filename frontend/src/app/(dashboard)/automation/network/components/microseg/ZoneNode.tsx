@@ -237,7 +237,7 @@ export const MoreNode = memo(MoreNodeComponent)
 
 const BOUNDARY_ICON = { external: 'ri-global-line', outside: 'ri-cloud-line' } as const
 
-/** The two places outside the zones: Unknown / External (sources that match no guest), Outside (CIDR destinations, not applied in v1). */
+/** The two places outside the zones: Unknown / External (sources that match no guest), Outside (CIDR destinations: their flows are applied once the source zone enforces its outbound traffic). */
 function BoundaryNodeComponent({ data }: NodeProps) {
   const d = data as unknown as BoundaryNodeData
   const t = useTranslations('microsegPilot.overview.node')
@@ -253,8 +253,8 @@ function BoundaryNodeComponent({ data }: NodeProps) {
         <Handles />
         <i className={BOUNDARY_ICON[d.kind]} style={{ fontSize: 16, flexShrink: 0 }} />
         <Typography noWrap fontWeight={600} sx={{ flexShrink: 0, fontSize: '0.85rem' }}>{t(d.kind)}</Typography>
-        {d.kind === 'outside' && (
-          <Typography noWrap variant='caption' sx={{ flex: '1 1 0', minWidth: 0 }}>{t('notApplied')}</Typography>
+        {d.kind === 'outside' && (d.egress === 'notApplied' || d.egress === 'observed') && (
+          <Typography noWrap variant='caption' sx={{ flex: '1 1 0', minWidth: 0 }}>{t(d.egress)}</Typography>
         )}
       </Box>
     </Tooltip>

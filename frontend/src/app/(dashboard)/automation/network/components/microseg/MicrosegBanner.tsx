@@ -1,10 +1,10 @@
 'use client'
 
-import { Alert, Box, Button, Chip, Paper, Typography } from '@mui/material'
+import { Alert, Box, Button, Chip, Paper, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { microsegErrorKeyOf } from '@/lib/microseg/api'
-import type { MicrosegPolicy } from '@/lib/microseg/types'
+import type { MicrosegLogNode, MicrosegPolicy } from '@/lib/microseg/types'
 
 import MicrosegConfirmDialog, { type ConfirmInfoLine } from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
@@ -13,6 +13,20 @@ import { clusterFirewallOff, formatWhen, stillPaused } from './summaryModel'
 import type { ControlAction, MicrosegControls } from './useMicrosegControls'
 import { NOW_REFRESH_MS, useNow } from './useNow'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
+
+/** The log reader of each node on one line each: its rate over 15 minutes and how far behind the log it reads. */
+function LogNodeLines({ nodes }: { nodes: readonly MicrosegLogNode[] }) {
+  const t = useTranslations('microsegPilot.banner')
+  return (
+    <Box>
+      {nodes.map(n => (
+        <Typography key={n.node} variant='caption' sx={{ display: 'block', whiteSpace: 'nowrap' }}>
+          {t('logNode', { node: n.node, rate: Math.round(n.lines_per_min_15m), lag: Math.round(n.lag_seconds) })}
+        </Typography>
+      ))}
+    </Box>
+  )
+}
 
 type Props = {
   connectionId: string
@@ -63,8 +77,12 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
   const stale = !!statusError && !!status
   const statusFailed = !!statusError && !status
 
+  // A reader that met a full page of the log in 24 hours may have missed lines: the strip says so, the load per node on hover.
+  const logNodes = status?.log_nodes ?? []
+  const logBehind = logNodes.some(n => n.full_pages_24h > 0)
+
   const hasContent = !!status?.emergency_stop || !!status?.engine.held || !!shownNotice || actionError != null
-    || statusFailed || stale || pausedShown || !!policy.pending_changes
+    || statusFailed || stale || pausedShown || logBehind || !!policy.pending_changes
 
   return (
     <>
@@ -106,7 +124,7 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
           {actionError != null && <MicrosegErrorAlert error={actionError} onClose={controls.clearActionError} />}
           {statusFailed && <MicrosegErrorAlert error={statusError} onRetry={reload} />}
 
-          {(pausedShown || stale) && (
+          {(pausedShown || stale || logBehind) && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 4 }}>
               {pausedShown && (
                 <Chip
@@ -119,6 +137,12 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
 
               {stale && (
                 <Chip size='small' color='warning' variant='outlined' icon={<i className='ri-wifi-off-line' />} label={t('microsegPilot.banner.statusStale')} />
+              )}
+
+              {logBehind && (
+                <Tooltip title={<LogNodeLines nodes={logNodes} />} describeChild>
+                  <Chip size='small' color='warning' variant='outlined' icon={<i className='ri-file-list-3-line' />} label={t('microsegPilot.banner.logBehind')} />
+                </Tooltip>
               )}
             </Box>
           )}

@@ -132,6 +132,7 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
         egressReady={egressReady(item.zone)}
         uncovered={uncovered === 'failed' ? null : {
           series: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id)) : null,
+          outSeries: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id), 'out') : null,
           from: uncovered?.from ?? 0,
           stepMs: uncovered?.stepMs ?? 3_600_000,
         }}

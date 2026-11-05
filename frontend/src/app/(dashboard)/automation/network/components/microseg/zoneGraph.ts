@@ -6,6 +6,7 @@ import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, ZoneState } from '
 import { serviceName } from '@/lib/network/serviceNames'
 
 import { flowService } from './FlowSummary'
+import { outboundFlowStatus, type OutboundFlowStatus } from './outboundStatus'
 import { placeEdges, type EdgeEnds, type Obstacle, type PlacedEdge } from './zoneGraphEdges'
 import type { Point } from './edgeGeometry'
 import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, byText, circleRadius, layerZones, memberSlots, orderLayers, slotPositions } from './zoneLayout'
@@ -59,7 +60,8 @@ export type GuestNodeData = {
   target?: string
 }
 export type MoreNodeData = { kind: 'more'; count: number; groupId: string }
-export type BoundaryNodeData = { kind: 'external' | 'outside' }
+/** `egress`, on the Outside box: the worst state of the outbound traffic of the zones that send a flow to it. */
+export type BoundaryNodeData = { kind: 'external' | 'outside'; egress?: OutboundFlowStatus }
 /** An address that talks to a zone and is no guest (the guest view draws the busiest ones on their own). */
 export type IpNodeData = { kind: 'ip'; ip: string }
 export type MapNodeData = ZoneNodeData | UnzonedNodeData | GuestNodeData | MoreNodeData | BoundaryNodeData | IpNodeData
@@ -273,8 +275,24 @@ export function addAllowedPairs(pairs: Map<string, Pair>, flows: MicrosegFlow[],
     const source = allowedEnd(f.src_cidr, f.src_zone_id, EXTERNAL_ID, known)
     const target = allowedEnd(f.dst_cidr, f.dst_zone_id, OUTSIDE_ID, known)
     if (!source || !target || (source === EXTERNAL_ID && target === OUTSIDE_ID)) continue
-    addPair(pairs, target === OUTSIDE_ID ? 'outside' : 'allowed', source, target, flowService(f), f)
+    const toOutside = target === OUTSIDE_ID
+    // A flow to Outside is solid once its source zone enforces the outbound traffic, dashed while it only observes it or not at all.
+    const applied = toOutside && outboundFlowStatus(f, known.get(f.src_zone_id)) === 'applied'
+    addPair(pairs, toOutside && !applied ? 'outside' : 'allowed', source, target, flowService(f), f)
   }
+}
+
+const OUTSIDE_RANK: Record<OutboundFlowStatus, number> = { applied: 0, observed: 1, notApplied: 2 }
+
+/** What the Outside box says: the worst state among the flows to it (not applied, then observed, then applied); undefined with no flow to it. */
+export function outsideEgressOf(flows: readonly MicrosegFlow[], known: ReadonlyMap<string, MicrosegZone>): OutboundFlowStatus | undefined {
+  let worst: OutboundFlowStatus | undefined
+  for (const f of flows) {
+    if (!f.dst_cidr || f.src_cidr || !known.has(f.src_zone_id)) continue
+    const status = outboundFlowStatus(f, known.get(f.src_zone_id))
+    if (worst === undefined || OUTSIDE_RANK[status] > OUTSIDE_RANK[worst]) worst = status
+  }
+  return worst
 }
 
 /** The source of an observed flow: its guest (or its zone's circle), a guest in no zone, or External. */
@@ -331,10 +349,10 @@ export function cellCenters(grid: Cell[][], colGap = COL_GAP, rowGap = ROW_GAP):
   return centers
 }
 
-export function placeBoundary(out: Placement, id: string, c: Point) {
+export function placeBoundary(out: Placement, id: string, c: Point, egress?: OutboundFlowStatus) {
   out.nodes.push({
     id, type: 'boundary', position: { x: c.x - NODE_W / 2, y: c.y - NODE_H / 2 }, width: NODE_W, height: NODE_H, focusable: false,
-    data: { kind: id === EXTERNAL_ID ? 'external' : 'outside' } satisfies BoundaryNodeData,
+    data: { kind: id === EXTERNAL_ID ? 'external' : 'outside', ...(id === OUTSIDE_ID && egress ? { egress } : {}) } satisfies BoundaryNodeData,
   })
   out.obstacles.push({ id, center: c, shape: BOX_SHAPE })
   out.endShapes.set(id, { center: c, shape: BOX_SHAPE, group: id })
@@ -358,13 +376,13 @@ export function placeGroup(out: Placement, group: Group, c: Point) {
 }
 
 /** The nodes in grid order, with the obstacles the edges avoid and the outline every edge end clips on. */
-function buildNodes(grid: Cell[][], centers: Map<string, Point>, groups: Map<string, Group>): Placement {
+function buildNodes(grid: Cell[][], centers: Map<string, Point>, groups: Map<string, Group>, outsideEgress?: OutboundFlowStatus): Placement {
   const out: Placement = { nodes: [], obstacles: [], endShapes: new Map() }
   for (const cell of grid.flat()) {
     const c = centers.get(cell.id)!
     const group = groups.get(cell.id)
     if (group) placeGroup(out, group, c)
-    else placeBoundary(out, cell.id, c)
+    else placeBoundary(out, cell.id, c, outsideEgress)
   }
   return out
 }
@@ -436,7 +454,7 @@ export function buildZoneGraph({ zones, flows, suggestions, members = null, unzo
 
   // Grid: longest-path layer as the column, barycenter order as the row.
   const grid = buildGrid(columns, groups, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID))
-  const { nodes, obstacles, endShapes } = buildNodes(grid, cellCenters(grid), groups)
+  const { nodes, obstacles, endShapes } = buildNodes(grid, cellCenters(grid), groups, outsideEgressOf(flows, known))
   return { nodes, edges: placePairs(ordered, endShapes, obstacles, unapplied) }
 }
 

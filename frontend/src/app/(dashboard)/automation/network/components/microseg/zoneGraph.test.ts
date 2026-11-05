@@ -438,3 +438,31 @@ describe('the demo-like map is readable', () => {
     expect(problems).toEqual([])
   })
 })
+
+describe('outbound flows to Outside', () => {
+  const to = (id: string, src: string) => flow(id, { src_zone_id: src, dst_zone_id: '', dst_cidr: '8.8.8.0/24', proto: 'udp', dport: '53' })
+  const build = (zones: MicrosegZone[], flows: MicrosegFlow[]) => buildZoneGraph({ zones, flows, suggestions: [] })
+  const outsideData = (g: ReturnType<typeof buildZoneGraph>) => byId(g.nodes, 'outside').data as { kind: string; egress?: string }
+
+  it('draws a solid allowed edge when the source zone enforces its outbound traffic', () => {
+    const g = build([zone('zw', 'web', { state: 'enforce', egress_state: 'enforce' }), db], [to('f1', 'zw')])
+    const edge = g.edges.find(e => e.target === 'outside')!
+    expect(data(edge).kind).toBe('allowed')
+    expect(edge.style?.strokeDasharray).toBeUndefined()
+    expect(outsideData(g).egress).toBe('applied')
+  })
+
+  it('draws a dashed edge when the source zone only observes it', () => {
+    const g = build([zone('zw', 'web', { egress_state: 'observe' }), db], [to('f1', 'zw')])
+    const edge = g.edges.find(e => e.target === 'outside')!
+    expect(data(edge).kind).toBe('outside')
+    expect(edge.style?.strokeDasharray).toBeTruthy()
+    expect(outsideData(g).egress).toBe('observed')
+  })
+
+  it('says not applied on the Outside box while one flow to it is not controlled', () => {
+    const g = build([zone('zw', 'web', { state: 'enforce', egress_state: 'enforce' }), zone('zd', 'db'), app], [to('f1', 'zw'), to('f2', 'zd')])
+    expect(outsideData(g).egress).toBe('notApplied')
+    expect(g.edges.filter(e => e.target === 'outside').map(e => data(e).kind).sort()).toEqual(['allowed', 'outside'])
+  })
+})

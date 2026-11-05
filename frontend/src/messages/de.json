@@ -12403,7 +12403,9 @@
         "done": "Abgeschlossen",
         "failed": "Fehlgeschlagen",
         "running": "Läuft"
-      }
+      },
+      "logNode": "{node} · {rate} Zeilen/Min. · {lag} s Verzug",
+      "logBehind": "Protokoll im Rückstand"
     },
     "stop": {
       "button": "Notfall-Stopp",
@@ -12548,7 +12550,10 @@
           "loading": "Verlauf wird gelesen...",
           "disabled": "Zone deaktiviert: ihr Verkehr wird nicht protokolliert",
           "aria": "{count, plural, one {Nicht abgedeckter Verkehr der letzten 24 Stunden: # Treffer} other {Nicht abgedeckter Verkehr der letzten 24 Stunden: # Treffer}}",
-          "bar": "{from} bis {to}: {count, plural, one {# Treffer} other {# Treffer}}"
+          "bar": "{from} bis {to}: {count, plural, one {# Treffer} other {# Treffer}}",
+          "barBoth": "{from} bis {to}: {count, plural, one {# Treffer} other {# Treffer}} eingehend, {out, plural, one {# Treffer} other {# Treffer}} ausgehend",
+          "legendIn": "Eingehend",
+          "legendOut": "Ausgehend"
         },
         "egress": {
           "state": {
@@ -12566,11 +12571,12 @@
         }
       },
       "flow": {
-        "notApplied": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",
+        "notApplied": "Nicht angewendet (Ausgang nicht kontrolliert)",
         "learned": "Gelernt",
         "edit": "Fluss bearbeiten",
         "delete": "Fluss löschen",
-        "createdBy": "Erstellt von {user}"
+        "createdBy": "Erstellt von {user}",
+        "observed": "Ausgang im Beobachtungsmodus"
       },
       "zoneDialog": {
         "createTitle": "Neue Zone",
@@ -12729,9 +12735,11 @@
           "pendingChangeHint": "Wird beim nächsten Anwenden geändert",
           "pendingRemoval": "Entfernen ausstehend",
           "pendingRemovalHint": "Wird beim nächsten Anwenden entfernt",
-          "notApplied": "In v1 nicht angewendet",
-          "notAppliedHint": "Nicht angewendet (Ausgang in v1 nicht verwaltet)",
-          "unknownHint": "Vergleich mit der angewendeten Revision..."
+          "notApplied": "Nicht angewendet",
+          "notAppliedHint": "Nicht angewendet (Ausgang nicht kontrolliert)",
+          "unknownHint": "Vergleich mit der angewendeten Revision...",
+          "observed": "Ausgang beobachtet",
+          "observedHint": "Ausgang im Beobachtungsmodus: die Zone protokolliert diese Flüsse, ohne sie bereits zu blockieren"
         },
         "uncovered": "{count, plural, one {Nicht abgedeckt 24 h: # Treffer} other {Nicht abgedeckt 24 h: # Treffer}}",
         "uncoveredHint": "Verkehr in diese Zone, den kein Fluss abdeckt (von den Mitgliedern der Zone in den letzten 24 h protokolliert)",
@@ -12840,6 +12848,40 @@
           "title": "Name in Proxmox bereits vergeben",
           "detail": "{object} existiert bereits in Proxmox und wurde nicht von ProxCenter angelegt: Es bleibt unberührt.",
           "hint": "Ein Objekt namens pcz-* existiert in Proxmox ohne die Markierung der Mikrosegmentierung: in Proxmox umbenennen oder löschen."
+        },
+        "egress_rule_missing": {
+          "title": "Ausgangsregel fehlt",
+          "detail": "Die abschließende Ausgangsregel von {name} fehlt in Proxmox.",
+          "detailCollision": "{name} kann seinen Ausgang nicht blockieren: pcz-_local gehört in Proxmox jemand anderem.",
+          "hintCollision": "In Proxmox existiert ein Objekt namens pcz-_local ohne die Mikrosegmentierungs-Markierung: benennen Sie es in Proxmox um oder löschen Sie es."
+        },
+        "egress_rule_misplaced": {
+          "title": "Ausgangsregel falsch platziert",
+          "detail": "Die abschließende Ausgangsregel von {name} ist nicht die letzte Regel oder kommt doppelt vor.",
+          "detailKnown": "Die Regel für bekannte Ziele von {name} steht nicht direkt vor der abschließenden Ausgangsregel."
+        },
+        "egress_rule_verdict": {
+          "title": "Ausgangsregel mit falschem Urteil",
+          "detail": "Die abschließende Ausgangsregel von {name} lautet {have} statt {want}.",
+          "detailCollision": "{name} kann nicht blockieren: pcz-_local gehört in Proxmox jemand anderem, daher bleibt die Ausgangsregel {have}.",
+          "hintCollision": "In Proxmox existiert ein Objekt namens pcz-_local ohne die Mikrosegmentierungs-Markierung: benennen Sie es in Proxmox um oder löschen Sie es."
+        },
+        "known_rule_missing": {
+          "title": "Regel für bekannte Ziele fehlt",
+          "detail": "Die Regel der Gruppe pcz-_known fehlt bei {name}."
+        },
+        "known_rule_extra": {
+          "title": "Überzählige Regel für bekannte Ziele",
+          "detail": "{name} hat noch eine Regel der Gruppe pcz-_known, die sein Ausgangszustand nicht mehr braucht."
+        },
+        "local_set_desync": {
+          "title": "Lokales Netz-Set nicht synchron",
+          "detail": "{object} enthält {actual} statt {desired}."
+        },
+        "egress_no_subnet": {
+          "title": "Ausgang ohne bekanntes Subnetz",
+          "detail": "{name} von {zone} hat kein bekanntes Subnetz: sein lokales Netz beschränkt sich auf die eigenen IPs.",
+          "hint": "Kein Subnetz bekannt: prüfen Sie die Netzwerkkonfiguration des Gastes in Proxmox (eine IP mit Präfixlänge oder den QEMU-Gastagenten)."
         }
       },
       "chip": {
@@ -12850,7 +12892,14 @@
         "member_without_ip": "Keine IP",
         "ambiguous_zone": "Mehrere Zonen",
         "object_collision": "Name belegt",
-        "generic": "Abweichung"
+        "generic": "Abweichung",
+        "egress_rule_missing": "Ausgangsregel fehlt",
+        "egress_rule_misplaced": "Ausgang falsch platziert",
+        "egress_rule_verdict": "Ausgang falsches Urteil",
+        "known_rule_missing": "Bekannte Regel fehlt",
+        "known_rule_extra": "Bekannte Regel überzählig",
+        "local_set_desync": "Lokales Set nicht synchron",
+        "egress_no_subnet": "Kein Subnetz"
       },
       "zoneFilter": "Nur Zone {name}",
       "zoneFilterClear": "Alle Zonen anzeigen",
@@ -13022,7 +13071,7 @@
       "mapLabel": "Karte der Zonen und ihrer Flüsse",
       "suggestionsError": "Die ausstehenden Flüsse konnten nicht gelesen werden. Die Karte zeigt nur die erlaubten Flüsse.",
       "legend": {
-        "outside": "Nach außen: in v1 nicht angewendet",
+        "outside": "Nach außen: Ausgang nicht blockiert",
         "allowed": "Erlaubt",
         "unprotected": "Ungeschützt",
         "blocked": "Blockiert",
@@ -13033,8 +13082,8 @@
         "external": "Unbekannt / Extern",
         "externalHint": "Quellen, die zu keinem Gast passen: eine IP-Adresse oder ein Netz (CIDR)",
         "outside": "Außerhalb",
-        "outsideHint": "Ziele außerhalb der Zonen (ein CIDR). Flüsse dorthin werden in v1 nicht angewendet.",
-        "notApplied": "in v1 nicht angewendet",
+        "outsideHint": "Ziele außerhalb der Zonen (ein CIDR). Flüsse dorthin werden angewendet, sobald die Quellzone ihren Ausgang blockiert.",
+        "notApplied": "Ausgang nicht kontrolliert",
         "aria": "Zone {name}: {state}, {members}",
         "membersUnknown": "Mitglieder unbekannt",
         "unzoned": "Gäste ohne Zone ({count, number})",
@@ -13047,10 +13096,11 @@
         "moreHint": "{count, plural, one {# weiteres Mitglied} other {# weitere Mitglieder}}: der Zonenbereich listet alle",
         "moreUnzonedHint": "{count, plural, one {# weiterer Gast} other {# weitere Gäste}} ohne Zone: Abweichungen listet alle",
         "ipHint": "{ip}: eine Adresse ohne Zone und ohne Gast, die mit dieser Zone gesprochen hat",
-        "inside": "{count, plural, one {# beobachteter Fluss} other {# beobachtete Flüsse}} innerhalb der Zone"
+        "inside": "{count, plural, one {# beobachteter Fluss} other {# beobachtete Flüsse}} innerhalb der Zone",
+        "observed": "Ausgang beobachtet"
       },
       "edge": {
-        "outside": "In v1 nicht angewendet: {services}",
+        "outside": "Ausgang nicht blockiert: {services}",
         "aria": "{from} nach {to}: {services}",
         "allowed": "Erlaubt: {services}",
         "unprotected": "{count, plural, one {# beobachteter Fluss} other {# beobachtete Flüsse}}, die kein Fluss erlaubt (ungeschützt)",
@@ -13264,7 +13314,13 @@
           "unknown": "Die Adresse von ProxCenter konnte nicht erkannt werden, diese Prüfung kann daher nichts aussagen. Legen Sie sie in den Einstellungen fest.",
           "inZone": "ProxCenter ({self_ip}) liegt in der Zone {zone}: Sie durchzusetzen könnte die Verbindung abschneiden.",
           "uncheckedTimeout": "{count, plural, one {# Mitglied konnte} other {# Mitglieder konnten}} nicht geprüft werden (Erfassung abgebrochen): ProxCenter könnte in einem davon liegen.",
-          "uncheckedCap": "{count, plural, one {# Mitglied konnte} other {# Mitglieder konnten}} nicht geprüft werden (Erfassungsobergrenze überschritten): ProxCenter könnte in einem davon liegen."
+          "uncheckedCap": "{count, plural, one {# Mitglied konnte} other {# Mitglieder konnten}} nicht geprüft werden (Erfassungsobergrenze überschritten): ProxCenter könnte in einem davon liegen.",
+          "inZoneEgress": "ProxCenter ({self_ip}) liegt in der Zone {zone}, die ihren Ausgang kontrolliert: erlauben Sie vor dem Blockieren einen Fluss zu den Proxmox-Knoten, sonst könnte ProxCenter sie verlieren."
+        },
+        "egress_subnets": {
+          "title": "Ausgangs-Subnetze",
+          "pass": "Jedes Mitglied einer Zone mit Ausgangskontrolle hat ein bekanntes Subnetz.",
+          "warn": "{count, plural, one {# Mitglied hat kein bekanntes Subnetz} other {# Mitglieder haben kein bekanntes Subnetz}} ({guests}): ihr lokales Netz beschränkt sich auf ihre eigenen IPs."
         }
       },
       "rateUnits": {

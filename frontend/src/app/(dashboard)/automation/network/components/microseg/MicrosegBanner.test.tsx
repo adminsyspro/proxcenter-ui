@@ -349,3 +349,25 @@ describe('banner: pending changes', () => {
     expect(calls('GET /revisions?limit=1')).toHaveLength(0)
   })
 })
+
+describe('banner: the log reader load', () => {
+  const node = (over: Record<string, unknown> = {}) => ({ node: 'pve1', lines_last: 400, lines_per_min_15m: 82, lag_seconds: 12, full_pages_24h: 0, ...over })
+
+  it('draws nothing while every reader keeps up', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ log_nodes: [node()] }))
+    renderTab()
+    await bannerReady()
+    expect(screen.queryByText('Log behind')).toBeNull()
+  })
+
+  it('shows an alert chip when a reader met a full page, and its load per node on hover', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ log_nodes: [node(), node({ node: 'pve2', lines_per_min_15m: 5, lag_seconds: 0, full_pages_24h: 1 })] }))
+    renderTab()
+    const chip = await screen.findByText('Log behind')
+    expect(chip.closest('.MuiChip-root')).toBeTruthy()
+    fireEvent.mouseOver(chip)
+    const tip = await screen.findByRole('tooltip')
+    expect(tip.textContent).toContain('pve1 · 82 lines/min · 12 s behind')
+    expect(tip.textContent).toContain('pve2 · 5 lines/min · 0 s behind')
+  })
+})

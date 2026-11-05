@@ -212,18 +212,29 @@ describe('flow list', () => {
     expect(await screen.findByText('Create a zone first: a flow links zones or a zone and a CIDR.')).toBeTruthy()
   })
 
-  it('says "not applied in v1" for a flow whose destination is a CIDR, in the table and under the zone', async () => {
+  it('says "not applied" for a flow whose destination is a CIDR, in the table and under the zone', async () => {
     const toCidr: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: '', dst_cidr: '10.0.0.0/8', dport: '53', proto: 'udp' }
     const toZone: MicrosegFlow = { ...flow('f2'), src_zone_id: 'zw', dst_zone_id: 'zd' }
     setup({ zones: [web(), db()], flows: [toCidr, toZone] })
 
-    const pill = 'Not applied (egress not managed in v1)'
+    const pill = 'Not applied (outbound not controlled)'
     const flows = await screen.findByRole('region', { name: 'Flows' })
-    expect(within(flows).getAllByText('Not applied in v1')).toHaveLength(1)
+    expect(within(flows).getAllByText('Not applied')).toHaveLength(1)
     expect(within(flows).getByText('10.0.0.0/8')).toBeTruthy()
 
     fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Show details of web' }))
     expect(within(await screen.findByRole('region', { name: 'Details of web' })).getAllByText(pill)).toHaveLength(1)
+  })
+
+  it('says "Outbound observed" for a flow to a CIDR while the source zone observes its outbound traffic, and nothing once it enforces it', async () => {
+    const toCidr: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: '', dst_cidr: '10.0.0.0/8', dport: '53', proto: 'udp' }
+    setup({ zones: [{ ...web(), egress_state: 'observe' }, db()], flows: [toCidr] })
+    const flows = await screen.findByRole('region', { name: 'Flows' })
+    expect(within(flows).getAllByText('Outbound observed')).toHaveLength(1)
+    expect(within(flows).queryByText(/Not applied/)).toBeNull()
+
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Show details of web' }))
+    expect(within(await screen.findByRole('region', { name: 'Details of web' })).getAllByText('Outbound observed')).toHaveLength(1)
   })
 
   it('does not show the pill for a CIDR source', async () => {

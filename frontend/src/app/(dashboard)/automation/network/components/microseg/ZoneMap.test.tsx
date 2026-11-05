@@ -88,11 +88,11 @@ describe('edges', () => {
     expect(await pathOf('unprotected:external>zone:zd')).toBeTruthy()
   })
 
-  it('draws a CIDR destination as a dashed grey edge to an Outside node labelled not applied in v1', async () => {
+  it('draws a CIDR destination as a dashed grey edge to an Outside node labelled outbound not controlled', async () => {
     setup({ flows: [flowOf('f1', { dst_zone_id: '', dst_cidr: '8.8.8.0/24', proto: 'udp', dport: '53' })] })
     const out = await node('outside')
     expect(within(out).getByText('Outside')).toBeTruthy()
-    expect(within(out).getByText('not applied in v1')).toBeTruthy()
+    expect(within(out).getByText('outbound not controlled')).toBeTruthy()
     const path = await pathOf('outside:zone:zw>outside')
     expect(path.getAttribute('data-dash')).not.toBe('')
     expect(path.getAttribute('data-stroke')).toBe('#9e9e9e')

@@ -12735,7 +12735,9 @@
         "done": "완료",
         "failed": "실패",
         "running": "실행 중"
-      }
+      },
+      "logNode": "{node} · 분당 {rate}줄 · {lag}초 지연",
+      "logBehind": "로그 지연"
     },
     "stop": {
       "button": "긴급 중지",
@@ -12880,7 +12882,10 @@
           "loading": "기록을 읽는 중...",
           "disabled": "영역 비활성화됨: 트래픽이 기록되지 않음",
           "aria": "최근 24시간 미적용 트래픽: 히트 {count}개",
-          "bar": "{from}~{to}: 히트 {count}개"
+          "bar": "{from}~{to}: 히트 {count}개",
+          "barBoth": "{from}~{to}: 수신 {count, plural, other {#회}}, 송신 {out, plural, other {#회}}",
+          "legendIn": "수신",
+          "legendOut": "송신"
         },
         "egress": {
           "state": {
@@ -12898,11 +12903,12 @@
         }
       },
       "flow": {
-        "notApplied": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",
+        "notApplied": "적용되지 않음 (송신 제어 안 함)",
         "learned": "학습됨",
         "edit": "플로우 편집",
         "delete": "플로우 삭제",
-        "createdBy": "작성자: {user}"
+        "createdBy": "작성자: {user}",
+        "observed": "송신 관찰 중"
       },
       "zoneDialog": {
         "createTitle": "새 영역",
@@ -13061,9 +13067,11 @@
           "pendingChangeHint": "다음 적용 시 변경됨",
           "pendingRemoval": "삭제 대기 중",
           "pendingRemovalHint": "다음 적용 시 삭제됨",
-          "notApplied": "v1에서 적용 안 됨",
-          "notAppliedHint": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",
-          "unknownHint": "적용된 리비전과 비교하는 중..."
+          "notApplied": "적용되지 않음",
+          "notAppliedHint": "적용되지 않음 (송신 제어 안 함)",
+          "unknownHint": "적용된 리비전과 비교하는 중...",
+          "observed": "송신 관찰 중",
+          "observedHint": "송신 관찰 중: 영역이 이 플로우를 아직 차단하지 않고 기록만 합니다"
         },
         "uncovered": "{count, plural, other {미허용 24시간: 히트 #회}}",
         "uncoveredHint": "어떤 플로우도 허용하지 않는 이 영역으로의 트래픽 (지난 24시간 동안 영역 구성원이 기록)",
@@ -13172,6 +13180,40 @@
           "title": "Proxmox에서 이미 사용 중인 이름",
           "detail": "{object}은(는) 이미 Proxmox에 있고 ProxCenter가 만든 것이 아니므로 건드리지 않습니다.",
           "hint": "마이크로 세분화 표시가 없는 pcz-* 이름의 개체가 Proxmox에 있습니다. Proxmox에서 이름을 바꾸거나 삭제하세요."
+        },
+        "egress_rule_missing": {
+          "title": "송신 규칙 없음",
+          "detail": "{name}의 최종 송신 규칙이 Proxmox에 없습니다.",
+          "detailCollision": "{name}은(는) 송신을 차단할 수 없습니다. Proxmox에서 pcz-_local은 다른 사용자의 객체입니다.",
+          "hintCollision": "Proxmox에 마이크로 세그멘테이션 표식이 없는 pcz-_local 객체가 있습니다. Proxmox에서 이름을 바꾸거나 삭제하세요."
+        },
+        "egress_rule_misplaced": {
+          "title": "송신 규칙 위치 오류",
+          "detail": "{name}의 최종 송신 규칙이 마지막 규칙이 아니거나 두 번 나타납니다.",
+          "detailKnown": "{name}의 알려진 대상 규칙이 최종 송신 규칙 바로 앞에 있지 않습니다."
+        },
+        "egress_rule_verdict": {
+          "title": "송신 규칙 판정 불일치",
+          "detail": "{name}의 최종 송신 규칙이 {want}이(가) 아니라 {have}입니다.",
+          "detailCollision": "{name}은(는) 차단할 수 없습니다. Proxmox에서 pcz-_local은 다른 사용자의 객체라 송신 규칙이 {have}로 남습니다.",
+          "hintCollision": "Proxmox에 마이크로 세그멘테이션 표식이 없는 pcz-_local 객체가 있습니다. Proxmox에서 이름을 바꾸거나 삭제하세요."
+        },
+        "known_rule_missing": {
+          "title": "알려진 대상 규칙 없음",
+          "detail": "{name}에 pcz-_known 그룹의 규칙이 없습니다."
+        },
+        "known_rule_extra": {
+          "title": "알려진 대상 규칙 초과",
+          "detail": "{name}에 송신 상태에서 더 이상 필요하지 않은 pcz-_known 그룹 규칙이 남아 있습니다."
+        },
+        "local_set_desync": {
+          "title": "로컬 네트워크 세트 불일치",
+          "detail": "{object}에 {desired} 대신 {actual}이(가) 들어 있습니다."
+        },
+        "egress_no_subnet": {
+          "title": "알려진 서브넷 없는 송신",
+          "detail": "{zone}의 {name}에 알려진 서브넷이 없습니다. 로컬 네트워크가 자신의 IP로 한정됩니다.",
+          "hint": "알려진 서브넷이 없습니다. Proxmox에서 게스트의 네트워크 설정(접두사 길이가 있는 IP 또는 QEMU 게스트 에이전트)을 확인하세요."
         }
       },
       "chip": {
@@ -13182,7 +13224,14 @@
         "member_without_ip": "IP 없음",
         "ambiguous_zone": "여러 영역",
         "object_collision": "이름 사용 중",
-        "generic": "불일치"
+        "generic": "불일치",
+        "egress_rule_missing": "송신 규칙 없음",
+        "egress_rule_misplaced": "송신 위치 오류",
+        "egress_rule_verdict": "송신 판정 불일치",
+        "known_rule_missing": "알려진 규칙 없음",
+        "known_rule_extra": "알려진 규칙 초과",
+        "local_set_desync": "로컬 세트 불일치",
+        "egress_no_subnet": "서브넷 없음"
       },
       "zoneFilter": "영역 {name}만",
       "zoneFilterClear": "모든 영역 표시",
@@ -13354,7 +13403,7 @@
       "mapLabel": "영역과 플로우 지도",
       "suggestionsError": "대기 중인 플로우를 읽을 수 없습니다. 지도에는 허용된 플로우만 표시됩니다.",
       "legend": {
-        "outside": "외부로: v1에서 적용되지 않음",
+        "outside": "외부로: 송신 차단 안 됨",
         "allowed": "허용됨",
         "unprotected": "보호되지 않음",
         "blocked": "차단됨",
@@ -13365,8 +13414,8 @@
         "external": "알 수 없음 / 외부",
         "externalHint": "어떤 게스트와도 일치하지 않는 소스: IP 주소 또는 네트워크(CIDR)",
         "outside": "영역 밖",
-        "outsideHint": "영역 밖의 목적지(CIDR). 해당 목적지로 가는 플로우는 v1에서 적용되지 않습니다.",
-        "notApplied": "v1에서 적용되지 않음",
+        "outsideHint": "영역 밖의 대상(CIDR). 이 대상으로의 플로우는 출발 영역이 송신을 차단하면 적용됩니다.",
+        "notApplied": "송신 제어 안 함",
         "aria": "영역 {name}, {state}, {members}",
         "membersUnknown": "구성원 수 알 수 없음",
         "unzoned": "영역 없는 게스트 ({count, number})",
@@ -13379,10 +13428,11 @@
         "moreHint": "{count, plural, other {멤버 #개 더}}: 영역 패널에 모두 나열됩니다",
         "moreUnzonedHint": "{count, plural, other {영역 없는 게스트 #개 더}}: 편차에 모두 나열됩니다",
         "ipHint": "{ip}: 이 영역과 통신한, 영역과 게스트에 속하지 않는 주소",
-        "inside": "{count, plural, other {영역 내부에서 관찰된 흐름 #개}}"
+        "inside": "{count, plural, other {영역 내부에서 관찰된 흐름 #개}}",
+        "observed": "송신 관찰 중"
       },
       "edge": {
-        "outside": "v1에서 적용되지 않음: {services}",
+        "outside": "송신 차단 안 됨: {services}",
         "aria": "{from}에서 {to}: {services}",
         "allowed": "허용됨: {services}",
         "unprotected": "{count, plural, other {관찰된 흐름 #개}}, 이를 허용하는 흐름 없음(보호되지 않음)",
@@ -13596,7 +13646,13 @@
           "unknown": "ProxCenter 주소를 감지하지 못해 이 점검은 판단할 수 없습니다. 설정에서 지정하세요.",
           "inZone": "ProxCenter({self_ip})가 {zone} 영역 안에 있습니다. 강제 적용하면 연결이 끊길 수 있습니다.",
           "uncheckedTimeout": "{count, plural, other {#개 멤버를 확인하지 못했습니다}} (수집이 중단됨). ProxCenter가 그중 하나에 속해 있을 수 있습니다.",
-          "uncheckedCap": "{count, plural, other {#개 멤버를 확인하지 못했습니다}} (수집 한도 초과). ProxCenter가 그중 하나에 속해 있을 수 있습니다."
+          "uncheckedCap": "{count, plural, other {#개 멤버를 확인하지 못했습니다}} (수집 한도 초과). ProxCenter가 그중 하나에 속해 있을 수 있습니다.",
+          "inZoneEgress": "ProxCenter({self_ip})가 송신을 제어하는 영역 {zone} 안에 있습니다. 차단하기 전에 Proxmox 노드로의 플로우를 허용하지 않으면 ProxCenter가 노드와 연결이 끊길 수 있습니다."
+        },
+        "egress_subnets": {
+          "title": "송신 서브넷",
+          "pass": "송신 제어 영역의 모든 구성원에게 알려진 서브넷이 있습니다.",
+          "warn": "{count}개 구성원에 알려진 서브넷이 없습니다 ({guests}): 로컬 네트워크가 자신의 IP로 한정됩니다."
         }
       },
       "rateUnits": {

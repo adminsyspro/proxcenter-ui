@@ -12735,7 +12735,9 @@
         "done": "Terminado",
         "failed": "Fallido",
         "running": "En curso"
-      }
+      },
+      "logNode": "{node} · {rate} líneas/min · retraso {lag} s",
+      "logBehind": "Registro atrasado"
     },
     "stop": {
       "button": "Parada de emergencia",
@@ -12880,7 +12882,10 @@
           "loading": "Leyendo el historial...",
           "disabled": "Zona desactivada: su tráfico no se registra",
           "aria": "{count, plural, one {Tráfico no cubierto en las últimas 24 horas: # impacto} other {Tráfico no cubierto en las últimas 24 horas: # impactos}}",
-          "bar": "{from} a {to}: {count, plural, one {# impacto} other {# impactos}}"
+          "bar": "{from} a {to}: {count, plural, one {# impacto} other {# impactos}}",
+          "barBoth": "{from} a {to}: {count, plural, one {# coincidencia} other {# coincidencias}} entrantes, {out, plural, one {# coincidencia} other {# coincidencias}} salientes",
+          "legendIn": "Entrante",
+          "legendOut": "Saliente"
         },
         "egress": {
           "state": {
@@ -12898,11 +12903,12 @@
         }
       },
       "flow": {
-        "notApplied": "No aplicado (salida no gestionada en v1)",
+        "notApplied": "No aplicado (salida no controlada)",
         "learned": "Aprendido",
         "edit": "Editar flujo",
         "delete": "Eliminar flujo",
-        "createdBy": "Creado por {user}"
+        "createdBy": "Creado por {user}",
+        "observed": "Salida en observación"
       },
       "zoneDialog": {
         "createTitle": "Nueva zona",
@@ -13061,9 +13067,11 @@
           "pendingChangeHint": "Se modifica en la próxima aplicación",
           "pendingRemoval": "Eliminación pendiente",
           "pendingRemovalHint": "Se elimina en la próxima aplicación",
-          "notApplied": "No aplicado en v1",
-          "notAppliedHint": "No aplicado (salida no gestionada en v1)",
-          "unknownHint": "Comparando con la revisión aplicada..."
+          "notApplied": "No aplicado",
+          "notAppliedHint": "No aplicado (salida no controlada)",
+          "unknownHint": "Comparando con la revisión aplicada...",
+          "observed": "Salida en observación",
+          "observedHint": "Salida en observación: la zona registra estos flujos sin bloquearlos todavía"
         },
         "uncovered": "{count, plural, one {Sin cubrir 24 h: # impacto} other {Sin cubrir 24 h: # impactos}}",
         "uncoveredHint": "Tráfico hacia esta zona que ningún flujo cubre (registrado por los miembros de la zona en las últimas 24 h)",
@@ -13172,6 +13180,40 @@
           "title": "Nombre ya usado en Proxmox",
           "detail": "{object} ya existe en Proxmox y no fue creado por ProxCenter: no se toca.",
           "hint": "Existe en Proxmox un objeto llamado pcz-* sin la marca de la microsegmentación: renómbrelo o elimínelo en Proxmox."
+        },
+        "egress_rule_missing": {
+          "title": "Falta la regla de salida",
+          "detail": "La regla final de salida de {name} no está en Proxmox.",
+          "detailCollision": "{name} no puede bloquear su salida: pcz-_local pertenece a otra persona en Proxmox.",
+          "hintCollision": "Existe en Proxmox un objeto llamado pcz-_local sin la marca de microsegmentación: renómbrelo o elimínelo en Proxmox."
+        },
+        "egress_rule_misplaced": {
+          "title": "Regla de salida mal ubicada",
+          "detail": "La regla final de salida de {name} no es la última regla, o aparece dos veces.",
+          "detailKnown": "La regla de destinos conocidos de {name} no está justo antes de su regla final de salida."
+        },
+        "egress_rule_verdict": {
+          "title": "Regla de salida con el veredicto erróneo",
+          "detail": "La regla final de salida de {name} es {have} en lugar de {want}.",
+          "detailCollision": "{name} no puede bloquear: pcz-_local pertenece a otra persona en Proxmox, así que su regla de salida sigue en {have}.",
+          "hintCollision": "Existe en Proxmox un objeto llamado pcz-_local sin la marca de microsegmentación: renómbrelo o elimínelo en Proxmox."
+        },
+        "known_rule_missing": {
+          "title": "Falta la regla de destinos conocidos",
+          "detail": "Falta la regla del grupo pcz-_known en {name}."
+        },
+        "known_rule_extra": {
+          "title": "Regla de destinos conocidos de más",
+          "detail": "{name} conserva una regla del grupo pcz-_known que su estado de salida ya no necesita."
+        },
+        "local_set_desync": {
+          "title": "Red local desincronizada",
+          "detail": "{object} contiene {actual} en lugar de {desired}."
+        },
+        "egress_no_subnet": {
+          "title": "Salida sin subred conocida",
+          "detail": "{name} de {zone} no tiene subred conocida: su red local se reduce a sus propias IP.",
+          "hint": "Ninguna subred conocida: revise la configuración de red del invitado en Proxmox (una IP con su longitud de prefijo, o el agente invitado QEMU)."
         }
       },
       "chip": {
@@ -13182,7 +13224,14 @@
         "member_without_ip": "Sin IP",
         "ambiguous_zone": "Varias zonas",
         "object_collision": "Nombre ocupado",
-        "generic": "Desviación"
+        "generic": "Desviación",
+        "egress_rule_missing": "Sin regla de salida",
+        "egress_rule_misplaced": "Salida mal ubicada",
+        "egress_rule_verdict": "Salida, veredicto erróneo",
+        "known_rule_missing": "Falta regla conocida",
+        "known_rule_extra": "Regla conocida de más",
+        "local_set_desync": "Red local desincronizada",
+        "egress_no_subnet": "Sin subred"
       },
       "zoneFilter": "Solo zona {name}",
       "zoneFilterClear": "Mostrar todas las zonas",
@@ -13354,7 +13403,7 @@
       "mapLabel": "Mapa de las zonas y sus flujos",
       "suggestionsError": "No se pudieron leer los flujos pendientes. El mapa solo muestra los flujos permitidos.",
       "legend": {
-        "outside": "Hacia el exterior: no aplicado en v1",
+        "outside": "Hacia el exterior: salida no bloqueada",
         "allowed": "Permitido",
         "unprotected": "Sin protección",
         "blocked": "Bloqueado",
@@ -13365,8 +13414,8 @@
         "external": "Desconocido / Externo",
         "externalHint": "Orígenes que no corresponden a ningún invitado: una dirección IP o una red (CIDR)",
         "outside": "Exterior",
-        "outsideHint": "Destinos fuera de las zonas (un CIDR). Los flujos hacia ellos no se aplican en v1.",
-        "notApplied": "no aplicado en v1",
+        "outsideHint": "Destinos fuera de las zonas (un CIDR). Los flujos hacia ellos se aplican cuando la zona de origen bloquea su salida.",
+        "notApplied": "salida no controlada",
         "aria": "Zona {name}, {state}, {members}",
         "membersUnknown": "miembros desconocidos",
         "unzoned": "Invitados sin zona ({count, number})",
@@ -13379,10 +13428,11 @@
         "moreHint": "{count, plural, one {# miembro más} other {# miembros más}}: el panel de la zona los lista todos",
         "moreUnzonedHint": "{count, plural, one {# invitado más} other {# invitados más}} sin zona: Desviaciones los lista todos",
         "ipHint": "{ip}: una dirección sin zona y sin invitado que habló con esta zona",
-        "inside": "{count, plural, one {# flujo observado} other {# flujos observados}} dentro de la zona"
+        "inside": "{count, plural, one {# flujo observado} other {# flujos observados}} dentro de la zona",
+        "observed": "salida en observación"
       },
       "edge": {
-        "outside": "No aplicado en v1: {services}",
+        "outside": "Salida no bloqueada: {services}",
         "aria": "{from} a {to}: {services}",
         "allowed": "Permitido: {services}",
         "unprotected": "{count, plural, one {# flujo observado} other {# flujos observados}} que ningún flujo permite (sin protección)",
@@ -13596,7 +13646,13 @@
           "unknown": "No se pudo detectar la dirección de ProxCenter, así que esta comprobación no puede concluir. Indíquela en los ajustes.",
           "inZone": "ProxCenter ({self_ip}) está dentro de la zona {zone}: aplicarla podría cortar la conexión.",
           "uncheckedTimeout": "{count, plural, one {No se pudo comprobar # miembro} other {No se pudieron comprobar # miembros}} (recopilación interrumpida): ProxCenter podría estar dentro de uno de ellos.",
-          "uncheckedCap": "{count, plural, one {No se pudo comprobar # miembro} other {No se pudieron comprobar # miembros}} (por encima del límite de recopilación): ProxCenter podría estar dentro de uno de ellos."
+          "uncheckedCap": "{count, plural, one {No se pudo comprobar # miembro} other {No se pudieron comprobar # miembros}} (por encima del límite de recopilación): ProxCenter podría estar dentro de uno de ellos.",
+          "inZoneEgress": "ProxCenter ({self_ip}) está dentro de la zona {zone}, que controla su salida: permita un flujo hacia los nodos Proxmox antes de bloquear, o ProxCenter podría perderlos."
+        },
+        "egress_subnets": {
+          "title": "Subredes de salida",
+          "pass": "Cada miembro de una zona con salida controlada tiene una subred conocida.",
+          "warn": "{count, plural, one {# miembro no tiene subred conocida} other {# miembros no tienen subred conocida}} ({guests}): su red local se reduce a sus propias IP."
         }
       },
       "rateUnits": {

@@ -23,6 +23,8 @@ export function hitsWindow(now: number): { from: number; to: number } {
 export function uncoveredByZone(traffic: Pick<MicrosegTraffic, 'buckets'>): Map<string, number> {
   const zones = new Map<string, number>()
   for (const b of traffic.buckets) {
+    // An outbound bucket is logged by the emitting zone: it is no traffic into it.
+    if (b.direction === 'out') continue
     const key = b.zone.toLowerCase()
     zones.set(key, (zones.get(key) ?? 0) + b.hits)
   }
@@ -36,10 +38,18 @@ export function uncoveredByZone(traffic: Pick<MicrosegTraffic, 'buckets'>): Map<
  * older orchestrator, a follower) is not retried: the table shows no count.
  */
 /** The hourly hits of each zone over the window, oldest first, plus where the window starts and its step. */
-export type UncoveredSeries = { from: number; stepMs: number; size: number; byZone: Map<string, number[]> }
+export type UncoveredSeries = {
+  from: number
+  stepMs: number
+  size: number
+  /** Inbound: the hits of the traffic into each zone. */
+  byZone: Map<string, number[]>
+  /** Outbound: the hits of the traffic each zone emitted (its outbound buckets). */
+  outByZone: Map<string, number[]>
+}
 
 /**
- * The hits of each destination zone per bucket of the answer (24 hourly buckets for the Policy window), by name whatever
+ * The hits of each zone per bucket of the answer (24 hourly buckets for the Policy window), by name whatever
  * the case, every source and verdict together: a bucket with no row is 0. A bucket outside the window is dropped.
  */
 export function uncoveredSeriesByZone(traffic: Pick<MicrosegTraffic, 'buckets' | 'from' | 'to' | 'step'>): UncoveredSeries {
@@ -47,20 +57,23 @@ export function uncoveredSeriesByZone(traffic: Pick<MicrosegTraffic, 'buckets' |
   const stepMs = Math.max(1, traffic.step) * 1000
   const size = Math.max(0, Math.round((Date.parse(traffic.to) - from) / stepMs))
   const byZone = new Map<string, number[]>()
+  const outByZone = new Map<string, number[]>()
   for (const b of traffic.buckets) {
     const i = Math.floor((Date.parse(b.at) - from) / stepMs)
     if (!(i >= 0 && i < size)) continue
     const key = b.zone.toLowerCase()
-    let row = byZone.get(key)
-    if (!row) byZone.set(key, (row = new Array<number>(size).fill(0)))
+    const rows = b.direction === 'out' ? outByZone : byZone
+    let row = rows.get(key)
+    if (!row) rows.set(key, (row = new Array<number>(size).fill(0)))
     row[i] += b.hits
   }
-  return { from, stepMs, size, byZone }
+  return { from, stepMs, size, byZone, outByZone }
 }
 
 /** The hourly series of a zone, with the name it had in the applied revision when the draft renamed it (as uncoveredOf). */
-export function uncoveredSeriesOf(series: UncoveredSeries, name: string, previousName?: string): number[] {
-  const pick = (n: string) => series.byZone.get(n.toLowerCase())
+export function uncoveredSeriesOf(series: UncoveredSeries, name: string, previousName?: string, direction: 'in' | 'out' = 'in'): number[] {
+  const rowsOf = direction === 'out' ? series.outByZone : series.byZone
+  const pick = (n: string) => rowsOf.get(n.toLowerCase())
   const rows = [pick(name), previousName && previousName.toLowerCase() !== name.toLowerCase() ? pick(previousName) : undefined]
   return Array.from({ length: series.size }, (_, i) => rows.reduce((sum, row) => sum + (row?.[i] ?? 0), 0))
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { Box, Checkbox, FormControl, InputAdornment, MenuItem, Select, TextField, Typography } from '@mui/material'
+import { Box, Checkbox, Divider, FormControl, InputAdornment, MenuItem, Select, TextField, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
@@ -34,11 +34,14 @@ function FieldRow({ label, hint, tip, children }: { label: string; hint?: string
   )
 }
 
-export function SectionTitle({ children }: { children: ReactNode }) {
+export function SectionTitle({ children, first = false }: { children: ReactNode; first?: boolean }) {
   return (
-    <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 2, mb: 0.5, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-      {children}
-    </Typography>
+    <Box data-testid='settings-section' sx={{ mt: first ? 0 : 2.5, mb: 1 }}>
+      {!first && <Divider data-testid='settings-section-divider' sx={{ mb: 2 }} />}
+      <Typography variant='caption' color='text.primary' sx={{ display: 'block', fontWeight: 600, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        {children}
+      </Typography>
+    </Box>
   )
 }
 
@@ -91,7 +94,7 @@ export default function SettingsFields({ form, problems, busy, prefixWarning, on
 
   return (
     <Box>
-      <SectionTitle>{t('sections.general')}</SectionTitle>
+      <SectionTitle first>{t('sections.general')}</SectionTitle>
       <TextRow
         label={t('fields.tagPrefix')}
         hint={t('hints.tagPrefix')}

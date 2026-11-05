@@ -97,6 +97,16 @@ describe('layout', () => {
     }
   })
 
+  it('separates every section after the first with a divider', () => {
+    open()
+    const sections = screen.getAllByTestId('settings-section')
+    expect(sections.length).toBeGreaterThanOrEqual(6)
+    sections.forEach((section, i) => {
+      const divider = section.querySelector('[data-testid="settings-section-divider"]')
+      expect(!!divider).toBe(i > 0)
+    })
+  })
+
   it('shows the write cap unit and the gear icon', () => {
     open()
     expect(screen.getByText('writes')).toBeTruthy()

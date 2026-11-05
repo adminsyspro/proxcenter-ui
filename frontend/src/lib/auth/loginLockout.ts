@@ -91,8 +91,9 @@ export function ipThrottleKey(ip: string): string {
   if (!isIPv6(addr)) return addr
 
   // Rewrite an embedded IPv4 tail as two hex groups, expand "::" to eight
-  // groups, keep the first four.
-  const full = addr.replace(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/, (_m, a, b, c, d) =>
+  // groups, keep the first four. Octets are bounded to three digits so the
+  // match stays linear on the forwarded address, which the client controls.
+  const full = addr.replace(/(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/, (_m, a, b, c, d) =>
     `${((+a << 8) | +b).toString(16)}:${((+c << 8) | +d).toString(16)}`)
   const [head, rest] = full.includes("::") ? full.split("::") : [full, null]
   const left = head ? head.split(":") : []

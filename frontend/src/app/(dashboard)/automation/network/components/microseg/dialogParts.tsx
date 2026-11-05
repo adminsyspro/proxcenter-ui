@@ -1,13 +1,46 @@
 'use client'
 
-import { useCallback, useState } from 'react'
-import { Alert } from '@mui/material'
+import { useCallback, useState, type ReactNode } from 'react'
+import { Alert, Box, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { MicrosegApiError, microsegErrorKeyOf } from '@/lib/microseg/api'
 import TruncatedText from './TruncatedText'
 
 export const ONE_LINE_SX = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const
+
+/** Width of the name column of a form dialog: room for the longest row name in every catalogue. */
+export const FORM_LABEL_WIDTH = 150
+/** Height of the first line of a form row: the height of a small outlined field, so names and controls share a centre line. */
+const FORM_ROW_HEIGHT = 38
+
+/** A checkbox or a radio without its padding, its drawn box flush with the left edge of the fields above (the icon is inset 3px). */
+export const FLUSH_TOGGLE_SX = { p: 0, ml: '-3px', mr: 1 } as const
+
+type FormRowProps = {
+  label: string
+  /** The id of the input the name labels, for a text field. */
+  htmlFor?: string
+  /** Captions under the control, in the control column. */
+  below?: ReactNode
+  children: ReactNode
+}
+
+/** A setting of a form dialog: its name in a fixed left column, its control on the right; the name goes above the control on a narrow screen. */
+export function FormRow({ label, htmlFor, below, children }: FormRowProps) {
+  const nameSx = { ...ONE_LINE_SX, display: 'block', lineHeight: { sm: `${FORM_ROW_HEIGHT}px` } }
+  return (
+    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: `${FORM_LABEL_WIDTH}px minmax(0, 1fr)` }, columnGap: 4, rowGap: 1, alignItems: 'start' }}>
+      {htmlFor
+        ? <Typography component='label' htmlFor={htmlFor} variant='body2' color='text.secondary' sx={nameSx}>{label}</Typography>
+        : <Typography component='span' variant='body2' color='text.secondary' sx={nameSx}>{label}</Typography>}
+      <Box sx={{ minWidth: 0 }}>
+        <Box sx={{ minHeight: FORM_ROW_HEIGHT, display: 'flex', alignItems: 'center', minWidth: 0 }}>{children}</Box>
+        {below}
+      </Box>
+    </Box>
+  )
+}
 
 /** A line of a dialog: one line, cut with an ellipsis and shown in full as a tooltip. */
 export function OneLine({ text, color = 'text.secondary' }: { text: string; color?: string }) {

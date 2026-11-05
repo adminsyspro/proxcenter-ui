@@ -1,15 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import {
-  Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormControlLabel, FormHelperText, IconButton, Radio,
-  RadioGroup, Stack, TextField, Tooltip, Typography,
+  Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, IconButton, Radio, RadioGroup,
+  Stack, TextField, Tooltip, Typography,
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { zoneEgress, type EgressMode, type MicrosegZone } from '@/lib/microseg/types'
 
-import { DialogErrorLine, isVersionConflict, ONE_LINE_SX, useDialogAction } from './dialogParts'
+import { DialogErrorLine, FLUSH_TOGGLE_SX, FormRow, isVersionConflict, ONE_LINE_SX, useDialogAction } from './dialogParts'
 import TypedConfirmDialog from './TypedConfirmDialog'
 import ZoneStateGate from './ZoneStateGate'
 import type { ZoneGate } from './zoneGate'
@@ -26,14 +26,16 @@ type Props = {
 }
 
 const HELPER_SX = { ...ONE_LINE_SX, mx: 0 } as const
+/** The label of a checkbox or a radio: on one line, without the theme's negative start margin. */
+const TOGGLE_LABEL_SX = { m: 0, minWidth: 0, '& .MuiFormControlLabel-label': ONE_LINE_SX } as const
+const CAPTION_SX = { display: 'block', mt: 1 } as const
 
 function ColorPicker({ value, onChange, label }: { value: string; onChange: (color: string) => void; label: string }) {
   const colors: string[] = [...ZONE_COLORS]
   // A zone created elsewhere may carry a color outside the palette: keep it selectable.
   if (value && !colors.some(c => c.toLowerCase() === value.toLowerCase())) colors.push(value)
   return (
-    <Box role='group' aria-label={label} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-      <Box component='span' sx={{ width: 90, flexShrink: 0, color: 'text.secondary' }}>{label}</Box>
+    <Box role='group' aria-label={label} sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5, ml: 'calc(-2px - 0.125rem)', minWidth: 0 }}>
       {colors.map(color => {
         const selected = color.toLowerCase() === value.toLowerCase()
         return (
@@ -58,39 +60,46 @@ const EGRESS_MODES: EgressMode[] = ['local', 'all']
 
 type EgressProps = { values: ZoneFormValues; disabled: boolean; stateBlocked: boolean; set: <K extends keyof ZoneFormValues>(key: K, value: ZoneFormValues[K]) => void }
 
-/** The Outbound section: one control per line, the choice follows the box, the help and the Internet warning are captions. */
+/** The Outbound rows: the control box, then the choice it unlocks; the help and the Internet warning are captions of the choice. */
 function EgressSection({ values, disabled, stateBlocked, set }: EgressProps) {
   const t = useTranslations('microsegPilot.policy.zoneDialog')
+  const modeDisabled = disabled || stateBlocked || !values.egress_control
   return (
-    <Stack spacing={1}>
-      <Typography variant='subtitle2' sx={ONE_LINE_SX}>{t('egressSection')}</Typography>
-      <Box>
+    <>
+      <FormRow
+        label={t('egressSection')}
+        below={stateBlocked && <Typography variant='caption' color='text.secondary' sx={CAPTION_SX}>{t('egressNeedsState')}</Typography>}
+      >
         <FormControlLabel
-          control={<Checkbox checked={values.egress_control} onChange={e => set('egress_control', e.target.checked)} disabled={disabled || stateBlocked} />}
+          control={<Checkbox checked={values.egress_control} onChange={e => set('egress_control', e.target.checked)} disabled={disabled || stateBlocked} sx={FLUSH_TOGGLE_SX} />}
           label={t('egressControl')}
-          sx={{ m: 0, '& .MuiTypography-root': ONE_LINE_SX }}
+          sx={TOGGLE_LABEL_SX}
         />
-        {stateBlocked && <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('egressNeedsState')}</Typography>}
-      </Box>
-      <FormControl disabled={disabled || stateBlocked || !values.egress_control}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'nowrap', minWidth: 0 }}>
-          <Typography component='span' variant='body2' color='text.secondary' sx={{ ...ONE_LINE_SX, flexShrink: 0 }}>{t('egressFilter')}</Typography>
-          <RadioGroup row sx={{ flexWrap: 'nowrap', minWidth: 0 }} aria-label={t('egressFilter')} value={values.egress_mode} onChange={e => set('egress_mode', e.target.value as EgressMode)}>
+      </FormRow>
+      <FormRow
+        label={t('egressFilterTo')}
+        below={(
+          <>
+            <Typography variant='caption' color='text.secondary' sx={CAPTION_SX}>{t('egressHelp')}</Typography>
+            {values.egress_mode === 'all' && <Typography variant='caption' color='warning.main' sx={CAPTION_SX}>{t('egressAllWarning')}</Typography>}
+          </>
+        )}
+      >
+        <FormControl disabled={modeDisabled} sx={{ minWidth: 0 }}>
+          <RadioGroup row sx={{ flexWrap: 'nowrap', gap: 4, minWidth: 0 }} aria-label={t('egressFilter')} value={values.egress_mode} onChange={e => set('egress_mode', e.target.value as EgressMode)}>
             {EGRESS_MODES.map(mode => (
               <FormControlLabel
                 key={mode}
                 value={mode}
-                control={<Radio />}
+                control={<Radio sx={FLUSH_TOGGLE_SX} />}
                 label={t(mode === 'local' ? 'egressLocal' : 'egressAll')}
-                sx={{ mr: 1, minWidth: 0, '& .MuiTypography-root': ONE_LINE_SX }}
+                sx={TOGGLE_LABEL_SX}
               />
             ))}
           </RadioGroup>
-        </Box>
-        <FormHelperText sx={{ mx: 0 }}>{t('egressHelp')}</FormHelperText>
-        {values.egress_mode === 'all' && <FormHelperText sx={{ mx: 0, color: 'warning.main' }}>{t('egressAllWarning')}</FormHelperText>}
-      </FormControl>
-    </Stack>
+        </FormControl>
+      </FormRow>
+    </>
   )
 }
 
@@ -98,6 +107,8 @@ function EgressSection({ values, disabled, stateBlocked, set }: EgressProps) {
 export default function ZoneDialog({ zone, onSave, onClose, gate }: Props) {
   const t = useTranslations()
   const editing = zone !== null
+  const nameId = useId()
+  const labelId = useId()
   const [values, setValues] = useState<ZoneFormValues>({
     name: zone?.name ?? '', label: zone?.label ?? '', color: zone ? zone.color : ZONE_COLORS[0], isolate_members: zone?.isolate_members ?? false,
     egress_control: zone ? zoneEgress(zone) !== 'off' : false, egress_mode: zone?.egress_mode ?? 'local',
@@ -146,35 +157,37 @@ export default function ZoneDialog({ zone, onSave, onClose, gate }: Props) {
       <DialogTitle id='microseg-zone-title' sx={ONE_LINE_SX}>
         {editing ? t('microsegPilot.policy.zoneDialog.editTitle') : t('microsegPilot.policy.zoneDialog.createTitle')}
       </DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 1 }}>
-          <TextField
-            label={t('microsegPilot.policy.zoneDialog.name')}
-            value={values.name}
-            onChange={e => set('name', e.target.value)}
-            onBlur={() => setTouched(true)}
-            disabled={editing || busy}
-            error={!!nameError}
-            helperText={nameError ? t(nameError) : t('microsegPilot.policy.zoneDialog.nameHint')}
-            slotProps={{ htmlInput: { maxLength: 14 }, formHelperText: { sx: HELPER_SX } }}
-            size='small'
-            fullWidth
-            autoFocus={!editing}
-          />
-          <TextField
-            label={t('microsegPilot.policy.zoneDialog.label')}
-            value={values.label}
-            onChange={e => set('label', e.target.value)}
-            disabled={busy}
-            size='small'
-            fullWidth
-          />
-          <ColorPicker value={values.color} onChange={color => set('color', color)} label={t('microsegPilot.policy.zoneDialog.color')} />
-          <FormControlLabel
-            control={<Checkbox checked={values.isolate_members} onChange={e => set('isolate_members', e.target.checked)} disabled={busy} />}
-            label={t('microsegPilot.policy.zoneDialog.isolate')}
-            sx={{ m: 0, '& .MuiTypography-root': ONE_LINE_SX }}
-          />
+      <DialogContent sx={{ '&&': { pt: 5 } }}>
+        <Stack spacing={4}>
+          <FormRow label={t('microsegPilot.policy.zoneDialog.name')} htmlFor={nameId}>
+            <TextField
+              id={nameId}
+              value={values.name}
+              onChange={e => set('name', e.target.value)}
+              onBlur={() => setTouched(true)}
+              disabled={editing || busy}
+              error={!!nameError}
+              helperText={nameError ? t(nameError) : t('microsegPilot.policy.zoneDialog.nameHint')}
+              slotProps={{ htmlInput: { maxLength: 14 }, formHelperText: { sx: HELPER_SX } }}
+              size='small'
+              fullWidth
+              autoFocus={!editing}
+            />
+          </FormRow>
+          <FormRow label={t('microsegPilot.policy.zoneDialog.label')} htmlFor={labelId}>
+            <TextField id={labelId} value={values.label} onChange={e => set('label', e.target.value)} disabled={busy} size='small' fullWidth />
+          </FormRow>
+          <FormRow label={t('microsegPilot.policy.zoneDialog.color')}>
+            <ColorPicker value={values.color} onChange={color => set('color', color)} label={t('microsegPilot.policy.zoneDialog.color')} />
+          </FormRow>
+          <FormRow label={t('microsegPilot.policy.zoneDialog.members')}>
+            <FormControlLabel
+              control={<Checkbox checked={values.isolate_members} onChange={e => set('isolate_members', e.target.checked)} disabled={busy} sx={FLUSH_TOGGLE_SX} />}
+              label={t('microsegPilot.policy.zoneDialog.isolate')}
+              sx={TOGGLE_LABEL_SX}
+            />
+          </FormRow>
+          <Divider />
           <EgressSection values={values} disabled={busy} stateBlocked={stateBlocked} set={set} />
           {error && <DialogErrorLine message={error} />}
         </Stack>

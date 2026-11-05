@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react'
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
 
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, ZoneState } from '@/lib/microseg/types'
-import { serviceName } from '@/lib/network/serviceNames'
+import { serviceLabelIn, serviceName, sharedServiceNames } from '@/lib/network/serviceNames'
 
 import { flowService } from './FlowSummary'
 import { outboundFlowStatus, type OutboundFlowStatus } from './outboundStatus'
@@ -186,12 +186,14 @@ export function groupServices(services: string[]): string {
     ports.set(proto, set)
   }
   const protos = [...ports.keys()].sort(byText)
+  // A name that several protocols share ("DNS" on tcp and udp) says its protocol.
+  const shared = sharedServiceNames(protos.flatMap(proto => [...ports.get(proto)!].map(dport => ({ proto, dport }))))
   const part = (proto: string, sep: string) => {
     const list = [...ports.get(proto)!].sort(portOrder)
     if (!list.length) return proto
     const names = list.map(p => serviceName(proto, p))
     if (names.every(n => n === null)) return `${proto}${sep}${list.join(', ')}`
-    return [...new Set(list.map((p, i) => names[i] ?? `${proto}/${p}`))].join(', ')
+    return [...new Set(list.map((p, i) => (names[i] ? serviceLabelIn(proto, p, shared) : `${proto}/${p}`)))].join(', ')
   }
   return protos.length === 1 ? part(protos[0], '/') : protos.map(p => part(p, ' ')).join(' · ')
 }

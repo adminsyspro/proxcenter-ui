@@ -287,6 +287,8 @@ describe('groupServices', () => {
   it('reads a known port as its name: one protocol, several protocols, a name with an unknown port or a range', () => {
     expect(groupServices(['tcp/8080', 'tcp/22'])).toBe('SSH, HTTP-alt')
     expect(groupServices(['udp/53', 'tcp/5432'])).toBe('PostgreSQL · DNS')
+    expect(groupServices(['udp/53', 'tcp/53'])).toBe('DNS (tcp) · DNS (udp)')
+    expect(groupServices(['udp/53', 'tcp/53', 'tcp/5432'])).toBe('DNS (tcp), PostgreSQL · DNS (udp)')
     expect(groupServices(['icmp', 'tcp/443', 'tcp/80'])).toBe('icmp · HTTP, HTTPS')
     expect(groupServices(['tcp/80,443', 'tcp/8000-8100'])).toBe('HTTP, HTTPS, tcp/8000-8100')
     expect(groupServices(['tcp/22', 'tcp/42001'])).toBe('SSH, tcp/42001')

@@ -5,6 +5,7 @@ import { Box, ButtonBase, Checkbox, Table, TableBody, TableCell, TableContainer,
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
+import { sharedServiceNames } from '@/lib/network/serviceNames'
 
 import { destinationKey, groupByDestination, maxHits, type ObservationGroup } from './observationModel'
 import ObservationRow, { destinationName, OBSERVATION_COLUMNS } from './ObservationRow'
@@ -78,6 +79,7 @@ export default function ObservationTable({ rows, zones, guestName, selected, bus
     return g.rows[0]?.direction === 'out' ? 'text.disabled' : 'error.main'
   }
   const groups = groupByDestination(rows, nameOf)
+  const shared = sharedServiceNames(rows.map(s => ({ proto: s.proto, dport: s.dport })))
 
   return (
     <>
@@ -123,6 +125,7 @@ export default function ObservationTable({ rows, zones, guestName, selected, bus
                     now={now}
                     onToggle={() => onToggle(s.id)}
                     onResolve={(action, prefixLen) => onResolve(s, action, prefixLen)}
+                    sharedServices={shared}
                     onOpenDetails={() => onOpenDetails(s)}
                   />
                 ))}

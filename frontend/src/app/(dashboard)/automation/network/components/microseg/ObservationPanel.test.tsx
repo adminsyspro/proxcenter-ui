@@ -638,6 +638,14 @@ describe('outbound flows', () => {
     expect(within(recent).queryByText(/web-1/)).toBeNull()
   })
 
+  it('adds the protocol to a service name that two rows share for different protocols', async () => {
+    setup([out('d1', { proto: 'udp', dport: '53' }), out('d2', { proto: 'tcp', dport: '53', dst_ip: '203.0.113.11', dst_key: '203.0.113.11' }), out('d3', { dport: '22', dst_ip: '203.0.113.12', dst_key: '203.0.113.12' })])
+    const udp = await row('web to 203.0.113.10')
+    expect(within(udp).getByText('DNS (udp)')).toBeTruthy()
+    expect(within(await row('web to 203.0.113.11')).getByText('DNS (tcp)')).toBeTruthy()
+    expect(within(await row('web to 203.0.113.12')).getByText('SSH')).toBeTruthy()
+  })
+
   it('says many destinations for the aggregate and offers neither Accept nor a network for it, only a hint', async () => {
     setup([out('o1', { dst_key: '0.0.0.0/0', dst_ip: '' })])
     const line = await row('web to Many destinations')

@@ -3,7 +3,7 @@
 import { Box, Checkbox, Chip, IconButton, TableCell, TableRow, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
-import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
+import { serviceLabelIn, serviceTitle } from '@/lib/network/serviceNames'
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 
 import { destinationLabel, hitsShare } from './observationModel'
@@ -16,6 +16,7 @@ import TruncatedText from './TruncatedText'
 export const OBSERVATION_COLUMNS = 10
 
 const CELL_SX = { py: 0.5, px: 1, whiteSpace: 'nowrap' } as const
+const NO_SHARED: ReadonlySet<string> = new Set()
 const NAME_SX = { maxWidth: 200, minWidth: 0 } as const
 
 /** What a zone-less endpoint is called: its IP, or "Unknown". */
@@ -55,19 +56,21 @@ export type ObservationRowProps = {
   now: number
   onToggle: () => void
   onResolve: (action: SuggestionAction, prefixLen?: number) => void
+  /** The service names the rows share for different protocols: they carry their protocol (sharedServiceNames). */
+  sharedServices?: ReadonlySet<string>
   /** Opens the flow in its dialog (details, traffic, recent occurrences). */
   onOpenDetails: () => void
 }
 
 /** One observed flow, one row of the table; its details open in a centred dialog (ObservedFlowDialog). */
-export default function ObservationRow({ suggestion: s, zones, guestName, checked, busy, maxHits, now, onToggle, onResolve, onOpenDetails }: ObservationRowProps) {
+export default function ObservationRow({ suggestion: s, zones, guestName, checked, busy, maxHits, now, onToggle, onResolve, onOpenDetails, sharedServices = NO_SHARED }: ObservationRowProps) {
   const t = useTranslations('microsegPilot.observation')
   const format = useFormatter()
 
   const when = (iso: string) => formatWhen(format, iso)
   const source = endpoint(s.src_zone_id, s.src_ip, zones, t)
   const destination = destinationName(s, zones, guestName, t)
-  const service = serviceLabel(s.proto, s.dport)
+  const service = serviceLabelIn(s.proto, s.dport, sharedServices)
   const serviceTip = serviceTitle(s.proto, s.dport)
   const pending = s.status === 'pending'
   const share = hitsShare(s.hits, maxHits)

@@ -9079,6 +9079,7 @@
       "postureNoCounter": "카운터 없음",
       "postureAwaitingDecision": "결정 대기 중",
       "postureBlockedIn": "{zones}에서",
+      "postureBlockedOut": "{zones}에서 나가는 방향",
       "postureBlockedNone": "차단된 흐름 없음",
       "postureServicesTitle": "적중 수 기준 상위 서비스",
       "postureColService": "서비스",

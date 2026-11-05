@@ -9079,6 +9079,7 @@
       "postureNoCounter": "sin contador",
       "postureAwaitingDecision": "en espera de una decisión",
       "postureBlockedIn": "en {zones}",
+      "postureBlockedOut": "saliente desde {zones}",
       "postureBlockedNone": "ninguno descartado",
       "postureServicesTitle": "Servicios principales por coincidencias",
       "postureColService": "Servicio",

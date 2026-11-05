@@ -262,8 +262,10 @@ export type PostureDistribution = {
   allowed: number
   wouldBlock: number
   blocked: number
-  /** Names of the zones the blocked flows were dropped in. */
+  /** Names of the zones the blocked inbound flows were dropped in. */
   blockedZones: string[]
+  /** Names of the zones whose outbound flows were blocked (the emitting zone, not the destination). */
+  blockedOutZones: string[]
 }
 
 const shareOf = (hits: number, total: number): Share => ({ hits, percent: total > 0 ? (hits / total) * 100 : 0 })
@@ -281,12 +283,17 @@ export function postureDistribution(input: {
   let eastWest = 0
   let unknown = 0
   const blockedZones = new Set<string>()
+  const blockedOutZones = new Set<string>()
   for (const s of input.suggestions) {
+    if (s.direction === 'out' && s.kind === 'blocked') {
+      const emitter = look.zonesById.get(s.src_zone_id || s.src_key)
+      if (emitter) blockedOutZones.add(emitter.name)
+    }
     // A flow is only logged towards a zone (the outside is not filtered in v1): one to a zone gone since is left out.
     if (!look.zonesById.has(s.dst_zone_id)) continue
     if (groupOf('zone', s.src_zone_id, s.src_ip, look) === EXTERNAL_KEY) unknown += s.hits
     else eastWest += s.hits
-    if (s.kind === 'blocked') {
+    if (s.kind === 'blocked' && s.direction !== 'out') {
       const zone = look.zonesById.get(s.dst_zone_id)
       if (zone) blockedZones.add(zone.name)
     }
@@ -300,6 +307,7 @@ export function postureDistribution(input: {
     wouldBlock: input.suggestions.filter(s => s.kind === 'would_block').length,
     blocked: input.suggestions.filter(s => s.kind === 'blocked').length,
     blockedZones: [...blockedZones].sort(byText),
+    blockedOutZones: [...blockedOutZones].sort(byText),
   }
 }
 

@@ -67,7 +67,11 @@ export function TrafficDistribution({ phase, distribution }: { phase: BlockPhase
     body = <Typography variant='body2' color='text.secondary'>{t('postureTrafficUnavailable')}</Typography>
   } else {
     const d = distribution
-    const blockedCaption = d.blockedZones.length ? t('postureBlockedIn', { zones: format.list(d.blockedZones, { type: 'conjunction' }) }) : t('postureBlockedNone')
+    const blockedParts = [
+      d.blockedZones.length ? t('postureBlockedIn', { zones: format.list(d.blockedZones, { type: 'conjunction' }) }) : '',
+      d.blockedOutZones.length ? t('postureBlockedOut', { zones: format.list(d.blockedOutZones, { type: 'conjunction' }) }) : '',
+    ].filter(Boolean)
+    const blockedCaption = blockedParts.length ? blockedParts.join(', ') : t('postureBlockedNone')
     const none = d.total === 0
     body = (
       <Box sx={TILE_GRID}>

@@ -9079,6 +9079,7 @@
       "postureNoCounter": "无计数器",
       "postureAwaitingDecision": "等待决定",
       "postureBlockedIn": "在 {zones} 中",
+      "postureBlockedOut": "{zones} 的出站",
       "postureBlockedNone": "无丢弃",
       "postureServicesTitle": "按命中次数排列的主要服务",
       "postureColService": "服务",

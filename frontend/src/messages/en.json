@@ -9079,6 +9079,7 @@
       "postureNoCounter": "no counter",
       "postureAwaitingDecision": "awaiting a decision",
       "postureBlockedIn": "in {zones}",
+      "postureBlockedOut": "outbound from {zones}",
       "postureBlockedNone": "none dropped",
       "postureServicesTitle": "Top services by hits",
       "postureColService": "Service",

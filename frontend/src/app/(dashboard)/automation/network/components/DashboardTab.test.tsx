@@ -658,6 +658,19 @@ describe('DashboardTab: observed traffic distribution and top services', () => {
     expect(screen.getByTestId('tile-blocked').textContent).toContain('in web')
   })
 
+  it('words a blocked outbound flow with the zone that emits it, next to the zones that blocked inbound traffic', async () => {
+    const blockedOut = seen({ direction: 'out', kind: 'blocked', src_key: 'zweb', src_zone_id: 'zweb', src_ip: '', dst_zone_id: 'zdb', dst_key: 'zdb', dst_ip: '10.0.0.2', dport: '53', proto: 'udp', hits: 9 })
+    postureReads({ suggestions: [...OBSERVED, blockedOut, { ...blockedOut, id: 'o2', dport: '443', proto: 'tcp' }] })
+    renderDashboard({ enable: 1 })
+
+    expect(await screen.findByTestId('tile-blocked-value')).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId('tile-blocked-value').textContent).toBe('3 flows'))
+    const caption = screen.getByTestId('tile-blocked').textContent ?? ''
+    expect(caption).toContain('in web')
+    expect(caption).toContain('outbound from web')
+    expect(caption).not.toContain('in db')
+  })
+
   it('lists the services by hits with their status, the allowed ones without counter', async () => {
     postureReads()
     renderDashboard({ enable: 1 })

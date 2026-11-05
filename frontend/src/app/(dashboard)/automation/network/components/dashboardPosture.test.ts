@@ -181,6 +181,15 @@ describe('postureDistribution', () => {
     expect(d.eastWest).toEqual({ hits: 400, percent: 80 })
   })
 
+  it('attributes a blocked outbound flow to the zone that emits it, not to its destination', () => {
+    const out = seen({ direction: 'out', kind: 'blocked', src_key: 'zweb', src_zone_id: 'zweb', dst_zone_id: 'zdb', dst_key: 'zdb', hits: 7 })
+    const outside = seen({ direction: 'out', kind: 'blocked', src_key: 'zweb', src_zone_id: 'zweb', dst_zone_id: '', dst_key: '203.0.113.9', dst_ip: '203.0.113.9', hits: 5 })
+    const d = postureDistribution({ zones: ZONES, tagPrefix: 'zone-', flows: [], suggestions: [out, outside, ...FLOWS_SEEN], guests: [], addresses: false })
+    expect(d.blockedZones).toEqual(['db'])
+    expect(d.blockedOutZones).toEqual(['web'])
+    expect(d.blocked).toBe(3)
+  })
+
   it('gives 0 % of nothing', () => {
     const d = postureDistribution({ zones: ZONES, tagPrefix: 'zone-', flows: [], suggestions: [], guests: [], addresses: false })
     expect(d.eastWest).toEqual({ hits: 0, percent: 0 })

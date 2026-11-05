@@ -9079,6 +9079,7 @@
       "postureNoCounter": "sans compteur",
       "postureAwaitingDecision": "en attente d'une décision",
       "postureBlockedIn": "dans {zones}",
+      "postureBlockedOut": "en sortie de {zones}",
       "postureBlockedNone": "aucun rejeté",
       "postureServicesTitle": "Principaux services par occurrences",
       "postureColService": "Service réseau",

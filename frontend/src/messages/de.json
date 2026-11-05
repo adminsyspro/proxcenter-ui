@@ -9026,6 +9026,7 @@
       "postureNoCounter": "ohne Zähler",
       "postureAwaitingDecision": "warten auf eine Entscheidung",
       "postureBlockedIn": "in {zones}",
+      "postureBlockedOut": "ausgehend von {zones}",
       "postureBlockedNone": "keiner verworfen",
       "postureServicesTitle": "Top-Dienste nach Treffern",
       "postureColService": "Dienst",

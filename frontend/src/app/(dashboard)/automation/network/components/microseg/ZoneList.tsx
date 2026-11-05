@@ -14,6 +14,7 @@ import { useIgnoredDrifts } from './driftIgnore'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { useBoxSize } from './useBoxSize'
 import { useNow } from './useNow'
+import { SUGGESTIONS_LIMIT } from './useZoneReadiness'
 import ZoneCard, { RemovedZoneCard, ZoneCardDetails, type ZoneCardProps } from './ZoneCard'
 import type { ZoneRowProps } from './ZoneRow'
 import { zoneDriftSignals } from './zonePanelModel'
@@ -94,9 +95,9 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
   // The outbound readiness needs the pending outbound would-block flows: read once, and only when a zone observes its outbound.
   const now = useNow()
   const observingEgress = zones.some(z => zoneEgress(z) === 'observe')
-  const { data: outbound } = useMicrosegSuggestions(observingEgress ? connectionId : null, { kind: 'would_block', status: 'pending', direction: 'out', limit: 200 })
+  const { data: outbound } = useMicrosegSuggestions(observingEgress ? connectionId : null, { kind: 'would_block', status: 'pending', direction: 'out', limit: SUGGESTIONS_LIMIT })
   const egressReady = (zone: MicrosegZone) =>
-    zoneEgress(zone) === 'observe' && !!outbound && outbound.length < 200 && isEgressReady(zone, pendingOutboundOf(outbound, zone.id), readyAfterHours, now)
+    zoneEgress(zone) === 'observe' && !!outbound && outbound.length < SUGGESTIONS_LIMIT && isEgressReady(zone, pendingOutboundOf(outbound, zone.id), readyAfterHours, now)
 
   const items: Item[] = useMemo(() => [
     ...zones.map(zone => ({ zone, removed: false, members: zoneMembers(zone, tagPrefix, guests, pendingMembers, zones) })),

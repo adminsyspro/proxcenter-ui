@@ -142,8 +142,8 @@ export default function ZonePanel({
   const zones = useMemo(() => [...zonesById.values()], [zonesById])
   const egress = zoneEgress(zone)
   const now = useNow()
-  // The map reads every pending observed flow, outbound ones included: the readiness needs no read of its own.
-  const egressReady = egress === 'observe' && isEgressReady(zone, pendingOutboundOf(suggestions, zone.id), edits.readyAfterHours, now)
+  // The map reads every pending observed flow, outbound ones included: the readiness needs no read of its own, unless that read was cut (partialLimit).
+  const egressReady = egress === 'observe' && partialLimit === null && isEgressReady(zone, pendingOutboundOf(suggestions, zone.id), edits.readyAfterHours, now)
   const trafficSection = usePanelSection('zone.traffic')
   const sourcesSection = usePanelSection('zone.sources')
   // Nothing is read for the chart while both sections it feeds are folded.

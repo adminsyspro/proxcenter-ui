@@ -4,6 +4,7 @@ import { getTenantConnectionIds } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { orchestratorSegment, OrchestratorPathError } from "@/lib/orchestrator/client"
+import { publicRollingUpdates } from "@/lib/rollingUpdate/publicRollingUpdate"
 
 export const runtime = "nodejs"
 
@@ -42,7 +43,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ data: publicRollingUpdates(data) })
   } catch (error: any) {
     if (error instanceof OrchestratorPathError) return NextResponse.json({ error: error.message }, { status: 400 })
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {

@@ -359,4 +359,29 @@ describe('the target search of a user who cannot read the inventory (D9)', () =>
     await node('guest:zw:qemu/100')
     expect(calls(COVERAGE)).toHaveLength(0)
   })
+
+  describe('outbound observed flows', () => {
+    const out = (id: string, over = {}) => wouldBlock(id, { direction: 'out', src_ip: '10.0.0.1', dst_zone_id: '', dst_key: '203.0.113.10', dst_ip: '203.0.113.10', ...over })
+
+    it('chooses the prefix of an outbound network in the dialog and sends it', async () => {
+      mock.routes['POST /suggestions/resolve'] = () => reply(200, { version: 4 })
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1')] })
+      await node('guest:zw:qemu/100')
+      await target('web-1')
+      const row = within(await panel('Guest web-1')).getByRole('listitem', { name: 'Outgoing, to 203.0.113.10' })
+      fireEvent.click(within(row).getByRole('button', { name: 'Accept as CIDR' }))
+      expect(calls('POST /suggestions/resolve')).toHaveLength(0)
+      fireEvent.click(within(await screen.findByRole('dialog', { name: 'Accept as a network' })).getByRole('button', { name: 'Accept' }))
+      await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
+      expect(body(calls('POST /suggestions/resolve')[0][1])).toEqual({ version: 3, ids: ['o1'], action: 'accept_cidr', prefix_len: 24 })
+    })
+
+    it('offers no network for many destinations', async () => {
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { dst_key: '0.0.0.0/0', dst_ip: '' })] })
+      await node('guest:zw:qemu/100')
+      await target('web-1')
+      const row = within(await panel('Guest web-1')).getByRole('listitem')
+      expect(within(row).queryByRole('button', { name: 'Accept as CIDR' })).toBeNull()
+    })
+  })
 })

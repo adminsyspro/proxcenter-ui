@@ -50,7 +50,7 @@ function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
   peers: ReadonlyMap<string, string>
   zonesById: Map<string, MicrosegZone>
   busy: boolean
-  onResolve: (action: SuggestionAction) => void
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
 }) {
   const t = useTranslations('microsegPilot.overview')
   const to = useTranslations('microsegPilot.observation')
@@ -105,8 +105,8 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
   const traffic = useSelectionTraffic(connectionId, zones, { kind: 'guest', type: target.type, vmid: target.vmid, ips: target.ips }, trafficSection[0])
   const ips = target.ips.length ? t('node.guestIps', { ips: target.ips.join(', ') }) : t('node.guestNoIp')
 
-  async function resolve(id: string, action: SuggestionAction) {
-    const outcome = await resolveIds([id], action)
+  async function resolve(id: string, action: SuggestionAction, prefixLen?: number) {
+    const outcome = await resolveIds([id], action, prefixLen)
     if (outcome?.resolved) onResolved(action)
   }
 
@@ -157,7 +157,7 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
         {observedEmpty && <Empty text={observedEmpty} />}
         <Box role='list'>
           {observedPage.rows.map(row => (
-            <ObservedLine key={row.suggestion.id} row={row} peers={peers} zonesById={zonesById} busy={busy} onResolve={action => resolve(row.suggestion.id, action)} />
+            <ObservedLine key={row.suggestion.id} row={row} peers={peers} zonesById={zonesById} busy={busy} onResolve={(action, prefixLen) => resolve(row.suggestion.id, action, prefixLen)} />
           ))}
         </Box>
         <PolicyPager count={observedPage.count} page={observedPage.page} size={observedPage.size} onPage={observedPage.setPage} />

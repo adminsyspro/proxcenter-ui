@@ -13012,7 +13012,7 @@
         "accept": "Akzeptieren"
       },
       "cidrOutTip": "Erstellt im Entwurf den Flow {from} → das Netzwerk von {ip} {service} mit dem gewählten Präfix.",
-      "cidrOutAggregate": "Nicht verfügbar: zu viele Ziele für ein einzelnes Netzwerk."
+      "bulkCidrOutbound": "Ausgehende Netzwerke werden einzeln akzeptiert, um jeweils das Präfix zu wählen."
     },
     "overview": {
       "empty": "Noch keine Zone zum Zeichnen.",

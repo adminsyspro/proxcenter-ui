@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup } from '@testing-library/react'
+import { act, cleanup, within } from '@testing-library/react'
 
 import { fireEvent, renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
 import { MicrosegApiError, MicrosegConflictError } from '@/lib/microseg/api'
@@ -63,6 +63,35 @@ describe('ResolveActions', () => {
 
     renderWithProviders(<ResolveActions suggestion={sug()} busy onResolve={vi.fn()} />)
     for (const name of ['Accept', 'Accept as CIDR', 'Dismiss']) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('ResolveActions on an outbound flow', () => {
+  const out = (over: Partial<MicrosegSuggestion> = {}) => sug({ direction: 'out', dst_key: '203.0.113.10', dst_ip: '203.0.113.10', dst_zone_id: '', ...over })
+
+  it('opens the prefix dialog and resolves with the chosen prefix', () => {
+    const onResolve = vi.fn()
+    renderWithProviders(<ResolveActions suggestion={out()} busy={false} onResolve={onResolve} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Accept as CIDR' }))
+    expect(onResolve).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog', { name: 'Accept as a network' })
+    expect(within(dialog).getByText('203.0.113.0/24')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Accept' }))
+    expect(onResolve).toHaveBeenCalledWith('accept_cidr', 24)
+  })
+
+  it('offers no network for many destinations', () => {
+    renderWithProviders(<ResolveActions suggestion={out({ dst_key: '::/0', dst_ip: '' })} busy={false} onResolve={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Accept as CIDR' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
+  })
+
+  it('keeps the inbound CIDR direct, without prefix', () => {
+    const onResolve = vi.fn()
+    renderWithProviders(<ResolveActions suggestion={sug()} busy={false} onResolve={onResolve} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Accept as CIDR' }))
+    expect(onResolve).toHaveBeenCalledWith('accept_cidr')
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
 

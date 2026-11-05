@@ -93,11 +93,13 @@ type BulkBarProps = {
   /** A selected flow has no source zone (Accept impossible) / no source IP (As CIDR impossible). */
   noZone: boolean
   noIp: boolean
+  /** A selected flow is outbound: its network is accepted one by one (its prefix is chosen in a dialog). */
+  outbound?: boolean
   onResolve: (action: SuggestionAction) => void
 }
 
 /** "3 selected · Accept · As CIDR · Dismiss": the same three ways out for every checked flow of the page. */
-export function BulkBar({ count, busy, noZone, noIp, onResolve }: BulkBarProps) {
+export function BulkBar({ count, busy, noZone, noIp, outbound = false, onResolve }: BulkBarProps) {
   const t = useTranslations('microsegPilot.observation')
   const { canWrite } = useMicrosegWrite()
 
@@ -113,8 +115,8 @@ export function BulkBar({ count, busy, noZone, noIp, onResolve }: BulkBarProps) 
           {t('accept')}
         </Button>
       </WriteTip>
-      <WriteTip title={noIp ? t('bulkCidrBlocked') : t('bulkCidrTip')}>
-        <Button size='small' variant='outlined' aria-label={t('bulkAcceptCidr')} disabled={!canWrite || busy || noIp} onClick={() => onResolve('accept_cidr')} sx={ACTION_SX}>
+      <WriteTip title={outbound ? t('bulkCidrOutbound') : noIp ? t('bulkCidrBlocked') : t('bulkCidrTip')}>
+        <Button size='small' variant='outlined' aria-label={t('bulkAcceptCidr')} disabled={!canWrite || busy || noIp || outbound} onClick={() => onResolve('accept_cidr')} sx={ACTION_SX}>
           {t('asCidr')}
         </Button>
       </WriteTip>

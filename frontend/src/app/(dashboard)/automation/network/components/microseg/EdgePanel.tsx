@@ -10,7 +10,7 @@ import { serviceTitle, serviceTokensTitle } from '@/lib/network/serviceNames'
 import { OneLine } from './dialogParts'
 import { MapNamesContext, isSampled, observedHits, type EdgeT } from './FlowEdge'
 import FlowSummary, { flowService } from './FlowSummary'
-import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
+import { DirectionGlyph, ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
 import PolicyPager, { usePaged } from './PolicyPager'
 import type { PanelEdgeData } from './zoneGraph'
 import { formatWhen } from './summaryModel'
@@ -43,7 +43,7 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
   example: string | null
   zonesById: Map<string, MicrosegZone>
   busy: boolean
-  onResolve: (action: SuggestionAction) => void
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
 }) {
   const t = useTranslations('microsegPilot.overview')
   const to = useTranslations('microsegPilot.observation')
@@ -65,6 +65,7 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
         <IconButton size='small' aria-expanded={open} aria-label={open ? tp('hideDetails') : tp('showDetails')} onClick={() => setOpen(v => !v)}>
           <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
         </IconButton>
+        <DirectionGlyph direction={s.direction} />
         <ObservedKindGlyph kind={s.kind} />
         <Tooltip title={`${source} → ${destination}`}>
           <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{`${source} → ${destination}`}</Typography>
@@ -106,8 +107,8 @@ export default function EdgePanel({ edgeId, source, target, data, from, to, zone
   const flowsPage = usePaged(data.flows, ROWS_PER_PAGE)
   const { busy, failure, clearFailure, resolve: resolveIds } = useResolveSuggestions(connectionId, version, reloadPolicy, reloadSuggestions)
 
-  async function resolve(id: string, action: SuggestionAction) {
-    const outcome = await resolveIds([id], action)
+  async function resolve(id: string, action: SuggestionAction, prefixLen?: number) {
+    const outcome = await resolveIds([id], action, prefixLen)
     if (outcome?.resolved) onResolved(action)
   }
 
@@ -133,7 +134,7 @@ export default function EdgePanel({ edgeId, source, target, data, from, to, zone
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1.5 }}>{t('flowPanel.observed')}</Typography>
           <Box role='list'>
             {observedPage.rows.map(s => (
-              <ObservedRow key={s.id} s={s} example={example} zonesById={zonesById} busy={busy} onResolve={action => resolve(s.id, action)} />
+              <ObservedRow key={s.id} s={s} example={example} zonesById={zonesById} busy={busy} onResolve={(action, prefixLen) => resolve(s.id, action, prefixLen)} />
             ))}
           </Box>
           <PolicyPager count={observedPage.count} page={observedPage.page} size={observedPage.size} onPage={observedPage.setPage} />

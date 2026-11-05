@@ -13344,7 +13344,7 @@
         "accept": "Accept"
       },
       "cidrOutTip": "Creates the flow {from} → the network of {ip} {service} in the draft, with the prefix you choose.",
-      "cidrOutAggregate": "Not available: too many destinations to make one network."
+      "bulkCidrOutbound": "Outbound networks are accepted one by one, to choose each prefix."
     },
     "overview": {
       "empty": "No zone to draw yet.",

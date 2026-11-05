@@ -13344,7 +13344,7 @@
         "accept": "接受"
       },
       "cidrOutTip": "按所选前缀，在草稿中创建流 {from} → {ip} 所在网络 {service}。",
-      "cidrOutAggregate": "不可用：目标过多，无法合并为一个网络。"
+      "bulkCidrOutbound": "出站网络需逐个接受，以便分别选择前缀。"
     },
     "overview": {
       "empty": "还没有可绘制的区域。",

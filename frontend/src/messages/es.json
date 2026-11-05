@@ -13344,7 +13344,7 @@
         "accept": "Aceptar"
       },
       "cidrOutTip": "Crea en el borrador el flujo {from} → la red de {ip} {service}, con el prefijo elegido.",
-      "cidrOutAggregate": "No disponible: demasiados destinos para formar una red."
+      "bulkCidrOutbound": "Las redes salientes se aceptan una por una, para elegir cada prefijo."
     },
     "overview": {
       "empty": "Aún no hay ninguna zona que dibujar.",

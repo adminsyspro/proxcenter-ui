@@ -13344,7 +13344,7 @@
         "accept": "수락"
       },
       "cidrOutTip": "선택한 프리픽스로 초안에 {from} → {ip}의 네트워크 {service} 흐름을 만듭니다.",
-      "cidrOutAggregate": "사용할 수 없음: 대상이 너무 많아 하나의 네트워크로 만들 수 없습니다."
+      "bulkCidrOutbound": "아웃바운드 네트워크는 프리픽스를 각각 선택해야 하므로 하나씩 수락합니다."
     },
     "overview": {
       "empty": "아직 그릴 영역이 없습니다.",

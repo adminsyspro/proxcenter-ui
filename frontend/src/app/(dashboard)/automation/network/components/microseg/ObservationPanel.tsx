@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { Alert, Box, CircularProgress, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { isAggregateDst, type MicrosegSuggestion, type SuggestionAction } from '@/lib/microseg/types'
+import type { MicrosegSuggestion, SuggestionAction } from '@/lib/microseg/types'
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
 import MicrosegErrorAlert from './MicrosegErrorAlert'
@@ -98,8 +98,9 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
   const chosen = pending.filter(r => selected.has(r.id))
   const allChecked = pending.length > 0 && chosen.length === pending.length
   const noZoneAmongChosen = chosen.some(r => !r.src_zone_id)
-  // As CIDR needs the source address of an inbound flow, and the destination address of an outbound one (never many).
-  const noIpAmongChosen = chosen.some(r => (r.direction === 'out' ? !r.dst_ip || isAggregateDst(r) : !r.src_ip))
+  // Bulk As CIDR needs the source address of every inbound flow; an outbound flow is accepted as a network one by one.
+  const noIpAmongChosen = chosen.some(r => !r.src_ip && r.direction !== 'out')
+  const outboundAmongChosen = chosen.some(r => r.direction === 'out')
 
   const changeFilters = (next: ObservationFilterValues) => {
     setFilters(next)
@@ -174,7 +175,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
       {data && (
         <>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40 }}>
-            {chosen.length > 0 && <BulkBar count={chosen.length} busy={busy} noZone={noZoneAmongChosen} noIp={noIpAmongChosen} onResolve={bulk} />}
+            {chosen.length > 0 && <BulkBar count={chosen.length} busy={busy} noZone={noZoneAmongChosen} noIp={noIpAmongChosen} outbound={outboundAmongChosen} onResolve={bulk} />}
             <Box sx={{ flex: 1 }} />
             <PrevNextPager page={page} hasNext={hasNext} onPage={goToPage} />
           </Box>

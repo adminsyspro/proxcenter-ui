@@ -671,4 +671,16 @@ describe('outbound flows', () => {
     await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
     expect(body(calls('POST /suggestions/resolve')[0][1])).toEqual({ version: 3, ids: ['u1'], action: 'accept_cidr' })
   })
+
+  it('disables the bulk As CIDR as soon as an outbound flow is selected, and says why', async () => {
+    setup([sug('s1', { src_ip: '10.0.0.5' }), out('o1')])
+    await row('web to 203.0.113.10')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select web to db' }))
+    expect((screen.getByRole('button', { name: 'Accept selected as CIDR' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select web to 203.0.113.10' }))
+    const bulk = screen.getByRole('button', { name: 'Accept selected as CIDR' }) as HTMLButtonElement
+    expect(bulk.disabled).toBe(true)
+    fireEvent.mouseOver(bulk.parentElement as HTMLElement)
+    expect(await screen.findByText(/Outbound networks are accepted one by one/)).toBeTruthy()
+  })
 })

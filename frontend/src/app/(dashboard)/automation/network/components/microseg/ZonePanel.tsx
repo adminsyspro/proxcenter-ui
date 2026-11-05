@@ -10,7 +10,7 @@ import { zoneEgress, type MicrosegFlow, type MicrosegSuggestion, type MicrosegZo
 
 import FlowSummary from './FlowSummary'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
-import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
+import { DirectionGlyph, ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
@@ -105,12 +105,13 @@ function SuggestionLine({ suggestion: s, zonesById, busy, onResolve }: {
   suggestion: MicrosegSuggestion
   zonesById: Map<string, MicrosegZone>
   busy: boolean
-  onResolve: (action: SuggestionAction) => void
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
 }) {
   const to = useTranslations('microsegPilot.observation')
   const source = s.src_zone_id ? zonesById.get(s.src_zone_id)?.name ?? to('deletedZone') : s.src_ip || to('unknownEndpoint')
   return (
     <Box role='listitem' aria-label={source} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minHeight: 36, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
+      <DirectionGlyph direction={s.direction} />
       <ObservedKindGlyph kind={s.kind} />
       <TruncatedText text={source} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
       <ServiceHits suggestion={s} />
@@ -158,8 +159,8 @@ export default function ZonePanel({
   const pendingPage = usePaged(pending, FLOWS_PAGE_SIZE)
   const { busy, failure, clearFailure, resolve } = useResolveSuggestions(connectionId, version, reloadPolicy, reloadSuggestions)
 
-  async function resolveOne(id: string, action: SuggestionAction) {
-    const outcome = await resolve([id], action)
+  async function resolveOne(id: string, action: SuggestionAction, prefixLen?: number) {
+    const outcome = await resolve([id], action, prefixLen)
     if (outcome?.resolved) onResolved(action)
   }
 
@@ -213,7 +214,7 @@ export default function ZonePanel({
         {pending.length === 0 && <Typography variant='body2' color='text.disabled'>{tsec('suggestionsEmpty')}</Typography>}
         <Box role='list'>
           {pendingPage.rows.map(s => (
-            <SuggestionLine key={s.id} suggestion={s} zonesById={zonesById} busy={busy} onResolve={action => { void resolveOne(s.id, action) }} />
+            <SuggestionLine key={s.id} suggestion={s} zonesById={zonesById} busy={busy} onResolve={(action, prefixLen) => { void resolveOne(s.id, action, prefixLen) }} />
           ))}
         </Box>
         <PolicyPager count={pendingPage.count} page={pendingPage.page} size={pendingPage.size} onPage={pendingPage.setPage} />

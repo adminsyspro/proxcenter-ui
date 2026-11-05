@@ -5,9 +5,10 @@ import { Box, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
-import type { FlowDirection, MicrosegSuggestion, SuggestionAction, SuggestionKind } from '@/lib/microseg/types'
+import { isAggregateDst, type FlowDirection, type MicrosegSuggestion, SuggestionAction, SuggestionKind } from '@/lib/microseg/types'
 import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
 
+import AcceptNetworkDialog from './AcceptNetworkDialog'
 import { isVersionConflict, writeErrorMessage } from './dialogParts'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import TruncatedText from './TruncatedText'
@@ -69,7 +70,8 @@ export function ServiceHits({ suggestion: s }: { suggestion: Pick<MicrosegSugges
 type ResolveActionsProps = {
   suggestion: MicrosegSuggestion
   busy: boolean
-  onResolve: (action: SuggestionAction) => void
+  /** `prefixLen` comes with As CIDR on an outbound flow, whose dialog chooses it. */
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
   /** Name of the accept button (its tooltip too when the flow has a source zone); "Accept" by default. */
   acceptLabel?: string
   /** Tooltip of the accept button when the flow has a source zone; the accept label by default. */
@@ -81,18 +83,35 @@ export function ResolveActions({ suggestion: s, busy, onResolve, acceptLabel, ac
   const t = useTranslations('microsegPilot.observation')
   const accept = acceptLabel ?? t('accept')
   const { canWrite } = useMicrosegWrite()
+  const outbound = s.direction === 'out'
+  const [choosingPrefix, setChoosingPrefix] = useState(false)
+  // An outbound flow is accepted as the network of its destination (the prefix is chosen), never for many destinations.
+  const cidrOff = outbound ? !s.dst_ip : !s.src_ip
+  const showCidr = !(outbound && isAggregateDst(s))
 
   return (
     <>
       <WriteTip title={s.src_zone_id ? acceptTip ?? accept : t('acceptNoZone')}>
         <IconButton size='small' aria-label={accept} disabled={!canWrite || busy || !s.src_zone_id} onClick={() => onResolve('accept')}><i className='ri-check-line' /></IconButton>
       </WriteTip>
-      <WriteTip title={s.src_ip ? t('acceptCidr') : t('acceptCidrNoIp')}>
-        <IconButton size='small' aria-label={t('acceptCidr')} disabled={!canWrite || busy || !s.src_ip} onClick={() => onResolve('accept_cidr')}><i className='ri-checkbox-multiple-line' /></IconButton>
-      </WriteTip>
+      {showCidr && (
+        <WriteTip title={cidrOff ? t('acceptCidrNoIp') : t('acceptCidr')}>
+          <IconButton size='small' aria-label={t('acceptCidr')} disabled={!canWrite || busy || cidrOff} onClick={() => (outbound ? setChoosingPrefix(true) : onResolve('accept_cidr'))}><i className='ri-checkbox-multiple-line' /></IconButton>
+        </WriteTip>
+      )}
       <WriteTip title={t('dismiss')}>
         <IconButton size='small' aria-label={t('dismiss')} disabled={!canWrite || busy} onClick={() => onResolve('dismiss')}><i className='ri-close-line' /></IconButton>
       </WriteTip>
+      {choosingPrefix && (
+        <AcceptNetworkDialog
+          ip={s.dst_ip}
+          onClose={() => setChoosingPrefix(false)}
+          onAccept={len => {
+            setChoosingPrefix(false)
+            onResolve('accept_cidr', len)
+          }}
+        />
+      )}
     </>
   )
 }

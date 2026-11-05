@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { MicrosegFlow, MicrosegSuggestion, PendingMember } from '@/lib/microseg/types'
+import type { MicrosegFlow, MicrosegSuggestion, PendingMember, SuggestionKind } from '@/lib/microseg/types'
 
 import { flowsOfZone, isEgressReady, isZoneReady, pendingOutboundOf, zoneMembers, type PolicyGuest } from './zoneModel'
 import { flow, zone } from './microsegTestKit'
@@ -142,7 +142,7 @@ describe('pendingOutboundOf', () => {
       base('absent', { direction: undefined }),
       base('other', { src_key: 'z2' }),
       base('done', { status: 'accepted' }),
-      base('unprotected', { kind: 'unprotected' }),
+      base('unprotected', { kind: 'unprotected' as unknown as SuggestionKind }),
     ]
     expect(pendingOutboundOf(list, 'z1').map(s => s.id)).toEqual(['keep'])
   })

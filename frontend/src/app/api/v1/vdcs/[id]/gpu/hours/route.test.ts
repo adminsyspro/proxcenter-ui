@@ -11,6 +11,8 @@ const m = vi.hoisted(() => ({
   load: vi.fn(),
   find: vi.fn(),
   latest: vi.fn(),
+  rbac: vi.fn(),
+  allowed: vi.fn(),
 }))
 
 vi.mock('@/lib/gpu/guard', () => ({ sessionUser: () => m.sessionUser() }))
@@ -26,6 +28,11 @@ vi.mock('@/lib/gpu/metrics', async () => {
   const actual = await vi.importActual<typeof import('@/lib/gpu/metrics')>('@/lib/gpu/metrics')
   return { ...actual, getGpuMetricsLatest: () => m.latest() }
 })
+vi.mock('@/lib/rbac', () => ({
+  getRBACContext: () => m.rbac(),
+  filterVmsByPermission: (...a: unknown[]) => m.allowed(...a),
+  PERMISSIONS: { VM_VIEW: 'vm.view' },
+}))
 vi.mock('@/lib/db/prisma', () => ({ prisma: { gpuUsageHour: { findMany: (...a: unknown[]) => m.find(...a) } } }))
 
 import { GET } from './route'
@@ -53,6 +60,8 @@ beforeEach(() => {
   m.listEntries.mockResolvedValue([{ id: 'e1' }])
   m.find.mockResolvedValue([usage])
   m.latest.mockResolvedValue(snapshot([type('c1', 'RTXA5000-12Q')]))
+  m.rbac.mockResolvedValue({ isAdmin: true })
+  m.allowed.mockImplementation(async (_p: string, rows: unknown[]) => rows)
 })
 
 describe('GET /api/v1/vdcs/{id}/gpu/hours', () => {
@@ -116,6 +125,19 @@ describe('GET /api/v1/vdcs/{id}/gpu/hours', () => {
     expect(res.status).toBe(200)
     expect((await body(res)).data.byVm[0].label).toBe('vGPU RTX A5000')
     expect(console.warn).toHaveBeenCalledTimes(1)
+  })
+
+  it('a user scoped to some VMs of the vDC gets only their hours, judged on vm.view', async () => {
+    m.rbac.mockResolvedValue({ isAdmin: false, principal: 'user:u1', tenantId: 't1' })
+    m.find.mockResolvedValue([usage, { ...usage, vmid: 102, vmName: 'db' }])
+    m.allowed.mockImplementation(async (_p: string, rows: Array<{ vmid: string }>) => rows.filter((r) => r.vmid === '101'))
+    const data = (await body(await callRoute(GET, at('2026-11')))).data
+
+    expect(data.byVm.map((r: { vmName: string }) => r.vmName)).toEqual(['web'])
+    expect(m.allowed).toHaveBeenCalledWith('user:u1', [
+      { connId: 'c1', node: 'pve-secret-node', type: 'qemu', vmid: '101', tags: [], pool: 'vdc-acme' },
+      { connId: 'c1', node: 'pve-secret-node', type: 'qemu', vmid: '102', tags: [], pool: 'vdc-acme' },
+    ], 'vm.view', 't1')
   })
 
   it('answers 503 unavailable when the database fails, without its text', async () => {

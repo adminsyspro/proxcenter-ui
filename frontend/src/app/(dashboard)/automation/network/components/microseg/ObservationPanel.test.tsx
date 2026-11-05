@@ -622,6 +622,22 @@ describe('outbound flows', () => {
     expect(await row('web to legacy-vm')).toBeTruthy()
   })
 
+  it('opens an outbound flow with the emitting zone as its source and the destination guest in the guest column', async () => {
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: [{ vmid: 300, name: 'legacy-vm', node: 'pve1', type: 'qemu', status: 'running', tags: [], ips: ['203.0.113.10'] }] } })
+    mock.routes['GET /traffic*'] = () => reply(200, { step: 3600, from: '2026-11-01T13:00:00Z', to: '2026-11-02T13:00:00Z', buckets: [] })
+    const ev = { seq: 1, ts: '2026-11-02T12:00:00Z', node: 'pve1', vmid: 101, type: 'lxc', guest: 'web-1', zone: 'web', src_zone: '', direction: 'out', src_ip: '10.0.0.5', dst_ip: '203.0.113.10', proto: 'tcp', dport: 443, verdict: 'would_block' }
+    mock.routes['GET /events*'] = () => reply(200, { events: [ev, { ...ev, seq: 2, dst_ip: '198.51.100.7' }], truncated: false, oldest: null })
+    setup([out('o1', { src_ip: '' })])
+    fireEvent.click(within(await row('web to legacy-vm')).getByRole('button', { name: 'Details of the flow from web to legacy-vm' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('web → 203.0.113.10')).toBeTruthy()
+    expect(within(dialog).queryByText(/Unknown → /)).toBeNull()
+    const recent = await within(dialog).findByRole('table', { name: 'Recent occurrences' })
+    await waitFor(() => expect(within(recent).getAllByRole('row')).toHaveLength(2))
+    expect(within(recent).getByText('legacy-vm')).toBeTruthy()
+    expect(within(recent).queryByText(/web-1/)).toBeNull()
+  })
+
   it('says many destinations for the aggregate and offers neither Accept nor a network for it, only a hint', async () => {
     setup([out('o1', { dst_key: '0.0.0.0/0', dst_ip: '' })])
     const line = await row('web to Many destinations')

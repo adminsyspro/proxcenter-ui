@@ -56,7 +56,8 @@ function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
   const t = useTranslations('microsegPilot.overview')
   const to = useTranslations('microsegPilot.observation')
   const s = row.suggestion
-  const peer = (row.peerIp && peers.get(bareIp(row.peerIp))) || row.peerIp || to('unknownEndpoint')
+  const emitter = row.peerZoneId ? zonesById.get(row.peerZoneId)?.name ?? to('deletedZone') : ''
+  const peer = (row.peerIp && peers.get(bareIp(row.peerIp))) || row.peerIp || emitter || to('unknownEndpoint')
   const where = t(row.direction === 'out' ? 'target.panel.outgoing' : 'target.panel.incoming', { peer })
   const service = serviceTitle(s.proto, s.dport)
   const from = s.src_zone_id ? zonesById.get(s.src_zone_id)?.name ?? to('deletedZone') : to('unknownEndpoint')

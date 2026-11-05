@@ -148,9 +148,9 @@ function RecentSection({ connectionId, suggestion: s, ends, srcZone, dstZone, gu
             {recent.map(e => (
               <TableRow key={e.seq} data-event={e.seq}>
                 <TableCell sx={CELL_SX}>{when(e.ts)}</TableCell>
-                <TableCell sx={CELL_SX}>{outbound ? (guestName?.(e.dst_ip) ?? e.dst_ip) : e.src_ip || t('unknownEndpoint')}</TableCell>
+                <TableCell sx={CELL_SX}>{outbound ? e.dst_ip : e.src_ip || t('unknownEndpoint')}</TableCell>
                 <TableCell sx={{ ...CELL_SX, maxWidth: 260 }}>
-                  <TruncatedText text={t('dialog.guest', { name: e.guest || String(e.vmid), vmid: e.vmid, ip: (outbound ? e.src_ip : e.dst_ip) || '-' })} variant='body2' />
+                  <TruncatedText text={outbound ? guestName?.(e.dst_ip) ?? (e.dst_ip || '-') : t('dialog.guest', { name: e.guest || String(e.vmid), vmid: e.vmid, ip: e.dst_ip || '-' })} variant='body2' />
                 </TableCell>
                 <TableCell sx={CELL_SX}>{e.node}</TableCell>
               </TableRow>
@@ -206,7 +206,7 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
           <Line label={t('dialog.hits')}>{format.number(s.hits)}</Line>
           <Line label={t('dialog.firstSeen')}>{when(s.first_seen)}</Line>
           <Line label={t('dialog.lastSeen')}>{when(s.last_seen)}</Line>
-          <Line label={t('dialog.addresses')}>{`${s.src_ip || t('unknownEndpoint')} → ${s.dst_ip || t('unknownEndpoint')}`}</Line>
+          <Line label={t('dialog.addresses')}>{`${s.src_ip || (outbound && srcZone) || t('unknownEndpoint')} → ${s.dst_ip || t('unknownEndpoint')}`}</Line>
           <Typography variant='caption' color='text.secondary'>{t('detail.sampleNote')}</Typography>
         </Section>
 

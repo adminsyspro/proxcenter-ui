@@ -19,9 +19,12 @@ export function zoneDriftSignals(
   return { count: mine.length, firewallOff: new Set(mine.filter(d => d.kind === 'nic_firewall_off' && d.guest).map(d => guestKey(d.guest!))) }
 }
 
-/** The pending observed flows towards a zone (learned, not accepted nor dismissed yet), the busiest first. */
+/**
+ * The pending observed flows towards a zone and the outbound ones it emits (learned, not accepted nor dismissed yet), the
+ * busiest first. An outbound flow carries its emitting zone in `src_zone_id` (`src_key` on older data).
+ */
 export function zoneSuggestions(suggestions: readonly MicrosegSuggestion[], zoneId: string): MicrosegSuggestion[] {
   return suggestions
-    .filter(s => s.status === 'pending' && s.dst_zone_id === zoneId)
+    .filter(s => s.status === 'pending' && (s.dst_zone_id === zoneId || (s.direction === 'out' && (s.src_zone_id || s.src_key) === zoneId)))
     .sort((a, b) => b.hits - a.hits || (a.id < b.id ? -1 : 1))
 }

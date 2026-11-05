@@ -71,15 +71,30 @@ export function involvesTarget(s: Pick<MicrosegSuggestion, 'src_ip' | 'dst_ip'>,
   return involvesAddresses(s, targetAddresses(t))
 }
 
-export type TargetFlow = { suggestion: MicrosegSuggestion; direction: 'in' | 'out'; peerIp: string }
+export type TargetFlow = {
+  suggestion: MicrosegSuggestion
+  direction: 'in' | 'out'
+  peerIp: string
+  /** The emitting zone of an outbound flow the guest receives, when no source address says who sent it. */
+  peerZoneId?: string
+}
+
+/** The zone an outbound flow leaves from (`src_key` on older data), '' for an inbound flow. */
+const emittingZone = (s: MicrosegSuggestion): string => (s.direction === 'out' ? s.src_zone_id || s.src_key : '')
 
 /** The pending observed flows of the guest: outgoing when it is the source, else incoming; busiest first. */
 export function targetSuggestions(suggestions: MicrosegSuggestion[], t: TargetGuest): TargetFlow[] {
   const ips = targetAddresses(t)
   const own = (ip: string) => !!ip && ips.has(bareIp(ip))
+  // An outbound flow without a source address is the guest's when it leaves the guest's zone.
+  const emits = (s: MicrosegSuggestion) => own(s.src_ip) || (!s.src_ip && !!t.zoneId && emittingZone(s) === t.zoneId)
   return suggestions
-    .filter(s => s.status === 'pending' && (own(s.src_ip) || own(s.dst_ip)))
-    .map(s => (own(s.src_ip) ? { suggestion: s, direction: 'out' as const, peerIp: s.dst_ip } : { suggestion: s, direction: 'in' as const, peerIp: s.src_ip }))
+    .filter(s => s.status === 'pending' && (emits(s) || own(s.dst_ip)))
+    .map((s): TargetFlow => {
+      if (emits(s)) return { suggestion: s, direction: 'out', peerIp: s.dst_ip }
+      const zone = !s.src_ip ? emittingZone(s) : ''
+      return { suggestion: s, direction: 'in', peerIp: s.src_ip, ...(zone ? { peerZoneId: zone } : {}) }
+    })
     .sort((a, b) => b.suggestion.hits - a.suggestion.hits || Number(a.direction === 'in') - Number(b.direction === 'in') || byText(a.suggestion.id, b.suggestion.id))
 }
 

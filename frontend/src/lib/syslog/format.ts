@@ -89,6 +89,8 @@ function truncate(value: string, max: number): string {
  * well so the rule reads as intended even if the suffix rule changes.
  */
 const SENSITIVE_KEY = /pass(word|wd|phrase)?|secret|token|api[_-]?key|private[_-]?key|key[_-]?pem|hmac|credential|authorization|cookie|otp|^(openai|anthropic)Key$|key(_?enc|_?encrypted)?$/i
+// A Ceph client keyring, sent to a cluster storage (roadmap#202).
+const KEYRING_KEY = /keyring/i
 const HARMLESS_SUFFIX = /(id|name|prefix|method|type|enabled|count|ttl|expires?(at)?|scopes?|path|file|algo(rithm)?|fingerprint|size|bits|length|check)$/i
 /** Names that end in `key` without holding one: the key of a setting, a table or a map. */
 const HARMLESS_KEY_NAME = /^(key|keys|setting_?key|cache_?key|primary_?key|foreign_?key|sort_?key|row_?key)$/i
@@ -97,7 +99,7 @@ export const REDACTED = '[redacted]'
 
 export function isSensitiveKey(key: string): boolean {
   if (HARMLESS_KEY_NAME.test(key)) return false
-  return SENSITIVE_KEY.test(key) && !HARMLESS_SUFFIX.test(key)
+  return (SENSITIVE_KEY.test(key) || KEYRING_KEY.test(key)) && !HARMLESS_SUFFIX.test(key)
 }
 
 /**

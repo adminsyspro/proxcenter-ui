@@ -45,9 +45,13 @@ type GroupedVmsViewProps = {
   vdcNameByConn?: Map<string, string>
   nodeStatuses?: Map<string, string | undefined>  // #666: node column pastille, keyed `${connId}:${node}`
   guestSelection?: GuestSelection  // #1218: "Migrate selection" across the groups
+  /** Action next to the expand/collapse buttons of the header (the Pools view's Create pool). */
+  headerAction?: React.ReactNode
+  /** Icon button at the end of a group row, before its count (the Pools view's Members). */
+  groupAction?: { icon: string; label: string; show: (key: string) => boolean; onClick: (key: string) => void }
 }
 
-function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, onMigrate, onLoadTrendsBatch, onSelect, favorites, onToggleFavorite, migratingVmIds, showVdcColumn, vdcNameByConn, nodeStatuses, guestSelection }: GroupedVmsViewProps) {
+function GroupedVmsView({ title, icon, groups, allVms, onVmClick, onVmAction, onMigrate, onLoadTrendsBatch, onSelect, favorites, onToggleFavorite, migratingVmIds, showVdcColumn, vdcNameByConn, nodeStatuses, guestSelection, headerAction, groupAction }: Readonly<GroupedVmsViewProps>) {
   const t = useTranslations()
   // Par défaut, TOUS les groupes sont repliés
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -120,6 +124,7 @@ return next
             </Typography>
             <Stack direction="row" spacing={0.5} alignItems="center">
               {guestSelection && <GuestSelectionBar selection={guestSelection} inline />}
+              {headerAction}
               <MuiTooltip title={t('inventoryPage.expandAll')}>
                 <IconButton size="small" onClick={expandAll}>
                   <i className="ri-expand-up-down-line" style={{ fontSize: 16 }} />
@@ -182,6 +187,18 @@ return next
                       <Typography variant="caption" sx={{ opacity: 0.6, fontSize: 11 }}>
                         {group.sublabel}
                       </Typography>
+                    )}
+                    {groupAction?.show(group.key) && (
+                      <MuiTooltip title={groupAction.label}>
+                        <IconButton
+                          size="small"
+                          aria-label={groupAction.label}
+                          onClick={e => { e.stopPropagation(); groupAction.onClick(group.key) }}
+                          sx={{ p: 0.25 }}
+                        >
+                          <i className={groupAction.icon} style={{ fontSize: 16 }} />
+                        </IconButton>
+                      </MuiTooltip>
                     )}
                     <Chip
                       size="small"

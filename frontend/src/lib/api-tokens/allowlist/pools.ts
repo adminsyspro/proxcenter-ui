@@ -16,7 +16,9 @@ export const POOLS_ENTRIES: AllowlistEntry[] = [
     method: "GET",
     requiredScopes: ["nodes:read", "pools:write"],
     summary: "Resource pools of a cluster",
-    description: "The Proxmox resource pools of the cluster with their comment.",
+    description:
+      "The Proxmox resource pools of the cluster with their comment. With `poolid`, that one pool with its members instead: its guests, and its storages once each with the nodes they are listed on; 404 for a pool outside the caller's list.",
+    queryParams: [{ name: "poolid", description: "Read this pool's members", required: false }],
     responseSchemaRef: "PoolsResponse",
   },
   {
@@ -34,8 +36,9 @@ export const POOLS_ENTRIES: AllowlistEntry[] = [
     id: "pool-update",
     method: "PUT",
     requiredScopes: ["pools:write"],
-    summary: "Update the comment of a resource pool",
-    description: "Sets the comment of the pool `poolid` (named in the body); an empty comment clears it. Not available to a vDC tenant token.",
+    summary: "Update a resource pool's comment or members",
+    description:
+      "Sets the comment of the pool `poolid` (named in the body); an empty comment clears it. With `vms` and/or `storage`, adds those guests and storages to the pool instead, or removes them with `delete: true`; `allowMove: true` moves a guest that belongs to another pool. A pool backing a vDC answers 409 `POOL_OWNED_BY_VDC`, a guest moved out of one 409 `GUEST_IN_VDC_POOL`. Not available to a vDC tenant token.",
     requestSchemaRef: "PoolUpdateRequest",
     responseSchemaRef: "PoolWriteResponse",
   },

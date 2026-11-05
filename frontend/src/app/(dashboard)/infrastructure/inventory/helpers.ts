@@ -180,7 +180,8 @@ export function passthroughLabel(kind: 'USB' | 'PCI', value: string): string {
  * as the PVE UI does (#566).
  */
 export function optionSaveBody(key: string, value: unknown): Record<string, unknown> {
-  if (key === 'features' && !value) return { delete: 'features' }
+  // An emptied value clears the key: PVE then falls back to its default.
+  if ((key === 'features' || key === 'vmstatestorage') && !value) return { delete: key }
 
   return { [key]: value }
 }
@@ -193,6 +194,12 @@ export function guestNameOptionEdit(vmType: 'qemu' | 'lxc' | undefined, name: st
   return vmType === 'lxc'
     ? { key: 'hostname', label: t('inventory.createLxc.hostname'), value: name || '', type: 'text' as const }
     : { key: 'name', label: t('common.name'), value: name || '', type: 'text' as const }
+}
+
+/** A memory size in MB as the Memory card header shows it: MB under 1 GB (a 128 MB container used to read « 0 GB »). */
+export function memoryChipLabel(mb: number): string {
+  if (!Number.isFinite(mb) || mb <= 0) return '0 MB'
+  return mb < 1024 ? `${Math.round(mb)} MB` : `${Math.round((mb / 1024) * 10) / 10} GB`
 }
 
 /** Flips one toggle of a `features` string, leaving everything else untouched. */
@@ -1759,8 +1766,11 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
           smbiosUuid: config.smbios1?.match(/uuid=([^,]+)/)?.[1] || 'Auto-generated',
           agentEnabled: config.agent && (String(config.agent).startsWith('1') || String(config.agent).includes('enabled=1')),
           spiceEnhancements: config.spice_enhancements || 'none',
-          vmStateStorage: config.vmstatestorage || 'Automatic',
-          amdSEV: config.sev ? 'enabled' : 'default',
+          // Empty = automatic: the edit dialog starts blank and an emptied
+          // field clears the key (roadmap#201).
+          vmStateStorage: config.vmstatestorage || '',
+          // PVE names the key `amd-sev` (type=std|es|snp,...).
+          amdSEV: config['amd-sev'] ? String(config['amd-sev']) : '',
           // LXC-only (#566): the display name lives in `hostname`, the privilege
           // level is fixed at creation, `features` is the raw property string
           // the Features dialog edits.

@@ -74,8 +74,11 @@ import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
 import { VmItem } from './components/VmItem'
 import TreeDialogs from './components/TreeDialogs'
+import { ContextMenuHeader, contextMenuPaperSx, MenuIcon } from './components/contextMenuParts'
 import { waitForNodeMaintenance } from '@/lib/inventory/waitForNodeMaintenance'
 import PoolDialog, { type PoolDialogState, type PoolOwner } from './components/PoolDialog'
+import PoolMembersDialog, { type PoolMembersState } from './components/PoolMembersDialog'
+import { isVdcPool } from './components/poolMembers'
 import { InventoryLoadedContext } from './inventoryLoadedContext'
 
 // Re-export for external consumers (e.g. InventoryDetails.tsx)
@@ -153,6 +156,9 @@ export type HostItem = {
   vms: AllVmItem[]
 }
 
+/** What the Pools view of the details panel can ask the tree, which owns the pool dialogs. */
+export type PoolActions = { create: () => void; members: (poolid: string) => void }
+
 export type PoolItem = {
   pool: string
   // Commentaire Proxmox (le premier non vide si le pool existe sur plusieurs clusters).
@@ -169,6 +175,8 @@ type Props = {
   selected: InventorySelection | null
   onSelect: (sel: InventorySelection | null) => void
   onRefreshRef?: (refresh: () => void) => void  // callback pour exposer la fonction refresh
+  /** Pool actions the details panel offers (roadmap#200); null once the tree unmounts. */
+  onPoolActions?: (actions: PoolActions | null) => void
   onOptimisticVmStatusRef?: (fn: (connId: string, vmid: string, status: string) => void) => void
   onOptimisticVmTagsRef?: (fn: (connId: string, vmid: string, tags: string[]) => void) => void
   viewMode?: ViewMode  // viewMode contrôlé depuis le parent
@@ -469,14 +477,15 @@ function safeJson<T>(x: any): T {
   return (x?.data ?? x) as T
 }
 
-export default function InventoryTree({ selected, onSelect, onRefreshRef, onOptimisticVmStatusRef, onOptimisticVmTagsRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange, showVmId, onToggleShowVmId }: Props) {
+export default function InventoryTree({ selected, onSelect, onRefreshRef, onPoolActions, onOptimisticVmStatusRef, onOptimisticVmTagsRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange, showVmId, onToggleShowVmId }: Readonly<Props>) {
   const t = useTranslations()
   const theme = useTheme()
   const { isAdmin, scopeTypes, hasPermission } = useRBAC()
   // Proxmox pools are per connection; the API re-checks connection.manage on each one.
   const canManagePools = hasPermission('connection.manage')
   const [poolDialog, setPoolDialog] = useState<PoolDialogState>(null)
-  const [poolMenu, setPoolMenu] = useState<{ anchor?: HTMLElement; mouseX?: number; mouseY?: number; path: string } | null>(null)
+  const [poolMembersDialog, setPoolMembersDialog] = useState<PoolMembersState>(null)
+  const [poolMenu, setPoolMenu] = useState<{ anchor?: HTMLElement; mouseX?: number; mouseY?: number; path: string; count?: number } | null>(null)
   // Tenants other than the provider get the cloud-style abstraction —
   // shared storages on a multi-tenant cluster would leak other tenants'
   // VMID metadata, so we hide the STORAGES section from them entirely
@@ -2216,6 +2225,34 @@ return vms
     return owners
   }, [clusters])
 
+  // What the members dialog offers, built only while it is open.
+  const poolMemberSources = useMemo(() => {
+    if (!poolMembersDialog) return null
+    const guests: Array<{ connId: string; vmid: number; type: string; node: string; name: string | null; status: string | null; template: boolean; pool: string | null }> = []
+    const nodeStatus = new Map<string, string>()
+
+    clusters.forEach(clu => clu.nodes.forEach(n => {
+      if (n.status) nodeStatus.set(`${clu.connId}:${n.node}`, n.status)
+      n.vms.forEach(vm => guests.push({
+        connId: clu.connId,
+        vmid: Number(vm.vmid),
+        type: vm.type,
+        node: n.node,
+        name: vm.name || null,
+        status: vm.status || null,
+        template: !!vm.template,
+        pool: vm.pool || null,
+      }))
+    }))
+
+    const storages = clusterStorages.flatMap(cs => [
+      ...(cs.sharedStorages || []).map(st => ({ connId: cs.connId, storage: st.storage })),
+      ...(cs.nodes || []).flatMap(n => n.storages.map(st => ({ connId: cs.connId, storage: st.storage }))),
+    ])
+
+    return { guests, storages, nodeStatus }
+  }, [poolMembersDialog, clusters, clusterStorages])
+
   const openCreatePool = useCallback((parent?: string) => {
     setPoolDialog({
       mode: 'create',
@@ -2224,6 +2261,21 @@ return vms
       clusters: parent ? (poolOwners.get(parent) || []) : clusters.map(c => ({ connId: c.connId, connName: c.name })),
     })
   }, [clusters, poolOwners])
+
+  // Le panneau de droite (vue Pools) ouvre les mêmes dialogues que le menu du pool.
+  useEffect(() => {
+    if (!onPoolActions) return
+    onPoolActions({
+      create: () => openCreatePool(),
+      members: poolid => {
+        const owners = poolOwners.get(poolid)
+
+        if (owners?.length) setPoolMembersDialog({ poolid, owners })
+      },
+    })
+  }, [onPoolActions, openCreatePool, poolOwners])
+
+  useEffect(() => () => onPoolActions?.(null), [onPoolActions])
 
   // Liste des pools uniques avec leurs VMs (filtrées, sans templates)
   const poolsList = useMemo(() => {
@@ -2384,7 +2436,7 @@ return a.pool.localeCompare(b.pool)
           onContextMenu={e => {
             if (!canManagePools || !poolOwners.has(node.path)) return
             e.preventDefault()
-            setPoolMenu({ mouseX: e.clientX, mouseY: e.clientY, path: node.path })
+            setPoolMenu({ mouseX: e.clientX, mouseY: e.clientY, path: node.path, count: node.totalCount })
           }}
           onClick={() => {
             const willCollapse = !isCollapsed
@@ -2422,9 +2474,9 @@ return a.pool.localeCompare(b.pool)
               aria-label={t('common.actions')}
               onClick={e => {
                 e.stopPropagation()
-                setPoolMenu({ anchor: e.currentTarget, path: node.path })
+                setPoolMenu({ anchor: e.currentTarget, path: node.path, count: node.totalCount })
               }}
-              sx={{ p: 0.25, opacity: 0, '.pool-header:hover &, &:focus-visible': { opacity: 1 } }}
+              sx={{ p: 0.25, opacity: 0.6, '.pool-header:hover &, &:focus-visible': { opacity: 1 } }}
             >
               <i className="ri-more-2-fill" style={{ fontSize: 16 }} />
             </IconButton>
@@ -5033,29 +5085,70 @@ return (
         anchorEl={poolMenu?.anchor}
         anchorReference={poolMenu?.anchor ? 'anchorEl' : 'anchorPosition'}
         anchorPosition={poolMenu && !poolMenu.anchor ? { top: poolMenu.mouseY ?? 0, left: poolMenu.mouseX ?? 0 } : undefined}
+        slotProps={{ paper: { sx: contextMenuPaperSx } }}
       >
+        {/* Même en-tête que le menu d'un invité : le pool, puis son nombre d'invités. */}
+        <ContextMenuHeader
+          icon={<MenuIcon name="ri-folder-fill" tone="primary.main" />}
+          label={poolMenu?.path}
+          hint={poolMenu?.count !== undefined ? String(poolMenu.count) : undefined}
+        />
         {/* PVE limite l'imbrication à 3 niveaux */}
         {poolMenu && poolMenu.path.split('/').length < 3 && (
           <MenuItem onClick={() => { openCreatePool(poolMenu.path); setPoolMenu(null) }}>
-            <ListItemIcon><i className="ri-folder-add-line" style={{ fontSize: 18 }} /></ListItemIcon>
+            <ListItemIcon><MenuIcon name="ri-folder-add-line" tone="primary.main" /></ListItemIcon>
             <ListItemText>{t('inventory.createSubPool')}</ListItemText>
           </MenuItem>
         )}
+        {/* Un pool vDC appartient au vDC : ses membres ne se changent pas d'ici,
+            l'entrée reste visible, grisée, avec la raison. */}
+        {poolMenu && (isVdcPool(poolMenu.path) ? (
+          <Tooltip title={t('inventory.guestPoolVdc')} placement="right">
+            <span>
+              <MenuItem disabled>
+                <ListItemIcon><MenuIcon name="ri-folder-user-line" tone="info.main" /></ListItemIcon>
+                <ListItemText>{t('inventory.poolMembersMenu')}</ListItemText>
+              </MenuItem>
+            </span>
+          </Tooltip>
+        ) : (
+          <MenuItem onClick={() => {
+            setPoolMembersDialog({ poolid: poolMenu.path, owners: poolOwners.get(poolMenu.path) || [] })
+            setPoolMenu(null)
+          }}>
+            <ListItemIcon><MenuIcon name="ri-folder-user-line" tone="info.main" /></ListItemIcon>
+            <ListItemText>{t('inventory.poolMembersMenu')}</ListItemText>
+          </MenuItem>
+        ))}
         <MenuItem onClick={() => {
           if (poolMenu) setPoolDialog({ mode: 'edit', poolid: poolMenu.path, owners: poolOwners.get(poolMenu.path) || [] })
           setPoolMenu(null)
         }}>
-          <ListItemIcon><i className="ri-edit-line" style={{ fontSize: 18 }} /></ListItemIcon>
+          <ListItemIcon><MenuIcon name="ri-edit-line" tone="warning.main" /></ListItemIcon>
           <ListItemText>{t('inventory.editPoolComment')}</ListItemText>
         </MenuItem>
+        <Divider />
         <MenuItem onClick={() => {
           if (poolMenu) setPoolDialog({ mode: 'delete', poolid: poolMenu.path, owners: poolOwners.get(poolMenu.path) || [] })
           setPoolMenu(null)
         }} sx={{ color: 'error.main' }}>
-          <ListItemIcon><i className="ri-delete-bin-line" style={{ fontSize: 18, color: 'inherit' }} /></ListItemIcon>
+          <ListItemIcon><MenuIcon name="ri-delete-bin-line" tone="error.main" /></ListItemIcon>
           <ListItemText>{t('common.delete')}</ListItemText>
         </MenuItem>
       </Menu>
+      {poolMemberSources && (
+        <PoolMembersDialog
+          state={poolMembersDialog}
+          guests={poolMemberSources.guests}
+          storages={poolMemberSources.storages}
+          nodeStatus={poolMemberSources.nodeStatus}
+          onClose={() => setPoolMembersDialog(null)}
+          onDone={message => {
+            setSnackbar({ open: true, message, severity: 'success' })
+            setReloadTick(x => x + 1)
+          }}
+        />
+      )}
       <PoolDialog
         state={poolDialog}
         onClose={() => setPoolDialog(null)}

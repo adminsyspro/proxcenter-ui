@@ -338,6 +338,33 @@ describe('PUT config: keys the Options tab edits (#566)', () => {
     expect(configWriteBody()).toBeNull()
   })
 
+  it.each([
+    ['startdate', '2026-01-01T00:00:00'],
+    ['vmstatestorage', 'local-lvm'],
+  ])('forwards the VM option %s the Options tab edits (roadmap#201)', async (key, value) => {
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { [key]: value } })
+
+    expect(res.status).toBe(200)
+    expect(configWriteBody()?.get(key)).toBe(value)
+  })
+
+  it.each(['spice_enhancements', 'amd-sev'])('drops the root-only VM option %s instead of forwarding it', async key => {
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { [key]: 'x' } })
+
+    expect(res.status).toBe(400)
+    expect(configWriteBody()).toBeNull()
+  })
+
+  it('drops those VM options for a container', async () => {
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: { ...baseParams, type: 'lxc' }, body: { startdate: 'now' } })
+
+    expect(res.status).toBe(400)
+    expect(configWriteBody()).toBeNull()
+  })
+
   it('forwards the startup order for a VM', async () => {
     const PUT = await loadPut()
     const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { startup: 'order=1,up=30' } })

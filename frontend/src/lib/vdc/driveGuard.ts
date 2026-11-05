@@ -73,6 +73,13 @@ export async function enforceTenantDrives(args: {
   const libraries = scope.isoLibrariesByConnection?.get(args.connectionId) ?? new Set<string>()
   let slugs: { mine: string; all: string[] } | null = null
 
+  // The hibernation state is a volume like a disk: it lands on a storage of
+  // the vDC or nowhere (roadmap#201). Empty clears it, back to the default.
+  const stateStorage = args.body.vmstatestorage
+  if (args.type === 'qemu' && stateStorage !== undefined && String(stateStorage) !== '' && !writable.has(String(stateStorage))) {
+    throw new DriveScopeError('vmstatestorage: this storage is not part of your vDC.')
+  }
+
   for (const key of Object.keys(args.body)) {
     if (!isTenantDiskKey(key, args.type)) continue
     const raw = String(args.body[key] ?? '')

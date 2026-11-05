@@ -531,7 +531,9 @@ export async function pveFetch<T>(
 
         const shouldFailover = incrementFailures(opts.id)
         if (!shouldFailover) {
-          console.warn(`[failover] Connection ${safeLog(opts.id)} failure ${getFailureCount(opts.id)}/${FAILURE_THRESHOLD} for ${safeLog(path)} (${classifyPveError(err)})`)
+          // No request value in this line: a path can carry a scan's CIFS password
+          // (roadmap#202), and CodeQL treats both id and path as user input.
+          console.warn(`[failover] Connection failure ${getFailureCount(opts.id)}/${FAILURE_THRESHOLD} (${classifyPveError(err)})`)
           // roadmap#194: below the threshold the circuit stays closed, but
           // the request that met the dead primary need not fail for it.
           if (isConnectPhaseFailure(err, replaySafe)) return viaPeerOnce(opts.id, err)

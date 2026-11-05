@@ -121,7 +121,8 @@ import StorageDashboard from './StorageDashboard'
 import NetworkDashboard from './NetworkDashboard'
 import BackupDashboard from './BackupDashboard'
 import MigrationDashboard from './MigrationDashboard'
-import { ViewMode, AllVmItem, HostItem, PoolItem, TagItem, NodeIcon, ClusterIcon, StatusIcon } from './InventoryTree'
+import { ViewMode, AllVmItem, HostItem, PoolItem, PoolActions, TagItem, NodeIcon, ClusterIcon, StatusIcon } from './InventoryTree'
+import { isVdcPool } from './components/poolMembers'
 import NetworkDetailPanel from './components/NetworkDetailPanel'
 import TenantVnetDetailPanel from './TenantVnetDetailPanel'
 import TagManager from './components/TagManager'
@@ -188,6 +189,7 @@ export default function InventoryDetails({
   inventoryLoaded = false,
   hosts = [],
   pools = [],
+  poolActions = null,
   tags = [],
   pbsServers = [],
   showIpSnap = false,
@@ -218,6 +220,8 @@ export default function InventoryDetails({
   inventoryLoaded?: boolean  // the first inventory stream has ended (an empty allVms is then really empty)
   hosts?: HostItem[]
   pools?: PoolItem[]
+  /** Create a pool or edit a pool's members, from the Pools view (roadmap#200). */
+  poolActions?: PoolActions | null
   tags?: TagItem[]
   pbsServers?: import('./InventoryTree').TreePbsServer[]
   showIpSnap?: boolean
@@ -287,6 +291,7 @@ export default function InventoryDetails({
   const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
   const { hasPermission } = useRBAC()
   const canCreate = hasPermission('vm.create')
+  const canManagePools = hasPermission('connection.manage')
   // connectionId → vDC name (tenant IaaS): powers the vDC chip and the vDC
   // column. Bijective per the DB unique (tenant_id, connection_id).
   const { vdcs: myVdcs } = useMyVdcs()
@@ -792,6 +797,15 @@ export default function InventoryDetails({
   }, [editOptionDialog])
 
   // Handler pour sauvegarder une option VM
+  // The guest's resource pool is an inventory fact (/cluster/resources), not
+  // part of its config: read it from the inventory row (roadmap#200).
+  const guestPool = useMemo(() => {
+    if (selection?.type !== 'vm') return null
+    const { connId, type, vmid } = parseVmId(selection.id)
+
+    return allVms.find((vm: any) => vm.connId === connId && vm.type === type && String(vm.vmid) === String(vmid))?.pool || null
+  }, [selection, allVms])
+
   const handleSaveOption = useCallback(async () => {
     if (!editOptionDialog || !selection || selection.type !== 'vm') return
     
@@ -3074,6 +3088,19 @@ return vm?.isCluster ?? false
               description: p.comment,
               vms: p.vms
             }))}
+            headerAction={poolActions && canManagePools ? (
+              <MuiTooltip title={t('inventory.createPool')}>
+                <IconButton size="small" color="primary" aria-label={t('inventory.createPool')} onClick={poolActions.create}>
+                  <i className="ri-add-line" style={{ fontSize: 18 }} />
+                </IconButton>
+              </MuiTooltip>
+            ) : null}
+            groupAction={poolActions && canManagePools ? {
+              icon: 'ri-folder-user-line',
+              label: t('inventory.poolMembersMenu'),
+              show: key => !isVdcPool(key) && key !== `(${t('common.none')})`,
+              onClick: poolActions.members,
+            } : undefined}
             allVms={displayVms}
             onVmClick={handleVmClick}
             onVmAction={handleTableVmAction}
@@ -3852,7 +3879,7 @@ return vm?.isCluster ?? false
                 selectedDisk, setSelectedDisk, setEditDiskInitialTab, editDiskInitialTab, handleDetachDisk, setSelectedNetwork, setSelectedPveStorage, setShowCreateSnapshot, setTasksLoaded,
                 setTf, onRrdRangeChange, onRrdWindowSelect, rrdWindow, rrdMeta, setVmNotes, showCreateSnapshot, snapshotActionBusy, snapshotFeatureAvailable, snapshotRowTasks, snapshots,
                 snapshotsError, snapshotsLoading, snapshotTaskBusy, sourceCephAvailable, tags,
-                refreshData, tasks, tasksError, tasksLoading, tf, vmNotes}}
+                refreshData, tasks, tasksError, tasksLoading, tf, vmNotes, guestPool, onRefresh}}
             />
           )}
 

@@ -82,13 +82,14 @@ const DetachConfirmDialog = dynamic(() => import('@/components/hardware/DetachCo
 const DeleteUnusedDiskDialog = dynamic(() => import('@/components/hardware/DeleteUnusedDiskDialog').then(mod => ({ default: mod.DeleteUnusedDiskDialog })), { ssr: false })
 
 import type { InventorySelection, DetailsPayload, RrdTimeframe, SeriesPoint, Status } from '../types'
-import { formatBps, formatOsType, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, machineTypeRow, hotplugDevice, guestNameOptionEdit } from '../helpers'
+import { formatBps, formatOsType, formatRrdTick, formatRrdTooltipTs, formatUptime, parseMarkdown, markdownSx, parseNodeId, parseVmId, cpuPct, pct, buildSeriesFromRrd, fetchRrd, machineTypeRow, hotplugDevice, guestNameOptionEdit, memoryChipLabel } from '../helpers'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useToast } from '@/contexts/ToastContext'
 import { AreaPctChart, AreaBpsChart2 } from '../components/RrdCharts'
 import InventorySummary from '../components/InventorySummary'
 import LxcOptionRows from './LxcOptionRows'
+import GuestPoolRow from './GuestPoolRow'
 import { SaveIcon, AddIcon, CloseIcon } from '../components/IconWrappers'
 import VdcQuotaBanner from '@/components/inventory/VdcQuotaBanner'
 import { useVmDiskLatencySeries } from '@/hooks/useVmDiskLatencySeries'
@@ -102,6 +103,9 @@ import { cpuGroupHeaderSx } from '../cpuSelectStyles'
 // Latency curves sit on the Disk I/O chart next to red bandwidth areas: amber
 // first, then violet and teal for a second and third disk.
 const LATENCY_LINE_COLORS = ['#f59e0b', '#a855f7', '#14b8a6']
+
+/** Proxmox's floor for a container's memory, in MB. */
+const LXC_MIN_MEMORY_MB = 16
 
 export default function VmDetailTabs(props: any) {
   const toast = useToast()
@@ -406,6 +410,9 @@ export default function VmDetailTabs(props: any) {
     tf,
     vmNotes,
   } = props
+  // A container has cores and a CPU limit, no sockets, CPU model, NUMA or
+  // CPU flags: the config route drops those keys for it (roadmap#201 recette).
+  const isLxcGuest = data?.vmType === 'lxc'
 
   // Dragging across any chart of the card selects that window on all of them.
   const rrdDrag = useChartDragRange(onRrdWindowSelect)
@@ -1012,7 +1019,7 @@ export default function VmDetailTabs(props: any) {
                             <Typography variant="subtitle1" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <i className="ri-cpu-line" style={{ fontSize: 20 }} />
                               {t('inventory.processor')}
-                              <Chip label={`${data?.cpuInfo?.sockets || cpuSockets}S / ${data?.cpuInfo?.cores || cpuCores}C`} size="small" sx={{ height: 22, fontSize: 11 }} />
+                              <Chip label={isLxcGuest ? `${data?.cpuInfo?.cores || cpuCores}C` : `${data?.cpuInfo?.sockets || cpuSockets}S / ${data?.cpuInfo?.cores || cpuCores}C`} size="small" sx={{ height: 22, fontSize: 11 }} />
                             </Typography>
                             <i className={hwSections.has('cpu') ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 22, opacity: 0.5 }} />
                           </Box>
@@ -1040,9 +1047,9 @@ export default function VmDetailTabs(props: any) {
                           )}
                           
                           {/* Sockets & Cores côte à côte */}
-                          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 3 }}>
+                          <Box sx={{ display: 'grid', gridTemplateColumns: isLxcGuest ? '1fr' : '1fr 1fr', gap: 2, mb: 3 }}>
                             {/* Sockets */}
-                            {(() => {
+                            {!isLxcGuest && (() => {
                               const maxSockets = data.nodeCapacity?.hostSockets || 4
                               const marks = Array.from({ length: maxSockets }, (_, i) => ({ value: i + 1, label: String(i + 1) }))
                               return (
@@ -1076,7 +1083,7 @@ export default function VmDetailTabs(props: any) {
                             {/* Cores */}
                             <Box>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                                <Typography variant="body2" fontWeight={600}>{t('inventory.coresPerSocket')}</Typography>
+                                <Typography variant="body2" fontWeight={600}>{isLxcGuest ? t('inventory.lxcCores') : t('inventory.coresPerSocket')}</Typography>
                                 <NumericTextField
                                   disabled={!canConfigHardware}
                                   size="small"
@@ -1114,6 +1121,7 @@ export default function VmDetailTabs(props: any) {
                           </Box>
 
                           {/* CPU Type */}
+                          {!isLxcGuest && (
                           <FormControl fullWidth sx={{ mb: 3 }}>
                             <InputLabel>{t('inventory.cpuType')}</InputLabel>
                             <Select
@@ -1130,6 +1138,7 @@ export default function VmDetailTabs(props: any) {
                               ])}
                             </Select>
                           </FormControl>
+                          )}
 
                           {/* CPU Limit + NUMA toggles */}
                           {!cpuAdvancedHidden && (
@@ -1145,6 +1154,7 @@ export default function VmDetailTabs(props: any) {
                                 }
                                 label={t('inventory.limitCpuUsage')}
                               />
+                              {!isLxcGuest && (
                               <FormControlLabel
                                 control={
                                   <Switch
@@ -1155,6 +1165,7 @@ export default function VmDetailTabs(props: any) {
                                 }
                                 label="Enable NUMA"
                               />
+                              )}
                             </Box>
                             {cpuLimitEnabled && (
                               <Box sx={{ mt: 2 }}>
@@ -1190,17 +1201,19 @@ export default function VmDetailTabs(props: any) {
                           )}
 
                           {/* Extra CPU Flags (collapsible) */}
-                          {!cpuAdvancedHidden && (
+                          {!cpuAdvancedHidden && !isLxcGuest && (
                             <CpuFlagsSelector flags={cpuFlags} onChange={setCpuFlags} disabled={!canConfigHardware} sx={{ mb: 2 }} />
                           )}
 
                           {/* Résumé */}
                           <Box sx={{ p: 2, bgcolor: 'action.hover', borderRadius: 1, mb: 2 }}>
                             <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-                              {t('inventory.totalVcpus', { count: cpuSockets * cpuCores })}
+                              {t('inventory.totalVcpus', { count: isLxcGuest ? cpuCores : cpuSockets * cpuCores })}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              {t('inventory.socketsCoresBreakdown', { sockets: cpuSockets, cores: cpuCores })}
+                              {isLxcGuest
+                                ? t('inventory.lxcCpuCount', { count: cpuCores })
+                                : t('inventory.socketsCoresBreakdown', { sockets: cpuSockets, cores: cpuCores })}
                             </Typography>
                           </Box>
 
@@ -1234,7 +1247,7 @@ export default function VmDetailTabs(props: any) {
                             <Typography variant="subtitle1" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <i className="ri-database-2-line" style={{ fontSize: 20 }} />
                               {t('inventory.memory')}
-                              <Chip label={`${((data?.memoryInfo?.memory || memory) / 1024).toFixed(0)} GB`} size="small" sx={{ height: 22, fontSize: 11 }} />
+                              <Chip label={memoryChipLabel(data?.memoryInfo?.memory || memory)} size="small" sx={{ height: 22, fontSize: 11 }} />
                               {data?.vmType === 'lxc' && (data?.memoryInfo?.swap ?? 0) > 0 && (
                                 <Chip label={`Swap: ${data.memoryInfo.swap} MB`} size="small" variant="outlined" sx={{ height: 22, fontSize: 11 }} />
                               )}
@@ -1278,14 +1291,14 @@ export default function VmDetailTabs(props: any) {
                                 size="small"
                                 type="number"
                                 value={memory}
-                                format={(v) => String(Math.round(v / 1024))}
-                                parse={(s) => Number.parseFloat(s) * 1024}
+                                format={(v) => String(Math.round((v / 1024) * 100) / 100)}
+                                parse={(s) => Math.round(Number.parseFloat(s) * 1024)}
                                 onChange={(newMem) => {
                                   setMemory(newMem)
                                   if (balloonEnabled && balloon > newMem) setBalloon(newMem)
                                 }}
                                 fallback={1024}
-                                min={512}
+                                min={isLxcGuest ? LXC_MIN_MEMORY_MB : 512}
                                 InputProps={{
                                   endAdornment: <InputAdornment position="end">GB</InputAdornment>,
                                 }}
@@ -2205,6 +2218,15 @@ return (
                                   )}
                                 </td>
                               </tr>
+                              {selection?.type === 'vm' && (
+                                <GuestPoolRow
+                                  connId={parseVmId(selection.id).connId}
+                                  vmid={parseVmId(selection.id).vmid}
+                                  pool={props.guestPool ?? null}
+                                  canManage={hasPermission('connection.manage')}
+                                  onChanged={() => { void props.onRefresh?.() }}
+                                />
+                              )}
                               <tr>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2613,13 +2635,14 @@ return (
                                   {pendingChip('spice_enhancements')}
                                 </td>
                                 <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
-                                  {canConfig && (
-                                  <MuiTooltip title={t('common.edit')}>
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'spice_enhancements', label: t('inventory.spiceEnhancements'), value: data.optionsInfo?.spiceEnhancements || '', type: 'text' })}>
-                                      <i className="ri-pencil-line" style={{ fontSize: 16 }} />
-                                    </IconButton>
+                                  {/* PVE lets root@pam alone set it, never an API token (roadmap#201). */}
+                                  <MuiTooltip title={t('inventory.rootOnlyOption')}>
+                                    <span>
+                                      <IconButton size="small" disabled>
+                                        <i className="ri-lock-line" style={{ fontSize: 16 }} />
+                                      </IconButton>
+                                    </span>
                                   </MuiTooltip>
-                                  )}
                                 </td>
                               </tr>
                               <tr>
@@ -2644,29 +2667,25 @@ return (
                                 </td>
                               </tr>
                               <tr>
-                                <td style={{ padding: '6px 16px', fontWeight: 500 }}>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, fontWeight: 500 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <i className="ri-lock-password-line" style={{ fontSize: 16, opacity: 0.6 }} />{' '}
                                     AMD SEV
                                   </Box>
                                 </td>
-                                <td style={{ padding: '6px 16px' }}>
-                                  {data.optionsInfo?.amdSEV === 'enabled' ? t('common.enabled') : t('common.disabled')}
-                                  {pendingChip('amd_sev')}
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, position: 'relative' as const }}>
+                                  {data.optionsInfo?.amdSEV || t('common.disabled')}
+                                  {pendingChip('amd-sev')}
                                 </td>
-                                <td style={{ padding: '6px 16px', textAlign: 'center' }}>
-                                  {canConfig && (
-                                  <MuiTooltip title={t('common.edit')}>
-                                    <IconButton size="small" onClick={() => setEditOptionDialog({ key: 'amd_sev', label: 'AMD SEV', value: data.optionsInfo?.amdSEV || '', type: 'select', options: [
-                                      { value: '', label: t('common.default') },
-                                      { value: 'sev', label: 'AMD SEV' },
-                                      { value: 'sev-es', label: 'AMD SEV-ES (highly experimental)' },
-                                      { value: 'sev-snp', label: 'AMD SEV-SNP (highly experimental)' },
-                                    ] })}>
-                                      <i className="ri-pencil-line" style={{ fontSize: 16 }} />
-                                    </IconButton>
+                                <td style={{ padding: '3px 12px', borderBottom: '1px solid var(--mui-palette-divider)', fontSize: 12, textAlign: 'center' }}>
+                                  {/* Root-only in PVE as well, like the SPICE enhancements. */}
+                                  <MuiTooltip title={t('inventory.rootOnlyOption')}>
+                                    <span>
+                                      <IconButton size="small" disabled>
+                                        <i className="ri-lock-line" style={{ fontSize: 16 }} />
+                                      </IconButton>
+                                    </span>
                                   </MuiTooltip>
-                                  )}
                                 </td>
                               </tr>
                               </>)}

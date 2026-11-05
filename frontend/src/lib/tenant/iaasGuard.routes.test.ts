@@ -189,6 +189,7 @@ const VDC_SCOPED: Record<string, string> = {
   "[id]/resources/route.ts": "guest visibility of the session",
   "[id]/snapshots/route.ts": "guest visibility of the session",
   "[id]/storage/[storage]/route.ts": "owner of the cluster only",
+  "[id]/nodes/[node]/storage-scan/route.ts": "owner of the cluster only",
   "[id]/tag-access/route.ts": "tag policy of the caller's guests",
 }
 

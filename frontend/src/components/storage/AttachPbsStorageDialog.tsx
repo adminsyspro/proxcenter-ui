@@ -4,6 +4,9 @@ import React, { useEffect, useMemo, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 
+import type { ClusterStorageType } from '@/lib/storage/clusterStorageTypes'
+
+import ClusterStorageDialog, { ADD_STORAGE_TYPES } from './ClusterStorageDialog'
 import {
   Alert,
   Box,
@@ -27,13 +30,10 @@ import {
 } from '@mui/material'
 
 /**
- * Storage types this dialog can attach. Only `pbs` today; the select exists so
- * adding NFS, CIFS or the rest is a matter of adding an entry and its fields,
- * not of moving the entry point (issue #890).
+ * The Add dialog's types: PBS here, every other one in ClusterStorageDialog,
+ * which this dialog hands over to when another type is picked (roadmap#202).
  */
-const STORAGE_TYPES = [
-  { value: 'pbs', labelKey: 'storage.attachPbs.typePbs', icon: 'ri-hard-drive-2-fill' },
-] as const
+const PBS_ICON = 'ri-hard-drive-2-fill'
 
 /** Glyphe d'un datastore, celui de l'arbre d'inventaire. */
 const DATASTORE_ICON = 'ri-database-2-line'
@@ -90,7 +90,7 @@ export default function AttachPbsStorageDialog({
 
   const clusterId = cluster.id
 
-  const [storageType, setStorageType] = useState<string>(STORAGE_TYPES[0].value)
+  const [storageType, setStorageType] = useState<string>('pbs')
   const [source, setSource] = useState('')
   const [datastore, setDatastore] = useState('')
   const [namespace, setNamespace] = useState('')
@@ -245,6 +245,19 @@ export default function AttachPbsStorageDialog({
     }
   }
 
+  if (storageType !== 'pbs') {
+    return (
+      <ClusterStorageDialog
+        cluster={cluster}
+        mode='create'
+        initialType={storageType as ClusterStorageType}
+        onTypeChange={setStorageType}
+        onClose={onClose}
+        onSaved={onAttached}
+      />
+    )
+  }
+
   return (
     <Dialog open={open} onClose={submitting ? undefined : onClose} maxWidth='sm' fullWidth>
       <DialogTitle>{t('storage.attachPbs.title')}</DialogTitle>
@@ -259,9 +272,9 @@ export default function AttachPbsStorageDialog({
               value={storageType}
               onChange={e => setStorageType(String(e.target.value))}
             >
-              {STORAGE_TYPES.map(type => (
+              {ADD_STORAGE_TYPES.map(type => (
                 <MenuItem key={type.value} value={type.value}>
-                  <OptionRow icon={type.icon}>{t(type.labelKey as any)}</OptionRow>
+                  <OptionRow icon={type.icon}>{t(`storage.clusterStorage.types.${type.value}` as any)}</OptionRow>
                 </MenuItem>
               ))}
             </Select>
@@ -289,7 +302,7 @@ export default function AttachPbsStorageDialog({
               >
                 {pbsConnections.map(c => (
                   <MenuItem key={c.id} value={c.id}>
-                    <OptionRow icon={STORAGE_TYPES[0].icon}>{c.name}</OptionRow>
+                    <OptionRow icon={PBS_ICON}>{c.name}</OptionRow>
                   </MenuItem>
                 ))}
               </Select>

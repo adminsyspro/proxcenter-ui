@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
+import { licenseExcludedResponse } from "@/lib/api/response"
 
-import { pveFetch } from "@/lib/proxmox/client"
+import { pveFetch, PveApplicationError } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { isSharedStorage, vmDiskFormats } from "@/lib/proxmox/storage"
 import { formatBytes } from "@/utils/format"
@@ -12,6 +13,8 @@ import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraSc
 import { resolveCallerInfraScope } from "@/lib/tenant/iaasGuard"
 import { iaasStorageView } from "@/lib/connections/iaasView"
 import { attachPbsStorage, PbsAttachError } from "@/lib/storage/attachPbsStorage"
+import { buildStorageParams, ClusterStorageError, pveMessage, redactSecrets, scrubStorageConfig } from "@/lib/storage/clusterStorage"
+import { isClusterStorageType } from "@/lib/storage/clusterStorageTypes"
 import { audit } from "@/lib/audit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -245,10 +248,11 @@ async function postHandler(req: Request, ctx: { params: Promise<{ id: string }> 
   const type = String(body?.type ?? "pbs")
 
   if (type !== "pbs") {
-    return NextResponse.json(
-      { error: `Unsupported storage type "${type}": only pbs can be attached from here` },
-      { status: 400 },
-    )
+    if (!isClusterStorageType(type)) {
+      return NextResponse.json({ error: "Unsupported storage type" }, { status: 400 })
+    }
+
+    return createClusterStorage(id, { ...body, type })
   }
 
   const storage = String(body?.storage ?? "").trim()
@@ -347,6 +351,78 @@ async function postHandler(req: Request, ctx: { params: Promise<{ id: string }> 
       { error: message, ...(e instanceof PbsAttachError ? { code: e.code } : {}) },
       { status },
     )
+  }
+}
+
+/** Node names of the cluster that are not part of it. */
+async function unknownNodes(conn: any, nodes: string[]): Promise<string[]> {
+  if (!nodes.length) return []
+  const clusterNodes = await pveFetch<any[]>(conn, "/nodes")
+  const known = new Set((clusterNodes || []).map((n: any) => String(n?.node)))
+
+  return nodes.filter(n => !known.has(n))
+}
+
+/**
+ * Adds an NFS, CIFS, iSCSI, LVM, external RBD, CephFS, ZFS over iSCSI or
+ * directory storage to the cluster (roadmap#202). One Proxmox call; the
+ * secrets it carries (CIFS password, Ceph keyring) are never logged, audited
+ * or sent back.
+ */
+async function createClusterStorage(id: string, body: any) {
+  const secrets = [body?.fields?.password, body?.fields?.keyring].map(v => (typeof v === "string" ? v : undefined))
+  let built
+
+  try {
+    built = buildStorageParams(body, "create")
+  } catch (e: any) {
+    if (e instanceof ClusterStorageError) return NextResponse.json({ error: e.message, code: e.code }, { status: e.status })
+    throw e
+  }
+
+  const storage = built.params.storage
+  const details = { type: body.type, ...scrubStorageConfig(built.params) }
+
+  try {
+    const conn = await getConnectionById(id)
+    const unknown = await unknownNodes(conn, Array.isArray(body?.nodes) ? body.nodes.map(String) : [])
+
+    if (unknown.length) {
+      return NextResponse.json({ error: `Unknown node(s) on this cluster: ${unknown.join(", ")}` }, { status: 400 })
+    }
+
+    await pveFetch<any>(conn, "/storage", { method: "POST", body: new URLSearchParams(built.params) })
+
+    await audit({
+      action: "create",
+      category: "storage",
+      resourceType: "storage",
+      resourceId: storage,
+      resourceName: storage,
+      status: "success",
+      details: { connectionId: id, connectionName: conn.name, ...details },
+    })
+
+    return NextResponse.json({ data: { storage, type: body.type } }, { status: 201 })
+  } catch (e: any) {
+    const excluded = licenseExcludedResponse(e)
+    if (excluded) return excluded
+
+    const message = redactSecrets(e instanceof PveApplicationError ? pveMessage(e) : e?.message || String(e), secrets)
+    const status = e instanceof PveApplicationError && e.statusCode >= 400 && e.statusCode < 500 ? e.statusCode : 500
+
+    await audit({
+      action: "create",
+      category: "storage",
+      resourceType: "storage",
+      resourceId: storage,
+      resourceName: storage,
+      status: "failure",
+      errorMessage: message,
+      details: { connectionId: id, ...details },
+    })
+
+    return NextResponse.json({ error: message }, { status })
   }
 }
 

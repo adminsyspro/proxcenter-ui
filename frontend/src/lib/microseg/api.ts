@@ -4,7 +4,7 @@
 // Next relay at /api/v1/firewall/microseg/{connectionId}/<route>.
 
 import type {
-  CheckQueued, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegFlow, MicrosegPolicy,
+  CheckQueued, EgressState, FlowDirection, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegFlow, MicrosegPolicy,
   MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegTraffic, MicrosegZone, PolicyUpdate,
   PreflightCheck, ResolveSuggestionsInput, SuggestionKind, SuggestionStatus, ZoneInput, ZoneState,
 } from './types'
@@ -94,11 +94,12 @@ export type ListEventsParams = {
   q?: string
 }
 /** `from` and `to` in RFC3339, `step` in seconds (a multiple of 300, 300 to 21600). */
-export type TrafficParams = { from: string; to: string; step: number }
+export type TrafficParams = { from: string; to: string; step: number; direction?: FlowDirection }
 export type ListSuggestionsParams = PageParams & {
   kind?: SuggestionKind
   status?: SuggestionStatus
   zone?: string
+  direction?: FlowDirection
 }
 
 function query(params: Record<string, string | number | undefined> = {}): string {
@@ -184,6 +185,9 @@ export function microsegApi(connId: string) {
     deleteZone: (zoneId: string, version: number) => call<{ version: number }>('DELETE', `zones/${id(zoneId)}`, { version }),
     setZoneState: (zoneId: string, state: ZoneState, version: number) =>
       call<RunStarted>('POST', `zones/${id(zoneId)}/state`, { version, state }),
+    /** Outbound state of a zone (same answer as setZoneState); 400 on a disabled zone, 409 on a stale version. */
+    setZoneEgressState: (zoneId: string, state: EgressState, version: number) =>
+      call<RunStarted>('POST', `zones/${id(zoneId)}/egress-state`, { state, version }),
 
     saveFlow: ({ id: flowId, ...body }: FlowInput) =>
       call<{ version: number; flow: MicrosegFlow }>(flowId ? 'PUT' : 'POST', flowId ? `flows/${id(flowId)}` : 'flows', body),

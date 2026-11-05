@@ -69,11 +69,17 @@ export function microsegGuestOverlay(vmid: number, tags: unknown): { tags: strin
 
 const hourBucket = (now: number) => now - (now % HOUR)
 
+// Outbound filtering: the app zone observes the local network and Internet, the others are off.
+const egressOf = (z: DemoZone, now: number) => z.name === 'app'
+  ? { egress_state: 'observe', egress_mode: 'all', egress_observe_since: new Date(hourBucket(now) - 2 * DAY).toISOString() }
+  : { egress_state: 'off', egress_mode: 'local', egress_observe_since: null }
+
 function zoneRows(now: number) {
   return ZONES.map(z => ({
     id: z.id, policy_id: POLICY_ID, name: z.name, label: z.label, color: z.color, enforcement: 'guest', vnet_id: '', state: z.state,
     isolate_members: z.name === 'db',
     observe_since: z.state === 'disabled' ? null : new Date(hourBucket(now) - z.observeDays * DAY).toISOString(),
+    ...egressOf(z, now),
   }))
 }
 
@@ -142,7 +148,8 @@ function policy(now: number) {
 
 type SuggestionSeed = {
   id: string; kind: 'would_block' | 'blocked'; status: 'pending' | 'accepted' | 'dismissed'
-  src: { zone: string; vmid: number } | { ip: string }; dst: { zone: string; vmid: number }
+  src: { zone: string; vmid: number } | { ip: string }; dst: { zone: string; vmid: number } | { ip: string } | { aggregate: string }
+  direction?: 'out'
   proto: string; dport: string; hits: number; firstHours: number; lastHours: number
 }
 
@@ -153,19 +160,26 @@ const SUGGESTIONS: SuggestionSeed[] = [
   { id: 'demo-sugg-4', kind: 'blocked', status: 'pending', src: { zone: 'web', vmid: 100 }, dst: { zone: 'db', vmid: 112 }, proto: 'tcp', dport: '3306', hits: 37, firstHours: 20, lastHours: 3 },
   { id: 'demo-sugg-5', kind: 'blocked', status: 'pending', src: { ip: '192.168.1.57' }, dst: { zone: 'web', vmid: 101 }, proto: 'tcp', dport: '22', hits: 12, firstHours: 14, lastHours: 5 },
   { id: 'demo-sugg-6', kind: 'would_block', status: 'dismissed', src: { zone: 'monitoring', vmid: 131 }, dst: { zone: 'app', vmid: 152 }, proto: 'icmp', dport: '', hits: 58, firstHours: 44, lastHours: 8 },
+  { id: 'demo-sugg-7', direction: 'out', kind: 'would_block', status: 'pending', src: { zone: 'app', vmid: 151 }, dst: { ip: '10.20.90.12' }, proto: 'tcp', dport: '3128', hits: 240, firstHours: 36, lastHours: 0 },
+  { id: 'demo-sugg-8', direction: 'out', kind: 'would_block', status: 'pending', src: { zone: 'app', vmid: 152 }, dst: { ip: '151.101.1.69' }, proto: 'tcp', dport: '443', hits: 88, firstHours: 30, lastHours: 1 },
+  { id: 'demo-sugg-9', direction: 'out', kind: 'would_block', status: 'pending', src: { zone: 'app', vmid: 155 }, dst: { aggregate: '0.0.0.0/0' }, proto: 'tcp', dport: '443', hits: 5120, firstHours: 44, lastHours: 0 },
 ]
 
 function suggestionRow(s: SuggestionSeed, now: number) {
-  const dstZone = zoneByName(s.dst.zone)
   const src = 'zone' in s.src ? { zone: zoneByName(s.src.zone), ip: ipOf(s.src.vmid, zoneByName(s.src.zone).octet) } : null
+  const dst = 'zone' in s.dst
+    ? { key: zoneByName(s.dst.zone).id, ip: ipOf(s.dst.vmid, zoneByName(s.dst.zone).octet), zoneId: zoneByName(s.dst.zone).id }
+    : 'ip' in s.dst ? { key: s.dst.ip, ip: s.dst.ip, zoneId: '' } : { key: s.dst.aggregate, ip: '', zoneId: '' }
 
   return {
     id: s.id, policy_id: POLICY_ID, kind: s.kind,
+    ...(s.direction ? { direction: s.direction } : {}),
     src_key: src ? src.zone.id : (s.src as { ip: string }).ip,
     src_ip: src ? src.ip : (s.src as { ip: string }).ip,
     src_zone_id: src ? src.zone.id : '',
-    dst_ip: ipOf(s.dst.vmid, dstZone.octet),
-    dst_zone_id: dstZone.id,
+    dst_key: dst.key,
+    dst_ip: dst.ip,
+    dst_zone_id: dst.zoneId,
     proto: s.proto, dport: s.dport, hits: s.hits,
     first_seen: new Date(hourBucket(now) - s.firstHours * HOUR).toISOString(),
     last_seen: new Date(hourBucket(now) - s.lastHours * HOUR).toISOString(),
@@ -254,6 +268,12 @@ function lastRuns(now: number) {
   return out
 }
 
+const LOG_NODES = [
+  { node: 'pve-node-01', lines_last: 410, lines_per_min_15m: 380, lag_seconds: 12, full_pages_24h: 0 },
+  { node: 'pve-node-02', lines_last: 365, lines_per_min_15m: 342, lag_seconds: 15, full_pages_24h: 0 },
+  { node: 'pve-node-03', lines_last: 1000, lines_per_min_15m: 910, lag_seconds: 74, full_pages_24h: 6 },
+]
+
 function status(now: number) {
   const members = ZONES.reduce((n, z) => n + z.vmids.length, 0)
   const enforced = ZONES.filter(z => z.state === 'enforce').reduce((n, z) => n + z.vmids.length, 0)
@@ -264,6 +284,7 @@ function status(now: number) {
     coverage: { running: RUNNING, zoned: members, members, protected: enforced },
     zones_by_state: { disabled: count('disabled'), observe: count('observe'), enforce: count('enforce') },
     emergency_stop: false,
+    log_nodes: LOG_NODES,
   }
 }
 
@@ -317,9 +338,11 @@ export const resolveMicrosegMock: DemoMockResolver = (method, cleanPath, url) =>
       const kind = params.get('kind')
       const stat = params.get('status')
       const zone = params.get('zone')
+      const direction = params.get('direction')
 
       const rows = SUGGESTIONS.map(s => suggestionRow(s, now)).filter(s => (
-        (!kind || s.kind === kind) && (!stat || s.status === stat) && (!zone || s.src_zone_id === zone || s.dst_zone_id === zone)
+        (!kind || s.kind === kind) && (!stat || s.status === stat) && (!zone || s.src_zone_id === zone || s.dst_zone_id === zone) &&
+        (!direction || (s.direction ?? 'in') === direction)
       ))
 
       return { suggestions: rows.slice(offset, offset + limit), limit, offset }

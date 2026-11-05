@@ -180,6 +180,7 @@ export type AuditAction =
   // Micro-segmentation lifecycle, written by the orchestrator (internal/microseg/audit.go)
   | "microseg.apply"
   | "microseg.state"
+  | "microseg.egress_state"
   | "microseg.emergency_stop"
   | "microseg.restore"
   | "microseg.remove"

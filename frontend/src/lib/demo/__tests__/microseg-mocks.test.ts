@@ -102,7 +102,7 @@ describe('demo micro-segmentation', () => {
   it('serves observed flows that name zones and addresses of the map', async () => {
     const policy = await demoGet(`${BASE}/policy`)
     const ids = new Set(policy.zones.map((z: any) => z.id))
-    const { suggestions } = await demoGet(`${BASE}/suggestions`)
+    const { suggestions } = await demoGet(`${BASE}/suggestions?direction=in`)
 
     expect(suggestions.length).toBeGreaterThanOrEqual(4)
 
@@ -193,6 +193,7 @@ describe('demo micro-segmentation', () => {
   it.each([
     ['POST', `${BASE}/zones`],
     ['POST', `${BASE}/emergency-stop`],
+    ['POST', `${BASE}/zones/demo-zone-app/egress-state`],
     ['PUT', `${BASE}/policy`],
     ['DELETE', `${BASE}/flows/demo-flow-web-app`],
   ])('refuses %s %s as the demo locks its other mutations, with the code the tab translates', async (method, path) => {
@@ -200,5 +201,44 @@ describe('demo micro-segmentation', () => {
 
     expect(res.status).toBe(403)
     expect(res.body).toEqual({ code: 'FORBIDDEN', error: 'Action disabled in demo mode' })
+  })
+})
+
+describe('demo micro-segmentation, outbound', () => {
+  it('puts the app zone in outbound observe over the local network and the internet, the others off', async () => {
+    const { zones } = await demoGet(`${BASE}/policy`)
+    const app = zones.find((z: any) => z.name === 'app')
+
+    expect(app).toMatchObject({ egress_state: 'observe', egress_mode: 'all' })
+    expect(Date.parse(app.egress_observe_since)).toBeLessThanOrEqual(Date.now())
+    for (const z of zones.filter((x: any) => x.name !== 'app')) {
+      expect(z.egress_state ?? 'off', z.name).toBe('off')
+      expect(z.egress_observe_since ?? null, z.name).toBeNull()
+    }
+  })
+
+  it('serves 3 outbound suggestions, one of them the aggregate, and filters by direction', async () => {
+    const policy = await demoGet(`${BASE}/policy`)
+    const app = policy.zones.find((z: any) => z.name === 'app').id
+    const out = (await demoGet(`${BASE}/suggestions?direction=out`)).suggestions
+    const inbound = (await demoGet(`${BASE}/suggestions?direction=in`)).suggestions
+    const all = (await demoGet(`${BASE}/suggestions`)).suggestions
+
+    expect(out).toHaveLength(3)
+    expect(out.every((s: any) => s.direction === 'out' && s.src_zone_id === app && s.src_key === app)).toBe(true)
+    expect(out.filter((s: any) => s.dst_key === '0.0.0.0/0' || s.dst_key === '::/0')).toHaveLength(1)
+    expect(out.every((s: any) => s.dst_zone_id === '' && s.dst_key !== '')).toBe(true)
+    expect(inbound.every((s: any) => (s.direction ?? 'in') === 'in')).toBe(true)
+    expect(inbound.length + out.length).toBe(all.length)
+  })
+
+  it('reports the log reading of 3 nodes in the status', async () => {
+    const { engine, log_nodes } = await demoGet(`${BASE}/status`)
+
+    expect(engine).toBeDefined()
+    expect(log_nodes).toHaveLength(3)
+    for (const n of log_nodes) {
+      expect(Object.keys(n).sort((a, b) => a.localeCompare(b))).toEqual(['full_pages_24h', 'lag_seconds', 'lines_last', 'lines_per_min_15m', 'node'])
+    }
   })
 })

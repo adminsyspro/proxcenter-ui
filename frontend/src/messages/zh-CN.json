@@ -4241,7 +4241,7 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "API 令牌",
-      "subtitle": "供外部工具使用的服务账户:监控(Prometheus、Zabbix、PRTG)与自动化(CI、脚本)。每个范围都需明确授予。",
+      "subtitle": "用于监控(Prometheus、Zabbix、PRTG)与自动化(CI、Terraform、Ansible)的服务账户。每个范围都需明确授予。",
       "newToken": "新建令牌",
       "referenceButton": "API 参考文档",
       "reference": {

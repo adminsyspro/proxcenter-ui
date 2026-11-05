@@ -4230,7 +4230,7 @@
     "apiTokens": {
       "tabLabel": "API",
       "title": "API-Token",
-      "subtitle": "Dienstkonten für externe Tools: Monitoring (Prometheus, Zabbix, PRTG) und Automatisierung (CI, Skripte). Jeder Scope wird ausdrücklich vergeben.",
+      "subtitle": "Dienstkonten für Monitoring (Prometheus, Zabbix, PRTG) und Automatisierung (CI, Terraform, Ansible). Jeder Scope wird ausdrücklich vergeben.",
       "newToken": "Neuer Token",
       "referenceButton": "API-Referenz",
       "reference": {

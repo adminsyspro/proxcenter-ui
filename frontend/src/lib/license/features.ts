@@ -57,7 +57,7 @@ export const Features = {
   // cluster), which lives under the `connections/[id]/ha/**` routes and is
   // not gated by this capability.
   HA: 'control_plane_ha',
-  // Read-only public API access via pxc_ service-account tokens (paid add-on,
+  // Public API access, read and write, via pxc_ service-account tokens (paid add-on,
   // spec 2026-07-28). Enforcement lives in getPrincipal(), UI gate in the
   // Settings API tab FeatureGuard.
   API_ACCESS: 'api_access',
@@ -176,7 +176,7 @@ export const OPTION_REGISTRY: Record<string, OptionInfo> = {
   },
   api_access: {
     name: 'ProxCenter API Access',
-    description: 'Read-only public API: autonomous service-account tokens for Prometheus, Zabbix, PRTG, CI and custom monitoring integrations.',
+    description: 'Public API, read and write: scoped service-account tokens for monitoring (Prometheus, Zabbix, PRTG) and automation (CI, scripts, Terraform, Ansible) across every connected cluster.',
     docsUrl: 'https://proxcenter.io/pricing',
   },
 }

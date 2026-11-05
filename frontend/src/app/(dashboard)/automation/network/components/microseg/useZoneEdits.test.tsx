@@ -22,7 +22,7 @@ installFreshMocks()
 const web = zone('zw', { name: 'web', state: 'disabled' })
 const draft = policy({ zones: [web], last_revision: REVISION_HEAD })
 const ref = { node: 'pve1', type: 'qemu' as const, vmid: 100 }
-const values = { name: 'web', label: 'front', color: '#ef4444', isolate_members: true }
+const values = { name: 'web', label: 'front', color: '#ef4444', isolate_members: true, egress_control: false, egress_mode: 'all' as const }
 const flowValues = { src_zone_id: 'zw', src_cidr: '', dst_zone_id: 'zw', dst_cidr: '', proto: 'tcp', dport: '22', comment: '', origin: 'manual' }
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -60,7 +60,7 @@ describe('useZoneEdits', () => {
     await waitFor(() => expect(calls('GET /status')).toHaveLength(1))
     await act(() => result.current.saveZone(web, values))
     expect(body(calls('PUT /zones/zw')[0][1] as RequestInit)).toEqual({
-      version: 3, name: 'web', label: 'front', color: '#ef4444', enforcement: 'guest', vnet_id: '', isolate_members: true,
+      version: 3, name: 'web', label: 'front', color: '#ef4444', enforcement: 'guest', vnet_id: '', isolate_members: true, egress_mode: 'all',
     })
     expect(reloadPolicy).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(calls('GET /status')).toHaveLength(2))

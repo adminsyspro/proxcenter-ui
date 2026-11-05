@@ -70,4 +70,31 @@ describe('microsegPilot i18n parity across the 6 served locales', () => {
       expect(same.length, `${locale}: ${same.join(', ')}`).toBeLessThanOrEqual(ceiling)
     }
   })
+
+  it('words the Outbound section of the zone dialog as agreed in French and English', () => {
+    const wanted: Record<string, Record<string, string>> = {
+      fr: {
+        egressSection: 'Sortie',
+        egressControl: 'Contrôler la sortie',
+        egressFilter: 'Filtrer la sortie vers :',
+        egressLocal: 'Le réseau local',
+        egressAll: 'Le réseau local et Internet',
+        egressHelp: 'Réseau local = les sous-réseaux des VM en zone, VM sans zone comprises. En blocage, seuls les flux de la politique passent.',
+        egressAllWarning: 'Filtrage par adresse IP seulement : un service derrière un nom de domaine peut changer d\'adresse.',
+      },
+      en: {
+        egressSection: 'Outbound',
+        egressControl: 'Control outbound traffic',
+        egressFilter: 'Filter outbound traffic to:',
+        egressLocal: 'Local network',
+        egressAll: 'Local network and Internet',
+        egressHelp: 'Local network = the subnets of the zoned VMs, unzoned VMs included. When blocking, only the flows of the policy go through.',
+        egressAllWarning: 'IP filtering only: a service behind a domain name can change address.',
+      },
+    }
+    for (const [locale, keys] of Object.entries(wanted)) {
+      const flat = flatten(locales[locale].microsegPilot)
+      for (const [key, text] of Object.entries(keys)) expect(flat[`policy.zoneDialog.${key}`], `${locale}: ${key}`).toBe(text)
+    }
+  })
 })

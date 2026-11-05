@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { maskedCidr, validateFlowForm, validateZoneForm, ZONE_COLORS } from './zoneForm'
 
 const zone = (over: Partial<Parameters<typeof validateZoneForm>[0]> = {}) => ({
-  name: 'web', label: '', color: ZONE_COLORS[0], isolate_members: false, ...over,
+  name: 'web', label: '', color: ZONE_COLORS[0], isolate_members: false, egress_control: false, egress_mode: 'local' as const, ...over,
 })
 
 const flow = (over: Partial<Parameters<typeof validateFlowForm>[0]> = {}) => ({

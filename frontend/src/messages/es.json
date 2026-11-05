@@ -12898,6 +12898,20 @@
         "label": "Etiqueta",
         "color": "Color",
         "isolate": "Aislar los miembros entre sí",
+        "egressSection": "Salida",
+        "egressControl": "Controlar el tráfico saliente",
+        "egressFilter": "Filtrar el tráfico saliente hacia:",
+        "egressLocal": "La red local",
+        "egressAll": "La red local e Internet",
+        "egressHelp": "Red local = las subredes de las VM en zona, incluidas las VM sin zona. En bloqueo, solo pasan los flujos de la política.",
+        "egressAllWarning": "Solo filtrado por dirección IP: un servicio tras un nombre de dominio puede cambiar de dirección.",
+        "egressNeedsState": "La zona debe estar en observación o en bloqueo",
+        "egressOnTitle": "¿Controlar el tráfico saliente de la zona {name}?",
+        "egressOffTitle": "¿Dejar de controlar el tráfico saliente de la zona {name}?",
+        "egressOnBody": "El tráfico saliente de la zona pasa a observación de inmediato, como una nueva revisión.",
+        "egressOffBody": "El filtrado del tráfico saliente de la zona se retira de inmediato, como una nueva revisión.",
+        "egressOnConfirm": "Controlar",
+        "egressOffConfirm": "Dejar de controlar",
         "create": "Crear",
         "save": "Guardar"
       },
@@ -12953,7 +12967,9 @@
         "running": {
           "disabled": "{label}: cambio a desactivada en curso",
           "observe": "{label}: cambio a observación en curso",
-          "enforce": "{label}: cambio a aplicación en curso"
+          "enforce": "{label}: cambio a aplicación en curso",
+          "egressObserve": "{label}: control del tráfico saliente en curso",
+          "egressOff": "{label}: retirada del control del tráfico saliente en curso"
         },
         "done": "{label}: {done} hechos, {failed} fallidos, {notRun} sin ejecutar",
         "failed": "{label}: la ejecución ha fallado",

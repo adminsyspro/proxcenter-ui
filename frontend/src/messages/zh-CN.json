@@ -12898,6 +12898,20 @@
         "label": "标签",
         "color": "颜色",
         "isolate": "使成员之间相互隔离",
+        "egressSection": "出站",
+        "egressControl": "控制出站流量",
+        "egressFilter": "过滤出站流量到:",
+        "egressLocal": "本地网络",
+        "egressAll": "本地网络和互联网",
+        "egressHelp": "本地网络 = 区域内虚拟机的子网,包括不在区域内的虚拟机。阻止模式下,只有策略中的流量可以通过。",
+        "egressAllWarning": "仅按 IP 地址过滤:域名背后的服务可能会更改地址。",
+        "egressNeedsState": "区域必须处于观察或阻止状态",
+        "egressOnTitle": "控制区域 {name} 的出站流量?",
+        "egressOffTitle": "停止控制区域 {name} 的出站流量?",
+        "egressOnBody": "该区域的出站流量将立即进入观察状态,并生成新的修订版本。",
+        "egressOffBody": "该区域的出站过滤将立即移除,并生成新的修订版本。",
+        "egressOnConfirm": "控制",
+        "egressOffConfirm": "停止控制",
         "create": "创建",
         "save": "保存"
       },
@@ -12953,7 +12967,9 @@
         "running": {
           "disabled": "{label}：正在切换到停用",
           "observe": "{label}：正在切换到观察",
-          "enforce": "{label}：正在切换到强制执行"
+          "enforce": "{label}：正在切换到强制执行",
+          "egressObserve": "{label}:正在控制出站流量",
+          "egressOff": "{label}:正在移除出站流量控制"
         },
         "done": "{label}：{done} 个已完成，{failed} 个失败，{notRun} 个未执行",
         "failed": "{label}：运行失败",

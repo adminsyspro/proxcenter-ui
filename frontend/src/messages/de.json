@@ -12566,6 +12566,20 @@
         "label": "Bezeichnung",
         "color": "Farbe",
         "isolate": "Mitglieder voneinander isolieren",
+        "egressSection": "Ausgehend",
+        "egressControl": "Ausgehenden Verkehr kontrollieren",
+        "egressFilter": "Ausgehenden Verkehr filtern zu:",
+        "egressLocal": "Lokales Netzwerk",
+        "egressAll": "Lokales Netzwerk und Internet",
+        "egressHelp": "Lokales Netzwerk = die Subnetze der VMs in Zonen, einschließlich VMs ohne Zone. Im Blockierungsmodus passieren nur die Flüsse der Richtlinie.",
+        "egressAllWarning": "Nur Filterung nach IP-Adresse: Ein Dienst hinter einem Domainnamen kann seine Adresse ändern.",
+        "egressNeedsState": "Die Zone muss im Beobachtungs- oder Blockierungsmodus sein",
+        "egressOnTitle": "Ausgehenden Verkehr der Zone {name} kontrollieren?",
+        "egressOffTitle": "Ausgehenden Verkehr der Zone {name} nicht mehr kontrollieren?",
+        "egressOnBody": "Der ausgehende Verkehr der Zone wechselt sofort in die Beobachtung, als neue Revision.",
+        "egressOffBody": "Die Filterung des ausgehenden Verkehrs der Zone wird sofort entfernt, als neue Revision.",
+        "egressOnConfirm": "Kontrollieren",
+        "egressOffConfirm": "Nicht mehr kontrollieren",
         "create": "Erstellen",
         "save": "Speichern"
       },
@@ -12621,7 +12635,9 @@
         "running": {
           "disabled": "{label}: Wechsel zu deaktiviert läuft",
           "observe": "{label}: Wechsel zu Beobachtung läuft",
-          "enforce": "{label}: Wechsel zu Durchsetzung läuft"
+          "enforce": "{label}: Wechsel zu Durchsetzung läuft",
+          "egressObserve": "{label}: Kontrolle des ausgehenden Verkehrs läuft",
+          "egressOff": "{label}: Entfernen der Kontrolle des ausgehenden Verkehrs läuft"
         },
         "done": "{label}: {done} erledigt, {failed} fehlgeschlagen, {notRun} nicht ausgeführt",
         "failed": "{label}: der Lauf ist fehlgeschlagen",

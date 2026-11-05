@@ -129,6 +129,82 @@ describe('zone header actions', () => {
   })
 })
 
+describe('zone dialog, Outbound section', () => {
+  const openEdit = async (zone: MicrosegZone = web()) => {
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone, db()], last_revision: REVISION_HEAD, version: 3 }))
+    setup({ zones: [zone, db()] })
+    fireEvent.click(button(await openPanel(), 'Edit zone'))
+    return screen.findByRole('dialog', { name: 'Edit zone' })
+  }
+
+  it('shows the control unchecked and Local network chosen but disabled until the box is checked', async () => {
+    const dialog = await openEdit()
+    expect(within(dialog).getByText('Outbound')).toBeTruthy()
+    const box = within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }) as HTMLInputElement
+    expect(box.checked).toBe(false)
+    expect((within(dialog).getByRole('radio', { name: 'Local network' }) as HTMLInputElement).checked).toBe(true)
+    expect((within(dialog).getByRole('radio', { name: 'Local network and Internet' }) as HTMLInputElement).disabled).toBe(true)
+    expect(within(dialog).getByText(/^Local network = the subnets of the zoned VMs/)).toBeTruthy()
+    expect(within(dialog).queryByText(/IP filtering only/)).toBeNull()
+  })
+
+  it('disables the box of a disabled zone and says the zone must be observed or blocking', async () => {
+    const dialog = await openEdit(web({ state: 'disabled' }))
+    expect((within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }) as HTMLInputElement).disabled).toBe(true)
+    expect(within(dialog).getByText('The zone must be in observation or blocking')).toBeTruthy()
+  })
+
+  it('warns about IP filtering when Local network and Internet is chosen', async () => {
+    const dialog = await openEdit(web({ egress_state: 'observe' }))
+    expect((within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }) as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Local network and Internet' }))
+    expect(within(dialog).getByText('IP filtering only: a service behind a domain name can change address.')).toBeTruthy()
+  })
+
+  it('asks first, then saves the mode and starts the outbound observation with the new version', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r2' })
+    mock.routes['GET /runs/r2'] = () => reply(200, { id: 'r2', status: 'running' })
+    const dialog = await openEdit()
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }))
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Local network and Internet' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Control outbound traffic of zone web?' })
+    expect(calls('PUT /zones/zw')).toHaveLength(0)
+    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Control' }))
+
+    await waitFor(() => expect(calls('POST /zones/zw/egress-state')).toHaveLength(1))
+    expect(body(calls('PUT /zones/zw')[0][1] as RequestInit)).toMatchObject({ egress_mode: 'all' })
+    expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 4, state: 'observe' })
+    expect(await screen.findByText(/web: outbound control in progress/)).toBeTruthy()
+  })
+
+  it('shows an enforced outbound as checked and sends off once unchecked and confirmed', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r2' })
+    mock.routes['GET /runs/r2'] = () => reply(200, { id: 'r2', status: 'running' })
+    const dialog = await openEdit(web({ state: 'enforce', egress_state: 'enforce' }))
+    const box = within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }) as HTMLInputElement
+    expect(box.checked).toBe(true)
+    fireEvent.click(box)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Stop controlling outbound traffic of zone web?' })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Stop controlling' }))
+    await waitFor(() => expect(calls('POST /zones/zw/egress-state')).toHaveLength(1))
+    expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 4, state: 'off' })
+  })
+
+  it('saves without a question or an outbound call when only the mode changes', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
+    const dialog = await openEdit(web({ egress_state: 'observe' }))
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Local network and Internet' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(calls('PUT /zones/zw')).toHaveLength(1))
+    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
+  })
+})
+
 describe('members', () => {
   const tagged = [vm(100, 'web-1', ['zone-web'])]
 

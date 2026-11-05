@@ -12898,6 +12898,20 @@
         "label": "Label",
         "color": "Color",
         "isolate": "Isolate members from each other",
+        "egressSection": "Outbound",
+        "egressControl": "Control outbound traffic",
+        "egressFilter": "Filter outbound traffic to:",
+        "egressLocal": "Local network",
+        "egressAll": "Local network and Internet",
+        "egressHelp": "Local network = the subnets of the zoned VMs, unzoned VMs included. When blocking, only the flows of the policy go through.",
+        "egressAllWarning": "IP filtering only: a service behind a domain name can change address.",
+        "egressNeedsState": "The zone must be in observation or blocking",
+        "egressOnTitle": "Control outbound traffic of zone {name}?",
+        "egressOffTitle": "Stop controlling outbound traffic of zone {name}?",
+        "egressOnBody": "The outbound traffic of the zone goes to observation right away, as a new revision.",
+        "egressOffBody": "The outbound filtering of the zone is removed right away, as a new revision.",
+        "egressOnConfirm": "Control",
+        "egressOffConfirm": "Stop controlling",
         "create": "Create",
         "save": "Save"
       },
@@ -12953,7 +12967,9 @@
         "running": {
           "disabled": "{label}: change to disabled in progress",
           "observe": "{label}: change to observation in progress",
-          "enforce": "{label}: change to enforcement in progress"
+          "enforce": "{label}: change to enforcement in progress",
+          "egressObserve": "{label}: outbound control in progress",
+          "egressOff": "{label}: outbound control removal in progress"
         },
         "done": "{label}: {done} done, {failed} failed, {notRun} not run",
         "failed": "{label}: the run failed",

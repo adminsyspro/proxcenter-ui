@@ -14,11 +14,16 @@ export const ZONE_COLORS = [
 
 export const FLOW_PROTOS = ['tcp', 'udp', 'icmp', 'icmpv6', 'any'] as const
 
+import type { EgressMode } from '@/lib/microseg/types'
+
 export type ZoneFormValues = {
   name: string
   label: string
   color: string
   isolate_members: boolean
+  /** The outbound is observed or enforced (the checkbox); an enforced outbound counts as checked. */
+  egress_control: boolean
+  egress_mode: EgressMode
 }
 
 export function validateZoneForm(v: ZoneFormValues): Record<string, string> {

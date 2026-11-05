@@ -12899,6 +12899,20 @@
         "label": "Libellé",
         "color": "Couleur",
         "isolate": "Isoler les membres les uns des autres",
+        "egressSection": "Sortie",
+        "egressControl": "Contrôler la sortie",
+        "egressFilter": "Filtrer la sortie vers :",
+        "egressLocal": "Le réseau local",
+        "egressAll": "Le réseau local et Internet",
+        "egressHelp": "Réseau local = les sous-réseaux des VM en zone, VM sans zone comprises. En blocage, seuls les flux de la politique passent.",
+        "egressAllWarning": "Filtrage par adresse IP seulement : un service derrière un nom de domaine peut changer d'adresse.",
+        "egressNeedsState": "La zone doit être en observation ou en blocage",
+        "egressOnTitle": "Contrôler la sortie de la zone {name} ?",
+        "egressOffTitle": "Ne plus contrôler la sortie de la zone {name} ?",
+        "egressOnBody": "La sortie de la zone passe en observation tout de suite, dans une nouvelle révision.",
+        "egressOffBody": "Le filtrage de la sortie de la zone est retiré tout de suite, dans une nouvelle révision.",
+        "egressOnConfirm": "Contrôler",
+        "egressOffConfirm": "Ne plus contrôler",
         "create": "Créer",
         "save": "Enregistrer"
       },
@@ -12954,7 +12968,9 @@
         "running": {
           "disabled": "{label} : passage en désactivé en cours",
           "observe": "{label} : passage en observation en cours",
-          "enforce": "{label} : passage en application en cours"
+          "enforce": "{label} : passage en application en cours",
+          "egressObserve": "{label} : contrôle de la sortie en cours",
+          "egressOff": "{label} : retrait du contrôle de la sortie en cours"
         },
         "done": "{label} : {done} faites, {failed} en échec, {notRun} non exécutées",
         "failed": "{label} : l'exécution a échoué",

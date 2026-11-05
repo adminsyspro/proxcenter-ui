@@ -5,7 +5,7 @@ import { useSWRConfig } from 'swr'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
-import type { GuestRef, MembersInput, MicrosegFlow, MicrosegPolicy, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import { zoneEgress, type GuestRef, type MembersInput, type MicrosegFlow, type MicrosegPolicy, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
 import { isVersionConflict } from './dialogParts'
 import type { FlowSaveValues } from './FlowDialog'
@@ -59,16 +59,32 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     await refresh()
   }
 
-  const saveZone = (zone: MicrosegZone | null, values: ZoneFormValues) => write(() => api.saveZone({
-    id: zone?.id,
-    version,
-    name: values.name,
-    label: values.label,
-    color: values.color,
-    enforcement: zone?.enforcement ?? 'guest',
-    vnet_id: zone?.vnet_id ?? '',
-    isolate_members: values.isolate_members,
-  }))
+  /**
+   * The zone is written first (with the outbound mode); when the outbound control changed, its state follows, applied
+   * at once with the version the write returned: observation on a check, off on an uncheck.
+   */
+  const saveZone = (zone: MicrosegZone | null, values: ZoneFormValues) => write(async () => {
+    const saved = await api.saveZone({
+      id: zone?.id,
+      version,
+      name: values.name,
+      label: values.label,
+      color: values.color,
+      enforcement: zone?.enforcement ?? 'guest',
+      vnet_id: zone?.vnet_id ?? '',
+      isolate_members: values.isolate_members,
+      egress_mode: values.egress_mode,
+    })
+    if (!zone || values.egress_control === (zoneEgress(zone) !== 'off')) return
+    const state = values.egress_control ? 'observe' : 'off'
+    const started = await api.setZoneEgressState(zone.id, state, saved.version)
+    startRun({
+      runId: started.run_id,
+      kind: 'zoneState',
+      label: zone.name,
+      runningText: t(`run.running.${state === 'observe' ? 'egressObserve' : 'egressOff'}`, { label: zone.name }),
+    })
+  })
 
   const deleteZone = (zone: MicrosegZone) => write(() => api.deleteZone(zone.id, version))
 

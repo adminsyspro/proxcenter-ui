@@ -12898,6 +12898,20 @@
         "label": "레이블",
         "color": "색상",
         "isolate": "구성원 간 격리",
+        "egressSection": "아웃바운드",
+        "egressControl": "아웃바운드 트래픽 제어",
+        "egressFilter": "아웃바운드 트래픽 필터링 대상:",
+        "egressLocal": "로컬 네트워크",
+        "egressAll": "로컬 네트워크 및 인터넷",
+        "egressHelp": "로컬 네트워크 = 존에 속한 VM의 서브넷(존이 없는 VM 포함). 차단 시에는 정책의 플로우만 통과합니다.",
+        "egressAllWarning": "IP 주소 기준 필터링만 가능: 도메인 이름 뒤의 서비스는 주소가 바뀔 수 있습니다.",
+        "egressNeedsState": "존이 관찰 또는 차단 상태여야 합니다",
+        "egressOnTitle": "{name} 존의 아웃바운드 트래픽을 제어하시겠습니까?",
+        "egressOffTitle": "{name} 존의 아웃바운드 트래픽 제어를 중지하시겠습니까?",
+        "egressOnBody": "존의 아웃바운드 트래픽이 새 리비전으로 즉시 관찰 상태가 됩니다.",
+        "egressOffBody": "존의 아웃바운드 필터링이 새 리비전으로 즉시 제거됩니다.",
+        "egressOnConfirm": "제어",
+        "egressOffConfirm": "제어 중지",
         "create": "만들기",
         "save": "저장"
       },
@@ -12953,7 +12967,9 @@
         "running": {
           "disabled": "{label}: 비활성으로 변경 중",
           "observe": "{label}: 관찰로 변경 중",
-          "enforce": "{label}: 적용으로 변경 중"
+          "enforce": "{label}: 적용으로 변경 중",
+          "egressObserve": "{label}: 아웃바운드 제어 진행 중",
+          "egressOff": "{label}: 아웃바운드 제어 해제 진행 중"
         },
         "done": "{label}: 완료 {done}, 실패 {failed}, 미실행 {notRun}",
         "failed": "{label}: 실행에 실패했습니다",

@@ -8484,7 +8484,7 @@
     "permissionsCount": "权限（{count}）",
     "widgetVisibility": {
       "title": "小组件可见性",
-      "desc": "勾选要为此角色用户隐藏的小组件。叠加于按 Scope 自动过滤之上。",
+      "desc": "已勾选的小组件可供此角色用户在仪表板上使用；取消勾选即可隐藏。叠加于按 Scope 自动过滤之上。",
       "hiddenCount": "已隐藏 {count} 个"
     },
     "defaultScope": {

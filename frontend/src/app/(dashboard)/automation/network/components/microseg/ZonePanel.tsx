@@ -16,7 +16,7 @@ import PolicyPager, { usePaged } from './PolicyPager'
 import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
 import { MemberChangeChip } from './ZoneRow'
 import EgressChip from './EgressChip'
-import ZoneExpandDialog from './ZoneExpandDialog'
+import ZoneExpandDialog, { type DataTab } from './ZoneExpandDialog'
 import ZoneStateChip from './ZoneStateChip'
 import { destinationName } from './ObservationRow'
 import { bareIp } from './zoneGraph'
@@ -223,45 +223,59 @@ export default function ZonePanel({
     </>
   )
 
-  const dataSections = (
+  const suggestionsBody = (
     <>
-      <PanelSection id='zone.suggestions' title={tsec('suggestions')} count={pending.length}>
-        {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1 }}>{failure}</Alert>}
-        {partialLimit !== null && <OneLine text={tt('partial', { count: partialLimit })} />}
-        {pending.length === 0 && <Typography variant='body2' color='text.disabled'>{tsec('suggestionsEmpty')}</Typography>}
-        <Box role='list'>
-          {pendingPage.rows.map(s => (
-            <SuggestionLine key={s.id} suggestion={s} zonesById={zonesById} peers={peers} busy={busy} onResolve={(action, prefixLen) => { void resolveOne(s.id, action, prefixLen) }} />
-          ))}
-        </Box>
-        <PolicyPager count={pendingPage.count} page={pendingPage.page} size={pendingPage.size} onPage={pendingPage.setPage} />
-      </PanelSection>
-
-      <PanelSection id='zone.members' title={t('members')} count={membersKnown ? members.length : null}>
-        {edits.memberError != null && <MicrosegErrorAlert error={edits.memberError} onClose={edits.clearMemberError} />}
-        {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
-        {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
-        <Box role='list'>
-          {paged.rows.map(m => <MemberLine key={`${m.ref.type}/${m.ref.vmid}`} member={m} zoneId={zone.id} edits={edits} firewallOff={!!signals?.firewallOff.has(guestKey(m.ref))} />)}
-        </Box>
-        <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
-      </PanelSection>
-
-      <PanelSection id='zone.incoming' title={ts('incoming')} count={incoming.length} action={<NewFlowButton label={tz('newIncoming')} onClick={() => editor.create({ dst_zone_id: zone.id })} />}>
-        <FlowsList flows={incoming} zonesById={zonesById} editor={editor} />
-      </PanelSection>
-      <PanelSection id='zone.outgoing' title={ts('outgoing')} count={outgoing.length} action={<NewFlowButton label={tz('newOutgoing')} onClick={() => editor.create({ src_zone_id: zone.id })} />}>
-        <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} />
-      </PanelSection>
+      {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1 }}>{failure}</Alert>}
+      {partialLimit !== null && <OneLine text={tt('partial', { count: partialLimit })} />}
+      {pending.length === 0 && <Typography variant='body2' color='text.disabled'>{tsec('suggestionsEmpty')}</Typography>}
+      <Box role='list'>
+        {pendingPage.rows.map(s => (
+          <SuggestionLine key={s.id} suggestion={s} zonesById={zonesById} peers={peers} busy={busy} onResolve={(action, prefixLen) => { void resolveOne(s.id, action, prefixLen) }} />
+        ))}
+      </Box>
+      <PolicyPager count={pendingPage.count} page={pendingPage.page} size={pendingPage.size} onPage={pendingPage.setPage} />
     </>
   )
+  const membersBody = (
+    <>
+      {edits.memberError != null && <MicrosegErrorAlert error={edits.memberError} onClose={edits.clearMemberError} />}
+      {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
+      {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
+      <Box role='list'>
+        {paged.rows.map(m => <MemberLine key={`${m.ref.type}/${m.ref.vmid}`} member={m} zoneId={zone.id} edits={edits} firewallOff={!!signals?.firewallOff.has(guestKey(m.ref))} />)}
+      </Box>
+      <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
+    </>
+  )
+  const newIncoming = <NewFlowButton label={tz('newIncoming')} onClick={() => editor.create({ dst_zone_id: zone.id })} />
+  const newOutgoing = <NewFlowButton label={tz('newOutgoing')} onClick={() => editor.create({ src_zone_id: zone.id })} />
+  const incomingBody = <FlowsList flows={incoming} zonesById={zonesById} editor={editor} />
+  const outgoingBody = <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} />
+
+  const dataSections = (
+    <>
+      <PanelSection id='zone.suggestions' title={tsec('suggestions')} count={pending.length}>{suggestionsBody}</PanelSection>
+      <PanelSection id='zone.members' title={t('members')} count={membersKnown ? members.length : null}>{membersBody}</PanelSection>
+      <PanelSection id='zone.incoming' title={ts('incoming')} count={incoming.length} action={newIncoming}>{incomingBody}</PanelSection>
+      <PanelSection id='zone.outgoing' title={ts('outgoing')} count={outgoing.length} action={newOutgoing}>{outgoingBody}</PanelSection>
+    </>
+  )
+
+  // The same bodies in the dialog, one sub-tab each, the count in the label and the add button above the flows.
+  const withCount = (label: string, count: number | null) => (count === null ? label : `${label} (${count})`)
+  const dataTabs: DataTab[] = [
+    { id: 'suggestions', label: withCount(tz('subSuggestions'), pending.length), content: suggestionsBody },
+    { id: 'members', label: withCount(tz('subMembers'), membersKnown ? members.length : null), content: membersBody },
+    { id: 'incoming', label: withCount(tz('subIncoming'), incoming.length), action: newIncoming, content: incomingBody },
+    { id: 'outgoing', label: withCount(tz('subOutgoing'), outgoing.length), action: newOutgoing, content: outgoingBody },
+  ]
 
   return (
     <PanelFrame label={t('label', { name: zone.name })} width={400} header={header}>
       {trafficSections}
       {dataSections}
       {editor.dialogs}
-      {expanded && <ZoneExpandDialog zone={zone} connectionId={connectionId} traffic={trafficSections} data={dataSections} onClose={() => setExpanded(false)} />}
+      {expanded && <ZoneExpandDialog zone={zone} connectionId={connectionId} traffic={trafficSections} dataTabs={dataTabs} chips={<><ZoneStateChip state={zone.state} /><EgressChip state={egress} ready={egressReady} /></>} onClose={() => setExpanded(false)} />}
     </PanelFrame>
   )
 }

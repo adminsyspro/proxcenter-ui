@@ -13509,6 +13509,13 @@
         "noFlows": "无"
       },
       "zonePanel": {
+        "detailsTitle": "区域详情 · {name}",
+        "subSuggestions": "待处理建议",
+        "subMembers": "成员",
+        "subIncoming": "入站流",
+        "subOutgoing": "出站流",
+        "colDirection": "方向",
+        "colVerdict": "判定",
         "expand": "放大",
         "tabTraffic": "流量",
         "tabData": "数据",

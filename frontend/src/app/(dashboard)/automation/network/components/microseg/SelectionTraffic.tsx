@@ -14,7 +14,6 @@ import { useSliceName } from '../TrafficByZone'
 import { useTimelineRange } from '../useTimelineRange'
 import { useTrafficTimeline } from '../useTrafficTimeline'
 import { objectDotSx } from './objectColour'
-import { useStoredChoice } from './useStoredChoice'
 import { bareIp } from './zoneGraph'
 import TruncatedText from './TruncatedText'
 
@@ -24,15 +23,12 @@ const TOP_SOURCES = 5
 /** What a map panel charts: a zone (the flows logged in it) or a guest (its events in the orchestrator's memory). */
 export type TrafficSelection = { kind: 'zone'; zone: MicrosegZone } | { kind: 'guest'; type: GuestType; vmid: number; ips: readonly string[] }
 
-/** The direction of a panel's chart, remembered per browser for every panel. */
-export const PANEL_DIRECTION_KEY = 'proxcenter.microseg.panelDirection'
-const DIRECTIONS: readonly TimelineDirection[] = ['both', 'in', 'out']
 
 /**
  * The traffic over time of a map panel's selection, the Dashboard's chart filtered on it: for a zone the persisted
  * history of the range (the ring asked with `zone=` when the history is not served), stacked by source zone; for a
  * guest the events of its VMID in the ring. Inbound (by source zone) or outbound (the flows it emitted, by destination
- * zone), remembered per browser. Also the same over every verdict, for the summary and the top sources. The range is
+ * zone). Also the same over every verdict, for the summary and the top sources. The range is
  * the Dashboard's, remembered per browser. `enabled` false reads nothing (its sections are folded). No Proxmox call.
  */
 /** One direction's figures over every verdict: its total, its ranked groups, would be blocked and blocked. */
@@ -47,7 +43,8 @@ export type TopEntry = SourceTotal & { dir: 'in' | 'out' }
 export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[], selection: TrafficSelection, enabled = true) {
   const [verdict, setVerdict] = useState<TimelineVerdict>('all')
   const [range, setRange] = useTimelineRange()
-  const [direction, setDirection] = useStoredChoice<TimelineDirection>(PANEL_DIRECTION_KEY, DIRECTIONS, 'both')
+  // Both on every opening of a panel: the choice is not remembered.
+  const [direction, setDirection] = useState<TimelineDirection>('both')
   const slices = useMemo(() => zoneSeries(zones), [zones])
   const guestType = selection.kind === 'guest' ? selection.type : null
   const guestVmid = selection.kind === 'guest' ? selection.vmid : null

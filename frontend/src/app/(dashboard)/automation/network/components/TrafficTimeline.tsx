@@ -273,7 +273,7 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   // in both themes (the default selected tint is too faint on a dark paper).
   const toggleSx = {
     '& .MuiToggleButton-root': {
-      ...(compact ? { py: 0, px: 0.75, fontSize: 11 } : { py: 0.25, px: 1, fontSize: 12 }),
+      ...(compact ? { py: 0, px: 1, height: 30, fontSize: '0.8125rem' } : { py: 0.25, px: 1, fontSize: 12 }),
       textTransform: 'none',
       color: 'text.secondary',
     },
@@ -323,9 +323,9 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
           value={verdict}
           onChange={e => onVerdict(e.target.value as TimelineVerdict)}
           inputProps={{ 'aria-label': t('postureTimelineVerdict') }}
-          sx={{ ...SMALL_SELECT_SX, fontSize: 12 }}
+          sx={{ ...SMALL_SELECT_SX, height: 30, fontSize: '0.8125rem', '& .MuiSelect-select': { py: 0, pl: 1.25, display: 'flex', alignItems: 'center', minHeight: 0 } }}
         >
-          {VERDICTS.map(v => <MenuItem key={v} value={v}>{t(VERDICT_LABEL[v])}</MenuItem>)}
+          {VERDICTS.map(v => <MenuItem key={v} value={v} sx={{ fontSize: '0.8125rem' }}>{t(VERDICT_LABEL[v])}</MenuItem>)}
         </Select>
       </FormControl>
     )

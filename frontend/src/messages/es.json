@@ -13509,6 +13509,13 @@
         "noFlows": "Ninguno"
       },
       "zonePanel": {
+        "detailsTitle": "Detalles de la zona · {name}",
+        "subSuggestions": "Sugerencias pendientes",
+        "subMembers": "Miembros",
+        "subIncoming": "Flujos entrantes",
+        "subOutgoing": "Flujos salientes",
+        "colDirection": "Dirección",
+        "colVerdict": "Veredicto",
         "expand": "Ampliar",
         "tabTraffic": "Tráfico",
         "tabData": "Datos",

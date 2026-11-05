@@ -13510,6 +13510,13 @@
         "noFlows": "Aucun"
       },
       "zonePanel": {
+        "detailsTitle": "Détails de la zone · {name}",
+        "subSuggestions": "Suggestions en attente",
+        "subMembers": "Membres",
+        "subIncoming": "Flux entrants",
+        "subOutgoing": "Flux sortants",
+        "colDirection": "Direction",
+        "colVerdict": "Verdict",
         "expand": "Agrandir",
         "tabTraffic": "Trafic",
         "tabData": "Données",

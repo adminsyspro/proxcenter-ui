@@ -35,7 +35,8 @@ function ZoneLogs({ connectionId, zone }: { connectionId: string; zone: Microseg
           <TableHead>
             <TableRow>
               <TableCell sx={CELL_SX}>{to('dialog.colTime')}</TableCell>
-              <TableCell sx={{ ...CELL_SX, width: 56 }} />
+              <TableCell sx={CELL_SX}>{t('colDirection')}</TableCell>
+              <TableCell sx={CELL_SX}>{t('colVerdict')}</TableCell>
               <TableCell sx={CELL_SX}>{to('dialog.colSource')}</TableCell>
               <TableCell sx={CELL_SX}>{to('dialog.colDestination')}</TableCell>
               <TableCell sx={CELL_SX}>{to('columns.service')}</TableCell>
@@ -47,7 +48,10 @@ function ZoneLogs({ connectionId, zone }: { connectionId: string; zone: Microseg
               <TableRow key={e.seq} hover data-event={e.seq}>
                 <TableCell sx={CELL_SX}>{formatWhen(format, e.ts)}</TableCell>
                 <TableCell sx={CELL_SX}>
-                  <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}><DirectionGlyph direction={e.direction} /><ObservedKindGlyph kind={e.verdict} /></Box>
+                  <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}><DirectionGlyph direction={e.direction} />{to(e.direction === 'out' ? 'direction.out' : 'direction.in')}</Box>
+                </TableCell>
+                <TableCell sx={CELL_SX}>
+                  <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}><ObservedKindGlyph kind={e.verdict} />{to(`kind.${e.verdict}`)}</Box>
                 </TableCell>
                 <TableCell sx={{ ...CELL_SX, maxWidth: 220 }}><TruncatedText text={e.src_ip || e.src_zone || '-'} variant='body2' /></TableCell>
                 <TableCell sx={{ ...CELL_SX, maxWidth: 220 }}><TruncatedText text={e.dst_ip || e.guest || '-'} variant='body2' /></TableCell>
@@ -71,11 +75,34 @@ function ZoneLogs({ connectionId, zone }: { connectionId: string; zone: Microseg
  * The zone panel in a centred dialog, with room: its traffic (chart, summary, top), its data (suggestions, members,
  * flows) and the log of its events, one tab each. The panel's own sections are passed in: same content, same state.
  */
-export default function ZoneExpandDialog({ zone, connectionId, traffic, data, onClose }: {
+/** One sub-tab of the Data tab: its label (count included), the add button above its content, the content. */
+export type DataTab = { id: string; label: string; action?: ReactNode; content: ReactNode }
+
+function ZoneData({ tabs }: { tabs: DataTab[] }) {
+  const t = useTranslations('microsegPilot.overview.zonePanel')
+  const [id, setId] = useState(tabs[0]?.id ?? '')
+  const current = tabs.find(x => x.id === id) ?? tabs[0]
+  if (!current) return null
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, borderBottom: 1, borderColor: 'divider', mb: 1.5 }}>
+        <Tabs value={current.id} onChange={(_e, v: string) => setId(v)} variant='scrollable' scrollButtons={false} aria-label={t('tabData')} sx={{ flex: 1, minWidth: 0, minHeight: 36 }}>
+          {tabs.map(x => <Tab key={x.id} value={x.id} label={x.label} sx={{ minHeight: 36, py: 0.5, textTransform: 'none' }} />)}
+        </Tabs>
+        {current.action}
+      </Box>
+      <Box role='tabpanel' data-subtab={current.id}>{current.content}</Box>
+    </Box>
+  )
+}
+
+export default function ZoneExpandDialog({ zone, connectionId, traffic, dataTabs, chips, onClose }: {
   zone: MicrosegZone
   connectionId: string
   traffic: ReactNode
-  data: ReactNode
+  dataTabs: DataTab[]
+  /** The zone's state and outbound chips, after its title. */
+  chips: ReactNode
   onClose: () => void
 }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
@@ -84,9 +111,11 @@ export default function ZoneExpandDialog({ zone, connectionId, traffic, data, on
   const titleId = 'zone-expand-title'
   return (
     <Dialog open onClose={onClose} maxWidth='lg' fullWidth aria-labelledby={titleId} slotProps={{ paper: { sx: { height: '80vh' } } }}>
-      <DialogTitle id={titleId} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <DialogTitle component='div' id='zone-expand-bar' sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <i className='ri-shield-fill' style={{ fontSize: 20, color: zone.color || undefined }} />
-        <Box component='span' sx={{ flex: 1, minWidth: 0 }}>{zone.name}</Box>
+        <Typography id={titleId} component='h2' variant='h6' sx={{ flexShrink: 0 }}>{t('detailsTitle', { name: zone.name })}</Typography>
+        <Typography component='span' variant='body2' color='text.secondary' noWrap sx={{ flex: 1, minWidth: 0 }}>{zone.label}</Typography>
+        {chips}
         <IconButton size='small' aria-label={tc('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
       </DialogTitle>
       <Tabs value={tab} onChange={(_e, v: TabId) => setTab(v)} sx={{ px: 3, borderBottom: 1, borderColor: 'divider', minHeight: 40 }}>
@@ -96,7 +125,7 @@ export default function ZoneExpandDialog({ zone, connectionId, traffic, data, on
       </Tabs>
       <DialogContent sx={{ pt: 2 }}>
         {tab === 'traffic' && traffic}
-        {tab === 'data' && data}
+        {tab === 'data' && <ZoneData tabs={dataTabs} />}
         {tab === 'logs' && <ZoneLogs connectionId={connectionId} zone={zone} />}
       </DialogContent>
     </Dialog>

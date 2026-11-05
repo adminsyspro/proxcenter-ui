@@ -13509,6 +13509,13 @@
         "noFlows": "없음"
       },
       "zonePanel": {
+        "detailsTitle": "영역 상세 · {name}",
+        "subSuggestions": "대기 중인 제안",
+        "subMembers": "구성원",
+        "subIncoming": "수신 플로우",
+        "subOutgoing": "송신 플로우",
+        "colDirection": "방향",
+        "colVerdict": "판정",
         "expand": "확대",
         "tabTraffic": "트래픽",
         "tabData": "데이터",

@@ -13391,7 +13391,8 @@
           "inZone": "ProxCenter ({self_ip}) liegt in der Zone {zone}: Sie durchzusetzen könnte die Verbindung abschneiden.",
           "uncheckedTimeout": "{count, plural, one {# Mitglied konnte} other {# Mitglieder konnten}} nicht geprüft werden (Erfassung abgebrochen): ProxCenter könnte in einem davon liegen.",
           "uncheckedCap": "{count, plural, one {# Mitglied konnte} other {# Mitglieder konnten}} nicht geprüft werden (Erfassungsobergrenze überschritten): ProxCenter könnte in einem davon liegen.",
-          "inZoneEgress": "ProxCenter ({self_ip}) liegt in der Zone {zone}, die ihren Ausgang kontrolliert: erlauben Sie vor dem Blockieren einen Fluss zu den Proxmox-Knoten, sonst könnte ProxCenter sie verlieren."
+          "inZoneEgress": "ProxCenter ({self_ip}) liegt in der Zone {zone}, die ihren Ausgang kontrolliert: erlauben Sie vor dem Blockieren einen Fluss zu den Proxmox-Knoten, sonst könnte ProxCenter sie verlieren.",
+          "dockerInternal": "Die erkannte Adresse ist Docker-intern: Tragen Sie unter Einstellungen > Erweitert die Adresse des Hosts ein, die Proxmox sieht."
         },
         "egress_subnets": {
           "title": "Ausgangs-Subnetze",
@@ -13414,8 +13415,8 @@
         "load": "Last auf Proxmox",
         "enforcement": "Durchsetzung",
         "observation": "Beobachtung",
-        "address": "ProxCenter-Adressen",
         "notifications": "Benachrichtigen bei",
+        "advanced": "Erweitert",
         "removal": "Entfernung"
       },
       "fields": {
@@ -13429,7 +13430,7 @@
         "rate": "Protokoll-Ratenlimit",
         "rateUnit": "Einheit des Protokoll-Ratenlimits",
         "burst": "Protokoll-Burst",
-        "selfIps": "ProxCenter-Adressen",
+        "selfIps": "Von Proxmox gesehene Adressen",
         "notify_drift": "Abweichungen",
         "notify_paused": "Engine pausiert",
         "notify_unprotected": "Ungeschützte Gäste",
@@ -13438,8 +13439,7 @@
       "hints": {
         "tagPrefix": "Die Zonen-Tags der Gäste sind dieses Präfix gefolgt vom Zonennamen.",
         "write_cap": "Schreibvorgänge nach Proxmox, die in einem Durchlauf erlaubt sind. Darüber hält die Engine an und bittet um Bestätigung.",
-        "rate": "Leer lässt das Protokoll-Ratenlimit von Proxmox unberührt. Sonst wird es gesetzt, solange eine Zone beobachtet wird.",
-        "selfIps": "Die Adressen, von denen ProxCenter die Gäste erreicht, durch Kommas getrennt. Leer: automatisch erkannt."
+        "rate": "Leer lässt das Protokoll-Ratenlimit von Proxmox unberührt. Sonst wird es gesetzt, solange eine Zone beobachtet wird."
       },
       "unitsLong": {
         "seconds": "Sekunden",
@@ -13452,8 +13452,13 @@
         "hour": "pro Stunde",
         "day": "pro Tag"
       },
-      "leaveAsIs": "Unverändert lassen",
+      "leaveAsIs": "Unverändert",
       "detectedAutomatically": "Automatisch erkannt",
+      "selfIpsSource": {
+        "settings": "Einstellungen",
+        "install": "Installationsskript",
+        "detected": "erkannt"
+      },
       "validation": {
         "tagPrefix": "Das Tag-Präfix hat 1 bis 16 Zeichen: Kleinbuchstaben, Ziffern, . _ + -",
         "range": "{label} muss zwischen {min} und {max} {unit} liegen.",
@@ -13487,7 +13492,8 @@
         "rate": "Obergrenze der Protokollzeilen pro Regel, während der Beobachtung angehoben, damit nichts verloren geht; wird auf den Proxmox-Cluster angewendet.",
         "logInterval": "Abstand zwischen zwei Lesevorgängen des Firewall-Protokolls jedes Knotens: ein Lesevorgang pro Knoten und Intervall.",
         "readyAfter": "Dauer ohne neuen Fluss, der blockiert würde, bevor eine Zone als bereit angezeigt wird; das ist keine Sperre.",
-        "writeCap": "Darüber hält die Engine an und bittet um Bestätigung."
+        "writeCap": "Darüber hält die Engine an und bittet um Bestätigung.",
+        "selfIps": "Adressen, von denen aus ProxCenter die Knoten erreicht. Die Vorabprüfung stellt sicher, dass sie nicht abgeschnitten werden. Leer lassen, um die Erkennung zu verwenden."
       }
     },
     "history": {

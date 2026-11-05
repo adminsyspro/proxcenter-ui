@@ -49,6 +49,7 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
         const key = detail.reason === 'collect_cap' ? 'checks.self_in_zone.uncheckedCap' : 'checks.self_in_zone.uncheckedTimeout'
         return { key, values: { count: detail.unchecked } }
       }
+      if (check.status === 'warn' && detail.reason === 'docker_internal') return { key: 'checks.self_in_zone.dockerInternal', values: { self_ip: text(detail.self_ip) } }
       if (check.status === 'warn' && detail.egress === true) return { key: 'checks.self_in_zone.inZoneEgress', values: { zone: text(detail.zone), self_ip: text(detail.self_ip) } }
       if (check.status === 'warn') return { key: 'checks.self_in_zone.inZone', values: { zone: text(detail.zone), self_ip: text(detail.self_ip) } }
       return { key: detail.self_ip === 'unknown' ? 'checks.self_in_zone.unknown' : 'checks.self_in_zone.pass' }

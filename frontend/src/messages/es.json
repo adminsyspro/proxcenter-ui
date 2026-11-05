@@ -13723,7 +13723,8 @@
           "inZone": "ProxCenter ({self_ip}) está dentro de la zona {zone}: aplicarla podría cortar la conexión.",
           "uncheckedTimeout": "{count, plural, one {No se pudo comprobar # miembro} other {No se pudieron comprobar # miembros}} (recopilación interrumpida): ProxCenter podría estar dentro de uno de ellos.",
           "uncheckedCap": "{count, plural, one {No se pudo comprobar # miembro} other {No se pudieron comprobar # miembros}} (por encima del límite de recopilación): ProxCenter podría estar dentro de uno de ellos.",
-          "inZoneEgress": "ProxCenter ({self_ip}) está dentro de la zona {zone}, que controla su salida: permita un flujo hacia los nodos Proxmox antes de bloquear, o ProxCenter podría perderlos."
+          "inZoneEgress": "ProxCenter ({self_ip}) está dentro de la zona {zone}, que controla su salida: permita un flujo hacia los nodos Proxmox antes de bloquear, o ProxCenter podría perderlos.",
+          "dockerInternal": "La dirección detectada es interna de Docker: indique en Ajustes > Avanzado la dirección del host que ve Proxmox."
         },
         "egress_subnets": {
           "title": "Subredes de salida",
@@ -13746,8 +13747,8 @@
         "load": "Carga sobre Proxmox",
         "enforcement": "Aplicación",
         "observation": "Observación",
-        "address": "Direcciones de ProxCenter",
         "notifications": "Avisarme de",
+        "advanced": "Avanzado",
         "removal": "Retirada"
       },
       "fields": {
@@ -13761,7 +13762,7 @@
         "rate": "Límite de tasa del registro",
         "rateUnit": "Unidad de la tasa del registro",
         "burst": "Ráfaga del registro",
-        "selfIps": "Direcciones de ProxCenter",
+        "selfIps": "Direcciones que ve Proxmox",
         "notify_drift": "Desviaciones",
         "notify_paused": "Motor en pausa",
         "notify_unprotected": "Invitados sin proteger",
@@ -13770,8 +13771,7 @@
       "hints": {
         "tagPrefix": "Las etiquetas de zona de los invitados son este prefijo seguido del nombre de la zona.",
         "write_cap": "Escrituras hacia Proxmox permitidas en una pasada. Superado el tope, el motor se detiene y pide su confirmación.",
-        "rate": "Vacío deja intacto el límite de tasa del registro de Proxmox. Si no, se fija mientras se observa una zona.",
-        "selfIps": "Las direcciones desde las que ProxCenter alcanza a los invitados, separadas por comas. Vacío: detección automática."
+        "rate": "Vacío deja intacto el límite de tasa del registro de Proxmox. Si no, se fija mientras se observa una zona."
       },
       "unitsLong": {
         "seconds": "segundos",
@@ -13784,8 +13784,13 @@
         "hour": "por hora",
         "day": "por día"
       },
-      "leaveAsIs": "No tocar",
+      "leaveAsIs": "Sin cambios",
       "detectedAutomatically": "Detectada automáticamente",
+      "selfIpsSource": {
+        "settings": "ajustes",
+        "install": "script de instalación",
+        "detected": "detectada"
+      },
       "validation": {
         "tagPrefix": "El prefijo de etiqueta tiene de 1 a 16 caracteres: minúsculas, dígitos, . _ + -",
         "range": "{label} debe estar entre {min} y {max} {unit}.",
@@ -13819,7 +13824,8 @@
         "rate": "Tope de líneas de registro por regla, elevado durante la observación para no perder nada; se aplica al clúster de Proxmox.",
         "logInterval": "Tiempo entre dos lecturas del registro del cortafuegos de cada nodo: una lectura por nodo y por intervalo.",
         "readyAfter": "Tiempo sin ningún flujo nuevo que se bloquearía antes de indicar que una zona está lista; no es un bloqueo.",
-        "writeCap": "Superado el tope, el motor se detiene y pide una confirmación."
+        "writeCap": "Superado el tope, el motor se detiene y pide una confirmación.",
+        "selfIps": "Direcciones desde las que ProxCenter alcanza los nodos. La comprobación previa verifica que no queden cortadas. Déjelo vacío para usar la detección."
       }
     },
     "history": {

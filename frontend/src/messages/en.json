@@ -13723,7 +13723,8 @@
           "inZone": "ProxCenter ({self_ip}) is inside the zone {zone}: enforcing it could cut the connection.",
           "uncheckedTimeout": "{count, plural, one {# member} other {# members}} could not be checked (collection cut short): ProxCenter may be inside one of them.",
           "uncheckedCap": "{count, plural, one {# member} other {# members}} could not be checked (more than the collection cap): ProxCenter may be inside one of them.",
-          "inZoneEgress": "ProxCenter ({self_ip}) is inside the zone {zone}, which controls its outbound traffic: allow a flow to the Proxmox nodes before blocking, or ProxCenter could lose them."
+          "inZoneEgress": "ProxCenter ({self_ip}) is inside the zone {zone}, which controls its outbound traffic: allow a flow to the Proxmox nodes before blocking, or ProxCenter could lose them.",
+          "dockerInternal": "The detected address is internal to Docker: in Settings > Advanced, enter the address of the host as Proxmox sees it."
         },
         "egress_subnets": {
           "title": "Outbound subnets",
@@ -13746,8 +13747,8 @@
         "load": "Load on Proxmox",
         "enforcement": "Enforcement",
         "observation": "Observation",
-        "address": "ProxCenter addresses",
         "notifications": "Notify me about",
+        "advanced": "Advanced",
         "removal": "Removal"
       },
       "fields": {
@@ -13761,7 +13762,7 @@
         "rate": "Log rate limit",
         "rateUnit": "Log rate unit",
         "burst": "Log burst",
-        "selfIps": "ProxCenter addresses",
+        "selfIps": "Addresses Proxmox sees",
         "notify_drift": "Drifts",
         "notify_paused": "Engine paused",
         "notify_unprotected": "Unprotected guests",
@@ -13770,8 +13771,7 @@
       "hints": {
         "tagPrefix": "The zone tags on the guests are this prefix followed by the zone name.",
         "write_cap": "Writes to Proxmox allowed in one run. Past it the engine holds and asks you to confirm.",
-        "rate": "Empty leaves the Proxmox log rate limit untouched. Otherwise it is set while a zone is observed.",
-        "selfIps": "The addresses ProxCenter reaches the guests from, separated by commas. Empty: detected automatically."
+        "rate": "Empty leaves the Proxmox log rate limit untouched. Otherwise it is set while a zone is observed."
       },
       "unitsLong": {
         "seconds": "seconds",
@@ -13784,8 +13784,13 @@
         "hour": "per hour",
         "day": "per day"
       },
-      "leaveAsIs": "Leave as is",
+      "leaveAsIs": "Unchanged",
       "detectedAutomatically": "Detected automatically",
+      "selfIpsSource": {
+        "settings": "settings",
+        "install": "install script",
+        "detected": "detected"
+      },
       "validation": {
         "tagPrefix": "The tag prefix is 1 to 16 characters: lowercase letters, digits, . _ + -",
         "range": "{label} must be between {min} and {max} {unit}.",
@@ -13819,7 +13824,8 @@
         "rate": "Cap on log lines per rule, raised during observation so that nothing is lost; applied to the Proxmox cluster.",
         "logInterval": "Delay between two reads of the firewall log of each node: one read per node and per interval.",
         "readyAfter": "Time without a new flow that would be blocked before a zone is shown as ready; it is not a lock.",
-        "writeCap": "Past it, the engine stops and asks for a confirmation."
+        "writeCap": "Past it, the engine stops and asks for a confirmation.",
+        "selfIps": "Addresses ProxCenter reaches the nodes from. The preflight checks they are not cut off. Leave empty to use the detection."
       }
     },
     "history": {

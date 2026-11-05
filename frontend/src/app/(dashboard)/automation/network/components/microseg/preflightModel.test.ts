@@ -49,6 +49,11 @@ describe('the ProxCenter address check that could not look at every member', () 
     expect(preflightMessage(unchecked('collect_cap', 1)).detail).toEqual({ key: 'checks.self_in_zone.uncheckedCap', values: { count: 1 } })
   })
 
+  it('asks for the host address when the detected one is internal to Docker', () => {
+    const docker = { id: 'self_in_zone', status: 'warn' as const, detail: { self_ip: '172.17.0.3', reason: 'docker_internal' } }
+    expect(preflightMessage(docker).detail).toEqual({ key: 'checks.self_in_zone.dockerInternal', values: { self_ip: '172.17.0.3' } })
+  })
+
   it('keeps the zone wording when the address was found in a zone', () => {
     const hit = { id: 'self_in_zone', status: 'warn' as const, detail: { zone: 'web', self_ip: '10.0.0.5' } }
     expect(preflightMessage(hit).detail).toEqual({ key: 'checks.self_in_zone.inZone', values: { zone: 'web', self_ip: '10.0.0.5' } })

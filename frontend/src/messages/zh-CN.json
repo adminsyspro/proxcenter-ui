@@ -13723,7 +13723,8 @@
           "inZone": "ProxCenter（{self_ip}）位于区域 {zone} 内：强制执行可能会切断连接。",
           "uncheckedTimeout": "{count, plural, other {有 # 个成员无法检查}}（收集被中断）：ProxCenter 可能位于其中之一。",
           "uncheckedCap": "{count, plural, other {有 # 个成员无法检查}}（超出收集上限）：ProxCenter 可能位于其中之一。",
-          "inZoneEgress": "ProxCenter（{self_ip}）位于控制出站流量的区域 {zone} 内：阻断前请先放行通往 Proxmox 节点的流量，否则 ProxCenter 可能失去与节点的连接。"
+          "inZoneEgress": "ProxCenter（{self_ip}）位于控制出站流量的区域 {zone} 内：阻断前请先放行通往 Proxmox 节点的流量，否则 ProxCenter 可能失去与节点的连接。",
+          "dockerInternal": "检测到的地址是 Docker 内部地址：请在 设置 > 高级 中填写 Proxmox 看到的主机地址。"
         },
         "egress_subnets": {
           "title": "出站子网",
@@ -13746,8 +13747,8 @@
         "load": "Proxmox 负载",
         "enforcement": "强制执行",
         "observation": "观察",
-        "address": "ProxCenter 地址列表",
         "notifications": "通知我",
+        "advanced": "高级",
         "removal": "移除"
       },
       "fields": {
@@ -13761,7 +13762,7 @@
         "rate": "日志速率限制",
         "rateUnit": "日志速率单位",
         "burst": "日志突发量",
-        "selfIps": "ProxCenter 地址列表",
+        "selfIps": "Proxmox 看到的地址",
         "notify_drift": "偏差",
         "notify_paused": "引擎已暂停",
         "notify_unprotected": "未受保护的客户机",
@@ -13770,8 +13771,7 @@
       "hints": {
         "tagPrefix": "客户机上的区域标签由此前缀加上区域名称组成。",
         "write_cap": "单次运行允许向 Proxmox 写入的次数。超过后引擎会暂停并请您确认。",
-        "rate": "留空则不改动 Proxmox 的日志速率限制。否则在观察区域期间设置该值。",
-        "selfIps": "ProxCenter 连接客户机所用的地址，以逗号分隔。留空则自动检测。"
+        "rate": "留空则不改动 Proxmox 的日志速率限制。否则在观察区域期间设置该值。"
       },
       "unitsLong": {
         "seconds": "秒",
@@ -13784,8 +13784,13 @@
         "hour": "每小时",
         "day": "每天"
       },
-      "leaveAsIs": "保持不变",
+      "leaveAsIs": "不变",
       "detectedAutomatically": "自动检测",
+      "selfIpsSource": {
+        "settings": "设置",
+        "install": "安装脚本",
+        "detected": "自动检测"
+      },
       "validation": {
         "tagPrefix": "标签前缀为 1 到 16 个字符：小写字母、数字、. _ + -",
         "range": "{label}必须在 {min} 到 {max} {unit}之间。",
@@ -13819,7 +13824,8 @@
         "rate": "每条规则的日志行数上限，观察期间会调高以免丢失任何记录；应用于 Proxmox 集群。",
         "logInterval": "每个节点两次读取防火墙日志之间的间隔：每个节点每个间隔读取一次。",
         "readyAfter": "在没有新的会被阻止的流量的情况下持续该时长后，区域才会显示为就绪；这不是锁定。",
-        "writeCap": "超过后引擎会停止并请求确认。"
+        "writeCap": "超过后引擎会停止并请求确认。",
+        "selfIps": "ProxCenter 访问节点时使用的地址。预检会确认这些地址不会被切断。留空则使用自动检测。"
       }
     },
     "history": {

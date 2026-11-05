@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import type { MicrosegSettings } from '@/lib/microseg/types'
 
 import {
-  SETTING_BOUNDS, buildRateLimit, changedUpdate, formFromSettings, parseRateLimit, validateSettingsForm,
+  SETTING_BOUNDS, buildRateLimit, changedUpdate, formFromSettings, parseRateLimit, selfIpsFallback, validateSettingsForm,
 } from './settingsModel'
 
 const base: MicrosegSettings = {
@@ -167,5 +167,18 @@ describe('changed fields', () => {
     expect(empty.light_interval_sec).toBe('300')
     expect(empty.notify_drift).toBe(true)
     expect(empty.selfIps).toBe('')
+  })
+})
+
+describe('what an empty addresses field stands for', () => {
+  it('names the install or detected addresses with their source', () => {
+    expect(selfIpsFallback(['10.42.0.250', '2001:db8::250'], 'install')).toEqual({ ips: '10.42.0.250, 2001:db8::250', source: 'install' })
+    expect(selfIpsFallback(['172.17.0.3'], 'detected')).toEqual({ ips: '172.17.0.3', source: 'detected' })
+  })
+
+  it('has nothing to say when the settings hold them, when none is known, or on an older orchestrator', () => {
+    expect(selfIpsFallback(['10.0.0.5'], 'settings')).toBeNull()
+    expect(selfIpsFallback([], 'detected')).toBeNull()
+    expect(selfIpsFallback(undefined, undefined)).toBeNull()
   })
 })

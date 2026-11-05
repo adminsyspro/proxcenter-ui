@@ -69,6 +69,15 @@ describe('checks', () => {
     expect(within(line).getByText(/web/)).toBeTruthy()
   })
 
+  it('sends to Settings > Advanced when the detected address is internal to Docker', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'self_in_zone', status: 'warn', detail: { self_ip: '172.17.0.3', reason: 'docker_internal' } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'ProxCenter address: warning' })
+    expect(within(line).getByText('The detected address is internal to Docker: in Settings > Advanced, enter the address of the host as Proxmox sees it.')).toBeTruthy()
+  })
+
   it('warns, with the count in the right plural, when members could not be checked', async () => {
     mock.routes['GET /preflight'] = () => reply(200, {
       checks: [{ id: 'self_in_zone', status: 'warn', detail: { unchecked: 1, reason: 'collect_cap' } }],

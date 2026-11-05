@@ -13724,7 +13724,8 @@
           "inZone": "ProxCenter ({self_ip}) est dans la zone {zone} : l'appliquer pourrait couper la connexion.",
           "uncheckedTimeout": "{count, plural, one {# membre n'a pas pu être vérifié} other {# membres n'ont pas pu être vérifiés}} (collecte interrompue) : ProxCenter peut se trouver dans l'un d'eux.",
           "uncheckedCap": "{count, plural, one {# membre n'a pas pu être vérifié} other {# membres n'ont pas pu être vérifiés}} (au-delà du plafond de collecte) : ProxCenter peut se trouver dans l'un d'eux.",
-          "inZoneEgress": "ProxCenter ({self_ip}) est dans la zone {zone}, qui contrôle sa sortie : autorisez un flux vers les nœuds Proxmox avant de bloquer, sinon ProxCenter pourrait les perdre."
+          "inZoneEgress": "ProxCenter ({self_ip}) est dans la zone {zone}, qui contrôle sa sortie : autorisez un flux vers les nœuds Proxmox avant de bloquer, sinon ProxCenter pourrait les perdre.",
+          "dockerInternal": "L'adresse détectée est interne à Docker : renseignez dans Réglages > Avancé l'adresse de l'hôte vue par Proxmox."
         },
         "egress_subnets": {
           "title": "Sous-réseaux de sortie",
@@ -13747,8 +13748,8 @@
         "load": "Charge sur Proxmox",
         "enforcement": "Application",
         "observation": "Observation",
-        "address": "Adresses de ProxCenter",
         "notifications": "Me notifier de",
+        "advanced": "Avancé",
         "removal": "Retrait"
       },
       "fields": {
@@ -13762,7 +13763,7 @@
         "rate": "Débit maximal du journal",
         "rateUnit": "Unité du débit du journal",
         "burst": "Rafale du journal",
-        "selfIps": "Adresses de ProxCenter",
+        "selfIps": "Adresses vues par Proxmox",
         "notify_drift": "Écarts",
         "notify_paused": "Moteur en pause",
         "notify_unprotected": "Invités non protégés",
@@ -13771,8 +13772,7 @@
       "hints": {
         "tagPrefix": "Les tags de zone des invités sont ce préfixe suivi du nom de la zone.",
         "write_cap": "Écritures vers Proxmox permises en un passage. Au-delà, le moteur se met en attente et demande votre confirmation.",
-        "rate": "Vide : la limite de débit du journal de Proxmox n'est pas touchée. Sinon elle est posée tant qu'une zone est observée.",
-        "selfIps": "Les adresses depuis lesquelles ProxCenter joint les invités, séparées par des virgules. Vide : détection automatique."
+        "rate": "Vide : la limite de débit du journal de Proxmox n'est pas touchée. Sinon elle est posée tant qu'une zone est observée."
       },
       "unitsLong": {
         "seconds": "secondes",
@@ -13785,8 +13785,13 @@
         "hour": "par heure",
         "day": "par jour"
       },
-      "leaveAsIs": "Ne pas toucher",
+      "leaveAsIs": "Inchangé",
       "detectedAutomatically": "Détectée automatiquement",
+      "selfIpsSource": {
+        "settings": "réglages",
+        "install": "script d'installation",
+        "detected": "détectée"
+      },
       "validation": {
         "tagPrefix": "Le préfixe de tag fait de 1 à 16 caractères : minuscules, chiffres, . _ + -",
         "range": "{label} doit être compris entre {min} et {max} {unit}.",
@@ -13820,7 +13825,8 @@
         "rate": "Plafond de lignes de journal par règle, relevé pendant l'observation pour ne rien perdre ; appliqué au cluster Proxmox.",
         "logInterval": "Délai entre deux lectures du journal pare-feu de chaque nœud : une lecture par nœud et par intervalle.",
         "readyAfter": "Durée sans nouveau flux qui serait bloqué avant qu'une zone soit indiquée prête ; ce n'est pas un verrou.",
-        "writeCap": "Au-delà, le moteur s'arrête et demande une confirmation."
+        "writeCap": "Au-delà, le moteur s'arrête et demande une confirmation.",
+        "selfIps": "Adresses depuis lesquelles ProxCenter joint les nœuds. Le pré-vol vérifie qu'elles ne sont pas coupées. Laisser vide pour utiliser la détection."
       }
     },
     "history": {

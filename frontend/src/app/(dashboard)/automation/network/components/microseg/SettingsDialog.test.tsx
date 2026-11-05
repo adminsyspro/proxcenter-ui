@@ -38,6 +38,8 @@ const field = (name: string) => screen.getByRole('textbox', { name }) as HTMLInp
 const type = (name: string, value: string) => fireEvent.change(field(name), { target: { value } })
 const save = () => screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
 const put = () => calls('PUT /policy')
+const ADDRESSES = 'Addresses Proxmox sees'
+const openAdvanced = () => fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
 
 describe('form', () => {
   it('shows the current values and keeps Save off until something changes', () => {
@@ -188,14 +190,16 @@ describe('log rate limit', () => {
 describe('self IPs', () => {
   it('names the address that is not valid and refuses to save', () => {
     open()
-    type('ProxCenter addresses', '10.0.0.5, 10.0.0.999')
+    openAdvanced()
+    type(ADDRESSES, '10.0.0.5, 10.0.0.999')
     expect(screen.getByText('10.0.0.999 is not a valid IP address.')).toBeTruthy()
     expect(save().disabled).toBe(true)
   })
 
   it('refuses more than 16', () => {
     open()
-    type('ProxCenter addresses', Array.from({ length: 17 }, (_, i) => `10.0.0.${i + 1}`).join(' '))
+    openAdvanced()
+    type(ADDRESSES, Array.from({ length: 17 }, (_, i) => `10.0.0.${i + 1}`).join(' '))
     expect(screen.getByText('At most 16 addresses.')).toBeTruthy()
     expect(save().disabled).toBe(true)
   })
@@ -203,8 +207,9 @@ describe('self IPs', () => {
   it('sends the list, and an empty list when they are cleared', async () => {
     mock.routes['PUT /policy'] = () => reply(200, { version: 4, policy: policy().policy })
     open({ self_ips: ['10.0.0.5'] })
-    expect(field('ProxCenter addresses').value).toBe('10.0.0.5')
-    type('ProxCenter addresses', '10.0.0.5, fd00::1')
+    openAdvanced()
+    expect(field(ADDRESSES).value).toBe('10.0.0.5')
+    type(ADDRESSES, '10.0.0.5, fd00::1')
     fireEvent.click(save())
     await waitFor(() => expect(put()).toHaveLength(1))
     expect(body(put()[0][1]).settings).toEqual({ self_ips: ['10.0.0.5', 'fd00::1'] })
@@ -213,10 +218,63 @@ describe('self IPs', () => {
   it('clears them with an empty list', async () => {
     mock.routes['PUT /policy'] = () => reply(200, { version: 4, policy: policy().policy })
     open({ self_ips: ['10.0.0.5'] })
-    type('ProxCenter addresses', '')
+    openAdvanced()
+    type(ADDRESSES, '')
     fireEvent.click(save())
     await waitFor(() => expect(put()).toHaveLength(1))
     expect(body(put()[0][1]).settings).toEqual({ self_ips: [] })
+  })
+})
+
+describe('advanced section', () => {
+  const openWith = (extra: Record<string, unknown>, settings: Partial<MicrosegSettings> = {}) =>
+    open(settings, { policy: { ...policy(), ...extra, policy: { ...policy().policy, settings: { ...SETTINGS, ...settings } } } as never })
+
+  it('is closed at opening, last before the removal, and holds the addresses with their tooltip', async () => {
+    open()
+    const toggle = screen.getByRole('button', { name: 'Advanced' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('textbox', { name: ADDRESSES })).toBeNull()
+    const sections = screen.getAllByTestId('settings-section')
+    expect(sections[sections.length - 2].contains(toggle)).toBe(true)
+    expect(sections[sections.length - 1].textContent).toBe('Removal')
+
+    openAdvanced()
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    const input = field(ADDRESSES)
+    const row = input.closest('div[class*="MuiBox"]')?.parentElement?.parentElement as HTMLElement
+    fireEvent.mouseOver(within(row).getByTestId('form-row-tip'))
+    expect(await screen.findByText(/Addresses ProxCenter reaches the nodes from\. The preflight checks they are not cut off\./)).toBeTruthy()
+  })
+
+  it.each([
+    ['install', ['10.42.0.250', '2001:db8::250'], '10.42.0.250, 2001:db8::250 (install script)'],
+    ['detected', ['172.17.0.3'], '172.17.0.3 (detected)'],
+  ])('shows the %s addresses an empty field stands for', (source, ips, text) => {
+    openWith({ self_ips_effective: ips, self_ips_source: source })
+    openAdvanced()
+    expect(field(ADDRESSES).placeholder).toBe(text)
+    expect(field(ADDRESSES).title).toBe(text)
+    expect(field(ADDRESSES).value).toBe('')
+  })
+
+  it('shows the addresses of the settings in the field, and the detection as placeholder', () => {
+    openWith({ self_ips_effective: ['10.0.0.5'], self_ips_source: 'settings' }, { self_ips: ['10.0.0.5'] })
+    openAdvanced()
+    expect(field(ADDRESSES).value).toBe('10.0.0.5')
+    expect(field(ADDRESSES).placeholder).toBe('Detected automatically')
+  })
+
+  it('falls back to the detection wording on an older orchestrator', () => {
+    open()
+    openAdvanced()
+    expect(field(ADDRESSES).placeholder).toBe('Detected automatically')
+  })
+
+  it('says Unchanged in the empty log rate fields', () => {
+    open()
+    expect(field('Log rate limit').placeholder).toBe('Unchanged')
+    expect(field('Log burst').placeholder).toBe('Unchanged')
   })
 })
 

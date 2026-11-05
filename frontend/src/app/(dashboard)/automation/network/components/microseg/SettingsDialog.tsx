@@ -106,6 +106,8 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
             problems={problems}
             busy={busy}
             prefixWarning={prefixChanged}
+            effectiveSelfIps={policy.self_ips_effective}
+            selfIpsSource={policy.self_ips_source}
             onChange={(key, value) => setForm(prev => ({ ...prev, [key]: value }))}
           />
           <SectionTitle>{t('sections.removal')}</SectionTitle>

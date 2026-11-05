@@ -158,7 +158,13 @@ export type MicrosegPolicy = {
   last_revision: MicrosegRevision | null
   version: number
   pending_changes: boolean
+  /** The addresses the preflight takes as ProxCenter's (absent on an older orchestrator). */
+  self_ips_effective?: string[]
+  /** Where they come from: the settings, the install script (PROXCENTER_HOST_IPS) or the detection. */
+  self_ips_source?: SelfIpsSource
 }
+
+export type SelfIpsSource = 'settings' | 'install' | 'detected'
 
 export type StepKind =
   | 'cluster.ratelimit' | 'ipset.create' | 'ipset.sync' | 'group.create' | 'group.rules'

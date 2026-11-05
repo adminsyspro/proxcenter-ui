@@ -13711,7 +13711,8 @@
           "nodesOff": "The node firewalls are off, so nothing can be cut.",
           "missing": "No rule keeps port {ports} open from anywhere: turning the firewall on could cut your access.",
           "missingFor": "No rule keeps port {ports} open from {ips}: turning the firewall on could cut ProxCenter off.",
-          "dockerInternal": "No rule keeps port {ports} open for ProxCenter: the detected address is internal to Docker, in Settings > Advanced enter the address of the host as Proxmox sees it."
+          "dockerInternal": "No rule keeps port {ports} open for ProxCenter: the detected address is internal to Docker, in Settings > Advanced enter the address of the host as Proxmox sees it.",
+          "groupUnreadable": "The rules of the security group {group} could not be read: the management access cannot be checked."
         },
         "log_ratelimit": {
           "title": "Log rate limit",

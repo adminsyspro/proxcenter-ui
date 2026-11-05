@@ -13379,7 +13379,8 @@
           "nodesOff": "Die Node-Firewalls sind aus, es kann also nichts abgeschnitten werden.",
           "missing": "Keine Regel hält Port {ports} von überall offen: Das Einschalten der Firewall könnte Ihren Zugriff abschneiden.",
           "missingFor": "Keine Regel hält Port {ports} von {ips} aus offen: Das Aktivieren der Firewall könnte ProxCenter abschneiden.",
-          "dockerInternal": "Keine Regel hält Port {ports} für ProxCenter offen: Die erkannte Adresse ist Docker-intern, tragen Sie unter Einstellungen > Erweitert die Adresse des Hosts ein, die Proxmox sieht."
+          "dockerInternal": "Keine Regel hält Port {ports} für ProxCenter offen: Die erkannte Adresse ist Docker-intern, tragen Sie unter Einstellungen > Erweitert die Adresse des Hosts ein, die Proxmox sieht.",
+          "groupUnreadable": "Die Regeln der Sicherheitsgruppe {group} konnten nicht gelesen werden: Der Verwaltungszugang kann nicht geprüft werden."
         },
         "log_ratelimit": {
           "title": "Protokoll-Ratenlimit",

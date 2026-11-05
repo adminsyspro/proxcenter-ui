@@ -115,6 +115,20 @@ describe('the resume dialog', () => {
     expect(within(dialog).queryByText(/the emergency stop is kept/)).toBeNull()
   })
 
+  it('names, in the dialog, the security group whose rules could not be read', async () => {
+    mock.routes['POST /emergency-stop'] = () => reply(409, {
+      code: 'SOCLE_MISSING',
+      error: 'the emergency stop is kept: …',
+      detail: { web: false, ssh: false, reason: 'group_unreadable', group: 'sg-gone' },
+    })
+    renderConfigured()
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Resume' }))
+
+    expect(await within(dialog).findByText('The rules of the security group sg-gone could not be read: the management access cannot be checked.')).toBeTruthy()
+  })
+
   it('opens the deployment wizard from the refusal and closes the dialog', async () => {
     mock.routes['POST /emergency-stop'] = () => reply(409, { code: 'SOCLE_MISSING', error: 'x' })
     renderConfigured()

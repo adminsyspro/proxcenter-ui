@@ -13711,7 +13711,8 @@
           "nodesOff": "Los cortafuegos de los nodos están desactivados, no se puede cortar nada.",
           "missing": "Ninguna regla mantiene abierto el puerto {ports} desde cualquier origen: activar el cortafuegos podría cortar su acceso.",
           "missingFor": "Ninguna regla mantiene abierto el puerto {ports} desde {ips}: activar el cortafuegos podría dejar fuera a ProxCenter.",
-          "dockerInternal": "Ninguna regla mantiene abierto el puerto {ports} para ProxCenter: la dirección detectada es interna de Docker, indique en Ajustes > Avanzado la dirección del host que ve Proxmox."
+          "dockerInternal": "Ninguna regla mantiene abierto el puerto {ports} para ProxCenter: la dirección detectada es interna de Docker, indique en Ajustes > Avanzado la dirección del host que ve Proxmox.",
+          "groupUnreadable": "No se pudieron leer las reglas del grupo de seguridad {group}: no se puede comprobar el acceso de administración."
         },
         "log_ratelimit": {
           "title": "Límite de tasa del registro",

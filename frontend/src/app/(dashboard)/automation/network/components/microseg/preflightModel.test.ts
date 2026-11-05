@@ -90,6 +90,14 @@ describe('a SOCLE_MISSING refusal', () => {
     ])
   })
 
+  it('names the security group that could not be read', () => {
+    expect(socleRefusalLines({ reason: 'group_unreadable', group: 'sg-gone' })).toEqual([
+      { key: 'preflight.checks.socle_rules.groupUnreadable', values: { group: 'sg-gone' } },
+    ])
+    const check = { id: 'socle_rules', status: 'fail' as const, fix: 'socle', detail: { web: false, ssh: false, reason: 'group_unreadable', group: 'sg-gone' } }
+    expect(preflightMessage(check).detail).toEqual({ key: 'checks.socle_rules.groupUnreadable', values: { group: 'sg-gone' } })
+  })
+
   it('says nothing more without a detail', () => {
     expect(socleRefusalLines(undefined)).toEqual([])
     expect(socleRefusalLines({ web: false, ssh: true })).toEqual([])

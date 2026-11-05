@@ -13712,7 +13712,8 @@
           "nodesOff": "Les pare-feu des nœuds sont désactivés, rien ne peut être coupé.",
           "missing": "Aucune règle ne laisse le port {ports} ouvert depuis n'importe où : activer le pare-feu pourrait couper votre accès.",
           "missingFor": "Aucune règle ne garde le port {ports} ouvert depuis {ips} : activer le pare-feu pourrait couper ProxCenter.",
-          "dockerInternal": "Aucune règle ne garde le port {ports} ouvert pour ProxCenter : l'adresse détectée est interne à Docker, renseignez dans Réglages > Avancé l'adresse de l'hôte vue par Proxmox."
+          "dockerInternal": "Aucune règle ne garde le port {ports} ouvert pour ProxCenter : l'adresse détectée est interne à Docker, renseignez dans Réglages > Avancé l'adresse de l'hôte vue par Proxmox.",
+          "groupUnreadable": "Les règles du groupe de sécurité {group} n'ont pas pu être lues : impossible de vérifier que l'accès d'administration reste ouvert."
         },
         "log_ratelimit": {
           "title": "Limite du débit de journal",

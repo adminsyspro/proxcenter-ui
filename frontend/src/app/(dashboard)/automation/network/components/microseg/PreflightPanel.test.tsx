@@ -87,6 +87,15 @@ describe('checks', () => {
     expect(within(line).getByText(/the detected address is internal to Docker, in Settings > Advanced enter the address of the host/)).toBeTruthy()
   })
 
+  it('names the security group whose rules could not be read', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'socle_rules', status: 'fail', fix: 'socle', detail: { web: false, ssh: false, reason: 'group_unreadable', group: 'sg-gone' } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'Management access: failed' })
+    expect(within(line).getByText('The rules of the security group sg-gone could not be read: the management access cannot be checked.')).toBeTruthy()
+  })
+
   it('names the address the socle rules do not accept', async () => {
     mock.routes['GET /preflight'] = () => reply(200, {
       checks: [{ id: 'socle_rules', status: 'fail', fix: 'socle', detail: { web: true, ssh: false, uncovered: ['192.168.5.1'] } }],

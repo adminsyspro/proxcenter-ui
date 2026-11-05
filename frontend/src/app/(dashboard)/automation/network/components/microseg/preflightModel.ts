@@ -40,6 +40,7 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
       if (check.status === 'pass') return { key: detail.node_firewalls === 'off' ? 'checks.socle_rules.nodesOff' : 'checks.socle_rules.pass' }
       const ports = socleMissing(detail)
       if (detail.reason === 'docker_internal') return { key: 'checks.socle_rules.dockerInternal', values: { ports } }
+      if (detail.reason === 'group_unreadable') return { key: 'checks.socle_rules.groupUnreadable', values: { group: text(detail.group) } }
       const uncovered = (Array.isArray(detail.uncovered) ? detail.uncovered : []).filter((ip): ip is string => typeof ip === 'string')
       if (uncovered.length > 0) return { key: 'checks.socle_rules.missingFor', values: { ports, ips: uncovered.join(', ') } }
       return { key: 'checks.socle_rules.missing', values: { ports } }
@@ -70,13 +71,14 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
 
 /**
  * What a SOCLE_MISSING refusal says beyond its fixed message, from the failed
- * socle check it carries: the Docker reason and the addresses the rules leave
- * out, as keys under microsegPilot.
+ * socle check it carries: the Docker reason, the security group that could not
+ * be read and the addresses the rules leave out, as keys under microsegPilot.
  */
 export function socleRefusalLines(detail: Record<string, unknown> | undefined): Array<{ key: string; values?: Record<string, string> }> {
   if (!detail) return []
   const lines: Array<{ key: string; values?: Record<string, string> }> = []
   if (detail.reason === 'docker_internal') lines.push({ key: 'preflight.checks.self_in_zone.dockerInternal' })
+  if (detail.reason === 'group_unreadable') lines.push({ key: 'preflight.checks.socle_rules.groupUnreadable', values: { group: text(detail.group) } })
   const uncovered = (Array.isArray(detail.uncovered) ? detail.uncovered : []).filter((ip): ip is string => typeof ip === 'string')
   if (uncovered.length > 0) lines.push({ key: 'stop.socleUncovered', values: { ips: uncovered.join(', ') } })
   return lines

@@ -229,7 +229,7 @@ describe('outbound state of a zone in its panel', () => {
   it('has no outbound action while the outbound is off', async () => {
     setupMap({ zones: [web({ state: 'enforce' })] })
     const panel = await openPanel()
-    expect(await within(panel).findByText('Outbound: off')).toBeTruthy()
+    expect(await within(panel).findByText('Outbound: not controlled')).toBeTruthy()
     expect(within(panel).queryByRole('button', { name: 'Block outbound' })).toBeNull()
     expect(within(panel).queryByRole('button', { name: 'Reopen outbound' })).toBeNull()
   })

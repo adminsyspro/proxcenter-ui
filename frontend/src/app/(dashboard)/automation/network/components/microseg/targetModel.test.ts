@@ -87,6 +87,18 @@ describe('the observed flows of a targeted guest', () => {
     expect(own.map(r => [r.suggestion.id, r.direction])).toEqual([['o3', 'out']])
   })
 
+  it('lists the outbound flows of its zone for each member whatever the sample source address, marking those another member emitted, its own first', () => {
+    const outbound = (id: string, over: Record<string, unknown> = {}) => seen(id, { direction: 'out', src_key: 'zw', src_zone_id: 'zw', src_ip: '10.0.1.9', dst_zone_id: '', dst_key: '10.0.2.7', dst_ip: '10.0.2.7', hits: 1, ...over })
+    const rows = targetSuggestions([
+      outbound('other', { hits: 50 }),
+      outbound('mine', { src_ip: '10.0.1.1', hits: 2 }),
+      outbound('foreign', { src_key: 'zd', src_zone_id: 'zd' }),
+    ], target())
+    expect(rows.map(r => [r.suggestion.id, r.direction, r.fromZone ?? null])).toEqual([['mine', 'out', null], ['other', 'out', 'zw']])
+    const unzoned = targetSuggestions([outbound('other')], target({ zoneId: null }))
+    expect(unzoned).toEqual([])
+  })
+
   it('names a peer by its guest when an address is known', () => {
     const peers = targetPeers([guest(200, 'db-1', ['10.0.4.1/24'])])
     expect(peers.get('10.0.4.1')).toBe('db-1')

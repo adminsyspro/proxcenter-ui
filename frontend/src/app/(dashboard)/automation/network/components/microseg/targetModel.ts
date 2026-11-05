@@ -77,6 +77,8 @@ export type TargetFlow = {
   peerIp: string
   /** The emitting zone of an outbound flow the guest receives, when no source address says who sent it. */
   peerZoneId?: string
+  /** The emitting zone of an outbound flow the guest's zone emits when its sample source address is another member's (or unknown). */
+  fromZone?: string
 }
 
 /** The zone an outbound flow leaves from (`src_key` on older data), '' for an inbound flow. */
@@ -86,16 +88,18 @@ const emittingZone = (s: MicrosegSuggestion): string => (s.direction === 'out' ?
 export function targetSuggestions(suggestions: MicrosegSuggestion[], t: TargetGuest): TargetFlow[] {
   const ips = targetAddresses(t)
   const own = (ip: string) => !!ip && ips.has(bareIp(ip))
-  // An outbound flow without a source address is the guest's when it leaves the guest's zone.
-  const emits = (s: MicrosegSuggestion) => own(s.src_ip) || (!s.src_ip && !!t.zoneId && emittingZone(s) === t.zoneId)
+  // An outbound flow is aggregated per emitting zone with one sample address: it is the guest's when that address is its own
+  // or when it leaves the guest's zone, whichever member the sample address belongs to.
+  const ofZone = (s: MicrosegSuggestion) => !!t.zoneId && emittingZone(s) === t.zoneId
+  const emits = (s: MicrosegSuggestion) => own(s.src_ip) || ofZone(s)
   return suggestions
     .filter(s => s.status === 'pending' && (emits(s) || own(s.dst_ip)))
     .map((s): TargetFlow => {
-      if (emits(s)) return { suggestion: s, direction: 'out', peerIp: s.dst_ip }
+      if (emits(s)) return { suggestion: s, direction: 'out', peerIp: s.dst_ip, ...(!own(s.src_ip) ? { fromZone: emittingZone(s) } : {}) }
       const zone = !s.src_ip ? emittingZone(s) : ''
       return { suggestion: s, direction: 'in', peerIp: s.src_ip, ...(zone ? { peerZoneId: zone } : {}) }
     })
-    .sort((a, b) => b.suggestion.hits - a.suggestion.hits || Number(a.direction === 'in') - Number(b.direction === 'in') || byText(a.suggestion.id, b.suggestion.id))
+    .sort((a, b) => Number(!!a.fromZone) - Number(!!b.fromZone) || b.suggestion.hits - a.suggestion.hits || Number(a.direction === 'in') - Number(b.direction === 'in') || byText(a.suggestion.id, b.suggestion.id))
 }
 
 /** The guest name of each known address (the first guest by name when two share one). */

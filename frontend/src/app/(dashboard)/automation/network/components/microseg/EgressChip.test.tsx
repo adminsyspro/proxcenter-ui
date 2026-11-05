@@ -15,7 +15,7 @@ import ZoneCard from './ZoneCard'
 installFreshMocks()
 
 const CASES: Array<{ state: EgressState; ready: boolean; label: string; colorClass: string }> = [
-  { state: 'off', ready: false, label: 'Outbound: off', colorClass: 'MuiChip-colorDefault' },
+  { state: 'off', ready: false, label: 'Outbound: not controlled', colorClass: 'MuiChip-colorDefault' },
   { state: 'observe', ready: false, label: 'Outbound: observing', colorClass: 'MuiChip-colorInfo' },
   { state: 'observe', ready: true, label: 'Outbound: ready', colorClass: 'MuiChip-colorSuccess' },
   { state: 'enforce', ready: false, label: 'Outbound: blocking', colorClass: 'MuiChip-colorError' },
@@ -36,6 +36,26 @@ describe('EgressChip', () => {
   })
 })
 
+describe('the icon-only chip', () => {
+  const css = () => Array.from(document.querySelectorAll('style')).map(x => x.textContent).join('\n')
+
+  it('reads its state in its accessible name and keeps a positive margin on both sides of its icon, so its outline stays inside the card', () => {
+    renderWithProviders(<EgressChip state='off' iconOnlyBelow={160} />)
+    expect(screen.getByLabelText('Outbound: not controlled').classList.contains('MuiChip-root')).toBe(true)
+    const block = /@container \(max-width: 160px\)\{(.*)\}/.exec(css())
+    expect(block).toBeTruthy()
+    const icon = /\.MuiChip-icon\{([^}]*)\}/.exec(block![1])
+    expect(icon).toBeTruthy()
+    expect(icon![1]).not.toMatch(/margin-right:\s*-/)
+    expect(icon![1]).toMatch(/margin-right:\s*5px/)
+  })
+
+  it('words the not controlled state in French without an anglicism', async () => {
+    const fr = (await import('@/messages/fr.json')).default as any
+    expect(fr.microsegPilot.policy.zone.egress.state.off).toBe('Sortie : non contrôlée')
+  })
+})
+
 describe('on the zone card', () => {
   const rowProps = {
     members: [], membersKnown: true, flows: [], zonesById: new Map(),
@@ -50,7 +70,7 @@ describe('on the zone card', () => {
 
   it('says off for a zone without outbound control, whatever its old data holds', () => {
     renderWithProviders(<ZoneCard zone={web({ state: 'disabled', egress_state: 'enforce' })} {...rowProps} />)
-    expect(within(screen.getByRole('listitem', { name: 'web' })).getByText('Outbound: off')).toBeTruthy()
+    expect(within(screen.getByRole('listitem', { name: 'web' })).getByText('Outbound: not controlled')).toBeTruthy()
   })
 
   it('keeps the name first on one line: the chips shrink and the outbound chip goes icon-only in a narrow card', () => {

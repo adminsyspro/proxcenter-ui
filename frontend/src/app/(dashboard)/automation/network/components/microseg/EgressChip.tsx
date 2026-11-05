@@ -33,7 +33,7 @@ export default function EgressChip({ state, ready = false, size = 'small', iconO
         label={<span data-egress-label>{t(`state.${look}`)}</span>}
         sx={{
           flexShrink: 0, maxWidth: '100%',
-          ...(iconOnlyBelow ? { [`@container (max-width: ${iconOnlyBelow}px)`]: { '& .MuiChip-label': { display: 'none' }, '& .MuiChip-icon': { mr: '-6px' } } } : {}),
+          ...(iconOnlyBelow ? { [`@container (max-width: ${iconOnlyBelow}px)`]: { '& .MuiChip-label': { display: 'none' }, '& .MuiChip-icon': { mr: '5px' } } } : {}),
         }}
       />
     </Tooltip>

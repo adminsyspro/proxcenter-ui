@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
 import { isAggregateDst, type FlowDirection, type MicrosegSuggestion, type SuggestionAction, type SuggestionKind } from '@/lib/microseg/types'
-import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
+import { serviceLabel, serviceLabelIn, serviceTitle } from '@/lib/network/serviceNames'
 
 import AcceptNetworkDialog from './AcceptNetworkDialog'
 import { isVersionConflict, writeErrorMessage } from './dialogParts'
@@ -57,11 +57,11 @@ export function DirectionGlyph({ direction }: { direction: FlowDirection | undef
 }
 
 /** The service of an observed flow (its name, protocol and port in the tooltip) and its hits, as two cells of a row. */
-export function ServiceHits({ suggestion: s }: { suggestion: Pick<MicrosegSuggestion, 'proto' | 'dport' | 'hits'> }) {
+export function ServiceHits({ suggestion: s, sharedServices }: { suggestion: Pick<MicrosegSuggestion, 'proto' | 'dport' | 'hits'>; sharedServices?: ReadonlySet<string> }) {
   const t = useTranslations('microsegPilot.observation')
   return (
     <>
-      <TruncatedText text={serviceLabel(s.proto, s.dport)} title={serviceTitle(s.proto, s.dport)} color='text.secondary' sx={{ flexShrink: 0 }} />
+      <TruncatedText text={sharedServices ? serviceLabelIn(s.proto, s.dport, sharedServices) : serviceLabel(s.proto, s.dport)} title={serviceTitle(s.proto, s.dport)} color='text.secondary' sx={{ flexShrink: 0 }} />
       <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{t('hits', { count: s.hits })}</Typography>
     </>
   )

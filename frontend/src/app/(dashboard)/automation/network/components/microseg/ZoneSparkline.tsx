@@ -17,7 +17,7 @@ function LegendKey({ colour, label }: { colour: string; label: string }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
       <Box component='span' aria-hidden sx={{ width: 8, height: 8, borderRadius: '2px', bgcolor: colour, flexShrink: 0 }} />
-      <Typography variant='caption' color='text.secondary' noWrap>{label}</Typography>
+      <Typography variant='caption' color='text.secondary' noWrap sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</Typography>
     </Box>
   )
 }
@@ -74,9 +74,9 @@ export default function ZoneSparkline({ state, series, outSeries = null, outStat
   return (
     <Box data-zone-sparkline sx={{ minWidth: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1, minWidth: 0 }}>
-        <Typography variant='caption' color='text.secondary' noWrap>{t('title')}</Typography>
+        <Typography variant='caption' color='text.secondary' noWrap sx={{ flexShrink: 0 }}>{t('title')}</Typography>
         <Tooltip title={total === null ? '' : t('aria', { count: total })} disableInteractive>
-          <Typography variant='caption' color='text.primary' fontWeight={600} noWrap data-testid='zone-sparkline-total' sx={{ flexShrink: 0 }}>{label}</Typography>
+          <Typography variant='caption' color='text.primary' fontWeight={600} noWrap data-testid='zone-sparkline-total' sx={{ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</Typography>
         </Tooltip>
       </Box>
       <Box sx={{ mt: 0.25 }}>

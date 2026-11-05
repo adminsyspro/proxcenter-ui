@@ -76,6 +76,22 @@ describe('ZoneSparkline', () => {
       expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 would be blocked · 20 outbound would be blocked')
     })
 
+    it('truncates the total with an ellipsis instead of cutting it, and lets it shrink before the title', () => {
+      renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      const total = getComputedStyle(screen.getByTestId('zone-sparkline-total'))
+      expect(total.textOverflow).toBe('ellipsis')
+      expect(total.whiteSpace).toBe('nowrap')
+      expect(total.overflow).toBe('hidden')
+      expect(total.flexShrink).not.toBe('0')
+      expect(total.minWidth).toBe('0px')
+    })
+
+    it('truncates each key of the legend', () => {
+      renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      const key = screen.getByText('Outbound')
+      expect(getComputedStyle(key).textOverflow).toBe('ellipsis')
+    })
+
     it('says both counts on hover', async () => {
       renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
       fireEvent.mouseOver(bars()[5])

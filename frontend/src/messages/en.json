@@ -12894,7 +12894,7 @@
         },
         "egress": {
           "state": {
-            "off": "Outbound: off",
+            "off": "Outbound: not controlled",
             "observe": "Outbound: observing",
             "ready": "Outbound: ready",
             "enforce": "Outbound: blocking"
@@ -13591,6 +13591,7 @@
           "noZoneFlows": "This guest is in no zone: no allowed flow applies to it.",
           "incoming": "Incoming, from {peer}",
           "outgoing": "Outgoing, to {peer}",
+          "fromZone": "from zone {zone}",
           "acceptTip": "Accept as flow {from} → {to} {service}: the engine keeps one sample pair of guests per observed flow, so the flow covers the whole zone pair.",
           "partial": "Only the first {count} pending observed flows of the map are read: this list may miss some."
         },

@@ -386,6 +386,26 @@ describe('the target search of a user who cannot read the inventory (D9)', () =>
       expect(within(aside).queryByRole('button', { name: /Deleted zone/ })).toBeNull()
     })
 
+    it('lists the outbound flows of its zone in the panel of another member, marked as coming from the zone, its own first', async () => {
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { hits: 9 }), out('o2', { src_ip: '10.0.0.3', dport: '443', hits: 1 })] })
+      await node('guest:zw:qemu/101')
+      await target('web-2')
+      const rows = within(await panel('Guest web-2')).getAllByRole('listitem')
+      expect(rows.map(r => r.getAttribute('data-suggestion'))).toEqual(['o2', 'o1'])
+      expect(within(rows[0]).queryByText('from zone web')).toBeNull()
+      expect(within(rows[1]).getByText('from zone web')).toBeTruthy()
+    })
+
+    it('adds the protocol to a service name two rows share for different protocols', async () => {
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { proto: 'udp', dport: '53' }), out('o2', { proto: 'tcp', dport: '53' }), out('o3', { proto: 'tcp', dport: '22' })] })
+      await node('guest:zw:qemu/100')
+      await target('web-1')
+      const aside = await panel('Guest web-1')
+      expect(within(aside).getByText('DNS (udp)')).toBeTruthy()
+      expect(within(aside).getByText('DNS (tcp)')).toBeTruthy()
+      expect(within(aside).getByText('SSH')).toBeTruthy()
+    })
+
     it('offers neither Accept nor a network for many destinations, only the hint', async () => {
       setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { dst_key: '0.0.0.0/0', dst_ip: '' })] })
       await node('guest:zw:qemu/100')

@@ -5,10 +5,11 @@ import { Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/materia
 import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
-import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
+import { zoneEgress, type MicrosegFlow, type MicrosegZone } from '@/lib/microseg/types'
 import { serviceLabel } from '@/lib/network/serviceNames'
 
 import DiffChip from './DiffChip'
+import EgressChip from './EgressChip'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import { endText } from './policyTableModel'
 import { flowsOfZone, type ZoneMember } from './zoneModel'
@@ -24,6 +25,8 @@ export type ZoneCardProps = ZoneRowProps & {
   /** The zone's drifts (ignored ones left out), null while the engine has not computed them. */
   drifts: number | null
   onOpenDrifts?: (zone: MicrosegZone) => void
+  /** The outbound observation is clean for the whole window (isEgressReady): the chip says ready. */
+  egressReady?: boolean
   /**
    * The zone's uncovered traffic of the last 24 hours, one count per hour: `series` null while the history is read.
    * The whole value is null when the history cannot be read (an older orchestrator): no sparkline then.
@@ -103,7 +106,7 @@ function FlowPreview({ zone, flows, zonesById }: { zone: MicrosegZone; flows: Mi
  * and the flows opened full width below the row of cards) and the actions, shown on hover or focus (always on touch).
  */
 export default function ZoneCard(props: ZoneCardProps) {
-  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onAssign, onAddFlow, drifts, onOpenDrifts, uncovered } = props
+  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onAssign, onAddFlow, drifts, onOpenDrifts, uncovered, egressReady = false } = props
   const t = useTranslations('microsegPilot.policy.zone')
   const ts = useTranslations('microsegPilot.overview.sections')
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
@@ -123,6 +126,7 @@ export default function ZoneCard(props: ZoneCardProps) {
           <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
             <ZoneStateChip state={zone.state} onClick={canWrite ? setAnchor : undefined} />
+            <EgressChip state={zoneEgress(zone)} ready={egressReady} />
             <DiffChip kind={diffKind} />
             {!!drifts && (
               <Chip

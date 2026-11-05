@@ -12882,6 +12882,20 @@
           "disabled": "Zone désactivée : son trafic n'est pas journalisé",
           "aria": "{count, plural, one {Trafic non couvert sur les dernières 24 heures : # occurrence} other {Trafic non couvert sur les dernières 24 heures : # occurrences}}",
           "bar": "{from} à {to} : {count, plural, one {# occurrence} other {# occurrences}}"
+        },
+        "egress": {
+          "state": {
+            "off": "Sortie : off",
+            "observe": "Sortie : observation",
+            "ready": "Sortie : prête",
+            "enforce": "Sortie : blocage"
+          },
+          "hint": {
+            "off": "Le trafic sortant n'est pas contrôlé",
+            "observe": "Le trafic sortant est journalisé, rien n'est bloqué",
+            "ready": "Rien n'aurait été bloqué en sortie sur toute la fenêtre d'observation",
+            "enforce": "Seuls les flux de la politique sortent de la zone"
+          }
         }
       },
       "flow": {
@@ -12970,7 +12984,9 @@
           "observe": "{label} : passage en observation en cours",
           "enforce": "{label} : passage en application en cours",
           "egressObserve": "{label} : contrôle de la sortie en cours",
-          "egressOff": "{label} : retrait du contrôle de la sortie en cours"
+          "egressOff": "{label} : retrait du contrôle de la sortie en cours",
+          "egressReopen": "{label} : réouverture de la sortie en cours",
+          "egressEnforce": "{label} : blocage de la sortie en cours"
         },
         "done": "{label} : {done} faites, {failed} en échec, {notRun} non exécutées",
         "failed": "{label} : l'exécution a échoué",
@@ -13053,6 +13069,22 @@
         "uncovered": "{count, plural, one {Non couvert 24 h : # occurrence} other {Non couvert 24 h : # occurrences}}",
         "uncoveredHint": "Trafic entrant dans cette zone qu’aucun flux ne couvre (journalisé par les membres de la zone ces dernières 24 h)",
         "noFlowInto": "Aucun flux vers cette zone"
+      },
+      "egressState": {
+        "title": {
+          "block": "Bloquer la sortie de la zone {name} ?",
+          "reopen": "Rouvrir la sortie de la zone {name} ?"
+        },
+        "reopenBody": "La sortie repasse en observation : plus rien n'est bloqué.",
+        "checking": "Vérification de l'observation de la sortie...",
+        "ready": "Rien n'aurait été bloqué en sortie ces {hours} dernières heures.",
+        "notReady": "Cette zone n'est pas prête : il faut {hours} heures d'observation de la sortie sans trafic en attente qui serait bloqué.",
+        "unchecked": "L'observation de la sortie n'a pas pu être vérifiée, la zone est considérée comme pas prête.",
+        "typeName": "Saisissez {name} pour confirmer",
+        "confirm": {
+          "block": "Bloquer la sortie",
+          "reopen": "Rouvrir la sortie"
+        }
       }
     },
     "plan": {
@@ -13366,7 +13398,9 @@
         "editFlow": "Modifier le flux",
         "deleteFlow": "Supprimer le flux",
         "newIncoming": "Nouveau flux entrant",
-        "newOutgoing": "Nouveau flux sortant"
+        "newOutgoing": "Nouveau flux sortant",
+        "egressBlock": "Bloquer la sortie",
+        "egressReopen": "Rouvrir la sortie"
       },
       "partial": "Partiel : seuls les {count, number} premiers flux en attente sont dessinés.",
       "filters": {

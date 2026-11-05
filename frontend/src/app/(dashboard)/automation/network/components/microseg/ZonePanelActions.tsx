@@ -4,7 +4,7 @@ import { useCallback, useState, type MouseEvent, type ReactNode } from 'react'
 import { Box, IconButton } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import type { MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import { zoneEgress, type MicrosegFlow, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
 import { useDialogAction } from './dialogParts'
 import DiscardDraft from './DiscardDraft'
@@ -14,6 +14,7 @@ import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import type { ZoneEdits } from './useZoneEdits'
 import { zoneGateOf } from './zoneGate'
 import ZoneDialog from './ZoneDialog'
+import ZoneEgressDialog from './ZoneEgressDialog'
 import ZoneEnforceDialog from './ZoneEnforceDialog'
 import { ZoneStateMenu } from './ZoneRow'
 import ZoneStateDialog from './ZoneStateDialog'
@@ -82,7 +83,7 @@ export function ZoneStateConfirm({ zone, state, edits, onClose }: { zone: Micros
   )
 }
 
-type ZoneDialogOpen = { kind: 'edit' } | { kind: 'delete' } | { kind: 'state'; state: ZoneState } | null
+type ZoneDialogOpen = { kind: 'edit' } | { kind: 'delete' } | { kind: 'state'; state: ZoneState } | { kind: 'egress'; action: 'block' | 'reopen' } | null
 
 /** Edit, state, delete and assign of the zone of the panel, one row of icons, with their dialogs. */
 export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted }: { zone: MicrosegZone; edits: ZoneEdits; onAssign: () => void; onDeleted: () => void }) {
@@ -103,16 +104,41 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted }: { zone: 
       onDeleted()
     }
   }
+  const egress = zoneEgress(zone)
+  // Reopening is one click; with pending changes in the draft it goes through the refusal (the change applies the whole draft).
+  const reopenEgress = () => {
+    if (edits.pendingChanges.pending) {
+      setOpen({ kind: 'egress', action: 'reopen' })
+      return
+    }
+    edits.setZoneEgressState(zone, 'observe').catch(edits.reportError)
+  }
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
       <WriteIcon label={t('edit')} icon='ri-pencil-line' onClick={() => setOpen({ kind: 'edit' })} />
+      {egress === 'observe' && <WriteIcon label={t('egressBlock')} icon='ri-lock-line' onClick={() => setOpen({ kind: 'egress', action: 'block' })} />}
+      {egress === 'enforce' && <WriteIcon label={t('egressReopen')} icon='ri-lock-unlock-line' onClick={reopenEgress} />}
       <WriteIcon label={t('changeState')} icon='ri-toggle-line' aria-haspopup='menu' onClick={e => setAnchor(e.currentTarget)} />
       <WriteIcon label={t('delete')} icon='ri-delete-bin-line' onClick={() => { removal.reset(); setOpen({ kind: 'delete' }) }} />
       <WriteIcon label={t('assign')} icon='ri-add-circle-line' onClick={onAssign} />
       <ZoneStateMenu zone={zone} anchor={anchor} onClose={() => setAnchor(null)} onPick={state => setOpen({ kind: 'state', state })} />
       {open?.kind === 'edit' && <ZoneDialog zone={zone} onSave={save} onClose={close} gate={zoneGateOf(edits, close)} />}
       {open?.kind === 'state' && <ZoneStateConfirm zone={zone} state={open.state} edits={edits} onClose={close} />}
+      {open?.kind === 'egress' && (
+        <ZoneEgressDialog
+          connectionId={edits.connectionId}
+          zone={zone}
+          action={open.action}
+          readyAfterHours={edits.readyAfterHours}
+          gate={zoneGateOf(edits, close)}
+          onConfirm={async () => {
+            await edits.setZoneEgressState(zone, open.action === 'block' ? 'enforce' : 'observe')
+            close()
+          }}
+          onCancel={close}
+        />
+      )}
       <MicrosegConfirmDialog
         open={open?.kind === 'delete'}
         title={tp('delete.zoneTitle', { name: zone.name })}

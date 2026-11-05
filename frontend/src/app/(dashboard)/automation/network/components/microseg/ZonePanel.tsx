@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import { useMicrosegDrifts } from '@/lib/microseg/useMicrosegLists'
-import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
+import { zoneEgress, type MicrosegFlow, type MicrosegSuggestion, type MicrosegZone, type SuggestionAction } from '@/lib/microseg/types'
 
 import FlowSummary from './FlowSummary'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
@@ -15,12 +15,14 @@ import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
 import { MemberChangeChip } from './ZoneRow'
+import EgressChip from './EgressChip'
 import ZoneStateChip from './ZoneStateChip'
 import { FlowRowActions, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
 import type { ZoneEdits } from './useZoneEdits'
 import { useIgnoredDrifts } from './driftIgnore'
 import { OneLine } from './dialogParts'
-import { flowsOfZone, guestKey, type ZoneMember } from './zoneModel'
+import { useNow } from './useNow'
+import { flowsOfZone, guestKey, isEgressReady, pendingOutboundOf, type ZoneMember } from './zoneModel'
 import { zoneDriftSignals, zoneSuggestions } from './zonePanelModel'
 import TruncatedText from './TruncatedText'
 
@@ -138,6 +140,10 @@ export default function ZonePanel({
   const editor = useFlowEditor(edits)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
   const zones = useMemo(() => [...zonesById.values()], [zonesById])
+  const egress = zoneEgress(zone)
+  const now = useNow()
+  // The map reads every pending observed flow, outbound ones included: the readiness needs no read of its own.
+  const egressReady = egress === 'observe' && isEgressReady(zone, pendingOutboundOf(suggestions, zone.id), edits.readyAfterHours, now)
   const trafficSection = usePanelSection('zone.traffic')
   const sourcesSection = usePanelSection('zone.sources')
   // Nothing is read for the chart while both sections it feeds are folded.
@@ -175,6 +181,7 @@ export default function ZonePanel({
           />
         )}
         <ZoneStateChip state={zone.state} />
+        <EgressChip state={egress} ready={egressReady} />
         <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: 1 }}>

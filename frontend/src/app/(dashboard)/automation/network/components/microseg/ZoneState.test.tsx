@@ -8,6 +8,7 @@ import { within } from '@testing-library/react'
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 import { calls, fetchMock, mock, reply } from './microsegTestKit'
 import { body, hoursAgo, run, setup, SUGGESTIONS_ROUTE, suggestion, installFreshMocks, web } from './policyTestKit'
+import { node, setup as setupMap, wouldBlock } from './zoneMapTestKit'
 
 installFreshMocks()
 
@@ -191,5 +192,97 @@ describe('enforcing a zone', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(fetchMock.mock.calls.some(([u, i]) => String(u).endsWith('/state') && (i as RequestInit)?.method === 'POST')).toBe(false)
+  })
+})
+
+describe('outbound state of a zone in its panel', () => {
+  const OUT_ROUTE = 'GET /suggestions?kind=would_block&status=pending&zone=zw&direction=out&limit=200'
+  const openPanel = async () => {
+    fireEvent.click(await node('zone:zw'))
+    return screen.findByRole('complementary', { name: 'Zone web' })
+  }
+  const outbound = (id: string, lastSeen: string) => wouldBlock(id, { direction: 'out', src_key: 'zw', src_zone_id: 'zw', dst_zone_id: '', dst_ip: '8.8.8.8', last_seen: lastSeen })
+  const observing = (over = {}) => web({ state: 'enforce', egress_state: 'observe', egress_observe_since: hoursAgo(48), ...over })
+
+  it('shows the chip as ready when the window elapsed with no outbound flow seen in it', async () => {
+    setupMap({ zones: [observing()], suggestions: [outbound('o1', hoursAgo(30))] })
+    const panel = await openPanel()
+    expect(await within(panel).findByText('Outbound: ready')).toBeTruthy()
+  })
+
+  it('shows the chip as observing while an outbound flow was seen inside the window, and ignores inbound ones', async () => {
+    setupMap({ zones: [observing()], suggestions: [outbound('o1', hoursAgo(1))] })
+    const panel = await openPanel()
+    expect(await within(panel).findByText('Outbound: observing')).toBeTruthy()
+  })
+
+  it('has no outbound action while the outbound is off', async () => {
+    setupMap({ zones: [web({ state: 'enforce' })] })
+    const panel = await openPanel()
+    expect(await within(panel).findByText('Outbound: off')).toBeTruthy()
+    expect(within(panel).queryByRole('button', { name: 'Block outbound' })).toBeNull()
+    expect(within(panel).queryByRole('button', { name: 'Reopen outbound' })).toBeNull()
+  })
+
+  it('reopens the outbound in one click, without a dialog, even when the inbound is enforced', async () => {
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r1' })
+    mock.routes['GET /runs/r1'] = () => reply(200, run('running'))
+    setupMap({ zones: [web({ state: 'enforce', egress_state: 'enforce' })] })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Reopen outbound' }))
+    await waitFor(() => expect(calls('POST /zones/zw/egress-state')).toHaveLength(1))
+    expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 3, state: 'observe' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('refuses to reopen the outbound while the draft has pending changes, with the way to the plan', async () => {
+    setupMap({ zones: [web({ state: 'enforce', egress_state: 'enforce' })], pending_changes: true })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Reopen outbound' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Reopen outbound of zone web?' })
+    expect(await within(dialog).findByText(/^Apply or discard your \d+ pending changes? first\.$/)).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'View plan' })).toBeTruthy()
+    expect((within(dialog).getByRole('button', { name: 'Reopen outbound' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
+  })
+
+  it('asks for the zone name to block the outbound of a zone that is not ready', async () => {
+    mock.routes[OUT_ROUTE] = () => reply(200, { suggestions: [outbound('o1', hoursAgo(1))], limit: 200, offset: 0 })
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r1' })
+    mock.routes['GET /runs/r1'] = () => reply(200, run('running'))
+    setupMap({ zones: [observing()] })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Block outbound' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Block outbound of zone web?' })
+    const confirm = await within(dialog).findByRole('button', { name: 'Block outbound' }) as HTMLButtonElement
+    const field = await within(dialog).findByLabelText('Type web to confirm')
+    expect(await within(dialog).findByText(/not ready/)).toBeTruthy()
+    expect(confirm.disabled).toBe(true)
+    fireEvent.change(field, { target: { value: 'web' } })
+    expect(confirm.disabled).toBe(false)
+    fireEvent.click(confirm)
+    await waitFor(() => expect(calls('POST /zones/zw/egress-state')).toHaveLength(1))
+    expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 3, state: 'enforce' })
+  })
+
+  it('asks a plain confirmation to block the outbound of a ready zone', async () => {
+    mock.routes[OUT_ROUTE] = () => reply(200, { suggestions: [outbound('o1', hoursAgo(30))], limit: 200, offset: 0 })
+    setupMap({ zones: [observing()] })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Block outbound' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Block outbound of zone web?' })
+    const confirm = await within(dialog).findByRole('button', { name: 'Block outbound' }) as HTMLButtonElement
+    await waitFor(() => expect(confirm.disabled).toBe(false))
+    expect(within(dialog).queryByLabelText(/Type web to confirm/)).toBeNull()
+  })
+
+  it('refuses to block the outbound while the draft has pending changes', async () => {
+    mock.routes[OUT_ROUTE] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
+    setupMap({ zones: [observing()], pending_changes: true })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Block outbound' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Block outbound of zone web?' })
+    expect(await within(dialog).findByText(/^Apply or discard your \d+ pending changes? first\.$/)).toBeTruthy()
+    expect((within(dialog).getByRole('button', { name: 'Block outbound' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })

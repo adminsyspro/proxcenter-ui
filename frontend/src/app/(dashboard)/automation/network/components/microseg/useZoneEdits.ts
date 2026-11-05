@@ -5,7 +5,7 @@ import { useSWRConfig } from 'swr'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
-import { zoneEgress, type GuestRef, type MembersInput, type MicrosegFlow, type MicrosegPolicy, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
+import { zoneEgress, type EgressState, type GuestRef, type MembersInput, type MicrosegFlow, type MicrosegPolicy, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
 import { isVersionConflict } from './dialogParts'
 import type { FlowSaveValues } from './FlowDialog'
@@ -98,6 +98,17 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     startRun({ runId: started.run_id, kind: 'zoneState', label: zone.name, runningText: t(`run.running.${state}`, { label: zone.name }) })
   })
 
+  /** Applied at once with the whole draft, like the inbound state: the run is followed in the strip of the tab. */
+  const setZoneEgressState = (zone: MicrosegZone, state: Exclude<EgressState, 'off'>) => write(async () => {
+    const started = await api.setZoneEgressState(zone.id, state, version)
+    startRun({
+      runId: started.run_id,
+      kind: 'zoneState',
+      label: zone.name,
+      runningText: t(`run.running.${state === 'observe' ? 'egressReopen' : 'egressEnforce'}`, { label: zone.name }),
+    })
+  })
+
   /** One member write at a time; a failure is kept in `memberError`. */
   const memberWrite = (body: MembersInput) => {
     if (memberBusy) return
@@ -126,6 +137,9 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     saveFlow,
     deleteFlow,
     setZoneState,
+    setZoneEgressState,
+    /** Reports a failure the panel shows in its alert (the one-click reopen has no dialog to show it). */
+    reportError: setMemberError,
     changeMember,
     keepMember,
     memberBusy,

@@ -33,7 +33,7 @@ export function useMicrosegDrifts(connId: string | null | undefined, options: { 
  */
 export function useMicrosegSuggestions(connId: string | null | undefined, params: ListSuggestionsParams) {
   const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
-  const key = connId ? [`${microsegBaseUrl(connId)}/suggestions`, params.kind, params.status, params.zone, params.limit, params.offset] : null
+  const key = connId ? [`${microsegBaseUrl(connId)}/suggestions`, params.kind, params.status, params.zone, params.direction, params.limit, params.offset] : null
   const { data, error, isLoading, isValidating, mutate } = useSWR<MicrosegSuggestion[], MicrosegApiError>(
     key,
     async () => (await api!.listSuggestions(params)).suggestions,

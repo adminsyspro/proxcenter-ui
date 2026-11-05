@@ -97,3 +97,21 @@ export function isZoneReady(
   if (Number.isNaN(since) || now - since < windowMs) return false
   return !pending.some(s => now - Date.parse(s.last_seen) < windowMs)
 }
+
+/**
+ * Same rule as `isZoneReady`, on the outbound: observed for at least `ready_after_hours` since `egress_observe_since`
+ * and no pending outbound would-block suggestion of the zone seen inside that window (`pendingOut`, see `pendingOutboundOf`).
+ */
+export function isEgressReady(
+  zone: Pick<MicrosegZone, 'egress_state' | 'egress_observe_since'>,
+  pendingOut: Pick<MicrosegSuggestion, 'last_seen'>[],
+  readyAfterHours: number | undefined,
+  now: number,
+): boolean {
+  return isZoneReady({ state: 'observe', observe_since: zone.egress_observe_since ?? null }, pendingOut, readyAfterHours, now)
+}
+
+/** The pending outbound would-block suggestions the zone emits (an absent direction is inbound). */
+export function pendingOutboundOf(suggestions: readonly MicrosegSuggestion[], zoneId: string): MicrosegSuggestion[] {
+  return suggestions.filter(s => s.direction === 'out' && s.kind === 'would_block' && s.status === 'pending' && s.src_key === zoneId)
+}

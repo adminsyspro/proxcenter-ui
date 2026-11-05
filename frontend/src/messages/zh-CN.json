@@ -12881,6 +12881,20 @@
           "disabled": "区域已禁用：其流量未被记录",
           "aria": "最近 24 小时的未覆盖流量：{count} 次命中",
           "bar": "{from} 至 {to}：{count} 次命中"
+        },
+        "egress": {
+          "state": {
+            "off": "出站：关闭",
+            "observe": "出站：观察中",
+            "ready": "出站：就绪",
+            "enforce": "出站：阻断中"
+          },
+          "hint": {
+            "off": "出站流量未受控制",
+            "observe": "出站流量会被记录，不会阻断任何流量",
+            "ready": "在整个观察窗口内，出站方向没有任何流量会被阻断",
+            "enforce": "只有策略中的流可以离开该区域"
+          }
         }
       },
       "flow": {
@@ -12969,7 +12983,9 @@
           "observe": "{label}：正在切换到观察",
           "enforce": "{label}：正在切换到强制执行",
           "egressObserve": "{label}:正在控制出站流量",
-          "egressOff": "{label}:正在移除出站流量控制"
+          "egressOff": "{label}:正在移除出站流量控制",
+          "egressReopen": "{label}：正在重新开放出站",
+          "egressEnforce": "{label}：正在阻断出站"
         },
         "done": "{label}：{done} 个已完成，{failed} 个失败，{notRun} 个未执行",
         "failed": "{label}：运行失败",
@@ -13052,6 +13068,22 @@
         "uncovered": "{count, plural, other {未覆盖 24 小时：# 次命中}}",
         "uncoveredHint": "进入该区域且未被任何流量规则覆盖的流量（由该区域成员在过去 24 小时内记录）",
         "noFlowInto": "没有流向该区域的流量规则"
+      },
+      "egressState": {
+        "title": {
+          "block": "阻断区域 {name} 的出站？",
+          "reopen": "重新开放区域 {name} 的出站？"
+        },
+        "reopenBody": "出站将回到观察状态，不再阻断任何流量。",
+        "checking": "正在检查出站观察...",
+        "ready": "过去 {hours} 小时内，出站方向没有任何流量会被阻断。",
+        "notReady": "该区域尚未就绪：需要 {hours} 小时的出站观察，且没有待处理的将被阻断的流量。",
+        "unchecked": "无法检查出站观察，该区域按未就绪处理。",
+        "typeName": "输入 {name} 以确认",
+        "confirm": {
+          "block": "阻断出站",
+          "reopen": "重新开放出站"
+        }
       }
     },
     "plan": {
@@ -13365,7 +13397,9 @@
         "editFlow": "编辑流量规则",
         "deleteFlow": "删除流量规则",
         "newIncoming": "新建入站流量规则",
-        "newOutgoing": "新建出站流量规则"
+        "newOutgoing": "新建出站流量规则",
+        "egressBlock": "阻断出站",
+        "egressReopen": "重新开放出站"
       },
       "partial": "部分显示：仅绘制前 {count, number} 条待处理流量。",
       "filters": {

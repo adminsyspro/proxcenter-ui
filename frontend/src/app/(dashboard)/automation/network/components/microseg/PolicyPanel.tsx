@@ -86,6 +86,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         guestsStatus={guestsStatus}
         pendingMembers={policy.pending_members}
         diff={diff}
+        readyAfterHours={edits.readyAfterHours}
         uncovered={uncovered.failed ? 'failed' : uncovered.series}
         onAdd={() => setZoneDialog({ item: null })}
         onEdit={zone => setZoneDialog({ item: zone })}

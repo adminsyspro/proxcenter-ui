@@ -12549,6 +12549,20 @@
           "disabled": "Zone deaktiviert: ihr Verkehr wird nicht protokolliert",
           "aria": "{count, plural, one {Nicht abgedeckter Verkehr der letzten 24 Stunden: # Treffer} other {Nicht abgedeckter Verkehr der letzten 24 Stunden: # Treffer}}",
           "bar": "{from} bis {to}: {count, plural, one {# Treffer} other {# Treffer}}"
+        },
+        "egress": {
+          "state": {
+            "off": "Ausgang: aus",
+            "observe": "Ausgang: Beobachtung",
+            "ready": "Ausgang: bereit",
+            "enforce": "Ausgang: Sperre"
+          },
+          "hint": {
+            "off": "Der ausgehende Verkehr wird nicht kontrolliert",
+            "observe": "Der ausgehende Verkehr wird protokolliert, nichts wird blockiert",
+            "ready": "Im gesamten Beobachtungsfenster wäre ausgehend nichts blockiert worden",
+            "enforce": "Nur die Flows der Richtlinie verlassen die Zone"
+          }
         }
       },
       "flow": {
@@ -12637,7 +12651,9 @@
           "observe": "{label}: Wechsel zu Beobachtung läuft",
           "enforce": "{label}: Wechsel zu Durchsetzung läuft",
           "egressObserve": "{label}: Kontrolle des ausgehenden Verkehrs läuft",
-          "egressOff": "{label}: Entfernen der Kontrolle des ausgehenden Verkehrs läuft"
+          "egressOff": "{label}: Entfernen der Kontrolle des ausgehenden Verkehrs läuft",
+          "egressReopen": "{label}: Ausgang wird wieder geöffnet",
+          "egressEnforce": "{label}: Ausgang wird gesperrt"
         },
         "done": "{label}: {done} erledigt, {failed} fehlgeschlagen, {notRun} nicht ausgeführt",
         "failed": "{label}: der Lauf ist fehlgeschlagen",
@@ -12720,6 +12736,22 @@
         "uncovered": "{count, plural, one {Nicht abgedeckt 24 h: # Treffer} other {Nicht abgedeckt 24 h: # Treffer}}",
         "uncoveredHint": "Verkehr in diese Zone, den kein Fluss abdeckt (von den Mitgliedern der Zone in den letzten 24 h protokolliert)",
         "noFlowInto": "Kein Fluss in diese Zone"
+      },
+      "egressState": {
+        "title": {
+          "block": "Ausgang der Zone {name} sperren?",
+          "reopen": "Ausgang der Zone {name} wieder öffnen?"
+        },
+        "reopenBody": "Der Ausgang geht zurück in die Beobachtung: nichts wird mehr blockiert.",
+        "checking": "Beobachtung des Ausgangs wird geprüft...",
+        "ready": "In den letzten {hours} Stunden wäre ausgehend nichts blockiert worden.",
+        "notReady": "Diese Zone ist nicht bereit: Sie braucht {hours} Stunden Ausgangsbeobachtung ohne ausstehenden Verkehr, der blockiert würde.",
+        "unchecked": "Die Ausgangsbeobachtung konnte nicht geprüft werden, die Zone gilt als nicht bereit.",
+        "typeName": "Geben Sie {name} zur Bestätigung ein",
+        "confirm": {
+          "block": "Ausgang sperren",
+          "reopen": "Ausgang wieder öffnen"
+        }
       }
     },
     "plan": {
@@ -13033,7 +13065,9 @@
         "editFlow": "Fluss bearbeiten",
         "deleteFlow": "Fluss löschen",
         "newIncoming": "Neuer eingehender Fluss",
-        "newOutgoing": "Neuer ausgehender Fluss"
+        "newOutgoing": "Neuer ausgehender Fluss",
+        "egressBlock": "Ausgang sperren",
+        "egressReopen": "Ausgang wieder öffnen"
       },
       "partial": "Teilweise: Nur die ersten {count, number} ausstehenden Flüsse werden gezeichnet.",
       "filters": {

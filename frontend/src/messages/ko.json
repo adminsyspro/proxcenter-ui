@@ -12881,6 +12881,20 @@
           "disabled": "영역 비활성화됨: 트래픽이 기록되지 않음",
           "aria": "최근 24시간 미적용 트래픽: 히트 {count}개",
           "bar": "{from}~{to}: 히트 {count}개"
+        },
+        "egress": {
+          "state": {
+            "off": "아웃바운드: 끔",
+            "observe": "아웃바운드: 관찰 중",
+            "ready": "아웃바운드: 준비됨",
+            "enforce": "아웃바운드: 차단 중"
+          },
+          "hint": {
+            "off": "아웃바운드 트래픽이 제어되지 않습니다",
+            "observe": "아웃바운드 트래픽을 기록하며 아무것도 차단하지 않습니다",
+            "ready": "관찰 기간 내내 아웃바운드에서 차단될 항목이 없었습니다",
+            "enforce": "정책의 플로우만 영역 밖으로 나갑니다"
+          }
         }
       },
       "flow": {
@@ -12969,7 +12983,9 @@
           "observe": "{label}: 관찰로 변경 중",
           "enforce": "{label}: 적용으로 변경 중",
           "egressObserve": "{label}: 아웃바운드 제어 진행 중",
-          "egressOff": "{label}: 아웃바운드 제어 해제 진행 중"
+          "egressOff": "{label}: 아웃바운드 제어 해제 진행 중",
+          "egressReopen": "{label}: 아웃바운드를 다시 여는 중",
+          "egressEnforce": "{label}: 아웃바운드를 차단하는 중"
         },
         "done": "{label}: 완료 {done}, 실패 {failed}, 미실행 {notRun}",
         "failed": "{label}: 실행에 실패했습니다",
@@ -13052,6 +13068,22 @@
         "uncovered": "{count, plural, other {미허용 24시간: 히트 #회}}",
         "uncoveredHint": "어떤 플로우도 허용하지 않는 이 영역으로의 트래픽 (지난 24시간 동안 영역 구성원이 기록)",
         "noFlowInto": "이 영역으로 들어오는 플로우가 없습니다"
+      },
+      "egressState": {
+        "title": {
+          "block": "{name} 영역의 아웃바운드를 차단하시겠습니까?",
+          "reopen": "{name} 영역의 아웃바운드를 다시 여시겠습니까?"
+        },
+        "reopenBody": "아웃바운드가 관찰 상태로 돌아가며 더 이상 아무것도 차단되지 않습니다.",
+        "checking": "아웃바운드 관찰을 확인하는 중...",
+        "ready": "최근 {hours}시간 동안 아웃바운드에서 차단될 항목이 없었습니다.",
+        "notReady": "이 영역은 준비되지 않았습니다. 차단될 대기 중 트래픽 없이 {hours}시간 동안 아웃바운드를 관찰해야 합니다.",
+        "unchecked": "아웃바운드 관찰을 확인할 수 없어 영역을 준비되지 않은 것으로 처리합니다.",
+        "typeName": "확인하려면 {name}을(를) 입력하세요",
+        "confirm": {
+          "block": "아웃바운드 차단",
+          "reopen": "아웃바운드 다시 열기"
+        }
       }
     },
     "plan": {
@@ -13365,7 +13397,9 @@
         "editFlow": "플로우 편집",
         "deleteFlow": "플로우 삭제",
         "newIncoming": "새 수신 플로우",
-        "newOutgoing": "새 송신 플로우"
+        "newOutgoing": "새 송신 플로우",
+        "egressBlock": "아웃바운드 차단",
+        "egressReopen": "아웃바운드 다시 열기"
       },
       "partial": "일부만 표시: 대기 중인 처음 {count, number}개 플로우만 그려집니다.",
       "filters": {

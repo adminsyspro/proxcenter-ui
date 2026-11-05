@@ -12881,6 +12881,20 @@
           "disabled": "Zone disabled: its traffic is not logged",
           "aria": "{count, plural, one {Uncovered traffic over the last 24 hours: # hit} other {Uncovered traffic over the last 24 hours: # hits}}",
           "bar": "{from} to {to}: {count, plural, one {# hit} other {# hits}}"
+        },
+        "egress": {
+          "state": {
+            "off": "Outbound: off",
+            "observe": "Outbound: observing",
+            "ready": "Outbound: ready",
+            "enforce": "Outbound: blocking"
+          },
+          "hint": {
+            "off": "Outbound traffic is not controlled",
+            "observe": "Outbound traffic is logged, nothing is blocked",
+            "ready": "Nothing would have been blocked outbound for the whole observation window",
+            "enforce": "Only the flows of the policy leave the zone"
+          }
         }
       },
       "flow": {
@@ -12969,7 +12983,9 @@
           "observe": "{label}: change to observation in progress",
           "enforce": "{label}: change to enforcement in progress",
           "egressObserve": "{label}: outbound control in progress",
-          "egressOff": "{label}: outbound control removal in progress"
+          "egressOff": "{label}: outbound control removal in progress",
+          "egressReopen": "{label}: outbound reopening in progress",
+          "egressEnforce": "{label}: outbound blocking in progress"
         },
         "done": "{label}: {done} done, {failed} failed, {notRun} not run",
         "failed": "{label}: the run failed",
@@ -13052,6 +13068,22 @@
         "uncovered": "{count, plural, one {Uncovered 24 h: # hit} other {Uncovered 24 h: # hits}}",
         "uncoveredHint": "Traffic into this zone that no flow covers (logged by the zone's members over the last 24 h)",
         "noFlowInto": "No flow into this zone"
+      },
+      "egressState": {
+        "title": {
+          "block": "Block outbound of zone {name}?",
+          "reopen": "Reopen outbound of zone {name}?"
+        },
+        "reopenBody": "The outbound goes back to observation: nothing is blocked any more.",
+        "checking": "Checking the outbound observation...",
+        "ready": "Nothing would have been blocked outbound in the last {hours} hours.",
+        "notReady": "This zone is not ready: it needs {hours} hours of outbound observation with no pending traffic that would be blocked.",
+        "unchecked": "The outbound observation could not be checked, the zone is treated as not ready.",
+        "typeName": "Type {name} to confirm",
+        "confirm": {
+          "block": "Block outbound",
+          "reopen": "Reopen outbound"
+        }
       }
     },
     "plan": {
@@ -13365,7 +13397,9 @@
         "editFlow": "Edit flow",
         "deleteFlow": "Delete flow",
         "newIncoming": "New incoming flow",
-        "newOutgoing": "New outgoing flow"
+        "newOutgoing": "New outgoing flow",
+        "egressBlock": "Block outbound",
+        "egressReopen": "Reopen outbound"
       },
       "partial": "Partial: only the first {count, number} pending flows are drawn.",
       "filters": {

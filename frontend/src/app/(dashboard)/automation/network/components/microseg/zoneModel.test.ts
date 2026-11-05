@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { MicrosegFlow, MicrosegSuggestion, PendingMember } from '@/lib/microseg/types'
 
-import { flowsOfZone, isZoneReady, zoneMembers, type PolicyGuest } from './zoneModel'
+import { flowsOfZone, isEgressReady, isZoneReady, pendingOutboundOf, zoneMembers, type PolicyGuest } from './zoneModel'
 import { flow, zone } from './microsegTestKit'
 
 const guest = (vmid: number, tags: string[], over: Partial<PolicyGuest> = {}): PolicyGuest => ({
@@ -97,5 +97,53 @@ describe('isZoneReady', () => {
   it('uses 24 hours when the setting is missing', () => {
     expect(isZoneReady(observed, [sug(hoursAgo(20))], 0, NOW)).toBe(false)
     expect(isZoneReady(zone('z1', { state: 'observe', observe_since: hoursAgo(23) }), [], undefined, NOW)).toBe(false)
+  })
+})
+
+describe('isEgressReady', () => {
+  const NOW = Date.parse('2026-11-02T12:00:00Z')
+  const hoursAgo = (h: number) => new Date(NOW - h * 3600_000).toISOString()
+  const sug = (lastSeen: string, over: Partial<MicrosegSuggestion> = {}): MicrosegSuggestion => ({
+    id: 's', policy_id: 'p', kind: 'would_block', direction: 'out', src_key: 'z1', src_ip: '', src_zone_id: 'z1', dst_ip: '8.8.8.8', dst_zone_id: '',
+    proto: 'tcp', dport: '443', hits: 1, first_seen: lastSeen, last_seen: lastSeen, status: 'pending', ...over,
+  })
+  const observing = { egress_state: 'observe' as const, egress_observe_since: hoursAgo(30) }
+
+  it('is ready when the outbound was observed for the whole window with nothing seen in it', () => {
+    expect(isEgressReady(observing, [sug(hoursAgo(25))], 24, NOW)).toBe(true)
+    expect(isEgressReady(observing, [], 24, NOW)).toBe(true)
+  })
+
+  it('is not ready while the window has not elapsed, or without a start', () => {
+    expect(isEgressReady({ egress_state: 'observe', egress_observe_since: hoursAgo(3) }, [], 24, NOW)).toBe(false)
+    expect(isEgressReady({ egress_state: 'observe', egress_observe_since: null }, [], 24, NOW)).toBe(false)
+    expect(isEgressReady({ egress_state: 'observe' }, [], 24, NOW)).toBe(false)
+  })
+
+  it('is not ready when an outbound suggestion was seen inside the window', () => {
+    expect(isEgressReady(observing, [sug(hoursAgo(25)), sug(hoursAgo(2))], 24, NOW)).toBe(false)
+  })
+
+  it('uses 24 hours when the setting is missing', () => {
+    expect(isEgressReady(observing, [sug(hoursAgo(20))], undefined, NOW)).toBe(false)
+  })
+})
+
+describe('pendingOutboundOf', () => {
+  const base = (id: string, over: Partial<MicrosegSuggestion>): MicrosegSuggestion => ({
+    id, policy_id: 'p', kind: 'would_block', direction: 'out', src_key: 'z1', src_ip: '', src_zone_id: 'z1', dst_ip: '', dst_zone_id: '',
+    proto: 'tcp', dport: '80', hits: 1, first_seen: '2026-11-02T10:00:00Z', last_seen: '2026-11-02T10:00:00Z', status: 'pending', ...over,
+  })
+
+  it('keeps the pending outbound would-block suggestions emitted by the zone, and ignores inbound ones', () => {
+    const list = [
+      base('keep', {}),
+      base('in', { direction: 'in' }),
+      base('absent', { direction: undefined }),
+      base('other', { src_key: 'z2' }),
+      base('done', { status: 'accepted' }),
+      base('unprotected', { kind: 'unprotected' }),
+    ]
+    expect(pendingOutboundOf(list, 'z1').map(s => s.id)).toEqual(['keep'])
   })
 })

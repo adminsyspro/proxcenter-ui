@@ -54,6 +54,15 @@ describe('the ProxCenter address check that could not look at every member', () 
     expect(preflightMessage(docker).detail).toEqual({ key: 'checks.self_in_zone.dockerInternal', values: { self_ip: '172.17.0.3' } })
   })
 
+  it('names the addresses the socle rules leave out, and the Docker reason', () => {
+    const uncovered = { id: 'socle_rules', status: 'fail' as const, fix: 'socle', detail: { web: true, ssh: false, uncovered: ['192.168.5.1', 3] } }
+    expect(preflightMessage(uncovered).detail).toEqual({ key: 'checks.socle_rules.missingFor', values: { ports: '22', ips: '192.168.5.1' } })
+    const docker = { id: 'socle_rules', status: 'fail' as const, fix: 'socle', detail: { web: false, ssh: false, reason: 'docker_internal', self_ip: '172.17.0.3' } }
+    expect(preflightMessage(docker).detail).toEqual({ key: 'checks.socle_rules.dockerInternal', values: { ports: '8006, 22' } })
+    const plain = { id: 'socle_rules', status: 'fail' as const, fix: 'socle', detail: { web: false, ssh: true } }
+    expect(preflightMessage(plain).detail).toEqual({ key: 'checks.socle_rules.missing', values: { ports: '8006' } })
+  })
+
   it('keeps the zone wording when the address was found in a zone', () => {
     const hit = { id: 'self_in_zone', status: 'warn' as const, detail: { zone: 'web', self_ip: '10.0.0.5' } }
     expect(preflightMessage(hit).detail).toEqual({ key: 'checks.self_in_zone.inZone', values: { zone: 'web', self_ip: '10.0.0.5' } })

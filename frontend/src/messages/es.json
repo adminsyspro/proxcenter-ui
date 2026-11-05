@@ -13708,7 +13708,9 @@
           "title": "Acceso de administración",
           "pass": "La web (8006) y SSH (22) siguen accesibles.",
           "nodesOff": "Los cortafuegos de los nodos están desactivados, no se puede cortar nada.",
-          "missing": "Ninguna regla mantiene abierto el puerto {ports} desde cualquier origen: activar el cortafuegos podría cortar su acceso."
+          "missing": "Ninguna regla mantiene abierto el puerto {ports} desde cualquier origen: activar el cortafuegos podría cortar su acceso.",
+          "missingFor": "Ninguna regla mantiene abierto el puerto {ports} desde {ips}: activar el cortafuegos podría dejar fuera a ProxCenter.",
+          "dockerInternal": "Ninguna regla mantiene abierto el puerto {ports} para ProxCenter: la dirección detectada es interna de Docker, indique en Ajustes > Avanzado la dirección del host que ve Proxmox."
         },
         "log_ratelimit": {
           "title": "Límite de tasa del registro",
@@ -13791,6 +13793,7 @@
         "install": "script de instalación",
         "detected": "detectada"
       },
+      "dockerInternalHint": "Dirección interna de Docker: Proxmox ve la dirección del host, indíquela aquí.",
       "validation": {
         "tagPrefix": "El prefijo de etiqueta tiene de 1 a 16 caracteres: minúsculas, dígitos, . _ + -",
         "range": "{label} debe estar entre {min} y {max} {unit}.",

@@ -13708,7 +13708,9 @@
           "title": "管理访问",
           "pass": "Web（8006）和 SSH（22）仍可访问。",
           "nodesOff": "节点防火墙已关闭，不会切断任何访问。",
-          "missing": "没有任何规则允许从任意来源访问端口 {ports}：开启防火墙可能会切断您的访问。"
+          "missing": "没有任何规则允许从任意来源访问端口 {ports}：开启防火墙可能会切断您的访问。",
+          "missingFor": "没有规则从 {ips} 保持端口 {ports} 开放：启用防火墙可能会切断 ProxCenter。",
+          "dockerInternal": "没有规则为 ProxCenter 保持端口 {ports} 开放：检测到的地址是 Docker 内部地址，请在 设置 > 高级 中填写 Proxmox 看到的主机地址。"
         },
         "log_ratelimit": {
           "title": "日志速率限制",
@@ -13791,6 +13793,7 @@
         "install": "安装脚本",
         "detected": "自动检测"
       },
+      "dockerInternalHint": "Docker 内部地址：Proxmox 看到的是主机地址，请在此填写。",
       "validation": {
         "tagPrefix": "标签前缀为 1 到 16 个字符：小写字母、数字、. _ + -",
         "range": "{label}必须在 {min} 到 {max} {unit}之间。",

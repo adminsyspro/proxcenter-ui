@@ -108,6 +108,7 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
             prefixWarning={prefixChanged}
             effectiveSelfIps={policy.self_ips_effective}
             selfIpsSource={policy.self_ips_source}
+            selfIpsDockerInternal={policy.self_ips_docker_internal}
             onChange={(key, value) => setForm(prev => ({ ...prev, [key]: value }))}
           />
           <SectionTitle>{t('sections.removal')}</SectionTitle>

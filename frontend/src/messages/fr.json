@@ -13709,7 +13709,9 @@
           "title": "Accès d'administration",
           "pass": "Le web (8006) et SSH (22) restent accessibles.",
           "nodesOff": "Les pare-feu des nœuds sont désactivés, rien ne peut être coupé.",
-          "missing": "Aucune règle ne laisse le port {ports} ouvert depuis n'importe où : activer le pare-feu pourrait couper votre accès."
+          "missing": "Aucune règle ne laisse le port {ports} ouvert depuis n'importe où : activer le pare-feu pourrait couper votre accès.",
+          "missingFor": "Aucune règle ne garde le port {ports} ouvert depuis {ips} : activer le pare-feu pourrait couper ProxCenter.",
+          "dockerInternal": "Aucune règle ne garde le port {ports} ouvert pour ProxCenter : l'adresse détectée est interne à Docker, renseignez dans Réglages > Avancé l'adresse de l'hôte vue par Proxmox."
         },
         "log_ratelimit": {
           "title": "Limite du débit de journal",
@@ -13792,6 +13794,7 @@
         "install": "script d'installation",
         "detected": "détectée"
       },
+      "dockerInternalHint": "Adresse interne à Docker : Proxmox voit l'adresse de l'hôte, renseignez-la ici.",
       "validation": {
         "tagPrefix": "Le préfixe de tag fait de 1 à 16 caractères : minuscules, chiffres, . _ + -",
         "range": "{label} doit être compris entre {min} et {max} {unit}.",

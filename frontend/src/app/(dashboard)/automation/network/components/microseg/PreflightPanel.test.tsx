@@ -78,6 +78,24 @@ describe('checks', () => {
     expect(within(line).getByText('The detected address is internal to Docker: in Settings > Advanced, enter the address of the host as Proxmox sees it.')).toBeTruthy()
   })
 
+  it('sends to Settings > Advanced when the socle fails on a Docker internal address', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'socle_rules', status: 'fail', fix: 'socle', detail: { web: false, ssh: false, reason: 'docker_internal', self_ip: '172.17.0.3' } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'Management access: failed' })
+    expect(within(line).getByText(/the detected address is internal to Docker, in Settings > Advanced enter the address of the host/)).toBeTruthy()
+  })
+
+  it('names the address the socle rules do not accept', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'socle_rules', status: 'fail', fix: 'socle', detail: { web: true, ssh: false, uncovered: ['192.168.5.1'] } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'Management access: failed' })
+    expect(within(line).getByText('No rule keeps port 22 open from 192.168.5.1: turning the firewall on could cut ProxCenter off.')).toBeTruthy()
+  })
+
   it('warns, with the count in the right plural, when members could not be checked', async () => {
     mock.routes['GET /preflight'] = () => reply(200, {
       checks: [{ id: 'self_in_zone', status: 'warn', detail: { unchecked: 1, reason: 'collect_cap' } }],

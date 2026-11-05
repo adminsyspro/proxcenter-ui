@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { Box, ButtonBase, Checkbox, Collapse, Divider, FormControl, InputAdornment, MenuItem, Select, TextField, Typography } from '@mui/material'
+import { Box, ButtonBase, Checkbox, Collapse, Divider, FormControl, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
@@ -82,11 +82,25 @@ type TextRowProps = {
   placeholder?: string
   /** Shown on hover of the input, for a placeholder too long for it. */
   title?: string
+  /** A warning at the end of the input, its text in a tooltip. */
+  warning?: string
   numeric?: boolean
   onChange: (value: string) => void
 }
 
-function TextRow({ label, hint, tip, value, invalid, disabled, unit, placeholder, title, numeric = false, onChange }: TextRowProps) {
+function TextRow({ label, hint, tip, value, invalid, disabled, unit, placeholder, title, warning, numeric = false, onChange }: TextRowProps) {
+  const end = unit
+    ? <InputAdornment position='end'>{unit}</InputAdornment>
+    : warning
+      ? (
+        <InputAdornment position='end'>
+          <Tooltip title={warning} describeChild>
+            <Box component='i' className='ri-error-warning-line' role='img' aria-label={warning} data-testid='settings-field-warning' sx={{ fontSize: 18, color: 'warning.main', cursor: 'help' }} />
+          </Tooltip>
+        </InputAdornment>
+      )
+      : null
+
   return (
     <FieldRow label={label} hint={hint} tip={tip}>
       <TextField
@@ -99,7 +113,7 @@ function TextRow({ label, hint, tip, value, invalid, disabled, unit, placeholder
         autoComplete='off'
         slotProps={{
           htmlInput: { 'aria-label': label, inputMode: numeric ? 'numeric' : undefined, title },
-          input: unit ? { endAdornment: <InputAdornment position='end'>{unit}</InputAdornment> } : undefined,
+          input: end ? { endAdornment: end } : undefined,
         }}
         fullWidth
       />
@@ -116,11 +130,13 @@ type Props = {
   /** The addresses the preflight takes as ProxCenter's, and their source (GET /policy). */
   effectiveSelfIps?: string[]
   selfIpsSource?: SelfIpsSource
+  /** The only address known is a container one: say Proxmox sees the host's. */
+  selfIpsDockerInternal?: boolean
   onChange: <K extends keyof SettingsForm>(key: K, value: SettingsForm[K]) => void
 }
 
 /** The inputs of the Settings dialog, grouped under small headings, every setting on one line. */
-export default function SettingsFields({ form, problems, busy, prefixWarning, effectiveSelfIps, selfIpsSource, onChange }: Props) {
+export default function SettingsFields({ form, problems, busy, prefixWarning, effectiveSelfIps, selfIpsSource, selfIpsDockerInternal = false, onChange }: Props) {
   const t = useTranslations('microsegPilot.settings')
   const fallback = selfIpsFallback(effectiveSelfIps, selfIpsSource)
   const selfIpsPlaceholder = fallback
@@ -219,6 +235,7 @@ export default function SettingsFields({ form, problems, busy, prefixWarning, ef
           disabled={busy}
           placeholder={selfIpsPlaceholder}
           title={selfIpsPlaceholder}
+          warning={selfIpsDockerInternal && form.selfIps.trim() === '' ? t('dockerInternalHint') : undefined}
           onChange={v => onChange('selfIps', v)}
         />
       </CollapsibleSection>

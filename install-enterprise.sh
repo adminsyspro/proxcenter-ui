@@ -404,16 +404,17 @@ EOF
 # The installer writes the host's addresses to PROXCENTER_HOST_IPS so the
 # preflight checks the right ones.
 
-# docker_bridge_ips: the addresses of the Docker bridges and veth pairs of
-# this host (docker0, br-*, veth*), one per line. Without `ip`, the default
-# docker0 gateway.
+# docker_bridge_ips: the addresses of the virtual interfaces of this host
+# that Proxmox never sees ProxCenter come from (Docker bridges and veth
+# pairs, libvirt, CNI/flannel/calico/weave/VXLAN overlays, Tailscale), one
+# per line. Without `ip`, the default docker0 gateway.
 docker_bridge_ips() {
     if ! command -v ip > /dev/null 2>&1; then
         echo "172.17.0.1"
         return 0
     fi
     ip -o addr show 2>/dev/null \
-        | awk '$2 ~ /^(docker[0-9]*|br-[0-9a-f]+|veth[^ ]*)(@.*)?:?$/ { split($4, a, "/"); print a[1] }'
+        | awk '$2 ~ /^(docker[0-9]*|docker_gwbridge|br-[0-9a-f]+|veth[^ ]*|virbr[^ ]*|cni[^ ]*|flannel[^ ]*|tailscale[^ ]*|cali[^ ]*|vxlan[^ ]*|weave[^ ]*)(@.*)?:?$/ { split($4, a, "/"); print a[1] }'
 }
 
 # filter_host_ips CANDIDATES EXCLUDED: the CANDIDATES (space separated, as
@@ -548,6 +549,11 @@ refresh_host_ips() {
         return 0
     fi
     if grep -q '^PROXCENTER_HOST_IPS=' .env; then
+        local previous
+        previous=$(sed -n 's/^PROXCENTER_HOST_IPS=//p' .env | head -1)
+        if [ -n "$previous" ] && [ "$previous" != "$ips" ]; then
+            log_warning "PROXCENTER_HOST_IPS was $previous: every upgrade rewrites it, force other addresses in Micro-segmentation > Settings > Advanced instead"
+        fi
         sed -i "s|^PROXCENTER_HOST_IPS=.*|PROXCENTER_HOST_IPS=$ips|" .env
     else
         printf '\n# Addresses of this host, as the Proxmox nodes see ProxCenter (added by upgrade)\nPROXCENTER_HOST_IPS=%s\n' "$ips" >> .env

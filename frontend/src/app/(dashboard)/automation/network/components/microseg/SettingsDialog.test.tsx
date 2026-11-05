@@ -265,6 +265,22 @@ describe('advanced section', () => {
     expect(field(ADDRESSES).placeholder).toBe('Detected automatically')
   })
 
+  it('warns that a lone container address is not what Proxmox sees, until an address is typed', async () => {
+    openWith({ self_ips_effective: ['172.17.0.3'], self_ips_source: 'detected', self_ips_docker_internal: true })
+    openAdvanced()
+    expect(field(ADDRESSES).placeholder).toBe('172.17.0.3 (detected)')
+    const warning = screen.getByTestId('settings-field-warning')
+    expect(warning.getAttribute('aria-label')).toBe("Address internal to Docker: Proxmox sees the host's address, enter it here.")
+    type(ADDRESSES, '10.42.0.250')
+    expect(screen.queryByTestId('settings-field-warning')).toBeNull()
+  })
+
+  it('has no warning for a host address', () => {
+    openWith({ self_ips_effective: ['10.42.0.250'], self_ips_source: 'install', self_ips_docker_internal: false })
+    openAdvanced()
+    expect(screen.queryByTestId('settings-field-warning')).toBeNull()
+  })
+
   it('falls back to the detection wording on an older orchestrator', () => {
     open()
     openAdvanced()

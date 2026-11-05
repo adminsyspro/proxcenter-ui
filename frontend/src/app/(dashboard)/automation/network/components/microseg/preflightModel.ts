@@ -36,9 +36,14 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] {
     case 'cluster_firewall':
       if (heldByStop(check)) return { key: 'checks.cluster_firewall.heldByStop' }
       return { key: check.status === 'pass' ? 'checks.cluster_firewall.pass' : 'checks.cluster_firewall.off' }
-    case 'socle_rules':
+    case 'socle_rules': {
       if (check.status === 'pass') return { key: detail.node_firewalls === 'off' ? 'checks.socle_rules.nodesOff' : 'checks.socle_rules.pass' }
-      return { key: 'checks.socle_rules.missing', values: { ports: socleMissing(detail) } }
+      const ports = socleMissing(detail)
+      if (detail.reason === 'docker_internal') return { key: 'checks.socle_rules.dockerInternal', values: { ports } }
+      const uncovered = (Array.isArray(detail.uncovered) ? detail.uncovered : []).filter((ip): ip is string => typeof ip === 'string')
+      if (uncovered.length > 0) return { key: 'checks.socle_rules.missingFor', values: { ports, ips: uncovered.join(', ') } }
+      return { key: 'checks.socle_rules.missing', values: { ports } }
+    }
     case 'log_ratelimit': {
       const rate = text(detail.rate)
       if (check.status === 'warn') return { key: 'checks.log_ratelimit.default', values: { rate } }

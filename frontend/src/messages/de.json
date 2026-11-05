@@ -13376,7 +13376,9 @@
           "title": "Verwaltungszugriff",
           "pass": "Web (8006) und SSH (22) bleiben erreichbar.",
           "nodesOff": "Die Node-Firewalls sind aus, es kann also nichts abgeschnitten werden.",
-          "missing": "Keine Regel hält Port {ports} von überall offen: Das Einschalten der Firewall könnte Ihren Zugriff abschneiden."
+          "missing": "Keine Regel hält Port {ports} von überall offen: Das Einschalten der Firewall könnte Ihren Zugriff abschneiden.",
+          "missingFor": "Keine Regel hält Port {ports} von {ips} aus offen: Das Aktivieren der Firewall könnte ProxCenter abschneiden.",
+          "dockerInternal": "Keine Regel hält Port {ports} für ProxCenter offen: Die erkannte Adresse ist Docker-intern, tragen Sie unter Einstellungen > Erweitert die Adresse des Hosts ein, die Proxmox sieht."
         },
         "log_ratelimit": {
           "title": "Protokoll-Ratenlimit",
@@ -13459,6 +13461,7 @@
         "install": "Installationsskript",
         "detected": "erkannt"
       },
+      "dockerInternalHint": "Docker-interne Adresse: Proxmox sieht die Adresse des Hosts, tragen Sie sie hier ein.",
       "validation": {
         "tagPrefix": "Das Tag-Präfix hat 1 bis 16 Zeichen: Kleinbuchstaben, Ziffern, . _ + -",
         "range": "{label} muss zwischen {min} und {max} {unit} liegen.",

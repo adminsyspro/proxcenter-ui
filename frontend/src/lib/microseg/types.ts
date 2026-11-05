@@ -162,6 +162,8 @@ export type MicrosegPolicy = {
   self_ips_effective?: string[]
   /** Where they come from: the settings, the install script (PROXCENTER_HOST_IPS) or the detection. */
   self_ips_source?: SelfIpsSource
+  /** The only address known is the detected one of a container network, which Proxmox never sees. */
+  self_ips_docker_internal?: boolean
 }
 
 export type SelfIpsSource = 'settings' | 'install' | 'detected'

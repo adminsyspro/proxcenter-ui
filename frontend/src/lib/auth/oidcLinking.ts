@@ -15,19 +15,36 @@ export function isEmailVerified(claim: unknown): boolean {
 }
 
 /**
+ * Whether the e-mail claim can be trusted to link an existing account: the IdP
+ * says it is verified, or the administrator stated that this IdP only hands
+ * out verified addresses and the claim is simply absent. An explicit "false"
+ * is never trusted.
+ */
+export function isEmailVouched(claim: unknown, idpVerifiesEmail: boolean): boolean {
+  if (isEmailVerified(claim)) return true
+
+  return idpVerifiesEmail && (claim === undefined || claim === null)
+}
+
+/**
  * Decide whether an OIDC identity may be bound to a local account that was
  * matched by e-mail only (no account carries this identity's subject yet).
- * An account already bound to another subject is never re-bound, and an
- * address the IdP does not vouch for never takes over an account holding a
- * provider-level role. Every other account links as before.
+ * An account already bound to another subject is never re-bound. An address
+ * the IdP does not vouch for is refused when the configuration requires a
+ * verified e-mail, and in every case for an account holding a provider-level
+ * role. Otherwise it links, and the caller records the unverified link.
  */
 export async function oidcLinkRefusal(input: {
   storedSub: string | null
   emailVerified: unknown
+  requireVerifiedEmail: boolean
+  idpVerifiesEmail: boolean
   isProtectedAccount: () => Promise<boolean>
 }): Promise<OidcLinkRefusal | null> {
   if (input.storedSub) return "oidc_sub_mismatch"
-  if (!isEmailVerified(input.emailVerified) && (await input.isProtectedAccount())) return "email_not_verified"
+  if (isEmailVouched(input.emailVerified, input.idpVerifiesEmail)) return null
+  if (input.requireVerifiedEmail || (await input.isProtectedAccount())) return "email_not_verified"
+
   return null
 }
 

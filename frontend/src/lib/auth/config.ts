@@ -11,7 +11,7 @@ import { auditKeptForLastSuperAdmin, isExternalProvider, isLastLocalSuperAdmin, 
 import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdapDetailed, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
 import { getOidcConfig, oidcSeedRoleId, syncOidcRoleAssignment } from "./oidc"
-import { holdsProtectedRole, oidcLinkRefusal, OIDC_LINK_REFUSED } from "./oidcLinking"
+import { holdsProtectedRole, isEmailVouched, oidcLinkRefusal, OIDC_LINK_REFUSED } from "./oidcLinking"
 import { oidcOpenidAgent } from "./oidcProxy"
 import { isSessionTenantDisabled, loadJwtContext } from "./jwtContext"
 import { createSession, evaluateSession, revokeSession, touchSession } from "./sessions"
@@ -113,6 +113,22 @@ async function logOidcLinkRefusal(email: string, reason: string): Promise<void> 
     })
   } catch (e) {
     console.error("[oidc] cannot audit the refused sign-in:", e)
+  }
+}
+
+async function logOidcUnverifiedLink(email: string): Promise<void> {
+  console.warn(`[oidc] "${email}" linked to an existing account without a verified e-mail`)
+  try {
+    const { audit } = await import("@/lib/audit")
+    await audit({
+      action: "login",
+      category: "auth",
+      userEmail: email,
+      details: { reason: "email_not_verified", provider: "oidc", linked: true },
+      status: "warning",
+    })
+  } catch (e) {
+    console.error("[oidc] cannot audit the unverified link:", e)
   }
 }
 
@@ -611,12 +627,20 @@ export const authOptions: NextAuthOptions = {
             const refusal = await oidcLinkRefusal({
               storedSub: existing.oidcSub,
               emailVerified: (profile as any).email_verified,
+              requireVerifiedEmail: oidcConfig.requireVerifiedEmail,
+              idpVerifiesEmail: oidcConfig.idpVerifiesEmail,
               isProtectedAccount: () => holdsProtectedRole(accountId, now),
             })
 
             if (refusal) {
               await logOidcLinkRefusal(email, refusal)
               return `/login?error=${OIDC_LINK_REFUSED}`
+            }
+
+            // Linked although the IdP does not vouch for the address: the
+            // configuration allows it, the audit trail says so.
+            if (!isEmailVouched((profile as any).email_verified, oidcConfig.idpVerifiesEmail)) {
+              await logOidcUnverifiedLink(email)
             }
           }
 

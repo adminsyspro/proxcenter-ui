@@ -42,6 +42,10 @@ export interface OidcConfig {
   groupMappingStrategy: MappingStrategy
   showLocalLogin: boolean
   forceSsoRedirect: boolean
+  /** Refuse to link an existing account to an e-mail the IdP does not vouch for. */
+  requireVerifiedEmail: boolean
+  /** Read a missing email_verified claim as verified (IdPs that never send it). */
+  idpVerifiesEmail: boolean
   /** Outbound proxy towards the IdP; null falls back to the environment. */
   proxyUrl: string | null
   proxyUsername: string | null
@@ -107,6 +111,8 @@ export async function getOidcConfig(): Promise<OidcConfig | null> {
     groupMappingStrategy: normalizeMappingStrategy(row.groupMappingStrategy),
     showLocalLogin: row.showLocalLogin,
     forceSsoRedirect: row.forceSsoRedirect,
+    requireVerifiedEmail: row.requireVerifiedEmail,
+    idpVerifiesEmail: row.idpVerifiesEmail,
     proxyUrl: row.proxyUrl ?? null,
     proxyUsername: row.proxyUsername ?? null,
     proxyPassword,

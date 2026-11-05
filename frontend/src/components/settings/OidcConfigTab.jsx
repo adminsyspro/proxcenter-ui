@@ -55,6 +55,8 @@ export default function OidcConfigTab() {
     default_role: 'role_viewer',
     show_local_login: true,
     force_sso_redirect: false,
+    require_verified_email: true,
+    idp_verifies_email: false,
     group_role_mapping: '[]',
     group_mapping_strategy: 'first_match',
     proxy_url: '',
@@ -706,7 +708,49 @@ export default function OidcConfigTab() {
                 </Typography>
               </Box>
             }
-            sx={{ mb: 2 }}
+            sx={{ mb: 2, display: 'flex' }}
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.require_verified_email}
+                onChange={e => setConfig({ ...config, require_verified_email: e.target.checked })}
+                disabled={!config.enabled}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant='body1' fontWeight={600}>
+                  {t('oidc.requireVerifiedEmail')}
+                </Typography>
+                <Typography variant='body2' sx={{ opacity: 0.6 }}>
+                  {t('oidc.requireVerifiedEmailDesc')}
+                </Typography>
+              </Box>
+            }
+            sx={{ mb: 2, display: 'flex' }}
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.idp_verifies_email}
+                onChange={e => setConfig({ ...config, idp_verifies_email: e.target.checked })}
+                disabled={!config.enabled}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant='body1' fontWeight={600}>
+                  {t('oidc.idpVerifiesEmail')}
+                </Typography>
+                <Typography variant='body2' sx={{ opacity: 0.6 }}>
+                  {t('oidc.idpVerifiesEmailDesc')}
+                </Typography>
+              </Box>
+            }
+            sx={{ mb: 3, display: 'flex' }}
           />
 
           <FormControl fullWidth sx={{ mb: 3 }} disabled={!config.enabled}>

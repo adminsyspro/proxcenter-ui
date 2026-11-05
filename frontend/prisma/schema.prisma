@@ -638,6 +638,12 @@ model OidcConfig {
   // forceSsoRedirect=true sends /login straight to the IdP.
   showLocalLogin   Boolean  @default(true)  @map("show_local_login")
   forceSsoRedirect Boolean  @default(false) @map("force_sso_redirect")
+  // Linking an existing account found by e-mail. requireVerifiedEmail refuses
+  // an address the IdP does not vouch for (email_verified); off, the link is
+  // made and audited, except for provider-level accounts. idpVerifiesEmail
+  // reads a missing claim as verified, for IdPs that never send it.
+  requireVerifiedEmail Boolean @default(true)  @map("require_verified_email")
+  idpVerifiesEmail     Boolean @default(false) @map("idp_verifies_email")
   // Ordered JSON array of grants: [{ group, tenant, vdc, role }, ...], read top
   // to bottom at login time. Legacy flat objects still read back as entries.
   groupRoleMapping Json     @default("[]") @map("group_role_mapping")

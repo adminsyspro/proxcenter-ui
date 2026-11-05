@@ -8878,6 +8878,8 @@
     "ldapAuth": "LDAP",
     "localAuth": "本地",
     "passwordManagedByIdp": "密码由身份提供商管理 (OIDC / LDAP)。",
+    "localLoginAllowed": "使用本地密码的紧急访问",
+    "passwordEmergencyAccess": "紧急访问：此密码可在不经过身份提供商的情况下登录",
     "emailLabel": "电子邮件",
     "emailHeader": "电子邮件",
     "authHeader": "认证",

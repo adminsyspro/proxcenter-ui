@@ -8878,6 +8878,8 @@
     "ldapAuth": "LDAP",
     "localAuth": "Local",
     "passwordManagedByIdp": "Password is managed by the identity provider (OIDC / LDAP).",
+    "localLoginAllowed": "Emergency access with a local password",
+    "passwordEmergencyAccess": "Emergency access: this password signs in without the identity provider",
     "emailLabel": "Email",
     "emailHeader": "Email",
     "authHeader": "Auth",

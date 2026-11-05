@@ -8878,6 +8878,8 @@
     "ldapAuth": "LDAP",
     "localAuth": "Local",
     "passwordManagedByIdp": "La contraseña la gestiona el proveedor de identidad (OIDC / LDAP).",
+    "localLoginAllowed": "Acceso de emergencia con contraseña local",
+    "passwordEmergencyAccess": "Acceso de emergencia: esta contraseña inicia sesión sin el proveedor de identidad",
     "emailLabel": "Email",
     "emailHeader": "Email",
     "authHeader": "Auth",

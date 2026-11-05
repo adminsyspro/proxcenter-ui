@@ -177,6 +177,26 @@ describe('OIDC sign-in binding a local account found by e-mail (H2)', () => {
     expect(auditMock).not.toHaveBeenCalled()
   })
 
+  it('drops the local password of the account it converts', async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null, password: 'h', localLoginAllowed: false })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue(null)
+
+    await signIn({ email_verified: true })
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'u-local' },
+      data: expect.objectContaining({ authProvider: 'oidc', password: null }),
+    }))
+  })
+
+  it('keeps the local password of an account with emergency access', async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null, password: 'h', localLoginAllowed: true })
+
+    await signIn({ email_verified: true })
+    const { data } = (prisma.user.update as any).mock.calls[0][0]
+    expect(data).not.toHaveProperty('password')
+    expect(data.localLoginAllowed).toBe(true)
+  })
+
   it('leaves an account found by its own subject alone', async () => {
     ;(prisma.user.findFirst as any).mockResolvedValue({ ...localAccount, oidcSub: 'sub-new' })
 

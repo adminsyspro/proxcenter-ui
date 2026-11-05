@@ -7,7 +7,8 @@ import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { hashPassword } from "@/lib/auth/password"
 import { safeLog } from "@/lib/log/sanitize"
-import { checkPermission, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { checkPermission, isUserSuperAdmin, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { isExternalProvider } from "@/lib/auth/localLogin"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
 import { denyIfTargetIsProtectedAndCallerIsNot, findUserInTenant } from "@/lib/rbac/userTargetGuards"
 import { nanoid } from "nanoid"
@@ -51,6 +52,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         name: user.name,
         role: user.role,
         auth_provider: user.authProvider,
+        local_login_allowed: user.localLoginAllowed,
         enabled: user.enabled,
         last_login_at: user.lastLoginAt?.toISOString() ?? null,
         created_at: user.createdAt.toISOString(),
@@ -69,7 +71,7 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     const session = await getServerSession(authOptions)
     const { id } = await params
     const body = await req.json()
-    const { name, enabled, password, tenantIds, roleId, deleteApiTokens } = body
+    const { name, enabled, password, tenantIds, roleId, deleteApiTokens, localLoginAllowed } = body
 
     const isSelf = session?.user?.id === id
     const selfServiceFields = new Set(["name", "password"])
@@ -113,9 +115,14 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     // account itself is changed by the provider or by its holder. A field
     // sent back with its current value (the dialog resends the whole form)
     // changes nothing and is not held against the caller.
+    if (localLoginAllowed !== undefined && typeof localLoginAllowed !== "boolean") {
+      return NextResponse.json({ error: "localLoginAllowed must be a boolean" }, { status: 400 })
+    }
+    const localLoginChanged = localLoginAllowed !== undefined && localLoginAllowed !== user.localLoginAllowed
     const touchesAccount = Boolean(password)
       || (enabled !== undefined && !!enabled !== user.enabled)
       || (name !== undefined && name !== user.name)
+      || localLoginChanged
     if (!isProviderView && !isSelf && touchesAccount) {
       const elsewhere = await prisma.userTenant.count({ where: { userId: id, tenantId: { not: tenantId } } })
       if (elsewhere > 0) {
@@ -133,10 +140,22 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     const data: Record<string, unknown> = {}
     if (name !== undefined && name !== user.name) data.name = name
     if (enabled !== undefined && !!enabled !== user.enabled) data.enabled = !!enabled
+    // Emergency access: a local password that keeps working once the account
+    // is OIDC or LDAP. Only a super admin grants or withdraws it; withdrawing
+    // it from an SSO account drops the password with it.
+    if (localLoginChanged) {
+      if (!session?.user?.id || !(await isUserSuperAdmin(session.user.id))) {
+        return NextResponse.json({ error: "Only a super admin may change emergency access" }, { status: 403 })
+      }
+      data.localLoginAllowed = localLoginAllowed
+      if (!localLoginAllowed && isExternalProvider(user.authProvider) && user.password) data.password = null
+    }
+    const localLoginAfter = localLoginAllowed ?? user.localLoginAllowed
     // Password is owned by the external IdP for SSO/LDAP accounts. Refuse to set
     // a local password on them — it would open a credentials login path that
-    // bypasses SSO/MFA. Covers both admin edits and self-service profile changes.
-    if (password && (user.authProvider === "ldap" || user.authProvider === "oidc")) {
+    // bypasses SSO/MFA — unless the account has emergency access. Covers both
+    // admin edits and self-service profile changes.
+    if (password && isExternalProvider(user.authProvider) && !localLoginAfter) {
       return NextResponse.json(
         { error: "The password is managed by the identity provider (OIDC/LDAP) and cannot be set here." },
         { status: 403 }
@@ -333,7 +352,7 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
 
     // Account fields sent back unchanged are a valid no-op (the dialog
     // resends its form); an empty body is still a client error.
-    const accountFieldsSent = name !== undefined || enabled !== undefined
+    const accountFieldsSent = name !== undefined || enabled !== undefined || localLoginAllowed !== undefined
     if (Object.keys(data).length === 0 && !tenantsChanged && !rolesChanged && !wantsTokenDeletion && !accountFieldsSent) {
       return NextResponse.json({ error: "No changes provided" }, { status: 400 })
     }
@@ -382,7 +401,7 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     // open, otherwise a stolen cookie survives the exact action a compromised
     // user takes to defend themselves. No exception sid: the caller's own
     // session goes too, which is the expected outcome of "change my password".
-    if (password || data.enabled === false) {
+    if (password || data.enabled === false || data.password === null) {
       try {
         const { revokeAllSessions } = await import("@/lib/auth/sessions")
         const revoked = await revokeAllSessions(id)
@@ -402,6 +421,8 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     if (data.name !== undefined) changes.name = data.name
     if (data.enabled !== undefined) changes.enabled = data.enabled
     if (password) changes.passwordChanged = true
+    if (data.localLoginAllowed !== undefined) changes.localLoginAllowed = data.localLoginAllowed
+    if (data.password === null) changes.passwordRemoved = true
     if (tenantsChanged && (tenantsChanged.added.length > 0 || tenantsChanged.removed.length > 0)) {
       changes.tenants = tenantsChanged
     }
@@ -436,6 +457,7 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
         name: updated.name,
         role: updated.role,
         auth_provider: updated.authProvider,
+        local_login_allowed: updated.localLoginAllowed,
         enabled: updated.enabled,
         last_login_at: updated.lastLoginAt?.toISOString() ?? null,
         created_at: updated.createdAt.toISOString(),

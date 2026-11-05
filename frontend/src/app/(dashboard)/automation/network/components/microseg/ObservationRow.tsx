@@ -6,9 +6,9 @@ import { useFormatter, useTranslations } from 'next-intl'
 import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 
-import { hitsShare } from './observationModel'
+import { destinationLabel, hitsShare } from './observationModel'
 import { FlowActions } from './ObservationActions'
-import { ObservedKindGlyph } from './observationParts'
+import { DirectionGlyph, ObservedKindGlyph } from './observationParts'
 import { formatWhen } from './summaryModel'
 import TruncatedText from './TruncatedText'
 
@@ -22,6 +22,12 @@ const NAME_SX = { maxWidth: 200, minWidth: 0 } as const
 export function endpoint(zoneId: string, ip: string, zones: Map<string, MicrosegZone>, t: (key: string) => string): string {
   if (zoneId) return zones.get(zoneId)?.name ?? t('deletedZone')
   return ip || t('unknownEndpoint')
+}
+
+/** The name of the destination of a flow: an outbound one may be an address, a guest or many destinations. */
+export function destinationName(s: MicrosegSuggestion, zones: Map<string, MicrosegZone>, guestName: (ip: string) => string | undefined, t: (key: string) => string): string {
+  if (s.direction !== 'out') return endpoint(s.dst_zone_id, s.dst_ip, zones, t)
+  return destinationLabel(s, id => zones.get(id)?.name ?? t('deletedZone'), guestName, t('manyDestinations'))
 }
 
 /** The colour of the source dot: its zone's, red for a source in no zone, grey for a zone that is gone. */
@@ -39,6 +45,8 @@ function relative(format: ReturnType<typeof useFormatter>, iso: string, now: num
 export type ObservationRowProps = {
   suggestion: MicrosegSuggestion
   zones: Map<string, MicrosegZone>
+  /** The name of the guest that carries an address, when the inventory knows it. */
+  guestName: (ip: string) => string | undefined
   checked: boolean
   busy: boolean
   /** Most hits of a flow on the page: the bar of each row is its share of it. */
@@ -46,19 +54,19 @@ export type ObservationRowProps = {
   /** The current time of the relative "last seen" (useNow). */
   now: number
   onToggle: () => void
-  onResolve: (action: SuggestionAction) => void
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
   /** Opens the flow in its dialog (details, traffic, recent occurrences). */
   onOpenDetails: () => void
 }
 
 /** One observed flow, one row of the table; its details open in a centred dialog (ObservedFlowDialog). */
-export default function ObservationRow({ suggestion: s, zones, checked, busy, maxHits, now, onToggle, onResolve, onOpenDetails }: ObservationRowProps) {
+export default function ObservationRow({ suggestion: s, zones, guestName, checked, busy, maxHits, now, onToggle, onResolve, onOpenDetails }: ObservationRowProps) {
   const t = useTranslations('microsegPilot.observation')
   const format = useFormatter()
 
   const when = (iso: string) => formatWhen(format, iso)
   const source = endpoint(s.src_zone_id, s.src_ip, zones, t)
-  const destination = endpoint(s.dst_zone_id, s.dst_ip, zones, t)
+  const destination = destinationName(s, zones, guestName, t)
   const service = serviceLabel(s.proto, s.dport)
   const serviceTip = serviceTitle(s.proto, s.dport)
   const pending = s.status === 'pending'
@@ -87,6 +95,7 @@ export default function ObservationRow({ suggestion: s, zones, checked, busy, ma
         </TableCell>
         <TableCell sx={CELL_SX}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+            <DirectionGlyph direction={s.direction} />
             <ObservedKindGlyph kind={s.kind} />
             <Box component='span' data-source-dot={dot} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: dot, flexShrink: 0 }} />
             <TruncatedText text={source} fontWeight={600} tabIndex={0} sx={NAME_SX} />

@@ -10,7 +10,7 @@ import { cleanup, within } from '@testing-library/react'
 import { screen, fireEvent, renderWithProviders, waitFor } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegSuggestion } from '@/lib/microseg/types'
 
-import { calls, mock, policy, renderTab, reply, zone, BASE, fetchMock, REVISION_HEAD } from './microsegTestKit'
+import { calls, mock, policy, renderTab, reply, zone, BASE, fetchMock, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
 import ObservationPanel from './ObservationPanel'
 import { body, installFreshMocks } from './policyTestKit'
 
@@ -177,7 +177,7 @@ describe('observation list', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
-  it('puts the three filters on the row of the sub-tabs, before Check now', async () => {
+  it('puts the filters on the row of the sub-tabs, before Check now', async () => {
     setup([sug('s1')])
     await row('web to db')
     const slot = await screen.findByTestId('microseg-actions-slot')
@@ -586,5 +586,89 @@ describe('settings link', () => {
       />,
     )
     expect(((await screen.findByRole('button', { name: 'Open settings' })) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('outbound flows', () => {
+  const out = (id: string, over: Partial<MicrosegSuggestion> = {}) => sug(id, {
+    direction: 'out', src_zone_id: 'zw', dst_zone_id: '', dst_key: '203.0.113.10', dst_ip: '203.0.113.10', ...over,
+  })
+
+  it('filters on the direction on the server, on the row of the other filters', async () => {
+    setup([sug('s1')])
+    mock.routes['GET /suggestions?limit=26&status=pending&direction=out'] = () => reply(200, { suggestions: [out('o1')], limit: 26, offset: 0 })
+    await row('web to db')
+    const filters = within(await screen.findByTestId('microseg-actions-slot')).getByTestId('observation-filters')
+    expect(within(filters).getByRole('combobox', { name: 'Direction' }).textContent).toBe('DirectionAll')
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Direction' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Outbound' }))
+    await waitFor(() => expect(listCalls().some(u => u.includes('direction=out'))).toBe(true))
+    expect(await row('web to 203.0.113.10')).toBeTruthy()
+  })
+
+  it('heads a row with the arrow of its direction, a flow without direction being inbound', async () => {
+    setup([sug('s1'), out('o1')])
+    const outbound = await row('web to 203.0.113.10')
+    expect(outbound.querySelector('.ri-arrow-right-up-line')).toBeTruthy()
+    expect(within(outbound).getByText('203.0.113.10')).toBeTruthy()
+    const inbound = await row('web to db')
+    expect(inbound.querySelector('.ri-arrow-right-down-line')).toBeTruthy()
+    expect(inbound.querySelector('.ri-arrow-right-up-line')).toBeNull()
+  })
+
+  it('names the guest that carries the address of an outbound destination outside any zone', async () => {
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: [{ vmid: 300, name: 'legacy-vm', node: 'pve1', type: 'qemu', status: 'running', tags: [], ips: ['203.0.113.10'] }] } })
+    setup([out('o1')])
+    expect(await row('web to legacy-vm')).toBeTruthy()
+  })
+
+  it('says many destinations for the aggregate and offers no network for it', async () => {
+    setup([out('o1', { dst_key: '0.0.0.0/0', dst_ip: '' })])
+    const line = await row('web to Many destinations')
+    expect(within(line).getByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(within(line).queryByRole('button', { name: 'As CIDR' })).toBeNull()
+  })
+
+  it('shows the blocked outbound flows with their arrow', async () => {
+    setup([out('b1', { kind: 'blocked' })])
+    const line = await row('web to 203.0.113.10')
+    expect(line.querySelector('.ri-arrow-right-up-line')).toBeTruthy()
+    expect(within(line).getByText('Blocked')).toBeTruthy()
+  })
+
+  it('accepts an outbound flow as a network after the prefix of the dialog, /24 being proposed', async () => {
+    setup([out('o1')])
+    fireEvent.click(within(await row('web to 203.0.113.10')).getByRole('button', { name: 'As CIDR' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Accept as a network' })
+    expect(within(dialog).getByRole('combobox').textContent).toBe('/24')
+    expect(within(dialog).getByText('203.0.113.0/24')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
+    expect(body(calls('POST /suggestions/resolve')[0][1])).toEqual({ version: 3, ids: ['o1'], action: 'accept_cidr', prefix_len: 24 })
+  })
+
+  it('sends the prefix chosen in the dialog, and nothing when it is cancelled', async () => {
+    setup([out('o1')])
+    fireEvent.click(within(await row('web to 203.0.113.10')).getByRole('button', { name: 'As CIDR' }))
+    let dialog = await screen.findByRole('dialog', { name: 'Accept as a network' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(calls('POST /suggestions/resolve')).toHaveLength(0)
+
+    fireEvent.click(within(await row('web to 203.0.113.10')).getByRole('button', { name: 'As CIDR' }))
+    dialog = await screen.findByRole('dialog', { name: 'Accept as a network' })
+    fireEvent.mouseDown(within(dialog).getByRole('combobox'))
+    fireEvent.click(await screen.findByRole('option', { name: '/16' }))
+    expect(within(dialog).getByText('203.0.0.0/16')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
+    expect(body(calls('POST /suggestions/resolve')[0][1])).toMatchObject({ action: 'accept_cidr', prefix_len: 16 })
+  })
+
+  it('keeps the inbound As CIDR direct, with no prefix', async () => {
+    setup([unknownSource])
+    fireEvent.click(within(await row(/192.168.1.50 to db/)).getByRole('button', { name: 'As CIDR' }))
+    await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
+    expect(body(calls('POST /suggestions/resolve')[0][1])).toEqual({ version: 3, ids: ['u1'], action: 'accept_cidr' })
   })
 })

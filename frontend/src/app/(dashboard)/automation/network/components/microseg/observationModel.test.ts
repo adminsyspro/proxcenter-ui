@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { decodeCollapsed, encodeCollapsed, groupByDestination, hitsShare, maxHits } from './observationModel'
+import { cidrPreview, decodeCollapsed, destinationLabel, encodeCollapsed, groupByDestination, hitsShare, maxHits, prefixBounds } from './observationModel'
 
 const row = (id: string, dst: string, hits: number) => ({ id, dst_zone_id: dst, hits })
 const names: Record<string, string> = { za: 'app', zd: 'db', zw: 'web', '': 'Unknown destination' }
@@ -60,5 +60,46 @@ describe('collapsed groups storage', () => {
     expect(decodeCollapsed('not json')).toEqual([])
     expect(decodeCollapsed('{"a":1}')).toEqual([])
     expect(decodeCollapsed('["zd",3,null]')).toEqual(['zd'])
+  })
+})
+
+describe('groupByDestination on the destination key', () => {
+  const out = (id: string, key: string, hits: number, zoneId = '') => ({ id, dst_key: key, dst_zone_id: zoneId, hits })
+  it('groups an outbound flow by its destination key, the addresses outside any zone last', () => {
+    const groups = groupByDestination([out('1', '203.0.113.10', 900), out('2', 'zd', 5, 'zd'), out('3', 'zd', 6, 'zd'), out('4', '203.0.113.10', 1)], (key, r) => (r.dst_zone_id ? nameOf(key) : key))
+    expect(groups.map(g => [g.key, g.name, g.hits])).toEqual([['zd', 'db', 11], ['203.0.113.10', '203.0.113.10', 901]])
+  })
+  it('falls back on the destination zone for a flow of the first lot, which has no key', () => {
+    const groups = groupByDestination([row('1', 'zw', 1), row('2', 'zw', 2)], nameOf)
+    expect(groups.map(g => g.key)).toEqual(['zw'])
+  })
+})
+
+describe('destinationLabel', () => {
+  const zoneName = (id: string) => (id === 'zd' ? 'db' : 'Deleted zone')
+  const guestName = (ip: string) => (ip === '10.0.0.7' ? 'legacy-vm' : undefined)
+  const base = { dst_key: '', dst_ip: '', dst_zone_id: '' }
+  it('names the zone first, then the guest that carries the address, then the address', () => {
+    expect(destinationLabel({ ...base, dst_zone_id: 'zd', dst_ip: '10.0.0.9' }, zoneName, guestName)).toBe('db')
+    expect(destinationLabel({ ...base, dst_key: '10.0.0.7', dst_ip: '10.0.0.7' }, zoneName, guestName)).toBe('legacy-vm')
+    expect(destinationLabel({ ...base, dst_key: '203.0.113.10', dst_ip: '203.0.113.10' }, zoneName, guestName)).toBe('203.0.113.10')
+  })
+  it('says many destinations for the aggregate, whatever address it carries', () => {
+    expect(destinationLabel({ ...base, dst_key: '0.0.0.0/0', dst_ip: '198.51.100.1' }, zoneName, guestName)).toBe('Many destinations')
+    expect(destinationLabel({ ...base, dst_key: '::/0' }, zoneName, guestName, 'Nombreuses destinations')).toBe('Nombreuses destinations')
+  })
+})
+
+describe('prefix lengths', () => {
+  it('bounds an IPv4 address at /8../32 proposing /24 and an IPv6 one at /16../128 proposing /64', () => {
+    expect(prefixBounds('203.0.113.10')).toEqual({ min: 8, max: 32, def: 24 })
+    expect(prefixBounds('2001:db8::1')).toEqual({ min: 16, max: 128, def: 64 })
+  })
+  it('previews the network the prefix makes', () => {
+    expect(cidrPreview('203.0.113.10', 24)).toBe('203.0.113.0/24')
+    expect(cidrPreview('203.0.113.10', 8)).toBe('203.0.0.0/8')
+    expect(cidrPreview('203.0.113.10', 32)).toBe('203.0.113.10/32')
+    expect(cidrPreview('2001:db8:abcd:12::1', 64)).toBe('2001:db8:abcd:12::/64')
+    expect(cidrPreview('2001:db8::1', 128)).toBe('2001:db8::1/128')
   })
 })

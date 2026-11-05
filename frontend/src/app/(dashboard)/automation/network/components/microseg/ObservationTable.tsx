@@ -6,8 +6,8 @@ import { useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 
-import { groupByDestination, maxHits, type ObservationGroup } from './observationModel'
-import ObservationRow, { OBSERVATION_COLUMNS } from './ObservationRow'
+import { destinationKey, groupByDestination, maxHits, type ObservationGroup } from './observationModel'
+import ObservationRow, { destinationName, OBSERVATION_COLUMNS } from './ObservationRow'
 
 const HEAD_SX = { py: 0.75, px: 1, whiteSpace: 'nowrap', fontWeight: 600 } as const
 const VISUALLY_HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' } as const
@@ -15,6 +15,7 @@ const VISUALLY_HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: '
 type Props = {
   rows: MicrosegSuggestion[]
   zones: Map<string, MicrosegZone>
+  guestName: (ip: string) => string | undefined
   selected: ReadonlySet<string>
   busy: boolean
   now: number
@@ -24,11 +25,11 @@ type Props = {
   canSelect: boolean
   onToggleAll: () => void
   onToggle: (id: string) => void
-  onResolve: (s: MicrosegSuggestion, action: SuggestionAction) => void
+  onResolve: (s: MicrosegSuggestion, action: SuggestionAction, prefixLen?: number) => void
   onOpenDetails: (s: MicrosegSuggestion) => void
-  /** The destination zone of the first flow of the next page, when there is one: its group may go on there. */
-  nextZoneId?: string
-  /** The folded destination zones ('' = unknown destination), and the fold or unfold of one. */
+  /** The first flow of the next page, when there is one: its destination group may go on there. */
+  nextFlow?: MicrosegSuggestion
+  /** The folded destinations (a zone id, or an address; '' = unknown destination), and the fold or unfold of one. */
   collapsed: ReadonlySet<string>
   onToggleGroup: (key: string) => void
 }
@@ -63,12 +64,15 @@ function GroupHeader({ group, color, collapsed, onToggle }: { group: Observation
  * busiest first) that folds its flows (the panel keeps the folded zones). The grouping covers the page only:
  * the caption says so when the next page goes on with a zone.
  */
-export default function ObservationTable({ rows, zones, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, onOpenDetails, nextZoneId, collapsed, onToggleGroup }: Props) {
+export default function ObservationTable({ rows, zones, guestName, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, onOpenDetails, nextFlow, collapsed, onToggleGroup }: Props) {
   const t = useTranslations('microsegPilot.observation')
   const max = maxHits(rows)
 
-  const nameOf = (id: string) => (id ? zones.get(id)?.name ?? t('deletedZone') : t('unknownDestination'))
-  const colorOf = (id: string) => (id ? zones.get(id)?.color || 'text.disabled' : 'error.main')
+  // An outbound destination outside any zone is its guest or its address; an inbound one outside any zone is unknown.
+  const nameOf = (_key: string, first: MicrosegSuggestion) => (first.dst_zone_id || first.direction === 'out'
+    ? destinationName(first, zones, guestName, t as (key: string) => string)
+    : t('unknownDestination'))
+  const colorOf = (g: ObservationGroup<MicrosegSuggestion>) => (g.outside ? 'error.main' : zones.get(g.key)?.color || 'text.disabled')
   const groups = groupByDestination(rows, nameOf)
 
   return (
@@ -102,18 +106,19 @@ export default function ObservationTable({ rows, zones, selected, busy, now, all
           <TableBody>
             {groups.map(group => (
               <Fragment key={group.key}>
-                <GroupHeader group={group} color={colorOf(group.key)} collapsed={collapsed.has(group.key)} onToggle={() => onToggleGroup(group.key)} />
+                <GroupHeader group={group} color={colorOf(group)} collapsed={collapsed.has(group.key)} onToggle={() => onToggleGroup(group.key)} />
                 {!collapsed.has(group.key) && group.rows.map(s => (
                   <ObservationRow
                     key={s.id}
                     suggestion={s}
                     zones={zones}
+                    guestName={guestName}
                     checked={selected.has(s.id)}
                     busy={busy}
                     maxHits={max}
                     now={now}
                     onToggle={() => onToggle(s.id)}
-                    onResolve={action => onResolve(s, action)}
+                    onResolve={(action, prefixLen) => onResolve(s, action, prefixLen)}
                     onOpenDetails={() => onOpenDetails(s)}
                   />
                 ))}
@@ -122,9 +127,9 @@ export default function ObservationTable({ rows, zones, selected, busy, now, all
           </TableBody>
         </Table>
       </TableContainer>
-      {nextZoneId !== undefined && (
+      {nextFlow !== undefined && (
         <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1 }}>
-          {t('groupsContinue', { zone: nameOf(nextZoneId) })}
+          {t('groupsContinue', { zone: nameOf(destinationKey(nextFlow), nextFlow) })}
         </Typography>
       )}
     </>

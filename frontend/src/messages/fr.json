@@ -13227,7 +13227,11 @@
         "status": "Statut",
         "statusAll": "Tous les statuts",
         "zone": "Zone",
-        "zoneAll": "Toutes les zones"
+        "zoneAll": "Toutes les zones",
+        "direction": "Direction",
+        "directionAll": "Toutes",
+        "directionIn": "Entrant",
+        "directionOut": "Sortant"
       },
       "kind": {
         "would_block": "Serait bloqué",
@@ -13323,9 +13327,25 @@
         "colSource": "Origine",
         "colGuest": "Invité atteint",
         "colNode": "Nœud",
-        "guest": "{name} ({vmid}) · IP {ip}"
+        "guest": "{name} ({vmid}) · IP {ip}",
+        "direction": "Direction",
+        "colDestination": "Destination",
+        "trafficScopeOutside": "Tous les services de {source} vers les adresses hors zone avec ce verdict : l'historique garde les zones, pas les adresses."
       },
-      "actionTip": "{action} : {tip}"
+      "actionTip": "{action} : {tip}",
+      "direction": {
+        "in": "Entrant",
+        "out": "Sortant"
+      },
+      "manyDestinations": "Nombreuses destinations",
+      "prefix": {
+        "title": "Accepter comme réseau",
+        "length": "Longueur du préfixe",
+        "cancel": "Annuler",
+        "accept": "Accepter"
+      },
+      "cidrOutTip": "Crée le flux {from} → le réseau de {ip} {service} dans le brouillon, avec le préfixe choisi.",
+      "cidrOutAggregate": "Indisponible : trop de destinations pour en faire un réseau."
     },
     "overview": {
       "empty": "Aucune zone à dessiner pour l'instant.",

@@ -12894,7 +12894,11 @@
         "status": "Status",
         "statusAll": "Alle Status",
         "zone": "Zone",
-        "zoneAll": "Alle Zonen"
+        "zoneAll": "Alle Zonen",
+        "direction": "Richtung",
+        "directionAll": "Alle",
+        "directionIn": "Eingehend",
+        "directionOut": "Ausgehend"
       },
       "kind": {
         "would_block": "Würde blockiert",
@@ -12990,9 +12994,25 @@
         "colSource": "Quelle",
         "colGuest": "Erreichter Gast",
         "colNode": "Knoten",
-        "guest": "{name} ({vmid}) · IP {ip}"
+        "guest": "{name} ({vmid}) · IP {ip}",
+        "direction": "Richtung",
+        "colDestination": "Ziel",
+        "trafficScopeOutside": "Alle Dienste von {source} zu Adressen außerhalb der Zonen mit diesem Urteil: Der Verlauf speichert die Zonen, nicht die Adressen."
       },
-      "actionTip": "{action} – {tip}"
+      "actionTip": "{action} – {tip}",
+      "direction": {
+        "in": "Eingehend",
+        "out": "Ausgehend"
+      },
+      "manyDestinations": "Viele Ziele",
+      "prefix": {
+        "title": "Als Netzwerk akzeptieren",
+        "length": "Präfixlänge",
+        "cancel": "Abbrechen",
+        "accept": "Akzeptieren"
+      },
+      "cidrOutTip": "Erstellt im Entwurf den Flow {from} → das Netzwerk von {ip} {service} mit dem gewählten Präfix.",
+      "cidrOutAggregate": "Nicht verfügbar: zu viele Ziele für ein einzelnes Netzwerk."
     },
     "overview": {
       "empty": "Noch keine Zone zum Zeichnen.",

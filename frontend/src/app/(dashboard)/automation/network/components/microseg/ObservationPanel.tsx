@@ -4,21 +4,22 @@ import { useMemo, useState } from 'react'
 import { Alert, Box, CircularProgress, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import type { MicrosegSuggestion, SuggestionAction } from '@/lib/microseg/types'
+import { isAggregateDst, type MicrosegSuggestion, type SuggestionAction } from '@/lib/microseg/types'
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import { BulkBar, ObservationLegend } from './ObservationActions'
 import ObservationFilters, { type ObservationFilterValues } from './ObservationFilters'
-import { decodeCollapsed, encodeCollapsed } from './observationModel'
+import { decodeCollapsed, destinationKey, encodeCollapsed } from './observationModel'
 import ObservationTable from './ObservationTable'
-import { endpoint } from './ObservationRow'
+import { destinationName, endpoint } from './ObservationRow'
 import ObservedFlowDialog from './ObservedFlowDialog'
 import { useResolveSuggestions } from './observationParts'
 import { PrevNextPager } from './PolicyPager'
 import { useNow } from './useNow'
 import { usePendingChanges } from './usePendingChanges'
+import { useZoneGuests } from './useZoneGuests'
 import { useStored } from './useStoredChoice'
 import { uncoveredOf, useZoneUncovered } from './useZoneUncovered'
 
@@ -27,6 +28,17 @@ export const COLLAPSED_STORAGE_KEY = 'microseg.observation.collapsed'
 
 /** Flows per page. The request asks for one more, which tells whether a next page exists. */
 export const OBSERVATION_PAGE_SIZE = 25
+
+/** The guests by address, from the inventory the tab already reads (one request for the whole folder). */
+function useGuestName(connectionId: string): (ip: string) => string | undefined {
+  const { guests } = useZoneGuests(connectionId)
+  const byIp = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const g of guests) for (const ip of g.ips) if (!map.has(ip)) map.set(ip, g.name)
+    return map
+  }, [guests])
+  return ip => byIp.get(ip)
+}
 
 type Resolved = { action: SuggestionAction; count: number }
 
@@ -56,7 +68,7 @@ function ZoneFilterBanner({ connectionId, policy, zoneId }: { connectionId: stri
 export default function ObservationPanel({ connectionId, policy, reloadPolicy, onOpenSettings, observationZone = null }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.observation')
   // Opened from a Policy zone group: filtered on that zone (it stays a filter the user can clear).
-  const [filters, setFilters] = useState<ObservationFilterValues>(() => ({ kind: '', status: 'pending', zone: observationZone ?? '' }))
+  const [filters, setFilters] = useState<ObservationFilterValues>(() => ({ kind: '', status: 'pending', zone: observationZone ?? '', direction: '' }))
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [resolved, setResolved] = useState<Resolved | null>(null)
@@ -69,8 +81,10 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
     offset: page > 0 ? page * OBSERVATION_PAGE_SIZE : undefined,
     status: filters.status || undefined,
     zone: filters.zone || undefined,
+    direction: filters.direction || undefined,
   })
   const { busy, failure, clearFailure, resolve: resolveIds } = useResolveSuggestions(connectionId, policy.version, reloadPolicy, reload)
+  const guestName = useGuestName(connectionId)
   const zonesById = useMemo(() => new Map(policy.zones.map(z => [z.id, z])), [policy.zones])
   const rows = useMemo(() => (data ?? []).slice(0, OBSERVATION_PAGE_SIZE), [data])
   const hasNext = (data?.length ?? 0) > OBSERVATION_PAGE_SIZE
@@ -80,11 +94,12 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
   const collapsed = useMemo(() => new Set(collapsedKeys), [collapsedKeys])
 
   // Select-all covers the pending flows of the page that are shown: not the resolved ones, not those of a folded zone.
-  const pending = rows.filter(r => r.status === 'pending' && !collapsed.has(r.dst_zone_id))
+  const pending = rows.filter(r => r.status === 'pending' && !collapsed.has(destinationKey(r)))
   const chosen = pending.filter(r => selected.has(r.id))
   const allChecked = pending.length > 0 && chosen.length === pending.length
   const noZoneAmongChosen = chosen.some(r => !r.src_zone_id)
-  const noIpAmongChosen = chosen.some(r => !r.src_ip)
+  // As CIDR needs the source address of an inbound flow, and the destination address of an outbound one (never many).
+  const noIpAmongChosen = chosen.some(r => (r.direction === 'out' ? !r.dst_ip || isAggregateDst(r) : !r.src_ip))
 
   const changeFilters = (next: ObservationFilterValues) => {
     setFilters(next)
@@ -107,16 +122,16 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
       return
     }
     setCollapsedKeys([...collapsedKeys, key])
-    const hidden = new Set(rows.filter(r => r.dst_zone_id === key).map(r => r.id))
+    const hidden = new Set(rows.filter(r => destinationKey(r) === key).map(r => r.id))
     setSelected(prev => new Set([...prev].filter(id => !hidden.has(id))))
   }
   const toggleAll = () => setSelected(allChecked ? new Set() : new Set(pending.map(r => r.id)))
 
-  async function resolve(ids: string[], action: SuggestionAction) {
+  async function resolve(ids: string[], action: SuggestionAction, prefixLen?: number) {
     if (busy || ids.length === 0) return
     setResolved(null)
     // A 409 (the draft moved) re-reads the list and the draft; the selection stays for the next try.
-    const outcome = await resolveIds(ids, action)
+    const outcome = await resolveIds(ids, action, prefixLen)
     if (!outcome) return
     if (outcome.resolved) {
       setSelected(prev => new Set([...prev].filter(id => !ids.includes(id))))
@@ -126,11 +141,11 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
     if (page > 0 && outcome.fresh && outcome.fresh.length === 0) goToPage(page - 1)
   }
 
-  const one = (s: MicrosegSuggestion, action: SuggestionAction) => resolve([s.id], action)
+  const one = (s: MicrosegSuggestion, action: SuggestionAction, prefixLen?: number) => resolve([s.id], action, prefixLen)
   // An action from the dialog closes it: the outcome (or the failure) shows above the table, as for a row's action.
-  const fromDialog = (s: MicrosegSuggestion, action: SuggestionAction) => {
+  const fromDialog = (s: MicrosegSuggestion, action: SuggestionAction, prefixLen?: number) => {
     setDetail(null)
-    void resolve([s.id], action)
+    void resolve([s.id], action, prefixLen)
   }
   const endName = (zoneId: string, ip: string) => endpoint(zoneId, ip, zonesById, t)
   const bulk = (action: SuggestionAction) => resolve(chosen.map(r => r.id), action)
@@ -169,6 +184,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
             <ObservationTable
               rows={rows}
               zones={zonesById}
+              guestName={guestName}
               selected={selected}
               busy={busy}
               now={now}
@@ -179,7 +195,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
               onToggle={toggle}
               onResolve={one}
               onOpenDetails={setDetail}
-              nextZoneId={hasNext ? data[OBSERVATION_PAGE_SIZE].dst_zone_id : undefined}
+              nextFlow={hasNext ? data[OBSERVATION_PAGE_SIZE] : undefined}
               collapsed={collapsed}
               onToggleGroup={toggleGroup}
             />
@@ -192,9 +208,10 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
           suggestion={detail}
           zones={zonesById}
           source={endName(detail.src_zone_id, detail.src_ip)}
-          destination={endName(detail.dst_zone_id, detail.dst_ip)}
+          destination={destinationName(detail, zonesById, guestName, t as (key: string) => string)}
           busy={busy}
-          onResolve={action => fromDialog(detail, action)}
+          onResolve={(action, prefixLen) => fromDialog(detail, action, prefixLen)}
+          guestName={guestName}
           onClose={() => setDetail(null)}
         />
       )}

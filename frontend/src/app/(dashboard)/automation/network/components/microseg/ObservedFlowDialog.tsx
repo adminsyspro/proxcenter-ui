@@ -12,7 +12,7 @@ import HourlyBars from './HourlyBars'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { FlowActions } from './ObservationActions'
 import { eventOfFlow, flowTrafficSeries } from './observedFlowModel'
-import { ObservedKindGlyph } from './observationParts'
+import { DirectionGlyph, ObservedKindGlyph } from './observationParts'
 import { formatWhen } from './summaryModel'
 import TruncatedText from './TruncatedText'
 import { useZoneUncovered } from './useZoneUncovered'
@@ -30,9 +30,16 @@ type Props = {
   source: string
   destination: string
   busy: boolean
-  onResolve: (action: SuggestionAction) => void
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
+  /** The guest that carries an address, when the inventory knows it. */
+  guestName?: (ip: string) => string | undefined
   onClose: () => void
 }
+
+type Translate = ReturnType<typeof useTranslations<'microsegPilot.observation'>>
+
+const inboundScope = (t: Translate, src: string, dst: string) => (src ? t('dialog.trafficScope', { source: src, destination: dst }) : t('dialog.trafficScopeNoZone', { destination: dst }))
+const outboundScope = (t: Translate, src: string, dst: string) => (dst ? t('dialog.trafficScope', { source: src, destination: dst }) : t('dialog.trafficScopeOutside', { source: src }))
 
 /** One fact on one line: the label at the left, the value at the right. */
 function Line({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
@@ -64,7 +71,7 @@ function Section({ title, aside, children }: Readonly<{ title: string; aside?: s
  * read: no new request), its latest occurrences with the guests they reached (the engine's memory, read when the
  * dialog opens, no Proxmox call), and the actions of a pending flow.
  */
-export default function ObservedFlowDialog({ connectionId, suggestion: s, zones, source, destination, busy, onResolve, onClose }: Readonly<Props>) {
+export default function ObservedFlowDialog({ connectionId, suggestion: s, zones, source, destination, busy, onResolve, guestName, onClose }: Readonly<Props>) {
   const t = useTranslations('microsegPilot.observation')
   const format = useFormatter()
   const when = (iso: string) => formatWhen(format, iso)
@@ -72,16 +79,20 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
   const srcZone = s.src_zone_id ? zones.get(s.src_zone_id)?.name ?? '' : ''
   const dstZone = s.dst_zone_id ? zones.get(s.dst_zone_id)?.name ?? '' : ''
   const service = serviceLabel(s.proto, s.dport)
+  const outbound = s.direction === 'out'
+  // The zone of the guest that logged the flow (the destination zone when inbound, the emitting zone when outbound) and the other end.
+  const guestZone = outbound ? srcZone : dstZone
+  const otherZone = outbound ? dstZone : srcZone
   const colour = s.kind === 'blocked' ? 'info.main' : 'error.main'
 
   const { traffic, failed } = useZoneUncovered(connectionId)
-  const series = traffic && dstZone ? flowTrafficSeries(traffic, dstZone, srcZone, s.kind) : null
+  const series = traffic && guestZone ? flowTrafficSeries(traffic, guestZone, otherZone, s.kind, outbound ? 'out' : 'in') : null
   const from = traffic ? Date.parse(traffic.from) : 0
   const stepMs = (traffic?.step ?? 3600) * 1000
   const hour = (i: number) => format.dateTime(new Date(from + i * stepMs), { hour: '2-digit', minute: '2-digit' })
   const total = series?.reduce((a, b) => a + b, 0) ?? null
 
-  const events = useMicrosegEvents(connectionId, { zone: dstZone, verdict: s.kind, q: String(s.dport) }, !!dstZone)
+  const events = useMicrosegEvents(connectionId, { zone: guestZone, verdict: s.kind, q: String(s.dport) }, !!guestZone)
   const recent = events.events.filter(e => eventOfFlow(e, s, srcZone, dstZone)).slice(0, RECENT_SHOWN)
   // How far back the engine's memory went for this read (newest first): the oldest event it returned.
   const oldest = events.events.at(-1)?.ts ?? null
@@ -101,6 +112,13 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
       </DialogTitle>
       <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, minWidth: 0 }}>
         <Section title={t('dialog.summary')}>
+          <Line label={t('dialog.direction')}>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+              <DirectionGlyph direction={s.direction} />
+              <Typography variant='body2' fontWeight={500}>{t(outbound ? 'direction.out' : 'direction.in')}</Typography>
+            </Box>
+          </Line>
+          <Line label={t('dialog.colDestination')}>{destination}</Line>
           <Line label={t('dialog.service')}>{serviceTitle(s.proto, s.dport)}</Line>
           <Line label={t('dialog.hits')}>{format.number(s.hits)}</Line>
           <Line label={t('dialog.firstSeen')}>{when(s.first_seen)}</Line>
@@ -109,7 +127,7 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
           <Typography variant='caption' color='text.secondary'>{t('detail.sampleNote')}</Typography>
         </Section>
 
-        {!failed && dstZone && (
+        {!failed && guestZone && (
           <Section title={t('dialog.trafficTitle')} aside={total === null ? undefined : t('dialog.trafficTotal', { count: total })}>
             <HourlyBars
               series={series}
@@ -123,12 +141,12 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
               <Typography variant='caption' color='text.secondary'>{t('dialog.now')}</Typography>
             </Box>
             <Typography variant='caption' color='text.secondary'>
-              {srcZone ? t('dialog.trafficScope', { source: srcZone, destination: dstZone }) : t('dialog.trafficScopeNoZone', { destination: dstZone })}
+              {outbound ? outboundScope(t, srcZone, dstZone) : inboundScope(t, srcZone, dstZone)}
             </Typography>
           </Section>
         )}
 
-        {dstZone && (
+        {guestZone && (
           <Section title={t('dialog.recentTitle')} aside={oldest ? t('dialog.recentSince', { time: when(oldest) }) : undefined}>
             {events.error && !events.events.length ? <MicrosegErrorAlert error={events.error} onRetry={events.reload} /> : null}
             {events.loading && !events.events.length && <CircularProgress size={18} />}
@@ -140,7 +158,7 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
                 <TableHead>
                   <TableRow>
                     <TableCell sx={CELL_SX}>{t('dialog.colTime')}</TableCell>
-                    <TableCell sx={CELL_SX}>{t('dialog.colSource')}</TableCell>
+                    <TableCell sx={CELL_SX}>{t(outbound ? 'dialog.colDestination' : 'dialog.colSource')}</TableCell>
                     <TableCell sx={CELL_SX}>{t('dialog.colGuest')}</TableCell>
                     <TableCell sx={CELL_SX}>{t('dialog.colNode')}</TableCell>
                   </TableRow>
@@ -149,9 +167,9 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
                   {recent.map(e => (
                     <TableRow key={e.seq} data-event={e.seq}>
                       <TableCell sx={CELL_SX}>{when(e.ts)}</TableCell>
-                      <TableCell sx={CELL_SX}>{e.src_ip || t('unknownEndpoint')}</TableCell>
+                      <TableCell sx={CELL_SX}>{outbound ? (guestName?.(e.dst_ip) ?? e.dst_ip) : e.src_ip || t('unknownEndpoint')}</TableCell>
                       <TableCell sx={{ ...CELL_SX, maxWidth: 260 }}>
-                        <TruncatedText text={t('dialog.guest', { name: e.guest || String(e.vmid), vmid: e.vmid, ip: e.dst_ip || '-' })} variant='body2' />
+                        <TruncatedText text={t('dialog.guest', { name: e.guest || String(e.vmid), vmid: e.vmid, ip: (outbound ? e.src_ip : e.dst_ip) || '-' })} variant='body2' />
                       </TableCell>
                       <TableCell sx={CELL_SX}>{e.node}</TableCell>
                     </TableRow>

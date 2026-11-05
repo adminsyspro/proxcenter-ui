@@ -13226,7 +13226,11 @@
         "status": "状态",
         "statusAll": "所有状态",
         "zone": "区域",
-        "zoneAll": "所有区域"
+        "zoneAll": "所有区域",
+        "direction": "方向",
+        "directionAll": "全部",
+        "directionIn": "入站",
+        "directionOut": "出站"
       },
       "kind": {
         "would_block": "将被阻止",
@@ -13322,9 +13326,25 @@
         "colSource": "来源",
         "colGuest": "到达的客户机",
         "colNode": "节点",
-        "guest": "{name}（{vmid}）· IP {ip}"
+        "guest": "{name}（{vmid}）· IP {ip}",
+        "direction": "方向",
+        "colDestination": "目标",
+        "trafficScopeOutside": "此判定下从 {source} 到区域外地址的所有服务：历史记录保存的是区域，而不是地址。"
       },
-      "actionTip": "{action}：{tip}"
+      "actionTip": "{action}：{tip}",
+      "direction": {
+        "in": "入站",
+        "out": "出站"
+      },
+      "manyDestinations": "大量目标",
+      "prefix": {
+        "title": "作为网络接受",
+        "length": "前缀长度",
+        "cancel": "取消",
+        "accept": "接受"
+      },
+      "cidrOutTip": "按所选前缀，在草稿中创建流 {from} → {ip} 所在网络 {service}。",
+      "cidrOutAggregate": "不可用：目标过多，无法合并为一个网络。"
     },
     "overview": {
       "empty": "还没有可绘制的区域。",

@@ -5,7 +5,7 @@ import { Box, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
-import type { MicrosegSuggestion, SuggestionAction, SuggestionKind } from '@/lib/microseg/types'
+import type { FlowDirection, MicrosegSuggestion, SuggestionAction, SuggestionKind } from '@/lib/microseg/types'
 import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
 
 import { isVersionConflict, writeErrorMessage } from './dialogParts'
@@ -36,6 +36,20 @@ export function ObservedKindGlyph({ kind }: { kind: SuggestionKind }) {
             bgcolor: glyph.dot,
           }}
         />
+      </Box>
+    </Tooltip>
+  )
+}
+
+/** The direction of an observed flow as an arrow (up and out for an outbound flow, down and in for an inbound one). */
+export function DirectionGlyph({ direction }: { direction: FlowDirection | undefined }) {
+  const t = useTranslations('microsegPilot.observation')
+  const out = direction === 'out'
+  const label = t(out ? 'direction.out' : 'direction.in')
+  return (
+    <Tooltip title={label}>
+      <Box component='span' role='img' aria-label={label} data-direction={out ? 'out' : 'in'} sx={{ display: 'inline-flex', flexShrink: 0, color: out ? 'warning.main' : 'text.secondary' }}>
+        <i className={out ? 'ri-arrow-right-up-line' : 'ri-arrow-right-down-line'} style={{ fontSize: 16 }} />
       </Box>
     </Tooltip>
   )
@@ -105,14 +119,14 @@ export function useResolveSuggestions<R>(
 
   const clearFailure = useCallback(() => setFailure(null), [])
 
-  const resolve = useCallback(async (ids: string[], action: SuggestionAction): Promise<ResolveOutcome<R> | null> => {
+  const resolve = useCallback(async (ids: string[], action: SuggestionAction, prefixLen?: number): Promise<ResolveOutcome<R> | null> => {
     if (running.current || ids.length === 0) return null
     running.current = true
     setBusy(true)
     setFailure(null)
     let resolved = false
     try {
-      await microsegApi(connectionId).resolveSuggestions({ version, ids, action })
+      await microsegApi(connectionId).resolveSuggestions({ version, ids, action, ...(prefixLen === undefined ? {} : { prefix_len: prefixLen }) })
       resolved = true
     } catch (e) {
       setFailure(writeErrorMessage(tAll as (key: string) => string, e))

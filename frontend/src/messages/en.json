@@ -13226,7 +13226,11 @@
         "status": "Status",
         "statusAll": "All statuses",
         "zone": "Zone",
-        "zoneAll": "All zones"
+        "zoneAll": "All zones",
+        "direction": "Direction",
+        "directionAll": "All",
+        "directionIn": "Inbound",
+        "directionOut": "Outbound"
       },
       "kind": {
         "would_block": "Would be blocked",
@@ -13322,9 +13326,25 @@
         "colSource": "Source",
         "colGuest": "Guest reached",
         "colNode": "Node",
-        "guest": "{name} ({vmid}) · {ip}"
+        "guest": "{name} ({vmid}) · {ip}",
+        "direction": "Direction",
+        "colDestination": "Destination",
+        "trafficScopeOutside": "Every service from {source} to the addresses outside the zones with this verdict: the history keeps the zones, not the addresses."
       },
-      "actionTip": "{action}: {tip}"
+      "actionTip": "{action}: {tip}",
+      "direction": {
+        "in": "Inbound",
+        "out": "Outbound"
+      },
+      "manyDestinations": "Many destinations",
+      "prefix": {
+        "title": "Accept as a network",
+        "length": "Prefix length",
+        "cancel": "Cancel",
+        "accept": "Accept"
+      },
+      "cidrOutTip": "Creates the flow {from} → the network of {ip} {service} in the draft, with the prefix you choose.",
+      "cidrOutAggregate": "Not available: too many destinations to make one network."
     },
     "overview": {
       "empty": "No zone to draw yet.",

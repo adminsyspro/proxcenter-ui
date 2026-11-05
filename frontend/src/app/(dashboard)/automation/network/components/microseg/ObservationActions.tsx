@@ -1,12 +1,13 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { serviceTitle } from '@/lib/network/serviceNames'
-import type { MicrosegSuggestion, SuggestionAction, SuggestionKind } from '@/lib/microseg/types'
+import { isAggregateDst, type MicrosegSuggestion, type SuggestionAction, type SuggestionKind } from '@/lib/microseg/types'
 
+import AcceptNetworkDialog from './AcceptNetworkDialog'
 import { ObservedKindGlyph } from './observationParts'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
@@ -18,7 +19,8 @@ type FlowActionsProps = {
   source: string
   destination: string
   busy: boolean
-  onResolve: (action: SuggestionAction) => void
+  /** `prefixLen` comes with As CIDR on an outbound flow, whose dialog chooses it. */
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
   /** Coloured icons for the rows of the table (the default), labelled buttons where there is room (the flow dialog). */
   variant?: 'icons' | 'buttons'
 }
@@ -39,31 +41,48 @@ export function FlowActions({ suggestion: s, source, destination, busy, onResolv
   const t = useTranslations('microsegPilot.observation')
   const { canWrite } = useMicrosegWrite()
   const service = serviceTitle(s.proto, s.dport)
+  const outbound = s.direction === 'out'
+  const [choosingPrefix, setChoosingPrefix] = useState(false)
   const spec = {
     accept: { label: t('accept'), tip: s.src_zone_id ? t('acceptTip', { from: source, to: destination, service }) : t('acceptUnknownSource'), off: !s.src_zone_id },
-    accept_cidr: { label: t('asCidr'), tip: s.src_ip ? t('cidrTip', { ip: s.src_ip }) : t('acceptCidrNoIp'), off: !s.src_ip },
+    accept_cidr: outbound
+      ? { label: t('asCidr'), tip: t('cidrOutTip', { from: source, ip: s.dst_ip, service }), off: !s.dst_ip }
+      : { label: t('asCidr'), tip: s.src_ip ? t('cidrTip', { ip: s.src_ip }) : t('acceptCidrNoIp'), off: !s.src_ip },
     dismiss: { label: t('dismiss'), tip: t('dismissTip'), off: false },
   }
+  // Many destinations never make one network: the backend refuses it, so the action is not offered.
+  const actions = FLOW_ACTIONS.filter(({ action }) => !(action === 'accept_cidr' && outbound && isAggregateDst(s)))
+  const run = (action: SuggestionAction) => (action === 'accept_cidr' && outbound ? setChoosingPrefix(true) : onResolve(action))
 
   return (
     <Box sx={{ display: 'inline-flex', gap: variant === 'icons' ? 0 : 0.5 }}>
-      {FLOW_ACTIONS.map(({ action, icon, color }) => {
+      {actions.map(({ action, icon, color }) => {
         const { label, tip, off } = spec[action]
         const disabled = !canWrite || busy || off
         return (
           <WriteTip key={action} title={variant === 'icons' ? t('actionTip', { action: label, tip }) : tip}>
             {variant === 'icons' ? (
-              <IconButton size='small' color={color} aria-label={label} disabled={disabled} onClick={() => onResolve(action)}>
+              <IconButton size='small' color={color} aria-label={label} disabled={disabled} onClick={() => run(action)}>
                 <i className={icon} />
               </IconButton>
             ) : (
-              <Button size='small' variant='outlined' color={action === 'dismiss' ? 'inherit' : 'primary'} disabled={disabled} onClick={() => onResolve(action)} sx={ACTION_SX}>
+              <Button size='small' variant='outlined' color={action === 'dismiss' ? 'inherit' : 'primary'} disabled={disabled} onClick={() => run(action)} sx={ACTION_SX}>
                 {label}
               </Button>
             )}
           </WriteTip>
         )
       })}
+      {choosingPrefix && (
+        <AcceptNetworkDialog
+          ip={s.dst_ip}
+          onClose={() => setChoosingPrefix(false)}
+          onAccept={len => {
+            setChoosingPrefix(false)
+            onResolve('accept_cidr', len)
+          }}
+        />
+      )}
     </Box>
   )
 }

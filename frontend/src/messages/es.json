@@ -13226,7 +13226,11 @@
         "status": "Estado",
         "statusAll": "Todos los estados",
         "zone": "Zona",
-        "zoneAll": "Todas las zonas"
+        "zoneAll": "Todas las zonas",
+        "direction": "Dirección",
+        "directionAll": "Todas",
+        "directionIn": "Entrante",
+        "directionOut": "Saliente"
       },
       "kind": {
         "would_block": "Se bloquearía",
@@ -13322,9 +13326,25 @@
         "colSource": "Origen",
         "colGuest": "Invitado alcanzado",
         "colNode": "Nodo",
-        "guest": "{name} ({vmid}) · IP {ip}"
+        "guest": "{name} ({vmid}) · IP {ip}",
+        "direction": "Dirección",
+        "colDestination": "Destino",
+        "trafficScopeOutside": "Todos los servicios de {source} hacia direcciones fuera de las zonas con este veredicto: el historial guarda las zonas, no las direcciones."
       },
-      "actionTip": "{action} – {tip}"
+      "actionTip": "{action} – {tip}",
+      "direction": {
+        "in": "Entrante",
+        "out": "Saliente"
+      },
+      "manyDestinations": "Muchos destinos",
+      "prefix": {
+        "title": "Aceptar como red",
+        "length": "Longitud del prefijo",
+        "cancel": "Cancelar",
+        "accept": "Aceptar"
+      },
+      "cidrOutTip": "Crea en el borrador el flujo {from} → la red de {ip} {service}, con el prefijo elegido.",
+      "cidrOutAggregate": "No disponible: demasiados destinos para formar una red."
     },
     "overview": {
       "empty": "Aún no hay ninguna zona que dibujar.",

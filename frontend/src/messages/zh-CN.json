@@ -9059,6 +9059,7 @@
       "postureHits": "{count, plural, other {# 次命中}}",
       "postureMembers": "{count, plural, other {# 个客户机}}",
       "postureUnknownExternal": "未知 / 外部",
+      "postureOutside": "区域之外",
       "postureUnzoned": "无区域",
       "postureOther": "其他",
       "postureNoVlan": "无 VLAN",
@@ -12887,7 +12888,8 @@
           "legendIn": "入站",
           "legendOut": "出站",
           "outBlocked": "出站已阻断 {short}",
-          "outWouldBlock": "出站将阻断 {short}"
+          "outWouldBlock": "出站将阻断 {short}",
+          "outConnections": "{short} 个出站连接"
         },
         "egress": {
           "state": {
@@ -12932,6 +12934,7 @@
         "egressOffTitle": "停止控制区域 {name} 的出站流量?",
         "egressOnBody": "该区域的出站流量将立即进入观察状态,并生成新的修订版本。",
         "egressOffBody": "该区域的出站过滤将立即移除,并生成新的修订版本。",
+        "egressIsolateNote": "隔离设置的更改也会一并应用。",
         "egressOnConfirm": "控制",
         "egressOffConfirm": "停止控制",
         "create": "创建",
@@ -13198,6 +13201,7 @@
           "title": "出站规则判定不符",
           "detail": "{name} 的最终出站规则是 {have}，应为 {want}。",
           "detailCollision": "{name} 无法阻断：在 Proxmox 中 pcz-_local 属于他人，因此其出站规则仍为 {have}。",
+          "detailDest": "{name} 的出站规则指向 {haveDest}，而不是 {wantDest}。",
           "hintCollision": "Proxmox 中存在名为 pcz-_local 且没有微分段标记的对象：请在 Proxmox 中重命名或删除它。"
         },
         "known_rule_missing": {
@@ -13217,6 +13221,8 @@
           "detail": "{zone} 中的 {name} 没有已知子网：其本地网络仅限于自身 IP。",
           "hint": "未知子网：请在 Proxmox 中检查客户机的网络配置（带前缀长度的 IP，或 QEMU 客户机代理）。"
         },
+        "destinationAll": "所有目的地",
+        "destinationLocal": "本地网络",
         "verdict": {
           "disabled": "已禁用"
         }
@@ -13341,6 +13347,7 @@
       "dismissTip": "隐藏此配对的这条建议。",
       "bulkLabel": "已选的流",
       "bulkAcceptTip": "为每条所选建议在草稿中创建区域之间的流。",
+      "bulkAcceptAggregateTip": "在草稿中为每个所选建议创建区域之间的流。发往多个目的地的流会允许其服务访问所有地址 (0.0.0.0/0)。",
       "bulkCidrTip": "以每个来源作为地址范围创建相同的流。",
       "bulkDismissTip": "隐藏所选建议。",
       "legend": {
@@ -13352,6 +13359,7 @@
         "about": "关于命中数"
       },
       "acceptUnknownSource": "未知来源：请使用“按 CIDR”",
+      "acceptAggregateTip": "允许 {service} 访问所有地址 (0.0.0.0/0)",
       "zoneBanner": "{zone} 区域的建议 · 24 小时内 {count, plural, other {# 次未覆盖命中}}",
       "zoneBannerNoCount": "{zone} 区域的建议",
       "dialog": {

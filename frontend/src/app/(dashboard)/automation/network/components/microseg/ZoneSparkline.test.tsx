@@ -90,6 +90,11 @@ describe('ZoneSparkline', () => {
       expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 would be blocked · 20 outbound blocked')
     })
 
+    it('words outbound hits left in the window after the outbound went off as plain connections', () => {
+      renderWithProviders(<ZoneSparkline state='enforce' outState='off' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 blocked · 20 outbound connections')
+    })
+
     it('says only the outbound part when nothing came in', () => {
       renderWithProviders(<ZoneSparkline state='enforce' outState='enforce' series={new Array<number>(24).fill(0)} outSeries={out()} from={FROM} stepMs={3_600_000} />)
       expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('20 outbound blocked')

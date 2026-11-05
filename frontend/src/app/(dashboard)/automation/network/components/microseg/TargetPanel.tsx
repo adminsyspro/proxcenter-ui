@@ -11,6 +11,7 @@ import { serviceTitle } from '@/lib/network/serviceNames'
 import { OneLine } from './dialogParts'
 import FlowSummary from './FlowSummary'
 import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
+import { destinationName } from './ObservationRow'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { SelectionTrafficChart, useSelectionTraffic } from './SelectionTraffic'
@@ -58,9 +59,11 @@ function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
   const peer = (row.peerIp && peers.get(bareIp(row.peerIp))) || row.peerIp || to('unknownEndpoint')
   const where = t(row.direction === 'out' ? 'target.panel.outgoing' : 'target.panel.incoming', { peer })
   const service = serviceTitle(s.proto, s.dport)
-  const zoneName = (id: string) => zonesById.get(id)?.name ?? to('deletedZone')
-  const accept = t('flowPanel.acceptAs', { from: s.src_zone_id ? zoneName(s.src_zone_id) : to('unknownEndpoint'), to: zoneName(s.dst_zone_id), service })
-  const acceptTip = t('target.panel.acceptTip', { from: s.src_zone_id ? zoneName(s.src_zone_id) : to('unknownEndpoint'), to: zoneName(s.dst_zone_id), service })
+  const from = s.src_zone_id ? zonesById.get(s.src_zone_id)?.name ?? to('deletedZone') : to('unknownEndpoint')
+  // The other end as the Observation table names it: its zone, else the guest or the address, else many destinations.
+  const destination = destinationName(s, zonesById, ip => peers.get(bareIp(ip)), to as (key: string) => string)
+  const accept = t('flowPanel.acceptAs', { from, to: destination, service })
+  const acceptTip = t('target.panel.acceptTip', { from, to: destination, service })
   const kind = s.kind === 'blocked' ? 'blocked' : 'unprotected'
   return (
     <Box role='listitem' aria-label={where} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minHeight: 36, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>

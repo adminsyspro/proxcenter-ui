@@ -157,6 +157,16 @@ describe('enforcing a zone', () => {
     await waitFor(() => expect(calls('POST /zones/zw/state')).toHaveLength(1))
   })
 
+  it('reads the inbound suggestions of the zone with the inbound direction, so outbound rows of the zone never count', async () => {
+    mock.routes[SUGGESTIONS_ROUTE] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
+    setup({ zones: [web({ state: 'observe', observe_since: hoursAgo(48) })] })
+    const dialog = await chooseEnforce()
+    await waitFor(() => expect((within(dialog).getByRole('button', { name: 'Enforce' }) as HTMLButtonElement).disabled).toBe(false))
+    const reads = calls(SUGGESTIONS_ROUTE)
+    expect(reads.length).toBeGreaterThan(0)
+    expect(String(reads[0][0])).toContain('direction=in')
+  })
+
   it('treats a zone observed for less than the window as not ready', async () => {
     mock.routes[SUGGESTIONS_ROUTE] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
     setup({ zones: [web({ state: 'observe', observe_since: hoursAgo(2) })] })

@@ -22,6 +22,8 @@ function LegendKey({ colour, label }: { colour: string; label: string }) {
   )
 }
 
+const OUT_WORDING = { enforce: 'outBlocked', observe: 'outWouldBlock', off: 'outConnections' } as const
+
 type Props = {
   state: ZoneState
   /** The hits per bucket, oldest first; null while the history is read. */
@@ -64,7 +66,8 @@ export default function ZoneSparkline({ state, series, outSeries = null, outStat
   const compact = (n: number) => format.number(n, { notation: 'compact', maximumFractionDigits: 1 })
   // Each side is worded with its own state: the zone's for the inbound hits, its outbound state for the outbound hits.
   const inLabel = (n: number) => t(state === 'enforce' ? 'blocked' : 'wouldBlock', { count: n, short: compact(n) })
-  const outLabel = t(outState === 'enforce' ? 'outBlocked' : 'outWouldBlock', { short: compact(outTotal) })
+  // Outbound hits still in the 24 h window after the zone's outbound went off are plain traffic, nothing is blocked or would be.
+  const outLabel = t(OUT_WORDING[outState], { short: compact(outTotal) })
   let label = t('loading')
   if (inTotal !== null) label = split ? [inTotal > 0 ? inLabel(inTotal) : '', outLabel].filter(Boolean).join(' · ') : inLabel(inTotal)
 

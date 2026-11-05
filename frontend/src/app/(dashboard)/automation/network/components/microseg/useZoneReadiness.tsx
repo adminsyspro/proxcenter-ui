@@ -15,7 +15,7 @@ export const SUGGESTIONS_LIMIT = 200
 export type Readiness = 'ready' | 'notReady' | 'unchecked'
 
 /**
- * Reads the pending would-block suggestions of the zone (inbound, or outbound with `direction: 'out'`) and says whether
+ * Reads the pending would-block suggestions of the zone (always read with its direction: the zone filter of the backend also matches the outbound rows on their source, which must not count for the inbound read) and says whether
  * the zone is ready: observed for the whole window with none seen inside it. A full page or a failed read is never
  * "ready" (notReady, unchecked). Null while reading, and while `enabled` is false.
  */
@@ -28,7 +28,7 @@ export function useZoneReadiness(
     if (!enabled) return
     let cancelled = false
     microsegApi(connectionId)
-      .listSuggestions({ kind: 'would_block', status: 'pending', zone: zoneId, ...(direction === 'out' ? { direction } : {}), limit: SUGGESTIONS_LIMIT })
+      .listSuggestions({ kind: 'would_block', status: 'pending', zone: zoneId, direction, limit: SUGGESTIONS_LIMIT })
       .then(({ suggestions }) => {
         if (cancelled) return
         const complete = suggestions.length < SUGGESTIONS_LIMIT

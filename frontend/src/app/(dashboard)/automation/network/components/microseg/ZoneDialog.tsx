@@ -9,7 +9,7 @@ import { useTranslations } from 'next-intl'
 
 import { zoneEgress, type EgressMode, type MicrosegZone } from '@/lib/microseg/types'
 
-import { DialogErrorLine, ONE_LINE_SX, useDialogAction } from './dialogParts'
+import { DialogErrorLine, isVersionConflict, ONE_LINE_SX, useDialogAction } from './dialogParts'
 import TypedConfirmDialog from './TypedConfirmDialog'
 import ZoneStateGate from './ZoneStateGate'
 import type { ZoneGate } from './zoneGate'
@@ -117,9 +117,19 @@ export default function ZoneDialog({ zone, onSave, onClose, gate }: Props) {
   const stateBlocked = !zone || (zone.state !== 'observe' && zone.state !== 'enforce')
   const egressChanged = !!zone && values.egress_control !== (zoneEgress(zone) !== 'off')
 
+  const isolationChanged = !!zone && values.isolate_members !== zone.isolate_members
+
   const save = () => {
     setFrozenGate(prev => prev ?? gate ?? null)
-    return run(() => onSave({ ...values, label: values.label.trim() }))
+    return run(async () => {
+      try {
+        await onSave({ ...values, label: values.label.trim() })
+      } catch (e) {
+        // The draft moved elsewhere: the next try is a new question, gated on the draft as it is then.
+        if (isVersionConflict(e)) setFrozenGate(null)
+        throw e
+      }
+    })
   }
   const submit = () => {
     if (Object.keys(errors).length > 0) return
@@ -178,7 +188,10 @@ export default function ZoneDialog({ zone, onSave, onClose, gate }: Props) {
       {confirming && (
         <TypedConfirmDialog
           title={t(`microsegPilot.policy.zoneDialog.${egressText.title}`, { name: values.name })}
-          lines={[t(`microsegPilot.policy.zoneDialog.${egressText.body}`)]}
+          lines={[
+            t(`microsegPilot.policy.zoneDialog.${egressText.body}`),
+            ...(isolationChanged ? [t('microsegPilot.policy.zoneDialog.egressIsolateNote')] : []),
+          ]}
           confirmLabel={t(`microsegPilot.policy.zoneDialog.${egressText.confirm}`)}
           color='warning'
           ready={!egressGate?.pending}

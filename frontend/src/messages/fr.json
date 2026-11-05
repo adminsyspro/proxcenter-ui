@@ -9059,6 +9059,7 @@
       "postureHits": "{count, plural, one {# occurrence} other {# occurrences}}",
       "postureMembers": "{count, plural, one {# invité} other {# invités}}",
       "postureUnknownExternal": "Inconnu / Externe",
+      "postureOutside": "Extérieur",
       "postureUnzoned": "Hors zone",
       "postureOther": "Autres",
       "postureNoVlan": "Sans VLAN",
@@ -12888,7 +12889,8 @@
           "legendIn": "Entrant",
           "legendOut": "Sortant",
           "outBlocked": "{short} sortants bloqués",
-          "outWouldBlock": "{short} sortants seraient bloqués"
+          "outWouldBlock": "{short} sortants seraient bloqués",
+          "outConnections": "{short} connexions sortantes"
         },
         "egress": {
           "state": {
@@ -12933,6 +12935,7 @@
         "egressOffTitle": "Ne plus contrôler la sortie de la zone {name} ?",
         "egressOnBody": "La sortie de la zone passe en observation tout de suite, dans une nouvelle révision.",
         "egressOffBody": "Le filtrage de la sortie de la zone est retiré tout de suite, dans une nouvelle révision.",
+        "egressIsolateNote": "Le changement d'isolation est appliqué en même temps.",
         "egressOnConfirm": "Contrôler",
         "egressOffConfirm": "Ne plus contrôler",
         "create": "Créer",
@@ -13199,6 +13202,7 @@
           "title": "Règle de sortie au mauvais verdict",
           "detail": "La règle finale de sortie de {name} est {have} au lieu de {want}.",
           "detailCollision": "{name} ne peut pas bloquer : pcz-_local appartient à quelqu'un d'autre dans Proxmox, sa règle de sortie reste {have}.",
+          "detailDest": "La règle de sortie de {name} vise {haveDest} au lieu de {wantDest}.",
           "hintCollision": "Un objet nommé pcz-_local existe dans Proxmox sans le marqueur de micro-segmentation : renommez-le ou supprimez-le dans Proxmox."
         },
         "known_rule_missing": {
@@ -13218,6 +13222,8 @@
           "detail": "{name} de {zone} n'a aucun sous-réseau connu : son réseau local se réduit à ses IP.",
           "hint": "Aucun sous-réseau connu : vérifiez la configuration réseau de l'invité dans Proxmox (une IP avec sa longueur de préfixe, ou l'agent invité QEMU)."
         },
+        "destinationAll": "toutes les destinations",
+        "destinationLocal": "le réseau local",
         "verdict": {
           "disabled": "désactivée"
         }
@@ -13342,6 +13348,7 @@
       "dismissTip": "Masque cette suggestion pour cette paire.",
       "bulkLabel": "Flux sélectionnés",
       "bulkAcceptTip": "Crée dans le brouillon le flux entre les zones de chaque suggestion sélectionnée.",
+      "bulkAcceptAggregateTip": "Crée dans le brouillon le flux entre les zones de chaque suggestion sélectionnée. Un flux vers de nombreuses destinations autorise son service vers toutes les adresses (0.0.0.0/0).",
       "bulkCidrTip": "Crée les mêmes flux avec chaque source comme plage d'adresses.",
       "bulkDismissTip": "Masque les suggestions sélectionnées.",
       "legend": {
@@ -13353,6 +13360,7 @@
         "about": "À propos des occurrences"
       },
       "acceptUnknownSource": "Source inconnue : utilisez En CIDR",
+      "acceptAggregateTip": "Autoriser {service} vers toutes les adresses (0.0.0.0/0)",
       "zoneBanner": "Suggestions pour la zone {zone} · {count, plural, one {# occurrence non couverte} other {# occurrences non couvertes}} en 24 h",
       "zoneBannerNoCount": "Suggestions pour la zone {zone}",
       "dialog": {

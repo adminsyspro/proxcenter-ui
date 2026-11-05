@@ -376,6 +376,16 @@ describe('the target search of a user who cannot read the inventory (D9)', () =>
       expect(body(calls('POST /suggestions/resolve')[0][1])).toEqual({ version: 3, ids: ['o1'], action: 'accept_cidr', prefix_len: 24 })
     })
 
+    it('names the destination of the accept button by its address, or as many destinations, never as a deleted zone', async () => {
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1'), out('o2', { dst_key: '0.0.0.0/0', dst_ip: '' })] })
+      await node('guest:zw:qemu/100')
+      await target('web-1')
+      const aside = await panel('Guest web-1')
+      expect(within(aside).getByRole('button', { name: /^Accept as flow web → 203\.0\.113\.10 / })).toBeTruthy()
+      expect(within(aside).getByRole('button', { name: /^Accept as flow web → Many destinations / })).toBeTruthy()
+      expect(within(aside).queryByRole('button', { name: /Deleted zone/ })).toBeNull()
+    })
+
     it('offers no network for many destinations', async () => {
       setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { dst_key: '0.0.0.0/0', dst_ip: '' })] })
       await node('guest:zw:qemu/100')

@@ -5,6 +5,8 @@ import { guestKey } from './zoneModel'
 
 /** The group of the known destinations (the orchestrator's KnownGroup): a misplaced rule on it is the known rule. */
 const KNOWN_GROUP = 'pcz-_known'
+/** The destination of an outbound rule in "local" mode: the group of the local network (the orchestrator's LocalSet). */
+const LOCAL_DEST = '+pcz-_local'
 
 /** The kinds the engine reports (drift.go), in the order the sub-tab documents them. */
 export const DRIFT_KINDS = [
@@ -63,6 +65,11 @@ function ruleOf(detail: Record<string, unknown>): string {
 function valuesOf(d: MicrosegDrift, t: Translate): Record<string, string | number> {
   // PVE names (ACCEPT, DROP) stay as they are; a disabled rule is said in the user's language.
   const verdict = (v: unknown) => (v === 'DISABLED' ? t('verdict.disabled') : text(v))
+  // The destination of a rule: "" is every destination (mode "all"), "+pcz-_local" the local network set.
+  const destination = (v: unknown) => {
+    if (v === '') return t('destinationAll')
+    return v === LOCAL_DEST ? t('destinationLocal') : text(v)
+  }
   const detail = d.detail ?? {}
   return {
     name: text(detail.name, d.guest ? `${d.guest.type}/${d.guest.vmid}` : '-'),
@@ -75,17 +82,23 @@ function valuesOf(d: MicrosegDrift, t: Translate): Record<string, string | numbe
     zone: text(detail.zone),
     want: verdict(detail.want),
     have: verdict(detail.have),
+    wantDest: destination(detail.want_dest),
+    haveDest: destination(detail.have_dest),
     kind: d.kind,
   }
 }
 
-type DetailVariant = 'group' | 'collision' | 'known' | null
+type DetailVariant = 'group' | 'collision' | 'known' | 'dest' | null
 
-/** Which wording of the detail a drift takes: a foreign rule in a group, a zone that cannot block, a misplaced known rule. */
+const DETAIL_KEY: Record<Exclude<DetailVariant, null>, string> = { group: 'detailGroup', collision: 'detailCollision', known: 'detailKnown', dest: 'detailDest' }
+
+/** Which wording of the detail a drift takes: a foreign rule in a group, a zone that cannot block, a misplaced known rule, a rule aimed at another destination. */
 function detailVariant(d: MicrosegDrift): DetailVariant {
   if (d.kind === 'foreign_accept' && !d.guest) return 'group'
   if ((d.kind === 'egress_rule_missing' || d.kind === 'egress_rule_verdict') && d.detail?.reason === 'collision') return 'collision'
   if (d.kind === 'egress_rule_misplaced' && d.object === KNOWN_GROUP) return 'known'
+  // A rule at the right verdict but aimed at the wrong destination: the detail carries both (an empty one is "all").
+  if (d.kind === 'egress_rule_verdict' && (typeof d.detail?.want_dest === 'string' || typeof d.detail?.have_dest === 'string')) return 'dest'
   return null
 }
 
@@ -100,7 +113,7 @@ export function driftLabel(d: MicrosegDrift, t: Translate): DriftLabel {
   if (!isKnown(d.kind)) return { title: t('generic.title', values), detail: t('generic.detail', values), fixable: false, fix: null, hint: null }
   // A foreign rule inside one of our groups has no guest: its detail names the group.
   const variant = detailVariant(d)
-  const detailKey = variant ? `${d.kind}.${variant === 'group' ? 'detailGroup' : variant === 'collision' ? 'detailCollision' : 'detailKnown'}` : `${d.kind}.detail`
+  const detailKey = `${d.kind}.${variant ? DETAIL_KEY[variant] : 'detail'}`
   // A verdict the zone cannot reach because pcz-_local is not ours is no plan's job: Proxmox holds the fix.
   const collided = variant === 'collision'
   const fix = collided ? null : FIX_OF[d.kind]

@@ -629,6 +629,29 @@ describe('outbound flows', () => {
     expect(within(line).queryByRole('button', { name: 'As CIDR' })).toBeNull()
   })
 
+  it('says in the Accept tooltip that many destinations are allowed to every address, in the row and in the bulk bar', async () => {
+    setup([out('o1', { dst_key: '0.0.0.0/0', dst_ip: '' }), out('o2')])
+    const line = await row('web to Many destinations')
+    fireEvent.mouseOver(within(line).getByRole('button', { name: 'Accept' }).parentElement as HTMLElement)
+    expect((await screen.findByRole('tooltip')).textContent).toMatch(/to all addresses \(0\.0\.0\.0\/0\)/)
+    fireEvent.mouseOut(within(line).getByRole('button', { name: 'Accept' }).parentElement as HTMLElement)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select web to 203.0.113.10' }))
+    const bulk = screen.getByRole('button', { name: 'Accept selected' })
+    fireEvent.mouseOver(bulk.parentElement as HTMLElement)
+    expect(await screen.findByText(/Creates in the draft the flow between the zones of each selected suggestion\.$/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select web to Many destinations' }))
+    fireEvent.mouseOver(bulk.parentElement as HTMLElement)
+    expect(await screen.findByText(/A flow to many destinations allows its service to all addresses \(0\.0\.0\.0\/0\)/)).toBeTruthy()
+  })
+
+  it('colours the group of an outbound address outside the zones with a neutral dot, not the red of an unknown destination', async () => {
+    setup([out('o1')])
+    await row('web to 203.0.113.10')
+    const dot = (key: string) => document.querySelector(`[data-group="${key}"] [data-group-dot]`)?.getAttribute('data-group-dot')
+    expect(dot('203.0.113.10')).toBe('text.disabled')
+  })
+
   it('shows the blocked outbound flows with their arrow', async () => {
     setup([out('b1', { kind: 'blocked' })])
     const line = await row('web to 203.0.113.10')

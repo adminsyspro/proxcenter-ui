@@ -44,6 +44,7 @@ export function useSliceName() {
     switch (slice.kind) {
       case 'unzoned': return t('postureUnzoned')
       case 'external': return t('postureUnknownExternal')
+      case 'outside': return t('postureOutside')
       case 'other': return t('postureOther')
       case 'novlan': return t('postureNoVlan')
       case 'vlan': return t('postureVlan', { vlan: slice.name })

@@ -9059,6 +9059,7 @@
       "postureHits": "{count, plural, one {# hit} other {# hits}}",
       "postureMembers": "{count, plural, one {# guest} other {# guests}}",
       "postureUnknownExternal": "Unknown / External",
+      "postureOutside": "Outside",
       "postureUnzoned": "Unzoned",
       "postureOther": "Other",
       "postureNoVlan": "No VLAN",
@@ -12887,7 +12888,8 @@
           "legendIn": "Inbound",
           "legendOut": "Outbound",
           "outBlocked": "{short} outbound blocked",
-          "outWouldBlock": "{short} outbound would be blocked"
+          "outWouldBlock": "{short} outbound would be blocked",
+          "outConnections": "{short} outbound connections"
         },
         "egress": {
           "state": {
@@ -12932,6 +12934,7 @@
         "egressOffTitle": "Stop controlling outbound traffic of zone {name}?",
         "egressOnBody": "The outbound traffic of the zone goes to observation right away, as a new revision.",
         "egressOffBody": "The outbound filtering of the zone is removed right away, as a new revision.",
+        "egressIsolateNote": "The isolation change is applied with it.",
         "egressOnConfirm": "Control",
         "egressOffConfirm": "Stop controlling",
         "create": "Create",
@@ -13198,6 +13201,7 @@
           "title": "Outbound rule at the wrong verdict",
           "detail": "The final outbound rule of {name} is {have} instead of {want}.",
           "detailCollision": "{name} cannot block: pcz-_local belongs to someone else in Proxmox, so its outbound rule stays {have}.",
+          "detailDest": "The outbound rule of {name} targets {haveDest} instead of {wantDest}.",
           "hintCollision": "An object named pcz-_local exists in Proxmox without the micro-segmentation marker: rename or delete it in Proxmox."
         },
         "known_rule_missing": {
@@ -13217,6 +13221,8 @@
           "detail": "{name} of {zone} has no known subnet: its local network is reduced to its own IPs.",
           "hint": "No subnet known: check the network configuration of the guest in Proxmox (an IP with its prefix length, or the QEMU guest agent)."
         },
+        "destinationAll": "all destinations",
+        "destinationLocal": "the local network",
         "verdict": {
           "disabled": "disabled"
         }
@@ -13341,6 +13347,7 @@
       "dismissTip": "Hides this suggestion for this pair.",
       "bulkLabel": "Selected flows",
       "bulkAcceptTip": "Creates in the draft the flow between the zones of each selected suggestion.",
+      "bulkAcceptAggregateTip": "Creates in the draft the flow between the zones of each selected suggestion. A flow to many destinations allows its service to all addresses (0.0.0.0/0).",
       "bulkCidrTip": "Creates the same flows with each source as an address range.",
       "bulkDismissTip": "Hides the selected suggestions.",
       "legend": {
@@ -13352,6 +13359,7 @@
         "about": "About the hit counts"
       },
       "acceptUnknownSource": "Unknown source: use As CIDR",
+      "acceptAggregateTip": "Allow {service} to all addresses (0.0.0.0/0)",
       "zoneBanner": "Suggestions for zone {zone} · {count, plural, one {# uncovered hit} other {# uncovered hits}} in 24 h",
       "zoneBannerNoCount": "Suggestions for zone {zone}",
       "dialog": {

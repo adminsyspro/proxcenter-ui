@@ -213,7 +213,7 @@ describe('DashboardTab: header chips', () => {
     const chip = await screen.findByTestId('chip-check')
     fireEvent.mouseOver(chip)
     const tip = await screen.findByRole('tooltip')
-    expect(tip.textContent).toContain('pve1 · 82 lines/min · 12 s behind')
+    expect(tip.textContent).toContain('pve1 · 82 lines/min · 12 sec behind')
     expect(tip.textContent).toContain('pve2 · 3 lines/min · 5 min behind')
   })
 

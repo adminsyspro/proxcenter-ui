@@ -1,4 +1,4 @@
-import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, UNZONED_KEY, buildResolver, groupKeyOf, zoneKey, type LensPair } from '@/lib/microseg/trafficLens'
+import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, buildResolver, groupKeyOf, zoneKey, type LensPair } from '@/lib/microseg/trafficLens'
 import type { MicrosegEvent, MicrosegTraffic, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
 
 import { NO_VLAN_KEY, type GroupBy, type PostureGuest, type PostureSlice } from './dashboardPosture'
@@ -92,7 +92,8 @@ function groupOfEvent(
   if (groupBy === 'dstzone') {
     // The zone that received it: the zone of the guest that logged it, or for an outbound event the destination zone.
     const received = out ? e.src_zone : e.zone
-    if (!received) return EXTERNAL_KEY
+    // An outbound event to an address outside the zones names no zone: "Outside", as on the map.
+    if (!received) return OUTSIDE_KEY
     const zone = zoneByName.get(received.toLowerCase())
     return zone ? zoneKey(zone.id) : OTHER_KEY
   }
@@ -186,7 +187,8 @@ export function postureHistory(input: {
   const stepMs = stepMsOf(range)
   const zoneByName = new Map(input.zones.map(z => [z.name.toLowerCase(), z]))
   const groupOf = (name: string) => {
-    if (!name) return EXTERNAL_KEY
+    // Grouped by destination, an empty zone is an outbound flow to an address outside the zones.
+    if (!name) return by === 'dst' ? OUTSIDE_KEY : EXTERNAL_KEY
     const zone = zoneByName.get(name.toLowerCase())
     return zone ? zoneKey(zone.id) : OTHER_KEY
   }

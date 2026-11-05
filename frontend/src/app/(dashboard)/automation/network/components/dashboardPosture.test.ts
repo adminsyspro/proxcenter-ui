@@ -53,6 +53,16 @@ describe('postureGuests', () => {
   })
 })
 
+describe('postureTraffic: grouped by destination zone', () => {
+  it('names an outbound destination outside the zones Outside, kept apart from Unknown / External', () => {
+    const outbound = seen({ direction: 'out', src_zone_id: 'zweb', src_ip: '10.0.0.1', dst_zone_id: '', dst_ip: '198.51.100.7', hits: 40 })
+    const { slices } = postureTraffic(input({ groupBy: 'dstzone', suggestions: [...FLOWS_SEEN, outbound] }))
+    expect(slices.map(s => [s.key, s.kind, s.hits])).toContainEqual(['outside', 'outside', 40])
+    // The unknown sources of the inbound flows are still Unknown on the source side of the zone grouping.
+    expect(postureTraffic(input({ suggestions: [...FLOWS_SEEN, outbound] })).slices.map(s => s.key)).not.toContain('outside')
+  })
+})
+
 describe('postureTraffic: hits per source zone', () => {
   it('sums the hits per source zone, Unzoned and Unknown / External included, busiest first', () => {
     const { total, slices } = postureTraffic(input())

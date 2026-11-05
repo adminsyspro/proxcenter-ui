@@ -9006,6 +9006,7 @@
       "postureHits": "{count, plural, one {# Treffer} other {# Treffer}}",
       "postureMembers": "{count, plural, one {# Gast} other {# Gäste}}",
       "postureUnknownExternal": "Unbekannt / Extern",
+      "postureOutside": "Außerhalb",
       "postureUnzoned": "Ohne Zone",
       "postureOther": "Sonstige",
       "postureNoVlan": "Kein VLAN",
@@ -12555,7 +12556,8 @@
           "legendIn": "Eingehend",
           "legendOut": "Ausgehend",
           "outBlocked": "{short} ausgehend blockiert",
-          "outWouldBlock": "{short} ausgehend würden blockiert"
+          "outWouldBlock": "{short} ausgehend würden blockiert",
+          "outConnections": "{short} ausgehende Verbindungen"
         },
         "egress": {
           "state": {
@@ -12600,6 +12602,7 @@
         "egressOffTitle": "Ausgehenden Verkehr der Zone {name} nicht mehr kontrollieren?",
         "egressOnBody": "Der ausgehende Verkehr der Zone wechselt sofort in die Beobachtung, als neue Revision.",
         "egressOffBody": "Die Filterung des ausgehenden Verkehrs der Zone wird sofort entfernt, als neue Revision.",
+        "egressIsolateNote": "Die Änderung der Isolation wird gleichzeitig angewendet.",
         "egressOnConfirm": "Kontrollieren",
         "egressOffConfirm": "Nicht mehr kontrollieren",
         "create": "Erstellen",
@@ -12866,6 +12869,7 @@
           "title": "Ausgangsregel mit falschem Urteil",
           "detail": "Die abschließende Ausgangsregel von {name} lautet {have} statt {want}.",
           "detailCollision": "{name} kann nicht blockieren: pcz-_local gehört in Proxmox jemand anderem, daher bleibt die Ausgangsregel {have}.",
+          "detailDest": "Die Ausgangsregel von {name} zielt auf {haveDest} statt auf {wantDest}.",
           "hintCollision": "In Proxmox existiert ein Objekt namens pcz-_local ohne die Mikrosegmentierungs-Markierung: benennen Sie es in Proxmox um oder löschen Sie es."
         },
         "known_rule_missing": {
@@ -12885,6 +12889,8 @@
           "detail": "{name} von {zone} hat kein bekanntes Subnetz: sein lokales Netz beschränkt sich auf die eigenen IPs.",
           "hint": "Kein Subnetz bekannt: prüfen Sie die Netzwerkkonfiguration des Gastes in Proxmox (eine IP mit Präfixlänge oder den QEMU-Gastagenten)."
         },
+        "destinationAll": "alle Ziele",
+        "destinationLocal": "das lokale Netzwerk",
         "verdict": {
           "disabled": "deaktiviert"
         }
@@ -13009,6 +13015,7 @@
       "dismissTip": "Blendet diesen Vorschlag für dieses Paar aus.",
       "bulkLabel": "Ausgewählte Flüsse",
       "bulkAcceptTip": "Legt im Entwurf für jeden ausgewählten Vorschlag den Fluss zwischen den Zonen an.",
+      "bulkAcceptAggregateTip": "Erstellt im Entwurf den Fluss zwischen den Zonen jedes ausgewählten Vorschlags. Ein Fluss zu vielen Zielen erlaubt seinen Dienst zu allen Adressen (0.0.0.0/0).",
       "bulkCidrTip": "Legt dieselben Flüsse mit jeder Quelle als Adressbereich an.",
       "bulkDismissTip": "Blendet die ausgewählten Vorschläge aus.",
       "legend": {
@@ -13020,6 +13027,7 @@
         "about": "Zu den Trefferzahlen"
       },
       "acceptUnknownSource": "Unbekannte Quelle: Als CIDR verwenden",
+      "acceptAggregateTip": "{service} zu allen Adressen erlauben (0.0.0.0/0)",
       "zoneBanner": "Vorschläge für Zone {zone} · {count, plural, one {# nicht abgedeckter Treffer} other {# nicht abgedeckte Treffer}} in 24 h",
       "zoneBannerNoCount": "Vorschläge für Zone {zone}",
       "dialog": {

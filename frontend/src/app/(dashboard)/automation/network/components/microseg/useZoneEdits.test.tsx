@@ -81,13 +81,23 @@ describe('useZoneEdits', () => {
     expect(reloadPolicy).toHaveBeenCalledTimes(1)
   })
 
-  it('rethrows a 400 with the server wording and reads nothing again', async () => {
+  it('rethrows a 400 with the server wording and reads the policy again anyway', async () => {
     mock.routes['DELETE /zones/zw'] = () => reply(400, { code: 'INVALID', error: 'zone in use' })
     const { result, reloadPolicy } = setup()
     const error = await refused(result.current.deleteZone(web))
     expect(error).toBeInstanceOf(MicrosegApiError)
     expect((error as MicrosegApiError).serverMessage).toBe('zone in use')
-    expect(reloadPolicy).not.toHaveBeenCalled()
+    expect(reloadPolicy).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads the policy again when the state change after a successful zone write is refused with a 400', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web })
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(400, { code: 'INVALID', error: 'zone disabled' })
+    const { result, reloadPolicy } = setup()
+    const error = await refused(result.current.saveZone(web, { ...values, egress_control: true }))
+    expect((error as MicrosegApiError).serverMessage).toBe('zone disabled')
+    expect(calls('PUT /zones/zw')).toHaveLength(1)
+    expect(reloadPolicy).toHaveBeenCalledTimes(1)
   })
 
   it('deletes a zone and a flow with the version, and saves a flow', async () => {
@@ -125,7 +135,7 @@ describe('useZoneEdits', () => {
     expect(calls('POST /members')).toHaveLength(1)
     expect(body(calls('POST /members')[0][1] as RequestInit)).toEqual({ version: 3, zone_id: '', guests: [ref] })
     expect((result.current.memberError as MicrosegApiError).code).toBe('BUSY')
-    expect(reloadPolicy).not.toHaveBeenCalled()
+    expect(reloadPolicy).toHaveBeenCalledTimes(1)
     act(() => result.current.clearMemberError())
     expect(result.current.memberError).toBeNull()
   })

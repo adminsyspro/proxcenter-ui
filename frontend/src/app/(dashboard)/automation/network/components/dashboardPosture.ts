@@ -1,5 +1,5 @@
 import type { FirewallCoverage } from '@/hooks/useZeroTrust'
-import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, UNZONED_KEY, zoneKey } from '@/lib/microseg/trafficLens'
+import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, zoneKey } from '@/lib/microseg/trafficLens'
 import type { MicrosegFlow, MicrosegStatus, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 import { serviceTokenLabel } from '@/lib/network/serviceNames'
 
@@ -60,7 +60,7 @@ export function postureGuests(rows: FirewallCoverage['guests'] | undefined, gues
   return [...byKey.values()]
 }
 
-export type SliceKind = 'zone' | 'unzoned' | 'external' | 'other' | 'vlan' | 'novlan' | 'node'
+export type SliceKind = 'zone' | 'unzoned' | 'external' | 'outside' | 'other' | 'vlan' | 'novlan' | 'node'
 
 /** One slice of the donut: a group, its hits, and how many guests it holds (null when that cannot be told). */
 export type PostureSlice = {
@@ -115,7 +115,7 @@ function groupOf(groupBy: GroupBy, zoneId: string, ip: string, look: Lookup): st
   return guest.vlans.length ? vlanKey(guest.vlans[0]) : NO_VLAN_KEY
 }
 
-const NAMED_KINDS: Record<string, SliceKind> = { [UNZONED_KEY]: 'unzoned', [EXTERNAL_KEY]: 'external', [OTHER_KEY]: 'other', [NO_VLAN_KEY]: 'novlan' }
+const NAMED_KINDS: Record<string, SliceKind> = { [UNZONED_KEY]: 'unzoned', [EXTERNAL_KEY]: 'external', [OUTSIDE_KEY]: 'outside', [OTHER_KEY]: 'other', [NO_VLAN_KEY]: 'novlan' }
 
 function sliceKind(key: string): SliceKind {
   const named = NAMED_KINDS[key]
@@ -125,13 +125,13 @@ function sliceKind(key: string): SliceKind {
 }
 
 const NAMED_COLORS: Partial<Record<SliceKind, string>> = {
-  unzoned: GROUP_COLORS.unzoned, external: GROUP_COLORS.external, other: GROUP_COLORS.other, novlan: GROUP_COLORS.zone,
+  unzoned: GROUP_COLORS.unzoned, external: GROUP_COLORS.external, outside: GROUP_COLORS.external, other: GROUP_COLORS.other, novlan: GROUP_COLORS.zone,
 }
 
 /** How many guests a group holds: zone members by tag, guests in no zone, per VLAN (first NIC) or node. */
 function membersOf(kind: SliceKind, name: string, zone: MicrosegZone | undefined, guests: readonly PostureGuest[], look: Lookup): number | null {
-  if (!guests.length || kind === 'external' || kind === 'other') return null
-  const counts: Record<Exclude<SliceKind, 'external' | 'other'>, (g: PostureGuest) => boolean> = {
+  if (!guests.length || kind === 'external' || kind === 'outside' || kind === 'other') return null
+  const counts: Record<Exclude<SliceKind, 'external' | 'outside' | 'other'>, (g: PostureGuest) => boolean> = {
     zone: g => look.zoneOfGuest(g)?.id === zone?.id,
     unzoned: g => !look.zoneOfGuest(g),
     vlan: g => String(g.vlans[0]) === name,
@@ -163,9 +163,12 @@ export function postureTraffic(input: {
 }): PostureTraffic {
   const { groupBy, zones, suggestions, guests } = input
   const look = lookupOf(zones, input.tagPrefix, guests, input.addresses)
-  const side = (s: MicrosegSuggestion, end: 'src' | 'dst') => (end === 'src'
-    ? groupOf(groupBy, s.src_zone_id, s.src_ip, look)
-    : groupOf(groupBy, s.dst_zone_id, s.dst_ip, look))
+  const side = (s: MicrosegSuggestion, end: 'src' | 'dst') => {
+    if (end === 'src') return groupOf(groupBy, s.src_zone_id, s.src_ip, look)
+    const group = groupOf(groupBy, s.dst_zone_id, s.dst_ip, look)
+    // Grouped by destination zone, an address outside the zones (an outbound flow) is "Outside", not an unknown source.
+    return groupBy === 'dstzone' && group === EXTERNAL_KEY ? OUTSIDE_KEY : group
+  }
   const sliceSide = groupBy === 'zone' ? 'src' : 'dst'
 
   const sums = new Map<string, number>()
@@ -360,5 +363,6 @@ export function zoneSeries(zones: readonly MicrosegZone[]): Pick<PostureSlice, '
   return [
     ...zones.map(z => ({ key: zoneKey(z.id), kind: 'zone' as const, name: z.name, color: z.color || objectColour(`zone:${z.name}`, zones) })),
     { key: EXTERNAL_KEY, kind: 'external' as const, name: '', color: GROUP_COLORS.external },
+    { key: OUTSIDE_KEY, kind: 'outside' as const, name: '', color: GROUP_COLORS.external },
   ]
 }

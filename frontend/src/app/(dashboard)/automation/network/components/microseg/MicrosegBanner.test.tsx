@@ -367,8 +367,8 @@ describe('banner: the log reader load', () => {
     expect(chip.closest('.MuiChip-root')).toBeTruthy()
     fireEvent.mouseOver(chip)
     const tip = await screen.findByRole('tooltip')
-    expect(tip.textContent).toContain('pve1 · 82 lines/min · 12 s behind')
-    expect(tip.textContent).toContain('pve2 · 5 lines/min · 0 s behind')
+    expect(tip.textContent).toContain('pve1 · 82 lines/min · 12 sec behind')
+    expect(tip.textContent).toContain('pve2 · 5 lines/min · 0 sec behind')
   })
 
   it('says a long lag in minutes, then hours', async () => {
@@ -376,8 +376,8 @@ describe('banner: the log reader load', () => {
     renderTab()
     fireEvent.mouseOver(await screen.findByText('Log behind'))
     const tip = (await screen.findByRole('tooltip')).textContent
-    expect(tip).toContain('pve1 · 82 lines/min · 120 s behind')
+    expect(tip).toContain('pve1 · 82 lines/min · 120 sec behind')
     expect(tip).toContain('pve2 · 82 lines/min · 10 min behind')
-    expect(tip).toContain('pve3 · 82 lines/min · 10 h behind')
+    expect(tip).toContain('pve3 · 82 lines/min · 10 hr behind')
   })
 })

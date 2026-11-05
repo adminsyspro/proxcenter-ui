@@ -9059,6 +9059,7 @@
       "postureHits": "{count, plural, one {# coincidencia} other {# coincidencias}}",
       "postureMembers": "{count, plural, one {# invitado} other {# invitados}}",
       "postureUnknownExternal": "Desconocido / Externo",
+      "postureOutside": "Exterior",
       "postureUnzoned": "Sin zona",
       "postureOther": "Otros",
       "postureNoVlan": "Sin VLAN",
@@ -12887,7 +12888,8 @@
           "legendIn": "Entrante",
           "legendOut": "Saliente",
           "outBlocked": "{short} salientes bloqueados",
-          "outWouldBlock": "{short} salientes se bloquearían"
+          "outWouldBlock": "{short} salientes se bloquearían",
+          "outConnections": "{short} conexiones salientes"
         },
         "egress": {
           "state": {
@@ -12932,6 +12934,7 @@
         "egressOffTitle": "¿Dejar de controlar el tráfico saliente de la zona {name}?",
         "egressOnBody": "El tráfico saliente de la zona pasa a observación de inmediato, como una nueva revisión.",
         "egressOffBody": "El filtrado del tráfico saliente de la zona se retira de inmediato, como una nueva revisión.",
+        "egressIsolateNote": "El cambio de aislamiento se aplica al mismo tiempo.",
         "egressOnConfirm": "Controlar",
         "egressOffConfirm": "Dejar de controlar",
         "create": "Crear",
@@ -13198,6 +13201,7 @@
           "title": "Regla de salida con el veredicto erróneo",
           "detail": "La regla final de salida de {name} es {have} en lugar de {want}.",
           "detailCollision": "{name} no puede bloquear: pcz-_local pertenece a otra persona en Proxmox, así que su regla de salida sigue en {have}.",
+          "detailDest": "La regla de salida de {name} apunta a {haveDest} en lugar de {wantDest}.",
           "hintCollision": "Existe en Proxmox un objeto llamado pcz-_local sin la marca de microsegmentación: renómbrelo o elimínelo en Proxmox."
         },
         "known_rule_missing": {
@@ -13217,6 +13221,8 @@
           "detail": "{name} de {zone} no tiene subred conocida: su red local se reduce a sus propias IP.",
           "hint": "Ninguna subred conocida: revise la configuración de red del invitado en Proxmox (una IP con su longitud de prefijo, o el agente invitado QEMU)."
         },
+        "destinationAll": "todos los destinos",
+        "destinationLocal": "la red local",
         "verdict": {
           "disabled": "desactivada"
         }
@@ -13341,6 +13347,7 @@
       "dismissTip": "Oculta esta sugerencia para este par.",
       "bulkLabel": "Flujos seleccionados",
       "bulkAcceptTip": "Crea en el borrador el flujo entre las zonas de cada sugerencia seleccionada.",
+      "bulkAcceptAggregateTip": "Crea en el borrador el flujo entre las zonas de cada sugerencia seleccionada. Un flujo hacia muchos destinos permite su servicio hacia todas las direcciones (0.0.0.0/0).",
       "bulkCidrTip": "Crea los mismos flujos con cada origen como rango de direcciones.",
       "bulkDismissTip": "Oculta las sugerencias seleccionadas.",
       "legend": {
@@ -13352,6 +13359,7 @@
         "about": "Sobre las coincidencias"
       },
       "acceptUnknownSource": "Origen desconocido: use Como CIDR",
+      "acceptAggregateTip": "Permitir {service} hacia todas las direcciones (0.0.0.0/0)",
       "zoneBanner": "Sugerencias para la zona {zone} · {count, plural, one {# impacto sin cubrir} other {# impactos sin cubrir}} en 24 h",
       "zoneBannerNoCount": "Sugerencias para la zona {zone}",
       "dialog": {

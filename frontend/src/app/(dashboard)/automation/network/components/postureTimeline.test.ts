@@ -276,6 +276,9 @@ describe('the persisted history (UA55)', () => {
     const outOfWeb = run('1h', rows, { by: 'dst', zone: 'web', slices: [slice('zone:zdb', 'zone', '#2', 'db'), ...ZONE_SLICES] })
     expect(outOfWeb.total).toBe(13)
     expect(outOfWeb.buckets.at(-1)!.counts['zone:zdb']).toBe(9)
+    // The 4 hits to an address outside the zones are grouped as "Outside", not as an unknown source.
+    const byDst = run('1h', rows, { by: 'dst', zone: 'web', slices: [slice('zone:zdb', 'zone', '#2', 'db'), slice('outside', 'outside', '#616161'), ...ZONE_SLICES] })
+    expect(byDst.buckets.at(-1)!.counts).toEqual({ 'zone:zdb': 9, outside: 4 })
     const intoDb = run('1h', rows, { zone: 'db' })
     expect(intoDb.total).toBe(9)
     expect(intoDb.buckets.at(-1)!.counts['zone:zweb']).toBe(9)
@@ -448,13 +451,13 @@ describe('mirrored chart', () => {
 
 describe('postureTimeline: outbound events (logged by the emitting zone)', () => {
   const out = (over: Partial<MicrosegEvent> = {}) => event({ direction: 'out', zone: 'web', src_zone: 'db', ...over })
-  const dstSlices = [slice('zone:zdb', 'zone', '#222222', 'db'), ...ZONE_SLICES]
+  const dstSlices = [slice('zone:zdb', 'zone', '#222222', 'db'), slice('outside', 'outside', '#616161'), ...ZONE_SLICES]
 
   it('groups an outbound event by its emitting zone, and by its destination zone or the outside', () => {
     const events = [out({ ts: at(1) }), out({ ts: at(1), src_zone: '' })]
     const bySrc = run({ events })
     expect(bySrc.buckets.at(-1)!.counts).toEqual({ 'zone:zweb': 2 })
     const byDst = run({ events, groupBy: 'dstzone', slices: dstSlices })
-    expect(byDst.buckets.at(-1)!.counts).toEqual({ 'zone:zdb': 1, external: 1 })
+    expect(byDst.buckets.at(-1)!.counts).toEqual({ 'zone:zdb': 1, outside: 1 })
   })
 })

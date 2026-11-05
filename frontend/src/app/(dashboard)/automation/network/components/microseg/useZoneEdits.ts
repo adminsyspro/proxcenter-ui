@@ -7,7 +7,6 @@ import { useTranslations } from 'next-intl'
 import { microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
 import { zoneEgress, type EgressState, type GuestRef, type MembersInput, type MicrosegFlow, type MicrosegPolicy, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
-import { isVersionConflict } from './dialogParts'
 import type { FlowSaveValues } from './FlowDialog'
 import type { TrackedRun } from './microsegTabTypes'
 import { usePendingChanges } from './usePendingChanges'
@@ -28,8 +27,8 @@ export type ZoneEditsInput = {
 
 /**
  * The writes on the zones, flows and members of the draft, shared by the Policy sub-tab and the zone panel of the map.
- * Every write carries the draft version. On success the policy and the status are read again (the map, the counts and
- * the pending-changes bar follow); on a VERSION_CONFLICT the policy is read again too and the error is rethrown, so the
+ * Every write carries the draft version. After it, success or not, the policy and the status are read again (the map, the counts and
+ * the pending-changes bar follow); on any failure (a VERSION_CONFLICT included) the policy is read again too and the error is rethrown, so the
  * dialog keeps its input and says why. A 400 keeps the server's wording (writeErrorMessage).
  */
 export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan }: ZoneEditsInput) {
@@ -48,15 +47,16 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     ])
   }
 
-  /** Runs a write; on success refreshes, on a conflict refreshes too and rethrows. */
+  /**
+   * Runs a write and always refreshes after it: a write made of two calls (the zone, then its outbound state) may have
+   * changed the draft before the second one failed, so a 400 or a 5xx must not leave the UI on the old version.
+   */
   async function write(action: () => Promise<unknown>) {
     try {
       await action()
-    } catch (e) {
-      if (isVersionConflict(e)) await refresh()
-      throw e
+    } finally {
+      await refresh()
     }
-    await refresh()
   }
 
   /**

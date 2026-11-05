@@ -5,7 +5,7 @@ import { Box, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
-import { isAggregateDst, type FlowDirection, type MicrosegSuggestion, SuggestionAction, SuggestionKind } from '@/lib/microseg/types'
+import { isAggregateDst, type FlowDirection, type MicrosegSuggestion, type SuggestionAction, type SuggestionKind } from '@/lib/microseg/types'
 import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
 
 import AcceptNetworkDialog from './AcceptNetworkDialog'
@@ -67,6 +67,18 @@ export function ServiceHits({ suggestion: s }: { suggestion: Pick<MicrosegSugges
   )
 }
 
+/**
+ * The prefix choice of an outbound As CIDR: `choose` opens the dialog (rendered as `dialog`, null while closed), whose
+ * Accept closes it and resolves the flow with the chosen length.
+ */
+export function usePrefixChoice(ip: string, onResolve: (action: SuggestionAction, prefixLen?: number) => void) {
+  const [choosing, setChoosing] = useState(false)
+  const dialog = choosing
+    ? <AcceptNetworkDialog ip={ip} onClose={() => setChoosing(false)} onAccept={len => { setChoosing(false); onResolve('accept_cidr', len) }} />
+    : null
+  return { choose: () => setChoosing(true), dialog }
+}
+
 type ResolveActionsProps = {
   suggestion: MicrosegSuggestion
   busy: boolean
@@ -84,34 +96,29 @@ export function ResolveActions({ suggestion: s, busy, onResolve, acceptLabel, ac
   const accept = acceptLabel ?? t('accept')
   const { canWrite } = useMicrosegWrite()
   const outbound = s.direction === 'out'
-  const [choosingPrefix, setChoosingPrefix] = useState(false)
+  const prefix = usePrefixChoice(s.dst_ip, onResolve)
   // An outbound flow is accepted as the network of its destination (the prefix is chosen), never for many destinations.
   const cidrOff = outbound ? !s.dst_ip : !s.src_ip
-  const showCidr = !(outbound && isAggregateDst(s))
+  const aggregate = outbound && isAggregateDst(s)
+  const showCidr = !aggregate
+  let acceptTitle = acceptTip ?? accept
+  if (!s.src_zone_id) acceptTitle = t('acceptNoZone')
+  else if (aggregate) acceptTitle = t('acceptAggregateTip', { service: serviceTitle(s.proto, s.dport) })
 
   return (
     <>
-      <WriteTip title={s.src_zone_id ? acceptTip ?? accept : t('acceptNoZone')}>
+      <WriteTip title={acceptTitle}>
         <IconButton size='small' aria-label={accept} disabled={!canWrite || busy || !s.src_zone_id} onClick={() => onResolve('accept')}><i className='ri-check-line' /></IconButton>
       </WriteTip>
       {showCidr && (
         <WriteTip title={cidrOff ? t('acceptCidrNoIp') : t('acceptCidr')}>
-          <IconButton size='small' aria-label={t('acceptCidr')} disabled={!canWrite || busy || cidrOff} onClick={() => (outbound ? setChoosingPrefix(true) : onResolve('accept_cidr'))}><i className='ri-checkbox-multiple-line' /></IconButton>
+          <IconButton size='small' aria-label={t('acceptCidr')} disabled={!canWrite || busy || cidrOff} onClick={() => (outbound ? prefix.choose() : onResolve('accept_cidr'))}><i className='ri-checkbox-multiple-line' /></IconButton>
         </WriteTip>
       )}
       <WriteTip title={t('dismiss')}>
         <IconButton size='small' aria-label={t('dismiss')} disabled={!canWrite || busy} onClick={() => onResolve('dismiss')}><i className='ri-close-line' /></IconButton>
       </WriteTip>
-      {choosingPrefix && (
-        <AcceptNetworkDialog
-          ip={s.dst_ip}
-          onClose={() => setChoosingPrefix(false)}
-          onAccept={len => {
-            setChoosingPrefix(false)
-            onResolve('accept_cidr', len)
-          }}
-        />
-      )}
+      {prefix.dialog}
     </>
   )
 }

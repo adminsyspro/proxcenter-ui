@@ -49,7 +49,7 @@ function GroupHeader({ group, color, collapsed, onToggle }: { group: Observation
           sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 1, width: '100%', minWidth: 0, minHeight: 34, px: 1.5, textAlign: 'left', '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}
         >
           <i aria-hidden className={collapsed ? 'ri-arrow-right-s-line' : 'ri-arrow-down-s-line'} style={{ fontSize: 18 }} />
-          <Box component='span' aria-hidden sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
+          <Box component='span' aria-hidden data-group-dot={color} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color, flexShrink: 0 }} />
           <Typography component='span' noWrap variant='body2' fontWeight={600} sx={{ minWidth: 0 }}>
             {t('group', { zone: group.name, count: group.rows.length, hits: group.hits })}
           </Typography>
@@ -72,7 +72,11 @@ export default function ObservationTable({ rows, zones, guestName, selected, bus
   const nameOf = (_key: string, first: MicrosegSuggestion) => (first.dst_zone_id || first.direction === 'out'
     ? destinationName(first, zones, guestName, t as (key: string) => string)
     : t('unknownDestination'))
-  const colorOf = (g: ObservationGroup<MicrosegSuggestion>) => (g.outside ? 'error.main' : zones.get(g.key)?.color || 'text.disabled')
+  const colorOf = (g: ObservationGroup<MicrosegSuggestion>) => {
+    if (!g.outside) return zones.get(g.key)?.color || 'text.disabled'
+    // Red marks a destination nobody knows (inbound); an outbound address outside the zones is only an address.
+    return g.rows[0]?.direction === 'out' ? 'text.disabled' : 'error.main'
+  }
   const groups = groupByDestination(rows, nameOf)
 
   return (

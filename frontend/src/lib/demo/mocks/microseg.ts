@@ -165,11 +165,19 @@ const SUGGESTIONS: SuggestionSeed[] = [
   { id: 'demo-sugg-9', direction: 'out', kind: 'would_block', status: 'pending', src: { zone: 'app', vmid: 155 }, dst: { aggregate: '0.0.0.0/0' }, proto: 'tcp', dport: '443', hits: 5120, firstHours: 44, lastHours: 0 },
 ]
 
+/** The destination of a seed: a guest of a zone, an address outside the zones, or the aggregate of many destinations. */
+function destinationOf(dst: SuggestionSeed['dst']): { key: string; ip: string; zoneId: string } {
+  if ('zone' in dst) {
+    const zone = zoneByName(dst.zone)
+    return { key: zone.id, ip: ipOf(dst.vmid, zone.octet), zoneId: zone.id }
+  }
+  if ('ip' in dst) return { key: dst.ip, ip: dst.ip, zoneId: '' }
+  return { key: dst.aggregate, ip: '', zoneId: '' }
+}
+
 function suggestionRow(s: SuggestionSeed, now: number) {
   const src = 'zone' in s.src ? { zone: zoneByName(s.src.zone), ip: ipOf(s.src.vmid, zoneByName(s.src.zone).octet) } : null
-  const dst = 'zone' in s.dst
-    ? { key: zoneByName(s.dst.zone).id, ip: ipOf(s.dst.vmid, zoneByName(s.dst.zone).octet), zoneId: zoneByName(s.dst.zone).id }
-    : 'ip' in s.dst ? { key: s.dst.ip, ip: s.dst.ip, zoneId: '' } : { key: s.dst.aggregate, ip: '', zoneId: '' }
+  const dst = destinationOf(s.dst)
 
   return {
     id: s.id, policy_id: POLICY_ID, kind: s.kind,

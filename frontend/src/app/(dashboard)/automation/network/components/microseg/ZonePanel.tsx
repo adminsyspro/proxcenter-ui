@@ -12,7 +12,7 @@ import FlowSummary from './FlowSummary'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { DirectionGlyph, ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
-import PolicyPager, { usePaged } from './PolicyPager'
+import { PagedList, POLICY_PAGE_SIZE } from './PolicyPager'
 import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
 import { MemberChangeChip } from './ZoneRow'
 import EgressChip from './EgressChip'
@@ -88,19 +88,17 @@ function MemberLine({ member, zoneId, edits, firewallOff }: { member: ZoneMember
   )
 }
 
-function FlowsList({ flows, zonesById, editor }: { flows: MicrosegFlow[]; zonesById: Map<string, MicrosegZone>; editor: FlowEditor }) {
+function FlowsList({ flows, zonesById, editor, size = FLOWS_PAGE_SIZE }: { flows: MicrosegFlow[]; zonesById: Map<string, MicrosegZone>; editor: FlowEditor; size?: number }) {
   const t = useTranslations('microsegPilot.overview.panel')
-  const paged = usePaged(flows, FLOWS_PAGE_SIZE)
   return (
     <>
       {flows.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noFlows')}</Typography>}
-      {paged.rows.map(flow => (
+      <PagedList items={flows} size={size} render={rows => rows.map(flow => (
         <Box key={flow.id} sx={{ display: 'flex', minHeight: 28, alignItems: 'center', gap: 0.5, minWidth: 0 }}>
           <FlowSummary flow={flow} zonesById={zonesById} />
           <FlowRowActions flow={flow} onEdit={editor.edit} onDelete={editor.remove} />
         </Box>
-      ))}
-      <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
+      ))} />
     </>
   )
 }
@@ -146,7 +144,6 @@ export default function ZonePanel({
   const tsec = useTranslations('microsegPilot.overview.sections')
   const ts = useTranslations('microsegPilot.policy.zone')
   const tt = useTranslations('microsegPilot.overview.target.panel')
-  const paged = usePaged(members)
   const editor = useFlowEditor(edits)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
   const zones = useMemo(() => [...zonesById.values()], [zonesById])
@@ -165,7 +162,6 @@ export default function ZonePanel({
     [zone, members, drifts, zones, ignored],
   )
   const pending = useMemo(() => zoneSuggestions(suggestions, zone.id), [suggestions, zone.id])
-  const pendingPage = usePaged(pending, FLOWS_PAGE_SIZE)
   const { busy, failure, clearFailure, resolve } = useResolveSuggestions(connectionId, version, reloadPolicy, reloadSuggestions)
 
   async function resolveOne(id: string, action: SuggestionAction, prefixLen?: number) {
@@ -223,41 +219,43 @@ export default function ZonePanel({
     </>
   )
 
-  const suggestionsBody = (
+  const suggestionsBody = (size = FLOWS_PAGE_SIZE) => (
     <>
       {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1 }}>{failure}</Alert>}
       {partialLimit !== null && <OneLine text={tt('partial', { count: partialLimit })} />}
       {pending.length === 0 && <Typography variant='body2' color='text.disabled'>{tsec('suggestionsEmpty')}</Typography>}
-      <Box role='list'>
-        {pendingPage.rows.map(s => (
-          <SuggestionLine key={s.id} suggestion={s} zonesById={zonesById} peers={peers} busy={busy} onResolve={(action, prefixLen) => { void resolveOne(s.id, action, prefixLen) }} />
-        ))}
-      </Box>
-      <PolicyPager count={pendingPage.count} page={pendingPage.page} size={pendingPage.size} onPage={pendingPage.setPage} />
+      <PagedList items={pending} size={size} render={rows => (
+        <Box role='list'>
+          {rows.map(s => (
+            <SuggestionLine key={s.id} suggestion={s} zonesById={zonesById} peers={peers} busy={busy} onResolve={(action, prefixLen) => { void resolveOne(s.id, action, prefixLen) }} />
+          ))}
+        </Box>
+      )} />
     </>
   )
-  const membersBody = (
+  const membersBody = (size = POLICY_PAGE_SIZE) => (
     <>
       {edits.memberError != null && <MicrosegErrorAlert error={edits.memberError} onClose={edits.clearMemberError} />}
       {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
       {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
-      <Box role='list'>
-        {paged.rows.map(m => <MemberLine key={`${m.ref.type}/${m.ref.vmid}`} member={m} zoneId={zone.id} edits={edits} firewallOff={!!signals?.firewallOff.has(guestKey(m.ref))} />)}
-      </Box>
-      <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
+      <PagedList items={members} size={size} render={rows => (
+        <Box role='list'>
+          {rows.map(m => <MemberLine key={`${m.ref.type}/${m.ref.vmid}`} member={m} zoneId={zone.id} edits={edits} firewallOff={!!signals?.firewallOff.has(guestKey(m.ref))} />)}
+        </Box>
+      )} />
     </>
   )
   const newIncoming = <NewFlowButton label={tz('newIncoming')} onClick={() => editor.create({ dst_zone_id: zone.id })} />
   const newOutgoing = <NewFlowButton label={tz('newOutgoing')} onClick={() => editor.create({ src_zone_id: zone.id })} />
-  const incomingBody = <FlowsList flows={incoming} zonesById={zonesById} editor={editor} />
-  const outgoingBody = <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} />
+  const incomingBody = (size?: number) => <FlowsList flows={incoming} zonesById={zonesById} editor={editor} size={size} />
+  const outgoingBody = (size?: number) => <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} size={size} />
 
   const dataSections = (
     <>
-      <PanelSection id='zone.suggestions' title={tsec('suggestions')} count={pending.length}>{suggestionsBody}</PanelSection>
-      <PanelSection id='zone.members' title={t('members')} count={membersKnown ? members.length : null}>{membersBody}</PanelSection>
-      <PanelSection id='zone.incoming' title={ts('incoming')} count={incoming.length} action={newIncoming}>{incomingBody}</PanelSection>
-      <PanelSection id='zone.outgoing' title={ts('outgoing')} count={outgoing.length} action={newOutgoing}>{outgoingBody}</PanelSection>
+      <PanelSection id='zone.suggestions' title={tsec('suggestions')} count={pending.length}>{suggestionsBody()}</PanelSection>
+      <PanelSection id='zone.members' title={t('members')} count={membersKnown ? members.length : null}>{membersBody()}</PanelSection>
+      <PanelSection id='zone.incoming' title={ts('incoming')} count={incoming.length} action={newIncoming}>{incomingBody()}</PanelSection>
+      <PanelSection id='zone.outgoing' title={ts('outgoing')} count={outgoing.length} action={newOutgoing}>{outgoingBody()}</PanelSection>
     </>
   )
 

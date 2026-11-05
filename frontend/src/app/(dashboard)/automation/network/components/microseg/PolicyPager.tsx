@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { IconButton, TablePagination, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -49,6 +49,17 @@ export function PrevNextPager({ page, hasNext, onPage }: PrevNextProps) {
       <IconButton size='small' aria-label={t('policy.pager.next')} disabled={!hasNext} onClick={() => onPage(page + 1)}>
         <i className='ri-arrow-right-s-line' />
       </IconButton>
+    </>
+  )
+}
+
+/** A list paged in its own state: the rows of the current page go to `render`, the pager follows. */
+export function PagedList<T>({ items, size, render }: { items: T[]; size: number; render: (rows: T[]) => ReactNode }) {
+  const paged = usePaged(items, size)
+  return (
+    <>
+      {render(paged.rows)}
+      <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
     </>
   )
 }

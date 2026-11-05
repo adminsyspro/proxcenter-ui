@@ -12592,15 +12592,42 @@
         "color": "Farbe",
         "isolate": "Mitglieder voneinander isolieren",
         "members": "Mitglieder",
+        "inboundSection": "Eingehend",
+        "inboundStates": {
+          "disabled": "Deaktiviert",
+          "observe": "Beobachtung",
+          "enforce": "Blockierung"
+        },
         "egressSection": "Ausgehend",
-        "egressControl": "Ausgehenden Verkehr kontrollieren",
+        "outboundStates": {
+          "off": "Nicht kontrolliert",
+          "observe": "Beobachtung",
+          "enforce": "Blockierung"
+        },
         "egressFilter": "Ausgehenden Verkehr filtern zu:",
         "egressFilterTo": "Filtern nach",
         "egressLocal": "Lokales Netzwerk",
         "egressAll": "Lokales Netzwerk und Internet",
-        "egressHelp": "Lokales Netzwerk = die Subnetze der VMs in Zonen, einschließlich VMs ohne Zone. Im Blockierungsmodus passieren nur die Flüsse der Richtlinie.",
         "egressAllWarning": "Nur Filterung nach IP-Adresse: Ein Dienst hinter einem Domainnamen kann seine Adresse ändern.",
         "egressNeedsState": "Die Zone muss im Beobachtungs- oder Blockierungsmodus sein",
+        "tips": {
+          "isolate": "Die VMs dieser Zone erreichen einander nur über einen deklarierten Fluss. Deaktiviert kommunizieren sie frei miteinander.",
+          "inbound": {
+            "disabled": "Die Zone wird nicht auf Proxmox angewendet.",
+            "observe": "Nichts wird blockiert: eingehender Verkehr außerhalb der Richtlinie wird protokolliert und als Vorschlag angeboten.",
+            "enforce": "Nur die Flüsse der Richtlinie kommen herein; der Rest wird blockiert und ist unter Blockiert sichtbar."
+          },
+          "outbound": {
+            "off": "Die VMs der Zone gehen frei nach außen, nichts wird protokolliert.",
+            "observe": "Nichts wird blockiert: ausgehender Verkehr außerhalb der Richtlinie wird protokolliert und als Vorschlag angeboten.",
+            "enforce": "Nur der durch einen Fluss erlaubte ausgehende Verkehr geht durch; der Rest wird blockiert und ist unter Blockiert sichtbar."
+          },
+          "local": "Filtert ausgehenden Verkehr zu den Subnetzen der VMs in Zonen, VMs ohne Zone eingeschlossen. Das Internet bleibt offen.",
+          "all": "Filtert jeden ausgehenden Verkehr, Internet eingeschlossen: nur die Flüsse der Richtlinie gehen durch."
+        },
+        "statesTitle": "Zustände der Zone {name} ändern?",
+        "statesConfirm": "Zustände anwenden",
+        "inboundRunFailed": "Die Änderung des eingehenden Zustands ist fehlgeschlagen: der ausgehende Zustand wurde nicht geändert.",
         "egressOnTitle": "Ausgehenden Verkehr der Zone {name} kontrollieren?",
         "egressOffTitle": "Ausgehenden Verkehr der Zone {name} nicht mehr kontrollieren?",
         "egressOnBody": "Der ausgehende Verkehr der Zone wechselt in die Beobachtung.",

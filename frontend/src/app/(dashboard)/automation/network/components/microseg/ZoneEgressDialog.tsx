@@ -7,7 +7,7 @@ import type { MicrosegZone } from '@/lib/microseg/types'
 import { useDialogAction } from './dialogParts'
 import TypedConfirmDialog from './TypedConfirmDialog'
 import type { ZoneGate } from './zoneGate'
-import { ReadinessLine, useZoneReadiness } from './useZoneReadiness'
+import { useReadinessCheck } from './useZoneReadiness'
 import ZoneStateGate from './ZoneStateGate'
 
 type Props = {
@@ -30,27 +30,24 @@ type Props = {
 export default function ZoneEgressDialog({ connectionId, zone, action, readyAfterHours, gate, onConfirm, onCancel }: Props) {
   const t = useTranslations('microsegPilot.policy.egressState')
   const block = action === 'block'
-  const readiness = useZoneReadiness(connectionId, zone, readyAfterHours, { direction: 'out', enabled: block })
+  const check = useReadinessCheck(connectionId, zone, readyAfterHours, { direction: 'out', enabled: block })
   const { busy, error, run } = useDialogAction()
-
-  const needsName = block && readiness !== null && readiness !== 'ready'
-  const loading = block && readiness === null
 
   return (
     <TypedConfirmDialog
       title={t(`title.${action}`, { name: zone.name })}
       lines={block ? [] : [t('reopenBody')]}
       inputLabel={t('typeName', { name: zone.name })}
-      expected={needsName ? zone.name : undefined}
+      expected={check.needsName ? zone.name : undefined}
       confirmLabel={t(`confirm.${action}`)}
       color='warning'
-      ready={!loading && !gate.pending}
+      ready={!check.loading && !gate.pending}
       busy={busy}
       error={error}
       onConfirm={() => void run(onConfirm)}
       onCancel={onCancel}
     >
-      {block && <ReadinessLine readiness={readiness} texts={{ checking: t('checking'), ready: t('ready', { hours: readyAfterHours }), notReady: t('notReady', { hours: readyAfterHours }), unchecked: t('unchecked', { hours: readyAfterHours }) }} />}
+      {check.line}
       <ZoneStateGate pending={gate.pending} count={gate.count} onViewPlan={gate.onViewPlan} discard={gate.discard} />
     </TypedConfirmDialog>
   )

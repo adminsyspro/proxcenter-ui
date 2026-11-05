@@ -12924,15 +12924,42 @@
         "color": "颜色",
         "isolate": "使成员之间相互隔离",
         "members": "成员",
+        "inboundSection": "入站",
+        "inboundStates": {
+          "disabled": "已禁用",
+          "observe": "观察",
+          "enforce": "阻止"
+        },
         "egressSection": "出站",
-        "egressControl": "控制出站流量",
+        "outboundStates": {
+          "off": "不控制",
+          "observe": "观察",
+          "enforce": "阻止"
+        },
         "egressFilter": "过滤出站流量到:",
         "egressFilterTo": "过滤到",
         "egressLocal": "本地网络",
         "egressAll": "本地网络和互联网",
-        "egressHelp": "本地网络 = 区域内虚拟机的子网,包括不在区域内的虚拟机。阻止模式下,只有策略中的流量可以通过。",
         "egressAllWarning": "仅按 IP 地址过滤:域名背后的服务可能会更改地址。",
         "egressNeedsState": "区域必须处于观察或阻止状态",
+        "tips": {
+          "isolate": "此区域的虚拟机之间只能通过已声明的流量互通。取消勾选后，它们可以自由通信。",
+          "inbound": {
+            "disabled": "该区域未在 Proxmox 上应用。",
+            "observe": "不阻止任何流量：策略之外的入站流量会被记录并作为建议提出。",
+            "enforce": "只有策略中的流量可以进入；其余流量被阻止，并显示在已阻止中。"
+          },
+          "outbound": {
+            "off": "区域内的虚拟机可自由出站，不记录任何内容。",
+            "observe": "不阻止任何流量：策略之外的出站流量会被记录并作为建议提出。",
+            "enforce": "只有流量规则允许的出站流量可以通过；其余流量被阻止，并显示在已阻止中。"
+          },
+          "local": "过滤发往区域内虚拟机子网的出站流量，包括无区域的虚拟机。互联网保持开放。",
+          "all": "过滤所有出站流量，包括互联网：只有策略中的流量可以通过。"
+        },
+        "statesTitle": "更改区域 {name} 的状态？",
+        "statesConfirm": "应用状态",
+        "inboundRunFailed": "入站状态更改失败：出站未被修改。",
         "egressOnTitle": "控制区域 {name} 的出站流量?",
         "egressOffTitle": "停止控制区域 {name} 的出站流量?",
         "egressOnBody": "该区域的出站流量将进入观察状态。",

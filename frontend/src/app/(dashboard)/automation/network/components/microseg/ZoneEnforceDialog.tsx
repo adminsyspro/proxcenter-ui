@@ -7,7 +7,7 @@ import type { MicrosegZone } from '@/lib/microseg/types'
 
 import { useDialogAction } from './dialogParts'
 import TypedConfirmDialog from './TypedConfirmDialog'
-import { ReadinessLine, useZoneReadiness } from './useZoneReadiness'
+import { useReadinessCheck } from './useZoneReadiness'
 import ZoneStateGate from './ZoneStateGate'
 
 type Props = {
@@ -35,25 +35,23 @@ export default function ZoneEnforceDialog({
   connectionId, zone, readyAfterHours, pending = false, pendingCount = null, onViewPlan, discard, onConfirm, onCancel,
 }: Props) {
   const t = useTranslations('microsegPilot.policy.enforce')
-  const readiness = useZoneReadiness(connectionId, zone, readyAfterHours)
+  const check = useReadinessCheck(connectionId, zone, readyAfterHours)
   const { busy, error, run } = useDialogAction()
-
-  const needsName = readiness !== null && readiness !== 'ready'
 
   return (
     <TypedConfirmDialog
       title={t('title', { name: zone.name })}
       inputLabel={t('typeName', { name: zone.name })}
-      expected={needsName ? zone.name : undefined}
+      expected={check.needsName ? zone.name : undefined}
       confirmLabel={t('confirm')}
       color='warning'
-      ready={readiness !== null && !pending}
+      ready={!check.loading && !pending}
       busy={busy}
       error={error}
       onConfirm={() => void run(onConfirm)}
       onCancel={onCancel}
     >
-      <ReadinessLine readiness={readiness} texts={{ checking: t('checking'), ready: t('ready', { hours: readyAfterHours }), notReady: t('notReady', { hours: readyAfterHours }), unchecked: t('unchecked', { hours: readyAfterHours }) }} />
+      {check.line}
       <ZoneStateGate pending={pending} count={pendingCount} onViewPlan={onViewPlan} discard={discard} />
     </TypedConfirmDialog>
   )

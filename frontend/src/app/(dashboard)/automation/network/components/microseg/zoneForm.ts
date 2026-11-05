@@ -3,7 +3,7 @@
 // is shown at once instead of coming back as a 400. The server stays the
 // authority. Errors are i18n keys, one per field.
 
-import type { EgressMode } from '@/lib/microseg/types'
+import type { EgressMode, EgressState, ZoneState } from '@/lib/microseg/types'
 
 const V = 'microsegPilot.policy.validation'
 
@@ -21,8 +21,10 @@ export type ZoneFormValues = {
   label: string
   color: string
   isolate_members: boolean
-  /** The outbound is observed or enforced (the checkbox); an enforced outbound counts as checked. */
-  egress_control: boolean
+  /** The inbound state chosen in the dialog (a new zone stays disabled). */
+  state: ZoneState
+  /** The outbound state chosen in the dialog; ignored while `state` is disabled (the backend turns the outbound off). */
+  egress_state: EgressState
   egress_mode: EgressMode
 }
 

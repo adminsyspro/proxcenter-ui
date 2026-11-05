@@ -15,14 +15,15 @@ import enMessages from '@/messages/en.json'
 
 import { calls, mock, policy, reply, zone, REVISION_HEAD } from './microsegTestKit'
 import { body, installFreshMocks } from './policyTestKit'
-import { useZoneEdits, type ZoneEditsInput } from './useZoneEdits'
+import { InboundRunFailedError } from './dialogParts'
+import { useZoneEdits, zoneStateChanges, type ZoneEditsInput } from './useZoneEdits'
 
 installFreshMocks()
 
 const web = zone('zw', { name: 'web', state: 'disabled' })
 const draft = policy({ zones: [web], last_revision: REVISION_HEAD })
 const ref = { node: 'pve1', type: 'qemu' as const, vmid: 100 }
-const values = { name: 'web', label: 'front', color: '#ef4444', isolate_members: true, egress_control: false, egress_mode: 'all' as const }
+const values = { name: 'web', label: 'front', color: '#ef4444', isolate_members: true, state: 'disabled' as const, egress_state: 'off' as const, egress_mode: 'all' as const }
 const flowValues = { src_zone_id: 'zw', src_cidr: '', dst_zone_id: 'zw', dst_cidr: '', proto: 'tcp', dport: '22', comment: '', origin: 'manual' }
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -94,10 +95,52 @@ describe('useZoneEdits', () => {
     mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web })
     mock.routes['POST /zones/zw/egress-state'] = () => reply(400, { code: 'INVALID', error: 'zone disabled' })
     const { result, reloadPolicy } = setup()
-    const error = await refused(result.current.saveZone(web, { ...values, egress_control: true }))
+    const observed = zone('zw', { name: 'web', state: 'observe' })
+    const error = await refused(result.current.saveZone(observed, { ...values, state: 'observe', egress_state: 'observe' }))
     expect((error as MicrosegApiError).serverMessage).toBe('zone disabled')
     expect(calls('PUT /zones/zw')).toHaveLength(1)
     expect(reloadPolicy).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends the inbound change, waits for its run, then the outbound change with the version read again', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web })
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1' })
+    let reads = 0
+    mock.routes['GET /runs/r1'] = () => reply(200, { id: 'r1', status: ++reads < 2 ? 'running' : 'done' })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web], version: 6 }))
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r2' })
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const { result, startRun } = setup()
+      await act(() => result.current.saveZone(web, { ...values, state: 'observe', egress_state: 'enforce' }))
+      expect(reads).toBe(2)
+      expect(body(calls('POST /zones/zw/state')[0][1] as RequestInit)).toEqual({ version: 4, state: 'observe' })
+      expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 6, state: 'enforce' })
+      expect(startRun).toHaveBeenNthCalledWith(1, expect.objectContaining({ runId: 'r1', runningText: 'web: change to observation in progress' }))
+      expect(startRun).toHaveBeenNthCalledWith(2, expect.objectContaining({ runId: 'r2', runningText: 'web: outbound blocking in progress' }))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops after a failed inbound run: the outbound change is not sent', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web })
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1' })
+    mock.routes['GET /runs/r1'] = () => reply(200, { id: 'r1', status: 'failed', error: 'boom' })
+    const { result, reloadPolicy } = setup()
+    const error = await refused(result.current.saveZone(web, { ...values, state: 'observe', egress_state: 'observe' }))
+    expect(error).toBeInstanceOf(InboundRunFailedError)
+    expect((error as InboundRunFailedError).detail).toBe('boom')
+    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
+    expect(reloadPolicy).toHaveBeenCalledTimes(1)
+  })
+
+  it('says which state changes a zone dialog asks for: none for the outbound of a zone set disabled', () => {
+    const observed = zone('zw', { state: 'observe', egress_state: 'observe' })
+    expect(zoneStateChanges(observed, { state: 'observe', egress_state: 'observe' })).toEqual({ inbound: null, outbound: null })
+    expect(zoneStateChanges(observed, { state: 'disabled', egress_state: 'enforce' })).toEqual({ inbound: 'disabled', outbound: null })
+    expect(zoneStateChanges(observed, { state: 'enforce', egress_state: 'enforce' })).toEqual({ inbound: 'enforce', outbound: 'enforce' })
+    expect(zoneStateChanges(web, { state: 'observe', egress_state: 'off' })).toEqual({ inbound: 'observe', outbound: null })
   })
 
   it('deletes a zone and a flow with the version, and saves a flow', async () => {

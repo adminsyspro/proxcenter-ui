@@ -12924,15 +12924,42 @@
         "color": "색상",
         "isolate": "구성원 간 격리",
         "members": "구성원",
+        "inboundSection": "인바운드",
+        "inboundStates": {
+          "disabled": "비활성",
+          "observe": "관찰",
+          "enforce": "차단"
+        },
         "egressSection": "아웃바운드",
-        "egressControl": "아웃바운드 트래픽 제어",
+        "outboundStates": {
+          "off": "제어 안 함",
+          "observe": "관찰",
+          "enforce": "차단"
+        },
         "egressFilter": "아웃바운드 트래픽 필터링 대상:",
         "egressFilterTo": "필터링 대상",
         "egressLocal": "로컬 네트워크",
         "egressAll": "로컬 네트워크 및 인터넷",
-        "egressHelp": "로컬 네트워크 = 존에 속한 VM의 서브넷(존이 없는 VM 포함). 차단 시에는 정책의 플로우만 통과합니다.",
         "egressAllWarning": "IP 주소 기준 필터링만 가능: 도메인 이름 뒤의 서비스는 주소가 바뀔 수 있습니다.",
         "egressNeedsState": "존이 관찰 또는 차단 상태여야 합니다",
+        "tips": {
+          "isolate": "이 존의 VM은 선언된 흐름을 통해서만 서로 연결됩니다. 선택 해제하면 자유롭게 통신합니다.",
+          "inbound": {
+            "disabled": "존이 Proxmox에 적용되지 않습니다.",
+            "observe": "아무것도 차단되지 않습니다. 정책 밖의 인바운드 트래픽은 기록되고 제안으로 표시됩니다.",
+            "enforce": "정책의 흐름만 들어옵니다. 나머지는 차단되며 차단됨에서 볼 수 있습니다."
+          },
+          "outbound": {
+            "off": "존의 VM은 자유롭게 나가며 아무것도 기록되지 않습니다.",
+            "observe": "아무것도 차단되지 않습니다. 정책 밖의 아웃바운드 트래픽은 기록되고 제안으로 표시됩니다.",
+            "enforce": "흐름이 허용한 아웃바운드 트래픽만 통과합니다. 나머지는 차단되며 차단됨에서 볼 수 있습니다."
+          },
+          "local": "존에 속한 VM의 서브넷으로 나가는 트래픽을 필터링합니다(존이 없는 VM 포함). 인터넷은 열려 있습니다.",
+          "all": "인터넷을 포함한 모든 아웃바운드 트래픽을 필터링합니다. 정책의 흐름만 통과합니다."
+        },
+        "statesTitle": "존 {name}의 상태를 변경할까요?",
+        "statesConfirm": "상태 적용",
+        "inboundRunFailed": "인바운드 상태 변경에 실패했습니다. 아웃바운드는 변경되지 않았습니다.",
         "egressOnTitle": "{name} 존의 아웃바운드 트래픽을 제어하시겠습니까?",
         "egressOffTitle": "{name} 존의 아웃바운드 트래픽 제어를 중지하시겠습니까?",
         "egressOnBody": "존의 아웃바운드 트래픽이 관찰 상태가 됩니다.",

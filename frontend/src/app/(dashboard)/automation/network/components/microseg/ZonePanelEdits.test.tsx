@@ -7,12 +7,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 
-import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
+import { renderWithProviders, screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 import RBACContext, { type RBACContextValue } from '@/contexts/RBACContext'
+import frMessages from '@/messages/fr.json'
 import type { MicrosegFlow, MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
-import { calls, mock, policy, renderTab, reply, revisionWithSnapshot, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
+import { calls, fetchMock, mock, policy, renderTab, reply, revisionWithSnapshot, BASE, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
 import MicrosegTab from './MicrosegTab'
+import ZoneDialog from './ZoneDialog'
 import { body, db, installFreshMocks, vm, web } from './policyTestKit'
 import { flowOf, node, pathOf, setup } from './zoneMapTestKit'
 
@@ -143,36 +145,208 @@ describe('zone header actions', () => {
   })
 })
 
-describe('zone dialog, Outbound section', () => {
+describe('zone dialog, state rows and Outbound section', () => {
+  const IN_ROUTE = 'GET /suggestions?kind=would_block&status=pending&zone=zw&direction=in&limit=200'
+  const OUT_ROUTE = 'GET /suggestions?kind=would_block&status=pending&zone=zw&direction=out&limit=200'
+
   const openEdit = async (zone: MicrosegZone = web(), pending = false) => {
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone, db()], last_revision: REVISION_HEAD, version: 3 }))
     setup({ zones: [zone, db()], pending_changes: pending })
     fireEvent.click(button(await openPanel(), 'Edit zone'))
     return screen.findByRole('dialog', { name: 'Edit zone' })
   }
+  const group = (dialog: HTMLElement, name: 'Inbound' | 'Outbound') => within(dialog).getByRole('group', { name })
+  const pick = (dialog: HTMLElement, name: 'Inbound' | 'Outbound', option: string) => fireEvent.click(within(group(dialog, name)).getByRole('button', { name: option }))
+  const pressed = (dialog: HTMLElement, name: 'Inbound' | 'Outbound') =>
+    within(group(dialog, name)).getAllByRole('button').filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent)
+  const order = (...keys: string[]) => keys.map(key => fetchMock.mock.calls.findIndex(([u, i]) => `${(i as RequestInit | undefined)?.method ?? 'GET'} ${(u as string).replace(BASE, '')}` === key))
 
-  it('shows the control unchecked and Local network chosen but disabled until the box is checked', async () => {
+  it('shows the inbound and outbound states of the zone, the outbound filter disabled while the outbound is not controlled', async () => {
     const dialog = await openEdit()
-    expect(within(dialog).getByText('Outbound')).toBeTruthy()
-    const box = within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }) as HTMLInputElement
-    expect(box.checked).toBe(false)
+    expect(pressed(dialog, 'Inbound')).toEqual(['Observing'])
+    expect(pressed(dialog, 'Outbound')).toEqual(['Not controlled'])
+    expect(within(group(dialog, 'Inbound')).getAllByRole('button').map(b => b.textContent)).toEqual(['Disabled', 'Observing', 'Blocking'])
+    expect(within(group(dialog, 'Outbound')).getAllByRole('button').map(b => b.textContent)).toEqual(['Not controlled', 'Observing', 'Blocking'])
+    expect(within(dialog).queryByRole('checkbox', { name: 'Control outbound traffic' })).toBeNull()
     expect((within(dialog).getByRole('radio', { name: 'Local network' }) as HTMLInputElement).checked).toBe(true)
     expect((within(dialog).getByRole('radio', { name: 'Local network and Internet' }) as HTMLInputElement).disabled).toBe(true)
-    expect(within(dialog).getByText(/^Local network = the subnets of the zoned VMs/)).toBeTruthy()
-    expect(within(dialog).queryByText(/IP filtering only/)).toBeNull()
+    // The long help moved into the tooltips.
+    expect(within(dialog).queryByText(/^Local network = the subnets/)).toBeNull()
+    pick(dialog, 'Outbound', 'Observing')
+    expect((within(dialog).getByRole('radio', { name: 'Local network and Internet' }) as HTMLInputElement).disabled).toBe(false)
   })
 
-  it('disables the box of a disabled zone and says the zone must be observed or blocking', async () => {
+  it('disables the outbound of a disabled zone, says why, and shows Not controlled once the inbound is set Disabled', async () => {
     const dialog = await openEdit(web({ state: 'disabled' }))
-    expect((within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }) as HTMLInputElement).disabled).toBe(true)
+    for (const b of within(group(dialog, 'Outbound')).getAllByRole('button')) expect((b as HTMLButtonElement).disabled).toBe(true)
     expect(within(dialog).getByText('The zone must be in observation or blocking')).toBeTruthy()
+    pick(dialog, 'Inbound', 'Observing')
+    expect((within(group(dialog, 'Outbound')).getByRole('button', { name: 'Observing' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('shows Not controlled and disables the filter once the inbound of an observed zone is set Disabled', async () => {
+    const observed = await openEdit(web({ egress_state: 'observe' }))
+    expect(pressed(observed, 'Outbound')).toEqual(['Observing'])
+    pick(observed, 'Inbound', 'Disabled')
+    expect(pressed(observed, 'Outbound')).toEqual(['Not controlled'])
+    expect((within(observed).getByRole('radio', { name: 'Local network' }) as HTMLInputElement).disabled).toBe(true)
+  })
+
+  it('hides the state rows of a new zone', async () => {
+    renderWithProviders(<ZoneDialog zone={null} connectionId='c1' readyAfterHours={24} onSave={vi.fn()} onClose={vi.fn()} />)
+    const dialog = await screen.findByRole('dialog', { name: 'New zone' })
+    expect(within(dialog).queryByRole('group', { name: 'Inbound' })).toBeNull()
+    expect(within(dialog).queryByRole('group', { name: 'Outbound' })).toBeNull()
+  })
+
+  it('explains each option in a tooltip: the toggles, and an info icon after the isolation and filter labels', async () => {
+    const dialog = await openEdit()
+    expect(within(dialog).getAllByTestId('zone-dialog-tip')).toHaveLength(3)
+    fireEvent.mouseOver(within(group(dialog, 'Inbound')).getByRole('button', { name: 'Blocking' }))
+    expect(await screen.findByText('Only the flows of the policy come in; the rest is blocked and visible in Blocked.')).toBeTruthy()
+    fireEvent.mouseOver(within(group(dialog, 'Outbound')).getByRole('button', { name: 'Not controlled' }))
+    expect(await screen.findByText('The VMs of the zone go out freely, nothing is logged.')).toBeTruthy()
+    fireEvent.mouseOver(within(dialog).getAllByTestId('zone-dialog-tip')[0])
+    expect(await screen.findByText(/^The VMs of this zone reach each other only through a declared flow/)).toBeTruthy()
+    fireEvent.mouseOver(within(dialog).getAllByTestId('zone-dialog-tip')[2])
+    expect(await screen.findByText('Filters all outbound traffic, Internet included: only the flows of the policy go through.')).toBeTruthy()
+  })
+
+  it('says the rows and the tooltips in French', async () => {
+    renderWithProviders(
+      <ZoneDialog zone={web({ egress_state: 'observe' })} connectionId='c1' readyAfterHours={24} onSave={vi.fn()} onClose={vi.fn()} />,
+      { locale: 'fr', messages: frMessages as Record<string, unknown> },
+    )
+    const dialog = await screen.findByRole('dialog', { name: 'Modifier la zone' })
+    expect(within(within(dialog).getByRole('group', { name: 'Entrée' })).getAllByRole('button').map(b => b.textContent)).toEqual(['Désactivée', 'Observation', 'Blocage'])
+    expect(within(within(dialog).getByRole('group', { name: 'Sortie' })).getAllByRole('button').map(b => b.textContent)).toEqual(['Non contrôlée', 'Observation', 'Blocage'])
+    fireEvent.mouseOver(within(within(dialog).getByRole('group', { name: 'Sortie' })).getByRole('button', { name: 'Blocage' }))
+    expect(await screen.findByText('Seules les sorties autorisées par un flux passent ; le reste est bloqué et visible dans Bloqués.')).toBeTruthy()
+    fireEvent.mouseOver(within(dialog).getAllByTestId('zone-dialog-tip')[1])
+    expect(await screen.findByText('Filtre les sorties vers les sous-réseaux des VM en zone, VM sans zone comprises. Internet reste ouvert.')).toBeTruthy()
   })
 
   it('warns about IP filtering when Local network and Internet is chosen', async () => {
     const dialog = await openEdit(web({ egress_state: 'observe' }))
-    expect((within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }) as HTMLInputElement).checked).toBe(true)
     fireEvent.click(within(dialog).getByRole('radio', { name: 'Local network and Internet' }))
     expect(within(dialog).getByText('IP filtering only: a service behind a domain name can change address.')).toBeTruthy()
+  })
+
+  it('asks the zone name before an inbound move to Blocking when the zone is not ready, then writes the zone and enforces it', async () => {
+    mock.routes[IN_ROUTE] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1' })
+    mock.routes['GET /runs/r1'] = () => reply(200, { id: 'r1', status: 'running' })
+    const dialog = await openEdit(web({ observe_since: null }))
+    pick(dialog, 'Inbound', 'Blocking')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Enforce zone web?' })
+    expect(await within(confirm).findByText(/This zone is not ready/)).toBeTruthy()
+    const go = within(confirm).getByRole('button', { name: 'Enforce' }) as HTMLButtonElement
+    expect(go.disabled).toBe(true)
+    fireEvent.change(within(confirm).getByLabelText('Type web to confirm'), { target: { value: 'web' } })
+    expect(go.disabled).toBe(false)
+    expect(calls('PUT /zones/zw')).toHaveLength(0)
+    fireEvent.click(go)
+    await waitFor(() => expect(calls('POST /zones/zw/state')).toHaveLength(1))
+    expect(body(calls('POST /zones/zw/state')[0][1] as RequestInit)).toEqual({ version: 4, state: 'enforce' })
+    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
+  })
+
+  it('asks the zone name before an outbound move to Blocking when the outbound is not ready', async () => {
+    mock.routes[OUT_ROUTE] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
+    const dialog = await openEdit(web({ egress_state: 'observe', egress_observe_since: null }))
+    pick(dialog, 'Outbound', 'Blocking')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Block outbound of zone web?' })
+    expect(await within(confirm).findByText(/needs 24 hours of outbound observation/)).toBeTruthy()
+    expect(within(confirm).getByLabelText('Type web to confirm')).toBeTruthy()
+  })
+
+  it('reopens a blocked outbound in one click when the draft is clean', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r2' })
+    mock.routes['GET /runs/r2'] = () => reply(200, { id: 'r2', status: 'running' })
+    const dialog = await openEdit(web({ state: 'enforce', egress_state: 'enforce' }))
+    pick(dialog, 'Outbound', 'Observing')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(calls('POST /zones/zw/egress-state')).toHaveLength(1))
+    expect(screen.queryByRole('dialog', { name: 'Reopen outbound of zone web?' })).toBeNull()
+    expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 4, state: 'observe' })
+    expect(await screen.findByText(/web: outbound reopening in progress/)).toBeTruthy()
+  })
+
+  it('refuses a state change while the draft was dirty before the dialog, with View plan and Discard, and writes nothing', async () => {
+    const dialog = await openEdit(web({ state: 'enforce', egress_state: 'enforce' }), true)
+    pick(dialog, 'Outbound', 'Observing')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    const reopen = await screen.findByRole('dialog', { name: 'Reopen outbound of zone web?' })
+    expect((within(reopen).getByRole('button', { name: 'Reopen outbound' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(reopen).getByRole('button', { name: 'View plan' })).toBeTruthy()
+    expect(within(reopen).getByRole('button', { name: 'Discard changes' })).toBeTruthy()
+    fireEvent.click(within(reopen).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Reopen outbound of zone web?' })).toBeNull())
+
+    pick(dialog, 'Inbound', 'Disabled')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    const disable = await screen.findByRole('dialog', { name: 'Disable zone web?' })
+    expect((within(disable).getByRole('button', { name: 'Disable' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(disable).getByRole('button', { name: 'View plan' })).toBeTruthy()
+    expect(calls('PUT /zones/zw')).toHaveLength(0)
+    expect(calls('POST /zones/zw/state')).toHaveLength(0)
+    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
+  })
+
+  it('applies both states in order: the inbound first, then the outbound with the version read once its run is done', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1' })
+    mock.routes['GET /runs/r1'] = () => reply(200, { id: 'r1', status: 'done' })
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r2' })
+    mock.routes['GET /runs/r2'] = () => reply(200, { id: 'r2', status: 'running' })
+    const dialog = await openEdit(web({ state: 'disabled' }))
+    pick(dialog, 'Inbound', 'Observing')
+    pick(dialog, 'Outbound', 'Observing')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Change the states of zone web?' })
+    expect(within(confirm).getByText('Nothing is blocked: the traffic the zone would block is logged.')).toBeTruthy()
+    expect(within(confirm).getByText('The outbound traffic of the zone goes to observation.')).toBeTruthy()
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web(), db()], last_revision: REVISION_HEAD, version: 5 }))
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Apply the states' }))
+    await waitFor(() => expect(calls('POST /zones/zw/egress-state')).toHaveLength(1))
+    expect(body(calls('POST /zones/zw/state')[0][1] as RequestInit)).toEqual({ version: 4, state: 'observe' })
+    expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 5, state: 'observe' })
+    const [put, state, run, egress] = order('PUT /zones/zw', 'POST /zones/zw/state', 'GET /runs/r1', 'POST /zones/zw/egress-state')
+    expect(put).toBeLessThan(state)
+    expect(state).toBeLessThan(run)
+    expect(run).toBeLessThan(egress)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit zone' })).toBeNull())
+  })
+
+  it('does not send the outbound change when the inbound run fails, and says so in the dialog', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1' })
+    mock.routes['GET /runs/r1'] = () => reply(200, { id: 'r1', status: 'failed', error: 'pve unreachable' })
+    const dialog = await openEdit(web({ state: 'disabled' }))
+    pick(dialog, 'Inbound', 'Observing')
+    pick(dialog, 'Outbound', 'Observing')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Change the states of zone web?' })).getByRole('button', { name: 'Apply the states' }))
+    expect(await within(dialog).findByText('The inbound state change failed: the outbound was not changed. pve unreachable')).toBeTruthy()
+    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
+    expect(screen.getByRole('dialog', { name: 'Edit zone' })).toBeTruthy()
+  })
+
+  it('sends only the inbound change when the zone is set Disabled', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1' })
+    mock.routes['GET /runs/r1'] = () => reply(200, { id: 'r1', status: 'running' })
+    const dialog = await openEdit(web({ egress_state: 'observe' }))
+    pick(dialog, 'Inbound', 'Disabled')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Disable zone web?' })).getByRole('button', { name: 'Disable' }))
+    await waitFor(() => expect(calls('POST /zones/zw/state')).toHaveLength(1))
+    expect(body(calls('POST /zones/zw/state')[0][1] as RequestInit)).toEqual({ version: 4, state: 'disabled' })
+    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
   })
 
   it('asks first, then saves the mode and starts the outbound observation with the new version', async () => {
@@ -180,12 +354,11 @@ describe('zone dialog, Outbound section', () => {
     mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r2' })
     mock.routes['GET /runs/r2'] = () => reply(200, { id: 'r2', status: 'running' })
     const dialog = await openEdit()
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }))
+    pick(dialog, 'Outbound', 'Observing')
     fireEvent.click(within(dialog).getByRole('radio', { name: 'Local network and Internet' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     const confirm = await screen.findByRole('dialog', { name: 'Control outbound traffic of zone web?' })
     expect(calls('PUT /zones/zw')).toHaveLength(0)
-    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
     // The immediate-revision sentence is said once (by the gate), not again by the body.
     expect(confirm.textContent?.match(/right away/g) ?? []).toHaveLength(1)
     expect(within(confirm).getByText('The outbound traffic of the zone goes to observation.')).toBeTruthy()
@@ -197,24 +370,11 @@ describe('zone dialog, Outbound section', () => {
     expect(await screen.findByText(/web: outbound control in progress/)).toBeTruthy()
   })
 
-  it('refuses the outbound change while the draft was dirty before the dialog, with the way to the plan, and writes nothing', async () => {
-    const dialog = await openEdit(web(), true)
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }))
-    fireEvent.click(within(dialog).getByRole('radio', { name: 'Local network and Internet' }))
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
-    const confirm = await screen.findByRole('dialog', { name: 'Control outbound traffic of zone web?' })
-    expect((within(confirm).getByRole('button', { name: 'Control' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(within(confirm).getByRole('button', { name: 'View plan' })).toBeTruthy()
-    expect(calls('PUT /zones/zw')).toHaveLength(0)
-    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
-  })
-
   it('keeps the dialog usable with the error when the outbound change fails after the zone was written', async () => {
     mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
     mock.routes['POST /zones/zw/egress-state'] = () => reply(400, { code: 'INVALID', error: 'zone is disabled' })
     const dialog = await openEdit()
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }))
-    fireEvent.click(within(dialog).getByRole('radio', { name: 'Local network and Internet' }))
+    pick(dialog, 'Outbound', 'Observing')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     const confirm = await screen.findByRole('dialog', { name: 'Control outbound traffic of zone web?' })
     fireEvent.click(within(confirm).getByRole('button', { name: 'Control' }))
@@ -223,14 +383,12 @@ describe('zone dialog, Outbound section', () => {
     expect((within(dialog).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('shows an enforced outbound as checked and sends off once unchecked and confirmed', async () => {
+  it('sends off once a blocked outbound is set Not controlled and confirmed', async () => {
     mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
     mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r2' })
     mock.routes['GET /runs/r2'] = () => reply(200, { id: 'r2', status: 'running' })
     const dialog = await openEdit(web({ state: 'enforce', egress_state: 'enforce' }))
-    const box = within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }) as HTMLInputElement
-    expect(box.checked).toBe(true)
-    fireEvent.click(box)
+    pick(dialog, 'Outbound', 'Not controlled')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     const confirm = await screen.findByRole('dialog', { name: 'Stop controlling outbound traffic of zone web?' })
     fireEvent.click(within(confirm).getByRole('button', { name: 'Stop controlling' }))
@@ -238,9 +396,9 @@ describe('zone dialog, Outbound section', () => {
     expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 4, state: 'off' })
   })
 
-  it('says in the confirmation that the isolation change is applied with the outbound change, and stays silent for the label, colour and mode', async () => {
+  it('says in the confirmation that the isolation change is applied with the state change, and stays silent for the label, colour and mode', async () => {
     const dialog = await openEdit()
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }))
+    pick(dialog, 'Outbound', 'Observing')
     fireEvent.change(within(dialog).getByLabelText('Label'), { target: { value: 'front' } })
     fireEvent.click(within(dialog).getByRole('radio', { name: 'Local network and Internet' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
@@ -258,7 +416,7 @@ describe('zone dialog, Outbound section', () => {
   it('gates a retry again after a version conflict, even when the draft became dirty meanwhile', async () => {
     mock.routes['PUT /zones/zw'] = () => reply(409, { code: 'VERSION_CONFLICT', error: 'stale' })
     const dialog = await openEdit()
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Control outbound traffic' }))
+    pick(dialog, 'Outbound', 'Observing')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     const first = await screen.findByRole('dialog', { name: 'Control outbound traffic of zone web?' })
     expect((within(first).getByRole('button', { name: 'Control' }) as HTMLButtonElement).disabled).toBe(false)
@@ -273,13 +431,14 @@ describe('zone dialog, Outbound section', () => {
     expect(calls('PUT /zones/zw')).toHaveLength(1)
   })
 
-  it('saves without a question or an outbound call when only the mode changes', async () => {
+  it('saves without a question or a state call when only the mode changes', async () => {
     mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web() })
     const dialog = await openEdit(web({ egress_state: 'observe' }))
     fireEvent.click(within(dialog).getByRole('radio', { name: 'Local network and Internet' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(calls('PUT /zones/zw')).toHaveLength(1))
     expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
+    expect(calls('POST /zones/zw/state')).toHaveLength(0)
   })
 })
 

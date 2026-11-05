@@ -12924,15 +12924,42 @@
         "color": "Color",
         "isolate": "Aislar los miembros entre sí",
         "members": "Miembros",
+        "inboundSection": "Entrada",
+        "inboundStates": {
+          "disabled": "Desactivada",
+          "observe": "Observación",
+          "enforce": "Bloqueo"
+        },
         "egressSection": "Salida",
-        "egressControl": "Controlar el tráfico saliente",
+        "outboundStates": {
+          "off": "No controlada",
+          "observe": "Observación",
+          "enforce": "Bloqueo"
+        },
         "egressFilter": "Filtrar el tráfico saliente hacia:",
         "egressFilterTo": "Filtrar hacia",
         "egressLocal": "La red local",
         "egressAll": "La red local e Internet",
-        "egressHelp": "Red local = las subredes de las VM en zona, incluidas las VM sin zona. En bloqueo, solo pasan los flujos de la política.",
         "egressAllWarning": "Solo filtrado por dirección IP: un servicio tras un nombre de dominio puede cambiar de dirección.",
         "egressNeedsState": "La zona debe estar en observación o en bloqueo",
+        "tips": {
+          "isolate": "Las VM de esta zona solo se comunican entre sí mediante un flujo declarado. Sin marcar, se comunican libremente.",
+          "inbound": {
+            "disabled": "La zona no se aplica en Proxmox.",
+            "observe": "No se bloquea nada: el tráfico entrante fuera de la política se registra y se propone como sugerencia.",
+            "enforce": "Solo entran los flujos de la política; el resto se bloquea y es visible en Bloqueado."
+          },
+          "outbound": {
+            "off": "Las VM de la zona salen libremente, no se registra nada.",
+            "observe": "No se bloquea nada: las salidas fuera de la política se registran y se proponen como sugerencias.",
+            "enforce": "Solo pasan las salidas autorizadas por un flujo; el resto se bloquea y es visible en Bloqueado."
+          },
+          "local": "Filtra las salidas hacia las subredes de las VM en zona, incluidas las VM sin zona. Internet sigue abierto.",
+          "all": "Filtra toda salida, Internet incluido: solo pasan los flujos de la política."
+        },
+        "statesTitle": "¿Cambiar los estados de la zona {name}?",
+        "statesConfirm": "Aplicar los estados",
+        "inboundRunFailed": "El cambio de estado de entrada ha fallado: la salida no se ha modificado.",
         "egressOnTitle": "¿Controlar el tráfico saliente de la zona {name}?",
         "egressOffTitle": "¿Dejar de controlar el tráfico saliente de la zona {name}?",
         "egressOnBody": "El tráfico saliente de la zona pasa a observación.",

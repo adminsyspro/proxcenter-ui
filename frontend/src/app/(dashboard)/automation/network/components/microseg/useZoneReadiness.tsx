@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Box, CircularProgress } from '@mui/material'
+import { useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
 import type { FlowDirection, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
@@ -54,4 +55,35 @@ export function ReadinessLine({ readiness, texts }: { readiness: Readiness | nul
     )
   }
   return <OneLine text={texts[readiness]} />
+}
+
+export type ReadinessCheck = {
+  readiness: Readiness | null
+  /** Still reading: the confirmation waits. */
+  loading: boolean
+  /** Not ready, or not readable: the zone name must be typed. */
+  needsName: boolean
+  /** The readiness line of the confirmation, null when not checked. */
+  line: ReactNode
+}
+
+/**
+ * The readiness part of a blocking confirmation (inbound: the enforce texts, outbound: the egressState texts), shared
+ * by the enforce and outbound dialogs of the panel and the zone dialog. Nothing is read while `enabled` is false.
+ */
+export function useReadinessCheck(
+  connectionId: string, zone: MicrosegZone, readyAfterHours: number, { direction = 'in', enabled = true }: { direction?: FlowDirection; enabled?: boolean } = {},
+): ReadinessCheck {
+  const t = useTranslations('microsegPilot.policy')
+  const readiness = useZoneReadiness(connectionId, zone, readyAfterHours, { direction, enabled })
+  const ns = direction === 'out' ? 'egressState' : 'enforce'
+  const hours = { hours: readyAfterHours }
+  return {
+    readiness,
+    loading: enabled && readiness === null,
+    needsName: enabled && readiness !== null && readiness !== 'ready',
+    line: enabled
+      ? <ReadinessLine readiness={readiness} texts={{ checking: t(`${ns}.checking`), ready: t(`${ns}.ready`, hours), notReady: t(`${ns}.notReady`, hours), unchecked: t(`${ns}.unchecked`, hours) }} />
+      : null,
+  }
 }

@@ -63,11 +63,29 @@ export function isVersionConflict(error: unknown): boolean {
   return error instanceof MicrosegApiError && error.code === 'VERSION_CONFLICT'
 }
 
+/**
+ * The inbound run of a zone dialog that changed both states ended in failure: the outbound change was not sent.
+ * `detail` is the run's own error, when it gave one.
+ */
+export class InboundRunFailedError extends Error {
+  readonly detail: string
+
+  constructor(detail = '') {
+    super(detail || 'inbound run failed')
+    this.name = 'InboundRunFailedError'
+    this.detail = detail
+  }
+}
+
 type Translate = (key: string) => string
 
-/** One translated message for a failed write; the server's wording is only added for INVALID. */
+/** One translated message for a failed write; the server's wording is only added for INVALID (and a failed run's own error). */
 export function writeErrorMessage(t: Translate, error: unknown): string {
   if (isVersionConflict(error)) return t('microsegPilot.policy.conflictReloaded')
+  if (error instanceof InboundRunFailedError) {
+    const base = t('microsegPilot.policy.zoneDialog.inboundRunFailed')
+    return error.detail ? `${base} ${error.detail}` : base
+  }
   const base = t(microsegErrorKeyOf(error))
   const detail = error instanceof MicrosegApiError && error.code === 'INVALID' ? error.serverMessage : undefined
   return detail ? `${base} ${detail}` : base

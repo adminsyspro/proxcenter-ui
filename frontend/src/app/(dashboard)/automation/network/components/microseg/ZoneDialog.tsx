@@ -3,25 +3,28 @@
 import { useId, useState } from 'react'
 import {
   Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, IconButton, Radio, RadioGroup,
-  Stack, TextField, Tooltip, Typography,
+  Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { zoneEgress, type EgressMode, type MicrosegZone } from '@/lib/microseg/types'
+import { zoneEgress, type EgressMode, type EgressState, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
 import { DialogErrorLine, FLUSH_TOGGLE_SX, FormRow, isVersionConflict, ONE_LINE_SX, useDialogAction } from './dialogParts'
-import TypedConfirmDialog from './TypedConfirmDialog'
-import ZoneStateGate from './ZoneStateGate'
+import { zoneStateChanges } from './useZoneEdits'
 import type { ZoneGate } from './zoneGate'
 import { validateZoneForm, ZONE_COLORS, type ZoneFormValues } from './zoneForm'
+import ZoneStatesConfirm from './ZoneStatesConfirm'
 
 type Props = {
   /** The zone to edit, or null to create one. */
   zone: MicrosegZone | null
+  /** For the readiness of a move to blocking. */
+  connectionId: string
+  readyAfterHours: number
   /** Throws when the write fails: the dialog then keeps its input and shows the error. */
   onSave: (values: ZoneFormValues) => Promise<void>
   onClose: () => void
-  /** The pending changes of the draft: an outbound change applies the whole draft, so it is refused while there are some. */
+  /** The pending changes of the draft: a state change applies the whole draft, so it is refused while there are some. */
   gate?: ZoneGate
 }
 
@@ -57,65 +60,119 @@ function ColorPicker({ value, onChange, label }: { value: string; onChange: (col
 }
 
 const EGRESS_MODES: EgressMode[] = ['local', 'all']
+const INBOUND_STATES: ZoneState[] = ['disabled', 'observe', 'enforce']
+const OUTBOUND_STATES: EgressState[] = ['off', 'observe', 'enforce']
 
-type EgressProps = { values: ZoneFormValues; disabled: boolean; stateBlocked: boolean; set: <K extends keyof ZoneFormValues>(key: K, value: ZoneFormValues[K]) => void }
+/** An option label with its explanation behind an info icon at its right. */
+function TipLabel({ text, tip }: { text: string; tip: string }) {
+  return (
+    <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, minWidth: 0, maxWidth: '100%' }}>
+      <Box component='span' sx={{ ...ONE_LINE_SX, minWidth: 0 }}>{text}</Box>
+      <Tooltip title={tip} describeChild>
+        <Box component='i' className='ri-information-line' data-testid='zone-dialog-tip' sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0, cursor: 'help' }} />
+      </Tooltip>
+    </Box>
+  )
+}
 
-/** The Outbound rows: the control box, then the choice it unlocks; the help and the Internet warning are captions of the choice. */
-function EgressSection({ values, disabled, stateBlocked, set }: EgressProps) {
+type StateOption<T extends string> = { value: T; label: string; tip: string }
+
+/** One state of the zone (inbound or outbound): three exclusive buttons, each explained by its tooltip. */
+function StateToggle<T extends string>({ label, value, options, disabled, onChange }: {
+  label: string
+  value: T
+  options: StateOption<T>[]
+  disabled: boolean
+  onChange: (value: T) => void
+}) {
+  return (
+    <ToggleButtonGroup exclusive size='small' value={value} aria-label={label} disabled={disabled} onChange={(_, next: T | null) => next && onChange(next)} sx={{ minWidth: 0 }}>
+      {options.map(o => (
+        // A disabled button cannot show a tooltip: the caption of the row says why instead.
+        <Tooltip key={o.value} title={disabled ? '' : o.tip} describeChild>
+          <ToggleButton value={o.value} sx={{ textTransform: 'none', px: 1.5, whiteSpace: 'nowrap' }}>{o.label}</ToggleButton>
+        </Tooltip>
+      ))}
+    </ToggleButtonGroup>
+  )
+}
+
+type SetField = <K extends keyof ZoneFormValues>(key: K, value: ZoneFormValues[K]) => void
+
+/** The Inbound and Outbound state rows of an existing zone: the outbound waits for an inbound in observation or blocking. */
+function StateRows({ values, disabled, set }: { values: ZoneFormValues; disabled: boolean; set: SetField }) {
   const t = useTranslations('microsegPilot.policy.zoneDialog')
-  const modeDisabled = disabled || stateBlocked || !values.egress_control
+  const inboundOff = values.state === 'disabled'
   return (
     <>
-      <FormRow
-        label={t('egressSection')}
-        below={stateBlocked && <Typography variant='caption' color='text.secondary' sx={CAPTION_SX}>{t('egressNeedsState')}</Typography>}
-      >
-        <FormControlLabel
-          control={<Checkbox checked={values.egress_control} onChange={e => set('egress_control', e.target.checked)} disabled={disabled || stateBlocked} sx={FLUSH_TOGGLE_SX} />}
-          label={t('egressControl')}
-          sx={TOGGLE_LABEL_SX}
+      <FormRow label={t('inboundSection')}>
+        <StateToggle
+          label={t('inboundSection')}
+          value={values.state}
+          options={INBOUND_STATES.map(v => ({ value: v, label: t(`inboundStates.${v}`), tip: t(`tips.inbound.${v}`) }))}
+          disabled={disabled}
+          onChange={v => set('state', v)}
         />
       </FormRow>
       <FormRow
-        label={t('egressFilterTo')}
-        below={(
-          <>
-            <Typography variant='caption' color='text.secondary' sx={CAPTION_SX}>{t('egressHelp')}</Typography>
-            {values.egress_mode === 'all' && <Typography variant='caption' color='warning.main' sx={CAPTION_SX}>{t('egressAllWarning')}</Typography>}
-          </>
-        )}
+        label={t('egressSection')}
+        below={inboundOff && <Typography variant='caption' color='text.secondary' sx={CAPTION_SX}>{t('egressNeedsState')}</Typography>}
       >
-        <FormControl disabled={modeDisabled} sx={{ minWidth: 0 }}>
-          <RadioGroup row sx={{ flexWrap: 'nowrap', gap: 4, minWidth: 0 }} aria-label={t('egressFilter')} value={values.egress_mode} onChange={e => set('egress_mode', e.target.value as EgressMode)}>
-            {EGRESS_MODES.map(mode => (
-              <FormControlLabel
-                key={mode}
-                value={mode}
-                control={<Radio sx={FLUSH_TOGGLE_SX} />}
-                label={t(mode === 'local' ? 'egressLocal' : 'egressAll')}
-                sx={TOGGLE_LABEL_SX}
-              />
-            ))}
-          </RadioGroup>
-        </FormControl>
+        <StateToggle
+          label={t('egressSection')}
+          // A disabled zone has no outbound control: the backend turns it off with the inbound.
+          value={inboundOff ? 'off' : values.egress_state}
+          options={OUTBOUND_STATES.map(v => ({ value: v, label: t(`outboundStates.${v}`), tip: t(`tips.outbound.${v}`) }))}
+          disabled={disabled || inboundOff}
+          onChange={v => set('egress_state', v)}
+        />
       </FormRow>
     </>
   )
 }
 
-/** Create or edit a zone: name (fixed once created), label, color from a small palette, isolation. */
-export default function ZoneDialog({ zone, onSave, onClose, gate }: Props) {
+/** The choice of what the outbound filter covers, explained by the tooltips; the Internet warning stays visible under it. */
+function EgressModeRow({ values, disabled, set }: { values: ZoneFormValues; disabled: boolean; set: SetField }) {
+  const t = useTranslations('microsegPilot.policy.zoneDialog')
+  return (
+    <FormRow
+      label={t('egressFilterTo')}
+      below={values.egress_mode === 'all' && <Typography variant='caption' color='warning.main' sx={CAPTION_SX}>{t('egressAllWarning')}</Typography>}
+    >
+      <FormControl disabled={disabled} sx={{ minWidth: 0 }}>
+        <RadioGroup row sx={{ flexWrap: 'nowrap', gap: 4, minWidth: 0 }} aria-label={t('egressFilter')} value={values.egress_mode} onChange={e => set('egress_mode', e.target.value as EgressMode)}>
+          {EGRESS_MODES.map(mode => (
+            <FormControlLabel
+              key={mode}
+              value={mode}
+              control={<Radio sx={FLUSH_TOGGLE_SX} />}
+              label={<TipLabel text={t(mode === 'local' ? 'egressLocal' : 'egressAll')} tip={t(`tips.${mode}`)} />}
+              sx={TOGGLE_LABEL_SX}
+            />
+          ))}
+        </RadioGroup>
+      </FormControl>
+    </FormRow>
+  )
+}
+
+/**
+ * Create or edit a zone: name (fixed once created), label, color from a small palette, isolation; for an existing zone
+ * also its inbound and outbound states, applied at once with the whole draft after the zone is written (confirmed first,
+ * refused while the draft had pending changes), and what its outbound filter covers.
+ */
+export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave, onClose, gate }: Props) {
   const t = useTranslations()
   const editing = zone !== null
   const nameId = useId()
   const labelId = useId()
   const [values, setValues] = useState<ZoneFormValues>({
     name: zone?.name ?? '', label: zone?.label ?? '', color: zone ? zone.color : ZONE_COLORS[0], isolate_members: zone?.isolate_members ?? false,
-    egress_control: zone ? zoneEgress(zone) !== 'off' : false, egress_mode: zone?.egress_mode ?? 'local',
+    state: zone?.state ?? 'disabled', egress_state: zone ? zoneEgress(zone) : 'off', egress_mode: zone?.egress_mode ?? 'local',
   })
   const [confirming, setConfirming] = useState(false)
-  // The gate as it was when the question was asked: once the dialog has written (its own mode change makes the draft
-  // dirty), a retry must not be refused for that change.
+  // The gate as it was when the question was asked: once the dialog has written (its own changes make the draft
+  // dirty), a retry must not be refused for them.
   const [frozenGate, setFrozenGate] = useState<ZoneGate | null>(null)
   const [touched, setTouched] = useState(false)
   const { busy, error, run } = useDialogAction()
@@ -124,11 +181,13 @@ export default function ZoneDialog({ zone, onSave, onClose, gate }: Props) {
   const nameError = values.name !== '' || touched ? errors.name : undefined
   const set = <K extends keyof ZoneFormValues>(key: K, value: ZoneFormValues[K]) => setValues(prev => ({ ...prev, [key]: value }))
 
-  // A new zone is disabled, and so is a disabled one: its outbound cannot be controlled until it is observed or enforced.
-  const stateBlocked = !zone || (zone.state !== 'observe' && zone.state !== 'enforce')
-  const egressChanged = !!zone && values.egress_control !== (zoneEgress(zone) !== 'off')
-
+  const changes = zone ? zoneStateChanges(zone, values) : { inbound: null, outbound: null }
   const isolationChanged = !!zone && values.isolate_members !== zone.isolate_members
+  const stateGate = frozenGate ?? gate
+  // Reopening the outbound (blocking to observation) is one click when the draft is clean, as in the panel.
+  const reopenOnly = !!zone && !changes.inbound && changes.outbound === 'observe' && zoneEgress(zone) === 'enforce' && !gate?.pending
+  // The filter only means something while the outbound is controlled.
+  const modeDisabled = busy || values.state === 'disabled' || values.egress_state === 'off'
 
   const save = () => {
     setFrozenGate(prev => prev ?? gate ?? null)
@@ -144,13 +203,9 @@ export default function ZoneDialog({ zone, onSave, onClose, gate }: Props) {
   }
   const submit = () => {
     if (Object.keys(errors).length > 0) return
-    if (egressChanged) setConfirming(true)
+    if ((changes.inbound || changes.outbound) && !reopenOnly) setConfirming(true)
     else void save()
   }
-  const egressText = values.egress_control
-    ? { title: 'egressOnTitle', body: 'egressOnBody', confirm: 'egressOnConfirm' }
-    : { title: 'egressOffTitle', body: 'egressOffBody', confirm: 'egressOffConfirm' }
-  const egressGate = frozenGate ?? gate
 
   return (
     <Dialog open onClose={busy ? undefined : onClose} maxWidth='sm' fullWidth aria-labelledby='microseg-zone-title'>
@@ -187,12 +242,14 @@ export default function ZoneDialog({ zone, onSave, onClose, gate }: Props) {
           <FormRow label={t('microsegPilot.policy.zoneDialog.members')}>
             <FormControlLabel
               control={<Checkbox checked={values.isolate_members} onChange={e => set('isolate_members', e.target.checked)} disabled={busy} sx={FLUSH_TOGGLE_SX} />}
-              label={t('microsegPilot.policy.zoneDialog.isolate')}
+              label={<TipLabel text={t('microsegPilot.policy.zoneDialog.isolate')} tip={t('microsegPilot.policy.zoneDialog.tips.isolate')} />}
               sx={TOGGLE_LABEL_SX}
             />
           </FormRow>
           <Divider />
-          <EgressSection values={values} disabled={busy} stateBlocked={stateBlocked} set={set} />
+          {/* A new zone is created disabled: its states are changed once it exists. */}
+          {editing && <StateRows values={values} disabled={busy} set={set} />}
+          <EgressModeRow values={values} disabled={modeDisabled} set={set} />
           {error && <DialogErrorLine message={error} />}
         </Stack>
       </DialogContent>
@@ -202,22 +259,19 @@ export default function ZoneDialog({ zone, onSave, onClose, gate }: Props) {
           {editing ? t('microsegPilot.policy.zoneDialog.save') : t('microsegPilot.policy.zoneDialog.create')}
         </Button>
       </DialogActions>
-      {confirming && (
-        <TypedConfirmDialog
-          title={t(`microsegPilot.policy.zoneDialog.${egressText.title}`, { name: values.name })}
-          lines={[
-            t(`microsegPilot.policy.zoneDialog.${egressText.body}`),
-            ...(isolationChanged ? [t('microsegPilot.policy.zoneDialog.egressIsolateNote')] : []),
-          ]}
-          confirmLabel={t(`microsegPilot.policy.zoneDialog.${egressText.confirm}`)}
-          color='warning'
-          ready={!egressGate?.pending}
+      {confirming && zone && (
+        <ZoneStatesConfirm
+          connectionId={connectionId}
+          zone={zone}
+          readyAfterHours={readyAfterHours}
+          inbound={changes.inbound}
+          outbound={changes.outbound}
+          isolationChanged={isolationChanged}
+          gate={stateGate}
           busy={busy}
           onConfirm={() => void save().then(ok => { if (!ok) setConfirming(false) })}
           onCancel={() => setConfirming(false)}
-        >
-          <ZoneStateGate pending={!!egressGate?.pending} count={egressGate?.count ?? null} onViewPlan={egressGate?.onViewPlan} discard={egressGate?.discard} />
-        </TypedConfirmDialog>
+        />
       )}
     </Dialog>
   )

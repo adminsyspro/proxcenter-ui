@@ -12924,15 +12924,42 @@
         "color": "Color",
         "isolate": "Isolate members from each other",
         "members": "Members",
+        "inboundSection": "Inbound",
+        "inboundStates": {
+          "disabled": "Disabled",
+          "observe": "Observing",
+          "enforce": "Blocking"
+        },
         "egressSection": "Outbound",
-        "egressControl": "Control outbound traffic",
+        "outboundStates": {
+          "off": "Not controlled",
+          "observe": "Observing",
+          "enforce": "Blocking"
+        },
         "egressFilter": "Filter outbound traffic to:",
         "egressFilterTo": "Filter to",
         "egressLocal": "Local network",
         "egressAll": "Local network and Internet",
-        "egressHelp": "Local network = the subnets of the zoned VMs, unzoned VMs included. When blocking, only the flows of the policy go through.",
         "egressAllWarning": "IP filtering only: a service behind a domain name can change address.",
         "egressNeedsState": "The zone must be in observation or blocking",
+        "tips": {
+          "isolate": "The VMs of this zone reach each other only through a declared flow. Unchecked, they talk to each other freely.",
+          "inbound": {
+            "disabled": "The zone is not applied on Proxmox.",
+            "observe": "Nothing is blocked: inbound traffic outside the policy is logged and offered as suggestions.",
+            "enforce": "Only the flows of the policy come in; the rest is blocked and visible in Blocked."
+          },
+          "outbound": {
+            "off": "The VMs of the zone go out freely, nothing is logged.",
+            "observe": "Nothing is blocked: outbound traffic outside the policy is logged and offered as suggestions.",
+            "enforce": "Only the outbound traffic allowed by a flow goes through; the rest is blocked and visible in Blocked."
+          },
+          "local": "Filters outbound traffic to the subnets of the zoned VMs, unzoned VMs included. Internet stays open.",
+          "all": "Filters all outbound traffic, Internet included: only the flows of the policy go through."
+        },
+        "statesTitle": "Change the states of zone {name}?",
+        "statesConfirm": "Apply the states",
+        "inboundRunFailed": "The inbound state change failed: the outbound was not changed.",
         "egressOnTitle": "Control outbound traffic of zone {name}?",
         "egressOffTitle": "Stop controlling outbound traffic of zone {name}?",
         "egressOnBody": "The outbound traffic of the zone goes to observation.",

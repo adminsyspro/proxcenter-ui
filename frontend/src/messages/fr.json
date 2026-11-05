@@ -12925,15 +12925,42 @@
         "color": "Couleur",
         "isolate": "Isoler les membres les uns des autres",
         "members": "Membres",
+        "inboundSection": "Entrée",
+        "inboundStates": {
+          "disabled": "Désactivée",
+          "observe": "Observation",
+          "enforce": "Blocage"
+        },
         "egressSection": "Sortie",
-        "egressControl": "Contrôler la sortie",
+        "outboundStates": {
+          "off": "Non contrôlée",
+          "observe": "Observation",
+          "enforce": "Blocage"
+        },
         "egressFilter": "Filtrer la sortie vers :",
         "egressFilterTo": "Filtrer vers",
         "egressLocal": "Le réseau local",
         "egressAll": "Le réseau local et Internet",
-        "egressHelp": "Réseau local = les sous-réseaux des VM en zone, VM sans zone comprises. En blocage, seuls les flux de la politique passent.",
         "egressAllWarning": "Filtrage par adresse IP seulement : un service derrière un nom de domaine peut changer d'adresse.",
         "egressNeedsState": "La zone doit être en observation ou en blocage",
+        "tips": {
+          "isolate": "Les VM de cette zone ne se joignent entre elles que par un flux déclaré. Décochée, elles communiquent librement.",
+          "inbound": {
+            "disabled": "La zone n'est pas appliquée sur Proxmox.",
+            "observe": "Rien n'est bloqué : le trafic entrant hors politique est journalisé et proposé en suggestions.",
+            "enforce": "Seuls les flux de la politique entrent ; le reste est bloqué et visible dans Bloqués."
+          },
+          "outbound": {
+            "off": "Les VM de la zone sortent librement, rien n'est journalisé.",
+            "observe": "Rien n'est bloqué : les sorties hors politique sont journalisées et proposées en suggestions.",
+            "enforce": "Seules les sorties autorisées par un flux passent ; le reste est bloqué et visible dans Bloqués."
+          },
+          "local": "Filtre les sorties vers les sous-réseaux des VM en zone, VM sans zone comprises. Internet reste ouvert.",
+          "all": "Filtre toute sortie, Internet compris : seuls les flux de la politique passent."
+        },
+        "statesTitle": "Changer les états de la zone {name} ?",
+        "statesConfirm": "Appliquer les états",
+        "inboundRunFailed": "Le changement d'état en entrée a échoué : la sortie n'a pas été modifiée.",
         "egressOnTitle": "Contrôler la sortie de la zone {name} ?",
         "egressOffTitle": "Ne plus contrôler la sortie de la zone {name} ?",
         "egressOnBody": "La sortie de la zone passe en observation.",

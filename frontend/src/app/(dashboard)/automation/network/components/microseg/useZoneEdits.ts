@@ -5,14 +5,33 @@ import { useSWRConfig } from 'swr'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
+import { waitForRun } from '@/lib/microseg/useMicroseg'
 import { zoneEgress, type EgressState, type GuestRef, type MembersInput, type MicrosegFlow, type MicrosegPolicy, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
+import { InboundRunFailedError } from './dialogParts'
 import type { FlowSaveValues } from './FlowDialog'
 import type { TrackedRun } from './microsegTabTypes'
 import { usePendingChanges } from './usePendingChanges'
 import type { ZoneFormValues } from './zoneForm'
 
 const DEFAULT_READY_AFTER_HOURS = 24
+
+/**
+ * The state changes a zone dialog asks for: the inbound one when its state moved; the outbound one when its outbound
+ * moved, unless the zone is set disabled (the backend turns the outbound off with it).
+ */
+export function zoneStateChanges(zone: MicrosegZone, values: Pick<ZoneFormValues, 'state' | 'egress_state'>): { inbound: ZoneState | null; outbound: EgressState | null } {
+  const inbound = values.state === zone.state ? null : values.state
+  const outbound = values.state === 'disabled' || values.egress_state === zoneEgress(zone) ? null : values.egress_state
+  return { inbound, outbound }
+}
+
+/** The running line of an outbound change: observing from off, reopening from blocking, blocking, or off. */
+function egressRunningKey(from: EgressState, to: EgressState): string {
+  if (to === 'enforce') return 'egressEnforce'
+  if (to === 'off') return 'egressOff'
+  return from === 'enforce' ? 'egressReopen' : 'egressObserve'
+}
 
 export type ZoneEditsInput = {
   connectionId: string
@@ -60,8 +79,11 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
   }
 
   /**
-   * The zone is written first (with the outbound mode); when the outbound control changed, its state follows, applied
-   * at once with the version the write returned: observation on a check, off on an uncheck.
+   * The zone is written first (with the outbound mode). Then the state changes the dialog asked for, each applied at
+   * once with the whole draft: the inbound state with the version the write returned; the outbound state after it,
+   * once the inbound run has finished (with the version read again then), or at once when only the outbound changed.
+   * A failed inbound run stops there (InboundRunFailedError): the outbound change is not sent. A zone set disabled
+   * gets no outbound call: the backend turns its outbound off.
    */
   const saveZone = (zone: MicrosegZone | null, values: ZoneFormValues) => write(async () => {
     const saved = await api.saveZone({
@@ -75,15 +97,20 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
       isolate_members: values.isolate_members,
       egress_mode: values.egress_mode,
     })
-    if (!zone || values.egress_control === (zoneEgress(zone) !== 'off')) return
-    const state = values.egress_control ? 'observe' : 'off'
-    const started = await api.setZoneEgressState(zone.id, state, saved.version)
-    startRun({
-      runId: started.run_id,
-      kind: 'zoneState',
-      label: zone.name,
-      runningText: t(`run.running.${state === 'observe' ? 'egressObserve' : 'egressOff'}`, { label: zone.name }),
-    })
+    if (!zone) return
+    const { inbound, outbound } = zoneStateChanges(zone, values)
+    let next = saved.version
+    if (inbound) {
+      const started = await api.setZoneState(zone.id, inbound, next)
+      startRun({ runId: started.run_id, kind: 'zoneState', label: zone.name, runningText: t(`run.running.${inbound}`, { label: zone.name }) })
+      if (!outbound) return
+      const run = await waitForRun(api.getRun, started.run_id)
+      if (run.status === 'failed') throw new InboundRunFailedError(run.error)
+      next = (await api.getPolicy()).version
+    }
+    if (!outbound) return
+    const started = await api.setZoneEgressState(zone.id, outbound, next)
+    startRun({ runId: started.run_id, kind: 'zoneState', label: zone.name, runningText: t(`run.running.${egressRunningKey(zoneEgress(zone), outbound)}`, { label: zone.name }) })
   })
 
   const deleteZone = (zone: MicrosegZone) => write(() => api.deleteZone(zone.id, version))

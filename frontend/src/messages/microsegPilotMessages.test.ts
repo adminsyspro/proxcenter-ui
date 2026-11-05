@@ -71,24 +71,43 @@ describe('microsegPilot i18n parity across the 6 served locales', () => {
     }
   })
 
-  it('words the Outbound section of the zone dialog as agreed in French and English', () => {
+  it('words the state rows, the Outbound section and the tooltips of the zone dialog as agreed in French and English', () => {
     const wanted: Record<string, Record<string, string>> = {
       fr: {
         egressSection: 'Sortie',
-        egressControl: 'Contrôler la sortie',
+        inboundSection: 'Entrée',
+        'inboundStates.disabled': 'Désactivée',
+        'inboundStates.observe': 'Observation',
+        'inboundStates.enforce': 'Blocage',
+        'outboundStates.off': 'Non contrôlée',
+        'outboundStates.observe': 'Observation',
+        'outboundStates.enforce': 'Blocage',
+        'tips.isolate': 'Les VM de cette zone ne se joignent entre elles que par un flux déclaré. Décochée, elles communiquent librement.',
+        'tips.inbound.disabled': 'La zone n\'est pas appliquée sur Proxmox.',
+        'tips.inbound.observe': 'Rien n\'est bloqué : le trafic entrant hors politique est journalisé et proposé en suggestions.',
+        'tips.inbound.enforce': 'Seuls les flux de la politique entrent ; le reste est bloqué et visible dans Bloqués.',
+        'tips.outbound.off': 'Les VM de la zone sortent librement, rien n\'est journalisé.',
+        'tips.outbound.observe': 'Rien n\'est bloqué : les sorties hors politique sont journalisées et proposées en suggestions.',
+        'tips.outbound.enforce': 'Seules les sorties autorisées par un flux passent ; le reste est bloqué et visible dans Bloqués.',
+        'tips.local': 'Filtre les sorties vers les sous-réseaux des VM en zone, VM sans zone comprises. Internet reste ouvert.',
+        'tips.all': 'Filtre toute sortie, Internet compris : seuls les flux de la politique passent.',
         egressFilter: 'Filtrer la sortie vers :',
         egressLocal: 'Le réseau local',
         egressAll: 'Le réseau local et Internet',
-        egressHelp: 'Réseau local = les sous-réseaux des VM en zone, VM sans zone comprises. En blocage, seuls les flux de la politique passent.',
         egressAllWarning: 'Filtrage par adresse IP seulement : un service derrière un nom de domaine peut changer d\'adresse.',
       },
       en: {
         egressSection: 'Outbound',
-        egressControl: 'Control outbound traffic',
+        inboundSection: 'Inbound',
+        'inboundStates.disabled': 'Disabled',
+        'inboundStates.observe': 'Observing',
+        'inboundStates.enforce': 'Blocking',
+        'outboundStates.off': 'Not controlled',
+        'outboundStates.observe': 'Observing',
+        'outboundStates.enforce': 'Blocking',
         egressFilter: 'Filter outbound traffic to:',
         egressLocal: 'Local network',
         egressAll: 'Local network and Internet',
-        egressHelp: 'Local network = the subnets of the zoned VMs, unzoned VMs included. When blocking, only the flows of the policy go through.',
         egressAllWarning: 'IP filtering only: a service behind a domain name can change address.',
       },
     }

@@ -146,13 +146,20 @@ export type BwlimitKind = (typeof BWLIMIT_KINDS)[number]
 /** The Proxmox keys whose value never leaves the server once written. */
 export const SECRET_KEYS = ['password', 'keyring', 'encryption-key', 'master-pubkey'] as const
 
+/** A scalar as text; an object, an array or nothing as ''. */
+export function asText(v: unknown): string {
+  if (typeof v === 'string') return v
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  return ''
+}
+
 /** MiB/s per kind as the dialog holds them, or null for no limit. */
 export type BwlimitMiB = Partial<Record<BwlimitKind, number | null>>
 
 /** `clone=1024,default=2048` (KiB/s) → MiB/s per kind. */
 export function parseBwlimit(raw: unknown): BwlimitMiB {
   const out: BwlimitMiB = {}
-  for (const part of String(raw ?? '').split(',')) {
+  for (const part of asText(raw).split(',')) {
     const [k, v] = part.split('=').map(s => s.trim())
     const kib = Number(v)
     if ((BWLIMIT_KINDS as readonly string[]).includes(k) && Number.isFinite(kib) && kib > 0) out[k as BwlimitKind] = Math.round(kib / 1024)

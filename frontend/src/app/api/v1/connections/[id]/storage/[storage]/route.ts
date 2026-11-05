@@ -146,6 +146,20 @@ async function putHandler(req: Request, ctx: Ctx): Promise<Response> {
 }
 
 /**
+ * The generic removal when the storage is not a PBS one, or null to let the
+ * PBS detach run. An unreadable config leaves the PBS path as it was: it
+ * reports its own errors.
+ */
+async function removeIfNotPbs(req: Request, id: string, storage: string, conn: any): Promise<Response | null> {
+  const cfg = await pveFetch<Record<string, any>>(conn, `/storage/${encodeURIComponent(storage)}`).catch(() => null)
+
+  if (!cfg?.type || cfg.type === "pbs") return null
+  if (!STORAGE_ID_RE.test(storage)) return NextResponse.json({ error: "Invalid storage id" }, { status: 400 })
+
+  return removeClusterStorage(req, id, storage, conn, cfg)
+}
+
+/**
  * Removes a storage that is not a PBS one (roadmap#202): refused while a guest
  * volume sits on it or a backup job writes to it. Proxmox only drops the
  * configuration, the data stays where it is. When a node could not be read
@@ -220,14 +234,9 @@ async function deleteHandler(
     const conn = await getConnectionById(id)
 
     // Not a PBS storage: the generic removal, with its usage check.
-    // An unreadable config leaves the PBS path as it was: it reports its own errors.
-    const cfg = await pveFetch<Record<string, any>>(conn, `/storage/${encodeURIComponent(String(storage))}`).catch(() => null)
+    const other = await removeIfNotPbs(_req, id, String(storage), conn)
 
-    if (cfg?.type && cfg.type !== "pbs") {
-      if (!STORAGE_ID_RE.test(String(storage))) return NextResponse.json({ error: "Invalid storage id" }, { status: 400 })
-
-      return await removeClusterStorage(_req, id, String(storage), conn, cfg)
-    }
+    if (other) return other
 
     const prisma = await getSessionPrisma()
 

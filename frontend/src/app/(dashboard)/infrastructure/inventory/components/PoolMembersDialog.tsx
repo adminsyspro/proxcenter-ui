@@ -67,13 +67,13 @@ const ROW_SX = { display: 'flex', alignItems: 'center', gap: 1, height: 32, px: 
  * A pool lives on one cluster; when its name exists on several, the dialog
  * asks which one, as the edit and delete dialogs do.
  */
-export default function PoolMembersDialog(props: Props) {
+export default function PoolMembersDialog(props: Readonly<Props>) {
   if (!props.state) return null
 
   return <PoolMembersForm key={props.state.poolid} {...props} state={props.state} />
 }
 
-function PoolMembersForm({ state, guests, storages, nodeStatus, onClose, onDone }: Props & { state: NonNullable<PoolMembersState> }) {
+function PoolMembersForm({ state, guests, storages, nodeStatus, onClose, onDone }: Readonly<Props & { state: NonNullable<PoolMembersState> }>) {
   const t = useTranslations()
   const theme = useTheme()
   const dark = theme.palette.mode === 'dark'
@@ -94,14 +94,19 @@ function PoolMembersForm({ state, guests, storages, nodeStatus, onClose, onDone 
 
     setMembers(null)
     setLoadError(null)
-    fetch(`/api/v1/connections/${encodeURIComponent(connId)}/pools?poolid=${encodeURIComponent(state.poolid)}`, { signal: controller.signal })
-      .then(async res => {
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/pools?poolid=${encodeURIComponent(state.poolid)}`, { signal: controller.signal })
         const body = await res.json().catch(() => ({}))
 
         if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
         setMembers(body.data)
-      })
-      .catch(e => { if (!controller.signal.aborted) setLoadError(e?.message || String(e)) })
+      } catch (e: any) {
+        if (!controller.signal.aborted) setLoadError(e?.message || String(e))
+      }
+    }
+
+    void load()
 
     return () => controller.abort()
   }, [connId, state.poolid])

@@ -2,6 +2,7 @@ import { pveFetch, PveApplicationError, type ProxmoxClientOptions } from '@/lib/
 import { isSharedStorage } from '@/lib/proxmox/storage'
 
 import {
+  asText,
   formatBwlimit,
   isClusterStorageType,
   SECRET_KEYS,
@@ -9,6 +10,7 @@ import {
   STORAGE_TYPE_SPECS,
   type BwlimitMiB,
   type ClusterStorageType,
+  type StorageField,
 } from './clusterStorageTypes'
 
 /**
@@ -47,8 +49,7 @@ const VOLID_RE = /^[A-Za-z][A-Za-z0-9\-_.]*:[^\s,]+$/
 const MULTILINE_KEYS = new Set(['keyring'])
 
 function fieldValue(key: string, raw: unknown): string {
-  if (raw === undefined || raw === null) return ''
-  const value = String(raw).trim()
+  const value = asText(raw).trim()
   const max = MULTILINE_KEYS.has(key) ? 8192 : 1024
   if (value.length > max) throw new ClusterStorageError(`${key} is too long`)
   // eslint-disable-next-line no-control-regex
@@ -60,69 +61,87 @@ function fieldValue(key: string, raw: unknown): string {
 /** Body of the PVE call, and the keys a PUT clears. */
 export type StorageParams = { params: Record<string, string>; deletes: string[] }
 
+type Mode = 'create' | 'update'
+
+/** Whether another field holds the value a condition names. */
+const holds = (fields: Record<string, unknown>, cond?: { key: string; value: string }) =>
+  !!cond && asText(fields[cond.key]) === cond.value
+
+/** One type field into `out`: written, cleared on update, or refused. */
+function applyField(field: StorageField, fields: Record<string, unknown>, mode: Mode, out: StorageParams): void {
+  if (mode === 'update' && field.fixed) return
+  if (field.shownWhen && !holds(fields, field.shownWhen)) return
+
+  const raw = fields[field.key]
+
+  if (field.kind === 'boolean') {
+    if (raw !== undefined) out.params[field.key] = raw === true || raw === '1' ? '1' : '0'
+    return
+  }
+
+  const value = fieldValue(field.key, raw)
+
+  if (field.kind === 'select' && value && !field.options?.includes(value)) throw new ClusterStorageError(`Invalid ${field.key}`)
+  if (!value || (field.key === 'smbversion' && value === 'default')) {
+    const required = mode === 'create' && (field.required || holds(fields, field.requiredWhen))
+    if (required) throw new ClusterStorageError(`${field.key} is required`)
+    // A secret left blank keeps the stored one; anything else blank is cleared.
+    if (mode === 'update' && field.kind !== 'secret' && !field.required) out.deletes.push(field.key)
+    return
+  }
+  if (field.key === 'base' && !VOLID_RE.test(value)) throw new ClusterStorageError('Invalid base volume')
+  out.params[field.key] = value
+}
+
+function applyContent(contents: readonly string[], input: ClusterStorageInput, out: StorageParams): void {
+  const content = [...new Set((input.content ?? []).map(asText))]
+  if (!content.length) throw new ClusterStorageError('Pick at least one content type')
+  const allowed = content.every(c => contents.includes(c)) && !(content.includes('none') && content.length > 1)
+  if (!allowed) throw new ClusterStorageError('Content type not allowed for this storage')
+  out.params.content = content.join(',')
+}
+
+/** Settings every type shares: nodes, enabled, shared, bandwidth limits. */
+function applyCommon(sharedChoice: boolean, input: ClusterStorageInput, mode: Mode, out: StorageParams): void {
+  const clearOnUpdate = (key: string) => { if (mode === 'update') out.deletes.push(key) }
+
+  const nodes = [...new Set((input.nodes ?? []).map(asText))]
+  if (nodes.some(n => !NODE_RE.test(n))) throw new ClusterStorageError('Invalid node name')
+  if (nodes.length) out.params.nodes = nodes.join(',')
+  else clearOnUpdate('nodes')
+
+  if (input.enabled === false) out.params.disable = '1'
+  else clearOnUpdate('disable')
+
+  if (sharedChoice && input.shared !== undefined) out.params.shared = input.shared ? '1' : '0'
+
+  const bwlimit = formatBwlimit(input.bwlimit)
+  if (bwlimit) out.params.bwlimit = bwlimit
+  else clearOnUpdate('bwlimit')
+}
+
 /**
  * The Proxmox parameters of a create (every field) or an update (only what
  * Proxmox lets change). On update an empty secret keeps the stored one and an
  * emptied optional field is cleared.
  */
-export function buildStorageParams(input: ClusterStorageInput, mode: 'create' | 'update'): StorageParams {
+export function buildStorageParams(input: ClusterStorageInput, mode: Mode): StorageParams {
   if (!isClusterStorageType(input?.type)) throw new ClusterStorageError('Unsupported storage type')
   const spec = STORAGE_TYPE_SPECS[input.type]
-  const params: Record<string, string> = {}
-  const deletes: string[] = []
-  const fields = input.fields ?? {}
+  const out: StorageParams = { params: {}, deletes: [] }
 
   if (mode === 'create') {
-    const id = String(input.storage ?? '').trim()
+    const id = asText(input.storage).trim()
     if (!STORAGE_ID_RE.test(id)) throw new ClusterStorageError('Invalid storage id')
-    params.storage = id
-    params.type = input.type
+    out.params.storage = id
+    out.params.type = input.type
   }
 
-  for (const field of spec.fields) {
-    if (mode === 'update' && field.fixed) continue
-    if (field.shownWhen && String(fields[field.shownWhen.key] ?? '') !== field.shownWhen.value) continue
-    const required = mode === 'create' && (field.required || (field.requiredWhen && String(fields[field.requiredWhen.key] ?? '') === field.requiredWhen.value))
+  for (const field of spec.fields) applyField(field, input.fields ?? {}, mode, out)
+  applyContent(spec.contents, input, out)
+  applyCommon(spec.sharedChoice, input, mode, out)
 
-    if (field.kind === 'boolean') {
-      if (fields[field.key] !== undefined) params[field.key] = fields[field.key] === true || fields[field.key] === '1' ? '1' : '0'
-      continue
-    }
-
-    const value = fieldValue(field.key, fields[field.key])
-
-    if (field.kind === 'select' && value && !field.options?.includes(value)) throw new ClusterStorageError(`Invalid ${field.key}`)
-    if (!value || (field.key === 'smbversion' && value === 'default')) {
-      if (required) throw new ClusterStorageError(`${field.key} is required`)
-      // A secret left blank keeps the stored one; anything else blank is cleared.
-      if (mode === 'update' && field.kind !== 'secret' && !field.required) deletes.push(field.key)
-      continue
-    }
-    if (field.key === 'base' && !VOLID_RE.test(value)) throw new ClusterStorageError('Invalid base volume')
-    params[field.key] = value
-  }
-
-  const content = [...new Set((input.content ?? []).map(String))]
-  if (!content.length) throw new ClusterStorageError('Pick at least one content type')
-  if (content.some(c => !spec.contents.includes(c))) throw new ClusterStorageError('Content type not allowed for this storage')
-  if (content.includes('none') && content.length > 1) throw new ClusterStorageError('Content type not allowed for this storage')
-  params.content = content.join(',')
-
-  const nodes = [...new Set((input.nodes ?? []).map(String))]
-  if (nodes.some(n => !NODE_RE.test(n))) throw new ClusterStorageError('Invalid node name')
-  if (nodes.length) params.nodes = nodes.join(',')
-  else if (mode === 'update') deletes.push('nodes')
-
-  if (input.enabled === false) params.disable = '1'
-  else if (mode === 'update') deletes.push('disable')
-
-  if (spec.sharedChoice && input.shared !== undefined) params.shared = input.shared ? '1' : '0'
-
-  const bwlimit = formatBwlimit(input.bwlimit)
-  if (bwlimit) params.bwlimit = bwlimit
-  else if (mode === 'update') deletes.push('bwlimit')
-
-  return { params, deletes }
+  return out
 }
 
 /** A storage config as the edit dialog may read it: no secret, ever. */
@@ -225,9 +244,10 @@ export async function scanStorageTarget(conn: ProxmoxClientOptions, connId: stri
   let answered = false
   try {
     const qs = query.toString()
+    const path = `/nodes/${encodeURIComponent(node)}/scan/${req.type}`
     const rows = await pveFetch<any[]>(
       conn,
-      `/nodes/${encodeURIComponent(node)}/scan/${req.type}${qs ? `?${qs}` : ''}`,
+      qs ? `${path}?${qs}` : path,
       {},
       // Above the default budget: a slow answer is not a dead node, so the
       // client never replays the scan through another node.
@@ -253,7 +273,7 @@ export function pveMessage(e: any): string {
   if (!body) return raw
   try {
     const parsed = JSON.parse(body)
-    const detail = parsed?.errors ? Object.entries(parsed.errors).map(([k, v]) => `${k}: ${v}`).join(' ') : ''
+    const detail = parsed?.errors ? Object.entries(parsed.errors).map(([k, v]) => `${k}: ${asText(v)}`).join(' ') : ''
     return [parsed?.message, detail].filter(Boolean).join(' ').trim() || raw
   } catch {
     return raw

@@ -44,7 +44,7 @@ const NO_POOL = ''
  * another pool, or out of its pool. A vDC pool is the vDC's, so a guest in
  * one shows it locked, and no vDC pool is offered as a target.
  */
-export default function GuestPoolRow({ connId, vmid, pool, canManage, onChanged }: Props) {
+export default function GuestPoolRow({ connId, vmid, pool, canManage, onChanged }: Readonly<Props>) {
   const t = useTranslations()
   const [open, setOpen] = useState(false)
   const [pools, setPools] = useState<string[] | null>(null)
@@ -54,19 +54,24 @@ export default function GuestPoolRow({ connId, vmid, pool, canManage, onChanged 
   const locked = isVdcPool(pool)
   const base = `/api/v1/connections/${encodeURIComponent(connId)}/pools`
 
+  const loadPools = async () => {
+    try {
+      const res = await fetch(base)
+      const body = await res.json().catch(() => ({}))
+
+      if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
+      setPools((body.data || []).map((p: any) => String(p.poolid)).filter((p: string) => !isVdcPool(p)))
+    } catch (e: any) {
+      setError(e?.message || String(e))
+    }
+  }
+
   const openDialog = () => {
     setTarget(pool || NO_POOL)
     setError(null)
     setPools(null)
     setOpen(true)
-    fetch(base)
-      .then(async res => {
-        const body = await res.json().catch(() => ({}))
-
-        if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
-        setPools((body.data || []).map((p: any) => String(p.poolid)).filter((p: string) => !isVdcPool(p)))
-      })
-      .catch(e => setError(e?.message || String(e)))
+    void loadPools()
   }
 
   const save = async () => {

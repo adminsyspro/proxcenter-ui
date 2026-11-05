@@ -200,7 +200,11 @@ type MemberChange = { vms: string[]; storage: string[]; remove: boolean; allowMo
 function parseMemberChange(body: any): MemberChange | { error: string } | null {
   if (body?.vms === undefined && body?.storage === undefined) return null
 
-  const list = (v: unknown) => (v === undefined ? [] : Array.isArray(v) ? v.map(x => String(x).trim()) : null)
+  const list = (v: unknown): string[] | null => {
+    if (v === undefined) return []
+
+    return Array.isArray(v) ? v.map(x => String(x).trim()) : null
+  }
   const vms = list(body.vms)
   const storage = list(body.storage)
 

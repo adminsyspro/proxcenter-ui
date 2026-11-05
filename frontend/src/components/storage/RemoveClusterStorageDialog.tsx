@@ -22,7 +22,7 @@ type Refusal =
  * refuses while something still uses it and says what; when a node could not
  * be read, the operator may remove it anyway. The data stays on the storage.
  */
-export default function RemoveClusterStorageDialog({ target, onClose, onRemoved }: Props) {
+export default function RemoveClusterStorageDialog({ target, onClose, onRemoved }: Readonly<Props>) {
   const t = useTranslations()
   const [busy, setBusy] = useState(false)
   const [refusal, setRefusal] = useState<Refusal | null>(null)

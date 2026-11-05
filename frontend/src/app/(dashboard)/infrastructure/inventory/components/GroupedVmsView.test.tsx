@@ -44,7 +44,7 @@ describe('GroupedVmsView actions (roadmap#200)', () => {
         onVmAction={vi.fn()}
         onLoadTrendsBatch={vi.fn().mockResolvedValue({})}
         headerAction={<button onClick={onCreate}>Create pool</button>}
-        groupAction={group => (group.key.startsWith('vdc-') ? null : <button onClick={e => { e.stopPropagation(); onMembers(group.key) }}>Members</button>)}
+        groupAction={{ icon: 'ri-folder-user-line', label: 'Members', show: key => !key.startsWith('vdc-'), onClick: onMembers }}
       />
     )
 

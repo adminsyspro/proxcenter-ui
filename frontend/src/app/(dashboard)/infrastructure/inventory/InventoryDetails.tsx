@@ -3095,18 +3095,12 @@ return vm?.isCluster ?? false
                 </IconButton>
               </MuiTooltip>
             ) : null}
-            groupAction={poolActions && canManagePools ? (group => isVdcPool(group.key) || group.key === `(${t('common.none')})` ? null : (
-              <MuiTooltip title={t('inventory.poolMembersMenu')}>
-                <IconButton
-                  size="small"
-                  aria-label={t('inventory.poolMembersMenu')}
-                  onClick={e => { e.stopPropagation(); poolActions.members(group.key) }}
-                  sx={{ p: 0.25 }}
-                >
-                  <i className="ri-folder-user-line" style={{ fontSize: 16 }} />
-                </IconButton>
-              </MuiTooltip>
-            )) : undefined}
+            groupAction={poolActions && canManagePools ? {
+              icon: 'ri-folder-user-line',
+              label: t('inventory.poolMembersMenu'),
+              show: key => !isVdcPool(key) && key !== `(${t('common.none')})`,
+              onClick: poolActions.members,
+            } : undefined}
             allVms={displayVms}
             onVmClick={handleVmClick}
             onVmAction={handleTableVmAction}

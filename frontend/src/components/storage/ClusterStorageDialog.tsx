@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 
@@ -31,6 +31,7 @@ import {
 
 import { SMALL_SELECT_SX } from '@/components/settings/VdcQuotaRow'
 import {
+  asText,
   BWLIMIT_KINDS,
   parseBwlimit,
   STORAGE_ID_RE,
@@ -83,7 +84,135 @@ export function OptionRow({ icon, children }: { icon: string; children: React.Re
   )
 }
 
-const asList = (raw: unknown) => String(raw ?? '').split(',').map(s => s.trim()).filter(Boolean)
+const asList = (raw: unknown) => asText(raw).split(',').map(s => s.trim()).filter(Boolean)
+const byName = (a: string, b: string) => a.localeCompare(b)
+
+/** `data` of a ProxCenter API answer, or its error. */
+async function getData<T>(url: string): Promise<T> {
+  const res = await fetch(url)
+  const json = await res.json().catch(() => ({}))
+
+  if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`)
+
+  return json?.data as T
+}
+
+/**
+ * Nodes and storages of the cluster: the node lists, the names already taken,
+ * and the iSCSI storages an LVM can be built on.
+ */
+function useClusterLists(base: string) {
+  const [lists, setLists] = useState({ nodes: [] as string[], taken: [] as string[], iscsi: [] as string[] })
+
+  useEffect(() => {
+    let alive = true
+    const load = async () => {
+      const [nodes, storages] = await Promise.all([
+        getData<any[]>(`${base}/nodes`).catch(() => []),
+        getData<any[]>(`${base}/storage`).catch(() => []),
+      ])
+      const rows = Array.isArray(storages) ? storages : []
+
+      if (!alive) return
+      setLists({
+        nodes: (Array.isArray(nodes) ? nodes : []).map((n: any) => String(n?.node)).filter(Boolean).sort(byName),
+        taken: rows.map((s: any) => String(s.storage)),
+        iscsi: [...new Set<string>(rows.filter((s: any) => s.type === 'iscsi').map((s: any) => String(s.storage)))].sort(byName),
+      })
+    }
+
+    void load()
+
+    return () => { alive = false }
+  }, [base])
+
+  return lists
+}
+
+/** The edit form a stored configuration fills in. */
+type StoredForm = {
+  type: ClusterStorageType
+  fields: Record<string, string | boolean>
+  content: string[]
+  nodes: string[]
+  enabled: boolean
+  shared: boolean
+  bwlimit: BwlimitMiB
+  baseStorage: string
+}
+
+export function formFromConfig(cfg: Record<string, any>): StoredForm {
+  const type = cfg.type as ClusterStorageType
+  const fields: Record<string, string | boolean> = {}
+
+  for (const f of STORAGE_TYPE_SPECS[type]?.fields ?? []) {
+    if (cfg[f.key] === undefined) continue
+    fields[f.key] = f.kind === 'boolean' ? cfg[f.key] === 1 || cfg[f.key] === '1' : asText(cfg[f.key])
+  }
+
+  return {
+    type,
+    fields,
+    content: asList(cfg.content),
+    nodes: asList(cfg.nodes),
+    enabled: !cfg.disable,
+    shared: cfg.shared === 1 || cfg.shared === '1',
+    bwlimit: parseBwlimit(cfg.bwlimit),
+    baseStorage: cfg.base ? asText(cfg.base).split(':')[0] : '',
+  }
+}
+
+/** Edit: the stored configuration (secrets left out by the route), handed to `apply` once. */
+function useStoredConfig(url: string | null, apply: (form: StoredForm) => void) {
+  const applyRef = useRef(apply)
+  const [state, setState] = useState({ loading: !!url, error: null as string | null })
+
+  applyRef.current = apply
+
+  useEffect(() => {
+    if (!url) return
+    let alive = true
+    const load = async () => {
+      try {
+        const cfg = await getData<Record<string, any>>(url)
+
+        if (!alive) return
+        applyRef.current(formFromConfig(cfg))
+        setState({ loading: false, error: null })
+      } catch (e: any) {
+        if (alive) setState({ loading: false, error: e?.message || String(e) })
+      }
+    }
+
+    void load()
+
+    return () => { alive = false }
+  }, [url])
+
+  return state
+}
+
+/** LVM on iSCSI: the LUNs of the chosen base storage, read from one node. */
+function useLuns(url: string | null) {
+  const [luns, setLuns] = useState<ScanEntry[]>([])
+
+  useEffect(() => {
+    if (!url) return
+    let alive = true
+    const load = async () => {
+      const rows = await getData<any[]>(url).catch(() => [])
+      const lunSize = (v: any) => (v.size ? `${Math.round(Number(v.size) / 2 ** 30)} GiB` : null)
+
+      if (alive) setLuns((Array.isArray(rows) ? rows : []).map((v: any) => ({ value: String(v.volid), detail: lunSize(v) })))
+    }
+
+    void load()
+
+    return () => { alive = false }
+  }, [url])
+
+  return luns
+}
 
 /**
  * Add or edit a cluster storage (roadmap#202): NFS, SMB/CIFS, iSCSI, LVM,
@@ -91,7 +220,7 @@ const asList = (raw: unknown) => String(raw ?? '').split(',').map(s => s.trim())
  * from a node before saving where Proxmox has a scan for it; secrets are typed
  * in, never shown back.
  */
-export default function ClusterStorageDialog({ cluster, mode, storage, initialType = 'nfs', onTypeChange, onClose, onSaved }: Props) {
+export default function ClusterStorageDialog({ cluster, mode, storage, initialType = 'nfs', onTypeChange, onClose, onSaved }: Readonly<Props>) {
   const t = useTranslations()
   const [type, setType] = useState<ClusterStorageType>(initialType)
   const [storageId, setStorageId] = useState(storage || '')
@@ -102,16 +231,9 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
   const [shared, setShared] = useState(false)
   const [bwlimit, setBwlimit] = useState<BwlimitMiB>({})
   const [bwOpen, setBwOpen] = useState(false)
-
-  const [clusterNodes, setClusterNodes] = useState<string[]>([])
-  const [taken, setTaken] = useState<string[]>([])
-  const [iscsiStorages, setIscsiStorages] = useState<string[]>([])
   const [baseStorage, setBaseStorage] = useState('')
-  const [luns, setLuns] = useState<ScanEntry[]>([])
-  const [loading, setLoading] = useState(mode === 'edit')
-  const [loadError, setLoadError] = useState<string | null>(null)
 
-  const [scanNode, setScanNode] = useState('')
+  const [pickedScanNode, setScanNode] = useState('')
   const [scanning, setScanning] = useState(false)
   const [scan, setScan] = useState<{ ok: boolean; entries: ScanEntry[]; error?: string } | null>(null)
 
@@ -120,85 +242,26 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
 
   const spec = STORAGE_TYPE_SPECS[type]
   const base = `/api/v1/connections/${encodeURIComponent(cluster.id)}`
+  const { nodes: clusterNodes, taken, iscsi: iscsiStorages } = useClusterLists(base)
+  const scanNode = pickedScanNode || clusterNodes[0] || ''
 
-  // Nodes and existing storages of the cluster: the node lists, the names
-  // already taken, and the iSCSI storages an LVM can be built on.
-  useEffect(() => {
-    let alive = true
+  const { loading, error: loadError } = useStoredConfig(
+    mode === 'edit' && storage ? `${base}/storage/${encodeURIComponent(storage)}` : null,
+    form => {
+      setType(form.type)
+      setFields(form.fields)
+      setContent(form.content)
+      setNodes(form.nodes)
+      setEnabled(form.enabled)
+      setShared(form.shared)
+      setBwlimit(form.bwlimit)
+      setBaseStorage(form.baseStorage)
+    },
+  )
 
-    fetch(`${base}/nodes`)
-      .then(r => r.json())
-      .then(json => {
-        if (!alive) return
-        const names = (Array.isArray(json?.data) ? json.data : []).map((n: any) => String(n?.node)).filter(Boolean).sort()
-        setClusterNodes(names)
-        setScanNode(prev => prev || names[0] || '')
-      })
-      .catch(() => { if (alive) setClusterNodes([]) })
-
-    fetch(`${base}/storage`)
-      .then(r => r.json())
-      .then(json => {
-        if (!alive) return
-        const rows = Array.isArray(json?.data) ? json.data : []
-        setTaken(rows.map((s: any) => String(s.storage)))
-        setIscsiStorages([...new Set<string>(rows.filter((s: any) => s.type === 'iscsi').map((s: any) => String(s.storage)))].sort())
-      })
-      .catch(() => { if (alive) setTaken([]) })
-
-    return () => { alive = false }
-  }, [base])
-
-  // Edit: the stored configuration, secrets left out by the route.
-  useEffect(() => {
-    if (mode !== 'edit' || !storage) return
-    let alive = true
-
-    fetch(`${base}/storage/${encodeURIComponent(storage)}`)
-      .then(async r => {
-        const json = await r.json().catch(() => ({}))
-        if (!r.ok) throw new Error(json?.error || `HTTP ${r.status}`)
-        return json.data
-      })
-      .then((cfg: Record<string, any>) => {
-        if (!alive) return
-        const cfgType = cfg.type as ClusterStorageType
-        const next: Record<string, string | boolean> = {}
-
-        for (const f of STORAGE_TYPE_SPECS[cfgType]?.fields ?? []) {
-          if (cfg[f.key] === undefined) continue
-          next[f.key] = f.kind === 'boolean' ? cfg[f.key] === 1 || cfg[f.key] === '1' : String(cfg[f.key])
-        }
-        setType(cfgType)
-        setFields(next)
-        setContent(asList(cfg.content))
-        setNodes(asList(cfg.nodes))
-        setEnabled(!cfg.disable)
-        setShared(cfg.shared === 1 || cfg.shared === '1')
-        setBwlimit(parseBwlimit(cfg.bwlimit))
-        if (cfg.base) setBaseStorage(String(cfg.base).split(':')[0])
-        setLoading(false)
-      })
-      .catch(e => { if (alive) { setLoadError(e?.message || String(e)); setLoading(false) } })
-
-    return () => { alive = false }
-  }, [mode, storage, base])
-
-  // LVM on iSCSI: the LUNs of the chosen base storage, read from the test node.
-  useEffect(() => {
-    if (type !== 'lvm' || !baseStorage || !scanNode || mode === 'edit') return
-    let alive = true
-
-    fetch(`${base}/nodes/${encodeURIComponent(scanNode)}/storage/${encodeURIComponent(baseStorage)}/content`)
-      .then(r => r.json())
-      .then(json => {
-        if (!alive) return
-        setLuns((Array.isArray(json?.data) ? json.data : []).map((v: any) => ({ value: String(v.volid), detail: v.size ? `${Math.round(Number(v.size) / 2 ** 30)} GiB` : null })))
-      })
-      .catch(() => { if (alive) setLuns([]) })
-
-    return () => { alive = false }
-  }, [type, baseStorage, scanNode, base, mode])
+  const luns = useLuns(type === 'lvm' && baseStorage && scanNode && mode === 'create'
+    ? `${base}/nodes/${encodeURIComponent(scanNode)}/storage/${encodeURIComponent(baseStorage)}/content`
+    : null)
 
   const pickType = (next: string) => {
     if (next === 'pbs') return onTypeChange?.('pbs')
@@ -214,12 +277,9 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
 
   const setField = (key: string, value: string | boolean) => setFields(prev => ({ ...prev, [key]: value }))
 
-  const visible = (f: StorageField) => !f.shownWhen || String(fields[f.shownWhen.key] ?? '') === f.shownWhen.value
-  const missing = mode === 'create' && spec.fields.some(f => {
-    if (!visible(f)) return false
-    const required = f.required || (f.requiredWhen && String(fields[f.requiredWhen.key] ?? '') === f.requiredWhen.value)
-    return required && !String(fields[f.key] ?? '').trim()
-  })
+  const holds = (cond?: { key: string; value: string }) => !!cond && asText(fields[cond.key]) === cond.value
+  const visible = (f: StorageField) => !f.shownWhen || holds(f.shownWhen)
+  const missing = mode === 'create' && spec.fields.some(f => visible(f) && (f.required || holds(f.requiredWhen)) && !asText(fields[f.key]).trim())
   const idInvalid = mode === 'create' && storageId !== '' && !STORAGE_ID_RE.test(storageId)
   const nameTaken = mode === 'create' && taken.includes(storageId)
   let idHelp: string | undefined
@@ -276,57 +336,26 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
   const scanned = SCANNED_FIELD[type]
   const scanOptions = scan?.ok ? scan.entries : []
 
-  const renderField = (f: StorageField) => {
-    if (!visible(f)) return null
-    const disabled = submitting || (mode === 'edit' && !!f.fixed)
-    const value = fields[f.key]
+  const renderSelect = (f: StorageField, disabled: boolean) => (
+    <FormControl key={f.key} size='small' fullWidth disabled={disabled}>
+      <InputLabel id={`cs-${f.key}-label`}>{label(f.key)}</InputLabel>
+      <Select
+        labelId={`cs-${f.key}-label`}
+        label={label(f.key)}
+        value={asText(fields[f.key]) || (f.key === 'smbversion' ? 'default' : '')}
+        onChange={e => setField(f.key, String(e.target.value))}
+        sx={SMALL_SELECT_SX}
+      >
+        {(f.options ?? []).map(o => (
+          <MenuItem key={o} value={o}>{o === 'default' ? t('common.default') : o}</MenuItem>
+        ))}
+      </Select>
+    </FormControl>
+  )
 
-    if (f.key === 'base') return renderBase(disabled)
-    // A scanned volume group only exists without a base: built on a LUN, the
-    // group is new and named here.
-    if (f.key === scanned && !(type === 'lvm' && baseStorage)) {
-      return (
-        <Autocomplete
-          key={f.key}
-          freeSolo
-          size='small'
-          disabled={disabled}
-          options={scanOptions.map(e => e.value)}
-          inputValue={String(value ?? '')}
-          onInputChange={(_e, v) => setField(f.key, v)}
-          renderInput={params => <TextField {...params} required={f.required} label={label(f.key)} />}
-        />
-      )
-    }
-
-    if (f.kind === 'boolean') {
-      return (
-        <FormControlLabel
-          key={f.key}
-          control={<Checkbox size='small' checked={value === true} onChange={e => setField(f.key, e.target.checked)} disabled={disabled} />}
-          label={label(f.key)}
-        />
-      )
-    }
-
-    if (f.kind === 'select') {
-      return (
-        <FormControl key={f.key} size='small' fullWidth disabled={disabled}>
-          <InputLabel id={`cs-${f.key}-label`}>{label(f.key)}</InputLabel>
-          <Select
-            labelId={`cs-${f.key}-label`}
-            label={label(f.key)}
-            value={String(value ?? (f.key === 'smbversion' ? 'default' : ''))}
-            onChange={e => setField(f.key, String(e.target.value))}
-            sx={SMALL_SELECT_SX}
-          >
-            {(f.options ?? []).map(o => (
-              <MenuItem key={o} value={o}>{o === 'default' ? t('common.default') : o}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      )
-    }
+  const renderText = (f: StorageField, disabled: boolean) => {
+    const secret = f.kind === 'secret'
+    const keyring = f.key === 'keyring'
 
     return (
       <TextField
@@ -335,16 +364,52 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
         fullWidth
         required={mode === 'create' && f.required}
         disabled={disabled}
-        type={f.kind === 'secret' && f.key !== 'keyring' ? 'password' : 'text'}
-        autoComplete={f.kind === 'secret' ? 'new-password' : 'off'}
-        multiline={f.key === 'keyring'}
-        minRows={f.key === 'keyring' ? 2 : undefined}
+        type={secret && !keyring ? 'password' : 'text'}
+        autoComplete={secret ? 'new-password' : 'off'}
+        multiline={keyring}
+        minRows={keyring ? 2 : undefined}
         label={label(f.key)}
-        placeholder={f.kind === 'secret' && mode === 'edit' ? t('storage.clusterStorage.secretKeep') : undefined}
-        value={String(value ?? '')}
+        placeholder={secret && mode === 'edit' ? t('storage.clusterStorage.secretKeep') : undefined}
+        value={asText(fields[f.key])}
         onChange={e => setField(f.key, e.target.value)}
       />
     )
+  }
+
+  // A scanned volume group only exists without a base: built on a LUN, the
+  // group is new and named here.
+  const isScanned = (f: StorageField) => f.key === scanned && !(type === 'lvm' && baseStorage)
+
+  const renderField = (f: StorageField) => {
+    if (!visible(f)) return null
+    const disabled = submitting || (mode === 'edit' && !!f.fixed)
+
+    if (f.key === 'base') return renderBase(disabled)
+    if (isScanned(f)) {
+      return (
+        <Autocomplete
+          key={f.key}
+          freeSolo
+          size='small'
+          disabled={disabled}
+          options={scanOptions.map(e => e.value)}
+          inputValue={asText(fields[f.key])}
+          onInputChange={(_e, v) => setField(f.key, v)}
+          renderInput={params => <TextField {...params} required={f.required} label={label(f.key)} />}
+        />
+      )
+    }
+    if (f.kind === 'boolean') {
+      return (
+        <FormControlLabel
+          key={f.key}
+          control={<Checkbox size='small' checked={fields[f.key] === true} onChange={e => setField(f.key, e.target.checked)} disabled={disabled} />}
+          label={label(f.key)}
+        />
+      )
+    }
+
+    return f.kind === 'select' ? renderSelect(f, disabled) : renderText(f, disabled)
   }
 
   const renderBase = (disabled: boolean) => (

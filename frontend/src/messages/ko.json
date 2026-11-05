@@ -13535,6 +13535,14 @@
         "egressBlock": "아웃바운드 차단",
         "egressReopen": "아웃바운드 다시 열기"
       },
+      "edgePanel": {
+        "detailsTitle": "플로우 상세",
+        "dialogLabel": "플로우 상세 · {from} → {to}",
+        "declaredFlows": "선언된 플로우",
+        "newFlow": "이 영역 간 새 플로우",
+        "suggestionsEmpty": "이 쌍에 대기 중인 제안 없음",
+        "logsEmpty": "엔진 메모리에 이 쌍의 이벤트가 없습니다"
+      },
       "partial": "일부만 표시: 대기 중인 처음 {count, number}개 플로우만 그려집니다.",
       "filters": {
         "title": "흐름:"

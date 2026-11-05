@@ -16,6 +16,7 @@ import { defaultCentre } from './guestViewModel'
 import { MapNamesContext, edgeAria, type EdgeT, type MapNames } from './FlowEdge'
 import MapToolbar, { useFlowFilters, useMapView, type MapView } from './MapToolbar'
 import { mapViewGraph } from './mapViewGraph'
+import { pairEndOf } from './pairModel'
 import { buildMatrix, matrixEdge, type MatrixEnd } from './matrixModel'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import { useZoneEdits } from './useZoneEdits'
@@ -39,8 +40,16 @@ const PENDING_LIMIT = 200
 const PENDING_OBSERVED: ListSuggestionsParams = { status: 'pending', limit: PENDING_LIMIT }
 
 type Selection = { kind: 'zone' | 'guest' | 'edge'; id: string }
-/** The edge (or the cell of the matrix) whose flow panel is open. */
-type PanelEdge = { id: string; source: string; target: string; data: PanelEdgeData }
+/** The edge (or the cell of the matrix) whose flow panel is open, and the groups (zones, boundaries) of its two ends. */
+type PanelEdge = { id: string; source: string; target: string; data: PanelEdgeData; groups: [string, string] }
+
+/** The open flow panel's edge: the selected cell (its ends are groups already), else the selected edge of the canvas. */
+function panelEdgeOf(cell: Omit<PanelEdge, 'groups'> | null, edge: Pick<PanelEdge, 'id' | 'source' | 'target'> & { data?: unknown } | undefined): PanelEdge | null {
+  if (cell) return { ...cell, groups: [cell.source, cell.target] }
+  if (!edge) return null
+  const data = edge.data as MapEdgeData
+  return { id: edge.id, source: edge.source, target: edge.target, data, groups: [data.fromGroup, data.toGroup] }
+}
 
 /** The node the selection lights: the circle of the selected zone, or the selected guest. */
 function selectedNodeOf(selectedZone: { id: string } | null, selection: Selection | null): string | null {
@@ -162,7 +171,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   // The flow panel: the selected cell of the matrix, or the selected edge of the canvas.
   const graphEdge = graph.edges.find(e => selection?.kind === 'edge' && e.id === selection.id)
   const cellEdge = matrix && selection?.kind === 'edge' ? matrixEdge(matrix, selection.id, filters, unapplied) : null
-  const selectedEdge: PanelEdge | null = cellEdge ?? (graphEdge ? { id: graphEdge.id, source: graphEdge.source, target: graphEdge.target, data: graphEdge.data as unknown as MapEdgeData } : null)
+  const selectedEdge = panelEdgeOf(cellEdge, graphEdge)
   const selectedNode = selectedNodeOf(selectedZone, selection)
   const selectedFocus = selectedNode ?? (selection?.kind === 'edge' ? selection.id : null)
   const focusId = hover ?? keyFocus ?? selectedFocus
@@ -405,14 +414,20 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           {selectedEdge && (
             <EdgePanel
               key={selectedEdge.id}
-              edgeId={selectedEdge.id}
               source={selectedEdge.source}
               target={selectedEdge.target}
               data={selectedEdge.data}
               from={nameOf(selectedEdge.source)}
               to={nameOf(selectedEdge.target)}
+              src={pairEndOf(selectedEdge.groups[0], zonesById, nameOf(selectedEdge.groups[0]))}
+              dst={pairEndOf(selectedEdge.groups[1], zonesById, nameOf(selectedEdge.groups[1]))}
               zonesById={zonesById}
+              flows={flows}
+              suggestions={input.suggestions}
               unapplied={unapplied}
+              edits={edits}
+              partialLimit={(suggestions.data?.length ?? 0) >= PENDING_LIMIT ? PENDING_LIMIT : null}
+              peers={mapTarget.peers}
               connectionId={connectionId}
               version={policy.version}
               reloadPolicy={reloadPolicy}

@@ -20,8 +20,15 @@ import TruncatedText from './TruncatedText'
 /** Sources (or destinations) listed in the panel; the header counts them all. */
 const TOP_SOURCES = 5
 
-/** What a map panel charts: a zone (the flows logged in it) or a guest (its events in the orchestrator's memory). */
-export type TrafficSelection = { kind: 'zone'; zone: MicrosegZone } | { kind: 'guest'; type: GuestType; vmid: number; ips: readonly string[] }
+/**
+ * What a map panel charts: a zone (the flows logged in it), a pair of zones (inbound what the receiver logged from the
+ * emitter, outbound what the emitter logged towards the receiver; '' for an end in no zone) or a guest (its events in
+ * the orchestrator's memory).
+ */
+export type TrafficSelection =
+  | { kind: 'zone'; zone: MicrosegZone }
+  | { kind: 'pair'; emitter: string; receiver: string }
+  | { kind: 'guest'; type: GuestType; vmid: number; ips: readonly string[] }
 
 
 /**
@@ -57,10 +64,13 @@ export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[],
     return (e: MicrosegEvent) => mine.has(bareIp(e.src_ip))
   }, [guestVmid, guestIps])
   const zone = selection.kind === 'zone' ? selection.zone : null
+  const emitter = selection.kind === 'pair' ? selection.emitter : null
+  const receiver = selection.kind === 'pair' ? selection.receiver : null
+  const pair = useMemo(() => (emitter === null || receiver === null ? null : { emitter, receiver }), [emitter, receiver])
   const connection = enabled ? connectionId : null
   // Both directions are read: the same history answer, or the ring the panel holds (inbound of a zone asks `zone=`).
-  const inbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'zone', verdict, range, zone, keep: keepIn })
-  const outbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'dstzone', verdict, range, zone, keep: keepOut })
+  const inbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'zone', verdict, range, zone, pair, keep: keepIn })
+  const outbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'dstzone', verdict, range, zone, pair, keep: keepOut })
   const inSummary = useMemo(() => summaryOf(inbound.build), [inbound.build])
   const outSummary = useMemo(() => summaryOf(outbound.build), [outbound.build])
   const aligned = useMemo(() => alignTimelines(inbound.timeline, outbound.timeline), [inbound.timeline, outbound.timeline])

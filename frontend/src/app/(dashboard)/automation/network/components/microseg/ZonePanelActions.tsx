@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState, type MouseEvent, type ReactNode } from 'react'
-import { Box, IconButton } from '@mui/material'
+import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { zoneEgress, type MicrosegFlow, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
@@ -9,6 +9,8 @@ import { zoneEgress, type MicrosegFlow, type MicrosegZone, type ZoneState } from
 import { useDialogAction } from './dialogParts'
 import DiscardDraft from './DiscardDraft'
 import FlowDialog, { type FlowSaveValues } from './FlowDialog'
+import FlowSummary from './FlowSummary'
+import { PagedList } from './PolicyPager'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import type { ZoneEdits } from './useZoneEdits'
@@ -177,6 +179,38 @@ export function FlowRowActions({ flow, onEdit, onDelete }: { flow: MicrosegFlow;
   )
 }
 
+/**
+ * A paged list of declared flows, one line each with its edit and delete; the ones the last applied revision does not
+ * have marked Draft when `unapplied` is known.
+ */
+export function FlowsList({ flows, zonesById, editor, size, unapplied = null }: {
+  flows: MicrosegFlow[]
+  zonesById: Map<string, MicrosegZone>
+  editor: Pick<FlowEditor, 'edit' | 'remove'>
+  size: number
+  unapplied?: ReadonlySet<string> | null
+}) {
+  const t = useTranslations('microsegPilot.overview')
+  return (
+    <>
+      {flows.length === 0 && <Typography variant='body2' color='text.disabled'>{t('panel.noFlows')}</Typography>}
+      <PagedList items={flows} size={size} render={rows => (
+        <Box role='list'>
+          {rows.map(flow => (
+            <Box role='listitem' key={flow.id} sx={{ display: 'flex', minHeight: 28, alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+              <FlowSummary flow={flow} zonesById={zonesById} />
+              {unapplied?.has(flow.id) && (
+                <Tooltip title={t('edge.draft')}><Chip size='small' color='warning' variant='outlined' label={t('flowPanel.draft')} sx={{ flexShrink: 0 }} /></Tooltip>
+              )}
+              <FlowRowActions flow={flow} onEdit={editor.edit} onDelete={editor.remove} />
+            </Box>
+          ))}
+        </Box>
+      )} />
+    </>
+  )
+}
+
 export function NewFlowButton({ label, onClick }: { label: string; onClick: () => void }) {
   return <WriteIcon label={label} icon='ri-add-line' onClick={onClick} />
 }
@@ -184,13 +218,15 @@ export function NewFlowButton({ label, onClick }: { label: string; onClick: () =
 type FlowInitial = Partial<Pick<FlowSaveValues, 'src_zone_id' | 'dst_zone_id'>>
 type FlowEditing = { flow: MicrosegFlow | null; initial?: FlowInitial } | null
 
-/** The flow dialog (edit, or a new flow prefilled) and the delete confirmation of the panel. */
-export function useFlowEditor(edits: ZoneEdits): {
+type FlowEditor = {
   edit: (flow: MicrosegFlow) => void
   create: (initial: FlowInitial) => void
   remove: (flow: MicrosegFlow) => void
   dialogs: ReactNode
-} {
+}
+
+/** The flow dialog (edit, or a new flow prefilled) and the delete confirmation of the panel. */
+export function useFlowEditor(edits: ZoneEdits): FlowEditor {
   const tp = useTranslations('microsegPilot.policy')
   const [editing, setEditing] = useState<FlowEditing>(null)
   const [deleting, setDeleting] = useState<MicrosegFlow | null>(null)

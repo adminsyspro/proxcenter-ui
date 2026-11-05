@@ -1,5 +1,5 @@
 import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, buildResolver, groupKeyOf, zoneKey, type LensPair } from '@/lib/microseg/trafficLens'
-import type { MicrosegEvent, MicrosegTraffic, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
+import type { FlowDirection, MicrosegEvent, MicrosegTraffic, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
 
 import { NO_VLAN_KEY, type GroupBy, type PostureGuest, type PostureSlice } from './dashboardPosture'
 import { bareIp } from './microseg/zoneGraph'
@@ -152,6 +152,26 @@ export function postureTimeline(input: {
   return { ...stack(first, last, items, slices, BUCKET_MS), windowMinutes }
 }
 
+/** One ordered pair of zones of the map (their names as the history and the events carry them, '' for an end in no zone). */
+export type TrafficPair = { emitter: string; receiver: string }
+
+type Logged = { direction?: FlowDirection; zone: string; src_zone: string }
+
+/**
+ * Who emitted and who received a bucket or an event: an inbound one is logged by the receiving zone (`zone`, the emitter
+ * in `src_zone`), an outbound one by the emitting zone (`zone`, the destination in `src_zone`, empty outside the zones).
+ */
+export function loggedEnds(x: Logged): TrafficPair {
+  return x.direction === 'out' ? { emitter: x.zone, receiver: x.src_zone } : { emitter: x.src_zone, receiver: x.zone }
+}
+
+/** The bucket or event belongs to the pair and was logged in that direction (inbound by the receiver, outbound by the emitter). */
+export function onPair(pair: TrafficPair, direction: FlowDirection, x: Logged): boolean {
+  const ends = loggedEnds(x)
+  return (x.direction ?? 'in') === direction
+    && ends.emitter.toLowerCase() === pair.emitter.toLowerCase() && ends.receiver.toLowerCase() === pair.receiver.toLowerCase()
+}
+
 /**
  * The window asked of the history route: up to the next 5-minute edge (the last bucket is in progress), back by the
  * range, the start on the step grid so the first bucket is whole and the range never reaches past what was asked.
@@ -181,8 +201,10 @@ export function postureHistory(input: {
    * (inbound); grouped by destination, the flows it emitted (outbound).
    */
   zone?: string | null
+  /** One pair of the map instead of a zone: by source, what its receiver logged (inbound); by destination, what its emitter logged (outbound). */
+  pair?: TrafficPair | null
 }): PostureTimeline {
-  const { history, range, verdict, slices, by = 'src' } = input
+  const { history, range, verdict, slices, by = 'src', pair = null } = input
   const only = input.zone?.toLowerCase() ?? null
   const stepMs = stepMsOf(range)
   const zoneByName = new Map(input.zones.map(z => [z.name.toLowerCase(), z]))
@@ -192,15 +214,15 @@ export function postureHistory(input: {
     const zone = zoneByName.get(name.toLowerCase())
     return zone ? zoneKey(zone.id) : OTHER_KEY
   }
-  // A bucket says who logged it: an inbound one is logged by the receiving zone (`zone`, the emitter in `src_zone`), an
-  // outbound one by the emitting zone (`zone`, the destination in `src_zone`, empty outside the zones). Read as a flow:
-  const emitterOf = (b: MicrosegTraffic['buckets'][number]) => (b.direction === 'out' ? b.zone : b.src_zone)
-  const receiverOf = (b: MicrosegTraffic['buckets'][number]) => (b.direction === 'out' ? b.src_zone : b.zone)
   // The side the chart groups on, and the side one zone is kept on: the other one.
-  const grouped = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? emitterOf(b) : receiverOf(b))
-  const kept = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? receiverOf(b) : emitterOf(b))
+  const grouped = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? loggedEnds(b).emitter : loggedEnds(b).receiver)
+  const kept = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? loggedEnds(b).receiver : loggedEnds(b).emitter)
+  const inScope = (b: MicrosegTraffic['buckets'][number]) => {
+    if (pair) return onPair(pair, by === 'src' ? 'in' : 'out', b)
+    return only === null || kept(b).toLowerCase() === only
+  }
   const items = history.buckets
-    .filter(b => (verdict === 'all' || b.verdict === verdict) && (only === null || kept(b).toLowerCase() === only))
+    .filter(b => (verdict === 'all' || b.verdict === verdict) && inScope(b))
     .map(b => ({ at: Date.parse(b.at), group: groupOf(grouped(b)), value: b.hits }))
   const first = Math.ceil(Date.parse(history.from) / stepMs) * stepMs
   const last = Math.floor((Date.parse(history.to) - 1) / stepMs) * stepMs

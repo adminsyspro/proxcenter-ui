@@ -13535,6 +13535,14 @@
         "egressBlock": "Block outbound",
         "egressReopen": "Reopen outbound"
       },
+      "edgePanel": {
+        "detailsTitle": "Flow details",
+        "dialogLabel": "Flow details · {from} → {to}",
+        "declaredFlows": "Declared flows",
+        "newFlow": "New flow between these zones",
+        "suggestionsEmpty": "No pending suggestion for this pair",
+        "logsEmpty": "No event of this pair in the engine's memory"
+      },
       "partial": "Partial: only the first {count, number} pending flows are drawn.",
       "filters": {
         "title": "Flows:"

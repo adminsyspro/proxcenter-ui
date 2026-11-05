@@ -13203,6 +13203,14 @@
         "egressBlock": "Ausgang sperren",
         "egressReopen": "Ausgang wieder öffnen"
       },
+      "edgePanel": {
+        "detailsTitle": "Flussdetails",
+        "dialogLabel": "Flussdetails · {from} → {to}",
+        "declaredFlows": "Deklarierte Flüsse",
+        "newFlow": "Neuer Fluss zwischen diesen Zonen",
+        "suggestionsEmpty": "Kein offener Vorschlag für dieses Paar",
+        "logsEmpty": "Kein Ereignis dieses Paars im Speicher der Engine"
+      },
       "partial": "Teilweise: Nur die ersten {count, number} ausstehenden Flüsse werden gezeichnet.",
       "filters": {
         "title": "Flüsse:"

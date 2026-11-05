@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Box, CircularProgress, Dialog, DialogContent, DialogTitle, IconButton, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, Typography } from '@mui/material'
+import { visuallyHidden } from '@mui/utils'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { useMicrosegEvents } from '@/lib/microseg/useMicrosegEvents'
-import type { MicrosegZone } from '@/lib/microseg/types'
+import type { MicrosegEvent } from '@/lib/microseg/types'
 
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { DirectionGlyph, ObservedKindGlyph } from './observationParts'
@@ -43,13 +44,13 @@ export function rowsForViewport(viewport: number, rowPx: number, extraPx: number
 }
 const CELL_SX = { py: 0.5, px: 1, whiteSpace: 'nowrap' } as const
 
-/** The events of the engine's memory that reached or left the zone, newest first, older ones on demand. */
-function ZoneLogs({ connectionId, zone, viewport }: { connectionId: string; zone: MicrosegZone; viewport: number }) {
+/** The events of the engine's memory of the dialog's scope (a zone, a pair), newest first, older ones on demand. */
+function ScopeLogs({ connectionId, keep, emptyText, viewport }: { connectionId: string; keep: (e: MicrosegEvent) => boolean; emptyText: string; viewport: number }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
   const to = useTranslations('microsegPilot.observation')
   const format = useFormatter()
   const log = useMicrosegEvents(connectionId, { zone: '', verdict: '', q: '' }, true)
-  const rows = log.events.filter(e => e.zone === zone.name || e.src_zone === zone.name)
+  const rows = log.events.filter(keep)
   const known = log.events.length > 0
   const size = rowsForViewport(viewport, LOG_ROW_PX, LOG_HEAD_PX)
   const [page, setPage] = useState(0)
@@ -66,7 +67,7 @@ function ZoneLogs({ connectionId, zone, viewport }: { connectionId: string; zone
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
       {log.error && !known && <MicrosegErrorAlert error={log.error} onRetry={log.reload} />}
       {log.loading && !known && <CircularProgress size={18} />}
-      {!log.loading && !log.error && rows.length === 0 && <Typography variant='body2' color='text.disabled'>{t('logsEmpty')}</Typography>}
+      {!log.loading && !log.error && rows.length === 0 && <Typography variant='body2' color='text.disabled'>{emptyText}</Typography>}
       {rows.length > 0 && (
         <Table size='small' stickyHeader aria-label={t('tabLogs')}>
           <TableHead>
@@ -109,14 +110,13 @@ function ZoneLogs({ connectionId, zone, viewport }: { connectionId: string; zone
   )
 }
 
-/**
- * The zone panel in a centred dialog, with room: its traffic (chart, summary, top), its data (suggestions, members,
- * flows) and the log of its events, one tab each. The panel's own sections are passed in: same content, same state.
- */
+/** A sub-tab label with its count (none while the count is unknown). */
+export const withCount = (label: string, count: number | null) => (count === null ? label : `${label} (${count})`)
+
 /** One sub-tab of the Data tab: its label (count included), the add button above its content, the content. */
 export type DataTab = { id: string; label: string; action?: ReactNode; content: (size: number) => ReactNode }
 
-function ZoneData({ tabs, viewport }: { tabs: DataTab[]; viewport: number }) {
+function DataTabs({ tabs, viewport }: { tabs: DataTab[]; viewport: number }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
   const [id, setId] = useState(tabs[0]?.id ?? '')
   const current = tabs.find(x => x.id === id) ?? tabs[0]
@@ -134,27 +134,45 @@ function ZoneData({ tabs, viewport }: { tabs: DataTab[]; viewport: number }) {
   )
 }
 
-export default function ZoneExpandDialog({ zone, connectionId, traffic, dataTabs, chips, onClose }: {
-  zone: MicrosegZone
+/** What the dialog is about: its name, its heading (an icon before the title, the title, a line after it) and its events. */
+export type ExpandScope = {
+  /** The accessible name of the dialog. */
+  label: string
+  lead?: ReactNode
+  title: string
+  subtitle?: ReactNode
+  /** The state chips, after the subtitle. */
+  chips: ReactNode
+  /** The events of the scope in the Logs tab, and what the tab says without any. */
+  keepEvent: (e: MicrosegEvent) => boolean
+  logsEmpty: string
+}
+
+/**
+ * A map panel (a zone, a pair of zones) in a centred dialog, with room: its traffic (chart, summary), its data (one
+ * sub-tab per list) and the log of its events, one tab each. The panel's own sections are passed in: same content,
+ * same state. The dialog follows its content up to the page height, the lists paged from the rows that fit.
+ */
+export default function ExpandDialog({ scope, connectionId, traffic, dataTabs, onClose }: {
+  scope: ExpandScope
   connectionId: string
   traffic: ReactNode
   dataTabs: DataTab[]
-  /** The zone's state and outbound chips, after its title. */
-  chips: ReactNode
   onClose: () => void
 }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
   const tc = useTranslations('microsegPilot.overview.panel')
   const [tab, setTab] = useState<TabId>('traffic')
-  const titleId = 'zone-expand-title'
   const viewport = useViewportHeight()
+  const labelId = useId()
   return (
-    <Dialog open onClose={onClose} maxWidth='lg' fullWidth aria-labelledby={titleId} slotProps={{ paper: { sx: { maxHeight: 'calc(100vh - 32px)', minHeight: '50vh', m: 2 } } }}>
-      <DialogTitle component='div' id='zone-expand-bar' sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <i className='ri-shield-fill' style={{ fontSize: 20, color: zone.color || undefined }} />
-        <Typography id={titleId} component='h2' variant='h6' sx={{ flexShrink: 0 }}>{t('detailsTitle', { name: zone.name })}</Typography>
-        <Typography component='span' variant='body2' color='text.secondary' noWrap sx={{ flex: 1, minWidth: 0 }}>{zone.label}</Typography>
-        {chips}
+    <Dialog open onClose={onClose} maxWidth='lg' fullWidth aria-labelledby={labelId} slotProps={{ paper: { sx: { maxHeight: 'calc(100vh - 32px)', minHeight: '50vh', m: 2 } } }}>
+      <DialogTitle component='div' id={`${labelId}-bar`} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+        <Box component='span' id={labelId} sx={visuallyHidden}>{scope.label}</Box>
+        {scope.lead}
+        <Typography component='h2' variant='h6' sx={{ flexShrink: 0 }}>{scope.title}</Typography>
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>{scope.subtitle}</Box>
+        {scope.chips}
         <IconButton size='small' aria-label={tc('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
       </DialogTitle>
       <Tabs value={tab} onChange={(_e, v: TabId) => setTab(v)} sx={{ px: 3, borderBottom: 1, borderColor: 'divider', minHeight: 40 }}>
@@ -164,8 +182,8 @@ export default function ZoneExpandDialog({ zone, connectionId, traffic, dataTabs
       </Tabs>
       <DialogContent sx={{ pt: 2 }}>
         {tab === 'traffic' && traffic}
-        {tab === 'data' && <ZoneData tabs={dataTabs} viewport={viewport} />}
-        {tab === 'logs' && <ZoneLogs connectionId={connectionId} zone={zone} viewport={viewport} />}
+        {tab === 'data' && <DataTabs tabs={dataTabs} viewport={viewport} />}
+        {tab === 'logs' && <ScopeLogs connectionId={connectionId} keep={scope.keepEvent} emptyText={scope.logsEmpty} viewport={viewport} />}
       </DialogContent>
     </Dialog>
   )

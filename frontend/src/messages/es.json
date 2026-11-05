@@ -13535,6 +13535,14 @@
         "egressBlock": "Bloquear la salida",
         "egressReopen": "Reabrir la salida"
       },
+      "edgePanel": {
+        "detailsTitle": "Detalles del flujo",
+        "dialogLabel": "Detalles del flujo · {from} → {to}",
+        "declaredFlows": "Flujos declarados",
+        "newFlow": "Nuevo flujo entre estas zonas",
+        "suggestionsEmpty": "Ninguna sugerencia pendiente para este par",
+        "logsEmpty": "Ningún evento de este par en la memoria del motor"
+      },
       "partial": "Parcial: solo se dibujan los primeros {count, number} flujos pendientes.",
       "filters": {
         "title": "Flujos:"

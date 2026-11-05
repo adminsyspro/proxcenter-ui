@@ -13536,6 +13536,14 @@
         "egressBlock": "Bloquer la sortie",
         "egressReopen": "Rouvrir la sortie"
       },
+      "edgePanel": {
+        "detailsTitle": "Détails du flux",
+        "dialogLabel": "Détails du flux · {from} → {to}",
+        "declaredFlows": "Flux déclarés",
+        "newFlow": "Nouveau flux entre ces zones",
+        "suggestionsEmpty": "Aucune suggestion en attente pour cette paire",
+        "logsEmpty": "Aucun événement de cette paire dans la mémoire du moteur"
+      },
       "partial": "Partiel : seuls les {count, number} premiers flux en attente sont dessinés.",
       "filters": {
         "title": "Flux :"

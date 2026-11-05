@@ -13535,6 +13535,14 @@
         "egressBlock": "阻断出站",
         "egressReopen": "重新开放出站"
       },
+      "edgePanel": {
+        "detailsTitle": "流量详情",
+        "dialogLabel": "流量详情 · {from} → {to}",
+        "declaredFlows": "已声明的流量规则",
+        "newFlow": "在这些区域之间新建流量规则",
+        "suggestionsEmpty": "此区域对没有待处理的建议",
+        "logsEmpty": "引擎内存中没有此区域对的事件"
+      },
       "partial": "部分显示：仅绘制前 {count, number} 条待处理流量。",
       "filters": {
         "title": "流量："

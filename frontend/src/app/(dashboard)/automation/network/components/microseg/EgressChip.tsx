@@ -3,7 +3,10 @@
 import { Chip, Tooltip } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import type { EgressState } from '@/lib/microseg/types'
+import { zoneEgress, type EgressState, type MicrosegSuggestion, type MicrosegZone } from '@/lib/microseg/types'
+
+import { useNow } from './useNow'
+import { isEgressReady, pendingOutboundOf } from './zoneModel'
 
 type Look = 'off' | 'observe' | 'ready' | 'enforce'
 
@@ -38,4 +41,15 @@ export default function EgressChip({ state, ready = false, size = 'small', iconO
       />
     </Tooltip>
   )
+}
+
+/**
+ * The outbound state of a zone, and whether it is ready to block (observing, its window clean of pending outbound
+ * would-block flows). Not ready while the pending flows read were cut (`partial`); a null zone is off.
+ */
+export function useZoneEgress(zone: MicrosegZone | null, suggestions: readonly MicrosegSuggestion[], readyAfterHours: number | undefined, partial: boolean): { state: EgressState; ready: boolean } {
+  const now = useNow()
+  const state = zone ? zoneEgress(zone) : 'off'
+  const ready = !!zone && state === 'observe' && !partial && isEgressReady(zone, pendingOutboundOf(suggestions, zone.id), readyAfterHours, now)
+  return { state, ready }
 }

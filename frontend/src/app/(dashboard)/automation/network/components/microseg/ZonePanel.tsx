@@ -6,26 +6,24 @@ import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import { useMicrosegDrifts } from '@/lib/microseg/useMicrosegLists'
-import { zoneEgress, type MicrosegFlow, type MicrosegSuggestion, type MicrosegZone, type SuggestionAction } from '@/lib/microseg/types'
+import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 
-import FlowSummary from './FlowSummary'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { DirectionGlyph, ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import { PagedList, POLICY_PAGE_SIZE } from './PolicyPager'
 import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
 import { MemberChangeChip } from './ZoneRow'
-import EgressChip from './EgressChip'
-import ZoneExpandDialog, { type DataTab } from './ZoneExpandDialog'
+import EgressChip, { useZoneEgress } from './EgressChip'
+import ExpandDialog, { withCount, type DataTab } from './ExpandDialog'
 import ZoneStateChip from './ZoneStateChip'
 import { destinationName } from './ObservationRow'
 import { bareIp } from './zoneGraph'
-import { FlowRowActions, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
+import { FlowsList, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
 import type { ZoneEdits } from './useZoneEdits'
 import { useIgnoredDrifts } from './driftIgnore'
 import { OneLine } from './dialogParts'
-import { useNow } from './useNow'
-import { flowsOfZone, guestKey, isEgressReady, pendingOutboundOf, type ZoneMember } from './zoneModel'
+import { flowsOfZone, guestKey, type ZoneMember } from './zoneModel'
 import { zoneDriftSignals, zoneSuggestions } from './zonePanelModel'
 import TruncatedText from './TruncatedText'
 
@@ -58,8 +56,6 @@ type Props = {
   peers?: ReadonlyMap<string, string>
 }
 
-type FlowEditor = ReturnType<typeof useFlowEditor>
-
 function MemberLine({ member, zoneId, edits, firewallOff }: { member: ZoneMember; zoneId: string; edits: ZoneEdits; firewallOff: boolean }) {
   const t = useTranslations('microsegPilot.overview.panel')
   const tsec = useTranslations('microsegPilot.overview.sections')
@@ -85,21 +81,6 @@ function MemberLine({ member, zoneId, edits, firewallOff }: { member: ZoneMember
       <MemberChangeChip member={member} />
       <MemberAction member={member} zoneId={zoneId} edits={edits} />
     </Box>
-  )
-}
-
-function FlowsList({ flows, zonesById, editor, size = FLOWS_PAGE_SIZE }: { flows: MicrosegFlow[]; zonesById: Map<string, MicrosegZone>; editor: FlowEditor; size?: number }) {
-  const t = useTranslations('microsegPilot.overview.panel')
-  return (
-    <>
-      {flows.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noFlows')}</Typography>}
-      <PagedList items={flows} size={size} render={rows => rows.map(flow => (
-        <Box key={flow.id} sx={{ display: 'flex', minHeight: 28, alignItems: 'center', gap: 0.5, minWidth: 0 }}>
-          <FlowSummary flow={flow} zonesById={zonesById} />
-          <FlowRowActions flow={flow} onEdit={editor.edit} onDelete={editor.remove} />
-        </Box>
-      ))} />
-    </>
   )
 }
 
@@ -147,10 +128,8 @@ export default function ZonePanel({
   const editor = useFlowEditor(edits)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
   const zones = useMemo(() => [...zonesById.values()], [zonesById])
-  const egress = zoneEgress(zone)
-  const now = useNow()
   // The map reads every pending observed flow, outbound ones included: the readiness needs no read of its own, unless that read was cut (partialLimit).
-  const egressReady = egress === 'observe' && partialLimit === null && isEgressReady(zone, pendingOutboundOf(suggestions, zone.id), edits.readyAfterHours, now)
+  const { state: egress, ready: egressReady } = useZoneEgress(zone, suggestions, edits.readyAfterHours, partialLimit !== null)
   const trafficSection = usePanelSection('zone.traffic')
   const sourcesSection = usePanelSection('zone.sources')
   // Nothing is read for the chart while both sections it feeds are folded.
@@ -247,8 +226,8 @@ export default function ZonePanel({
   )
   const newIncoming = <NewFlowButton label={tz('newIncoming')} onClick={() => editor.create({ dst_zone_id: zone.id })} />
   const newOutgoing = <NewFlowButton label={tz('newOutgoing')} onClick={() => editor.create({ src_zone_id: zone.id })} />
-  const incomingBody = (size?: number) => <FlowsList flows={incoming} zonesById={zonesById} editor={editor} size={size} />
-  const outgoingBody = (size?: number) => <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} size={size} />
+  const incomingBody = (size = FLOWS_PAGE_SIZE) => <FlowsList flows={incoming} zonesById={zonesById} editor={editor} size={size} />
+  const outgoingBody = (size = FLOWS_PAGE_SIZE) => <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} size={size} />
 
   const dataSections = (
     <>
@@ -260,7 +239,6 @@ export default function ZonePanel({
   )
 
   // The same bodies in the dialog, one sub-tab each, the count in the label and the add button above the flows.
-  const withCount = (label: string, count: number | null) => (count === null ? label : `${label} (${count})`)
   const dataTabs: DataTab[] = [
     { id: 'suggestions', label: withCount(tz('subSuggestions'), pending.length), content: suggestionsBody },
     { id: 'members', label: withCount(tz('subMembers'), membersKnown ? members.length : null), content: membersBody },
@@ -273,7 +251,23 @@ export default function ZonePanel({
       {trafficSections}
       {dataSections}
       {editor.dialogs}
-      {expanded && <ZoneExpandDialog zone={zone} connectionId={connectionId} traffic={trafficSections} dataTabs={dataTabs} chips={<><ZoneStateChip state={zone.state} /><EgressChip state={egress} ready={egressReady} /></>} onClose={() => setExpanded(false)} />}
+      {expanded && (
+        <ExpandDialog
+          scope={{
+            label: tz('detailsTitle', { name: zone.name }),
+            lead: <i className='ri-shield-fill' style={{ fontSize: 20, color: zone.color || undefined }} />,
+            title: tz('detailsTitle', { name: zone.name }),
+            subtitle: <Typography component='span' variant='body2' color='text.secondary' noWrap sx={{ minWidth: 0 }}>{zone.label}</Typography>,
+            chips: <><ZoneStateChip state={zone.state} /><EgressChip state={egress} ready={egressReady} /></>,
+            keepEvent: e => e.zone === zone.name || e.src_zone === zone.name,
+            logsEmpty: tz('logsEmpty'),
+          }}
+          connectionId={connectionId}
+          traffic={trafficSections}
+          dataTabs={dataTabs}
+          onClose={() => setExpanded(false)}
+        />
+      )}
     </PanelFrame>
   )
 }

@@ -13509,6 +13509,12 @@
         "noFlows": "Ninguno"
       },
       "zonePanel": {
+        "expand": "Ampliar",
+        "tabTraffic": "Tráfico",
+        "tabData": "Datos",
+        "tabLogs": "Registros",
+        "logsEmpty": "Ningún evento de esta zona en la memoria del motor",
+        "logsOlder": "Cargar anteriores",
         "edit": "Editar zona",
         "changeState": "Cambiar el estado",
         "delete": "Eliminar zona",

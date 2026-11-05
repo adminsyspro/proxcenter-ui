@@ -13510,6 +13510,12 @@
         "noFlows": "Aucun"
       },
       "zonePanel": {
+        "expand": "Agrandir",
+        "tabTraffic": "Trafic",
+        "tabData": "Données",
+        "tabLogs": "Journaux",
+        "logsEmpty": "Aucun événement de cette zone dans la mémoire du moteur",
+        "logsOlder": "Charger plus ancien",
         "edit": "Modifier la zone",
         "changeState": "Changer l'état",
         "delete": "Supprimer la zone",

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Alert, Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -16,6 +16,7 @@ import PolicyPager, { usePaged } from './PolicyPager'
 import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
 import { MemberChangeChip } from './ZoneRow'
 import EgressChip from './EgressChip'
+import ZoneExpandDialog from './ZoneExpandDialog'
 import ZoneStateChip from './ZoneStateChip'
 import { destinationName } from './ObservationRow'
 import { bareIp } from './zoneGraph'
@@ -172,6 +173,8 @@ export default function ZonePanel({
     if (outcome?.resolved) onResolved(action)
   }
 
+  const [expanded, setExpanded] = useState(false)
+
   const header = (
     <>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
@@ -191,6 +194,7 @@ export default function ZonePanel({
         )}
         <ZoneStateChip state={zone.state} />
         <EgressChip state={egress} ready={egressReady} />
+        <IconButton size='small' aria-label={tz('expand')} onClick={() => setExpanded(true)}><i className='ri-fullscreen-line' /></IconButton>
         <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: 1 }}>
@@ -200,8 +204,8 @@ export default function ZonePanel({
     </>
   )
 
-  return (
-    <PanelFrame label={t('label', { name: zone.name })} width={400} header={header}>
+  const trafficSections = (
+    <>
       <PanelSection id='zone.traffic' title={tsec('traffic')} state={trafficSection}>
         <SelectionTrafficChart traffic={traffic} />
         <TrafficSummaryLine traffic={traffic} />
@@ -216,6 +220,11 @@ export default function ZonePanel({
         <TopSourcesList top={traffic.summary.top} phase={traffic.phase} mode={traffic.direction} />
       </PanelSection>
 
+    </>
+  )
+
+  const dataSections = (
+    <>
       <PanelSection id='zone.suggestions' title={tsec('suggestions')} count={pending.length}>
         {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1 }}>{failure}</Alert>}
         {partialLimit !== null && <OneLine text={tt('partial', { count: partialLimit })} />}
@@ -244,7 +253,15 @@ export default function ZonePanel({
       <PanelSection id='zone.outgoing' title={ts('outgoing')} count={outgoing.length} action={<NewFlowButton label={tz('newOutgoing')} onClick={() => editor.create({ src_zone_id: zone.id })} />}>
         <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} />
       </PanelSection>
+    </>
+  )
+
+  return (
+    <PanelFrame label={t('label', { name: zone.name })} width={400} header={header}>
+      {trafficSections}
+      {dataSections}
       {editor.dialogs}
+      {expanded && <ZoneExpandDialog zone={zone} connectionId={connectionId} traffic={trafficSections} data={dataSections} onClose={() => setExpanded(false)} />}
     </PanelFrame>
   )
 }

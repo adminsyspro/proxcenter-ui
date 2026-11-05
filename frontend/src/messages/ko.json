@@ -13509,6 +13509,12 @@
         "noFlows": "없음"
       },
       "zonePanel": {
+        "expand": "확대",
+        "tabTraffic": "트래픽",
+        "tabData": "데이터",
+        "tabLogs": "로그",
+        "logsEmpty": "엔진 메모리에 이 영역의 이벤트가 없습니다",
+        "logsOlder": "이전 항목 불러오기",
         "edit": "영역 편집",
         "changeState": "상태 변경",
         "delete": "영역 삭제",

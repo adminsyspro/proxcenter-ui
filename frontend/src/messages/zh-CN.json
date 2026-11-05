@@ -13509,6 +13509,12 @@
         "noFlows": "无"
       },
       "zonePanel": {
+        "expand": "放大",
+        "tabTraffic": "流量",
+        "tabData": "数据",
+        "tabLogs": "日志",
+        "logsEmpty": "引擎内存中没有此区域的事件",
+        "logsOlder": "加载更早的",
         "edit": "编辑区域",
         "changeState": "更改状态",
         "delete": "删除区域",

@@ -144,6 +144,30 @@ describe('zone panel: Pending suggestions', () => {
   })
 })
 
+describe('zone panel: expanded in a dialog', () => {
+  it('opens the traffic, the data and the logs of the zone in a centred dialog with tabs', async () => {
+    mock.routes[EVENTS_OF_DB] = () => reply(200, { events: [event('web')], truncated: false, oldest: null })
+    mock.routes['GET /events?limit=200'] = () => reply(200, {
+      events: [event('web'), event('db', { zone: 'web', dst_ip: '172.30.99.43', dport: 9999 }), event('web', { zone: 'other', src_zone: 'x' })], truncated: false, oldest: null,
+    })
+    setup({ suggestions: [wouldBlock('s1')] })
+    const panel = await openDb()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Expand' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'db' })
+    expect(within(dialog).getAllByRole('tab').map(t => t.textContent)).toEqual(['Traffic', 'Data', 'Logs'])
+    expect(await within(dialog).findByTestId('traffic-summary')).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Data' }))
+    expect(within(dialog).getByRole('region', { name: 'Pending suggestions' })).toBeTruthy()
+    expect(within(dialog).getByRole('region', { name: 'Members' })).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Logs' }))
+    await waitFor(() => expect(within(dialog).getAllByRole('row')).toHaveLength(3))
+    expect(within(dialog).getByText('172.30.99.43')).toBeTruthy()
+  })
+})
+
 describe('zone panel: outbound suggestions', () => {
   it('names the destination as the peer of an outbound row, and keeps the source for an inbound one', async () => {
     setup({ suggestions: [

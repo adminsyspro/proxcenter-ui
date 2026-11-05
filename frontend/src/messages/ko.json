@@ -13347,7 +13347,7 @@
       "dismissTip": "이 쌍에 대한 이 제안을 숨깁니다.",
       "bulkLabel": "선택한 흐름",
       "bulkAcceptTip": "선택한 각 제안의 영역 간 흐름을 초안에 만듭니다.",
-      "bulkAcceptAggregateTip": "선택한 각 제안의 존 간 플로우를 초안에 만듭니다. 여러 대상으로 향하는 플로우는 해당 서비스를 모든 주소(0.0.0.0/0)로 허용합니다.",
+      "bulkAcceptOutZoneTip": "선택한 각 제안의 영역 간 플로우를 초안에 만듭니다. 영역으로 향하는 아웃바운드 플로우는 소스 영역에서 대상 영역으로의 인바운드도 함께 허용합니다.",
       "bulkCidrTip": "각 출발지를 주소 범위로 하여 같은 흐름을 만듭니다.",
       "bulkDismissTip": "선택한 제안을 숨깁니다.",
       "legend": {
@@ -13359,7 +13359,8 @@
         "about": "적중 수 안내"
       },
       "acceptUnknownSource": "알 수 없는 출발지: CIDR로를 사용하세요",
-      "acceptAggregateTip": "{service}을(를) 모든 주소(0.0.0.0/0)로 허용",
+      "aggregateHint": "이 서비스를 모든 주소로 허용하려면 플로우를 직접 만드세요.",
+      "acceptOutZoneTip": "플로우 {from} → {to}를 추가합니다. {from}에서 {to}로의 인바운드도 함께 허용합니다.",
       "zoneBanner": "{zone} 영역의 제안 · 24시간 동안 미허용 히트 {count, plural, other {#회}}",
       "zoneBannerNoCount": "{zone} 영역의 제안",
       "dialog": {

@@ -10,7 +10,7 @@ import { serviceTitle, serviceTokensTitle } from '@/lib/network/serviceNames'
 import { OneLine } from './dialogParts'
 import { MapNamesContext, isSampled, observedHits, type EdgeT } from './FlowEdge'
 import FlowSummary, { flowService } from './FlowSummary'
-import { DirectionGlyph, ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
+import { DirectionGlyph, ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
 import PolicyPager, { usePaged } from './PolicyPager'
 import type { PanelEdgeData } from './zoneGraph'
 import { formatWhen } from './summaryModel'
@@ -71,7 +71,7 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
           <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }}>{`${source} → ${destination}`}</Typography>
         </Tooltip>
         <ServiceHits suggestion={s} />
-        <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptLabel={accept} />
+        <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptLabel={accept} acceptTip={outboundZoneAcceptTip(to, s, source, destination)} />
       </Box>
       <Collapse in={open} unmountOnExit>
         <Box sx={{ pl: 5, pb: 1, minWidth: 0 }}>

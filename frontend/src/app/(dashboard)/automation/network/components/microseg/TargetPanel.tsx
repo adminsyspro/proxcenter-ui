@@ -10,7 +10,7 @@ import { serviceTitle } from '@/lib/network/serviceNames'
 
 import { OneLine } from './dialogParts'
 import FlowSummary from './FlowSummary'
-import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
+import { ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
 import { destinationName } from './ObservationRow'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import PolicyPager, { usePaged } from './PolicyPager'
@@ -63,7 +63,9 @@ function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
   // The other end as the Observation table names it: its zone, else the guest or the address, else many destinations.
   const destination = destinationName(s, zonesById, ip => peers.get(bareIp(ip)), to as (key: string) => string)
   const accept = t('flowPanel.acceptAs', { from, to: destination, service })
-  const acceptTip = t('target.panel.acceptTip', { from, to: destination, service })
+  const sampleTip = t('target.panel.acceptTip', { from, to: destination, service })
+  const zoneTip = outboundZoneAcceptTip(to, s, from, destination)
+  const acceptTip = zoneTip ? `${zoneTip} ${sampleTip}` : sampleTip
   const kind = s.kind === 'blocked' ? 'blocked' : 'unprotected'
   return (
     <Box role='listitem' aria-label={where} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minHeight: 36, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>

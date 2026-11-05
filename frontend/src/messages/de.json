@@ -13015,7 +13015,7 @@
       "dismissTip": "Blendet diesen Vorschlag für dieses Paar aus.",
       "bulkLabel": "Ausgewählte Flüsse",
       "bulkAcceptTip": "Legt im Entwurf für jeden ausgewählten Vorschlag den Fluss zwischen den Zonen an.",
-      "bulkAcceptAggregateTip": "Erstellt im Entwurf den Fluss zwischen den Zonen jedes ausgewählten Vorschlags. Ein Fluss zu vielen Zielen erlaubt seinen Dienst zu allen Adressen (0.0.0.0/0).",
+      "bulkAcceptOutZoneTip": "Legt im Entwurf den Fluss zwischen den Zonen jedes ausgewählten Vorschlags an. Ein ausgehender Fluss zu einer Zone erlaubt auch den eingehenden Verkehr der Zielzone aus der Quellzone.",
       "bulkCidrTip": "Legt dieselben Flüsse mit jeder Quelle als Adressbereich an.",
       "bulkDismissTip": "Blendet die ausgewählten Vorschläge aus.",
       "legend": {
@@ -13027,7 +13027,8 @@
         "about": "Zu den Trefferzahlen"
       },
       "acceptUnknownSource": "Unbekannte Quelle: Als CIDR verwenden",
-      "acceptAggregateTip": "{service} zu allen Adressen erlauben (0.0.0.0/0)",
+      "aggregateHint": "Legen Sie einen Fluss von Hand an, um diesen Dienst für beliebige Adressen zu erlauben.",
+      "acceptOutZoneTip": "Fügt den Fluss {from} → {to} hinzu: Er erlaubt auch den eingehenden Verkehr von {to} aus {from}.",
       "zoneBanner": "Vorschläge für Zone {zone} · {count, plural, one {# nicht abgedeckter Treffer} other {# nicht abgedeckte Treffer}} in 24 h",
       "zoneBannerNoCount": "Vorschläge für Zone {zone}",
       "dialog": {

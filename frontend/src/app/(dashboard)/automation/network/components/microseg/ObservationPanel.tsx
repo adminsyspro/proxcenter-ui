@@ -102,6 +102,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
   const noIpAmongChosen = chosen.some(r => !r.src_ip && r.direction !== 'out')
   const outboundAmongChosen = chosen.some(r => r.direction === 'out')
   const aggregateAmongChosen = chosen.some(r => r.direction === 'out' && isAggregateDst(r))
+  const outboundZoneAmongChosen = chosen.some(r => r.direction === 'out' && !!r.dst_zone_id)
 
   const changeFilters = (next: ObservationFilterValues) => {
     setFilters(next)
@@ -176,7 +177,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
       {data && (
         <>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40 }}>
-            {chosen.length > 0 && <BulkBar count={chosen.length} busy={busy} noZone={noZoneAmongChosen} noIp={noIpAmongChosen} outbound={outboundAmongChosen} aggregate={aggregateAmongChosen} onResolve={bulk} />}
+            {chosen.length > 0 && <BulkBar count={chosen.length} busy={busy} noZone={noZoneAmongChosen} noIp={noIpAmongChosen} outbound={outboundAmongChosen} aggregate={aggregateAmongChosen} outboundZone={outboundZoneAmongChosen} onResolve={bulk} />}
             <Box sx={{ flex: 1 }} />
             <PrevNextPager page={page} hasNext={hasNext} onPage={goToPage} />
           </Box>

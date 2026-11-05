@@ -13348,7 +13348,7 @@
       "dismissTip": "Masque cette suggestion pour cette paire.",
       "bulkLabel": "Flux sélectionnés",
       "bulkAcceptTip": "Crée dans le brouillon le flux entre les zones de chaque suggestion sélectionnée.",
-      "bulkAcceptAggregateTip": "Crée dans le brouillon le flux entre les zones de chaque suggestion sélectionnée. Un flux vers de nombreuses destinations autorise son service vers toutes les adresses (0.0.0.0/0).",
+      "bulkAcceptOutZoneTip": "Crée dans le brouillon le flux entre les zones de chaque suggestion sélectionnée. Un flux sortant vers une zone autorise aussi l'entrée de sa zone de destination depuis la zone source.",
       "bulkCidrTip": "Crée les mêmes flux avec chaque source comme plage d'adresses.",
       "bulkDismissTip": "Masque les suggestions sélectionnées.",
       "legend": {
@@ -13360,7 +13360,8 @@
         "about": "À propos des occurrences"
       },
       "acceptUnknownSource": "Source inconnue : utilisez En CIDR",
-      "acceptAggregateTip": "Autoriser {service} vers toutes les adresses (0.0.0.0/0)",
+      "aggregateHint": "Créez un flux à la main pour autoriser ce service vers toutes les adresses.",
+      "acceptOutZoneTip": "Ajoute le flux {from} → {to} : il autorise aussi l'entrée de {to} depuis {from}.",
       "zoneBanner": "Suggestions pour la zone {zone} · {count, plural, one {# occurrence non couverte} other {# occurrences non couvertes}} en 24 h",
       "zoneBannerNoCount": "Suggestions pour la zone {zone}",
       "dialog": {

@@ -622,27 +622,42 @@ describe('outbound flows', () => {
     expect(await row('web to legacy-vm')).toBeTruthy()
   })
 
-  it('says many destinations for the aggregate and offers no network for it', async () => {
+  it('says many destinations for the aggregate and offers neither Accept nor a network for it, only a hint', async () => {
     setup([out('o1', { dst_key: '0.0.0.0/0', dst_ip: '' })])
     const line = await row('web to Many destinations')
-    expect(within(line).getByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(within(line).queryByRole('button', { name: 'Accept' })).toBeNull()
     expect(within(line).queryByRole('button', { name: 'As CIDR' })).toBeNull()
+    expect(within(line).getByRole('img', { name: 'Create a flow by hand to allow this service to any address.' })).toBeTruthy()
+    expect(within(line).getByRole('button', { name: 'Dismiss' })).toBeTruthy()
   })
 
-  it('says in the Accept tooltip that many destinations are allowed to every address, in the row and in the bulk bar', async () => {
+  it('disables the bulk Accept with the hint while an aggregate row is selected', async () => {
     setup([out('o1', { dst_key: '0.0.0.0/0', dst_ip: '' }), out('o2')])
-    const line = await row('web to Many destinations')
+    await row('web to Many destinations')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select web to 203.0.113.10' }))
+    const bulk = screen.getByRole('button', { name: 'Accept selected' }) as HTMLButtonElement
+    expect(bulk.disabled).toBe(false)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select web to Many destinations' }))
+    expect(bulk.disabled).toBe(true)
+    fireEvent.mouseOver(bulk.parentElement as HTMLElement)
+    expect(await screen.findByText('Create a flow by hand to allow this service to any address.')).toBeTruthy()
+  })
+
+  it('says in the Accept tooltip that an outbound flow to a zone also opens the inbound of that zone, in the row and in the bulk bar', async () => {
+    setup([out('o1', { dst_zone_id: 'zd', dst_key: 'zd', dst_ip: '10.0.0.9' }), out('o2')])
+    const line = await row('web to db')
     fireEvent.mouseOver(within(line).getByRole('button', { name: 'Accept' }).parentElement as HTMLElement)
-    expect((await screen.findByRole('tooltip')).textContent).toMatch(/to all addresses \(0\.0\.0\.0\/0\)/)
+    expect((await screen.findByRole('tooltip')).textContent).toBe("Accept: Adds the flow web → db: it also allows db's inbound from web.")
     fireEvent.mouseOut(within(line).getByRole('button', { name: 'Accept' }).parentElement as HTMLElement)
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select web to 203.0.113.10' }))
     const bulk = screen.getByRole('button', { name: 'Accept selected' })
     fireEvent.mouseOver(bulk.parentElement as HTMLElement)
-    expect(await screen.findByText(/Creates in the draft the flow between the zones of each selected suggestion\.$/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select web to Many destinations' }))
+    expect(await screen.findByText(/^Creates in the draft the flow between the zones of each selected suggestion\.$/)).toBeTruthy()
+    fireEvent.mouseOut(bulk.parentElement as HTMLElement)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select web to db' }))
     fireEvent.mouseOver(bulk.parentElement as HTMLElement)
-    expect(await screen.findByText(/A flow to many destinations allows its service to all addresses \(0\.0\.0\.0\/0\)/)).toBeTruthy()
+    expect(await screen.findByText(/also allows the inbound of its destination zone from the source zone/)).toBeTruthy()
   })
 
   it('colours the group of an outbound address outside the zones with a neutral dot, not the red of an unknown destination', async () => {

@@ -376,22 +376,34 @@ describe('the target search of a user who cannot read the inventory (D9)', () =>
       expect(body(calls('POST /suggestions/resolve')[0][1])).toEqual({ version: 3, ids: ['o1'], action: 'accept_cidr', prefix_len: 24 })
     })
 
-    it('names the destination of the accept button by its address, or as many destinations, never as a deleted zone', async () => {
+    it('names the destination of the accept button by its address, never as a deleted zone, and gives many destinations no accept button', async () => {
       setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1'), out('o2', { dst_key: '0.0.0.0/0', dst_ip: '' })] })
       await node('guest:zw:qemu/100')
       await target('web-1')
       const aside = await panel('Guest web-1')
       expect(within(aside).getByRole('button', { name: /^Accept as flow web → 203\.0\.113\.10 / })).toBeTruthy()
-      expect(within(aside).getByRole('button', { name: /^Accept as flow web → Many destinations / })).toBeTruthy()
+      expect(within(aside).queryByRole('button', { name: /^Accept as flow web → Many destinations / })).toBeNull()
       expect(within(aside).queryByRole('button', { name: /Deleted zone/ })).toBeNull()
     })
 
-    it('offers no network for many destinations', async () => {
+    it('offers neither Accept nor a network for many destinations, only the hint', async () => {
       setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { dst_key: '0.0.0.0/0', dst_ip: '' })] })
       await node('guest:zw:qemu/100')
       await target('web-1')
       const row = within(await panel('Guest web-1')).getByRole('listitem')
       expect(within(row).queryByRole('button', { name: 'Accept as CIDR' })).toBeNull()
+      expect(within(row).queryByRole('button', { name: /^Accept as flow/ })).toBeNull()
+      expect(within(row).getByRole('img', { name: 'Create a flow by hand to allow this service to any address.' })).toBeTruthy()
+    })
+
+    it('says in the Accept tooltip that an outbound flow to a zone also opens the inbound of that zone', async () => {
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { dst_zone_id: 'zd', dst_key: 'zd', dst_ip: '10.0.0.9' })] })
+      await node('guest:zw:qemu/100')
+      await target('web-1')
+      const row = within(await panel('Guest web-1')).getByRole('listitem')
+      const accept = within(row).getByRole('button', { name: /^Accept as flow web → db / })
+      fireEvent.mouseOver(accept.parentElement as HTMLElement)
+      expect((await screen.findByRole('tooltip')).textContent).toMatch(/Adds the flow web → db: it also allows db's inbound from web\./)
     })
   })
 })

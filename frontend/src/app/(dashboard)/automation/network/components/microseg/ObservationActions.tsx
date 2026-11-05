@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { serviceTitle } from '@/lib/network/serviceNames'
 import { isAggregateDst, type MicrosegSuggestion, type SuggestionAction, type SuggestionKind } from '@/lib/microseg/types'
 
-import { ObservedKindGlyph, usePrefixChoice } from './observationParts'
+import { AggregateHint, ObservedKindGlyph, outboundZoneAcceptTip, usePrefixChoice } from './observationParts'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
 const ACTION_SX = { minWidth: 0, px: 1, py: 0, lineHeight: 1.6, whiteSpace: 'nowrap' } as const
@@ -33,11 +33,10 @@ const FLOW_ACTIONS = [
 
 type Translate = ReturnType<typeof useTranslations<'microsegPilot.observation'>>
 
-/** The tooltip of Accept: the flow between the zones, or for many destinations the service allowed to every address. */
+/** The tooltip of Accept: the flow between the zones, which for an outbound flow to a zone also opens its inbound. */
 function acceptTipOf(t: Translate, s: MicrosegSuggestion, flow: { from: string; to: string; service: string }): string {
   if (!s.src_zone_id) return t('acceptUnknownSource')
-  if (s.direction === 'out' && isAggregateDst(s)) return t('acceptAggregateTip', { service: flow.service })
-  return t('acceptTip', flow)
+  return outboundZoneAcceptTip(t, s, flow.from, flow.to) ?? t('acceptTip', flow)
 }
 
 /**
@@ -58,12 +57,14 @@ export function FlowActions({ suggestion: s, source, destination, busy, onResolv
       : { label: t('asCidr'), tip: s.src_ip ? t('cidrTip', { ip: s.src_ip }) : t('acceptCidrNoIp'), off: !s.src_ip },
     dismiss: { label: t('dismiss'), tip: t('dismissTip'), off: false },
   }
-  // Many destinations never make one network: the backend refuses it, so the action is not offered.
-  const actions = FLOW_ACTIONS.filter(({ action }) => !(action === 'accept_cidr' && outbound && isAggregateDst(s)))
+  // Many destinations never make one flow in one click, nor one network: the backend refuses both, so neither is offered.
+  const aggregate = outbound && isAggregateDst(s)
+  const actions = FLOW_ACTIONS.filter(({ action }) => !(aggregate && action !== 'dismiss'))
   const run = (action: SuggestionAction) => (action === 'accept_cidr' && outbound ? prefix.choose() : onResolve(action))
 
   return (
     <Box sx={{ display: 'inline-flex', gap: variant === 'icons' ? 0 : 0.5 }}>
+      {aggregate && <AggregateHint />}
       {actions.map(({ action, icon, color }) => {
         const { label, tip, off } = spec[action]
         const disabled = !canWrite || busy || off
@@ -94,8 +95,10 @@ type BulkBarProps = {
   noIp: boolean
   /** A selected flow is outbound: its network is accepted one by one (its prefix is chosen in a dialog). */
   outbound?: boolean
-  /** A selected flow goes to many destinations: its Accept allows the service to every address (0.0.0.0/0). */
+  /** A selected flow goes to many destinations: Accept is off (the flow is created by hand). */
   aggregate?: boolean
+  /** A selected flow is outbound to a zone: its Accept also opens that zone's inbound. */
+  outboundZone?: boolean
   onResolve: (action: SuggestionAction) => void
 }
 
@@ -105,8 +108,15 @@ function bulkCidrTipOf(t: Translate, outbound: boolean, noIp: boolean): string {
   return noIp ? t('bulkCidrBlocked') : t('bulkCidrTip')
 }
 
+/** The tooltip of the bulk Accept: why it is off (no source zone, many destinations), or what it does. */
+function bulkAcceptTipOf(t: Translate, c: { noZone: boolean; aggregate: boolean; outboundZone: boolean }): string {
+  if (c.noZone) return t('bulkAcceptBlocked')
+  if (c.aggregate) return t('aggregateHint')
+  return t(c.outboundZone ? 'bulkAcceptOutZoneTip' : 'bulkAcceptTip')
+}
+
 /** "3 selected · Accept · As CIDR · Dismiss": the same three ways out for every checked flow of the page. */
-export function BulkBar({ count, busy, noZone, noIp, outbound = false, aggregate = false, onResolve }: BulkBarProps) {
+export function BulkBar({ count, busy, noZone, noIp, outbound = false, aggregate = false, outboundZone = false, onResolve }: BulkBarProps) {
   const t = useTranslations('microsegPilot.observation')
   const { canWrite } = useMicrosegWrite()
 
@@ -117,8 +127,8 @@ export function BulkBar({ count, busy, noZone, noIp, outbound = false, aggregate
       sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, px: 1, py: 0.5, borderRadius: 1, bgcolor: 'action.selected' }}
     >
       <Typography noWrap variant='body2' fontWeight={600} sx={{ flexShrink: 0, mr: 0.5 }}>{t('selected', { count })}</Typography>
-      <WriteTip title={noZone ? t('bulkAcceptBlocked') : t(aggregate ? 'bulkAcceptAggregateTip' : 'bulkAcceptTip')}>
-        <Button size='small' variant='outlined' aria-label={t('bulkAccept')} disabled={!canWrite || busy || noZone} onClick={() => onResolve('accept')} sx={ACTION_SX}>
+      <WriteTip title={bulkAcceptTipOf(t, { noZone, aggregate, outboundZone })}>
+        <Button size='small' variant='outlined' aria-label={t('bulkAccept')} disabled={!canWrite || busy || noZone || aggregate} onClick={() => onResolve('accept')} sx={ACTION_SX}>
           {t('accept')}
         </Button>
       </WriteTip>

@@ -80,10 +80,11 @@ describe('ResolveActions on an outbound flow', () => {
     expect(onResolve).toHaveBeenCalledWith('accept_cidr', 24)
   })
 
-  it('offers no network for many destinations', () => {
+  it('offers neither Accept nor a network for many destinations, only the hint', () => {
     renderWithProviders(<ResolveActions suggestion={out({ dst_key: '::/0', dst_ip: '' })} busy={false} onResolve={vi.fn()} />)
     expect(screen.queryByRole('button', { name: 'Accept as CIDR' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+    expect(screen.getByRole('img', { name: 'Create a flow by hand to allow this service to any address.' })).toBeTruthy()
   })
 
   it('keeps the inbound CIDR direct, without prefix', () => {

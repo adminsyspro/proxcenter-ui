@@ -13347,7 +13347,7 @@
       "dismissTip": "隐藏此配对的这条建议。",
       "bulkLabel": "已选的流",
       "bulkAcceptTip": "为每条所选建议在草稿中创建区域之间的流。",
-      "bulkAcceptAggregateTip": "在草稿中为每个所选建议创建区域之间的流。发往多个目的地的流会允许其服务访问所有地址 (0.0.0.0/0)。",
+      "bulkAcceptOutZoneTip": "在草稿中创建每个所选建议的区域之间的流。指向某个区域的出站流同时允许从源区域到目标区域的入站流量。",
       "bulkCidrTip": "以每个来源作为地址范围创建相同的流。",
       "bulkDismissTip": "隐藏所选建议。",
       "legend": {
@@ -13359,7 +13359,8 @@
         "about": "关于命中数"
       },
       "acceptUnknownSource": "未知来源：请使用“按 CIDR”",
-      "acceptAggregateTip": "允许 {service} 访问所有地址 (0.0.0.0/0)",
+      "aggregateHint": "请手动创建流量规则，以允许此服务访问任意地址。",
+      "acceptOutZoneTip": "添加流 {from} → {to}：同时允许 {from} 到 {to} 的入站流量。",
       "zoneBanner": "{zone} 区域的建议 · 24 小时内 {count, plural, other {# 次未覆盖命中}}",
       "zoneBannerNoCount": "{zone} 区域的建议",
       "dialog": {

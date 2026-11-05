@@ -68,6 +68,31 @@ export function ServiceHits({ suggestion: s }: { suggestion: Pick<MicrosegSugges
 }
 
 /**
+ * Stands in the place of Accept on a row for many destinations: no one-click opening of the Internet, the flow is
+ * created by hand.
+ */
+export function AggregateHint() {
+  const t = useTranslations('microsegPilot.observation')
+  return (
+    <Tooltip title={t('aggregateHint')}>
+      <Box component='span' role='img' aria-label={t('aggregateHint')} sx={{ display: 'inline-flex', alignItems: 'center', px: 1, color: 'text.secondary' }}>
+        <i className='ri-information-line' />
+      </Box>
+    </Tooltip>
+  )
+}
+
+/** The tooltip of Accept for an outbound flow to a zone, which also opens that zone's inbound; undefined for any other flow. */
+export function outboundZoneAcceptTip(
+  t: (key: 'acceptOutZoneTip', values: { from: string; to: string }) => string,
+  s: Pick<MicrosegSuggestion, 'direction' | 'src_zone_id' | 'dst_zone_id'>,
+  from: string,
+  to: string,
+): string | undefined {
+  return s.direction === 'out' && s.src_zone_id && s.dst_zone_id ? t('acceptOutZoneTip', { from, to }) : undefined
+}
+
+/**
  * The prefix choice of an outbound As CIDR: `choose` opens the dialog (rendered as `dialog`, null while closed), whose
  * Accept closes it and resolves the flow with the chosen length.
  */
@@ -101,15 +126,15 @@ export function ResolveActions({ suggestion: s, busy, onResolve, acceptLabel, ac
   const cidrOff = outbound ? !s.dst_ip : !s.src_ip
   const aggregate = outbound && isAggregateDst(s)
   const showCidr = !aggregate
-  let acceptTitle = acceptTip ?? accept
-  if (!s.src_zone_id) acceptTitle = t('acceptNoZone')
-  else if (aggregate) acceptTitle = t('acceptAggregateTip', { service: serviceTitle(s.proto, s.dport) })
+  const acceptTitle = s.src_zone_id ? acceptTip ?? accept : t('acceptNoZone')
 
   return (
     <>
-      <WriteTip title={acceptTitle}>
-        <IconButton size='small' aria-label={accept} disabled={!canWrite || busy || !s.src_zone_id} onClick={() => onResolve('accept')}><i className='ri-check-line' /></IconButton>
-      </WriteTip>
+      {aggregate ? <AggregateHint /> : (
+        <WriteTip title={acceptTitle}>
+          <IconButton size='small' aria-label={accept} disabled={!canWrite || busy || !s.src_zone_id} onClick={() => onResolve('accept')}><i className='ri-check-line' /></IconButton>
+        </WriteTip>
+      )}
       {showCidr && (
         <WriteTip title={cidrOff ? t('acceptCidrNoIp') : t('acceptCidr')}>
           <IconButton size='small' aria-label={t('acceptCidr')} disabled={!canWrite || busy || cidrOff} onClick={() => (outbound ? prefix.choose() : onResolve('accept_cidr'))}><i className='ri-checkbox-multiple-line' /></IconButton>

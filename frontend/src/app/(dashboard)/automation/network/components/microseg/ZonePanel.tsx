@@ -10,7 +10,7 @@ import { zoneEgress, type MicrosegFlow, type MicrosegSuggestion, type MicrosegZo
 
 import FlowSummary from './FlowSummary'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
-import { DirectionGlyph, ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
+import { DirectionGlyph, ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
@@ -115,7 +115,7 @@ function SuggestionLine({ suggestion: s, zonesById, busy, onResolve }: {
       <ObservedKindGlyph kind={s.kind} />
       <TruncatedText text={source} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
       <ServiceHits suggestion={s} />
-      <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} />
+      <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptTip={outboundZoneAcceptTip(to, s, source, s.dst_zone_id ? zonesById.get(s.dst_zone_id)?.name ?? to('deletedZone') : '')} />
     </Box>
   )
 }

@@ -13347,7 +13347,7 @@
       "dismissTip": "Hides this suggestion for this pair.",
       "bulkLabel": "Selected flows",
       "bulkAcceptTip": "Creates in the draft the flow between the zones of each selected suggestion.",
-      "bulkAcceptAggregateTip": "Creates in the draft the flow between the zones of each selected suggestion. A flow to many destinations allows its service to all addresses (0.0.0.0/0).",
+      "bulkAcceptOutZoneTip": "Creates in the draft the flow between the zones of each selected suggestion. An outbound flow to a zone also allows the inbound of its destination zone from the source zone.",
       "bulkCidrTip": "Creates the same flows with each source as an address range.",
       "bulkDismissTip": "Hides the selected suggestions.",
       "legend": {
@@ -13359,7 +13359,8 @@
         "about": "About the hit counts"
       },
       "acceptUnknownSource": "Unknown source: use As CIDR",
-      "acceptAggregateTip": "Allow {service} to all addresses (0.0.0.0/0)",
+      "aggregateHint": "Create a flow by hand to allow this service to any address.",
+      "acceptOutZoneTip": "Adds the flow {from} → {to}: it also allows {to}'s inbound from {from}.",
       "zoneBanner": "Suggestions for zone {zone} · {count, plural, one {# uncovered hit} other {# uncovered hits}} in 24 h",
       "zoneBannerNoCount": "Suggestions for zone {zone}",
       "dialog": {

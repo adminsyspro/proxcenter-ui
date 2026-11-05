@@ -13347,7 +13347,7 @@
       "dismissTip": "Oculta esta sugerencia para este par.",
       "bulkLabel": "Flujos seleccionados",
       "bulkAcceptTip": "Crea en el borrador el flujo entre las zonas de cada sugerencia seleccionada.",
-      "bulkAcceptAggregateTip": "Crea en el borrador el flujo entre las zonas de cada sugerencia seleccionada. Un flujo hacia muchos destinos permite su servicio hacia todas las direcciones (0.0.0.0/0).",
+      "bulkAcceptOutZoneTip": "Crea en el borrador el flujo entre las zonas de cada sugerencia seleccionada. Un flujo de salida hacia una zona también permite la entrada de su zona de destino desde la zona de origen.",
       "bulkCidrTip": "Crea los mismos flujos con cada origen como rango de direcciones.",
       "bulkDismissTip": "Oculta las sugerencias seleccionadas.",
       "legend": {
@@ -13359,7 +13359,8 @@
         "about": "Sobre las coincidencias"
       },
       "acceptUnknownSource": "Origen desconocido: use Como CIDR",
-      "acceptAggregateTip": "Permitir {service} hacia todas las direcciones (0.0.0.0/0)",
+      "aggregateHint": "Cree un flujo a mano para permitir este servicio hacia cualquier dirección.",
+      "acceptOutZoneTip": "Añade el flujo {from} → {to}: también permite la entrada de {to} desde {from}.",
       "zoneBanner": "Sugerencias para la zona {zone} · {count, plural, one {# impacto sin cubrir} other {# impactos sin cubrir}} en 24 h",
       "zoneBannerNoCount": "Sugerencias para la zona {zone}",
       "dialog": {

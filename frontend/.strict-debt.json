@@ -137,7 +137,6 @@
     "src/app/api/v1/public/backups/route.ts": 2,
     "src/app/api/v1/public/health/route.ts": 4,
     "src/app/api/v1/public/metrics/route.ts": 8,
-    "src/app/api/v1/rbac/assignments/[id]/route.test.ts": 6,
     "src/app/api/v1/rbac/assignments/route.test.ts": 4,
     "src/app/api/v1/rbac/effective/route.test.ts": 7,
     "src/app/api/v1/rbac/roles/[id]/route.test.ts": 5,

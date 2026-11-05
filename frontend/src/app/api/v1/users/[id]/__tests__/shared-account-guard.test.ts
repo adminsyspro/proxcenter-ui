@@ -24,7 +24,7 @@ const {
   userFindUniqueMock: vi.fn(),
   userUpdateMock: vi.fn(),
   membershipCountMock: vi.fn(),
-  revokeAllSessionsMock: vi.fn(async () => 0),
+  revokeAllSessionsMock: vi.fn(async (..._args: unknown[]) => 0),
 }))
 
 vi.mock("next-auth", () => ({ getServerSession: () => sessionMock() }))

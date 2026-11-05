@@ -74,7 +74,7 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
 
   it('rejects a scope_type change to a scoped type with no resolvable target', async () => {
     userRoleFindFirstMock.mockResolvedValueOnce(existingAssignment)
-    const res = await callRoute(PATCH, {
+    const res = await callRoute(PATCH as any, {
       method: 'PATCH',
       params: { id: 'assign_1' },
       body: { scope_type: 'vm' },
@@ -89,7 +89,7 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
     userRoleFindFirstMock
       .mockResolvedValueOnce(existingAssignment)
       .mockResolvedValueOnce(updatedRow('inherit', null))
-    const res = await callRoute(PATCH, {
+    const res = await callRoute(PATCH as any, {
       method: 'PATCH',
       params: { id: 'assign_1' },
       body: { scope_type: 'inherit' },
@@ -104,7 +104,7 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
     userRoleFindFirstMock
       .mockResolvedValueOnce(existingAssignment)
       .mockResolvedValueOnce(updatedRow('tag', 'web'))
-    const res = await callRoute(PATCH, {
+    const res = await callRoute(PATCH as any, {
       method: 'PATCH',
       params: { id: 'assign_1' },
       body: { scope_type: 'tag', scope_target: 'web' },
@@ -118,7 +118,7 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
     isProtectedMock.mockResolvedValue(false)
     userRoleFindFirstMock.mockResolvedValue({ ...existingAssignment, scopeType: 'connection', scopeTarget: 'conn-1',
       role: { name: 'NIC identity', permissions: [{ permissionId: 'vm.config.nic.vlan' }] } })
-    const res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'global' } })
+    const res = await callRoute(PATCH as any, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'global' } })
     expect(res.status).toBe(403)
     expect(userRoleUpdateManyMock).not.toHaveBeenCalled()
   })
@@ -128,11 +128,11 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
     const sensitive = { ...existingAssignment,
       role: { name: 'NIC identity', permissions: [{ permissionId: 'vm.config.nic.mac' }] } }
     userRoleFindFirstMock.mockResolvedValueOnce(sensitive).mockResolvedValueOnce(updatedRow('connection', 'conn-1'))
-    let res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'connection', scope_target: 'conn-1' } })
+    let res = await callRoute(PATCH as any, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'connection', scope_target: 'conn-1' } })
     expect(res.status).toBe(200)
     expect(userRoleUpdateManyMock.mock.calls[0][0].data.scopeType).toBe('connection')
     userRoleFindFirstMock.mockResolvedValueOnce(sensitive).mockResolvedValueOnce(updatedRow('global', null))
-    res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { expires_at: '2030-01-01T00:00:00.000Z' } })
+    res = await callRoute(PATCH as any, { method: 'PATCH', params: { id: 'assign_1' }, body: { expires_at: '2030-01-01T00:00:00.000Z' } })
     expect(res.status).toBe(200)
     expect(userRoleUpdateManyMock).toHaveBeenCalledTimes(2)
   })
@@ -148,7 +148,7 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
     isSuperAdminMock.mockResolvedValue(false)
     userRoleFindFirstMock.mockResolvedValue({ ...existingAssignment, scopeType: 'node', scopeTarget: 'c1:pve1',
       role: { name: 'NIC identity', permissions: [{ permissionId: 'vm.config.nic.mac' }] } })
-    const res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_target: 'c1:pve2' } })
+    const res = await callRoute(PATCH as any, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_target: 'c1:pve2' } })
     expect(res.status).toBe(403)
     expect(userRoleUpdateManyMock).not.toHaveBeenCalled()
   })
@@ -156,7 +156,7 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
     isSuperAdminMock.mockResolvedValue(false)
     userRoleFindFirstMock.mockResolvedValue({ ...existingAssignment, scopeType: 'node', scopeTarget: 'c1:pve1',
       role: { name: 'NIC identity', permissions: [{ permissionId: 'vm.config.nic.vlan' }] } })
-    const res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'vm', scope_target: 'c1:pve2:qemu:100' } })
+    const res = await callRoute(PATCH as any, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'vm', scope_target: 'c1:pve2:qemu:100' } })
     expect(res.status).toBe(403)
     expect(userRoleUpdateManyMock).not.toHaveBeenCalled()
   })
@@ -165,13 +165,13 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
     const onNode = { ...existingAssignment, scopeType: 'node', scopeTarget: 'c1:pve1',
       role: { name: 'NIC identity', permissions: [{ permissionId: 'vm.config.nic.mac' }] } }
     userRoleFindFirstMock.mockResolvedValueOnce(onNode).mockResolvedValueOnce(updatedRow('vm', 'c1:pve1:qemu:100'))
-    const res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'vm', scope_target: 'c1:pve1:qemu:100' } })
+    const res = await callRoute(PATCH as any, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_type: 'vm', scope_target: 'c1:pve1:qemu:100' } })
     expect(res.status).toBe(200)
     expect(userRoleUpdateManyMock.mock.calls[0][0].data).toMatchObject({ scopeType: 'vm', scopeTarget: 'c1:pve1:qemu:100' })
   })
   it('drops a scope_target sent alone for an unscoped assignment', async () => {
     userRoleFindFirstMock.mockResolvedValueOnce(existingAssignment).mockResolvedValueOnce(updatedRow('global', null))
-    const res = await callRoute(PATCH, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_target: 'c1:pve1' } })
+    const res = await callRoute(PATCH as any, { method: 'PATCH', params: { id: 'assign_1' }, body: { scope_target: 'c1:pve1' } })
     expect(res.status).toBe(200)
     expect(userRoleUpdateManyMock.mock.calls[0][0].data).toMatchObject({ scopeType: 'global', scopeTarget: null })
   })

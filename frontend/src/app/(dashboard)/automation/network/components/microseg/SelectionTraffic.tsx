@@ -154,8 +154,10 @@ export function TrafficSummaryLine({ traffic }: { traffic: SelectionTrafficState
       ? t(key, { hits: total, source: nameOf(top[0]), share: Math.round(top[0].share), wouldBlock, blocked })
       : t('summaryNone')
   }
+  // Outbound, "blocked" also counts what the destination zone blocks at its inbound: the tooltip says so.
+  const help = traffic.direction === 'out' && traffic.summary.total > 0 ? t('summaryOutBlockedHelp') : null
   return (
-    <Tooltip title={text}>
+    <Tooltip title={help ? <>{text}<br />{help}</> : text}>
       <Typography variant='body2' color='text.secondary' noWrap data-testid='traffic-summary' sx={{ mt: 1 }}>{text}</Typography>
     </Tooltip>
   )

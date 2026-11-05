@@ -13639,6 +13639,7 @@
         "topSourcesEmpty": "Ninguna fuente en este intervalo",
         "suggestionsEmpty": "Ninguna sugerencia pendiente para esta zona",
         "summaryOut": "{hits, plural, one {# coincidencia} other {# coincidencias}} · destino principal {source} ({share} %) · {wouldBlock, number} se bloquearían, {blocked, number} bloqueados",
+        "summaryOutBlockedHelp": "Bloqueados: conexiones bloqueadas por la zona de destino (su entrada) o por la salida de esta zona.",
         "topDestinations": "Destinos principales",
         "topDestinationsEmpty": "Ningún destino en este intervalo",
         "memberRunning": "En ejecución",

@@ -13640,6 +13640,7 @@
         "topSourcesEmpty": "Aucune source sur cette période",
         "suggestionsEmpty": "Aucune suggestion en attente pour cette zone",
         "summaryOut": "{hits, plural, one {# occurrence} other {# occurrences}} · première destination {source} ({share} %) · {wouldBlock, number} seraient bloqués, {blocked, number} bloqués",
+        "summaryOutBlockedHelp": "Bloqués : connexions bloquées par la zone de destination (son entrée) ou par la sortie de cette zone.",
         "topDestinations": "Principales destinations",
         "topDestinationsEmpty": "Aucune destination sur cette période",
         "memberRunning": "En marche",

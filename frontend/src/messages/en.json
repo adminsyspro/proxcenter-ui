@@ -13639,6 +13639,7 @@
         "topSourcesEmpty": "No source in this range",
         "suggestionsEmpty": "No pending suggestion for this zone",
         "summaryOut": "{hits, plural, one {# hit} other {# hits}} · top destination {source} ({share}%) · {wouldBlock, number} would be blocked, {blocked, number} blocked",
+        "summaryOutBlockedHelp": "Blocked: connections blocked by the destination zone (its inbound) or by this zone's outbound.",
         "topDestinations": "Top destinations",
         "topDestinationsEmpty": "No destination in this range",
         "memberRunning": "Running",

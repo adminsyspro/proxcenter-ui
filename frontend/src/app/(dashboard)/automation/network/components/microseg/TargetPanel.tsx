@@ -58,12 +58,16 @@ function ObservedLine({ row, peers, zonesById, sharedServices, busy, onResolve }
   const to = useTranslations('microsegPilot.observation')
   const s = row.suggestion
   const emitter = row.peerZoneId ? zonesById.get(row.peerZoneId)?.name ?? to('deletedZone') : ''
-  const peer = (row.peerIp && peers.get(bareIp(row.peerIp))) || row.peerIp || emitter || to('unknownEndpoint')
+  const guestOf = (ip: string) => peers.get(bareIp(ip))
+  // An outbound row's peer is its destination (never the zone that emits it), an inbound row's its source.
+  const peer = s.direction === 'out' && row.direction === 'out'
+    ? destinationName(s, zonesById, guestOf, to as (key: string) => string)
+    : (row.peerIp && guestOf(row.peerIp)) || row.peerIp || emitter || to('unknownEndpoint')
   const where = t(row.direction === 'out' ? 'target.panel.outgoing' : 'target.panel.incoming', { peer })
   const service = serviceTitle(s.proto, s.dport)
   const from = s.src_zone_id ? zonesById.get(s.src_zone_id)?.name ?? to('deletedZone') : to('unknownEndpoint')
   // The other end as the Observation table names it: its zone, else the guest or the address, else many destinations.
-  const destination = destinationName(s, zonesById, ip => peers.get(bareIp(ip)), to as (key: string) => string)
+  const destination = destinationName(s, zonesById, guestOf, to as (key: string) => string)
   const accept = t('flowPanel.acceptAs', { from, to: destination, service })
   const sampleTip = t('target.panel.acceptTip', { from, to: destination, service })
   const zoneTip = outboundZoneAcceptTip(to, s, from, destination)

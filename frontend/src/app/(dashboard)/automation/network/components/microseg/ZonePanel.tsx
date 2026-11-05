@@ -17,6 +17,8 @@ import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, u
 import { MemberChangeChip } from './ZoneRow'
 import EgressChip from './EgressChip'
 import ZoneStateChip from './ZoneStateChip'
+import { destinationName } from './ObservationRow'
+import { bareIp } from './zoneGraph'
 import { FlowRowActions, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
 import type { ZoneEdits } from './useZoneEdits'
 import { useIgnoredDrifts } from './driftIgnore'
@@ -51,6 +53,8 @@ type Props = {
   onOpenDrifts?: (zoneId: string) => void
   /** The map read only the first `limit` pending observed flows: the suggestions may miss some. */
   partialLimit?: number | null
+  /** The guest name of each address the inventory knows, to name the destination of an outbound row. */
+  peers?: ReadonlyMap<string, string>
 }
 
 type FlowEditor = ReturnType<typeof useFlowEditor>
@@ -101,21 +105,25 @@ function FlowsList({ flows, zonesById, editor }: { flows: MicrosegFlow[]; zonesB
 }
 
 /** A pending suggestion towards the zone on one line: kind, source, service and hits, the ways out of Observation. */
-function SuggestionLine({ suggestion: s, zonesById, busy, onResolve }: {
+function SuggestionLine({ suggestion: s, zonesById, peers, busy, onResolve }: {
   suggestion: MicrosegSuggestion
   zonesById: Map<string, MicrosegZone>
+  peers?: ReadonlyMap<string, string>
   busy: boolean
   onResolve: (action: SuggestionAction, prefixLen?: number) => void
 }) {
   const to = useTranslations('microsegPilot.observation')
-  const source = s.src_zone_id ? zonesById.get(s.src_zone_id)?.name ?? to('deletedZone') : s.src_ip || to('unknownEndpoint')
+  // The peer of an inbound row is its source, the peer of an outbound row (emitted by this zone) is its destination.
+  const source = s.direction === 'out'
+    ? destinationName(s, zonesById, ip => peers?.get(bareIp(ip)), to as (key: string) => string)
+    : s.src_zone_id ? zonesById.get(s.src_zone_id)?.name ?? to('deletedZone') : s.src_ip || to('unknownEndpoint')
   return (
     <Box role='listitem' aria-label={source} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minHeight: 36, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
       <DirectionGlyph direction={s.direction} />
       <ObservedKindGlyph kind={s.kind} />
       <TruncatedText text={source} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
       <ServiceHits suggestion={s} />
-      <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptTip={outboundZoneAcceptTip(to, s, source, s.dst_zone_id ? zonesById.get(s.dst_zone_id)?.name ?? to('deletedZone') : '')} />
+      <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptTip={outboundZoneAcceptTip(to, s, s.src_zone_id ? zonesById.get(s.src_zone_id)?.name ?? to('deletedZone') : s.src_ip || to('unknownEndpoint'), s.dst_zone_id ? zonesById.get(s.dst_zone_id)?.name ?? to('deletedZone') : '')} />
     </Box>
   )
 }
@@ -130,7 +138,7 @@ function SuggestionLine({ suggestion: s, zonesById, busy, onResolve }: {
  */
 export default function ZonePanel({
   zone, members, membersKnown, flows, zonesById, edits, onClose, onAssign,
-  connectionId, version, suggestions, reloadPolicy, reloadSuggestions, onResolved, onOpenDrifts, partialLimit = null,
+  connectionId, version, suggestions, reloadPolicy, reloadSuggestions, onResolved, onOpenDrifts, partialLimit = null, peers,
 }: Props) {
   const t = useTranslations('microsegPilot.overview.panel')
   const tz = useTranslations('microsegPilot.overview.zonePanel')
@@ -214,7 +222,7 @@ export default function ZonePanel({
         {pending.length === 0 && <Typography variant='body2' color='text.disabled'>{tsec('suggestionsEmpty')}</Typography>}
         <Box role='list'>
           {pendingPage.rows.map(s => (
-            <SuggestionLine key={s.id} suggestion={s} zonesById={zonesById} busy={busy} onResolve={(action, prefixLen) => { void resolveOne(s.id, action, prefixLen) }} />
+            <SuggestionLine key={s.id} suggestion={s} zonesById={zonesById} peers={peers} busy={busy} onResolve={(action, prefixLen) => { void resolveOne(s.id, action, prefixLen) }} />
           ))}
         </Box>
         <PolicyPager count={pendingPage.count} page={pendingPage.page} size={pendingPage.size} onPage={pendingPage.setPage} />

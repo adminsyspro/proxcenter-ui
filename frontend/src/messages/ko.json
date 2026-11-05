@@ -13639,6 +13639,7 @@
         "topSourcesEmpty": "이 기간에 출발지 없음",
         "suggestionsEmpty": "이 영역에 대기 중인 제안 없음",
         "summaryOut": "{hits, plural, other {적중 #회}} · 주요 목적지 {source} ({share}%) · 차단 예정 {wouldBlock, number}, 차단됨 {blocked, number}",
+        "summaryOutBlockedHelp": "차단됨: 목적지 영역(해당 영역의 인바운드) 또는 이 영역의 아웃바운드에서 차단된 연결입니다.",
         "topDestinations": "주요 목적지",
         "topDestinationsEmpty": "이 기간에 목적지 없음",
         "memberRunning": "실행 중",

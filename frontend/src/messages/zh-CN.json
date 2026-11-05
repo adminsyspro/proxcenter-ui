@@ -13639,6 +13639,7 @@
         "topSourcesEmpty": "此时间范围内没有来源",
         "suggestionsEmpty": "此区域没有待处理的建议",
         "summaryOut": "{hits, plural, other {# 次命中}} · 主要目的地 {source}（{share}%）· 将被阻止 {wouldBlock, number}，已阻止 {blocked, number}",
+        "summaryOutBlockedHelp": "已阻止：被目的地区域（其入站）或本区域出站阻止的连接。",
         "topDestinations": "主要目的地",
         "topDestinationsEmpty": "此时间范围内没有目的地",
         "memberRunning": "运行中",

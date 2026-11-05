@@ -144,6 +144,21 @@ describe('zone panel: Pending suggestions', () => {
   })
 })
 
+describe('zone panel: outbound suggestions', () => {
+  it('names the destination as the peer of an outbound row, and keeps the source for an inbound one', async () => {
+    setup({ suggestions: [
+      wouldBlock('o1', { direction: 'out', src_zone_id: 'zd', dst_zone_id: '', src_ip: '10.0.0.2', dst_ip: '172.30.99.43', dst_key: '172.30.99.43', proto: 'tcp', dport: 9999 }),
+      wouldBlock('o2', { direction: 'out', src_zone_id: 'zd', dst_zone_id: 'zw', dst_key: 'zw', dst_ip: '' }),
+      wouldBlock('o3', { direction: 'out', src_zone_id: 'zd', dst_zone_id: '', dst_ip: '', dst_key: '0.0.0.0/0' }),
+      wouldBlock('i1'),
+    ] })
+    const panel = await openDb()
+    const pending = section(panel, 'Pending suggestions')
+    expect(within(pending).getAllByRole('listitem').map(l => l.getAttribute('aria-label')).sort()).toEqual(['172.30.99.43', 'Many destinations', 'web', 'web'])
+    expect(within(pending).queryByRole('listitem', { name: 'db' })).toBeNull()
+  })
+})
+
 describe('zone panel: direction', () => {
   it('charts outbound the flows the zone emitted, by destination zone, ranks its destinations, and remembers the choice', async () => {
     // The ring has no source zone filter: outbound reads it whole and keeps the events from db.
@@ -156,6 +171,8 @@ describe('zone panel: direction', () => {
 
     const traffic = section(panel, 'Observed traffic')
     await waitFor(() => expect(within(traffic).getByTestId('traffic-summary').textContent).toBe('2 hits · top destination web (100%) · 2 would be blocked, 0 blocked'))
+    fireEvent.mouseOver(within(traffic).getByTestId('traffic-summary'))
+    expect((await screen.findByRole('tooltip')).textContent).toContain("Blocked: connections blocked by the destination zone (its inbound) or by this zone's outbound.")
     expect(within(traffic).getAllByTestId(/^area-/).map(a => a.getAttribute('data-testid'))).toEqual(['area-zone:zw'])
     expect(within(panel).getByRole('region', { name: 'Top destinations' })).toBeTruthy()
     expect(window.localStorage.getItem(PANEL_DIRECTION_KEY)).toBe('out')

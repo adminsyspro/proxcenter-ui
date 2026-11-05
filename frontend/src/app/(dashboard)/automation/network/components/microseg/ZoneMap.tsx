@@ -381,6 +381,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
               onResolved={setResolved}
               onOpenDrifts={zoneId => goToSubTab('drifts', { zoneId })}
               partialLimit={(suggestions.data?.length ?? 0) >= PENDING_LIMIT ? PENDING_LIMIT : null}
+              peers={mapTarget.peers}
             />
           )}
           {targetPanel && target && (

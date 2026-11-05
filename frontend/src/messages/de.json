@@ -13307,6 +13307,7 @@
         "topSourcesEmpty": "Keine Quelle in diesem Zeitraum",
         "suggestionsEmpty": "Kein offener Vorschlag für diese Zone",
         "summaryOut": "{hits, plural, one {# Treffer} other {# Treffer}} · wichtigstes Ziel {source} ({share} %) · {wouldBlock, number} würden blockiert, {blocked, number} blockiert",
+        "summaryOutBlockedHelp": "Blockiert: Verbindungen, die von der Zielzone (deren Eingang) oder vom Ausgang dieser Zone blockiert werden.",
         "topDestinations": "Wichtigste Ziele",
         "topDestinationsEmpty": "Kein Ziel in diesem Zeitraum",
         "memberRunning": "Läuft",

@@ -154,8 +154,12 @@ export default function ZoneDialog({ zone, onSave, onClose, gate }: Props) {
 
   return (
     <Dialog open onClose={busy ? undefined : onClose} maxWidth='sm' fullWidth aria-labelledby='microseg-zone-title'>
-      <DialogTitle id='microseg-zone-title' sx={ONE_LINE_SX}>
-        {editing ? t('microsegPilot.policy.zoneDialog.editTitle') : t('microsegPilot.policy.zoneDialog.createTitle')}
+      <DialogTitle id='microseg-zone-heading' sx={{ ...ONE_LINE_SX, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <i className='ri-shield-fill' data-testid='zone-dialog-icon' style={{ fontSize: 18, flexShrink: 0, color: values.color || undefined }} />
+        <Box component='span' id='microseg-zone-title' sx={{ ...ONE_LINE_SX, flexShrink: 0 }}>
+          {editing ? t('microsegPilot.policy.zoneDialog.editTitle') : t('microsegPilot.policy.zoneDialog.createTitle')}
+        </Box>
+        {values.name.trim() ? <Box component='span' data-testid='zone-dialog-name' sx={{ ...ONE_LINE_SX, minWidth: 0, fontWeight: 700 }}>{`\u00B7 ${values.name.trim()}`}</Box> : null}
       </DialogTitle>
       <DialogContent sx={{ '&&': { pt: 5 } }}>
         <Stack spacing={4}>

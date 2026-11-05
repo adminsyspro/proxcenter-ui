@@ -57,6 +57,20 @@ describe('zone header actions', () => {
     expect(await within(screen.getByRole('complementary', { name: 'Zone web' })).findByText('front')).toBeTruthy()
   })
 
+  it('shows the zone icon and name in the dialog header, the icon following the selected color', async () => {
+    setup()
+    fireEvent.click(button(await openPanel(), 'Edit zone'))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit zone' })
+    expect(within(dialog).getByTestId('zone-dialog-name').textContent).toContain('web')
+    const icon = within(dialog).getByTestId('zone-dialog-icon')
+    expect(icon.className).toContain('ri-shield-fill')
+    const swatch = within(dialog).getAllByRole('button').find(b => /^#[0-9a-f]{6}$/i.test(b.getAttribute('aria-label') ?? '') && b.getAttribute('aria-pressed') !== 'true') as HTMLElement
+    fireEvent.click(swatch)
+    const probe = document.createElement('i')
+    probe.style.color = swatch.getAttribute('aria-label') as string
+    expect(icon.style.color).toBe(probe.style.color)
+  })
+
   it('keeps the dialog open with the message and reloads the policy on a version conflict', async () => {
     mock.routes['PUT /zones/zw'] = () => reply(409, { code: 'VERSION_CONFLICT', error: 'stale' })
     setup()

@@ -238,13 +238,28 @@ describe('PATCH /users/[id] — deleteApiTokens', () => {
     const res = await callRoute(PATCH as any, {
       method: 'PATCH',
       params: { id: 'u-leaver' },
-      body: { enabled: false, deleteApiTokens: true },
+      body: { deleteApiTokens: true },
     })
 
     expect(res.status).toBe(200)
     expect((await readJson<any>(res)).data.api_tokens_deleted).toBe(1)
     expect(await exists('live-t2')).toBe(false)
     expect(await exists('live-default')).toBe(true)
+  })
+
+  it('refuses to disable, from a customer tenant, a user who also belongs to another tenant', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('t2')
+    const { PATCH } = await importRoute()
+    const res = await callRoute(PATCH as any, {
+      method: 'PATCH',
+      params: { id: 'u-leaver' },
+      body: { enabled: false, deleteApiTokens: true },
+    })
+
+    expect(res.status).toBe(403)
+    // Nothing happened to the tokens either: the refusal comes first.
+    expect(await exists('live-t2')).toBe(true)
+    expect((await prismaTest.user.findUnique({ where: { id: 'u-leaver' } }))?.enabled).toBe(true)
   })
 
   it('aborts with the account still enabled when the deletion fails (deletion runs first)', async () => {

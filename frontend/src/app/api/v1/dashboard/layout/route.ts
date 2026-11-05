@@ -12,9 +12,10 @@ export const runtime = "nodejs"
 
 const MAX_DASHBOARDS = 20
 
-function getUserId(session: any, url?: URL) {
-  return session?.user?.id || url?.searchParams.get('userId') || 'default'
-}
+// A valid cookie whose server-side session is gone (signed out, revoked)
+// resolves to no session: the request then names nobody, and nothing in it
+// (a userId in the query, a provider fallback) may stand in for the user.
+const notAuthenticated = () => NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
 /**
  * GET /api/v1/dashboard/layout
@@ -27,10 +28,11 @@ export async function GET(req: Request) {
   if (demo) return demo
 
   try {
-    const prisma = await getSessionPrisma()
     const session = await getServerSession(authOptions)
+    const userId: string | undefined = session?.user?.id
+    if (!userId) return notAuthenticated()
+    const prisma = await getSessionPrisma()
     const url = new URL(req.url)
-    const userId = getUserId(session, url)
     const list = url.searchParams.get('list')
     const name = url.searchParams.get('name')
 
@@ -116,9 +118,10 @@ export async function PUT(req: Request) {
   if (demo) return demo
 
   try {
-    const prisma = await getSessionPrisma()
     const session = await getServerSession(authOptions)
-    const userId = getUserId(session)
+    const userId: string | undefined = session?.user?.id
+    if (!userId) return notAuthenticated()
+    const prisma = await getSessionPrisma()
     const tenantId = await getCurrentTenantId()
     const body = await req.json()
     const { name = 'Default', widgets } = body
@@ -163,9 +166,10 @@ export async function POST(req: Request) {
   if (demo) return demo
 
   try {
-    const prisma = await getSessionPrisma()
     const session = await getServerSession(authOptions)
-    const userId = getUserId(session)
+    const userId: string | undefined = session?.user?.id
+    if (!userId) return notAuthenticated()
+    const prisma = await getSessionPrisma()
     const body = await req.json()
     const { name, widgets } = body
 
@@ -233,10 +237,11 @@ export async function DELETE(req: Request) {
   if (demo) return demo
 
   try {
-    const prisma = await getSessionPrisma()
     const session = await getServerSession(authOptions)
+    const userId: string | undefined = session?.user?.id
+    if (!userId) return notAuthenticated()
+    const prisma = await getSessionPrisma()
     const url = new URL(req.url)
-    const userId = getUserId(session, url)
     const name = url.searchParams.get('name')
 
     if (name) {
@@ -289,9 +294,10 @@ export async function PATCH(req: Request) {
   if (demo) return demo
 
   try {
-    const prisma = await getSessionPrisma()
     const session = await getServerSession(authOptions)
-    const userId = getUserId(session)
+    const userId: string | undefined = session?.user?.id
+    if (!userId) return notAuthenticated()
+    const prisma = await getSessionPrisma()
     const body = await req.json()
     const { order } = body
 

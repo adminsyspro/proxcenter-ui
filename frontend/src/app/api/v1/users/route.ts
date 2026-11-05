@@ -129,6 +129,7 @@ export async function GET() {
       name: m.user.name,
       role: m.user.role,
       auth_provider: m.user.authProvider,
+      local_login_allowed: m.user.localLoginAllowed,
       enabled: m.user.enabled,
       totp_enabled: m.user.totpEnabled,
       require_2fa_enrollment: m.user.require2faEnrollment,

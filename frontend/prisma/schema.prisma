@@ -423,6 +423,9 @@ model User {
   authProvider String    @default("credentials") @map("auth_provider")
   ldapDn       String?   @map("ldap_dn")
   oidcSub      String?   @map("oidc_sub")
+  // Emergency access: a local password still signs in once the account is
+  // OIDC or LDAP. Set by a super admin, or kept for the last super admin.
+  localLoginAllowed Boolean @default(false) @map("local_login_allowed")
   enabled      Boolean   @default(true)
   lastLoginAt  DateTime? @map("last_login_at")
   createdAt    DateTime  @map("created_at")

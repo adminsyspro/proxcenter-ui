@@ -8878,6 +8878,8 @@
     "ldapAuth": "LDAP",
     "localAuth": "로컬",
     "passwordManagedByIdp": "비밀번호는 ID 공급자(OIDC / LDAP)가 관리합니다.",
+    "localLoginAllowed": "로컬 비밀번호를 통한 긴급 액세스",
+    "passwordEmergencyAccess": "긴급 액세스: 이 비밀번호로 ID 공급자 없이 로그인합니다",
     "emailLabel": "이메일",
     "emailHeader": "이메일",
     "authHeader": "인증",

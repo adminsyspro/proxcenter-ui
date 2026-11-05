@@ -298,7 +298,7 @@ const TENANT_FORBIDDEN_ROLE_IDS = new Set([
   'role_vm_user',
 ])
 
-function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true, currentUserId, currentSessionTenantId = 'default', enableTenantMgmt = false, tenantsList = [] }) {
+function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true, currentUserId, callerIsSuperAdmin = false, currentSessionTenantId = 'default', enableTenantMgmt = false, tenantsList = [] }) {
   // Self-protection: the current user cannot change their own role or disable
   // their own account (matches the backend guards in /users/[id] and
   // /rbac/assignments). Hide those controls in the edit dialog.
@@ -307,6 +307,8 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [enabled, setEnabled] = useState(true)
+  // Emergency access: the local password keeps working on an SSO / LDAP account.
+  const [localLoginAllowed, setLocalLoginAllowed] = useState(false)
   const [selectedRole, setSelectedRole] = useState(null)
   const [initialRoleId, setInitialRoleId] = useState(null)
   // The operator chose to take a provider-managed role over (issue #1074).
@@ -325,6 +327,12 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
   // Password is owned by the external IdP for SSO/LDAP accounts — never let the
   // app set a local password on them (would open a credentials path bypassing SSO).
   const isExternalAuth = isEdit && (user?.auth_provider === 'ldap' || user?.auth_provider === 'oidc')
+  // ...unless a super admin granted the account emergency access.
+  const showEmergencyAccess = isExternalAuth && callerIsSuperAdmin
+  const passwordLocked = isExternalAuth && !localLoginAllowed
+  let passwordHelper = t ? t('usersPage.minChars') : 'Minimum 8 characters'
+  if (passwordLocked) passwordHelper = t ? t('usersPage.passwordManagedByIdp') : 'Password is managed by the identity provider'
+  else if (isExternalAuth) passwordHelper = t ? t('usersPage.passwordEmergencyAccess') : 'Emergency access: this password signs in without the identity provider'
   // Super admins are pinned to every tenant by design — disable the
   // multi-select but still display their current memberships so the
   // operator sees the rule rather than an empty field.
@@ -366,6 +374,7 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
       // legacy int comparison (=== 1) was always false and pinned the
       // Switch off regardless of the row's real state.
       setEnabled(!!user.enabled)
+      setLocalLoginAllowed(!!user.local_login_allowed)
       // Several roles → leave the picker empty so the operator must pick a
       // role explicitly (and acknowledge it replaces all of them).
       const { distinctRoles } = summarizeUserRoles(user.roles)
@@ -379,6 +388,7 @@ function UserDialog({ open, onClose, user, onSave, rbacRoles, t, showRbac = true
       setEmail('')
       setPassword('')
       setEnabled(true)
+      setLocalLoginAllowed(false)
       setSelectedRole(null)
       setSelectedTenants([])
     }
@@ -478,7 +488,8 @@ return
         ? {
             ...(name !== (user.name || '') ? { name } : {}),
             ...(enabled !== !!user.enabled ? { enabled: enabled ? 1 : 0 } : {}),
-            ...(password ? { password } : {}),
+            ...(showEmergencyAccess && localLoginAllowed !== !!user.local_login_allowed ? { localLoginAllowed } : {}),
+            ...(password && !passwordLocked ? { password } : {}),
             ...(enableTenantMgmt && !tenantPickerDisabled ? { tenantIds: selectedTenants } : {}),
             // Only include roleId when the operator actually changed it.
             // This avoids re-sending a protected role (super_admin /
@@ -621,14 +632,14 @@ return
           fullWidth
           label={isEdit ? (t ? t('usersPage.newPassword') : 'New password (leave empty to keep current)') : (t ? t('auth.password') : 'Password')}
           type={showPassword ? 'text' : 'password'}
-          value={isExternalAuth ? '' : password}
+          value={passwordLocked ? '' : password}
           onChange={e => setPassword(e.target.value)}
-          sx={{ mb: 2 }}
+          sx={{ mb: showEmergencyAccess ? 1 : 2 }}
           required={!isEdit}
-          disabled={isExternalAuth}
-          helperText={isExternalAuth ? (t ? t('usersPage.passwordManagedByIdp') : 'Password is managed by the identity provider') : (t ? t('usersPage.minChars') : 'Minimum 8 characters')}
+          disabled={passwordLocked}
+          helperText={passwordHelper}
           InputProps={{
-            endAdornment: isExternalAuth ? undefined : (
+            endAdornment: passwordLocked ? undefined : (
               <InputAdornment position='end'>
                 <IconButton size='small' onClick={() => setShowPassword(!showPassword)}>
                   <i className={showPassword ? 'ri-eye-off-line' : 'ri-eye-line'} />
@@ -637,6 +648,19 @@ return
             ),
           }}
         />
+
+        {showEmergencyAccess && (
+          <FormControlLabel
+            sx={{ mb: 2, display: 'flex' }}
+            control={
+              <Switch
+                checked={localLoginAllowed}
+                onChange={e => setLocalLoginAllowed(e.target.checked)}
+              />
+            }
+            label={t ? t('usersPage.localLoginAllowed') : 'Emergency access with a local password'}
+          />
+        )}
 
         {showRbac && !isSelf && enableTenantMgmt && rolesAreDivergent && (
           <Alert severity='warning' sx={{ mb: 2 }} icon={<i className='ri-error-warning-line' />}>
@@ -1898,6 +1922,7 @@ return () => setPageInfo('', '', '')
         t={t}
         showRbac={showRbac}
         currentUserId={session?.user?.id}
+        callerIsSuperAdmin={!!users.find(u => u.id === session?.user?.id)?.is_super_admin}
         currentSessionTenantId={session?.user?.tenantId || 'default'}
         enableTenantMgmt={enableTenantMgmt}
         tenantsList={tenantsList}

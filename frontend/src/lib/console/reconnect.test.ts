@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { JSDOM } from 'jsdom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import * as ConsoleUI from './viewport'
+import * as ConsoleUI from './consoleUi'
 
 const html = readFileSync('public/novnc/console.html', 'utf8')
 let dom: JSDOM
@@ -143,4 +143,15 @@ it('shows disconnected when the browser refuses to close the window', async () =
   expect(w.document.getElementById('loading-text')!.textContent).toBe('Disconnected')
   await vi.advanceTimersByTimeAsync(60000)
   expect(attempts()).toBe(1)
+})
+
+describe('console page CD/DVD menu (#1309)', () => {
+  it('puts the ISO button first in the toolbar buttons without reading anything until opened', async () => {
+    vi.useFakeTimers()
+    const { w, fetch } = await boot()
+    const buttons = w.document.querySelector('#toolbar .buttons')!
+
+    expect(buttons.firstElementChild?.classList.contains('pxc-media-btn')).toBe(true)
+    expect(fetch.mock.calls.some(([url]) => url.endsWith('/config'))).toBe(false)
+  })
 })

@@ -180,6 +180,17 @@
       }
     }
 
+    // Lecteur CD/DVD (#1309): le même menu que la console noVNC.
+    if (connId && type && node && vmid) {
+      ConsoleUI.mountMediaMenu({
+        doc: document,
+        container: toolbar.querySelector('.buttons'),
+        host: toolbar,
+        ref: { connId, type, node, vmid },
+        fetchFn: (url, init) => fetch(url, init),
+      });
+    }
+
     function setStatus(s, text) { dot.className = s; status.textContent = '• ' + text; }
     function fail(big, small) {
       setStatus('error', 'Error');

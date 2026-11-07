@@ -106,6 +106,13 @@ describe('pickPbsStorage', () => {
     expect(pickPbsStorage(storages, { baseUrl: 'https://pbs.lab:8007', datastore: 'store1', namespace: 'prod', node: 'pve1' })).toBe('everywhere')
   })
 
+  it('reaches a storage declared by FQDN through the certificate the PBS connection pinned (ui#1308)', () => {
+    const fp = '17:44:52:4E:99:EA:D8:04:7E:15:CB:EA:F3:7D:43:56:8F:23:D2:D7:B2:43:26:F4:E6:13:C8:9C:4A:E4:AC:21'
+    const byFqdn = [{ storage: 'WH-PBS-Store', type: 'pbs', server: 'pbs.test.com', datastore: 'test-vdc', namespace: '', fingerprint: fp }]
+    expect(pickPbsStorage(byFqdn, { baseUrl: 'https://10.42.0.201:8007', fingerprint: fp, datastore: 'test-vdc', namespace: '', node: 'pve1' })).toBe('WH-PBS-Store')
+    expect(pickPbsStorage(byFqdn, { baseUrl: 'https://10.42.0.201:8007', datastore: 'test-vdc', namespace: '', node: 'pve1' })).toBeNull()
+  })
+
   it('returns null when nothing matches', () => {
     expect(pickPbsStorage(storages, { baseUrl: 'https://pbs.lab:8007', datastore: 'store1', namespace: '', node: 'pve1' })).toBeNull()
     expect(pickPbsStorage(null, { baseUrl: 'https://pbs.lab', datastore: 'store1', namespace: '', node: 'pve1' })).toBeNull()

@@ -31,7 +31,8 @@ import { GET } from './route'
 beforeEach(() => {
   h.scope = null
   h.pveFetch.mockReset().mockImplementation(async (_conn: unknown, path: string) =>
-    path === '/storage' ? [{ storage: 'pbs1', type: 'pbs', server: '10.0.0.9:8007', datastore: 'ds' }] : [])
+    // PVE keeps the port in its own `port` option: `server` is the bare address.
+    path === '/storage' ? [{ storage: 'pbs1', type: 'pbs', server: '10.0.0.9', datastore: 'ds' }] : [])
 })
 
 const rows = async () => (await (await GET()).json()).data as any[]

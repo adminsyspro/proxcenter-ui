@@ -18,6 +18,7 @@ import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import { clearRestoredTags } from "@/lib/backups/restoreTagsCleanup"
 import { resolveCtRestoreStorage } from "@/lib/backups/ctRestoreStorage"
 import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
+import { pbsIdentityOf, samePbsServer } from "@/lib/guestFileRestore/pbsPveStorages"
 import type { Principal } from "@/lib/auth/principal"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { resolveVisibleConnectionIds } from "@/lib/api-tokens/scope"
@@ -203,23 +204,22 @@ async function handler(
           }
         }
       }
-      // Look up the PBS connection to know which `server` PVE storages
-      // need to advertise. We compare lower-cased hostnames so an IP vs
-      // FQDN mismatch (e.g. `pbs.lab` vs `10.0.0.5`) doesn't break the
-      // join — both sides are normalised the same way.
+      // Look up the PBS connection to know which server the PVE storage
+      // must reach. `server` is compared as written (no DNS), so a storage
+      // declared by FQDN and a connection declared by IP only meet through
+      // the certificate fingerprint both sides pin (ui#1308).
       const pbsConn = await prisma.connection.findUnique({
         where: { id: pbsId },
-        select: { baseUrl: true },
+        select: { baseUrl: true, fingerprint: true },
       })
       if (!pbsConn?.baseUrl) {
         return NextResponse.json({ error: "PBS connection not found" }, { status: 404 })
       }
-      const pbsHost = (() => {
-        try { return new URL(pbsConn.baseUrl).hostname.toLowerCase() } catch { return '' }
-      })()
+      const pbsIdentity = pbsIdentityOf({ baseUrl: pbsConn.baseUrl, fingerprint: pbsConn.fingerprint })
 
       // List PVE storages on the target node and pick the one whose pbs-
       // type config points at the same server + datastore (and namespace).
+      // Its ID is free: it never has to equal the datastore name.
       const nodeStorages = await pveFetch<any[]>(
         conn,
         `/nodes/${encodeURIComponent(node)}/storage?content=backup`
@@ -236,10 +236,9 @@ async function handler(
         if (!storageName) continue
         try {
           const cfg = await pveFetch<any>(conn, `/storage/${encodeURIComponent(storageName)}`)
-          const cfgServer = String(cfg?.server || '').toLowerCase()
           const cfgDatastore = String(cfg?.datastore || '')
           const cfgNamespace = String(cfg?.namespace || '').trim()
-          const sameHost = !!cfgServer && (cfgServer === pbsHost || cfgServer === pbsConn.baseUrl.toLowerCase())
+          const sameHost = samePbsServer(cfg ?? {}, pbsIdentity)
           const sameDs = cfgDatastore === datastore
           const sameNs = cfgNamespace === wantedNs
           if (sameHost && sameDs && sameNs) {
@@ -250,7 +249,7 @@ async function handler(
       }
       if (!matchedStorage) {
         return NextResponse.json({
-          error: `No PVE storage on node "${node}" maps to PBS datastore "${datastore}"${wantedNs ? ` (ns: ${wantedNs})` : ''}. Configure one before restoring.`,
+          error: `No PBS storage on node "${node}" reaches this backup server with datastore "${datastore}"${wantedNs ? ` and namespace "${wantedNs}"` : ''}. The storage ID can be any name, but its server (address or certificate fingerprint), datastore and namespace must match.`,
         }, { status: 409 })
       }
       // backupPath comes from /guests/{vmid}/backups already shaped as

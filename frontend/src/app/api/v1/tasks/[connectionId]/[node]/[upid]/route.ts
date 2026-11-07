@@ -77,7 +77,8 @@ async function handleSourceVmCleanupAfterMigration(args: {
       const { executeSSH } = await import('@/lib/ssh/exec')
       const { resolveNodeSshEndpoint } = await import('@/lib/ssh/node-endpoint')
       const nodeIp = await resolveNodeSshEndpoint(connection, node)
-      const result = await executeSSH(connectionId, nodeIp, `qm unlock ${safeVmid}`)
+      const { asRoot } = await import('@/lib/ssh/sudo')
+      const result = await executeSSH(connectionId, nodeIp, asRoot(`qm unlock ${safeVmid}`))
       if (result.success) {
         console.log(`[task-api] Auto-unlocked VM ${vmid} on ${node} after cross-cluster migration`)
       } else {

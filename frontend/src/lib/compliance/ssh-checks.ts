@@ -2,6 +2,7 @@
 // Read-only SSH-based CIS Benchmark checks — no writes, no remediation
 
 import type { HardeningCheck, CheckStatus, Severity } from './hardening'
+import { asRoot } from '@/lib/ssh/sudo'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -28,6 +29,14 @@ const SECTION_DELIM = '###CIS_SECTION:'
  * Returns a single shell script that runs all read-only audit checks.
  * Output is delimited by `###CIS_SECTION:<key>###` markers.
  */
+// The audit runs as the SSH account. Only the probes that read what root
+// alone can see go through sudo, each with its arguments pinned by the
+// sudoers template (lib/ssh/sudo): sshd -T, AppArmor and fail2ban status, and
+// the two file-system walks, which miss every directory the account cannot
+// open otherwise.
+const SUID_FIND = asRoot('find / -xdev -type f \\( -perm -4000 -o -perm -2000 \\) -print')
+const WORLD_WRITABLE_FIND = asRoot('find / -xdev -type f -perm -0002 ! -path "/proc/*" ! -path "/sys/*" ! -path "/tmp/*" ! -path "/var/tmp/*" -print')
+
 export function buildSSHAuditCommand(): string {
   const sections: Array<{ key: string; cmd: string }> = [
     // --- OS Hardening ---
@@ -72,7 +81,7 @@ zfs get encryption -t filesystem -H 2>/dev/null | grep -v "off" | head -5 || ech
     // --- SSH Hardening ---
     {
       key: 'sshd_config',
-      cmd: `sshd -T 2>/dev/null || cat /etc/ssh/sshd_config 2>/dev/null || echo "SSHD_NOT_FOUND"`,
+      cmd: `${asRoot('sshd -T')} 2>/dev/null || cat /etc/ssh/sshd_config 2>/dev/null || echo "SSHD_NOT_FOUND"`,
     },
     // --- Network ---
     {
@@ -112,7 +121,7 @@ done`,
     {
       key: 'apparmor',
       cmd: `systemctl is-active apparmor 2>/dev/null || echo "inactive"
-aa-status --json 2>/dev/null || aa-status 2>/dev/null || echo "AA_NOT_AVAILABLE"`,
+${asRoot('aa-status --json')} 2>/dev/null || echo "AA_NOT_AVAILABLE"`,
     },
     {
       key: 'auditd',
@@ -128,7 +137,7 @@ systemctl is-active chrony 2>/dev/null; systemctl is-active systemd-timesyncd 2>
       key: 'fail2ban',
       cmd: `dpkg -l fail2ban 2>/dev/null | grep -q "^ii" && echo "INSTALLED" || echo "NOT_INSTALLED"
 systemctl is-active fail2ban 2>/dev/null || echo "inactive"
-fail2ban-client status 2>/dev/null | head -5 || echo "NO_STATUS"`,
+${asRoot('fail2ban-client status')} 2>/dev/null | head -5 || echo "NO_STATUS"`,
     },
     // --- Filesystem ---
     {
@@ -140,11 +149,11 @@ stat -c "%a %U %G" /etc/gshadow 2>/dev/null || echo "UNKNOWN"`,
     },
     {
       key: 'suid_files',
-      cmd: `find / -xdev -type f \\( -perm -4000 -o -perm -2000 \\) -print 2>/dev/null | head -100 | wc -l; echo "---"; find / -xdev -type f \\( -perm -4000 -o -perm -2000 \\) -print 2>/dev/null | head -10`,
+      cmd: `${SUID_FIND} 2>/dev/null | head -100 | wc -l; echo "---"; ${SUID_FIND} 2>/dev/null | head -10`,
     },
     {
       key: 'world_writable',
-      cmd: `find / -xdev -type f -perm -0002 ! -path "/proc/*" ! -path "/sys/*" ! -path "/tmp/*" ! -path "/var/tmp/*" -print 2>/dev/null | head -50 | wc -l; echo "---"; find / -xdev -type f -perm -0002 ! -path "/proc/*" ! -path "/sys/*" ! -path "/tmp/*" ! -path "/var/tmp/*" -print 2>/dev/null | head -5`,
+      cmd: `${WORLD_WRITABLE_FIND} 2>/dev/null | head -50 | wc -l; echo "---"; ${WORLD_WRITABLE_FIND} 2>/dev/null | head -5`,
     },
     {
       key: 'integrity',

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { asRoot } from "@/lib/ssh/sudo"
 import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById, isConnectionNotFoundError } from "@/lib/connections/getConnection"
@@ -207,7 +208,7 @@ async function prepareWrite(ctx: Ctx, enable: boolean): Promise<
 async function runGroupCommand(id: string, conn: any, ceph: NodeCeph, command: string, extra: Record<string, unknown>) {
   const endpoint = await resolveNodeSshEndpoint(conn, ceph.viaNode)
   console.log(`[ceph/noout] executing via SSH on ${safeLog(formatSshEndpoint(endpoint))}: ${safeLog(command)}`)
-  const result = await executeSSH(id, endpoint, command)
+  const result = await executeSSH(id, endpoint, asRoot(command))
   if (result.success) {
     return NextResponse.json({ success: true, crushHost: ceph.crushHost, osds: ceph.osds.map(o => o.id), output: result.output, ...extra })
   }

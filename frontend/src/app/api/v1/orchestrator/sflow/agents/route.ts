@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { asRoot, SFLOW_MIN_SAMPLING } from "@/lib/ssh/sudo"
 
 import { getCurrentTenantId, getSessionPrisma, requireProviderTenant } from "@/lib/tenant"
 import { orchestratorFetch } from "@/lib/orchestrator"
@@ -128,12 +129,12 @@ async function probeHost(
   }
 
   try {
-    const bridgesResult = await executeSSH(connId, ssh, "ovs-vsctl list-br 2>/dev/null || true", undefined, READ_ONLY)
+    const bridgesResult = await executeSSH(connId, ssh, `${asRoot("ovs-vsctl list-br")} 2>/dev/null || true`, undefined, READ_ONLY)
     let hasBridges = bridgesResult.success && !!bridgesResult.output?.trim()
 
     if (!hasBridges) {
       // Fallback: ovs-vsctl may not be in PATH — probe with which
-      const whichResult = await executeSSH(connId, ssh, "which ovs-vsctl 2>/dev/null && ovs-vsctl list-br", undefined, READ_ONLY)
+      const whichResult = await executeSSH(connId, ssh, `which ovs-vsctl 2>/dev/null && ${asRoot("ovs-vsctl list-br")}`, undefined, READ_ONLY)
       if (whichResult.success && whichResult.output?.trim()) {
         const lines = whichResult.output.trim().split("\n").filter(Boolean)
         if (lines.length > 0 && lines[0].includes("ovs-vsctl")) {
@@ -152,9 +153,9 @@ async function probeHost(
 
       // Run the three remaining probes concurrently since they're independent
       const [versionResult, sflowResult, ipLinkResult] = await Promise.all([
-        executeSSH(connId, ssh, "ovs-vsctl --version 2>/dev/null | head -1 || true", undefined, READ_ONLY),
-        executeSSH(connId, ssh, "ovs-vsctl list sflow 2>/dev/null | grep -E 'targets|agent|sampling|polling' || true", undefined, READ_ONLY),
-        executeSSH(connId, ssh, "ip -o link 2>/dev/null", undefined, READ_ONLY),
+        executeSSH(connId, ssh, `${asRoot("ovs-vsctl --version")} 2>/dev/null | head -1 || true`, undefined, READ_ONLY),
+        executeSSH(connId, ssh, `${asRoot("ovs-vsctl list sflow")} 2>/dev/null | grep -E 'targets|agent|sampling|polling' || true`, undefined, READ_ONLY),
+        executeSSH(connId, ssh, "ip -o link 2>/dev/null", undefined, { ...READ_ONLY, asAccount: true }),
       ])
 
       if (versionResult.success && versionResult.output?.trim()) {
@@ -331,8 +332,10 @@ async function handlePost(request: NextRequest) {
     }
     const safeSampling = Number(samplingRate)
     const safePolling = Number(pollingInterval)
-    if (!Number.isInteger(safeSampling) || safeSampling < 1 || safeSampling > 1_000_000_000) {
-      return NextResponse.json({ error: "samplingRate must be an integer between 1 and 1000000000" }, { status: 400 })
+    // Below 1 in 64 a busy node spends its CPU sampling, and the restricted
+    // sudoers rule refuses it.
+    if (!Number.isInteger(safeSampling) || safeSampling < SFLOW_MIN_SAMPLING || safeSampling > 1_000_000_000) {
+      return NextResponse.json({ error: `samplingRate must be an integer between ${SFLOW_MIN_SAMPLING} and 1000000000` }, { status: 400 })
     }
     if (!Number.isInteger(safePolling) || safePolling < 1 || safePolling > 86_400) {
       return NextResponse.json({ error: "pollingInterval must be an integer between 1 and 86400" }, { status: 400 })

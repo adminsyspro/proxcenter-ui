@@ -7,6 +7,7 @@ import { safeLog } from "@/lib/log/sanitize"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { makeHostVerifier } from "@/lib/ssh/host-key-store"
 import { resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
+import { hasSudoMark, resolveSudo } from "@/lib/ssh/sudo"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
@@ -64,6 +65,16 @@ export interface SSHExecOpts {
    *  command is refused (roadmap#58). A caller vouches for its own command;
    *  in doubt, leave it unset and the command is refused there. */
   readOnly?: boolean
+  /** The command runs as the SSH account: only the programs it marks with
+   *  asRoot() (lib/ssh/sudo) escalate, as `sudo -n <program>`. Implied by a
+   *  command carrying a mark. Without it, an unmarked command keeps the
+   *  historical `sudo sh -c '<command>'` wrapping, which only a full sudoers
+   *  grant satisfies (migrations). */
+  asAccount?: boolean
+  /** Sent on the command's stdin, then closed. The way to hand a secret to a
+   *  node: a command line lands in the sudo log and in ps, stdin does not.
+   *  Only honoured on the ssh2 path, so the call skips the orchestrator. */
+  stdin?: string
 }
 
 /**
@@ -145,6 +156,26 @@ export function createInactivityTimer(ms: number, onFire: () => void): { bump: (
   }
   bump()
   return { bump, clear }
+}
+
+// sudo's own refusals when a full grant is missing: no password can be typed
+// in a non-interactive session, or the command is outside the sudoers rules.
+const SUDO_REFUSED = /sudo: (a password is required|a terminal is required|sorry, user \S+ is not allowed)/
+
+/**
+ * A command still wrapped in `sudo sh -c` (the migration pipelines) needs the
+ * full grant of the migrations profile: say so instead of sudo's bare refusal.
+ */
+export function explainSudoRefusal(result: SSHResult, wrapped: boolean): SSHResult {
+  if (!wrapped || result.success) return result
+  const text = `${result.error ?? ""}\n${result.output ?? ""}`
+
+  if (!SUDO_REFUSED.test(text)) return result
+
+  return {
+    ...result,
+    error: "sudo refused the command: this operation runs a whole script as root and needs the migrations sudo profile (NOPASSWD: ALL), see Settings > SSH commands",
+  }
 }
 
 /**
@@ -254,16 +285,21 @@ export async function executeSSH(
   // otherwise fail every check with `bash: sudo: command not found`.
   // Use `sudo sh -c '...'` so compound commands (&&, ||, pipes, redirects)
   // all execute under sudo. Naive `sudo cmd1 && cmd2` only sudo's cmd1.
-  const needsSudo = connection.sshUseSudo && user !== 'root'
-  const finalCommand = needsSudo ? `sudo sh -c ${shellEscape(command)}` : command
+  const needsSudo = !!connection.sshUseSudo && user !== 'root'
+  const perProgram = execOpts.asAccount === true || hasSudoMark(command)
+  const finalCommand = perProgram
+    ? resolveSudo(command, needsSudo)
+    : needsSudo ? `sudo sh -c ${shellEscape(command)}` : command
 
+  const wrapped = !perProgram && needsSudo
   const direct = () => executeSSHDirect({
     host: nodeIp, port, user, key, password, passphrase, command: finalCommand, timeoutMs,
-    inactivityMs: execOpts.inactivityMs, onData: execOpts.onData,
-  })
+    inactivityMs: execOpts.inactivityMs, onData: execOpts.onData, stdin: execOpts.stdin,
+  }).then(r => explainSudoRefusal(r, wrapped))
 
-  // The orchestrator answers once at the end, so a streaming call cannot go through it.
-  if (execOpts.onData !== undefined || execOpts.inactivityMs !== undefined) return direct()
+  // The orchestrator answers once at the end and takes no stdin, so a
+  // streaming call or one feeding stdin cannot go through it.
+  if (execOpts.onData !== undefined || execOpts.inactivityMs !== undefined || execOpts.stdin !== undefined) return direct()
 
   // 1. Try orchestrator
   try {
@@ -283,7 +319,7 @@ export async function executeSSH(
     if (res.ok) {
       const data = await res.json()
       console.log(`[ssh] executed via orchestrator on ${safeLog(nodeIp)}`)
-      return { success: data.success !== false, output: data.output, error: data.error }
+      return explainSudoRefusal({ success: data.success !== false, output: data.output, error: data.error }, wrapped)
     }
 
     const err = await res.json().catch(() => ({}))
@@ -335,6 +371,8 @@ export function executeSSHDirect(opts: {
   timeoutMs?: number
   inactivityMs?: number
   onData?: (chunk: string) => void
+  /** Written to the command's stdin, which is then closed. */
+  stdin?: string
 }): Promise<SSHResult> {
   return new Promise((resolve) => {
     const conn = new Client()
@@ -383,6 +421,8 @@ export function executeSSHDirect(opts: {
           settle({ success: false, error: err.message })
           return
         }
+
+        if (opts.stdin !== undefined) stream.end(opts.stdin)
 
         let stdout = ""
         let stderr = ""

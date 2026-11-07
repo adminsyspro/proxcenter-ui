@@ -21,7 +21,7 @@ describe('verifyNodeTarget', () => {
     const r = await verifyNodeTarget('c1', conn, 'pve1', '203.0.113.10')
     expect(r).toEqual({ ok: true })
     // The probe only reads, so it runs on a cluster outside the license too (roadmap#58).
-    expect(executeSSHMock).toHaveBeenCalledWith('c1', '203.0.113.10', 'hostname -s', undefined, { readOnly: true })
+    expect(executeSSHMock).toHaveBeenCalledWith('c1', '203.0.113.10', 'hostname -s', undefined, { readOnly: true, asAccount: true })
   })
 
   it('matches on the short label when node is an FQDN', async () => {

@@ -38,6 +38,7 @@ import {
 
 import { formatBytes } from '@/utils/format'
 import NumericTextField from '@/components/ui/NumericTextField'
+import { SFLOW_MIN_SAMPLING } from '@/lib/ssh/sudo'
 import dynamic from 'next/dynamic'
 import {
   formatElapsed,
@@ -1352,7 +1353,7 @@ export default function FlowsTab() {
             value={samplingRate}
             onChange={setSamplingRate}
             fallback={512}
-            min={1}
+            min={SFLOW_MIN_SAMPLING}
             InputProps={{ sx: { fontFamily: 'monospace' } }}
           />
           <Box sx={{ mt: 1, p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>
@@ -1368,6 +1369,9 @@ export default function FlowsTab() {
               {samplingRate > 1024 && t('networkFlows.samplingVeryLight')}
             </Typography>
           </Box>
+          <Alert severity="info" icon={<i className="ri-shield-check-line" />} sx={{ mt: 2 }}>
+            {t('networkFlows.collectorFirewallHint')}
+          </Alert>
           <Box sx={{ mt: 2 }}>
             <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
               {t('networkFlows.nodesToConfigure')}

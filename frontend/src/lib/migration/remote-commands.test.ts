@@ -9,7 +9,7 @@ import {
   authorizedKeysDeployCommand, authorizedKeysRevokeCommand, backgroundBashCommand, curlConfigQuoted, ddCopyScript,
   ddReadCommand, esxiKeyLoginProbeCommand, esxiSshCommand, fileExistsCommand, fileSizeCommand, listDirCommand,
   parseBackgroundPid, qemuImgConvertScript, qemuImgInfoCommand, qemuImgSshProbeCommand, qemuNbdServeCommand,
-  qemuOptionValue, readlinkCommand, sshfsMountCommand, sshpassEsxiCommand, vmfsPath, vmkfstoolsCloneCommand,
+  qemuOptionValue, readlinkCommand, sshfsMountCommand, sshpassEsxiCommand, esxiPasswordStdin, vmfsPath, vmkfstoolsCloneCommand,
   vmkfstoolsDeleteCommand, writeScriptCommand,
 } from "./remote-commands"
 
@@ -143,10 +143,11 @@ describe("node-side ssh wrappers", () => {
     expect(() => esxiSshCommand("ssh", 0, "root", "esx", "ls")).toThrow(/Invalid SSH port/)
   })
 
-  it("sshpassEsxiCommand exports the raw password and keeps the login and remote command whole", () => {
+  it("sshpassEsxiCommand reads the raw password from stdin and keeps the login and remote command whole", () => {
     const password = `p'a"s$(touch ${canary}) \`id\` s`
-    const cmd = sshpassEsxiCommand(password, OPTS, 2222, "root", `esx $(touch ${canary})`, fileSizeCommand(hostileDs))
-    const out = execFileSync("bash", ["-c", `sshpass() { printf '%s${SEP}' "$SSHPASS" "$@"; }\n${cmd}`], { encoding: "utf8", env: ENV })
+    const cmd = sshpassEsxiCommand(OPTS, 2222, "root", `esx $(touch ${canary})`, fileSizeCommand(hostileDs))
+    expect(cmd).not.toContain("p'a")
+    const out = execFileSync("sh", ["-c", `sshpass() { printf '%s${SEP}' "$SSHPASS" "$@"; }\n${cmd}`], { encoding: "utf8", env: ENV, input: esxiPasswordStdin(password) })
     const [seenPassword, ...argv] = out.split(SEP).slice(0, -1)
     expect(seenPassword).toBe(password)
     expect(argv).toEqual(["-e", "ssh", ...OPTS.split(" "), "-p", "2222", `root@esx $(touch ${canary})`, fileSizeCommand(hostileDs)])
@@ -181,10 +182,12 @@ describe("node-side file and image builders", () => {
     expect(argv).toEqual(["-o", spec.options, `root@esx:${remotePath}`, mountPath])
     expect(existsSync(mountPath)).toBe(true)
 
-    // password_stdin: the password arrives on stdin, raw.
+    // password_stdin: the password is the command's own stdin, raw, and
+    // never part of the command line (sudo would log it).
     const password = `p'w$(touch ${canary})`
-    const withPassword = sshfsMountCommand({ ...spec, options: `password_stdin,${spec.options}`, password })
-    const out = execFileSync("bash", ["-c", `sshfs() { IFS= read -r pw; printf '%s${SEP}' "$pw" "$@"; }\n${withPassword}`], { encoding: "utf8", env: ENV })
+    const withPassword = sshfsMountCommand({ ...spec, options: `password_stdin,${spec.options}` })
+    expect(withPassword).not.toContain("p'w")
+    const out = execFileSync("bash", ["-c", `sshfs() { IFS= read -r pw; printf '%s${SEP}' "$pw" "$@"; }\n${withPassword}`], { encoding: "utf8", env: ENV, input: password })
     expect(out.split(SEP).slice(0, -1)).toEqual([password, "-o", `password_stdin,${spec.options}`, `root@esx:${remotePath}`, mountPath])
     noCanary()
   })

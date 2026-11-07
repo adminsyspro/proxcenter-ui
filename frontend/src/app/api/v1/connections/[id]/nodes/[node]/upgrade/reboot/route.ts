@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { asRoot } from "@/lib/ssh/sudo"
 import { licenseExcludedResponse } from "@/lib/api/response"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
@@ -43,7 +44,7 @@ async function handlePost(_req: Request, ctx: Ctx) {
   // Use nohup so the SSH session returns before the reboot kills it
   let result: SSHResult
   try {
-    result = await executeSSH(id, nodeIp, "nohup bash -c 'sleep 1 && reboot' > /dev/null 2>&1 &")
+    result = await executeSSH(id, nodeIp, `nohup bash -c 'sleep 1 && ${asRoot("reboot")}' > /dev/null 2>&1 &`)
   } catch (e) {
     // The cluster is outside the license: executeSSH refused the reboot
     // itself (roadmap#58), with the code the UI recognises.

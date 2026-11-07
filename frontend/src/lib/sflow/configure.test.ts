@@ -17,6 +17,7 @@ import {
   parseConfigureOutput,
   type SFlowDesiredConfig,
 } from "./configure"
+import { resolveSudo } from "@/lib/ssh/sudo"
 
 const config: SFlowDesiredConfig = {
   collectorTarget: "udp:collector.example:6343",
@@ -33,7 +34,9 @@ describe("buildSFlowConfigureCommand", () => {
   it("keeps the SSH allowlist prefix and safe replacement semantics", () => {
     const command = buildSFlowConfigureCommand(config)
 
-    expect(command.startsWith("for br in $(ovs-vsctl list-br)")).toBe(true)
+    // The orchestrator allowlist knows both shapes: root and a sudo account.
+    expect(resolveSudo(command, false).startsWith("for br in $(ovs-vsctl list-br)")).toBe(true)
+    expect(resolveSudo(command, true).startsWith("for br in $(sudo -n ovs-vsctl list-br)")).toBe(true)
     expect(command).not.toMatch(/\bclear\b/)
   })
 
@@ -167,7 +170,7 @@ describe("applySFlowOnNode", () => {
     expect(executeSSHMock).toHaveBeenCalledWith(
       "connection-1",
       "10.0.0.1",
-      expect.stringMatching(/^for br in \$\(ovs-vsctl list-br\)/),
+      expect.stringMatching(/^for br in \$\(\u0000sudo\u0000ovs-vsctl list-br\)/),
     )
   })
 

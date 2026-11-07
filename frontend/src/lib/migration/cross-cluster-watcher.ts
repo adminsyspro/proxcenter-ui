@@ -1,4 +1,5 @@
 import { applyRestorePlan, rollbackPrereqsOnSource, type CcmRestorePlan } from '@/lib/migration/ccm-prereqs'
+import { asRoot, hasSudoMark, resolveSudo } from '@/lib/ssh/sudo'
 import { pveFetch } from '@/lib/proxmox/client'
 import { decryptSecret } from '@/lib/crypto/secret'
 import { getTenantPrisma } from '@/lib/tenant'
@@ -89,7 +90,12 @@ async function runSshForWatcher(
     }
   }
 
-  const finalCommand = connection.sshUseSudo ? `sudo sh -c ${shellEscape(command)}` : command
+  // Same rule as executeSSH: a marked command escalates per program, an
+  // unmarked one keeps the `sudo sh -c` wrapping; never sudo for root.
+  const needsSudo = !!connection.sshUseSudo && user !== 'root'
+  const finalCommand = hasSudoMark(command)
+    ? resolveSudo(command, needsSudo)
+    : needsSudo ? `sudo sh -c ${shellEscape(command)}` : command
 
   try {
     const body: Record<string, unknown> = { host: nodeIp, port, user, command: finalCommand }
@@ -210,7 +216,7 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
     )
     if (vmConfig?.lock) {
       const endpoint = await resolveNodeSshEndpoint(sourceConn, sourceNode)
-      const result = await runSshForWatcher(connectionId, tenantId, endpoint, `qm unlock ${safeVmid}`)
+      const result = await runSshForWatcher(connectionId, tenantId, endpoint, asRoot(`qm unlock ${safeVmid}`))
       if (result.success) {
         console.log(`${tag} auto-unlocked VM on ${sourceNode}`)
         unlocked = true

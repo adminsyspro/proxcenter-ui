@@ -4604,7 +4604,7 @@
     "sshPassword": "Contraseña SSH",
     "sshKeyHint": "Pega tu clave privada SSH (formato OpenSSH)",
     "sshUseSudo": "Usar sudo para privileged commands",
-    "sshUseSudoHelper": "Prefija comandos con sudo cuando el usuario SSH no sea root",
+    "sshUseSudoHelper": "Cuando el usuario SSH no es root, los comandos privilegiados pasan por sudo. Ajustes > Comandos SSH genera el archivo sudoers correspondiente.",
     "replicationNetwork": "Red de replicación (CIDR)",
     "replicationNetworkHelper": "Los flujos de replicación llegan a los nodos de este clúster por su dirección en esta red en lugar de la dirección de gestión. Déjelo vacío para seguir usando la red de gestión; los nodos del otro clúster deben tener una ruta hacia ella.",
     "cephExporterPort": "Puerto del ceph-exporter",
@@ -4836,7 +4836,7 @@
         "heading": "Tus conexiones PVE",
         "loading": "Cargando conexiones…",
         "noConnections": "Aún no hay ninguna conexión PVE configurada.",
-        "rootWarning": "Todas las conexiones usan root. Considera cambiar a un usuario dedicado con sudo para tener trazabilidad de auditoría y reducir el alcance de una posible exposición.",
+        "rootWarning": "Todas las conexiones usan root. Con un usuario dedicado y sudo, root ya no inicia sesión por SSH y los comandos privilegiados quedan registrados con su nombre.",
         "partial": "Parcialmente endurecido: algunas conexiones siguen usando root.",
         "hardened": "Endurecido: todas las conexiones usan un usuario dedicado con sudo.",
         "chipRoot": "Todo root",
@@ -4846,19 +4846,22 @@
       },
       "recs": {
         "heading": "Recomendaciones de seguridad",
-        "intro": "Para laboratorios o entornos con un solo administrador, root es aceptable si las claves SSH se gestionan correctamente. En producción, entornos multiadministrador o sensibles a cumplimiento, se recomienda un usuario dedicado con sudo: obtienes trazabilidad en /var/log/auth.log y el impacto de una exposición queda limitado a los comandos permitidos.",
+        "intro": "Para un laboratorio o un único administrador, root es aceptable si la clave SSH está bien custodiada. Si no, conéctese con un usuario dedicado: root ya no inicia sesión por SSH, cada comando privilegiado queda registrado bajo ese usuario en /var/log/auth.log, y los perfiles restringidos de abajo solo le permiten ejecutar como root los comandos que ProxCenter necesita, cada uno con sus argumentos fijados.",
         "step1Title": "Crear un usuario SSH dedicado en cada nodo PVE",
         "step1Hint": "Ejecuta estos comandos en cada nodo PVE (adapta la clave pública a la tuya).",
-        "step2Title": "Instalar la plantilla sudoers",
-        "step2Hint": "Copia la plantilla, pégala en /etc/sudoers.d/proxcenter en cada nodo PVE y valida con visudo -c.",
+        "step2Title": "Instalar el archivo sudoers de las funciones que usa",
+        "step2Hint": "Marque los perfiles que va a conceder, copie el archivo generado en /etc/sudoers.d/proxcenter en cada nodo PVE y valídelo con visudo -c. Se requiere sudo 1.9.10 o posterior (PVE 8 y 9 lo incluyen).",
         "step3Title": "Cambiar la conexión ProxCenter al nuevo usuario",
         "step3Hint": "En Ajustes > Conexiones > PVE, edita cada conexión, cambia el usuario SSH a proxcenter y habilita Usar sudo.",
         "copyTemplate": "Copiar plantilla sudoers",
         "copyInstall": "Copiar comando de instalación",
         "copied": "Copiado al portapapeles",
-        "disclaimer": "Nota: la lista permitida de comandos se aplica cuando los comandos pasan por el orquestador integrado. Algunas rutas de código (migraciones, operaciones directas de nodo) omiten hoy esta comprobación. Hay una tarea de hardening de seguridad para extender la aplicación estricta; ejecutar ProxCenter con un usuario dedicado con sudo ya proporciona trazabilidad a nivel de OS (/var/log/auth.log) y limita el impacto de una exposición.",
-        "shellWrapWarning": "Algunos comandos usan construcciones de shell (bucles for sobre bridges OVS) que no se pueden expresar como reglas sudoers exec simples. La plantilla incluye una entrada /bin/sh acotada para ello. Si prefieres evitar /bin/sh en sudoers, no uses la función de configuración sFlow de Network Flows.",
-        "rollingUpdateWarning": "Las actualizaciones progresivas (rolling updates) las ejecuta el orquestador, que envuelve cada comando privilegiado en sudo -n sh -c. No están cubiertas por esta lista blanca: una regla sudoers por comando nunca es suficiente y la comprobación previa indica que el usuario SSH no tiene sudo sin contraseña. En los nodos que actualice a través de ProxCenter, conceda proxcenter ALL=(ALL) NOPASSWD: ALL (la plantilla termina con esa línea comentada) o conéctese como root."
+        "disclaimer": "Lo que protegen los perfiles restringidos: una clave de ProxCenter robada solo ejecuta como root los comandos listados, con los argumentos listados. Los comandos marcados como equivalentes a root, y el perfil de migraciones, renuncian a esa protección: concédalos solo donde use esas funciones.",
+        "migrationsWarning": "El perfil de migraciones concede proxcenter ALL=(ALL) NOPASSWD: ALL, que equivale a root: los procesos de migración ejecutan scripts completos como root. Concédalo en los nodos que reciben migraciones, mientras duren las migraciones.",
+        "rootEquivalentWarning": "Estos comandos de los perfiles elegidos siguen siendo equivalentes a root, aun fijados:",
+        "sensitiveWarning": "Estos comandos de los perfiles elegidos no hacen la cuenta equivalente a root, pero una clave robada podría aun así usarlos de forma indebida:",
+        "sflowPinned": "Network Flows: la regla sFlow solo permite a los nodos enviar a {target}, el colector guardado en Network Flows. Vuelva a generar este archivo tras cambiar de colector.",
+        "orchestratorRulesMissing": "El orquestador no responde: el archivo solo contiene las reglas de los comandos que envía la interfaz web. Vuelva a generarlo cuando el orquestador responda."
       },
       "allowlist": {
         "heading": "Lista permitida de comandos",
@@ -4874,6 +4877,20 @@
         "fetchFailed": "Error al cargar la lista de comandos SSH.",
         "clipboardFailed": "No se pudo copiar al portapapeles.",
         "retry": "Reintentar"
+      },
+      "profiles": {
+        "nodeOps": {
+          "label": "Operaciones de nodo",
+          "features": "mantenimiento HA, indicadores Ceph, actualización y reinicio de nodo, rolling updates, drenaje de host, desbloqueo de VM, captura de consola, Network Flows, cumplimiento CIS"
+        },
+        "siteRecovery": {
+          "label": "Site Recovery",
+          "features": "replicación, conmutación, prueba de conmutación, retorno, puntos de restauración"
+        },
+        "migrations": {
+          "label": "Migraciones",
+          "features": "migraciones desde VMware, Hyper-V, Nutanix y XCP-ng (equivalente a root)"
+        }
       }
     },
     "diagnostics": {
@@ -5264,6 +5281,29 @@
           "help": "Pone un nodo en mantenimiento o lo devuelve al servicio; los invitados se evacúan del nodo."
         }
       }
+    },
+    "sshSudoProfiles": "Perfiles sudo: {profiles}",
+    "sshSudoMissing": "No disponible en este nodo: {features}",
+    "sudoColumn": {
+      "header": "Sudo",
+      "root": "root",
+      "sudo": "sudo",
+      "plain": "Sin sudo",
+      "rootTooltip": "Conectado como root: no se usa sudo.",
+      "sudoTooltip": "Cuenta {user}: los comandos privilegiados se ejecutan con sudo. Probar comprueba los perfiles sudo de cada nodo.",
+      "plainTooltip": "Cuenta {user} sin sudo: las acciones que requieren root fallarán."
+    },
+    "sshSudoCheck": {
+      "notInstalled": "sudo no está instalado en este nodo.",
+      "noRights": "La cuenta {user} no tiene derechos sudo en este nodo: despliegue el archivo sudoers de Ajustes > Comandos SSH.",
+      "tooOld": "sudo {version} en este nodo: el archivo sudoers restringido requiere sudo {min} o posterior.",
+      "incomplete": "{profile}: {count, plural, one {falta # regla} other {faltan # reglas}} en el archivo sudoers ({uses}). Vuelva a generarlo en Ajustes > Comandos SSH y despliéguelo de nuevo.",
+      "rulesPartial": "Orquestador inaccesible: solo se comprobaron las reglas del frontend.",
+      "profilesAllNodes": "Perfiles sudo en los {count} nodos: {profiles}",
+      "notDeployed": "No desplegado: {features}",
+      "rootNoEffect": "Sin efecto con root: los comandos ya se ejecutan como root. Indique una cuenta dedicada (por ejemplo proxcenter) para usar sudo.",
+      "rootSkipped": "Conectado como root: no se usa sudo, así que no hay ningún archivo sudoers que comprobar.",
+      "tooOpen": "El archivo sudoers es anterior a las reglas actuales y aún permite más de lo que ProxCenter necesita ({uses}): vuelva a generarlo en Ajustes > Comandos SSH."
     }
   },
   "green": {
@@ -10719,6 +10759,7 @@
     "configureSflowDesc": "sFlow se configurará en todos los bridges OVS de los nodos seleccionados. Los agentes enviarán muestras de flujo al colector especificado.",
     "collectorTarget": "Destino del colector",
     "collectorTargetHelp": "Dirección IP y puerto del servidor ProxCenter (donde se ejecuta el orquestador)",
+    "collectorFirewallHint": "sFlow no tiene autenticación: el colector acepta datagramas de cualquier emisor. Limite el puerto UDP 6343 del servidor ProxCenter a las direcciones de los nodos Proxmox en su cortafuegos.",
     "nodesToConfigure": "Nodos que configurar:",
     "reconfigure": "Reconfigurar sFlow",
     "configure": "Configurar sFlow",

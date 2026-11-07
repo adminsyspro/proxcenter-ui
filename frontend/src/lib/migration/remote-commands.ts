@@ -44,11 +44,17 @@ export function esxiSshCommand(sshPrefix: string, port: number | string, user: s
 }
 
 /**
- * Same, authenticated with sshpass from the environment. The export and the ssh
- * run in one node-side command so the password never appears on a command line.
+ * Same, authenticated with sshpass from the environment. The password is read
+ * from the command's stdin (executeSSH `stdin: esxiPasswordStdin(password)`):
+ * on a command line it would land in the node's sudo log and in ps.
  */
-export function sshpassEsxiCommand(password: string, sshOpts: string, port: number | string, user: string, host: string, remoteCommand: string): string {
-  return `export SSHPASS=${q(password)} && sshpass -e ssh ${sshOpts} -p ${tcpPort(port)} ${q(`${user}@${host}`)} ${q(remoteCommand)} 2>&1`
+export function sshpassEsxiCommand(sshOpts: string, port: number | string, user: string, host: string, remoteCommand: string): string {
+  return `IFS= read -r SSHPASS && export SSHPASS && sshpass -e ssh ${sshOpts} -p ${tcpPort(port)} ${q(`${user}@${host}`)} ${q(remoteCommand)} 2>&1`
+}
+
+/** The stdin sshpassEsxiCommand reads its password from. */
+export function esxiPasswordStdin(password: string): string {
+  return `${password}\n`
 }
 
 /** Key-based login probe used right after a temporary key was deployed. */
@@ -120,13 +126,12 @@ export interface SshfsMountSpec {
   user: string
   host: string
   remotePath: string
-  /** Piped to sshfs on stdin (needs `password_stdin` in options). */
-  password?: string
+  // A password is never part of the command: with `password_stdin` in the
+  // options, sshfs reads it from the stdin executeSSH feeds (`stdin`).
 }
 
 export function sshfsMountCommand(spec: SshfsMountSpec): string {
-  const feed = spec.password === undefined ? "" : `printf '%s' ${q(spec.password)} | `
-  return `mkdir -p ${q(spec.mountPath)} && ${feed}sshfs -o ${q(spec.options)} ${q(`${spec.user}@${spec.host}:${spec.remotePath}`)} ${q(spec.mountPath)} 2>&1`
+  return `mkdir -p ${q(spec.mountPath)} && sshfs -o ${q(spec.options)} ${q(`${spec.user}@${spec.host}:${spec.remotePath}`)} ${q(spec.mountPath)} 2>&1`
 }
 
 export interface QemuSshProbeSpec {

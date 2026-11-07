@@ -53,6 +53,7 @@ import { checkPermission } from '@/lib/rbac'
 import { executeSSH } from '@/lib/ssh/exec'
 import { getNodeIp } from '@/lib/ssh/node-ip'
 import { PveLicenseExcludedError } from '@/lib/license/exclusions'
+import { asRoot } from '@/lib/ssh/sudo'
 
 const getConnectionByIdMock = getConnectionById as any
 const pveFetchMock = pveFetch as any
@@ -206,7 +207,7 @@ describe('POST /api/v1/connections/[id]/nodes/[node]/maintenance', () => {
     expect(executeSSHMock).toHaveBeenCalledWith(
       CONN_ID,
       expect.objectContaining({ host: NODE_IP }),
-      `ha-manager crm-command node-maintenance enable ${NODE}`
+      asRoot(`ha-manager crm-command node-maintenance enable ${NODE}`)
     )
   })
 
@@ -291,7 +292,7 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/maintenance', () => {
     expect(executeSSHMock).toHaveBeenCalledWith(
       CONN_ID,
       expect.objectContaining({ host: NODE_IP }),
-      `ha-manager crm-command node-maintenance disable ${NODE}`
+      asRoot(`ha-manager crm-command node-maintenance disable ${NODE}`)
     )
   })
 
@@ -365,7 +366,7 @@ describe('node-name validation (command injection)', () => {
     expect(executeSSHMock).toHaveBeenCalledWith(
       CONN_ID,
       expect.objectContaining({ host: NODE_IP }),
-      'ha-manager crm-command node-maintenance enable pve-node-02',
+      asRoot('ha-manager crm-command node-maintenance enable pve-node-02'),
     )
   })
 })

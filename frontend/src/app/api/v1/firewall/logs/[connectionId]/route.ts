@@ -16,6 +16,7 @@ import { collectFirewallLog, MAX_SCAN_LINES } from '@/lib/firewall/logs'
 import { gateRotatedReads } from '@/lib/firewall/rotatedLogGate'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { guardSessionGuest } from '@/lib/vdc/guestGuard'
+import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
 
 import type { FirewallLogScope, LogWindowSec } from '@/lib/firewall/logs'
 import type { LogPage, LogPageQuery, LogPageReader } from '@/lib/firewall/logWindow'
@@ -44,6 +45,14 @@ function badRequest(message: string) {
 export async function GET(req: NextRequest, ctx: RouteContext) {
   try {
     const { connectionId } = await ctx.params
+    // A guest's own log stays open to an IaaS tenant (guest scope checked
+    // below); the node, cluster and security group logs carry the traffic of
+    // every customer on the cluster.
+    if (new URL(req.url).searchParams.get('scope') !== 'vm') {
+      const iaasDenied = await denyIaasTenant()
+      if (iaasDenied) return iaasDenied
+    }
+
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
     if (ownershipDenied) return ownershipDenied
 

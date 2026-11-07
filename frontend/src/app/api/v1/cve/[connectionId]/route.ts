@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { verifyConnectionOwnership } from "@/lib/tenant"
+import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -15,6 +17,13 @@ export async function GET(
 ) {
   try {
     const { connectionId } = await params
+
+    // The CVE posture of the cluster's nodes is the owner's business: an IaaS
+    // tenant renting a vDC slice of it gets 404, another tenant too.
+    const iaasDenied = await denyIaasTenant()
+    if (iaasDenied) return iaasDenied
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
     if (denied) return denied
@@ -57,6 +66,13 @@ export async function POST(
 ) {
   try {
     const { connectionId } = await params
+
+    // The CVE posture of the cluster's nodes is the owner's business: an IaaS
+    // tenant renting a vDC slice of it gets 404, another tenant too.
+    const iaasDenied = await denyIaasTenant()
+    if (iaasDenied) return iaasDenied
+    const ownershipDenied = await verifyConnectionOwnership(connectionId)
+    if (ownershipDenied) return ownershipDenied
 
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
     if (denied) return denied

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
+import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 export async function GET(
@@ -12,6 +13,8 @@ export async function GET(
 ) {
   try {
     const { connectionId } = await params
+    const iaasDenied = await denyIaasTenant()
+    if (iaasDenied) return iaasDenied
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
     if (ownershipDenied) return ownershipDenied
 

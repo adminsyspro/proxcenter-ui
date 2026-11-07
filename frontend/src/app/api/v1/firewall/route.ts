@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
+import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
@@ -25,6 +26,8 @@ export async function GET(request: NextRequest) {
     }
 
     // codeql[js/user-controlled-bypass] — connectionId is format-validated and ownership-checked
+    const iaasDenied = await denyIaasTenant()
+    if (iaasDenied) return iaasDenied
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
     if (ownershipDenied) return ownershipDenied
 

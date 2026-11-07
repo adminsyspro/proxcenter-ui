@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
+import { denyIaasTenant, resolveCallerInfraScope } from '@/lib/tenant/iaasGuard'
+import { iaasFirewallNamesView } from '@/lib/connections/iaasView'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
@@ -18,6 +20,11 @@ async function getHandler(
 ) {
   try {
     const { connectionId } = await params
+    // An IaaS tenant picks these by name in its guests' firewall rules and
+    // reads nothing else of the provider's datacenter firewall (lib/connections/iaasView).
+    const caller = await resolveCallerInfraScope()
+    if (caller.ok === false) return caller.response
+
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
     if (ownershipDenied) return ownershipDenied
 
@@ -31,7 +38,7 @@ async function getHandler(
       async () => pveDirect.getIPSets(await getConnectionById(connectionId)),
     )
 
-    return NextResponse.json(ipsets)
+    return NextResponse.json(caller.infra.kind === 'iaas' ? iaasFirewallNamesView(ipsets, 'name') : ipsets)
   } catch (error: any) {
     console.error('Error fetching IP sets:', error)
     
@@ -49,6 +56,8 @@ async function postHandler(
 ) {
   try {
     const { connectionId } = await params
+    const iaasDenied = await denyIaasTenant()
+    if (iaasDenied) return iaasDenied
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
     if (ownershipDenied) return ownershipDenied
 

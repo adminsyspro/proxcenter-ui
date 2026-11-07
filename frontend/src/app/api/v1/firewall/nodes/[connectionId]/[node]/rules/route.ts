@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { verifyConnectionOwnership } from '@/lib/tenant'
+import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
@@ -18,6 +19,8 @@ async function postHandler(
 ) {
   try {
     const { connectionId, node } = await params
+    const iaasDenied = await denyIaasTenant()
+    if (iaasDenied) return iaasDenied
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
     if (ownershipDenied) return ownershipDenied
 

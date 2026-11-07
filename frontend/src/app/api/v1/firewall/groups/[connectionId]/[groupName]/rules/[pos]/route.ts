@@ -7,6 +7,7 @@ import { getConnectionById } from '@/lib/connections/getConnection'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
+import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -18,6 +19,8 @@ async function putHandler(
 ) {
   try {
     const { connectionId, groupName, pos } = await params
+    const iaasDenied = await denyIaasTenant()
+    if (iaasDenied) return iaasDenied
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
     if (ownershipDenied) return ownershipDenied
 
@@ -53,6 +56,8 @@ async function deleteHandler(
 ) {
   try {
     const { connectionId, groupName, pos } = await params
+    const iaasDenied = await denyIaasTenant()
+    if (iaasDenied) return iaasDenied
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
     if (ownershipDenied) return ownershipDenied
 

@@ -217,7 +217,7 @@
     "src/lib/inventory/guestDiskTotals.ts": 4,
     "src/lib/migration/el10-check.test.ts": 1,
     "src/lib/migration/integrity.test.ts": 12,
-    "src/lib/migration/pipeline.ts": 14,
+    "src/lib/migration/pipeline.ts": 13,
     "src/lib/migration/v2v-pipeline.ts": 2,
     "src/lib/migration/v2v-preflight.test.ts": 2,
     "src/lib/migration/warm/guest-conversion.test.ts": 4,

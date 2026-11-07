@@ -7,20 +7,28 @@ import { Box, Chip, Tooltip, Typography } from '@mui/material'
 // only: probing the nodes for every row would open one SSH session per node
 // each time the list is shown. The Test button of the connection checks the
 // sudo profiles on each node.
-export function sudoMode(conn) {
+export type SudoMode = 'none' | 'root' | 'sudo' | 'plain'
+
+export interface SshSudoConnection {
+  sshEnabled?: boolean | null
+  sshUser?: string | null
+  sshUseSudo?: boolean | null
+}
+
+export function sudoMode(conn: SshSudoConnection | null | undefined): SudoMode {
   if (!conn?.sshEnabled) return 'none'
   if ((conn.sshUser || 'root') === 'root') return 'root'
 
   return conn.sshUseSudo ? 'sudo' : 'plain'
 }
 
-const LOOK = {
+const LOOK: Record<Exclude<SudoMode, 'none'>, { color: 'default' | 'success' | 'warning'; icon: string }> = {
   root: { color: 'default', icon: 'ri-user-star-line' },
   sudo: { color: 'success', icon: 'ri-shield-check-line' },
   plain: { color: 'warning', icon: 'ri-error-warning-line' },
 }
 
-export default function SshSudoCell({ connection }) {
+export default function SshSudoCell({ connection }: { connection: SshSudoConnection }) {
   const t = useTranslations()
   const mode = sudoMode(connection)
 

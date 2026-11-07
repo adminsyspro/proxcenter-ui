@@ -3,14 +3,13 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
-import { verifyConnectionOwnership } from '@/lib/tenant'
-import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { withAudit } from '@/lib/audit/withAudit'
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 // POST /api/v1/firewall/ipsets/[connectionId]/[ipsetName]/entries - Add entry
 async function postHandler(
@@ -19,12 +18,7 @@ async function postHandler(
 ) {
   try {
     const { connectionId, ipsetName } = await params
-    const iaasDenied = await denyIaasTenant()
-    if (iaasDenied) return iaasDenied
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
 
     const body = await request.json()

@@ -7,11 +7,12 @@ import { getConnectionById } from '@/lib/connections/getConnection'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
-import { denyIaasTenant, resolveCallerInfraScope } from '@/lib/tenant/iaasGuard'
+import { resolveCallerInfraScope } from '@/lib/tenant/iaasGuard'
 import { iaasFirewallNamesView } from '@/lib/connections/iaasView'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from '@/lib/audit/withAudit'
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 // GET /api/v1/firewall/groups/[connectionId] - Get all security groups
 async function getHandler(
@@ -58,12 +59,7 @@ async function postHandler(
 ) {
   try {
     const { connectionId } = await params
-    const iaasDenied = await denyIaasTenant()
-    if (iaasDenied) return iaasDenied
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
 
     const body = await request.json()

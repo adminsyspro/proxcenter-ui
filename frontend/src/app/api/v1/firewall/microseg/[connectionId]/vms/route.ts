@@ -3,9 +3,8 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
-import { verifyConnectionOwnership } from '@/lib/tenant'
-import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { PERMISSIONS } from '@/lib/rbac'
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 export async function GET(
   request: NextRequest,
@@ -13,12 +12,7 @@ export async function GET(
 ) {
   try {
     const { connectionId } = await params
-    const iaasDenied = await denyIaasTenant()
-    if (iaasDenied) return iaasDenied
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_VIEW)
     if (denied) return denied
 
     const searchParams = request.nextUrl.searchParams

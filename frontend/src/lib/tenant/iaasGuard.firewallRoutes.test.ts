@@ -221,7 +221,7 @@ describe("firewall and CVE routes: every file is classified for IaaS tenants", (
       const source = readFileSync(join(API, file), "utf8")
       const mod = await load(file)
       const handlers = METHODS.filter(m => typeof mod[m] === "function").length
-      expect(source.match(/await denyIaasTenant\(\)/g)?.length ?? 0, file).toBeGreaterThanOrEqual(handlers)
+      expect(source.match(/await (denyIaasTenant\(\)|guardProviderInfra\()/g)?.length ?? 0, file).toBeGreaterThanOrEqual(handlers)
     }
   })
 })

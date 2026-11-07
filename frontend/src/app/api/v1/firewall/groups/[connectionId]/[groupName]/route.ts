@@ -6,11 +6,10 @@ import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
-import { verifyConnectionOwnership } from '@/lib/tenant'
-import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from '@/lib/audit/withAudit'
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 // DELETE /api/v1/firewall/groups/[connectionId]/[groupName] - Delete security group
 async function deleteHandler(
@@ -19,12 +18,7 @@ async function deleteHandler(
 ) {
   try {
     const { connectionId, groupName } = await params
-    const iaasDenied = await denyIaasTenant()
-    if (iaasDenied) return iaasDenied
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
 
     const orchestrator = getOrchestratorClient()

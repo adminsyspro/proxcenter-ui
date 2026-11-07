@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { pveFetch } from "@/lib/proxmox/client"
 import { decryptSecret } from "@/lib/crypto/secret"
+import { pbsIdentityOf, samePbsServer } from "@/lib/guestFileRestore/pbsPveStorages"
 import { checkPermission, filterVisibleConnections, getCurrentRbacInfraScope, PERMISSIONS } from "@/lib/rbac"
 
 export const runtime = "nodejs"
@@ -47,6 +48,7 @@ export async function GET() {
         baseUrl: true,
         insecureTLS: true,
         apiTokenEnc: true,
+        fingerprint: true,
       }
     })
 
@@ -56,15 +58,11 @@ export async function GET() {
     const pveConnections = visible.filter(c => c.type === 'pve')
     const pbsConnections = visible.filter(c => c.type === 'pbs')
 
-    // Créer un map des PBS par URL pour le matching
-    const pbsByUrl = new Map<string, { id: string, name: string }>()
-
-    for (const pbs of pbsConnections) {
-      // Normaliser l'URL pour le matching (sans protocole, sans trailing slash)
-      const normalizedUrl = normalizeUrl(pbs.baseUrl)
-
-      pbsByUrl.set(normalizedUrl, { id: pbs.id, name: pbs.name })
-    }
+    // A PVE storage reaches a PBS connection by host or by pinned
+    // certificate fingerprint, whatever its storage ID (ui#1308).
+    const pbsIdentities = pbsConnections
+      .filter(pbs => !!pbs.baseUrl)
+      .map(pbs => ({ id: pbs.id, name: pbs.name, identity: pbsIdentityOf({ baseUrl: pbs.baseUrl, fingerprint: pbs.fingerprint }) }))
 
     const result: any[] = []
 
@@ -103,9 +101,7 @@ export async function GET() {
           }
 
           // Essayer de matcher avec une connexion PBS de ProxCenter
-          const pbsServer = storage.server || ''
-          const normalizedPbsUrl = normalizeUrl(`https://${pbsServer}`)
-          const matchedPbs = pbsByUrl.get(normalizedPbsUrl)
+          const matchedPbs = pbsIdentities.find(p => samePbsServer(storage, p.identity))
 
           result.push({
             pveId: pve.id,
@@ -137,16 +133,4 @@ export async function GET() {
     
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
-}
-
-/**
- * Normalise une URL pour le matching (retire le protocole, le port par défaut, le trailing slash)
- */
-function normalizeUrl(url: string): string {
-  if (!url) return ''
-  
-  return url
-    .replace(/^https?:\/\//, '')
-    .replace(/\/$/, '')
-    .toLowerCase()
 }

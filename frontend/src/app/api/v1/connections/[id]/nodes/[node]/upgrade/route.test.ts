@@ -9,6 +9,7 @@ vi.mock("@/lib/tenant/iaasGuard", () => ({ denyIaasTenant: async () => null }))
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 import { PveLicenseExcludedError } from '@/lib/license/exclusions'
+import { FRONTEND_SUDO_RULES, resolveSudo, verifySudo } from '@/lib/ssh/sudo'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
@@ -83,7 +84,7 @@ describe('POST upgrade — identity guard', () => {
     const res = await callRoute(POST, { params: { id: 'c1', node: 'pve1' }, body: {} })
     expect(res.status).toBe(403)
     expect(await readJson<any>(res)).toMatchObject({ code: 'CONNECTION_LICENSE_EXCLUDED' })
-    expect(executeSSHMock.mock.calls[0][4]).toEqual({ readOnly: true })
+    expect(executeSSHMock.mock.calls[0][4]).toEqual({ readOnly: true, asAccount: true })
     expect(executeSSHMock.mock.calls[1][4]).toBeUndefined()
   })
 })
@@ -105,7 +106,8 @@ describe('upgrade script — apt outcome (discussion #928)', () => {
     executeSSHMock.mockResolvedValueOnce({ success: true })
     const POST = await importPOST()
     await callRoute(POST, { params: { id: 'c1', node: 'pve1' }, body })
-    return executeSSHMock.mock.calls[0][2] as string
+    // As a root account receives it: the sudo marks dropped.
+    return resolveSudo(executeSSHMock.mock.calls[0][2] as string, false)
   }
 
   it('keeps locally modified conffiles instead of failing on the dpkg prompt', async () => {
@@ -115,9 +117,19 @@ describe('upgrade script — apt outcome (discussion #928)', () => {
 
   it('writes RUNNING before the background job, outside the tmpfs /tmp', async () => {
     const script = await launch()
-    expect(script.indexOf('echo RUNNING > /var/log/proxcenter-upgrade.status')).toBe(0)
+    expect(script.indexOf('echo RUNNING | tee /var/log/proxcenter-upgrade.status > /dev/null')).toBe(0)
     expect(script.indexOf('nohup')).toBeGreaterThan(0)
     expect(script).not.toContain('/tmp/')
+  })
+
+  it('runs every privileged program through a pinned sudo for a sudo account, never sudo sh -c', async () => {
+    await launch({ auto_reboot: true })
+    const resolved = resolveSudo(executeSSHMock.mock.calls[0][2] as string, true)
+    expect(verifySudo(resolved, FRONTEND_SUDO_RULES)).toEqual([])
+    expect(resolved).toContain('sudo -n env DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get -y')
+    expect(resolved).not.toMatch(/sudo -n DEBIAN_FRONTEND/)
+    expect(resolved).toContain('| sudo -n tee -a /var/log/proxcenter-upgrade.log')
+    expect(resolved).not.toMatch(/sudo (-n )?sh -c/)
   })
 
   it('auto-reboots on a newer installed kernel, not only on /var/run/reboot-required', async () => {
@@ -154,18 +166,20 @@ describe('upgrade script — run in bash against stubbed apt-get and reboot', ()
     executeSSHMock.mockResolvedValueOnce({ success: true })
     const POST = await importPOST()
     await callRoute(POST, { params: { id: 'c1', node: 'pve1' }, body: { auto_reboot: opts.autoReboot } })
-    const script = executeSSHMock.mock.calls[0][2] as string
+    const script = resolveSudo(executeSSHMock.mock.calls[0][2] as string, false)
     const inner = script.slice(script.indexOf("bash -c '") + 9, script.lastIndexOf("' > /dev/null"))
     const flag = join(dir, 'reboot-required')
     if (opts.rebootNeeded) writeFileSync(flag, '')
     stub('apt-get', `exit ${opts.aptExit}`)
     stub('reboot', `echo called >> ${join(dir, 'reboot-calls')}; exit ${opts.rebootExit ?? 0}`)
     const local = inner
-      .replaceAll('> /var/log/proxcenter-upgrade.status', `>> ${join(dir, 'status')}`)
+      .replaceAll('tee /var/log/proxcenter-upgrade.status', `tee -a ${join(dir, 'status')}`)
       .replaceAll('/var/log/proxcenter-upgrade.log', join(dir, 'log'))
       .replaceAll('/var/run/reboot-required', flag)
       .replaceAll('/boot/vmlinuz-', join(dir, 'no-kernel-'))
       .replaceAll('sleep 2', 'true')
+      // The upgrade names apt-get by its absolute path (no PATH lookup as root).
+      .replaceAll('/usr/bin/apt-get', join(dir, 'bin', 'apt-get'))
     spawnSync('bash', ['-c', local], { env: { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}` } })
     const read = (f: string) => (existsSync(join(dir, f)) ? readFileSync(join(dir, f), 'utf8').trim().split('\n') : [])
     return { statuses: read('status'), rebooted: read('reboot-calls').length > 0 }
@@ -201,7 +215,7 @@ describe('GET upgrade poll — reboot detection', () => {
     expect(await readJson<any>(res)).toEqual({ status: 'COMPLETED', logs: 'log', reboot_required: true })
     const command = executeSSHMock.mock.calls[0][2] as string
     // The poll only reads, so it still answers on a cluster outside the license (roadmap#58).
-    expect(executeSSHMock.mock.calls[0][4]).toEqual({ readOnly: true })
+    expect(executeSSHMock.mock.calls[0][4]).toEqual({ readOnly: true, asAccount: true })
     expect(command).toContain('cat /var/log/proxcenter-upgrade.status')
     expect(command).toContain('uname -r')
     // an auto-reboot run ends on REBOOTING: once booted after it, it reads as COMPLETED

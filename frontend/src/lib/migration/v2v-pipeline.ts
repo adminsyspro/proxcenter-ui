@@ -27,7 +27,7 @@ import { releaseVmids } from "./vmid-reservation"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { assertAbsPath } from "@/lib/ssh/validate"
-import { authorizedKeysDeployCommand, authorizedKeysRevokeCommand, curlConfigQuoted, esxiKeyLoginProbeCommand, parseBackgroundPid, sshpassEsxiCommand } from "./remote-commands"
+import { authorizedKeysDeployCommand, authorizedKeysRevokeCommand, curlConfigQuoted, esxiKeyLoginProbeCommand, parseBackgroundPid, sshpassEsxiCommand, esxiPasswordStdin } from "./remote-commands"
 import { HyperVClient } from "@/lib/hyperv/client"
 import { resolveHypervDiskPaths } from "./hyperv-disks"
 import { applySourceSizing, hypervSourceSizing, nutanixSourceSizing, type SourceSizing } from "./source-sizing"
@@ -1485,12 +1485,12 @@ export async function runV2vMigrationPipeline(
         // Some setups (nested ESXi, lab images) drop that dir and use ~/.ssh instead —
         // try both so we don't fail on non-default layouts. The login and the remote
         // command are escaped for both shells (the user and host come from the record).
-        const deployCmd = sshpassEsxiCommand(esxiPass, esxiSshOpts, esxiSshPort, username, host, authorizedKeysDeployCommand(username, pubKey, "etc"))
-        const deployResult = await executeSSH(config.targetConnectionId, nodeIp, deployCmd)
+        const deployCmd = sshpassEsxiCommand(esxiSshOpts, esxiSshPort, username, host, authorizedKeysDeployCommand(username, pubKey, "etc"))
+        const deployResult = await executeSSH(config.targetConnectionId, nodeIp, deployCmd, undefined, { stdin: esxiPasswordStdin(esxiPass) })
         let deployed = !!deployResult.output?.includes("DEPLOYED")
         if (!deployed) {
-          const deployCmd2 = sshpassEsxiCommand(esxiPass, esxiSshOpts, esxiSshPort, username, host, authorizedKeysDeployCommand(username, pubKey, "home"))
-          const deployResult2 = await executeSSH(config.targetConnectionId, nodeIp, deployCmd2)
+          const deployCmd2 = sshpassEsxiCommand(esxiSshOpts, esxiSshPort, username, host, authorizedKeysDeployCommand(username, pubKey, "home"))
+          const deployResult2 = await executeSSH(config.targetConnectionId, nodeIp, deployCmd2, undefined, { stdin: esxiPasswordStdin(esxiPass) })
           deployed = !!deployResult2.output?.includes("DEPLOYED")
         }
         if (!deployed) {
@@ -3058,8 +3058,8 @@ export async function runV2vMigrationPipeline(
         const pubFingerprint = pubKey.split(/\s+/)[1]?.substring(0, 40) || ""
         if (pubFingerprint) {
           const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
-          const revokeCmd = sshpassEsxiCommand(esxiPass, esxiSshOpts, eport, euser, ehost, authorizedKeysRevokeCommand(euser, pubFingerprint, "REVOKED"))
-          const revokeResult = await executeSSH(config.targetConnectionId, nodeIp, revokeCmd, CLEANUP_TIMEOUT_MS)
+          const revokeCmd = sshpassEsxiCommand(esxiSshOpts, eport, euser, ehost, authorizedKeysRevokeCommand(euser, pubFingerprint, "REVOKED"))
+          const revokeResult = await executeSSH(config.targetConnectionId, nodeIp, revokeCmd, CLEANUP_TIMEOUT_MS, { stdin: esxiPasswordStdin(esxiPass) })
           if (!revokeResult.output?.includes("REVOKED")) {
             failedCleanups.push(`esxi-authorized-keys revoke: ${revokeResult.error || revokeResult.output?.substring(0, 150) || "unknown"}`)
           }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { APT_DIST_UPGRADE, asRoot } from "@/lib/ssh/sudo"
 import { licenseExcludedResponse } from "@/lib/api/response"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
@@ -67,9 +68,12 @@ async function handlePost(req: Request, ctx: Ctx) {
   // that reboots writes REBOOTING directly, never COMPLETED first, or a poll in
   // between would make the dialog send its own reboot. If reboot itself fails,
   // the run is still a success that leaves the reboot to the operator.
+  // The status and log files live in /var/log: a non-root account writes
+  // them through a pinned `sudo -n tee`, the apt run itself as root.
+  const setStatus = (s: string) => `echo ${s} | ${asRoot(`tee ${STATUS_FILE}`)} > /dev/null`
   const successCmd = autoReboot
-    ? `if ${REBOOT_REQUIRED_TEST}; then echo REBOOTING > ${STATUS_FILE}; sleep 2; reboot || echo COMPLETED > ${STATUS_FILE}; else echo COMPLETED > ${STATUS_FILE}; fi`
-    : `echo COMPLETED > ${STATUS_FILE}`
+    ? `if ${REBOOT_REQUIRED_TEST}; then ${setStatus("REBOOTING")}; sleep 2; ${asRoot("reboot")} || ${setStatus("COMPLETED")}; else ${setStatus("COMPLETED")}; fi`
+    : setStatus("COMPLETED")
 
   // RUNNING is written before the background job starts, so the first poll
   // can never read the outcome of a previous run.
@@ -78,9 +82,14 @@ async function handlePost(req: Request, ctx: Ctx) {
   // without confdef/confold dpkg leaves that package unconfigured and apt
   // exits non-zero. Keep the local file, as dpkg's own default and the
   // Rolling Update do.
-  const script = `echo RUNNING > ${STATUS_FILE}; rm -f ${LOG_FILE}; nohup bash -c '
-(apt-get update 2>&1 && DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dist-upgrade 2>&1) >> ${LOG_FILE} 2>&1
-if [ $? -eq 0 ]; then ${successCmd}; else echo FAILED > ${STATUS_FILE}; fi
+  // pipefail keeps apt's exit code through the tee that appends the log.
+  // DEBIAN_FRONTEND is set by env inside the privileged command (see
+  // APT_DIST_UPGRADE): sudo drops the exported one, and keeping it through
+  // env_keep would let the caller choose a value debconf evaluates as root.
+  const script = `${setStatus("RUNNING")}; ${asRoot(`rm -f ${LOG_FILE}`)}; nohup bash -c '
+set -o pipefail; export DEBIAN_FRONTEND=noninteractive
+(${asRoot("apt-get update")} 2>&1 && ${asRoot(APT_DIST_UPGRADE)} 2>&1) 2>&1 | ${asRoot(`tee -a ${LOG_FILE}`)} > /dev/null
+if [ $? -eq 0 ]; then ${successCmd}; else ${setStatus("FAILED")}; fi
 ' > /dev/null 2>&1 &`
 
   let result: SSHResult
@@ -135,7 +144,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   const command = `${readStatus}; echo '---SEPARATOR---'; cat ${LOG_FILE} 2>/dev/null; echo '---SEPARATOR---'; if ${REBOOT_REQUIRED_TEST}; then echo YES; else echo NO; fi`
 
   // Only reads, so the poll still answers on a cluster outside the license.
-  const result = await executeSSH(id, nodeIp, command, undefined, { readOnly: true })
+  const result = await executeSSH(id, nodeIp, command, undefined, { readOnly: true, asAccount: true })
 
   if (!result.success) {
     return NextResponse.json(

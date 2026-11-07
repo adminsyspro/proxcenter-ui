@@ -4604,7 +4604,7 @@
     "sshPassword": "SSH Password",
     "sshKeyHint": "Paste your SSH private key (OpenSSH format)",
     "sshUseSudo": "Use sudo for privileged commands",
-    "sshUseSudoHelper": "Prefix commands with sudo when the SSH user is not root",
+    "sshUseSudoHelper": "When the SSH user is not root, privileged commands run through sudo. Settings > SSH commands generates the matching sudoers file.",
     "replicationNetwork": "Replication network (CIDR)",
     "replicationNetworkHelper": "Replication streams reach this cluster's nodes on their address in this network instead of the management address. Leave empty to keep the management network; the nodes of the other cluster must have a route to it.",
     "cephExporterPort": "Ceph exporter port",
@@ -4836,7 +4836,7 @@
         "heading": "Your PVE connections",
         "loading": "Loading connections…",
         "noConnections": "No PVE connection configured yet.",
-        "rootWarning": "All connections use root. Consider switching to a dedicated user with sudo for audit trails and reduced compromise scope.",
+        "rootWarning": "All connections use root. A dedicated user with sudo can no longer log in as root over SSH, and its privileged commands are logged under its name.",
         "partial": "Partially hardened: some connections still use root.",
         "hardened": "Hardened: all connections use a dedicated user with sudo.",
         "chipRoot": "All root",
@@ -4846,19 +4846,22 @@
       },
       "recs": {
         "heading": "Security recommendations",
-        "intro": "For lab or single-admin setups, root is acceptable if SSH keys are properly managed. For production, multi-admin, or compliance-sensitive environments, a dedicated user with sudo is recommended: you get an audit trail in /var/log/auth.log and compromise is scoped to the whitelisted commands.",
+        "intro": "For a lab or a single administrator, root is acceptable if the SSH key is well kept. Otherwise, connect with a dedicated user: root can no longer log in over SSH, every privileged command is logged under that user in /var/log/auth.log, and the restricted profiles below only let it run, as root, the commands ProxCenter needs, each with its arguments pinned.",
         "step1Title": "Create a dedicated SSH user on each PVE node",
         "step1Hint": "Run these commands on every PVE node (adapt the public key to yours).",
-        "step2Title": "Install the sudoers template",
-        "step2Hint": "Copy the template, paste it into /etc/sudoers.d/proxcenter on every PVE node, and validate with visudo -c.",
+        "step2Title": "Install the sudoers file for the features you use",
+        "step2Hint": "Tick the profiles to grant, copy the generated file into /etc/sudoers.d/proxcenter on every PVE node, and validate it with visudo -c. sudo 1.9.10 or later is required (PVE 8 and 9 ship it).",
         "step3Title": "Switch the ProxCenter connection to the new user",
         "step3Hint": "In Settings > Connections > PVE, edit each connection, change the SSH user to proxcenter, and enable Use sudo.",
         "copyTemplate": "Copy sudoers template",
         "copyInstall": "Copy install command",
         "copied": "Copied to clipboard",
-        "disclaimer": "Note: the command allowlist is applied when commands route through the embedded orchestrator. Some code paths (migrations, direct node operations) bypass this check today. A security-hardening task is tracked to extend strict enforcement; running ProxCenter under a dedicated user with sudo already provides OS-level audit trail (/var/log/auth.log) and scopes compromise impact.",
-        "shellWrapWarning": "A few commands use shell constructs (for-loops over OVS bridges) that cannot be expressed as simple sudoers exec rules. The template includes a scoped /bin/sh entry for these. If you prefer to avoid /bin/sh in sudoers, do not use the Network Flows sFlow configuration feature.",
-        "rollingUpdateWarning": "Rolling updates are run by the orchestrator, which wraps every privileged command in sudo -n sh -c. They are not covered by this allowlist: a per-command sudoers rule is never enough and the pre-flight reports that the SSH user lacks passwordless sudo. On nodes you update through ProxCenter, either grant proxcenter ALL=(ALL) NOPASSWD: ALL (the template ends with that line commented out) or connect as root."
+        "disclaimer": "What the restricted profiles protect: a leaked ProxCenter key only runs the listed commands as root, with the listed arguments. Commands marked as equivalent to root, and the migrations profile, give that protection up: grant them only where you use those features.",
+        "migrationsWarning": "The migrations profile grants proxcenter ALL=(ALL) NOPASSWD: ALL, which is equivalent to root: the migration pipelines run whole scripts as root. Grant it on the nodes that receive migrations, for the duration of the migrations.",
+        "rootEquivalentWarning": "These commands of the selected profiles stay equivalent to root, even pinned:",
+        "sensitiveWarning": "These commands of the selected profiles do not make the account equivalent to root, but a stolen key could still misuse them:",
+        "sflowPinned": "Network Flows: the sFlow rule only lets the nodes send to {target}, the collector saved in Network Flows. Regenerate this file after changing the collector.",
+        "orchestratorRulesMissing": "The orchestrator is unreachable: the file only holds the rules of the commands the web interface sends. Generate it again once the orchestrator answers."
       },
       "allowlist": {
         "heading": "Command allowlist",
@@ -4874,6 +4877,20 @@
         "fetchFailed": "Failed to load the SSH command list.",
         "clipboardFailed": "Could not copy to clipboard.",
         "retry": "Retry"
+      },
+      "profiles": {
+        "nodeOps": {
+          "label": "Node operations",
+          "features": "HA maintenance, Ceph flags, node upgrade and reboot, rolling updates, host drain, VM unlock, console screenshot, Network Flows, CIS compliance"
+        },
+        "siteRecovery": {
+          "label": "Site Recovery",
+          "features": "replication, failover, test failover, failback, restore points"
+        },
+        "migrations": {
+          "label": "Migrations",
+          "features": "migrations from VMware, Hyper-V, Nutanix and XCP-ng (equivalent to root)"
+        }
       }
     },
     "diagnostics": {
@@ -5264,6 +5281,29 @@
           "help": "Puts a node in maintenance mode, or brings it back; guests are evacuated from the node."
         }
       }
+    },
+    "sshSudoProfiles": "sudo profiles: {profiles}",
+    "sshSudoMissing": "Unavailable on this node: {features}",
+    "sudoColumn": {
+      "header": "Sudo",
+      "root": "root",
+      "sudo": "sudo",
+      "plain": "No sudo",
+      "rootTooltip": "Connected as root: sudo is not used.",
+      "sudoTooltip": "Account {user}: privileged commands run through sudo. Test checks the sudo profiles on each node.",
+      "plainTooltip": "Account {user} without sudo: actions that need root will fail."
+    },
+    "sshSudoCheck": {
+      "notInstalled": "sudo is not installed on this node.",
+      "noRights": "The account {user} has no sudo rights on this node: deploy the sudoers file of Settings > SSH commands.",
+      "tooOld": "sudo {version} on this node: the restricted sudoers file needs sudo {min} or later.",
+      "incomplete": "{profile}: {count, plural, one {# rule is} other {# rules are}} missing from the sudoers file ({uses}). Regenerate it in Settings > SSH commands and deploy it again.",
+      "rulesPartial": "Orchestrator unreachable: only the rules of the frontend were checked.",
+      "profilesAllNodes": "sudo profiles on the {count} nodes: {profiles}",
+      "notDeployed": "Not deployed: {features}",
+      "rootNoEffect": "No effect with root: commands already run as root. Enter a dedicated user (for example proxcenter) to use sudo.",
+      "rootSkipped": "Connected as root: sudo is not used, so there is no sudoers file to check.",
+      "tooOpen": "The sudoers file is older than the current rules and still allows more than ProxCenter needs ({uses}): regenerate it from Settings > SSH Commands."
     }
   },
   "green": {
@@ -10719,6 +10759,7 @@
     "configureSflowDesc": "sFlow will be configured on all OVS bridges of the selected nodes. The agents will send flow samples to the specified collector.",
     "collectorTarget": "Collector Target",
     "collectorTargetHelp": "IP address and port of the ProxCenter server (where the orchestrator runs)",
+    "collectorFirewallHint": "sFlow has no authentication: the collector takes datagrams from any sender. Restrict UDP port 6343 of the ProxCenter server to the addresses of the Proxmox nodes in your firewall.",
     "nodesToConfigure": "Nodes to configure:",
     "reconfigure": "Reconfigure sFlow",
     "configure": "Configure sFlow",

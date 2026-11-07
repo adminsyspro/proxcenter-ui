@@ -4604,7 +4604,7 @@
     "sshPassword": "Mot de passe SSH",
     "sshKeyHint": "Collez votre clé privée SSH (format OpenSSH)",
     "sshUseSudo": "Utiliser sudo pour les commandes privilégiées",
-    "sshUseSudoHelper": "Préfixe les commandes avec sudo quand l'utilisateur SSH n'est pas root",
+    "sshUseSudoHelper": "Quand l'utilisateur SSH n'est pas root, les commandes privilégiées passent par sudo. Réglages > Commandes SSH génère le fichier sudoers correspondant.",
     "replicationNetwork": "Réseau de réplication (CIDR)",
     "replicationNetworkHelper": "Les flux de réplication atteignent les nœuds de ce cluster sur leur adresse dans ce réseau plutôt que sur l'adresse de management. Laissez vide pour rester sur le réseau de management ; les nœuds de l'autre cluster doivent avoir une route vers ce réseau.",
     "cephExporterPort": "Port du ceph-exporter",
@@ -4836,7 +4836,7 @@
         "heading": "Vos connexions PVE",
         "loading": "Chargement des connexions…",
         "noConnections": "Aucune connexion PVE configurée pour le moment.",
-        "rootWarning": "Toutes les connexions utilisent root. Passer à un utilisateur dédié avec sudo offre un journal d'audit et limite l'impact d'une compromission.",
+        "rootWarning": "Toutes les connexions utilisent root. Avec un utilisateur dédié et sudo, root ne se connecte plus en SSH et les commandes privilégiées sont journalisées sous son nom.",
         "partial": "Partiellement durci : certaines connexions utilisent encore root.",
         "hardened": "Durci : toutes les connexions utilisent un utilisateur dédié avec sudo.",
         "chipRoot": "Tout en root",
@@ -4846,19 +4846,22 @@
       },
       "recs": {
         "heading": "Recommandations de sécurité",
-        "intro": "Pour un lab ou un environnement mono-administrateur, root est acceptable si la clé SSH est bien gérée. En production, en multi-administrateurs ou avec des enjeux de conformité, un utilisateur dédié avec sudo est recommandé : vous obtenez un journal d'audit dans /var/log/auth.log et une compromission est bornée aux commandes whitelistées.",
+        "intro": "Pour un lab ou un seul administrateur, root est acceptable si la clé SSH est bien gardée. Sinon, connectez-vous avec un utilisateur dédié : root ne se connecte plus en SSH, chaque commande privilégiée est journalisée sous cet utilisateur dans /var/log/auth.log, et les profils restreints ci-dessous ne lui laissent exécuter en root que les commandes dont ProxCenter a besoin, chacune avec ses arguments figés.",
         "step1Title": "Créer un utilisateur SSH dédié sur chaque nœud PVE",
         "step1Hint": "Exécuter ces commandes sur chaque nœud PVE (adapter la clé publique à la vôtre).",
-        "step2Title": "Installer le modèle sudoers",
-        "step2Hint": "Copier le modèle, le coller dans /etc/sudoers.d/proxcenter sur chaque nœud, puis valider avec visudo -c.",
+        "step2Title": "Installer le fichier sudoers des fonctionnalités utilisées",
+        "step2Hint": "Cochez les profils à accorder, copiez le fichier généré dans /etc/sudoers.d/proxcenter sur chaque nœud PVE, puis validez-le avec visudo -c. sudo 1.9.10 ou plus récent est requis (PVE 8 et 9 le fournissent).",
         "step3Title": "Basculer la connexion ProxCenter vers le nouvel utilisateur",
         "step3Hint": "Dans Réglages > Connexions > PVE, éditer chaque connexion, changer l'utilisateur SSH vers proxcenter et activer Use sudo.",
         "copyTemplate": "Copier le modèle sudoers",
         "copyInstall": "Copier la commande d'installation",
         "copied": "Copié dans le presse-papiers",
-        "disclaimer": "Remarque : la whitelist de commandes est appliquée lorsque les commandes passent par l'orchestrateur embarqué. Certains chemins (migrations, opérations nœud directes) contournent cette vérification aujourd'hui. Un chantier de durcissement est suivi séparément ; exécuter ProxCenter sous un utilisateur dédié avec sudo fournit déjà un journal d'audit système (/var/log/auth.log) et limite l'impact d'une compromission.",
-        "shellWrapWarning": "Quelques commandes utilisent des constructions shell (boucles sur les bridges OVS) qui ne peuvent pas être exprimées comme de simples règles sudoers exec. Le modèle inclut une entrée /bin/sh pour ces cas. Si vous préférez éviter /bin/sh dans sudoers, n'utilisez pas la fonctionnalité de configuration sFlow des Network Flows.",
-        "rollingUpdateWarning": "Les mises à jour progressives (rolling updates) sont exécutées par l'orchestrateur, qui enveloppe chaque commande privilégiée dans sudo -n sh -c. Elles ne sont pas couvertes par cette liste blanche : une règle sudoers par commande ne suffit jamais et le préflight signale que l'utilisateur SSH n'a pas de sudo sans mot de passe. Sur les nœuds que vous mettez à jour via ProxCenter, accordez proxcenter ALL=(ALL) NOPASSWD: ALL (le modèle se termine par cette ligne en commentaire) ou connectez-vous en root."
+        "disclaimer": "Ce que protègent les profils restreints : une clé ProxCenter volée n'exécute en root que les commandes listées, avec les arguments listés. Les commandes signalées comme équivalentes à root, et le profil migrations, renoncent à cette protection : ne les accordez que là où vous utilisez ces fonctionnalités.",
+        "migrationsWarning": "Le profil migrations accorde proxcenter ALL=(ALL) NOPASSWD: ALL, ce qui équivaut à root : les pipelines de migration exécutent des scripts entiers en root. Accordez-le sur les nœuds qui reçoivent des migrations, le temps des migrations.",
+        "rootEquivalentWarning": "Ces commandes des profils choisis restent équivalentes à root, même figées :",
+        "sensitiveWarning": "Ces commandes des profils choisis ne rendent pas le compte équivalent à root, mais une clé volée pourrait quand même les détourner :",
+        "sflowPinned": "Network Flows : la règle sFlow ne laisse les nœuds envoyer que vers {target}, le collecteur enregistré dans Network Flows. Régénérez ce fichier après avoir changé de collecteur.",
+        "orchestratorRulesMissing": "L'orchestrateur est injoignable : le fichier ne contient que les règles des commandes envoyées par l'interface web. Générez-le à nouveau quand l'orchestrateur répond."
       },
       "allowlist": {
         "heading": "Liste des commandes autorisées",
@@ -4874,6 +4877,20 @@
         "fetchFailed": "Impossible de charger la liste des commandes SSH.",
         "clipboardFailed": "Impossible de copier dans le presse-papiers.",
         "retry": "Réessayer"
+      },
+      "profiles": {
+        "nodeOps": {
+          "label": "Opérations nœud",
+          "features": "maintenance HA, drapeaux Ceph, mise à jour et redémarrage de nœud, rolling updates, drain d'hôte, déverrouillage de VM, capture de console, Network Flows, conformité CIS"
+        },
+        "siteRecovery": {
+          "label": "Site Recovery",
+          "features": "réplication, bascule, test de bascule, retour, points de restauration"
+        },
+        "migrations": {
+          "label": "Migrations",
+          "features": "migrations depuis VMware, Hyper-V, Nutanix et XCP-ng (équivalent à root)"
+        }
       }
     },
     "diagnostics": {
@@ -5264,6 +5281,29 @@
           "help": "Met un nœud en maintenance ou le remet en service ; les invités sont évacués du nœud."
         }
       }
+    },
+    "sshSudoProfiles": "Profils sudo : {profiles}",
+    "sshSudoMissing": "Indisponible sur ce nœud : {features}",
+    "sudoColumn": {
+      "header": "Sudo",
+      "root": "root",
+      "sudo": "sudo",
+      "plain": "Sans sudo",
+      "rootTooltip": "Connexion en root : sudo n'est pas utilisé.",
+      "sudoTooltip": "Compte {user} : les commandes privilégiées passent par sudo. Tester vérifie les profils sudo de chaque nœud.",
+      "plainTooltip": "Compte {user} sans sudo : les actions qui demandent root échoueront."
+    },
+    "sshSudoCheck": {
+      "notInstalled": "sudo n'est pas installé sur ce nœud.",
+      "noRights": "Le compte {user} n'a aucun droit sudo sur ce nœud : déployez le fichier sudoers de Réglages > Commandes SSH.",
+      "tooOld": "sudo {version} sur ce nœud : le fichier sudoers restreint demande sudo {min} ou plus récent.",
+      "incomplete": "{profile} : {count, plural, one {# règle manque} other {# règles manquent}} dans le fichier sudoers ({uses}). Regénérez-le dans Réglages > Commandes SSH et redéployez-le.",
+      "rulesPartial": "Orchestrateur injoignable : seules les règles du frontend ont été vérifiées.",
+      "profilesAllNodes": "Profils sudo sur les {count} nœuds : {profiles}",
+      "notDeployed": "Non déployé : {features}",
+      "rootNoEffect": "Sans effet avec root : les commandes s'exécutent déjà en root. Indiquez un compte dédié (par exemple proxcenter) pour utiliser sudo.",
+      "rootSkipped": "Connexion en root : sudo n'est pas utilisé, il n'y a donc aucun fichier sudoers à vérifier.",
+      "tooOpen": "Le fichier sudoers est antérieur aux règles actuelles et autorise encore plus que ce dont ProxCenter a besoin ({uses}) : régénérez-le depuis Paramètres > Commandes SSH."
     }
   },
   "green": {
@@ -10720,6 +10760,7 @@
     "configureSflowDesc": "sFlow sera configuré sur tous les bridges OVS des nœuds sélectionnés. Les agents enverront des échantillons de flux au collecteur spécifié.",
     "collectorTarget": "Cible du collecteur",
     "collectorTargetHelp": "Adresse IP et port du serveur ProxCenter (où l'orchestrateur s'exécute)",
+    "collectorFirewallHint": "sFlow n'a pas d'authentification : le collecteur accepte les datagrammes de n'importe quel émetteur. Limitez le port UDP 6343 du serveur ProxCenter aux adresses des nœuds Proxmox dans votre pare-feu.",
     "nodesToConfigure": "Nœuds à configurer :",
     "reconfigure": "Reconfigurer sFlow",
     "configure": "Configurer sFlow",

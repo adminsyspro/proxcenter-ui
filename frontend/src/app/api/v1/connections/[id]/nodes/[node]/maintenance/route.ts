@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { asRoot } from "@/lib/ssh/sudo"
 import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById, isConnectionNotFoundError } from "@/lib/connections/getConnection"
@@ -58,7 +59,7 @@ async function toggleMaintenance(
     const command = `ha-manager crm-command node-maintenance ${enable ? 'enable' : 'disable'} ${safeNode}`
 
     console.log(`[maintenance] ${label} ${safeLog(safeNode)}: executing via SSH on ${safeLog(formatSshEndpoint(nodeIp))}: ${safeLog(command)}`)
-    const result = await executeSSH(id, nodeIp, command)
+    const result = await executeSSH(id, nodeIp, asRoot(command))
 
     if (result.success) {
       return NextResponse.json({ success: true, method: 'ssh', output: result.output })

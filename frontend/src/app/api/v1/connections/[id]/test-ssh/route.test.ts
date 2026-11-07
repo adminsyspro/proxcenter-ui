@@ -47,6 +47,12 @@ vi.mock('@/lib/ssh/node-ip', () => ({
   getNodeIp: getNodeIpMock,
 }))
 
+const loadSudoRulesMock = vi.fn<() => Promise<{ rules: any[], orchestratorAvailable: boolean }>>()
+
+vi.mock('@/lib/ssh/loadSudoRules', () => ({
+  loadSudoRules: loadSudoRulesMock,
+}))
+
 let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
@@ -58,6 +64,7 @@ beforeEach(() => {
   getConnectionByIdMock.mockReset()
   pveFetchMock.mockReset()
   getNodeIpMock.mockReset()
+  loadSudoRulesMock.mockReset()
 
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
@@ -479,5 +486,73 @@ describe('POST /api/v1/connections/[id]/test-ssh - other behavior', () => {
     expect(executeSSHDirectMock).toHaveBeenCalledWith(expect.objectContaining({ host: '10.0.0.12', port: 2222 }))
     expect(json.nodes[0]).toMatchObject({ node: 'pve1', ip: '203.0.113.10', host: '203.0.113.10', port: 2201, address_source: 'override' })
     expect(json.nodes[1]).toMatchObject({ node: 'pve2', ip: '10.0.0.12', host: '10.0.0.12', port: 2222, address_source: 'proxmox' })
+  })
+})
+
+describe('POST /api/v1/connections/[id]/test-ssh - sudoers check', () => {
+  const RULES = [
+    { id: 'ui-guest-unlock', profile: 'node-ops', path: '/usr/sbin/qm', args: '^unlock [0-9]+$', usedBy: 'Unlock', example: 'unlock 100' },
+    { id: 'sr-zfs', profile: 'site-recovery', path: '/usr/sbin/zfs', args: '^snapshot [a-z/@]+$', usedBy: 'ZFS', example: 'snapshot a/b@c' },
+  ]
+
+  function connection(sshUser: string, sshUseSudo: boolean) {
+    return {
+      id: 'conn-1', name: 'PVE', type: 'pve', baseUrl: 'https://10.0.0.1:8006',
+      sshEnabled: true, sshPort: 22, sshUser, sshAuthMethod: 'password', sshKeyEnc: null, sshPassEnc: 'enc', sshUseSudo,
+    }
+  }
+
+  it('checks every rule on each reachable node for a sudo account, and says when only the frontend rules were known', async () => {
+    findUniqueMock.mockResolvedValueOnce(connection('proxcenter', true))
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: false, nodes: [{ node: 'pve1', ip: '10.0.0.1', status: 'ok' }, { node: 'pve2', ip: '10.0.0.2', status: 'error' }] }),
+    })
+    loadSudoRulesMock.mockResolvedValueOnce({ rules: RULES, orchestratorAvailable: false })
+    executeSSHDirectMock.mockResolvedValueOnce({
+      success: true,
+      output: 'PXC_SUDO_VERSION:Sudo version 1.9.16p2\nPXC_RULE:ui-guest-unlock:yes\nPXC_RULE:sr-zfs:no\nPXC_RULE:pxc-migrations:no\n',
+    } as any)
+
+    const res = await callRoute(await importHandler(), { params: { id: 'conn-1' }, body: {} })
+    const json = await readJson<any>(res)
+
+    expect(executeSSHDirectMock).toHaveBeenCalledTimes(1)
+    const opts = executeSSHDirectMock.mock.calls[0][0]
+
+    expect(opts).toMatchObject({ host: '10.0.0.1', user: 'proxcenter' })
+    expect(opts.command).toContain("pxc_r 'ui-guest-unlock' '/usr/sbin/qm' 'unlock' '100'")
+    expect(json.sudoRulesPartial).toBe(true)
+    expect(json.nodes[0].sudoCheck).toEqual({
+      status: 'ok',
+      version: 'Sudo version 1.9.16p2',
+      profiles: {
+        'node-ops': { checked: 1, missing: [] },
+        'site-recovery': { checked: 1, missing: [{ id: 'sr-zfs', usedBy: 'ZFS' }] },
+        migrations: { checked: 1, missing: [{ id: 'pxc-migrations', usedBy: 'Migrations' }] },
+      },
+    })
+    expect(json.nodes[1].sudoCheck).toBeUndefined()
+  })
+
+  it('does not check sudo for root', async () => {
+    findUniqueMock.mockResolvedValueOnce(connection('root', true))
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, nodes: [{ node: 'pve1', ip: '10.0.0.1', status: 'ok' }] }) })
+
+    const json = await readJson<any>(await callRoute(await importHandler(), { params: { id: 'conn-1' }, body: {} }))
+
+    expect(executeSSHDirectMock).not.toHaveBeenCalled()
+    expect(loadSudoRulesMock).not.toHaveBeenCalled()
+    expect(json.nodes[0].sudoCheck).toBeUndefined()
+    expect(json.sudoSkipped).toBe('root')
+  })
+
+  it('says nothing about sudo for root when the switch is off', async () => {
+    findUniqueMock.mockResolvedValueOnce(connection('root', false))
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, nodes: [{ node: 'pve1', ip: '10.0.0.1', status: 'ok' }] }) })
+
+    const json = await readJson<any>(await callRoute(await importHandler(), { params: { id: 'conn-1' }, body: {} }))
+
+    expect(json.sudoSkipped).toBeUndefined()
   })
 })

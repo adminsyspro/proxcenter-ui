@@ -101,7 +101,7 @@ describe('testNetworkReachability', () => {
 
     expect(executeSSHMock).toHaveBeenCalledTimes(3)
     // A ping only reads, so the diagnostic runs on a cluster outside the license too (roadmap#58).
-    expect(executeSSHMock).toHaveBeenCalledWith('c-prod', expect.objectContaining({ host: 'ip-of-pve1' }), expect.stringContaining('ping'), expect.any(Number), { readOnly: true })
+    expect(executeSSHMock).toHaveBeenCalledWith('c-prod', expect.objectContaining({ host: 'ip-of-pve1' }), expect.stringContaining('ping'), expect.any(Number), { readOnly: true, asAccount: true })
     expect(results).toEqual([
       { vdcId: 'v-prod', vdcName: 'MSP-vDC', connectionId: 'c-prod', connectionName: 'PVE-PROD', node: 'pve1', peer: '10.42.0.111', state: 'reachable' },
       { vdcId: 'v-prod', vdcName: 'MSP-vDC', connectionId: 'c-prod', connectionName: 'PVE-PROD', node: 'pve2', peer: '10.42.0.111', state: 'unreachable' },

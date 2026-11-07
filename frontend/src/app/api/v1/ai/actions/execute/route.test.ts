@@ -103,6 +103,7 @@ import { ACTION_KINDS, ACTION_TIER, type ActionCard, type ActionKind } from '@/l
 import { clearBackupJobsCache } from '@/lib/tools/backups'
 
 import { POST } from './route'
+import { asRoot } from '@/lib/ssh/sudo'
 
 const CONV = 'conv-1'
 const bind = { userId: 'u1', tenantId: 'default', conversationId: CONV }
@@ -637,7 +638,7 @@ describe('POST /api/v1/ai/actions/execute', () => {
 
       expect(res.status).toBe(200)
       expect(res.body.result).toEqual({ node: 'pve2', connId: 'c1', message: 'Done: put pve2 in maintenance' })
-      expect(h.executeSSH).toHaveBeenCalledWith('c1', expect.anything(), 'ha-manager crm-command node-maintenance enable pve2')
+      expect(h.executeSSH).toHaveBeenCalledWith('c1', expect.anything(), asRoot('ha-manager crm-command node-maintenance enable pve2'))
 
       const [net] = await rows('maintenance')
 
@@ -661,7 +662,7 @@ describe('POST /api/v1/ai/actions/execute', () => {
       const res = await run(card('maintenance', HOST2, { mode: 'exit' }), { confirmed: true })
 
       expect(res.status).toBe(200)
-      expect(h.executeSSH).toHaveBeenCalledWith('c1', expect.anything(), 'ha-manager crm-command node-maintenance disable pve2')
+      expect(h.executeSSH).toHaveBeenCalledWith('c1', expect.anything(), asRoot('ha-manager crm-command node-maintenance disable pve2'))
       expect((await rows('maintenance'))[0].details).toMatchObject({ method: 'DELETE' })
     })
 

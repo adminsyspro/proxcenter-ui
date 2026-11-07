@@ -4604,7 +4604,7 @@
     "sshPassword": "SSH 密码",
     "sshKeyHint": "粘贴您的 SSH 私钥（OpenSSH 格式）",
     "sshUseSudo": "使用 sudo 执行特权命令",
-    "sshUseSudoHelper": "当 SSH 用户不是 root 时，在命令前加 sudo",
+    "sshUseSudoHelper": "SSH 用户不是 root 时，特权命令通过 sudo 执行。设置 > SSH 命令会生成对应的 sudoers 文件。",
     "replicationNetwork": "复制网络 (CIDR)",
     "replicationNetworkHelper": "复制流将通过此集群节点在该网络中的地址到达节点，而不是管理地址。留空则继续使用管理网络；对端集群的节点必须有到达该网络的路由。",
     "cephExporterPort": "ceph-exporter 端口",
@@ -4836,7 +4836,7 @@
         "heading": "您的 PVE 连接",
         "loading": "正在加载连接……",
         "noConnections": "尚未配置任何 PVE 连接。",
-        "rootWarning": "所有连接都使用 root。建议切换到带 sudo 的专用用户，可获得审计日志并缩小被攻破时的影响面。",
+        "rootWarning": "所有连接都使用 root。使用专用用户和 sudo 后，root 不再通过 SSH 登录，特权命令以该用户的名义记录。",
         "partial": "部分加固：部分连接仍使用 root。",
         "hardened": "已加固：所有连接都使用带 sudo 的专用用户。",
         "chipRoot": "全部 root",
@@ -4846,19 +4846,22 @@
       },
       "recs": {
         "heading": "安全建议",
-        "intro": "对于实验室或单管理员环境，只要 SSH 密钥管理得当，使用 root 是可以接受的。在生产、多管理员或有合规要求的环境中，建议使用带 sudo 的专用用户：您会在 /var/log/auth.log 中获得审计日志，被攻破时影响仅限于白名单命令。",
+        "intro": "在实验环境或只有一名管理员时，只要 SSH 密钥保管妥当，使用 root 是可以接受的。否则请使用专用用户连接：root 不再通过 SSH 登录，每条特权命令都以该用户的名义记录在 /var/log/auth.log 中，而下面的受限配置档只允许它以 root 身份运行 ProxCenter 所需的命令，且每条命令的参数都已固定。",
         "step1Title": "在每个 PVE 节点上创建专用 SSH 用户",
         "step1Hint": "在每个 PVE 节点上运行这些命令（请替换为您自己的公钥）。",
-        "step2Title": "安装 sudoers 模板",
-        "step2Hint": "复制模板，粘贴到每个节点的 /etc/sudoers.d/proxcenter，并使用 visudo -c 校验。",
+        "step2Title": "为所用功能安装 sudoers 文件",
+        "step2Hint": "勾选要授予的配置档，将生成的文件复制到每个 PVE 节点的 /etc/sudoers.d/proxcenter，并用 visudo -c 校验。需要 sudo 1.9.10 或更高版本（PVE 8 和 9 自带）。",
         "step3Title": "将 ProxCenter 连接切换到新用户",
         "step3Hint": "在 设置 > 连接 > PVE 中，编辑每个连接，将 SSH 用户改为 proxcenter，并启用 Use sudo。",
         "copyTemplate": "复制 sudoers 模板",
         "copyInstall": "复制安装命令",
         "copied": "已复制到剪贴板",
-        "disclaimer": "说明：命令白名单仅在命令经由内置编排器转发时生效。目前部分路径（迁移、节点直连操作）会绕过该检查。扩大严格校验范围的加固任务在另一个工单中跟进；使用带 sudo 的专用用户运行 ProxCenter 已经可以提供操作系统级审计日志（/var/log/auth.log），并缩小被攻破时的影响。",
-        "shellWrapWarning": "部分命令使用了 shell 结构（例如针对 OVS 网桥的 for 循环），无法表示为简单的 sudoers exec 规则。模板为此包含了 /bin/sh 条目。如果希望避免在 sudoers 中出现 /bin/sh，请不要使用 Network Flows 的 sFlow 配置功能。",
-        "rollingUpdateWarning": "滚动更新由编排器执行，它会把每条特权命令包装在 sudo -n sh -c 中，因此不在此允许列表的覆盖范围内：逐条命令的 sudoers 规则永远不够，预检会报告 SSH 用户缺少免密码 sudo。对于通过 ProxCenter 更新的节点，请授予 proxcenter ALL=(ALL) NOPASSWD: ALL（模板末尾有这一行的注释版本），或改用 root 连接。"
+        "disclaimer": "受限配置档所提供的保护：泄露的 ProxCenter 密钥只能以 root 身份运行所列命令，且只能使用所列参数。标记为等同 root 的命令以及迁移配置档会放弃这一保护：只在使用这些功能的地方授予。",
+        "migrationsWarning": "迁移配置档授予 proxcenter ALL=(ALL) NOPASSWD: ALL，等同于 root：迁移流程以 root 身份运行完整脚本。仅在接收迁移的节点上、并在迁移期间授予。",
+        "rootEquivalentWarning": "所选配置档中的以下命令即使固定了参数，仍等同于 root：",
+        "sensitiveWarning": "所选配置文件中的以下命令不会使账户等同于 root，但被盗的密钥仍可能滥用它们：",
+        "sflowPinned": "Network Flows：sFlow 规则只允许节点发送到 {target}，即 Network Flows 中保存的收集器。更换收集器后请重新生成此文件。",
+        "orchestratorRulesMissing": "无法连接编排器：该文件只包含 Web 界面所发送命令的规则。编排器恢复响应后请重新生成。"
       },
       "allowlist": {
         "heading": "命令白名单",
@@ -4874,6 +4877,20 @@
         "fetchFailed": "加载 SSH 命令列表失败。",
         "clipboardFailed": "复制到剪贴板失败。",
         "retry": "重试"
+      },
+      "profiles": {
+        "nodeOps": {
+          "label": "节点运维",
+          "features": "HA 维护、Ceph 标志、节点更新与重启、滚动更新、主机排空、VM 解锁、控制台截图、Network Flows、CIS 合规"
+        },
+        "siteRecovery": {
+          "label": "Site Recovery",
+          "features": "复制、故障转移、故障转移测试、故障回切、还原点"
+        },
+        "migrations": {
+          "label": "迁移",
+          "features": "从 VMware、Hyper-V、Nutanix 和 XCP-ng 迁移（等同于 root）"
+        }
       }
     },
     "diagnostics": {
@@ -5264,6 +5281,29 @@
           "help": "将节点置于维护模式或恢复服务；客户机会从该节点疏散。"
         }
       }
+    },
+    "sshSudoProfiles": "sudo 配置档：{profiles}",
+    "sshSudoMissing": "此节点不可用：{features}",
+    "sudoColumn": {
+      "header": "Sudo",
+      "root": "root",
+      "sudo": "sudo",
+      "plain": "无 sudo",
+      "rootTooltip": "以 root 连接：不使用 sudo。",
+      "sudoTooltip": "账户 {user}：特权命令通过 sudo 执行。测试会检查每个节点上的 sudo 配置文件。",
+      "plainTooltip": "账户 {user} 没有 sudo：需要 root 的操作将失败。"
+    },
+    "sshSudoCheck": {
+      "notInstalled": "此节点未安装 sudo。",
+      "noRights": "账户 {user} 在此节点上没有 sudo 权限：请部署 设置 > SSH 命令 中的 sudoers 文件。",
+      "tooOld": "此节点上的 sudo {version}：受限 sudoers 文件需要 sudo {min} 或更高版本。",
+      "incomplete": "{profile}：sudoers 文件缺少 {count} 条规则（{uses}）。请在 设置 > SSH 命令 中重新生成并重新部署。",
+      "rulesPartial": "无法连接编排器：仅检查了前端的规则。",
+      "profilesAllNodes": "{count} 个节点上的 sudo 配置文件：{profiles}",
+      "notDeployed": "未部署：{features}",
+      "rootNoEffect": "对 root 无效：命令已以 root 身份运行。要使用 sudo，请填写专用账户（例如 proxcenter）。",
+      "rootSkipped": "以 root 连接：不使用 sudo，因此没有需要检查的 sudoers 文件。",
+      "tooOpen": "sudoers 文件早于当前规则，仍允许超出 ProxCenter 所需的操作（{uses}）：请在 设置 > SSH 命令 中重新生成。"
     }
   },
   "green": {
@@ -10719,6 +10759,7 @@
     "configureSflowDesc": "sFlow 将在所选节点的所有 OVS 网桥上配置。代理将向指定的收集器发送流量样本。",
     "collectorTarget": "收集器目标",
     "collectorTargetHelp": "ProxCenter 服务器的 IP 地址和端口（编排器运行的位置）",
+    "collectorFirewallHint": "sFlow 没有身份验证：收集器接受任何发送方的数据报。请在防火墙中将 ProxCenter 服务器的 UDP 6343 端口限制为 Proxmox 节点的地址。",
     "nodesToConfigure": "要配置的节点：",
     "reconfigure": "重新配置 sFlow",
     "configure": "配置 sFlow",

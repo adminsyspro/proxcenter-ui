@@ -69,7 +69,7 @@ describe('POST reboot — identity guard', () => {
     const res = await callRoute(POST, { params: { id: 'c1', node: 'pve1' }, body: {} })
     expect(res.status).toBe(403)
     expect(await readJson<any>(res)).toMatchObject({ code: 'CONNECTION_LICENSE_EXCLUDED' })
-    expect(executeSSHMock.mock.calls[0][4]).toEqual({ readOnly: true })
+    expect(executeSSHMock.mock.calls[0][4]).toEqual({ readOnly: true, asAccount: true })
     expect(executeSSHMock.mock.calls[1][4]).toBeUndefined()
   })
 })

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { resolveSudo } from "@/lib/ssh/sudo"
 
 import {
   crushHostMatchesNode,
@@ -182,7 +183,7 @@ describe("summarizeCephHealth", () => {
 
 describe("commands", () => {
   it("builds ok-to-stop with the exit code swallowed and only integer ids", () => {
-    expect(okToStopCommand([2, 5, -1, 1.5])).toBe("ceph osd ok-to-stop 2 5 -f json 2>/dev/null; true")
+    expect(resolveSudo(okToStopCommand([2, 5, -1, 1.5]), false)).toBe("ceph osd ok-to-stop 2 5 -f json 2>/dev/null; true")
   })
 
   it("builds set-group / unset-group for a host held to the hostname grammar", () => {

@@ -2,7 +2,7 @@
 // Dialog pour ajouter/modifier une connexion PVE/PBS avec support SSH
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { useTheme } from '@mui/material/styles'
 
@@ -50,6 +50,8 @@ import { isPartialIPv4Cidr, isValidCidr } from '@/lib/net/cidr'
 import { isHostKeyMismatch } from './hostKeyMismatch'
 import NodeSshEndpointsEditor from '@/components/ssh/NodeSshEndpointsEditor'
 import { formatSshEndpoint } from '@/lib/ssh/node-endpoint-core'
+import type { SudoCheck } from '@/lib/ssh/sudo'
+import SudoCheckLines, { NotDeployedLine, profilesAbsentEverywhere, uniformSudoCheck } from './SudoCheckLines'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { isZeroRateLimitValid, ZERO_RATE_LIMIT_MAX_MBPS } from '@/lib/migration/warm/zero-rate'
 import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
@@ -240,9 +242,23 @@ export default function ConnectionDialog({
       host?: string
       port?: number
       address_source?: 'override' | 'proxmox'
+      // Set for a non-root account with sudo: what its sudoers file allows.
+      sudoCheck?: SudoCheck
     }[]
+    // The orchestrator could not list its rules: only the frontend's were checked.
+    sudoRulesPartial?: boolean
+    // sudo switched on for root, which never uses it: nothing was checked.
+    sudoSkipped?: 'root'
     error?: string
   } | null>(null)
+
+  // Nodes that all answered the sudoers check alike are summed up in one line,
+  // and a profile no node holds is a choice rather than a fault.
+  const sudoUniform = useMemo(() => uniformSudoCheck(sshTestResult?.nodes ?? []), [sshTestResult])
+  const sudoAbsentEverywhere = useMemo(
+    () => profilesAbsentEverywhere((sshTestResult?.nodes ?? []).flatMap(n => (n.sudoCheck ? [n.sudoCheck] : []))),
+    [sshTestResult],
+  )
 
   // Re-trust: drop the pinned SSH host key of one node, then re-run the test.
   // `retrustingHost` doubles as the "one at a time" lock -- the row spinner and
@@ -441,6 +457,7 @@ export default function ConnectionDialog({
       sshPort: form.sshPort,
       sshUser: form.sshUser,
       sshAuthMethod: form.sshAuthMethod,
+      sshUseSudo: form.sshUseSudo,
     }
 
     if (form.sshKey.trim()) payload.sshKey = form.sshKey
@@ -1380,6 +1397,11 @@ export default function ConnectionDialog({
               }
               sx={{ mt: 1, ml: 0 }}
             />
+            {form.sshUseSudo && (form.sshUser || 'root').trim() === 'root' && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 1 }}>
+                {t('settings.sshSudoCheck.rootNoEffect')}
+              </Typography>
+            )}
 
             {/* Per-node SSH address and port (PVE): needs the saved connection's nodes */}
             {type === 'pve' && form.sshEnabled && (
@@ -1418,6 +1440,16 @@ export default function ConnectionDialog({
                           ? t('settings.sshTestSuccess')
                           : (sshTestResult.error || t('settings.sshTestFailed'))}
                       </Typography>
+                      {sshTestResult.sudoSkipped === 'root' && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                          {t('settings.sshSudoCheck.rootSkipped')}
+                        </Typography>
+                      )}
+                      {sudoUniform ? (
+                        <SudoCheckLines check={sudoUniform} user={form.sshUser || 'root'} absentEverywhere={sudoAbsentEverywhere} summaryCount={sshTestResult.nodes?.filter(n => n.status === 'ok').length} />
+                      ) : (
+                        <NotDeployedLine profiles={sudoAbsentEverywhere} />
+                      )}
                       {/* Always render the per-node breakdown when present, even when the
                           overall test failed. In a cluster a single unreachable or
                           misconfigured node fails the whole test; the user needs to see
@@ -1469,8 +1501,7 @@ export default function ConnectionDialog({
                                 </Tooltip>
                               )}
                             </Box>
-                            {/* Two stacked MUI captions sit side by side unless
-                                each one is told to be a block. */}
+                            {node.sudoCheck && !sudoUniform && <SudoCheckLines check={node.sudoCheck} user={form.sshUser || 'root'} absentEverywhere={sudoAbsentEverywhere} showNotDeployed={false} />}
                             {feedback?.error && (
                               <Typography variant="caption" color="error" sx={{ display: 'block', ml: 3 }}>
                                 {t('settings.sshRetrustFailed', { error: feedback.error })}
@@ -1484,6 +1515,11 @@ export default function ConnectionDialog({
                           </Box>
                         )
                       })}
+                      {sshTestResult.sudoRulesPartial && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                          {t('settings.sshSudoCheck.rulesPartial')}
+                        </Typography>
+                      )}
                     </Alert>
                   </Box>
                 )}

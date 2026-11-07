@@ -53,6 +53,7 @@ import { findCountry } from '@/lib/utils/countries'
 import LicenseTab from '@/components/settings/license/LicenseTab'
 import LlmModelLabel from '@/components/settings/LlmModelLabel'
 import SettingsNav from '@/components/settings/SettingsNav'
+import SshSudoCell, { sudoMode } from '@/components/settings/SshSudoCell'
 import { useConnectionsManagement } from '@/hooks/useConnectionsManagement'
 import { useAISettings } from '@/hooks/useAISettings'
 import { isQualifiedOllamaModel, QUALIFIED_OLLAMA_MODELS } from '@/lib/ai/qualifiedModels'
@@ -922,6 +923,13 @@ function ConnectionsTab() {
             )}
           </Box>
         )
+      },
+      {
+        field: 'sshUseSudo',
+        headerName: t('settings.sudoColumn.header'),
+        width: 120,
+        valueGetter: (_value, row) => sudoMode(row),
+        renderCell: params => <SshSudoCell connection={params.row} />
       },
       {
         field: 'bridgeType',

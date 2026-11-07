@@ -443,6 +443,20 @@
     },
     "services": {
       "statusUnknown": "unbekannt"
+    },
+    "securityUpgrade": {
+      "banner": "Für diesen Cluster ist eine Sicherheitshärtung verfügbar.",
+      "apply": "Sicherheitshärtung anwenden",
+      "dialogTitle": "Sicherheitshärtung anwenden",
+      "line1": "Die Knoten werden nacheinander aktualisiert (Rolling-Update).",
+      "line2": "Es erfolgt eine geplante Umschaltung von wenigen Sekunden.",
+      "line3": "Es gehen keine Daten verloren.",
+      "confirm": "Härtung starten",
+      "progress": "Sicherheitshärtung: Schritt {step} von {total}",
+      "failed": "Sicherheitshärtung fehlgeschlagen: {error}",
+      "resume": "Fortsetzen",
+      "done": "Sicherheitshärtung angewendet.",
+      "progressWithLabel": "Sicherheitshärtung: Schritt {step} von {total}: {label}"
     }
   },
   "user": {

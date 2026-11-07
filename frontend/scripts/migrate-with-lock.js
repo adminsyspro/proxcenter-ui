@@ -1,5 +1,9 @@
 const { Client } = require('pg');
 const { execFileSync } = require('child_process');
+// TypeScript source loaded through Node type stripping (Node >= 22.18), so the
+// lock connection and the app share one TLS derivation. The runner image
+// copies that single source file to /app/src/lib/db/ (see Dockerfile).
+const { buildPoolConfig } = require('../src/lib/db/connectionConfig.ts');
 
 const LOCK_ID = 0x50524D49; // ASCII "PRMI" - distinct from leader lock 0x50524F58
 
@@ -17,7 +21,7 @@ if (require.main === module) {
       process.exit(1);
     }
 
-    const client = new Client({ connectionString: pgDsn(dsn) });
+    const client = new Client(buildPoolConfig(pgDsn(dsn)));
     await client.connect();
     console.log('[migrate-with-lock] Acquiring migration lock...');
     await client.query('SELECT pg_advisory_lock($1)', [LOCK_ID]);

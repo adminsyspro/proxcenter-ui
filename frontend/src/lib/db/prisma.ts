@@ -2,6 +2,8 @@ import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 import pg from "pg"
 
+import { buildPoolConfig } from "./connectionConfig"
+
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
 
 function getDatabaseUrl() {
@@ -30,8 +32,9 @@ const schema = extractSchema(dsn)
 export const databaseSchema = schema
 
 function createClient() {
+  // HA level 1: TLS verified against the cluster CA; standalone: unchanged.
   const pool = new pg.Pool({
-    connectionString: dsn,
+    ...buildPoolConfig(dsn),
     max: Number(process.env.PG_POOL_MAX) || 10,
     connectionTimeoutMillis: 10_000,
   })

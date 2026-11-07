@@ -21,6 +21,7 @@ import { useHaCluster, type PatroniMember } from './useHaCluster'
 import { useHaConfig } from './useHaConfig'
 
 import HaNodeCard from './HaNodeCard'
+import HaSecurityUpgrade from './HaSecurityUpgrade'
 import HaServiceGrid from './HaServiceGrid'
 
 const ROLE_ORDER: Record<string, number> = { leader: 0, sync_standby: 1, replica: 2, standby_leader: 1 }
@@ -94,6 +95,8 @@ export default function HaClusterDashboard() {
     }
   }, [mutate, t])
 
+  const refreshConfig = useCallback(() => mutateConfig(), [mutateConfig])
+
   const maintenanceIPs = useMemo(() => {
     if (!haConfig?.nodes) return new Set<string>()
     return new Set(haConfig.nodes.filter(n => n.maintenance).map(n => n.ip))
@@ -109,8 +112,11 @@ export default function HaClusterDashboard() {
   }
 
   if (error || !cluster) {
+    // The security upgrade stays visible: /ha/cluster fails for a while
+    // during its switchover and recreates.
     return (
       <Box sx={{ p: 2 }}>
+        <HaSecurityUpgrade config={haConfig} onChange={refreshConfig} />
         <Alert severity="error">
           {t('dashboard.loadFailed')} {error?.message || t('dashboard.orchestratorUnavailable')}
         </Alert>
@@ -144,6 +150,7 @@ export default function HaClusterDashboard() {
 
   return (
     <Box sx={{ p: 2 }}>
+      <HaSecurityUpgrade config={haConfig} onChange={refreshConfig} />
       {versionMismatch && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           {t('dashboard.versionMismatch', { versions: [...versions].join(', ') })}

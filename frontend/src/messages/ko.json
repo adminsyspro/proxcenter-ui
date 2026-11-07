@@ -440,6 +440,20 @@
     },
     "services": {
       "statusUnknown": "알 수 없음"
+    },
+    "securityUpgrade": {
+      "banner": "이 클러스터에 보안 강화를 적용할 수 있습니다.",
+      "apply": "보안 강화 적용",
+      "dialogTitle": "보안 강화 적용",
+      "line1": "노드는 하나씩 순서대로 업데이트됩니다(롤링).",
+      "line2": "몇 초 정도의 계획된 스위치오버가 한 번 수행됩니다.",
+      "line3": "데이터 손실은 없습니다.",
+      "confirm": "강화 시작",
+      "progress": "보안 강화: {total}단계 중 {step}단계",
+      "failed": "보안 강화 실패: {error}",
+      "resume": "재개",
+      "done": "보안 강화가 적용되었습니다.",
+      "progressWithLabel": "보안 강화: {total}단계 중 {step}단계: {label}"
     }
   },
   "user": {

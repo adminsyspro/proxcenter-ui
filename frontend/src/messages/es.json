@@ -440,6 +440,20 @@
     },
     "services": {
       "statusUnknown": "desconocido"
+    },
+    "securityUpgrade": {
+      "banner": "El refuerzo de seguridad está disponible para este clúster.",
+      "apply": "Aplicar el refuerzo de seguridad",
+      "dialogTitle": "Aplicar el refuerzo de seguridad",
+      "line1": "Los nodos se actualizan uno tras otro (actualización progresiva).",
+      "line2": "Se produce un cambio de líder planificado de unos segundos.",
+      "line3": "No se pierde ningún dato.",
+      "confirm": "Iniciar el refuerzo",
+      "progress": "Refuerzo de seguridad: paso {step} de {total}",
+      "failed": "Error en el refuerzo de seguridad: {error}",
+      "resume": "Reanudar",
+      "done": "Refuerzo de seguridad aplicado.",
+      "progressWithLabel": "Refuerzo de seguridad: paso {step} de {total}: {label}"
     }
   },
   "user": {

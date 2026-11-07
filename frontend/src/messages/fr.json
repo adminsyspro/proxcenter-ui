@@ -440,6 +440,20 @@
     },
     "services": {
       "statusUnknown": "inconnu"
+    },
+    "securityUpgrade": {
+      "banner": "Le durcissement de la sécurité est disponible pour ce cluster.",
+      "apply": "Appliquer le durcissement de la sécurité",
+      "dialogTitle": "Appliquer le durcissement de la sécurité",
+      "line1": "Les nœuds sont mis à jour l'un après l'autre (mise à jour progressive).",
+      "line2": "Une bascule planifiée de quelques secondes a lieu.",
+      "line3": "Aucune donnée n'est perdue.",
+      "confirm": "Lancer le durcissement",
+      "progress": "Durcissement de la sécurité : étape {step} sur {total}",
+      "failed": "Échec du durcissement de la sécurité : {error}",
+      "resume": "Reprendre",
+      "done": "Durcissement de la sécurité appliqué.",
+      "progressWithLabel": "Durcissement de la sécurité : étape {step} sur {total} : {label}"
     }
   },
   "user": {

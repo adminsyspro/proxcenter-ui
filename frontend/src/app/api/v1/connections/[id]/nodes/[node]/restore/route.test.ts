@@ -825,6 +825,68 @@ describe("POST restore -- API token and the nested PBS source", () => {
   })
 })
 
+// The PVE storage that reads the PBS backup is found by what it points at,
+// never by its ID (ui#1308): an operator names a `pbs` storage as they like,
+// and may declare the server by FQDN on one side and by IP on the other.
+describe("POST restore -- PVE storage resolved from the PBS coordinates (ui#1308)", () => {
+  const FP = "17:44:52:4E:99:EA:D8:04:7E:15:CB:EA:F3:7D:43:56:8F:23:D2:D7:B2:43:26:F4:E6:13:C8:9C:4A:E4:AC:21"
+  const OTHER_FP = "AA:44:52:4E:99:EA:D8:04:7E:15:CB:EA:F3:7D:43:56:8F:23:D2:D7:B2:43:26:F4:E6:13:C8:9C:4A:E4:AC:21"
+  const body = {
+    vmid: 91318, type: "qemu", storage: "ceph",
+    pbsBackup: { pbsId: "pbs-1", datastore: "test-vdc", namespace: "", backupPath: "backup/vm/91308/2026-11-07T16:10:01Z" },
+  }
+  const call = async () => {
+    const { POST } = await import("./route")
+    const req = new Request("http://test.local/_", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } })
+    return POST(req, { params: Promise.resolve({ id: "pve-1", node: "node1" }) } as any)
+  }
+  const withStorages = (configs: Record<string, object>) => {
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string) => {
+      if (path.startsWith("/nodes/node1/storage")) return Object.keys(configs).map(storage => ({ storage, type: "pbs" }))
+      const m = /^\/storage\/(.+)$/.exec(path)
+      if (m) return { type: "pbs", ...configs[decodeURIComponent(m[1])] }
+      return "UPID:node1:00000000:00000000:00000000:qmrestore:91318:root@pam:"
+    })
+  }
+  const postedArchive = () => {
+    const post = pveFetchMock.mock.calls.find(c => c[1] === "/nodes/node1/qemu")
+    return post ? postedParams(post).get("archive") : undefined
+  }
+
+  beforeEach(async () => {
+    const { prisma } = await import("@/lib/db/prisma")
+    vi.mocked(prisma.connection.findUnique).mockReset().mockResolvedValue({ baseUrl: "https://10.42.0.201:8007", fingerprint: FP } as any)
+  })
+
+  it("restores through a storage whose ID differs from the datastore name", async () => {
+    withStorages({ "SZ-PBS-Backup": { server: "10.42.0.201", datastore: "test-vdc" } })
+
+    expect((await call()).status).toBe(200)
+    expect(postedArchive()).toBe("SZ-PBS-Backup:backup/vm/91308/2026-11-07T16:10:01Z")
+  })
+
+  it("joins a storage declared by FQDN to a connection declared by IP through the pinned fingerprint", async () => {
+    withStorages({
+      "pbs-elsewhere": { server: "pbs.other.lan", datastore: "test-vdc", fingerprint: OTHER_FP },
+      "WH-PBS-Store": { server: "pbs.test.com", datastore: "test-vdc", fingerprint: FP.toLowerCase() },
+    })
+
+    expect((await call()).status).toBe(200)
+    expect(postedArchive()).toBe("WH-PBS-Store:backup/vm/91308/2026-11-07T16:10:01Z")
+  })
+
+  it("409 naming what has to match when no storage reaches this server, and nothing is restored", async () => {
+    withStorages({ "pbs-elsewhere": { server: "pbs.other.lan", datastore: "test-vdc", fingerprint: OTHER_FP } })
+
+    const res = await call()
+    expect(res.status).toBe(409)
+    const { error } = (await readJson<{ error: string }>(res))!
+    expect(error).toContain('No PBS storage on node "node1" reaches this backup server with datastore "test-vdc"')
+    expect(error).toContain("The storage ID can be any name")
+    expect(postedArchive()).toBeUndefined()
+  })
+})
+
 // A restored VM holds the GPUs of its backed-up config (#672): for a vDC
 // tenant they draw on the contingent, under the vDC lock, and stay reserved
 // until the restore task ends.

@@ -7,7 +7,7 @@
 // datastore and namespace, then `<storage>:backup/<type>/<id>/<time>`.
 
 import { normalizeNamespace } from '@/lib/backups/namespaceText'
-import { matchingPbsStorages, pbsHostOf } from '@/lib/guestFileRestore/pbsPveStorages'
+import { matchingPbsStorages, pbsIdentityOf } from '@/lib/guestFileRestore/pbsPveStorages'
 
 import { SETTINGS_RANGES, type DrillNetworkMode, type DrillRequest, type DrillSettings, type DrillVerifyState } from './types'
 
@@ -153,15 +153,16 @@ export function buildArchiveVolid(storage: string, input: Pick<DrillInput, 'back
 
 /**
  * The `pbs` storage of the target cluster that reaches this restore point
- * from the target node: same server, datastore and namespace, and either not
+ * from the target node: same server (by address or pinned certificate),
+ * datastore and namespace, whatever its ID, and either not
  * restricted to some nodes or restricted to a list that holds the node.
  */
 export function pickPbsStorage(
   storages: unknown,
-  match: { baseUrl: string; datastore: string; namespace: string; node: string },
+  match: { baseUrl: string; fingerprint?: string | null; datastore: string; namespace: string; node: string },
 ): string | null {
   const candidates = matchingPbsStorages(storages, {
-    host: pbsHostOf(match.baseUrl),
+    ...pbsIdentityOf(match),
     datastore: match.datastore,
     namespace: match.namespace,
   })

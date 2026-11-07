@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import type { ClusterStorageType } from '@/lib/storage/clusterStorageTypes'
+import { pbsIdentityOf, samePbsServer } from '@/lib/guestFileRestore/pbsPveStorages'
 
 import ClusterStorageDialog, { ADD_STORAGE_TYPES } from './ClusterStorageDialog'
 import {
@@ -63,16 +64,6 @@ type AttachPbsStorageDialogProps = {
   onAttached: () => void
 }
 
-function bareHost(baseUrl: string): string {
-  let host = baseUrl.replace(/^https?:\/\//, '')
-  const slash = host.indexOf('/')
-  if (slash !== -1) host = host.slice(0, slash)
-  const colon = host.lastIndexOf(':')
-  if (colon !== -1 && /^\d+$/.test(host.slice(colon + 1))) host = host.slice(0, colon)
-
-  return host
-}
-
 /** PVE storage ids start with a letter, so a datastore named `2024` cannot pass through as-is. */
 function suggestStorageName(datastore: string): string {
   const core = datastore.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -102,7 +93,7 @@ export default function AttachPbsStorageDialog({
   /** Backup server whose datastore listing has landed, so loading is derived. */
   const [loadedSource, setLoadedSource] = useState<string | null>(null)
   const [clusterNodes, setClusterNodes] = useState<string[]>([])
-  const [attached, setAttached] = useState<Array<{ storage: string; type: string; server: string | null; datastore: string | null }>>([])
+  const [attached, setAttached] = useState<Array<{ storage: string; type: string; server: string | null; datastore: string | null; fingerprint: string | null }>>([])
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -149,6 +140,7 @@ export default function AttachPbsStorageDialog({
             type: s.type,
             server: s.server ?? null,
             datastore: s.datastore ?? null,
+            fingerprint: s.fingerprint ?? null,
           })),
         )
       })
@@ -190,13 +182,13 @@ export default function AttachPbsStorageDialog({
   const duplicate = useMemo(() => {
     if (!datastore || !selectedPbs) return null
 
-    // Two backup servers can hold a datastore of the same name, so the host
-    // has to match too. It is compared on the bare host, which is what PVE
-    // stores in `server`.
-    const host = bareHost(String(selectedPbs.baseUrl ?? ''))
+    // Two backup servers can hold a datastore of the same name, so the server
+    // has to match too: by the bare host PVE stores in `server`, or by the
+    // pinned certificate when one side names it by FQDN and the other by IP.
+    const identity = pbsIdentityOf({ baseUrl: String(selectedPbs.baseUrl ?? ''), fingerprint: selectedPbs.fingerprint })
 
     return attached.find(a => (
-      a.type === 'pbs' && a.datastore === datastore && (!host || !a.server || a.server === host)
+      a.type === 'pbs' && a.datastore === datastore && (!identity.host || !a.server || samePbsServer(a, identity))
     )) ?? null
   }, [attached, datastore, selectedPbs])
 

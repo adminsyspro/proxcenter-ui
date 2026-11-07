@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const {
-  checkPermissionMock, accessMock, pbsMock, pbsUnscopedMock, connMock, findManyMock, tenantMock, infraMock, pveFetchMock,
+  checkPermissionMock, accessMock, pbsMock, pbsUnscopedMock, connMock, findManyMock, findUniqueMock, tenantMock, infraMock, pveFetchMock,
 } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn(),
   accessMock: vi.fn(),
@@ -13,6 +13,7 @@ const {
   pbsUnscopedMock: vi.fn(),
   connMock: vi.fn(),
   findManyMock: vi.fn(),
+  findUniqueMock: vi.fn(),
   tenantMock: vi.fn(),
   infraMock: vi.fn(),
   pveFetchMock: vi.fn(),
@@ -28,7 +29,9 @@ vi.mock('@/lib/connections/getConnection', () => ({
   getPbsConnectionById: (...a: any[]) => pbsMock(...a),
   getPbsConnectionByIdUnscoped: (...a: any[]) => pbsUnscopedMock(...a),
 }))
-vi.mock('@/lib/db/prisma', () => ({ prisma: { connection: { findMany: (...a: any[]) => findManyMock(...a) } } }))
+vi.mock('@/lib/db/prisma', () => ({
+  prisma: { connection: { findMany: (...a: any[]) => findManyMock(...a), findUnique: (...a: any[]) => findUniqueMock(...a) } },
+}))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: () => tenantMock() }))
 vi.mock('@/lib/tenant/infraScope', () => ({ getTenantInfrastructureScope: (...a: any[]) => infraMock(...a) }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: (...a: any[]) => pveFetchMock(...a) }))
@@ -50,6 +53,7 @@ beforeEach(() => {
   pbsUnscopedMock.mockReset().mockResolvedValue({ baseUrl: 'https://pbs.lab:8007' })
   connMock.mockReset().mockImplementation(async (id: string) => ({ id }))
   findManyMock.mockReset().mockResolvedValue([{ id: 'c1', name: 'Alpha' }, { id: 'c2', name: 'Beta' }])
+  findUniqueMock.mockReset().mockResolvedValue({ fingerprint: null })
   tenantMock.mockReset().mockResolvedValue('default')
   infraMock.mockReset().mockResolvedValue({ kind: 'provider' })
   pveFetchMock.mockReset().mockImplementation(async (conn: { id: string }) => (conn.id === 'c1'
@@ -69,6 +73,19 @@ describe('GET /api/v1/pbs/[id]/pve-storages', () => {
     expect(pbsUnscopedMock).not.toHaveBeenCalled()
     expect(findManyMock.mock.calls[0][0].where).toEqual({ type: 'pve' })
     expect(pveFetchMock).toHaveBeenCalledWith({ id: 'c1' }, '/storage', {}, { timeoutMs: 10_000 })
+  })
+
+  it('offers a storage declared by FQDN when the connection, declared by IP, pinned the same certificate (ui#1308)', async () => {
+    const fp = '17:44:52:4E:99:EA:D8:04:7E:15:CB:EA:F3:7D:43:56:8F:23:D2:D7:B2:43:26:F4:E6:13:C8:9C:4A:E4:AC:21'
+    pbsMock.mockResolvedValue({ baseUrl: 'https://10.42.0.201:8007' })
+    findUniqueMock.mockResolvedValue({ fingerprint: fp })
+    pveFetchMock.mockImplementation(async (conn: { id: string }) => (conn.id === 'c1'
+      ? [pbsStorage('WH-PBS-Store', { server: 'pbs.test.com', fingerprint: fp.toLowerCase() })]
+      : [pbsStorage('elsewhere', { server: 'pbs.other.lan' })]))
+
+    const res = await call()
+    expect(((await readJson(res)) as any).data).toEqual([{ connId: 'c1', connName: 'Alpha', storage: 'WH-PBS-Store', nodes: [] }])
+    expect(findUniqueMock).toHaveBeenCalledWith({ where: { id: 'pbs1' }, select: { fingerprint: true } })
   })
 
   it('returns the PBS RBAC denial', async () => {

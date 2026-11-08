@@ -74,7 +74,9 @@ const ALLOWED_LXC_FIELDS = new Set([
   'hostname', 'description', 'tags', 'onboot', 'protection', 'startup',
   'cores', 'cpulimit', 'cpuunits',
   'memory', 'swap',
-  'unprivileged', 'features',
+  // `unprivileged` is deliberately NOT here: a tenant's container is forced
+  // unprivileged at creation and must not be flipped to privileged later.
+  'features',
   'delete',
   'revert',
 ])

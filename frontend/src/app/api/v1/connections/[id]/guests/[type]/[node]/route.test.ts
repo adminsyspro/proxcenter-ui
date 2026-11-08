@@ -308,3 +308,30 @@ describe('POST guests create: datacenter User Tag Access (#1208)', () => {
     expect(pveCreateCalled()).toBe(false)
   })
 })
+
+describe('POST guests create: tenant LXC is forced unprivileged', () => {
+  async function withVdc() {
+    const quota = await import('@/lib/vdc/quota')
+    vi.mocked(quota.resolveVdcForTenant).mockResolvedValue({
+      allowBlankVms: true,
+      poolName: 'vdc-pool',
+      quota: null,
+      computePolicy: null,
+      storagePolicies: new Map(),
+    } as any)
+    vi.mocked(quota.checkVdcQuota).mockResolvedValue({ ok: true } as any)
+  }
+
+  it('refuses an explicitly privileged container', async () => {
+    await withVdc()
+    const res = await callRoute(await loadPost(), {
+      params: { ...baseParams, type: 'lxc' },
+      body: { vmid: 190, unprivileged: 0, ostemplate: 'local:vztmpl/x.tar.zst', rootfs: 'ceph:2' },
+    })
+    expect(res.status).toBe(403)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toContain('unprivileged')
+    expect(pveFetchMock.mock.calls.some(c => c[2]?.method === 'POST')).toBe(false)
+  })
+
+})

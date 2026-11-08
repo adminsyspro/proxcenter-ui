@@ -157,6 +157,16 @@ async function handler(
           return NextResponse.json({ error: 'This vDC does not allow blank VMs: deploy from the template catalogue.' }, { status: 403 })
         }
 
+        // A privileged LXC maps container root (uid 0) to host root on the
+        // shared node: a container-escape surface that reaches every tenant on
+        // that node. Tenants only ever get unprivileged containers.
+        if (type === 'lxc') {
+          if (body.unprivileged !== undefined && String(body.unprivileged) !== '1') {
+            return NextResponse.json({ error: 'Tenants may only create unprivileged containers.' }, { status: 403 })
+          }
+          body.unprivileged = 1
+        }
+
         // vDC compute policy (#893): the model must sit inside the allowed
         // set and the advanced CPU options are refused when the switch is off.
         // A body without `cpu` would let PVE pick kvm64 behind the policy's

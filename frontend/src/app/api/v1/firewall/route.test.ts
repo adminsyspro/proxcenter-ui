@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// The IaaS tenant gate is covered by src/lib/tenant/iaasGuard.firewallRoutes.test.ts;
+// the caller here is the provider.
+vi.mock("@/lib/tenant/iaasGuard", () => ({
+  denyIaasTenant: async () => null,
+  resolveCallerInfraScope: async () => ({ ok: true, tenantId: "default", infra: { kind: "provider" } }),
+}))
+
 import {
   CONN,
   getConnectionByIdMock,

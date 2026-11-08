@@ -7,7 +7,9 @@ import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import type { Principal } from '@/lib/auth/principal'
-import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { resolveCallerInfraScope } from '@/lib/tenant/iaasGuard'
+import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import * as pveDirect from '@/lib/firewall/pveDirect'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -15,9 +17,10 @@ import { withAudit } from '@/lib/audit/withAudit'
 type Params = { connectionId: string; node: string; vmType: string; vmid: string }
 
 // The orchestrator decodes this body with Go's encoding/json, which matches
-// keys case-insensitively (with Unicode folding: "ſ" is an "s"). A token body
-// is rebuilt from the exact IsolateVMRequest keys, typed, so what the checks
-// below see is what the orchestrator gets. Sessions keep the raw body.
+// keys case-insensitively (with Unicode folding: "ſ" is an "s"). The body of a
+// token or of a vDC tenant session is rebuilt from the exact IsolateVMRequest
+// keys, typed, so what the checks below see is what the orchestrator gets.
+// Provider and MSP sessions keep the raw body.
 const ISOLATE_FLAGS = ['enable_firewall', 'set_policy_in_drop', 'set_policy_out_drop', 'apply_base_sgs', 'enable_nic_fw'] as const
 
 const goFold = (key: string) => key.replace(/\u017f/g, 's').replace(/\u212a/g, 'k').toLowerCase()
@@ -48,16 +51,27 @@ function tokenIsolatePayload(body: unknown): IsolatePayload | null {
   return payload
 }
 
-// apply_base_sgs may create cluster-level security groups and gateway
-// aliases: a vDC tenant token isolates its own guest without it. Any spelling
-// the orchestrator would read as apply_base_sgs counts (fail closed).
-async function tokenBaseSgsRefusal(principal: Principal, body: Record<string, unknown>): Promise<string | null> {
-  const asks = Object.entries(body).some(([key, value]) => goFold(key) === 'apply_base_sgs' && !!value)
+// apply_base_sgs and an sg-base-* group that does not exist yet make the
+// orchestrator create datacenter security groups and gateway aliases. A vDC
+// (iaas) tenant, session or token, applies groups that already exist to its
+// own guest and nothing else. Any spelling the orchestrator would read as
+// apply_base_sgs counts (fail closed).
+const asksBaseSgs = (body: Record<string, unknown>) =>
+  Object.entries(body).some(([key, value]) => goFold(key) === 'apply_base_sgs' && !!value)
 
-  if (!asks) return null
-  const infra = await getTenantInfrastructureScope(principal.tenantId, { ignoreVdcContext: true })
+async function createsClusterGroups(connectionId: string, wanted: string[] | undefined): Promise<boolean> {
+  if (!wanted?.length) return false
+  const orchestrator = getOrchestratorClient()
+  const groups = await orchestratorOrPve<unknown>(
+    'firewall/groups',
+    () => orchestrator.get(`/firewall/groups/${connectionId}`),
+    async () => pveDirect.getSecurityGroups(await getConnectionById(connectionId)),
+  )
+  const existing = new Set(
+    (Array.isArray(groups) ? groups : []).map(g => (g && typeof g === 'object' ? (g as Record<string, unknown>).group : undefined)),
+  )
 
-  return infra.kind === 'iaas' ? 'Cluster-level object not available to a vDC tenant token' : null
+  return wanted.some(sg => !existing.has(sg))
 }
 
 // POST - Isolate VM
@@ -79,13 +93,20 @@ async function postHandler(
 
     let body = await request.json()
 
-    if (principal?.kind === 'token') {
+    const caller = await resolveCallerInfraScope()
+    if (caller.ok === false) return caller.response
+    const iaas = caller.infra.kind === 'iaas'
+
+    if (principal?.kind === 'token' || iaas) {
       const payload = tokenIsolatePayload(body)
 
       if (!payload) return NextResponse.json({ error: 'Invalid isolation request' }, { status: 400 })
-      const tokenRefusal = await tokenBaseSgsRefusal(principal, body)
 
-      if (tokenRefusal) return NextResponse.json({ error: tokenRefusal }, { status: 403 })
+      if (iaas && (asksBaseSgs(body) || await createsClusterGroups(connectionId, payload.additional_sgs))) {
+        const who = principal?.kind === 'token' ? 'a vDC tenant token' : 'a vDC tenant'
+
+        return NextResponse.json({ error: `Cluster-level object not available to ${who}` }, { status: 403 })
+      }
       body = payload
     }
 

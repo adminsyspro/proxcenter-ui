@@ -125,3 +125,16 @@ export function iaasInventoryClusterView<T extends Row>(cluster: T): T {
 export function iaasInventoryNodeView<T extends Row>(node: T): T {
   return omit(node, INVENTORY_NODE_HIDDEN) as T
 }
+
+/**
+ * Datacenter firewall aliases, IP sets or security groups: the names an IaaS
+ * tenant's guest rules reference, never the provider's addresses, members,
+ * rules or comments. `key` is the name field of the PVE object ("group" for
+ * security groups, "name" otherwise).
+ */
+export function iaasFirewallNamesView(rows: unknown, key: "name" | "group"): Row[] {
+  if (!Array.isArray(rows)) return []
+  return rows
+    .filter((row): row is Row => !!row && typeof row === "object" && typeof (row as Row)[key] === "string")
+    .map(row => ({ [key]: row[key] }))
+}

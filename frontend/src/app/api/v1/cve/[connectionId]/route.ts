@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -16,7 +17,9 @@ export async function GET(
   try {
     const { connectionId } = await params
 
-    const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+    // The CVE posture of the cluster's nodes is the owner's business: an IaaS
+    // tenant renting a vDC slice of it gets 404, another tenant too.
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_VIEW)
     if (denied) return denied
 
     const { searchParams } = new URL(request.url)
@@ -58,7 +61,9 @@ export async function POST(
   try {
     const { connectionId } = await params
 
-    const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+    // The CVE posture of the cluster's nodes is the owner's business: an IaaS
+    // tenant renting a vDC slice of it gets 404, another tenant too.
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_VIEW)
     if (denied) return denied
 
     const { searchParams } = new URL(request.url)

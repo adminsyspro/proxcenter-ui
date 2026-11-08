@@ -7,6 +7,8 @@ import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { guardSessionGuest } from '@/lib/vdc/guestGuard'
+import { tenantGuestVisibility } from '@/lib/vdc/guestScope'
+import { resolveCallerInfraScope } from '@/lib/tenant/iaasGuard'
 
 type Params = { connectionId: string; node: string; vmType: string; vmid: string }
 
@@ -31,9 +33,22 @@ export async function GET(
     const response = await orchestrator.get(
       `/firewall/microseg/${connectionId}/vm/${node}/${vmType}/${vmid}/simulate`
     )
+    const simulation = response.data as Record<string, unknown> | null
 
-    
-return NextResponse.json(response.data)
+    // affected_vms is drawn from every guest of the cluster: an IaaS tenant
+    // sees only the guests of its own vDC in it (503 when that cannot be
+    // verified, never an unmasked list).
+    const caller = await resolveCallerInfraScope()
+    if (caller.ok === false) return caller.response
+
+    if (caller.infra.kind === 'iaas' && simulation && Array.isArray(simulation.affected_vms)) {
+      const visibility = await tenantGuestVisibility(caller.tenantId, await getConnectionById(connectionId), connectionId, { infra: caller.infra })
+
+      if (visibility instanceof NextResponse) return visibility
+      simulation.affected_vms = simulation.affected_vms.filter((vm: any) => visibility.has(null, vm?.vmid))
+    }
+
+    return NextResponse.json(simulation)
   } catch (error: any) {
     console.error('Error simulating isolation:', error)
     

@@ -3,10 +3,10 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
-import { verifyConnectionOwnership } from '@/lib/tenant'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from '@/lib/audit/withAudit'
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 async function postHandler(
   request: NextRequest,
@@ -14,10 +14,7 @@ async function postHandler(
 ) {
   try {
     const { connectionId } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
 
     const body = await request.json()

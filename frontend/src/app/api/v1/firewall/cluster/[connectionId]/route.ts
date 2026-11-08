@@ -3,13 +3,13 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
-import { verifyConnectionOwnership } from '@/lib/tenant'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { withAudit } from '@/lib/audit/withAudit'
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 // GET /api/v1/firewall/cluster/[connectionId] - Get cluster options or rules
 async function getHandler(
@@ -18,10 +18,7 @@ async function getHandler(
 ) {
   try {
     const { connectionId } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_VIEW)
     if (denied) return denied
 
     const { searchParams } = new URL(request.url)
@@ -58,10 +55,7 @@ async function putHandler(
 ) {
   try {
     const { connectionId } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
 
     const body = await request.json()
@@ -91,10 +85,7 @@ async function postHandler(
 ) {
   try {
     const { connectionId } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
 
     const body = await request.json()

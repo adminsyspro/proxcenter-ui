@@ -40,6 +40,8 @@ vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: async () => 'default',
   getTenantConnectionIds: async () => new Set(['c1', 'c2']),
   verifyConnectionOwnership: async () => null,
+  // The IaaS gate (lib/tenant/iaasGuard) checks a session still belongs to its tenant.
+  userHasAccessToTenant: async () => true,
   DEFAULT_TENANT_ID: 'default',
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: async (id: string) => ({ id, baseUrl: 'https://pve', apiToken: 't' }) }))

@@ -39,7 +39,9 @@ vi.mock("@/lib/db/prisma", () => ({
     user: { findUnique: userFindUniqueMock, create: userCreateMock, findMany: userFindManyMock },
     userTenant: { create: userTenantCreateMock, findMany: userTenantFindManyMock },
     rbacUserRole: { create: rbacUserRoleCreateMock, findMany: rbacUserRoleFindManyMock },
-    tenant: { findMany: tenantFindManyMock },
+    // Genuine Community installs are single-tenant, so the non-default-tenant
+    // guard (community super-admin fail-closed) never trips here.
+    tenant: { findMany: tenantFindManyMock, findFirst: vi.fn(async () => null) },
     session: { groupBy: sessionGroupByMock, count: sessionCountMock },
     $transaction: transactionMock,
   },

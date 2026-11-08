@@ -86,14 +86,8 @@ beforeEach(async () => {
 })
 
 describe("backfillCommunitySuperAdmin against Postgres", () => {
-  it("repairs a rights-less account on the tenant it belongs to", async () => {
-    const now = new Date()
-
-    // Only the provider tenant may go without an operating model.
-    await prismaTest.tenant.create({
-      data: { id: "tenant-b", slug: "tenant-b", name: "B", operatingModel: "msp", createdAt: now, updatedAt: now },
-    })
-    await seedRightsLessUser("u1", "tenant-b")
+  it("repairs a rights-less account on the default tenant", async () => {
+    await seedRightsLessUser("u1", "default")
 
     expect(await backfillCommunitySuperAdmin("u1")).toBe(true)
 
@@ -103,12 +97,28 @@ describe("backfillCommunitySuperAdmin against Postgres", () => {
       roleId: "role_super_admin",
       scopeType: "global",
       scopeTarget: null,
-      tenantId: "tenant-b",
+      tenantId: "default",
       expiresAt: null,
     })
 
     const user = await prismaTest.user.findUnique({ where: { id: "u1" } })
     expect(user?.role).toBe("super_admin")
+  })
+
+  it("refuses to escalate when a non-default tenant exists (Enterprise read as Community)", async () => {
+    const now = new Date()
+
+    // Multi-tenant is Enterprise-only: a non-default tenant means this install
+    // was provisioned Enterprise and merely reads as Community (lapsed/revoked
+    // licence). The convenience grant must not fire and escalate a tenant user.
+    await prismaTest.tenant.create({
+      data: { id: "tenant-b", slug: "tenant-b", name: "B", operatingModel: "msp", createdAt: now, updatedAt: now },
+    })
+    await seedRightsLessUser("u1", "tenant-b")
+
+    expect(await backfillCommunitySuperAdmin("u1")).toBe(false)
+    expect(await prismaTest.rbacUserRole.count({ where: { userId: "u1" } })).toBe(0)
+    expect((await prismaTest.user.findUnique({ where: { id: "u1" } }))?.role).toBe("user")
   })
 
   it("is idempotent across sign-ins", async () => {

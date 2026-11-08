@@ -58,6 +58,23 @@ function activeGrantFilter() {
 }
 
 /**
+ * True when a tenant other than `default` exists. Multi-tenant is Enterprise-
+ * only, so this means the installation was provisioned as Enterprise. If such
+ * an install is read as Community (a deactivated or lapsed licence, a portal
+ * revocation), the community super-admin convenience must NOT fire: it would
+ * silently and permanently escalate every tenant account to platform super
+ * admin, surviving the licence coming back. A real Community install has only
+ * the default tenant, so this is always false there.
+ */
+export async function hasNonDefaultTenant(): Promise<boolean> {
+  const row = await prisma.tenant.findFirst({
+    where: { id: { not: DEFAULT_TENANT_ID } },
+    select: { id: true },
+  })
+  return Boolean(row)
+}
+
+/**
  * Whether the user holds any active RBAC authority at all: a role grant or a
  * direct permission grant. A user with none of either sees nothing.
  */
@@ -126,6 +143,9 @@ export async function backfillCommunitySuperAdmin(userId: string): Promise<boole
 
   const { getServerLicense } = await import("./requireEnterprise")
   if (!isCommunityDeployment(await getServerLicense())) return false
+  // An Enterprise install read as Community (lapsed/revoked licence) still has
+  // its tenants: never auto-escalate there.
+  if (await hasNonDefaultTenant()) return false
 
   await grantSuperAdmin(userId)
 

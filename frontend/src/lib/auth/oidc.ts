@@ -218,6 +218,14 @@ export function resolveOidcGrants(
   }
 
   if (resolved.length === 0) {
+    // A configured group mapping that matched nothing must NOT fall back to a
+    // provider-tenant grant: provider membership requires an explicit group, so
+    // leaving every mapped group (claims `groups:[]`) grants no access rather
+    // than silently handing out the provider default role (CX-23). This still
+    // revokes the old mapped grants (issue #442's intent) — it just revokes all
+    // the way instead of stopping at a provider floor. Only a deployment with
+    // no group mapping at all uses the simple default grant.
+    if (mapping.length > 0) return []
     return [{ tenantId: DEFAULT_TENANT_ID, vdcId: null, roleId: toRoleId(config.defaultRole) }]
   }
   return resolved
@@ -233,7 +241,10 @@ export function resolveOidcGrants(
 export function oidcSeedRoleId(groups: string[] | undefined, config: OidcConfig): string {
   const grants = resolveOidcGrants(groups, config)
   const preferred = grants.find(g => g.tenantId === DEFAULT_TENANT_ID) || grants[0]
-  return preferred.roleId
+  // No grant resolved (a configured mapping matched nothing): the denormalised
+  // display column gets the lowest-privilege tenant viewer, never a provider
+  // role. The authoritative RBAC grant is what resolveOidcGrants returned (none).
+  return preferred ? preferred.roleId : "role_tenant_viewer"
 }
 
 /**

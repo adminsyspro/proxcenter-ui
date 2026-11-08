@@ -239,6 +239,23 @@ export function tokenInfraScope(connectionIds: string[] | null): RbacInfraScope 
   }
 }
 
+/**
+ * A fully-empty, deny-everything scope. `isFlatRecordVisible` and the infra
+ * filters treat it as "no connection, no node, no guest is visible". Use it
+ * where a caller must fail closed (e.g. no principal resolved): a `null` scope
+ * means "unrestricted" and must never be returned on an authz failure.
+ */
+export function emptyDenyInfraScope(): RbacInfraScope {
+  return {
+    fullConnections: new Set(),
+    nodesByConnection: new Map(),
+    guestDerived: false,
+    nodeGrantsByConnection: new Map(),
+    guestGrantsByConnection: new Map(),
+    storageGrantsByConnection: new Map(),
+  }
+}
+
 /** Node names granted outright on a connection (see RbacInfraScope.nodeGrantsByConnection). */
 function outrightNodes(scope: RbacInfraScope, connId: string): Set<string> | undefined {
   return scope.nodeGrantsByConnection ? scope.nodeGrantsByConnection.get(connId) : scope.nodesByConnection.get(connId)

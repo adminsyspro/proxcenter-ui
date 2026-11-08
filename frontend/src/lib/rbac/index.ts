@@ -30,6 +30,7 @@ import {
   isStorageVisible,
   filterStorageDataForRbac,
   tokenInfraScope,
+  emptyDenyInfraScope,
   type RbacInfraScope,
   type ScopePermissionFilter,
 } from './infraScope'
@@ -218,11 +219,32 @@ export function grantsPermission(grantedSet: Set<string>, requested: string): bo
 }
 
 /**
+ * Permissions that are inherently tenant/platform-wide: managing users, roles,
+ * settings, tenants, API tokens, audit and compliance. A resource-less check of
+ * one of these is an administrative verdict over the WHOLE tenant, so it must be
+ * satisfied only by a `global` grant — never by a narrow node/vm/pool/tag/
+ * storage grant. Without this, `scopeMatches` returns true for ANY scope when no
+ * resource is named (the "no resource filter → include all" branch), so a role
+ * scoped to a single node or vDC pool (the exact shape the SSO group mapping
+ * produces) would pass `admin.users` / `admin.rbac` / `admin.settings` and take
+ * over the whole tenant, or every tenant from the provider view.
+ */
+const GLOBAL_SCOPE_PERMISSIONS: ReadonlySet<string> = new Set([
+  "admin.users",
+  "admin.rbac",
+  "admin.settings",
+  "admin.audit",
+  "admin.compliance",
+  "admin.tenants",
+  "admin.apitokens",
+])
+
+/**
  * Sync predicate over preloaded grants. Equivalent to one `hasPermission`
  * check but with zero DB calls — meant to be invoked in a tight loop after
  * a single `loadUserGrants` call.
  */
-function checkGrants(
+export function checkGrants(
   grants: LoadedGrants,
   permission: string,
   resourceType?: string,
@@ -230,8 +252,16 @@ function checkGrants(
   resourceMeta?: { tags?: string[]; pool?: string },
 ): boolean {
   if (grants.superAdmin) return true
+  // A resource-less check of a tenant-wide admin permission demands a global
+  // grant: a narrow scope must never stand in for "across the whole tenant".
+  const requireGlobalGrant =
+    !resourceType && !resourceId && GLOBAL_SCOPE_PERMISSIONS.has(permission)
   for (const g of grants.byScope) {
     if (!grantsPermission(g.permissions, permission)) continue
+    if (requireGlobalGrant) {
+      if (g.scopeType === "global") return true
+      continue
+    }
     if (scopeMatches(g.scopeType, g.scopeTarget, resourceType, resourceId, resourceMeta)) {
       return true
     }
@@ -1007,9 +1037,14 @@ export async function getRbacInfraScope(
  */
 export async function getCurrentRbacInfraScope(permission?: ScopePermissionFilter): Promise<RbacInfraScope | null> {
   const ctx = await getRBACContext()
-  if (!ctx || ctx.isAdmin) return null
+  // No principal resolved (e.g. a rejected `Bearer pxc_` sent alongside a
+  // session cookie): deny everything. Returning null here would mean
+  // "unrestricted" and silently lift the aggregate-route RBAC mask — only a
+  // genuine super admin or global grant is unrestricted.
+  if (!ctx) return emptyDenyInfraScope()
+  if (ctx.isAdmin) return null
   const principal = ctx.principal ?? ctx.userId
-  if (!principal) return null
+  if (!principal) return emptyDenyInfraScope()
   return getRbacInfraScope(principal, ctx.tenantId, permission)
 }
 

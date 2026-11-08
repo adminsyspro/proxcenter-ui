@@ -2,7 +2,11 @@
 //
 // OpenVDDK (https://github.com/openvddk/openvddk, Apache 2.0) is THE library: a
 // drop-in libvixDiskLib.so.8 that ProxCenter installs on its own, without the
-// Enterprise package Broadcom's VDDK needs since its public download closed. It
+// Enterprise package Broadcom's VDDK needs since its public download closed.
+// ProxCenter installs its own build of it, from its fork
+// (https://github.com/adminsyspro/openvddk, branch `proxcenter`): the upstream
+// release plus the fixes ProxCenter could not wait for, so a host the upstream
+// release cannot read does not wait on a project that takes no contributions. It
 // lives in its own directory: a Broadcom VDDK already on a node stays where it
 // is, untouched, and nbdkit loads whichever library the `libdir=` it is given
 // holds (an explicit `vddkLibdir` from the API can still point at one).
@@ -20,13 +24,14 @@ export const BROADCOM_DEFAULT_LIBDIR = "/usr/lib/vmware-vix-disklib"
  * Bumping the version means bumping all of it.
  */
 export const OPENVDDK_KIT = {
-  version: "0.7.4",
-  commit: "94926da2f764",
-  file: "openvddk-evalkit-0.7.4-94926da2f764.tar.gz",
-  sha256: "4f50188fcfe9dc8c0e523a05359bee16c12f990f812332548f5b00a4c2252687",
+  // 0.7.4 with the fix for ESXi 7.0.0 GA hosts (openvddk/openvddk#1).
+  version: "0.7.4-pxc1",
+  commit: "80ecfecc6cc8",
+  file: "openvddk-evalkit-0.7.4-pxc1-80ecfecc6cc8.tar.gz",
+  sha256: "29ca9636ab897c0168d00e18747b35755a9d4ce8093b98ea57cc8190ca56ab89",
   /** The library inside the kit (lib/), the file nbdkit ends up loading. */
   libFile: "libvixDiskLib.so.8.0.3",
-  libSha256: "d39bf157aae96283c8f0ccfadc26b9aec104a5ef9708c4d15cc6945db1dc7daf",
+  libSha256: "2292a6f7c2a1906cea5547bf23f9c744df748dda8084ce0fc9e9217b9fe064c7",
   /** Download size, for the confirmation text. */
   sizeMB: 17,
   /** Size once extracted on the node. */
@@ -34,7 +39,7 @@ export const OPENVDDK_KIT = {
 } as const
 
 export const OPENVDDK_KIT_URL =
-  `https://github.com/openvddk/openvddk/releases/download/v${OPENVDDK_KIT.version}/${OPENVDDK_KIT.file}`
+  `https://github.com/adminsyspro/openvddk/releases/download/v${OPENVDDK_KIT.version}/${OPENVDDK_KIT.file}`
 
 // System directories a library directory must never be: the OpenVDDK install
 // replaces its directory as a whole, so one of these would take the host down.

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { buildPreflightCmd, parsePreflightOutput, checkVddkPreflight, runWarmNodePreflight } from "./vddk-preflight"
+import { OPENVDDK_KIT } from "./vddk-library"
 
 vi.mock("@/lib/ssh/exec", async (importActual) => {
   const actual = await importActual<typeof import("@/lib/ssh/exec")>()
@@ -91,6 +92,52 @@ describe("parsePreflightOutput", () => {
     const r = parsePreflightOutput(out, "/usr/lib/vmware-vix-disklib")
     expect(r.error).toContain("install OpenVDDK 0.7.4")
     expect(r.error).toContain("install the Broadcom VDDK")
+  })
+})
+
+// An older OpenVDDK kit stays on a node until it is replaced: the preflight
+// compares the library in OpenVDDK's directory with the pinned release, so a
+// node still on a kit without a fix ProxCenter ships is not ready.
+describe("parsePreflightOutput: pinned OpenVDDK release", () => {
+  const OPENVDDK = ALL_PRESENT.replace(/vddk-lib=.*/, "vddk-lib=/usr/lib/openvddk/lib64/libvixDiskLib.so")
+  const OLD_SHA = "d39bf157aae96283c8f0ccfadc26b9aec104a5ef9708c4d15cc6945db1dc7daf"
+
+  it("probes the library's SHA-256 only when the directory holds OpenVDDK", () => {
+    const cmd = buildPreflightCmd("/usr/lib/openvddk")
+    expect(cmd).toContain(`openvddk-sha=$(grep -qs OpenVDDK '/usr/lib/openvddk'/NOTICE && sha256sum '/usr/lib/openvddk'/lib/${OPENVDDK_KIT.libFile}`)
+  })
+  it("is ready when OpenVDDK's directory holds the pinned library", () => {
+    const r = parsePreflightOutput(`${OPENVDDK}\nopenvddk-sha=${OPENVDDK_KIT.libSha256}`, "/usr/lib/openvddk")
+    expect(r.ok).toBe(true)
+    expect(r.openvddkOutdated).toBeUndefined()
+  })
+  it("is not ready when OpenVDDK's directory holds another release, and points at Prepare this node", () => {
+    const r = parsePreflightOutput(`${OPENVDDK}\nopenvddk-sha=${OLD_SHA}`, "/usr/lib/openvddk")
+    expect(r.ok).toBe(false)
+    expect(r.openvddkOutdated).toBe(true)
+    expect(r.missing).toEqual([`OpenVDDK ${OPENVDDK_KIT.version}`])
+    expect(r.error).toContain(`OpenVDDK ${OPENVDDK_KIT.version}`)
+    expect(r.error).toContain("Prepare this node")
+    expect(r.libdir).toBe("/usr/lib/openvddk")
+  })
+  it("leaves an explicit libdir alone, whatever library it holds", () => {
+    const out = `${ALL_PRESENT}\nopenvddk-sha=${OLD_SHA}`
+    expect(parsePreflightOutput(out, "/opt/vddk").ok).toBe(true)
+  })
+  it("says nothing of the release when the directory holds no OpenVDDK (no NOTICE, empty hash)", () => {
+    expect(parsePreflightOutput(`${OPENVDDK}\nopenvddk-sha=`, "/usr/lib/openvddk").ok).toBe(true)
+  })
+  it("keeps the usual list when something else is missing too", () => {
+    const out = `${OPENVDDK.replace("nbdkit=/usr/sbin/nbdkit", "nbdkit=MISSING")}\nopenvddk-sha=${OLD_SHA}`
+    const r = parsePreflightOutput(out, "/usr/lib/openvddk")
+    expect(r.missing).toEqual(["nbdkit"])
+    expect(r.openvddkOutdated).toBeUndefined()
+  })
+  it("reports a missing library as missing, not as outdated", () => {
+    const out = `${ALL_PRESENT.replace(/vddk-lib=.*/, "vddk-lib=")}\nopenvddk-sha=${OLD_SHA}`
+    const r = parsePreflightOutput(out, "/usr/lib/openvddk")
+    expect(r.missing).toEqual(["vddk-lib"])
+    expect(r.openvddkOutdated).toBeUndefined()
   })
 })
 

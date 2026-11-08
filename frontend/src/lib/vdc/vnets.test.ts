@@ -556,6 +556,11 @@ describe('validateNetAgainstScope', () => {
     expect(validateNetAgainstScope('virtio,bridge=vnetacme', networks())).toEqual({ ok: true })
   })
 
+  it('rejects a NIC with no bridge (host user-mode networking)', () => {
+    expect(validateNetAgainstScope('virtio', networks()).ok).toBe(false)
+    expect(validateNetAgainstScope('virtio,firewall=1', networks()).ok).toBe(false)
+  })
+
   it('refuses a tag on an SDN vnet', async () => {
     const v = validateNetAgainstScope('virtio,bridge=vnetacme,tag=137', networks())
     expect(v.ok).toBe(false)
@@ -666,9 +671,9 @@ describe('validateNetAgainstScope', () => {
     expect(validateNetAgainstScope('virtio,bridge=vmbr0,tag=150', networks())).toEqual({ ok: true })
   })
 
-  it('accepts a net string with no bridge= at all (historical behaviour)', async () => {
-    expect(validateNetAgainstScope('virtio=BC:24:11:00:00:01', networks())).toEqual({ ok: true })
-    expect(validateNetAgainstScope('', networks())).toEqual({ ok: true })
+  it('rejects a net string with no bridge= at all (host user-mode networking)', async () => {
+    expect(validateNetAgainstScope('virtio=BC:24:11:00:00:01', networks()).ok).toBe(false)
+    expect(validateNetAgainstScope('', networks()).ok).toBe(false)
   })
 
   it('does not mistake a substring key for tag= or trunks=', async () => {

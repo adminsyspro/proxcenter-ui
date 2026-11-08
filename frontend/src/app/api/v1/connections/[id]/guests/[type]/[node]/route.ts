@@ -141,7 +141,7 @@ async function handler(
 
     let drives: Awaited<ReturnType<typeof enforceTenantDrives>> = null
     try {
-      drives = await enforceTenantDrives({ tenantId, connectionId: id, type, body })
+      drives = await enforceTenantDrives({ tenantId, connectionId: id, type, body, targetVmid: String(body.vmid ?? '') })
     } catch (e: any) {
       if (e instanceof DriveScopeError) return NextResponse.json({ error: e.message }, { status: 403 })
       throw e

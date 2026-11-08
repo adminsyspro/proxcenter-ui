@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isTenantDiskKey, parseDriveString, validateDriveAgainstScope,
   stampDriveQos, policyQosSuffix, QOS_KEYS, parsePveSizeToMb,
+  guestVolumeOwnerVmid,
 } from './drives'
 
 const scope = new Set(['ceph-nvme', 'ceph-hdd'])
@@ -166,5 +167,41 @@ describe('isTenantDiskKey', () => {
     ['unused0', 'lxc', true], ['net0', 'lxc', false],
   ] as const)('%s/%s -> %s', (key, type, want) => {
     expect(isTenantDiskKey(key, type)).toBe(want)
+  })
+})
+
+describe('validateDriveAgainstScope — guest volume ownership (targetVmid)', () => {
+  it('extracts the owning vmid from volume names', () => {
+    expect(guestVolumeOwnerVmid('vm-109-disk-0')).toBe('109')
+    expect(guestVolumeOwnerVmid('vm-109-cloudinit')).toBe('109')
+    expect(guestVolumeOwnerVmid('base-100-disk-0')).toBe('100')
+    expect(guestVolumeOwnerVmid('subvol-101-disk-0')).toBe('101')
+    expect(guestVolumeOwnerVmid('109/vm-109-disk-0.qcow2')).toBe('109')
+    expect(guestVolumeOwnerVmid('32')).toBeNull() // fresh allocation
+    expect(guestVolumeOwnerVmid('iso/debian.iso')).toBeNull()
+  })
+
+  it('rejects attaching another guest volume on an authorised storage', () => {
+    const r = validateDriveAgainstScope('scsi1', 'ceph-nvme:vm-109-disk-0', scope, new Set(), '113')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('belongs to guest 109')
+  })
+
+  it('allows a guest to reference its OWN volume', () => {
+    expect(validateDriveAgainstScope('scsi1', 'ceph-nvme:vm-113-disk-0', scope, new Set(), '113').ok).toBe(true)
+  })
+
+  it('allows a fresh allocation regardless of target', () => {
+    expect(validateDriveAgainstScope('scsi0', 'ceph-nvme:32', scope, new Set(), '113').ok).toBe(true)
+  })
+
+  it('rejects import-from another guest volume', () => {
+    const r = validateDriveAgainstScope('scsi0', 'ceph-nvme:0,import-from=ceph-nvme:vm-109-disk-0', scope, new Set(), '113')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('import source belongs to guest 109')
+  })
+
+  it('does not enforce ownership when no target vmid is given (provider/msp path)', () => {
+    expect(validateDriveAgainstScope('scsi1', 'ceph-nvme:vm-109-disk-0', scope).ok).toBe(true)
   })
 })

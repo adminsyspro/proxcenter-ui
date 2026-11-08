@@ -46,6 +46,10 @@ export async function enforceTenantDrives(args: {
   connectionId: string
   type: 'qemu' | 'lxc'
   body: Record<string, any>
+  /** The guest id being created or reconfigured. A drive may only reference an
+   *  existing volume owned by this guest; references to other guests' volumes
+   *  on shared storage are refused. */
+  targetVmid: string
 }): Promise<DriveEnforcement | null> {
   const infra = await getTenantInfrastructureScope(args.tenantId, { ignoreVdcContext: true })
   if (infra.kind !== 'iaas') return null
@@ -83,7 +87,7 @@ export async function enforceTenantDrives(args: {
   for (const key of Object.keys(args.body)) {
     if (!isTenantDiskKey(key, args.type)) continue
     const raw = String(args.body[key] ?? '')
-    const verdict = validateDriveAgainstScope(key, raw, allowedStorages, readOnlyStorages)
+    const verdict = validateDriveAgainstScope(key, raw, allowedStorages, readOnlyStorages, args.targetVmid)
     if (verdict.ok === false) throw new DriveScopeError(verdict.error)
     const { drive } = verdict
 

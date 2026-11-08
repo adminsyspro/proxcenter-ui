@@ -10,6 +10,29 @@ export interface HaConfig {
   deploymentStep: number
   deployedAt: string | null
   nodes: HaNodeConfig[]
+  securityLevel?: number
+  securityUpgrade?: HaSecurityUpgrade | null
+}
+
+export interface HaSecurityUpgrade {
+  v: number
+  phase: number
+  nodeIndex: number
+  status: 'running' | 'failed' | 'done'
+  error?: string
+  startedAt: string
+  updatedAt: string
+  awaitingSelfRestart?: boolean
+}
+
+/**
+ * A running HA cluster: deployed, or converted once (deployedAt) with its
+ * last deploy failed. The security upgrade accepts both.
+ */
+export function isConvertedCluster(config: Pick<HaConfig, 'deploymentState' | 'deployedAt'> | undefined): boolean {
+  if (!config) return false
+
+  return config.deploymentState === 'deployed' || (config.deploymentState === 'failed' && !!config.deployedAt)
 }
 
 export type HaImageSourceMode = '' | 'online' | 'registry' | 'local'

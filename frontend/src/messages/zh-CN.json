@@ -440,6 +440,20 @@
     },
     "services": {
       "statusUnknown": "未知"
+    },
+    "securityUpgrade": {
+      "banner": "此集群可进行安全加固。",
+      "apply": "应用安全加固",
+      "dialogTitle": "应用安全加固",
+      "line1": "节点将逐个依次更新(滚动更新)。",
+      "line2": "将进行一次持续数秒的计划内切换。",
+      "line3": "不会丢失任何数据。",
+      "confirm": "开始加固",
+      "progress": "安全加固:第 {step} 步,共 {total} 步",
+      "failed": "安全加固失败:{error}",
+      "resume": "继续",
+      "done": "安全加固已应用。",
+      "progressWithLabel": "安全加固:第 {step} 步,共 {total} 步:{label}"
     }
   },
   "user": {

@@ -1,9 +1,21 @@
 scope: proxcenter
 name: ${PATRONI_NAME}
 
+# Hardened layout (security level 1). The TLS files are mounted read-only in
+# /etc/patroni/tls (config/ha/tls on the host). Every credential and TLS path
+# of the REST API, patronictl, etcd and the replication and rewind
+# connections comes from the PATRONI_* environment set in docker-compose.ha.yml.
+
 restapi:
   listen: ${NODE_IP}:8008
   connect_address: ${NODE_IP}:8008
+  # GET endpoints (/primary, /health, /cluster) stay readable without
+  # credentials: HAProxy and keepalived check them. Write endpoints need the
+  # REST credentials AND a source address in this list or a cluster member.
+  allowlist:
+    - 127.0.0.1/32
+    - ${VIP}/32
+  allowlist_include_members: true
 
 etcd3:
   hosts: ${PEER1_IP}:2379,${PEER2_IP}:2379,${PEER3_IP}:2379
@@ -32,26 +44,48 @@ bootstrap:
     - encoding: UTF8
     - data-checksums
 
-  pg_hba:
-    - host replication replicator 0.0.0.0/0 md5
-    - host all all 0.0.0.0/0 md5
-
-# Superuser and replication credentials come EXCLUSIVELY from the
-# documented PATRONI_SUPERUSER_* / PATRONI_REPLICATION_* environment
-# variables set in docker-compose.ha.yml. No password scalar lives in this
-# file and none goes through envsubst (quoting an envsubst placeholder
-# cannot make arbitrary YAML values safe). Patroni creates the replication
-# role itself when it bootstraps a fresh cluster; the standalone-adoption
-# path is covered by ensure_replicator in entrypoint-patroni.sh.
+# Superuser, replication and rewind credentials come EXCLUSIVELY from the
+# documented PATRONI_SUPERUSER_* / PATRONI_REPLICATION_* / PATRONI_REWIND_*
+# environment variables set in docker-compose.ha.yml. No password scalar
+# lives in this file and none goes through envsubst (quoting an envsubst
+# placeholder cannot make arbitrary YAML values safe); only role names and
+# addresses are substituted. Patroni creates the replication role itself when
+# it bootstraps a fresh cluster; when it adopts a standalone database, the
+# conversion (or the security upgrade) has created the replication and rewind
+# roles beforehand, ensure_replicator in entrypoint-patroni.sh being only a
+# last-resort net. postgresql.pg_hba below is the only pg_hba source, there is
+# deliberately no bootstrap.pg_hba.
 
 postgresql:
   listen: ${NODE_IP}:5432
   connect_address: ${NODE_IP}:5432
   data_dir: /var/lib/postgresql/data
+  # Patroni's own superuser sessions use the local socket ("local" line).
+  use_unix_socket: true
+  parameters:
+    ssl: "on"
+    ssl_cert_file: /etc/patroni/tls/node.crt
+    ssl_key_file: /etc/patroni/tls/node.key
+    ssl_ca_file: /etc/patroni/tls/ca.crt
+  # TLS only, scram-sha-256 only, and only from the three nodes and the VIP.
   pg_hba:
-    - host replication replicator 0.0.0.0/0 md5
-    - host all all 0.0.0.0/0 md5
     - local all all trust
+    - hostssl replication ${PATRONI_REPLICATION_USERNAME} ${PEER1_IP}/32 scram-sha-256
+    - hostssl all proxcenter_app ${PEER1_IP}/32 scram-sha-256
+    - hostssl all proxcenter_rewind ${PEER1_IP}/32 scram-sha-256
+    - hostssl all ${PATRONI_SUPERUSER_USERNAME} ${PEER1_IP}/32 scram-sha-256
+    - hostssl replication ${PATRONI_REPLICATION_USERNAME} ${PEER2_IP}/32 scram-sha-256
+    - hostssl all proxcenter_app ${PEER2_IP}/32 scram-sha-256
+    - hostssl all proxcenter_rewind ${PEER2_IP}/32 scram-sha-256
+    - hostssl all ${PATRONI_SUPERUSER_USERNAME} ${PEER2_IP}/32 scram-sha-256
+    - hostssl replication ${PATRONI_REPLICATION_USERNAME} ${PEER3_IP}/32 scram-sha-256
+    - hostssl all proxcenter_app ${PEER3_IP}/32 scram-sha-256
+    - hostssl all proxcenter_rewind ${PEER3_IP}/32 scram-sha-256
+    - hostssl all ${PATRONI_SUPERUSER_USERNAME} ${PEER3_IP}/32 scram-sha-256
+    - hostssl replication ${PATRONI_REPLICATION_USERNAME} ${VIP}/32 scram-sha-256
+    - hostssl all proxcenter_app ${VIP}/32 scram-sha-256
+    - hostssl all proxcenter_rewind ${VIP}/32 scram-sha-256
+    - hostssl all ${PATRONI_SUPERUSER_USERNAME} ${VIP}/32 scram-sha-256
 
 watchdog:
   mode: off

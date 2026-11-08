@@ -440,6 +440,20 @@
     },
     "services": {
       "statusUnknown": "unknown"
+    },
+    "securityUpgrade": {
+      "banner": "Security hardening is available for this cluster.",
+      "apply": "Apply security hardening",
+      "dialogTitle": "Apply security hardening",
+      "line1": "The nodes are updated one after the other (rolling).",
+      "line2": "One planned switchover of a few seconds takes place.",
+      "line3": "No data is lost.",
+      "confirm": "Start hardening",
+      "progress": "Security hardening: step {step} of {total}",
+      "failed": "Security hardening failed: {error}",
+      "resume": "Resume",
+      "done": "Security hardening applied.",
+      "progressWithLabel": "Security hardening: step {step} of {total}: {label}"
     }
   },
   "user": {

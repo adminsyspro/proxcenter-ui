@@ -30,6 +30,12 @@ export interface VddkPreflightResult {
   osUnsupported?: boolean
   /** Directory the probe looked in, the one nbdkit will be given. */
   libdir?: string
+  /**
+   * True when OpenVDDK's directory holds an OpenVDDK library other than the
+   * release ProxCenter pins (an older kit): not ready, "Prepare this node"
+   * replaces it.
+   */
+  openvddkOutdated?: boolean
 }
 
 /** Install hint shown for each absent dependency. */
@@ -64,6 +70,7 @@ function vddkLibHint(libdir: string): string {
  *   - nbdkit / nbd-client: `command -v` path, or MISSING
  *   - vddk-plugin: path to nbdkit-vddk-plugin.so, or empty
  *   - vddk-lib: path to libvixDiskLib.so* under <libdir>/lib64, or empty
+ *   - openvddk-sha: SHA-256 of the library when <libdir> holds OpenVDDK, or empty
  * Pure; parsed by parsePreflightOutput.
  */
 export function buildPreflightCmd(libdir: string): string {
@@ -79,6 +86,9 @@ export function buildPreflightCmd(libdir: string): string {
     // at provisioning time points at a `.so.9` on a VDDK 9 node. Resolving `.so.8`
     // is the honest read: it is the SONAME nbdkit 1.42 actually dlopens.
     `echo "vddk-real=$(readlink -f ${lib}/lib64/libvixDiskLib.so.8 2>/dev/null || readlink -f ${lib}/lib64/libvixDiskLib.so 2>/dev/null)"`,
+    // An OpenVDDK install (its NOTICE says so) is checked against the pinned
+    // release, so a node keeps no older kit once ProxCenter pins a fixed one.
+    `echo "openvddk-sha=$(grep -qs OpenVDDK ${lib}/NOTICE && sha256sum ${lib}/lib/${OPENVDDK_KIT.libFile} 2>/dev/null | cut -d' ' -f1)"`,
     // Debian major version: decides whether the node can be prepared at all
     // (nbdkit-plugin-vddk only exists from Debian 13 / PVE 9 on).
     'echo "debian-major=$(. /etc/os-release 2>/dev/null; echo "$VERSION_ID" | cut -d. -f1)"',
@@ -102,6 +112,26 @@ export function parsePreflightOutput(output: string, libdir: string): VddkPrefli
   const debianMajor = Number.isFinite(parsed) ? parsed : undefined
   const vddkLib = map.get("vddk-real")?.trim() || undefined
   const where = { libdir }
+  // Only in OpenVDDK's own directory, the one "Prepare this node" manages: an
+  // explicit libdir is the operator's library, whatever it holds. A node that
+  // misses something else gets the usual list: preparing it installs the
+  // pinned release too.
+  const installedSha = map.get("openvddk-sha")?.trim()
+  const openvddkOutdated =
+    libdir === OPENVDDK_DEFAULT_LIBDIR && missing.length === 0 && !!installedSha && installedSha !== OPENVDDK_KIT.libSha256
+  if (openvddkOutdated) {
+    return {
+      ok: false,
+      missing: [`OpenVDDK ${OPENVDDK_KIT.version}`],
+      debianMajor,
+      vddkLib,
+      openvddkOutdated,
+      ...where,
+      error:
+        `The OpenVDDK library in ${libdir} is not the release ProxCenter uses (OpenVDDK ${OPENVDDK_KIT.version}): ` +
+        `"Prepare this node" updates it.`,
+    }
+  }
   if (missing.length === 0) return { ok: true, missing: [], debianMajor, vddkLib, ...where }
   // Debian < 13 cannot be prepared: nbdkit-plugin-vddk is not packaged there,
   // so apt dead-ends for the automated path and the manual guide alike. An

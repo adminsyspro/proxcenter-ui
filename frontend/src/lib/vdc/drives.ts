@@ -117,11 +117,33 @@ function importFromStorage(opts: Array<[string, string]>): string | null | undef
   return v.slice(0, idx)
 }
 
+/** The guest id that OWNS a referenced volume, or null when the reference is a
+ *  fresh allocation (`storage:<size>`) or a non-guest object (an ISO). PVE
+ *  volume parts carry the owner in their name: `vm-<id>-disk-N`,
+ *  `vm-<id>-cloudinit`, `base-<id>-disk-N`, `subvol-<id>-disk-N`, and the
+ *  dir-storage layout nests them under `<id>/...`. A tenant that names a volume
+ *  whose owner is a guest other than the one being written is reaching for a
+ *  neighbour's disk on shared storage: only the owning guest's name is checked
+ *  today, so the storage match alone lets it through. */
+export function guestVolumeOwnerVmid(volumeRest: string): string | null {
+  const sub = volumeRest.match(/^(\d+)\//)
+  if (sub) return sub[1]
+  const m = volumeRest.match(/^(?:vm|base|subvol)-(\d+)-/)
+  return m ? m[1] : null
+}
+
+/** The volume part (everything after `storage:`) of a `storage:rest` volid. */
+function volidRest(head: string): string {
+  const idx = head.indexOf(':')
+  return idx > 0 ? head.slice(idx + 1) : ''
+}
+
 export function validateDriveAgainstScope(
   key: string,
   raw: string,
   allowedStorages: Set<string>,
   readOnlyStorages: Set<string> = new Set(),
+  targetVmid?: string,
 ): { ok: true; drive: ParsedDrive } | { ok: false; error: string } {
   const parsed = parseDriveString(raw)
   if (parsed.ok === false) return { ok: false, error: `${key}: ${parsed.error}` }
@@ -133,6 +155,25 @@ export function validateDriveAgainstScope(
   // A read-only ISO library (#894) may back a CD/DVD drive, never a data disk.
   if (drive.storage !== null && readOnlyStorages.has(drive.storage) && !drive.isCdrom) {
     return { ok: false, error: `${key}: storage "${drive.storage}" is a read-only ISO library and cannot hold a disk.` }
+  }
+  // Ownership: a reference to an EXISTING guest volume (attach, unusedN, or
+  // import-from source) must name a volume owned by the guest being written.
+  // The storage match above only proves the volume lives on an authorised
+  // storage, not that it is the tenant's — on shared storage a neighbour's
+  // `vm-<id>-disk-*` sits on the very same storage. Enforced only when the
+  // target guest id is known (the tenant write paths always pass it).
+  if (targetVmid !== undefined && drive.storage !== null) {
+    const owner = guestVolumeOwnerVmid(volidRest(drive.head))
+    if (owner !== null && owner !== String(targetVmid)) {
+      return { ok: false, error: `${key}: volume belongs to guest ${owner}, not this guest.` }
+    }
+    const impEntry = drive.opts.find(([k]) => k === 'import-from')
+    if (impEntry) {
+      const impOwner = guestVolumeOwnerVmid(volidRest(impEntry[1]))
+      if (impOwner !== null && impOwner !== String(targetVmid)) {
+        return { ok: false, error: `${key}: import source belongs to guest ${impOwner}, not this guest.` }
+      }
+    }
   }
   const impStorage = importFromStorage(drive.opts)
   if (impStorage === null) {

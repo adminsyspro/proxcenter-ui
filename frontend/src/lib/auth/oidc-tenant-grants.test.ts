@@ -120,9 +120,18 @@ describe('resolveOidcGrants', () => {
     expect(resolveOidcGrants(['ops'], config)[0].roleId).toBe('role_operator')
   })
 
-  it('falls back to the default role in the provider tenant when nothing matches', () => {
+  it('grants nothing when a configured mapping matches no group (CX-23)', () => {
     const config = makeConfig([{ group: 'ops', tenant: 't_acme', role: 'role_operator' }], 'viewer')
-    expect(resolveOidcGrants(['nobody'], config)).toEqual([
+    // Provider membership requires an explicit group: leaving every mapped
+    // group must not silently hand out the provider default role.
+    expect(resolveOidcGrants(['nobody'], config)).toEqual([])
+    expect(resolveOidcGrants([], config)).toEqual([])
+    expect(oidcSeedRoleId(['nobody'], config)).toBe('role_tenant_viewer')
+  })
+
+  it('still seeds the provider default when NO group mapping is configured', () => {
+    const config = makeConfig([], 'viewer')
+    expect(resolveOidcGrants([], config)).toEqual([
       { tenantId: 'default', vdcId: null, roleId: 'role_viewer' },
     ])
   })
@@ -199,15 +208,13 @@ describe('resolveOidcGrants', () => {
     ])
   })
 
-  it('still falls back to the default role under the cumulative strategy', () => {
+  it('grants nothing under the cumulative strategy when nothing matches', () => {
     const config = makeConfig(
       [{ group: 'admins', role: 'role_admin' }],
       'viewer',
       'cumulative',
     )
-    expect(resolveOidcGrants(['nobody'], config)).toEqual([
-      { tenantId: 'default', vdcId: null, roleId: 'role_viewer' },
-    ])
+    expect(resolveOidcGrants(['nobody'], config)).toEqual([])
   })
 })
 

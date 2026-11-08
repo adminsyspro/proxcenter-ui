@@ -574,7 +574,16 @@ export function validateNetAgainstScope(
   networks: Map<string, AllowedNetwork>,
 ): { ok: true } | { ok: false; error: string } {
   const bridge = parseBridgeFromNet(netStr)
-  if (!bridge) return { ok: true }
+  if (!bridge) {
+    // A NIC with no bridge= is not harmless: QEMU falls back to user-mode
+    // (SLIRP) networking through the host's stack, bypassing the vDC's VLANs,
+    // the PVE firewall and microsegmentation. A tenant NIC must always name an
+    // authorised bridge.
+    return {
+      ok: false,
+      error: `A network interface must specify an authorised bridge. Allowed: ${Array.from(networks.keys()).join(', ')}`,
+    }
+  }
 
   const entry = networks.get(bridge)
   if (!entry) {

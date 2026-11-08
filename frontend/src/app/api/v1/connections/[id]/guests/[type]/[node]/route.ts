@@ -109,6 +109,17 @@ async function handler(
     // vDC quota enforcement
     const tenantId = await getCurrentTenantId()
     if (tenantId !== 'default') {
+      // The create endpoint also restores when handed `archive`, which skips
+      // the restore route's source scoping (PBS namespace / vDC storages /
+      // guest ownership): a tenant could reconstruct a neighbour's backup into
+      // a VM of its own and read the disk. Tenants restore through the restore
+      // endpoint, which enforces that scope.
+      if (body.archive !== undefined && String(body.archive) !== '') {
+        return NextResponse.json(
+          { error: 'Restoring from a backup must go through the restore endpoint.' },
+          { status: 403 },
+        )
+      }
       for (const permission of sensitiveNicPermissions(body)) {
         const sensitiveDenied = await checkPermission(permission, 'vm', `${id}:${node}:${type}:${body.vmid}`)
         if (sensitiveDenied) return sensitiveDenied
@@ -141,7 +152,7 @@ async function handler(
 
     let drives: Awaited<ReturnType<typeof enforceTenantDrives>> = null
     try {
-      drives = await enforceTenantDrives({ tenantId, connectionId: id, type, body })
+      drives = await enforceTenantDrives({ tenantId, connectionId: id, type, body, targetVmid: String(body.vmid ?? '') })
     } catch (e: any) {
       if (e instanceof DriveScopeError) return NextResponse.json({ error: e.message }, { status: 403 })
       throw e
@@ -155,6 +166,16 @@ async function handler(
         // template catalogue only, whatever client sends the request.
         if (type === 'qemu' && !vdcInfo.allowBlankVms) {
           return NextResponse.json({ error: 'This vDC does not allow blank VMs: deploy from the template catalogue.' }, { status: 403 })
+        }
+
+        // A privileged LXC maps container root (uid 0) to host root on the
+        // shared node: a container-escape surface that reaches every tenant on
+        // that node. Tenants only ever get unprivileged containers.
+        if (type === 'lxc') {
+          if (body.unprivileged !== undefined && String(body.unprivileged) !== '1') {
+            return NextResponse.json({ error: 'Tenants may only create unprivileged containers.' }, { status: 403 })
+          }
+          body.unprivileged = 1
         }
 
         // vDC compute policy (#893): the model must sit inside the allowed

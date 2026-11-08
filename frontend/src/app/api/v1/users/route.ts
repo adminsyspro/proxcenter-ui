@@ -11,7 +11,7 @@ import { authOptions } from "@/lib/auth/config"
 import { checkPermission, PERMISSIONS, isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { getServerLicense } from "@/lib/auth/requireEnterprise"
-import { isCommunityDeployment } from "@/lib/auth/communitySuperAdmin"
+import { isCommunityDeployment, hasNonDefaultTenant } from "@/lib/auth/communitySuperAdmin"
 import { aliveWhere } from "@/lib/auth/sessions"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -249,7 +249,10 @@ async function handlePost(req: Request) {
     // A Community install has no orchestrator to answer at all, so "resolved"
     // alone would never fire there. See isCommunityDeployment (issue #755).
     const license = await getServerLicense()
-    const grantSuperAdmin = isCommunityDeployment(license)
+    // An Enterprise install read as Community (lapsed/revoked licence) still
+    // has its tenants; auto-granting super-admin there would silently and
+    // permanently escalate a tenant-created account platform-wide.
+    const grantSuperAdmin = isCommunityDeployment(license) && !(await hasNonDefaultTenant())
 
     await prisma.$transaction([
       prisma.user.create({

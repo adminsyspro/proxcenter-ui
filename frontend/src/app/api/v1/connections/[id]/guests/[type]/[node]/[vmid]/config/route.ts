@@ -74,7 +74,9 @@ const ALLOWED_LXC_FIELDS = new Set([
   'hostname', 'description', 'tags', 'onboot', 'protection', 'startup',
   'cores', 'cpulimit', 'cpuunits',
   'memory', 'swap',
-  'unprivileged', 'features',
+  // `unprivileged` is deliberately NOT here: a tenant's container is forced
+  // unprivileged at creation and must not be flipped to privileged later.
+  'features',
   'delete',
   'revert',
 ])
@@ -393,7 +395,7 @@ async function putHandler(
     // Disk storage allow-list + storage-policy QoS stamping + quota metering
     // (pre-existing hole: disk keys used to flow verbatim to PVE).
     try {
-      const drives = await enforceTenantDrives({ tenantId, connectionId: id, type: type as 'qemu' | 'lxc', body })
+      const drives = await enforceTenantDrives({ tenantId, connectionId: id, type: type as 'qemu' | 'lxc', body, targetVmid: vmid })
       if (drives && vdcInfo) {
         // Import-from metering (Finding I2): PVE allocates a full-size
         // volume for scsiN: "gold:0,import-from=gold:vm-100-disk-0", so meter

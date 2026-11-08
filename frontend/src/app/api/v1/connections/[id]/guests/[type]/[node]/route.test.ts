@@ -335,3 +335,16 @@ describe('POST guests create: tenant LXC is forced unprivileged', () => {
   })
 
 })
+
+describe('POST guests create: tenant restore via create is refused', () => {
+  it('403: an archive= on the create route is pushed to the restore endpoint', async () => {
+    const res = await callRoute(await loadPost(), {
+      params: baseParams,
+      body: { vmid: 190, archive: 'pbs:backup/vm/100/2026-01-01T00:00:00Z', storage: 'ceph' },
+    })
+    expect(res.status).toBe(403)
+    const json = await readJson<{ error: string }>(res)
+    expect(json?.error).toContain('restore endpoint')
+    expect(pveFetchMock.mock.calls.some(c => c[2]?.method === 'POST')).toBe(false)
+  })
+})

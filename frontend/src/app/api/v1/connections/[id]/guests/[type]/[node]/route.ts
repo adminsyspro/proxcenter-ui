@@ -109,6 +109,17 @@ async function handler(
     // vDC quota enforcement
     const tenantId = await getCurrentTenantId()
     if (tenantId !== 'default') {
+      // The create endpoint also restores when handed `archive`, which skips
+      // the restore route's source scoping (PBS namespace / vDC storages /
+      // guest ownership): a tenant could reconstruct a neighbour's backup into
+      // a VM of its own and read the disk. Tenants restore through the restore
+      // endpoint, which enforces that scope.
+      if (body.archive !== undefined && String(body.archive) !== '') {
+        return NextResponse.json(
+          { error: 'Restoring from a backup must go through the restore endpoint.' },
+          { status: 403 },
+        )
+      }
       for (const permission of sensitiveNicPermissions(body)) {
         const sensitiveDenied = await checkPermission(permission, 'vm', `${id}:${node}:${type}:${body.vmid}`)
         if (sensitiveDenied) return sensitiveDenied

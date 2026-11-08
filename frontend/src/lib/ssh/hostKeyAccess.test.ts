@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   requireProviderTenant: vi.fn(),
   findMany: vi.fn(),
   allFindMany: vi.fn(),
+  forgetHostKey: vi.fn(),
 }))
 
 vi.mock("@/lib/rbac", () => ({
@@ -15,12 +16,13 @@ vi.mock("@/lib/rbac", () => ({
   holdsBroadPermission: h.holdsBroadPermission,
 }))
 vi.mock("@/lib/db/prisma", () => ({ prisma: { connection: { findMany: h.allFindMany } } }))
+vi.mock("./host-key-store", () => ({ forgetHostKey: h.forgetHostKey }))
 vi.mock("@/lib/tenant", () => ({
   getSessionPrisma: async () => ({ connection: { findMany: h.findMany } }),
   requireProviderTenant: h.requireProviderTenant,
 }))
 
-import { hostKeyInScope, hostKeyScope } from "./hostKeyAccess"
+import { forgetHostKeysOf, hostKeyInScope, hostKeyScope, hostKeysOwnedBy } from "./hostKeyAccess"
 
 const FORBIDDEN = new Response(null, { status: 403 })
 
@@ -127,5 +129,29 @@ describe("hostKeyScope", () => {
     expect([...scope.hosts].sort()).toEqual(["192.0.2.10", "192.0.2.11", "msp.example"])
     expect(hostKeyInScope(scope, "10.42.0.101")).toBe(false)
     expect(hostKeyInScope(scope, "10.42.0.201")).toBe(false)
+  })
+})
+
+describe("hostKeysOwnedBy", () => {
+  it("lists the API host, node addresses and SSH overrides only this connection uses", async () => {
+    h.allFindMany.mockResolvedValue([
+      ...CONNECTIONS,
+      // A second registration of PVE-PROD's first node (another connection).
+      { id: "other", baseUrl: "https://10.42.0.101:8006", sshPort: 22, hosts: [] },
+    ])
+    expect((await hostKeysOwnedBy("prod")).sort()).toEqual(["10.42.0.102", "pve-prod.lab", "pve2-mgmt.lab"])
+    expect(await hostKeysOwnedBy("dr")).toEqual(["fd00::111", "10.42.0.111"])
+  })
+
+  it("returns nothing for an unknown connection", async () => {
+    expect(await hostKeysOwnedBy("gone")).toEqual([])
+  })
+})
+
+describe("forgetHostKeysOf", () => {
+  it("forgets each host and sums what was removed", async () => {
+    h.forgetHostKey.mockReset().mockResolvedValueOnce(2).mockResolvedValueOnce(0)
+    expect(await forgetHostKeysOf(["a", "b"])).toBe(2)
+    expect(h.forgetHostKey.mock.calls.map(c => c[0])).toEqual(["a", "b"])
   })
 })

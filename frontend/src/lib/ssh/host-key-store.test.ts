@@ -1,316 +1,363 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { createHash } from 'node:crypto'
 
-const findUniqueMock = vi.fn()
-const createMock = vi.fn()
-const updateMock = vi.fn()
-const findManyMock = vi.fn()
-const deleteManyMock = vi.fn()
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// An in-memory ssh_host_keys (unique on host + key type) and ssh_known_hosts,
+// enough of Prisma for the store: the tests check behaviour, not query shapes.
+type Row = {
+  host: string
+  keyType: string
+  keyData: Uint8Array | null
+  pendingKeyData: Uint8Array | null
+  pendingSeenAt: Date | null
+  confirmedAt: Date | null
+  confirmedBy: string | null
+  firstSeenAt: Date
+  lastUsedAt: Date
+}
+
+const db = vi.hoisted(() => ({
+  rows: [] as any[],
+  legacy: [] as { host: string; key_type: string; public_key: string; pinned_at: Date }[],
+  legacyTable: true,
+}))
+
+function matches(r: Row, where: any): boolean {
+  if (!where) return true
+  if (where.OR) return where.OR.some((w: any) => matches(r, w))
+  if (where.host_keyType) return r.host === where.host_keyType.host && r.keyType === where.host_keyType.keyType
+  if (typeof where.host === 'string' && r.host !== where.host) return false
+  if (typeof where.host === 'object' && !r.host.startsWith(where.host.startsWith)) return false
+  if (where.keyData?.not === null && r.keyData === null) return false
+
+  return true
+}
+
+function pick(r: Row, select?: Record<string, boolean>) {
+  if (!select) return { ...r }
+
+  return Object.fromEntries(Object.keys(select).map(k => [k, (r as any)[k]]))
+}
 
 vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     sshHostKey: {
-      findUnique: (...args: unknown[]) => findUniqueMock(...args),
-      create: (...args: unknown[]) => createMock(...args),
-      update: (...args: unknown[]) => updateMock(...args),
-      findMany: (...args: unknown[]) => findManyMock(...args),
-      deleteMany: (...args: unknown[]) => deleteManyMock(...args),
+      findMany: async ({ where, select }: any = {}) =>
+        db.rows.filter(r => matches(r, where)).sort((a, b) => (a.host + a.keyType).localeCompare(b.host + b.keyType)).map(r => pick(r, select)),
+      upsert: async ({ where, create, update, select }: any) => {
+        let row = db.rows.find(r => matches(r, where))
+        if (row) Object.assign(row, update)
+        else {
+          row = { keyData: null, pendingKeyData: null, pendingSeenAt: null, confirmedAt: null, confirmedBy: null, firstSeenAt: new Date(), lastUsedAt: new Date(), ...create }
+          db.rows.push(row)
+        }
+
+        return pick(row, select)
+      },
+      update: async ({ where, data }: any) => {
+        const row = db.rows.find(r => matches(r, where))
+        if (!row) throw new Error('not found')
+        Object.assign(row, data)
+
+        return row
+      },
+      deleteMany: async ({ where }: any) => {
+        const before = db.rows.length
+        db.rows = db.rows.filter(r => !matches(r, where))
+
+        return { count: before - db.rows.length }
+      },
+    },
+    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      if (!db.legacyTable) throw new Error('relation "ssh_known_hosts" does not exist')
+      const sql = strings.join('?')
+      if (sql.includes('WHERE host =')) return db.legacy.filter(l => l.host === values[0])
+
+      return [...db.legacy].sort((a, b) => a.host.localeCompare(b.host))
+    },
+    $executeRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+      if (!db.legacyTable) throw new Error('relation "ssh_known_hosts" does not exist')
+      const before = db.legacy.length
+      db.legacy = db.legacy.filter(l => l.host !== values[0])
+
+      return before - db.legacy.length
     },
   },
 }))
 
-import { verifyOrPin, makeHostVerifier, listPinnedHostKeys, forgetHostKey } from './host-key-store'
+import {
+  algorithmsForKeyType, confirmHostKey, forgetHostKey, hostKeyAlgorithms, hostKeyEndpoint, hostKeyFingerprint,
+  hostKeyRefusalMessage, listHostKeys, makeHostVerifier, readKeyType, trustedKnownHosts, verifyHostKey,
+} from './host-key-store'
 
-// Build a fake ssh2 public-key buffer: <4-byte BE length><algo name><payload>.
-// We never inspect the payload bytes for verification (those are compared
-// constant-time), so any random suffix works. The algo header is what
-// readKeyType extracts for logging.
+// A wire-format public key: <4-byte BE length><algorithm name><payload>.
 function fakeKey(algo: string, suffix = 'payload-bytes'): Buffer {
-  const algoBuf = Buffer.from(algo, 'utf8')
-  const lenBuf = Buffer.alloc(4)
-  lenBuf.writeUInt32BE(algoBuf.length, 0)
-  const payload = Buffer.from(suffix, 'utf8')
-  return Buffer.concat([lenBuf, algoBuf, payload])
+  const name = Buffer.from(algo, 'utf8')
+  const len = Buffer.alloc(4)
+  len.writeUInt32BE(name.length, 0)
+
+  return Buffer.concat([len, name, Buffer.from(suffix, 'utf8')])
+}
+
+function trust(host: string, key: Buffer, confirmed = true) {
+  db.rows.push({
+    host, keyType: readKeyType(key), keyData: Uint8Array.from(key), pendingKeyData: null, pendingSeenAt: null,
+    confirmedAt: confirmed ? new Date() : null, confirmedBy: confirmed ? 'ops@example.com' : null,
+    firstSeenAt: new Date(), lastUsedAt: new Date(),
+  })
+}
+
+function rowOf(host: string, keyType: string) {
+  return db.rows.find(r => r.host === host && r.keyType === keyType)
 }
 
 beforeEach(() => {
-  findUniqueMock.mockReset()
-  createMock.mockReset()
-  updateMock.mockReset()
-  findManyMock.mockReset()
-  deleteManyMock.mockReset()
+  db.rows = []
+  db.legacy = []
+  db.legacyTable = true
 })
 
-describe('verifyOrPin', () => {
-  it('pins a new key on first contact and reports the algorithm', async () => {
-    findUniqueMock.mockResolvedValueOnce(null)
-    createMock.mockResolvedValueOnce({})
-    const key = fakeKey('ssh-ed25519', 'first-fingerprint')
-
-    const out = await verifyOrPin('PVE1.example', 22, key)
-
-    expect(out).toEqual({ status: 'pinned-new', keyType: 'ssh-ed25519' })
-    expect(findUniqueMock).toHaveBeenCalledWith({
-      where: { host: 'pve1.example:22' },
-      select: { keyType: true, keyData: true },
-    })
-    expect(createMock).toHaveBeenCalledTimes(1)
-    const createArg = createMock.mock.calls[0]?.[0]?.data
-    expect(createArg.host).toBe('pve1.example:22')
-    expect(createArg.keyType).toBe('ssh-ed25519')
-    expect(Buffer.from(createArg.keyData).equals(key)).toBe(true)
+describe('hostKeyEndpoint and key helpers', () => {
+  it('builds the same host:port string as the orchestrator', () => {
+    expect(hostKeyEndpoint(' PVE1.Lab ', 22)).toBe('pve1.lab:22')
+    expect(hostKeyEndpoint('[FE80::1]', 2222)).toBe('fe80::1:2222')
+    expect(hostKeyEndpoint('10.0.0.1', 0)).toBe('10.0.0.1:22')
+    expect(hostKeyEndpoint('  ', 22)).toBe('')
   })
 
-  it('returns pinned-existing and refreshes lastUsedAt when the presented key matches', async () => {
-    const key = fakeKey('ecdsa-sha2-nistp256', 'pinned-fingerprint')
-    findUniqueMock.mockResolvedValueOnce({ keyType: 'ecdsa-sha2-nistp256', keyData: Uint8Array.from(key) })
-    updateMock.mockResolvedValueOnce({})
-
-    const out = await verifyOrPin('pve2.example', 22, key)
-
-    expect(out).toEqual({ status: 'pinned-existing', keyType: 'ecdsa-sha2-nistp256' })
-    expect(createMock).not.toHaveBeenCalled()
-    expect(updateMock).toHaveBeenCalledTimes(1)
-    expect(updateMock.mock.calls[0]?.[0]?.where).toEqual({ host: 'pve2.example:22' })
+  it('reads the key type and an OpenSSH fingerprint', () => {
+    const key = fakeKey('ssh-ed25519')
+    expect(readKeyType(key)).toBe('ssh-ed25519')
+    expect(readKeyType(Buffer.from([0, 0]))).toBe('unknown')
+    expect(readKeyType(Buffer.from([0, 0, 0, 99, 1]))).toBe('unknown')
+    expect(hostKeyFingerprint(key)).toBe(`SHA256:${createHash('sha256').update(key).digest('base64').replace(/=+$/, '')}`)
   })
 
-  it('pins the same hostname on different ports as distinct entries', async () => {
-    const key22 = fakeKey('ssh-ed25519', 'bastion-22')
-    const key2222 = fakeKey('ssh-ed25519', 'bastion-2222')
-    findUniqueMock
-      .mockResolvedValueOnce({ keyType: 'ssh-ed25519', keyData: Uint8Array.from(key22) })
-      .mockResolvedValueOnce(null)
-    updateMock.mockResolvedValueOnce({})
-    createMock.mockResolvedValueOnce({})
-
-    const a = await verifyOrPin('bastion.example', 22, key22)
-    expect(a.status).toBe('pinned-existing')
-    expect(updateMock.mock.calls[0]?.[0]?.where).toEqual({ host: 'bastion.example:22' })
-
-    const b = await verifyOrPin('bastion.example', 2222, key2222)
-    expect(b.status).toBe('pinned-new')
-    expect(findUniqueMock.mock.calls[1]?.[0]?.where).toEqual({ host: 'bastion.example:2222' })
-    expect(createMock.mock.calls[0]?.[0]?.data?.host).toBe('bastion.example:2222')
-  })
-
-  it('returns mismatch when the presented key differs from the pinned one', async () => {
-    const pinned = fakeKey('ssh-rsa', 'original')
-    const presented = fakeKey('ssh-rsa', 'rotated')
-    findUniqueMock.mockResolvedValueOnce({ keyType: 'ssh-rsa', keyData: Uint8Array.from(pinned) })
-
-    const out = await verifyOrPin('pve3.example', 22, presented)
-
-    expect(out).toEqual({
-      status: 'mismatch',
-      expectedKeyType: 'ssh-rsa',
-      presentedKeyType: 'ssh-rsa',
-    })
-    expect(createMock).not.toHaveBeenCalled()
-    expect(updateMock).not.toHaveBeenCalled()
-  })
-
-  it('rejects an empty host instead of attempting any DB call', async () => {
-    const out = await verifyOrPin('   ', 22, fakeKey('ssh-ed25519'))
-    expect(out.status).toBe('mismatch')
-    expect(findUniqueMock).not.toHaveBeenCalled()
-  })
-
-  it('reports keyType=unknown for malformed key buffers', async () => {
-    findUniqueMock.mockResolvedValueOnce(null)
-    createMock.mockResolvedValueOnce({})
-    const out = await verifyOrPin('pve.example', 22, Buffer.from([1, 2, 3]))
-    expect(out).toEqual({ status: 'pinned-new', keyType: 'unknown' })
-  })
-
-  it('handles a concurrent race (P2002) by re-reading the row that won', async () => {
-    const winningKey = fakeKey('ssh-ed25519', 'won')
-    findUniqueMock
-      .mockResolvedValueOnce(null) // first read: nothing pinned yet
-      .mockResolvedValueOnce({ keyType: 'ssh-ed25519', keyData: Uint8Array.from(winningKey) })
-    const conflict = Object.assign(new Error('unique'), { code: 'P2002' })
-    createMock.mockRejectedValueOnce(conflict)
-    updateMock.mockResolvedValueOnce({})
-
-    const out = await verifyOrPin('race.example', 22, winningKey)
-    expect(out).toEqual({ status: 'pinned-existing', keyType: 'ssh-ed25519' })
-  })
-
-  it('reports mismatch when the race winner has a different key', async () => {
-    const ours = fakeKey('ssh-ed25519', 'mine')
-    const theirs = fakeKey('ssh-rsa', 'theirs')
-    findUniqueMock
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ keyType: 'ssh-rsa', keyData: Uint8Array.from(theirs) })
-    createMock.mockRejectedValueOnce(Object.assign(new Error('unique'), { code: 'P2002' }))
-
-    const out = await verifyOrPin('race-mismatch.example', 22, ours)
-    expect(out).toEqual({
-      status: 'mismatch',
-      expectedKeyType: 'ssh-rsa',
-      presentedKeyType: 'ssh-ed25519',
-    })
-    expect(updateMock).not.toHaveBeenCalled()
-  })
-
-  it('rethrows non-P2002 errors from create', async () => {
-    findUniqueMock.mockResolvedValueOnce(null)
-    const fatal = Object.assign(new Error('disk full'), { code: 'P3000' })
-    createMock.mockRejectedValueOnce(fatal)
-    await expect(verifyOrPin('boom.example', 22, fakeKey('ssh-ed25519'))).rejects.toThrow('disk full')
-  })
-
-  it('swallows update failures so an SSH op is not aborted by a missing row', async () => {
-    const key = fakeKey('ssh-ed25519', 'pinned')
-    findUniqueMock.mockResolvedValueOnce({ keyType: 'ssh-ed25519', keyData: Uint8Array.from(key) })
-    updateMock.mockRejectedValueOnce(new Error('row vanished'))
-    const out = await verifyOrPin('lossy.example', 22, key)
-    expect(out).toEqual({ status: 'pinned-existing', keyType: 'ssh-ed25519' })
+  it('signs an RSA key with SHA-2 and SHA-1', () => {
+    expect(algorithmsForKeyType('ssh-rsa')).toEqual(['rsa-sha2-512', 'rsa-sha2-256', 'ssh-rsa'])
+    expect(algorithmsForKeyType('ssh-ed25519')).toEqual(['ssh-ed25519'])
   })
 })
 
-describe('makeHostVerifier', () => {
-  // Helper: drive the ssh2-style (key, callback) shape and resolve when
-  // the callback fires. Lets a single await give us the boolean decision.
-  function drive(verifier: (key: Buffer, cb: (ok: boolean) => void) => void, key: Buffer): Promise<boolean> {
-    return new Promise((resolve) => verifier(key, resolve))
-  }
+describe('verifyHostKey', () => {
+  it('refuses an unknown key and keeps it pending, on every attempt', async () => {
+    const key = fakeKey('ssh-ed25519', 'new')
+    const first = await verifyHostKey('PVE1', 22, key)
+    expect(first).toEqual({ status: 'refused', endpoint: 'pve1:22', keyType: 'ssh-ed25519', fingerprint: hostKeyFingerprint(key), state: 'unconfirmed' })
+    expect(Buffer.from(rowOf('pve1:22', 'ssh-ed25519').pendingKeyData).equals(key)).toBe(true)
+    expect(rowOf('pve1:22', 'ssh-ed25519').keyData).toBeNull()
 
-  it('returns true on a first-contact pin and logs the algo and host', async () => {
-    findUniqueMock.mockResolvedValueOnce(null)
-    createMock.mockResolvedValueOnce({})
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-
-    const key = fakeKey('ssh-ed25519', 'tofu')
-    const ok = await drive(makeHostVerifier('pve.example', 22), key)
-    expect(ok).toBe(true)
-    expect(log).toHaveBeenCalledTimes(1)
-    expect(log.mock.calls[0]?.[0]).toContain('ssh-ed25519')
-    expect(log.mock.calls[0]?.[0]).toContain('pve.example')
-    log.mockRestore()
+    expect((await verifyHostKey('pve1', 22, key)).status).toBe('refused')
   })
 
-  it('returns true silently on a ratified pin', async () => {
-    const key = fakeKey('ssh-ed25519', 'pinned')
-    findUniqueMock.mockResolvedValueOnce({ keyType: 'ssh-ed25519', keyData: Uint8Array.from(key) })
-    updateMock.mockResolvedValueOnce({})
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+  it('accepts the trusted key and refreshes its last use at most hourly', async () => {
+    const key = fakeKey('ssh-ed25519')
+    trust('pve1:22', key)
+    const old = new Date(Date.now() - 2 * 3_600_000)
+    rowOf('pve1:22', 'ssh-ed25519').lastUsedAt = old
 
-    const ok = await drive(makeHostVerifier('pve.example', 22), key)
-    expect(ok).toBe(true)
-    // pinned-existing path does not log; the noise floor stays low.
-    expect(log).not.toHaveBeenCalled()
-    log.mockRestore()
+    expect(await verifyHostKey('pve1', 22, key)).toEqual({ status: 'trusted', keyType: 'ssh-ed25519' })
+    expect(rowOf('pve1:22', 'ssh-ed25519').lastUsedAt.getTime()).toBeGreaterThan(old.getTime())
   })
 
-  it('returns false and warns on a mismatch', async () => {
-    const pinned = fakeKey('ssh-rsa', 'original')
-    const presented = fakeKey('ssh-rsa', 'rotated')
-    findUniqueMock.mockResolvedValueOnce({ keyType: 'ssh-rsa', keyData: Uint8Array.from(pinned) })
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  it('refuses a changed key, keeps the trusted one and stores the new one as pending', async () => {
+    const good = fakeKey('ssh-ed25519', 'good')
+    const evil = fakeKey('ssh-ed25519', 'evil')
+    trust('pve1:22', good)
 
-    const ok = await drive(makeHostVerifier('pve.example', 22), presented)
-    expect(ok).toBe(false)
-    expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn.mock.calls[0]?.[0]).toContain('host-key mismatch')
-    warn.mockRestore()
+    const r = await verifyHostKey('pve1', 22, evil)
+    expect(r).toMatchObject({ status: 'refused', state: 'mismatch' })
+    const row = rowOf('pve1:22', 'ssh-ed25519')
+    expect(Buffer.from(row.keyData).equals(good)).toBe(true)
+    expect(Buffer.from(row.pendingKeyData).equals(evil)).toBe(true)
   })
 
-  it('returns false and logs the error path when verifyOrPin throws', async () => {
-    findUniqueMock.mockRejectedValueOnce(new Error('db down'))
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('does not let a trusted key of one type vouch for another type or another port', async () => {
+    trust('pve1:22', fakeKey('ssh-ed25519'))
+    expect(await verifyHostKey('pve1', 22, fakeKey('ecdsa-sha2-nistp256'))).toMatchObject({ status: 'refused', state: 'unconfirmed' })
+    expect(await verifyHostKey('pve1', 2222, fakeKey('ssh-ed25519'))).toMatchObject({ status: 'refused', state: 'unconfirmed' })
+  })
 
-    const ok = await drive(makeHostVerifier('pve.example', 22), fakeKey('ssh-ed25519'))
-    expect(ok).toBe(false)
-    expect(err).toHaveBeenCalledTimes(1)
-    expect(err.mock.calls[0]?.[0]).toContain('db down')
-    err.mockRestore()
+  it('accepts the orchestrator legacy pin of the bare host and carries it over as automatic', async () => {
+    const key = fakeKey('ecdsa-sha2-nistp256', 'legacy')
+    db.legacy.push({ host: 'pve2', key_type: 'ecdsa-sha2-nistp256', public_key: key.toString('base64'), pinned_at: new Date() })
+
+    expect(await verifyHostKey('pve2', 2201, key)).toEqual({ status: 'trusted', keyType: 'ecdsa-sha2-nistp256' })
+    const row = rowOf('pve2:2201', 'ecdsa-sha2-nistp256')
+    expect(Buffer.from(row.keyData).equals(key)).toBe(true)
+    expect(row.confirmedAt).toBeNull()
+  })
+
+  it('refuses a key that differs from the legacy pin of its type', async () => {
+    db.legacy.push({ host: 'pve2', key_type: 'ssh-ed25519', public_key: fakeKey('ssh-ed25519', 'a').toString('base64'), pinned_at: new Date() })
+    expect(await verifyHostKey('pve2', 22, fakeKey('ssh-ed25519', 'b'))).toMatchObject({ status: 'refused', state: 'mismatch' })
+  })
+
+  it('treats a missing legacy table (no orchestrator) as no pin', async () => {
+    db.legacyTable = false
+    expect(await verifyHostKey('pve3', 22, fakeKey('ssh-ed25519'))).toMatchObject({ status: 'refused', state: 'unconfirmed' })
+  })
+
+  it('rejects an empty host', async () => {
+    await expect(verifyHostKey('  ', 22, fakeKey('ssh-ed25519'))).rejects.toThrow(/empty/)
   })
 })
 
-describe('listPinnedHostKeys', () => {
-  it('lists the pins in host order without the key material', async () => {
-    const rows = [
-      { host: '10.42.0.101:22', keyType: 'ssh-ed25519', firstSeenAt: new Date(0), lastUsedAt: new Date(0) },
-    ]
-    findManyMock.mockResolvedValueOnce(rows)
+describe('confirmHostKey', () => {
+  it('promotes exactly the pending key with the fingerprint the operator saw', async () => {
+    const key = fakeKey('ssh-ed25519', 'k')
+    await verifyHostKey('pve1', 22, key)
 
-    await expect(listPinnedHostKeys()).resolves.toEqual(rows)
-    expect(findManyMock).toHaveBeenCalledWith({
-      select: { host: true, keyType: true, firstSeenAt: true, lastUsedAt: true },
-      orderBy: { host: 'asc' },
-    })
-    // keyData never leaves the store: the UI has no use for it and it is
-    // the one column worth not shipping to a browser.
-    expect(findManyMock.mock.calls[0]?.[0]?.select?.keyData).toBeUndefined()
+    expect(await confirmHostKey('pve1:22', 'SHA256:other', 'ops@example.com')).toBe(false)
+    expect(await confirmHostKey('pve1:22', hostKeyFingerprint(key), 'ops@example.com')).toBe(true)
+
+    const row = rowOf('pve1:22', 'ssh-ed25519')
+    expect(Buffer.from(row.keyData).equals(key)).toBe(true)
+    expect(row.pendingKeyData).toBeNull()
+    expect(row.confirmedBy).toBe('ops@example.com')
+    expect((await verifyHostKey('pve1', 22, key)).status).toBe('trusted')
+  })
+
+  it('replaces a trusted key by the new one after a reinstall', async () => {
+    const old = fakeKey('ssh-ed25519', 'old')
+    const fresh = fakeKey('ssh-ed25519', 'fresh')
+    trust('pve1:22', old)
+    await verifyHostKey('pve1', 22, fresh)
+
+    expect(await confirmHostKey('pve1:22', hostKeyFingerprint(fresh), 'ops@example.com')).toBe(true)
+    expect((await verifyHostKey('pve1', 22, old)).status).toBe('refused')
+  })
+
+  it('turns an automatic pin into a confirmed one', async () => {
+    const key = fakeKey('ssh-ed25519')
+    trust('pve1:22', key, false)
+    expect(await confirmHostKey('pve1:22', hostKeyFingerprint(key), 'ops@example.com')).toBe(true)
+    expect(rowOf('pve1:22', 'ssh-ed25519').confirmedAt).toBeInstanceOf(Date)
+  })
+})
+
+describe('hostKeyAlgorithms', () => {
+  it('offers the trusted key types first, else the legacy one, else ed25519 first, then the rest', async () => {
+    const defaults = await hostKeyAlgorithms('pve1', 22)
+    expect(defaults).toEqual([
+      'ssh-ed25519', 'ecdsa-sha2-nistp256', 'ecdsa-sha2-nistp384', 'ecdsa-sha2-nistp521', 'rsa-sha2-512', 'rsa-sha2-256', 'ssh-rsa',
+    ])
+
+    db.legacy.push({ host: 'pve1', key_type: 'ecdsa-sha2-nistp256', public_key: fakeKey('ecdsa-sha2-nistp256').toString('base64'), pinned_at: new Date() })
+    const legacy = await hostKeyAlgorithms('pve1', 22)
+    expect(legacy[0]).toBe('ecdsa-sha2-nistp256')
+    expect([...legacy].sort()).toEqual([...defaults].sort())
+
+    trust('pve1:22', fakeKey('ssh-rsa'))
+    trust('pve1:22', fakeKey('ecdsa-sha2-nistp384'))
+    expect(await hostKeyAlgorithms('pve1', 22)).toEqual([
+      'ecdsa-sha2-nistp384', 'rsa-sha2-512', 'rsa-sha2-256', 'ssh-rsa', 'ssh-ed25519', 'ecdsa-sha2-nistp256', 'ecdsa-sha2-nistp521',
+    ])
+  })
+})
+
+describe('listHostKeys', () => {
+  it('lists trusted, automatic and pending keys, then the legacy pins no trusted key covers', async () => {
+    trust('pve1:22', fakeKey('ssh-ed25519', 'c'))
+    trust('pve2:22', fakeKey('ssh-ed25519', 'a'), false)
+    await verifyHostKey('pve3', 22, fakeKey('ssh-ed25519', 'p'))
+    const legacyKey = fakeKey('ecdsa-sha2-nistp256', 'l')
+    db.legacy.push(
+      { host: 'pve1', key_type: 'ecdsa-sha2-nistp256', public_key: legacyKey.toString('base64'), pinned_at: new Date() },
+      { host: 'pve9', key_type: 'ecdsa-sha2-nistp256', public_key: legacyKey.toString('base64'), pinned_at: new Date() },
+    )
+
+    const keys = await listHostKeys()
+    expect(keys.map(k => [k.host, k.origin, !!k.legacy])).toEqual([
+      ['pve1:22', 'confirmed', false],
+      ['pve2:22', 'automatic', false],
+      ['pve3:22', 'pending', false],
+      ['pve9', 'automatic', true],
+    ])
+    expect(keys[2].fingerprint).toBeNull()
+    expect(keys[2].pendingFingerprint).toMatch(/^SHA256:/)
+    expect(keys[3].fingerprint).toBe(hostKeyFingerprint(legacyKey))
+  })
+
+  it('lists without the legacy table', async () => {
+    db.legacyTable = false
+    trust('pve1:22', fakeKey('ssh-ed25519'))
+    expect(await listHostKeys()).toHaveLength(1)
   })
 })
 
 describe('forgetHostKey', () => {
-  it('clears every port pinned for the host and reports the row count', async () => {
-    deleteManyMock.mockResolvedValueOnce({ count: 2 })
+  it('drops every port and type of a bare host plus its legacy pin', async () => {
+    trust('pve1:22', fakeKey('ssh-ed25519'))
+    trust('pve1:2222', fakeKey('ssh-ed25519'))
+    trust('pve10:22', fakeKey('ssh-ed25519'))
+    db.legacy.push({ host: 'pve1', key_type: 'ssh-ed25519', public_key: 'AAAA', pinned_at: new Date() })
 
-    await expect(forgetHostKey('10.42.0.101')).resolves.toBe(2)
-    expect(deleteManyMock).toHaveBeenCalledWith({
-      where: { OR: [{ host: '10.42.0.101' }, { host: { startsWith: '10.42.0.101:' } }] },
-    })
+    expect(await forgetHostKey('PVE1')).toBe(3)
+    expect(db.rows.map(r => r.host)).toEqual(['pve10:22'])
   })
 
-  it('anchors the prefix on the colon so a longer sibling address is left alone', async () => {
-    deleteManyMock.mockResolvedValueOnce({ count: 1 })
-
-    await forgetHostKey('10.42.0.1')
-
-    // Without the trailing colon this would also wipe 10.42.0.10 and
-    // 10.42.0.111, silently un-pinning hosts nobody asked about.
-    const where = deleteManyMock.mock.calls[0]?.[0]?.where
-    expect(where.OR[1].host.startsWith).toBe('10.42.0.1:')
+  it('drops one endpoint when given host:port', async () => {
+    trust('pve1:22', fakeKey('ssh-ed25519'))
+    trust('pve1:2222', fakeKey('ssh-ed25519'))
+    expect(await forgetHostKey('pve1:2222')).toBe(1)
+    expect(db.rows.map(r => r.host)).toEqual(['pve1:22'])
   })
 
-  it('normalizes case and surrounding blanks like the verifier does', async () => {
-    deleteManyMock.mockResolvedValueOnce({ count: 1 })
-
-    await forgetHostKey('  PVE1.Example  ')
-
-    expect(deleteManyMock.mock.calls[0]?.[0]?.where.OR[0].host).toBe('pve1.example')
-  })
-
-  it('returns 0 on an empty host without issuing a delete', async () => {
-    await expect(forgetHostKey('   ')).resolves.toBe(0)
-    expect(deleteManyMock).not.toHaveBeenCalled()
+  it('handles IPv6 literals and an empty host', async () => {
+    trust('fe80::1:22', fakeKey('ssh-ed25519'))
+    expect(await forgetHostKey('[fe80::1]:22')).toBe(1)
+    expect(await forgetHostKey('  ')).toBe(0)
   })
 })
 
-describe('makeHostVerifier mismatch reporting', () => {
-  function drive(verifier: (key: Buffer, cb: (ok: boolean) => void) => void, key: Buffer): Promise<boolean> {
-    return new Promise((resolve) => verifier(key, resolve))
-  }
+describe('trustedKnownHosts', () => {
+  it('writes OpenSSH lines and SHA-256 hashes of the trusted keys only', async () => {
+    const key = fakeKey('ecdsa-sha2-nistp256')
+    trust('esx1:22', key)
+    trust('esx1:2222', key)
+    await verifyHostKey('esx2', 22, key)
 
-  it('hands the caller a reason naming both algorithms and the way out', async () => {
-    const pinned = fakeKey('ssh-ed25519', 'original')
-    const presented = fakeKey('ecdsa-sha2-nistp256', 'reinstalled')
-    findUniqueMock.mockResolvedValueOnce({ keyType: 'ssh-ed25519', keyData: Uint8Array.from(pinned) })
+    expect(await trustedKnownHosts('ESX1', 22)).toEqual({
+      lines: [`esx1 ecdsa-sha2-nistp256 ${key.toString('base64')}`],
+      keyTypes: ['ecdsa-sha2-nistp256'],
+      sha256Hex: [createHash('sha256').update(key).digest('hex')],
+    })
+    expect((await trustedKnownHosts('esx1', 2222)).lines[0]).toMatch(/^\[esx1\]:2222 /)
+    expect((await trustedKnownHosts('esx2', 22)).lines).toEqual([])
+  })
+})
+
+describe('makeHostVerifier', () => {
+  it('accepts a trusted key', async () => {
+    const key = fakeKey('ssh-ed25519')
+    trust('pve1:22', key)
+    const ok = await new Promise<boolean>(resolve => makeHostVerifier('pve1', 22)(key, resolve))
+    expect(ok).toBe(true)
+  })
+
+  it('refuses an unconfirmed key and hands the refusal to the caller', async () => {
+    const onRefusal = vi.fn()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const onMismatch = vi.fn()
-
-    const ok = await drive(makeHostVerifier('pve1.example', 22, onMismatch), presented)
-
+    const ok = await new Promise<boolean>(resolve => makeHostVerifier('pve1', 22, onRefusal)(fakeKey('ssh-ed25519'), resolve))
     expect(ok).toBe(false)
-    expect(onMismatch).toHaveBeenCalledTimes(1)
-    const message = onMismatch.mock.calls[0]?.[0] as string
-    expect(message).toContain('pve1.example')
-    expect(message).toContain('ssh-ed25519')
-    expect(message).toContain('ecdsa-sha2-nistp256')
-    expect(message).toContain('re-trust')
+    expect(onRefusal.mock.calls[0][0]).toMatchObject({ endpoint: 'pve1:22', state: 'unconfirmed' })
+    expect(onRefusal.mock.calls[0][1]).toMatch(/not confirmed/)
     warn.mockRestore()
   })
 
-  it('never fires the callback when the key matches', async () => {
-    const key = fakeKey('ssh-ed25519', 'pinned')
-    findUniqueMock.mockResolvedValueOnce({ keyType: 'ssh-ed25519', keyData: Uint8Array.from(key) })
-    updateMock.mockResolvedValueOnce({})
-    const onMismatch = vi.fn()
+  it('refuses when the check itself fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const ok = await new Promise<boolean>(resolve => makeHostVerifier('', 22)(fakeKey('ssh-ed25519'), resolve))
+    expect(ok).toBe(false)
+    error.mockRestore()
+  })
+})
 
-    await drive(makeHostVerifier('pve1.example', 22, onMismatch), key)
-
-    expect(onMismatch).not.toHaveBeenCalled()
+describe('hostKeyRefusalMessage', () => {
+  it('tells a changed key from an unconfirmed one and names the way out', () => {
+    const base = { endpoint: 'pve1:22', keyType: 'ssh-ed25519', fingerprint: 'SHA256:x' }
+    expect(hostKeyRefusalMessage({ ...base, state: 'mismatch' })).toMatch(/changed.*Host keys/)
+    expect(hostKeyRefusalMessage({ ...base, state: 'unconfirmed' })).toMatch(/not confirmed.*SSH test/)
   })
 })

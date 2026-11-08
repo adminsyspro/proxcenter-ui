@@ -284,6 +284,14 @@
       "operationFailed": "Échec de l'opération ({status})"
     },
     "wizard": {
+      "hostKeysTitle": "Clés d'hôte SSH à confirmer",
+      "hostKeyUnconfirmed": "{node} : clé d'hôte pas encore confirmée",
+      "hostKeyChanged": "{node} : clé d'hôte différente de celle de confiance",
+      "hostKeyFingerprint": "Clé {keyType} {fingerprint}",
+      "trustHostKey": "Faire confiance",
+      "trustNewHostKey": "Faire confiance à la nouvelle clé",
+      "trustHostKeyFailed": "La clé n'a pas été approuvée : {error}",
+      "hostKeyHelper": "Comparez chaque empreinte avec celle que le nœud indique lui-même (ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub) avant de lui faire confiance.",
       "title": "Déploiement du cluster HA",
       "stepPrerequisites": "Prérequis",
       "stepNodes": "Noeuds",
@@ -4635,10 +4643,6 @@
     "testSshConnection": "Tester la connexion SSH",
     "sshTestSuccess": "Connexion SSH réussie !",
     "sshTestFailed": "Échec du test SSH",
-    "sshRetrustHost": "Refaire confiance",
-    "sshRetrustHostHelper": "Oublier la clé d'hôte SSH épinglée pour ce nœud, puis relancer le test. À ne faire que si vous venez de réinstaller ce nœud ou de regénérer ses clés.",
-    "sshRetrustFailed": "Échec de la remise en confiance : {error}",
-    "sshRetrustOrchestratorUnavailable": "Orchestrateur injoignable : la clé qu'il a épinglée pour cet hôte est toujours en place.",
     "sshNodeEndpoints": {
       "title": "Adresse SSH par nœud",
       "description": "Laissez l'adresse vide pour utiliser celle que Proxmox remonte. Toute adresse est acceptée, y compris une adresse VPN, de VLAN d'administration ou de NAT. Laissez le port vide pour utiliser celui de la connexion.",
@@ -4813,30 +4817,36 @@
       "disaster_recovery": "Reprise après sinistre"
     },
     "sshHostKeys": {
-      "heading": "Clés d'hôte SSH épinglées",
-      "description": "ProxCenter épingle la clé d'hôte SSH d'une machine à la première connexion et refuse toute connexion ultérieure si cette clé change. Oubliez la clé épinglée après avoir réinstallé l'hôte ou regénéré ses clés.",
-      "loadError": "Impossible de charger les clés d'hôte SSH épinglées.",
-      "empty": "Aucune clé d'hôte SSH épinglée pour l'instant.",
-      "orchestratorUnavailable": "Orchestrateur injoignable : les clés qu'il a épinglées n'apparaissent pas dans cette liste et ne peuvent pas être oubliées pour le moment.",
+      "heading": "Clés d'hôte SSH",
+      "description": "ProxCenter et l'orchestrateur ne se connectent qu'à un hôte dont vous avez confirmé la clé d'hôte SSH. Un nouvel hôte, ou une clé qui change, est refusé tant que vous n'avez pas validé son empreinte ici ou depuis le test SSH de sa connexion. Les clés épinglées automatiquement par les versions précédentes restent valides et peuvent être confirmées.",
+      "loadError": "Impossible de charger les clés d'hôte SSH.",
+      "empty": "Aucune clé d'hôte SSH pour l'instant.",
       "columns": {
         "host": "Hôte",
-        "keyTypes": "Types de clé",
-        "pinnedAt": "Épinglée le",
-        "sources": "Épinglée dans",
+        "keyType": "Type de clé",
+        "fingerprint": "Empreinte",
+        "status": "État",
         "actions": "Actions"
       },
-      "sources": {
-        "orchestrator": "Orchestrateur",
-        "frontend": "Interface web"
+      "status": {
+        "confirmed": "Confirmée par {by} le {date}",
+        "automatic": "Épinglée automatiquement",
+        "pending": "En attente de confirmation",
+        "changed": "Changée, nouvelle clé en attente"
       },
+      "newKeyTooltip": "Nouvelle clé présentée : {fingerprint}",
+      "trust": "Faire confiance",
+      "trustTitle": "Faire confiance à la clé d'hôte de {host} ?",
+      "trustChangedWarning": "Cet hôte présente désormais une clé différente de la clé de confiance. N'acceptez que si vous avez vous-même réinstallé l'hôte ou regénéré ses clés : sinon, quelqu'un d'autre répond peut-être à cette adresse.",
+      "trustFingerprint": "Clé {keyType} {fingerprint}",
+      "trustHow": "Comparez-la avec l'empreinte que l'hôte annonce lui-même (ssh-keygen -lf sur ses fichiers /etc/ssh/ssh_host_*_key.pub) avant de lui faire confiance.",
+      "trustConfirm": "Faire confiance à la clé",
+      "trustSuccess": "Clé d'hôte de {host} acceptée.",
       "forget": "Oublier",
-      "forgetTitle": "Oublier la clé épinglée pour {host} ?",
-      "forgetWarning": "La prochaine connexion à {host} fera confiance à la clé d'hôte que cette adresse présentera, quelle qu'elle soit, et l'épinglera à son tour.",
-      "forgetWhen": "À ne faire que pour un hôte que vous venez de réinstaller vous-même ou dont vous venez de regénérer les clés. Ailleurs, une clé qui change signifie que quelqu'un d'autre répond à cette adresse.",
-      "forgetFailed": "Impossible d'oublier la clé épinglée : {error}",
-      "forgetOrchestratorUnavailable": "Orchestrateur injoignable : la clé qu'il a épinglée pour {host} est toujours en place. Réessayez une fois l'orchestrateur revenu.",
-      "forgetNotFound": "Plus aucune clé n'était épinglée pour {host}.",
-      "forgetSuccess": "Clé épinglée oubliée pour {host}. La prochaine connexion épinglera la clé présentée.",
+      "forgetTitle": "Oublier la clé d'hôte de {host} ?",
+      "forgetWarning": "Les connexions à {host} seront refusées jusqu'à ce que sa clé soit à nouveau confirmée.",
+      "forgetSuccess": "Clé d'hôte de {host} oubliée.",
+      "actionFailed": "L'action a échoué : {error}",
       "cancel": "Annuler",
       "confirm": "Oublier la clé"
     },
@@ -5042,7 +5052,7 @@
           "prerequisitesFailed": "SSH non testé : les vérifications API ou TLS ont échoué.",
           "noCredentials": "SSH non testé : aucune clé ni aucun mot de passe utilisable n'est enregistré sur la connexion.",
           "ok": "{node} : la connexion SSH en {user} sur {host}:{port} fonctionne (hostname {hostname}).",
-          "hostKeyMismatch": "{node} : la clé d'hôte de {host} a changé depuis son épinglage. Si le nœud a été réinstallé ou sa clé régénérée, utilisez Refaire confiance dans la boîte de dialogue de la connexion.",
+          "hostKeyMismatch": "{node} : la clé d'hôte de {host} n'est pas confirmée, ou a changé. Vérifiez son empreinte et faites-lui confiance depuis le test SSH de la connexion.",
           "authFailed": "{node} : l'authentification SSH a échoué pour {user} sur {host}:{port}. Vérifiez la clé ou le mot de passe enregistré sur la connexion, et que la clé publique figure dans le fichier authorized_keys de {user} sur le nœud.",
           "timeout": "{node} : aucune réponse SSH de {host}:{port}. Vérifiez sshd et le pare-feu (TCP {port}), ou définissez une adresse SSH par nœud dans la boîte de dialogue de la connexion.",
           "failed": "{node} : SSH vers {host}:{port} a échoué ({error})."
@@ -5318,7 +5328,14 @@
       "rootNoEffect": "Sans effet avec root : les commandes s'exécutent déjà en root. Indiquez un compte dédié (par exemple proxcenter) pour utiliser sudo.",
       "rootSkipped": "Connexion en root : sudo n'est pas utilisé, il n'y a donc aucun fichier sudoers à vérifier.",
       "tooOpen": "Le fichier sudoers est antérieur aux règles actuelles et autorise encore plus que ce dont ProxCenter a besoin ({uses}) : régénérez-le depuis Paramètres > Commandes SSH."
-    }
+    },
+    "sshHostKeyUnconfirmed": "clé d'hôte pas encore confirmée",
+    "sshHostKeyChanged": "clé d'hôte différente de la clé de confiance",
+    "sshHostKeyFingerprint": "Clé {keyType} {fingerprint}",
+    "sshTrustHostKey": "Faire confiance à cette clé",
+    "sshTrustNewHostKey": "Faire confiance à la nouvelle clé",
+    "sshTrustHostKeyHelper": "Comparez cette empreinte avec celle que l'hôte annonce lui-même avant de lui faire confiance : ssh-keygen -lf sur ses fichiers /etc/ssh/ssh_host_*_key.pub.",
+    "sshTrustFailed": "La clé n'a pas été acceptée : {error}"
   },
   "green": {
     "score": {

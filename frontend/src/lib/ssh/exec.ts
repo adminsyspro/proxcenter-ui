@@ -5,7 +5,7 @@ import { decryptSecret } from "@/lib/crypto/secret"
 import { isConnectionLicenseExcluded, licenseExcludedError, PveLicenseExcludedError } from "@/lib/license/exclusions"
 import { safeLog } from "@/lib/log/sanitize"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
-import { makeHostVerifier } from "@/lib/ssh/host-key-store"
+import { hostKeyAlgorithms, makeHostVerifier, type HostKeyRefusal } from "@/lib/ssh/host-key-store"
 import { resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 import { hasSudoMark, resolveSudo } from "@/lib/ssh/sudo"
 
@@ -39,6 +39,8 @@ export interface SSHResult {
   success: boolean
   output?: string
   error?: string
+  /** Set when the host key was refused: the key it presented, now pending. */
+  hostKey?: HostKeyRefusal
 }
 
 // Keepalive on every ssh2 connection: send a probe every 15s and give up after
@@ -79,14 +81,17 @@ export interface SSHExecOpts {
 
 /**
  * Build the ssh2 connect config, with keepalive always on (see the constants
- * above) and TOFU host-key verification. Auth is key (+ optional passphrase) or
+ * above) and host-key verification against the confirmed keys. Auth is key (+ optional passphrase) or
  * password (+ keyboard-interactive), matching what the connection record holds.
  */
 export function buildConnectConfig(opts: {
   host: string; port: number; user: string; key?: string; password?: string; passphrase?: string
-  /** Called with a human-readable reason when the pinned host key no longer
-   *  matches, so the caller can replace ssh2's opaque handshake error. */
-  onMismatch?: (message: string) => void
+  /** Called when the host key is refused (not confirmed, or changed), so the
+   *  caller can replace ssh2's opaque handshake error. */
+  onRefusal?: (refusal: HostKeyRefusal, message: string) => void
+  /** Host key algorithms to offer (hostKeyAlgorithms()), so the server
+   *  presents a key type ProxCenter holds a trusted key for. */
+  hostKeyAlgorithms?: string[]
 }): Record<string, unknown> {
   const cfg: Record<string, unknown> = {
     host: opts.host,
@@ -95,11 +100,11 @@ export function buildConnectConfig(opts: {
     readyTimeout: 30_000,
     keepaliveInterval: SSH_KEEPALIVE_INTERVAL_MS,
     keepaliveCountMax: SSH_KEEPALIVE_COUNT_MAX,
-    // TOFU host-key verification. Pin on first contact, refuse any later
-    // connection whose server key differs. Closes the MITM gap that ssh2's
-    // default "trust everything" behaviour leaves open.
-    hostVerifier: makeHostVerifier(opts.host, opts.port, opts.onMismatch),
+    // Only a confirmed host key is accepted; an unknown or changed one
+    // refuses the connection (ssh2 trusts every key by default).
+    hostVerifier: makeHostVerifier(opts.host, opts.port, opts.onRefusal),
   }
+  if (opts.hostKeyAlgorithms?.length) cfg.algorithms = { serverHostKey: opts.hostKeyAlgorithms }
   if (opts.key) {
     cfg.privateKey = opts.key
     if (opts.passphrase) cfg.passphrase = opts.passphrase
@@ -360,7 +365,7 @@ export async function executeSSH(
 /**
  * Execute a command over SSH using the ssh2 library directly.
  */
-export function executeSSHDirect(opts: {
+export async function executeSSHDirect(opts: {
   host: string
   port: number
   user: string
@@ -374,6 +379,8 @@ export function executeSSHDirect(opts: {
   /** Written to the command's stdin, which is then closed. */
   stdin?: string
 }): Promise<SSHResult> {
+  const algorithms = await hostKeyAlgorithms(opts.host, opts.port)
+
   return new Promise((resolve) => {
     const conn = new Client()
     // Absolute cap for the whole SSH operation (connect + exec + stream).
@@ -383,12 +390,10 @@ export function executeSSHDirect(opts: {
     // transfer long before this fires.
     const overallTimeoutMs = opts.timeoutMs ?? 30_000
 
-    // Set by the host-key verifier when the pinned key no longer matches.
-    // ssh2 reports that rejection as a bare "Handshake failed" on the error
-    // event, so without this the caller only sees a generic failure and the
-    // operator has no way to tell a rotated host key from a network problem
-    // (adminsyspro/proxcenter-ui#979).
-    let hostKeyMismatch: string | null = null
+    // Set by the host-key verifier when it refuses the key. ssh2 reports that
+    // rejection as a bare "Handshake failed" on the error event, so without
+    // this the caller could not tell a key to confirm from a network problem.
+    let refused: { refusal: HostKeyRefusal; message: string } | null = null
 
     // Single-settle guard: whichever of close/error/timeout/inactivity happens
     // first wins and tears down both timers + the connection.
@@ -458,7 +463,9 @@ export function executeSSHDirect(opts: {
       })
     })
 
-    conn.on("error", (err) => settle({ success: false, error: hostKeyMismatch ?? err.message }))
+    conn.on("error", (err) => settle(refused
+      ? { success: false, error: refused.message, hostKey: refused.refusal }
+      : { success: false, error: err.message }))
 
     // Handle keyboard-interactive auth (used by ESXi and some other hosts)
     conn.on("keyboard-interactive", (_name, _instructions, _instructionsLang, prompts, finish) => {
@@ -471,7 +478,8 @@ export function executeSSHDirect(opts: {
 
     conn.connect(buildConnectConfig({
       ...opts,
-      onMismatch: (message) => { hostKeyMismatch = message },
+      hostKeyAlgorithms: algorithms,
+      onRefusal: (refusal, message) => { refused = { refusal, message } },
     }) as any)
   })
 }

@@ -287,6 +287,14 @@
       "operationFailed": "Vorgang fehlgeschlagen ({status})"
     },
     "wizard": {
+      "hostKeysTitle": "Zu bestätigende SSH-Hostschlüssel",
+      "hostKeyUnconfirmed": "{node}: Hostschlüssel noch nicht bestätigt",
+      "hostKeyChanged": "{node}: Hostschlüssel seit der Bestätigung geändert",
+      "hostKeyFingerprint": "{keyType}-Schlüssel {fingerprint}",
+      "trustHostKey": "Diesem Schlüssel vertrauen",
+      "trustNewHostKey": "Dem neuen Schlüssel vertrauen",
+      "trustHostKeyFailed": "Der Schlüssel wurde nicht bestätigt: {error}",
+      "hostKeyHelper": "Vergleichen Sie jeden Fingerabdruck mit dem, den der Knoten selbst meldet (ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub), bevor Sie ihm vertrauen.",
       "title": "HA-Cluster-Bereitstellung",
       "stepPrerequisites": "Voraussetzungen",
       "stepNodes": "Knoten",
@@ -4624,10 +4632,6 @@
     "testSshConnection": "SSH-Verbindung testen",
     "sshTestSuccess": "SSH connection Erfolgful!",
     "sshTestFailed": "SSH test fehlgeschlagen",
-    "sshRetrustHost": "Neu vertrauen",
-    "sshRetrustHostHelper": "Den für diesen Knoten gespeicherten SSH-Hostschlüssel verwerfen und erneut testen. Nur tun, wenn Sie den Knoten gerade neu installiert oder dessen Schlüssel erneuert haben.",
-    "sshRetrustFailed": "Neu vertrauen fehlgeschlagen: {error}",
-    "sshRetrustOrchestratorUnavailable": "Der Orchestrator war nicht erreichbar: Der von ihm für diesen Host gespeicherte Schlüssel besteht weiterhin.",
     "sshNodeEndpoints": {
       "title": "SSH-Adresse pro Knoten",
       "description": "Lassen Sie die Adresse leer, um die von Proxmox gemeldete zu verwenden. Jede Adresse ist möglich, auch eine VPN-, Admin-VLAN- oder NAT-Adresse. Lassen Sie den Port leer, um den Port der Verbindung zu verwenden.",
@@ -4802,32 +4806,38 @@
       "disaster_recovery": "Notfallwiederherstellung"
     },
     "sshHostKeys": {
-      "heading": "Gespeicherte SSH-Hostschlüssel",
-      "description": "ProxCenter speichert den SSH-Hostschlüssel eines Hosts bei der ersten Verbindung und lehnt jede spätere Verbindung ab, wenn sich dieser Schlüssel ändert. Verwerfen Sie den Eintrag, nachdem Sie den Host neu installiert oder dessen Schlüssel erneuert haben.",
-      "loadError": "Die gespeicherten SSH-Hostschlüssel konnten nicht geladen werden.",
-      "empty": "Noch kein SSH-Hostschlüssel gespeichert.",
-      "orchestratorUnavailable": "Der Orchestrator ist nicht erreichbar: Die von ihm gespeicherten Schlüssel fehlen in dieser Liste und können derzeit nicht verworfen werden.",
+      "heading": "SSH-Host-Schlüssel",
+      "description": "ProxCenter und der Orchestrator verbinden sich nur mit einem Host, dessen SSH-Host-Schlüssel Sie bestätigt haben. Ein neuer Host oder ein geänderter Schlüssel wird abgelehnt, bis Sie seinem Fingerabdruck hier oder im SSH-Test seiner Verbindung vertrauen. Von früheren Versionen automatisch gespeicherte Schlüssel funktionieren weiter und können bestätigt werden.",
+      "loadError": "Die SSH-Host-Schlüssel konnten nicht geladen werden.",
+      "empty": "Noch kein SSH-Host-Schlüssel.",
       "columns": {
         "host": "Host",
-        "keyTypes": "Schlüsseltypen",
-        "pinnedAt": "Gespeichert am",
-        "sources": "Gespeichert in",
+        "keyType": "Schlüsseltyp",
+        "fingerprint": "Fingerabdruck",
+        "status": "Status",
         "actions": "Aktionen"
       },
-      "sources": {
-        "orchestrator": "Orchestrator",
-        "frontend": "Weboberfläche"
+      "status": {
+        "confirmed": "Bestätigt von {by} am {date}",
+        "automatic": "Automatisch gespeichert",
+        "pending": "Wartet auf Bestätigung",
+        "changed": "Geändert, neuer Schlüssel wartet"
       },
-      "forget": "Verwerfen",
-      "forgetTitle": "Gespeicherten Schlüssel für {host} verwerfen?",
-      "forgetWarning": "Die nächste Verbindung zu {host} vertraut jedem Hostschlüssel, den diese Adresse vorlegt, und speichert ihn seinerseits.",
-      "forgetWhen": "Nur für einen Host durchführen, den Sie gerade selbst neu installiert oder dessen Schlüssel Sie erneuert haben. Sonst bedeutet ein geänderter Schlüssel, dass jemand anderes unter dieser Adresse antwortet.",
-      "forgetFailed": "Der gespeicherte Schlüssel konnte nicht verworfen werden: {error}",
-      "forgetOrchestratorUnavailable": "Der Orchestrator war nicht erreichbar: Der von ihm für {host} gespeicherte Schlüssel besteht weiterhin. Versuchen Sie es erneut, sobald der Orchestrator wieder läuft.",
-      "forgetNotFound": "Für {host} war kein Schlüssel mehr gespeichert.",
-      "forgetSuccess": "Gespeicherter Schlüssel für {host} verworfen. Die nächste Verbindung speichert den vorgelegten Schlüssel.",
+      "newKeyTooltip": "Neuer Schlüssel vorgelegt: {fingerprint}",
+      "trust": "Vertrauen",
+      "trustTitle": "Dem Host-Schlüssel von {host} vertrauen?",
+      "trustChangedWarning": "Dieser Host legt jetzt einen anderen Schlüssel als den vertrauenswürdigen vor. Vertrauen Sie ihm nur, wenn Sie den Host selbst neu installiert oder seine Schlüssel neu erzeugt haben: andernfalls antwortet unter dieser Adresse möglicherweise jemand anderes.",
+      "trustFingerprint": "{keyType}-Schlüssel {fingerprint}",
+      "trustHow": "Vergleichen Sie ihn vor dem Vertrauen mit dem Fingerabdruck, den der Host selbst meldet (ssh-keygen -lf auf seinen Dateien /etc/ssh/ssh_host_*_key.pub).",
+      "trustConfirm": "Dem Schlüssel vertrauen",
+      "trustSuccess": "Dem Host-Schlüssel von {host} wird vertraut.",
+      "forget": "Vergessen",
+      "forgetTitle": "Den Host-Schlüssel von {host} vergessen?",
+      "forgetWarning": "Verbindungen zu {host} werden abgelehnt, bis sein Schlüssel erneut bestätigt wird.",
+      "forgetSuccess": "Host-Schlüssel von {host} vergessen.",
+      "actionFailed": "Die Aktion ist fehlgeschlagen: {error}",
       "cancel": "Abbrechen",
-      "confirm": "Schlüssel verwerfen"
+      "confirm": "Schlüssel vergessen"
     },
     "sshCommands": {
       "tabLabel": "SSH-Befehle",
@@ -5031,7 +5041,7 @@
           "prerequisitesFailed": "SSH nicht getestet: die API- oder TLS-Prüfungen sind fehlgeschlagen.",
           "noCredentials": "SSH nicht getestet: an der Verbindung ist kein nutzbarer Schlüssel und kein Passwort hinterlegt.",
           "ok": "{node}: SSH-Anmeldung als {user} auf {host}:{port} funktioniert (Hostname {hostname}).",
-          "hostKeyMismatch": "{node}: der Host-Schlüssel von {host} hat sich seit dem Hinterlegen geändert. Wurde der Node neu installiert oder der Schlüssel erneuert, nutzen Sie Erneut vertrauen im Verbindungsdialog.",
+          "hostKeyMismatch": "{node}: Der Host-Schlüssel von {host} ist nicht bestätigt oder hat sich geändert. Prüfen Sie seinen Fingerabdruck und vertrauen Sie ihm im SSH-Test der Verbindung.",
           "authFailed": "{node}: SSH-Authentifizierung für {user} auf {host}:{port} fehlgeschlagen. Prüfen Sie den an der Verbindung hinterlegten Schlüssel oder das Passwort und dass der öffentliche Schlüssel in der authorized_keys von {user} auf dem Node steht.",
           "timeout": "{node}: keine SSH-Antwort von {host}:{port}. Prüfen Sie sshd und die Firewall (TCP {port}) oder legen Sie im Verbindungsdialog eine SSH-Adresse pro Node fest.",
           "failed": "{node}: SSH zu {host}:{port} fehlgeschlagen ({error})."
@@ -5307,7 +5317,14 @@
       "rootNoEffect": "Ohne Wirkung mit root: Befehle laufen bereits als root. Geben Sie ein eigenes Konto an (zum Beispiel proxcenter), um sudo zu verwenden.",
       "rootSkipped": "Als root verbunden: sudo wird nicht verwendet, es gibt also keine sudoers-Datei zu prüfen.",
       "tooOpen": "Die sudoers-Datei ist älter als die aktuellen Regeln und erlaubt noch mehr, als ProxCenter braucht ({uses}): Erzeugen Sie sie unter Einstellungen > SSH-Befehle neu."
-    }
+    },
+    "sshHostKeyUnconfirmed": "Host-Schlüssel noch nicht bestätigt",
+    "sshHostKeyChanged": "Host-Schlüssel hat sich seit der Bestätigung geändert",
+    "sshHostKeyFingerprint": "{keyType}-Schlüssel {fingerprint}",
+    "sshTrustHostKey": "Diesem Schlüssel vertrauen",
+    "sshTrustNewHostKey": "Dem neuen Schlüssel vertrauen",
+    "sshTrustHostKeyHelper": "Vergleichen Sie diesen Fingerabdruck vor dem Vertrauen mit dem, den der Host selbst meldet: ssh-keygen -lf auf seinen Dateien /etc/ssh/ssh_host_*_key.pub.",
+    "sshTrustFailed": "Dem Schlüssel wurde nicht vertraut: {error}"
   },
   "green": {
     "score": {

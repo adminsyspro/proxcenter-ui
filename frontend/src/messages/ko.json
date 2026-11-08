@@ -284,6 +284,14 @@
       "operationFailed": "작업 실패 ({status})"
     },
     "wizard": {
+      "hostKeysTitle": "확인할 SSH 호스트 키",
+      "hostKeyUnconfirmed": "{node}: 호스트 키가 아직 확인되지 않음",
+      "hostKeyChanged": "{node}: 호스트 키가 신뢰한 키와 다름",
+      "hostKeyFingerprint": "{keyType} 키 {fingerprint}",
+      "trustHostKey": "이 키 신뢰",
+      "trustNewHostKey": "새 키 신뢰",
+      "trustHostKeyFailed": "키를 신뢰하지 못했습니다: {error}",
+      "hostKeyHelper": "신뢰하기 전에 각 지문을 노드가 직접 보고하는 지문(ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub)과 비교하세요.",
       "title": "HA 클러스터 배포",
       "stepPrerequisites": "사전 요구 사항",
       "stepNodes": "노드",
@@ -4635,10 +4643,6 @@
     "testSshConnection": "SSH 연결 테스트",
     "sshTestSuccess": "SSH 연결 성공!",
     "sshTestFailed": "SSH 테스트 실패",
-    "sshRetrustHost": "다시 신뢰",
-    "sshRetrustHostHelper": "이 노드에 고정된 SSH 호스트 키를 삭제한 뒤 다시 테스트합니다. 노드를 방금 재설치했거나 키를 새로 만든 경우에만 실행하세요.",
-    "sshRetrustFailed": "다시 신뢰 실패: {error}",
-    "sshRetrustOrchestratorUnavailable": "오케스트레이터에 연결할 수 없었습니다. 이 호스트에 대해 오케스트레이터가 고정한 키는 그대로 남아 있습니다.",
     "sshNodeEndpoints": {
       "title": "노드별 SSH 주소",
       "description": "주소를 비워 두면 Proxmox가 보고하는 주소를 사용합니다. VPN, 관리 VLAN, NAT 주소를 포함한 모든 주소를 사용할 수 있습니다. 포트를 비워 두면 연결 포트를 사용합니다.",
@@ -4813,32 +4817,38 @@
       "disaster_recovery": "재해 복구"
     },
     "sshHostKeys": {
-      "heading": "고정된 SSH 호스트 키",
-      "description": "ProxCenter는 호스트에 처음 연결할 때 SSH 호스트 키를 고정하고, 이후 그 키가 바뀌면 모든 연결을 거부합니다. 호스트를 재설치했거나 키를 새로 만든 뒤에는 고정된 키를 삭제하세요.",
-      "loadError": "고정된 SSH 호스트 키를 불러올 수 없습니다.",
-      "empty": "아직 고정된 SSH 호스트 키가 없습니다.",
-      "orchestratorUnavailable": "오케스트레이터에 연결할 수 없습니다. 오케스트레이터가 고정한 키는 이 목록에 없으며 지금은 삭제할 수 없습니다.",
+      "heading": "SSH 호스트 키",
+      "description": "ProxCenter와 오케스트레이터는 사용자가 SSH 호스트 키를 확인한 호스트에만 연결합니다. 새 호스트 또는 키가 변경된 호스트는 여기에서 또는 해당 연결의 SSH 테스트에서 지문을 신뢰할 때까지 거부됩니다. 이전 버전에서 자동으로 고정된 키는 계속 작동하며 확인할 수 있습니다.",
+      "loadError": "SSH 호스트 키를 불러올 수 없습니다.",
+      "empty": "아직 SSH 호스트 키가 없습니다.",
       "columns": {
         "host": "호스트",
-        "keyTypes": "키 종류",
-        "pinnedAt": "고정 일시",
-        "sources": "고정 위치",
+        "keyType": "키 유형",
+        "fingerprint": "지문",
+        "status": "상태",
         "actions": "작업"
       },
-      "sources": {
-        "orchestrator": "오케스트레이터",
-        "frontend": "웹 인터페이스"
+      "status": {
+        "confirmed": "{by}님이 {date}에 확인",
+        "automatic": "자동으로 고정됨",
+        "pending": "확인 대기 중",
+        "changed": "변경됨, 새 키 대기 중"
       },
-      "forget": "삭제",
-      "forgetTitle": "{host}에 고정된 키를 삭제할까요?",
-      "forgetWarning": "{host}에 대한 다음 연결은 해당 주소가 제시하는 호스트 키를 그대로 신뢰하고 다시 고정합니다.",
-      "forgetWhen": "방금 직접 재설치했거나 키를 새로 만든 호스트에만 실행하세요. 그 밖의 경우, 키가 바뀌었다는 것은 다른 누군가가 그 주소에서 응답하고 있다는 뜻입니다.",
-      "forgetFailed": "고정된 키를 삭제하지 못했습니다: {error}",
-      "forgetOrchestratorUnavailable": "오케스트레이터에 연결할 수 없었습니다. {host}에 대해 고정된 키가 그대로 남아 있습니다. 오케스트레이터가 복구된 뒤 다시 시도하세요.",
-      "forgetNotFound": "{host}에 고정된 키가 이미 없습니다.",
-      "forgetSuccess": "{host}의 고정된 키를 삭제했습니다. 다음 연결에서 제시된 키를 고정합니다.",
+      "newKeyTooltip": "제시된 새 키: {fingerprint}",
+      "trust": "신뢰",
+      "trustTitle": "{host}의 호스트 키를 신뢰하시겠습니까?",
+      "trustChangedWarning": "이 호스트가 이제 신뢰하는 키와 다른 키를 제시합니다. 직접 호스트를 다시 설치했거나 키를 다시 생성한 경우에만 신뢰하세요. 그렇지 않으면 다른 시스템이 이 주소에서 응답하고 있을 수 있습니다.",
+      "trustFingerprint": "{keyType} 키 {fingerprint}",
+      "trustHow": "신뢰하기 전에 호스트가 직접 보고하는 지문과 비교하세요(/etc/ssh/ssh_host_*_key.pub 파일에 ssh-keygen -lf 실행).",
+      "trustConfirm": "키 신뢰",
+      "trustSuccess": "{host}의 호스트 키를 신뢰합니다.",
+      "forget": "잊기",
+      "forgetTitle": "{host}의 호스트 키를 잊으시겠습니까?",
+      "forgetWarning": "키가 다시 확인될 때까지 {host}에 대한 연결이 거부됩니다.",
+      "forgetSuccess": "{host}의 호스트 키를 잊었습니다.",
+      "actionFailed": "작업에 실패했습니다: {error}",
       "cancel": "취소",
-      "confirm": "키 삭제"
+      "confirm": "키 잊기"
     },
     "sshCommands": {
       "tabLabel": "SSH 명령",
@@ -5042,7 +5052,7 @@
           "prerequisitesFailed": "SSH를 테스트하지 않았습니다. API 또는 TLS 점검이 실패했습니다.",
           "noCredentials": "SSH를 테스트하지 않았습니다. 연결에 사용 가능한 키나 비밀번호가 저장되어 있지 않습니다.",
           "ok": "{node}: {host}:{port}에 {user}로 SSH 로그인이 동작합니다 (호스트 이름 {hostname}).",
-          "hostKeyMismatch": "{node}: {host}의 호스트 키가 고정된 이후 변경되었습니다. 노드를 재설치했거나 키를 재생성했다면 연결 대화상자에서 다시 신뢰를 사용하세요.",
+          "hostKeyMismatch": "{node}: {host}의 호스트 키가 확인되지 않았거나 변경되었습니다. 지문을 확인한 뒤 연결의 SSH 테스트에서 신뢰하세요.",
           "authFailed": "{node}: {host}:{port}에서 {user}의 SSH 인증이 실패했습니다. 연결에 저장된 키 또는 비밀번호를 확인하고, 공개 키가 노드의 {user} authorized_keys에 있는지 확인하세요.",
           "timeout": "{node}: {host}:{port}에서 SSH 응답이 없습니다. sshd와 방화벽 (TCP {port})을 확인하거나 연결 대화상자에서 노드별 SSH 주소를 설정하세요.",
           "failed": "{node}: {host}:{port}로의 SSH가 실패했습니다 ({error})."
@@ -5318,7 +5328,14 @@
       "rootNoEffect": "root에서는 효과가 없음: 명령이 이미 root로 실행됩니다. sudo를 사용하려면 전용 계정(예: proxcenter)을 입력하세요.",
       "rootSkipped": "root로 연결됨: sudo를 사용하지 않으므로 확인할 sudoers 파일이 없습니다.",
       "tooOpen": "sudoers 파일이 현재 규칙보다 오래되어 ProxCenter에 필요한 것보다 더 많은 것을 허용합니다({uses}). 설정 > SSH 명령에서 다시 생성하세요."
-    }
+    },
+    "sshHostKeyUnconfirmed": "호스트 키가 아직 확인되지 않음",
+    "sshHostKeyChanged": "신뢰한 이후 호스트 키가 변경됨",
+    "sshHostKeyFingerprint": "{keyType} 키 {fingerprint}",
+    "sshTrustHostKey": "이 키 신뢰",
+    "sshTrustNewHostKey": "새 키 신뢰",
+    "sshTrustHostKeyHelper": "신뢰하기 전에 이 지문을 호스트가 직접 보고하는 지문과 비교하세요: /etc/ssh/ssh_host_*_key.pub 파일에 ssh-keygen -lf 를 실행합니다.",
+    "sshTrustFailed": "키를 신뢰하지 못했습니다: {error}"
   },
   "green": {
     "score": {

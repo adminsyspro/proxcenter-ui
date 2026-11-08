@@ -20,6 +20,14 @@ vi.hoisted(() => {
   process.env.V2V_ROOT_CHOICE_TIMEOUT_MS = "9000"
 })
 
+// The ESXi host key is confirmed in ProxCenter (the SSH test of the connection).
+const esxiTrust = vi.hoisted(() => ({
+  value: { lines: ["10.0.0.5 ecdsa-sha2-nistp256 AAAAtest"], keyTypes: ["ecdsa-sha2-nistp256"], sha256Hex: ["ab"] },
+}))
+vi.mock("@/lib/ssh/host-key-store", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/ssh/host-key-store")>()
+  return { ...actual, trustedKnownHosts: vi.fn(async () => esxiTrust.value) }
+})
 vi.mock("@/lib/ssh/exec", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/ssh/exec")>()
   return { ...actual, executeSSH: vi.fn() } // keep the real shellEscape
@@ -704,6 +712,88 @@ describe("runV2vMigrationPipeline per-disk target storage (#317, lot 2)", () => 
     expect(messages()).toContain("Per-disk choices: storage disk 1->local, disk 2->thin")
     expect(sshCommands()).toContain("pvesm alloc 'thin' 120 'vm-120-disk-1' 1048576 --format raw 2>&1")
     expect(attachedSlots().scsi1).toBe("thin:vm-120-disk-1")
+  })
+
+  it("checks the ESXi host key against the confirmed one: per-job file, ssh config and libssh's known_hosts, no keyscan", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+    diskListing = "testvm-sda\n"
+    prisma.connection.findUnique.mockResolvedValue({
+      baseUrl: "https://esxi.local", apiTokenEnc: "enc", insecureTLS: true, hypervShareName: null,
+      sshEnabled: true, sshUser: "root", sshPort: 22, sshKeyEnc: "enc-key", sshPassEnc: null, sshAuthMethod: "key",
+    } as any)
+    vi.mocked(parseVmConfig).mockReturnValue(vmwareSource(1) as any)
+
+    await runPipelineToEnd("v2v-it-esxi-hk", makeConfig({
+      sourceType: "esxi-direct", diskPaths: undefined, migrationType: "cold",
+      vmxPath: "/vmfs/volumes/ds1/testvm/testvm.vmx", esxiHost: "esxi.local",
+    }))
+
+    expect(prisma.row.status).toBe("completed")
+    const calls = vi.mocked(executeSSH).mock.calls
+    const commands = calls.map(c => String(c[2]))
+    const stageKh = commands.findIndex(c => /^umask 077; cat > '[^']*\/v2v-home-v2v-it-esxi-hk\/\.ssh\/known_hosts'$/.test(c))
+    const keyWrite = commands.findIndex(c => c.includes("/.ssh/id_rsa'") && c.startsWith("printf"))
+    expect(stageKh).toBeGreaterThanOrEqual(0)
+    expect(keyWrite).toBeGreaterThan(stageKh)
+    expect((calls[stageKh][4] as any).stdin).toBe("10.0.0.5 ecdsa-sha2-nistp256 AAAAtest\n")
+    expect(commands.some(c => c.includes("StrictHostKeyChecking=no") || c.includes("UserKnownHostsFile=/dev/null"))).toBe(false)
+    const sshConfig = commands.find(c => c.includes("IdentitiesOnly yes")) || ""
+    expect(sshConfig).toContain("StrictHostKeyChecking yes")
+    expect(sshConfig).not.toContain("/dev/null")
+    expect(commands.some(c => c.includes("ssh-keyscan"))).toBe(false)
+    const seed = calls.find(c => String(c[2]) === "umask 077; cat >> /root/.ssh/known_hosts")
+    expect((seed?.[4] as any)?.stdin).toBe("10.0.0.5 ecdsa-sha2-nistp256 AAAAtest\n")
+    // the old entry of the host is dropped before, and the seeded one at the end
+    // of the successful run, with the per-job HOME holding the key
+    expect(commands.filter(c => c === "ssh-keygen -R 'esxi.local' -f /root/.ssh/known_hosts")).toHaveLength(2)
+    expect(commands.some(c => /^rm -rf '[^']*\/v2v-home-v2v-it-esxi-hk'$/.test(c))).toBe(true)
+  })
+
+  it("stops an esxi-direct run before the ESXi key or password moves when another host answers", { timeout: 15000 }, async () => {
+    queueV2vRuns([{ exit: 0, log: SUCCESS_LOG }])
+    prisma.connection.findUnique.mockResolvedValue({
+      baseUrl: "https://esxi.local", apiTokenEnc: "enc", insecureTLS: true, hypervShareName: null,
+      sshEnabled: true, sshUser: "root", sshPort: 22, sshKeyEnc: "enc-key", sshPassEnc: null, sshAuthMethod: "key",
+    } as any)
+    vi.mocked(parseVmConfig).mockReturnValue(vmwareSource(1) as any)
+    const route = vi.mocked(executeSSH).getMockImplementation()!
+    vi.mocked(executeSSH).mockImplementation(((...a: any[]) => String(a[2]).startsWith("ssh -i /dev/null ")
+      ? Promise.resolve({ success: false, error: "Exit code 255", output: "Host key verification failed." })
+      : (route as any)(...a)) as any)
+
+    await runPipelineToEnd("v2v-it-esxi-impostor", makeConfig({
+      sourceType: "esxi-direct", diskPaths: undefined, migrationType: "cold",
+      vmxPath: "/vmfs/volumes/ds1/testvm/testvm.vmx", esxiHost: "esxi.local",
+    }))
+
+    expect(prisma.row.status).toBe("failed")
+    expect(JSON.stringify(prisma.row)).toMatch(/esxi\.local:22 presented an SSH host key that is not the one confirmed/)
+    const commands = vi.mocked(executeSSH).mock.calls.map(c => String(c[2]))
+    expect(commands.some(c => c.includes("/.ssh/id_rsa'") && c.startsWith("printf"))).toBe(false)
+    expect(commands.some(c => c.includes("virt-v2v -v"))).toBe(false)
+  })
+
+  it("stops an esxi-direct run before anything is staged when the ESXi host key is not confirmed", { timeout: 15000 }, async () => {
+    const saved = esxiTrust.value
+    esxiTrust.value = { lines: [], keyTypes: [], sha256Hex: [] }
+    prisma.connection.findUnique.mockResolvedValue({
+      baseUrl: "https://esxi.local", apiTokenEnc: "enc", insecureTLS: true, hypervShareName: null,
+      sshEnabled: true, sshUser: "root", sshPort: 22, sshKeyEnc: null, sshPassEnc: "enc-pw", sshAuthMethod: "password",
+    } as any)
+    vi.mocked(parseVmConfig).mockReturnValue(vmwareSource(1) as any)
+    try {
+      await runPipelineToEnd("v2v-it-esxi-none", makeConfig({
+        sourceType: "esxi-direct", diskPaths: undefined, migrationType: "cold",
+        vmxPath: "/vmfs/volumes/ds1/testvm/testvm.vmx", esxiHost: "esxi.local",
+      }))
+    } finally {
+      esxiTrust.value = saved
+    }
+
+    expect(prisma.row.status).toBe("failed")
+    expect(JSON.stringify(prisma.row)).toMatch(/SSH host key of the ESXi host esxi\.local:22 is not confirmed/)
+    const commands = vi.mocked(executeSSH).mock.calls.map(c => String(c[2]))
+    expect(commands.some(c => c.includes("sshpass") || c.includes("ssh-keygen -t rsa") || c.includes("/.ssh/known_hosts"))).toBe(false)
   })
 })
 

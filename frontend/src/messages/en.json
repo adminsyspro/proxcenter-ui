@@ -284,6 +284,14 @@
       "operationFailed": "Operation failed ({status})"
     },
     "wizard": {
+      "hostKeysTitle": "SSH host keys to confirm",
+      "hostKeyUnconfirmed": "{node}: host key not confirmed yet",
+      "hostKeyChanged": "{node}: host key changed since it was trusted",
+      "hostKeyFingerprint": "{keyType} key {fingerprint}",
+      "trustHostKey": "Trust this key",
+      "trustNewHostKey": "Trust the new key",
+      "trustHostKeyFailed": "The key was not trusted: {error}",
+      "hostKeyHelper": "Compare each fingerprint with the one the node itself reports (ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub) before trusting it.",
       "title": "HA Cluster Deployment",
       "stepPrerequisites": "Prerequisites",
       "stepNodes": "Nodes",
@@ -4635,10 +4643,6 @@
     "testSshConnection": "Test SSH Connection",
     "sshTestSuccess": "SSH connection successful!",
     "sshTestFailed": "SSH test failed",
-    "sshRetrustHost": "Re-trust",
-    "sshRetrustHostHelper": "Forget the SSH host key pinned for this node, then test again. Only do this if you have just reinstalled or rekeyed the node.",
-    "sshRetrustFailed": "Re-trust failed: {error}",
-    "sshRetrustOrchestratorUnavailable": "The orchestrator was unreachable: the key it pinned for this host is still in place.",
     "sshNodeEndpoints": {
       "title": "SSH address per node",
       "description": "Leave the address empty to use the one Proxmox reports. Any address works, including a VPN, admin VLAN or NAT address. Leave the port empty to use the connection port.",
@@ -4813,30 +4817,36 @@
       "disaster_recovery": "Disaster Recovery"
     },
     "sshHostKeys": {
-      "heading": "Pinned SSH host keys",
-      "description": "ProxCenter pins the SSH host key of a host the first time it connects, and refuses every later connection if that key changes. Forget a pin once you have reinstalled or rekeyed the host.",
-      "loadError": "Unable to load the pinned SSH host keys.",
-      "empty": "No SSH host key pinned yet.",
-      "orchestratorUnavailable": "The orchestrator is unreachable: the keys it pinned are missing from this list and cannot be forgotten right now.",
+      "heading": "SSH host keys",
+      "description": "ProxCenter and the orchestrator only connect to a host whose SSH host key you confirmed. A new host, or a key that changed, is refused until you trust its fingerprint here or from the SSH test of its connection. Keys pinned automatically by earlier versions keep working and can be confirmed.",
+      "loadError": "Unable to load the SSH host keys.",
+      "empty": "No SSH host key yet.",
       "columns": {
         "host": "Host",
-        "keyTypes": "Key types",
-        "pinnedAt": "Pinned on",
-        "sources": "Pinned in",
+        "keyType": "Key type",
+        "fingerprint": "Fingerprint",
+        "status": "Status",
         "actions": "Actions"
       },
-      "sources": {
-        "orchestrator": "Orchestrator",
-        "frontend": "Web interface"
+      "status": {
+        "confirmed": "Confirmed by {by} on {date}",
+        "automatic": "Pinned automatically",
+        "pending": "Waiting for confirmation",
+        "changed": "Changed, new key waiting"
       },
+      "newKeyTooltip": "New key presented: {fingerprint}",
+      "trust": "Trust",
+      "trustTitle": "Trust the host key of {host}?",
+      "trustChangedWarning": "This host now presents a different key from the trusted one. Trust it only if you reinstalled or rekeyed the host yourself: anywhere else, someone else may be answering at that address.",
+      "trustFingerprint": "{keyType} key {fingerprint}",
+      "trustHow": "Compare it with the fingerprint the host itself reports (ssh-keygen -lf on its /etc/ssh/ssh_host_*_key.pub files) before trusting it.",
+      "trustConfirm": "Trust the key",
+      "trustSuccess": "Host key of {host} trusted.",
       "forget": "Forget",
-      "forgetTitle": "Forget the pinned key for {host}?",
-      "forgetWarning": "The next connection to {host} will trust whatever host key that address presents, and pin it in turn.",
-      "forgetWhen": "Only do this for a host you have just reinstalled or rekeyed yourself. Anywhere else, a key that changed means someone else is answering at that address.",
-      "forgetFailed": "Could not forget the pinned key: {error}",
-      "forgetOrchestratorUnavailable": "The orchestrator was unreachable: the key it pinned for {host} is still in place. Try again once the orchestrator is back.",
-      "forgetNotFound": "No key was pinned for {host} any more.",
-      "forgetSuccess": "Pinned key forgotten for {host}. The next connection pins the key it is presented.",
+      "forgetTitle": "Forget the host key of {host}?",
+      "forgetWarning": "Connections to {host} are refused until its key is confirmed again.",
+      "forgetSuccess": "Host key of {host} forgotten.",
+      "actionFailed": "The action failed: {error}",
       "cancel": "Cancel",
       "confirm": "Forget the key"
     },
@@ -5042,7 +5052,7 @@
           "prerequisitesFailed": "SSH not tested: the API or TLS checks failed.",
           "noCredentials": "SSH not tested: no usable key or password is stored on the connection.",
           "ok": "{node}: SSH login as {user} on {host}:{port} works (hostname {hostname}).",
-          "hostKeyMismatch": "{node}: the host key of {host} changed since it was pinned. If the node was reinstalled or rekeyed, use Re-trust in the connection dialog.",
+          "hostKeyMismatch": "{node}: the host key of {host} is not confirmed, or changed. Check its fingerprint and trust it from the SSH test of the connection.",
           "authFailed": "{node}: SSH authentication failed for {user} on {host}:{port}. Check the key or password stored on the connection, and that the public key is in the authorized_keys of {user} on the node.",
           "timeout": "{node}: no SSH answer from {host}:{port}. Check sshd and the firewall (TCP {port}), or set a per-node SSH address in the connection dialog.",
           "failed": "{node}: SSH to {host}:{port} failed ({error})."
@@ -5318,7 +5328,14 @@
       "rootNoEffect": "No effect with root: commands already run as root. Enter a dedicated user (for example proxcenter) to use sudo.",
       "rootSkipped": "Connected as root: sudo is not used, so there is no sudoers file to check.",
       "tooOpen": "The sudoers file is older than the current rules and still allows more than ProxCenter needs ({uses}): regenerate it from Settings > SSH Commands."
-    }
+    },
+    "sshHostKeyUnconfirmed": "host key not confirmed yet",
+    "sshHostKeyChanged": "host key changed since it was trusted",
+    "sshHostKeyFingerprint": "{keyType} key {fingerprint}",
+    "sshTrustHostKey": "Trust this key",
+    "sshTrustNewHostKey": "Trust the new key",
+    "sshTrustHostKeyHelper": "Compare this fingerprint with the one the host itself reports before trusting it: ssh-keygen -lf on its /etc/ssh/ssh_host_*_key.pub files.",
+    "sshTrustFailed": "The key was not trusted: {error}"
   },
   "green": {
     "score": {

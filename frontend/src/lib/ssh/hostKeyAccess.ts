@@ -20,6 +20,7 @@ import { checkPermission, getRBACContext, holdsBroadPermission } from "@/lib/rba
 import { getSessionPrisma, requireProviderTenant } from "@/lib/tenant"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 
+import { forgetHostKey } from "./host-key-store"
 import { managedHostSshEndpoint } from "./node-endpoint-core"
 
 /** `all`: every pin, `hosts` then unused; otherwise only the bare hosts listed. */
@@ -83,4 +84,33 @@ export async function hostKeyScope(permission: string): Promise<HostKeyScope> {
 
 export function hostKeyInScope(scope: HostKeyScope, host: string): boolean {
   return scope.all || scope.hosts.has(normalizeHost(host))
+}
+
+/**
+ * The hosts whose keys only this connection uses: its API host and node
+ * addresses, minus those another connection still answers on (a node shared
+ * by two connections, an ESXi registered twice). Read it before the
+ * connection and its ManagedHost rows are deleted.
+ */
+export async function hostKeysOwnedBy(connectionId: string): Promise<string[]> {
+  const all = await prisma.connection.findMany({
+    select: { id: true, baseUrl: true, sshPort: true, hosts: true },
+  })
+  const own = new Set<string>()
+  const others = new Set<string>()
+  for (const conn of all) {
+    const target = conn.id === connectionId ? own : others
+    for (const host of connectionHosts(conn)) target.add(host)
+  }
+  own.delete("")
+
+  return [...own].filter(host => !others.has(host))
+}
+
+/** Forget the keys of these hosts (hostKeysOwnedBy), once the connection is gone. */
+export async function forgetHostKeysOf(hosts: string[]): Promise<number> {
+  let removed = 0
+  for (const host of hosts) removed += await forgetHostKey(host)
+
+  return removed
 }

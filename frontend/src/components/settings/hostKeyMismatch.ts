@@ -1,24 +1,17 @@
 /**
- * Recognise the one SSH failure an operator can fix from the UI: a pinned host
- * key that no longer matches the key the node presents.
+ * Recognise an SSH failure caused by the host key: a key that is not
+ * confirmed yet, or that differs from the trusted one. Both are fixed by
+ * confirming the key (connection SSH test, or Settings > SSH commands > Host
+ * keys), unlike an auth, timeout or network failure.
  *
- * ProxCenter pins the host key of every node on first contact, so a node that
- * was reinstalled or rekeyed is refused for ever after with
- *
- *   ssh host-key mismatch for "10.42.0.101": pinned ecdsa-sha2-nistp256,
- *   presented ecdsa-sha2-nistp256. Refusing to connect.
- *
- * Only that failure gets a "Re-trust" button: every other SSH error (auth,
- * timeout, unreachable) is not cured by dropping the pin, and offering to drop
- * it would teach the operator to clear pins whenever anything goes wrong.
- *
- * The orchestrator and the Node side of the app word the message slightly
- * differently ("host-key mismatch" vs "host key mismatch"), hence the loose
- * separator.
+ * The orchestrator and the Node side word it the same way ("ssh host key of
+ * <host:port> changed" / "is not confirmed"); the older "host key mismatch"
+ * wording is still recognised for an orchestrator not yet upgraded.
  */
-const HOST_KEY_MISMATCH = /host[\s_-]?key\s+mismatch/i
+const HOST_KEY_REFUSAL = /host[\s_-]?key\s+mismatch|host key of \S+ (?:changed|is not confirmed)/i
 
 export function isHostKeyMismatch(error?: string): boolean {
   if (!error) return false
-  return HOST_KEY_MISMATCH.test(error)
+
+  return HOST_KEY_REFUSAL.test(error)
 }

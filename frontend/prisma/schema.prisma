@@ -1555,22 +1555,31 @@ model NodeGreenConfig {
   @@map("node_green_config")
 }
 
-// TOFU host-key store for the frontend ssh2 path. Mirrors the backend
-// orchestrator's ssh_known_hosts table, which pins the same hosts for the
-// Go paths (and keys them WITHOUT the port, unlike this one). Keyed by
-// "host:port", so two SSH endpoints behind one hostname (NAT, a bastion
-// port-forward) pin separately. The first successful connection pins the
-// key; every subsequent connection verifies it matches. Clearing a pin is
-// the "re-trust" action in Settings > SSH commands, which wipes both
-// stores for a host, every port included.
+// SSH host keys of every endpoint ProxCenter or the orchestrator connects to
+// (PVE nodes, ESXi hosts), shared by both: the orchestrator reads and writes
+// this table in the same database. Keyed by "host:port", so two SSH endpoints
+// behind one hostname (NAT, a bastion port-forward) are told apart.
+//
+// No key is trusted on first use: a key ProxCenter has
+// not seen confirmed is stored in pending_key_data and the connection is
+// refused until an operator confirms its fingerprint. One row per endpoint
+// and key type, because ssh2, Go and OpenSSH do not all negotiate the same
+// host key algorithm. key_data is the trusted key; confirmed_at null on a
+// trusted key means it was pinned automatically before confirmation existed.
 model SshHostKey {
-  id          String   @id @default(cuid())
-  host        String   @unique
-  keyType     String   @map("key_type")
-  keyData     Bytes    @map("key_data")
-  firstSeenAt DateTime @default(now()) @map("first_seen_at")
-  lastUsedAt  DateTime @default(now()) @updatedAt @map("last_used_at")
+  id             String    @id @default(cuid())
+  host           String
+  keyType        String    @map("key_type")
+  keyData        Bytes?    @map("key_data")
+  pendingKeyData Bytes?    @map("pending_key_data")
+  pendingSeenAt  DateTime? @map("pending_seen_at")
+  confirmedAt    DateTime? @map("confirmed_at")
+  confirmedBy    String?   @map("confirmed_by")
+  firstSeenAt    DateTime  @default(now()) @map("first_seen_at")
+  lastUsedAt     DateTime  @default(now()) @updatedAt @map("last_used_at")
 
+  @@unique([host, keyType])
+  @@index([host])
   @@map("ssh_host_keys")
 }
 

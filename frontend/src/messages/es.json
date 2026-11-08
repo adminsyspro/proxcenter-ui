@@ -284,6 +284,14 @@
       "operationFailed": "Operación fallida ({status})"
     },
     "wizard": {
+      "hostKeysTitle": "Claves de host SSH por confirmar",
+      "hostKeyUnconfirmed": "{node}: clave de host aún sin confirmar",
+      "hostKeyChanged": "{node}: clave de host distinta de la de confianza",
+      "hostKeyFingerprint": "Clave {keyType} {fingerprint}",
+      "trustHostKey": "Confiar en esta clave",
+      "trustNewHostKey": "Confiar en la nueva clave",
+      "trustHostKeyFailed": "La clave no se aprobó: {error}",
+      "hostKeyHelper": "Compare cada huella con la que indica el propio nodo (ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub) antes de confiar en ella.",
       "title": "Despliegue del clúster HA",
       "stepPrerequisites": "Requisitos previos",
       "stepNodes": "Nodos",
@@ -4635,10 +4643,6 @@
     "testSshConnection": "Probar conexión SSH",
     "sshTestSuccess": "Conexión SSH correcta",
     "sshTestFailed": "Prueba SSH fallida",
-    "sshRetrustHost": "Volver a confiar",
-    "sshRetrustHostHelper": "Olvidar la clave de host SSH fijada para este nodo y volver a probar. Hágalo solo si acaba de reinstalar el nodo o de regenerar sus claves.",
-    "sshRetrustFailed": "No se ha podido volver a confiar: {error}",
-    "sshRetrustOrchestratorUnavailable": "El orquestador no estaba disponible: la clave que fijó para este host sigue vigente.",
     "sshNodeEndpoints": {
       "title": "Dirección SSH por nodo",
       "description": "Deje la dirección vacía para usar la que informa Proxmox. Se acepta cualquier dirección, incluida una de VPN, de VLAN de administración o de NAT. Deje el puerto vacío para usar el de la conexión.",
@@ -4813,30 +4817,36 @@
       "disaster_recovery": "Disaster Recovery"
     },
     "sshHostKeys": {
-      "heading": "Claves de host SSH fijadas",
-      "description": "ProxCenter fija la clave de host SSH de una máquina en la primera conexión y rechaza cualquier conexión posterior si esa clave cambia. Olvide la clave fijada después de reinstalar el host o de regenerar sus claves.",
-      "loadError": "No se han podido cargar las claves de host SSH fijadas.",
-      "empty": "Todavía no hay ninguna clave de host SSH fijada.",
-      "orchestratorUnavailable": "El orquestador no está disponible: las claves que fijó no aparecen en esta lista y no se pueden olvidar ahora mismo.",
+      "heading": "Claves de host SSH",
+      "description": "ProxCenter y el orquestador solo se conectan a un host cuya clave de host SSH usted haya confirmado. Un host nuevo, o una clave que cambió, se rechaza hasta que confíe en su huella aquí o desde la prueba SSH de su conexión. Las claves fijadas automáticamente por versiones anteriores siguen funcionando y pueden confirmarse.",
+      "loadError": "No se pudieron cargar las claves de host SSH.",
+      "empty": "Todavía no hay ninguna clave de host SSH.",
       "columns": {
         "host": "Host",
-        "keyTypes": "Tipos de clave",
-        "pinnedAt": "Fijada el",
-        "sources": "Fijada en",
+        "keyType": "Tipo de clave",
+        "fingerprint": "Huella",
+        "status": "Estado",
         "actions": "Acciones"
       },
-      "sources": {
-        "orchestrator": "Orquestador",
-        "frontend": "Interfaz web"
+      "status": {
+        "confirmed": "Confirmada por {by} el {date}",
+        "automatic": "Fijada automáticamente",
+        "pending": "Pendiente de confirmación",
+        "changed": "Cambiada, nueva clave pendiente"
       },
+      "newKeyTooltip": "Nueva clave presentada: {fingerprint}",
+      "trust": "Confiar",
+      "trustTitle": "¿Confiar en la clave de host de {host}?",
+      "trustChangedWarning": "Este host presenta ahora una clave distinta de la de confianza. Confíe en ella solo si usted mismo reinstaló el host o regeneró sus claves: de lo contrario, puede que otra máquina esté respondiendo en esa dirección.",
+      "trustFingerprint": "Clave {keyType} {fingerprint}",
+      "trustHow": "Compárela con la huella que indica el propio host (ssh-keygen -lf sobre sus archivos /etc/ssh/ssh_host_*_key.pub) antes de confiar en ella.",
+      "trustConfirm": "Confiar en la clave",
+      "trustSuccess": "Se confía en la clave de host de {host}.",
       "forget": "Olvidar",
-      "forgetTitle": "¿Olvidar la clave fijada para {host}?",
-      "forgetWarning": "La próxima conexión a {host} confiará en la clave de host que presente esa dirección, sea cual sea, y la fijará a su vez.",
-      "forgetWhen": "Hágalo solo con un host que acabe de reinstalar usted mismo o cuyas claves acabe de regenerar. En cualquier otro caso, una clave que cambia significa que otro responde en esa dirección.",
-      "forgetFailed": "No se ha podido olvidar la clave fijada: {error}",
-      "forgetOrchestratorUnavailable": "El orquestador no estaba disponible: la clave que fijó para {host} sigue vigente. Vuelva a intentarlo cuando el orquestador esté operativo.",
-      "forgetNotFound": "Ya no había ninguna clave fijada para {host}.",
-      "forgetSuccess": "Clave fijada olvidada para {host}. La próxima conexión fijará la clave que se presente.",
+      "forgetTitle": "¿Olvidar la clave de host de {host}?",
+      "forgetWarning": "Las conexiones a {host} se rechazarán hasta que su clave se confirme de nuevo.",
+      "forgetSuccess": "Clave de host de {host} olvidada.",
+      "actionFailed": "La acción falló: {error}",
       "cancel": "Cancelar",
       "confirm": "Olvidar la clave"
     },
@@ -5042,7 +5052,7 @@
           "prerequisitesFailed": "SSH no probado: las comprobaciones de API o TLS fallaron.",
           "noCredentials": "SSH no probado: no hay ninguna clave ni contraseña utilizable guardada en la conexión.",
           "ok": "{node}: el inicio de sesión SSH como {user} en {host}:{port} funciona (hostname {hostname}).",
-          "hostKeyMismatch": "{node}: la clave de host de {host} cambió desde que se fijó. Si el nodo se reinstaló o se regeneró su clave, use Volver a confiar en el diálogo de la conexión.",
+          "hostKeyMismatch": "{node}: la clave de host de {host} no está confirmada o ha cambiado. Compruebe su huella y confíe en ella desde la prueba SSH de la conexión.",
           "authFailed": "{node}: la autenticación SSH falló para {user} en {host}:{port}. Compruebe la clave o la contraseña guardada en la conexión, y que la clave pública esté en el authorized_keys de {user} en el nodo.",
           "timeout": "{node}: sin respuesta SSH de {host}:{port}. Compruebe sshd y el cortafuegos (TCP {port}), o defina una dirección SSH por nodo en el diálogo de la conexión.",
           "failed": "{node}: SSH hacia {host}:{port} falló ({error})."
@@ -5318,7 +5328,14 @@
       "rootNoEffect": "Sin efecto con root: los comandos ya se ejecutan como root. Indique una cuenta dedicada (por ejemplo proxcenter) para usar sudo.",
       "rootSkipped": "Conectado como root: no se usa sudo, así que no hay ningún archivo sudoers que comprobar.",
       "tooOpen": "El archivo sudoers es anterior a las reglas actuales y aún permite más de lo que ProxCenter necesita ({uses}): vuelva a generarlo en Ajustes > Comandos SSH."
-    }
+    },
+    "sshHostKeyUnconfirmed": "clave de host aún no confirmada",
+    "sshHostKeyChanged": "la clave de host cambió desde que se confió en ella",
+    "sshHostKeyFingerprint": "Clave {keyType} {fingerprint}",
+    "sshTrustHostKey": "Confiar en esta clave",
+    "sshTrustNewHostKey": "Confiar en la nueva clave",
+    "sshTrustHostKeyHelper": "Compare esta huella con la que indica el propio host antes de confiar en ella: ssh-keygen -lf sobre sus archivos /etc/ssh/ssh_host_*_key.pub.",
+    "sshTrustFailed": "No se confió en la clave: {error}"
   },
   "green": {
     "score": {

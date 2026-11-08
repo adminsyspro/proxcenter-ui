@@ -214,7 +214,7 @@ describe('POST guests create: import-from metering (Finding I2 -- meter, never r
     checkVdcQuotaMock.mockResolvedValue({ allowed: false, violations: ['Storage policy "Gold" (gold): over quota'] })
     pveFetchMock.mockReset().mockImplementation(async (_conn, path: string) => {
       if (String(path).endsWith('/storage/gold/content')) {
-        return [{ volid: 'gold:vm-100-disk-0', size: 32 * 1024 * 1024 * 1024, content: 'images' }]
+        return [{ volid: 'gold:import/img.qcow2', size: 32 * 1024 * 1024 * 1024, content: 'images' }]
       }
       return 'UPID:x'
     })
@@ -222,7 +222,7 @@ describe('POST guests create: import-from metering (Finding I2 -- meter, never r
     const POST = await loadPost()
     const res = await callRoute(POST, {
       params: qemuParams,
-      body: { vmid: 105, scsi0: 'gold:0,import-from=gold:vm-100-disk-0' },
+      body: { vmid: 105, scsi0: 'gold:0,import-from=gold:import/img.qcow2' },
     })
     expect(res.status).toBe(409)
 
@@ -249,7 +249,7 @@ describe('POST guests create: import-from metering (Finding I2 -- meter, never r
     const POST = await loadPost()
     const res = await callRoute(POST, {
       params: qemuParams,
-      body: { vmid: 105, scsi0: 'gold:0,import-from=gold:vm-100-disk-0' },
+      body: { vmid: 105, scsi0: 'gold:0,import-from=gold:import/img.qcow2' },
     })
     expect(res.status).toBe(200)
     expect(checkVdcQuotaMock).toHaveBeenCalled()

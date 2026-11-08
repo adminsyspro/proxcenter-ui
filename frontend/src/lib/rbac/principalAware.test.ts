@@ -464,8 +464,15 @@ describe('module hygiene (contract assertion (b) precondition)', () => {
 })
 
 describe('getCurrentRbacInfraScope: the caller scope in one call (issue #525)', () => {
-  it('returns null without any principal (the route already rejected that caller)', async () => {
-    expect(await getCurrentRbacInfraScope()).toBeNull()
+  it('fails closed (deny-all scope) without any principal', async () => {
+    // A rejected principal (e.g. a bad Bearer pxc_ sent with a cookie) must not
+    // resolve to null ("unrestricted") and silently lift the aggregate-route
+    // RBAC mask: it returns an empty deny-everything scope instead.
+    const scope = await getCurrentRbacInfraScope()
+    expect(scope).not.toBeNull()
+    expect(scope?.fullConnections.size).toBe(0)
+    expect(scope?.nodesByConnection.size).toBe(0)
+    expect(scope?.guestDerived).toBe(false)
   })
 
   it('maps a connection-scoped token to a full-connection scope, a fleet-wide token to null', async () => {

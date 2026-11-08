@@ -48,7 +48,7 @@ describe('enforceTenantDrives', () => {
   it("kind 'provider': returns null, body untouched (even a tenant mbps=)", async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
     const body = { scsi0: 'local-lvm:32,mbps=9999' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(result).toBeNull()
     expect(body.scsi0).toBe('local-lvm:32,mbps=9999')
   })
@@ -56,7 +56,7 @@ describe('enforceTenantDrives', () => {
   it("kind 'msp': returns null, body untouched", async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['conn-1']) })
     const body = { scsi0: 'local-lvm:32,mbps=9999' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(result).toBeNull()
     expect(body.scsi0).toBe('local-lvm:32,mbps=9999')
   })
@@ -65,10 +65,10 @@ describe('enforceTenantDrives', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme', 'ceph-hdd']))
     const body = { scsi0: 'local-lvm:32' }
     await expect(
-      enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body }),
+      enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body }),
     ).rejects.toThrow(DriveScopeError)
     await expect(
-      enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body }),
+      enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body }),
     ).rejects.toThrow(/local-lvm/)
   })
 
@@ -77,7 +77,7 @@ describe('enforceTenantDrives', () => {
       iaasScope(['ceph-nvme', 'ceph-hdd'], { 'ceph-nvme': gold }),
     )
     const body = { scsi0: 'ceph-nvme:32,iops_rd=99999' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(body.scsi0).toBe('ceph-nvme:32,iops_rd=5000,iops_wr=4000,mbps_rd=500')
     expect(result).toEqual({ addStorageMbByStorage: { 'ceph-nvme': 32768 }, totalAddMb: 32768, importRefs: [] })
   })
@@ -85,7 +85,7 @@ describe('enforceTenantDrives', () => {
   it('iaas: an in-scope volume reference without a policy is left intact, zero metering', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme', 'ceph-hdd']))
     const body = { scsi1: 'ceph-hdd:vm-100-disk-2,size=32G' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(body.scsi1).toBe('ceph-hdd:vm-100-disk-2,size=32G')
     expect(result).toEqual({ addStorageMbByStorage: {}, totalAddMb: 0, importRefs: [] })
   })
@@ -95,7 +95,7 @@ describe('enforceTenantDrives', () => {
       iaasScope(['ceph-nvme'], { 'ceph-nvme': gold }),
     )
     const body = { mp0: 'ceph-nvme:8,mp=/data' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'lxc', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'lxc', body })
     expect(body.mp0).toBe('ceph-nvme:8,mp=/data')
     expect(result).toEqual({ addStorageMbByStorage: { 'ceph-nvme': 8192 }, totalAddMb: 8192, importRefs: [] })
   })
@@ -105,29 +105,29 @@ describe('enforceTenantDrives', () => {
       iaasScope(['ceph-nvme'], { 'ceph-nvme': gold }),
     )
     const body = { efidisk0: 'ceph-nvme:1,efitype=4m' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(body.efidisk0).toBe('ceph-nvme:1,efitype=4m')
     expect(result).toEqual({ addStorageMbByStorage: { 'ceph-nvme': 1024 }, totalAddMb: 1024, importRefs: [] })
   })
 
   it('iaas: vmstatestorage must name a storage of the vDC (roadmap#201)', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
-    await expect(enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: 'other' } }))
+    await expect(enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: 'other' } }))
       .rejects.toThrow('vmstatestorage: this storage is not part of your vDC.')
-    await expect(enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: 'gold' } })).resolves.not.toBeNull()
+    await expect(enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: 'gold' } })).resolves.not.toBeNull()
     // Emptied: back to the default, nothing to check.
-    await expect(enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: '' } })).resolves.not.toBeNull()
+    await expect(enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: '' } })).resolves.not.toBeNull()
   })
 
   it('provider: vmstatestorage is not checked', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
-    await expect(enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: 'any' } })).resolves.toBeNull()
+    await expect(enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body: { vmstatestorage: 'any' } })).resolves.toBeNull()
   })
 
   it('iaas: non-disk keys (net0, cores) are ignored', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme']))
     const body = { net0: 'virtio,bridge=vmbr0', cores: '4' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(result).toEqual({ addStorageMbByStorage: {}, totalAddMb: 0, importRefs: [] })
     expect(body.net0).toBe('virtio,bridge=vmbr0')
     expect(body.cores).toBe('4')
@@ -138,7 +138,7 @@ describe('enforceTenantDrives', () => {
       iaasScope(['ceph-nvme'], { 'ceph-nvme': gold }),
     )
     const body = { scsi0: 'ceph-nvme:vm-100-disk-0,media=cdrom,iops_rd=99999' }
-    await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(body.scsi0).toBe('ceph-nvme:vm-100-disk-0,media=cdrom,iops_rd=5000,iops_wr=4000,mbps_rd=500')
   })
 
@@ -146,7 +146,7 @@ describe('enforceTenantDrives', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme']))
     const body = { unused0: 'local-lvm:vm-100-disk-3' }
     await expect(
-      enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'lxc', body }),
+      enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'lxc', body }),
     ).rejects.toThrow(/local-lvm/)
   })
 
@@ -154,7 +154,7 @@ describe('enforceTenantDrives', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: null })
     const body = { scsi0: 'ceph-nvme:32' }
     await expect(
-      enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body }),
+      enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body }),
     ).rejects.toThrow(DriveScopeError)
   })
 
@@ -163,7 +163,7 @@ describe('enforceTenantDrives', () => {
       iaasScope(['ceph-nvme'], { 'ceph-nvme': gold }),
     )
     const body = { scsi0: 'ceph-nvme:10', scsi1: 'ceph-nvme:20' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(result).toEqual({ addStorageMbByStorage: { 'ceph-nvme': 30720 }, totalAddMb: 30720, importRefs: [] })
   })
 
@@ -171,14 +171,14 @@ describe('enforceTenantDrives', () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme']))
     const body = { scsi0: 'ceph-nvme:32' }
     await expect(
-      enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-OTHER', type: 'qemu', body }),
+      enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-OTHER', type: 'qemu', body }),
     ).rejects.toThrow(DriveScopeError)
   })
 
   it('iaas: import-from with a ZERO declared allocation is captured as an importRef, not metered directly (Finding I2)', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
     const body = { scsi0: 'gold:0,import-from=gold:vm-100-disk-0' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(result).toEqual({
       addStorageMbByStorage: {},
       totalAddMb: 0,
@@ -189,7 +189,7 @@ describe('enforceTenantDrives', () => {
   it('iaas: import-from with NO declared allocation (bare volid head) is also captured as an importRef', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
     const body = { scsi0: 'gold:vm-100-disk-1,import-from=gold:vm-100-disk-0' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(result?.importRefs).toEqual([
       { key: 'scsi0', targetStorage: 'gold', sourceVolid: 'gold:vm-100-disk-0', declaredMb: 0 },
     ])
@@ -198,7 +198,7 @@ describe('enforceTenantDrives', () => {
   it('iaas: import-from WITH an explicit non-zero size is metered for the declared part AND still captured as an importRef (residual fix)', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
     const body = { scsi0: 'gold:16,import-from=gold:vm-100-disk-0' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(result).toEqual({
       addStorageMbByStorage: { gold: 16384 },
       totalAddMb: 16384,
@@ -209,7 +209,7 @@ describe('enforceTenantDrives', () => {
   it('iaas: a plain zero-size volid without import-from produces no importRef', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
     const body = { scsi0: 'gold:0' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(result).toEqual({ addStorageMbByStorage: {}, totalAddMb: 0, importRefs: [] })
   })
 
@@ -228,7 +228,7 @@ describe('enforceTenantDrives', () => {
     it('a CD/DVD drive on the library passes, unstamped and unmetered', async () => {
       getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
       const body = { ide2: 'isolib:iso/x.iso,media=cdrom' }
-      const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+      const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
       expect(body.ide2).toBe('isolib:iso/x.iso,media=cdrom')
       expect(result).toEqual({ addStorageMbByStorage: {}, totalAddMb: 0, importRefs: [] })
     })
@@ -236,18 +236,18 @@ describe('enforceTenantDrives', () => {
     it("a CD/DVD drive mounting another tenant's upload on the library is refused", async () => {
       getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
       await expect(
-        enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { ide2: 'isolib:iso/custom-other-secret.iso,media=cdrom' } }),
+        enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body: { ide2: 'isolib:iso/custom-other-secret.iso,media=cdrom' } }),
       ).rejects.toThrow(/custom-other-secret\.iso" is not yours to mount/)
       // A custom- file matching no tenant is nobody's either.
       await expect(
-        enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { ide2: 'isolib:iso/custom-nobody-x.iso,media=cdrom' } }),
+        enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body: { ide2: 'isolib:iso/custom-nobody-x.iso,media=cdrom' } }),
       ).rejects.toThrow(DriveScopeError)
     })
 
     it("a CD/DVD drive mounting the tenant's own upload or a provider ISO on the library passes", async () => {
       getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
       const body = { ide2: 'isolib:iso/custom-acme-rescue.iso,media=cdrom', ide3: 'isolib:iso/debian.iso,media=cdrom' }
-      const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+      const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
       expect(result).toEqual({ addStorageMbByStorage: {}, totalAddMb: 0, importRefs: [] })
     })
 
@@ -255,38 +255,38 @@ describe('enforceTenantDrives', () => {
       tenantFindManyMock.mockResolvedValue([{ id: 't1', slug: 'acme' }, { id: 't3', slug: 'acme-prod' }])
       getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
       await expect(
-        enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { ide2: 'isolib:iso/custom-acme-prod-x.iso,media=cdrom' } }),
+        enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body: { ide2: 'isolib:iso/custom-acme-prod-x.iso,media=cdrom' } }),
       ).rejects.toThrow(/not yours to mount/)
     })
 
     it('the ownership check applies to library storages only: a custom- ISO on the writable storage is not judged', async () => {
       getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
       const body = { ide2: 'ceph:iso/custom-other-x.iso,media=cdrom' }
-      await expect(enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })).resolves.toBeTruthy()
+      await expect(enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })).resolves.toBeTruthy()
       expect(tenantFindManyMock).not.toHaveBeenCalled()
     })
 
     it('a data disk on the library throws DriveScopeError naming the read-only library', async () => {
       getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
       await expect(
-        enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { scsi1: 'isolib:8' } }),
+        enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body: { scsi1: 'isolib:8' } }),
       ).rejects.toThrow(DriveScopeError)
       await expect(
-        enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body: { scsi1: 'isolib:8' } }),
+        enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body: { scsi1: 'isolib:8' } }),
       ).rejects.toThrow(/read-only ISO library/)
     })
 
     it('a data disk on the writable storage next to a library still passes', async () => {
       getTenantInfrastructureScopeMock.mockResolvedValue(libScope())
       const body = { scsi1: 'ceph:8' }
-      const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+      const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
       expect(result).toEqual({ addStorageMbByStorage: { ceph: 8192 }, totalAddMb: 8192, importRefs: [] })
     })
 
     it('a fixture WITHOUT the two new maps keeps the pre-#894 behaviour: every visible storage is writable', async () => {
       getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph', 'isolib']))
       const body = { scsi1: 'isolib:8' }
-      const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+      const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
       expect(result).toEqual({ addStorageMbByStorage: { isolib: 8192 }, totalAddMb: 8192, importRefs: [] })
     })
   })
@@ -298,7 +298,7 @@ describe('enforceTenantDrives + meterImportRefs combined (Finding I2 residual: d
   it('gold:1,import-from=<32G volid> meters 32768 total for the tier (declared + delta, not double-counted)', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
     const body = { scsi0: 'gold:1,import-from=gold:vm-100-disk-0' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(result?.addStorageMbByStorage).toEqual({ gold: 1024 })
 
     pveFetchMock.mockResolvedValue(gold32g)
@@ -312,7 +312,7 @@ describe('enforceTenantDrives + meterImportRefs combined (Finding I2 residual: d
   it('declared 0 keeps metering the full 32768 (non-regression)', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
     const body = { scsi0: 'gold:0,import-from=gold:vm-100-disk-0' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(result?.addStorageMbByStorage).toEqual({})
 
     pveFetchMock.mockResolvedValue(gold32g)
@@ -326,7 +326,7 @@ describe('enforceTenantDrives + meterImportRefs combined (Finding I2 residual: d
   it('a source resolution failure keeps the declared metering (1024) and allows (fail-open unchanged)', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['gold']))
     const body = { scsi0: 'gold:1,import-from=gold:vm-100-disk-0' }
-    const result = await enforceTenantDrives({ tenantId: 't1', connectionId: 'conn-1', type: 'qemu', body })
+    const result = await enforceTenantDrives({ tenantId: 't1', targetVmid: '100', connectionId: 'conn-1', type: 'qemu', body })
     expect(result?.addStorageMbByStorage).toEqual({ gold: 1024 })
 
     pveFetchMock.mockRejectedValue(new Error('storage unreachable'))

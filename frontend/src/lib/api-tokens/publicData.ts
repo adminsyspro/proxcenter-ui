@@ -6,7 +6,8 @@
 // analysis). A Prometheus server scrapes every 15s: any fan-out to
 // Proxmox on this path would hammer the customer's cluster forever.
 import type { Principal } from "@/lib/auth/principal"
-import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
+import { applyVdcFilter } from "@/lib/vdc/scope"
 import { getInventorySWR, type ClusterData } from "@/lib/inventory/fetchRawInventory"
 
 import { resolvePublicRequestScope } from "./scope"
@@ -158,7 +159,15 @@ export async function loadPublicFleetView(principal?: Principal): Promise<Public
   // fan-out to the hypervisor. See getInventorySWR's doc comment.
   const { raw, cached } = await getInventorySWR(tenantId, infra, false, true, null)
 
-  const clusters = raw.clusters.filter(cluster => visible.has(cluster.id))
+  // vDC masking: `visible` keeps only the tenant's connections, but on a shared
+  // cluster that still exposes every node and guest of every neighbour. Mask
+  // each cluster to the tenant's vDC (nodes by node grant, guests by pool, and
+  // the provider's node/cluster addressing stripped) exactly as the inventory
+  // routes do. maskingScope is null for provider/msp, so they are unchanged.
+  const mask = maskingScope(infra)
+  const clusters = raw.clusters
+    .filter(cluster => visible.has(cluster.id))
+    .map(cluster => applyVdcFilter(cluster, mask))
   const nodes: PublicNode[] = []
   const guests: PublicGuest[] = []
 

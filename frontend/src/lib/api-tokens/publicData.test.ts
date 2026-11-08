@@ -15,8 +15,15 @@ const { resolvePublicRequestScopeMock, getInventorySWRMock, getTenantInfrastruct
 // to prove property 1 (no hypervisor call at scrape time, D12).
 vi.mock('./scope', () => ({ resolvePublicRequestScope: resolvePublicRequestScopeMock }))
 vi.mock('@/lib/inventory/fetchRawInventory', () => ({ getInventorySWR: getInventorySWRMock }))
+// Real vDC masking: the helpers are pure, so the public view is genuinely
+// filtered (a mask null for provider/msp passes through unchanged).
+vi.mock('@/lib/vdc/scope', async (io) => {
+  const actual = await io<typeof import('@/lib/vdc/scope')>()
+  return { applyVdcFilter: actual.applyVdcFilter }
+})
 vi.mock('@/lib/tenant/infraScope', () => ({
   getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
+  maskingScope: (infra: any) => (infra?.kind === 'iaas' ? infra.vdcScope : null),
 }))
 
 import { loadPublicFleetView } from './publicData'
@@ -389,5 +396,41 @@ describe('loadPublicFleetView, storages (#925)', () => {
       { node: 'n1', used: 10, total: 30 },
       { node: 'n2', used: 20, total: 60 },
     ])
+  })
+})
+
+describe('loadPublicFleetView — iaas tenant is masked to its vDC', () => {
+  it('keeps only the vDC pool guests and vDC nodes', async () => {
+    resolvePublicRequestScopeMock.mockResolvedValue({ tenantId: 't-iaas', visible: new Set(['pve-1']) })
+    getTenantInfrastructureScopeMock.mockResolvedValue({
+      kind: 'iaas',
+      vdcScope: {
+        connectionIds: new Set(['pve-1']),
+        nodesByConnection: new Map([['pve-1', new Set(['n1'])]]),
+        poolsByConnection: new Map([['pve-1', new Set(['p1'])]]),
+        storagesByConnection: new Map([['pve-1', new Set<string>()]]),
+      },
+    })
+    getInventorySWRMock.mockResolvedValue({
+      cached: true,
+      raw: {
+        clusters: [{
+          id: 'pve-1', name: 'C1',
+          nodes: [
+            { node: 'n1', status: 'online', guests: [
+              { vmid: 109, name: 'mine', type: 'qemu', status: 'running', pool: 'p1' },
+              { vmid: 200, name: 'neighbour', type: 'qemu', status: 'running', pool: 'p-other' },
+            ] },
+            { node: 'n2', status: 'online', guests: [
+              { vmid: 300, name: 'neighbour2', type: 'qemu', status: 'running', pool: 'p-other' },
+            ] },
+          ],
+        }],
+        storages: [], pbsServers: [],
+      },
+    })
+    const view = await loadPublicFleetView({ kind: 'token', tenantId: 't-iaas', connectionIds: ['pve-1'] } as any)
+    expect(view.guests.map(g => g.vmid).sort()).toEqual(['109'])
+    expect(view.nodes.map(n => n.node)).toEqual(['n1'])
   })
 })

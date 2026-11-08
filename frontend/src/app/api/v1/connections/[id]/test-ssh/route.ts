@@ -12,6 +12,12 @@ import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
 import { buildSudoCheckCommand, parseSudoCheck } from "@/lib/ssh/sudo"
 import { loadSudoRules } from "@/lib/ssh/loadSudoRules"
+import type { HostKeyRefusal } from "@/lib/ssh/host-key-store"
+
+/** A refused host key in the orchestrator's wire format, so the dialog reads one shape. */
+function hostKeyWire(r: HostKeyRefusal | undefined) {
+  return r ? { endpoint: r.endpoint, key_type: r.keyType, fingerprint: r.fingerprint, state: r.state } : undefined
+}
 
 export const runtime = "nodejs"
 
@@ -218,8 +224,11 @@ export async function POST(
           nodes: [{
             node: connection.name,
             ip: host,
+            host,
+            port,
             status: result.success ? 'ok' : 'error',
             error: result.success ? undefined : result.error,
+            host_key: hostKeyWire(result.hostKey),
           }],
         })
       } catch (e: any) {
@@ -338,6 +347,7 @@ export async function POST(
             ...target,
             status: result.success ? 'ok' as const : 'error' as const,
             error: result.success ? undefined : result.error,
+            host_key: hostKeyWire(result.hostKey),
           }
         } catch (e: any) {
           return {

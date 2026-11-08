@@ -10,7 +10,7 @@ const findUniqueMock = vi.fn<(args: any) => Promise<any>>()
 const findManyMock = vi.fn<(args: any) => Promise<any>>()
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const decryptSecretMock = vi.fn<(s: string) => string>()
-const executeSSHDirectMock = vi.fn<(opts: any) => Promise<{ success: boolean; error?: string }>>()
+const executeSSHDirectMock = vi.fn<(opts: any) => Promise<{ success: boolean; error?: string; hostKey?: any }>>()
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getNodeIpMock = vi.fn<(...args: any[]) => Promise<string>>()
@@ -332,6 +332,48 @@ describe('POST /api/v1/connections/[id]/test-ssh - other behavior', () => {
         command: 'hostname',
       }),
     )
+  })
+
+  it('reports the ESXi host key it refused, in the orchestrator wire format, with the endpoint tested', async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      id: 'esxi-1', name: 'ESXi Lab', type: 'vmware', baseUrl: 'https://esxi.lab.local:443', sshEnabled: true,
+      sshPort: 2222, sshUser: 'root', sshAuthMethod: 'password', sshKeyEnc: null, sshPassEnc: 'enc-pw',
+    })
+    executeSSHDirectMock.mockResolvedValueOnce({
+      success: false,
+      error: 'SSH host key of esxi.lab.local:2222 is not confirmed',
+      hostKey: { endpoint: 'esxi.lab.local:2222', keyType: 'ecdsa-sha2-nistp256', fingerprint: 'SHA256:abc', state: 'unconfirmed' },
+    })
+
+    const handler = await importHandler()
+    const json = await readJson<any>(await callRoute(handler, { params: { id: 'esxi-1' }, body: { sshEnabled: true, sshAuthMethod: 'password' } }))
+
+    expect(json.nodes[0]).toMatchObject({
+      status: 'error', host: 'esxi.lab.local', port: 2222,
+      host_key: { endpoint: 'esxi.lab.local:2222', key_type: 'ecdsa-sha2-nistp256', fingerprint: 'SHA256:abc', state: 'unconfirmed' },
+    })
+  })
+
+  it('reports the host key a node refused on the ssh2 fallback', async () => {
+    findUniqueMock.mockResolvedValueOnce({
+      id: 'conn-1', name: 'PVE', type: 'pve', baseUrl: 'https://10.0.0.1:8006', sshEnabled: true,
+      sshPort: 22, sshUser: 'root', sshAuthMethod: 'password', sshKeyEnc: null, sshPassEnc: 'enc-pw',
+    })
+    const connErr: any = new Error('fetch failed')
+    connErr.cause = { code: 'ECONNREFUSED' }
+    fetchMock.mockRejectedValueOnce(connErr)
+    getConnectionByIdMock.mockResolvedValueOnce({ id: 'conn-1', baseUrl: 'https://10.0.0.1:8006' })
+    pveFetchMock.mockResolvedValueOnce([{ node: 'pve1' }])
+    getNodeIpMock.mockResolvedValueOnce('10.0.0.11')
+    executeSSHDirectMock.mockResolvedValueOnce({
+      success: false, error: 'changed',
+      hostKey: { endpoint: '10.0.0.11:22', keyType: 'ssh-ed25519', fingerprint: 'SHA256:new', state: 'mismatch' },
+    })
+
+    const handler = await importHandler()
+    const json = await readJson<any>(await callRoute(handler, { params: { id: 'conn-1' }, body: { sshEnabled: true, sshAuthMethod: 'password' } }))
+
+    expect(json.nodes[0].host_key).toEqual({ endpoint: '10.0.0.11:22', key_type: 'ssh-ed25519', fingerprint: 'SHA256:new', state: 'mismatch' })
   })
 
   it('falls back to ssh2 per-node when the orchestrator is unreachable (PVE path)', async () => {

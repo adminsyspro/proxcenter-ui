@@ -140,6 +140,8 @@ export interface QemuSshProbeSpec {
   path: string
   user: string
   identityFile: string
+  /** `file.host-key-check.*` options (qemuHostKeyCheck): the confirmed key. */
+  hostKeyCheck: Record<string, string>
 }
 
 /** `qemu-img info` through QEMU's ssh block driver; the JSON is one argument. */
@@ -150,7 +152,7 @@ export function qemuImgSshProbeCommand(spec: QemuSshProbeSpec): string {
     "file.port": tcpPort(spec.port),
     "file.path": spec.path,
     "file.user": spec.user,
-    "file.host-key-check.mode": "none",
+    ...spec.hostKeyCheck,
     "file.identity-file": spec.identityFile,
   })
   return `timeout 15 qemu-img info ${q(`json:${json}`)} 2>&1`

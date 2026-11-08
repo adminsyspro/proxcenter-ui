@@ -192,14 +192,16 @@ describe("node-side file and image builders", () => {
     noCanary()
   })
 
-  it("qemuImgSshProbeCommand gives qemu-img one json: argument carrying the raw path", () => {
+  it("qemuImgSshProbeCommand gives qemu-img one json: argument carrying the raw path and the confirmed key", () => {
     const path = vmfsPath(hostileDs, hostileRel)
-    const cmd = qemuImgSshProbeCommand({ host: "esx", port: 22, path, user: "root", identityFile: `${dir}/key` })
+    const hostKeyCheck = { "file.host-key-check.mode": "hash", "file.host-key-check.type": "sha256", "file.host-key-check.hash": "ab12" }
+    const cmd = qemuImgSshProbeCommand({ host: "esx", port: 22, path, user: "root", identityFile: `${dir}/key`, hostKeyCheck })
     const [argv] = argvOf(["qemu-img"], cmd, "bash", ["timeout"])
     expect(argv[0]).toBe("info")
     expect(JSON.parse(argv[1].slice("json:".length))).toEqual({
       "file.driver": "ssh", "file.host": "esx", "file.port": 22, "file.path": path, "file.user": "root",
-      "file.host-key-check.mode": "none", "file.identity-file": `${dir}/key`,
+      "file.host-key-check.mode": "hash", "file.host-key-check.type": "sha256", "file.host-key-check.hash": "ab12",
+      "file.identity-file": `${dir}/key`,
     })
     noCanary()
   })

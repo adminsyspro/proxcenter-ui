@@ -284,6 +284,14 @@
       "operationFailed": "操作失败 ({status})"
     },
     "wizard": {
+      "hostKeysTitle": "待确认的 SSH 主机密钥",
+      "hostKeyUnconfirmed": "{node}：主机密钥尚未确认",
+      "hostKeyChanged": "{node}：主机密钥与已信任的密钥不同",
+      "hostKeyFingerprint": "{keyType} 密钥 {fingerprint}",
+      "trustHostKey": "信任此密钥",
+      "trustNewHostKey": "信任新密钥",
+      "trustHostKeyFailed": "未能信任该密钥：{error}",
+      "hostKeyHelper": "信任之前，请将每个指纹与节点自身报告的指纹（ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub）进行比较。",
       "title": "HA 集群部署",
       "stepPrerequisites": "前提条件",
       "stepNodes": "节点",
@@ -4635,10 +4643,6 @@
     "testSshConnection": "测试 SSH 连接",
     "sshTestSuccess": "SSH 连接成功！",
     "sshTestFailed": "SSH 测试失败",
-    "sshRetrustHost": "重新信任",
-    "sshRetrustHostHelper": "清除为该节点固定的 SSH 主机密钥，然后重新测试。仅在刚刚重装该节点或更换其密钥时执行。",
-    "sshRetrustFailed": "重新信任失败：{error}",
-    "sshRetrustOrchestratorUnavailable": "编排器不可用：它为该主机固定的密钥仍然存在。",
     "sshNodeEndpoints": {
       "title": "每个节点的 SSH 地址",
       "description": "地址留空则使用 Proxmox 报告的地址。可以填写任何地址，包括 VPN、管理 VLAN 或 NAT 地址。端口留空则使用连接的端口。",
@@ -4813,32 +4817,38 @@
       "disaster_recovery": "灾难恢复"
     },
     "sshHostKeys": {
-      "heading": "已固定的 SSH 主机密钥",
-      "description": "ProxCenter 在首次连接时固定主机的 SSH 主机密钥，此后一旦密钥变化便拒绝所有连接。在重装主机或更换其密钥之后，请清除已固定的密钥。",
-      "loadError": "无法加载已固定的 SSH 主机密钥。",
-      "empty": "尚未固定任何 SSH 主机密钥。",
-      "orchestratorUnavailable": "编排器不可用：它固定的密钥未出现在此列表中，目前也无法清除。",
+      "heading": "SSH 主机密钥",
+      "description": "ProxCenter 和编排器只连接您已确认其 SSH 主机密钥的主机。新主机或密钥发生变化的主机会被拒绝，直到您在此处或在其连接的 SSH 测试中信任其指纹。早期版本自动固定的密钥仍然有效，并可进行确认。",
+      "loadError": "无法加载 SSH 主机密钥。",
+      "empty": "暂无 SSH 主机密钥。",
       "columns": {
         "host": "主机",
-        "keyTypes": "密钥类型",
-        "pinnedAt": "固定时间",
-        "sources": "固定位置",
+        "keyType": "密钥类型",
+        "fingerprint": "指纹",
+        "status": "状态",
         "actions": "操作"
       },
-      "sources": {
-        "orchestrator": "编排器",
-        "frontend": "Web 界面"
+      "status": {
+        "confirmed": "由 {by} 于 {date} 确认",
+        "automatic": "自动固定",
+        "pending": "等待确认",
+        "changed": "已变化，新密钥待确认"
       },
-      "forget": "清除",
-      "forgetTitle": "清除 {host} 的已固定密钥？",
-      "forgetWarning": "下一次连接 {host} 时，将信任该地址出示的任意主机密钥，并重新固定它。",
-      "forgetWhen": "仅对刚刚由您重装或更换密钥的主机执行。否则密钥变化意味着该地址后面已换成了别人。",
-      "forgetFailed": "无法清除已固定的密钥：{error}",
-      "forgetOrchestratorUnavailable": "编排器不可用：它为 {host} 固定的密钥仍然存在。请在编排器恢复后重试。",
-      "forgetNotFound": "{host} 已经没有固定的密钥。",
-      "forgetSuccess": "已清除 {host} 的固定密钥。下一次连接将固定所出示的密钥。",
+      "newKeyTooltip": "出现的新密钥：{fingerprint}",
+      "trust": "信任",
+      "trustTitle": "信任 {host} 的主机密钥？",
+      "trustChangedWarning": "该主机现在提供的密钥与受信任的密钥不同。只有在您亲自重装了该主机或重新生成了其密钥时才信任它；否则，可能是其他机器在该地址上应答。",
+      "trustFingerprint": "{keyType} 密钥 {fingerprint}",
+      "trustHow": "信任之前，请将其与主机自身报告的指纹进行比对（在其 /etc/ssh/ssh_host_*_key.pub 文件上运行 ssh-keygen -lf）。",
+      "trustConfirm": "信任该密钥",
+      "trustSuccess": "已信任 {host} 的主机密钥。",
+      "forget": "遗忘",
+      "forgetTitle": "遗忘 {host} 的主机密钥？",
+      "forgetWarning": "在再次确认其密钥之前，与 {host} 的连接将被拒绝。",
+      "forgetSuccess": "已遗忘 {host} 的主机密钥。",
+      "actionFailed": "操作失败：{error}",
       "cancel": "取消",
-      "confirm": "清除密钥"
+      "confirm": "遗忘密钥"
     },
     "sshCommands": {
       "tabLabel": "SSH 命令",
@@ -5042,7 +5052,7 @@
           "prerequisitesFailed": "未测试 SSH：API 或 TLS 检查失败。",
           "noCredentials": "未测试 SSH：连接中没有可用的密钥或密码。",
           "ok": "{node}：以 {user} 身份通过 SSH 登录 {host}:{port} 成功（主机名 {hostname}）。",
-          "hostKeyMismatch": "{node}：{host} 的主机密钥自固定以来已更改。如果节点已重装或重新生成密钥，请在连接对话框中使用“重新信任”。",
+          "hostKeyMismatch": "{node}：{host} 的主机密钥尚未确认或已变化。请核对其指纹，并在连接的 SSH 测试中信任它。",
           "authFailed": "{node}：{user} 在 {host}:{port} 上的 SSH 认证失败。请检查连接中保存的密钥或密码，并确认公钥位于节点上 {user} 的 authorized_keys 中。",
           "timeout": "{node}：{host}:{port} 没有 SSH 响应。请检查 sshd 和防火墙（TCP {port}），或在连接对话框中为该节点设置 SSH 地址。",
           "failed": "{node}：到 {host}:{port} 的 SSH 失败（{error}）。"
@@ -5318,7 +5328,14 @@
       "rootNoEffect": "对 root 无效：命令已以 root 身份运行。要使用 sudo，请填写专用账户（例如 proxcenter）。",
       "rootSkipped": "以 root 连接：不使用 sudo，因此没有需要检查的 sudoers 文件。",
       "tooOpen": "sudoers 文件早于当前规则，仍允许超出 ProxCenter 所需的操作（{uses}）：请在 设置 > SSH 命令 中重新生成。"
-    }
+    },
+    "sshHostKeyUnconfirmed": "主机密钥尚未确认",
+    "sshHostKeyChanged": "主机密钥与受信任的密钥不同",
+    "sshHostKeyFingerprint": "{keyType} 密钥 {fingerprint}",
+    "sshTrustHostKey": "信任此密钥",
+    "sshTrustNewHostKey": "信任新密钥",
+    "sshTrustHostKeyHelper": "信任之前，请将此指纹与主机自身报告的指纹进行比对：在其 /etc/ssh/ssh_host_*_key.pub 文件上运行 ssh-keygen -lf。",
+    "sshTrustFailed": "未能信任该密钥：{error}"
   },
   "green": {
     "score": {

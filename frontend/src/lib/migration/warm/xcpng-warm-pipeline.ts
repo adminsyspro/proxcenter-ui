@@ -10,6 +10,7 @@ import {
   xapiLogin, xapiLogout, xapiKeepAlive, xapiGetVmConfig, xapiVmRefByUuid, xapiNbdEnabled, xapiManagementNetworkUuid,
   xapiEnableCbt, xapiDisableCbt, xapiSnapshotVm, xapiGetNbdInfo, xapiListChangedBlocks, xapiDestroySnapshot,
   xapiFindSnapshotsByPrefix, xapiCleanShutdown, xapiHardShutdown, xapiPowerState, CBT_CAPABLE_SR_TYPES,
+  xapiPoolInfo, xapiProductName, xapiWarmUnsupportedReason,
   type XapiSession, type XapiSnapshot,
 } from "@/lib/xcpng/xapi-client"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
@@ -42,14 +43,21 @@ import { startSessionKeepAlive } from "./session-keepalive"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 import { conversionNotAppliedMessage, convertGuestAtCutover, GUEST_CONVERSION_ESTIMATE_SEC } from "./guest-conversion"
 import { guestNicsFromNets } from "./guest-network"
+import { neutralizeXenPvDrivers, xenPvLogLine } from "../xen-pv-drivers"
+import { vtpmCreatedLine, vtpmPreflightWarning } from "../vtpm"
 
 export const XCPNG_SNAPSHOT_PREFIX = "proxcenter-warm"
 // XAPI sessions expire after 24 h of inactivity by default; ping well within that.
 const KEEPALIVE_MS = 5 * 60_000
 const POWER_POLL_MS = 5000
 
-/** CBT needs VHD based SRs; raw VDIs and SMAPIv3 SRs fall back to the checksum path. */
-export function cbtEligibilityXcpng(disks: XoDiskInfo[]): { eligible: boolean; reason?: string } {
+/**
+ * CBT needs VHD based SRs; raw VDIs and SMAPIv3 SRs fall back to the checksum
+ * path, and so does a pool whose licence withholds CBT (XenServer Standard and
+ * Free editions: VDI.enable_cbt would fail the job instead).
+ */
+export function cbtEligibilityXcpng(disks: XoDiskInfo[], pool: { cbtRestricted?: boolean } = {}): { eligible: boolean; reason?: string } {
+  if (pool.cbtRestricted) return { eligible: false, reason: "the pool licence does not include changed block tracking (a XenServer Premium Edition feature)" }
   for (const d of disks) {
     if (!d.srType) return { eligible: false, reason: `SR type unknown for disk "${d.label}"` }
     if (!CBT_CAPABLE_SR_TYPES.has(d.srType)) return { eligible: false, reason: `SR type "${d.srType}" of disk "${d.label}" does not support changed block tracking` }
@@ -89,6 +97,8 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
   const activeReaders: XapiReaderHandle[] = []
   const targetDev = new Map<number, string>()  // disk position -> device path
   let pveConn: any = null
+  // "XenServer" or "XCP-ng", from the pool master once logged in: the job log names what the operator runs.
+  let product = xapiProductName(undefined)
   let createdVmid: number | null = null        // set once THIS job created the target VM
   const cbtEnabledVdis: string[] = []          // VDIs whose CBT was off until we switched it on
   const stopHeartbeat = startJobHeartbeat({ jobId, prisma })
@@ -107,7 +117,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
   try {
     await updateJob(jobId, "planning")
     await appendStep(jobId, "planning", "Planning")
-    await appendLog(jobId, "Warm migration (XCP-ng CBT): planning")
+    await appendLog(jobId, "Warm migration (XAPI changed block tracking): planning")
     if (!acquireVmLock(vmKey)) throw new Error("A warm migration is already running for this source VM. Wait for it to finish or cancel it before starting another.")
     acquiredVmLock = true
 
@@ -117,6 +127,11 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     const { user, password } = splitCreds(decryptSecret(conn.apiTokenEnc), "root")
     session = await xapiLogin(conn.baseUrl, user, password, conn.insecureTLS)
     await appendLog(jobId, `Authenticated to ${session.baseUrl} as ${user}`, "success")
+    const pool = await xapiPoolInfo(session).catch(() => null)
+    product = xapiProductName(pool?.brand)
+    if (pool?.version) await appendLog(jobId, `Source pool: ${product} ${pool.version}`)
+    const unsupported = pool ? xapiWarmUnsupportedReason(pool) : null
+    if (unsupported) throw new Error(unsupported)
     stopKeepAlive = startSessionKeepAlive(() => xapiKeepAlive(session!), KEEPALIVE_MS)
 
     pveConn = await getConnectionById(config.targetConnectionId)
@@ -125,6 +140,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     vmRef = await xapiVmRefByUuid(session, config.sourceVmId)
     const vmConfig: XoVmConfig = await xapiGetVmConfig(session, config.sourceVmId)
     if (vmConfig.disks.length === 0) throw new Error("VM has no disks to migrate")
+    if (vmConfig.hasVtpm) await appendLog(jobId, vtpmPreflightWarning("xapi"), "warn")
     await updateJob(jobId, "planning", { sourceVmName: vmConfig.name, totalDisks: vmConfig.disks.length, totalBytes: BigInt(vmConfig.disks.reduce((s, d) => s + d.sizeBytes, 0)) })
 
     const storageInfo = await pveFetch<any>(pveConn as any, `/storage/${encodeURIComponent(config.targetStorage)}`)
@@ -142,9 +158,9 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     }).catch(async (e: any) => { await appendLog(jobId, `Leftover reader sweep skipped: ${e?.message || e}`, "warn").catch(() => {}) })
     if (!(await xapiNbdEnabled(session))) {
       const net = await xapiManagementNetworkUuid(session).catch(() => "<network uuid>")
-      throw new Error(`NBD is not enabled on any network of the XCP-ng pool. Run once on the pool master: xe network-param-add uuid=${net} param-name=purpose param-key=nbd`)
+      throw new Error(`NBD is not enabled on any network of the ${product} pool. Run once on the pool master: xe network-param-add uuid=${net} param-name=purpose param-key=nbd`)
     }
-    const elig = cbtEligibilityXcpng(vmConfig.disks)
+    const elig = cbtEligibilityXcpng(vmConfig.disks, { cbtRestricted: pool?.cbtRestricted })
     const useCbt = elig.eligible
     if (!useCbt) await appendLog(jobId, `CBT unavailable (${elig.reason}); using checksum block-diff fallback (downtime scales with disk size)`, "warn")
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
@@ -164,6 +180,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     createdVmid = targetVmid
     await updateJob(jobId, "enabling_cbt", { targetVmid })
     await appendLog(jobId, `Target VM ${targetVmid} created on ${config.targetNode}`, "success")
+    if (pveParams.tpmstate0) await appendLog(jobId, vtpmCreatedLine(config.targetStorage), "info")
 
     // ── preparing_disks ──
     // Every disk on the job's storage: the per-disk choices of #317 are VMware only.
@@ -190,7 +207,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     }
     const destroySnapshot = async (snap: XapiSnapshot) => {
       await xapiDestroySnapshot(session!, snap.ref).catch(async (e: any) => {
-        await appendLog(jobId, `Warning: snapshot ${snap.nameLabel} (${snap.uuid}) was not removed (${e?.message || e}); delete it on the XCP-ng pool`, "warn")
+        await appendLog(jobId, `Warning: snapshot ${snap.nameLabel} (${snap.uuid}) was not removed (${e?.message || e}); delete it on the ${product} pool`, "warn")
       })
       const k = ourSnapshots.indexOf(snap.ref); if (k >= 0) ourSnapshots.splice(k, 1)
     }
@@ -354,7 +371,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       // ── cutover (95 -> 98): confirmed power off, then the final delta ──
       await updateJob(jobId, "cutover", { progress: 95 })
       await appendStep(jobId, "cutover", "Cutover")
-      await cleanShutdownAndConfirm(jobId, powerOps, "Cutover: requesting clean guest shutdown (XCP-ng guest tools)…", "cutover")
+      await cleanShutdownAndConfirm(jobId, powerOps, `Cutover: requesting clean guest shutdown (${product} VM Tools)…`, "cutover")
       await appendLog(jobId, "Source powered off (confirmed): applying final delta", "success")
       const fin = await runPass("cutover", baseline, { status: "cutover", currentStep: "cutover", rangeStart: 95, rangeEnd: 98 })
       copiedBytes += fin.bytes
@@ -443,6 +460,16 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
     } else {
       await appendLog(jobId, "Guest conversion not requested for this cutover: the guest keeps the hardware it boots on without new drivers", "info")
     }
+    // Converted or not, a Windows guest keeps the Xen PV drivers of its VM Tools,
+    // which stop it with 0x0000DEAD (xen.sys) off Xen: disabled on the boot
+    // volume while it is still mapped, before the first boot (xen-pv-drivers.ts).
+    const bootDev = vmConfig.disks.length > 0 ? targetDev.get(vmConfig.disks[0].position) : undefined
+    if (isWindowsXoVm(vmConfig) && bootDev) {
+      await appendLog(jobId, "Windows guest: disabling the Xen PV drivers of the VM Tools on the boot disk…")
+      const pv = await neutralizeXenPvDrivers({ connectionId: config.targetConnectionId, nodeIp, disk: bootDev, format: "raw" })
+      const line = xenPvLogLine(pv)
+      await appendLog(jobId, line.msg, line.level)
+    }
     const unusable = isWindowsXoVm(vmConfig) && !converted ? virtioDevices(bootParams) : []
     if (unusable.length > 0) {
       await appendLog(jobId, `Windows has no VirtIO driver yet and does not see ${unusable.join(", ")}: install virtio-win-guest-tools.exe from the VirtIO ISO in the guest`, "warn")
@@ -467,7 +494,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       const notRemoved = new Set<string>()
       const warnNotRemoved = async (ref: string, e: any) => {
         notRemoved.add(ref)
-        await appendLog(jobId, `Warning: could not remove warm snapshot ${ref}: ${e?.message || e}; delete it on the XCP-ng pool`, "warn").catch(() => {})
+        await appendLog(jobId, `Warning: could not remove warm snapshot ${ref}: ${e?.message || e}; delete it on the ${product} pool`, "warn").catch(() => {})
       }
       for (const ref of [...ourSnapshots]) await xapiDestroySnapshot(session, ref).catch(e => warnNotRemoved(ref, e))
       // Belt and braces: anything with our prefix that an earlier aborted run left on the VM.

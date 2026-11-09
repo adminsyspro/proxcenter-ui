@@ -19,6 +19,9 @@ import {
   xapiGetVmConfig,
   xapiHardShutdown,
   xapiHosts,
+  xapiPoolInfo,
+  xapiProductName,
+  xapiWarmUnsupportedReason,
   xapiKeepAlive,
   xapiListChangedBlocks,
   xapiListVms,
@@ -143,7 +146,7 @@ describe("xcpng/xapi-client", () => {
           uuid: "host-uuid",
           name_label: "pool-master",
           address: "10.0.0.10",
-          software_version: { product_version: "8.3.0" },
+          software_version: { product_version: "8.3.0", product_brand: "XCP-ng" },
         },
         "OpaqueRef:host-2": {
           uuid: "host-uuid-2",
@@ -153,8 +156,8 @@ describe("xcpng/xapi-client", () => {
       }))
 
       await expect(xapiHosts(session)).resolves.toEqual([
-        { uuid: "host-uuid", name_label: "pool-master", address: "10.0.0.10", version: "8.3.0" },
-        { uuid: "host-uuid-2", name_label: "pool-member", address: "10.0.0.11", version: "" },
+        { uuid: "host-uuid", name_label: "pool-master", address: "10.0.0.10", version: "8.3.0", brand: "XCP-ng" },
+        { uuid: "host-uuid-2", name_label: "pool-member", address: "10.0.0.11", version: "", brand: "" },
       ])
       expect(requestAt(0).method).toBe("host.get_all_records")
     })
@@ -718,5 +721,27 @@ describe("xcpng/xapi-client", () => {
     })
     const methods = fetchMock.mock.calls.map((_, index) => requestAt(index).method)
     expect(methods.filter(method => method === "VDI.get_record")).toHaveLength(1)
+  })
+})
+
+describe("XAPI pool identity (roadmap#60)", () => {
+  it("reads brand, version and the CBT licence restriction from the pool and its master", async () => {
+    fetchMock
+      .mockResolvedValueOnce(success({ "OpaqueRef:pool": { master: "OpaqueRef:master", restrictions: { restrict_cbt: "true", restrict_vtpm: "false" } } }))
+      .mockResolvedValueOnce(success({ software_version: { product_brand: "XenServer", product_version: "8.4.0" } }))
+    await expect(xapiPoolInfo(session)).resolves.toEqual({ brand: "XenServer", version: "8.4.0", cbtRestricted: true })
+  })
+
+  it("names XCP-ng when the pool says nothing", () => {
+    expect(xapiProductName("XenServer")).toBe("XenServer")
+    expect(xapiProductName("")).toBe("XCP-ng")
+    expect(xapiProductName(undefined)).toBe("XCP-ng")
+  })
+
+  it("refuses a warm migration below XenServer 7.3, where neither CBT nor NBD exist", () => {
+    expect(xapiWarmUnsupportedReason({ brand: "XenServer", version: "7.1.2" })).toMatch(/XenServer 7\.1\.2 has neither changed block tracking nor the NBD server.*offline migration/)
+    expect(xapiWarmUnsupportedReason({ brand: "XenServer", version: "7.3.0" })).toBeNull()
+    expect(xapiWarmUnsupportedReason({ brand: "XCP-ng", version: "8.3.0" })).toBeNull()
+    expect(xapiWarmUnsupportedReason({ brand: "", version: "" })).toBeNull()
   })
 })

@@ -16,7 +16,11 @@ import { XapiSource } from "./xapi-source"
 
 export type XcpngSubType = "xo" | "xapi"
 
-export interface XcpngHostInfo { name_label: string; address: string; version: string }
+export interface XcpngHostInfo {
+  name_label: string; address: string; version: string
+  /** product_brand of the host ("XenServer", "XCP-ng"); unknown through Xen Orchestra. */
+  brand?: string
+}
 
 /**
  * What the offline pipeline needs to run curl on the PVE node. `curlConfig` is the

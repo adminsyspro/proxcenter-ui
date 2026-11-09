@@ -55,6 +55,7 @@ vi.mock("@/lib/xcpng/xapi-client", async importOriginal => {
     xapiNbdEnabled: vi.fn(), xapiManagementNetworkUuid: vi.fn(), xapiEnableCbt: vi.fn(), xapiDisableCbt: vi.fn(),
     xapiSnapshotVm: vi.fn(), xapiGetNbdInfo: vi.fn(), xapiListChangedBlocks: vi.fn(), xapiDestroySnapshot: vi.fn(),
     xapiFindSnapshotsByPrefix: vi.fn(), xapiCleanShutdown: vi.fn(), xapiHardShutdown: vi.fn(), xapiPowerState: vi.fn(),
+    xapiPoolInfo: vi.fn(),
   }
 })
 
@@ -73,7 +74,7 @@ import { startXapiReader, stopXapiReader, readAllocatedExtents } from "./xapi-re
 import { detectChangedExtentsByChecksum, scanBlockChecksums } from "./checksum-detector"
 import { startSessionKeepAlive } from "./session-keepalive"
 import {
-  xapiLogin, xapiLogout, xapiKeepAlive, xapiGetVmConfig, xapiVmRefByUuid, xapiNbdEnabled, xapiManagementNetworkUuid,
+  xapiLogin, xapiLogout, xapiKeepAlive, xapiGetVmConfig, xapiVmRefByUuid, xapiNbdEnabled, xapiManagementNetworkUuid, xapiPoolInfo,
   xapiEnableCbt, xapiDisableCbt, xapiSnapshotVm, xapiGetNbdInfo, xapiListChangedBlocks, xapiDestroySnapshot,
   xapiFindSnapshotsByPrefix, xapiCleanShutdown, xapiHardShutdown, xapiPowerState, XapiError, type XapiSnapshot,
 } from "@/lib/xcpng/xapi-client"
@@ -171,6 +172,16 @@ async function sshRouter(_connId: string, _host: string, command: string, _timeo
     opts?.onData?.("1073741824 bytes (1.1 GB, 1.0 GiB) copied, 5 s, 214 MB/s\r")
     opts?.onData?.("2147483648 bytes (2.1 GB, 2.0 GiB) copied, 10 s, 214 MB/s\r")
     return ok("")
+  }
+  // Xen PV driver neutralization of a Windows boot disk (xen-pv-drivers.ts)
+  if (command.includes("virt-win-reg --merge")) return ok("XENPV-MERGED\n")
+  if (command.includes("virt-win-reg --format=")) {
+    return ok([
+      String.raw`[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\Class\{4d36e97d-e325-11ce-bfc1-08002be10318}]`,
+      '"UpperFilters"=hex(7):58,00,45,00,4e,00,46,00,49,00,4c,00,54,00,00,00,00,00',
+      String.raw`[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Services\xenbus]`,
+      "XENPV-EXIT=0",
+    ].join("\n"))
   }
   if (conversion) {
     if (command.startsWith("test -x /usr/bin/virt-v2v-in-place")) return ok("v2v-in-place\n")
@@ -334,6 +345,7 @@ beforeEach(() => {
   vi.mocked(xapiVmRefByUuid).mockResolvedValue("OpaqueRef:vm")
   vi.mocked(xapiGetVmConfig).mockImplementation(async () => vmConfig)
   vi.mocked(xapiNbdEnabled).mockResolvedValue(true)
+  vi.mocked(xapiPoolInfo).mockResolvedValue({ brand: "XCP-ng", version: "8.3.0", cbtRestricted: false })
   vi.mocked(xapiManagementNetworkUuid).mockResolvedValue("net-uuid-1")
   vi.mocked(xapiEnableCbt).mockResolvedValue(true) // CBT was off: this job switched it on
   vi.mocked(xapiDisableCbt).mockResolvedValue(undefined)
@@ -618,6 +630,51 @@ describe("runXcpngWarmMigration CBT path", () => {
     // polled while Running, then saw Halted after the hard power off
     expect(vi.mocked(xapiPowerState).mock.calls.length).toBeGreaterThan(10)
     expect(hasLog("Source powered off (confirmed): applying final delta")).toBe(true)
+  })
+})
+
+describe("runXcpngWarmMigration XenServer sources (roadmap#60)", () => {
+  it("disables the Xen PV drivers of a Windows boot disk before attaching it", { timeout: 20000 }, async () => {
+    vmConfig = { ...makeVmConfig(), guestOS: "Microsoft Windows Server 2025 Standard" }
+
+    const err = await runToEnd("xcp-it-xenpv", makeConfig({ convertGuest: false }))
+
+    expect(err).toBeNull()
+    const scan = vi.mocked(executeSSH).mock.calls.findIndex(c => String(c[2]).includes("virt-win-reg --format=raw '/dev/zvol/DatastoreVM/vm-900-disk-0'"))
+    const merge = vi.mocked(executeSSH).mock.calls.findIndex(c => String(c[2]).includes("virt-win-reg --merge --format=raw '/dev/zvol/DatastoreVM/vm-900-disk-0'"))
+    expect(scan).toBeGreaterThanOrEqual(0)
+    expect(merge).toBeGreaterThan(scan)
+    expect(vi.mocked(executeSSH).mock.invocationCallOrder[merge]).toBeLessThan(vi.mocked(pveSetVmConfig).mock.invocationCallOrder[0])
+    expect(hasLog("Xen PV drivers disabled for the first boot off Xen (xenbus) and XENFILT removed from 1 device class filter list(s)")).toBe(true)
+  })
+
+  it("leaves a Linux guest's registry alone", { timeout: 20000 }, async () => {
+    const err = await runToEnd("xcp-it-linux", makeConfig({ convertGuest: false }))
+
+    expect(err).toBeNull()
+    expect(sshCommands.some(c => c.includes("virt-win-reg"))).toBe(false)
+  })
+
+  it("refuses a warm migration from XenServer 7.1, which has neither CBT nor NBD", { timeout: 20000 }, async () => {
+    vi.mocked(xapiPoolInfo).mockResolvedValue({ brand: "XenServer", version: "7.1.2", cbtRestricted: false })
+
+    const err = await runToEnd("xcp-it-xs71", makeConfig())
+
+    expect(err?.message).toContain("XenServer 7.1.2 has neither changed block tracking nor the NBD server")
+    expect(err?.message).toContain("Use an offline migration")
+    expect(xapiNbdEnabled).not.toHaveBeenCalled()
+    expect(pveCalls.some(c => c.path === "/nodes/pve1/qemu" && c.method === "POST")).toBe(false)
+  })
+
+  it("takes the checksum path on a pool whose licence withholds CBT, and names the product", { timeout: 20000 }, async () => {
+    vi.mocked(xapiPoolInfo).mockResolvedValue({ brand: "XenServer", version: "8.4.0", cbtRestricted: true })
+
+    const err = await runToEnd("xcp-it-licence", makeConfig({ targetVmid: 777 }))
+
+    expect(err).toBeNull()
+    expect(hasLog("Source pool: XenServer 8.4.0")).toBe(true)
+    expect(hasLog("CBT unavailable (the pool licence does not include changed block tracking")).toBe(true)
+    expect(xapiEnableCbt).not.toHaveBeenCalled()
   })
 })
 

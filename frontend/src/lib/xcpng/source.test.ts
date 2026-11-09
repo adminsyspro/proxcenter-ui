@@ -315,7 +315,7 @@ describe("xcpng source helpers", () => {
 
   describe("XapiSource inventory and lifecycle", () => {
     it("delegates VM and host operations to the active XAPI session", async () => {
-      const hosts = [{ uuid: "host-1", name_label: "host-one", address: "10.0.0.50", version: "8.3" }]
+      const hosts = [{ uuid: "host-1", name_label: "host-one", address: "10.0.0.50", version: "8.3", brand: "XCP-ng" }]
       const vms = [{
         uuid: "vm-1",
         name_label: "vm-one",
@@ -406,8 +406,8 @@ describe("xcpng source helpers", () => {
   describe("testXcpngConnection", () => {
     it("returns the host count and closes the source on success", async () => {
       xapiHostsMock.mockResolvedValue([
-        { uuid: "host-uuid-1", name_label: "host-1", address: "10.0.0.1", version: "8.3" },
-        { uuid: "host-uuid-2", name_label: "host-2", address: "10.0.0.2", version: "8.3" },
+        { uuid: "host-uuid-1", name_label: "host-1", address: "10.0.0.1", version: "8.3", brand: "XCP-ng" },
+        { uuid: "host-uuid-2", name_label: "host-2", address: "10.0.0.2", version: "8.3", brand: "XCP-ng" },
       ])
 
       await expect(testXcpngConnection(xapiCredentials)).resolves.toEqual({ ok: true, hosts: 2 })

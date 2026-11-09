@@ -13,6 +13,7 @@
  */
 
 import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
+import { xenGuestOs } from "./guest-os"
 
 export interface XoConnectionInfo {
   baseUrl: string
@@ -29,6 +30,8 @@ export interface XoVmConfig {
   firmware: "bios" | "uefi"
   virtualizationMode: string  // hvm | pv
   guestOS: string
+  /** The source VM has a virtual TPM (its state is never copied): the target gets an empty TPM 2.0. */
+  hasVtpm?: boolean
   tags: string[]
   snapshotCount: number
   disks: XoDiskInfo[]
@@ -166,7 +169,8 @@ export async function xoGetVmConfig(xo: XoConnectionInfo, vmUuid: string): Promi
     memoryMB: Math.round((vm.memory?.size || vm.memory?.dynamic?.[1] || 0) / 1048576),
     firmware,
     virtualizationMode: vm.virtualizationMode || "hvm",
-    guestOS: vm.os_version?.name || vm.os_version?.distro || "",
+    guestOS: xenGuestOs({ osVersion: vm.os_version, otherConfig: vm.other, referenceLabel: vm.reference_label, viridian: vm.viridian }),
+    hasVtpm: Array.isArray(vm.VTPMs) && vm.VTPMs.length > 0,
     tags: vm.tags || [],
     snapshotCount: vm.snapshots?.length || vm.$snapshots?.length || 0,
     disks,

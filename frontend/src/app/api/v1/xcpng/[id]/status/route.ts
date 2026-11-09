@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { openXcpngSource, xcpngSubTypeOf, isXcpngAuthError, type XcpngSource } from "@/lib/xcpng/source"
+import { xapiProductName } from "@/lib/xcpng/xapi-client"
 
 export const runtime = "nodejs"
 
@@ -32,15 +33,17 @@ export async function GET(
 
     const mode = xcpngSubTypeOf(conn)
     const host = conn.baseUrl.replace(/\/$/, '')
-    const backend = mode === 'xapi' ? 'XCP-ng pool' : 'XO server'
+    const backend = mode === 'xapi' ? 'pool master' : 'XO server'
 
     let src: XcpngSource | null = null
     try {
       // Opening an XAPI source logs in, so an auth failure surfaces here as well as on listHosts.
       src = await openXcpngSource(id)
       const hosts = await src.listHosts()
+      // XenServer and XCP-ng speak the same XAPI: the host says which one it is.
+      const product = xapiProductName(hosts[0]?.brand)
       const version = mode === 'xapi'
-        ? (hosts[0]?.version ? `XCP-ng ${hosts[0].version}` : 'XCP-ng')
+        ? (hosts[0]?.version ? `${product} ${hosts[0].version}` : product)
         : 'XO/XOA'
 
       return NextResponse.json({

@@ -6,6 +6,7 @@ import type { XoVmConfig } from "@/lib/xcpng/client"
 import type { PveVmCreateParams } from "./configMapper"
 import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
 import { buildNetValue } from "./target-overrides"
+import { tpmstate0Param } from "./vtpm"
 
 /** Map XO guest OS string to Proxmox ostype */
 function mapOsType(guestOS: string): string {
@@ -96,6 +97,10 @@ export function mapXoToPveConfig(
     // (especially Windows) pass Secure Boot verification after migration.
     params.efidisk0 = `${targetStorage}:1,efitype=4m,pre-enrolled-keys=1`
   }
+  // A source with a vTPM keeps a TPM device: an empty TPM 2.0 state, the XAPI
+  // one stays on the pool (lab 09/11/2026: Windows Server 2025 came up with no
+  // TPM at all, and a BitLocker volume bound to it would not unlock).
+  if (xoConfig.hasVtpm) params.tpmstate0 = tpmstate0Param(targetStorage)
 
   return params
 }

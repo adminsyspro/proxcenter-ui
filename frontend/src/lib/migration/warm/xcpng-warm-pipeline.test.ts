@@ -36,6 +36,13 @@ describe("cbtEligibilityXcpng", () => {
     expect(result.reason).toContain("database")
   })
 
+  it("falls back to the checksum path when the pool licence withholds CBT", () => {
+    const result = cbtEligibilityXcpng([disk("root", "ext")], { cbtRestricted: true })
+    expect(result.eligible).toBe(false)
+    expect(result.reason).toMatch(/licence.*Premium/)
+    expect(cbtEligibilityXcpng([disk("root", "ext")], { cbtRestricted: false })).toEqual({ eligible: true })
+  })
+
   it("rejects an empty storage repository type and names its disk", () => {
     const result = cbtEligibilityXcpng([
       disk("unknown-storage", ""),

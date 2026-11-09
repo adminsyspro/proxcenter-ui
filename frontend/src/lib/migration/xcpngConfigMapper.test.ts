@@ -103,3 +103,18 @@ describe("mapXoToPveConfig: data disks of an unconverted Windows (#1173)", () =>
     expect(mapXoToPveConfig(makeConfig({ disks: disks(2) }), 100, "ceph").diskSlots).toEqual(["scsi0", "scsi1"])
   })
 })
+
+describe("mapXoToPveConfig: Windows without a guest agent report, vTPM (roadmap#60)", () => {
+  it("treats the OS the VM record names as Windows: SATA boot disk, e1000, win11", () => {
+    // xenGuestOs fills guestOS from reference_label when the VM Tools never reported (xapi-client).
+    const p = mapXoToPveConfig(makeConfig({ guestOS: "windows server 2025", firmware: "uefi" }), 100, "ceph")
+    expect(p.ostype).toBe("win11")
+    expect(p.bootDiskSlot).toBe("sata0")
+    expect(p.nets.net0.startsWith("e1000,")).toBe(true)
+  })
+
+  it("gives a source with a vTPM an empty TPM 2.0 state, and none without", () => {
+    expect(mapXoToPveConfig(makeConfig({ firmware: "uefi", hasVtpm: true }), 100, "ceph").tpmstate0).toBe("ceph:1,version=v2.0")
+    expect(mapXoToPveConfig(makeConfig({ firmware: "uefi" }), 100, "ceph").tpmstate0).toBeUndefined()
+  })
+})

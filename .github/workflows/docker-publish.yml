@@ -34,6 +34,13 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request supersedes the run of the previous push. Every
+# other run (push to main, tag, schedule, dispatch) gets a group of its own, so
+# it is never cancelled nor queued behind another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   REGISTRY: ghcr.io
   FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/proxcenter-frontend

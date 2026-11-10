@@ -34,6 +34,13 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request supersedes the run of the previous push. Every
+# other run (push to main, tag, schedule, dispatch) gets a group of its own, so
+# it is never cancelled nor queued behind another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   REGISTRY: ghcr.io
   FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/proxcenter-frontend
@@ -137,7 +144,7 @@ jobs:
   # ========================================
   build-frontend:
     needs: [test, test-backend]
-    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
+    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -217,8 +224,11 @@ jobs:
           build-args: |
             GIT_SHA=${{ steps.src.outputs.sha }}
             APP_VERSION=${{ steps.resolve.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # One cache scope per image. With the default scope shared by every
+          # build, each export replaced the index of the others, and the
+          # orchestrator and WeasyPrint builds started cold on every run.
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
           platforms: linux/amd64
 
       - name: Make Frontend package public
@@ -275,7 +285,7 @@ jobs:
   # ========================================
   build-demo:
     needs: [test, test-backend]
-    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
+    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -309,8 +319,10 @@ jobs:
             GIT_SHA=${{ github.sha }}
             APP_VERSION=demo
             DEMO_MODE=true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=frontend-demo
+            type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend-demo
           platforms: linux/amd64
 
   # ========================================
@@ -322,7 +334,7 @@ jobs:
   # locally on every `docker-compose up`.
   build-weasyprint:
     needs: [test, test-backend]
-    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
+    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -387,8 +399,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=weasyprint
+          cache-to: type=gha,mode=max,scope=weasyprint
           platforms: linux/amd64
 
       # Signed SLSA provenance (Sigstore, public transparency log) bound to the
@@ -419,7 +431,7 @@ jobs:
   # (Enterprise-only); nodes authenticate with GHCR_TOKEN from .env.
   build-ha-images:
     needs: [test, test-backend]
-    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
+    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -534,11 +546,15 @@ jobs:
 
   # ========================================
   # Run Backend Tests
-  # Skipped for Dependabot PRs: they cannot access ORCHESTRATOR_PAT
-  # and don't modify backend code.
+  # Skipped on pull requests: the backend is checked out at its own main, so
+  # nothing in a pull request of this repository can change the outcome, and
+  # no pull request run then needs ORCHESTRATOR_PAT. The frontend-side builds
+  # accept the skip for a pull request of a branch of this repository only: a
+  # pull request from a fork never reaches them, as before. Push, tag and
+  # dispatch runs still test before they build.
   # ========================================
   test-backend:
-    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    if: github.event_name != 'pull_request'
     needs: [dispatch-guard]
     runs-on: ubuntu-latest
     # Replication tests open a per-run schema on this Postgres via
@@ -618,9 +634,11 @@ jobs:
 
   # ========================================
   # Build Orchestrator Image
+  # Skipped on pull requests, like the backend tests: its build context is
+  # the backend repository alone.
   # ========================================
   build-orchestrator:
-    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    if: github.event_name != 'pull_request'
     needs: [test, test-backend]
     runs-on: ubuntu-latest
     permissions:
@@ -767,8 +785,8 @@ jobs:
             VERSION=${{ steps.resolve.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=orchestrator
+          cache-to: type=gha,mode=max,scope=orchestrator
           platforms: linux/amd64
 
       # Signed SLSA provenance (Sigstore, public transparency log) bound to the

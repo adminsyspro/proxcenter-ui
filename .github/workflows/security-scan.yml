@@ -11,6 +11,13 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request supersedes the run of the previous push. Every
+# other run (push to main, tag, schedule, dispatch) gets a group of its own, so
+# it is never cancelled nor queued behind another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # ========================================
   # Trivy: Scan Docker images for vulns
@@ -40,8 +47,10 @@ jobs:
           tags: proxcenter-frontend:scan
           build-args: |
             GIT_SHA=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Same scope as the image build of docker-publish.yml: both build
+          # the same image and reuse each other's layers.
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
       - name: Run Trivy on Frontend image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -66,8 +75,10 @@ jobs:
           sarif_file: 'trivy-frontend.sarif'
           category: 'trivy-frontend'
 
+  # Skipped on pull requests: the image is built from the backend repository
+  # at its own main, which a pull request of this repository cannot change.
   trivy-orchestrator:
-    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    if: github.event_name != 'pull_request'
     name: Trivy — Orchestrator Image
     runs-on: ubuntu-latest
     permissions:
@@ -99,8 +110,8 @@ jobs:
           push: false
           load: true
           tags: proxcenter-orchestrator:scan
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=orchestrator
+          cache-to: type=gha,mode=max,scope=orchestrator
 
       - name: Run Trivy on Orchestrator image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

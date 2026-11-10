@@ -144,7 +144,7 @@ jobs:
   # ========================================
   build-frontend:
     needs: [test, test-backend]
-    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
+    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -282,7 +282,7 @@ jobs:
   # ========================================
   build-demo:
     needs: [test, test-backend]
-    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
+    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -329,7 +329,7 @@ jobs:
   # locally on every `docker-compose up`.
   build-weasyprint:
     needs: [test, test-backend]
-    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
+    if: ${{ always() && needs.test.result == 'success' && (needs.test-backend.result == 'success' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -426,7 +426,7 @@ jobs:
   # (Enterprise-only); nodes authenticate with GHCR_TOKEN from .env.
   build-ha-images:
     needs: [test, test-backend]
-    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || github.event.pull_request.user.login == 'dependabot[bot]') }}
+    if: ${{ always() && !inputs.staging && needs.test.result == 'success' && (needs.test-backend.result == 'success' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -541,11 +541,15 @@ jobs:
 
   # ========================================
   # Run Backend Tests
-  # Skipped for Dependabot PRs: they cannot access ORCHESTRATOR_PAT
-  # and don't modify backend code.
+  # Skipped on pull requests: the backend is checked out at its own main, so
+  # nothing in a pull request of this repository can change the outcome, and
+  # no pull request run then needs ORCHESTRATOR_PAT. The frontend-side builds
+  # accept the skip for a pull request of a branch of this repository only: a
+  # pull request from a fork never reaches them, as before. Push, tag and
+  # dispatch runs still test before they build.
   # ========================================
   test-backend:
-    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    if: github.event_name != 'pull_request'
     needs: [dispatch-guard]
     runs-on: ubuntu-latest
     # Replication tests open a per-run schema on this Postgres via
@@ -625,9 +629,11 @@ jobs:
 
   # ========================================
   # Build Orchestrator Image
+  # Skipped on pull requests, like the backend tests: its build context is
+  # the backend repository alone.
   # ========================================
   build-orchestrator:
-    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    if: github.event_name != 'pull_request'
     needs: [test, test-backend]
     runs-on: ubuntu-latest
     permissions:

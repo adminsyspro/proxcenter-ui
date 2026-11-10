@@ -73,8 +73,10 @@ jobs:
           sarif_file: 'trivy-frontend.sarif'
           category: 'trivy-frontend'
 
+  # Skipped on pull requests: the image is built from the backend repository
+  # at its own main, which a pull request of this repository cannot change.
   trivy-orchestrator:
-    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    if: github.event_name != 'pull_request'
     name: Trivy — Orchestrator Image
     runs-on: ubuntu-latest
     permissions:

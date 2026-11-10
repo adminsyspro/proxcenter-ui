@@ -47,8 +47,10 @@ jobs:
           tags: proxcenter-frontend:scan
           build-args: |
             GIT_SHA=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Same scope as the image build of docker-publish.yml: both build
+          # the same image and reuse each other's layers.
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
       - name: Run Trivy on Frontend image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -108,8 +110,8 @@ jobs:
           push: false
           load: true
           tags: proxcenter-orchestrator:scan
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=orchestrator
+          cache-to: type=gha,mode=max,scope=orchestrator
 
       - name: Run Trivy on Orchestrator image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

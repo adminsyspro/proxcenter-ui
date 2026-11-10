@@ -224,8 +224,11 @@ jobs:
           build-args: |
             GIT_SHA=${{ steps.src.outputs.sha }}
             APP_VERSION=${{ steps.resolve.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # One cache scope per image. With the default scope shared by every
+          # build, each export replaced the index of the others, and the
+          # orchestrator and WeasyPrint builds started cold on every run.
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
           platforms: linux/amd64
 
       - name: Make Frontend package public
@@ -316,8 +319,10 @@ jobs:
             GIT_SHA=${{ github.sha }}
             APP_VERSION=demo
             DEMO_MODE=true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=frontend-demo
+            type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend-demo
           platforms: linux/amd64
 
   # ========================================
@@ -394,8 +399,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=weasyprint
+          cache-to: type=gha,mode=max,scope=weasyprint
           platforms: linux/amd64
 
       # Signed SLSA provenance (Sigstore, public transparency log) bound to the
@@ -780,8 +785,8 @@ jobs:
             VERSION=${{ steps.resolve.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=orchestrator
+          cache-to: type=gha,mode=max,scope=orchestrator
           platforms: linux/amd64
 
       # Signed SLSA provenance (Sigstore, public transparency log) bound to the

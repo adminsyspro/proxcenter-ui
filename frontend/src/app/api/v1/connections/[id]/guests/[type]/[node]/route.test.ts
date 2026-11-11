@@ -16,7 +16,8 @@ const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   getRequestGuestScopePerimeter: getRequestGuestScopePerimeterMock,
-  PERMISSIONS: { VM_CREATE: 'vm.create' },
+  buildVmResourceId: (c: string, n: string, t: string, v: string) => `${c}:${n}:${t}:${v}`,
+  PERMISSIONS: { VM_CREATE: 'vm.create', VM_CONFIG_HARDWARE: 'vm.config.hardware', STORAGE_CONTENT: 'storage.content' },
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
@@ -346,5 +347,87 @@ describe('POST guests create: tenant restore via create is refused', () => {
     const json = await readJson<{ error: string }>(res)
     expect(json?.error).toContain('restore endpoint')
     expect(pveFetchMock.mock.calls.some(c => c[2]?.method === 'POST')).toBe(false)
+  })
+})
+
+describe('POST guests create: restores and volumes of another guest, for every caller (roadmap#219)', () => {
+  const created = () => pveFetchMock.mock.calls.find(c => /^\/nodes\/pve1\/(qemu|lxc)$/.test(String(c[1])) && c[2]?.method === 'POST')
+  const lxc = { ...baseParams, type: 'lxc' }
+
+  beforeEach(async () => {
+    // Earlier suites leave a vDC resolved: these cases are a provider's.
+    vi.mocked((await import('@/lib/vdc/quota')).resolveVdcForTenant).mockResolvedValue(null as any)
+  })
+
+  it.each([
+    ['qemu archive', baseParams, { vmid: 190, archive: 'local:backup/vzdump-qemu-200-2026_01_01-00_00_00.vma.zst' }],
+    ['lxc archive', lxc, { vmid: 190, archive: 'local:backup/vzdump-lxc-300-2026_01_01-00_00_00.tar.zst' }],
+    ['lxc restore flag', lxc, { vmid: 190, ostemplate: 'local:vztmpl/debian-13.tar.zst', restore: 1 }],
+    ['lxc restore flag as text', lxc, { vmid: 190, ostemplate: 'pbs:backup/ct/300/2026-01-01T00:00:00Z', restore: 'true' }],
+    ['lxc backup as template', lxc, { vmid: 190, ostemplate: 'local:backup/vzdump-lxc-300-2026_01_01-00_00_00.tar.zst' }],
+    ['lxc PBS backup as template', lxc, { vmid: 190, ostemplate: 'pbs:backup/ct/300/2026-01-01T00:00:00Z' }],
+  ])('403: %s is a restore, sent to the restore endpoint whoever asks', async (_label, params, body) => {
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params, body })
+
+    expect(res.status).toBe(403)
+    expect(await readJson<any>(res)).toEqual({ error: 'Restoring from a backup must go through the restore endpoint.' })
+    expect(created()).toBeUndefined()
+  })
+
+  it('200: a container from a template, restore unset or off', async () => {
+    const POST = await loadPost()
+
+    for (const body of [{ vmid: 190, ostemplate: 'local:vztmpl/debian-13-standard_13.6-1_amd64.tar.zst' }, { vmid: 191, ostemplate: 'ISO:vztmpl/alpine.tar.xz', restore: 0 }]) {
+      pveFetchMock.mockClear()
+      const res = await callRoute(POST, { params: lxc, body })
+
+      expect(res.status, JSON.stringify(body)).toBe(200)
+      expect(created()).toBeDefined()
+    }
+  })
+
+  it.each(['ceph:vm-200-disk-0', 'nfs:200/vm-200-disk-0.raw', 'local:iso/x.iso', '/var/lib/vz/template/cache/x.tar.zst', 'local:vztmpl/../x', ''])(
+    '400: a container template that is not a template of a storage (%s)',
+    async ostemplate => {
+      const POST = await loadPost()
+      const res = await callRoute(POST, { params: lxc, body: { vmid: 190, ostemplate } })
+
+      expect(res.status).toBe(400)
+      expect((await readJson<any>(res)).error).toMatch(/^ostemplate: expected a container template/)
+      expect(created()).toBeUndefined()
+    },
+  )
+
+  it('403: importing the disk of a guest the creator may not reconfigure, nothing created', async () => {
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string) => (String(path).startsWith('/cluster/resources') ? [{ vmid: 200, node: 'pve2', type: 'qemu' }] : 'UPID:x'))
+    checkPermissionMock.mockImplementation(async (permission: string) =>
+      permission === 'vm.config.hardware' ? deniedPermissionResponse('vm.config.hardware') : null)
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { vmid: 190, scsi0: 'ceph:0,import-from=ceph:vm-200-disk-0' } })
+
+    expect(res.status).toBe(403)
+    expect((await readJson<any>(res)).error).toMatch(/^scsi0: this volume is not one of this guest's disks/)
+    expect(checkPermissionMock).toHaveBeenCalledWith('vm.config.hardware', 'vm', 'conn-1:pve2:qemu:200')
+    expect(created()).toBeUndefined()
+  })
+
+  it('200: a new disk, an ISO and an image of an import storage ask nothing more', async () => {
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { vmid: 190, scsi0: 'ceph:32', scsi1: 'ceph:0,import-from=local:import/debian-12.qcow2', ide2: 'local:iso/debian-13.iso,media=cdrom' } })
+
+    expect(res.status).toBe(200)
+    expect(pveFetchMock.mock.calls.some(c => String(c[1]).startsWith('/cluster/resources'))).toBe(false)
+    expect(created()).toBeDefined()
+  })
+
+  it('403: cicustom on a storage the creator holds no content right on', async () => {
+    checkPermissionMock.mockImplementation(async (permission: string) =>
+      permission === 'storage.content' ? deniedPermissionResponse('storage.content') : null)
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { vmid: 190, cicustom: 'user=local:snippets/user.yaml' } })
+
+    expect(res.status).toBe(403)
+    expect(created()).toBeUndefined()
   })
 })

@@ -18,6 +18,7 @@ import { allocateIpTracked, releaseIp, IpamExhaustedError } from "@/lib/vdc/ipam
 import { parseCidr } from "@/lib/vdc/network"
 import { checkVmidAgainstTenantRange } from "@/lib/tenant/vmidRange"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
+import { cicustomRefusal, foreignVolumeRefusal } from "@/lib/proxmox/volumeOwnership"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -50,6 +51,37 @@ function sumNewDiskStorageMb(body: Record<string, any>): number {
 
 // POST /api/v1/connections/{id}/guests/{type}/{node}
 // Create a new VM (qemu) or LXC container
+const RESTORE_REFUSED = 'Restoring from a backup must go through the restore endpoint.'
+
+/** True for a value PVE reads as a set flag (1, true, "1", "yes", "on"). */
+function isSetFlag(value: unknown): boolean {
+  return value === true || value === 1 || ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase())
+}
+
+/**
+ * The 403 for a create call that is in fact a restore: `archive` on a VM,
+ * `restore` or a backup volume as `ostemplate` on a container.
+ */
+function restoreThroughCreateRefusal(type: 'qemu' | 'lxc', body: Record<string, unknown>): NextResponse | null {
+  const hasArchive = body.archive !== undefined && body.archive !== null && String(body.archive) !== ''
+  const restoresContainer = type === 'lxc' && (
+    isSetFlag(body.restore) || /^[^:]+:(?:.*\/)?backup\//.test(String(body.ostemplate ?? '')) || /(?:^|[:/])vzdump-/.test(String(body.ostemplate ?? ''))
+  )
+
+  return hasArchive || restoresContainer ? NextResponse.json({ error: RESTORE_REFUSED }, { status: 403 }) : null
+}
+
+const CONTAINER_TEMPLATE_RE = /^[A-Za-z][A-Za-z0-9._-]*:vztmpl\/[^/]+$/
+
+/** A container is created from a template of a storage, nothing else. */
+function containerTemplateRefusal(type: 'qemu' | 'lxc', body: Record<string, unknown>): NextResponse | null {
+  if (type !== 'lxc' || body.ostemplate === undefined || body.ostemplate === null) return null
+
+  return CONTAINER_TEMPLATE_RE.test(String(body.ostemplate))
+    ? null
+    : NextResponse.json({ error: 'ostemplate: expected a container template (storage:vztmpl/file).' }, { status: 400 })
+}
+
 async function handler(
   req: Request, 
   ctx: { params: Promise<{ id: string; type: string; node: string }> | { id: string; type: string; node: string } }
@@ -106,20 +138,20 @@ async function handler(
       }
     }
 
+    // PVE's create call also restores: a VM from `archive`, a container from
+    // a backup handed as `ostemplate` (with `restore`). That path skips what
+    // the restore route checks (vm.backup and backup.restore on the node, the
+    // scope of the source backup), so a creator could rebuild any guest's
+    // backup into a guest of its own. Every restore goes through the restore
+    // route, whoever asks.
+    const restoreRefused = restoreThroughCreateRefusal(type, body)
+    if (restoreRefused) return restoreRefused
+    const templateRefused = containerTemplateRefusal(type, body)
+    if (templateRefused) return templateRefused
+
     // vDC quota enforcement
     const tenantId = await getCurrentTenantId()
     if (tenantId !== 'default') {
-      // The create endpoint also restores when handed `archive`, which skips
-      // the restore route's source scoping (PBS namespace / vDC storages /
-      // guest ownership): a tenant could reconstruct a neighbour's backup into
-      // a VM of its own and read the disk. Tenants restore through the restore
-      // endpoint, which enforces that scope.
-      if (body.archive !== undefined && String(body.archive) !== '') {
-        return NextResponse.json(
-          { error: 'Restoring from a backup must go through the restore endpoint.' },
-          { status: 403 },
-        )
-      }
       for (const permission of sensitiveNicPermissions(body)) {
         const sensitiveDenied = await checkPermission(permission, 'vm', `${id}:${node}:${type}:${body.vmid}`)
         if (sensitiveDenied) return sensitiveDenied
@@ -156,6 +188,17 @@ async function handler(
     } catch (e: any) {
       if (e instanceof DriveScopeError) return NextResponse.json({ error: e.message }, { status: 403 })
       throw e
+    }
+
+    // An existing volume of another guest, attached or imported into the new
+    // one, needs the hardware right on that guest; cicustom needs a right on
+    // the storage it reads from. vDC tenants were already held to their own
+    // guest above.
+    const foreignDenied = await foreignVolumeRefusal({ connectionId: id, conn, tenantId, type, body, targetVmid: String(body.vmid ?? '') })
+    if (foreignDenied) return foreignDenied
+    if (type === 'qemu' && body.cicustom !== undefined) {
+      const cicustomDenied = await cicustomRefusal(id, body.cicustom)
+      if (cicustomDenied) return cicustomDenied
     }
 
     try {

@@ -205,3 +205,22 @@ describe('validateDriveAgainstScope — guest volume ownership (targetVmid)', ()
     expect(validateDriveAgainstScope('scsi1', 'ceph-nvme:vm-109-disk-0', scope).ok).toBe(true)
   })
 })
+
+describe('cicustomStorages', () => {
+  it('lists the storages of a well-formed line', async () => {
+    const { cicustomStorages } = await import('./drives')
+
+    expect(cicustomStorages('user=local:snippets/user.yaml')).toEqual(['local'])
+    expect(cicustomStorages('user=local:snippets/u.yaml, network=nfs-1:snippets/n.yaml,meta=local:snippets/m.yaml,vendor=cephfs:snippets/v.yaml')).toEqual(['local', 'nfs-1', 'local', 'cephfs'])
+    expect(cicustomStorages('')).toEqual([])
+    expect(cicustomStorages(undefined)).toEqual([])
+  })
+
+  it('answers null for anything else', async () => {
+    const { cicustomStorages } = await import('./drives')
+
+    for (const value of ['/etc/shadow', 'user=/etc/shadow', 'user=local', 'user=local:', 'script=local:snippets/x', 'user=local:snippets/../x', 'user=local:snippets/a,../b', 'local:snippets/x']) {
+      expect(cicustomStorages(value), value).toBeNull()
+    }
+  })
+})

@@ -24,13 +24,31 @@
 // and neither does an expired grant, which lib/rbac already ignores when it
 // loads permissions.
 
+import { isRoleAvailableInTenant, type PublishableRole } from "@/lib/rbac/rolePublication"
+
+const DEFAULT_TENANT = "default"
+
+/**
+ * System roles that never land in a customer tenant (mirror of
+ * PROTECTED_ROLE_IDS + PROVIDER_ONLY_ROLE_IDS in lib/rbac, inlined: lib/rbac
+ * pulls Prisma and this module stays injectable).
+ */
+const PROVIDER_ONLY_IN_TENANT: readonly string[] = [
+  "role_super_admin",
+  "role_provider_admin",
+  "role_operator",
+  "role_vm_admin",
+  "role_viewer",
+  "role_vm_user",
+]
+
 /** Id prefixes of the rows the sign-in providers own and manage themselves. */
 const PROVIDER_ID_PREFIXES = ["oidc_", "ldap_"] as const
 
 // Minimal Prisma surface the sync needs — injected so the logic is unit
 // testable without a real client.
 export type ProviderSyncDb = {
-  rbacRole: { findUnique: (args: any) => Promise<{ id: string } | null> }
+  rbacRole: { findUnique: (args: any) => Promise<({ id: string } & Partial<PublishableRole>) | null> }
   rbacUserRole: {
     findFirst: (args: any) => Promise<{ id: string } | null>
     deleteMany: (args: any) => Promise<unknown>
@@ -218,6 +236,35 @@ async function tryMembership(label: string, fn: () => Promise<void>): Promise<vo
   }
 }
 
+/** The roles a set of grants names, read once each (null = deleted). */
+async function loadSyncRoles(db: ProviderSyncDb, roleIds: string[]): Promise<Map<string, PublishableRole | null>> {
+  const ids = Array.from(new Set(roleIds))
+  const rows = await Promise.all(
+    ids.map(id =>
+      db.rbacRole.findUnique({
+        where: { id },
+        select: { id: true, isSystem: true, tenantId: true, audience: true, publishAll: true, publications: { select: { tenantId: true } } },
+      }),
+    ),
+  )
+  const out = new Map<string, PublishableRole | null>()
+  ids.forEach((id, i) => {
+    const row = rows[i]
+    out.set(id, row ? { isSystem: !!row.isSystem, tenantId: row.tenantId ?? null, audience: row.audience ?? null, publishAll: row.publishAll ?? false, publications: row.publications ?? [] } : null)
+  })
+  return out
+}
+
+/**
+ * The rules guardRoleAssignment applies to a manual grant, applied to the
+ * IdP's: provider-only system roles stay in the provider tenant, and a custom
+ * role reaches a customer tenant only when published there (ui#1336).
+ */
+function grantStandsInTenant(grant: ProviderGrantRow, role: PublishableRole): boolean {
+  if (grant.tenantId !== DEFAULT_TENANT && PROVIDER_ONLY_IN_TENANT.includes(grant.roleId)) return false
+  return isRoleAvailableInTenant(role, grant.tenantId)
+}
+
 /**
  * Reconcile the provider-owned RBAC rows of a user against the grants resolved
  * from the IdP on this login.
@@ -266,8 +313,25 @@ export async function syncProviderGrants(
     return
   }
 
-  const byTenant = new Map<string, ProviderGrantRow[]>()
+  // Resolve every distinct role once. A role deleted since the mapping was
+  // written must degrade to the lowest viewer of that tenant rather than
+  // FK-fail the whole login: role_viewer in the provider tenant,
+  // role_tenant_viewer in a customer one, where provider-only roles never go.
+  // A role that exists but is not published to the grant's tenant grants
+  // nothing there (ui#1336): the row is dropped, not degraded.
+  const roleRows = await loadSyncRoles(db, grants.map(g => g.roleId))
+  const effectiveGrants: ProviderGrantRow[] = []
   for (const grant of grants) {
+    const role = roleRows.get(grant.roleId)
+    if (!role) {
+      effectiveGrants.push({ ...grant, roleId: grant.tenantId === DEFAULT_TENANT ? "role_viewer" : "role_tenant_viewer" })
+    } else if (grantStandsInTenant(grant, role)) {
+      effectiveGrants.push(grant)
+    }
+  }
+
+  const byTenant = new Map<string, ProviderGrantRow[]>()
+  for (const grant of effectiveGrants) {
     const rows = byTenant.get(grant.tenantId)
     if (rows) rows.push(grant)
     else byTenant.set(grant.tenantId, [grant])
@@ -278,14 +342,6 @@ export async function syncProviderGrants(
     select: { id: true, tenantId: true },
   })
   const ownedTenants = new Set(ownedRows.map(row => row.tenantId))
-
-  // Resolve every distinct role once. A role deleted since the mapping was
-  // written must degrade to viewer rather than FK-fail the whole login.
-  const validRoleIds = new Set<string>()
-  for (const roleId of new Set(grants.map(g => g.roleId))) {
-    const row = await db.rbacRole.findUnique({ where: { id: roleId }, select: { id: true } })
-    if (row) validRoleIds.add(roleId)
-  }
 
   for (const [tenantId, rows] of byTenant) {
     if (!ownedTenants.has(tenantId)) {
@@ -309,7 +365,7 @@ export async function syncProviderGrants(
           data: {
             id: newId(),
             userId,
-            roleId: validRoleIds.has(row.roleId) ? row.roleId : "role_viewer",
+            roleId: row.roleId,
             scopeType: row.scopeType,
             scopeTarget: row.scopeTarget,
             tenantId,

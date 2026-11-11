@@ -5758,7 +5758,8 @@
         "settings": "설정 수정",
         "audit": "감사 로그 보기",
         "compliance": "컴플라이언스 및 보안 정책 관리",
-        "tenants": "테넌트 관리 (멀티 테넌시)"
+        "tenants": "테넌트 관리 (멀티 테넌시)",
+        "apitokens": "API 토큰 관리(생성, 취소)"
       },
       "sdn": {
         "vnet": {
@@ -8413,7 +8414,8 @@
     "mappingStrategyFirstMatch": "일치하는 첫 번째 역할 사용",
     "mappingStrategyCumulative": "일치하는 모든 역할 결합",
     "mappingStrategyFirstMatchHelper": "가장 위에 있는 일치 행이 적용되며, 테넌트와 vDC마다 역할은 하나입니다.",
-    "mappingStrategyCumulativeHelper": "사용자는 일치하는 모든 역할을 받으며, 권한은 해당 역할들의 합집합입니다."
+    "mappingStrategyCumulativeHelper": "사용자는 일치하는 모든 역할을 받으며, 권한은 해당 역할들의 합집합입니다.",
+    "allPublishedTenants": "게시된 모든 테넌트"
   },
   "ceph": {
     "clusterHealth": "클러스터 상태",
@@ -8703,7 +8705,41 @@
     "poolContainsVms": "VM {count}개",
     "tags": "태그",
     "pools": "풀",
-    "storages": "스토리지"
+    "storages": "스토리지",
+    "catalogue": {
+      "audience": "대상",
+      "audienceLegacy": "공급자 테넌트(기존)",
+      "audienceLegacyDesc": "카탈로그 이전에 생성됨: 공급자 테넌트에서만 사용",
+      "audienceProvider": "공급자",
+      "audienceServiceDesk": "서비스 데스크",
+      "audienceTenant": "테넌트",
+      "audienceProviderDesc": "공급자 테넌트 전용",
+      "audienceServiceDeskDesc": "게시된 테넌트 안에서 일하는 공급자 직원용, 공급자만 할당",
+      "audienceTenantDesc": "테넌트에 게시됨, 해당 테넌트 관리자가 할당 가능",
+      "publication": "게시",
+      "publishAll": "향후 테넌트를 포함한 모든 테넌트",
+      "allTenantsBox": "전체",
+      "noTenants": "테넌트 없음",
+      "noTenantSelected": "테넌트를 하나 이상 선택하거나 모든 테넌트에 게시하세요",
+      "ceilingNotice": "공급자 전용 권한은 사용할 수 없습니다",
+      "ceilingHint": "공급자 전용: 테넌트에 게시된 역할에는 포함할 수 없습니다",
+      "revokeTitle": "할당을 취소할까요?",
+      "revokeIntro": "다음 테넌트가 게시에서 제외됩니다. 해당 테넌트에서 이 역할의 할당이 취소됩니다:",
+      "revokeCount": "할당 {count}개",
+      "revokeConfirm": "취소 후 저장",
+      "catalogueChip": "공급자 카탈로그",
+      "publishedToAll": "모든 테넌트에 게시됨",
+      "publishedTo": "테넌트 {count}개에 게시됨",
+      "legacyPublished": "테넌트 {count}개에서 SSO",
+      "legacyPublishedHint": "SSO 그룹 매핑을 통해서만 이 테넌트에 적용됩니다. 게시하려면 대상을 선택하세요.",
+      "serviceDeskTarget": "테넌트",
+      "serviceDeskTargetAll": "향후 테넌트를 포함해 역할이 게시된 모든 테넌트",
+      "serviceDeskEditTitle": "서비스 데스크 할당",
+      "serviceDeskTenants": "테넌트 {count}개",
+      "serviceDeskAllTenantsShort": "게시된 전체 ({count})",
+      "serviceDeskManaged": "공급자 서비스 데스크 계정: 공급자가 관리",
+      "serviceDeskChip": "서비스 데스크"
+    }
   },
   "drsPage": {
     "balanced": "균형",

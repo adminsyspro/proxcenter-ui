@@ -3,9 +3,11 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import { firewallParamRefusal } from '@/lib/firewall/pathParams'
 import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -20,13 +22,15 @@ async function deleteHandler(
     const { connectionId, groupName } = await params
     const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ group: groupName })
+    if (malformed) return malformed
 
     const orchestrator = getOrchestratorClient()
 
     // Community has no orchestrator: delete straight on PVE (#616).
     await orchestratorOrPve(
       'firewall/groups',
-      () => orchestrator.delete(`/firewall/groups/${connectionId}/${groupName}`),
+      () => orchestrator.delete(orchestratorPath`/firewall/groups/${connectionId}/${groupName}`),
       async () => pveDirect.deleteSecurityGroup(await getConnectionById(connectionId), groupName),
     )
 

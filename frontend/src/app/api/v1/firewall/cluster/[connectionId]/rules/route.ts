@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
@@ -26,7 +27,7 @@ async function postHandler(
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/cluster/rules',
-      () => orchestrator.post(`/firewall/cluster/${connectionId}/rules`, body),
+      () => orchestrator.post(orchestratorPath`/firewall/cluster/${connectionId}/rules`, body),
       async () => pveDirect.addClusterRule(await getConnectionById(connectionId), body),
     )
 

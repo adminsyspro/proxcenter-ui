@@ -9,6 +9,7 @@ const { prismaMock, pveFetchMock, getConnectionByIdMock } = vi.hoisted(() => ({
   prismaMock: {
     vdc: { findUnique: vi.fn(), findMany: vi.fn() },
     connection: { findUnique: vi.fn() },
+    sdnEvpnZone: { findMany: vi.fn() },
   } as any,
   pveFetchMock: vi.fn(),
   getConnectionByIdMock: vi.fn(),
@@ -38,6 +39,8 @@ beforeEach(() => {
   pveFetchMock.mockReset()
   prismaMock.vdc.findUnique.mockReset()
   prismaMock.vdc.findMany.mockReset()
+  prismaMock.sdnEvpnZone.findMany.mockReset()
+  prismaMock.sdnEvpnZone.findMany.mockResolvedValue([])
   prismaMock.vdc.findMany.mockResolvedValue([])
   prismaMock.connection.findUnique.mockReset()
   getConnectionByIdMock.mockReset()
@@ -348,5 +351,16 @@ describe('assertNoVniRangeOverlap (roadmap#18)', () => {
     prismaMock.vdc.findMany.mockResolvedValue([{ name: 'vdc-b', vniRangeStart: 20010, vniRangeEnd: 20019 }])
     await expect(assertNoVniRangeOverlap('c1', null, ranged(20000, 20009))).resolves.toBeUndefined()
     expect(prismaMock.vdc.findMany.mock.calls[0][0].where.id).toBeUndefined()
+  })
+
+  // The VNI space of an EVPN zone is reserved on every cluster (#1334).
+  it('refuses a range overlapping an EVPN zone or holding its VRF VNI', async () => {
+    prismaMock.vdc.findMany.mockResolvedValue([])
+    prismaMock.sdnEvpnZone.findMany.mockResolvedValue([{ zoneName: 'zevpn', vrfVxlan: 9000, vniStart: 9001, vniEnd: 9099 }])
+    await expect(assertNoVniRangeOverlap('c1', 'v1', ranged(9050, 9150)))
+      .rejects.toThrow('VNI range 9050-9150 overlaps the range 9001-9099 reserved for EVPN zone "zevpn"')
+    await expect(assertNoVniRangeOverlap('c1', 'v1', ranged(8990, 9000)))
+      .rejects.toThrow('VNI range 8990-9000 contains VNI 9000, the VRF of EVPN zone "zevpn"')
+    await expect(assertNoVniRangeOverlap('c1', 'v1', ranged(9100, 9199))).resolves.toBeUndefined()
   })
 })

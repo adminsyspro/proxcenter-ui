@@ -40,6 +40,7 @@ import { useTranslations } from 'next-intl'
 
 import StoragePoliciesSection from './StoragePoliciesSection'
 import VdcPbsBindingsSection from './VdcPbsBindingsSection'
+import EvpnZonesSection from './EvpnZonesSection'
 import TenantNetworksSection from './TenantNetworksSection'
 import VdcHelpSection from './VdcHelpSection'
 import VdcGpuQuotaEditor, { type VdcGpuQuotaHandle } from './VdcGpuQuotaEditor'
@@ -369,7 +370,7 @@ export default function VdcTab() {
   const [dialogTab, setDialogTab] = useState(0)
   // Sub-tabs: the vDC list and the connection-level storage policies are
   // separate concerns; showing both stacked made the page too long.
-  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks' | 'usage-history' | 'help'>('vdcs')
+  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks' | 'evpn' | 'usage-history' | 'help'>('vdcs')
   const [editingVdc, setEditingVdc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
   // GPU contingent row of the Quotas tab (#672): written by the dialog's save.
@@ -2080,6 +2081,15 @@ export default function VdcTab() {
           }
         />
         <Tab
+          value="evpn"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-share-line" style={{ fontSize: 18 }} />
+              {t('vdc.evpn.title')}
+            </Box>
+          }
+        />
+        <Tab
           value="usage-history"
           label={
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2101,6 +2111,7 @@ export default function VdcTab() {
 
       {activeSection === 'policies' && <StoragePoliciesSection connections={connections} />}
       {activeSection === 'networks' && <TenantNetworksSection tenants={tenants} vdcs={vdcs} connections={connections} />}
+      {activeSection === 'evpn' && <EvpnZonesSection connections={connections} />}
       {activeSection === 'usage-history' && (
         <>
           <VdcUsageHistorySettings />

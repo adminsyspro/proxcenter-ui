@@ -12,6 +12,7 @@ import { prisma } from '@/lib/db/prisma'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 import { gatewayValidForCidr, parseCidr } from './network'
+import { evpnReservations, inEvpnRange } from './evpnReservations'
 import { listVnetsPve, VNI_BASE } from './sdn'
 import { VNI_MAX, ZONE_MTU_MAX, ZONE_MTU_MIN } from './transport'
 
@@ -189,6 +190,9 @@ async function takenVnis(): Promise<Map<number, string>> {
       if (Number.isFinite(v.tag) && !taken.has(v.tag)) taken.set(v.tag, `a VNet of cluster "${cluster.name}"`)
     }
   }
+  for (const vrf of (await evpnReservations()).vrfVnis) {
+    if (!taken.has(vrf.vni)) taken.set(vrf.vni, `the VRF of EVPN zone "${vrf.zoneName}"`)
+  }
   return taken
 }
 
@@ -200,16 +204,22 @@ async function takenVnis(): Promise<Map<number, string>> {
  */
 export async function allocateTenantVni(requested: number | null): Promise<number> {
   const taken = await takenVnis()
+  // The ranges of the EVPN zones are theirs on every cluster (#1334).
+  const evpn = await evpnReservations()
 
   if (requested !== null) {
     const holder = taken.get(requested)
     if (holder) throw new Error(`${ERR} VNI ${requested} is already used by ${holder}.`)
+    const zone = evpn.ranges.find(r => requested >= r.start && requested <= r.end)
+    if (zone) throw new Error(`${ERR} VNI ${requested} is already reserved for EVPN zone "${zone.zoneName}" (${zone.start}-${zone.end}).`)
     return requested
   }
 
+  // A VNet inside an EVPN range must not drag the allocation above that range.
   let max = VNI_BASE - 1
-  for (const vni of taken.keys()) if (vni > max) max = vni
-  const next = max + 1
+  for (const vni of taken.keys()) if (vni > max && !inEvpnRange(vni, evpn)) max = vni
+  let next = max + 1
+  while (next <= VNI_MAX && (taken.has(next) || inEvpnRange(next, evpn))) next++
   if (next > VNI_MAX) throw new Error(`${ERR} no free VNI left below ${VNI_MAX}.`)
   return next
 }

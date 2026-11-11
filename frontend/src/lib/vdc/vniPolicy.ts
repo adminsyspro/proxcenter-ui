@@ -18,6 +18,7 @@ import { getConnectionById } from '@/lib/connections/getConnection'
 import { prisma } from '@/lib/db/prisma'
 import { pveFetch } from '@/lib/proxmox/client'
 
+import { evpnReservations } from './evpnReservations'
 import { allocateVni, listVnetsPve } from './sdn'
 import { VNI_MAX, vniPolicyFor, type VdcTransport, type VniPolicy } from './transport'
 import type { SdnVnet } from './types'
@@ -45,20 +46,46 @@ export interface VniHolder {
   vdcId: string | null
   network?: string
   label: string
+  /** Live holders only: the PVE zone carrying it and its type. */
+  zone?: string
+  zoneType?: string | null
+}
+
+interface LiveOverlay {
+  vnets: Array<SdnVnet & { zoneType: string | null }>
+  /** VNI of the VRF of each EVPN zone: Proxmox lets a VNet take it. */
+  vrfs: Array<{ zone: string; vni: number }>
 }
 
 /**
- * The VNets of the VXLAN / EVPN zones of one cluster, as Proxmox runs them.
- * Only those zones compete for the VNI space: a VLAN VNet's tag 200 must not
- * block VNI 200. Without the zone list every tagged VNet is kept.
+ * The VNI space one cluster runs: the VNets of its VXLAN / EVPN zones and the
+ * VRF VNI of its EVPN zones. Only those zones compete for the VNI space: a
+ * VLAN VNet's tag 200 must not block VNI 200. Without the zone list every
+ * tagged VNet is kept.
  */
-async function liveOverlayVnets(conn: any): Promise<SdnVnet[]> {
+async function liveOverlay(conn: any): Promise<LiveOverlay> {
   const zones = await pveFetch<any[]>(conn, '/cluster/sdn/zones').catch(() => null)
   const overlayZones = zones
-    ? new Set(zones.filter((z: any) => z?.type === 'vxlan' || z?.type === 'evpn').map((z: any) => String(z.zone)))
+    ? new Map<string, string>(zones.filter((z: any) => z?.type === 'vxlan' || z?.type === 'evpn').map((z: any): [string, string] => [String(z.zone), String(z.type)]))
     : null
-  return (await listVnetsPve(conn)).filter(v =>
-    Number.isFinite(v.tag) && (!overlayZones || overlayZones.has(String(v.zone))))
+  const vnets = (await listVnetsPve(conn))
+    .filter(v => Number.isFinite(v.tag) && (!overlayZones || overlayZones.has(String(v.zone))))
+    .map(v => ({ ...v, zoneType: overlayZones?.get(String(v.zone)) ?? null }))
+  const vrfs = (zones || [])
+    .filter((z: any) => z?.type === 'evpn' && Number.isInteger(Number(z['vrf-vxlan'])))
+    .map((z: any) => ({ zone: String(z.zone), vni: Number(z['vrf-vxlan']) }))
+  return { vnets, vrfs }
+}
+
+function addLive(taken: Map<number, VniHolder>, live: LiveOverlay, where: string): void {
+  for (const v of live.vnets) {
+    if (!taken.has(v.tag)) {
+      taken.set(v.tag, { vdcId: null, label: `VNet "${v.vnet}" of zone "${v.zone}" ${where}`, zone: String(v.zone), zoneType: v.zoneType })
+    }
+  }
+  for (const vrf of live.vrfs) {
+    if (!taken.has(vrf.vni)) taken.set(vrf.vni, { vdcId: null, label: `the VRF of EVPN zone "${vrf.zone}" ${where}`, zone: vrf.zone, zoneType: 'evpn' })
+  }
 }
 
 /**
@@ -73,8 +100,9 @@ async function liveOverlayVnets(conn: any): Promise<SdnVnet[]> {
  * Holders: the VXLAN VNets ProxCenter created (those of this cluster first,
  * so a tenant is told about its own network), the stretched tenant networks,
  * whose VNI is reserved everywhere, and the live tag set of the VXLAN / EVPN
- * zones of each cluster (legacy zones, manual work). The live reads are best
- * effort: an unreachable cluster leaves the database and the PVE 400.
+ * zones of each cluster (legacy zones, manual work) with the VRF VNI of its
+ * EVPN zones, and the VRF VNI of the declared EVPN zones. The live reads are
+ * best effort: an unreachable cluster leaves the database and the PVE 400.
  */
 export async function takenVnisOnTransport(connectionId: string, conn?: any): Promise<Map<number, VniHolder>> {
   const taken = new Map<number, VniHolder>()
@@ -96,9 +124,7 @@ export async function takenVnisOnTransport(connectionId: string, conn?: any): Pr
 
   if (conn) {
     try {
-      for (const v of await liveOverlayVnets(conn)) {
-        if (!taken.has(v.tag)) taken.set(v.tag, { vdcId: null, label: `VNet "${v.vnet}" of zone "${v.zone}" on the cluster` })
-      }
+      addLive(taken, await liveOverlay(conn), 'on the cluster')
     } catch {
       // Best effort, see above.
     }
@@ -111,32 +137,37 @@ export async function takenVnisOnTransport(connectionId: string, conn?: any): Pr
   })
   const liveElsewhere = await Promise.all(others.map(async c => {
     try {
-      return { name: c.name, vnets: await liveOverlayVnets(await getConnectionById(c.id, c.tenantId)) }
+      return { name: c.name, live: await liveOverlay(await getConnectionById(c.id, c.tenantId)) }
     } catch {
-      return { name: c.name, vnets: [] as SdnVnet[] }
+      return { name: c.name, live: { vnets: [], vrfs: [] } as LiveOverlay }
     }
   }))
-  for (const cluster of liveElsewhere) {
-    for (const v of cluster.vnets) {
-      if (!taken.has(v.tag)) taken.set(v.tag, { vdcId: null, label: `VNet "${v.vnet}" of zone "${v.zone}" on cluster "${cluster.name}"` })
-    }
+  for (const cluster of liveElsewhere) addLive(taken, cluster.live, `on cluster "${cluster.name}"`)
+
+  for (const vrf of (await evpnReservations()).vrfVnis) {
+    if (!taken.has(vrf.vni)) taken.set(vrf.vni, { vdcId: null, label: `the VRF of EVPN zone "${vrf.zoneName}"`, zone: vrf.zoneName, zoneType: 'evpn' })
   }
   return taken
 }
 
 /**
- * The VNI ranges the provider handed to the OTHER vDCs of the connection:
- * reserved for them, so neither a tenant choice nor the automatic allocator
- * of a vDC without a range may land inside one.
+ * The VNI ranges the provider handed to the OTHER vDCs of the connection and
+ * to the EVPN zones, on any cluster: reserved for them, so neither a tenant
+ * choice nor the automatic allocator of a vDC without a range may land
+ * inside one.
  */
 export async function reservedRangesOnTransport(connectionId: string, vdcId: string): Promise<Array<{ start: number; end: number; vdcName: string }>> {
   const rows = await prisma.vdc.findMany({
     where: { connectionId, id: { not: vdcId }, vniRangeStart: { not: null } },
     select: { name: true, vniRangeStart: true, vniRangeEnd: true },
   })
-  return rows
-    .filter(r => r.vniRangeStart !== null && r.vniRangeEnd !== null)
-    .map(r => ({ start: r.vniRangeStart!, end: r.vniRangeEnd!, vdcName: r.name }))
+  const evpn = (await evpnReservations()).ranges.map(r => ({ start: r.start, end: r.end, vdcName: r.zoneName }))
+  return [
+    ...rows
+      .filter(r => r.vniRangeStart !== null && r.vniRangeEnd !== null)
+      .map(r => ({ start: r.vniRangeStart!, end: r.vniRangeEnd!, vdcName: r.name })),
+    ...evpn,
+  ]
 }
 
 function isReserved(vni: number, ranges: Array<{ start: number; end: number }>): boolean {

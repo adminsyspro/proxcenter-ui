@@ -14,6 +14,7 @@ const { prismaMock, getConnectionByIdMock, listVnetsPveMock } = vi.hoisted(() =>
     vdcVnet: { findMany: vi.fn(), findFirst: vi.fn() },
     connection: { findMany: vi.fn(), findUnique: vi.fn() },
     vdcSubnet: { create: vi.fn(), updateMany: vi.fn() },
+    sdnEvpnZone: { findMany: vi.fn() },
   } as any,
   getConnectionByIdMock: vi.fn(),
   listVnetsPveMock: vi.fn(),
@@ -58,6 +59,7 @@ beforeEach(() => {
   prismaMock.vdcVnet.findMany.mockResolvedValue([])
   prismaMock.vdcVnet.findFirst.mockResolvedValue(null)
   prismaMock.connection.findMany.mockResolvedValue([])
+  prismaMock.sdnEvpnZone.findMany.mockResolvedValue([])
   prismaMock.connection.findUnique.mockResolvedValue({ tenantId: 'default' })
   getConnectionByIdMock.mockResolvedValue({ id: 'conn' })
   listVnetsPveMock.mockResolvedValue([])
@@ -121,6 +123,18 @@ describe('allocateTenantVni', () => {
     await expect(allocateTenantVni(10010)).rejects.toThrow('VNI 10010 is already used by network "lan" of vDC "Acme prod"')
     await expect(allocateTenantVni(20000)).rejects.toThrow('already used by tenant network "other"')
     await expect(allocateTenantVni(30000)).rejects.toThrow('already used by a VNet of cluster "cluster-c1"')
+  })
+
+  // The VNI space of an EVPN zone is reserved on every cluster (#1334).
+  it('stays out of the range and off the VRF VNI of the EVPN zones', async () => {
+    clusters('c1')
+    prismaMock.sdnEvpnZone.findMany.mockResolvedValue([{ zoneName: 'zevpn', vrfVxlan: 10000, vniStart: 10001, vniEnd: 10099 }])
+    // A VNet of the zone sits inside its range: it must not drag the allocation above it.
+    listVnetsPveMock.mockResolvedValue([{ vnet: 'vev', zone: 'zevpn', tag: 10050, firewall: 0 }])
+
+    await expect(allocateTenantVni(null)).resolves.toBe(10100)
+    await expect(allocateTenantVni(10020)).rejects.toThrow('VNI 10020 is already reserved for EVPN zone "zevpn" (10001-10099)')
+    await expect(allocateTenantVni(10000)).rejects.toThrow('VNI 10000 is already used by the VRF of EVPN zone "zevpn"')
   })
 })
 

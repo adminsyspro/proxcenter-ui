@@ -14,7 +14,7 @@ vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: async (id
 import { DEFAULT_TRANSPORT, type VdcTransport } from './transport'
 import { normalizeRequestedVni, pickVni, takenVnisOnTransport, VniError } from './vniPolicy'
 
-const TABLES = ['tenant_network_members', 'tenant_networks', 'vdc_vnets', 'vdcs', 'provider_connections', 'Connection', 'tenants']
+const TABLES = ['sdn_evpn_zone_members', 'sdn_evpn_zones', 'tenant_network_members', 'tenant_networks', 'vdc_vnets', 'vdcs', 'provider_connections', 'Connection', 'tenants']
 const conn = { id: 'conn-1', baseUrl: 'https://pve.test', apiToken: 'tok' }
 
 beforeEach(async () => {
@@ -93,7 +93,7 @@ describe('takenVnisOnTransport', () => {
     expect(taken.get(10000)).toEqual({ vdcId: 'vdc-a', network: 'lan', label: 'network "lan" of vDC "vdc-a"' })
     expect(taken.get(10002)).toEqual({ vdcId: 'vdc-c', network: 'other-cluster', label: 'network "other-cluster" of vDC "vdc-c"' })
     expect(taken.get(50000)).toEqual({ vdcId: null, label: 'tenant network "stretch"' })
-    expect(taken.get(777)).toEqual({ vdcId: null, label: 'VNet "old" of zone "legacy" on the cluster' })
+    expect(taken.get(777)).toEqual({ vdcId: null, label: 'VNet "old" of zone "legacy" on the cluster', zone: 'legacy', zoneType: 'vxlan' })
   })
 
   it('counts the live overlay VNets of the other clusters, never their VLAN tags', async () => {
@@ -105,7 +105,20 @@ describe('takenVnisOnTransport', () => {
     })
     const taken = await takenVnisOnTransport('conn-1', conn)
     expect([...taken.keys()]).toEqual([4242])
-    expect(taken.get(4242)).toEqual({ vdcId: null, label: 'VNet "hand" of zone "manual" on cluster "pve-2"' })
+    expect(taken.get(4242)).toEqual({ vdcId: null, label: 'VNet "hand" of zone "manual" on cluster "pve-2"', zone: 'manual', zoneType: 'vxlan' })
+  })
+
+  // Proxmox lets a VNet take the VNI of an EVPN zone's VRF (#1334).
+  it('counts the VRF VNI of the EVPN zones, live on any cluster and declared', async () => {
+    pveFetchMock.mockImplementation(async (c: any, path: string) => {
+      if (path !== '/cluster/sdn/zones') return []
+      return c.id === 'conn-1' ? [{ zone: 'zlocal', type: 'evpn', 'vrf-vxlan': 9000 }] : [{ zone: 'zfar', type: 'evpn', 'vrf-vxlan': 9100 }]
+    })
+    await prismaTest.sdnEvpnZone.create({ data: { id: 'z1', name: 'Shared', zoneName: 'zdecl', vrfVxlan: 9200, vniStart: 9201, vniEnd: 9299 } })
+    const taken = await takenVnisOnTransport('conn-1', conn)
+    expect(taken.get(9000)).toEqual({ vdcId: null, label: 'the VRF of EVPN zone "zlocal" on the cluster', zone: 'zlocal', zoneType: 'evpn' })
+    expect(taken.get(9100)?.label).toBe('the VRF of EVPN zone "zfar" on cluster "pve-2"')
+    expect(taken.get(9200)?.label).toBe('the VRF of EVPN zone "zdecl"')
   })
 
   it('a network of this cluster is named before a network of another cluster holding the same VNI', async () => {
@@ -188,5 +201,13 @@ describe('pickVni', () => {
       return []
     })
     expect(await pickVni({ ...base, transport: shared(), requested: null })).toBe(10002)
+  })
+
+  // The VNI space of an EVPN zone is reserved on every cluster (#1334).
+  it('the range of an EVPN zone is off limits to a tenant choice and to the automatic allocator', async () => {
+    await prismaTest.sdnEvpnZone.create({ data: { id: 'z1', name: 'Shared', zoneName: 'zevpn', vrfVxlan: 9999, vniStart: 10000, vniEnd: 10004 } })
+    const refused = await pickVni({ ...base, transport: dedicated, requested: 10002 }).catch(e => e)
+    expect(refused).toMatchObject({ status: 409, message: 'VNI 10002 is already in use on this transport.' })
+    expect(await pickVni({ ...base, transport: shared(), requested: null })).toBe(10005)
   })
 })

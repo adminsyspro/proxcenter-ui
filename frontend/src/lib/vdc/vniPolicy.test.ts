@@ -8,12 +8,14 @@ import { prismaTest, truncate } from '../../__tests__/setup/prisma-test'
 
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: (...a: any[]) => pveFetchMock(...a) }))
+// The other clusters are read through their own connection: `id` tells the mock which one is asked.
+vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: async (id: string) => ({ id, baseUrl: `https://${id}`, apiToken: 'tok' }) }))
 
 import { DEFAULT_TRANSPORT, type VdcTransport } from './transport'
 import { normalizeRequestedVni, pickVni, takenVnisOnTransport, VniError } from './vniPolicy'
 
 const TABLES = ['tenant_network_members', 'tenant_networks', 'vdc_vnets', 'vdcs', 'provider_connections', 'Connection', 'tenants']
-const conn = { baseUrl: 'https://pve.test', apiToken: 'tok' }
+const conn = { id: 'conn-1', baseUrl: 'https://pve.test', apiToken: 'tok' }
 
 beforeEach(async () => {
   await truncate(TABLES)
@@ -71,13 +73,14 @@ describe('normalizeRequestedVni', () => {
 })
 
 describe('takenVnisOnTransport', () => {
-  it('unions the vDCs of the connection, the stretched networks and the live overlay zones only', async () => {
+  it('unions the vDCs of every cluster, the stretched networks and the live overlay zones only', async () => {
     await vnet('vdc-a', 'va', 10000, 'lan')
     await vnet('vdc-b', 'vb', 10001, 'dmz')
     await vnet('vdc-b', 'vv', 300, 'vl', 'vlan')
     await vnet('vdc-c', 'vc', 10002, 'other-cluster')
     await prismaTest.tenantNetwork.create({ data: { id: 'tn', tenantId: 'tenant-a', name: 'stretch', pveName: 'vstretch', vni: 50000, updatedAt: new Date() } })
-    pveFetchMock.mockImplementation(async (_c: any, path: string) => {
+    pveFetchMock.mockImplementation(async (c: any, path: string) => {
+      if (c.id !== 'conn-1') return []
       if (path === '/cluster/sdn/zones') return [{ zone: 'legacy', type: 'vxlan' }, { zone: 'vl', type: 'vlan' }, { zone: 'ev', type: 'evpn' }]
       if (path === '/cluster/sdn/vnets') return [
         { vnet: 'old', zone: 'legacy', tag: 777 }, { vnet: 'vlan1', zone: 'vl', tag: 200 }, { vnet: 'e1', zone: 'ev', tag: 888 },
@@ -86,10 +89,29 @@ describe('takenVnisOnTransport', () => {
     })
 
     const taken = await takenVnisOnTransport('conn-1', conn)
-    expect([...taken.keys()].sort((x, y) => x - y)).toEqual([777, 888, 10000, 10001, 50000])
+    expect([...taken.keys()].sort((x, y) => x - y)).toEqual([777, 888, 10000, 10001, 10002, 50000])
     expect(taken.get(10000)).toEqual({ vdcId: 'vdc-a', network: 'lan', label: 'network "lan" of vDC "vdc-a"' })
+    expect(taken.get(10002)).toEqual({ vdcId: 'vdc-c', network: 'other-cluster', label: 'network "other-cluster" of vDC "vdc-c"' })
     expect(taken.get(50000)).toEqual({ vdcId: null, label: 'tenant network "stretch"' })
     expect(taken.get(777)).toEqual({ vdcId: null, label: 'VNet "old" of zone "legacy" on the cluster' })
+  })
+
+  it('counts the live overlay VNets of the other clusters, never their VLAN tags', async () => {
+    pveFetchMock.mockImplementation(async (c: any, path: string) => {
+      if (c.id !== 'conn-2') return []
+      if (path === '/cluster/sdn/zones') return [{ zone: 'manual', type: 'vxlan' }, { zone: 'vl', type: 'vlan' }]
+      if (path === '/cluster/sdn/vnets') return [{ vnet: 'hand', zone: 'manual', tag: 4242 }, { vnet: 'vlan1', zone: 'vl', tag: 200 }]
+      return []
+    })
+    const taken = await takenVnisOnTransport('conn-1', conn)
+    expect([...taken.keys()]).toEqual([4242])
+    expect(taken.get(4242)).toEqual({ vdcId: null, label: 'VNet "hand" of zone "manual" on cluster "pve-2"' })
+  })
+
+  it('a network of this cluster is named before a network of another cluster holding the same VNI', async () => {
+    await vnet('vdc-c', 'vc', 10000, 'far')
+    await vnet('vdc-a', 'va', 10000, 'near')
+    expect((await takenVnisOnTransport('conn-1', conn)).get(10000)?.vdcId).toBe('vdc-a')
   })
 
   it('survives an unreachable cluster', async () => {
@@ -148,8 +170,23 @@ describe('pickVni', () => {
     expect(refused.message).not.toMatch(/theirs|vdc-b/)
   })
 
-  it('a VNI held on another cluster does not block this transport', async () => {
-    await vnet('vdc-c', 'vc', 20000)
-    expect(await pickVni({ ...base, transport: shared(20000, 20005), requested: 20000 })).toBe(20000)
+  // An EVPN control plane linking two clusters advertises every local VNI,
+  // static VXLAN zones included: the same VNI on two clusters is one L2 domain.
+  it('a VNI held on another cluster is refused, without naming who holds it', async () => {
+    await vnet('vdc-c', 'vc', 20000, 'theirs')
+    const refused = await pickVni({ ...base, transport: shared(20000, 20005), requested: 20000 }).catch(e => e)
+    expect(refused).toMatchObject({ status: 409, message: 'VNI 20000 is already in use on this transport.' })
+    expect(await pickVni({ ...base, transport: shared(20000, 20005), requested: null })).toBe(20001)
+  })
+
+  it('the automatic allocator steps over the VNIs of the other clusters, database and live', async () => {
+    await vnet('vdc-c', 'vc', 10000)
+    pveFetchMock.mockImplementation(async (c: any, path: string) => {
+      if (c.id !== 'conn-2') return []
+      if (path === '/cluster/sdn/zones') return [{ zone: 'manual', type: 'evpn' }]
+      if (path === '/cluster/sdn/vnets') return [{ vnet: 'hand', zone: 'manual', tag: 10001 }]
+      return []
+    })
+    expect(await pickVni({ ...base, transport: shared(), requested: null })).toBe(10002)
   })
 })

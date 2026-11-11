@@ -2,10 +2,11 @@
 // VNI choice of a tenant VXLAN network, scoped to the transport (roadmap#18).
 //
 // Proxmox refuses a VXLAN tag already carried by any VXLAN or EVPN VNet of
-// the cluster (VxlanPlugin::vnet_update_hook), whatever zone holds it. The
-// transport scope ProxCenter enforces is therefore the PVE connection: every
-// VNet of every vDC on it, the live `/cluster/sdn/vnets` set (legacy zones,
-// manual work) and the tenant-wide reservations of stretched networks.
+// the cluster (VxlanPlugin::vnet_update_hook), whatever zone holds it, and
+// knows nothing of the other clusters. ProxCenter keeps a VNI unique across
+// every cluster it manages (see takenVnisOnTransport): every VNet of every
+// vDC, the live `/cluster/sdn/vnets` sets (legacy zones, manual work) and the
+// tenant-wide reservations of stretched networks.
 //
 // On a shared transport the provider hands each vDC a VNI range and the
 // tenant picks inside it, or lets ProxCenter take the first free number of
@@ -13,11 +14,13 @@
 // a range on a shared transport the historical allocator (next above the
 // highest tag) stays in charge and the tenant cannot choose.
 
+import { getConnectionById } from '@/lib/connections/getConnection'
 import { prisma } from '@/lib/db/prisma'
 import { pveFetch } from '@/lib/proxmox/client'
 
 import { allocateVni, listVnetsPve } from './sdn'
 import { VNI_MAX, vniPolicyFor, type VdcTransport, type VniPolicy } from './transport'
+import type { SdnVnet } from './types'
 
 export class VniError extends Error {
   constructor(message: string, public readonly status: 400 | 409) {
@@ -45,20 +48,44 @@ export interface VniHolder {
 }
 
 /**
- * Every VNI taken on the transport of `connectionId`, with who holds it:
- * VXLAN VNets ProxCenter created on the cluster, the live PVE tag set of
- * its VXLAN / EVPN zones (best effort: an unreachable cluster leaves the PVE
- * 400 as the backstop), and the stretched tenant networks, whose VNI is
- * reserved on every cluster.
+ * The VNets of the VXLAN / EVPN zones of one cluster, as Proxmox runs them.
+ * Only those zones compete for the VNI space: a VLAN VNet's tag 200 must not
+ * block VNI 200. Without the zone list every tagged VNet is kept.
+ */
+async function liveOverlayVnets(conn: any): Promise<SdnVnet[]> {
+  const zones = await pveFetch<any[]>(conn, '/cluster/sdn/zones').catch(() => null)
+  const overlayZones = zones
+    ? new Set(zones.filter((z: any) => z?.type === 'vxlan' || z?.type === 'evpn').map((z: any) => String(z.zone)))
+    : null
+  return (await listVnetsPve(conn)).filter(v =>
+    Number.isFinite(v.tag) && (!overlayZones || overlayZones.has(String(v.zone))))
+}
+
+/**
+ * Every VNI a new network on `connectionId` must avoid, with who holds it.
+ *
+ * The scope is every Proxmox cluster ProxCenter manages, not the cluster of
+ * the vDC alone. Proxmox only refuses a tag already carried on the same
+ * cluster, but an EVPN controller peering two clusters advertises every
+ * local VNI (`advertise-all-vni`), static VXLAN zones included: the same VNI
+ * on two clusters then becomes one L2 domain, whoever owns each side.
+ *
+ * Holders: the VXLAN VNets ProxCenter created (those of this cluster first,
+ * so a tenant is told about its own network), the stretched tenant networks,
+ * whose VNI is reserved everywhere, and the live tag set of the VXLAN / EVPN
+ * zones of each cluster (legacy zones, manual work). The live reads are best
+ * effort: an unreachable cluster leaves the database and the PVE 400.
  */
 export async function takenVnisOnTransport(connectionId: string, conn?: any): Promise<Map<number, VniHolder>> {
   const taken = new Map<number, VniHolder>()
 
   const vnets = await prisma.vdcVnet.findMany({
-    where: { type: 'vxlan', vdc: { connectionId } },
-    select: { tag: true, displayName: true, pveName: true, vdcId: true, vdc: { select: { name: true } } },
+    where: { type: 'vxlan' },
+    select: { tag: true, displayName: true, pveName: true, vdcId: true, vdc: { select: { name: true, connectionId: true } } },
   })
-  for (const v of vnets) {
+  const local = vnets.filter(v => v.vdc.connectionId === connectionId)
+  const remote = vnets.filter(v => v.vdc.connectionId !== connectionId)
+  for (const v of [...local, ...remote]) {
     if (!taken.has(v.tag)) {
       taken.set(v.tag, { vdcId: v.vdcId, network: v.displayName ?? v.pveName, label: `network "${v.displayName ?? v.pveName}" of vDC "${v.vdc.name}"` })
     }
@@ -69,19 +96,29 @@ export async function takenVnisOnTransport(connectionId: string, conn?: any): Pr
 
   if (conn) {
     try {
-      // Only VXLAN / EVPN zones compete for the VNI space: a VLAN VNet's
-      // tag 200 must not block VNI 200.
-      const zones = await pveFetch<any[]>(conn, '/cluster/sdn/zones').catch(() => null)
-      const overlayZones = zones
-        ? new Set(zones.filter((z: any) => z?.type === 'vxlan' || z?.type === 'evpn').map((z: any) => String(z.zone)))
-        : null
-      for (const v of await listVnetsPve(conn)) {
-        if (!Number.isFinite(v.tag)) continue
-        if (overlayZones && !overlayZones.has(String(v.zone))) continue
+      for (const v of await liveOverlayVnets(conn)) {
         if (!taken.has(v.tag)) taken.set(v.tag, { vdcId: null, label: `VNet "${v.vnet}" of zone "${v.zone}" on the cluster` })
       }
     } catch {
       // Best effort, see above.
+    }
+  }
+
+  // Two light GETs per other cluster, in parallel, on a network creation.
+  const others = await prisma.connection.findMany({
+    where: { type: 'pve', id: { not: connectionId } },
+    select: { id: true, name: true, tenantId: true },
+  })
+  const liveElsewhere = await Promise.all(others.map(async c => {
+    try {
+      return { name: c.name, vnets: await liveOverlayVnets(await getConnectionById(c.id, c.tenantId)) }
+    } catch {
+      return { name: c.name, vnets: [] as SdnVnet[] }
+    }
+  }))
+  for (const cluster of liveElsewhere) {
+    for (const v of cluster.vnets) {
+      if (!taken.has(v.tag)) taken.set(v.tag, { vdcId: null, label: `VNet "${v.vnet}" of zone "${v.zone}" on cluster "${cluster.name}"` })
     }
   }
   return taken

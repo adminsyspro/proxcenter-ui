@@ -149,24 +149,23 @@ async function connectionFor(connectionId: string): Promise<any> {
 }
 
 /**
- * Every VNI a stretched network of this tenant must avoid, with who holds
- * it: every other tenant network (the reservation is global, so a cluster
- * joining later never finds its VNI taken), the VXLAN VNets ProxCenter
- * created on the tenant's clusters, and the live `/cluster/sdn/vnets` tag
- * set of those clusters, which also carries legacy zones and manual work.
+ * Every VNI a stretched network must avoid, with who holds it: every other
+ * tenant network, the VXLAN VNets ProxCenter created and the live
+ * `/cluster/sdn/vnets` tag set, which also carries legacy zones and manual
+ * work. The scope is every Proxmox cluster, not the tenant's own: an EVPN
+ * controller peering two clusters bridges equal VNIs, so a cluster the tenant
+ * has no vDC on still holds VNIs this network must not reuse.
  * The live read is best effort: an unreachable cluster does not block an
  * allocation, the PVE 400 at member creation stays the backstop.
  */
-async function takenVnis(clusterIds: string[]): Promise<Map<number, string>> {
+async function takenVnis(): Promise<Map<number, string>> {
   const taken = new Map<number, string>()
 
   const networks = await prisma.tenantNetwork.findMany({ select: { vni: true, name: true } })
   for (const n of networks) taken.set(n.vni, `tenant network "${n.name}"`)
 
-  if (clusterIds.length === 0) return taken
-
   const vnets = await prisma.vdcVnet.findMany({
-    where: { type: 'vxlan', vdc: { connectionId: { in: clusterIds } } },
+    where: { type: 'vxlan' },
     select: { tag: true, displayName: true, pveName: true, vdc: { select: { name: true } } },
   })
   for (const v of vnets) {
@@ -174,17 +173,20 @@ async function takenVnis(clusterIds: string[]): Promise<Map<number, string>> {
   }
 
   const connections = await prisma.connection.findMany({
-    where: { id: { in: clusterIds } },
+    where: { type: 'pve' },
     select: { id: true, name: true },
   })
-  for (const c of connections) {
+  const live = await Promise.all(connections.map(async c => {
     try {
-      const conn = await connectionFor(c.id)
-      for (const v of await listVnetsPve(conn)) {
-        if (Number.isFinite(v.tag) && !taken.has(v.tag)) taken.set(v.tag, `a VNet of cluster "${c.name}"`)
-      }
+      return { name: c.name, vnets: await listVnetsPve(await connectionFor(c.id)) }
     } catch {
       // Best effort, see above.
+      return { name: c.name, vnets: [] }
+    }
+  }))
+  for (const cluster of live) {
+    for (const v of cluster.vnets) {
+      if (Number.isFinite(v.tag) && !taken.has(v.tag)) taken.set(v.tag, `a VNet of cluster "${cluster.name}"`)
     }
   }
   return taken
@@ -192,12 +194,12 @@ async function takenVnis(clusterIds: string[]): Promise<Map<number, string>> {
 
 /**
  * Picks the VNI of a new network of the tenant: the requested one when it
- * is free everywhere the tenant has a vDC, otherwise the next number above
+ * is free on every cluster, otherwise the next number above
  * everything taken, never below the historical VNI floor so a VLAN-only
  * fleet does not drag the allocation into the VLAN tag range.
  */
-export async function allocateTenantVni(tenantId: string, requested: number | null): Promise<number> {
-  const taken = await takenVnis(await tenantClusterIds(tenantId))
+export async function allocateTenantVni(requested: number | null): Promise<number> {
+  const taken = await takenVnis()
 
   if (requested !== null) {
     const holder = taken.get(requested)
@@ -334,7 +336,7 @@ export async function createTenantNetwork(input: CreateTenantNetworkInput, creat
   // Allocation and naming look at the same clusters: those of the tenant's
   // vDCs, because any of them may join later.
   const clusterIds = await tenantClusterIds(input.tenantId)
-  const vni = await allocateTenantVni(input.tenantId, requestedVni)
+  const vni = await allocateTenantVni(requestedVni)
   const id = randomUUID()
   const pveName = await generateTenantNetworkPveName(id, clusterIds)
   const now = new Date()

@@ -6,6 +6,7 @@ const importDiskAssetsMock = vi.fn()
 const sweepMock = vi.fn()
 const startSamplerMock = vi.fn()
 const startBatchPumpMock = vi.fn()
+const startVdcMoveReconcilerMock = vi.fn()
 const warmCleanupMock = vi.fn(async () => {})
 
 vi.mock('@/lib/branding/importDiskAssets', () => ({
@@ -23,6 +24,7 @@ vi.mock('@/lib/migration/orphan-sweep', () => ({
 }))
 
 vi.mock('@/lib/migration/batch-scheduler', () => ({ startBatchPump: startBatchPumpMock }))
+vi.mock('@/lib/vdc/move/runner', () => ({ startVdcMoveReconciler: startVdcMoveReconcilerMock }))
 vi.mock('@/lib/migration/warm/orphan-cleanup', () => ({ cleanupOrphanedWarmSources: warmCleanupMock }))
 
 const { register } = await import('./instrumentation')
@@ -159,6 +161,8 @@ describe('instrumentation register (bulk migration batches)', () => {
     sweepMock.mockResolvedValue({ owned: 0, foreign: 0, total: 0, jobIds: [] })
     await register()
     expect(startBatchPumpMock).toHaveBeenCalledTimes(1)
+    // #1335: the moves between vDCs resume after a restart too.
+    expect(startVdcMoveReconcilerMock).toHaveBeenCalled()
     expect(warmCleanupMock).not.toHaveBeenCalled()
   })
 

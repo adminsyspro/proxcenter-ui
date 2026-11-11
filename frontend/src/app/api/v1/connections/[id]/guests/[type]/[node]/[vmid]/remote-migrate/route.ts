@@ -6,8 +6,10 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { getTenantInfrastructureScope, canMigrateConnections } from "@/lib/tenant/infraScope"
 import { watchMigrationAndCleanup } from "@/lib/migration/cross-cluster-watcher"
+import { failMove, finalizeMove, heartbeatMove } from "@/lib/vdc/move/runner"
+import { recordProviderMigrationAsMove } from "@/lib/vdc/move/service"
 import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
-import { getNodeIp } from "@/lib/ssh/node-ip"
+import { buildRemoteMigrateEndpoint } from "@/lib/migration/remoteMigrateEndpoint"
 
 import { captureReplicationJobs, type CcmRestorePlan } from '@/lib/migration/ccm-prereqs'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
@@ -54,63 +56,6 @@ function parseRestoreRequest(value: unknown): RestoreRequest | undefined {
     !optionalNumbers(value, ['replicationRate'])) return undefined
 
   return { ...value, restoreHa: value.restoreHa === true, restoreReplication: value.restoreReplication === true } as RestoreRequest
-}
-
-/** `XX:XX:...` SHA-256 fingerprint, the only form that may enter the target-endpoint spec. */
-const FINGERPRINT_RE = /^[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){31}$/
-
-/**
- * SHA-256 fingerprint of the certificate pveproxy serves on `node`, read through
- * the authenticated target API: the node's own certificate list first (pveproxy
- * serves pveproxy-ssl.pem when it exists, pve-ssl.pem otherwise), then the
- * cluster node list's pve_fp. Empty when the token can read neither.
- */
-async function fetchTargetNodeFingerprint(targetConn: any, node: string): Promise<string> {
-  try {
-    const certs = await pveFetch<any[]>(targetConn, `/nodes/${encodeURIComponent(node)}/certificates/info`)
-    if (Array.isArray(certs)) {
-      const served = certs.find((c: any) => c?.filename === 'pveproxy-ssl.pem') ?? certs.find((c: any) => c?.filename === 'pve-ssl.pem')
-      if (typeof served?.fingerprint === 'string' && FINGERPRINT_RE.test(served.fingerprint)) return served.fingerprint
-    }
-  } catch {
-    // The token may lack Sys.Audit on the node; the cluster list below needs less.
-  }
-  try {
-    const nodes = await pveFetch<any[]>(targetConn, '/cluster/config/nodes')
-    const entry = Array.isArray(nodes) ? nodes.find((n: any) => n?.name === node) : undefined
-    if (typeof entry?.pve_fp === 'string' && FINGERPRINT_RE.test(entry.pve_fp)) return entry.pve_fp
-  } catch {
-    // Standalone node or no access: the caller falls back to the TLS capture.
-  }
-  return ''
-}
-
-/**
- * SHA-256 fingerprint of whatever certificate `host` presents on `port`, or ''
- * when it cannot be read. Nothing is verified here on purpose: the value is
- * cross-checked against (or, failing that, stands in for) the API's answer.
- */
-async function captureTlsFingerprint(host: string, port: number): Promise<string> {
-  try {
-    const tls = await import('tls')
-    const captured = await new Promise<string>((resolve, reject) => {
-      const socket = tls.connect({ host, port, rejectUnauthorized: false, timeout: 10000 }, () => {
-        const cert = socket.getPeerCertificate()
-        socket.end()
-        if (cert?.fingerprint256) resolve(cert.fingerprint256)
-        else reject(new Error('No certificate fingerprint available'))
-      })
-      socket.on('error', reject)
-      socket.on('timeout', () => {
-        socket.destroy()
-        reject(new Error('Connection timeout'))
-      })
-    })
-    return FINGERPRINT_RE.test(captured) ? captured : ''
-  } catch (e: any) {
-    console.warn('[remote-migrate] TLS fingerprint capture failed:', String(e?.message || e).replace(/[\r\n]/g, ''))
-    return ''
-  }
 }
 
 /**
@@ -265,52 +210,17 @@ async function handler(
     }
 
     // Resolve the target NODE's address, not the cluster baseUrl, so the
-    // migration lands on the user-selected host. PVE's remote_migrate uses the
-    // host:port in the target-endpoint to reach the cluster API; talking to a
-    // specific node's pveproxy makes that node the receiver. Falling back to
-    // the cluster baseUrl made every cross-cluster migration land on whichever
-    // node baseUrl happens to point at, ignoring the user's choice (issue #282).
-    const targetUrl = new URL(targetConn.baseUrl)
-    const targetPort = targetUrl.port || '8006'
-    const targetHost = await getNodeIp(targetConn, safeTargetNode)
-
-    // The SHA-256 fingerprint remote_migrate pins the target to. It comes from
-    // the authenticated target API first (the certificate pveproxy serves on
-    // that node, then the cluster's pve_fp), so a hijacked resolution of
-    // targetHost cannot hand us its own certificate. A capture from the TLS
-    // handshake with targetHost is trusted on its own only when the API exposes
-    // nothing; when both exist they must agree.
-    const apiFingerprint = await fetchTargetNodeFingerprint(targetConn, safeTargetNode)
-    const capturedFingerprint = await captureTlsFingerprint(targetHost, Number.parseInt(targetPort, 10))
-    if (apiFingerprint && capturedFingerprint && apiFingerprint.toUpperCase() !== capturedFingerprint.toUpperCase()) {
-      return NextResponse.json(
-        {
-          error: `The host resolved for node "${safeTargetNode}" (${targetHost}) does not present the certificate the target cluster reports for that node. Check the node's address (managed host / SSH address) and its pveproxy certificate before migrating.`,
-        },
-        { status: 400 },
-      )
+    // migration lands on the user-selected host (issue #282), and pin the
+    // node's pveproxy certificate read through the authenticated target API.
+    const endpoint = await buildRemoteMigrateEndpoint(targetConn, safeTargetNode)
+    if (!endpoint.ok) {
+      return NextResponse.json({ error: endpoint.error }, { status: 400 })
     }
-    const targetFingerprint = apiFingerprint || capturedFingerprint
-    if (!targetFingerprint) {
-      return NextResponse.json(
-        { error: "Could not retrieve TLS fingerprint from target cluster. Please ensure the target is reachable." },
-        { status: 400 }
-      )
+    if (!endpoint.apiFingerprint) {
+      console.warn(`[remote-migrate] target API exposes no certificate fingerprint for ${safeTargetNode}; trusting the TLS capture from ${endpoint.host}`)
     }
-    if (!apiFingerprint) {
-      console.warn(`[remote-migrate] target API exposes no certificate fingerprint for ${safeTargetNode}; trusting the TLS capture from ${targetHost}`)
-    }
-
-    // Construire le target-endpoint au format attendu par Proxmox
-    // Format: apitoken=PVEAPIToken=<user>@<realm>!<token>=<secret>,host=<address>,fingerprint=<fp>[,port=<port>]
-    const targetEndpointParts = [
-      `apitoken=PVEAPIToken=${targetConn.apiToken}`,
-      `host=${targetHost}`,
-      `port=${targetPort}`,
-      `fingerprint=${targetFingerprint}`,
-    ]
-    
-    const targetEndpoint = targetEndpointParts.join(',')
+    const targetHost = endpoint.host
+    const targetEndpoint = endpoint.endpoint
 
     // Construire les paramètres de migration
     const migrateParams: Record<string, string> = {
@@ -368,7 +278,32 @@ async function handler(
     // (SSH unlock + optional source VM delete) even if the user closes the
     // browser tab, navigates away, or the tab is throttled in the background.
     // tenantId must be captured here while the request session is alive.
+    let vdcLink: { moveId: string; targetVdcName: string } | null = null
     if (typeof result === 'string' && result.startsWith('UPID:')) {
+      const resolvedTargetVmid = targetVmid !== undefined && targetVmid !== null && targetVmid !== ''
+        ? String(targetVmid)
+        : safeVmid
+      // #1335: a guest of a vDC joins the tenant's vDC on the target cluster
+      // (pool, storage-policy caps, IPAM) instead of landing outside any vDC.
+      vdcLink = await recordProviderMigrationAsMove({
+        sourceConnectionId: id,
+        sourceNode: safeNode,
+        vmid: Number(safeVmid),
+        targetConnectionId,
+        targetNode: safeTargetNode,
+        targetVmid: Number(resolvedTargetVmid),
+        targetStorage,
+        targetBridge,
+        online: !!online,
+        deleteSource: !!deleteSource,
+        upid: result,
+      }).catch((err) => {
+        console.warn('[remote-migrate] vDC link not recorded:', String(err?.message || err).replace(/[\r\n]/g, ''))
+        return null
+      })
+      const linkedMoveId = vdcLink?.moveId
+      let lastBeat = 0
+
       void watchMigrationAndCleanup({
         connectionId: id,
         tenantId,
@@ -380,10 +315,19 @@ async function handler(
         guestType: type,
         targetConn,
         targetNode: safeTargetNode,
-        targetVmid: targetVmid !== undefined && targetVmid !== null && targetVmid !== ''
-          ? String(targetVmid)
-          : safeVmid,
+        targetVmid: resolvedTargetVmid,
         restore: restore && typeof restore === 'object' ? restore : undefined,
+        onPoll: linkedMoveId
+          ? async () => {
+              if (Date.now() - lastBeat < 30_000) return
+              lastBeat = Date.now()
+              await heartbeatMove(linkedMoveId)
+            }
+          : undefined,
+      }).then(async (outcome) => {
+        if (!linkedMoveId) return
+        if (outcome.outcome === 'completed') await finalizeMove(linkedMoveId, !!deleteSource && outcome.sourceLeft)
+        else await failMove(linkedMoveId, 'The cross-cluster migration did not complete; the VM stays in its source vDC')
       }).catch(err => {
         console.warn('[remote-migrate] background watcher failed:', String(err?.message || err).replace(/[\r\n]/g, ''))
       })
@@ -401,6 +345,7 @@ async function handler(
         targetBridge,
         online,
         deleteSource,
+        targetVdc: vdcLink ? { moveId: vdcLink.moveId, name: vdcLink.targetVdcName } : null,
       }
     })
 

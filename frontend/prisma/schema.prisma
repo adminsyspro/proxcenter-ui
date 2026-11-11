@@ -1225,6 +1225,54 @@ model VdcIpamAllocation {
   @@map("vdc_ipam_allocations")
 }
 
+/// A guest moved from one vDC of a tenant to another of its vDCs on another
+/// cluster (#1335). The row outlives the request: the process that started
+/// the copy renews `heartbeat_at` while it watches the Proxmox task, and when
+/// that process dies another replica picks the move up and finishes it
+/// (pool, storage-policy caps, IPAM). vDC ids are kept without a foreign key
+/// on purpose: the history must survive a vDC that is deleted later.
+model VdcMove {
+  id                 String    @id
+  tenantId           String    @map("tenant_id")
+  guestName          String?   @map("guest_name")
+  vmid               Int
+  targetVmid         Int       @map("target_vmid")
+  sourceConnectionId String    @map("source_connection_id")
+  sourceNode         String    @map("source_node")
+  sourceVdcId        String    @map("source_vdc_id")
+  targetConnectionId String    @map("target_connection_id")
+  targetNode         String    @map("target_node")
+  targetVdcId        String    @map("target_vdc_id")
+  // { "<source storage>": "<target storage>" } and { "<source bridge>": "<target bridge>" }
+  storageMap         Json      @map("storage_map")
+  bridgeMap          Json      @map("bridge_map")
+  online             Boolean   @default(false)
+  // Remove the source guest once the copy completed. Always true for a move
+  // between vDCs; the provider's cross-cluster migration may keep the source.
+  deleteSource       Boolean   @default(true) @map("delete_source")
+  // `tenant`: the move action; `provider`: a cross-cluster migration the
+  // provider ran on a guest of a vDC, linked to the tenant's target vDC.
+  origin             String    @default("tenant")
+  // queued -> copying -> finalizing -> done | failed
+  status             String    @default("queued")
+  upid               String?
+  error              String?
+  // Non-blocking findings of the finalisation (an address left to reconfigure, ...).
+  warnings           Json?
+  requestedBy        String?   @map("requested_by")
+  // Replica watching the move and its last sign of life; a stale heartbeat
+  // hands the move to the reconciler of any replica.
+  holder             String?
+  heartbeatAt        DateTime? @map("heartbeat_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+  finishedAt         DateTime? @map("finished_at")
+
+  @@index([tenantId, status])
+  @@index([status, heartbeatAt])
+  @@map("vdc_moves")
+}
+
 model VdcPbsNamespace {
   id              String   @id
   vdcId           String   @map("vdc_id")

@@ -31,7 +31,23 @@ type WatcherOpts = {
   targetNode?: string
   targetVmid?: string
   restore?: (CcmRestorePlan & { rollbackOnFailure?: boolean }) | undefined
+  /** Task status poll interval, POLL_INTERVAL_MS when unset. */
+  pollIntervalMs?: number
+  /** Called on every poll, so a caller can show it is still watching (vDC moves, #1335). */
+  onPoll?: () => void | Promise<void>
 }
+
+/**
+ * How the watched migration ended. `completed`: the guest is on the target
+ * (the source may still exist when its unlock or delete failed, see
+ * `sourceLeft`). `failed`: PVE ended the task without a completed transfer.
+ * `timeout`: the task outlived the watch.
+ */
+export type WatcherOutcome =
+  | { outcome: 'completed'; sourceLeft: boolean }
+  | { outcome: 'failed'; exitstatus: string }
+  | { outcome: 'timeout' }
+  | { outcome: 'invalid' }
 
 /**
  * SSH runner that does not rely on the HTTP request session context.
@@ -134,7 +150,7 @@ async function runSshForWatcher(
  * GET /tasks/[upid]/route.ts: qm unlock is a no-op when the VM is already
  * unlocked, and DELETE responds 404 when the VM is already gone.
  */
-export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void> {
+export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<WatcherOutcome> {
   const { connectionId, tenantId, sourceConn, sourceNode, vmid, upid, deleteSource, guestType, targetConn, targetNode, targetVmid, restore } = opts
   const tag = `[migrate-watcher:${safeLog(vmid)}]`
 
@@ -146,13 +162,18 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
     safeVmid = assertVmid(vmid)
   } catch {
     console.warn(`${tag} invalid vmid, skipping cleanup`)
-    return
+    return { outcome: 'invalid' }
   }
 
   console.log(`${tag} started (deleteSource=${deleteSource}, upid=${safeLog(upid)})`)
 
   let taskStatus: any = null
-  for (let i = 0; i < MAX_POLL_ATTEMPTS; i++) {
+  const pollMs = opts.pollIntervalMs ?? POLL_INTERVAL_MS
+  const maxPolls = Math.ceil((MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS) / pollMs)
+  for (let i = 0; i < maxPolls; i++) {
+    try {
+      await opts.onPoll?.()
+    } catch { /* a heartbeat failure must not stop the watch */ }
     try {
       taskStatus = await pveFetch<any>(
         sourceConn,
@@ -163,7 +184,7 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
       // Transient PVE / network errors — keep polling. Log every ~60s.
       if (i % 30 === 0) console.warn(`${tag} status poll transient error:`, e?.message)
     }
-    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
+    await new Promise(resolve => setTimeout(resolve, pollMs))
   }
 
   if (taskStatus?.status !== 'stopped') {
@@ -173,7 +194,7 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
       if (restored.length > 0) console.log(`${tag} rolled back on source: ${restored.join(', ')}`)
       for (const err of errors) console.warn(`${tag} rollback failed: ${safeLog(err)}`)
     }
-    return
+    return { outcome: 'timeout' }
   }
 
   const exitstatus = String(taskStatus?.exitstatus || '')
@@ -200,7 +221,7 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
       if (restored.length > 0) console.log(`${tag} rolled back on source: ${restored.join(', ')}`)
       for (const err of errors) console.warn(`${tag} rollback failed: ${safeLog(err)}`)
     }
-    return
+    return { outcome: 'failed', exitstatus }
   }
 
   // roadmap#192: the guest now lives on the target cluster; its cached
@@ -228,7 +249,9 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
     }
   } catch (e: any) {
     const msg = String(e?.message || '')
-    if (msg.includes('404')) {
+    // PVE answers a guest it removed with a 500 "Configuration file ... does
+    // not exist", not a 404: the migration's own delete=1 does exactly that.
+    if (msg.includes('404') || /Configuration file .* does not exist/.test(msg)) {
       console.log(`${tag} source VM already gone, nothing to clean up`)
       sourceGone = true
     } else {
@@ -244,10 +267,10 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
     })
     if (restored.length > 0) console.log(`${tag} restored on target: ${restored.join(', ')}`)
     for (const err of errors) console.warn(`${tag} target restore failed: ${safeLog(err)}`)
-    if (errors.length > 0) return
+    if (errors.length > 0) return { outcome: 'completed', sourceLeft: !sourceGone }
   }
 
-  if (sourceGone) return
+  if (sourceGone) return { outcome: 'completed', sourceLeft: false }
 
   if (deleteSource && unlocked) {
     try {
@@ -258,15 +281,18 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<void>
       )
       console.log(`${tag} deleted source VM on ${sourceNode}`)
       forgetCachedGuest(connectionId, guestType || 'qemu', vmid)
+      return { outcome: 'completed', sourceLeft: false }
     } catch (e: any) {
       const msg = String(e?.message || '')
       if (msg.includes('404')) {
         console.log(`${tag} source VM already gone`)
-      } else {
-        console.warn(`${tag} could not delete source VM:`, msg)
+        return { outcome: 'completed', sourceLeft: false }
       }
+      console.warn(`${tag} could not delete source VM:`, msg)
     }
   } else if (deleteSource && !unlocked) {
     console.warn(`${tag} cannot delete source VM: unlock failed, manual cleanup needed`)
   }
+
+  return { outcome: 'completed', sourceLeft: true }
 }

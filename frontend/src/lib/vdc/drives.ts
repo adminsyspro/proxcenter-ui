@@ -224,3 +224,19 @@ export function stampDriveQos(raw: string, caps: DriveQosCaps | undefined): stri
   const base = [parsed.drive.head, ...kept.map(([k, v]) => `${k}=${v}`)].join(',')
   return `${base}${policyQosSuffix(caps)}`
 }
+
+const CICUSTOM_VOLUME_RE = /^(?:user|network|meta|vendor)=([A-Za-z][A-Za-z0-9._-]*):(.+)$/
+
+/** The storages a `cicustom` line reads its files from, or null when the line is not in PVE's form. */
+export function cicustomStorages(value: unknown): string[] | null {
+  const storages: string[] = []
+
+  for (const part of String(value ?? '').split(',').map(p => p.trim()).filter(Boolean)) {
+    const m = CICUSTOM_VOLUME_RE.exec(part)
+
+    if (!m || m[2].split('/').includes('..')) return null
+    storages.push(m[1])
+  }
+
+  return storages
+}

@@ -13,6 +13,8 @@ export function mapCreateVdcError(e: any): { status: number; message: string } {
       message: 'A vDC already exists for this tenant on this cluster (or its slug is already taken).',
     }
   }
+  // Attachment to a shared EVPN zone (#1334).
+  if (msg.startsWith('EVPN zone:')) return mapEvpnZoneError(e)
   if (msg.includes('Cannot shrink VLAN pools')) return { status: 409, message: msg }
   if (msg.startsWith('VLAN pool')) return { status: 400, message: msg }
   if (msg.includes('already has a vDC')) return { status: 409, message: msg }
@@ -73,7 +75,7 @@ export function mapEvpnZoneError(e: any): { status: number; message: string } {
   if (msg.startsWith('EVPN zone: not found') || msg.startsWith('VNI collision: network not found')) {
     return { status: 404, message: msg }
   }
-  if (msg.startsWith('EVPN zone:') && (msg.includes('already') || msg.includes('still holds') || msg.includes('overlaps') || msg.includes('differs'))) {
+  if (msg.startsWith('EVPN zone:') && (msg.includes('already') || msg.includes('still holds') || msg.includes('overlaps') || msg.includes('differs') || msg.includes('still carries') || msg.includes('still attached'))) {
     return { status: 409, message: msg }
   }
   // A Proxmox refusal while staging a controller, a zone or a VNet.

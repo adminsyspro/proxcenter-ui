@@ -11144,7 +11144,18 @@
         "gpu_check_unavailable": "目前无法核对您的 GPU 配额，请稍后重试。",
         "generic": "出现问题，请重试。"
       }
-    }
+    },
+    "vnetTypeShared": "在我的 vDC 之间共享",
+    "vnetTypeHelpShared": "共享网络可到达您勾选的所有 vDC；VXLAN 或 VLAN 网络只存在于此 vDC。",
+    "vnetSharedAllocated": "VNI 在共享区域中自动分配。",
+    "vnetSharedPresence": "存在于",
+    "vnetSharedPresenceHelp": "该网络计入其所在的每个 vDC 的网络配额。",
+    "vnetShared": "共享",
+    "vnetSharedTooltip": "“{network}”是在您的 vDC 之间共享的同一个网络。",
+    "vnetSharedManage": "选择承载此网络的 vDC",
+    "vnetSharedManageTitle": "承载“{name}”的 vDC",
+    "vnetSharedManageHelp": "勾选 vDC 会在其中创建该网络；取消勾选会在该 vDC 上没有客户机使用后将其移除。",
+    "deleteSharedVnetHint": "该网络仅从此 vDC 移除，并保留在您的其他 vDC 上。它会随最后一个 vDC 一起删除。"
   },
   "vdc": {
     "catalogGrantTitle": "目录",
@@ -11630,7 +11641,16 @@
       "renumber": "更改 VNI",
       "renumberTitle": "更改 VNI",
       "renumberConfirm": "将“{cluster}”上的“{network}”从 VNI {vni} 移到空闲的 VNI？客户机保持连接；此集群上的网络会中断几秒钟。",
-      "renumbered": "“{network}”已从 VNI {from} 移到 {to}。"
+      "renumbered": "“{network}”已从 VNI {from} 移到 {to}。",
+      "vdcTitle": "共享 EVPN 区域",
+      "vdcHint": "将 vDC 连接到其集群承载的 EVPN 区域。租户随后可创建能到达其连接到同一区域的其他 vDC 的网络。",
+      "vdcZone": "EVPN 区域",
+      "vdcZoneNone": "无",
+      "vdcOwnZone": "同时为此 vDC 创建专属 VXLAN 区域",
+      "vdcNoOwnZone": "此 vDC 没有专属 VXLAN 区域：其 overlay 网络位于共享区域中。",
+      "usage": "使用情况",
+      "usageValue": "{vdcs} 个 vDC · {networks} 个网络",
+      "deleteBlockedVdcs": "仍有 vDC 连接到该区域。"
     }
   },
   "sdn": {

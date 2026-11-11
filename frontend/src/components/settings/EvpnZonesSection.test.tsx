@@ -269,6 +269,13 @@ describe('EvpnZonesSection', () => {
     expect(await screen.findByText('EVPN zone "Shared" deleted.')).toBeInTheDocument()
   })
 
+  it('shows what uses a zone and locks its deletion while vDCs are attached', async () => {
+    zones = [{ ...ZONE, vdcCount: 2, networkCount: 3 }]
+    await renderLoaded()
+    expect(screen.getByText('2 vDC · 3 networks')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete the EVPN zone' })).toBeDisabled()
+  })
+
   it('lists the shared VNIs and moves the ProxCenter network to a free one', async () => {
     await renderLoaded()
     expect(await screen.findByText('Bridged')).toBeInTheDocument()

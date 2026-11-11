@@ -15,6 +15,7 @@ import { getConnectionById } from '@/lib/connections/getConnection'
 import { prisma } from '@/lib/db/prisma'
 import { pveFetch } from '@/lib/proxmox/client'
 
+import { attachedVdcCount } from './evpnVdc'
 import { applySdn, deleteZone } from './sdn'
 import { normalizePeerList, VNI_MAX } from './transport'
 import { takenVnisOnTransport } from './vniPolicy'
@@ -68,6 +69,9 @@ export interface EvpnZone {
   vniEnd: number
   createdAt: string
   members: EvpnZoneMember[]
+  /** vDCs attached to the zone and networks their tenants created in it. */
+  vdcCount: number
+  networkCount: number
 }
 
 export interface PveEvpnController {
@@ -298,6 +302,7 @@ export async function discoverEvpn(connectionIds: string[]): Promise<EvpnDiscove
 
 const ZONE_INCLUDE = {
   members: { include: { connection: { select: { name: true } } }, orderBy: { createdAt: 'asc' as const } },
+  _count: { select: { vdcs: true, tenantNetworks: true } },
 }
 
 function toIso(d: unknown): string {
@@ -323,6 +328,8 @@ function rowToZone(row: any): EvpnZone {
       controllerCreated: !!m.controllerCreated,
       adopted: !!m.adopted,
     })),
+    vdcCount: row._count?.vdcs ?? 0,
+    networkCount: row._count?.tenantNetworks ?? 0,
   }
 }
 
@@ -392,8 +399,20 @@ async function assertVniSpaceFree(z: { zoneName: string; vrfVxlan: number; vniSt
     }
   }
 
+  // The networks tenants already hold in this zone are its own: they may
+  // sit in its range, and a new range must still contain every one of them.
+  const own = exceptZoneId
+    ? await prisma.tenantNetwork.findMany({ where: { evpnZoneId: exceptZoneId }, select: { vni: true, name: true } })
+    : []
+  const outside = own.find(n => n.vni < range.start || n.vni > range.end)
+  if (outside) {
+    throw new Error(`${ERR} the VNI range must still hold VNI ${outside.vni} of network "${outside.name}", already created in the zone.`)
+  }
+  const ownVnis = new Set(own.map(n => n.vni))
+
   const taken = await takenVnisOnTransport('')
   for (const [vni, holder] of taken) {
+    if (ownVnis.has(vni)) continue
     if (holder.zone === z.zoneName && holder.zoneType === 'evpn') continue
     if (vni === z.vrfVxlan) throw new Error(`${ERR} the VRF VNI ${vni} is already used by ${holder.label}.`)
     if (vni >= range.start && vni <= range.end) {
@@ -609,6 +628,10 @@ export async function removeEvpnZoneMember(id: string, connectionId: string): Pr
   const row = await loadZone(id)
   const member = row.members.find((m: any) => m.connectionId === connectionId)
   if (!member) throw new Error(`${ERR} this cluster does not carry the zone.`)
+  const attached = await attachedVdcCount(id, connectionId)
+  if (attached > 0) {
+    throw new Error(`${ERR} ${attached} vDC(s) of this cluster are still attached to "${row.name}". Detach them first.`)
+  }
 
   const applyErrors: EvpnZoneWriteResult['applyErrors'] = []
   if (!member.adopted) {
@@ -630,6 +653,8 @@ export async function removeEvpnZoneMember(id: string, connectionId: string): Pr
 
 export async function deleteEvpnZone(id: string): Promise<EvpnZoneWriteResult['applyErrors']> {
   const row = await loadZone(id)
+  const attached = await attachedVdcCount(id)
+  if (attached > 0) throw new Error(`${ERR} ${attached} vDC(s) are still attached to "${row.name}". Detach them first.`)
   const applyErrors: EvpnZoneWriteResult['applyErrors'] = []
   for (const member of row.members) {
     const result = await removeEvpnZoneMember(id, member.connectionId)

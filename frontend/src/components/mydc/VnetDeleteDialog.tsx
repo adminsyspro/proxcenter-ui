@@ -43,7 +43,9 @@ export default function VnetDeleteDialog({ vnet, vdcId, onClose, onDeleted }: Pr
       <DialogContent>
         <Stack spacing={2} mt={1}>
           <Typography>{t('myVdc.deleteVnetConfirm', { name: vnet.displayName ?? vnet.pveName })}</Typography>
-          <Typography variant="caption" color="text.secondary">{t('myVdc.deleteVnetHint')}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {t(vnet.tenantNetwork?.shared ? 'myVdc.deleteSharedVnetHint' : 'myVdc.deleteVnetHint')}
+          </Typography>
           {error && <Alert severity="error">{error}</Alert>}
         </Stack>
       </DialogContent>

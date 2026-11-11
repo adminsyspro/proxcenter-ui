@@ -11371,7 +11371,16 @@
       "renumber": "VNI 변경",
       "renumberTitle": "VNI 변경",
       "renumberConfirm": "\"{cluster}\"의 \"{network}\"을(를) VNI {vni}에서 사용 가능한 VNI로 옮기시겠습니까? 게스트는 연결된 상태로 유지되며 이 클러스터에서 네트워크가 몇 초간 끊깁니다.",
-      "renumbered": "\"{network}\"을(를) VNI {from}에서 {to}(으)로 옮겼습니다."
+      "renumbered": "\"{network}\"을(를) VNI {from}에서 {to}(으)로 옮겼습니다.",
+      "vdcTitle": "공유 EVPN 존",
+      "vdcHint": "vDC를 클러스터가 운반하는 EVPN 존에 연결합니다. 그러면 테넌트는 같은 존에 연결된 다른 vDC에 도달하는 네트워크를 생성할 수 있습니다.",
+      "vdcZone": "EVPN 존",
+      "vdcZoneNone": "없음",
+      "vdcOwnZone": "이 vDC 전용 VXLAN 존도 생성",
+      "vdcNoOwnZone": "이 vDC에는 전용 VXLAN 존이 없습니다. 오버레이 네트워크는 공유 존에 있습니다.",
+      "usage": "사용량",
+      "usageValue": "vDC {vdcs}개 · 네트워크 {networks}개",
+      "deleteBlockedVdcs": "아직 존에 연결된 vDC가 있습니다."
     }
   },
   "myVdc": {
@@ -11631,7 +11640,18 @@
         "gpu_check_unavailable": "지금은 GPU 할당량을 확인할 수 없습니다. 잠시 후 다시 시도하세요.",
         "generic": "문제가 발생했습니다. 다시 시도하세요."
       }
-    }
+    },
+    "vnetTypeShared": "내 vDC 간 공유",
+    "vnetTypeHelpShared": "공유 네트워크는 선택한 모든 vDC에 연결됩니다. VXLAN 또는 VLAN 네트워크는 이 vDC에만 있습니다.",
+    "vnetSharedAllocated": "VNI는 공유 존에서 자동으로 할당됩니다.",
+    "vnetSharedPresence": "적용 대상",
+    "vnetSharedPresenceHelp": "네트워크는 적용된 각 vDC의 네트워크 할당량에 포함됩니다.",
+    "vnetShared": "공유",
+    "vnetSharedTooltip": "\"{network}\"은(는) 내 vDC 간에 공유되는 하나의 네트워크입니다.",
+    "vnetSharedManage": "이 네트워크를 사용할 vDC 선택",
+    "vnetSharedManageTitle": "\"{name}\"을(를) 사용하는 vDC",
+    "vnetSharedManageHelp": "vDC를 선택하면 해당 vDC에 네트워크가 생성됩니다. 선택을 해제하면 해당 vDC에서 게스트가 사용하지 않을 때 제거됩니다.",
+    "deleteSharedVnetHint": "네트워크는 이 vDC에서만 제거되고 다른 vDC에는 남습니다. 마지막 vDC에서 제거되면 삭제됩니다."
   },
   "sdn": {
     "subtab": {

@@ -933,6 +933,10 @@ model Vdc {
   // `platform`: the provider operates the edge, so every network declares
   // its subnet.
   edgeModel              String   @default("tenant") @map("edge_model")
+  // Shared EVPN zone the vDC is attached to (#1334): its tenant creates
+  // networks there that reach its other vDCs attached to the same zone.
+  evpnZoneId             String?  @map("evpn_zone_id")
+  evpnZone               SdnEvpnZone? @relation(fields: [evpnZoneId], references: [id], onDelete: Restrict)
   createdBy      String?  @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")
@@ -958,6 +962,7 @@ model Vdc {
   @@unique([connectionId, sdnZoneName], map: "idx_vdcs_sdn_zone_name")
   @@index([tenantId])
   @@index([connectionId])
+  @@index([evpnZoneId])
   @@map("vdcs")
 }
 
@@ -1151,6 +1156,11 @@ model TenantNetwork {
   vni         Int      @unique
   // Zone MTU as PVE defines it (#899); every member zone must agree.
   mtu         Int?
+  // Set for a network the tenant created in a shared EVPN zone (#1334): its
+  // members live in that zone, with a VNI of the zone range, and the tenant
+  // manages on which of its vDCs it is present.
+  evpnZoneId  String?      @map("evpn_zone_id")
+  evpnZone    SdnEvpnZone? @relation(fields: [evpnZoneId], references: [id], onDelete: Restrict)
   createdBy   String?  @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @map("updated_at")
@@ -1160,6 +1170,7 @@ model TenantNetwork {
 
   @@unique([tenantId, name])
   @@index([tenantId])
+  @@index([evpnZoneId])
   @@map("tenant_networks")
 }
 
@@ -1394,7 +1405,9 @@ model SdnEvpnZone {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @map("updated_at")
 
-  members SdnEvpnZoneMember[]
+  members        SdnEvpnZoneMember[]
+  vdcs           Vdc[]
+  tenantNetworks TenantNetwork[]
 
   @@map("sdn_evpn_zones")
 }

@@ -11371,7 +11371,16 @@
       "renumber": "Cambiar el VNI",
       "renumberTitle": "Cambiar el VNI",
       "renumberConfirm": "¿Mover \"{network}\" en \"{cluster}\" del VNI {vni} a uno libre? Los invitados siguen conectados; la red se corta unos segundos en este clúster.",
-      "renumbered": "\"{network}\" movida del VNI {from} al {to}."
+      "renumbered": "\"{network}\" movida del VNI {from} al {to}.",
+      "vdcTitle": "Zona EVPN compartida",
+      "vdcHint": "Vincula el vDC a una zona EVPN que lleva su clúster. El tenant crea entonces redes que llegan a sus otros vDC vinculados a la misma zona.",
+      "vdcZone": "Zona EVPN",
+      "vdcZoneNone": "Ninguna",
+      "vdcOwnZone": "Crear también una zona VXLAN propia de este vDC",
+      "vdcNoOwnZone": "Este vDC no tiene zona VXLAN propia: sus redes overlay viven en la zona compartida.",
+      "usage": "Uso",
+      "usageValue": "{vdcs} vDC · {networks} redes",
+      "deleteBlockedVdcs": "Todavía hay vDC vinculados a la zona."
     }
   },
   "myVdc": {
@@ -11631,7 +11640,18 @@
         "gpu_check_unavailable": "Su contingente de GPU no se puede comprobar por el momento. Inténtelo de nuevo en unos instantes.",
         "generic": "Se produjo un error. Inténtelo de nuevo."
       }
-    }
+    },
+    "vnetTypeShared": "Compartida entre mis vDC",
+    "vnetTypeHelpShared": "Una red compartida llega a todos los vDC que seleccione; una red VXLAN o VLAN permanece en este vDC.",
+    "vnetSharedAllocated": "El VNI se asigna automáticamente en la zona compartida.",
+    "vnetSharedPresence": "Presente en",
+    "vnetSharedPresenceHelp": "La red cuenta en la cuota de redes de cada vDC en el que está presente.",
+    "vnetShared": "Compartida",
+    "vnetSharedTooltip": "\"{network}\" es una sola red compartida entre sus vDC.",
+    "vnetSharedManage": "Elegir los vDC que llevan esta red",
+    "vnetSharedManageTitle": "vDC que llevan \"{name}\"",
+    "vnetSharedManageHelp": "Marcar un vDC crea la red allí; desmarcarlo la retira, cuando ningún invitado la usa en ese vDC.",
+    "deleteSharedVnetHint": "La red se retira solo de este vDC y permanece en sus otros vDC. Se elimina con su último vDC."
   },
   "sdn": {
     "subtab": {

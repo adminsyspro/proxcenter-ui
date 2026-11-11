@@ -48,7 +48,7 @@ const STATUS = [{ connectionId: 'c1', connectionName: 'paris', state: 'ok', deta
 const BODY = { name: 'Shared', zoneName: 'zshared', vrfVxlan: 9000, mtu: 1450, vniStart: 9001, vniEnd: 9099, members: [{ connectionId: 'c1', controller: { mode: 'existing', name: 'evpn1' } }] }
 
 const nextReq = (url: string, method = 'GET') => new NextRequest(url, { method })
-const ctx = (id?: string) => ({ params: Promise.resolve(id ? { id } : {}) })
+const ctx = (id?: string): any => ({ params: Promise.resolve(id ? { id } : {}) })
 const forbidden = () => NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
 beforeEach(() => {

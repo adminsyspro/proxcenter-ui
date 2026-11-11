@@ -475,6 +475,11 @@ export default function VdcTab() {
   const [transport, setTransport] = useState<TransportForm>(emptyTransport)
   // L3 edge model (#904): who provides gateway, DHCP and NAT on the vDC networks.
   const [edgeModel, setEdgeModel] = useState<VdcEdgeModel>('tenant')
+  // Shared EVPN zone (#1334): the declared zones, the one this vDC is attached
+  // to, and whether the vDC also keeps a VXLAN zone of its own (creation only).
+  const [evpnZones, setEvpnZones] = useState<Array<{ id: string; name: string; members: Array<{ connectionId: string }> }>>([])
+  const [evpnZoneId, setEvpnZoneId] = useState('')
+  const [ownVxlanZone, setOwnVxlanZone] = useState(true)
   const [nodeAddressInfo, setNodeAddressInfo] = useState<{ nodes: NodeAddressEntry[]; devices: string[] }>({ nodes: [], devices: [] })
   const [zoneStatus, setZoneStatus] = useState<ZoneStatus | null>(null)
   // Stretched tenant networks (#901) this vDC carries, read-only here: the
@@ -543,10 +548,13 @@ export default function VdcTab() {
 
   const fetchDropdowns = useCallback(async () => {
     try {
-      const [tenantsRes, connectionsRes] = await Promise.all([
+      const [tenantsRes, connectionsRes, evpnRes] = await Promise.all([
         fetch('/api/v1/tenants'),
         fetch('/api/v1/admin/connections?type=pve'),
+        fetch('/api/v1/admin/evpn-zones').catch(() => null),
       ])
+      const evpnData = evpnRes?.ok ? await evpnRes.json().catch(() => ({})) : {}
+      setEvpnZones(Array.isArray(evpnData?.data) ? evpnData.data : [])
 
       const tenantsData = await tenantsRes.json()
       const connectionsData = await connectionsRes.json()
@@ -1005,6 +1013,8 @@ export default function VdcTab() {
     setCatalogGrants({ imageIds: [], blueprintIds: [] })
     setTransport(emptyTransport)
     setEdgeModel('tenant')
+    setEvpnZoneId('')
+    setOwnVxlanZone(true)
     setZoneStatus(null)
     setZoneMessage(null)
     setProvisionResults(null)
@@ -1086,6 +1096,8 @@ export default function VdcTab() {
     })
     setTransport(transportFormFrom(vdc.transport))
     setEdgeModel(EDGE_MODELS.includes(vdc.edgeModel) ? vdc.edgeModel : 'tenant')
+    setEvpnZoneId(vdc.evpnZoneId ?? '')
+    setOwnVxlanZone(!!vdc.sdnZoneName)
     setZoneStatus(null)
     setZoneMessage(null)
     setProvisionResults(null)
@@ -1196,6 +1208,7 @@ export default function VdcTab() {
           catalogGrants,
           transport: transportPayload,
           edgeModel,
+          evpnZoneId: evpnZoneId || null,
           quota,
         }
 
@@ -1242,6 +1255,8 @@ export default function VdcTab() {
           catalogGrants,
           transport: transportPayload,
           edgeModel,
+          evpnZoneId: evpnZoneId || null,
+          ownVxlanZone: evpnZoneId && !ownVxlanZone ? false : undefined,
           quota: Object.keys(quota).some((k) => quota[k] !== null) ? quota : undefined,
         }
 
@@ -2971,6 +2986,46 @@ export default function VdcTab() {
                       </Alert>
                     </Stack>
                   </Box>
+
+                  {/* Shared EVPN zone (#1334): the tenant creates networks there
+                      that reach its other vDCs attached to the same zone. */}
+                  {(() => {
+                    const clusterId = editingVdc?.connectionId ?? form.connectionId
+                    const offered = evpnZones.filter(z => z.members.some(m => m.connectionId === clusterId))
+                    if (offered.length === 0 && !evpnZoneId) return null
+                    return (
+                      <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                        <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <i className="ri-share-line" />
+                          {t('vdc.evpn.vdcTitle')}
+                          {hintIcon(t('vdc.evpn.vdcHint'), false, true)}
+                        </Typography>
+                        <Stack spacing={1.5} sx={{ mt: 2 }}>
+                          <TextField
+                            select
+                            size="small"
+                            fullWidth
+                            sx={SMALL_SELECT_SX}
+                            label={t('vdc.evpn.vdcZone')}
+                            value={evpnZoneId}
+                            onChange={(e) => { setEvpnZoneId(e.target.value); if (!e.target.value) setOwnVxlanZone(true) }}
+                          >
+                            <MenuItem value="">{t('vdc.evpn.vdcZoneNone')}</MenuItem>
+                            {offered.map((z) => (<MenuItem key={z.id} value={z.id}>{z.name}</MenuItem>))}
+                          </TextField>
+                          {!editingVdc && evpnZoneId && (
+                            <FormControlLabel
+                              control={<Switch checked={ownVxlanZone} onChange={(e) => setOwnVxlanZone(e.target.checked)} />}
+                              label={t('vdc.evpn.vdcOwnZone')}
+                            />
+                          )}
+                          {editingVdc && !editingVdc.sdnZoneName && (
+                            <Alert severity="info" sx={{ py: 0 }}>{t('vdc.evpn.vdcNoOwnZone')}</Alert>
+                          )}
+                        </Stack>
+                      </Box>
+                    )
+                  })()}
 
                   {/* VXLAN transport (#899): how the tenant zone reaches its peers */}
                   <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>

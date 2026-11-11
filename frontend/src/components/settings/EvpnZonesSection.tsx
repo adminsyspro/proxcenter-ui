@@ -70,6 +70,8 @@ interface ZoneDto {
   vniStart: number
   vniEnd: number
   members: ZoneMember[]
+  vdcCount?: number
+  networkCount?: number
 }
 
 interface Discovery {
@@ -595,6 +597,7 @@ export default function EvpnZonesSection({ connections }: Props) {
                       <TableCell>{t('vdc.evpn.vniRange')}</TableCell>
                       <TableCell align="right">{t('vdc.evpn.mtu')}</TableCell>
                       <TableCell>{t('vdc.evpn.clusters')}</TableCell>
+                      <TableCell>{t('vdc.evpn.usage')}</TableCell>
                       <TableCell />
                     </TableRow>
                   </TableHead>
@@ -602,6 +605,10 @@ export default function EvpnZonesSection({ connections }: Props) {
                     {visible.map((z) => {
                       const busy = busyId === z.id
                       const hasVnets = (status[z.id] ?? []).some(s => s.vnetCount > 0)
+                      const hasVdcs = (z.vdcCount ?? 0) > 0
+                      let deleteTitle = t('vdc.evpn.delete')
+                      if (hasVdcs) deleteTitle = t('vdc.evpn.deleteBlockedVdcs')
+                      else if (hasVnets) deleteTitle = t('vdc.evpn.deleteBlocked')
                       return (
                         <TableRow key={z.id} hover>
                           <TableCell sx={{ whiteSpace: 'nowrap' }}>
@@ -647,6 +654,9 @@ export default function EvpnZonesSection({ connections }: Props) {
                               </Tooltip>
                             </Stack>
                           </TableCell>
+                          <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                            {t('vdc.evpn.usageValue', { vdcs: z.vdcCount ?? 0, networks: z.networkCount ?? 0 })}
+                          </TableCell>
                           <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                             {busy ? (
                               <CircularProgress size={18} sx={{ mr: 1, verticalAlign: 'middle' }} />
@@ -657,9 +667,9 @@ export default function EvpnZonesSection({ connections }: Props) {
                                     <i className="ri-pencil-line" />
                                   </IconButton>
                                 </Tooltip>
-                                <Tooltip title={hasVnets ? t('vdc.evpn.deleteBlocked') : t('vdc.evpn.delete')} arrow>
+                                <Tooltip title={deleteTitle} arrow>
                                   <span>
-                                    <IconButton size="small" color="error" aria-label={t('vdc.evpn.delete')} disabled={hasVnets} onClick={() => setConfirm({ kind: 'delete', zone: z })}>
+                                    <IconButton size="small" color="error" aria-label={t('vdc.evpn.delete')} disabled={hasVnets || hasVdcs} onClick={() => setConfirm({ kind: 'delete', zone: z })}>
                                       <i className="ri-delete-bin-line" />
                                     </IconButton>
                                   </span>

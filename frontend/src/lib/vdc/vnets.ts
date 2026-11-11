@@ -123,7 +123,7 @@ function rowToVnet(r: any): VdcVnet {
     zoneName: r.zoneName ?? null,
     firewall: r.firewall !== false,
     subnet,
-    tenantNetwork: network ? { id: network.id, name: network.name } : null,
+    tenantNetwork: network ? { id: network.id, name: network.name, shared: !!network.evpnZoneId } : null,
     createdBy: r.createdBy ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
   }
@@ -132,7 +132,7 @@ function rowToVnet(r: any): VdcVnet {
 export async function listVnetsForTenant(vdcId: string): Promise<VdcVnet[]> {
   const rows = await prisma.vdcVnet.findMany({
     where: { vdcId },
-    include: { subnet: true, tenantNetworkMember: { select: { tenantNetwork: { select: { id: true, name: true, subnet: { select: { id: true } } } } } } },
+    include: { subnet: true, tenantNetworkMember: { select: { tenantNetwork: { select: { id: true, name: true, evpnZoneId: true, subnet: { select: { id: true } } } } } } },
     orderBy: { displayName: 'asc' },
   })
   return rows.map(rowToVnet)
@@ -142,12 +142,17 @@ export async function listVnetsForTenant(vdcId: string): Promise<VdcVnet[]> {
 async function findVnetByDisplayName(vdcId: string, displayName: string) {
   return prisma.vdcVnet.findFirst({
     where: { vdcId, displayName },
-    include: { subnet: true, tenantNetworkMember: { select: { tenantNetwork: { select: { id: true, name: true, subnet: { select: { id: true } } } } } } },
+    include: { subnet: true, tenantNetworkMember: { select: { tenantNetwork: { select: { id: true, name: true, evpnZoneId: true, subnet: { select: { id: true } } } } } } },
   })
 }
 
-/** A VNet a stretched tenant network created (#901) is the provider's, not the tenant's to edit or delete. */
+/**
+ * A VNet a stretched tenant network created (#901) is the provider's, not the
+ * tenant's to edit or delete. A network of a shared EVPN zone (#1334) is the
+ * tenant's own: it passes.
+ */
 function assertNotTenantNetworkMember(row: any, displayName: string): void {
+  if (row?.tenantNetworkMember?.tenantNetwork?.evpnZoneId) return
   const network = row?.tenantNetworkMember?.tenantNetwork?.name
   if (network) {
     throw new Error(`VNet "${displayName}" belongs to tenant network "${network}" and is managed by the provider.`)
@@ -178,8 +183,12 @@ export interface CreateVnetInput {
   /** VXLAN: the VNI the tenant wants (roadmap#18). Allowed on a dedicated
    *  transport, or inside the provider range on a shared one. Null = automatic. */
   vni?: number | string | null
-  /** 'vxlan' (default) or 'vlan'. VLAN requires `bridge` and a matching vDC pool. */
-  type?: 'vxlan' | 'vlan'
+  /** 'vxlan' (default), 'vlan' or 'evpn'. VLAN requires `bridge` and a matching
+   *  vDC pool; EVPN requires the vDC to be attached to a shared zone (#1334). */
+  type?: 'vxlan' | 'vlan' | 'evpn'
+  /** EVPN: the vDCs of the tenant that carry the network, this one included.
+   *  Absent = every vDC of the tenant attached to the zone. */
+  vdcIds?: string[]
   bridge?: string
   /** Explicit VLAN tag; null/undefined = auto (first free in the vDC pools). */
   vlanTag?: number | null
@@ -216,6 +225,20 @@ async function getConn(vdc: ResolvedVdc): Promise<any> {
 export async function createVnetForTenant(input: CreateVnetInput): Promise<VdcVnet> {
   const vdc = await resolveVdcForVnet(input.vdcId, input.tenantId)
   if (!vdc) throw new Error('vDC not found')
+
+  // A network of the shared EVPN zone (#1334) is one network on several
+  // vDCs of the tenant: its own orchestration creates every local VNet.
+  if (input.type === 'evpn') {
+    if (input.vni !== undefined && input.vni !== null && input.vni !== '') {
+      throw new Error('vni applies to VXLAN networks only; the shared zone allocates the VNI.')
+    }
+    const { createEvpnNetworkForTenant } = await import('./evpnNetworks')
+    await createEvpnNetworkForTenant({
+      vdcId: vdc.id, tenantId: vdc.tenantId, displayName: input.displayName, description: input.description,
+      subnet: input.subnet ?? null, vdcIds: input.vdcIds, createdBy: input.createdBy,
+    })
+    return rowToVnet(await findVnetByDisplayName(vdc.id, input.displayName))
+  }
 
   const displayName = input.displayName
   if (!VNET_DISPLAY_NAME_REGEX.test(displayName)) {
@@ -411,10 +434,22 @@ export async function updateVnetForTenant(
     const dnsCsv = patch.subnet.dnsServers.length > 0
       ? patch.subnet.dnsServers.map(s => s.trim()).filter(Boolean).join(',')
       : ''
-    await prisma.vdcSubnet.update({
-      where: { id: row.subnet.id },
-      data: { dnsServers: dnsCsv || null },
-    })
+    // A network of the shared EVPN zone (#1334) has one addressing for all
+    // its vDCs: the canonical subnet and every mirror read the same DNS.
+    const sharedNetworkId: string | undefined = row.tenantNetworkMember?.tenantNetwork?.evpnZoneId
+      ? row.tenantNetworkMember.tenantNetwork.id
+      : undefined
+    if (sharedNetworkId) {
+      await prisma.vdcSubnet.updateMany({
+        where: { OR: [{ tenantNetworkId: sharedNetworkId }, { vnet: { tenantNetworkMember: { tenantNetworkId: sharedNetworkId } } }] },
+        data: { dnsServers: dnsCsv || null },
+      })
+    } else {
+      await prisma.vdcSubnet.update({
+        where: { id: row.subnet.id },
+        data: { dnsServers: dnsCsv || null },
+      })
+    }
   }
 
   if (patch.firewall !== undefined) {
@@ -430,11 +465,7 @@ export async function updateVnetForTenant(
     await prisma.vdcVnet.update({ where: { id: row.id }, data: updateData })
   }
 
-  const updated = await prisma.vdcVnet.findUnique({
-    where: { id: row.id },
-    include: { subnet: true },
-  })
-  return rowToVnet(updated)
+  return rowToVnet(await findVnetByDisplayName(vdc.id, displayName))
 }
 
 // ---------------------------------------------------------------------------
@@ -452,6 +483,14 @@ export async function deleteVnetForTenant(
   const row = await findVnetByDisplayName(vdc.id, displayName)
   if (!row) throw new Error(`VNet "${displayName}" not found`)
   assertNotTenantNetworkMember(row, displayName)
+
+  // A network of the shared EVPN zone (#1334) leaves this vDC only; it is
+  // deleted once no vDC of the tenant carries it any more.
+  const sharedNetwork = row.tenantNetworkMember?.tenantNetwork?.evpnZoneId ? row.tenantNetworkMember.tenantNetwork : null
+  if (sharedNetwork) {
+    const { removeEvpnNetworkFromVdc } = await import('./evpnNetworks')
+    return removeEvpnNetworkFromVdc(sharedNetwork.id, vdc.id)
+  }
 
   const pveName: string = row.pveName
 

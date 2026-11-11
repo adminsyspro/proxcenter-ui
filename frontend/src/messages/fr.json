@@ -11372,7 +11372,16 @@
       "renumber": "Changer le VNI",
       "renumberTitle": "Changer le VNI",
       "renumberConfirm": "Déplacer « {network} » sur « {cluster} » du VNI {vni} vers un VNI libre ? Les invités restent branchés ; le réseau est coupé quelques secondes sur ce cluster.",
-      "renumbered": "« {network} » déplacé du VNI {from} au VNI {to}."
+      "renumbered": "« {network} » déplacé du VNI {from} au VNI {to}.",
+      "vdcTitle": "Zone EVPN partagée",
+      "vdcHint": "Rattache le vDC à une zone EVPN portée par son cluster. Le tenant y crée alors des réseaux qui atteignent ses autres vDC rattachés à la même zone.",
+      "vdcZone": "Zone EVPN",
+      "vdcZoneNone": "Aucune",
+      "vdcOwnZone": "Créer aussi une zone VXLAN propre à ce vDC",
+      "vdcNoOwnZone": "Ce vDC n'a pas de zone VXLAN propre : ses réseaux overlay vivent dans la zone partagée.",
+      "usage": "Utilisation",
+      "usageValue": "{vdcs} vDC · {networks} réseaux",
+      "deleteBlockedVdcs": "Des vDC sont encore rattachés à la zone."
     }
   },
   "myVdc": {
@@ -11632,7 +11641,18 @@
         "gpu_check_unavailable": "Votre contingent GPU ne peut pas être vérifié pour le moment. Réessayez dans un instant.",
         "generic": "Une erreur est survenue. Réessayez."
       }
-    }
+    },
+    "vnetTypeShared": "Partagé entre mes vDC",
+    "vnetTypeHelpShared": "Un réseau partagé atteint tous les vDC que vous cochez ; un réseau VXLAN ou VLAN reste dans ce vDC.",
+    "vnetSharedAllocated": "Le VNI est attribué automatiquement dans la zone partagée.",
+    "vnetSharedPresence": "Présent sur",
+    "vnetSharedPresenceHelp": "Le réseau compte dans le quota de réseaux de chaque vDC où il est présent.",
+    "vnetShared": "Partagé",
+    "vnetSharedTooltip": "« {network} » est un seul réseau partagé entre vos vDC.",
+    "vnetSharedManage": "Choisir les vDC qui portent ce réseau",
+    "vnetSharedManageTitle": "vDC qui portent « {name} »",
+    "vnetSharedManageHelp": "Cocher un vDC y crée le réseau ; le décocher l'en retire, une fois qu'aucun invité ne l'utilise sur ce vDC.",
+    "deleteSharedVnetHint": "Le réseau est retiré de ce vDC seulement et reste sur vos autres vDC. Il est supprimé avec son dernier vDC."
   },
   "sdn": {
     "subtab": {

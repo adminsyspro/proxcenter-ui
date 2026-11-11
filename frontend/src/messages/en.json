@@ -11371,7 +11371,16 @@
       "renumber": "Change VNI",
       "renumberTitle": "Change the VNI",
       "renumberConfirm": "Move \"{network}\" on \"{cluster}\" from VNI {vni} to a free one? The guests stay plugged; the network is cut for a few seconds on this cluster.",
-      "renumbered": "\"{network}\" moved from VNI {from} to {to}."
+      "renumbered": "\"{network}\" moved from VNI {from} to {to}.",
+      "vdcTitle": "Shared EVPN zone",
+      "vdcHint": "Attach the vDC to an EVPN zone its cluster carries. The tenant then creates networks that reach its other vDCs attached to the same zone.",
+      "vdcZone": "EVPN zone",
+      "vdcZoneNone": "None",
+      "vdcOwnZone": "Also create a VXLAN zone for this vDC alone",
+      "vdcNoOwnZone": "This vDC has no VXLAN zone of its own: its overlay networks live in the shared zone.",
+      "usage": "Usage",
+      "usageValue": "{vdcs} vDC · {networks} networks",
+      "deleteBlockedVdcs": "vDCs are still attached to the zone."
     }
   },
   "myVdc": {
@@ -11631,7 +11640,18 @@
         "gpu_check_unavailable": "Your GPU contingent cannot be checked right now. Try again shortly.",
         "generic": "Something went wrong. Try again."
       }
-    }
+    },
+    "vnetTypeShared": "Shared between my vDCs",
+    "vnetTypeHelpShared": "A shared network reaches every vDC you select; a VXLAN or VLAN network stays in this vDC.",
+    "vnetSharedAllocated": "The VNI is allocated automatically in the shared zone.",
+    "vnetSharedPresence": "Present on",
+    "vnetSharedPresenceHelp": "The network counts in the network quota of each vDC it is present on.",
+    "vnetShared": "Shared",
+    "vnetSharedTooltip": "\"{network}\" is one network shared between your vDCs.",
+    "vnetSharedManage": "Choose the vDCs carrying this network",
+    "vnetSharedManageTitle": "vDCs carrying \"{name}\"",
+    "vnetSharedManageHelp": "Ticking a vDC creates the network there; unticking removes it, once no guest uses it on that vDC.",
+    "deleteSharedVnetHint": "The network is removed from this vDC only and stays on your other vDCs. It is deleted with its last vDC."
   },
   "sdn": {
     "subtab": {

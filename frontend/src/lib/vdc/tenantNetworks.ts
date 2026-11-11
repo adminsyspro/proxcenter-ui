@@ -85,7 +85,7 @@ export interface UpdateTenantNetworkInput {
 // Validation
 // ---------------------------------------------------------------------------
 
-function normalizeName(raw: unknown): string {
+export function normalizeName(raw: unknown): string {
   const name = String(raw ?? '').trim()
   if (!TENANT_NETWORK_NAME_REGEX.test(name)) {
     throw new Error(`${ERR} invalid name "${name}" (1-20 chars, lowercase letters / digits / dashes, must start with a letter).`)
@@ -120,7 +120,7 @@ function splitDns(csv: string | null | undefined): string[] {
   return csv ? csv.split(',').map(s => s.trim()).filter(Boolean) : []
 }
 
-function normalizeSubnet(raw: CreateTenantNetworkInput['subnet'] | undefined): { cidr: string; gateway: string; dnsServers: string | null } {
+export function normalizeSubnet(raw: CreateTenantNetworkInput['subnet'] | undefined): { cidr: string; gateway: string; dnsServers: string | null } {
   const cidr = String(raw?.cidr ?? '').trim()
   const gateway = String(raw?.gateway ?? '').trim()
   if (!cidr || !gateway) throw new Error(`${ERR} a subnet (CIDR and gateway) is required, it is the one IPAM pool of the whole network.`)
@@ -313,9 +313,13 @@ async function rowToNetwork(row: any): Promise<TenantNetwork> {
 // CRUD
 // ---------------------------------------------------------------------------
 
+/**
+ * The stretched networks the provider manages. The networks a tenant created
+ * in a shared EVPN zone (#1334) are its own and are left out.
+ */
 export async function listTenantNetworks(tenantId?: string): Promise<TenantNetwork[]> {
   const rows = await prisma.tenantNetwork.findMany({
-    where: tenantId ? { tenantId } : undefined,
+    where: { evpnZoneId: null, ...(tenantId ? { tenantId } : {}) },
     include: NETWORK_INCLUDE,
     orderBy: [{ tenantId: 'asc' }, { name: 'asc' }],
   })

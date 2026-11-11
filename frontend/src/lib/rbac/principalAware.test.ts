@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { headersMock, getServerSessionMock } = vi.hoisted(() => ({
   headersMock: vi.fn<() => Promise<Headers>>(),
@@ -261,6 +261,13 @@ describe('checkPermission, token branch: confined to the token tenant connection
     await truncate(['Connection'])
     await seedTenantWithConnection('tenant-b', 'conn-b')
     await seedTenantWithConnection('tenant-c', 'conn-c')
+  })
+
+  // Connection has no foreign key to tenants: left behind, these rows outlive
+  // the next file's tenant truncation as orphans, and the configuration backup
+  // test then fails to restore them (tenant trigger).
+  afterAll(async () => {
+    await truncate(['Connection'])
   })
 
   it('a non-default tenant token with null connectionIds is refused another tenant connection', async () => {

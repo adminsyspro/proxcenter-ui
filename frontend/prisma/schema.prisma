@@ -431,6 +431,10 @@ model User {
   authProvider String    @default("credentials") @map("auth_provider")
   ldapDn       String?   @map("ldap_dn")
   oidcSub      String?   @map("oidc_sub")
+  // Connection the OIDC identity was issued by: "default" for the provider
+  // IdP, the tenant id for a tenant's own IdP (issue #1289). An identity is the
+  // pair (connection, sub), never the subject alone.
+  oidcConnectionId String? @map("oidc_connection_id")
   // Emergency access: a local password still signs in once the account is
   // OIDC or LDAP. Set by a super admin, or kept for the last super admin.
   localLoginAllowed Boolean @default(false) @map("local_login_allowed")
@@ -456,6 +460,7 @@ model User {
   serviceDeskAssignments        RbacServiceDeskAssignment[] @relation("RbacServiceDeskAssignmentUser")
   serviceDeskAssignmentsGranted RbacServiceDeskAssignment[] @relation("RbacServiceDeskAssignmentGrantedBy")
 
+  @@unique([oidcConnectionId, oidcSub])
   @@index([tenantId])
   @@map("users")
 }
@@ -625,9 +630,12 @@ model LdapConfig {
   @@map("ldap_config")
 }
 
+// One row per tenant (issue #1289): the row id IS the tenant id, "default"
+// being the provider IdP. A tenant row signs in that tenant's users only.
 model OidcConfig {
   id               String   @id @default("default")
-  tenantId         String   @default("default") @map("tenant_id")
+  tenantId         String   @unique @default("default") @map("tenant_id")
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   enabled          Boolean  @default(false)
   providerName     String   @default("SSO") @map("provider_name")
   issuerUrl        String   @default("") @map("issuer_url")
@@ -660,6 +668,11 @@ model OidcConfig {
   // How several matching rows combine: "first_match" keeps the topmost row per
   // tenant/vDC, "cumulative" grants every matching role (issue #992).
   groupMappingStrategy String @default("first_match") @map("group_mapping_strategy")
+  // Tenant connections (issue #1289): the provider vouches for the addresses
+  // of this IdP (one it hosts, possibly on its internal network). Off, every
+  // address the server calls must be public HTTPS, checked at each sign-in,
+  // with no outbound proxy. Ignored while the tenant manages its own IdP.
+  trustedEndpoints Boolean @default(false) @map("trusted_endpoints")
   // Outbound HTTP proxy for the server-side calls to the IdP (roadmap#78).
   // Empty: HTTPS_PROXY / HTTP_PROXY from the environment, else direct.
   proxyUrl         String?  @map("proxy_url")
@@ -667,10 +680,12 @@ model OidcConfig {
   proxyPasswordEnc String?  @map("proxy_password_enc")
   // Hosts reached directly, NO_PROXY syntax; NO_PROXY is added to it.
   proxyBypass      String?  @map("proxy_bypass")
+  // Tenant connections only: e-mail domains allowed to sign in. Empty, any
+  // domain is accepted. JSON array of lowercase domains.
+  allowedDomains   Json     @default("[]") @map("allowed_domains")
   createdAt        DateTime @map("created_at")
   updatedAt        DateTime @map("updated_at")
 
-  @@index([tenantId])
   @@map("oidc_config")
 }
 
@@ -693,6 +708,9 @@ model Tenant {
   // left alone. Both set or both NULL (validated in the routes).
   vmidRangeStart Int? @map("vmid_range_start")
   vmidRangeEnd   Int? @map("vmid_range_end")
+  // The provider lets this tenant's admins manage the tenant's own OIDC
+  // connection (issue #1289). Off by default.
+  oidcSelfService Boolean @default(false) @map("oidc_self_service")
   createdBy   String?  @map("created_by")
   createdAt   DateTime @map("created_at")
   updatedAt   DateTime @map("updated_at")
@@ -703,6 +721,7 @@ model Tenant {
   tenantNetworks TenantNetwork[]
   catalogGrants  CatalogGrant[]
   rolePublications RbacRolePublication[]
+  oidcConnection OidcConfig?
 
   @@index([slug])
   @@map("tenants")

@@ -8,6 +8,7 @@ import { callRoute, readJson } from "@/__tests__/setup/route-test"
 const isOidcEnabledMock = vi.fn()
 const getOidcConfigMock = vi.fn()
 const isLdapEnabledMock = vi.fn()
+const tenantBySlugMock = vi.fn()
 
 vi.mock("@/lib/auth/oidc", () => ({
   isOidcEnabled: isOidcEnabledMock,
@@ -15,6 +16,10 @@ vi.mock("@/lib/auth/oidc", () => ({
 }))
 
 vi.mock("@/lib/auth/ldap", () => ({ isLdapEnabled: isLdapEnabledMock }))
+vi.mock("@/lib/auth/oidcConnections", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/auth/oidcConnections")>("@/lib/auth/oidcConnections")
+  return { ...actual, getActiveTenantConnectionBySlug: tenantBySlugMock }
+})
 
 async function importGET() {
   const mod = await import("../route")
@@ -24,6 +29,7 @@ async function importGET() {
 beforeEach(() => {
   vi.clearAllMocks()
   isLdapEnabledMock.mockResolvedValue(false)
+  tenantBySlugMock.mockResolvedValue(null)
 })
 
 describe("GET /api/v1/auth/providers", () => {
@@ -77,5 +83,36 @@ describe("GET /api/v1/auth/providers", () => {
     expect(body.oidcEnabled).toBe(false)
     expect(body.showLocalLogin).toBe(true)
     expect(body.forceSsoRedirect).toBe(false)
+  })
+})
+
+describe("GET /api/v1/auth/providers?tenant=<slug> (issue #1289)", () => {
+  const provider = { providerName: "Provider SSO", showLocalLogin: true, forceSsoRedirect: false }
+  const get = async (searchParams?: Record<string, string>) => {
+    const GET = await importGET()
+    return readJson<any>(await callRoute(GET as any, { method: "GET", searchParams }))
+  }
+
+  beforeEach(() => {
+    isOidcEnabledMock.mockResolvedValue(true)
+    getOidcConfigMock.mockResolvedValue(provider)
+  })
+
+  it("names the provider IdP's NextAuth id without a tenant", async () => {
+    const body = await get()
+    expect(body.oidcProviderId).toBe("oidc")
+    expect(tenantBySlugMock).not.toHaveBeenCalled()
+  })
+
+  it("answers with the tenant's own IdP and login flags", async () => {
+    tenantBySlugMock.mockResolvedValue({ id: "t-acme", providerName: "Acme SSO", showLocalLogin: false, forceSsoRedirect: true })
+    const body = await get({ tenant: "acme" })
+    expect(tenantBySlugMock).toHaveBeenCalledWith("acme")
+    expect(body).toMatchObject({ oidcEnabled: true, oidcProviderId: "oidc-t-acme", oidcProviderName: "Acme SSO", showLocalLogin: false, forceSsoRedirect: true })
+  })
+
+  it("answers an unknown slug, or one without a live IdP, exactly like /login", async () => {
+    const plain = await get()
+    expect(await get({ tenant: "ghost" })).toEqual(plain)
   })
 })

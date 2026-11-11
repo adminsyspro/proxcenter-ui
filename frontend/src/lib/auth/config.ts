@@ -10,9 +10,11 @@ import { verifyPassword, hashPassword, needsRehash, burnPasswordCheck } from "./
 import { auditKeptForLastSuperAdmin, isExternalProvider, isLastLocalSuperAdmin, localPasswordOnExternalSignIn } from "./localLogin"
 import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdapDetailed, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
-import { getOidcConfig, oidcSeedRoleId, syncOidcRoleAssignment } from "./oidc"
-import { holdsProtectedRole, isEmailVouched, oidcLinkRefusal, OIDC_LINK_REFUSED } from "./oidcLinking"
-import { oidcOpenidAgent } from "./oidcProxy"
+import { getOidcConfig, oidcSeedRoleId, syncOidcRoleAssignment, type OidcConfig } from "./oidc"
+import { auditOidcLinkRefusal, auditOidcUnverifiedLink, holdsProtectedRole, isEmailVouched, oidcLinkRefusal, OIDC_LINK_REFUSED } from "./oidcLinking"
+import { connectionIdFromProvider, getOidcConnection, isTenantConnection, listActiveOidcConnections, PROVIDER_CONNECTION_ID, providerIdFor } from "./oidcConnections"
+import { signInWithTenantConnection } from "./tenantOidcSignIn"
+import { bindConnectionHttpOptions, connectionHttpOptions, resolveOidcMetadata, type OidcMetadata } from "./oidcMetadata"
 import { isSessionTenantDisabled, loadJwtContext } from "./jwtContext"
 import { createSession, evaluateSession, revokeSession, touchSession } from "./sessions"
 import { sessionDurations } from "./durations"
@@ -94,43 +96,6 @@ async function logLdapRefusal(username: string, reason: string, detail?: string)
   }
 }
 
-/**
- * Record why an OIDC identity was not bound to the local account sharing its
- * e-mail (server log + `login_failed` audit row). The user only sees a
- * generic refusal on the login page.
- */
-async function logOidcLinkRefusal(email: string, reason: string): Promise<void> {
-  console.warn(`[oidc] sign-in refused for "${email}": ${reason}`)
-  try {
-    const { audit } = await import("@/lib/audit")
-    await audit({
-      action: "login_failed",
-      category: "auth",
-      userEmail: email,
-      details: { reason, provider: "oidc" },
-      status: "failure",
-      errorMessage: reason,
-    })
-  } catch (e) {
-    console.error("[oidc] cannot audit the refused sign-in:", e)
-  }
-}
-
-async function logOidcUnverifiedLink(email: string): Promise<void> {
-  console.warn(`[oidc] "${email}" linked to an existing account without a verified e-mail`)
-  try {
-    const { audit } = await import("@/lib/audit")
-    await audit({
-      action: "login",
-      category: "auth",
-      userEmail: email,
-      details: { reason: "email_not_verified", provider: "oidc", linked: true },
-      status: "warning",
-    })
-  } catch (e) {
-    console.error("[oidc] cannot audit the unverified link:", e)
-  }
-}
 
 /**
  * Best-effort request origin for a new session row.
@@ -441,8 +406,17 @@ export const authOptions: NextAuthOptions = {
         // Chercher ou créer l'utilisateur (Postgres)
         let user = await prisma.user.findUnique({
           where: { email },
-          select: { id: true, email: true, name: true, role: true, enabled: true, password: true, localLoginAllowed: true },
+          select: { id: true, email: true, name: true, role: true, enabled: true, password: true, localLoginAllowed: true, oidcConnectionId: true },
         })
+
+        // An account a tenant's own IdP provisioned belongs to that IdP
+        // (issue #1289). Binding the provider's directory to it by e-mail would
+        // hand the tenant whatever the directory grants: the tenant could have
+        // reserved the address of a provider employee before their first login.
+        if (user?.oidcConnectionId && user.oidcConnectionId !== "default") {
+          await logLdapRefusal(credentials.username, "tenant_idp_account", `${ldapUser.dn} matches an account of a tenant identity provider`)
+          throw new Error("Invalid LDAP credentials")
+        }
 
         const now = new Date()
 
@@ -472,7 +446,7 @@ export const authOptions: NextAuthOptions = {
             create: { userId: id, tenantId: "default", isDefault: true, joinedAt: now },
           })
 
-          user = { id, email, name: ldapUser.name, role: "viewer", enabled: true, password: null, localLoginAllowed: false }
+          user = { id, email, name: ldapUser.name, role: "viewer", enabled: true, password: null, localLoginAllowed: false, oidcConnectionId: null }
         } else {
           if (!user.enabled) {
             throw new Error("Account disabled")
@@ -582,8 +556,15 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account, profile }) {
-      // Handle OIDC provider sign-in: provision or update user in SQLite
-      if (account?.provider === 'oidc' && profile) {
+      // OIDC sign-in: the provider IdP ("oidc") or a tenant's own ("oidc-<tenant>", issue #1289).
+      const oidcConnectionId = connectionIdFromProvider(account?.provider)
+      if (oidcConnectionId && oidcConnectionId !== PROVIDER_CONNECTION_ID) {
+        const tenantConfig = profile ? await getOidcConnection(oidcConnectionId) : null
+        if (!tenantConfig || !tenantConfig.enabled || !isTenantConnection(tenantConfig)) return false
+        return signInWithTenantConnection({ user: user as any, profile: profile as any, config: tenantConfig })
+      }
+
+      if (oidcConnectionId === PROVIDER_CONNECTION_ID && profile) {
         const oidcConfig = await getOidcConfig()
 
         if (!oidcConfig || !oidcConfig.enabled) return false
@@ -598,9 +579,14 @@ export const authOptions: NextAuthOptions = {
 
         if (!email) return false
 
-        // Look up by oidc_sub first, then by email
+        // Look up by (provider connection, sub) first, then by email. The
+        // subject alone is not an identity: a tenant IdP may issue the same one.
         let existing = await prisma.user.findFirst({
-          where: { oidcSub: sub },
+          // A NULL connection id is a provider identity written before issue
+          // #1289 (an older backup, an instance not yet upgraded): tenant
+          // accounts always carry their tenant id.
+          where: { oidcSub: sub, OR: [{ oidcConnectionId: PROVIDER_CONNECTION_ID }, { oidcConnectionId: null }] },
+          orderBy: { oidcConnectionId: { sort: "asc", nulls: "last" } },
           select: { id: true, email: true, name: true, role: true, enabled: true, oidcSub: true, password: true, localLoginAllowed: true },
         })
 
@@ -633,14 +619,14 @@ export const authOptions: NextAuthOptions = {
             })
 
             if (refusal) {
-              await logOidcLinkRefusal(email, refusal)
+              await auditOidcLinkRefusal(email, refusal, PROVIDER_CONNECTION_ID)
               return `/login?error=${OIDC_LINK_REFUSED}`
             }
 
             // Linked although the IdP does not vouch for the address: the
             // configuration allows it, the audit trail says so.
             if (!isEmailVouched((profile as any).email_verified, oidcConfig.idpVerifiesEmail)) {
-              await logOidcUnverifiedLink(email)
+              await auditOidcUnverifiedLink(email, PROVIDER_CONNECTION_ID)
             }
           }
 
@@ -656,6 +642,7 @@ export const authOptions: NextAuthOptions = {
             data: {
               name,
               oidcSub: sub,
+              oidcConnectionId: PROVIDER_CONNECTION_ID,
               lastLoginAt: now,
               updatedAt: now,
               authProvider: "oidc",
@@ -713,6 +700,7 @@ export const authOptions: NextAuthOptions = {
               role: roleName,
               authProvider: "oidc",
               oidcSub: sub,
+              oidcConnectionId: PROVIDER_CONNECTION_ID,
               enabled: true,
               createdAt: now,
               updatedAt: now,
@@ -798,7 +786,8 @@ export const authOptions: NextAuthOptions = {
         // Don't store avatar in JWT to keep cookie size small
         // Avatar will be fetched from DB in session callback
         token.role = user.role
-        token.authProvider = account?.provider === 'oidc' ? 'oidc' : user.authProvider
+        const viaOidc = connectionIdFromProvider(account?.provider) !== null
+        token.authProvider = viaOidc ? 'oidc' : user.authProvider
 
         try {
           const origin = await requestOrigin()
@@ -812,7 +801,7 @@ export const authOptions: NextAuthOptions = {
           token.sid = await createSession({
             userId: user.id,
             ...origin,
-            idToken: account?.provider === 'oidc' ? (account.id_token ?? null) : null,
+            idToken: viaOidc ? (account?.id_token ?? null) : null,
           })
           token.authAt = Date.now()
         } catch (e: any) {
@@ -1059,42 +1048,76 @@ export async function getAuthOptions(req?: Request): Promise<NextAuthOptions> {
     },
   })
 
-  const oidcConfig = await getOidcConfig()
+  // One provider per live connection: the provider IdP keeps "oidc", each
+  // tenant IdP gets "oidc-<tenant>" and so its own callback URL (issue #1289).
+  // A tenant IdP is registered only for the request that addresses it: NextAuth
+  // answers /api/auth/providers with every registered provider, unauthenticated,
+  // and that list must not enumerate the provider's customers.
+  const addressed = addressedProviderId(req)
+  const connections = (await listActiveOidcConnections()).filter(
+    c => !isTenantConnection(c) || providerIdFor(c.id) === addressed,
+  )
+  if (connections.length === 0) return withSecure(authOptions)
 
-  if (!oidcConfig || !oidcConfig.enabled || !oidcConfig.issuerUrl || !oidcConfig.clientId) {
-    return withSecure(authOptions)
+  // Endpoints are only needed by the request that signs in through, or comes
+  // back from, that provider: every other request (session reads, the provider
+  // list) registers it by name, without contacting the IdP.
+  const providers = await Promise.all(
+    connections.map(async c => {
+      if (providerIdFor(c.id) !== addressed) return buildOidcProvider(c, null)
+      try {
+        return buildOidcProvider(c, await resolveOidcMetadata(c))
+      } catch (e: any) {
+        // Still registered: NextAuth then reports the sign-in error rather
+        // than an unknown provider.
+        console.error(`[oidc] discovery failed for connection ${c.id}:`, e?.message || e)
+        return buildOidcProvider(c, null)
+      }
+    }),
+  )
+
+  return withSecure({ ...authOptions, providers: [...authOptions.providers, ...providers] })
+}
+
+/** The provider a NextAuth sign-in or callback request names, if any. */
+function addressedProviderId(req?: Request): string | null {
+  if (!req) return null
+  let pathname: string
+  try {
+    pathname = new URL(req.url).pathname
+  } catch {
+    return null
   }
+  const match = /\/api\/auth\/(?:signin|callback)\/([^/]+)$/.exec(pathname)
+  if (!match) return null
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return null
+  }
+}
 
-  let issuerBase = oidcConfig.issuerUrl
-  while (issuerBase.endsWith('/')) issuerBase = issuerBase.slice(0, -1)
-
-  const oidcProvider: OAuthConfig<any> = {
-    id: 'oidc',
+/**
+ * NextAuth OAuth provider for one OIDC connection. Without metadata, the
+ * provider is only named (listed, never used for a flow on this request).
+ *
+ * No `wellKnown` and no `httpOptions`: NextAuth would apply them as
+ * openid-client's process-wide defaults, which concurrent sign-ins through
+ * different connections race on (issue #1289). The endpoints come from our own
+ * discovery and the connection's HTTP options are set on its own client and
+ * issuer, inside the token exchange (see oidcMetadata.ts).
+ */
+export function buildOidcProvider(oidcConfig: OidcConfig, metadata: OidcMetadata | null): OAuthConfig<any> {
+  const base = {
+    id: providerIdFor(oidcConfig.id),
     name: oidcConfig.providerName || 'SSO',
-    type: 'oauth',
-    // When manual endpoint overrides are used we skip .well-known discovery,
-    // so openid-client has no canonical issuer to validate the id_token `iss`
-    // claim against and rejects every callback with `expected undefined`.
-    // Passing `issuer` here gives it the value to compare against.
-    issuer: oidcConfig.authorizationUrl ? oidcConfig.issuerUrl : undefined,
-    wellKnown: oidcConfig.authorizationUrl ? undefined : `${issuerBase}/.well-known/openid-configuration`,
-    authorization: oidcConfig.authorizationUrl ? {
-      url: oidcConfig.authorizationUrl,
-      params: { scope: oidcConfig.scopes },
-    } : { params: { scope: oidcConfig.scopes } },
-    token: oidcConfig.tokenUrl || undefined,
-    userinfo: oidcConfig.userinfoUrl || undefined,
+    type: 'oauth' as const,
     clientId: oidcConfig.clientId,
     clientSecret: oidcConfig.clientSecret || '',
     idToken: true,
-    checks: ['state'],
-    // Discovery, token exchange, JWKS and userinfo are made by this server:
-    // they go through the outbound proxy when one is set (roadmap#78). Always
-    // passed, see oidcOpenidAgent. 10 s instead of openid-client's 3.5 s, a
-    // tunnel through a corporate proxy adds round trips.
-    httpOptions: { agent: oidcOpenidAgent(oidcConfig, issuerBase), timeout: 10000 } as any,
+    checks: ['state'] as any,
     allowDangerousEmailAccountLinking: true,
-    profile(profile) {
+    profile(profile: any) {
       return {
         id: profile.sub,
         email: profile[oidcConfig.claimEmail] || profile.email,
@@ -1102,13 +1125,30 @@ export async function getAuthOptions(req?: Request): Promise<NextAuthOptions> {
         avatar: profile.picture || null,
         role: 'viewer' as UserRole,
         authProvider: 'oidc' as const,
-        tenantId: 'default',
+        tenantId: oidcConfig.tenantId,
       }
     },
   }
+  if (!metadata) return { ...base, authorization: { params: { scope: oidcConfig.scopes } } }
 
-  return withSecure({
-    ...authOptions,
-    providers: [...authOptions.providers, oidcProvider],
-  })
+  // Discovery, token exchange and keys are requests of this server: through
+  // the connection's outbound proxy when one is set (roadmap#78), through the
+  // strict agent for a self-service tenant, with a 10 s budget.
+  const httpOptions = connectionHttpOptions(oidcConfig)
+  return {
+    ...base,
+    // Also what openid-client compares the id_token `iss` claim with.
+    issuer: metadata.issuer,
+    authorization: { url: metadata.authorization_endpoint, params: { scope: oidcConfig.scopes } },
+    token: {
+      url: metadata.token_endpoint,
+      async request({ client, params, checks, provider }: any) {
+        bindConnectionHttpOptions(client, httpOptions)
+        const tokens = await client.callback(provider.callbackUrl, params, checks)
+        return { tokens }
+      },
+    },
+    userinfo: metadata.userinfo_endpoint ? { url: metadata.userinfo_endpoint } : undefined,
+    jwks_endpoint: metadata.jwks_uri,
+  } as OAuthConfig<any>
 }

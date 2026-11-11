@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prismaTest, testSchema } from '@/__tests__/setup/prisma-test'
 
 import { compareMigrations, dumpConfiguration, isBackupPayload, restoreConfiguration, summarizeBackup, type BackupPayload } from './engine'
+import { BACKUP_SECTIONS } from './tables'
 
 function keyed(secret: string) {
   const key = createHash('sha256').update(secret).digest()
@@ -102,6 +103,28 @@ describe('configuration backup engine', () => {
     expect(ids.map(r => Number(r.id))).toEqual([7, 8])
   })
 
+  it("restores a tenant's own OIDC connection after its tenant, secret moved to the local key (issue #1289)", async () => {
+    const now = new Date()
+    await prismaTest.tenant.create({ data: { id: 'cb-idp', slug: 'cb-idp', name: 'IdP Co', operatingModel: 'msp', createdAt: now, updatedAt: now } })
+    await prismaTest.oidcConfig.create({
+      data: {
+        id: 'cb-idp', tenantId: 'cb-idp', enabled: true, issuerUrl: 'https://idp.example.test/realms/co',
+        clientId: 'pxc', clientSecretEnc: source.encrypt('tenant-secret'), allowedDomains: ['co.example'], createdAt: now, updatedAt: now,
+      },
+    })
+
+    const { payload } = await dumpConfiguration(prismaTest, testSchema, source.decrypt)
+    await prismaTest.tenant.delete({ where: { id: 'cb-idp' } })
+    expect(await prismaTest.oidcConfig.findUnique({ where: { id: 'cb-idp' } })).toBeNull()
+
+    await restoreConfiguration(prismaTest, testSchema, JSON.parse(JSON.stringify(payload)), target.encrypt)
+
+    const row = await prismaTest.oidcConfig.findUniqueOrThrow({ where: { id: 'cb-idp' } })
+    expect(row.tenantId).toBe('cb-idp')
+    expect(row.allowedDomains).toEqual(['co.example'])
+    expect(target.decrypt(row.clientSecretEnc!)).toBe('tenant-secret')
+  })
+
   it('drops rows pointing at a permission this install does not know, and reports unknown tables', async () => {
     const now = new Date()
     await prismaTest.rbacRole.upsert({ where: { id: 'cb-role' }, update: {}, create: { id: 'cb-role', name: 'cb-role', createdAt: now, updatedAt: now } })
@@ -112,7 +135,11 @@ describe('configuration backup engine', () => {
     const summary = await summarizeBackup(prismaTest, testSchema, payload)
     expect(summary.compatibility).toBe('same')
     expect(summary.unknownTables).toEqual(['not_a_table'])
-    expect(summary.sections.find(x => x.key === 'tenants')?.rows).toBe(payload.tables.tenants.length)
+    // The section counts every table it holds (vdcs, tenant networks...), which
+    // other test files sharing this schema may have filled.
+    const tenantTables = BACKUP_SECTIONS.find(x => x.key === 'tenants')!.tables
+    expect(summary.sections.find(x => x.key === 'tenants')?.rows).toBe(tenantTables.reduce((sum, t) => sum + (payload.tables[t.name]?.length ?? 0), 0))
+    expect(payload.tables.tenants.length).toBeGreaterThan(0)
 
     const result = await restoreConfiguration(prismaTest, testSchema, payload, source.encrypt)
     expect(result.skippedTables).toEqual(['not_a_table'])

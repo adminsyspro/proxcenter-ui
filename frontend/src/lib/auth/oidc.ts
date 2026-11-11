@@ -1,23 +1,24 @@
 // src/lib/auth/oidc.ts
-// OIDC / SSO config helpers. NextAuth's OIDC provider is built on the values
-// returned here at request time, so the singleton row in `oidc_config` is
-// the canonical source of truth (encrypted client secret + claim mappings).
+// OIDC / SSO config helpers. NextAuth's OIDC providers are built at request
+// time from the `oidc_config` rows (see oidcConnections.ts): the "default" row
+// is the provider IdP, every other row the IdP of one tenant (issue #1289).
 
 import { prisma } from "@/lib/db/prisma"
-import { decryptSecret } from "@/lib/crypto/secret"
 import { syncProviderGrants, type ProviderGrantsDb, type MembershipPort } from "./roleSync"
 import {
   ALL_PUBLISHED_TENANTS,
   DEFAULT_TENANT_ID,
-  normalizeGroupGrantMapping,
-  normalizeMappingStrategy,
-  projectGrantsToRoleMapping,
   type GroupGrant,
   type MappingStrategy,
 } from "./groupMapping"
+import { getOidcConnection, PROVIDER_CONNECTION_ID } from "./oidcConnections"
 import { loadVdcScopes, toProviderGrantRows, type ResolvedGrant, type VdcScopeDb } from "./vdcScope"
 
 export interface OidcConfig {
+  /** Connection id: "default" for the provider IdP, else the tenant id (issue #1289). */
+  id: string
+  /** Tenant whose users this connection signs in. */
+  tenantId: string
   enabled: boolean
   providerName: string
   issuerUrl: string
@@ -52,73 +53,27 @@ export interface OidcConfig {
   proxyUsername: string | null
   proxyPassword: string | null
   proxyBypass: string | null
+  /** Tenant connections: e-mail domains allowed to sign in, empty = any. */
+  allowedDomains: string[]
+  /**
+   * The tenant manages this connection itself (self-service): its URLs came
+   * from the tenant, so the server only reaches public HTTPS addresses for it.
+   */
+  strictUrls: boolean
 }
 
-/** Cheap "is OIDC turned on" probe — see isLdapEnabled for the rationale. */
+/** Cheap "is OIDC turned on" probe for the provider IdP — see isLdapEnabled for the rationale. */
 export async function isOidcEnabled(): Promise<boolean> {
   const row = await prisma.oidcConfig.findUnique({
-    where: { id: "default" },
+    where: { id: PROVIDER_CONNECTION_ID },
     select: { enabled: true },
   })
   return row?.enabled === true
 }
 
-/** Reads the full OIDC config + decrypts the client secret. */
+/** The provider IdP's configuration, client secret decrypted. */
 export async function getOidcConfig(): Promise<OidcConfig | null> {
-  const row = await prisma.oidcConfig.findUnique({ where: { id: "default" } })
-  if (!row) return null
-
-  let clientSecret: string | null = null
-  if (row.clientSecretEnc) {
-    try {
-      clientSecret = decryptSecret(row.clientSecretEnc)
-    } catch (e) {
-      console.error("Error decrypting OIDC client secret:", e)
-    }
-  }
-
-  let proxyPassword: string | null = null
-  if (row.proxyPasswordEnc) {
-    try {
-      proxyPassword = decryptSecret(row.proxyPasswordEnc)
-    } catch (e) {
-      console.error("Error decrypting OIDC proxy password:", e)
-    }
-  }
-
-  // group_role_mapping is JSONB holding either the tenant/vDC aware entry list
-  // or, on a config written before v1.5, the legacy flat { group: role } object.
-  // normalizeGroupGrantMapping absorbs both, so no data migration is needed.
-  const groupGrants = normalizeGroupGrantMapping(row.groupRoleMapping)
-  const groupRoleMapping = projectGrantsToRoleMapping(groupGrants)
-
-  return {
-    enabled: row.enabled,
-    providerName: row.providerName || "SSO",
-    issuerUrl: row.issuerUrl,
-    clientId: row.clientId,
-    clientSecret,
-    scopes: row.scopes || "openid profile email",
-    authorizationUrl: row.authorizationUrl,
-    tokenUrl: row.tokenUrl,
-    userinfoUrl: row.userinfoUrl,
-    claimEmail: row.claimEmail || "email",
-    claimName: row.claimName || "name",
-    claimGroups: row.claimGroups,
-    autoProvision: row.autoProvision,
-    defaultRole: row.defaultRole || "viewer",
-    groupRoleMapping,
-    groupGrants,
-    groupMappingStrategy: normalizeMappingStrategy(row.groupMappingStrategy),
-    showLocalLogin: row.showLocalLogin,
-    forceSsoRedirect: row.forceSsoRedirect,
-    requireVerifiedEmail: row.requireVerifiedEmail,
-    idpVerifiesEmail: row.idpVerifiesEmail,
-    proxyUrl: row.proxyUrl ?? null,
-    proxyUsername: row.proxyUsername ?? null,
-    proxyPassword,
-    proxyBypass: row.proxyBypass ?? null,
-  }
+  return getOidcConnection(PROVIDER_CONNECTION_ID)
 }
 
 /**
@@ -227,7 +182,7 @@ export function resolveOidcGrants(
     // the way instead of stopping at a provider floor. Only a deployment with
     // no group mapping at all uses the simple default grant.
     if (mapping.length > 0) return []
-    return [{ tenantId: DEFAULT_TENANT_ID, vdcId: null, roleId: toRoleId(config.defaultRole) }]
+    return [{ tenantId: config.tenantId || DEFAULT_TENANT_ID, vdcId: null, roleId: toRoleId(config.defaultRole) }]
   }
   return resolved
 }

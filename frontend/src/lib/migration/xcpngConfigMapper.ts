@@ -42,7 +42,7 @@ export function mapXoToPveConfig(
   networkBridge: string = "vmbr0",
   vlanTag?: number,
   cpuType: string = MIGRATION_CPU_TYPE_DEFAULT,
-  options: { guestConverted?: boolean } = {},
+  options: { guestConverted?: boolean; macPolicy?: "regenerate" } = {},
 ): PveVmCreateParams {
   const isEfi = xoConfig.firmware === "uefi"
   const isWin = isWindowsXoVm(xoConfig)
@@ -70,7 +70,7 @@ export function mapXoToPveConfig(
   // and a converted Linux guest gets its interface names pinned to it.
   const vifs = [...(xoConfig.networks || [])].sort((a, b) => Number(a.device) - Number(b.device))
   const nets: Record<string, string> = {}
-  for (const [i, vif] of vifs.entries()) nets[`net${i}`] = buildNetValue(nicModel, networkBridge, vif.mac, vlanTag)
+  for (const [i, vif] of vifs.entries()) nets[`net${i}`] = buildNetValue(nicModel, networkBridge, options.macPolicy === "regenerate" ? undefined : vif.mac, vlanTag)
   if (vifs.length === 0) nets.net0 = buildNetValue(nicModel, networkBridge, undefined, vlanTag)
 
   const params: PveVmCreateParams = {

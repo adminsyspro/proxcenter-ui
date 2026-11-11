@@ -8,7 +8,7 @@ import { NextResponse } from "next/server"
 import { checkPermission, getCurrentRbacInfraScope, PERMISSIONS, type RbacInfraScope } from "@/lib/rbac"
 import { sensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
-import type { MigrationNicMapping } from "@/lib/migration/target-overrides"
+import type { MigrationNetworkMapEntry, MigrationNicMapping } from "@/lib/migration/target-overrides"
 
 export interface MigrationTargetRequest {
   tenantId: string
@@ -19,6 +19,8 @@ export interface MigrationTargetRequest {
   networkBridge: string
   vlanTag?: number
   nics?: MigrationNicMapping[]
+  /** Bulk network table (ui#1333): its VLAN tags need the same right as a per-NIC tag. */
+  networkMap?: MigrationNetworkMapEntry[]
   /**
    * The VMkernel adapter the copy is pinned to (roadmap#53). On a vCenter
    * source it is applied by moving the vSphereBackupNFC tag on the HOST, a
@@ -69,12 +71,20 @@ export interface PermissionNeed {
  * on the session, and the batch scheduler, which checks them for the batch
  * creator before a queued job starts.
  */
-export function migrationNicPermissions(r: Pick<MigrationTargetRequest, "tenantId" | "targetConnectionId" | "targetNode" | "targetVmid" | "networkBridge" | "vlanTag" | "nics">): PermissionNeed[] {
+export function migrationNicPermissions(r: Pick<MigrationTargetRequest, "tenantId" | "targetConnectionId" | "targetNode" | "targetVmid" | "networkBridge" | "vlanTag" | "nics" | "networkMap">): PermissionNeed[] {
   if (r.tenantId === "default") return []
   const requestedNets: Record<string, string> = { net0: `virtio,bridge=${r.networkBridge}${r.vlanTag ? `,tag=${r.vlanTag}` : ""}` }
   for (const n of r.nics ?? []) {
     const tag = n.vlanTag ?? r.vlanTag
-    requestedNets[`net${n.index}`] = `virtio,bridge=${n.bridge}${tag ? `,tag=${tag}` : ""}`
+    // A custom MAC (ui#1330) is a MAC the operator sets: vm.config.nic.mac.
+    const mac = n.macMode === "custom" && n.mac ? `,macaddr=${n.mac}` : ""
+    requestedNets[`net${n.index}`] = `virtio,bridge=${n.bridge}${mac}${tag ? `,tag=${tag}` : ""}`
+  }
+  // The table's rows land on NICs whose position is only known once the
+  // source is read: checked under keys past the NIC range (net32 and up).
+  for (const [i, row] of (r.networkMap ?? []).entries()) {
+    const tag = row.vlanTag ?? r.vlanTag
+    requestedNets[`net${32 + i}`] = `virtio,bridge=${row.bridge}${tag ? `,tag=${tag}` : ""}`
   }
   const onVm = r.targetVmid !== undefined
   return sensitiveNicPermissions(requestedNets).map(permission => ({

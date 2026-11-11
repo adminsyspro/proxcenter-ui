@@ -70,6 +70,11 @@ async function handlePost(req: Request) {
     if (body.disks !== undefined || vms.some(vm => vm.disks !== undefined)) {
       return NextResponse.json({ error: "disks (per-disk storage) is not available for a batch: every VM of a batch goes to targetStorage" }, { status: 400 })
     }
+    // One custom MAC on every VM of a batch would be one MAC on many guests
+    // (ui#1330): a batch keeps or regenerates MACs (macPolicy), never sets one.
+    if (Array.isArray(body.nics) && body.nics.some((n: any) => n && typeof n === "object" && (n.macMode === "custom" || (n.mac !== undefined && n.mac !== null && n.mac !== "")))) {
+      return NextResponse.json({ error: "A batch cannot set a custom MAC address: use macPolicy \"keep\" or \"regenerate\"" }, { status: 400 })
+    }
     const ids = vms.map(vm => String(vm.sourceVmId ?? ""))
     if (new Set(ids).size !== ids.length) {
       return NextResponse.json({ error: "A VM appears twice in the batch" }, { status: 400 })

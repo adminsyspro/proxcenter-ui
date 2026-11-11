@@ -118,3 +118,10 @@ describe("mapXoToPveConfig: Windows without a guest agent report, vTPM (roadmap#
     expect(mapXoToPveConfig(makeConfig({ firmware: "uefi" }), 100, "ceph").tpmstate0).toBeUndefined()
   })
 })
+
+describe("mapXoToPveConfig: MAC policy (ui#1330)", () => {
+  it("keeps the VIF MAC by default and lets Proxmox assign one under regenerate", () => {
+    expect(mapXoToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0").nets.net0).toContain("macaddr=aa:bb:cc:dd:ee:ff")
+    expect(mapXoToPveConfig(makeConfig(), 100, "local-lvm", "vmbr0", undefined, undefined, { macPolicy: "regenerate" }).nets.net0).not.toContain("macaddr")
+  })
+})

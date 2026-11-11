@@ -8,7 +8,7 @@ import { assertTargetStorageSpace, gib } from "./target-space"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
-  soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, vmwareToolsState, soapCreateSnapshot, soapRemoveSnapshot,
+  soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, soapNameDistributedNics, vmwareToolsState, soapCreateSnapshot, soapRemoveSnapshot,
   soapWaitForConsolidation, soapFindSnapshotsByNamePrefix, CONSOLIDATION_TIMEOUT_MS, soapGetGuestStaticIpv4,
   SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS, soapPowerOffVm, soapConsolidateVmDisks, soapStartConsolidateVmDisks,
 } from "@/lib/vmware/soap"
@@ -18,7 +18,7 @@ import {
   soapGuestShutdown, soapWaitPoweredOff, soapKeepAlive,
 } from "@/lib/vmware/cbt"
 import { describeHardwareChanges, isWindowsVm, mapEsxiToPveConfig, virtioDevices, withoutVirtioChoices } from "../configMapper"
-import { bytesPerStorage, describeDiskPlan, describeOverrides, planDiskTargets, planStorages } from "../target-overrides"
+import { bytesPerStorage, describeDiskPlan, describeOverrides, diskDriveOptions, planDiskTargets, planStorages } from "../target-overrides"
 import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
 import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { decideNextPass, type PassStat, type ConvergenceConfig, type ConvergenceDecision } from "./convergence"
@@ -288,6 +288,8 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
 
     const vmConfigXml = await soapGetVmConfig(soapSession, config.sourceVmId)
     const vmConfig: EsxiVmConfig = parseVmConfig(vmConfigXml)
+    // Port group names of distributed-switch NICs, for the bulk network table (ui#1333).
+    await soapNameDistributedNics(soapSession, vmConfig.nics)
     // Per-disk choices (#317, lot 2), resolved before anything is sized,
     // created or copied: an excluded disk vanishes from vmConfig.disks here,
     // so no later step (CBT verdict, allocation, passes, verify, attach) ever
@@ -436,7 +438,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       await appendLog(jobId, "CBT enabled on source", "success")
     }
 
-    const overrides = { hardware: config.hardware, nics: config.nics }
+    const overrides = { hardware: config.hardware, nics: config.nics, networkMap: config.networkMap, macPolicy: config.macPolicy }
     // The review step's Bus column (#1000), per kept disk in target order.
     const buses = diskPlan.kept.map(k => k.bus)
     const overridesLine = describeOverrides(overrides)
@@ -908,6 +910,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true,
       targetStorage: config.targetStorage,
       ...(bootParams !== pveParams && { nets: bootParams.nets }),
+      // ui#1331: the operator's choice for each disk, else the job profile,
+      // else discard on a thin storage and iothread where the bus supports it.
+      driveOpts: (i, slot) => diskDriveOptions({
+        slot, storageType: storageTypes.get(diskPlan.kept[i].storage), scsihw: bootParams.scsihw, profile: config.diskOptions, disk: diskPlan.kept[i].options,
+      }),
     })
 
     // The source is powered off for good: give it back CBT the way we found it.

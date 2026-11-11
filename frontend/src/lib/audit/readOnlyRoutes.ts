@@ -37,6 +37,7 @@ export const READ_ONLY_MUTATION_ROUTES: Readonly<Record<string, string>> = {
   'v1/migrations/batches/copy-check': 'Migration preflight, read-only',
   'v1/migrations/batches/space-check': 'Migration preflight, read-only',
   'v1/migrations/preflight': 'Migration preflight, read-only',
+  'v1/vmware/[id]/vms/networks': 'Reads the source networks of a bulk selection (ui#1333), POST for the VM id list, changes nothing',
   'v1/alerts/sync': 'Background sync of the alerts the dashboard computed',
   'v1/orchestrator/alerts/events': 'Forwards Proxmox events to the orchestrator for analysis',
   'v1/orchestrator/alerts/backup-coverage/check': 'Backup coverage check, read-only',

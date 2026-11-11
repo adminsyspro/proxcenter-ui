@@ -5,7 +5,7 @@
 import type { EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import { vmwareToolsState } from "@/lib/vmware/soap"
 import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
-import { applyHardwareOverrides, buildNetValue, resolveNicTarget, type MigrationDiskBus, type MigrationTargetOverrides } from "./target-overrides"
+import { applyHardwareOverrides, buildNetValue, resolveNicTarget, targetNicMac, type MigrationDiskBus, type MigrationTargetOverrides } from "./target-overrides"
 import { tpmstate0Param } from "./vtpm"
 
 export interface PveVmCreateParams {
@@ -261,16 +261,16 @@ export function mapEsxiToPveConfig(
   }
   const nets: Record<string, string> = {}
   esxiConfig.nics.forEach((nic, i) => {
-    const target = resolveNicTarget(i, overrides?.nics, { bridge: networkBridge, vlanTag })
+    const target = resolveNicTarget(i, overrides?.nics, { bridge: networkBridge, vlanTag }, { name: nic.network, map: overrides?.networkMap })
     // A converted guest has the VirtIO network driver (netkvm on Windows), so
     // every NIC the operator left on "auto" becomes VirtIO, an E1000 source
     // adapter included.
     const model = target.model ?? defaultNicModel(nic.type)
-    nets[`net${i}`] = buildNetValue(model, target.bridge, nic.macAddress, target.vlanTag)
+    nets[`net${i}`] = buildNetValue(model, target.bridge, targetNicMac(nic.macAddress, target, overrides?.macPolicy), target.vlanTag)
   })
   if (esxiConfig.nics.length === 0) {
     const target = resolveNicTarget(0, overrides?.nics, { bridge: networkBridge, vlanTag })
-    nets.net0 = buildNetValue(target.model ?? (isWin && needsInboxDrivers ? "e1000" : "virtio"), target.bridge, undefined, target.vlanTag)
+    nets.net0 = buildNetValue(target.model ?? (isWin && needsInboxDrivers ? "e1000" : "virtio"), target.bridge, targetNicMac(undefined, target), target.vlanTag)
   }
 
   const params: PveVmCreateParams = applyHardwareOverrides({

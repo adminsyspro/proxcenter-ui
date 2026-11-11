@@ -21,6 +21,7 @@ import type { WarmMigrationConfig } from "@/lib/migration/warm/types"
 import { resolveRetryEngine, v2vConfigFromJobConfig, type RetrySourceConnection } from "@/lib/migration/retry-dispatch"
 import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig } from "@/lib/vmware/soap"
 import { decryptSecret } from "@/lib/crypto/secret"
+import { jobTargetOptions } from "@/lib/migration/target-overrides"
 
 export interface StartableJob {
   id: string
@@ -56,6 +57,9 @@ export function warmConfigFromJobConfig(c: Record<string, any>, engine: "warm-vm
     // Guest conversion at cutover (#1000): the operator's last choice when the
     // job was cut over before (a retry replays it).
     ...(typeof c.convertGuest === "boolean" && { convertGuest: c.convertGuest }),
+    // MAC policy and disk profile (ui#1330, #1331) on both engines, the
+    // network table (ui#1333) on the VMware one, whose source names networks.
+    ...jobTargetOptions(engine === "warm-vmware" ? c : { ...c, networkMap: undefined }),
   }
 }
 
@@ -69,6 +73,7 @@ export function coldConfigFromJobConfig(c: Record<string, any>): ColdConfig {
     ...(c.hardware && { hardware: c.hardware }),
     ...(c.nics && { nics: c.nics }),
     ...(Array.isArray(c.disks) && c.disks.length > 0 && { disks: c.disks }),
+    ...jobTargetOptions(c),
     migrationType: c.migrationType as "cold" | "live" | "sshfs_boot",
     transferMode: c.transferMode as "https" | "sshfs",
     // The user-selected Temporary Storage keeps SSHFS mounts, VMDK dumps and
@@ -167,6 +172,7 @@ export async function startMigrationJob(job: StartableJob, tenantId: string, sou
           networkBridge: cold.networkBridge, vlanTag: cold.vlanTag, startAfterMigration: cold.startAfterMigration,
           convertDisksToQcow2: cold.convertDisksToQcow2, cpuType: cold.cpuType,
           ...(cold.hardware && { hardware: cold.hardware }), ...(cold.nics && { nics: cold.nics }), ...(cold.disks && { disks: cold.disks }),
+          ...jobTargetOptions(config),
           tempStorage: config.tempStorage,
           migrationType: "cold",
           vmxPath: v2vRoute.vmxPath,

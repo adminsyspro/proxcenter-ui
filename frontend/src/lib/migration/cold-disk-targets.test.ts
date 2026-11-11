@@ -8,16 +8,16 @@ import { planDiskTargets } from "./target-overrides"
 const GIB = 1073741824
 
 describe("coldStorageTarget", () => {
-  it("imports as qcow2 into <path>/images/<vmid> with discard on a file-based storage", () => {
+  it("imports as qcow2 into <path>/images/<vmid> on a file-based storage", () => {
     expect(coldStorageTarget("nfs-slow", { type: "nfs", path: "/mnt/pve/nfs-slow" }, 120)).toEqual({
       storage: "nfs-slow", type: "nfs", isFileBased: true, importFormat: "qcow2",
-      imagesDir: "/mnt/pve/nfs-slow/images/120", driveOpts: ",discard=on",
+      imagesDir: "/mnt/pve/nfs-slow/images/120",
     })
   })
 
-  it("allocates raw, with no temp dir and no discard, on a block storage", () => {
+  it("allocates raw, with no temp dir, on a block storage", () => {
     expect(coldStorageTarget("local-lvm", { type: "lvmthin" }, 120)).toEqual({
-      storage: "local-lvm", type: "lvmthin", isFileBased: false, importFormat: "raw", imagesDir: "", driveOpts: "",
+      storage: "local-lvm", type: "lvmthin", isFileBased: false, importFormat: "raw", imagesDir: "",
     })
   })
 

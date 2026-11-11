@@ -534,7 +534,12 @@ function ConnectionsTab() {
         integrityCheckEnabled: formData.integrityCheckEnabled,
         integrityRegionCount: formData.integrityRegionCount,
         integrityRegionSizeMiB: formData.integrityRegionSizeMiB,
+        // Bulk migration limits of this target cluster (ui#1332)
+        migrationMaxParallel: formData.migrationMaxParallel,
+        migrationMaxPerNode: formData.migrationMaxPerNode,
       }),
+      // Bulk migration limit of a VMware source, per ESXi host (ui#1332), Enterprise only
+      ...(addConnType === 'vmware' && migrationAvailable && { migrationMaxPerSourceHost: formData.migrationMaxPerSourceHost }),
       // Provider-only create-with-owner: own the connection by an MSP tenant
       ...(!editingConn?.id && formData.ownerTenantId && { ownerTenantId: formData.ownerTenantId }),
     }

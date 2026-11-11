@@ -20,6 +20,7 @@ import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
 import { parseGuestTarget } from "@/lib/vdc/guestGuard"
 import { validateCpuAgainstPolicy, parseCpuProperty, loadCpuCapabilitiesIfNeeded } from "@/lib/vdc/computePolicy"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
+import { cicustomRefusal, foreignVolumeRefusal } from "@/lib/proxmox/volumeOwnership"
 import { getAllowedNetworksForTenant, validateNetAgainstScope } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig, IpamHintUnavailableError, IpamExhaustedError } from "@/lib/vdc/ipamSync"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
@@ -423,6 +424,18 @@ async function putHandler(
         return NextResponse.json({ error: e.message }, { status: 403 })
       }
       throw e
+    }
+
+    // An existing volume of another guest, attached or imported, needs the
+    // hardware right on that guest: the right held on this one opens its own
+    // disks only. Same for the storage a cicustom line reads its files from.
+    const foreignDenied = await foreignVolumeRefusal({
+      connectionId: id, conn, tenantId, type: type as 'qemu' | 'lxc', body, targetVmid: vmid, currentConfig,
+    })
+    if (foreignDenied) return foreignDenied
+    if (body.cicustom !== undefined) {
+      const cicustomDenied = await cicustomRefusal(id, body.cicustom)
+      if (cicustomDenied) return cicustomDenied
     }
 
     // Sélectionner les champs autorisés selon le type

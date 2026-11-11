@@ -25,6 +25,7 @@ import { startMigrationJob, type StartableJob } from "@/lib/migration/start-job"
 import { releaseLease, tryAcquireLease } from "@/lib/scheduler/lease"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 import { clampBulkConcurrency } from "@/app/(dashboard)/infrastructure/inventory/bulkMigrationConfig"
+import { MIGRATION_LIMIT_MAX, effectiveMigrationLimits, pickJobsToStart, sourceHostKey } from "@/lib/migration/migration-limits"
 import { hasPermission, PERMISSIONS } from "@/lib/rbac"
 import { migrationNicPermissions } from "@/lib/migration/authorize"
 import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
@@ -62,6 +63,16 @@ type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 async function lockBatch(tx: Tx, batchId: string): Promise<boolean> {
   const { count } = await tx.migrationBatch.updateMany({ where: { id: batchId }, data: { updatedAt: new Date() } })
   return count === 1
+}
+
+/**
+ * Transaction-scoped advisory lock on one limit scope (a target cluster or a
+ * source connection): the pumps of two batches sharing it run their counting
+ * and claiming one after the other. Advisory locks live outside any schema, so
+ * the client's schema binding does not matter here.
+ */
+async function lockLimitScope(tx: Tx, key: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`
 }
 
 /**
@@ -181,27 +192,56 @@ export async function pumpBatch(batchId: string, deps: PumpDeps = {}): Promise<P
 
   const { claimed, tenantId, status } = await prisma.$transaction(async (tx) => {
     if (!(await lockBatch(tx, batchId))) return { claimed: [] as StartableJob[], tenantId: "", status: null }
-    const batch = await tx.migrationBatch.findUnique({ where: { id: batchId }, select: { status: true, concurrency: true, tenantId: true } })
+    const batch = await tx.migrationBatch.findUnique({
+      where: { id: batchId },
+      select: { status: true, concurrency: true, tenantId: true, sourceConnectionId: true, targetConnectionId: true },
+    })
     if (!batch) return { claimed: [] as StartableJob[], tenantId: "", status: null }
     if (batch.status !== "running") return { claimed: [] as StartableJob[], tenantId: batch.tenantId, status: batch.status as BatchStatus }
 
     const jobs = await tx.migrationJob.findMany({
       where: { batchId },
-      select: { id: true, status: true, batchOrder: true },
+      select: { id: true, status: true, batchOrder: true, targetNode: true, sourceConnectionId: true, config: true },
       orderBy: [{ batchOrder: "asc" }, { createdAt: "asc" }],
     })
-    const running = jobs.filter(j => holdsBatchSlot(j.status)).length
+    const batchRunning = jobs.filter(j => holdsBatchSlot(j.status)).length
     const queued = jobs.filter(j => j.status === QUEUED_STATUS)
 
-    if (running === 0 && queued.length === 0) {
+    if (batchRunning === 0 && queued.length === 0) {
       await tx.migrationBatch.update({ where: { id: batchId }, data: { status: "completed" } })
       return { claimed: [] as StartableJob[], tenantId: batch.tenantId, status: "completed" as BatchStatus }
     }
 
+    // The cluster, node and source-host limits (ui#1332) count the migrations
+    // of every batch and the single ones: two batches into the same cluster, or
+    // reading from the same source, take these locks in the same order (target,
+    // then source) so they read each other's starts.
+    await lockLimitScope(tx, `migration-target:${batch.targetConnectionId}`)
+    await lockLimitScope(tx, `migration-source:${batch.sourceConnectionId}`)
+    const [target, source] = await Promise.all([
+      tx.connection.findUnique({ where: { id: batch.targetConnectionId }, select: { migrationMaxParallel: true, migrationMaxPerNode: true } }),
+      tx.connection.findUnique({ where: { id: batch.sourceConnectionId }, select: { type: true, migrationMaxPerSourceHost: true } }),
+    ])
+    const limits = effectiveMigrationLimits(target, source)
+    const active = await tx.migrationJob.findMany({
+      where: {
+        status: { notIn: [QUEUED_STATUS, ...TERMINAL_STATUSES] },
+        OR: [{ targetConnectionId: batch.targetConnectionId }, { sourceConnectionId: batch.sourceConnectionId }],
+      },
+      select: { targetConnectionId: true, targetNode: true, sourceConnectionId: true, config: true },
+    })
+    const hostKey = (j: { sourceConnectionId: string; config: unknown }) =>
+      j.sourceConnectionId === batch.sourceConnectionId ? sourceHostKey(j.sourceConnectionId, j.config) : null
+    const toStart = new Set(pickJobsToStart({
+      queued: queued.map(j => ({ id: j.id, targetNode: j.targetNode, sourceHostKey: hostKey(j) })),
+      running: active.map(j => ({ targetNode: j.targetNode, sourceHostKey: hostKey(j), sameTarget: j.targetConnectionId === batch.targetConnectionId })),
+      batchRunning,
+      limits: { ...limits, batch: clampBulkConcurrency(batch.concurrency, MIGRATION_LIMIT_MAX) },
+    }))
+
     const picked: StartableJob[] = []
-    let slots = clampBulkConcurrency(batch.concurrency) - running
     for (const job of queued) {
-      if (slots <= 0) break
+      if (!toStart.has(job.id)) continue
       // The status guard is what makes a start happen once: a pump that lost
       // the row (cancelled meanwhile, or claimed elsewhere) touches nothing.
       const { count } = await tx.migrationJob.updateMany({
@@ -214,7 +254,6 @@ export async function pumpBatch(batchId: string, deps: PumpDeps = {}): Promise<P
         select: { id: true, sourceConnectionId: true, sourceVmId: true, sourceVmName: true, targetConnectionId: true, targetNode: true, targetStorage: true, config: true },
       })
       if (row) picked.push(row)
-      slots--
     }
     return { claimed: picked, tenantId: batch.tenantId, status: "running" as BatchStatus }
   })

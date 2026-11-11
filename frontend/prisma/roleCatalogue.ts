@@ -28,6 +28,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   { id: "vm.backup", name: "vm.backup", category: "vm", description: "Backup/Restore a VM" },
   { id: "vm.clone", name: "vm.clone", category: "vm", description: "Clone a VM" },
   { id: "vm.migrate", name: "vm.migrate", category: "vm", description: "Migrate a VM", isDangerous: true },
+  { id: "vm.move_vdc", name: "vm.move_vdc", category: "vm", description: "Move a VM to another vDC of the same tenant", isDangerous: true },
   { id: "vm.config", name: "vm.config", category: "vm", description: "Modify VM configuration (excludes explicit tenant MAC and VLAN rights)", isDangerous: true },
   { id: "vm.config.media", name: "vm.config.media", category: "vm", description: "Change CD/DVD media or eject" },
   { id: "vm.config.nic.link", name: "vm.config.nic.link", category: "vm", description: "Toggle NIC link state (up/down)" },
@@ -193,6 +194,8 @@ export const ROLES: RoleSeed[] = [
       // network security, flows, resources) are provider-only.
       "vm.view", "vm.console", "vm.start", "vm.stop", "vm.restart", "vm.suspend",
       "vm.snapshot", "vm.backup", "vm.clone", "vm.migrate", "vm.config", "vm.delete", "vm.create",
+      // #1335: move a VM between the tenant's own vDCs, quotas checked on the target.
+      "vm.move_vdc",
       "node.view", "connection.view",
       // issue #920: the vDC ISO library is the tenant's own, guarded to its
       // storages by guardTenantStorageWrite.

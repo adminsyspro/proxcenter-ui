@@ -9,7 +9,7 @@
  * the node test project covers them without rendering.
  */
 
-import { HARDWARE_LIMITS, type MigrationDiskBus, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from '@/lib/migration/target-overrides'
+import { HARDWARE_LIMITS, MIGRATION_DISK_OPTION_KEYS, diskOptionsOf, isThinStorageType, normalizeUnicastMac, type MigrationDiskBus, type MigrationDiskMapping, type MigrationDiskOptions, type MigrationHardwareOverrides, type MigrationMacMode, type MigrationNicMapping } from '@/lib/migration/target-overrides'
 import { isFileBasedStorage } from '@/lib/proxmox/storage'
 
 export interface ReviewSourceNic {
@@ -51,6 +51,42 @@ export interface ReviewDiskState {
   exclude: boolean
   /** Forced target bus (#1000, warm only); absent or 'auto' keeps the engine's rule. */
   bus?: MigrationDiskBus
+  /** The options the operator set on this disk (ui#1331); an option left out follows the profile. */
+  options?: MigrationDiskOptions
+}
+
+/**
+ * The disk profile of both migration dialogs (ui#1331): discard on (applied
+ * on thin-provisioned storage), iothread on, SSD emulation off.
+ */
+export interface DiskProfileState {
+  discard: boolean
+  iothread: boolean
+  ssd: boolean
+}
+
+export const DEFAULT_DISK_PROFILE: DiskProfileState = { discard: true, iothread: true, ssd: false }
+
+/**
+ * The `diskOptions` field of the request: only the departures from the
+ * default profile, so a job left on the defaults stores nothing and the
+ * server's rule (discard on thin storage) applies. Undefined when nothing changed.
+ */
+export function buildDiskOptionsPayload(profile: DiskProfileState): MigrationDiskOptions | undefined {
+  const out: MigrationDiskOptions = {}
+  for (const key of MIGRATION_DISK_OPTION_KEYS) if (profile[key] !== DEFAULT_DISK_PROFILE[key]) out[key] = profile[key]
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+/** What a disk gets for one option when the operator leaves it: the profile, discard only on a thin storage. */
+export function profileDiskOption(key: keyof DiskProfileState, profile: DiskProfileState, storageType: string | undefined): boolean {
+  if (key === 'discard') return profile.discard && isThinStorageType(storageType)
+  return profile[key]
+}
+
+/** The value a disk row shows for one option: its own choice, else what the profile gives it. */
+export function effectiveDiskOption(disk: ReviewDiskState, key: keyof DiskProfileState, profile: DiskProfileState, storageType: string | undefined): boolean {
+  return disk.options?.[key] ?? profileDiskOption(key, profile, storageType)
 }
 
 export interface ReviewHardwareState {
@@ -64,6 +100,9 @@ export interface ReviewNicState {
   bridge: string
   vlanTag: string
   model: string
+  /** MAC of the target NIC (ui#1330): the source's, one Proxmox assigns, or `mac`. */
+  macMode: MigrationMacMode
+  mac: string
 }
 
 /**
@@ -84,7 +123,7 @@ export function initialHardwareState(source: ReviewSource | null | undefined): R
 
 /** One row per source NIC, all on the dialog's default bridge and tag. */
 export function initialNicState(source: ReviewSource | null | undefined, defaultBridge: string, defaultVlanTag: string): ReviewNicState[] {
-  return (source?.nics ?? []).map(() => ({ bridge: defaultBridge, vlanTag: defaultVlanTag, model: '' }))
+  return (source?.nics ?? []).map(() => ({ bridge: defaultBridge, vlanTag: defaultVlanTag, model: '', macMode: 'keep' as const, mac: '' }))
 }
 
 /** One row per source disk, all on the dialog's target storage and all migrated. */
@@ -160,11 +199,30 @@ export function disksValid(disks: ReviewDiskState[]): boolean {
   return keptReviewDisks(disks).every(k => k.storage.trim() !== '')
 }
 
+/**
+ * Why a NIC's custom MAC cannot be used: 'format' when it is not a unicast
+ * address, 'duplicate' when another adapter of the VM sets the same one, null
+ * when it is fine or the NIC does not set one.
+ */
+export function nicMacError(nics: ReviewNicState[], index: number): 'format' | 'duplicate' | null {
+  const nic = nics[index]
+  if (nic?.macMode !== 'custom') return null
+  const mac = normalizeUnicastMac(nic.mac)
+  if (!mac) return 'format'
+  const dup = nics.some((n, i) => i !== index && n.macMode === 'custom' && normalizeUnicastMac(n.mac) === mac)
+  return dup ? 'duplicate' : null
+}
+
+/** True when a NIC will not keep its source MAC: the guest sees a new adapter. */
+export function nicsChangeMac(nics: ReviewNicState[]): boolean {
+  return nics.some(n => n.macMode !== 'keep')
+}
+
 export function reviewIsValid(hw: ReviewHardwareState, nics: ReviewNicState[], disks: ReviewDiskState[] = []): boolean {
   const errors = hardwareErrors(hw)
   if (errors.cores || errors.sockets || errors.memoryMB) return false
   if (!disksValid(disks)) return false
-  return nics.every(n => n.bridge.trim() !== '' && !vlanTagInvalid(n.vlanTag))
+  return nics.every((n, i) => n.bridge.trim() !== '' && !vlanTagInvalid(n.vlanTag) && nicMacError(nics, i) === null)
 }
 
 /**
@@ -194,6 +252,11 @@ export function buildNicsPayload(nics: ReviewNicState[], canEditVlan: boolean): 
     const m: MigrationNicMapping = { index, bridge: n.bridge.trim() }
     if (canEditVlan && n.vlanTag.trim() !== '' && !vlanTagInvalid(n.vlanTag)) m.vlanTag = Number(n.vlanTag)
     if (n.model) m.model = n.model
+    if (n.macMode === 'regenerate') m.macMode = 'regenerate'
+    if (n.macMode === 'custom') {
+      m.macMode = 'custom'
+      m.mac = normalizeUnicastMac(n.mac) ?? n.mac.trim()
+    }
     return m
   })
 }
@@ -209,7 +272,11 @@ export function buildDisksPayload(disks: ReviewDiskState[], opts: { withBus?: bo
   return disks.map((d, index) => {
     if (d.exclude && index !== 0) return { index, exclude: true }
     // The bus only travels where the engine applies it (warm from VMware).
-    return { index, targetStorage: d.storage.trim(), ...(opts.withBus && d.bus && d.bus !== 'auto' && { bus: d.bus }) }
+    return {
+      index, targetStorage: d.storage.trim(), ...(opts.withBus && d.bus && d.bus !== 'auto' && { bus: d.bus }),
+      // The options set on this disk (ui#1331); the others follow the job profile.
+      ...diskOptionsOf(d.options ?? {}),
+    }
   })
 }
 

@@ -25,10 +25,10 @@ import { reserveTargetVmid } from "./reserve-target-vmid"
 import { releaseVmids } from "./vmid-reservation"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
-import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort, SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS } from "@/lib/vmware/soap"
+import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, soapNameDistributedNics, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort, SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS } from "@/lib/vmware/soap"
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
 import { warnIfEl10OnLowCpu } from "./el10-check"
-import { describeOverrides, planDiskTargets, describeDiskPlan, bytesPerStorage, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from "./target-overrides"
+import { describeOverrides, diskDriveOptions, planDiskTargets, describeDiskPlan, bytesPerStorage, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping, type MigrationNetworkMapEntry, type MigrationDiskOptions } from "./target-overrides"
 import { coldStorageTarget, coldStorages, localVolumeKinds, describeStorageSpace, storageSpaceShortfall, type ColdStorageTarget } from "./cold-disk-targets"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
 import { executeSSHWithTimeout } from "./ssh-long-exec"
@@ -88,6 +88,12 @@ interface MigrationConfig {
   hardware?: MigrationHardwareOverrides
   /** Per-source-NIC target bridge, VLAN tag and model (#317); unmapped NICs use networkBridge. */
   nics?: MigrationNicMapping[]
+  /** Bulk network table (ui#1333): source port group to target bridge. */
+  networkMap?: MigrationNetworkMapEntry[]
+  /** "regenerate": Proxmox assigns every NIC without its own MAC choice a new MAC (ui#1330). */
+  macPolicy?: "regenerate"
+  /** Profile of the target disks (ui#1331); absent options take the defaults. */
+  diskOptions?: MigrationDiskOptions
   /** Per-source-disk target storage or exclusion (#317, lot 2); unmapped disks use targetStorage. */
   disks?: MigrationDiskMapping[]
   migrationType?: "cold" | "live" | "sshfs_boot"
@@ -275,6 +281,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     await appendLog(jobId, `Retrieving VM configuration for "${config.sourceVmId}"...`)
     const vmXml = await soapGetVmConfig(soapSession, config.sourceVmId)
     const vmConfig = parseVmConfig(vmXml)
+    // Port group names of distributed-switch NICs, for the bulk network table (ui#1333).
+    await soapNameDistributedNics(soapSession, vmConfig.nics)
     // EL10 on a CPU type below x86-64-v3 does not boot (#1000): say it now.
     await warnIfEl10OnLowCpu({ session: soapSession, vmid: config.sourceVmId, guest: vmConfig, cpuType: config.cpuType, log: m => appendLog(jobId, m, "warn") })
 
@@ -509,7 +517,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
 
-    const overrides = { hardware: config.hardware, nics: config.nics }
+    const overrides = { hardware: config.hardware, nics: config.nics, networkMap: config.networkMap, macPolicy: config.macPolicy }
     const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides)
     const overridesLine = describeOverrides(overrides)
     if (overridesLine) await appendLog(jobId, overridesLine)
@@ -578,6 +586,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     }
     // The target of kept disk i (vmConfig.disks[i] is diskPlan.kept[i].disk).
     const diskTarget = (i: number): ColdStorageTarget => storageTargets.get(diskPlan.kept[i].storage)!
+    // Drive options of kept disk i on `slot` (ui#1331): the operator's choice
+    // for that disk, else the job profile, else discard on a thin storage and
+    // iothread where the bus supports it.
+    const diskDriveOpts = (i: number, slot: string): string => diskDriveOptions({
+      slot, storageType: diskTarget(i).type, scsihw: pveParams.scsihw, profile: config.diskOptions, disk: diskPlan.kept[i].options,
+    })
     // Temp file prefix of disk i: on its storage when file-based, in the temp base otherwise.
     const diskTmpFile = (i: number): string => `${diskTarget(i).imagesDir || tempBase}/proxcenter-mig-${jobId}-disk${i}`
 
@@ -600,7 +614,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Slot from the mapper: sata0 for the boot disk of OVMF and Windows guests
       // (#653), IDE and SATA source disks on their own bus, the rest on SCSI.
       const diskSlot = pveParams.diskSlots[i] ?? `scsi${i}`
-      const attachBody = new URLSearchParams({ [diskSlot]: volumeId })
+      const attachBody = new URLSearchParams({ [diskSlot]: `${volumeId}${diskDriveOpts(i, diskSlot)}` })
       try {
         await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
         // Record the attachment so the failure-path cleanup in
@@ -1426,8 +1440,9 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
       // Slot from the mapper (IDE and SATA source disks keep their bus).
       const diskSlot = pveParams.diskSlots[i] ?? `scsi${i}`
-      // Format, images directory and drive options of THIS disk's storage.
-      const { storage: diskStorage, importFormat, imagesDir, driveOpts } = diskTarget(i)
+      // Format and images directory of THIS disk's storage, and its drive options.
+      const { storage: diskStorage, importFormat, imagesDir } = diskTarget(i)
+      const driveOpts = diskDriveOpts(i, diskSlot)
 
       await updateJob(jobId, "transferring", {
         currentStep: `converting_disk_${i + 1}`,
@@ -1977,13 +1992,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // Helper: convert + import + attach a single disk
     async function convertAndImportDisk(i: number) {
       const tmpFile = diskTmpFile(i)
-      // Format, images directory and drive options of THIS disk's storage.
-      const { storage: diskStorage, importFormat, imagesDir, driveOpts } = diskTarget(i)
+      // Format and images directory of THIS disk's storage.
+      const { storage: diskStorage, importFormat, imagesDir } = diskTarget(i)
       // Slot from the mapper: sata0 for the boot disk of OVMF guests (the firmware
       // cannot enumerate an LSI controller) and of Windows guests (no boot-start
       // VirtIO driver in an untouched guest, #653), IDE and SATA source disks on
       // their own bus, SCSI data disks on SCSI for performance.
       const diskSlot = pveParams.diskSlots[i] ?? `scsi${i}`
+      const driveOpts = diskDriveOpts(i, diskSlot)
 
       // Convert VMDK to target format
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting to ${importFormat} format...`)
@@ -2809,7 +2825,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // Attach all disks + boot order atomically in a single PVE API PUT (replaces previous per-disk PUTs).
         const reconfigBody = new URLSearchParams()
         for (let di = 0; di < localVolumes.length; di++) {
-          reconfigBody.set(slotPerDisk[di], `${localVolumes[di].volumeId}${localTargets[di].driveOpts}`)
+          reconfigBody.set(slotPerDisk[di], `${localVolumes[di].volumeId}${diskDriveOpts(di, slotPerDisk[di])}`)
         }
         reconfigBody.set('boot', `order=${slotPerDisk[0]}`)
         await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, reconfigBody)

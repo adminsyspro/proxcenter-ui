@@ -52,3 +52,27 @@ describe("buildPveCreateParams: review-step overrides (#317)", () => {
     expect(p.net1).toBeUndefined()
   })
 })
+
+describe("v2v NICs: source network and MAC choice (ui#1330, ui#1333)", () => {
+  it("reads the source network virt-v2v keeps on each interface", () => {
+    const cfg = parseV2vXml(`<domain type="kvm"><name>w</name><memory unit="KiB">1048576</memory><vcpu>1</vcpu><os><type>hvm</type></os><devices>
+      <interface type="bridge"><mac address="00:50:56:00:00:01"/><source bridge="LAN &amp; servers"/><model type="virtio"/></interface>
+      <interface type="network"><source network="DMZ"/><model type="e1000"/></interface>
+    </devices></domain>`)
+    expect(cfg.nics).toEqual([
+      { model: "virtio", mac: "00:50:56:00:00:01", network: "LAN & servers" },
+      { model: "e1000", network: "DMZ" },
+    ])
+  })
+
+  it("maps each NIC by its source network and regenerates MACs on demand", () => {
+    const config = {
+      name: "w", memory: 1024, cores: 1, sockets: 1, firmware: "bios" as const, ostype: "l26", machine: "q35", scsihw: "virtio-scsi-single",
+      nics: [{ model: "virtio", mac: "00:50:56:00:00:01", network: "LAN" }, { model: "virtio", mac: "00:50:56:00:00:02", network: "DMZ" }],
+      disks: [],
+    }
+    const p = buildPveCreateParams(config, 100, "vmbr0", undefined, undefined, { networkMap: [{ source: "DMZ", bridge: "vmbr2" }], macPolicy: "regenerate" })
+    expect(p.net0).toBe("virtio,bridge=vmbr0")
+    expect(p.net1).toBe("virtio,bridge=vmbr2")
+  })
+})

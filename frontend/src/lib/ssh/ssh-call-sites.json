@@ -19,6 +19,7 @@
     "lib/diagnostics/connectionDiagnostics.ts": 1,
     "lib/migration/adopt-file-volume.ts": 3,
     "lib/migration/cross-cluster-watcher.ts": 3,
+    "lib/migration/mac-conflicts.ts": 1,
     "lib/migration/nfc-export.ts": 3,
     "lib/migration/pipeline.ts": 172,
     "lib/migration/pvesm-alloc.ts": 5,

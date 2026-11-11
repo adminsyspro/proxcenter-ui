@@ -35,7 +35,7 @@ import { ntfsCompressionPluginCheckCommand, ntfsCompressionPluginInstallScript }
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
 import { parseV2vXml, buildPveCreateParams } from "./v2vConfigMapper"
-import { describeOverrides, buildNetValue, resolveNicTarget, applyHardwareOverrides, planDiskTargets, planStorages, describeDiskPlan, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from "./target-overrides"
+import { describeOverrides, diskDriveOptions, buildNetValue, resolveNicTarget, targetNicMac, applyHardwareOverrides, planDiskTargets, planStorages, describeDiskPlan, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping, type MigrationNetworkMapEntry, type MigrationDiskOptions } from "./target-overrides"
 import { planV2vImports, v2vDiskSlot } from "./v2v-disk-targets"
 import type { V2vVmConfig } from "./v2vConfigMapper"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
@@ -54,6 +54,7 @@ import {
   soapLogout,
   soapGetVmConfig,
   parseVmConfig,
+  soapNameDistributedNics,
   soapCreateSnapshot,
   soapRemoveSnapshot,
   SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS,
@@ -110,6 +111,12 @@ export interface V2vMigrationConfig {
   hardware?: MigrationHardwareOverrides
   /** Per-source-NIC target bridge, VLAN tag and model (#317); unmapped NICs use networkBridge. */
   nics?: MigrationNicMapping[]
+  /** Bulk network table (ui#1333): source port group to target bridge. */
+  networkMap?: MigrationNetworkMapEntry[]
+  /** "regenerate": Proxmox assigns every NIC without its own MAC choice a new MAC (ui#1330). */
+  macPolicy?: "regenerate"
+  /** Profile of the target disks (ui#1331); absent options take the defaults. */
+  diskOptions?: MigrationDiskOptions
   /** Per-source-disk target storage or exclusion (#317, lot 2); unmapped disks use targetStorage. */
   disks?: MigrationDiskMapping[]
   /** vCenter datacenter name (libvirt vpx URI: vpx://VC/{datacenter}/...). Required for vcenter source. */
@@ -1844,6 +1851,8 @@ export async function runV2vMigrationPipeline(
 
       const vmConfigXml = await soapGetVmConfig(vmwareSession, config.sourceVmId)
       sourceVmwareConfig = parseVmConfig(vmConfigXml)
+      // Port group names of distributed-switch NICs, for the bulk network table (ui#1333).
+      await soapNameDistributedNics(vmwareSession, sourceVmwareConfig.nics)
       const datastoreNames = sourceVmwareConfig.disks.map(d => d.datastoreName).filter(Boolean)
       await appendLog(
         jobId,
@@ -2527,7 +2536,7 @@ export async function runV2vMigrationPipeline(
 
     // Build PVE creation params
     let createParams: Record<string, any>
-    const overrides = { hardware: config.hardware, nics: config.nics }
+    const overrides = { hardware: config.hardware, nics: config.nics, networkMap: config.networkMap, macPolicy: config.macPolicy }
 
     if (vmConfig) {
       // Override name from source VM (virt-v2v may use disk filename as name in -i disk mode)
@@ -2585,6 +2594,7 @@ export async function runV2vMigrationPipeline(
           vmConfig.nics = sourceVmwareConfig.nics.map(n => ({
             model: "virtio",
             mac: n.macAddress || undefined,
+            network: n.network || undefined,
           }))
         }
       } else if (sourceSizing) {
@@ -2611,7 +2621,7 @@ export async function runV2vMigrationPipeline(
         machine: "q35",
         boot: "order=scsi0",
         agent: "enabled=0",
-        net0: buildNetValue(fallbackNic.model ?? "virtio", fallbackNic.bridge, undefined, fallbackNic.vlanTag),
+        net0: buildNetValue(fallbackNic.model ?? "virtio", fallbackNic.bridge, targetNicMac(undefined, fallbackNic), fallbackNic.vlanTag),
       }, overrides.hardware)
     }
     const overridesLine = describeOverrides(overrides)
@@ -2790,6 +2800,13 @@ export async function runV2vMigrationPipeline(
     const useWinSataBoot = isWindowsVm && !useVirtioBlk
     const bus = { winSataBoot: useWinSataBoot, virtioBlk: useVirtioBlk }
 
+    // Drive options of one imported disk (ui#1331): the operator's choice for
+    // that disk, else the job profile, else discard on a thin storage and
+    // iothread where the bus supports it.
+    const diskDriveOpts = (disk: { options?: MigrationDiskOptions }, slot: string, storageType: string): string => diskDriveOptions({
+      slot, storageType, scsihw: createParams.scsihw, profile: config.diskOptions, disk: disk.options,
+    })
+
     for (const disk of importPlan.imports) {
       const diskFile = disk.file
       const diskPath = `${outputDir}/${diskFile}`
@@ -2855,7 +2872,7 @@ export async function runV2vMigrationPipeline(
           format: "qcow2",
           sourceFormat: stagedFormat,
           slot: diskSlot,
-          driveOpts: ",discard=on",
+          driveOpts: diskDriveOpts(disk, diskSlot, target.type),
           diskLabel,
           taken: adoptedVolumes,
           onLog: (m, level) => appendLog(jobId, m, level),
@@ -2948,7 +2965,7 @@ export async function runV2vMigrationPipeline(
 
         // Attach disk via PVE API
         const attachBody = new URLSearchParams({
-          [diskSlot]: volumeId,
+          [diskSlot]: `${volumeId}${diskDriveOpts(disk, diskSlot, target.type)}`,
         })
         try {
           await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)

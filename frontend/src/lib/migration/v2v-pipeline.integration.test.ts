@@ -498,7 +498,7 @@ describe("runV2vMigrationPipeline direct storage write (#292)", () => {
     )
     // the adopted volume is what got attached
     const attach = vi.mocked(pveSetVmConfig).mock.calls.find(c => c[3].has("scsi0"))
-    expect(attach?.[3].get("scsi0")).toBe("local:120/vm-120-disk-0.qcow2,discard=on")
+    expect(attach?.[3].get("scsi0")).toBe("local:120/vm-120-disk-0.qcow2,discard=on,iothread=1")
     // both the staging dir on the storage AND the temp dir are cleaned up
     expect(commands).toContain("rm -rf '/mnt/pve/nfs-vmstore/proxcenter-v2v/v2v-it-adopt'")
     expect(commands).toContain("rm -rf '/tmp/v2v-v2v-it-adopt'")
@@ -521,7 +521,7 @@ describe("runV2vMigrationPipeline direct storage write (#292)", () => {
     )
     expect(messages().some(m => m.includes("falling back to qm disk import"))).toBe(true)
     const attach = vi.mocked(pveSetVmConfig).mock.calls.find(c => c[3].has("scsi0"))
-    expect(attach?.[3].get("scsi0")).toBe("local:120/vm-120-disk-0.qcow2,discard=on")
+    expect(attach?.[3].get("scsi0")).toBe("local:120/vm-120-disk-0.qcow2,discard=on,iothread=1")
   })
 
   it("keeps the legacy temp staging when the storage is not reported active", { timeout: 15000 }, async () => {
@@ -600,8 +600,8 @@ describe("runV2vMigrationPipeline per-disk target storage (#317, lot 2)", () => 
     expect(logs.some(m => m.includes('[Disk 2/2] Adding testvm-sdb to storage "thin"'))).toBe(true)
     // attached in order, each from its own storage
     const attached = attachedSlots()
-    expect(attached.scsi0).toBe("local:120/vm-120-disk-0.qcow2,discard=on")
-    expect(attached.scsi1).toBe("thin:vm-120-disk-1")
+    expect(attached.scsi0).toBe("local:120/vm-120-disk-0.qcow2,discard=on,iothread=1")
+    expect(attached.scsi1).toBe("thin:vm-120-disk-1,discard=on,iothread=1")
     expect(attached.boot).toBe("order=scsi0")
   })
 
@@ -681,8 +681,8 @@ describe("runV2vMigrationPipeline per-disk target storage (#317, lot 2)", () => 
       "qm disk import 120 '/var/lib/vz/proxcenter-v2v/v2v-it-default/testvm-sdb' 'local' --format qcow2 2>&1",
     ])
     const attached = attachedSlots()
-    expect(attached.scsi0).toBe("local:120/vm-120-disk-0.qcow2,discard=on")
-    expect(attached.scsi1).toBe("local:120/vm-120-disk-0.qcow2,discard=on")
+    expect(attached.scsi0).toBe("local:120/vm-120-disk-0.qcow2,discard=on,iothread=1")
+    expect(attached.scsi1).toBe("local:120/vm-120-disk-0.qcow2,discard=on,iothread=1")
     expect(messages().some(m => m.startsWith("Per-disk choices"))).toBe(false)
     expect(soapLogin).not.toHaveBeenCalled()
   })
@@ -711,7 +711,7 @@ describe("runV2vMigrationPipeline per-disk target storage (#317, lot 2)", () => 
     expect(v2vLaunches[0]).toContain("-i vmx -it ssh")
     expect(messages()).toContain("Per-disk choices: storage disk 1->local, disk 2->thin")
     expect(sshCommands()).toContain("pvesm alloc 'thin' 120 'vm-120-disk-1' 1048576 --format raw 2>&1")
-    expect(attachedSlots().scsi1).toBe("thin:vm-120-disk-1")
+    expect(attachedSlots().scsi1).toBe("thin:vm-120-disk-1,discard=on,iothread=1")
   })
 
   it("checks the ESXi host key against the confirmed one: per-job file, ssh config and libssh's known_hosts, no keyscan", { timeout: 15000 }, async () => {

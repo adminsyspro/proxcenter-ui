@@ -33,6 +33,7 @@ import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget 
 import { getNodeSshEndpointForMigration } from "./pve-tasks"
 import { openXcpngSource, type XcpngSource } from "@/lib/xcpng/source"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
+import { diskDriveOptions, type MigrationDiskOptions } from "./target-overrides"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
@@ -54,6 +55,10 @@ interface MigrationConfig {
   targetConnectionId: string
   targetNode: string
   targetStorage: string
+  /** "regenerate": Proxmox assigns every NIC a new MAC (ui#1330). */
+  macPolicy?: "regenerate"
+  /** Profile of the target disks (ui#1331); absent options take the defaults. */
+  diskOptions?: MigrationDiskOptions
   networkBridge: string
   /**
    * Optional 802.1Q VLAN tag (1-4094) appended to net0 as `tag=N`. Empty/undefined
@@ -293,7 +298,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
 
-    const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
+    const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, { macPolicy: config.macPolicy })
     await appendLog(jobId, `Creating VM: ${pveParams.name} (${pveParams.ostype}, ${pveParams.bios}, ${pveParams.scsihw})...`)
 
     const createBody = new URLSearchParams({
@@ -340,6 +345,9 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     const storageType = storageConfig?.type || "dir"
     const isFileBased = isFileBasedStorage(storageType)
     const importFormat = isFileBased ? "qcow2" : "raw"
+    // Drive options of a disk on `slot` (ui#1331): the job profile, else
+    // discard on a thin storage and iothread on SCSI.
+    const diskDriveOpts = (slot: string): string => diskDriveOptions({ slot, storageType, scsihw: pveParams.scsihw, profile: config.diskOptions })
 
     // Resolve temp directory for VHD downloads.
     // Priority: user-selected tempStorage from the migration dialog.
@@ -415,7 +423,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     async function attachBlockDisk(i: number, volumeId: string) {
       // sata0 for Windows/EFI boot disks (#653), SCSI for data disks.
       const scsiSlot = pveParams.diskSlots[i] ?? (i === 0 ? pveParams.bootDiskSlot : `scsi${i}`)
-      const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
+      const attachBody = new URLSearchParams({ [scsiSlot]: `${volumeId}${diskDriveOpts(scsiSlot)}` })
       try {
         await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
         await appendLog(jobId, `Disk ${i + 1} attached as ${scsiSlot} (${volumeId})`, "success")
@@ -658,7 +666,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         targetVmid: targetVmid!,
         format: importFormat,
         slot: scsiSlot,
-        driveOpts: isFileBased ? ",discard=on" : "",
+        driveOpts: diskDriveOpts(scsiSlot),
         diskLabel: `Disk ${i + 1}`,
         taken: adoptedVolumes,
         onLog: (m, level) => appendLog(jobId, m, level),

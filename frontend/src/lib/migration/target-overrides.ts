@@ -29,6 +29,44 @@ export interface MigrationNicMapping {
   vlanTag?: number
   /** Proxmox NIC model; absent means the model the mapper derives from the source adapter. */
   model?: string
+  /**
+   * MAC address of the target NIC (ui#1330): absent keeps the source MAC,
+   * "regenerate" lets Proxmox assign one from the datacenter's prefix,
+   * "custom" sets `mac`.
+   */
+  macMode?: Exclude<MigrationMacMode, "keep">
+  /** The MAC set when `macMode` is "custom", upper case with colons. */
+  mac?: string
+}
+
+/** MAC choices of a target NIC (ui#1330). */
+export const MIGRATION_MAC_MODES = ["keep", "regenerate", "custom"] as const
+export type MigrationMacMode = typeof MIGRATION_MAC_MODES[number]
+
+/**
+ * Options of the target disks (ui#1331). On the job, the profile every disk
+ * starts from; on one disk mapping, that disk's choice. An option left out
+ * takes the default: `discard` on a thin-provisioned storage, `iothread` on a
+ * bus that supports it, `ssd` off.
+ */
+export interface MigrationDiskOptions {
+  discard?: boolean
+  iothread?: boolean
+  ssd?: boolean
+}
+
+export const MIGRATION_DISK_OPTION_KEYS = ["discard", "iothread", "ssd"] as const
+
+/**
+ * One row of the bulk dialog's network table (ui#1333): every adapter on the
+ * source network `source` (a vSphere port group name) lands on `bridge`, with
+ * `vlanTag` when set. A NIC whose network has no row falls back to the job's
+ * networkBridge and vlanTag.
+ */
+export interface MigrationNetworkMapEntry {
+  source: string
+  bridge: string
+  vlanTag?: number
 }
 
 export interface MigrationHardwareOverrides {
@@ -57,6 +95,10 @@ export interface MigrationDiskMapping {
    * once the guest is converted). Applied by the warm VMware engine.
    */
   bus?: MigrationDiskBus
+  /** This disk's options (ui#1331), over the job's profile. */
+  discard?: boolean
+  iothread?: boolean
+  ssd?: boolean
 }
 
 /** Disk bus choices of the review step: the mapper's rule, or one forced bus. */
@@ -67,6 +109,10 @@ export interface MigrationTargetOverrides {
   nics?: MigrationNicMapping[]
   hardware?: MigrationHardwareOverrides
   disks?: MigrationDiskMapping[]
+  /** Source network to target bridge table of a bulk batch (ui#1333). */
+  networkMap?: MigrationNetworkMapEntry[]
+  /** "regenerate": every NIC without its own MAC choice gets a Proxmox MAC (ui#1330, bulk). */
+  macPolicy?: "regenerate"
 }
 
 /** Proxmox NIC models the review step offers. */
@@ -84,6 +130,22 @@ export const MAX_NICS = 32
 
 /** Upper bound of the disk list (Proxmox has 56 disk slots: scsi0-30, virtio0-15, sata0-5, ide0-3). */
 export const MAX_DISKS = 64
+
+/**
+ * The ui#1330/#1331/#1333 options of a persisted job config, for the engine
+ * configs rebuilt from it (start, retry, batch). The create route validated
+ * them before they were stored.
+ */
+export function jobTargetOptions(c: Record<string, any>): { networkMap?: MigrationNetworkMapEntry[]; macPolicy?: "regenerate"; diskOptions?: MigrationDiskOptions } {
+  return {
+    ...(Array.isArray(c.networkMap) && c.networkMap.length > 0 && { networkMap: c.networkMap }),
+    ...(c.macPolicy === "regenerate" && { macPolicy: "regenerate" as const }),
+    ...(c.diskOptions && typeof c.diskOptions === "object" && !Array.isArray(c.diskOptions) && { diskOptions: c.diskOptions }),
+  }
+}
+
+/** Most rows the bulk network table can hold. */
+export const MAX_NETWORK_MAP_ENTRIES = 256
 
 /** PVE bridge ids (`vmbr0`), OVS bridges and SDN VNet ids (lowercase, 8 chars). */
 const BRIDGE_RE = /^[A-Za-z][A-Za-z0-9_.-]{0,31}$/
@@ -155,9 +217,108 @@ export function parseNicMappings(raw: unknown): ParseResult<MigrationNicMapping[
       }
       nic.model = e.model
     }
+    const mac = parseNicMac(index, e.macMode, e.mac)
+    if (typeof mac === "string") return { ok: false, error: mac }
+    Object.assign(nic, mac)
     out.push(nic)
   }
   out.sort((a, b) => a.index - b.index)
+  return { ok: true, value: out.length > 0 ? out : undefined }
+}
+
+/** A unicast MAC Proxmox accepts: six hex pairs, multicast bit clear, not all zero. */
+const MAC_RE = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/
+
+/** The MAC normalised to upper case with colons, or null when it is not a usable unicast address. */
+export function normalizeUnicastMac(raw: unknown): string | null {
+  if (typeof raw !== "string") return null
+  const mac = raw.trim().toUpperCase().replace(/-/g, ":")
+  if (!MAC_RE.test(mac)) return null
+  if ((Number.parseInt(mac.slice(0, 2), 16) & 1) === 1) return null
+  if (mac === "00:00:00:00:00:00") return null
+  return mac
+}
+
+/** The MAC fields of one NIC mapping, or the error message. */
+function parseNicMac(index: number, rawMode: unknown, rawMac: unknown): Pick<MigrationNicMapping, "macMode" | "mac"> | string {
+  if (rawMode === undefined || rawMode === null || rawMode === "" || rawMode === "keep") {
+    return rawMac === undefined || rawMac === null || rawMac === "" ? {} : `nics[${index}].mac needs macMode "custom"`
+  }
+  if (rawMode === "regenerate") return { macMode: "regenerate" }
+  if (rawMode !== "custom") return `nics[${index}].macMode must be one of ${MIGRATION_MAC_MODES.join(", ")}`
+  const mac = normalizeUnicastMac(rawMac)
+  if (!mac) return `nics[${index}].mac must be a unicast MAC address such as BC:24:11:12:34:56`
+  return { macMode: "custom", mac }
+}
+
+/** The custom MACs of a NIC list, in NIC order. */
+export function customMacs(nics: MigrationNicMapping[] | undefined): string[] {
+  return (nics ?? []).flatMap(n => (n.macMode === "custom" && n.mac ? [n.mac] : []))
+}
+
+/**
+ * Validate the job-level `macPolicy` (ui#1330, bulk dialog): absent or "keep"
+ * keeps the source MACs, "regenerate" lets Proxmox assign every NIC a MAC.
+ */
+export function parseMacPolicy(raw: unknown): ParseResult<"regenerate"> {
+  if (raw === undefined || raw === null || raw === "" || raw === "keep") return { ok: true, value: undefined }
+  if (raw === "regenerate") return { ok: true, value: "regenerate" }
+  return { ok: false, error: `macPolicy must be "keep" or "regenerate"` }
+}
+
+/** The disk option booleans of `src`, or the name of the first one that is not a boolean. */
+function pickDiskOptions(src: Record<string, unknown>): MigrationDiskOptions | string {
+  const out: MigrationDiskOptions = {}
+  for (const key of MIGRATION_DISK_OPTION_KEYS) {
+    const v = src[key]
+    if (v === undefined || v === null) continue
+    if (typeof v !== "boolean") return key
+    out[key] = v
+  }
+  return out
+}
+
+/**
+ * Validate the job-level `diskOptions` profile (ui#1331): booleans for
+ * discard, iothread and ssd. Absent, or every option left out, resolves to
+ * undefined: the defaults apply.
+ */
+export function parseDiskOptions(raw: unknown): ParseResult<MigrationDiskOptions> {
+  if (raw === undefined || raw === null) return { ok: true, value: undefined }
+  if (typeof raw !== "object" || Array.isArray(raw)) return { ok: false, error: "diskOptions must be an object" }
+  const picked = pickDiskOptions(raw as Record<string, unknown>)
+  if (typeof picked === "string") return { ok: false, error: `diskOptions.${picked} must be a boolean` }
+  return { ok: true, value: Object.keys(picked).length > 0 ? picked : undefined }
+}
+
+/**
+ * Validate the bulk `networkMap` (ui#1333): rows of `{ source, bridge,
+ * vlanTag? }`, one row per source network. An empty table resolves to
+ * undefined (every NIC on the default bridge).
+ */
+export function parseNetworkMap(raw: unknown): ParseResult<MigrationNetworkMapEntry[]> {
+  if (raw === undefined || raw === null) return { ok: true, value: undefined }
+  if (!Array.isArray(raw)) return { ok: false, error: "networkMap must be an array" }
+  if (raw.length > MAX_NETWORK_MAP_ENTRIES) return { ok: false, error: `networkMap cannot hold more than ${MAX_NETWORK_MAP_ENTRIES} entries` }
+  const seen = new Set<string>()
+  const out: MigrationNetworkMapEntry[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") return { ok: false, error: "networkMap entries must be objects" }
+    const e = entry as Record<string, unknown>
+    const source = typeof e.source === "string" ? e.source.trim() : ""
+    if (source === "" || source.length > 256) return { ok: false, error: "networkMap[].source must be a network name of 1 to 256 characters" }
+    if (seen.has(source)) return { ok: false, error: `networkMap lists ${JSON.stringify(source)} twice` }
+    seen.add(source)
+    const bridge = typeof e.bridge === "string" ? e.bridge.trim() : ""
+    if (!BRIDGE_RE.test(bridge)) return { ok: false, error: `networkMap bridge for ${JSON.stringify(source)} must be a bridge or VNet name` }
+    const row: MigrationNetworkMapEntry = { source, bridge }
+    if (e.vlanTag !== undefined && e.vlanTag !== null && e.vlanTag !== "") {
+      const tag = intInRange(e.vlanTag, 1, 4094)
+      if (tag === null) return { ok: false, error: `networkMap VLAN tag for ${JSON.stringify(source)} must be an integer between 1 and 4094` }
+      row.vlanTag = tag
+    }
+    out.push(row)
+  }
   return { ok: true, value: out.length > 0 ? out : undefined }
 }
 
@@ -204,7 +365,10 @@ export function parseDiskMappings(raw: unknown): ParseResult<MigrationDiskMappin
       }
       if (e.bus !== "auto") disk.bus = e.bus as MigrationDiskBus
     }
-    if (disk.targetStorage || disk.bus) out.push(disk)
+    const options = pickDiskOptions(e)
+    if (typeof options === "string") return { ok: false, error: `disks[${index}].${options} must be a boolean` }
+    Object.assign(disk, options)
+    if (Object.keys(disk).length > 1) out.push(disk)
   }
   out.sort((a, b) => a.index - b.index)
   return { ok: true, value: out.length > 0 ? out : undefined }
@@ -217,6 +381,8 @@ export interface PlannedDisk<T> {
   storage: string
   /** The operator's forced bus (#1000); absent means the mapper's rule. */
   bus?: Exclude<MigrationDiskBus, "auto">
+  /** The operator's options for this disk (ui#1331), over the job's profile. */
+  options?: MigrationDiskOptions
 }
 
 export interface DiskPlan<T> {
@@ -249,10 +415,61 @@ export function planDiskTargets<T>(
       excluded.push(sourceIndex)
       return
     }
-    kept.push({ disk, sourceIndex, storage: m?.targetStorage || defaultStorage, ...(m?.bus && m.bus !== "auto" && { bus: m.bus }) })
+    const options = m ? diskOptionsOf(m) : undefined
+    kept.push({ disk, sourceIndex, storage: m?.targetStorage || defaultStorage, ...(m?.bus && m.bus !== "auto" && { bus: m.bus }), ...(options && { options }) })
   })
   const unknown = [...byIndex.keys()].filter(i => i >= disks.length).sort((a, b) => a - b)
   return { kept, excluded, unknown }
+}
+
+/** The options a disk mapping sets, or undefined when it sets none. */
+export function diskOptionsOf(m: MigrationDiskOptions): MigrationDiskOptions | undefined {
+  const out: MigrationDiskOptions = {}
+  for (const key of MIGRATION_DISK_OPTION_KEYS) if (typeof m[key] === "boolean") out[key] = m[key]
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+/**
+ * Storage types where a disk is thin-provisioned, so `discard=on` returns the
+ * blocks the guest frees to the pool: Ceph RBD, ZFS, LVM-thin, and the file
+ * storages (a sparse raw or qcow2 file). Thick LVM, iSCSI and ZFS over iSCSI
+ * gain nothing from it by default.
+ */
+const THIN_STORAGE_TYPES: ReadonlySet<string> = new Set(["rbd", "zfspool", "lvmthin", "dir", "nfs", "cifs", "glusterfs", "cephfs", "btrfs"])
+
+export function isThinStorageType(type: string | null | undefined): boolean {
+  return !!type && THIN_STORAGE_TYPES.has(type)
+}
+
+export interface DriveOptionsInput {
+  /** The target slot (`scsi0`, `sata1`, `virtio0`, `ide0`). */
+  slot: string
+  /** PVE type of the disk's storage; unknown means not thin. */
+  storageType?: string | null
+  /** The VM's SCSI controller: iothread on a SCSI disk needs `virtio-scsi-single`. */
+  scsihw?: string | null
+  /** The job's profile (ui#1331). */
+  profile?: MigrationDiskOptions
+  /** This disk's own choice, over the profile. */
+  disk?: MigrationDiskOptions
+}
+
+/**
+ * Drive options appended to a disk's volume id when it is attached (ui#1331),
+ * e.g. `,discard=on,iothread=1`. `discard` defaults to on for a thin storage,
+ * `iothread` to on wherever the bus supports it (a VirtIO Block disk, or a
+ * SCSI disk on `virtio-scsi-single`, the controller every migration creates),
+ * `ssd` to off; it never reaches a VirtIO Block disk, which has no such flag.
+ */
+export function diskDriveOptions({ slot, storageType, scsihw, profile, disk }: DriveOptionsInput): string {
+  const bus = /^[a-z]+/.exec(slot)?.[0] ?? ""
+  const pick = (key: keyof MigrationDiskOptions, fallback: boolean) => disk?.[key] ?? profile?.[key] ?? fallback
+  const iothreadCapable = bus === "virtio" || (bus === "scsi" && scsihw === "virtio-scsi-single")
+  let out = ""
+  if (pick("discard", isThinStorageType(storageType))) out += ",discard=on"
+  if (iothreadCapable && pick("iothread", true)) out += ",iothread=1"
+  if (bus !== "virtio" && bus !== "" && pick("ssd", false)) out += ",ssd=1"
+  return out
 }
 
 /** The distinct target storages of a plan, in first-use order. */
@@ -278,9 +495,16 @@ export function describeDiskPlan(plan: DiskPlan<unknown>, defaultStorage: string
   }
   const forced = plan.kept.filter(k => k.bus)
   if (forced.length > 0) parts.push(`bus ${forced.map(k => `disk ${k.sourceIndex + 1}->${k.bus!.toUpperCase()}`).join(", ")}`)
+  const withOptions = plan.kept.filter(k => k.options)
+  if (withOptions.length > 0) parts.push(`options ${withOptions.map(k => `disk ${k.sourceIndex + 1}->${describeDiskOptions(k.options!)}`).join(", ")}`)
   if (plan.excluded.length > 0) parts.push(`excluded ${plan.excluded.map(i => `disk ${i + 1}`).join(", ")}`)
   if (plan.unknown.length > 0) parts.push(`ignored mapping for missing ${plan.unknown.map(i => `disk ${i + 1}`).join(", ")}`)
   return parts.length > 0 ? `Per-disk choices: ${parts.join("; ")}` : null
+}
+
+/** `discard on, ssd off`: the options a profile or a disk sets, for the job log. */
+export function describeDiskOptions(o: MigrationDiskOptions): string {
+  return MIGRATION_DISK_OPTION_KEYS.filter(k => typeof o[k] === "boolean").map(k => `${k} ${o[k] ? "on" : "off"}`).join(" ")
 }
 
 /** The storage id of a PVE volume id (`CephPool:vm-101-disk-0`), or the fallback when it has none. */
@@ -298,15 +522,37 @@ export function isAcceptableCpuType(value: unknown): value is string {
   return isKnownCpuType(value) || /^custom-[A-Za-z0-9_.-]+$/.test(value)
 }
 
-/** The mapping of one NIC, or the dialog defaults when the operator left it alone. */
+/**
+ * The target of one NIC: the operator's mapping of that NIC (review step),
+ * else the bulk table's row for its source network (ui#1333), else the
+ * dialog defaults.
+ */
 export function resolveNicTarget(
   index: number,
   nics: MigrationNicMapping[] | undefined,
   defaults: { bridge: string; vlanTag?: number },
-): { bridge: string; vlanTag?: number; model?: string } {
+  network?: { name?: string; map?: MigrationNetworkMapEntry[] },
+): { bridge: string; vlanTag?: number; model?: string; macMode?: MigrationNicMapping["macMode"]; mac?: string } {
   const m = nics?.find(n => n.index === index)
-  if (!m) return { bridge: defaults.bridge, vlanTag: defaults.vlanTag }
-  return { bridge: m.bridge, vlanTag: m.vlanTag ?? defaults.vlanTag, model: m.model }
+  if (m) return { bridge: m.bridge, vlanTag: m.vlanTag ?? defaults.vlanTag, model: m.model, macMode: m.macMode, mac: m.mac }
+  const row = network?.name ? network.map?.find(r => r.source === network.name) : undefined
+  if (row) return { bridge: row.bridge, vlanTag: row.vlanTag ?? defaults.vlanTag }
+  return { bridge: defaults.bridge, vlanTag: defaults.vlanTag }
+}
+
+/**
+ * The MAC the target NIC gets (ui#1330): the operator's custom MAC, nothing
+ * (Proxmox assigns one) when the NIC or the whole job regenerates, the
+ * source MAC otherwise.
+ */
+export function targetNicMac(
+  sourceMac: string | undefined,
+  target: { macMode?: MigrationNicMapping["macMode"]; mac?: string },
+  macPolicy?: "regenerate",
+): string | undefined {
+  if (target.macMode === "custom") return target.mac
+  if (target.macMode === "regenerate" || macPolicy === "regenerate") return undefined
+  return sourceMac
 }
 
 /** `tag=N` suffix for a valid 802.1Q tag, empty otherwise. */
@@ -336,6 +582,11 @@ export function applyHardwareOverrides<T extends { cores: number; sockets: numbe
   return params
 }
 
+function describeNicMac(n: MigrationNicMapping): string {
+  if (n.macMode === "custom") return ` MAC ${n.mac}`
+  return n.macMode === "regenerate" ? " new MAC" : ""
+}
+
 /** One line for the job log describing what the operator changed, or null when nothing was. */
 export function describeOverrides(overrides: MigrationTargetOverrides | undefined): string | null {
   if (!overrides) return null
@@ -350,7 +601,11 @@ export function describeOverrides(overrides: MigrationTargetOverrides | undefine
     if (hwParts.length > 0) parts.push(`hardware ${hwParts.join(", ")}`)
   }
   if (overrides.nics && overrides.nics.length > 0) {
-    parts.push(`NICs ${overrides.nics.map(n => `net${n.index}->${n.bridge}${n.vlanTag ? ` tag ${n.vlanTag}` : ""}${n.model ? ` (${n.model})` : ""}`).join(", ")}`)
+    parts.push(`NICs ${overrides.nics.map(n => `net${n.index}->${n.bridge}${n.vlanTag ? ` tag ${n.vlanTag}` : ""}${n.model ? ` (${n.model})` : ""}${describeNicMac(n)}`).join(", ")}`)
   }
+  if (overrides.networkMap && overrides.networkMap.length > 0) {
+    parts.push(`networks ${overrides.networkMap.map(r => `${JSON.stringify(r.source)}->${r.bridge}${r.vlanTag ? ` tag ${r.vlanTag}` : ""}`).join(", ")}`)
+  }
+  if (overrides.macPolicy === "regenerate") parts.push("MAC addresses regenerated by Proxmox")
   return parts.length > 0 ? `Operator overrides: ${parts.join("; ")}` : null
 }

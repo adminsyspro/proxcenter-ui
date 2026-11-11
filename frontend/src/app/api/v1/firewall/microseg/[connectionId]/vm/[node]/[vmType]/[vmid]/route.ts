@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
@@ -28,7 +29,7 @@ export async function GET(
     if (scopeDenied) return scopeDenied
 
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.get(`/firewall/microseg/${connectionId}/vm/${node}/${vmType}/${vmid}`)
+    const response = await orchestrator.get(orchestratorPath`/firewall/microseg/${connectionId}/vm/${node}/${vmType}/${vmid}`)
 
     
 return NextResponse.json(response.data)

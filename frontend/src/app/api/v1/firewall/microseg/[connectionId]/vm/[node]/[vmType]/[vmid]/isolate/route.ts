@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
@@ -64,7 +65,7 @@ async function createsClusterGroups(connectionId: string, wanted: string[] | und
   const orchestrator = getOrchestratorClient()
   const groups = await orchestratorOrPve<unknown>(
     'firewall/groups',
-    () => orchestrator.get(`/firewall/groups/${connectionId}`),
+    () => orchestrator.get(orchestratorPath`/firewall/groups/${connectionId}`),
     async () => pveDirect.getSecurityGroups(await getConnectionById(connectionId)),
   )
   const existing = new Set(
@@ -113,7 +114,7 @@ async function postHandler(
     const orchestrator = getOrchestratorClient()
 
     const response = await orchestrator.post(
-      `/firewall/microseg/${connectionId}/vm/${node}/${vmType}/${vmid}/isolate`,
+      orchestratorPath`/firewall/microseg/${connectionId}/vm/${node}/${vmType}/${vmid}/isolate`,
       body
     )
 

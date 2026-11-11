@@ -3,9 +3,11 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import { firewallResourceType, invalidResourceType } from '@/lib/firewall/pathParams'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -22,17 +24,16 @@ async function getHandler(
     if (denied) return denied
 
     const { searchParams } = new URL(request.url)
-    const type = searchParams.get('type') || 'options'
+    const type = firewallResourceType(searchParams.get('type'))
+    if (!type) return invalidResourceType()
 
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/cluster',
-      () => orchestrator.get(`/firewall/cluster/${connectionId}/${type}`),
+      () => orchestrator.get(orchestratorPath`/firewall/cluster/${connectionId}/${type}`),
       async () => {
         const conn = await getConnectionById(connectionId)
 
-        // Cluster level exposes exactly these two sub-resources; anything else
-        // reads the options, like the orchestrator's own default.
         return type === 'rules' ? await pveDirect.getClusterRules(conn) : await pveDirect.getClusterOptions(conn)
       },
     )
@@ -63,7 +64,7 @@ async function putHandler(
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/cluster',
-      () => orchestrator.put(`/firewall/cluster/${connectionId}/options`, body),
+      () => orchestrator.put(orchestratorPath`/firewall/cluster/${connectionId}/options`, body),
       async () => pveDirect.updateClusterOptions(await getConnectionById(connectionId), body),
     )
 
@@ -93,7 +94,7 @@ async function postHandler(
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/cluster',
-      () => orchestrator.post(`/firewall/cluster/${connectionId}/rules`, body),
+      () => orchestrator.post(orchestratorPath`/firewall/cluster/${connectionId}/rules`, body),
       async () => pveDirect.addClusterRule(await getConnectionById(connectionId), body),
     )
 

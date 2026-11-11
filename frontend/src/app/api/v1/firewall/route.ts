@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { PERMISSIONS } from '@/lib/rbac'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/status',
-      () => orchestrator.get(`/firewall/status/${connectionId}`),
+      () => orchestrator.get(orchestratorPath`/firewall/status/${connectionId}`),
       async () => pveDirect.getFirewallStatus(await getConnectionById(connectionId)),
     )
 

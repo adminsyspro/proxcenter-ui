@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { PERMISSIONS } from '@/lib/rbac'
 import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
@@ -20,9 +21,8 @@ export async function GET(
     
     const orchestrator = getOrchestratorClient()
 
-    const url = network 
-      ? `/firewall/microseg/${connectionId}/vms?network=${encodeURIComponent(network)}`
-      : `/firewall/microseg/${connectionId}/vms`
+    const path = orchestratorPath`/firewall/microseg/${connectionId}/vms`
+    const url = network ? `${path}?${new URLSearchParams({ network })}` : path
 
     const response = await orchestrator.get(url)
 

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { resolveCallerInfraScope } from '@/lib/tenant/iaasGuard'
 import { iaasFirewallNamesView } from '@/lib/connections/iaasView'
@@ -35,7 +36,7 @@ async function getHandler(
     const orchestrator = getOrchestratorClient()
     const ipsets = await orchestratorOrPve(
       'firewall/ipsets',
-      () => orchestrator.get(`/firewall/ipsets/${connectionId}`),
+      () => orchestrator.get(orchestratorPath`/firewall/ipsets/${connectionId}`),
       async () => pveDirect.getIPSets(await getConnectionById(connectionId)),
     )
 
@@ -65,7 +66,7 @@ async function postHandler(
     const orchestrator = getOrchestratorClient()
     const created = await orchestratorOrPve(
       'firewall/ipsets',
-      () => orchestrator.post(`/firewall/ipsets/${connectionId}`, body),
+      () => orchestrator.post(orchestratorPath`/firewall/ipsets/${connectionId}`, body),
       async () => pveDirect.createIPSet(await getConnectionById(connectionId), body),
     )
 

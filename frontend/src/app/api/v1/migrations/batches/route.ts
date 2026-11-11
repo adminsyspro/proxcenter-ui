@@ -16,6 +16,7 @@ import { checkBatchCopyNetwork } from "@/lib/migration/batch-copy-reach"
 import { checkBatchWarmRuntime } from "@/lib/migration/batch-warm-runtime"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 import { BULK_MIG_CONCURRENCY_MAX, BULK_MIG_CONCURRENCY_MIN } from "@/app/(dashboard)/infrastructure/inventory/bulkMigrationConfig"
+import { effectiveMigrationLimits } from "@/lib/migration/migration-limits"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
@@ -48,9 +49,16 @@ async function handlePost(req: Request) {
     const body = await req.json().catch(() => null)
     if (!body || typeof body !== "object") return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
+    // The highest concurrency is the target cluster's limit (ui#1332), set on
+    // its connection in Settings; the scheduler also holds each start to the
+    // per-node and per-source-host limits.
+    const target = typeof body.targetConnectionId === "string" && body.targetConnectionId
+      ? await prisma.connection.findUnique({ where: { id: body.targetConnectionId }, select: { migrationMaxParallel: true, migrationMaxPerNode: true } })
+      : null
+    const concurrencyMax = Math.min(BULK_MIG_CONCURRENCY_MAX, effectiveMigrationLimits(target, null).cluster)
     const concurrency = Number(body.concurrency ?? BULK_MIG_CONCURRENCY_MIN)
-    if (!Number.isInteger(concurrency) || concurrency < BULK_MIG_CONCURRENCY_MIN || concurrency > BULK_MIG_CONCURRENCY_MAX) {
-      return NextResponse.json({ error: `concurrency must be an integer between ${BULK_MIG_CONCURRENCY_MIN} and ${BULK_MIG_CONCURRENCY_MAX}` }, { status: 400 })
+    if (!Number.isInteger(concurrency) || concurrency < BULK_MIG_CONCURRENCY_MIN || concurrency > concurrencyMax) {
+      return NextResponse.json({ error: `concurrency must be an integer between ${BULK_MIG_CONCURRENCY_MIN} and ${concurrencyMax}` }, { status: 400 })
     }
     const vms: Array<Record<string, unknown>> = Array.isArray(body.vms) ? body.vms : []
     if (vms.length === 0 || vms.length > MAX_BATCH_VMS || vms.some(vm => !vm || typeof vm !== "object")) {

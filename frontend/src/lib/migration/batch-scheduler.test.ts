@@ -168,6 +168,98 @@ describe("pumpBatch", () => {
   })
 })
 
+// ui#1332: the limits of the target cluster, its nodes and the source hosts.
+describe("pumpBatch limits", () => {
+  // A default-tenant PVE connection needs its provider_connections row in the
+  // same transaction (deferred pool-sync trigger).
+  const conn = (id: string, type: string, extra: Record<string, unknown> = {}) => prismaTest.$transaction([
+    prismaTest.connection.create({ data: { id, name: id, type, baseUrl: `https://${id}`, apiTokenEnc: "x", ...extra } as any }),
+    ...(type === "pve" ? [prismaTest.providerConnection.create({ data: { connectionId: id } })] : []),
+  ])
+  const setNodes = (ids: string[], nodes: string[]) => Promise.all(ids.map((id, i) =>
+    prismaTest.migrationJob.update({ where: { id }, data: { targetNode: nodes[i] } })))
+  const setHosts = (ids: string[], hosts: string[]) => Promise.all(ids.map((id, i) =>
+    prismaTest.migrationJob.update({ where: { id }, data: { config: { migrationType: "cold", sourceType: "vcenter", vcenterHost: hosts[i] } } })))
+  const single = (status: string, targetNode: string, extra: Record<string, unknown> = {}) => prismaTest.migrationJob.create({
+    data: {
+      tenantId: "default", sourceConnectionId: "src", sourceVmId: `solo-${Math.random()}`, sourceVmName: "solo",
+      targetConnectionId: "tgt", targetNode, targetStorage: "local-lvm", config: {}, status, currentStep: status, ...extra,
+    },
+  })
+
+  const dropConns = () => prismaTest.$transaction([
+    prismaTest.providerConnection.deleteMany({ where: { connectionId: { in: ["src", "tgt"] } } }),
+    prismaTest.connection.deleteMany({ where: { id: { in: ["src", "tgt"] } } }),
+  ])
+  beforeEach(dropConns)
+  afterAll(dropConns)
+
+  it("starts at most 2 jobs on one node by default, then those of another node", async () => {
+    const { batchId, ids } = await makeBatch(4, { concurrency: 4 })
+    await setNodes(ids, ["pve1", "pve1", "pve1", "pve2"])
+
+    expect((await pumpBatch(batchId, { launch: vi.fn() })).started).toEqual([ids[0], ids[1], ids[3]])
+    expect(await statusOf(ids[2])).toBe("queued")
+  })
+
+  it("follows the per-node limit set on the target connection", async () => {
+    await conn("tgt", "pve", { migrationMaxPerNode: 1 })
+    const { batchId, ids } = await makeBatch(3, { concurrency: 3 })
+    await setNodes(ids, ["pve1", "pve1", "pve2"])
+
+    expect((await pumpBatch(batchId, { launch: vi.fn() })).started).toEqual([ids[0], ids[2]])
+  })
+
+  it("counts single migrations and other batches against the cluster limit", async () => {
+    await conn("tgt", "pve", { migrationMaxParallel: 3, migrationMaxPerNode: 3 })
+    await single("full_copy", "pve9")
+    await single("transferring", "pve8")
+    await single("completed", "pve7")
+    const { batchId, ids } = await makeBatch(3, { concurrency: 3 })
+    await setNodes(ids, ["pve1", "pve2", "pve3"])
+
+    expect((await pumpBatch(batchId, { launch: vi.fn() })).started).toEqual([ids[0]])
+  })
+
+  it("never runs more jobs of a batch than the cluster limit, whatever concurrency it was created with", async () => {
+    await conn("tgt", "pve", { migrationMaxParallel: 2 })
+    const { batchId, ids } = await makeBatch(4, { concurrency: 4 })
+    await setNodes(ids, ["pve1", "pve2", "pve3", "pve4"])
+
+    expect((await pumpBatch(batchId, { launch: vi.fn() })).started).toHaveLength(2)
+  })
+
+  it("holds a job whose ESXi host already serves its limit, even towards another cluster", async () => {
+    await conn("src", "vmware", { subType: "vcenter", migrationMaxPerSourceHost: 1 })
+    await single("transferring", "dr1", { targetConnectionId: "other", config: { vcenterHost: "esx1" } })
+    const { batchId, ids } = await makeBatch(2, { concurrency: 2 })
+    await setNodes(ids, ["pve1", "pve2"])
+    await setHosts(ids, ["esx1", "esx2"])
+
+    expect((await pumpBatch(batchId, { launch: vi.fn() })).started).toEqual([ids[1]])
+  })
+
+  it("starts the held job once its node frees a slot", async () => {
+    await conn("tgt", "pve", { migrationMaxPerNode: 1 })
+    const { batchId, ids } = await makeBatch(2, { concurrency: 2 })
+    const launch = vi.fn()
+    expect((await pumpBatch(batchId, { launch })).started).toEqual([ids[0]])
+
+    await setStatus(ids[0], "completed")
+    expect((await pumpBatch(batchId, { launch })).started).toEqual([ids[1]])
+  })
+
+  it("never exceeds a node limit when two batches pump at the same time", async () => {
+    await conn("tgt", "pve", { migrationMaxPerNode: 2 })
+    const a = await makeBatch(3, { concurrency: 3 })
+    const b = await makeBatch(3, { concurrency: 3 })
+
+    await Promise.all([pumpBatch(a.batchId, { launch: vi.fn() }), pumpBatch(b.batchId, { launch: vi.fn() })])
+
+    expect(await prismaTest.migrationJob.count({ where: { targetNode: "pve1", status: "pending" } })).toBe(2)
+  })
+})
+
 describe("cancelQueuedJobs", () => {
   it("cancels the queued jobs, leaves the running one alone and closes the batch", async () => {
     const { batchId, ids } = await makeBatch(3, { concurrency: 1 })

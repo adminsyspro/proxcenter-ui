@@ -56,6 +56,7 @@ import { useLicense, Features } from '@/contexts/LicenseContext'
 import { isZeroRateLimitValid, ZERO_RATE_LIMIT_MAX_MBPS } from '@/lib/migration/warm/zero-rate'
 import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
 import { DEFAULT_INTEGRITY_SETTINGS, INTEGRITY_REGION_COUNT_MAX, INTEGRITY_REGION_SIZE_MIB_MAX, estimateIntegritySecondsPerDisk, integritySettingsFromConnection } from '@/lib/migration/integrity-settings'
+import { MIGRATION_LIMIT_MAX, MIGRATION_PARALLEL_DEFAULT, MIGRATION_PER_NODE_DEFAULT, MIGRATION_PER_SOURCE_HOST_DEFAULT } from '@/lib/migration/migration-limits'
 
 export type ConnectionFormData = {
   name: string
@@ -94,6 +95,10 @@ export type ConnectionFormData = {
   integrityCheckEnabled: boolean
   integrityRegionCount: number
   integrityRegionSizeMiB: number
+  /** Bulk migration limits (ui#1332): cluster and per node on a PVE target, per ESXi host on a VMware source. */
+  migrationMaxParallel: number
+  migrationMaxPerNode: number
+  migrationMaxPerSourceHost: number
   // Provider-only, create mode: own the connection by an MSP tenant ('' = pool)
   ownerTenantId: string
 }
@@ -147,6 +152,9 @@ const defaultFormData: ConnectionFormData = {
   integrityCheckEnabled: DEFAULT_INTEGRITY_SETTINGS.enabled,
   integrityRegionCount: DEFAULT_INTEGRITY_SETTINGS.regionCount,
   integrityRegionSizeMiB: DEFAULT_INTEGRITY_SETTINGS.regionSizeMiB,
+  migrationMaxParallel: MIGRATION_PARALLEL_DEFAULT,
+  migrationMaxPerNode: MIGRATION_PER_NODE_DEFAULT,
+  migrationMaxPerSourceHost: MIGRATION_PER_SOURCE_HOST_DEFAULT,
   ownerTenantId: '',
 }
 
@@ -298,6 +306,9 @@ export default function ConnectionDialog({
             const i = integritySettingsFromConnection(initialData as any)
             return { integrityCheckEnabled: i.enabled, integrityRegionCount: i.regionCount, integrityRegionSizeMiB: i.regionSizeMiB }
           })(),
+          migrationMaxParallel: (initialData as any).migrationMaxParallel ?? MIGRATION_PARALLEL_DEFAULT,
+          migrationMaxPerNode: (initialData as any).migrationMaxPerNode ?? MIGRATION_PER_NODE_DEFAULT,
+          migrationMaxPerSourceHost: (initialData as any).migrationMaxPerSourceHost ?? MIGRATION_PER_SOURCE_HOST_DEFAULT,
           subType: editSubType,
           // External hypervisors keep "user:password" encrypted; the list payload
           // hands the user back as apiUser (never the password). Without it the
@@ -656,7 +667,9 @@ export default function ConnectionDialog({
   // section always had (PVE and standalone ESXi only).
  // Migration settings of a target cluster: Enterprise, PVE, and only once a
   // source hypervisor exists to migrate from.
-  const showMigrationsTab = type === 'pve' && migrationAvailable && migrationSourcesConfigured
+  // A VMware source gets the tab too, for its per-host limit of bulk
+  // migrations (ui#1332).
+  const showMigrationsTab = migrationAvailable && ((type === 'pve' && migrationSourcesConfigured) || isVmware)
   const showSshTab = !isPbs && !isXcpng && !isHyperv && !isNutanix && !(isVmware && form.subType === 'vcenter')
   const visibleTabs: { id: ConnectionTabId; label: string; icon: string }[] = [
     { id: 'general', label: t('settings.connectionTabGeneral'), icon: 'ri-settings-3-line' },
@@ -1575,6 +1588,40 @@ export default function ConnectionDialog({
         <Box role="tabpanel" hidden={currentTab !== 'migrations'} sx={{ pt: 1 }}>
         {showMigrationsTab && (
           <>
+            {/* Bulk migration limits (ui#1332): how many migrations run at once
+                into this cluster and into one of its nodes, or out of one ESXi
+                host of this source. */}
+            <SectionTitle icon="ri-stack-line" title={t('settings.migrationLimits')} optional={t('common.optional')} info={t(isVmware ? 'settings.migrationLimitsSourceInfo' : 'settings.migrationLimitsTargetInfo')} />
+            <Box sx={{ mt: 1, mb: 1 }}>
+              {(isVmware
+                ? [['migrationMaxPerSourceHost', t('settings.migrationMaxPerSourceHost')]] as const
+                : [['migrationMaxParallel', t('settings.migrationMaxParallel')], ['migrationMaxPerNode', t('settings.migrationMaxPerNode')]] as const
+              ).map(([field, label]) => (
+                <Box key={field} sx={{ mb: 1 }}>
+                  <Typography variant="body2">
+                    {label} <Box component="span" sx={{ fontWeight: 600 }} data-testid={`connection-${field}-value`}>{form[field]}</Box>
+                  </Typography>
+                  <Slider
+                    sx={{ mx: 4, width: 'calc(100% - 64px)' }}
+                    value={form[field]}
+                    min={1}
+                    max={MIGRATION_LIMIT_MAX}
+                    step={1}
+                    marks={[1, 5, 10, 15, 20].map(v => ({ value: v, label: `${v}` }))}
+                    onChange={(_e, v) => handleChange(field, v as number)}
+                    slotProps={{ input: { 'aria-label': label, 'data-testid': `connection-${field}` } as any }}
+                  />
+                </Box>
+              ))}
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                {t(isVmware ? 'settings.migrationLimitsSourceCaption' : 'settings.migrationLimitsTargetCaption')}
+              </Typography>
+            </Box>
+          </>
+        )}
+        {showMigrationsTab && type === 'pve' && (
+          <>
+            <Divider sx={{ my: 2.5 }} />
             {/* Section: warm migrations INTO this cluster (roadmap#45, Enterprise).
                 The zeroing cap protects the array behind this cluster's thick
                 storage, whatever the source hypervisor: it belongs to the target. */}

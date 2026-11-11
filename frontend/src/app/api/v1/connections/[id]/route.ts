@@ -1,5 +1,6 @@
 // src/app/api/v1/connections/[id]/route.ts
 import { NextResponse } from "next/server"
+import { migrationLimitFields } from "@/lib/migration/migration-limits"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
@@ -233,12 +234,16 @@ async function handlePatch(req: Request, ctx: { params: Promise<{ id: string }> 
     // clears it. A Community server ignores it rather than failing the save.
     // The post-copy integrity settings (roadmap#1) follow the same gate; null
     // puts a value back to its default.
+    // The bulk migration limits (ui#1332) follow the same gate: the cluster
+    // and per-node limits of a PVE target, the per-host limit of a VMware source.
     const migrationFields = ['warmZeroRateLimitMBps', 'integrityCheckEnabled', 'integrityRegionCount', 'integrityRegionSizeMiB'] as const
-    if (migrationFields.some(f => body[f] !== undefined) && await migrationFeatureLicensed()) {
+    const limitFieldSent = ([body.migrationMaxParallel, body.migrationMaxPerNode, body.migrationMaxPerSourceHost] as const).some(v => v !== undefined)
+    if ((migrationFields.some(f => body[f] !== undefined) || limitFieldSent) && await migrationFeatureLicensed()) {
       const current = await prisma.connection.findUnique({ where: { id }, select: { type: true } })
       if (current?.type === 'pve') {
         for (const f of migrationFields) if (body[f] !== undefined) data[f] = body[f]
       }
+      Object.assign(data, migrationLimitFields(current?.type, body))
     }
     if (body.sshAuthMethod !== undefined) {
       data.sshAuthMethod = body.sshAuthMethod || null

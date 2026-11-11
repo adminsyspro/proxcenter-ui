@@ -116,6 +116,22 @@ describe('connection schemas warmZeroRateLimitMBps (roadmap#45)', () => {
   })
 })
 
+describe('connection schemas migration limits (ui#1332)', () => {
+  const fields = ['migrationMaxParallel', 'migrationMaxPerNode', 'migrationMaxPerSourceHost']
+  const pve = { name: 'p', type: 'pve' as const, baseUrl: 'https://10.0.0.1:8006', apiToken: 't' }
+  it('accepts 1 to 20 and null', () => {
+    for (const f of fields) for (const v of [1, 7, 20, null]) {
+      expect(createConnectionSchema.safeParse({ ...pve, [f]: v }).success, `${f}=${v}`).toBe(true)
+      expect(updateConnectionSchema.safeParse({ [f]: v }).success, `${f}=${v}`).toBe(true)
+    }
+  })
+  it('refuses 0, more than 20, a fraction or a string', () => {
+    for (const f of fields) for (const v of [0, 21, 2.5, '4']) {
+      expect(updateConnectionSchema.safeParse({ [f]: v }).success, `${f}=${v}`).toBe(false)
+    }
+  })
+})
+
 describe('connection schemas cephExporterPort', () => {
   const pveBody = { name: 'p', type: 'pve', baseUrl: 'https://10.0.0.1:8006', apiToken: 'root@pam!t=s' }
 

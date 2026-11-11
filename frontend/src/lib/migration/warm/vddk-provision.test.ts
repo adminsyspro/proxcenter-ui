@@ -127,7 +127,7 @@ describe("buildOpenVddkInstallScript (roadmap#177)", () => {
   it("installs OpenVDDK into /usr/lib/openvddk from the pinned release on ProxCenter's fork, no token involved", () => {
     const script = s()
     expect(script).toContain("LIB='/usr/lib/openvddk'")
-    expect(script).toContain(`KIT_URL='https://github.com/adminsyspro/openvddk/releases/download/v0.7.4-pxc1/${OPENVDDK_KIT.file}'`)
+    expect(script).toContain(`KIT_URL='https://github.com/adminsyspro/openvddk/releases/download/v0.7.4-pxc2/${OPENVDDK_KIT.file}'`)
     expect(script).not.toContain("Bearer")
     expect(script).not.toContain("vmware-vix-disklib")
     // The library step sits between the plugin and the nbd module.

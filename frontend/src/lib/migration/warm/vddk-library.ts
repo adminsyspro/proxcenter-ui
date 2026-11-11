@@ -24,14 +24,15 @@ export const BROADCOM_DEFAULT_LIBDIR = "/usr/lib/vmware-vix-disklib"
  * Bumping the version means bumping all of it.
  */
 export const OPENVDDK_KIT = {
-  // 0.7.4 with the fix for ESXi 7.0.0 GA hosts (openvddk/openvddk#1).
-  version: "0.7.4-pxc1",
-  commit: "80ecfecc6cc8",
-  file: "openvddk-evalkit-0.7.4-pxc1-80ecfecc6cc8.tar.gz",
-  sha256: "29ca9636ab897c0168d00e18747b35755a9d4ce8093b98ea57cc8190ca56ab89",
+  // 0.7.4 with the fixes for ESXi 7.0.0 GA hosts (openvddk/openvddk#1) and for
+  // a '+' in a datastore file path, e.g. a VM named "web+db" (NET-0006).
+  version: "0.7.4-pxc2",
+  commit: "79ba2662c28a",
+  file: "openvddk-evalkit-0.7.4-pxc2-79ba2662c28a.tar.gz",
+  sha256: "ec7191d6a4d020c4f85b47560cfd52cd92728a6feff076522f34e0bcfd333b87",
   /** The library inside the kit (lib/), the file nbdkit ends up loading. */
   libFile: "libvixDiskLib.so.8.0.3",
-  libSha256: "2292a6f7c2a1906cea5547bf23f9c744df748dda8084ce0fc9e9217b9fe064c7",
+  libSha256: "2b91b346f8b35e357acac73a6b414f12c4270442b64efec5c6151c24de659ac9",
   /** Download size, for the confirmation text. */
   sizeMB: 17,
   /** Size once extracted on the node. */

@@ -116,7 +116,7 @@ describe('BulkWarmReadiness', () => {
     renderWithProviders(<Harness nodes={['pve1']} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Prepare this node' }))
-    expect(screen.getByText(/download OpenVDDK 0\.7\.4-pxc1 \(Apache 2\.0, 17 MB\), check its SHA-256 and install it into \/usr\/lib\/openvddk/)).toBeTruthy()
+    expect(screen.getByText(/download OpenVDDK 0\.7\.4-pxc2 \(Apache 2\.0, 17 MB\), check its SHA-256 and install it into \/usr\/lib\/openvddk/)).toBeTruthy()
     expect(screen.getByText(/A Broadcom VDDK already on the node is left untouched/)).toBeTruthy()
   })
 

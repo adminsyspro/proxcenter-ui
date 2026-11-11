@@ -41,7 +41,8 @@ export interface VddkReaderHandle {
  * A failure on a device that is still clean afterwards (no pid, size 0) is the
  * server's: nbdkit could not open the disk. The loop stops there instead of
  * offering the same socket to the fifteen other devices, which behind the retry
- * filter cost a minute each (roadmap#177).
+ * filter cost a minute each (roadmap#177), and says so with NBD_SERVER_REFUSED
+ * rather than NBD_ALLOC_FAILED: no device was missing, the source refused.
  * `sock` is a system-generated path, escaped all the same so the builder does
  * not depend on its callers for safety.
  */
@@ -49,16 +50,37 @@ export function buildNbdConnectCmd(sock: string): string {
   return [
     "modprobe nbd max_part=0 2>/dev/null",
     "ATTACHED=",
+    "REFUSED=",
     "for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do",
     "  [ -s /sys/block/nbd$i/pid ] && continue",
     `  if err=$(nbd-client -unix ${shellEscape(sock)} /dev/nbd$i 2>&1); then ATTACHED=/dev/nbd$i; echo "NBD_DEV=$ATTACHED"; break; fi`,
     // Next device only when this one was taken meanwhile (pid or size set). A
     // clean device that still failed means nbdkit refused the open: every other
     // device would get the same answer, one retry window each.
-    `  [ -s /sys/block/nbd$i/pid ] || [ "$(cat /sys/block/nbd$i/size 2>/dev/null)" != 0 ] || break`,
+    `  [ -s /sys/block/nbd$i/pid ] || [ "$(cat /sys/block/nbd$i/size 2>/dev/null)" != 0 ] || { REFUSED=1; break; }`,
     "done",
-    '[ -n "$ATTACHED" ] || { echo "NBD_ALLOC_FAILED: ${err}"; exit 1; }',
+    `[ -n "$ATTACHED" ] || { if [ -n "$REFUSED" ]; then echo "${NBD_SERVER_REFUSED} \${err}"; else echo "NBD_ALLOC_FAILED: \${err}"; fi; exit 1; }`,
   ].join("\n")
+}
+
+/** What the attach command prints when nbdkit refused to open the source disk. */
+export const NBD_SERVER_REFUSED = "NBD_SERVER_REFUSED:"
+
+/**
+ * The message a failed attach is reported with. When nbdkit refused the open,
+ * the cause is its log (the VDDK library's or the NBD server's answer), not the
+ * kernel NBD devices: the message says so and gives each distinct error line of
+ * the log once, since the retry filter repeats the same open, and with it the
+ * same lines, several times. nbd-client's own negotiation chatter adds nothing
+ * there and is left out.
+ */
+export function nbdAttachError(connectOutput: string, nbdkitLog: string): string {
+  const log = nbdkitLog.trim()
+  if (connectOutput.includes(NBD_SERVER_REFUSED)) {
+    const errors = [...new Set(log.split("\n").map(l => l.trim()).filter(l => /\berror:/.test(l)))]
+    return `nbdkit could not open the source disk: ${errors.length ? errors.join("\n") : log || "(empty)"}`
+  }
+  return `nbd-client failed to attach a free NBD device: ${connectOutput.trim()} | nbdkit log: ${log || "(empty)"}`
 }
 
 /**
@@ -191,7 +213,7 @@ export async function startVddkReader(
     // exit message — read both before teardown removes the log.
     const log = await executeSSH(connectionId, nodeIp, `cat ${shellEscape(logFile)} 2>/dev/null | tail -n 40`)
     await stopVddkReader(connectionId, nodeIp, { nbdDev, sock: opts.sock, pwFile: opts.passwordFile, logFile }).catch(() => {})
-    throw new Error(`nbd-client failed to attach a free NBD device: ${(connect.output || connect.error || "").trim()} | nbdkit log: ${log.output?.trim() || "(empty)"}`)
+    throw new Error(nbdAttachError(connect.output || connect.error || "", log.output ?? ""))
   }
 
   return { nbdDev, sock: opts.sock, pwFile: opts.passwordFile, logFile }

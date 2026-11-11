@@ -5,6 +5,7 @@ import { updateTenant, deleteTenant, DEFAULT_TENANT_ID, requireProviderTenant } 
 import { parseVmidRangeInput, findVmidRangeConflict } from "@/lib/tenant/vmidRange"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
+import { syncServiceDeskForNewTenant } from "@/lib/rbac/serviceDesk"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -85,6 +86,8 @@ async function handlePut(req: NextRequest, ctx: Ctx) {
   try {
     const tenant = await updateTenant(id, body)
     if (!tenant) return NextResponse.json({ error: "Tenant not found" }, { status: 404 })
+    // A re-enabled tenant is reached again by the service-desk roles published to all tenants (ui#1336).
+    if (body.enabled === true) await syncServiceDeskForNewTenant()
 
     await audit({
       action: "tenant.update",

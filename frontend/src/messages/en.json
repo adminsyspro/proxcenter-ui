@@ -5749,7 +5749,8 @@
         "settings": "Modify settings",
         "audit": "View audit logs",
         "compliance": "Manage compliance and security policies",
-        "tenants": "Manage tenants (multi-tenancy)"
+        "tenants": "Manage tenants (multi-tenancy)",
+        "apitokens": "Manage API tokens (create, revoke)"
       },
       "sdn": {
         "vnet": {
@@ -8404,7 +8405,8 @@
     "mappingStrategyFirstMatch": "Keep the first matching role",
     "mappingStrategyCumulative": "Combine every matching role",
     "mappingStrategyFirstMatchHelper": "The topmost row the user matches wins, one role per tenant and vDC.",
-    "mappingStrategyCumulativeHelper": "The user receives every role they match, and their permissions are the union of those roles."
+    "mappingStrategyCumulativeHelper": "The user receives every role they match, and their permissions are the union of those roles.",
+    "allPublishedTenants": "All published tenants"
   },
   "ceph": {
     "clusterHealth": "Cluster Health",
@@ -8694,7 +8696,41 @@
     "poolContainsVms": "{count} VM(s)",
     "tags": "tags",
     "pools": "pools",
-    "storages": "storages"
+    "storages": "storages",
+    "catalogue": {
+      "audience": "Audience",
+      "audienceLegacy": "Provider tenant (legacy)",
+      "audienceLegacyDesc": "Created before the catalogue: held in the provider tenant only",
+      "audienceProvider": "Provider",
+      "audienceServiceDesk": "Service desk",
+      "audienceTenant": "Tenant",
+      "audienceProviderDesc": "Provider tenant only",
+      "audienceServiceDeskDesc": "Provider staff inside the tenants it is published to, assigned by the provider only",
+      "audienceTenantDesc": "Published to tenants, their Tenant Admin can assign it",
+      "publication": "Publication",
+      "publishAll": "All tenants, including future ones",
+      "allTenantsBox": "All",
+      "noTenants": "No tenant",
+      "noTenantSelected": "Select at least one tenant, or publish to all tenants",
+      "ceilingNotice": "permissions reserved to the provider are unavailable",
+      "ceilingHint": "Reserved to the provider: a role published to tenants cannot carry it",
+      "revokeTitle": "Revoke assignments?",
+      "revokeIntro": "These tenants leave the publication. The assignments of this role made there will be revoked:",
+      "revokeCount": "{count} assignment(s)",
+      "revokeConfirm": "Revoke and save",
+      "catalogueChip": "Provider catalogue",
+      "publishedToAll": "published to all tenants",
+      "publishedTo": "published to {count} tenant(s)",
+      "legacyPublished": "SSO in {count} tenant(s)",
+      "legacyPublishedHint": "Reaches these tenants through the SSO group mapping only. Choose an audience to publish it.",
+      "serviceDeskTarget": "Tenants",
+      "serviceDeskTargetAll": "Every tenant the role is published to, including future ones",
+      "serviceDeskEditTitle": "Service desk assignment",
+      "serviceDeskTenants": "{count} tenant(s)",
+      "serviceDeskAllTenantsShort": "All published ({count})",
+      "serviceDeskManaged": "Provider service desk account: managed by the provider",
+      "serviceDeskChip": "Service desk"
+    }
   },
   "drsPage": {
     "balanced": "Balanced",

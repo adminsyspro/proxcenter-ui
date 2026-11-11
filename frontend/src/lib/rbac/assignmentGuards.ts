@@ -9,7 +9,10 @@
 //  2. Protected roles (super_admin, provider_admin) come from a super admin
 //     only, and a protected target is only touched by a super admin; both
 //     read as unknown to anyone else.
-//  3. The role must exist and, when it belongs to a tenant, to the target one.
+//  3. The role must exist and be assignable in the target tenant: its own
+//     tenant's role, or a catalogue role published there (ui#1336). Service
+//     desk roles never come through here: they follow the provider user across
+//     tenants (lib/rbac/serviceDesk.ts).
 //  4. NIC identity rights (MAC, VLAN) are granted by a super admin only.
 
 import { NextResponse } from "next/server"
@@ -19,11 +22,16 @@ import { isUserProtected, isUserSuperAdmin, PROTECTED_ROLE_IDS, PROVIDER_ONLY_RO
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 
 import { roleHasSensitiveNicPermissions } from "./nicPermissions"
+import { isRoleAssignableInTenant } from "./rolePublication"
 
 export type AssignableRole = {
   id: string
   name: string
+  isSystem: boolean
   tenantId: string | null
+  audience: string | null
+  publishAll: boolean
+  publications: { tenantId: string }[]
   permissions: { permissionId: string }[]
 }
 
@@ -68,10 +76,21 @@ export async function guardRoleAssignment(input: RoleAssignmentGuardInput): Prom
 
   const role = (await prisma.rbacRole.findUnique({
     where: { id: roleId },
-    select: { id: true, name: true, tenantId: true, permissions: { select: { permissionId: true } } },
+    select: {
+      id: true,
+      name: true,
+      isSystem: true,
+      tenantId: true,
+      audience: true,
+      publishAll: true,
+      publications: { where: { tenantId: targetTenantId }, select: { tenantId: true } },
+      permissions: { select: { permissionId: true } },
+    },
   })) as AssignableRole | null
-  const roleTenantId = role?.tenantId ?? null
-  if (!role || (roleTenantId !== null && roleTenantId !== targetTenantId)) return refuse("Role not found", 404)
+  if (role?.audience === "service_desk" && callerIsSuperAdmin) {
+    return refuse("A service desk role is assigned from the service desk assignments, not per tenant", 400)
+  }
+  if (!role || !isRoleAssignableInTenant(role, targetTenantId)) return refuse("Role not found", 404)
 
   if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(role)) {
     return refuse("Only a super admin may grant NIC identity permissions", 403)

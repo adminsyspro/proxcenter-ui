@@ -5738,7 +5738,8 @@
         "settings": "Modify Einstellungen",
         "audit": "Audit-Logs anzeigen",
         "compliance": "Manage compliance and Sicherheit policies",
-        "tenants": "Tenants verwalten (Mandantenfähigkeit)"
+        "tenants": "Tenants verwalten (Mandantenfähigkeit)",
+        "apitokens": "API-Token verwalten (erstellen, widerrufen)"
       },
       "sdn": {
         "vnet": {
@@ -8380,7 +8381,8 @@
     "mappingStrategyFirstMatch": "Erste passende Rolle übernehmen",
     "mappingStrategyCumulative": "Alle passenden Rollen kombinieren",
     "mappingStrategyFirstMatchHelper": "Die oberste passende Zeile gewinnt, eine Rolle je Tenant und vDC.",
-    "mappingStrategyCumulativeHelper": "Der Benutzer erhält alle passenden Rollen, seine Berechtigungen sind die Vereinigung dieser Rollen."
+    "mappingStrategyCumulativeHelper": "Der Benutzer erhält alle passenden Rollen, seine Berechtigungen sind die Vereinigung dieser Rollen.",
+    "allPublishedTenants": "Alle veröffentlichten Tenants"
   },
   "ceph": {
     "clusterHealth": "Cluster-Gesundheit",
@@ -8665,7 +8667,41 @@
     "poolContainsVms": "{count} VM(s)",
     "tags": "Tags",
     "pools": "Pools",
-    "storages": "Speicher"
+    "storages": "Speicher",
+    "catalogue": {
+      "audience": "Zielgruppe",
+      "audienceLegacy": "Anbieter-Tenant (Altbestand)",
+      "audienceLegacyDesc": "Vor dem Katalog erstellt: nur im Anbieter-Tenant vergeben",
+      "audienceProvider": "Anbieter",
+      "audienceServiceDesk": "Service Desk",
+      "audienceTenant": "Tenant",
+      "audienceProviderDesc": "Nur Anbieter-Tenant",
+      "audienceServiceDeskDesc": "Anbieter-Team in den Tenants, für die sie veröffentlicht ist, nur vom Anbieter vergeben",
+      "audienceTenantDesc": "Für Tenants veröffentlicht, ihr Tenant-Admin kann sie vergeben",
+      "publication": "Veröffentlichung",
+      "publishAll": "Alle Tenants, auch künftige",
+      "allTenantsBox": "Alle",
+      "noTenants": "Kein Tenant",
+      "noTenantSelected": "Mindestens einen Tenant wählen oder für alle Tenants veröffentlichen",
+      "ceilingNotice": "dem Anbieter vorbehaltene Berechtigungen sind nicht verfügbar",
+      "ceilingHint": "Dem Anbieter vorbehalten: eine für Tenants veröffentlichte Rolle kann sie nicht enthalten",
+      "revokeTitle": "Zuweisungen widerrufen?",
+      "revokeIntro": "Diese Tenants verlassen die Veröffentlichung. Die dort vorgenommenen Zuweisungen dieser Rolle werden widerrufen:",
+      "revokeCount": "{count} Zuweisung(en)",
+      "revokeConfirm": "Widerrufen und speichern",
+      "catalogueChip": "Anbieterkatalog",
+      "publishedToAll": "für alle Tenants veröffentlicht",
+      "publishedTo": "für {count} Tenant(s) veröffentlicht",
+      "legacyPublished": "SSO in {count} Tenant(s)",
+      "legacyPublishedHint": "Erreicht diese Tenants nur über die SSO-Gruppenzuordnung. Wählen Sie eine Zielgruppe, um sie zu veröffentlichen.",
+      "serviceDeskTarget": "Tenants",
+      "serviceDeskTargetAll": "Alle Tenants, für die die Rolle veröffentlicht ist, auch künftige",
+      "serviceDeskEditTitle": "Service-Desk-Zuweisung",
+      "serviceDeskTenants": "{count} Tenant(s)",
+      "serviceDeskAllTenantsShort": "Alle veröffentlichten ({count})",
+      "serviceDeskManaged": "Service-Desk-Konto des Anbieters: vom Anbieter verwaltet",
+      "serviceDeskChip": "Service Desk"
+    }
   },
   "drsPage": {
     "balanced": "Ausgewogen",

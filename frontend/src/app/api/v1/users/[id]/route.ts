@@ -10,6 +10,7 @@ import { safeLog } from "@/lib/log/sanitize"
 import { checkPermission, isUserSuperAdmin, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { isExternalProvider } from "@/lib/auth/localLogin"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
+import { isServiceDeskAccount, SERVICE_DESK_ACCOUNT_ERROR, SERVICE_DESK_ROW_PREFIX } from "@/lib/rbac/serviceDesk"
 import { denyIfTargetIsProtectedAndCallerIsNot, findUserInTenant } from "@/lib/rbac/userTargetGuards"
 import { nanoid } from "nanoid"
 import { DEFAULT_TENANT_ID, addUserToTenant, removeUserFromTenant, TenantMembershipError, getCurrentTenantId } from "@/lib/tenant"
@@ -115,6 +116,11 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     // account itself is changed by the provider or by its holder. A field
     // sent back with its current value (the dialog resends the whole form)
     // changes nothing and is not held against the caller.
+    // A provider service-desk account is the provider's, in every tenant it
+    // reaches (ui#1336).
+    if (!isProviderView && !isSelf && (await isServiceDeskAccount(id))) {
+      return NextResponse.json(SERVICE_DESK_ACCOUNT_ERROR, { status: 403 })
+    }
     if (localLoginAllowed !== undefined && typeof localLoginAllowed !== "boolean") {
       return NextResponse.json({ error: "localLoginAllowed must be a boolean" }, { status: 400 })
     }
@@ -323,6 +329,8 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
           where: {
             userId: id,
             ...(wouldStripProtected ? {} : { roleId: { notIn: [...PROTECTED_ROLE_IDS] } }),
+            // Service-desk rows follow their assignment (ui#1336), not this dialog.
+            NOT: { id: { startsWith: SERVICE_DESK_ROW_PREFIX } },
           },
         })
         if (typeof roleId === "string" && roleId.length > 0) {
@@ -503,6 +511,11 @@ async function handleDelete(req: Request, { params }: { params: Promise<{ id: st
         { error: "You cannot delete your own account" },
         { status: 400 }
       )
+    }
+
+    // A provider service-desk account is the provider's (ui#1336).
+    if (!isProviderView && (await isServiceDeskAccount(id))) {
+      return NextResponse.json(SERVICE_DESK_ACCOUNT_ERROR, { status: 403 })
     }
 
     // Offboarding (#632), opt-in through ?deleteApiTokens=true. This MUST run

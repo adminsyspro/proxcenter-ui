@@ -15,7 +15,7 @@ import { safeLog } from '@/lib/log/sanitize'
 import { loadTenantSlugs, resolveUploadOwner } from './scope'
 
 import {
-  DATA_DISK_KEY_RE, isTenantDiskKey, stampDriveQos, validateDriveAgainstScope, parseDriveString,
+  DATA_DISK_KEY_RE, cicustomStorages, isTenantDiskKey, stampDriveQos, validateDriveAgainstScope, parseDriveString,
   type DriveQosCaps,
 } from './drives'
 
@@ -82,6 +82,15 @@ export async function enforceTenantDrives(args: {
   const stateStorage = args.body.vmstatestorage
   if (args.type === 'qemu' && stateStorage !== undefined && String(stateStorage) !== '' && !writable.has(String(stateStorage))) {
     throw new DriveScopeError('vmstatestorage: this storage is not part of your vDC.')
+  }
+
+  // cicustom reads cloud-init files from a storage: one of the vDC or none.
+  const cicustom = args.body.cicustom
+  if (args.type === 'qemu' && cicustom !== undefined && String(cicustom).trim() !== '') {
+    const storages = cicustomStorages(cicustom)
+    if (storages === null || storages.some(storage => !allowedStorages.has(storage))) {
+      throw new DriveScopeError('cicustom: this storage is not part of your vDC.')
+    }
   }
 
   for (const key of Object.keys(args.body)) {

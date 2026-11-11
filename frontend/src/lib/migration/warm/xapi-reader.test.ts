@@ -158,6 +158,22 @@ describe("startXapiReader", () => {
     expect((error as Error).message).not.toContain("OpaqueRef:session")
   })
 
+  it("reports the server's refusal from the redacted nbdkit log, not a device shortage", async () => {
+    const line = "nbdkit: nbd[1]: error: export 'vdi/abc?session_id=OpaqueRef:session' refused by the server"
+    mockSSH
+      .mockResolvedValueOnce({ success: true, output: "12345" })
+      .mockResolvedValueOnce({ success: true, output: "EXISTS" })
+      .mockResolvedValueOnce({ success: false, output: "NBD_SERVER_REFUSED: Exiting." })
+      .mockResolvedValueOnce({ success: true, output: `${line}\n${line}\n` })
+      .mockResolvedValueOnce({ success: true, output: "" })
+
+    const error = await startXapiReader("conn", "10.0.0.7", TARGET, { intervalMs: 0 }).catch(e => e as Error)
+
+    expect((error as Error).message).toBe(
+      "nbdkit could not open the source disk: nbdkit: nbd[1]: error: export 'vdi/abc?session_id=<redacted>' refused by the server",
+    )
+  })
+
   it("tears down the CA directory and log when the launch command itself fails", async () => {
     mockSSH
       .mockResolvedValueOnce({ success: false, error: "ssh: connection reset" })

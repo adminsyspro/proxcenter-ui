@@ -2,6 +2,7 @@
 // Zod validation schemas for API route inputs
 
 import { z } from 'zod'
+import { MIGRATION_LIMIT_MAX } from '@/lib/migration/migration-limits'
 import { ZERO_RATE_LIMIT_MAX_MBPS, ZERO_RATE_UNLIMITED } from './migration/warm/zero-rate'
 import { INTEGRITY_REGION_COUNT_MAX, INTEGRITY_REGION_SIZE_MIB_MAX } from './migration/integrity-settings'
 
@@ -29,6 +30,9 @@ function refineReplicationNetwork(data: { sshEnabled?: boolean; replicationNetwo
 }
 
 /** POST /api/v1/connections — create a Proxmox connection */
+
+const migrationLimitSchema = z.number().int().min(1).max(MIGRATION_LIMIT_MAX).nullable().optional()
+
 export const createConnectionSchema = z.object({
   name: z.string().min(1, 'name is required').transform(s => s.trim()),
   type: z.enum(['pve', 'pbs', 'vmware', 'xcpng', 'hyperv', 'nutanix']).default('pve'),
@@ -74,6 +78,12 @@ export const createConnectionSchema = z.object({
   integrityCheckEnabled: z.boolean().nullable().optional(),
   integrityRegionCount: z.number().int().min(0).max(INTEGRITY_REGION_COUNT_MAX).nullable().optional(),
   integrityRegionSizeMiB: z.number().int().min(1).max(INTEGRITY_REGION_SIZE_MIB_MAX).nullable().optional(),
+  // Bulk migration limits (ui#1332), Enterprise only; null = the default. The
+  // cluster and per-node limits belong to a PVE target, the per-host limit to
+  // a VMware source (lib/migration/migration-limits).
+  migrationMaxParallel: migrationLimitSchema,
+  migrationMaxPerNode: migrationLimitSchema,
+  migrationMaxPerSourceHost: migrationLimitSchema,
 }).superRefine((data, ctx) => {
   // PVE/PBS require apiToken
   if ((data.type === 'pve' || data.type === 'pbs') && !data.apiToken) {
@@ -176,6 +186,12 @@ export const updateConnectionSchema = z.object({
   integrityCheckEnabled: z.boolean().nullable().optional(),
   integrityRegionCount: z.number().int().min(0).max(INTEGRITY_REGION_COUNT_MAX).nullable().optional(),
   integrityRegionSizeMiB: z.number().int().min(1).max(INTEGRITY_REGION_SIZE_MIB_MAX).nullable().optional(),
+  // Bulk migration limits (ui#1332), Enterprise only; null = the default. The
+  // cluster and per-node limits belong to a PVE target, the per-host limit to
+  // a VMware source (lib/migration/migration-limits).
+  migrationMaxParallel: migrationLimitSchema,
+  migrationMaxPerNode: migrationLimitSchema,
+  migrationMaxPerSourceHost: migrationLimitSchema,
 }).superRefine((data, ctx) => {
   refineReplicationNetwork(data, ctx)
 })

@@ -73,7 +73,8 @@ const EditOtherHardwareDialog = dynamic(() => import('@/components/HardwareModal
 const CloneVmDialog = dynamic(() => import('@/components/HardwareModals').then(mod => ({ default: mod.CloneVmDialog })), { ssr: false })
 import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/MigrateVmDialog'
 
-import { BULK_MIG_CONCURRENCY_MAX, BULK_MIG_CONCURRENCY_MIN, bulkTargetNodes, bulkTempBytesRequired, bulkVmDiskBytes, clampBulkConcurrency } from '../bulkMigrationConfig'
+import { effectiveMigrationLimits } from '@/lib/migration/migration-limits'
+import { BULK_MIG_CONCURRENCY_MIN, bulkTargetNodes, bulkTempBytesRequired, bulkVmDiskBytes, clampBulkConcurrency } from '../bulkMigrationConfig'
 import { countExtVmPower, isSourcePaused, isSourcePoweredOn } from '../extVmList'
 import { bulkBatchFromPayload, bulkRowsFromBatch, countBulkJobs, fetchBulkBatch, isTerminalJobStatus, orderBulkJobs, type BulkMigBatch, type BulkMigJobRow } from '../bulkJobList'
 import { pageOf } from '@/lib/paging'
@@ -1525,12 +1526,16 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   const zeroRateLimitInvalid = showZeroRateLimit && !isZeroRateLimitValid(migZeroRateLimit)
   // The target connection carries the migration settings of its cluster: the
   // zeroing cap (roadmap#45) and the post-copy integrity check (roadmap#1).
-  const { data: targetConnection } = useSWR<{ data?: { warmZeroRateLimitMBps?: number | null; integrityCheckEnabled?: boolean | null; integrityRegionCount?: number | null; integrityRegionSizeMiB?: number | null } }>(
+  const { data: targetConnection } = useSWR<{ data?: { warmZeroRateLimitMBps?: number | null; integrityCheckEnabled?: boolean | null; integrityRegionCount?: number | null; integrityRegionSizeMiB?: number | null; migrationMaxParallel?: number | null; migrationMaxPerNode?: number | null } }>(
     migTargetConn ? `/api/v1/connections/${encodeURIComponent(migTargetConn)}` : null,
     (url: string) => fetch(url).then(r => (r.ok ? r.json() : null)),
     { revalidateOnFocus: false },
   )
   const zeroRateGlobalDefault = describeZeroRateLimit(targetConnection?.data?.warmZeroRateLimitMBps)
+  // Bulk limits of the target cluster (ui#1332): the slider goes up to its
+  // cluster limit, and the scheduler holds each start to the per-node one.
+  const bulkTargetLimits = effectiveMigrationLimits(targetConnection?.data ?? null, null)
+  const bulkConcurrency = clampBulkConcurrency(migBulkConcurrency, bulkTargetLimits.cluster)
 
   // Post-copy integrity check (roadmap#1): what it adds to this migration, from
   // the target cluster's settings. In warm it runs at cutover, the source off,
@@ -1861,16 +1866,16 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
         </MuiTooltip>
         <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }} data-testid="bulk-concurrency-value">
-          {t('inventoryPage.esxiMigration.bulkConcurrencyValue', { count: migBulkConcurrency })}
+          {t('inventoryPage.esxiMigration.bulkConcurrencyValue', { count: bulkConcurrency })}
         </Typography>
       </Box>
       <Box sx={{ px: 1 }}>
         <Slider
           size="small"
-          value={migBulkConcurrency}
-          onChange={(_, val) => setMigBulkConcurrency(clampBulkConcurrency(val as number))}
+          value={bulkConcurrency}
+          onChange={(_, val) => setMigBulkConcurrency(clampBulkConcurrency(val as number, bulkTargetLimits.cluster))}
           min={BULK_MIG_CONCURRENCY_MIN}
-          max={BULK_MIG_CONCURRENCY_MAX}
+          max={bulkTargetLimits.cluster}
           step={1}
           marks
           valueLabelDisplay="auto"
@@ -1878,6 +1883,9 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           data-testid="bulk-concurrency-slider"
         />
       </Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }} data-testid="bulk-concurrency-limits">
+        {t('inventoryPage.esxiMigration.bulkConcurrencyLimits', { perNode: bulkTargetLimits.perNode, cluster: bulkTargetLimits.cluster })}
+      </Typography>
     </Box>
   )
 
@@ -5364,7 +5372,7 @@ return
                   // Peak disk usage in bulk = the N biggest committed disks × 2 (source +
                   // converted), N being how many jobs run at once (roadmap#53); sequential
                   // degrades to the biggest VM alone.
-                  const requiredBytes = bulkTempBytesRequired(selectedBulkVms.map((vm: any) => vm.committed || 0), migBulkConcurrency)
+                  const requiredBytes = bulkTempBytesRequired(selectedBulkVms.map((vm: any) => vm.committed || 0), bulkConcurrency)
                   return (
                     <Box>
                       <TextField
@@ -5380,9 +5388,9 @@ return
                           if (!sel) return 'Required: where the source disks are staged on the Proxmox node during the migration'
                           const availGB = (sel.availableBytes / 1073741824).toFixed(1)
                           const reqGB = (requiredBytes / 1073741824).toFixed(1)
-                          if (requiredBytes > 0 && sel.availableBytes < requiredBytes) return `Insufficient space: ${availGB} GB available, ~${reqGB} GB required for the ${migBulkConcurrency} largest VM(s) running at once`
+                          if (requiredBytes > 0 && sel.availableBytes < requiredBytes) return `Insufficient space: ${availGB} GB available, ~${reqGB} GB required for the ${bulkConcurrency} largest VM(s) running at once`
                           return requiredBytes > 0
-                            ? `${availGB} GB available (${sel.filesystem}), ~${reqGB} GB peak needed for ${migBulkConcurrency} VM(s) at once`
+                            ? `${availGB} GB available (${sel.filesystem}), ~${reqGB} GB peak needed for ${bulkConcurrency} VM(s) at once`
                             : `${availGB} GB available (${sel.filesystem})`
                         })()}
                         error={(() => {
@@ -5932,7 +5940,6 @@ return
                   const isNutanixBulk = bulkMigHostInfo.hostType === 'nutanix'
                   // Cap of this batch (roadmap#53): the server starts the queued jobs
                   // that many at a time, whether or not this tab stays open.
-                  const bulkConcurrency = clampBulkConcurrency(migBulkConcurrency)
                   try {
                     // The whole batch in one request: the server checks every VM,
                     // then creates the batch and one queued job per VM, or nothing.

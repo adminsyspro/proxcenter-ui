@@ -22,6 +22,7 @@ vi.mock('@/lib/db/prisma', () => ({
   prisma: {
     rbacRole: { findUnique: findUniqueMock, findFirst: findFirstMock, delete: deleteMock },
     rbacUserRole: { count: countMock },
+    rbacServiceDeskAssignment: { count: vi.fn().mockResolvedValue(0) },
     $transaction: txMock,
   },
 }))

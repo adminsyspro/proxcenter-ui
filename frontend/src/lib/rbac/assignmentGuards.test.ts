@@ -83,3 +83,31 @@ describe("guardRoleAssignment", () => {
     expect((await guardRoleAssignment(input())).ok).toBe(true)
   })
 })
+
+describe("guardRoleAssignment and the provider catalogue (ui#1336)", () => {
+  const catalogue = (over: Record<string, unknown> = {}) =>
+    role({ tenantId: "default", isSystem: false, audience: "tenant", publishAll: false, publications: [{ tenantId: "t1" }], ...over })
+
+  it("lets a tenant role in where it is published, and nowhere else", async () => {
+    roleFindUniqueMock.mockResolvedValue(catalogue())
+    expect((await guardRoleAssignment(input({ targetTenantId: "t1" }))).ok).toBe(true)
+    roleFindUniqueMock.mockResolvedValue(catalogue({ publications: [] }))
+    expect(await body(await guardRoleAssignment(input({ targetTenantId: "t2" })))).toMatchObject({ status: 404, error: "Role not found" })
+    expect(roleFindUniqueMock.mock.calls[0][0].select.publications).toEqual({ where: { tenantId: "t1" }, select: { tenantId: true } })
+  })
+
+  it("sends a service desk role to its own assignments, and hides it from anyone else", async () => {
+    roleFindUniqueMock.mockResolvedValue(catalogue({ audience: "service_desk", publishAll: true }))
+    expect(await body(await guardRoleAssignment(input({ targetTenantId: "t1" })))).toMatchObject({ status: 404 })
+    isSuperAdminMock.mockResolvedValue(true)
+    expect(await body(await guardRoleAssignment(input({ targetTenantId: "t1" })))).toMatchObject({
+      status: 400,
+      error: "A service desk role is assigned from the service desk assignments, not per tenant",
+    })
+  })
+
+  it("keeps a legacy role's grandfathered SSO publication out of the assignment routes", async () => {
+    roleFindUniqueMock.mockResolvedValue(catalogue({ audience: null }))
+    expect(await body(await guardRoleAssignment(input({ targetTenantId: "t1" })))).toMatchObject({ status: 404 })
+  })
+})

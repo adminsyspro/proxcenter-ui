@@ -6,6 +6,10 @@ import { useTranslations } from 'next-intl'
 
 import MappingOrderButtons from './MappingOrderButtons'
 import { moveMappingRow } from '@/lib/settings/mappingOrder'
+import { ALL_PUBLISHED_TENANTS } from '@/lib/auth/groupMapping'
+import { isRoleAvailableInTenant } from '@/lib/rbac/rolePublication'
+import { toPublishable } from '@/components/rbac/catalogueClient'
+
 
 import {
   Accordion,
@@ -34,6 +38,17 @@ import {
 // each Select sizes itself on its own value ("Tenant Operator" vs "Viewer") and
 // the columns stop lining up from one row to the next.
 const SCOPE_FIELD_WIDTH = 170
+
+// System roles that never go to a customer tenant (lib/rbac PROTECTED_ROLE_IDS
+// + PROVIDER_ONLY_ROLE_IDS; the server refuses them in a tenant mapping).
+const PROVIDER_ONLY_ROLES = new Set(['role_super_admin', 'role_provider_admin', 'role_operator', 'role_vm_admin', 'role_viewer', 'role_vm_user'])
+
+/** Whether a role can be the target of a mapping row in `tenantId` (ui#1336). */
+export function roleStandsInMappingTenant(role, tenantId) {
+  if (tenantId === ALL_PUBLISHED_TENANTS) return role.audience === 'service_desk' || role.audience === 'tenant'
+  if (tenantId !== 'default' && PROVIDER_ONLY_ROLES.has(role.id)) return false
+  return isRoleAvailableInTenant(toPublishable(role), tenantId)
+}
 
 export default function OidcConfigTab() {
   const t = useTranslations()
@@ -800,7 +815,12 @@ export default function OidcConfigTab() {
             // A mapping written before a tenant or vDC was deleted keeps its id
             // as an option, so the Select stays controlled and the stale value
             // is visible instead of silently blanking on load.
-            const tenantMissing = rowTenant && !tenants.some(x => x.id === rowTenant)
+            const allPublished = rowTenant === ALL_PUBLISHED_TENANTS
+            const tenantMissing = rowTenant && !allPublished && !tenants.some(x => x.id === rowTenant)
+            // Only the roles that stand in the row's tenant (ui#1336): the
+            // server refuses the others. The current value stays listed so the
+            // Select remains controlled.
+            const rowRoles = availableRoles.filter(role => role.id === mapping.role || roleStandsInMappingTenant(role, rowTenant))
             const vdcMissing = mapping.vdc && !tenantVdcs.some(v => v.id === mapping.vdc)
 
             return (
@@ -832,12 +852,13 @@ export default function OidcConfigTab() {
                         onChange={e => updateGroupMapping(index, 'tenant', e.target.value)}
                       >
                         {tenantMissing && <MenuItem value={rowTenant}>{rowTenant}</MenuItem>}
+                        <MenuItem value={ALL_PUBLISHED_TENANTS}>{t('oidc.allPublishedTenants')}</MenuItem>
                         {tenants.map(tenant => (
                           <MenuItem key={tenant.id} value={tenant.id}>{tenant.name}</MenuItem>
                         ))}
                       </Select>
                     </FormControl>
-                    <FormControl size='small' sx={{ width: SCOPE_FIELD_WIDTH }} disabled={!config.enabled}>
+                    <FormControl size='small' sx={{ width: SCOPE_FIELD_WIDTH }} disabled={!config.enabled || allPublished}>
                       <InputLabel shrink>{t('oidc.vdc')}</InputLabel>
                       <Select
                         value={mapping.vdc || ''}
@@ -862,7 +883,7 @@ export default function OidcConfigTab() {
                     label={t('oidc.role')}
                     onChange={e => updateGroupMapping(index, 'role', e.target.value)}
                   >
-                    {availableRoles.map(role => (
+                    {rowRoles.map(role => (
                       <MenuItem key={role.id} value={role.id}>{role.is_system ? t(`rbac.roles.${role.id}`) : role.name}</MenuItem>
                     ))}
                   </Select>

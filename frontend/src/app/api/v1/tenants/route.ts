@@ -4,6 +4,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { listTenants, createTenant, requireProviderTenant } from "@/lib/tenant"
 import { parseVmidRangeInput, findVmidRangeConflict } from "@/lib/tenant/vmidRange"
 import { audit } from "@/lib/audit"
+import { syncServiceDeskForNewTenant } from "@/lib/rbac/serviceDesk"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/config"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -71,6 +72,9 @@ async function handlePost(req: NextRequest) {
       vmidRangeStart: vmidRange?.start ?? null,
       vmidRangeEnd: vmidRange?.end ?? null,
     })
+
+    // Service-desk roles published to all tenants reach the new one (ui#1336).
+    await syncServiceDeskForNewTenant()
 
     await audit({
       action: "tenant.create",

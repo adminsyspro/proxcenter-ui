@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { hasPermission, isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
+import { isServiceDeskManaged } from "@/lib/rbac/serviceDesk"
 import { validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         user: { select: { id: true, email: true, name: true } },
-        role: { select: { id: true, name: true, color: true, isSystem: true } },
+        role: { select: { id: true, name: true, color: true, isSystem: true, audience: true } },
         grantedBy: { select: { email: true } },
       },
       orderBy: { grantedAt: "desc" },
@@ -110,6 +111,8 @@ export async function GET(req: NextRequest) {
       role_color: r.role.color,
       role_is_system: r.role.isSystem,
       granted_by_email: r.grantedBy?.email ?? null,
+      // Provider service-desk rows are read-only here (ui#1336).
+      managed_by: isServiceDeskManaged(r, tenantId) ? "service_desk" : null,
     }))
 
     // Surface the global role_super_admin assignment for super-admins who are
@@ -167,6 +170,7 @@ export async function GET(req: NextRequest) {
           role_color: r.role.color,
           role_is_system: r.role.isSystem,
           granted_by_email: r.grantedBy?.email ?? null,
+          managed_by: null,
         })
       }
     }
@@ -192,6 +196,7 @@ export async function GET(req: NextRequest) {
       // separate instead of collapsing them into one misleading row.
       tenant_id: a.tenant_id,
       tenant_name: a.tenant_name,
+      managed_by: a.managed_by,
       scope_type: a.scope_type,
       scope_target: a.scope_target,
       granted_at: a.granted_at,

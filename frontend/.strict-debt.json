@@ -37,7 +37,7 @@
     "src/app/(dashboard)/operations/backups/BackupJobRunsDrawer.test.tsx": 1,
     "src/app/(dashboard)/operations/network-flows/FlowsTab.tsx": 3,
     "src/app/(dashboard)/operations/reports/components/ReportCustomization.tsx": 1,
-    "src/app/(dashboard)/security/rbac/page.tsx": 81,
+    "src/app/(dashboard)/security/rbac/page.tsx": 67,
     "src/app/api/v1/admin/config-backup/configBackupRoutes.test.ts": 10,
     "src/app/api/v1/admin/sessions/[sid]/route.test.ts": 10,
     "src/app/api/v1/admin/tenant-networks/[id]/members/route.test.ts": 3,

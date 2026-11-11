@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { syncProviderGrants, type ProviderGrantsDb, type MembershipPort } from "./roleSync"
 import {
+  ALL_PUBLISHED_TENANTS,
   DEFAULT_TENANT_ID,
   normalizeGroupGrantMapping,
   normalizeMappingStrategy,
@@ -247,6 +248,50 @@ export function oidcSeedRoleId(groups: string[] | undefined, config: OidcConfig)
   return preferred ? preferred.roleId : "role_tenant_viewer"
 }
 
+/** What expandAllTenantGrants needs beyond the sync's own surface. */
+export type AllTenantsDb = {
+  rbacRole: { findUnique: (args: any) => Promise<any> }
+  tenant?: { findMany: (args: any) => Promise<Array<{ id: string }>> }
+}
+
+/**
+ * Expand the entries that target "every tenant the role is published to"
+ * (tenant "*", ui#1336) into one grant per such tenant, in the row's place,
+ * then dedupe again with the strategy's key: an earlier row naming a tenant
+ * explicitly still wins under first_match.
+ */
+export async function expandAllTenantGrants(
+  db: AllTenantsDb,
+  grants: ResolvedGrant[],
+  cumulative: boolean,
+): Promise<ResolvedGrant[]> {
+  if (!grants.some(g => g.tenantId === ALL_PUBLISHED_TENANTS)) return grants
+
+  const expandOne = async (grant: ResolvedGrant): Promise<ResolvedGrant[]> => {
+    if (grant.tenantId !== ALL_PUBLISHED_TENANTS) return [grant]
+    const role = await db.rbacRole.findUnique({
+      where: { id: grant.roleId },
+      select: { audience: true, publishAll: true, publications: { select: { tenantId: true } } },
+    })
+    if (!role || (role.audience !== "service_desk" && role.audience !== "tenant")) return []
+    const tenantIds: string[] = role.publishAll
+      ? ((await db.tenant?.findMany({ where: { enabled: true, id: { not: DEFAULT_TENANT_ID } }, select: { id: true } })) ?? []).map(t => t.id)
+      : (role.publications ?? []).map((p: { tenantId: string }) => p.tenantId)
+    return tenantIds.sort((x, y) => x.localeCompare(y)).map(tenantId => ({ tenantId, vdcId: null, roleId: grant.roleId }))
+  }
+  // Expanded side by side, flattened back in the mapping's row order.
+  const expanded = (await Promise.all(grants.map(expandOne))).flat()
+
+  const seen = new Set<string>()
+  return expanded.filter(g => {
+    const scope = `${g.tenantId}\u0000${g.vdcId ?? ""}`
+    const key = cumulative ? `${scope}\u0000${g.roleId}` : scope
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 /**
  * Re-sync a user's OIDC-derived RBAC assignments on login (issues #383, #442).
  *
@@ -266,7 +311,7 @@ export function oidcSeedRoleId(groups: string[] | undefined, config: OidcConfig)
  * are touched, so manual assignments are preserved (issue #940).
  */
 export async function syncOidcRoleAssignment(
-  db: ProviderGrantsDb & VdcScopeDb,
+  db: ProviderGrantsDb & VdcScopeDb & AllTenantsDb,
   params: {
     userId: string
     groups: string[] | undefined
@@ -282,7 +327,7 @@ export async function syncOidcRoleAssignment(
   const hasMapping = (config.groupGrants?.length ?? 0) > 0
   let rows = null
   if (hasMapping && groupsClaimIsArray) {
-    const resolved = resolveOidcGrants(groups, config)
+    const resolved = await expandAllTenantGrants(db, resolveOidcGrants(groups, config), config.groupMappingStrategy === "cumulative")
     const vdcScopes = await loadVdcScopes(
       db,
       resolved.map(g => g.vdcId).filter((id): id is string => !!id),

@@ -25,7 +25,8 @@ const {
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/demo/demo-api', () => ({ demoResponse: () => null }))
-vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'default', DEFAULT_TENANT_ID: 'default' }))
+const tenantIdMock = vi.hoisted(() => vi.fn(async () => 'default'))
+vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: () => tenantIdMock(), DEFAULT_TENANT_ID: 'default' }))
 vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
 vi.mock('@/lib/rbac', () => ({
   hasPermission: hasPermissionMock,
@@ -41,7 +42,7 @@ vi.mock('@/lib/db/prisma', () => ({
   },
 }))
 
-import { PATCH } from './route'
+import { DELETE, PATCH } from './route'
 
 const existingAssignment = {
   id: 'assign_1',
@@ -176,4 +177,42 @@ describe('PATCH /api/v1/rbac/assignments/[id] scope handling (issue #383)', () =
     expect(userRoleUpdateManyMock.mock.calls[0][0].data).toMatchObject({ scopeType: 'global', scopeTarget: null })
   })
 
+})
+
+describe('service desk rows are read-only here (ui#1336)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getServerSessionMock.mockResolvedValue({ user: { id: 'admin', email: 'admin@x' } })
+    hasPermissionMock.mockResolvedValue(true)
+    isSuperAdminMock.mockResolvedValue(true)
+    isProtectedMock.mockResolvedValue(false)
+    userRoleFindFirstMock.mockResolvedValue({ ...existingAssignment, id: 'sd_sda_1_t1' })
+  })
+
+  it('refuses to change or revoke a row a service desk assignment owns', async () => {
+    for (const res of [
+      await callRoute(PATCH as any, { method: 'PATCH', params: { id: 'sd_sda_1_t1' }, body: { scope_type: 'global' } }),
+      await callRoute(DELETE as any, { method: 'DELETE', params: { id: 'sd_sda_1_t1' } }),
+    ]) {
+      expect(res.status).toBe(409)
+      expect((await readJson<any>(res)).code).toBe('SERVICE_DESK_MANAGED')
+    }
+    expect(userRoleUpdateManyMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses a customer tenant the SSO row of a service desk role, and leaves it to the provider', async () => {
+    const sso = { ...existingAssignment, id: 'oidc_1', tenantId: 't1', role: { ...existingAssignment.role, audience: 'service_desk' } }
+    userRoleFindFirstMock.mockResolvedValue(sso)
+    tenantIdMock.mockResolvedValue('t1')
+    for (const res of [
+      await callRoute(PATCH as any, { method: 'PATCH', params: { id: 'oidc_1' }, body: { scope_type: 'global' } }),
+      await callRoute(DELETE as any, { method: 'DELETE', params: { id: 'oidc_1' } }),
+    ]) {
+      expect(res.status).toBe(409)
+      expect((await readJson<any>(res)).code).toBe('SERVICE_DESK_MANAGED')
+    }
+    tenantIdMock.mockResolvedValue('default')
+    const res = await callRoute(DELETE as any, { method: 'DELETE', params: { id: 'oidc_1' } })
+    expect(res.status).not.toBe(409)
+  })
 })

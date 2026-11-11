@@ -15,10 +15,13 @@ const normalizeGroupGrantMappingMock = vi.fn()
 const tenantFindManyMock = vi.fn()
 const vdcFindManyMock = vi.fn()
 const auditMock = vi.fn()
+const roleFindManyMock = vi.fn()
 
 vi.mock("@/lib/rbac", () => ({
   getRBACContext: getRBACContextMock,
   PERMISSIONS: { ADMIN_SETTINGS: "admin.settings" },
+  PROTECTED_ROLE_IDS: ["role_super_admin", "role_provider_admin"],
+  PROVIDER_ONLY_ROLE_IDS: ["role_operator", "role_vm_admin", "role_viewer", "role_vm_user"],
 }))
 
 // Provider-only route: requireProviderAdmin stands for the tenant gate AND
@@ -32,6 +35,7 @@ vi.mock("@/lib/db/prisma", () => ({
     // mapping targets against them on save.
     tenant: { findMany: tenantFindManyMock },
     vdc: { findMany: vdcFindManyMock },
+    rbacRole: { findMany: roleFindManyMock },
   },
 }))
 
@@ -59,6 +63,10 @@ beforeEach(() => {
   vdcFindManyMock.mockResolvedValue([])
   upsertMock.mockResolvedValue({})
   auditMock.mockResolvedValue(undefined)
+  // System roles, global: every mapping target resolves unless a test says otherwise.
+  roleFindManyMock.mockImplementation(async ({ where }: any) =>
+    (where.id.in as string[]).map(id => ({ id, name: id, isSystem: true, tenantId: null, audience: null, publishAll: false, publications: [], permissions: [] })),
+  )
 })
 
 // ─── GET ────────────────────────────────────────────────────────────────────
@@ -346,7 +354,7 @@ describe("PUT /api/v1/auth/oidc — group mapping targets", () => {
   })
 
   it("persists the entry list when every target resolves", async () => {
-    const grants = [{ group: "ops", tenantId: "t_acme", vdcId: "vdc_prod", role: "role_operator" }]
+    const grants = [{ group: "ops", tenantId: "t_acme", vdcId: "vdc_prod", role: "role_tenant_operator" }]
     normalizeGroupGrantMappingMock.mockReturnValue(grants)
     tenantFindManyMock.mockResolvedValue([{ id: "t_acme" }])
     vdcFindManyMock.mockResolvedValue([{ id: "vdc_prod", tenantId: "t_acme" }])
@@ -586,5 +594,61 @@ describe("/api/v1/auth/oidc — outbound proxy", () => {
     expect(res.status).toBe(400)
     expect((await readJson<any>(res)).error).toMatch(message)
     expect(upsertMock).not.toHaveBeenCalled()
+  })
+})
+
+// ─── Provider role catalogue (ui#1336) ──────────────────────────────────────
+
+describe("PUT /api/v1/auth/oidc: the mapping obeys the assignment rules", () => {
+  const validBody = { enabled: true, issuer_url: "https://idp.example.com", client_id: "cid" }
+  const custom = (id: string, over: Record<string, unknown> = {}) => ({
+    id, name: id, isSystem: false, tenantId: "default", audience: null, publishAll: false, publications: [], permissions: [], ...over,
+  })
+  const put = async (grants: any[]) => {
+    normalizeGroupGrantMappingMock.mockReturnValue(grants)
+    tenantFindManyMock.mockResolvedValue([{ id: "t_acme" }, { id: "default" }])
+    const { PUT } = await importRoute()
+    return callRoute(PUT as any, { method: "PUT", body: validBody })
+  }
+
+  it("refuses a provider-only system role in a customer tenant", async () => {
+    const res = await put([{ group: "ops", tenantId: "t_acme", vdcId: null, role: "operator" }])
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res)).error).toBe("role_operator can only be mapped in the provider tenant")
+    expect(upsertMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses a custom role that is not published to the tenant", async () => {
+    roleFindManyMock.mockResolvedValue([custom("role_ops")])
+    const res = await put([{ group: "ops", tenantId: "t_acme", vdcId: null, role: "role_ops" }])
+    expect((await readJson<any>(res)).error).toBe("role_ops is not published to tenant t_acme")
+  })
+
+  it("accepts a role published to the tenant, and every published tenant for a catalogue role", async () => {
+    roleFindManyMock.mockResolvedValue([custom("role_sd", { audience: "service_desk", publishAll: true })])
+    expect((await put([{ group: "sd", tenantId: "t_acme", vdcId: null, role: "role_sd" }])).status).toBe(200)
+    expect((await put([{ group: "sd", tenantId: "*", vdcId: null, role: "role_sd" }])).status).toBe(200)
+  })
+
+  it("keeps every published tenant to catalogue roles, without a vDC", async () => {
+    roleFindManyMock.mockResolvedValue([custom("role_ops")])
+    expect((await readJson<any>(await put([{ group: "g", tenantId: "*", vdcId: null, role: "role_ops" }]))).error)
+      .toBe("role_ops is not published to tenants, it cannot target every published tenant")
+    expect((await readJson<any>(await put([{ group: "g", tenantId: "*", vdcId: "vdc_1", role: "role_ops" }]))).error)
+      .toBe("A mapping to every published tenant cannot name a vDC")
+  })
+
+  it("keeps NIC identity rights to a super admin", async () => {
+    roleFindManyMock.mockResolvedValue([custom("role_nic", { permissions: [{ permissionId: "vm.config.nic.vlan" }] })])
+    getRBACContextMock.mockResolvedValue({ userId: "u2", isAdmin: false, tenantId: "default" })
+    const res = await put([{ group: "net", tenantId: "default", vdcId: null, role: "role_nic" }])
+    expect(res.status).toBe(403)
+    getRBACContextMock.mockResolvedValue({ userId: "u1", isAdmin: true, tenantId: "default" })
+    expect((await put([{ group: "net", tenantId: "default", vdcId: null, role: "role_nic" }])).status).toBe(200)
+  })
+
+  it("leaves an unknown role to the login sync", async () => {
+    roleFindManyMock.mockResolvedValue([])
+    expect((await put([{ group: "g", tenantId: "t_acme", vdcId: null, role: "role_gone" }])).status).toBe(200)
   })
 })

@@ -3,10 +3,12 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import { firewallParamRefusal } from '@/lib/firewall/pathParams'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { withAudit } from '@/lib/audit/withAudit'
 import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
@@ -20,13 +22,15 @@ async function postHandler(
     const { connectionId, node } = await params
     const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ node })
+    if (malformed) return malformed
 
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/nodes',
-      () => orchestrator.post(`/firewall/nodes/${connectionId}/${node}/rules`, body),
+      () => orchestrator.post(orchestratorPath`/firewall/nodes/${connectionId}/${node}/rules`, body),
       async () => pveDirect.addNodeRule(await getConnectionById(connectionId), node, body),
     )
 

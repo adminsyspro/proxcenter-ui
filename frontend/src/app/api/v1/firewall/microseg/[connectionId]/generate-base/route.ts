@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -20,7 +21,7 @@ async function postHandler(
     const body = await request.json()
     
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.post(`/firewall/microseg/${connectionId}/generate-base`, body)
+    const response = await orchestrator.post(orchestratorPath`/firewall/microseg/${connectionId}/generate-base`, body)
 
     
 return NextResponse.json(response.data)

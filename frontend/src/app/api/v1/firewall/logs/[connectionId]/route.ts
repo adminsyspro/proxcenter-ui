@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
@@ -119,7 +120,7 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
 
     const result = await collectFirewallLog(scope, window, {
       vmLog: (node, vmType, vmid) => {
-        const path = `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log`
+        const path = orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log`
 
         return gated(node, path, q => orchestratorOrPve<LogPage>(
           'firewall/logs',
@@ -128,7 +129,7 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
         ))
       },
       nodeLog: node => {
-        const path = `/firewall/nodes/${connectionId}/${node}/log`
+        const path = orchestratorPath`/firewall/nodes/${connectionId}/${node}/log`
 
         return gated(node, path, q => orchestratorOrPve<LogPage>(
           'firewall/logs',
@@ -139,24 +140,24 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
       nodes: async () => (await pveFetch<{ node: string; status?: string }[]>(await pve(), '/nodes')) ?? [],
       groups: () => orchestratorOrPve<SecurityGroup[]>(
         'firewall/logs',
-        () => orchestrator.get(`/firewall/groups/${connectionId}`),
+        () => orchestrator.get(orchestratorPath`/firewall/groups/${connectionId}`),
         async () => pveDirect.getSecurityGroups(await pve()),
       ),
       vmRules: (node, vmType, vmid) => orchestratorOrPve<FirewallRule[]>(
         'firewall/logs',
-        () => orchestrator.get(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules`),
+        () => orchestrator.get(orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules`),
         async () => pveDirect.getVMRules(await pve(), node, vmType, vmid),
       ),
       addressBook: async () => {
         const [aliases, ipsets] = await Promise.all([
           orchestratorOrPve<Alias[]>(
             'firewall/logs',
-            () => orchestrator.get(`/firewall/aliases/${connectionId}`),
+            () => orchestrator.get(orchestratorPath`/firewall/aliases/${connectionId}`),
             async () => pveDirect.getAliases(await pve()),
           ).catch(() => [] as Alias[]),
           orchestratorOrPve<IPSet[]>(
             'firewall/logs',
-            () => orchestrator.get(`/firewall/ipsets/${connectionId}`),
+            () => orchestrator.get(orchestratorPath`/firewall/ipsets/${connectionId}`),
             async () => pveDirect.getIPSets(await pve()),
           ).catch(() => [] as IPSet[]),
         ])

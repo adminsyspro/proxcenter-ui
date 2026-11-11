@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
@@ -37,7 +38,7 @@ async function getHandler(
     // The connection is only loaded on that fallback path.
     const groups = await orchestratorOrPve(
       'firewall/groups',
-      () => orchestrator.get(`/firewall/groups/${connectionId}`),
+      () => orchestrator.get(orchestratorPath`/firewall/groups/${connectionId}`),
       async () => pveDirect.getSecurityGroups(await getConnectionById(connectionId)),
     )
 
@@ -67,7 +68,7 @@ async function postHandler(
     const orchestrator = getOrchestratorClient()
     const created = await orchestratorOrPve(
       'firewall/groups',
-      () => orchestrator.post(`/firewall/groups/${connectionId}`, body),
+      () => orchestrator.post(orchestratorPath`/firewall/groups/${connectionId}`, body),
       async () => pveDirect.createSecurityGroup(await getConnectionById(connectionId), body),
     )
 

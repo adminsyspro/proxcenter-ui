@@ -5758,7 +5758,8 @@
         "settings": "Modificar configuración",
         "audit": "Ver logs de auditoría",
         "compliance": "Gestionar cumplimiento y políticas de seguridad",
-        "tenants": "Gestionar tenants (multi-tenancy)"
+        "tenants": "Gestionar tenants (multi-tenancy)",
+        "apitokens": "Gestionar los tokens de API (crear, revocar)"
       },
       "sdn": {
         "vnet": {
@@ -8413,7 +8414,8 @@
     "mappingStrategyFirstMatch": "Conservar el primer rol coincidente",
     "mappingStrategyCumulative": "Combinar todos los roles coincidentes",
     "mappingStrategyFirstMatchHelper": "Gana la fila coincidente más alta, un rol por tenant y por vDC.",
-    "mappingStrategyCumulativeHelper": "El usuario recibe todos los roles coincidentes y sus permisos son la unión de esos roles."
+    "mappingStrategyCumulativeHelper": "El usuario recibe todos los roles coincidentes y sus permisos son la unión de esos roles.",
+    "allPublishedTenants": "Todos los tenants publicados"
   },
   "ceph": {
     "clusterHealth": "Salud del clúster",
@@ -8703,7 +8705,41 @@
     "poolContainsVms": "{count} VM(s)",
     "tags": "etiquetas",
     "pools": "pools",
-    "storages": "almacenamientos"
+    "storages": "almacenamientos",
+    "catalogue": {
+      "audience": "Audiencia",
+      "audienceLegacy": "Tenant del proveedor (heredado)",
+      "audienceLegacyDesc": "Creado antes del catálogo: solo en el tenant del proveedor",
+      "audienceProvider": "Proveedor",
+      "audienceServiceDesk": "Service desk",
+      "audienceTenant": "Tenant",
+      "audienceProviderDesc": "Solo tenant del proveedor",
+      "audienceServiceDeskDesc": "Equipo del proveedor en los tenants donde está publicado, asignado solo por el proveedor",
+      "audienceTenantDesc": "Publicado a los tenants, su Tenant Admin puede asignarlo",
+      "publication": "Publicación",
+      "publishAll": "Todos los tenants, incluidos los futuros",
+      "allTenantsBox": "Todos",
+      "noTenants": "Ningún tenant",
+      "noTenantSelected": "Elija al menos un tenant o publique a todos los tenants",
+      "ceilingNotice": "los permisos reservados al proveedor no están disponibles",
+      "ceilingHint": "Reservado al proveedor: un rol publicado a los tenants no puede incluirlo",
+      "revokeTitle": "¿Revocar asignaciones?",
+      "revokeIntro": "Estos tenants salen de la publicación. Las asignaciones de este rol hechas allí se revocarán:",
+      "revokeCount": "{count} asignación(es)",
+      "revokeConfirm": "Revocar y guardar",
+      "catalogueChip": "Catálogo del proveedor",
+      "publishedToAll": "publicado a todos los tenants",
+      "publishedTo": "publicado a {count} tenant(s)",
+      "legacyPublished": "SSO en {count} tenant(s)",
+      "legacyPublishedHint": "Llega a estos tenants solo mediante el mapeo de grupos SSO. Elija una audiencia para publicarlo.",
+      "serviceDeskTarget": "Tenants",
+      "serviceDeskTargetAll": "Todos los tenants donde el rol está publicado, incluidos los futuros",
+      "serviceDeskEditTitle": "Asignación de service desk",
+      "serviceDeskTenants": "{count} tenant(s)",
+      "serviceDeskAllTenantsShort": "Todos los publicados ({count})",
+      "serviceDeskManaged": "Cuenta de service desk del proveedor: gestionada por el proveedor",
+      "serviceDeskChip": "Service desk"
+    }
   },
   "drsPage": {
     "balanced": "Equilibrado",

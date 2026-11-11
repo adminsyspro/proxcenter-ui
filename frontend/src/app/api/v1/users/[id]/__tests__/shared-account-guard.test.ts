@@ -17,7 +17,11 @@ const {
   userUpdateMock,
   membershipCountMock,
   revokeAllSessionsMock,
+  serviceDeskFindFirstMock,
+  serviceDeskRoleRowMock,
 } = vi.hoisted(() => ({
+  serviceDeskFindFirstMock: vi.fn(async (..._args: unknown[]): Promise<{ id: string } | null> => null),
+  serviceDeskRoleRowMock: vi.fn(async (..._args: unknown[]): Promise<{ id: string } | null> => null),
   sessionMock: vi.fn(),
   tenantMock: vi.fn(),
   findUserInTenantMock: vi.fn(),
@@ -36,6 +40,8 @@ vi.mock("@/lib/db/prisma", () => ({
   prisma: {
     user: { findUnique: userFindUniqueMock, update: userUpdateMock },
     userTenant: { count: (...a: any[]) => membershipCountMock(...a), findMany: vi.fn(async () => []) },
+    rbacServiceDeskAssignment: { findFirst: (...a: any[]) => serviceDeskFindFirstMock(...a) },
+    rbacUserRole: { findFirst: (...a: any[]) => serviceDeskRoleRowMock(...a) },
   },
 }))
 vi.mock("@/lib/rbac", () => ({
@@ -56,7 +62,7 @@ vi.mock("@/lib/tenant", () => ({
   TenantMembershipError: class extends Error {},
 }))
 
-import { PATCH } from "../route"
+import { DELETE, PATCH } from "../route"
 
 const SHARED = {
   id: "u-shared",
@@ -120,6 +126,15 @@ describe("PATCH /users/[id] on a user shared with other tenants", () => {
     expect(userUpdateMock).toHaveBeenCalledOnce()
   })
 
+  it("refuses any change to a provider service desk account from a customer tenant (ui#1336)", async () => {
+    membershipCountMock.mockResolvedValue(0)
+    serviceDeskFindFirstMock.mockResolvedValue({ id: "sda_1" })
+    const res = await patch({ name: "Shared" })
+    expect(res.status).toBe(403)
+    expect((await readJson<{ code: string }>(res))?.code).toBe("SERVICE_DESK_ACCOUNT")
+    expect(userUpdateMock).not.toHaveBeenCalled()
+  })
+
   it("lets the provider view change the account whatever its memberships", async () => {
     tenantMock.mockResolvedValue("default")
     const res = await patch({ enabled: false })
@@ -134,5 +149,23 @@ describe("PATCH /users/[id] on a user shared with other tenants", () => {
     expect(res.status).toBe(200)
     expect(userUpdateMock).toHaveBeenCalledOnce()
     expect(membershipCountMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("DELETE /users/[id] on a provider service desk account (ui#1336)", () => {
+  it("refuses from a customer tenant, before any token or membership is touched", async () => {
+    serviceDeskFindFirstMock.mockResolvedValue({ id: "sda_1" })
+    const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "u-shared" } })
+    expect(res.status).toBe(403)
+    expect((await readJson<{ code: string }>(res))?.code).toBe("SERVICE_DESK_ACCOUNT")
+  })
+
+  it("refuses too when the account holds a service desk role through the provider SSO mapping", async () => {
+    serviceDeskFindFirstMock.mockResolvedValue(null)
+    serviceDeskRoleRowMock.mockResolvedValue({ id: "oidc_1" })
+    const res = await callRoute(DELETE as any, { method: "DELETE", params: { id: "u-shared" } })
+    expect(res.status).toBe(403)
+    expect((await readJson<{ code: string }>(res))?.code).toBe("SERVICE_DESK_ACCOUNT")
+    serviceDeskRoleRowMock.mockResolvedValue(null)
   })
 })

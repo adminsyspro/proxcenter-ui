@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { PERMISSIONS } from '@/lib/rbac'
 import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
@@ -19,7 +20,7 @@ export async function GET(
     const gatewayOffset = searchParams.get('gateway_offset') || '254'
     
     const orchestrator = getOrchestratorClient()
-    const response = await orchestrator.get(`/firewall/microseg/${connectionId}/analyze?gateway_offset=${gatewayOffset}`)
+    const response = await orchestrator.get(`${orchestratorPath`/firewall/microseg/${connectionId}/analyze`}?${new URLSearchParams({ gateway_offset: gatewayOffset })}`)
 
     
 return NextResponse.json(response.data)

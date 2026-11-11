@@ -5758,7 +5758,8 @@
         "settings": "修改设置",
         "audit": "查看审计日志",
         "compliance": "管理合规与安全策略",
-        "tenants": "管理租户（多租户）"
+        "tenants": "管理租户（多租户）",
+        "apitokens": "管理 API 令牌（创建、撤销）"
       },
       "sdn": {
         "vnet": {
@@ -8413,7 +8414,8 @@
     "mappingStrategyFirstMatch": "采用第一个匹配的角色",
     "mappingStrategyCumulative": "合并所有匹配的角色",
     "mappingStrategyFirstMatchHelper": "最靠上的匹配行优先，每个租户和 vDC 只保留一个角色。",
-    "mappingStrategyCumulativeHelper": "用户将获得所有匹配的角色，其权限为这些角色的并集。"
+    "mappingStrategyCumulativeHelper": "用户将获得所有匹配的角色，其权限为这些角色的并集。",
+    "allPublishedTenants": "所有已发布的租户"
   },
   "ceph": {
     "clusterHealth": "集群健康状态",
@@ -8703,7 +8705,41 @@
     "poolContainsVms": "{count} 个 VM",
     "tags": "标签",
     "pools": "资源池",
-    "storages": "存储"
+    "storages": "存储",
+    "catalogue": {
+      "audience": "受众",
+      "audienceLegacy": "提供商租户（旧版）",
+      "audienceLegacyDesc": "在目录之前创建：仅在提供商租户中使用",
+      "audienceProvider": "提供商",
+      "audienceServiceDesk": "服务台",
+      "audienceTenant": "租户",
+      "audienceProviderDesc": "仅限提供商租户",
+      "audienceServiceDeskDesc": "在已发布的租户内工作的提供商人员，仅由提供商分配",
+      "audienceTenantDesc": "发布给租户，其租户管理员可以分配",
+      "publication": "发布",
+      "publishAll": "所有租户，包括未来的租户",
+      "allTenantsBox": "全部",
+      "noTenants": "无租户",
+      "noTenantSelected": "请至少选择一个租户，或发布给所有租户",
+      "ceilingNotice": "保留给提供商的权限不可用",
+      "ceilingHint": "保留给提供商：发布给租户的角色不能包含此权限",
+      "revokeTitle": "撤销分配？",
+      "revokeIntro": "以下租户将退出发布。在这些租户中此角色的分配将被撤销：",
+      "revokeCount": "{count} 个分配",
+      "revokeConfirm": "撤销并保存",
+      "catalogueChip": "提供商目录",
+      "publishedToAll": "已发布给所有租户",
+      "publishedTo": "已发布给 {count} 个租户",
+      "legacyPublished": "{count} 个租户中的 SSO",
+      "legacyPublishedHint": "仅通过 SSO 组映射到达这些租户。选择受众以发布它。",
+      "serviceDeskTarget": "租户",
+      "serviceDeskTargetAll": "角色已发布的所有租户，包括未来的租户",
+      "serviceDeskEditTitle": "服务台分配",
+      "serviceDeskTenants": "{count} 个租户",
+      "serviceDeskAllTenantsShort": "所有已发布 ({count})",
+      "serviceDeskManaged": "提供商服务台账户：由提供商管理",
+      "serviceDeskChip": "服务台"
+    }
   },
   "drsPage": {
     "balanced": "已平衡",

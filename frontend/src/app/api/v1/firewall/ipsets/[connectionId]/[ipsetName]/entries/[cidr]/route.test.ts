@@ -44,7 +44,7 @@ describe('DELETE /api/v1/firewall/ipsets/[connectionId]/[ipsetName]/entries/[cid
 
     expect(res.status).toBe(200)
     expect(await readJson<any>(res)).toEqual({ success: true })
-    expect(orchestrator.delete).toHaveBeenCalledWith('/firewall/ipsets/conn-1/blacklist/entries/10.0.0.0%2F8')
+    expect(orchestrator.delete).toHaveBeenCalledWith('/firewall/ipsets/conn-1/blacklist/entries/10.0.0.0%2F8', { encodedSlash: true })
     expect(deleteIPSetEntryMock).not.toHaveBeenCalled()
     expect(getConnectionByIdMock).not.toHaveBeenCalled()
   })

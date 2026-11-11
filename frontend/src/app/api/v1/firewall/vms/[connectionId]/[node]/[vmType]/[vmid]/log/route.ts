@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest, ctx: RouteContext) {
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/vms/log',
-      () => orchestrator.get(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log?${query}`),
+      () => orchestrator.get(`${orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/log`}?${query}`),
       async () => pveDirect.getVMFirewallLog(await getConnectionById(connectionId), node, vmType, vmid, Number(limit), { since, until }),
     )
 

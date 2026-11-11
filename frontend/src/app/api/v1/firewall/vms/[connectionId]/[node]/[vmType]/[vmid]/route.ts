@@ -3,11 +3,13 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import { firewallResourceType, invalidResourceType } from '@/lib/firewall/pathParams'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -32,14 +34,12 @@ async function getHandler(req: NextRequest, ctx: RouteContext) {
     if (scopeDenied) return scopeDenied
 
     const url = new URL(req.url)
-    const type = url.searchParams.get('type') || 'options'
-    
-    const orchestrator = getOrchestratorClient()
+    const type = firewallResourceType(url.searchParams.get('type'))
+    if (!type) return invalidResourceType()
 
-    const endpoint = type === 'rules' 
-      ? `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules`
-      : `/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/options`
-    
+    const orchestrator = getOrchestratorClient()
+    const endpoint = orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/${type}`
+
     const result = await orchestratorOrPve(
       'firewall/vms',
       () => orchestrator.get(endpoint),
@@ -79,7 +79,7 @@ async function postHandler(req: NextRequest, ctx: RouteContext) {
 
     const result = await orchestratorOrPve(
       'firewall/vms',
-      () => orchestrator.post(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules`, body),
+      () => orchestrator.post(orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules`, body),
       async () => pveDirect.addVMRule(await getConnectionById(connectionId), node, vmType, vmid, body),
     )
 
@@ -110,7 +110,7 @@ async function putHandler(req: NextRequest, ctx: RouteContext) {
 
     const result = await orchestratorOrPve(
       'firewall/vms',
-      () => orchestrator.put(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/options`, body),
+      () => orchestrator.put(orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/options`, body),
       async () => pveDirect.updateVMOptions(await getConnectionById(connectionId), node, vmType, vmid, body),
     )
 

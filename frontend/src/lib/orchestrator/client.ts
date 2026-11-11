@@ -1,6 +1,7 @@
 import type { Drill, DrillEvent, DrillRequest, DrillSettings, Preflight, Schedule, ScheduleInput, ScheduleRun } from '@/lib/backups/restoreDrills/types'
 import type { CleanupStarted, RecoveryExecutionEvent, ReplicationJob, ReplicationCheckRequest, ReplicationHealthStatus, SnapshotIdentity, SSHConnectivityResult } from './site-recovery.types'
 import { actorHeaders } from './actor'
+import { assertOrchestratorPath, OrchestratorPathError, orchestratorPath, orchestratorSegment } from './path'
 
 // src/lib/orchestrator/client.ts
 // Client pour communiquer avec le backend Go d'orchestration
@@ -28,66 +29,13 @@ export interface OrchestratorRequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: any
   timeout?: number
+  /** See OrchestratorPathOptions.encodedSlash. */
+  encodedSlash?: boolean
 }
 
-/**
- * A value refused as an orchestrator path segment. Carries the 400 the
- * proxies answer with: the call is refused here, before anything is sent.
- */
-export class OrchestratorPathError extends Error {
-  readonly status = 400
-  constructor(message: string) {
-    super(message)
-    this.name = 'OrchestratorPathError'
-  }
-}
-
-// What an identifier may look like once it sits in an orchestrator path: a
-// UUID, a cuid, a number, a slug. Every character here is left as is by
-// encodeURIComponent, so the segment reaches the orchestrator exactly as
-// validated, and `.` or `..` cannot start the segment.
-const PATH_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/
-
-/**
- * One segment of an orchestrator path, validated and encoded. Throws
- * OrchestratorPathError for anything that is not a plain identifier.
- */
-export function orchestratorSegment(value: unknown, name = 'id'): string {
-  const text = typeof value === 'number' && Number.isFinite(value) ? String(value) : value
-  if (typeof text !== 'string' || !PATH_SEGMENT.test(text)) {
-    throw new OrchestratorPathError(`Invalid ${name}`)
-  }
-  return encodeURIComponent(text)
-}
-
-/**
- * Tagged template building an orchestrator path: every interpolated value is
- * a path segment and goes through orchestratorSegment(). Query strings are not
- * values of this template; append them with URLSearchParams.
- *
- *   orchestratorPath`/reports/${id}/download`
- */
-export function orchestratorPath(strings: TemplateStringsArray, ...values: unknown[]): string {
-  let out = ''
-  for (let i = 0; i < strings.length; i++) {
-    out += strings[i]
-    if (i < values.length) out += orchestratorSegment(values[i])
-  }
-  return out
-}
-
-/**
- * Refuses a path whose segments would be re-interpreted on the way: a dot
- * segment, an empty segment or an encoded separator. The typed methods below
- * build their paths through orchestratorPath(); this is the net under them.
- */
-function assertOrchestratorPath(path: string): void {
-  const pathname = path.split(/[?#]/, 1)[0]
-  if (!pathname.startsWith('/') || /%2f/i.test(pathname)) throw new OrchestratorPathError('Invalid orchestrator path')
-  for (const segment of pathname.slice(1).split('/')) {
-    if (segment === '' || segment === '.' || segment === '..') throw new OrchestratorPathError('Invalid orchestrator path')
-  }
-}
+// The path grammar lives in ./path (no dependency, so a route under test keeps
+// the real checks when this client is mocked); re-exported for its importers.
+export { OrchestratorPathError, orchestratorPath, orchestratorSegment }
 
 /**
  * Fait une requête vers le backend Go d'orchestration
@@ -98,7 +46,7 @@ export async function orchestratorFetch<T>(
 ): Promise<T> {
   const { method = 'GET', body, timeout = 30000 } = options
 
-  assertOrchestratorPath(path)
+  assertOrchestratorPath(path, { encodedSlash: options.encodedSlash })
   const url = `${orchestratorBaseUrlForPath(path)}/api/v1${path}`
 
   const headers: Record<string, string> = {
@@ -549,8 +497,8 @@ return { data, status: 200 }
   /**
    * DELETE request - retourne { data: T }
    */
-  async delete<T = any>(path: string): Promise<OrchestratorResponse<T>> {
-    const data = await orchestratorFetch<T>(path, { method: 'DELETE' })
+  async delete<T = any>(path: string, options: Pick<OrchestratorRequestOptions, 'encodedSlash'> = {}): Promise<OrchestratorResponse<T>> {
+    const data = await orchestratorFetch<T>(path, { method: 'DELETE', ...options })
 
     
 return { data, status: 200 }

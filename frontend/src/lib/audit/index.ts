@@ -83,6 +83,11 @@ export type AuditAction =
   // RBAC
   | "rbac_role_created"
   | "rbac_role_updated"
+  | "rbac_role_publication_changed"
+  | "rbac_role_ceiling_refused"
+  | "rbac_service_desk_assigned"
+  | "rbac_service_desk_updated"
+  | "rbac_service_desk_revoked"
   | "rbac_role_deleted"
   | "rbac_role_assigned"
   | "rbac_role_revoked"

@@ -3,10 +3,12 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import { firewallParamRefusal, orchestratorAddressSegment } from '@/lib/firewall/pathParams'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { residualEscapeRefusal } from '@/lib/api/pathParam'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -22,17 +24,16 @@ async function deleteHandler(
     const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
 
-    const malformed = residualEscapeRefusal(cidr, 'CIDR')
+    const malformed = residualEscapeRefusal(cidr, 'CIDR') ?? firewallParamRefusal({ ipset: ipsetName, address: cidr })
     if (malformed) return malformed
-    const decodedCidr = cidr
 
     const orchestrator = getOrchestratorClient()
 
     await orchestratorOrPve(
       'firewall/ipsets/entries',
-      () => orchestrator.delete(`/firewall/ipsets/${connectionId}/${ipsetName}/entries/${encodeURIComponent(decodedCidr)}`),
+      () => orchestrator.delete(`${orchestratorPath`/firewall/ipsets/${connectionId}/${ipsetName}/entries`}/${orchestratorAddressSegment(cidr)}`, { encodedSlash: true }),
       // pveDirect escapes the CIDR itself, so it gets the decoded value
-      async () => pveDirect.deleteIPSetEntry(await getConnectionById(connectionId), ipsetName, decodedCidr),
+      async () => pveDirect.deleteIPSetEntry(await getConnectionById(connectionId), ipsetName, cidr),
     )
 
     return NextResponse.json({ success: true })

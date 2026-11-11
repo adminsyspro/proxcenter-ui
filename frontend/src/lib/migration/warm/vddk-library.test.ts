@@ -6,7 +6,7 @@ describe("OpenVDDK pin (roadmap#177)", () => {
     expect(OPENVDDK_DEFAULT_LIBDIR).toBe("/usr/lib/openvddk")
     expect(OPENVDDK_DEFAULT_LIBDIR).not.toBe(BROADCOM_DEFAULT_LIBDIR)
     expect(OPENVDDK_KIT_URL).toBe(
-      "https://github.com/adminsyspro/openvddk/releases/download/v0.7.4-pxc1/openvddk-evalkit-0.7.4-pxc1-80ecfecc6cc8.tar.gz",
+      "https://github.com/adminsyspro/openvddk/releases/download/v0.7.4-pxc2/openvddk-evalkit-0.7.4-pxc2-79ba2662c28a.tar.gz",
     )
     expect(OPENVDDK_KIT.file).toBe(`openvddk-evalkit-${OPENVDDK_KIT.version}-${OPENVDDK_KIT.commit}.tar.gz`)
     expect(OPENVDDK_KIT.sha256).toMatch(/^[0-9a-f]{64}$/)

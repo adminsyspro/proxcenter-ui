@@ -6,7 +6,8 @@ import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
-import { hasPermission, isUserSuperAdmin, resolveEffectiveScopes, expandPermissionHierarchy } from "@/lib/rbac"
+import { hasPermission, isUserSuperAdmin, resolveEffectiveScopes, expandPermissionHierarchy, ROLE_AVAILABILITY_SELECT } from "@/lib/rbac"
+import { isRoleAvailableInTenant } from "@/lib/rbac/rolePublication"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 
@@ -94,7 +95,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Récupérer les rôles de l'utilisateur (scoped by tenant) avec leurs permissions
-    const userRoles = await prisma.rbacUserRole.findMany({
+    const userRoleRows = await prisma.rbacUserRole.findMany({
       where: { userId: targetUserId, tenantId, ...activeFilter },
       select: {
         id: true,
@@ -111,10 +112,14 @@ export async function GET(req: NextRequest) {
             permissions: {
               select: { permission: { select: { id: true, name: true, category: true } } },
             },
+            ...ROLE_AVAILABILITY_SELECT(tenantId),
           },
         },
       },
     })
+    // Same rule as the grant loader: a role not published to this tenant grants
+    // nothing, so it is not reported as held either (ui#1336).
+    const userRoles = userRoleRows.filter(r => isRoleAvailableInTenant(r.role, tenantId))
 
     // Récupérer les permissions directes de l'utilisateur (scoped by tenant)
     const directPermissions = await prisma.rbacUserPermission.findMany({

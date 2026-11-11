@@ -252,6 +252,13 @@ export function projectEntriesToRoleMapping(
 // is dependency-free, so importing it here keeps this helper client-safe).
 export { DEFAULT_TENANT_ID }
 
+/**
+ * Tenant value of a mapping entry that targets every customer tenant its role
+ * is published to (ui#1336). Only a catalogue role (service desk or tenant
+ * audience) may use it; the login sync expands it.
+ */
+export const ALL_PUBLISHED_TENANTS = "*"
+
 export type GroupGrant = {
   /** IdP group name, matched exactly (trimmed on both sides). */
   group: string

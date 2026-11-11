@@ -3,10 +3,12 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import { firewallParamRefusal } from '@/lib/firewall/pathParams'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { withAudit } from '@/lib/audit/withAudit'
 import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
@@ -20,13 +22,15 @@ async function putHandler(
     const { connectionId, name } = await params
     const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ alias: name })
+    if (malformed) return malformed
 
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
     const updated = await orchestratorOrPve(
       'firewall/aliases',
-      () => orchestrator.put(`/firewall/aliases/${connectionId}/${name}`, body),
+      () => orchestrator.put(orchestratorPath`/firewall/aliases/${connectionId}/${name}`, body),
       async () => pveDirect.updateAlias(await getConnectionById(connectionId), name, body),
     )
 
@@ -50,12 +54,14 @@ async function deleteHandler(
     const { connectionId, name } = await params
     const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ alias: name })
+    if (malformed) return malformed
 
     const orchestrator = getOrchestratorClient()
 
     await orchestratorOrPve(
       'firewall/aliases',
-      () => orchestrator.delete(`/firewall/aliases/${connectionId}/${name}`),
+      () => orchestrator.delete(orchestratorPath`/firewall/aliases/${connectionId}/${name}`),
       async () => pveDirect.deleteAlias(await getConnectionById(connectionId), name),
     )
 

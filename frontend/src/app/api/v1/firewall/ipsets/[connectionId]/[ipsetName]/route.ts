@@ -3,10 +3,12 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import { firewallParamRefusal } from '@/lib/firewall/pathParams'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { withAudit } from '@/lib/audit/withAudit'
 import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
@@ -20,12 +22,14 @@ async function deleteHandler(
     const { connectionId, ipsetName } = await params
     const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ ipset: ipsetName })
+    if (malformed) return malformed
 
     const orchestrator = getOrchestratorClient()
 
     await orchestratorOrPve(
       'firewall/ipsets',
-      () => orchestrator.delete(`/firewall/ipsets/${connectionId}/${ipsetName}`),
+      () => orchestrator.delete(orchestratorPath`/firewall/ipsets/${connectionId}/${ipsetName}`),
       async () => pveDirect.deleteIPSet(await getConnectionById(connectionId), ipsetName),
     )
 
@@ -53,6 +57,8 @@ async function putHandler(
     const { connectionId, ipsetName } = await params
     const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ ipset: ipsetName })
+    if (malformed) return malformed
 
     const body = await request.json().catch(() => null)
     const comment = body?.comment ?? ''

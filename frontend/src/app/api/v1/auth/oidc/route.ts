@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server"
 
 import {
+  ALL_PUBLISHED_TENANTS,
+  DEFAULT_TENANT_ID,
   normalizeGroupGrantMapping,
   normalizeMappingStrategy,
   protectedRoleTargets,
@@ -10,7 +12,10 @@ import {
 import { checkProxyUrl, environmentProxyDisplay } from "@/lib/auth/oidcProxy"
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
-import { getRBACContext, PERMISSIONS } from "@/lib/rbac"
+import { getRBACContext, PERMISSIONS, PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from "@/lib/rbac"
+import { toRoleId } from "@/lib/auth/oidc"
+import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
+import { isRoleAvailableInTenant } from "@/lib/rbac/rolePublication"
 import { requireProviderAdmin } from "@/lib/tenant/providerGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -175,8 +180,64 @@ async function listMappingVdcs() {
 // Returns the error message, or null when every target resolves. A plain
 // nullable string rather than a discriminated union: tsconfig runs with
 // strict:false, which does not narrow `{ ok: true } | { ok: false, error }`.
+/**
+ * The rules a manual assignment obeys (lib/rbac/assignmentGuards), applied to
+ * the mapping: a provider-only role stays in the provider tenant, a custom role
+ * reaches a customer tenant only when published there, "all published tenants"
+ * needs a catalogue role, and NIC identity rights come from a super admin
+ * (ui#1336). Unknown roles are left to the login sync, which degrades them.
+ */
+async function validateGrantRoles(
+  grants: readonly GroupGrant[],
+  callerIsSuperAdmin: () => Promise<boolean>,
+): Promise<{ error: string; status: number } | null> {
+  const roleIds = [...new Set(grants.map(g => toRoleId(g.role)))]
+  if (roleIds.length === 0) return null
+  const roles = await prisma.rbacRole.findMany({
+    where: { id: { in: roleIds } },
+    select: {
+      id: true,
+      name: true,
+      isSystem: true,
+      tenantId: true,
+      audience: true,
+      publishAll: true,
+      publications: { select: { tenantId: true } },
+      permissions: { select: { permissionId: true } },
+    },
+  })
+  const byId = new Map(roles.map(r => [r.id, r]))
+  // The caller is looked up only when a mapped role carries NIC identity rights.
+  const nicRole = roleIds.map(id => byId.get(id)).find(r => !!r && roleHasSensitiveNicPermissions(r))
+  if (nicRole && !(await callerIsSuperAdmin())) {
+    return { error: `Only a super admin can map ${nicRole.name}: it grants NIC identity permissions`, status: 403 }
+  }
+  const tenantOnly: readonly string[] = [...PROVIDER_ONLY_ROLE_IDS, ...PROTECTED_ROLE_IDS]
+  for (const grant of grants) {
+    const roleId = toRoleId(grant.role)
+    const role = byId.get(roleId)
+    if (!role) continue
+    if (grant.tenantId === ALL_PUBLISHED_TENANTS) {
+      if (role.audience !== "service_desk" && role.audience !== "tenant") {
+        return { error: `${role.name} is not published to tenants, it cannot target every published tenant`, status: 400 }
+      }
+      continue
+    }
+    if (grant.tenantId !== DEFAULT_TENANT_ID && tenantOnly.includes(roleId)) {
+      return { error: `${role.name} can only be mapped in the provider tenant`, status: 400 }
+    }
+    if (!isRoleAvailableInTenant(role, grant.tenantId)) {
+      return { error: `${role.name} is not published to tenant ${grant.tenantId}`, status: 400 }
+    }
+  }
+  return null
+}
+
 async function validateGrantTargets(grants: readonly GroupGrant[]): Promise<string | null> {
-  const tenantIds = [...new Set(grants.map(g => g.tenantId))]
+  if (grants.some(g => g.tenantId === ALL_PUBLISHED_TENANTS && g.vdcId)) {
+    return "A mapping to every published tenant cannot name a vDC"
+  }
+  const tenantIds = [...new Set(grants.map(g => g.tenantId).filter(id => id !== ALL_PUBLISHED_TENANTS))]
   if (tenantIds.length > 0) {
     const known = await prisma.tenant.findMany({
       where: { id: { in: tenantIds } },
@@ -279,6 +340,10 @@ async function handlePut(req: Request) {
     const targetError = await validateGrantTargets(grants)
     if (targetError) {
       return NextResponse.json({ error: targetError }, { status: 400 })
+    }
+    const roleError = await validateGrantRoles(grants, async () => !!(await getRBACContext())?.isAdmin)
+    if (roleError) {
+      return NextResponse.json({ error: roleError.error }, { status: roleError.status })
     }
 
     const rawProxyUrl = typeof proxy_url === "string" ? proxy_url.trim() : ""

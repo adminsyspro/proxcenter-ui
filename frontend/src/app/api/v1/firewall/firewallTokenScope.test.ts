@@ -183,7 +183,7 @@ describe('firewall routes with an API token', () => {
     )
 
     expect(res.status).toBe(200)
-    expect(h.orchDelete).toHaveBeenCalledWith('/firewall/ipsets/c1/blocklist/entries/10.0.0.0%2F24')
+    expect(h.orchDelete).toHaveBeenCalledWith('/firewall/ipsets/c1/blocklist/entries/10.0.0.0%2F24', { encodedSlash: true })
   })
 
   it('isolating its own guest with apply_base_sgs from a vDC tenant token: 403 cluster object, nothing reached', async () => {

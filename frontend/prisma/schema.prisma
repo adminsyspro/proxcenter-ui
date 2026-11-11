@@ -452,6 +452,8 @@ model User {
   permissionsAssigned RbacUserPermission[] @relation("RbacUserPermissionUser")
   permissionsGranted  RbacUserPermission[] @relation("RbacUserPermissionGrantedBy")
   apiTokens           ApiToken[]
+  serviceDeskAssignments        RbacServiceDeskAssignment[] @relation("RbacServiceDeskAssignmentUser")
+  serviceDeskAssignmentsGranted RbacServiceDeskAssignment[] @relation("RbacServiceDeskAssignmentGrantedBy")
 
   @@index([tenantId])
   @@map("users")
@@ -699,6 +701,7 @@ model Tenant {
   apiTokens ApiToken[]
   tenantNetworks TenantNetwork[]
   catalogGrants  CatalogGrant[]
+  rolePublications RbacRolePublication[]
 
   @@index([slug])
   @@map("tenants")
@@ -807,14 +810,62 @@ model RbacRole {
   createdAt       DateTime @map("created_at")
   updatedAt       DateTime @map("updated_at")
 
-  permissions RbacRolePermission[]
-  userRoles   RbacUserRole[]
+  // Provider role catalogue (ui#1336). NULL = a role owned by `tenantId` only
+  // (system roles and every custom role created before the catalogue).
+  // "provider": provider tenant only. "service_desk": provider staff working
+  // inside the customer tenants it is published to, assigned by the provider
+  // only. "tenant": published to customer tenants, assignable by their Tenant
+  // Admin. Catalogue roles are owned by the provider tenant (tenantId
+  // "default"); publishAll covers every customer tenant, future ones included,
+  // otherwise `publications` lists them.
+  audience     String?  @map("audience")
+  publishAll   Boolean  @default(false) @map("publish_all")
+
+  permissions  RbacRolePermission[]
+  userRoles    RbacUserRole[]
+  publications RbacRolePublication[]
+  serviceDeskAssignments RbacServiceDeskAssignment[]
 
   @@unique([tenantId, name])
   @@index([name])
   @@index([isSystem])
   @@index([tenantId])
   @@map("rbac_roles")
+}
+
+model RbacRolePublication {
+  roleId   String   @map("role_id")
+  role     RbacRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  tenantId String   @map("tenant_id")
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, tenantId])
+  @@index([tenantId])
+  @@map("rbac_role_publications")
+}
+
+// One service-desk role held by a provider user across several customer
+// tenants (ui#1336). The grant itself is materialised as one RbacUserRole row
+// (id "sd_<assignment id>_<tenant id>") plus a membership per target tenant,
+// kept in step by lib/rbac/serviceDesk.ts whenever the assignment, the role's
+// publication or the tenant list changes. allTenants follows the publication;
+// otherwise tenantIds narrows it.
+model RbacServiceDeskAssignment {
+  id          String    @id
+  userId      String    @map("user_id")
+  user        User      @relation("RbacServiceDeskAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  roleId      String    @map("role_id")
+  role        RbacRole  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  allTenants  Boolean   @default(true) @map("all_tenants")
+  tenantIds   String[]  @default([]) @map("tenant_ids")
+  grantedById String?   @map("granted_by")
+  grantedBy   User?     @relation("RbacServiceDeskAssignmentGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  grantedAt   DateTime  @map("granted_at")
+  expiresAt   DateTime? @map("expires_at")
+
+  @@unique([userId, roleId])
+  @@index([roleId])
+  @@map("rbac_service_desk_assignments")
 }
 
 model RbacPermission {
@@ -1230,6 +1281,54 @@ model VdcIpamAllocation {
   @@index([subnetId])
   @@index([connectionId, vmid])
   @@map("vdc_ipam_allocations")
+}
+
+/// A guest moved from one vDC of a tenant to another of its vDCs on another
+/// cluster (#1335). The row outlives the request: the process that started
+/// the copy renews `heartbeat_at` while it watches the Proxmox task, and when
+/// that process dies another replica picks the move up and finishes it
+/// (pool, storage-policy caps, IPAM). vDC ids are kept without a foreign key
+/// on purpose: the history must survive a vDC that is deleted later.
+model VdcMove {
+  id                 String    @id
+  tenantId           String    @map("tenant_id")
+  guestName          String?   @map("guest_name")
+  vmid               Int
+  targetVmid         Int       @map("target_vmid")
+  sourceConnectionId String    @map("source_connection_id")
+  sourceNode         String    @map("source_node")
+  sourceVdcId        String    @map("source_vdc_id")
+  targetConnectionId String    @map("target_connection_id")
+  targetNode         String    @map("target_node")
+  targetVdcId        String    @map("target_vdc_id")
+  // { "<source storage>": "<target storage>" } and { "<source bridge>": "<target bridge>" }
+  storageMap         Json      @map("storage_map")
+  bridgeMap          Json      @map("bridge_map")
+  online             Boolean   @default(false)
+  // Remove the source guest once the copy completed. Always true for a move
+  // between vDCs; the provider's cross-cluster migration may keep the source.
+  deleteSource       Boolean   @default(true) @map("delete_source")
+  // `tenant`: the move action; `provider`: a cross-cluster migration the
+  // provider ran on a guest of a vDC, linked to the tenant's target vDC.
+  origin             String    @default("tenant")
+  // queued -> copying -> finalizing -> done | failed
+  status             String    @default("queued")
+  upid               String?
+  error              String?
+  // Non-blocking findings of the finalisation (an address left to reconfigure, ...).
+  warnings           Json?
+  requestedBy        String?   @map("requested_by")
+  // Replica watching the move and its last sign of life; a stale heartbeat
+  // hands the move to the reconciler of any replica.
+  holder             String?
+  heartbeatAt        DateTime? @map("heartbeat_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+  finishedAt         DateTime? @map("finished_at")
+
+  @@index([tenantId, status])
+  @@index([status, heartbeatAt])
+  @@map("vdc_moves")
 }
 
 model VdcPbsNamespace {

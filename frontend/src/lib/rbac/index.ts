@@ -10,6 +10,19 @@
 import { NextResponse } from "next/server"
 
 import { SENSITIVE_NIC_PERMISSIONS } from './nicPermissions'
+import { isRoleAvailableInTenant } from './rolePublication'
+
+/**
+ * Prisma `select` fragment carrying what isRoleAvailableInTenant reads, with
+ * the publications pre-filtered to the one tenant being resolved.
+ */
+export const ROLE_AVAILABILITY_SELECT = (tenantId: string) => ({
+  isSystem: true,
+  tenantId: true,
+  audience: true,
+  publishAll: true,
+  publications: { where: { tenantId }, select: { tenantId: true } },
+})
 
 import { prisma } from "@/lib/db/prisma"
 import { getPrincipal, rejectionToResponse, type Principal } from "@/lib/auth/principal"
@@ -150,6 +163,7 @@ async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedG
           select: {
             defaultScopes: true,
             permissions: { select: { permission: { select: { name: true } } } },
+            ...ROLE_AVAILABILITY_SELECT(tenantId),
           },
         },
       },
@@ -180,6 +194,9 @@ async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedG
   }
 
   for (const r of roleGrants) {
+    // A row whose role is not (or no longer) published to this tenant grants
+    // nothing (ui#1336): unpublishing takes effect at the next request.
+    if (!isRoleAvailableInTenant(r.role, tenantId)) continue
     // "inherit" assignments expand into the role's default scopes (issue #383);
     // every other scope passes through unchanged. The role's permissions are
     // attached to each resolved scope entry.
@@ -539,6 +556,7 @@ export const PERMISSIONS = {
   VM_BACKUP: "vm.backup",
   VM_CLONE: "vm.clone",
   VM_MIGRATE: "vm.migrate",
+  VM_MOVE_VDC: "vm.move_vdc",
   VM_CONFIG: "vm.config",
   VM_CONFIG_MEDIA: "vm.config.media",
   VM_CONFIG_NIC_LINK: "vm.config.nic.link",

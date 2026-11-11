@@ -26,6 +26,21 @@ import { WIDGET_REGISTRY, WIDGET_CATEGORIES } from '@/components/dashboard/widge
 import RoleDefaultScopeEditor from './RoleDefaultScopeEditor'
 import { formatScopeTarget, buildScopeOptions, buildVdcScopeOptions, buildVdcNameByPool } from './scope-options'
 import { toggleWidget as toggleHiddenWidget, toggleWidgetCategory, widgetCategoryState } from './widget-visibility'
+import { ceilingViolations, PUBLISHED_AUDIENCES, type RoleAudience } from '@/lib/rbac/rolePublication'
+import {
+  AUDIENCE_ICONS,
+  AUDIENCE_LABEL_KEYS,
+  ceilingFromRoles,
+  isAssignableFromDialog,
+  isServiceDeskRole,
+  publishedTenantOptions,
+  type TenantOption,
+} from '@/components/rbac/catalogueClient'
+import RolePublicationEditor from '@/components/rbac/RolePublicationEditor'
+import RevokeAssignmentsDialog, { type RevokedTenant } from '@/components/rbac/RevokeAssignmentsDialog'
+import ServiceDeskTargetEditor from '@/components/rbac/ServiceDeskTargetEditor'
+import ServiceDeskEditDialog, { type ServiceDeskAssignmentWire } from '@/components/rbac/ServiceDeskEditDialog'
+
 
 // Types
 interface Permission { id: string; name: string; category: string; description: string; is_dangerous: boolean }
@@ -85,9 +100,26 @@ const timeAgo = (d, t?: any, locale?: string) => {
 return new Date(d).toLocaleDateString(locale)
 }
 
+/** Leading icon of a permission row: reserved to the provider (ui#1336), dangerous, or plain. */
+function permissionIcon(perm: { is_dangerous?: boolean }, reserved: boolean, t: (key: string) => string) {
+  if (reserved) {
+    return <Tooltip title={t('rbacPage.catalogue.ceilingHint')} arrow><i className='ri-building-2-line' style={{ fontSize: '1.1rem' }} /></Tooltip>
+  }
+  if (perm.is_dangerous) {
+    return <Tooltip title={t('rbac.dangerousPermission')} arrow><i className='ri-shield-flash-line' style={{ color: '#f59e0b', fontSize: '1.1rem' }} /></Tooltip>
+  }
+
+  return <i className='ri-checkbox-blank-circle-line' style={{ opacity: 0.2 }} />
+}
+
 // Role Dialog
-function RoleDialog({ open, onClose, role, categories, onSave, t }) {
+function RoleDialog({ open, onClose, role, categories, onSave, t, roles = [] as any[], tenants = [] as TenantOption[], enableTenantMgmt = false }: any) {
   const [name, setName] = useState('')
+  // Provider role catalogue (ui#1336): audience and publication.
+  const [audience, setAudience] = useState<RoleAudience | null>(null)
+  const [publishAll, setPublishAll] = useState(false)
+  const [publishedTenants, setPublishedTenants] = useState<string[]>([])
+  const [revoked, setRevoked] = useState<RevokedTenant[] | null>(null)
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#6366f1')
   const [selectedPerms, setSelectedPerms] = useState(new Set())
@@ -107,14 +139,40 @@ function RoleDialog({ open, onClose, role, categories, onSave, t }) {
       setSelectedPerms(new Set(role.permissions.map(p => p.id)))
       setHiddenWidgets(new Set(role.widget_overrides?.hidden || []))
       setDefaultScopes(Array.isArray(role.default_scopes) ? role.default_scopes : [])
+      setAudience(role.audience ?? null)
+      setPublishAll(!!role.publish_all)
+      setPublishedTenants(role.published_tenants ?? [])
     } else {
       setName(''); setDescription(''); setColor('#6366f1'); setSelectedPerms(new Set()); setHiddenWidgets(new Set()); setDefaultScopes([])
+      setAudience(enableTenantMgmt ? 'provider' : null)
+      setPublishAll(false)
+      setPublishedTenants([])
     }
+    setRevoked(null)
 
     setExpanded(new Set(categories.map(c => c.id)))
     setWidgetExpanded(new Set())
     setError('')
-  }, [role, open, categories])
+  }, [role, open, categories, enableTenantMgmt])
+
+  // The catalogue applies to the custom roles of the provider tenant, edited
+  // from the provider view.
+  const showPublication = enableTenantMgmt && !role?.is_system && (!role || role.tenant_id === 'default')
+  const isPublished = audience !== null && PUBLISHED_AUDIENCES.includes(audience)
+  const ceiling = useMemo(() => ceilingFromRoles(roles), [roles])
+  const overCeiling = useCallback(
+    (permId: string) => isPublished && !!ceiling && ceilingViolations([permId], ceiling).length > 0,
+    [isPublished, ceiling],
+  )
+
+  // A role published to tenants cannot carry provider-only permissions: they
+  // are dropped as soon as the audience says so (the server refuses them too).
+  const changeAudience = (next: RoleAudience) => {
+    setAudience(next)
+    if (PUBLISHED_AUDIENCES.includes(next) && ceiling) {
+      setSelectedPerms((prev: Set<any>) => new Set([...prev].filter((id: any) => ceilingViolations([id], ceiling).length === 0)))
+    }
+  }
 
   const toggleWidget = (widgetType) => setHiddenWidgets(p => toggleHiddenWidget(p, widgetType))
 
@@ -137,7 +195,7 @@ return n })
     const cat = categories.find(c => c.id === catId)
 
     if (!cat) return
-    const ids = cat.permissions.map(p => p.id)
+    const ids = cat.permissions.map(p => p.id).filter(id => !overCeiling(id))
     const all = ids.every(id => selectedPerms.has(id))
 
     setSelectedPerms(p => { const n = new Set(p);
@@ -147,19 +205,32 @@ return n })
 return n })
   }
 
-  const handleSave = async () => {
+  const handleSave = async (confirmRevoke = false) => {
     if (!role?.is_system && !name.trim()) { setError(t('common.error'));
 
 return }
+    if (showPublication && isPublished && !publishAll && publishedTenants.length === 0) {
+      setError(t('rbacPage.catalogue.noTenantSelected'))
+
+      return
+    }
 
     setLoading(true); setError('')
 
     // System roles only accept widget_overrides edits — the backend rejects
     // any other field change. For custom roles we send the full payload.
     const widgetOverrides = hiddenWidgets.size > 0 ? { hidden: Array.from(hiddenWidgets) } : null
+    // A legacy role keeps its grandfathered publication until an audience is chosen.
+    const publication = showPublication && audience !== null
+      ? { audience, publish_all: isPublished && publishAll, published_tenants: isPublished && !publishAll ? publishedTenants : [] }
+      : {}
     const payload = role?.is_system
       ? { widget_overrides: widgetOverrides }
-      : { name: name.trim(), description: description.trim() || null, color, permissions: Array.from(selectedPerms), widget_overrides: widgetOverrides, default_scopes: defaultScopes }
+      : {
+          name: name.trim(), description: description.trim() || null, color, permissions: Array.from(selectedPerms), widget_overrides: widgetOverrides, default_scopes: defaultScopes,
+          ...publication,
+          ...(confirmRevoke ? { confirm_revoke: true } : {}),
+        }
 
     try {
       const res = await fetch(isEdit ? `/api/v1/rbac/roles/${role.id}` : '/api/v1/rbac/roles', {
@@ -170,10 +241,16 @@ return }
 
       const data = await res.json()
 
+      if (res.status === 409 && data.code === 'REVOKE_CONFIRMATION_REQUIRED') {
+        setRevoked(data.revoked || [])
+
+        return
+      }
       if (!res.ok) { setError(data.error || t('common.error'));
 
 return }
 
+      setRevoked(null)
       onSave(); onClose()
     } catch { setError(t('errors.connectionError')) } finally { setLoading(false) }
   }
@@ -181,14 +258,38 @@ return }
   return (
     <Dialog open={open} onClose={onClose} maxWidth='md' fullWidth>
       <DialogTitle><i className={isEdit ? 'ri-edit-line' : 'ri-add-line'} style={{marginRight:8}}/>{isEdit ? t('common.edit') : t('common.add')}</DialogTitle>
-      <DialogContent>
+      {/* DialogTitle zeroes the content's top padding: the first fields' floating labels were clipped. */}
+      <DialogContent sx={{ pt: '20px !important' }}>
         {error && <Alert severity='error' sx={{ mb: 2 }}>{error}</Alert>}
-        <Box sx={{ display: 'flex', gap: 2, mt: 1, mb: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
           <TextField fullWidth label={t('common.name')} value={name} onChange={e => setName(e.target.value)} disabled={role?.is_system} required />
           <TextField label={t('common.color')} type='color' value={color} onChange={e => setColor(e.target.value)} sx={{ width: 100 }} disabled={role?.is_system} />
         </Box>
         <TextField fullWidth label={t('common.description')} value={description} onChange={e => setDescription(e.target.value)} multiline rows={2} sx={{ mb: 2 }} disabled={role?.is_system} />
-        <Typography variant='subtitle2' sx={{ mb: 1, fontWeight: 600 }}>{t('rbacPage.permissionsCount', { count: selectedPerms.size })}</Typography>
+        {showPublication && (
+          <Box sx={{ mb: 2 }}>
+            <RolePublicationEditor
+              audience={audience}
+              onAudienceChange={changeAudience}
+              publishAll={publishAll}
+              onPublishAllChange={setPublishAll}
+              tenantIds={publishedTenants}
+              onTenantIdsChange={setPublishedTenants}
+              tenants={tenants}
+              legacy={!!role && !role.audience}
+              disabled={loading}
+              t={t}
+            />
+          </Box>
+        )}
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 1, minWidth: 0 }}>
+          <Typography variant='subtitle2' sx={{ fontWeight: 600, flexShrink: 0 }}>{t('rbacPage.permissionsCount', { count: selectedPerms.size })}</Typography>
+          {isPublished && (
+            <Typography variant='caption' noWrap title={t('rbacPage.catalogue.ceilingNotice')} sx={{ opacity: 0.7, minWidth: 0 }}>
+              · {t('rbacPage.catalogue.ceilingNotice')}
+            </Typography>
+          )}
+        </Box>
         {role?.is_system && <Alert severity='info' sx={{ mb: 1 }}>{t('rbac.cannotModifySystem')}</Alert>}
         <Paper variant='outlined' sx={{ maxHeight: 350, overflow: 'auto' }}>
           {categories.map(cat => {
@@ -212,13 +313,17 @@ return n })}>
                 </Box>
                 <Collapse in={isExp}>
                   <List dense disablePadding>
-                    {cat.permissions.map(perm => (
-                      <ListItem key={perm.id} sx={{ pl: 6, borderBottom: '1px solid', borderColor: 'divider' }}>
-                        <ListItemIcon sx={{ minWidth: 32 }}>{perm.is_dangerous ? <Tooltip title={t('rbac.dangerousPermission')} arrow><i className='ri-shield-flash-line' style={{ color: '#f59e0b', fontSize: '1.1rem' }} /></Tooltip> : <i className='ri-checkbox-blank-circle-line' style={{ opacity: 0.2 }} />}</ListItemIcon>
-                        <ListItemText primary={<code style={{ fontSize: '0.85rem' }}>{perm.name}</code>} secondary={t(`rbac.permDesc.${perm.id}`, { defaultValue: perm.description })} />
-                        <ListItemSecondaryAction><Checkbox checked={selectedPerms.has(perm.id)} onChange={() => togglePerm(perm.id)} size='small' disabled={role?.is_system} /></ListItemSecondaryAction>
-                      </ListItem>
-                    ))}
+                    {cat.permissions.map((perm: any) => {
+                      const reserved = overCeiling(perm.id)
+
+                      return (
+                        <ListItem key={perm.id} sx={{ pl: 6, borderBottom: '1px solid', borderColor: 'divider', opacity: reserved ? 0.5 : 1 }}>
+                          <ListItemIcon sx={{ minWidth: 32 }}>{permissionIcon(perm, reserved, t)}</ListItemIcon>
+                          <ListItemText primary={<code style={{ fontSize: '0.85rem' }}>{perm.name}</code>} secondary={t(`rbac.permDesc.${perm.id}`, { defaultValue: perm.description })} />
+                          <ListItemSecondaryAction><Checkbox checked={selectedPerms.has(perm.id)} onChange={() => togglePerm(perm.id)} size='small' disabled={role?.is_system || reserved} /></ListItemSecondaryAction>
+                        </ListItem>
+                      )
+                    })}
                   </List>
                 </Collapse>
               </Box>
@@ -301,8 +406,17 @@ return n })}>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t('common.cancel')}</Button>
-        <Button variant='contained' onClick={handleSave} disabled={loading}>{loading ? t('common.saving') : isEdit ? t('common.update') : t('common.create')}</Button>
+        <Button variant='contained' onClick={() => void handleSave()} disabled={loading}>{loading ? t('common.saving') : isEdit ? t('common.update') : t('common.create')}</Button>
       </DialogActions>
+      <RevokeAssignmentsDialog
+        open={revoked !== null}
+        roleName={name}
+        revoked={revoked ?? []}
+        loading={loading}
+        onCancel={() => setRevoked(null)}
+        onConfirm={() => void handleSave(true)}
+        t={t}
+      />
     </Dialog>
   )
 }
@@ -344,6 +458,11 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [searchFilter, setSearchFilter] = useState('')
+  // Service-desk role (ui#1336): one assignment across the tenants it is published to.
+  const [sdAllTenants, setSdAllTenants] = useState(true)
+  const [sdTenantIds, setSdTenantIds] = useState<string[]>([])
+  const selectedRole = roles.find((r: any) => r.id === roleId) || null
+  const serviceDeskMode = enableTenantMgmt && isServiceDeskRole(selectedRole)
   
   // Inventory data
   const [inventory, setInventory] = useState<any>(null)
@@ -371,6 +490,8 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
       setSelectedTargets([])
       setSearchFilter('')
       setError('')
+      setSdAllTenants(true)
+      setSdTenantIds([])
     }
   }, [open, currentTenantId])
 
@@ -385,6 +506,13 @@ function AssignmentDialog({ open, onClose, roles, users, assignments = [], tenan
       setRoleId('')
     }
   }, [tenantId, roleId])
+
+  // Provider view: a catalogue role is offered only where it is published
+  // (ui#1336); a service-desk role is offered whatever the tenant, it carries
+  // its own tenant list.
+  const offeredRoles = roles.filter((r: any) =>
+    isAssignableToTenant(r, tenantId) &&
+    (!enableTenantMgmt || isServiceDeskRole(r) || isAssignableFromDialog(r, tenantId)))
 
   // vdc options are tenant-scoped — a tenant switch invalidates them, so a
   // 'vdc' selection must not survive a tenant change (it would otherwise
@@ -472,11 +600,46 @@ return scopeOptions.filter((o: any) =>
   }, [scopeOptions, searchFilter])
 
   // Sauvegarder (créer une assignation par cible sélectionnée)
+  const saveServiceDesk = async () => {
+    if (!user) return
+    if (!sdAllTenants && sdTenantIds.length === 0) {
+      setError(t('rbacPage.catalogue.noTenantSelected'))
+
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const res = await fetch('/api/v1/rbac/service-desk-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id, role_id: roleId, all_tenants: sdAllTenants, tenant_ids: sdAllTenants ? [] : sdTenantIds }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error || t('common.error'))
+
+        return
+      }
+      onSave()
+      onClose()
+    } catch {
+      setError(t('errors.connectionError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!user || !roleId) {
       setError(t('common.error'))
       
 return
+    }
+    if (serviceDeskMode) {
+      await saveServiceDesk()
+
+      return
     }
 
     // global and inherit carry no target — a single assignment is created.
@@ -581,7 +744,7 @@ return
             membership. Required because a user with memberships in multiple
             tenants can hold a different role in each, and the backend stores
             them as separate RbacUserRole rows keyed on tenantId. */}
-        {enableTenantMgmt && (
+        {enableTenantMgmt && !serviceDeskMode && (
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>{t('vdc.tenant')}</InputLabel>
             <Select value={tenantId} label={t('vdc.tenant')} onChange={e => setTenantId(e.target.value)}>
@@ -601,20 +764,44 @@ return
         <FormControl fullWidth sx={{ mt: 2 }}>
           <InputLabel>{t('rbac.title')}</InputLabel>
           <Select value={roleId} label={t('rbac.title')} onChange={e => setRoleId(e.target.value)}>
-            {roles
-              .filter((r: any) => isAssignableToTenant(r, tenantId))
-              .map((r: any) => (
+            {offeredRoles.map((r: any) => (
                 <MenuItem key={r.id} value={r.id}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: r.color }} />
                     {r.name}
                     {r.is_system && <Chip label={t('rbacPage.systemRole')} size='small' sx={{ height: 18, fontSize: '0.7rem' }} />}
+                    {r.audience && r.audience !== 'provider' && (
+                      <Chip
+                        size='small'
+                        variant='outlined'
+                        color='primary'
+                        icon={<i className={AUDIENCE_ICONS[r.audience as RoleAudience]} style={{ fontSize: 12 }} />}
+                        label={t(AUDIENCE_LABEL_KEYS[r.audience as RoleAudience])}
+                        sx={{ height: 18, fontSize: '0.7rem' }}
+                      />
+                    )}
                   </Box>
                 </MenuItem>
               ))}
           </Select>
         </FormControl>
 
+        {serviceDeskMode && (
+          <Box sx={{ mt: 2 }}>
+            <ServiceDeskTargetEditor
+              allTenants={sdAllTenants}
+              onAllTenantsChange={setSdAllTenants}
+              tenantIds={sdTenantIds}
+              onTenantIdsChange={setSdTenantIds}
+              publishedTenants={publishedTenantOptions(selectedRole, tenants)}
+              disabled={saving}
+              t={t}
+            />
+          </Box>
+        )}
+
+        {/* Scope: a service-desk assignment always follows the role's default scope. */}
+        {!serviceDeskMode && (<>
         {/* Sélection scope type */}
         <FormControl fullWidth sx={{ mt: 2 }}>
           <InputLabel>{t('rbacPage.scope')}</InputLabel>
@@ -833,6 +1020,7 @@ return
             })}
           </Alert>
         )}
+        </>)}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t('common.cancel')}</Button>
@@ -843,8 +1031,8 @@ return
             saving ||
             !user ||
             !roleId ||
-            (scopeType === 'global' && conflict.globalAlreadyExists) ||
-            (scopeType !== 'global' && scopeType !== 'inherit' && selectedTargets.length === 0)
+            (!serviceDeskMode && scopeType === 'global' && conflict.globalAlreadyExists) ||
+            (!serviceDeskMode && scopeType !== 'global' && scopeType !== 'inherit' && selectedTargets.length === 0)
           }
         >
           {saving ? t('common.saving') : selectedTargets.length > 1 ? `${t('common.save')} (${selectedTargets.length})` : t('common.save')}
@@ -869,7 +1057,7 @@ function DeleteDialog({ open, onClose, title, message, onConfirm, loading, t }) 
 }
 
 // Roles Tab
-function RolesTab({ roles, categories, onRefresh, t }) {
+function RolesTab({ roles, categories, onRefresh, t, tenants = [] as TenantOption[], enableTenantMgmt = false, currentTenantId = 'default' }: any) {
   // Only super admins may author or mutate roles — the backend enforces the
   // same rule (POST/PATCH/DELETE /api/v1/rbac/roles). Tenant admins get a
   // read-only surface.
@@ -957,6 +1145,16 @@ return }
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                   <Typography variant='subtitle1' noWrap sx={{ fontWeight: 600 }}>{role.is_system ? t(`rbac.roles.${role.id}`, { defaultValue: role.name }) : role.name}</Typography>
                   {role.is_system && <Chip label={t('rbacPage.systemRole')} size='small' variant='outlined' sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }} />}
+                  {role.audience && (
+                    <Chip
+                      size='small'
+                      variant='outlined'
+                      color={role.audience === 'provider' ? 'default' : 'primary'}
+                      icon={<i className={AUDIENCE_ICONS[role.audience as RoleAudience]} style={{ fontSize: 13 }} />}
+                      label={currentTenantId === 'default' ? t(AUDIENCE_LABEL_KEYS[role.audience as RoleAudience]) : t('rbacPage.catalogue.catalogueChip')}
+                      sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }}
+                    />
+                  )}
                 </Box>
                 {/* Always reserve a 2-line (clamped) description block so every
                     card header has the same height, with or without a description. */}
@@ -967,7 +1165,7 @@ return }
                   {role.is_system ? t(`rbac.roleDesc.${role.id}`, { defaultValue: role.description || '' }) : (role.description || '')}
                 </Typography>
               </Box>
-              {isSuperAdmin && (
+              {isSuperAdmin && (role.is_system || role.tenant_id === currentTenantId) && (
                 <Box>
                   <Tooltip title={role.is_system ? t('common.view') : t('common.edit')}><IconButton size='small' onClick={() => { setSelected(role); setDialogOpen(true) }}><i className={role.is_system ? 'ri-eye-line' : 'ri-edit-line'} /></IconButton></Tooltip>
                   {!role.is_system && <Tooltip title={t('common.delete')}><IconButton size='small' color='error' onClick={() => { setToDelete(role); setDeleteOpen(true) }}><i className='ri-delete-bin-line' /></IconButton></Tooltip>}
@@ -975,8 +1173,23 @@ return }
               )}
             </Box>
             {/* Meta line: counts only, no individual permission names. */}
-            <Typography variant='caption' sx={{ display: 'block', opacity: 0.6, mt: 1.5 }}>
+            <Typography variant='caption' noWrap sx={{ display: 'block', opacity: 0.6, mt: 1.5 }}>
               {role.permissions.length} {t('rbacPage.permissions')} &nbsp;·&nbsp; {t('rbacPage.userCount', { count: role.user_count })}
+              {enableTenantMgmt && (role.audience === 'service_desk' || role.audience === 'tenant') && (
+                <Tooltip title={role.publish_all ? '' : (role.published_tenants || []).map((id: string) => tenants.find((tn: TenantOption) => tn.id === id)?.name || id).join(', ')}>
+                  <span>
+                    &nbsp;·&nbsp;
+                    {role.publish_all
+                      ? t('rbacPage.catalogue.publishedToAll')
+                      : t('rbacPage.catalogue.publishedTo', { count: (role.published_tenants || []).length })}
+                  </span>
+                </Tooltip>
+              )}
+              {enableTenantMgmt && !role.audience && (role.published_tenants || []).length > 0 && (
+                <Tooltip title={t('rbacPage.catalogue.legacyPublishedHint')}>
+                  <span>&nbsp;·&nbsp;{t('rbacPage.catalogue.legacyPublished', { count: role.published_tenants.length })}</span>
+                </Tooltip>
+              )}
             </Typography>
 
             {/* Permissions summarised by area (issue #383): "VM 13", "Connection 1". */}
@@ -1028,14 +1241,14 @@ return }
           </Paper>
         ))}
       </Box>
-      <RoleDialog open={dialogOpen} onClose={() => setDialogOpen(false)} role={selected} categories={categories} onSave={onRefresh} t={t} />
+      <RoleDialog open={dialogOpen} onClose={() => setDialogOpen(false)} role={selected} categories={categories} onSave={onRefresh} t={t} roles={roles} tenants={tenants} enableTenantMgmt={enableTenantMgmt} />
       <DeleteDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} title={t('rbacPage.deleteRole')} message={t('rbacPage.deleteRoleConfirm', { name: toDelete?.name })} onConfirm={handleDelete} loading={deleting} t={t} />
     </Box>
   )
 }
 
 // Assignments Tab avec regroupement par utilisateur/rôle/tenant/scope_type
-function AssignmentsTab({ assignments, roles, users, tenants = [], enableTenantMgmt = false, currentTenantId = 'default', vdcs = [], onRefresh, t }) {
+function AssignmentsTab({ assignments, roles, users, tenants = [] as TenantOption[], enableTenantMgmt = false, currentTenantId = 'default', vdcs = [] as any[], serviceDeskAssignments = [] as ServiceDeskAssignmentWire[], onRefresh, t }: any) {
   const dateLocale = getDateLocale(useLocale())
   const { data: session } = useSession()
   const currentUserId = session?.user?.id
@@ -1052,6 +1265,7 @@ function AssignmentsTab({ assignments, roles, users, tenants = [], enableTenantM
   const [page, setPage] = useState(0)
   const [perPage, setPerPage] = useState(PAGE_SIZES[0])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [sdEdit, setSdEdit] = useState<ServiceDeskAssignmentWire | null>(null)
 
   const toggleUser = (userId: string) => setExpanded(prev => {
     const next = new Set(prev)
@@ -1068,8 +1282,11 @@ function AssignmentsTab({ assignments, roles, users, tenants = [], enableTenantM
     const groups = new Map<string, any>()
 
     assignments.forEach((a: any) => {
+      // Provider view: the per-tenant rows of a service-desk assignment are
+      // shown once, as the assignment itself (below).
+      if (enableTenantMgmt && a.managed_by === 'service_desk') return
       const tenantId = a.tenant_id || 'default'
-      const key = `${a.user.id}:${a.role.id}:${tenantId}:${a.scope_type}`
+      const key = `${a.user.id}:${a.role.id}:${tenantId}:${a.scope_type}:${a.managed_by || ''}`
 
       if (!groups.has(key)) {
         groups.set(key, {
@@ -1082,7 +1299,8 @@ function AssignmentsTab({ assignments, roles, users, tenants = [], enableTenantM
           scope_targets: [],
           assignments: [],
           granted_at: a.granted_at,
-          granted_by_email: a.granted_by_email
+          granted_by_email: a.granted_by_email,
+          managed_by: a.managed_by || null,
         })
       }
 
@@ -1101,8 +1319,25 @@ function AssignmentsTab({ assignments, roles, users, tenants = [], enableTenantM
       }
     })
 
-    return Array.from(groups.values())
-  }, [assignments])
+    // One group per service-desk assignment (ui#1336), whatever the number of tenants it reaches.
+    const sdGroups = enableTenantMgmt
+      ? serviceDeskAssignments.map(sd => ({
+          id: `sd:${sd.id}`,
+          user: sd.user,
+          role: { ...sd.role, is_system: false },
+          tenant_id: '__service_desk__',
+          tenant_name: sd.tenants.map(tn => tn.name).join(', '),
+          scope_type: 'inherit',
+          scope_targets: [],
+          assignments: [],
+          granted_at: sd.granted_at,
+          granted_by_email: sd.granted_by_email,
+          sd,
+        }))
+      : []
+
+    return [...Array.from(groups.values()), ...sdGroups]
+  }, [assignments, serviceDeskAssignments, enableTenantMgmt])
 
   // One table row per user (issue #1188): a user holding several roles
   // unfolds into one sub-row per group instead of repeating the user.
@@ -1136,6 +1371,10 @@ function AssignmentsTab({ assignments, roles, users, tenants = [], enableTenantM
     setDeleting(true)
 
     try {
+      if (toDelete.sd) {
+        // The service-desk assignment, and every row it owns, in one call.
+        await fetch(`/api/v1/rbac/service-desk-assignments/${toDelete.sd.id}`, { method: 'DELETE' })
+      }
       // Supprimer toutes les assignations du groupe
       for (const assignment of toDelete.assignments) {
         await fetch(`/api/v1/rbac/assignments/${assignment.id}`, { method: 'DELETE' })
@@ -1240,6 +1479,22 @@ return (
   )
 
   const tenantChip = (group: any) => {
+    if (group.sd) {
+      return (
+        <Tooltip title={group.tenant_name || t('rbacPage.catalogue.noTenants')}>
+          <Chip
+            size='small'
+            color='primary'
+            variant='outlined'
+            icon={<i className='ri-customer-service-2-line' style={{ fontSize: 13 }} />}
+            label={group.sd.all_tenants
+              ? t('rbacPage.catalogue.serviceDeskAllTenantsShort', { count: group.sd.tenants.length })
+              : t('rbacPage.catalogue.serviceDeskTenants', { count: group.sd.tenants.length })}
+            sx={{ height: 22, fontSize: '0.75rem', maxWidth: '100%' }}
+          />
+        </Tooltip>
+      )
+    }
     const isProviderTenant = group.tenant_id === 'default'
     return (
       <Chip
@@ -1268,10 +1523,24 @@ return (
 
   // Hide edit/delete for your own assignment — the backend refuses
   // self-modification (see /rbac/assignments routes).
-  const actionsCell = (group: any) => group.user.id === currentUserId ? null : (
+  const actionsCell = (group: any) => {
+    if (group.user.id === currentUserId) return null
+    // Tenant view: a provider service-desk grant is shown, never changed here.
+    if (group.managed_by === 'service_desk') {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Tooltip title={t('rbacPage.catalogue.serviceDeskManaged')}>
+            <Box component='span' aria-label={t('rbacPage.catalogue.serviceDeskChip')} sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, color: 'primary.main' }}>
+              <i className='ri-customer-service-2-line' style={{ fontSize: 17 }} />
+            </Box>
+          </Tooltip>
+        </Box>
+      )
+    }
+    return (
     <Box sx={{ display: 'flex', gap: 0, justifyContent: 'flex-end' }}>
       <Tooltip title={t('common.edit')}>
-        <IconButton size='small' onClick={() => { setToEdit(group); setEditDialogOpen(true) }}>
+        <IconButton size='small' onClick={() => { if (group.sd) setSdEdit(group.sd); else { setToEdit(group); setEditDialogOpen(true) } }}>
           <i className='ri-edit-line' style={{ fontSize: 16 }} />
         </IconButton>
       </Tooltip>
@@ -1281,7 +1550,8 @@ return (
         </IconButton>
       </Tooltip>
     </Box>
-  )
+    )
+  }
 
   // The cells of one grant group, shared by a single-role user row and by
   // each unfolded sub-row of a multi-role user.
@@ -1413,6 +1683,14 @@ return (
         )}
       </Box>
       <AssignmentDialog open={dialogOpen} onClose={() => setDialogOpen(false)} roles={roles} users={availableUsers} assignments={assignments} tenants={tenants} enableTenantMgmt={enableTenantMgmt} currentTenantId={currentTenantId} vdcs={vdcs} onSave={onRefresh} t={t} />
+      <ServiceDeskEditDialog
+        open={sdEdit !== null}
+        assignment={sdEdit}
+        publishedTenants={publishedTenantOptions(roles.find((r: any) => r.id === sdEdit?.role.id), tenants)}
+        onClose={() => setSdEdit(null)}
+        onSaved={onRefresh}
+        t={t}
+      />
       <EditAssignmentDialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} assignmentGroup={toEdit} roles={roles} enableTenantMgmt={enableTenantMgmt} vdcs={vdcs} onSave={onRefresh} t={t} />
       <DeleteDialog
         open={deleteOpen}
@@ -1968,6 +2246,7 @@ export default function RBACPage() {
   const [assignments, setAssignments] = useState([])
   const [users, setUsers] = useState([])
   const [tenants, setTenants] = useState<Array<{ id: string; name: string }>>([])
+  const [serviceDeskAssignments, setServiceDeskAssignments] = useState<ServiceDeskAssignmentWire[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -2006,18 +2285,21 @@ return () => setPageInfo('', '', '')
         fetch('/api/v1/rbac/assignments'),
         fetch('/api/v1/users'),
       ]
-      if (enableTenantMgmt) requests.push(fetch('/api/v1/tenants'))
+      if (enableTenantMgmt) {
+        requests.push(fetch('/api/v1/tenants'), fetch('/api/v1/rbac/service-desk-assignments'))
+      }
 
       const responses = await Promise.all(requests)
-      const [rolesRes, permsRes, assignRes, usersRes, tenantsRes] = responses
-      const payloads = await Promise.all(responses.map(r => r.json()))
-      const [rolesData, permsData, assignData, usersData, tenantsData] = payloads
+      const [rolesRes, permsRes, assignRes, usersRes, tenantsRes, sdRes] = responses
+      const payloads = await Promise.all(responses.map(r => r.json().catch(() => ({}))))
+      const [rolesData, permsData, assignData, usersData, tenantsData, sdData] = payloads
 
       if (rolesRes.ok) setRoles(rolesData.data || [])
       if (permsRes.ok) { setPermissions(permsData.data || []); setCategories(permsData.categories || []) }
       if (assignRes.ok) setAssignments(assignData.data || [])
       if (usersRes.ok) setUsers(usersData.data || [])
       if (enableTenantMgmt && tenantsRes?.ok) setTenants(tenantsData?.data || [])
+      setServiceDeskAssignments(enableTenantMgmt && sdRes?.ok ? sdData?.data || [] : [])
     } catch (e) { setError(t('errors.loadingError')) } finally { setLoading(false) }
   }, [t, enableTenantMgmt])
 
@@ -2036,8 +2318,8 @@ return () => setPageInfo('', '', '')
         <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           {loading ? <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, p: 2 }}><CardsSkeleton count={3} columns={3} /><TableSkeleton rows={4} columns={5} /></Box> : (
             <>
-              {tab === 0 && <AssignmentsTab assignments={assignments} roles={roles} users={users} tenants={tenants} enableTenantMgmt={enableTenantMgmt} currentTenantId={currentTenantId} vdcs={vdcs} onRefresh={loadData} t={t} />}
-              {tab === 1 && <RolesTab roles={roles} categories={categories} onRefresh={loadData} t={t} />}
+              {tab === 0 && <AssignmentsTab assignments={assignments} roles={roles} users={users} tenants={tenants} enableTenantMgmt={enableTenantMgmt} currentTenantId={currentTenantId} vdcs={vdcs} serviceDeskAssignments={serviceDeskAssignments} onRefresh={loadData} t={t} />}
+              {tab === 1 && <RolesTab roles={roles} categories={categories} onRefresh={loadData} t={t} tenants={tenants} enableTenantMgmt={enableTenantMgmt} currentTenantId={currentTenantId} />}
               {tab === 2 && (
                 <Box>
                   <Typography variant='body2' sx={{ mb: 2, opacity: 0.6 }}>{t('rbacPage.permissionsAvailable', { count: permissions.length, categories: categories.length })}</Typography>

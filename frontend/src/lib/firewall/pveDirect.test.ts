@@ -675,3 +675,79 @@ describe('getFirewallStatus', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// Path segments: validated and encoded where the PVE path is built
+// ---------------------------------------------------------------------------
+
+describe('path segments', () => {
+  const rule = { type: 'in', action: 'ACCEPT' } as any
+
+  it('refuses a node, guest type, guest id or position that is not one plain segment, before any PVE call', async () => {
+    const calls: Array<[string, () => Promise<unknown>]> = [
+      ['node backslash', () => getNodeOptions(conn, 'pve1\\..\\..\\version?')],
+      ['node slash', () => getNodeRules(conn, 'pve1/lxc/101')],
+      ['node dot-dot', () => updateNodeOptions(conn, '..', { enable: 1 })],
+      ['node encoded dot', () => addNodeRule(conn, '%2e%2e', rule)],
+      ['node query', () => getNodeRules(conn, 'pve1?x=1')],
+      ['node rule pos slash', () => updateNodeRule(conn, 'pve1', '0/../../../pve2/firewall/rules/9', {})],
+      ['node rule pos backslash', () => deleteNodeRule(conn, 'pve1', '0\\..\\..\\..\\pve2\\firewall\\rules\\9')],
+      ['cluster rule pos', () => deleteClusterRule(conn, '0\\..\\..\\..\\nodes\\pve2\\firewall\\rules\\9')],
+      ['cluster rule pos update', () => updateClusterRule(conn, '..', {})],
+      ['group rule pos', () => updateSecurityGroupRule(conn, 'web', '0/..', {})],
+      ['group rule pos delete', () => deleteSecurityGroupRule(conn, 'web', '-1')],
+      ['guest type', () => getVMOptions(conn, 'pve1', 'qemu/100', 100)],
+      ['guest id', () => getVMRules(conn, 'pve1', 'qemu', '100/../101')],
+      ['guest node', () => addVMRule(conn, 'pve1\\..\\pve2', 'qemu', 100, rule)],
+      ['guest rule pos', () => updateVMRule(conn, 'pve1', 'lxc', 101, '0?x', {})],
+      ['guest rule pos delete', () => deleteVMRule(conn, 'pve1', 'lxc', 101, '0#')],
+      ['guest options', () => updateVMOptions(conn, 'pve1', 'kvm', 100, { enable: 1 })],
+      ['guest log', () => getVMFirewallLog(conn, 'pve1/..', 'qemu', 100)],
+      ['log page node', () => getFirewallLogPage(conn, 'pve1\\..', { limit: 50 })],
+      ['log page guest', () => getFirewallLogPage(conn, 'pve1', { limit: 50 }, { vmType: 'qemu', vmid: '1/..' })],
+      ['nic toggle', () => toggleVMNICFirewall(conn, 'pve1', 'qemu', '100/config/..', true)],
+    ]
+
+    for (const [label, run] of calls) {
+      await expect((async () => run())(), label).rejects.toMatchObject({ name: 'FirewallParamError', status: 400 })
+    }
+    expect(mockPve).not.toHaveBeenCalled()
+  })
+
+  it('refuses an empty or dot-segment object name, which no encoding makes safe', async () => {
+    const calls: Array<[string, () => Promise<unknown>]> = [
+      ['alias ..', () => deleteAlias(conn, '..')],
+      ['alias .', () => updateAlias(conn, '.', { cidr: '10.0.0.1' })],
+      ['ipset ..', () => deleteIPSet(conn, '..')],
+      ['ipset empty', () => addIPSetEntry(conn, '', { cidr: '10.0.0.1' } as any)],
+      ['ipset entry ..', () => deleteIPSetEntry(conn, 'blacklist', '..')],
+      ['group ..', () => deleteSecurityGroup(conn, '..')],
+      ['group rule ..', () => addSecurityGroupRule(conn, '..', rule)],
+    ]
+
+    for (const [label, run] of calls) {
+      await expect((async () => run())(), label).rejects.toMatchObject({ name: 'FirewallParamError', status: 400 })
+    }
+    expect(mockPve).not.toHaveBeenCalled()
+  })
+
+  it('encodes an object name so it stays one segment whatever it holds', async () => {
+    await deleteAlias(conn, 'a/b\\c?d#e')
+    expect(callAt().path).toBe('/cluster/firewall/aliases/a%2Fb%5Cc%3Fd%23e')
+    await deleteSecurityGroupRule(conn, 'sg-web', 4)
+    expect(callAt().path).toBe('/cluster/firewall/groups/sg-web/4')
+  })
+
+  it('builds node and guest paths unchanged for well-formed values, numbers included', async () => {
+    await getNodeRules(conn, 'pve-node-01.lab_x')
+    expect(callAt().path).toBe('/nodes/pve-node-01.lab_x/firewall/rules')
+    await updateNodeRule(conn, 'pve1', 0, { moveto: 2 })
+    expect(callAt().path).toBe('/nodes/pve1/firewall/rules/0')
+    await deleteVMRule(conn, 'pve1', 'lxc', 7001, '12')
+    expect(callAt().path).toBe('/nodes/pve1/lxc/7001/firewall/rules/12')
+    await getVMOptions(conn, 'pve2', 'qemu', '100')
+    expect(callAt().path).toBe('/nodes/pve2/qemu/100/firewall/options')
+    await getFirewallLogPage(conn, 'pve1', { limit: 50 }, { vmType: 'qemu', vmid: 100 })
+    expect(callAt().path).toMatch(/^\/nodes\/pve1\/qemu\/100\/firewall\/log\?/)
+  })
+})

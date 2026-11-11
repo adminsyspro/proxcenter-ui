@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
@@ -34,7 +35,7 @@ async function putHandler(req: NextRequest, ctx: RouteContext) {
 
     const result = await orchestratorOrPve(
       'firewall/vms/nic-firewall',
-      () => orchestrator.put(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/nic-firewall`, body),
+      () => orchestrator.put(orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/nic-firewall`, body),
       // Second level of the guest firewall: rewrites firewall=0/1 on every NIC
       async () => pveDirect.toggleVMNICFirewall(await getConnectionById(connectionId), node, vmType, vmid, body.enable),
     )

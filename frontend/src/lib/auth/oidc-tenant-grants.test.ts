@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import { syncOidcRoleAssignment, resolveOidcGrants, oidcSeedRoleId } from './oidc'
+import { syncOidcRoleAssignment, resolveOidcGrants, oidcSeedRoleId, expandAllTenantGrants } from './oidc'
 import type { OidcConfig } from './oidc'
 import {
   normalizeGroupGrantMapping,
@@ -68,7 +68,7 @@ let seq = 0
 const params = (extra: Record<string, any> = {}) => ({
   userId: 'u1',
   groups: ['ops'] as string[] | undefined,
-  config: makeConfig([{ group: 'ops', role: 'role_operator' }]),
+  config: makeConfig([{ group: 'ops', role: 'role_tenant_operator' }]),
   now: new Date('2026-09-14T00:00:00Z'),
   newId: () => `oidc_${++seq}`,
   groupsClaimIsArray: true,
@@ -89,28 +89,28 @@ describe('resolveOidcGrants', () => {
   it('returns one grant per tenant when a group is mapped several times', () => {
     const config = makeConfig([
       { group: 'ops', tenant: 'default', role: 'role_viewer' },
-      { group: 'ops', tenant: 't_acme', role: 'role_operator' },
+      { group: 'ops', tenant: 't_acme', role: 'role_tenant_operator' },
     ])
     expect(resolveOidcGrants(['ops'], config)).toEqual([
       { tenantId: 'default', vdcId: null, roleId: 'role_viewer' },
-      { tenantId: 't_acme', vdcId: null, roleId: 'role_operator' },
+      { tenantId: 't_acme', vdcId: null, roleId: 'role_tenant_operator' },
     ])
   })
 
   it('keeps the first match per tenant and vDC pair', () => {
     const config = makeConfig([
-      { group: 'ops', tenant: 't_acme', role: 'role_operator' },
+      { group: 'ops', tenant: 't_acme', role: 'role_tenant_operator' },
       { group: 'admins', tenant: 't_acme', role: 'role_admin' },
     ])
     expect(resolveOidcGrants(['ops', 'admins'], config)).toEqual([
-      { tenantId: 't_acme', vdcId: null, roleId: 'role_operator' },
+      { tenantId: 't_acme', vdcId: null, roleId: 'role_tenant_operator' },
     ])
   })
 
   it('treats a vDC grant and a tenant-wide grant as two distinct scopes', () => {
     const config = makeConfig([
       { group: 'ops', tenant: 't_acme', role: 'role_viewer' },
-      { group: 'ops', tenant: 't_acme', vdc: 'vdc_prod', role: 'role_operator' },
+      { group: 'ops', tenant: 't_acme', vdc: 'vdc_prod', role: 'role_tenant_operator' },
     ])
     expect(resolveOidcGrants(['ops'], config)).toHaveLength(2)
   })
@@ -121,7 +121,7 @@ describe('resolveOidcGrants', () => {
   })
 
   it('grants nothing when a configured mapping matches no group (CX-23)', () => {
-    const config = makeConfig([{ group: 'ops', tenant: 't_acme', role: 'role_operator' }], 'viewer')
+    const config = makeConfig([{ group: 'ops', tenant: 't_acme', role: 'role_tenant_operator' }], 'viewer')
     // Provider membership requires an explicit group: leaving every mapped
     // group must not silently hand out the provider default role.
     expect(resolveOidcGrants(['nobody'], config)).toEqual([])
@@ -141,7 +141,7 @@ describe('resolveOidcGrants', () => {
   it('keeps the topmost row whatever order the IdP lists the groups in', () => {
     const config = makeConfig([
       { group: 'admins', role: 'role_admin' },
-      { group: 'devs', role: 'role_operator' },
+      { group: 'devs', role: 'role_tenant_operator' },
     ])
     expect(resolveOidcGrants(['devs', 'admins'], config)).toEqual([
       { tenantId: 'default', vdcId: null, roleId: 'role_admin' },
@@ -153,11 +153,11 @@ describe('resolveOidcGrants', () => {
 
   it('follows the rows once they are reordered', () => {
     const config = makeConfig([
-      { group: 'devs', role: 'role_operator' },
+      { group: 'devs', role: 'role_tenant_operator' },
       { group: 'admins', role: 'role_admin' },
     ])
     expect(resolveOidcGrants(['devs', 'admins'], config)).toEqual([
-      { tenantId: 'default', vdcId: null, roleId: 'role_operator' },
+      { tenantId: 'default', vdcId: null, roleId: 'role_tenant_operator' },
     ])
   })
 
@@ -165,7 +165,7 @@ describe('resolveOidcGrants', () => {
     const config = makeConfig(
       [
         { group: 'admins', role: 'role_admin' },
-        { group: 'devs', role: 'role_operator' },
+        { group: 'devs', role: 'role_tenant_operator' },
         { group: 'oncall', role: 'role_viewer' },
       ],
       'role_viewer',
@@ -173,7 +173,7 @@ describe('resolveOidcGrants', () => {
     )
     expect(resolveOidcGrants(['devs', 'admins'], config)).toEqual([
       { tenantId: 'default', vdcId: null, roleId: 'role_admin' },
-      { tenantId: 'default', vdcId: null, roleId: 'role_operator' },
+      { tenantId: 'default', vdcId: null, roleId: 'role_tenant_operator' },
     ])
   })
 
@@ -195,7 +195,7 @@ describe('resolveOidcGrants', () => {
     const config = makeConfig(
       [
         { group: 'admins', tenant: 't_acme', role: 'role_admin' },
-        { group: 'devs', tenant: 't_acme', vdc: 'vdc_prod', role: 'role_operator' },
+        { group: 'devs', tenant: 't_acme', vdc: 'vdc_prod', role: 'role_tenant_operator' },
         { group: 'devs', tenant: 't_acme', role: 'role_viewer' },
       ],
       'role_viewer',
@@ -203,7 +203,7 @@ describe('resolveOidcGrants', () => {
     )
     expect(resolveOidcGrants(['admins', 'devs'], config)).toEqual([
       { tenantId: 't_acme', vdcId: null, roleId: 'role_admin' },
-      { tenantId: 't_acme', vdcId: 'vdc_prod', roleId: 'role_operator' },
+      { tenantId: 't_acme', vdcId: 'vdc_prod', roleId: 'role_tenant_operator' },
       { tenantId: 't_acme', vdcId: null, roleId: 'role_viewer' },
     ])
   })
@@ -221,22 +221,22 @@ describe('resolveOidcGrants', () => {
 describe('oidcSeedRoleId', () => {
   it('prefers the provider-tenant grant for the legacy users.role column', () => {
     const config = makeConfig([
-      { group: 'ops', tenant: 't_acme', role: 'role_operator' },
+      { group: 'ops', tenant: 't_acme', role: 'role_tenant_operator' },
       { group: 'ops', tenant: 'default', role: 'role_viewer' },
     ])
     expect(oidcSeedRoleId(['ops'], config)).toBe('role_viewer')
   })
 
   it('falls back to the first grant when the mapping targets no provider tenant', () => {
-    const config = makeConfig([{ group: 'ops', tenant: 't_acme', role: 'role_operator' }])
-    expect(oidcSeedRoleId(['ops'], config)).toBe('role_operator')
+    const config = makeConfig([{ group: 'ops', tenant: 't_acme', role: 'role_tenant_operator' }])
+    expect(oidcSeedRoleId(['ops'], config)).toBe('role_tenant_operator')
   })
 
   it('shows the topmost provider-tenant row when several roles are cumulated', () => {
     const config = makeConfig(
       [
         { group: 'admins', role: 'role_admin' },
-        { group: 'devs', role: 'role_operator' },
+        { group: 'devs', role: 'role_tenant_operator' },
       ],
       'role_viewer',
       'cumulative',
@@ -255,14 +255,14 @@ describe('syncOidcRoleAssignment — multi-tenant reconciliation', () => {
         membership,
         config: makeConfig([
           { group: 'ops', tenant: 'default', role: 'role_viewer' },
-          { group: 'ops', tenant: 't_acme', role: 'role_operator' },
+          { group: 'ops', tenant: 't_acme', role: 'role_tenant_operator' },
         ]),
       }),
     )
 
     expect(createdRows(db)).toEqual([
       expect.objectContaining({ tenantId: 'default', roleId: 'role_viewer', scopeType: 'inherit' }),
-      expect.objectContaining({ tenantId: 't_acme', roleId: 'role_operator', scopeType: 'inherit' }),
+      expect.objectContaining({ tenantId: 't_acme', roleId: 'role_tenant_operator', scopeType: 'inherit' }),
     ])
     expect(membership.add.mock.calls).toEqual([
       ['u1', 'default'],
@@ -282,14 +282,14 @@ describe('syncOidcRoleAssignment — multi-tenant reconciliation', () => {
     await syncOidcRoleAssignment(
       db,
       params({
-        config: makeConfig([{ group: 'ops', tenant: 't_acme', vdc: 'vdc_prod', role: 'role_operator' }]),
+        config: makeConfig([{ group: 'ops', tenant: 't_acme', vdc: 'vdc_prod', role: 'role_tenant_operator' }]),
       }),
     )
 
     expect(createdRows(db)).toEqual([
       expect.objectContaining({
         tenantId: 't_acme',
-        roleId: 'role_operator',
+        roleId: 'role_tenant_operator',
         scopeType: 'pool',
         scopeTarget: 'pool-acme-prod',
       }),
@@ -309,8 +309,8 @@ describe('syncOidcRoleAssignment — multi-tenant reconciliation', () => {
       params({
         groups: ['viewers', 'ops'],
         config: makeConfig([
-          { group: 'viewers', tenant: 't_acme', role: 'role_viewer' },
-          { group: 'ops', tenant: 't_acme', vdc: 'vdc_prod', role: 'role_operator' },
+          { group: 'viewers', tenant: 't_acme', role: 'role_tenant_viewer' },
+          { group: 'ops', tenant: 't_acme', vdc: 'vdc_prod', role: 'role_tenant_operator' },
         ]),
       }),
     )
@@ -364,7 +364,7 @@ describe('syncOidcRoleAssignment — multi-tenant reconciliation', () => {
         membership,
         config: makeConfig([
           { group: 'ops', tenant: 'default', role: 'role_viewer' },
-          { group: 'ops', tenant: 't_acme', role: 'role_operator' },
+          { group: 'ops', tenant: 't_acme', role: 'role_tenant_operator' },
         ]),
       }),
     )
@@ -401,10 +401,10 @@ describe('syncOidcRoleAssignment — multi-tenant reconciliation', () => {
   it('still handles a legacy flat mapping as a single provider-tenant row', async () => {
     const db = makeDb()
     const membership = makeMembership()
-    await syncOidcRoleAssignment(db, params({ membership, config: makeConfig({ ops: 'role_operator' }) }))
+    await syncOidcRoleAssignment(db, params({ membership, config: makeConfig({ ops: 'role_tenant_operator' }) }))
 
     expect(createdRows(db)).toEqual([
-      expect.objectContaining({ tenantId: 'default', roleId: 'role_operator', scopeType: 'inherit' }),
+      expect.objectContaining({ tenantId: 'default', roleId: 'role_tenant_operator', scopeType: 'inherit' }),
     ])
     expect(membership.add.mock.calls).toEqual([['u1', 'default']])
   })
@@ -424,7 +424,7 @@ describe('syncOidcRoleAssignment — multi-tenant reconciliation', () => {
       params({
         membership,
         groupsClaimIsArray: false,
-        config: makeConfig([{ group: 'ops', tenant: 't_acme', role: 'role_operator' }]),
+        config: makeConfig([{ group: 'ops', tenant: 't_acme', role: 'role_tenant_operator' }]),
       }),
     )
 
@@ -434,14 +434,100 @@ describe('syncOidcRoleAssignment — multi-tenant reconciliation', () => {
     expect(membership.remove).not.toHaveBeenCalled()
   })
 
-  it('degrades a grant whose role was deleted to role_viewer instead of failing the login', async () => {
+  it('degrades a grant whose role was deleted to the tenant viewer instead of failing the login', async () => {
     const db = makeDb({ rbacRole: { findUnique: vi.fn().mockResolvedValue(null) } })
     await syncOidcRoleAssignment(
       db,
       params({ config: makeConfig([{ group: 'ops', tenant: 't_acme', role: 'role_ghost' }]) }),
     )
+    // role_viewer is a provider-only role: a customer tenant gets role_tenant_viewer.
     expect(createdRows(db)).toEqual([
-      expect.objectContaining({ tenantId: 't_acme', roleId: 'role_viewer' }),
+      expect.objectContaining({ tenantId: 't_acme', roleId: 'role_tenant_viewer' }),
     ])
+  })
+})
+
+describe('provider catalogue at login (ui#1336)', () => {
+  const catalogueRole = (where: any, over: Record<string, unknown> = {}) => ({
+    id: where.id, isSystem: false, tenantId: 'default', audience: 'service_desk', publishAll: false,
+    publications: [{ tenantId: 't_acme' }, { tenantId: 't_beta' }], ...over,
+  })
+
+  it('expands "every published tenant" into one row per tenant the role is published to', async () => {
+    const db = makeDb({ rbacRole: { findUnique: vi.fn(async ({ where }: any) => catalogueRole(where)) } })
+    await syncOidcRoleAssignment(db, params({ config: makeConfig([{ group: 'ops', tenant: '*', role: 'role_sd' }]) }))
+    expect(createdRows(db).map((r: any) => r.tenantId).sort()).toEqual(['t_acme', 't_beta'])
+  })
+
+  it('expands a role published to all tenants to every enabled customer tenant', async () => {
+    const db = makeDb({
+      rbacRole: { findUnique: vi.fn(async ({ where }: any) => catalogueRole(where, { publishAll: true, publications: [] })) },
+      tenant: { findMany: vi.fn().mockResolvedValue([{ id: 't_x' }]) },
+    })
+    await syncOidcRoleAssignment(db, params({ config: makeConfig([{ group: 'ops', tenant: '*', role: 'role_sd' }]) }))
+    expect(createdRows(db).map((r: any) => r.tenantId)).toEqual(['t_x'])
+  })
+
+  it('lets an explicit row above win under first_match, and expands nothing for a role outside the catalogue', async () => {
+    const db = makeDb({
+      rbacRole: {
+        findUnique: vi.fn(async ({ where }: any) => (where.id === 'role_sd' ? catalogueRole(where) : { id: where.id, isSystem: true, tenantId: null })),
+      },
+    })
+    await syncOidcRoleAssignment(db, params({
+      config: makeConfig([
+        { group: 'ops', tenant: 't_acme', role: 'role_tenant_viewer' },
+        { group: 'ops', tenant: '*', role: 'role_sd' },
+        { group: 'ops', tenant: '*', role: 'role_tenant_admin' },
+      ]),
+    }))
+    expect(createdRows(db).map((r: any) => `${r.tenantId}:${r.roleId}`).sort()).toEqual(['t_acme:role_tenant_viewer', 't_beta:role_sd'])
+  })
+
+  it('drops a grant whose role is not published to the tenant, and a provider-only role in a customer tenant', async () => {
+    const db = makeDb({
+      rbacRole: {
+        findUnique: vi.fn(async ({ where }: any) =>
+          where.id === 'role_sd' ? catalogueRole(where, { publications: [{ tenantId: 't_beta' }] }) : { id: where.id, isSystem: true, tenantId: null },
+        ),
+      },
+    })
+    const membership = makeMembership()
+    await syncOidcRoleAssignment(db, params({
+      membership,
+      config: makeConfig([
+        { group: 'ops', tenant: 't_acme', role: 'role_sd' },
+        { group: 'ops', tenant: 't_gamma', role: 'role_operator' },
+      ]),
+    }))
+    expect(createdRows(db)).toEqual([])
+    expect(membership.add).not.toHaveBeenCalled()
+  })
+})
+
+describe('expandAllTenantGrants', () => {
+  it('returns the grants untouched when none targets every tenant', async () => {
+    const grants = [{ tenantId: 't1', vdcId: null, roleId: 'r' }]
+    const db = { rbacRole: { findUnique: vi.fn() } }
+    expect(await expandAllTenantGrants(db, grants, false)).toBe(grants)
+    expect(db.rbacRole.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('keeps every role per tenant under the cumulative strategy', async () => {
+    const db = { rbacRole: { findUnique: vi.fn(async () => ({ audience: 'tenant', publishAll: false, publications: [{ tenantId: 't1' }] })) } }
+    const out = await expandAllTenantGrants(db, [
+      { tenantId: 't1', vdcId: null, roleId: 'a' },
+      { tenantId: '*', vdcId: null, roleId: 'b' },
+    ], true)
+    expect(out).toEqual([
+      { tenantId: 't1', vdcId: null, roleId: 'a' },
+      { tenantId: 't1', vdcId: null, roleId: 'b' },
+    ])
+  })
+
+  it('expands nothing for a deleted role, or a published role without a tenant lookup', async () => {
+    const db = { rbacRole: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ audience: 'tenant', publishAll: true, publications: [] }) } }
+    expect(await expandAllTenantGrants(db, [{ tenantId: '*', vdcId: null, roleId: 'gone' }], false)).toEqual([])
+    expect(await expandAllTenantGrants(db, [{ tenantId: '*', vdcId: null, roleId: 'all' }], false)).toEqual([])
   })
 })

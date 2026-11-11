@@ -85,17 +85,29 @@ describe('PUT /api/v1/firewall/aliases/[connectionId]/[name]', () => {
 
     const { PUT } = handlersOf(await import('./route'))
 
-    // Next hands over already-decoded path params. pveDirect.updateAlias runs
-    // encodeURIComponent on the name, so a route that pre-encoded would write
-    // to an alias literally named "dmz%20net".
+    // Next hands over already-decoded path params and pveDirect.updateAlias
+    // encodes the name itself: the route passes it on untouched.
     const res = await callRoute(PUT, {
-      params: { connectionId: 'conn-1', name: 'dmz net' },
+      params: { connectionId: 'conn-1', name: 'dmz_net-1' },
       method: 'PUT',
       body,
     })
 
     expect(res.status).toBe(200)
-    expect(updateAliasMock).toHaveBeenCalledWith(CONN, 'dmz net', body)
+    expect(updateAliasMock).toHaveBeenCalledWith(CONN, 'dmz_net-1', body)
+  })
+
+  it('answers 400 on a name outside the alias grammar, before the orchestrator or PVE', async () => {
+    const { PUT } = handlersOf(await import('./route'))
+
+    for (const name of ['dmz net', '..', '..\\..\\alerts', 'a/b', 'a?x=1', '%2e%2e', '9lives']) {
+      const res = await callRoute(PUT, { params: { connectionId: 'conn-1', name }, method: 'PUT', body })
+
+      expect(res.status, name).toBe(400)
+      expect(await readJson<any>(res)).toEqual({ error: 'Invalid alias name' })
+    }
+    expect(orchestrator.put).not.toHaveBeenCalled()
+    expect(updateAliasMock).not.toHaveBeenCalled()
   })
 
   it('propagates a non-unavailable orchestrator error as a 500 and never writes to PVE', async () => {

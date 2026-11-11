@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
+import { isServiceDeskManaged } from "@/lib/rbac/serviceDesk"
 import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
 import { scopeIncludes, validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
@@ -139,12 +140,21 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
       where: buildAssignmentWhere(id, tenantId),
       include: {
         user: { select: { email: true } },
-        role: { select: { name: true } },
+        role: { select: { name: true, audience: true } },
       },
     })
 
     if (!assignment) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 })
+    }
+
+    // A provider service-desk row (ui#1336) is changed or revoked by the
+    // provider: from its service desk assignment, or from its SSO mapping.
+    if (isServiceDeskManaged(assignment, tenantId)) {
+      return NextResponse.json(
+        { error: "This assignment is managed by the provider service desk", code: "SERVICE_DESK_MANAGED" },
+        { status: 409 },
+      )
     }
 
     const superAdminBlock = await denyIfAssignmentTouchesProtected(
@@ -221,12 +231,21 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       where: buildAssignmentWhere(id, tenantId),
       include: {
         user: { select: { email: true } },
-        role: { select: { name: true, permissions: { select: { permissionId: true } } } },
+        role: { select: { name: true, audience: true, permissions: { select: { permissionId: true } } } },
       },
     })
 
     if (!assignment) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 })
+    }
+
+    // A provider service-desk row (ui#1336) is changed or revoked by the
+    // provider: from its service desk assignment, or from its SSO mapping.
+    if (isServiceDeskManaged(assignment, tenantId)) {
+      return NextResponse.json(
+        { error: "This assignment is managed by the provider service desk", code: "SERVICE_DESK_MANAGED" },
+        { status: 409 },
+      )
     }
 
     const superAdminBlock = await denyIfAssignmentTouchesProtected(

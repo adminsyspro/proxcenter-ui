@@ -218,6 +218,20 @@ describe('watchMigrationAndCleanup', () => {
     expect(deleteCalls()).toHaveLength(0)
   })
 
+  // #1335: remote_migrate with delete=1 removes the source itself; PVE then
+  // answers its config with a 500, not a 404.
+  it('treats the 500 "Configuration file does not exist" as a source already gone', async () => {
+    pveFetchMock
+      .mockResolvedValueOnce({ status: 'stopped', exitstatus: 'OK' })
+      .mockRejectedValueOnce(new Error("PVE 500 /nodes/source-node/qemu/100/config: {\"data\":null,\"message\":\"Configuration file 'nodes/source-node/qemu-server/100.conf' does not exist\\n\"}"))
+
+    const outcome = await watchMigrationAndCleanup({ ...BASE_OPTS, deleteSource: true })
+
+    expect(outcome).toEqual({ outcome: 'completed', sourceLeft: false })
+    expect(executeSSHDirectMock).not.toHaveBeenCalled()
+    expect(deleteCalls()).toHaveLength(0)
+  })
+
   it('does not unlock or delete when the source VM is already gone', async () => {
     pveFetchMock
       .mockResolvedValueOnce({ status: 'stopped', exitstatus: 'OK' })

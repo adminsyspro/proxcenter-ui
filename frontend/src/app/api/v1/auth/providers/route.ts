@@ -16,18 +16,18 @@ type LoginOidc = { providerName?: string | null; showLocalLogin?: boolean | null
 async function oidcAnswer(tenantSlug: string | null) {
   if (tenantSlug) {
     const tenantConnection = await getActiveTenantConnectionBySlug(tenantSlug)
-    if (tenantConnection) return loginFlags(true, providerIdFor(tenantConnection.id), tenantConnection)
+    if (tenantConnection) return ssoPageOptions(true, providerIdFor(tenantConnection.id), tenantConnection)
   }
 
   const oidcEnabled = await isOidcEnabled()
   const config = oidcEnabled ? await getOidcConfig() : null
-  return loginFlags(oidcEnabled, providerIdFor(PROVIDER_CONNECTION_ID), config)
+  return ssoPageOptions(oidcEnabled, providerIdFor(PROVIDER_CONNECTION_ID), config)
 }
 
 // Login-page behavior. Only meaningful when OIDC is on; default to the safe
 // values (local form visible, no auto-redirect) otherwise so the local form can
 // never be hidden without a working SSO.
-function loginFlags(oidcEnabled: boolean, oidcProviderId: string, config: LoginOidc | null) {
+function ssoPageOptions(oidcEnabled: boolean, oidcProviderId: string, config: LoginOidc | null) {
   return {
     oidcEnabled,
     oidcProviderId,

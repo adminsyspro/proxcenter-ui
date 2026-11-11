@@ -348,3 +348,18 @@ describe('VmActions - Clone and ConvertTemplate', () => {
     expect(cbs.onMigrate).toHaveBeenCalledOnce()
   })
 })
+
+// #1335: the move to another vDC sits next to Migrate, only when allowed.
+describe('VmActions - move to another vDC', () => {
+  it('is hidden by default', () => {
+    renderWithProviders(<VmActions {...makeCallbacks()} vmStatus="running" onMoveVdc={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Move to another vDC' })).toBeNull()
+  })
+
+  it('opens the move when allowed', () => {
+    const onMoveVdc = vi.fn()
+    renderWithProviders(<VmActions {...makeCallbacks()} vmStatus="running" canMigrate={false} canMoveVdc onMoveVdc={onMoveVdc} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Move to another vDC' }))
+    expect(onMoveVdc).toHaveBeenCalledTimes(1)
+  })
+})

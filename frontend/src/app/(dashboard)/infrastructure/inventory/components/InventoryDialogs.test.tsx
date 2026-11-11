@@ -1387,7 +1387,7 @@ describe('migration dialog options', () => {
     const panel = await screen.findByTestId('mig-warm-prereqs')
     expect(panel.className).toContain('MuiAlert-standardSuccess')
     expect(within(panel).getByText(/is ready for warm migration/)).toBeTruthy()
-    expect(within(panel).getByTestId('mig-warm-prereq-runtime').textContent).toContain('OpenVDDK 0.7.4-pxc1 found')
+    expect(within(panel).getByTestId('mig-warm-prereq-runtime').textContent).toContain('OpenVDDK 0.7.4-pxc2 found')
     expect(within(panel).getByTestId('mig-convert-guest-ready').textContent).toContain('ready')
     expect(within(panel).queryByRole('button')).toBeNull()
   })

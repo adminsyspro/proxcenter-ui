@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { buildJobReaderSweepCmd, buildNbdConnectCmd, buildReaderTeardownCmd, startVddkReader, stopVddkReader, VDDK_ATTACH_TIMEOUT_MS, VDDK_LAUNCH_TIMEOUT_MS } from "./vddk-reader"
+import { buildJobReaderSweepCmd, buildNbdConnectCmd, buildReaderTeardownCmd, nbdAttachError, startVddkReader, stopVddkReader, VDDK_ATTACH_TIMEOUT_MS, VDDK_LAUNCH_TIMEOUT_MS } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
 
 // Mock only executeSSH; keep the real shellEscape (vddk-cmd uses it transitively).
@@ -35,8 +35,10 @@ describe("pure builders", () => {
     expect(c).not.toContain("nbd-client -d")
     // Next device only on a lost race; a refusal by nbdkit on a clean device
     // ends the loop instead of costing a retry window per device (roadmap#177).
-    expect(c).toContain(`[ -s /sys/block/nbd$i/pid ] || [ "$(cat /sys/block/nbd$i/size 2>/dev/null)" != 0 ] || break`)
-    expect(c.indexOf("|| break")).toBeGreaterThan(c.indexOf("nbd-client -unix"))
+    expect(c).toContain(`[ -s /sys/block/nbd$i/pid ] || [ "$(cat /sys/block/nbd$i/size 2>/dev/null)" != 0 ] || { REFUSED=1; break; }`)
+    expect(c.indexOf("|| { REFUSED=1; break; }")).toBeGreaterThan(c.indexOf("nbd-client -unix"))
+    // That refusal is reported as the server's, not as a lack of free devices.
+    expect(c).toContain('if [ -n "$REFUSED" ]; then echo "NBD_SERVER_REFUSED: ${err}"; else echo "NBD_ALLOC_FAILED: ${err}"; fi; exit 1')
   })
   it("tears down device, nbdkit, socket, password file", () => {
     const c = buildReaderTeardownCmd({ nbdDev: "/dev/nbd3", sock: "/tmp/v.sock", pwFile: "/tmp/pw" })
@@ -171,6 +173,50 @@ describe("startVddkReader", () => {
     await expect(
       startVddkReader("conn", "10.99.99.201", OPTS, "pw", { intervalMs: 0, maxAttempts: 3 }),
     ).rejects.toThrow(/free NBD device|already in use/i)
+  })
+
+  it("reports nbdkit's refusal of the disk from its log, not a device shortage", async () => {
+    const line = "nbdkit: vddk[1]: error: OpenVDDK: VixDiskLib: VixDiskLib_Open: disk chain incomplete: a file is missing: [ds] a+b/a+b.vmdk"
+    mockSSH.mockImplementation(async (...args: unknown[]) => {
+      const cmd = String(args[2] ?? "")
+      if (cmd.includes("test -S")) return { success: true, output: "EXISTS" }
+      if (cmd.includes("nbd-client -unix")) return { success: false, output: "NBD_SERVER_REFUSED: Exiting.", error: "" }
+      if (cmd.startsWith("cat ")) return { success: true, output: `${line}\n${line}\n${line}\n` }
+      return { success: true, output: "" }
+    })
+    await expect(
+      startVddkReader("conn", "10.99.99.201", OPTS, "pw", { intervalMs: 0, maxAttempts: 3 }),
+    ).rejects.toThrow(new Error(`nbdkit could not open the source disk: ${line}`))
+    // The log is read before teardown removes it; no device was owned.
+    const teardown = mockSSH.mock.calls.map(c => String(c[2])).find(c => c.includes("pkill -f"))
+    expect(teardown).not.toContain("nbd-client -d")
+  })
+})
+
+describe("nbdAttachError", () => {
+  // The nbdkit log of discussion #1353: the retry filter repeated the same
+  // refused open, so each line came several times.
+  const refusedLog = [
+    "nbdkit: vddk[1]: error: OpenVDDK: VixDiskLib: VixDiskLib_OpenEx: transport nbdssl: disk chain incomplete: a file is missing: [ds] a+b/a+b.vmdk",
+    "nbdkit: vddk[1]: error: VixDiskLib_Open: [ds] a+b/a+b.vmdk: Unspecified failure",
+    "nbdkit: vddk[1]: debug: retry 1: waiting 2 seconds before retrying",
+  ]
+  const log = [...refusedLog, ...refusedLog, ...refusedLog].join("\n")
+
+  it("names nbdkit's refusal and gives each distinct error line once", () => {
+    const m = nbdAttachError("Negotiation: ..Error: Unknown error returned by server.\nNBD_SERVER_REFUSED: Exiting.", log)
+    expect(m).toBe(`nbdkit could not open the source disk: ${refusedLog[0]}\n${refusedLog[1]}`)
+    expect(m).not.toContain("free NBD device")
+    expect(m).not.toContain("Negotiation")
+  })
+  it("falls back to the whole log, or (empty), when it holds no error line", () => {
+    expect(nbdAttachError("NBD_SERVER_REFUSED: x", "  nbdkit: starting\n")).toBe("nbdkit could not open the source disk: nbdkit: starting")
+    expect(nbdAttachError("NBD_SERVER_REFUSED: x", "")).toBe("nbdkit could not open the source disk: (empty)")
+  })
+  it("keeps the device message when no free device could be attached", () => {
+    expect(nbdAttachError(" NBD_ALLOC_FAILED: nbd0 already in use \n", "")).toBe(
+      "nbd-client failed to attach a free NBD device: NBD_ALLOC_FAILED: nbd0 already in use | nbdkit log: (empty)",
+    )
   })
 })
 

@@ -15,6 +15,7 @@ import { backfillEmailLogos } from '@/lib/branding/emailLogo'
 import { importDiskAssets } from '@/lib/branding/importDiskAssets'
 import { prisma } from '@/lib/db/prisma'
 import { startBatchPump } from '@/lib/migration/batch-scheduler'
+import { startVdcMoveReconciler } from '@/lib/vdc/move/runner'
 import { resolveInstanceId, sweepOrphanedMigrationJobs } from '@/lib/migration/orphan-sweep'
 import { cleanupOrphanedWarmSources } from '@/lib/migration/warm/orphan-cleanup'
 import { startSFlowReconciler } from '@/lib/sflow/reconciler'
@@ -135,6 +136,17 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this: the batches stay queued and the next
     // job end, resume or boot pumps them.
     console.error('[startup] migration batch pump failed to start (non-fatal):', err)
+  }
+
+  try {
+    // Moves between vDCs (#1335): resumes the moves whose follower died
+    // (restart, lost replica) so the guest still joins its target vDC. Every
+    // replica starts it; a database lease lets exactly one reconcile.
+    startVdcMoveReconciler()
+  } catch (err) {
+    // Boot must never depend on this: the moves stay in the database and the
+    // next boot resumes them.
+    console.error('[startup] vDC move reconciler failed to start (non-fatal):', err)
   }
 
   try {

@@ -123,16 +123,8 @@ export async function GET(_req: Request, ctx: RouteContext) {
                 }
               }
             }
-          } catch (e: any) {
-            // Distinguer les erreurs de permission (403) des autres erreurs
-            const msg = e?.message || ''
-
-            if (msg.includes('403') || msg.includes('Permission')) {
-              // Permission manquante sur Proxmox (VM.Monitor requis)
-              // Ne pas logger en erreur, c'est une configuration Proxmox
-            } else if (msg.includes('500') && msg.includes('QEMU guest agent is not running')) {
-              // Guest agent non démarré - normal
-            }
+          } catch {
+            // An answer that does not have the expected shape: no address.
           }
 
 

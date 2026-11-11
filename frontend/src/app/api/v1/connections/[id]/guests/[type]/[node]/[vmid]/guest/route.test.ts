@@ -227,6 +227,18 @@ describe('GET guests/[type]/[node]/[vmid]/guest', () => {
     expect(agentCalls().filter(c => c === 'get-osinfo')).toHaveLength(2)
   })
 
+  it('gives no address, and the rest all the same, when the interfaces do not have the expected shape', async () => {
+    pve({
+      '/status/current': { status: 'running', uptime: 3600 },
+      '/agent/network-get-interfaces': { result: [{ name: 'eth0', 'ip-addresses': 'none' }] },
+      '/agent/get-osinfo': { name: 'Debian' },
+      '/agent/get-fsinfo': { result: [] },
+    })
+    const body = await data(await call())
+    expect(body.ip).toBeUndefined()
+    expect(body.osInfo).toEqual({ type: 'linux', name: 'Debian', version: null, kernel: null })
+  })
+
   it('skips the agent calls for a stopped QEMU guest and survives a status error', async () => {
     pve({ '/status/current': new Error('timeout') })
     const res = await call()

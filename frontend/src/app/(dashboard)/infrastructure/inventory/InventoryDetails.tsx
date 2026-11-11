@@ -149,6 +149,7 @@ import ExpandableChart from './components/ExpandableChart'
 import StorageContentGroup from './components/StorageContentGroup'
 import PbsServerPanel, { type PbsServerPanelHandle } from './components/PbsServerPanel'
 import InventoryDialogs, { type NodeActionFailedVm } from './components/InventoryDialogs'
+import MoveVdcDialog from '@/components/vdc/MoveVdcDialog'
 import ExternalHypervisorDashboard from './components/ExternalHypervisorDashboard'
 import { useDetailData } from './hooks/useDetailData'
 import { useLiveVmStatus } from './hooks/useLiveVmStatus'
@@ -315,6 +316,10 @@ export default function InventoryDetails({
   // allows them, next to the template catalogue that stays its main path.
   const tenantBlankVm = !tenantLoading && !allowLxc && blankVmVdcs(myVdcs, ctxCookie).length > 0
   const allowBlankVm = allowLxc || tenantBlankVm
+  // #1335: move a VM to another vDC of its tenant. A vDC tenant needs two
+  // vDCs; the provider sees it on a guest of a vDC pool (the server checks
+  // the tenant has another vDC and answers in the dialog otherwise).
+  const [moveVdcOpen, setMoveVdcOpen] = useState(false)
   const router = useRouter()
   const { trackTask } = useTaskTracker()
   const { addTask: addPCTask, updateTask: updatePCTask, registerOnRestore, unregisterOnRestore } = useProxCenterTasks()
@@ -805,6 +810,14 @@ export default function InventoryDetails({
 
     return allVms.find((vm: any) => vm.connId === connId && vm.type === type && String(vm.vmid) === String(vmid))?.pool || null
   }, [selection, allVms])
+
+  const canMoveVdc = useMemo(() => {
+    if (tenantLoading || selection?.type !== 'vm' || !hasPermission('vm.move_vdc')) return false
+    if (parseVmId(selection.id).type !== 'qemu') return false
+    if (!isFullClusterView) return vdcNameByConn.size >= 2
+
+    return typeof guestPool === 'string' && guestPool.startsWith('vdc-')
+  }, [tenantLoading, selection, hasPermission, isFullClusterView, vdcNameByConn, guestPool])
 
   const handleSaveOption = useCallback(async () => {
     if (!editOptionDialog || !selection || selection.type !== 'vm') return
@@ -3440,6 +3453,8 @@ return vm?.isCluster ?? false
                         isLocked={vmLock.locked}
                         lockType={vmLock.lockType}
                         canMigrate={!tenantLoading && isFullClusterView}
+                        canMoveVdc={canMoveVdc}
+                        onMoveVdc={() => setMoveVdcOpen(true)}
                         onStart={onStart}
                         onShutdown={onShutdown}
                         onStop={onStop}
@@ -4855,6 +4870,21 @@ return vm?.isCluster ?? false
 
         </Stack>
       ) : null}
+
+      {moveVdcOpen && selection?.type === 'vm' && (() => {
+        const { connId, node, vmid } = parseVmId(selection.id)
+
+        return (
+          <MoveVdcDialog
+            open={moveVdcOpen}
+            onClose={() => setMoveVdcOpen(false)}
+            connId={connId}
+            node={node}
+            vmid={vmid}
+            onMoved={() => onBack?.()}
+          />
+        )
+      })()}
 
       <InventoryDialogs
         selection={selection}

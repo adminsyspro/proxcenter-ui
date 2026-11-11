@@ -45,6 +45,7 @@ import VdcHelpSection from './VdcHelpSection'
 import VdcGpuQuotaEditor, { type VdcGpuQuotaHandle } from './VdcGpuQuotaEditor'
 import { QUOTA_INPUT_SX, QUOTA_ROW_SX, QUOTA_TRAIL_SX, QuotaRowLead, SMALL_SELECT_SX } from './VdcQuotaRow'
 import VdcUsageHistorySettings from './VdcUsageHistorySettings'
+import VdcMoveSettings from './VdcMoveSettings'
 import DeletedVdcUsageHistory from './DeletedVdcUsageHistory'
 import TransportModeDiagram, { TRANSPORT_MODE_KEYS } from './TransportModeDiagram'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
@@ -369,7 +370,7 @@ export default function VdcTab() {
   const [dialogTab, setDialogTab] = useState(0)
   // Sub-tabs: the vDC list and the connection-level storage policies are
   // separate concerns; showing both stacked made the page too long.
-  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks' | 'usage-history' | 'help'>('vdcs')
+  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks' | 'usage-history' | 'moves' | 'help'>('vdcs')
   const [editingVdc, setEditingVdc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
   // GPU contingent row of the Quotas tab (#672): written by the dialog's save.
@@ -2089,6 +2090,15 @@ export default function VdcTab() {
           }
         />
         <Tab
+          value="moves"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-arrow-left-right-line" style={{ fontSize: 18 }} />
+              {t('moveVdc.settings.title')}
+            </Box>
+          }
+        />
+        <Tab
           value="help"
           label={
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2107,6 +2117,7 @@ export default function VdcTab() {
           <DeletedVdcUsageHistory />
         </>
       )}
+      {activeSection === 'moves' && <VdcMoveSettings />}
       {activeSection === 'help' && <VdcHelpSection />}
 
       {activeSection === 'vdcs' && (

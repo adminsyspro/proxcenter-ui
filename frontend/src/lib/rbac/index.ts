@@ -539,6 +539,7 @@ export const PERMISSIONS = {
   VM_BACKUP: "vm.backup",
   VM_CLONE: "vm.clone",
   VM_MIGRATE: "vm.migrate",
+  VM_MOVE_VDC: "vm.move_vdc",
   VM_CONFIG: "vm.config",
   VM_CONFIG_MEDIA: "vm.config.media",
   VM_CONFIG_NIC_LINK: "vm.config.nic.link",

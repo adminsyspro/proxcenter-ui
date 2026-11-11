@@ -8,6 +8,7 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
 
 import { applySdn, createZone, listClusterNodeIps, readZonePve, updateZone, type PveZoneLive } from './sdn'
+import { evpnReservations } from './evpnReservations'
 import {
   parseCidr,
   parseZonePeers,
@@ -73,6 +74,24 @@ export async function assertNoVniRangeOverlap(
       throw new Error(
         `VXLAN transport: VNI range ${transport.vniRangeStart}-${transport.vniRangeEnd} is in use by vDC "${other.name}" ` +
         `(${range.vniRangeStart}-${range.vniRangeEnd}) on this cluster. Ranges of one transport must not overlap.`,
+      )
+    }
+  }
+  // The EVPN zones hold their VNI space on every cluster (#1334).
+  const evpn = await evpnReservations()
+  for (const zone of evpn.ranges) {
+    if (vniRangesOverlap(transport, { vniRangeStart: zone.start, vniRangeEnd: zone.end })) {
+      throw new Error(
+        `VXLAN transport: VNI range ${transport.vniRangeStart}-${transport.vniRangeEnd} overlaps the range ` +
+        `${zone.start}-${zone.end} reserved for EVPN zone "${zone.zoneName}".`,
+      )
+    }
+  }
+  for (const vrf of evpn.vrfVnis) {
+    if (vrf.vni >= transport.vniRangeStart && vrf.vni <= transport.vniRangeEnd) {
+      throw new Error(
+        `VXLAN transport: VNI range ${transport.vniRangeStart}-${transport.vniRangeEnd} contains VNI ${vrf.vni}, ` +
+        `the VRF of EVPN zone "${vrf.zoneName}".`,
       )
     }
   }

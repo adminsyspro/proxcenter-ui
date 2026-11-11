@@ -19,6 +19,8 @@ export interface Vdc {
   description: string | null
   pvePoolName: string
   sdnZoneName: string | null
+  /** Shared EVPN zone the vDC is attached to (#1334), null when none. */
+  evpnZoneId: string | null
   /** Single shared storage backing this vDC's VM disks. Null on legacy
    *  vDCs created before the migration; the admin must re-pick a shared
    *  storage before tenants can deploy. New vDCs are validated to point
@@ -165,8 +167,10 @@ export interface VdcVnet {
    *  (roadmap#18): the tenant addresses it itself, ProxCenter assigns no IP. */
   subnet: VdcSubnet | null
   /** Set when a stretched tenant network created this VNet (#901): the
-   *  provider manages it, and `subnet.id` is the network's shared pool. */
-  tenantNetwork: { id: string; name: string } | null
+   *  provider manages it, and `subnet.id` is the network's shared pool.
+   *  `shared` marks a network the tenant itself created in a shared EVPN
+   *  zone (#1334): the tenant manages it and the vDCs carrying it. */
+  tenantNetwork: { id: string; name: string; shared?: boolean } | null
   createdBy: string | null
   createdAt: string
 }
@@ -207,6 +211,10 @@ export interface CreateVdcInput {
    *  list (must be `shared=true` and advertise `content=images`). */
   primaryStorage: string
   sdnZoneName?: string
+  /** Shared EVPN zone the vDC is attached to (#1334). */
+  evpnZoneId?: string | null
+  /** False = no VXLAN zone of its own: the vDC only uses the shared EVPN zone. Needs `evpnZoneId`. */
+  ownVxlanZone?: boolean
   quota?: Partial<VdcQuota>
   sharedBridges?: Array<{ bridge: string; label?: string }>
   vlanPools?: Array<{ bridge: string; rangeStart: number; rangeEnd: number }>
@@ -220,6 +228,8 @@ export interface CreateVdcInput {
 }
 
 export interface UpdateVdcInput {
+  /** Shared EVPN zone (#1334): an id attaches, null detaches. */
+  evpnZoneId?: string | null
   name?: string
   description?: string
   enabled?: boolean

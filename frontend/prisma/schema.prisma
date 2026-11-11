@@ -87,6 +87,7 @@ model Connection {
   providerConnection ProviderConnection?
   licenseMapping     LicenseMapping?
   sdnVlanZones       SdnVlanZone[]
+  sdnEvpnZoneMembers SdnEvpnZoneMember[]
 }
 
 model ManagedHost {
@@ -983,6 +984,10 @@ model Vdc {
   // `platform`: the provider operates the edge, so every network declares
   // its subnet.
   edgeModel              String   @default("tenant") @map("edge_model")
+  // Shared EVPN zone the vDC is attached to (#1334): its tenant creates
+  // networks there that reach its other vDCs attached to the same zone.
+  evpnZoneId             String?  @map("evpn_zone_id")
+  evpnZone               SdnEvpnZone? @relation(fields: [evpnZoneId], references: [id], onDelete: Restrict)
   createdBy      String?  @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")
@@ -1008,6 +1013,7 @@ model Vdc {
   @@unique([connectionId, sdnZoneName], map: "idx_vdcs_sdn_zone_name")
   @@index([tenantId])
   @@index([connectionId])
+  @@index([evpnZoneId])
   @@map("vdcs")
 }
 
@@ -1201,6 +1207,11 @@ model TenantNetwork {
   vni         Int      @unique
   // Zone MTU as PVE defines it (#899); every member zone must agree.
   mtu         Int?
+  // Set for a network the tenant created in a shared EVPN zone (#1334): its
+  // members live in that zone, with a VNI of the zone range, and the tenant
+  // manages on which of its vDCs it is present.
+  evpnZoneId  String?      @map("evpn_zone_id")
+  evpnZone    SdnEvpnZone? @relation(fields: [evpnZoneId], references: [id], onDelete: Restrict)
   createdBy   String?  @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @map("updated_at")
@@ -1210,6 +1221,7 @@ model TenantNetwork {
 
   @@unique([tenantId, name])
   @@index([tenantId])
+  @@index([evpnZoneId])
   @@map("tenant_networks")
 }
 
@@ -1423,6 +1435,52 @@ model SdnVlanZone {
   @@unique([connectionId, bridge])
   @@unique([connectionId, zoneName])
   @@map("sdn_vlan_zones")
+}
+
+// Provider EVPN zone shared between clusters (#1334). One row per zone, one
+// member per cluster carrying it under the same PVE zone id. The BGP side
+// stays in Proxmox: a member only references the EVPN controller it uses.
+model SdnEvpnZone {
+  id          String   @id
+  name        String   @unique
+  description String?
+  // PVE zone id (8 chars at most), identical on every member cluster.
+  zoneName    String   @unique @map("zone_name")
+  // VNI of the zone VRF; never handed to a VNet, on any cluster.
+  vrfVxlan    Int      @unique @map("vrf_vxlan")
+  mtu         Int?
+  // VNIs the VNets of the zone are taken from, reserved on every cluster.
+  vniStart    Int      @map("vni_start")
+  vniEnd      Int      @map("vni_end")
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  members        SdnEvpnZoneMember[]
+  vdcs           Vdc[]
+  tenantNetworks TenantNetwork[]
+
+  @@map("sdn_evpn_zones")
+}
+
+model SdnEvpnZoneMember {
+  id                String      @id
+  zoneId            String      @map("zone_id")
+  zone              SdnEvpnZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  connectionId      String      @map("connection_id")
+  connection        Connection  @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  // EVPN controller of the cluster the zone is bound to.
+  controller        String
+  // True when ProxCenter created the controller, false when it referenced one.
+  controllerCreated Boolean     @default(false) @map("controller_created")
+  // True when the zone already existed on the cluster and was adopted: it is
+  // then left in place when the member is removed.
+  adopted           Boolean     @default(false)
+  createdAt         DateTime    @default(now()) @map("created_at")
+
+  @@unique([zoneId, connectionId])
+  @@index([connectionId])
+  @@map("sdn_evpn_zone_members")
 }
 
 // ─────────────── §1.5 Alerts (legacy frontend system) ───────────────

@@ -91,6 +91,8 @@ async function handlePost(req: NextRequest) {
           : undefined,
         transport: body.transport && typeof body.transport === 'object' ? body.transport : undefined,
         edgeModel: typeof body.edgeModel === 'string' ? body.edgeModel : undefined,
+        evpnZoneId: typeof body.evpnZoneId === 'string' && body.evpnZoneId ? body.evpnZoneId : null,
+        ownVxlanZone: body.ownVxlanZone === false ? false : undefined,
         quota: body.quota,
       },
       session?.user?.id ?? null

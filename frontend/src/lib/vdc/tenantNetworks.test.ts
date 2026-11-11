@@ -14,6 +14,7 @@ const { prismaMock, getConnectionByIdMock, listVnetsPveMock } = vi.hoisted(() =>
     vdcVnet: { findMany: vi.fn(), findFirst: vi.fn() },
     connection: { findMany: vi.fn(), findUnique: vi.fn() },
     vdcSubnet: { create: vi.fn(), updateMany: vi.fn() },
+    sdnEvpnZone: { findMany: vi.fn() },
   } as any,
   getConnectionByIdMock: vi.fn(),
   listVnetsPveMock: vi.fn(),
@@ -58,6 +59,7 @@ beforeEach(() => {
   prismaMock.vdcVnet.findMany.mockResolvedValue([])
   prismaMock.vdcVnet.findFirst.mockResolvedValue(null)
   prismaMock.connection.findMany.mockResolvedValue([])
+  prismaMock.sdnEvpnZone.findMany.mockResolvedValue([])
   prismaMock.connection.findUnique.mockResolvedValue({ tenantId: 'default' })
   getConnectionByIdMock.mockResolvedValue({ id: 'conn' })
   listVnetsPveMock.mockResolvedValue([])
@@ -74,9 +76,8 @@ const clusters = (...ids: string[]) => {
 }
 
 describe('allocateTenantVni', () => {
-  it('starts at the VNI floor when nothing is taken, and reads no VNet without a cluster', async () => {
-    await expect(allocateTenantVni('t1', null)).resolves.toBe(10000)
-    expect(prismaMock.vdcVnet.findMany).not.toHaveBeenCalled()
+  it('starts at the VNI floor when nothing is taken, and reads no live VNet without a cluster', async () => {
+    await expect(allocateTenantVni(null)).resolves.toBe(10000)
     expect(listVnetsPveMock).not.toHaveBeenCalled()
   })
 
@@ -85,29 +86,31 @@ describe('allocateTenantVni', () => {
     prismaMock.tenantNetwork.findMany.mockResolvedValue([{ vni: 10003, name: 'other' }])
     prismaMock.vdcVnet.findMany.mockResolvedValue([{ tag: 10010, displayName: 'lan', pveName: 'vabc', vdc: { name: 'Acme prod' } }])
     listVnetsPveMock.mockResolvedValue([{ vnet: 'vlegacy', zone: 'z', tag: 10020, firewall: 0 }])
-    await expect(allocateTenantVni('t1', null)).resolves.toBe(10021)
+    await expect(allocateTenantVni(null)).resolves.toBe(10021)
   })
 
-  it("scans only the clusters of the tenant's vDCs", async () => {
-    clusters('c1', 'c2')
-    await allocateTenantVni('t1', null)
-    expect(prismaMock.vdcVnet.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { type: 'vxlan', vdc: { connectionId: { in: ['c1', 'c2'] } } },
-    }))
+  // An EVPN control plane linking clusters bridges equal VNIs, so a cluster
+  // the tenant has no vDC on still holds VNIs the network must avoid.
+  it('scans every Proxmox cluster, including those the tenant has no vDC on', async () => {
+    prismaMock.vdc.findMany.mockResolvedValue([{ connectionId: 'c1' }])
+    prismaMock.connection.findMany.mockResolvedValue([{ id: 'c1', name: 'cluster-c1' }, { id: 'c2', name: 'cluster-c2' }])
+    await allocateTenantVni(null)
+    expect(prismaMock.vdcVnet.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { type: 'vxlan' } }))
+    expect(prismaMock.connection.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { type: 'pve' } }))
     expect(listVnetsPveMock).toHaveBeenCalledTimes(2)
   })
 
   it('never drops into the VLAN tag range because of a VLAN-only cluster', async () => {
     clusters('c1')
     listVnetsPveMock.mockResolvedValue([{ vnet: 'a', zone: 'z', tag: 100, firewall: 0 }, { vnet: 'b', zone: 'z', tag: 4094, firewall: 0 }])
-    await expect(allocateTenantVni('t1', null)).resolves.toBe(10000)
+    await expect(allocateTenantVni(null)).resolves.toBe(10000)
   })
 
   it('keeps allocating from the database when a cluster is unreachable', async () => {
     clusters('c1')
     prismaMock.vdcVnet.findMany.mockResolvedValue([{ tag: 10010, displayName: 'lan', pveName: 'vabc', vdc: { name: 'Acme prod' } }])
     listVnetsPveMock.mockRejectedValue(new Error('ECONNREFUSED'))
-    await expect(allocateTenantVni('t1', null)).resolves.toBe(10011)
+    await expect(allocateTenantVni(null)).resolves.toBe(10011)
   })
 
   it('accepts a requested VNI that is free, refuses a held one and names its holder', async () => {
@@ -116,10 +119,22 @@ describe('allocateTenantVni', () => {
     prismaMock.vdcVnet.findMany.mockResolvedValue([{ tag: 10010, displayName: 'lan', pveName: 'vabc', vdc: { name: 'Acme prod' } }])
     listVnetsPveMock.mockResolvedValue([{ vnet: 'vlegacy', zone: 'z', tag: 30000, firewall: 0 }])
 
-    await expect(allocateTenantVni('t1', 40000)).resolves.toBe(40000)
-    await expect(allocateTenantVni('t1', 10010)).rejects.toThrow('VNI 10010 is already used by network "lan" of vDC "Acme prod"')
-    await expect(allocateTenantVni('t1', 20000)).rejects.toThrow('already used by tenant network "other"')
-    await expect(allocateTenantVni('t1', 30000)).rejects.toThrow('already used by a VNet of cluster "cluster-c1"')
+    await expect(allocateTenantVni(40000)).resolves.toBe(40000)
+    await expect(allocateTenantVni(10010)).rejects.toThrow('VNI 10010 is already used by network "lan" of vDC "Acme prod"')
+    await expect(allocateTenantVni(20000)).rejects.toThrow('already used by tenant network "other"')
+    await expect(allocateTenantVni(30000)).rejects.toThrow('already used by a VNet of cluster "cluster-c1"')
+  })
+
+  // The VNI space of an EVPN zone is reserved on every cluster (#1334).
+  it('stays out of the range and off the VRF VNI of the EVPN zones', async () => {
+    clusters('c1')
+    prismaMock.sdnEvpnZone.findMany.mockResolvedValue([{ zoneName: 'zevpn', vrfVxlan: 10000, vniStart: 10001, vniEnd: 10099 }])
+    // A VNet of the zone sits inside its range: it must not drag the allocation above it.
+    listVnetsPveMock.mockResolvedValue([{ vnet: 'vev', zone: 'zevpn', tag: 10050, firewall: 0 }])
+
+    await expect(allocateTenantVni(null)).resolves.toBe(10100)
+    await expect(allocateTenantVni(10020)).rejects.toThrow('VNI 10020 is already reserved for EVPN zone "zevpn" (10001-10099)')
+    await expect(allocateTenantVni(10000)).rejects.toThrow('VNI 10000 is already used by the VRF of EVPN zone "zevpn"')
   })
 })
 

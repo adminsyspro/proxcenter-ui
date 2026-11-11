@@ -68,8 +68,10 @@ export async function zoneConfigOfVdc(vdc: VdcTransportRow, conn?: any): Promise
  * every vDC before #901, so the zone paths pay nothing then.
  */
 export async function memberPeersForVdc(vdcId: string): Promise<string[]> {
+  // A network of a shared EVPN zone (#1334) needs no peer exchange: BGP
+  // carries its reachability, the vDC's own VXLAN zone is not involved.
   const memberships = await prisma.tenantNetworkMember.findMany({
-    where: { vdcId },
+    where: { vdcId, tenantNetwork: { evpnZoneId: null } },
     select: { tenantNetworkId: true },
   })
   if (memberships.length === 0) return []

@@ -468,32 +468,40 @@ export async function listVnetsPve(conn: any): Promise<SdnVnet[]> {
 // Count NIC attachments for a VNet (used before delete)
 // ---------------------------------------------------------------------------
 
+/** Guest configs read at once when counting the NICs of a VNet. */
+const ATTACHMENT_SCAN_CONCURRENCY = 5
+
 /**
  * Returns the number of NICs across all VMs/CTs that reference `pveName` as bridge.
  * Best-effort: skips VMs whose config fails to fetch.
+ *
+ * One list call plus one config read per guest of the cluster. The reads go
+ * five at a time: a network shared between clusters (#1334) is checked on
+ * each of them before it is removed, and one after the other that wait
+ * added up. Five plain GETs at once stay far below what a cluster serves.
  */
 export async function countVnetAttachments(conn: any, pveName: string): Promise<number> {
-  const resources = await pveFetch<any[]>(conn, '/cluster/resources?type=vm')
+  const resources = (await pveFetch<any[]>(conn, '/cluster/resources?type=vm') || [])
+    .filter((res: any) => res.vmid && res.node && res.type)
   let count = 0
+  let next = 0
 
-  for (const res of resources || []) {
-    const vmid = res.vmid
-    const node = res.node
-    const type = res.type
-    if (!vmid || !node || !type) continue
-
-    try {
-      const config = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/config`)
-      for (const key of Object.keys(config)) {
-        if (!/^net\d+$/.test(key)) continue
-        const val = String(config[key] || '')
-        const m = val.match(/bridge=([^,]+)/)
-        if (m && m[1] === pveName) count++
+  const worker = async () => {
+    while (next < resources.length) {
+      const res = resources[next++]
+      try {
+        const config = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(res.node)}/${res.type}/${res.vmid}/config`)
+        for (const key of Object.keys(config)) {
+          if (!/^net\d+$/.test(key)) continue
+          const m = String(config[key] || '').match(/bridge=([^,]+)/)
+          if (m && m[1] === pveName) count++
+        }
+      } catch {
+        // Skip VMs whose config fails
       }
-    } catch {
-      // Skip VMs whose config fails
     }
   }
+  await Promise.all(Array.from({ length: Math.min(ATTACHMENT_SCAN_CONCURRENCY, resources.length) }, worker))
 
   return count
 }

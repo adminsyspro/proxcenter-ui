@@ -77,6 +77,8 @@ async function handlePut(req: Request, ctx: RouteContext) {
         : undefined,
       transport: body.transport && typeof body.transport === 'object' ? body.transport : undefined,
       edgeModel: typeof body.edgeModel === 'string' ? body.edgeModel : undefined,
+      // Absent = unchanged, null or '' = detach, an id = attach (#1334).
+      evpnZoneId: body.evpnZoneId === undefined ? undefined : (typeof body.evpnZoneId === 'string' && body.evpnZoneId ? body.evpnZoneId : null),
       quota: body.quota,
     })
 

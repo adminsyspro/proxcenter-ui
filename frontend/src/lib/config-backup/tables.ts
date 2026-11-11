@@ -48,6 +48,9 @@ export const BACKUP_SECTIONS: BackupSection[] = [
       { name: 'ManagedHost' },
       { name: 'provider_connections' },
       { name: 'sdn_vlan_zones' },
+      // Shared EVPN zones (#1334): vdcs and tenant_networks reference them.
+      { name: 'sdn_evpn_zones' },
+      { name: 'sdn_evpn_zone_members' },
       { name: 'storage_policies' },
       { name: 'datacenters' },
       { name: 'connection_green_config' },

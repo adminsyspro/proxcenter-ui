@@ -24,6 +24,7 @@ import {
   sameZoneConfig,
   type VdcTransport,
 } from './transport'
+import { assertEvpnDetachSafe, assertEvpnZoneForCluster } from './evpnVdc'
 import { assertNoTransportConflict, assertNoVniRangeOverlap } from './transportOps'
 import { memberPeersForVdc, withMemberPeers } from './stretchPeers'
 import { syncNetworksOfVdc } from './tenantNetworkMembers'
@@ -60,6 +61,7 @@ type VdcRow = {
   enabled: boolean | null
   primaryStorage: string | null
   sdnZoneName: string | null
+  evpnZoneId?: string | null
   cpuModelMode?: string | null
   cpuAllowedModels?: string[] | null
   cpuDefaultModel?: string | null
@@ -107,6 +109,7 @@ function rowToVdc(row: VdcRow): Vdc {
     description: row.description ?? null,
     pvePoolName: row.pvePoolName,
     sdnZoneName: row.sdnZoneName ?? null,
+    evpnZoneId: row.evpnZoneId ?? null,
     primaryStorage: row.primaryStorage ?? null,
     computePolicy: rowToComputePolicy(row),
     allowBlankVms: row.allowBlankVms === true,
@@ -500,6 +503,15 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
   await assertNoVniRangeOverlap(input.connectionId, null, transport)
   const edgeModel: VdcEdgeModel = input.edgeModel === undefined ? 'tenant' : normalizeEdgeModelInput(input.edgeModel)
 
+  // Shared EVPN zone (#1334): the cluster must carry it. A vDC attached to
+  // one may skip its own VXLAN zone and live in the shared zone alone.
+  const evpnZoneId = input.evpnZoneId || null
+  if (evpnZoneId) await assertEvpnZoneForCluster(evpnZoneId, input.connectionId)
+  const ownVxlanZone = input.ownVxlanZone !== false
+  if (!ownVxlanZone && !evpnZoneId) {
+    throw new Error('EVPN zone: a vDC without its own VXLAN zone must be attached to an EVPN zone.')
+  }
+
   // 4. Create PVE pool (existing behavior)
   const poolName = generatePoolName(tenantSlug, input.slug)
   const connOwnerTenantId = await getConnectionOwnerTenantId(input.connectionId)
@@ -522,8 +534,10 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
   }
 
   // 5. Create SDN zone on PVE
-  let sdnZoneName: string
-  if (input.sdnZoneName?.trim()) {
+  let sdnZoneName: string | null = null
+  if (!ownVxlanZone) {
+    // Nothing to create: the networks of this vDC live in the shared EVPN zone.
+  } else if (input.sdnZoneName?.trim()) {
     const custom = input.sdnZoneName.trim().toLowerCase()
     if (!/^[a-z][a-z0-9]{0,7}$/.test(custom)) {
       throw new Error('SDN zone ID must be 1-8 lowercase alphanumeric characters, starting with a letter.')
@@ -536,11 +550,13 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     sdnZoneName = await generateZoneName(input.connectionId, { id, slug: input.slug })
   }
   try {
-    // Cluster mode reads the node addresses now; the other modes carry
-    // their peers in the transport definition.
-    const clusterIps = transport.mode === 'cluster' ? await listClusterNodeIps(conn) : []
-    const zone = zoneConfigFor(transport, clusterIps)
-    await createZone(conn, sdnZoneName, { peers: zone.peers, mtu: zone.mtu })
+    if (sdnZoneName) {
+      // Cluster mode reads the node addresses now; the other modes carry
+      // their peers in the transport definition.
+      const clusterIps = transport.mode === 'cluster' ? await listClusterNodeIps(conn) : []
+      const zone = zoneConfigFor(transport, clusterIps)
+      await createZone(conn, sdnZoneName, { peers: zone.peers, mtu: zone.mtu })
+    }
   } catch (err: any) {
     try {
       await pveFetch(conn, `/pools/${encodeURIComponent(poolName)}`, { method: 'DELETE' })
@@ -561,6 +577,7 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
           description: input.description ?? null,
           pvePoolName: poolName,
           sdnZoneName,
+          evpnZoneId,
           primaryStorage: input.primaryStorage ?? null,
           ...computePolicyToRow(normalizeComputePolicyInput(input.computePolicy)),
           allowBlankVms: input.allowBlankVms === true,
@@ -653,7 +670,9 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     })
   } catch (err: any) {
     // DB transaction failed - rollback PVE resources to avoid orphans
-    try { await deleteZone(conn, sdnZoneName) } catch {}
+    if (sdnZoneName) {
+      try { await deleteZone(conn, sdnZoneName) } catch {}
+    }
     try {
       await pveFetch(conn, `/pools/${encodeURIComponent(poolName)}`, { method: 'DELETE' })
     } catch {}
@@ -667,11 +686,14 @@ export async function createVdc(input: CreateVdcInput, createdBy: string | null)
     await replaceVdcCatalogGrants(id, input.catalogGrants, createdBy)
   }
 
-  try {
-    await applySdn(conn)
-  } catch (err: any) {
-    // Do not roll back - config is written to /etc/pve/sdn/*.cfg; admin can retry apply.
-    console.warn(`[vdc] applySdn failed after creating zone "${sdnZoneName}": ${err?.message}`)
+  // No zone of its own, nothing staged: no network reload on the cluster.
+  if (sdnZoneName) {
+    try {
+      await applySdn(conn)
+    } catch (err: any) {
+      // Do not roll back - config is written to /etc/pve/sdn/*.cfg; admin can retry apply.
+      console.warn(`[vdc] applySdn failed after creating zone "${sdnZoneName}": ${err?.message}`)
+    }
   }
 
   clearVdcScopeCache(input.tenantId)
@@ -688,7 +710,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
   const existing = await prisma.vdc.findUnique({
     where: { id },
     select: {
-      id: true, tenantId: true, connectionId: true, sdnZoneName: true,
+      id: true, tenantId: true, connectionId: true, sdnZoneName: true, evpnZoneId: true,
       cpuModelMode: true, cpuAllowedModels: true, cpuDefaultModel: true, cpuAdvancedSettings: true,
       vxlanTransportMode: true, transportSharing: true, vniRangeStart: true, vniRangeEnd: true,
       vxlanPeers: true, vxlanMtu: true,
@@ -700,6 +722,17 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
   }
 
   const nextEdgeModel: VdcEdgeModel | null = input.edgeModel === undefined ? null : normalizeEdgeModelInput(input.edgeModel)
+
+  // Shared EVPN zone (#1334): attach to a zone the cluster carries, or
+  // detach once the vDC carries none of its networks any more.
+  const nextEvpnZoneId = input.evpnZoneId === undefined ? undefined : (input.evpnZoneId || null)
+  if (nextEvpnZoneId !== undefined && nextEvpnZoneId !== (existing.evpnZoneId ?? null)) {
+    if (existing.evpnZoneId) await assertEvpnDetachSafe(id)
+    if (nextEvpnZoneId) await assertEvpnZoneForCluster(nextEvpnZoneId, existing.connectionId)
+    else if (!existing.sdnZoneName) {
+      throw new Error('EVPN zone: this vDC has no VXLAN zone of its own, it cannot leave its EVPN zone.')
+    }
+  }
 
   if (input.vlanPools) {
     validateVlanPoolsInput(input.vlanPools)
@@ -767,6 +800,7 @@ export async function updateVdc(id: string, input: UpdateVdcInput): Promise<VdcW
     if (input.allowBlankVms !== undefined) updateData.allowBlankVms = input.allowBlankVms
     if (nextTransport) Object.assign(updateData, transportToRow(nextTransport))
     if (nextEdgeModel) updateData.edgeModel = nextEdgeModel
+    if (nextEvpnZoneId !== undefined) updateData.evpnZoneId = nextEvpnZoneId
 
     await tx.vdc.update({ where: { id }, data: updateData })
 
@@ -1046,7 +1080,14 @@ export async function deleteVdc(id: string): Promise<void> {
   })
 
   clearVdcScopeCache(vdc.tenantId)
-  if (stretchedNetworkIds.length > 0) await syncNetworksOfVdc(id, stretchedNetworkIds)
+  if (stretchedNetworkIds.length > 0) {
+    await syncNetworksOfVdc(id, stretchedNetworkIds)
+    // A network of a shared EVPN zone (#1334) exists only where the tenant
+    // placed it: once its last vDC is gone, it goes and its VNI is released.
+    await prisma.tenantNetwork.deleteMany({
+      where: { id: { in: stretchedNetworkIds }, evpnZoneId: { not: null }, members: { none: {} } },
+    })
+  }
 }
 
 // ---------------------------------------------------------------------------

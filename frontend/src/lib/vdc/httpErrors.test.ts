@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { mapCreateVdcError } from './httpErrors'
+import { mapCreateVdcError, mapEvpnZoneError } from './httpErrors'
 
 describe('mapCreateVdcError', () => {
   it('maps Prisma P2002 (lost race on a DB unique) to 409', () => {
@@ -60,5 +60,23 @@ describe('mapCreateVdcError', () => {
   it('still maps a plain "Storage policy" validation message to 400 (ordering non-regression)', () => {
     const e = new Error('Storage policy name is required (1-64 characters)')
     expect(mapCreateVdcError(e)).toEqual({ status: 400, message: e.message })
+  })
+})
+
+describe('mapEvpnZoneError (#1334)', () => {
+  it('maps the module messages to 404, 409, 400, 502 and the lost race to 409', () => {
+    expect(mapEvpnZoneError(Object.assign(new Error('unique'), { code: 'P2002' })).status).toBe(409)
+    expect(mapEvpnZoneError(new Error('EVPN zone: not found.')).status).toBe(404)
+    expect(mapEvpnZoneError(new Error('VNI collision: network not found.')).status).toBe(404)
+    expect(mapEvpnZoneError(new Error('EVPN zone: a zone named "x" already exists.')).status).toBe(409)
+    expect(mapEvpnZoneError(new Error('EVPN zone: zone "z" still holds 2 VNet(s) on cluster "c".')).status).toBe(409)
+    expect(mapEvpnZoneError(new Error('EVPN zone: the VNI range overlaps the range 1-2 of vDC "v".')).status).toBe(409)
+    expect(mapEvpnZoneError(new Error('EVPN zone: zone "z" differs on cluster "c" (MTU 1400): fix it in Proxmox.')).status).toBe(409)
+    expect(mapEvpnZoneError(new Error('Failed to create SDN zone "z": 400')).status).toBe(502)
+    expect(mapEvpnZoneError(new Error('EVPN zone: select at least one cluster.')).status).toBe(400)
+    expect(mapEvpnZoneError(new Error('VNI collision: only a VXLAN network carries a VNI.')).status).toBe(400)
+    expect(mapEvpnZoneError(Object.assign(new Error('No free VNI left'), { name: 'VniError', status: 409 }))).toEqual({ status: 409, message: 'No free VNI left' })
+    expect(mapEvpnZoneError(new Error('ECONNREFUSED')).status).toBe(500)
+    expect(mapEvpnZoneError('boom')).toEqual({ status: 500, message: 'boom' })
   })
 })

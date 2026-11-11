@@ -65,6 +65,13 @@ model Connection {
   integrityCheckEnabled  Boolean?
   integrityRegionCount   Int?
   integrityRegionSizeMiB Int?
+  // Bulk migration limits (ui#1332, lib/migration/migration-limits): null =
+  // the default. On a PVE target, migrations running into the cluster at once
+  // and into one of its nodes; on a VMware source, migrations reading from one
+  // of its ESXi hosts. Enterprise.
+  migrationMaxParallel      Int?
+  migrationMaxPerNode       Int?
+  migrationMaxPerSourceHost Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

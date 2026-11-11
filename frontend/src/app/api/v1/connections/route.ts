@@ -1,5 +1,6 @@
 // src/app/api/v1/connections/route.ts
 import { NextResponse } from "next/server"
+import { migrationLimitFields } from "@/lib/migration/migration-limits"
 import type { Prisma } from "@prisma/client"
 
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
@@ -152,6 +153,9 @@ export async function GET(req: Request) {
         integrityCheckEnabled: true,
         integrityRegionCount: true,
         integrityRegionSizeMiB: true,
+        migrationMaxParallel: true,
+        migrationMaxPerNode: true,
+        migrationMaxPerSourceHost: true,
         apiTokenEnc: true,
         sshKeyEnc: true,
         sshPassEnc: true,
@@ -376,6 +380,10 @@ async function handlePost(req: Request) {
       if (typeof integrityRegionCount === 'number') data.integrityRegionCount = integrityRegionCount
       if (typeof integrityRegionSizeMiB === 'number') data.integrityRegionSizeMiB = integrityRegionSizeMiB
     }
+    // Bulk migration limits (ui#1332): same gate; the cluster and per-node
+    // limits of a PVE target, the per-host limit of a VMware source.
+    const limitFields = migrationLimitFields(type, parseResult.data)
+    if (Object.keys(limitFields).length && await migrationFeatureLicensed()) Object.assign(data, limitFields)
 
     // SSH config (PVE + VMware)
     if (type !== 'xcpng' && type !== 'hyperv' && type !== 'nutanix') {
@@ -530,6 +538,7 @@ async function handlePost(req: Request) {
           sshUser: true, sshAuthMethod: true, sshUseSudo: true, replicationNetwork: true,
           warmZeroRateLimitMBps: true,
           integrityCheckEnabled: true, integrityRegionCount: true, integrityRegionSizeMiB: true,
+          migrationMaxParallel: true, migrationMaxPerNode: true, migrationMaxPerSourceHost: true,
           createdAt: true, updatedAt: true,
         },
       })

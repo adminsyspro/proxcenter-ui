@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   created: [] as any[],
   prisma: {} as any,
   tx: {} as any,
+  target: null as any,
 }))
 
 vi.mock("next/server", async (io) => {
@@ -100,7 +101,9 @@ beforeEach(() => {
       findMany: vi.fn(async () => [{ ...h.batch, jobs: [{ status: "full_copy" }, { status: "queued" }] }]),
     },
     migrationJob: { findMany: vi.fn(async () => h.jobs) },
+    connection: { findUnique: vi.fn(async () => h.target) },
   }
+  h.target = null
   vi.mocked(pumpBatch).mockClear()
   globalConn.findMany.mockClear()
   vi.mocked(pauseBatch).mockReset().mockResolvedValue(true)
@@ -233,6 +236,24 @@ describe("POST /api/v1/migrations/batches", () => {
 
     expect(res.status).toBe(400)
     expect((await readJson<any>(res)).error).toContain(word)
+    expect(h.validate).not.toHaveBeenCalled()
+  })
+
+  it("offers up to the target cluster's limit set in Settings (ui#1332)", async () => {
+    h.target = { migrationMaxParallel: 12 }
+    const res = await create({ ...shared, vms, concurrency: 12 })
+
+    expect(res.status).toBe(200)
+    expect(h.prisma.connection.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "tgt" } }))
+    expect(h.tx.migrationBatch.create).toHaveBeenCalledWith({ data: expect.objectContaining({ concurrency: 12 }) })
+  })
+
+  it("refuses more than the target cluster's limit, naming it", async () => {
+    h.target = { migrationMaxParallel: 8 }
+    const res = await create({ ...shared, vms, concurrency: 9 })
+
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res)).error).toContain("between 1 and 8")
     expect(h.validate).not.toHaveBeenCalled()
   })
 

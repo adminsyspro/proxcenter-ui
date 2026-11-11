@@ -24,8 +24,6 @@ export interface ColdStorageTarget {
   importFormat: "qcow2" | "raw"
   /** `<storage path>/images/<vmid>` on a file-based storage, where temp files and adopted volumes live; "" on block storage. */
   imagesDir: string
-  /** Drive options appended to the volid at attach time: discard only makes sense on a file target. */
-  driveOpts: string
 }
 
 /** Fields of a `/storage/{id}` answer this module reads. */
@@ -56,7 +54,6 @@ export function coldStorageTarget(
     isFileBased,
     importFormat: isFileBased ? "qcow2" : "raw",
     imagesDir,
-    driveOpts: isFileBased ? ",discard=on" : "",
   }
 }
 

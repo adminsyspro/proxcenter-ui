@@ -461,7 +461,7 @@ describe("runXcpngWarmMigration CBT path", () => {
     const attach = vi.mocked(pveSetVmConfig).mock.calls[0]
     expect(attach[1]).toBe("pve1")
     expect(attach[2]).toBe(900)
-    expect(attach[3].get("scsi0")).toBe("DatastoreVM:vm-900-disk-0")
+    expect(attach[3].get("scsi0")).toBe("DatastoreVM:vm-900-disk-0,discard=on,iothread=1")
     expect(attach[3].get("boot")).toBe("order=scsi0")
     expect(pveCalls.some(c => c.path === "/nodes/pve1/qemu/900/status/start" && c.method === "POST")).toBe(true)
     expect(hasLog("Target VM started")).toBe(true)
@@ -505,7 +505,7 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(messages().findIndex(m => m.startsWith("Guest network"))).toBeGreaterThan(messages().findIndex(m => m.startsWith("Guest converted")))
     // converted: a UEFI guest boots from SCSI, where it would stay on SATA otherwise
     const attach = vi.mocked(pveSetVmConfig).mock.calls[0]
-    expect(attach[3].get("scsi0")).toBe("DatastoreVM:vm-900-disk-1")
+    expect(attach[3].get("scsi0")).toBe("DatastoreVM:vm-900-disk-1,discard=on,iothread=1")
     expect(attach[3].get("boot")).toBe("order=scsi0")
     expect(attach[3].get("net0")).toBe("virtio,bridge=vmbr0,macaddr=aa:bb:cc:dd:ee:01")
     // the phases of the log, as on the VMware engine
@@ -722,7 +722,7 @@ describe("runXcpngWarmMigration checksum fallback", () => {
     // UEFI boot disk goes to sata0 (no boot-start VirtIO driver in an untouched guest)
     const attach = vi.mocked(pveSetVmConfig).mock.calls[0]
     expect(attach[2]).toBe(777)
-    expect(attach[3].get("sata0")).toBe("DatastoreVM:vm-777-disk-1")
+    expect(attach[3].get("sata0")).toBe("DatastoreVM:vm-777-disk-1,discard=on")
     expect(attach[3].get("boot")).toBe("order=sata0")
     expect(convertDisksToQcow2).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }))
     expect(prisma.statusHistory).not.toContain("converting_disks")

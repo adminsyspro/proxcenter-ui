@@ -35,17 +35,26 @@ import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Alert from '@mui/material/Alert'
+import Chip from '@mui/material/Chip'
+import IconButton from '@mui/material/IconButton'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useTheme } from '@mui/material/styles'
 
 import BridgePicker from '@/components/hardware/BridgePicker'
 import { migrationBridgeOption, sortNaturally } from '@/components/hardware/bridgeChoices'
 import { MIGRATION_CPU_TYPES, MIGRATION_CPU_TYPE_DEFAULT } from '@/lib/migration/cpu-type'
-import { MIGRATION_NIC_MODELS, MIGRATION_DISK_BUSES, HARDWARE_LIMITS, type MigrationDiskBus } from '@/lib/migration/target-overrides'
+import { MIGRATION_NIC_MODELS, MIGRATION_DISK_BUSES, MIGRATION_MAC_MODES, HARDWARE_LIMITS, type MigrationDiskBus, type MigrationMacMode } from '@/lib/migration/target-overrides'
 import {
-  autoBootBus, hardwareErrors, mergeCpuModels, scsiBootNeedsDrivers, sourceHardware, vlanTagInvalid,
-  type ReviewDiskState, type ReviewHardwareState, type ReviewNicState, type ReviewSource,
+  autoBootBus, effectiveDiskOption, hardwareErrors, mergeCpuModels, nicMacError, nicsChangeMac, scsiBootNeedsDrivers, sourceHardware, vlanTagInvalid,
+  type DiskProfileState, type ReviewDiskState, type ReviewHardwareState, type ReviewNicState, type ReviewSource,
 } from './migrationReview'
+
+/** The disk options a row can set (ui#1331), with their short label key. */
+const DISK_OPTION_CHIPS = [
+  { key: 'discard', label: 'reviewDiskOptDiscard' },
+  { key: 'iothread', label: 'reviewDiskOptIothread' },
+  { key: 'ssd', label: 'reviewDiskOptSsd' },
+] as const
 
 /** One target storage of the node, as the step-1 selector lists them (`storages?content=images`). */
 export interface StorageChoice {
@@ -123,6 +132,8 @@ export interface MigrationReviewStepProps {
   cpuNotes?: React.ReactNode
   /** UEFI sources only (#1000): enrol the Microsoft Secure Boot keys in the EFI disk. */
   efiKeys?: { value: boolean; onChange: (value: boolean) => void }
+  /** The dialog's disk profile (ui#1331), what a disk gets for an option it does not set. */
+  diskProfile: DiskProfileState
 }
 
 /** A slider over a value: linear for counts, by steps for memory (as the deploy wizard). */
@@ -183,7 +194,7 @@ const SOCKETS_SCALE = linearScale(1, 4, [1, 2, 3, 4])
 export default function MigrationReviewStep({
   source, sourceLoading, sourceName, targetConnId, targetNode, defaultBridge, canEditVlan,
   cpuType, onCpuTypeChange, hardware, onHardwareChange, disks, onDisksChange, storages, belowDisks, nics, onNicsChange,
-  busChoice, efiKeys, cpuNotes,
+  busChoice, efiKeys, cpuNotes, diskProfile,
 }: MigrationReviewStepProps) {
   const t = useTranslations()
   const theme = useTheme()
@@ -388,6 +399,7 @@ export default function MigrationReviewStep({
                 <TableCell>{t('inventoryPage.esxiMigration.reviewDiskName')}</TableCell>
                 <TableCell sx={{ minWidth: 220 }}>{t('inventoryPage.esxiMigration.reviewDiskStorage')}</TableCell>
                 {busChoice && <TableCell sx={{ width: 150 }}>{t('inventoryPage.esxiMigration.reviewDiskBus')}</TableCell>}
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>{t('inventoryPage.esxiMigration.reviewDiskOptions')}</TableCell>
                 <TableCell align="center" sx={{ width: 80, whiteSpace: 'nowrap' }}>{t('inventoryPage.esxiMigration.reviewDiskMigrate')}</TableCell>
               </TableRow>
             </TableHead>
@@ -446,6 +458,28 @@ export default function MigrationReviewStep({
                         </FormControl>
                       </TableCell>
                     )}
+                    <TableCell>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap' }} data-testid={`review-disk-${index}-options`}>
+                        {DISK_OPTION_CHIPS.map(opt => {
+                          const storageType = storages.find(st => st.storage === disk.storage)?.type
+                          const on = effectiveDiskOption(disk, opt.key, diskProfile, storageType)
+                          return (
+                            <Chip
+                              key={opt.key}
+                              size="small"
+                              label={t(`inventoryPage.esxiMigration.${opt.label}`)}
+                              color={on ? 'primary' : 'default'}
+                              variant={on ? 'filled' : 'outlined'}
+                              disabled={excluded}
+                              onClick={() => setDisk(index, { options: { ...disk.options, [opt.key]: !on } })}
+                              data-testid={`review-disk-${index}-opt-${opt.key}`}
+                              aria-pressed={on}
+                              sx={{ height: 22, fontSize: 11 }}
+                            />
+                          )
+                        })}
+                      </Box>
+                    </TableCell>
                     <TableCell align="center">
                       <Tooltip title={boot ? t('inventoryPage.esxiMigration.reviewDiskBootLocked') : ''} arrow placement="top">
                         <span>
@@ -464,6 +498,11 @@ export default function MigrationReviewStep({
               })}
             </TableBody>
           </Table>
+        )}
+        {disks.length > 0 && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }} data-testid="review-disk-options-caption">
+            {t('inventoryPage.esxiMigration.reviewDiskOptionsCaption')}
+          </Typography>
         )}
         {busChoice && scsiBootNeedsDrivers(disks, busChoice.convertGuest) && (
           <Alert severity="warning" sx={{ fontSize: 12, mt: 1.5 }} data-testid="review-scsi-boot-warning">
@@ -485,15 +524,17 @@ export default function MigrationReviewStep({
               <TableRow>
                 <TableCell>{t('inventoryPage.esxiMigration.reviewNicAdapter')}</TableCell>
                 <TableCell>{t('inventoryPage.esxiMigration.reviewNicSourceNetwork')}</TableCell>
-                <TableCell sx={{ minWidth: 200 }}>{t('inventoryPage.esxiMigration.reviewNicBridge')}</TableCell>
-                <TableCell sx={{ width: 96, whiteSpace: 'nowrap' }}>{t('inventoryPage.esxiMigration.vlanTag')}</TableCell>
-                <TableCell sx={{ width: 120 }}>{t('inventoryPage.esxiMigration.reviewNicModel')}</TableCell>
+                <TableCell sx={{ minWidth: 160 }}>{t('inventoryPage.esxiMigration.reviewNicBridge')}</TableCell>
+                <TableCell sx={{ width: 84, whiteSpace: 'nowrap' }}>{t('inventoryPage.esxiMigration.vlanTag')}</TableCell>
+                <TableCell sx={{ width: 104 }}>{t('inventoryPage.esxiMigration.reviewNicModel')}</TableCell>
+                <TableCell sx={{ width: 180 }}>{t('inventoryPage.esxiMigration.reviewNicMac')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {nics.map((nic, index) => {
                 const src = source?.nics[index]
                 const tagBad = vlanTagInvalid(nic.vlanTag)
+                const macError = nicMacError(nics, index)
                 return (
                   <TableRow key={index} data-testid={`review-nic-${index}`}>
                     <TableCell>
@@ -532,7 +573,7 @@ export default function MigrationReviewStep({
                         placeholder={t('inventoryPage.esxiMigration.vlanTagPlaceholder')}
                         onChange={e => setNic(index, { vlanTag: e.target.value.replaceAll(/[^0-9]/g, '') })}
                         error={tagBad}
-                        sx={{ width: 84 }}
+                        sx={{ width: 72 }}
                         inputProps={{ inputMode: 'numeric', maxLength: 4, 'data-testid': `review-nic-${index}-vlan` }}
                       />
                     </TableCell>
@@ -544,11 +585,45 @@ export default function MigrationReviewStep({
                         </Select>
                       </FormControl>
                     </TableCell>
+                    <TableCell>
+                      {/* One control per row: the mode list, or the MAC field once "Custom" is picked (its button goes back to Keep). */}
+                      {nic.macMode === 'custom' ? (
+                        <Tooltip title={macError ? t(`inventoryPage.esxiMigration.reviewNicMacError_${macError}`) : ''} arrow placement="top">
+                          <TextField
+                            size="small"
+                            value={nic.mac}
+                            placeholder="BC:24:11:00:00:00"
+                            onChange={e => setNic(index, { mac: e.target.value.replaceAll(/[^0-9A-Fa-f:-]/g, '').slice(0, 17) })}
+                            error={macError !== null}
+                            sx={{ width: 176 }}
+                            inputProps={{ 'data-testid': `review-nic-${index}-mac`, 'aria-label': t('inventoryPage.esxiMigration.reviewNicMac') }}
+                            InputProps={{
+                              endAdornment: (
+                                <IconButton size="small" edge="end" onClick={() => setNic(index, { macMode: 'keep', mac: '' })} aria-label={t('inventoryPage.esxiMigration.reviewNicMac_keep')} data-testid={`review-nic-${index}-mac-reset`}>
+                                  <i className="ri-close-line" style={{ fontSize: 14 }} />
+                                </IconButton>
+                              ),
+                            }}
+                          />
+                        </Tooltip>
+                      ) : (
+                        <FormControl size="small" fullWidth data-testid={`review-nic-${index}-mac-mode`}>
+                          <Select value={nic.macMode} onChange={e => setNic(index, { macMode: e.target.value as MigrationMacMode })} sx={SELECT_SX}>
+                            {MIGRATION_MAC_MODES.map(m => <MenuItem key={m} value={m}>{t(`inventoryPage.esxiMigration.reviewNicMac_${m}`)}</MenuItem>)}
+                          </Select>
+                        </FormControl>
+                      )}
+                    </TableCell>
                   </TableRow>
                 )
               })}
             </TableBody>
           </Table>
+        )}
+        {nicsChangeMac(nics) && (
+          <Alert severity="warning" sx={{ fontSize: 12, mt: 1.5 }} data-testid="review-mac-warning">
+            {t('inventoryPage.esxiMigration.macChangeWarning')}
+          </Alert>
         )}
       </Box>
     </Stack>

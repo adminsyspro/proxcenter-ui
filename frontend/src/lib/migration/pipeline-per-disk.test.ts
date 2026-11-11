@@ -373,8 +373,8 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     expect(logs).toContain('Adding disk to storage "ISO"...')
     expect(commands.some(c => c.startsWith("qm disk import "))).toBe(false)
     // attached on their own storage, discard only on the file volume
-    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0`)
-    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on`)
+    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0,discard=on,iothread=1`)
+    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on,iothread=1`)
     // the integrity check targets each disk's own copy
     const verified = vi.mocked(verifyDiskIntegrity).mock.calls.map(c => c[0])
     expect(verified).toHaveLength(2)
@@ -405,8 +405,8 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     expect(messages()).toContain("[Disk 2/2] Converting to qcow2 format...")
     const adopt = commands.find(c => c.includes("echo ADOPT_OK")) || ""
     expect(adopt).toContain(`mv -n '${tmp1}.qcow2' '/var/lib/vz/images/${VMID}/vm-${VMID}-disk-1.qcow2'`)
-    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0`)
-    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on`)
+    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0,discard=on,iothread=1`)
+    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on,iothread=1`)
   })
 
   it("live: clones both disks on ESXi, streams disk 1 to the block volume and converts disk 2 on ISO after the power-off", { timeout: 20000 }, async () => {
@@ -434,8 +434,8 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     const logs = messages()
     expect(logs).toContain("Attaching pre-streamed volumes to VM...")
     expect(logs).toContain("Converting and importing disks to Proxmox...")
-    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0`)
-    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on`)
+    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0,discard=on,iothread=1`)
+    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on,iothread=1`)
     // live mode never verifies (the clone is gone): the converted disk says so,
     // the SSH-dd block stream has no check point at all
     expect(verifyDiskIntegrity).not.toHaveBeenCalled()
@@ -457,7 +457,7 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     const commands = sshCommands()
     expect(commands.filter(c => c.startsWith("pvesm alloc "))).toHaveLength(1)
     expect(commands.some(c => c.includes("web-01_1-flat.vmdk"))).toBe(false)
-    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0`)
+    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0,discard=on,iothread=1`)
     expect(slotValue("scsi1")).toBeUndefined()
   })
 
@@ -514,8 +514,8 @@ describe("runMigrationPipeline without per-disk choices (unchanged behaviour)", 
     ])
     expect(commands.some(c => c.startsWith("mkdir -p \"/var/lib/vz/images/"))).toBe(false)
     expect(logs.some(m => m.startsWith("Temp directory:"))).toBe(false)
-    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0`)
-    expect(slotValue("scsi1")).toBe(`local-lvm:vm-${VMID}-disk-1`)
+    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0,discard=on,iothread=1`)
+    expect(slotValue("scsi1")).toBe(`local-lvm:vm-${VMID}-disk-1,discard=on,iothread=1`)
   })
 
   it("file-based default: every disk is converted into one images dir and adopted with discard", { timeout: 20000 }, async () => {
@@ -533,7 +533,7 @@ describe("runMigrationPipeline without per-disk choices (unchanged behaviour)", 
     expect(commands.some(c => c.includes(`-O qcow2 '/tmp/proxcenter-sshfs-${jobId}/web-01/web-01-flat.vmdk' '${dir}/proxcenter-mig-${jobId}-disk0.qcow2'`))).toBe(true)
     expect(commands.some(c => c.includes(`-O qcow2 '/tmp/proxcenter-sshfs-${jobId}/web-01/web-01_1-flat.vmdk' '${dir}/proxcenter-mig-${jobId}-disk1.qcow2'`))).toBe(true)
     expect(logs.filter(m => m === 'Adding disk to storage "ISO"...')).toHaveLength(2)
-    expect(slotValue("scsi0")).toBe(`ISO:${VMID}/vm-${VMID}-disk-0.qcow2,discard=on`)
-    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on`)
+    expect(slotValue("scsi0")).toBe(`ISO:${VMID}/vm-${VMID}-disk-0.qcow2,discard=on,iothread=1`)
+    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on,iothread=1`)
   })
 })

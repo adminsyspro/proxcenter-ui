@@ -16,6 +16,7 @@ import {
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { splitCreds, xcpngSubTypeOf } from "@/lib/xcpng/source"
 import { isWindowsXoVm, mapXoToPveConfig } from "../xcpngConfigMapper"
+import { diskDriveOptions } from "../target-overrides"
 import { virtioDevices } from "../configMapper"
 import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
 import { getNodeSshEndpointForMigration } from "../pve-tasks"
@@ -175,7 +176,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
         : `CBT enabled on ${cbtEnabledVdis.length} of ${vmConfig.disks.length} source disk(s), already on for the others (left as is)`, "success")
     }
     if (targetVmid == null) targetVmid = await reserveTargetVmid(pveConn, config.targetConnectionId, jobId)
-    const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
+    const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, { macPolicy: config.macPolicy })
     const shellConf = await createTargetVmShell(pveConn as any, config.targetNode, pveParams)
     createdVmid = targetVmid
     await updateJob(jobId, "enabling_cbt", { targetVmid })
@@ -449,7 +450,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       })
       if (result.converted) {
         converted = true
-        bootParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, { guestConverted: true })
+        bootParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, { guestConverted: true, macPolicy: config.macPolicy })
         const os = result.os ? ` (${result.os})` : ""
         await appendLog(jobId, `Guest converted in ${result.seconds ?? 0}s${os}: VirtIO drivers installed; the target boots from VirtIO SCSI with VirtIO NICs`, "success")
         for (const line of result.notes ?? []) await appendLog(jobId, line.msg, line.level)
@@ -481,6 +482,8 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       jobId, pveConn: pveConn as any, node: config.targetNode, vmid: targetVmid, diskCount: vmConfig.disks.length, diskSlots: bootParams.diskSlots, bootDiskSlot: bootParams.bootDiskSlot,
       allocatedVolumes, startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true, targetStorage: config.targetStorage,
       ...(bootParams !== pveParams && { nets: bootParams.nets }),
+      // ui#1331: the job profile, else discard on a thin storage and iothread on SCSI.
+      driveOpts: (_i, slot) => diskDriveOptions({ slot, storageType: storageInfo?.type, scsihw: bootParams.scsihw, profile: config.diskOptions }),
     })
     await updateJob(jobId, "completed", { progress: 100, ...warmFinalTransfer(vmConfig.disks.map(d => d.sizeBytes), copiedBytes) })
     await appendLog(jobId, "Warm migration complete", "success").catch(() => {})

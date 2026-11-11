@@ -12,7 +12,7 @@ import { renderWithProviders, screen, waitFor, fireEvent, within } from '@/__tes
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
 import MigrationReviewStep, { toNetworkChoices, formatGB } from './MigrationReviewStep'
-import type { ReviewSource } from './migrationReview'
+import { DEFAULT_DISK_PROFILE, type ReviewSource } from './migrationReview'
 
 const GIB = 1024 ** 3
 const source: ReviewSource = {
@@ -51,7 +51,7 @@ function renderStep(overrides: Partial<React.ComponentProps<typeof MigrationRevi
     cpuType: 'x86-64-v2-AES', onCpuTypeChange: vi.fn(),
     hardware: { cores: '2', sockets: '2', memoryMB: '4096' }, onHardwareChange: vi.fn(),
     disks: [onDefault, onDefault], onDisksChange: vi.fn(), storages,
-    nics: [{ bridge: 'vmbr0', vlanTag: '', model: '' }, { bridge: 'vmbr0', vlanTag: '', model: '' }], onNicsChange: vi.fn(),
+    nics: [{ bridge: 'vmbr0', vlanTag: '', model: '', macMode: 'keep' as const, mac: '' }, { bridge: 'vmbr0', vlanTag: '', model: '', macMode: 'keep' as const, mac: '' }], onNicsChange: vi.fn(), diskProfile: DEFAULT_DISK_PROFILE,
     ...overrides,
   }
   renderWithProviders(<MigrationReviewStep {...props} />)
@@ -92,7 +92,7 @@ describe('MigrationReviewStep', () => {
     })
     fireEvent.click(screen.getByRole('option', { name: /vf95117a/ }))
     expect(props.onNicsChange).toHaveBeenCalledWith([
-      { bridge: 'vmbr0', vlanTag: '', model: '' }, { bridge: 'vf95117a', vlanTag: '', model: '' },
+      { bridge: 'vmbr0', vlanTag: '', model: '', macMode: 'keep' as const, mac: '' }, { bridge: 'vf95117a', vlanTag: '', model: '', macMode: 'keep' as const, mac: '' },
     ])
   })
 
@@ -277,5 +277,49 @@ describe('MigrationReviewStep: CPU notes (#1000)', () => {
     seedNode()
     renderStep()
     expect(screen.queryByTestId('review-cpu-notes')).toBeNull()
+  })
+})
+
+describe('MigrationReviewStep MAC and disk options (ui#1330, ui#1331)', () => {
+  it('shows a MAC field for a custom MAC, flags a bad one and warns about the guest side', () => {
+    seedNode()
+    renderStep({ nics: [
+      { bridge: 'vmbr0', vlanTag: '', model: '', macMode: 'custom', mac: '01:00:5E:00:00:01' },
+      { bridge: 'vmbr0', vlanTag: '', model: '', macMode: 'keep', mac: '' },
+    ] })
+    const field = screen.getByTestId('review-nic-0-mac') as HTMLInputElement
+    expect(field.value).toBe('01:00:5E:00:00:01')
+    expect(field.getAttribute('aria-invalid')).toBe('true')
+    expect(screen.queryByTestId('review-nic-1-mac')).toBeNull()
+    expect(screen.getByTestId('review-mac-warning')).toBeTruthy()
+  })
+
+  it('has no MAC warning while every NIC keeps its source MAC', () => {
+    seedNode()
+    renderStep()
+    expect(screen.queryByTestId('review-mac-warning')).toBeNull()
+  })
+
+  it('switches a NIC to a custom MAC from its mode list', async () => {
+    seedNode()
+    const props = renderStep()
+    fireEvent.mouseDown(within(screen.getByTestId('review-nic-1-mac-mode')).getByRole('combobox'))
+    fireEvent.click(await screen.findByRole('option', { name: 'Custom' }))
+    expect(props.onNicsChange).toHaveBeenCalledWith([
+      expect.objectContaining({ macMode: 'keep' }),
+      expect.objectContaining({ macMode: 'custom' }),
+    ])
+  })
+
+  it('shows each disk with the options the profile gives it, and records a click as that disk choice', () => {
+    seedNode()
+    // san-lvm is thick LVM: no discard by default; tank (ZFS) is thin.
+    const props = renderStep({ disks: [onDefault, { storage: 'tank', exclude: false }] })
+    expect(screen.getByTestId('review-disk-0-opt-discard').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByTestId('review-disk-1-opt-discard').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('review-disk-0-opt-iothread').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('review-disk-0-opt-ssd').getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(screen.getByTestId('review-disk-1-opt-ssd'))
+    expect(props.onDisksChange).toHaveBeenCalledWith([onDefault, { storage: 'tank', exclude: false, options: { ssd: true } }])
   })
 })

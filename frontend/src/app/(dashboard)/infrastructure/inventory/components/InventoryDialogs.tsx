@@ -54,9 +54,12 @@ import { EL10_CPU_TYPE, cpuModelLevel, cpuTooLowForEl10 } from '@/lib/migration/
 import { diskControllerLabel } from '@/lib/proxmox/diskController'
 import MigrationLogLines from './MigrationLogLines'
 import MigrationReviewStep from './MigrationReviewStep'
+import DiskProfileField from './DiskProfileField'
+import BulkNetworkMapTable from './BulkNetworkMapTable'
+import { buildNetworkMapPayload, rowTagInvalid, type BulkNetworkRow } from './bulkNetworkMap'
 import type { GuestConversionReadiness } from '@/lib/migration/warm/guest-conversion-node'
 import { mergeVirtV2vSupport, windowsUnsupportedByVirtV2v, type VirtV2vSupport } from '@/lib/migration/warm/virt-v2v-windows'
-import { initialHardwareState, initialNicState, initialDiskState, reviewIsValid, buildHardwarePayload, buildNicsPayload, buildDisksPayload, keptReviewDisks, reviewDiskStorages, tempStorageTypeFor, warmSpaceNeeds, type ReviewSource, type ReviewSourceDisk, type ReviewHardwareState, type ReviewNicState, type ReviewDiskState } from './migrationReview'
+import { initialHardwareState, initialNicState, initialDiskState, reviewIsValid, buildHardwarePayload, buildNicsPayload, buildDisksPayload, buildDiskOptionsPayload, DEFAULT_DISK_PROFILE, type DiskProfileState, keptReviewDisks, reviewDiskStorages, tempStorageTypeFor, warmSpaceNeeds, type ReviewSource, type ReviewSourceDisk, type ReviewHardwareState, type ReviewNicState, type ReviewDiskState } from './migrationReview'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 // Dependency-free eligibility check (NOT ./cbt, which pulls the server-only SOAP client).
@@ -827,6 +830,18 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
   // useMigrationOptions because the only way into the review step is
   // enterReview, which seeds the rows afresh from the source VM every time.
   const [migDisks, setMigDisks] = useState<ReviewDiskState[]>([])
+  // Disk profile of both dialogs (ui#1331) and, in the bulk dialog, the MAC
+  // policy (ui#1330) and the source network table (ui#1333). Reset each time
+  // a dialog opens, so a choice made for one wave never carries over.
+  const [migDiskProfile, setMigDiskProfile] = useState<DiskProfileState>(DEFAULT_DISK_PROFILE)
+  const [bulkRegenerateMacs, setBulkRegenerateMacs] = useState(false)
+  const [bulkNetworkRows, setBulkNetworkRows] = useState<BulkNetworkRow[]>([])
+  React.useEffect(() => {
+    if (!esxiMigrateVm && !bulkMigOpen) return
+    setMigDiskProfile(DEFAULT_DISK_PROFILE)
+    setBulkRegenerateMacs(false)
+    setBulkNetworkRows([])
+  }, [esxiMigrateVm, bulkMigOpen])
   const isVmwareSource = esxiMigrateVm?.hostType === 'vmware' || esxiMigrateVm?.hostType === 'vcenter'
   React.useEffect(() => {
     if (!esxiMigrateVm) { setSourceDatastores([]); setSourceVmDetail(null); setMigDisks([]); return }
@@ -1590,6 +1605,11 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the levels belong to the connection only
   }, [migTargetConn, !!esxiMigrateVm, bulkMigOpen])
+  // The selected VMs of the bulk dialog, for its network table (ui#1333).
+  const bulkSelectedVmids = React.useMemo(
+    () => (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid)).map((vm: any) => String(vm.vmid)),
+    [bulkMigHostInfo, bulkMigSelected],
+  )
   const bulkEl10Names: string[] = bulkMigOpen
     ? (bulkMigHostInfo?.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid) && vm.el10 === true).map((vm: any) => String(vm.name))
     : []
@@ -2198,6 +2218,7 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
     // The Bus column only exists for a warm run from VMware, the engine that applies it.
     const reviewDisks = buildDisksPayload(migDisks, { withBus: migType === 'warm' && isVmwareSource })
     const reviewNics = buildNicsPayload(migNics, canEditVlan)
+    const diskOptions = buildDiskOptionsPayload(migDiskProfile)
     if (!esxiMigrateVm) return
     setMigStarting(true)
     try {
@@ -2238,6 +2259,8 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
           ...(isVmwareSource && migStep === 'review' && reviewHardware && { hardware: reviewHardware }),
           ...(isVmwareSource && migStep === 'review' && reviewDisks && { disks: reviewDisks }),
           ...(isVmwareSource && migStep === 'review' && reviewNics && { nics: reviewNics }),
+          // Disk profile (ui#1331), every source: only departures from the defaults travel.
+          ...(diskOptions && { diskOptions }),
           // Warm only, and single-VM only: the switch is hidden
           // everywhere else, so the payload is gated on the type too
           // rather than trusting the UI state.
@@ -4323,6 +4346,9 @@ return
                     label={<Typography variant="body2">{t('inventoryPage.esxiMigration.startAfterMigration')}</Typography>}
                   />
 
+                  {/* Disk profile of the target disks (ui#1331), every source. */}
+                  <DiskProfileField value={migDiskProfile} onChange={setMigDiskProfile} />
+
                   {/* Post-migration qcow2 conversion (#595) — thick LVM targets only */}
                   {renderAutomaticCutoverSwitch()}
                   {renderConvertGuestSwitch(esxiMigrateVm?.hostType)}
@@ -4426,6 +4452,7 @@ return
                 </>
               )}
               nics={migNics}
+              diskProfile={migDiskProfile}
               onNicsChange={setMigNics}
               busChoice={migType === 'warm' ? { convertGuest: migConvertGuest } : undefined}
               cpuNotes={renderCpuLevelNotes(singleEl10Names)}
@@ -5126,6 +5153,20 @@ return
                               : undefined}
                           />
                         </Box>
+                        {/* Source network table (ui#1333): VMware sources, whose engines map port groups. */}
+                        {(bulkMigHostInfo?.hostType === 'vmware' || bulkMigHostInfo?.hostType === 'vcenter') && migTargetConn && (
+                          <BulkNetworkMapTable
+                            sourceConnId={bulkMigHostInfo.connectionId}
+                            targetConnId={migTargetConn}
+                            targetNode={migTargetNode === '__auto__' ? (migNodeOptions.find((o: any) => o.connId === migTargetConn)?.node || '') : migTargetNode}
+                            vmids={bulkSelectedVmids}
+                            defaultBridge={migNetworkBridge}
+                            defaultVlanTag={canEditVlan ? migVlanTag : ''}
+                            canEditVlan={canEditVlan}
+                            rows={bulkNetworkRows}
+                            onRowsChange={setBulkNetworkRows}
+                          />
+                        )}
                       </>
                     )}
                   </Stack>
@@ -5465,6 +5506,16 @@ return
 
                 {/* Post-migration qcow2 conversion (#595) — thick LVM targets only */}
                 {renderQcow2ConvertSwitch()}
+
+                {/* Disk profile (ui#1331) and MAC policy (ui#1330) of the whole batch. */}
+                <DiskProfileField value={migDiskProfile} onChange={setMigDiskProfile} />
+                <FormControlLabel
+                  control={<Switch size="small" checked={bulkRegenerateMacs} onChange={(_, v) => setBulkRegenerateMacs(v)} data-testid="bulk-regenerate-macs" />}
+                  label={<Typography variant="body2">{t('inventoryPage.esxiMigration.bulkRegenerateMacs')}</Typography>}
+                />
+                {bulkRegenerateMacs && (
+                  <Alert severity="warning" sx={{ fontSize: 12 }} data-testid="bulk-mac-warning">{t('inventoryPage.esxiMigration.macChangeWarning')}</Alert>
+                )}
                 </Stack>
               </Box>
               </Box>
@@ -5901,6 +5952,8 @@ return
                   if (bulkCopy.problems.length > 0) return true
                   // A target node is being checked for, or lacks, the warm runtime.
                   if (migType === 'warm' && bulkWarm.blocked) return true
+                  // A row of the network table holds a VLAN tag that is not one (ui#1333).
+                  if (bulkNetworkRows.some(rowTagInvalid)) return true
                   return false
                 })()}
                 sx={{ textTransform: 'none' }}
@@ -5909,6 +5962,8 @@ return
                   if (!bulkMigHostInfo) return
                   setBulkMigStarting(true)
                   setBulkStartError(null)
+                  const bulkDiskOptions = buildDiskOptionsPayload(migDiskProfile)
+                  const bulkNetworkMap = buildNetworkMapPayload(bulkNetworkRows, canEditVlan)
                   const vmsToMigrate = bulkMigHostInfo.vms.filter((vm: any) => bulkMigSelected.has(vm.vmid))
                   // Round-robin over the target nodes: Auto spreads over the online
                   // nodes of the chosen cluster, a single node takes every VM. Same
@@ -5983,6 +6038,11 @@ return
                         ...(migType === 'warm' && (bulkMigHostInfo.hostType === 'vmware' || isVcenterBulk || bulkMigHostInfo.hostType === 'xcpng') && { convertGuest: migConvertGuest }),
                         // Thick zeroing cap of a warm batch (roadmap#45).
                         ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && { zeroRateLimitMBps: Number(migZeroRateLimit.trim()) }),
+                        // MAC policy and disk profile of the batch (ui#1330, #1331), every source;
+                        // the network table (ui#1333) on VMware sources, whose engines match port groups.
+                        ...(bulkRegenerateMacs && { macPolicy: 'regenerate' as const }),
+                        ...(bulkDiskOptions && { diskOptions: bulkDiskOptions }),
+                        ...(bulkNetworkMap && (bulkMigHostInfo.hostType === 'vmware' || isVcenterBulk) && { networkMap: bulkNetworkMap }),
                         // VMkernel adapter of the copy (roadmap#53), ESXi-direct batches only.
                         ...(showCopyVmk && migCopyVmk && copyVnic && { copyVmk: migCopyVmk }),
                         concurrency: bulkConcurrency,

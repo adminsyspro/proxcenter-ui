@@ -142,6 +142,7 @@ export async function jobStillAuthorized(b: BatchAuthorizationInput, job: Pick<S
     targetVmid: typeof c.targetVmid === "number" ? c.targetVmid : undefined,
     networkBridge: String(c.networkBridge ?? ""), vlanTag: typeof c.vlanTag === "number" ? c.vlanTag : undefined,
     nics: Array.isArray(c.nics) ? c.nics : undefined,
+    networkMap: Array.isArray(c.networkMap) ? c.networkMap : undefined,
   })
   for (const need of needs) {
     if (!(await hasPermission({ userId, permission: need.permission, resourceType: need.resourceType, resourceId: need.resourceId, tenantId: b.tenantId }))) return false

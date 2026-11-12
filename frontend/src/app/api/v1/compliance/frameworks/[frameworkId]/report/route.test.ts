@@ -17,6 +17,9 @@ let brandingOwner = 'tenant-1'
 const getSettingMock = vi.fn<(key: string, tenantId: string) => Promise<any>>()
 const getAssetMock = vi.fn<(tenantId: string, kind: string, slot: string) => Promise<any>>()
 
+// roadmap#224: the IaaS gate is covered by lib/tenant/iaasGuard.complianceRoutes.test.ts;
+// here the caller is a provider or MSP tenant.
+vi.mock('@/lib/tenant/iaasGuard', () => ({ denyIaasTenant: vi.fn(async () => null) }))
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({
     connection: { findUnique: findUniqueMock },

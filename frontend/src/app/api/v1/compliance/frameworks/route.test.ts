@@ -13,6 +13,9 @@ const verifyConnectionOwnershipMock = vi.fn<(id: string) => Promise<Response | n
 const collectHardeningDataMock = vi.fn<(opts: any) => Promise<any>>()
 const requireEnterpriseMock = vi.fn<() => Promise<Response | null>>()
 
+// roadmap#224: the IaaS gate is covered by lib/tenant/iaasGuard.complianceRoutes.test.ts;
+// here the caller is a provider or MSP tenant.
+vi.mock('@/lib/tenant/iaasGuard', () => ({ denyIaasTenant: vi.fn(async () => null) }))
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({
     connection: { findUnique: findUniqueMock },

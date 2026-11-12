@@ -58,6 +58,24 @@ export async function authorizeMigrationTarget(r: MigrationTargetRequest): Promi
   return null
 }
 
+/**
+ * Null when the caller may run a migration's checks or setup on a target
+ * node (the preflight, "Prepare this node"), else the response to return.
+ * Both routes run commands on the node with the provider's credentials, so
+ * they share this gate rather than each keeping a copy of it:
+ * - the tenant must be one that may migrate to the target cluster (and from
+ *   the source, when one is named): a vDC tenant never, an MSP only on its
+ *   own connections; 404 so nothing is learnt about other connections;
+ * - then vm.migrate on the source connection and on the target node.
+ */
+export async function authorizeMigrationNode(r: { tenantId: string; targetConnectionId: string; targetNode: string; sourceConnectionId?: string }): Promise<Response | null> {
+  const ends = r.sourceConnectionId ? [r.sourceConnectionId] : []
+  if (!canMigrateConnections(await getTenantInfrastructureScope(r.tenantId), r.targetConnectionId, ...ends)) {
+    return NextResponse.json({ error: "Connection not found" }, { status: 404 })
+  }
+  return denyMigrationEnds(r.sourceConnectionId, r.targetConnectionId, [r.targetNode])
+}
+
 export interface PermissionNeed {
   permission: string
   resourceType: "connection" | "vm"

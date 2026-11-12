@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { denyMigrationEnds } from "@/lib/migration/authorize"
+import { authorizeMigrationNode } from "@/lib/migration/authorize"
 import { runV2vPreflight, installV2vPackages, installVirtV2vBackport, startVirtioWinDownload, checkVirtioWinProgress } from "@/lib/migration/v2v-preflight"
 import { runWarmNodePreflight } from "@/lib/migration/warm/vddk-preflight"
 import { runXcpngWarmNodePreflight } from "@/lib/migration/warm/xcpng-node-preflight"
@@ -15,7 +15,6 @@ import { readClusterCpuLevels } from "@/lib/migration/cpu-level-nodes"
 import { readVmCopyInterfaces } from "@/lib/vmware/copy-interfaces-server"
 import { prisma } from "@/lib/db/prisma"
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
-import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { safeLog } from "@/lib/log/sanitize"
 
 export const runtime = "nodejs"
@@ -59,13 +58,9 @@ export async function POST(req: Request) {
   // The preflight runs commands on the target node and opens sessions on the
   // source with its stored credentials: only for clusters the caller may
   // migrate between, as the migration itself (a vDC tenant never, an MSP only
-  // on its own connections). 404 so nothing is learnt about other connections.
-  const infra = await getTenantInfrastructureScope(await getCurrentTenantId())
-  if (!canMigrateConnections(infra, targetConnectionId, ...(sourceConnectionId ? [sourceConnectionId] : []))) {
-    return NextResponse.json({ error: "Connection not found" }, { status: 404 })
-  }
-  const deniedEnds = await denyMigrationEnds(sourceConnectionId, targetConnectionId, [targetNode])
-  if (deniedEnds) return deniedEnds
+  // on its own connections), the same gate as "Prepare this node".
+  const deniedNode = await authorizeMigrationNode({ tenantId: await getCurrentTenantId(), targetConnectionId, targetNode, sourceConnectionId })
+  if (deniedNode) return deniedNode
 
   try {
     if (action === "install") {

@@ -2,39 +2,35 @@ export const dynamic = "force-dynamic"
 // src/app/api/v1/rbac/assignments/route.ts
 import { NextRequest, NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
 import { nanoid } from "nanoid"
 
-import { authOptions } from "@/lib/auth/config"
+import { authorizeAdminRead, getActingSession } from "@/lib/auth/actingUser"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { hasPermission, isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { hasPermission, isUserSuperAdmin, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
 import { isServiceDeskManaged } from "@/lib/rbac/serviceDesk"
 import { validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 // GET /api/v1/rbac/assignments - Liste toutes les assignations
-export async function GET(req: NextRequest) {
+async function handleGet(req: NextRequest) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const reader = await authorizeAdminRead(PERMISSIONS.ADMIN_RBAC_VIEW)
+    if (reader.denied) return reader.denied
 
     const tenantId = await getCurrentTenantId()
     const url = new URL(req.url)
     const userIdFilter = url.searchParams.get("user_id")
     const roleIdFilter = url.searchParams.get("role_id")
 
-    const callerIsSuperAdmin = await isUserSuperAdmin(session.user.id)
+    const callerIsSuperAdmin = reader.isSuperAdmin
     const now = new Date()
 
     // Hide every trace of protected roles (super_admin + provider_admin) —
@@ -219,13 +215,15 @@ return NextResponse.json(
   }
 }
 
+export const GET = withPublicApiGuard("rbac-assignments-list", handleGet)
+
 // POST /api/v1/rbac/assignments - Assigner un rôle à un utilisateur
 async function handlePost(req: NextRequest) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
 
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

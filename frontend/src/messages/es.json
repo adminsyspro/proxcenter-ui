@@ -4339,7 +4339,12 @@
           "nodes": "Nodos y clúster",
           "automation": "Automatización",
           "alerts": "Alertas",
-          "reports": "Informes"
+          "reports": "Informes",
+          "tenants": "Inquilinos",
+          "vdcs": "vDC y zonas EVPN",
+          "ipam": "IPAM",
+          "rbac": "Roles y asignaciones",
+          "users": "Usuarios"
         },
         "subScopes": {
           "vmsPower": "Encendido",
@@ -4366,8 +4371,8 @@
         "confirm": "Confirmar",
         "writeWarning": "Los scopes de escritura permiten al token crear, modificar y eliminar recursos reales.",
         "scopeNotGrantable": "Sus propios permisos no permiten conceder este scope para el tenant y las conexiones seleccionados.",
-        "scopesLoading": "Comprobando qué scopes de escritura puede conceder...",
-        "grantableError": "No se pudo comprobar qué scopes de escritura puede conceder. Cierre y vuelva a abrir el diálogo para reintentarlo.",
+        "scopesLoading": "Comprobando qué scopes puede conceder...",
+        "grantableError": "No se pudo comprobar qué scopes puede conceder. Cierre y vuelva a abrir el diálogo para reintentarlo.",
         "writeRateLimit": "Escrituras por minuto",
         "writeRateLimitHelp": "Peticiones de escritura que este token puede enviar por minuto, contadas aparte de las lecturas."
       },

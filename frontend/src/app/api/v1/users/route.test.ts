@@ -30,6 +30,10 @@ const transactionMock = vi.fn(async (ops: any[]) => ops)
 const sessionGroupByMock = vi.fn()
 const sessionCountMock = vi.fn()
 
+// API token guard: pass-through, these tests drive the session path (token
+// paths: routeGuard.test.ts, tenancyTokenScope.test.ts).
+vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
+vi.mock("@/lib/auth/actingUser", async () => (await import("@/__tests__/fixtures/actingUserFromNextAuth")).actingUserFromNextAuth())
 vi.mock("next-auth", () => ({ getServerSession: vi.fn(async () => ({ user: { id: "admin" } })) }))
 vi.mock("@/lib/auth/config", () => ({ authOptions: {} }))
 vi.mock("@/lib/auth/password", () => ({ hashPassword: hashPasswordMock }))
@@ -340,7 +344,7 @@ describe("/api/v1/users English error messages", () => {
   it("GET 500 'Server error' when the permission check throws without a message", async () => {
     checkPermissionMock.mockRejectedValue({})
     const GET = await importGET()
-    await expectError(await GET(), 500, "Server error")
+    await expectError(await GET(new Request("http://t/api/v1/users")), 500, "Server error")
   })
 
   it("POST 400 'Email and password are required'", async () => {

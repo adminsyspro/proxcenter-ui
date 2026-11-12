@@ -440,7 +440,7 @@ describe('gesture 3: bounded derogation', () => {
   })
 
   it('answers the existing cookie 401 to an OPTIONS preflight on a non-allowlisted path', async () => {
-    const res = await proxy(apiRequest('/api/v1/users', { method: 'OPTIONS' }))
+    const res = await proxy(apiRequest('/api/v1/audit', { method: 'OPTIONS' }))
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: 'Not authenticated' })
   })

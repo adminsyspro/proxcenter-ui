@@ -2,12 +2,10 @@ export const dynamic = "force-dynamic"
 // src/app/api/v1/rbac/assignments/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
-import { authOptions } from "@/lib/auth/config"
+import { authorizeAdminRead, getActingSession } from "@/lib/auth/actingUser"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { hasPermission, isUserSuperAdmin, isUserProtected, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
 import { isServiceDeskManaged } from "@/lib/rbac/serviceDesk"
 import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
@@ -15,6 +13,7 @@ import { scopeIncludes, validateAssignmentScope } from "@/lib/rbac/scope-validat
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 /**
  * Build the `where` clause for a single-assignment lookup. Provider-tenant
@@ -39,10 +38,10 @@ interface RouteContext {
  */
 async function denyIfAssignmentTouchesProtected(
   assignment: { roleId: string; userId: string } | null,
-  callerUserId: string
+  callerUserId: string | undefined
 ): Promise<NextResponse | null> {
   if (!assignment) return null
-  if (await isUserSuperAdmin(callerUserId)) return null
+  if (callerUserId && (await isUserSuperAdmin(callerUserId))) return null
   if (
     (PROTECTED_ROLE_IDS as readonly string[]).includes(assignment.roleId) ||
     (await isUserProtected(assignment.userId))
@@ -53,16 +52,13 @@ async function denyIfAssignmentTouchesProtected(
 }
 
 // GET /api/v1/rbac/assignments/[id] - Détails d'une assignation
-export async function GET(req: NextRequest, context: RouteContext) {
+async function handleGet(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const reader = await authorizeAdminRead(PERMISSIONS.ADMIN_RBAC_VIEW)
+    if (reader.denied) return reader.denied
 
     const { id } = await context.params
     const tenantId = await getCurrentTenantId()
@@ -82,7 +78,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
     const superAdminBlock = await denyIfAssignmentTouchesProtected(
       { roleId: assignment.roleId, userId: assignment.userId },
-      session.user.id,
+      reader.userId,
     )
     if (superAdminBlock) return superAdminBlock
 
@@ -115,13 +111,15 @@ return NextResponse.json(
   }
 }
 
+export const GET = withPublicApiGuard("rbac-assignment-get", handleGet)
+
 // DELETE /api/v1/rbac/assignments/[id] - Supprimer une assignation
 async function handleDelete(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
 
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -210,7 +208,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
 
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkGrants } from './index'
+import { checkGrants, grantsPermission, isGlobalScopePermission } from './index'
 import { emptyDenyInfraScope, isFlatRecordVisible } from './infraScope'
 
 /**
@@ -67,5 +67,32 @@ describe('S7 — empty deny scope hides every record', () => {
     const scope = emptyDenyInfraScope()
     expect(isFlatRecordVisible(scope, { connId: 'conn-1', node: 'pve1', vmid: '110' })).toBe(false)
     expect(isFlatRecordVisible(scope, { connId: 'conn-1' })).toBe(false)
+  })
+})
+
+// Issue #1360: the read-only children of the admin rights stay tenant-wide.
+describe('admin view permissions (admin.*.view)', () => {
+  it('are global-scope permissions, like their parent; other children are not', () => {
+    for (const p of ['admin.users.view', 'admin.rbac.view', 'admin.settings.view', 'admin.tenants.view']) {
+      expect(isGlobalScopePermission(p), p).toBe(true)
+    }
+    expect(isGlobalScopePermission('admin.users')).toBe(true)
+    expect(isGlobalScopePermission('vm.view')).toBe(false)
+    expect(isGlobalScopePermission('sdn.vnet.view')).toBe(false)
+    expect(isGlobalScopePermission('admin')).toBe(false)
+  })
+
+  it('are implied by their parent right', () => {
+    expect(grantsPermission(new Set(['admin.users']), 'admin.users.view')).toBe(true)
+    expect(grantsPermission(new Set(['admin.settings']), 'admin.settings.view')).toBe(true)
+    expect(grantsPermission(new Set(['admin.users.view']), 'admin.users')).toBe(false)
+  })
+
+  it('need a global grant when checked without a resource, even through the parent', () => {
+    const narrow = { superAdmin: false, byScope: [grant('node', 'conn-1:pve1', 'admin.users', 'admin.rbac.view')] }
+    expect(checkGrants(narrow, 'admin.users.view')).toBe(false)
+    expect(checkGrants(narrow, 'admin.rbac.view')).toBe(false)
+    const global = { superAdmin: false, byScope: [grant('global', null, 'admin.users')] }
+    expect(checkGrants(global, 'admin.users.view')).toBe(true)
   })
 })

@@ -430,7 +430,7 @@ describe('ApiTokensTab', () => {
     await waitFor(() => {
       expect(within(dialog).getAllByRole('combobox').length).toBe(1)
     })
-    expect(within(dialog).queryByLabelText(/tenant/i)).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText(/^tenant$/i)).not.toBeInTheDocument()
 
     await userEvent.type(within(dialog).getByLabelText(/name/i), 'ci-fallback')
     await userEvent.click(vmsReadButton(dialog))

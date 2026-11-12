@@ -5,6 +5,7 @@ import { PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { evpnContextForVdc } from "@/lib/vdc/evpnNetworks"
 import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -13,8 +14,8 @@ type RouteContext = { params: Promise<{ id: string }> | { id: string }; principa
 // GET /api/v1/vdcs/{id}/evpn-networks
 // Whether the vDC is attached to a shared EVPN zone (#1334), the vDCs of the
 // tenant attached to the same zone, and the networks it holds there.
-// Session only: the route is not part of the public token API.
-export async function GET(_req: Request, ctx: RouteContext) {
+// Public API: scope vdcs:read or network:write (issue #1360).
+async function handleGet(_req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
@@ -35,3 +36,5 @@ export async function GET(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vdc-evpn-networks", handleGet)

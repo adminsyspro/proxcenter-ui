@@ -4328,7 +4328,12 @@
           "nodes": "Knoten und Cluster",
           "automation": "Automatisierung",
           "alerts": "Alarme",
-          "reports": "Berichte"
+          "reports": "Berichte",
+          "tenants": "Mandanten",
+          "vdcs": "vDCs und EVPN-Zonen",
+          "ipam": "IPAM",
+          "rbac": "Rollen und Zuweisungen",
+          "users": "Benutzer"
         },
         "subScopes": {
           "vmsPower": "Ein/Aus",
@@ -4355,8 +4360,8 @@
         "confirm": "Bestätigen",
         "writeWarning": "Schreib-Scopes erlauben dem Token, echte Ressourcen zu erstellen, zu ändern und zu löschen.",
         "scopeNotGrantable": "Ihre eigenen Berechtigungen erlauben es nicht, diesen Scope für den gewählten Mandanten und die gewählten Verbindungen zu vergeben.",
-        "scopesLoading": "Prüfung, welche Schreib-Scopes Sie vergeben dürfen...",
-        "grantableError": "Es konnte nicht geprüft werden, welche Schreib-Scopes Sie vergeben dürfen. Schließen und öffnen Sie den Dialog erneut.",
+        "scopesLoading": "Prüfung, welche Scopes Sie vergeben dürfen...",
+        "grantableError": "Es konnte nicht geprüft werden, welche Scopes Sie vergeben dürfen. Schließen und öffnen Sie den Dialog erneut.",
         "writeRateLimit": "Schreibvorgänge pro Minute",
         "writeRateLimitHelp": "Schreibanfragen, die dieses Token pro Minute senden darf, getrennt von Lesezugriffen gezählt."
       },

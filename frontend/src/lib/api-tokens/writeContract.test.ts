@@ -68,6 +68,9 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
 const HANDLER_PERIMETER_IDS = [
   'gfr-probe', 'gfr-job-create', 'gfr-job-cancel',
   'vdc-vnets-list', 'vdc-vnet-create', 'vdc-vnet-get', 'vdc-vnet-update', 'vdc-vnet-delete',
+  // Multi-tenant reads (issue #1360): the handler filters on the token perimeter.
+  'vdc-vnet-ipam', 'vdc-vnet-ipam-next-free', 'vdcs-list', 'admin-vdcs-list', 'admin-vdc-get',
+  'vdc-evpn-networks', 'evpn-zones-list', 'evpn-zone-get', 'vdc-moves-list', 'vdc-move-get',
 ]
 
 /** GET handlers of a file opened in write that stay closed (spec: consoles only). */
@@ -306,8 +309,8 @@ describe('write contract: a read-only token is refused every write (getPrincipal
     await seedDefaultTenant()
   })
 
-  it('(e) a token with the 7 read scopes gets 403 on each write entry', async () => {
-    expect(READ_SCOPE_IDS).toHaveLength(7)
+  it('(e) a token with the 12 read scopes gets 403 on each write entry', async () => {
+    expect(READ_SCOPE_IDS).toHaveLength(12)
     const { secret } = await seedApiToken({ scopes: [...READ_SCOPE_IDS] })
     for (const entry of writeEntries) {
       const sample = samplePath(entry)

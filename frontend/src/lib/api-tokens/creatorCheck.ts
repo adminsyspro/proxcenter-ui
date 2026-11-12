@@ -10,7 +10,7 @@ import { holdsBroadPermission, isUserSuperAdmin } from "@/lib/rbac"
 import { userHasAccessToTenant } from "@/lib/tenant"
 
 import { holdsWriteScope } from "./grantable"
-import { isWriteScope } from "./scopes"
+import { isCreatorCheckedScope } from "./scopes"
 
 const TTL_MS = 60_000
 
@@ -61,10 +61,10 @@ async function cachedVerdict(cacheKey: string, compute: () => Promise<boolean>):
   return verdict
 }
 
-/** Whether the creator still holds every permission key of the write scope `scopeId`. */
+/** Whether the creator still holds every permission key of the creator-checked scope `scopeId`. */
 export function creatorStillHolds(token: CreatorToken, scopeId: string): Promise<boolean> {
   return cachedVerdict(`${token.tokenId}:${scopeId}`, async () =>
-    isWriteScope(scopeId) &&
+    isCreatorCheckedScope(scopeId) &&
     creatorPasses(token, userId => holdsWriteScope(userId, token.tenantId, scopeId, token.connectionIds)))
 }
 

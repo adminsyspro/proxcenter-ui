@@ -296,6 +296,15 @@ describe('holdsBroadPermission', () => {
     expect(m.prisma.rbacUserRole.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ userId: 'u1', tenantId: 't1' }) }))
   })
 
+  it('never makes a tenant-wide admin right broad through connection grants (issue #1360)', async () => {
+    grantRole(['admin.users', 'admin.settings.view'], 'connection', 'c1')
+    expect(await holdsBroadPermission('u1', 't1', 'admin.users.view', ['c1'])).toBe(false)
+    expect(await holdsBroadPermission('u1', 't1', 'admin.settings.view', ['c1'])).toBe(false)
+    grantRole(['admin.users'])
+    expect(await holdsBroadPermission('u1', 't1', 'admin.users.view', ['c1'])).toBe(true)
+    expect(await holdsBroadPermission('u1', 't1', 'admin.users.view', null)).toBe(true)
+  })
+
   it('a connection grant covers exactly its connection', async () => {
     grantRole(['vm.start'], 'connection', 'c1')
     expect(await holdsBroadPermission('u1', 't1', 'vm.start', ['c1'])).toBe(true)

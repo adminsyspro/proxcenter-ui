@@ -93,6 +93,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   { id: "admin.tenants", name: "admin.tenants", category: "admin", description: "Manage tenants (multi-tenancy)", isDangerous: true },
   { id: "admin.apitokens", name: "admin.apitokens", category: "admin", description: "Manage API tokens (create, revoke)", isDangerous: true },
   { id: "admin.identity", name: "admin.identity", category: "admin", description: "Manage the tenant's own identity provider, when the provider allows it", isDangerous: true },
+  { id: "admin.users.view", name: "admin.users.view", category: "admin", description: "View users and their tenant memberships (implied by admin.users)" },
+  { id: "admin.rbac.view", name: "admin.rbac.view", category: "admin", description: "View roles, permissions and role assignments (implied by admin.rbac)" },
+  { id: "admin.settings.view", name: "admin.settings.view", category: "admin", description: "View provider settings: vDCs, EVPN zones, storage policies (implied by admin.settings)" },
+  { id: "admin.tenants.view", name: "admin.tenants.view", category: "admin", description: "View tenants and their members (implied by admin.tenants)" },
 
   // SDN / VNet
   { id: "sdn.vnet.view", name: "sdn.vnet.view", category: "sdn", description: "List and view VNets in own vDCs" },

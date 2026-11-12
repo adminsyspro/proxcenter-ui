@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth/config"
+import type { Principal } from "@/lib/auth/principal"
+import { filterToTokenPerimeter } from "@/lib/api-tokens/scope"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getVdcById, updateVdc, deleteVdc } from "@/lib/vdc"
 import { mapCreateVdcError } from "@/lib/vdc/httpErrors"
@@ -10,13 +10,14 @@ import { normalizeIdList } from "@/lib/templates/catalogGrants"
 import { listBindingsForVdc } from "@/lib/db/vdcPbsBindings"
 import { unbindFromVdc } from "@/lib/vdc/pbsOrchestrator"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
-type RouteContext = { params: Promise<{ id: string }> | { id: string } }
+type RouteContext = { params: Promise<{ id: string }> | { id: string }; principal?: Principal }
 
 // GET /api/v1/admin/vdcs/[id] — get vDC detail
-export async function GET(_req: Request, ctx: RouteContext) {
+async function handleGet(_req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -25,19 +26,23 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS_VIEW)
     if (denied) return denied
 
     const vdc = await getVdcById(id)
-    if (!vdc) {
+    // A vDC on a connection outside a token's perimeter does not exist for it.
+    const [visible] = vdc ? await filterToTokenPerimeter([vdc], ctx.principal, v => [v.connectionId]) : []
+    if (!visible) {
       return NextResponse.json({ error: "vDC not found" }, { status: 404 })
     }
 
-    return NextResponse.json({ data: vdc })
+    return NextResponse.json({ data: visible })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("admin-vdc-get", handleGet)
 
 // PUT /api/v1/admin/vdcs/[id] — update vDC
 async function handlePut(req: Request, ctx: RouteContext) {
@@ -52,7 +57,6 @@ async function handlePut(req: Request, ctx: RouteContext) {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
-    const session = await getServerSession(authOptions)
     const body = await req.json()
 
     const vdc = await updateVdc(id, {
@@ -122,7 +126,6 @@ async function handleDelete(_req: Request, ctx: RouteContext) {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
-    const session = await getServerSession(authOptions)
 
     // Get vDC name before deletion for audit log
     const existing = await getVdcById(id)

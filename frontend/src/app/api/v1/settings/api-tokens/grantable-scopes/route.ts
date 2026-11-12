@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getCurrentTenantId, userHasAccessToTenant } from "@/lib/tenant"
 import { holdsWriteScope } from "@/lib/api-tokens/grantable"
-import { ALL_SCOPE_IDS, READ_SCOPE_IDS, WRITE_SCOPE_IDS } from "@/lib/api-tokens/scopes"
+import { ALL_SCOPE_IDS, isCreatorCheckedScope } from "@/lib/api-tokens/scopes"
 
 import { requireApiTokenAdmin } from "../_shared"
 
@@ -30,9 +30,9 @@ export async function GET(req: Request) {
   }
 
   const perimeter = connectionIds.length > 0 ? connectionIds : null
-  const grantable: string[] = [...READ_SCOPE_IDS]
-  for (const scope of WRITE_SCOPE_IDS) {
-    if (await holdsWriteScope(ctx.userId, tenantId, scope, perimeter)) grantable.push(scope)
+  const grantable: string[] = []
+  for (const scope of ALL_SCOPE_IDS) {
+    if (!isCreatorCheckedScope(scope) || await holdsWriteScope(ctx.userId, tenantId, scope, perimeter)) grantable.push(scope)
   }
   return NextResponse.json({ data: { grantable } })
 }

@@ -3,17 +3,16 @@ import { NextResponse } from "next/server"
 
 import { nanoid } from "nanoid"
 
-import { getServerSession } from "next-auth"
-
 import { prisma } from "@/lib/db/prisma"
 import { hashPassword } from "@/lib/auth/password"
-import { authOptions } from "@/lib/auth/config"
+import { getActingSession } from "@/lib/auth/actingUser"
 import { checkPermission, PERMISSIONS, isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { getServerLicense } from "@/lib/auth/requireEnterprise"
 import { isCommunityDeployment, hasNonDefaultTenant } from "@/lib/auth/communitySuperAdmin"
 import { aliveWhere } from "@/lib/auth/sessions"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -35,10 +34,10 @@ async function loadProtectedUserIds(): Promise<Set<string>> {
 }
 
 // GET /api/v1/users - Liste des utilisateurs
-export async function GET() {
+async function handleGet() {
   try {
-    // RBAC: Check admin.users permission
-    const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
+    // RBAC: admin.users.view, implied by admin.users (API tokens: users:read)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_USERS_VIEW)
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -48,7 +47,7 @@ export async function GET() {
     // wildcard) from non-super-admin callers so a tenant admin — who holds
     // admin.users scoped to their tenant — can't enumerate, edit, or delete
     // a provider operator.
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
     const callerIsSuperAdmin = session?.user?.id ? await isUserSuperAdmin(session.user.id) : false
     const protectedIds = callerIsSuperAdmin ? new Set<string>() : await loadProtectedUserIds()
 
@@ -158,6 +157,8 @@ export async function GET() {
     return NextResponse.json({ error: error?.message || "Server error" }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("users-list", handleGet)
 
 // POST /api/v1/users - Créer un utilisateur
 async function handlePost(req: Request) {

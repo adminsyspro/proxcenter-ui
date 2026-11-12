@@ -9,10 +9,11 @@ import { requireProviderTenant } from '@/lib/tenant'
 
 import { mapEvpnZoneError } from './httpErrors'
 
-export async function evpnGate(): Promise<Response | null> {
+/** `permission`: admin.settings to change a zone, admin.settings.view to read one (issue #1360). */
+export async function evpnGate(permission: string = PERMISSIONS.ADMIN_SETTINGS): Promise<Response | null> {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
-  const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+  const denied = await checkPermission(permission)
   return denied ?? null
 }
 

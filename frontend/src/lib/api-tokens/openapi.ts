@@ -7,6 +7,7 @@ import { SCOPE_DEFINITIONS } from "./scopes"
 // Same order as the ApiTag union.
 const API_TAGS: ApiTag[] = [
   "Monitoring", "VMs", "Snapshots", "Backups", "Storage", "HA", "Pools", "Network", "Firewall", "Tasks",
+  "Tenants", "vDCs", "RBAC", "Users",
 ]
 
 const REFUSAL_METHODS: HttpMethod[] = ["POST", "DELETE", "PUT", "PATCH", "GET"]

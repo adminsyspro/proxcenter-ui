@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({ checkPermission: vi.fn(), tenant: { id: 'acme' }, listMoves: vi.fn() }))
 
+// API token guard: pass-through, these tests drive the session path (token
+// paths: routeGuard.test.ts, tenancyTokenScope.test.ts).
+vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
 vi.mock('@/lib/rbac', () => ({ checkPermission: (...a: any[]) => h.checkPermission(...a), PERMISSIONS: { VM_VIEW: 'vm.view' } }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => h.tenant.id }))
 vi.mock('@/lib/vdc/move/status', () => ({ listMoves: h.listMoves }))

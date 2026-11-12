@@ -33,10 +33,36 @@ function nodeNetworkEntry(entry: NetworkEntry): AllowlistEntry {
 
 /** A VNet route of a vDC: the handler resolves the vDC connection itself. */
 function vnetEntry(entry: NetworkEntry): AllowlistEntry {
-  return networkEntry({ ...entry, perimeter: "handler" })
+  const built = networkEntry({ ...entry, perimeter: "handler" })
+  // A VNet read also answers the read scopes that bundle sdn.vnet.view, so the
+  // live creator check covers whichever of them the token relies on.
+  return entry.read ? { ...built, requiredScopes: [...built.requiredScopes, "vdcs:read", "ipam:read"] } : built
 }
 
+/** An IPAM read of a vDC VNet (issue #1360). */
+function ipamEntry(entry: Omit<NetworkEntry, "read" | "method">): AllowlistEntry {
+  return { ...vnetEntry({ ...entry, method: "GET", read: true }), requiredScopes: ["ipam:read", "vdcs:read", "network:write"] }
+}
+
+const IPAM_NOTE = "Needs sdn.vnet.view (scope ipam:read, vdcs:read or network:write). The VNet is looked up among the vDCs of the token's tenant: a provider token reads the provider's own vDCs only, as the provider session does."
+
 export const NETWORK_ENTRIES: AllowlistEntry[] = [
+  ipamEntry({
+    id: "vdc-vnet-ipam",
+    file: `${VNETS_FILE}/[pveName]/ipam`,
+    pattern: `${VNETS}/{pveName}/ipam`,
+    summary: "IPAM allocations of a vDC network",
+    description: `Every address allocated in the subnet of the VNet whose display name is {pveName}, with a usage summary; each allocation carries, best effort, the live name, node and status of its guest (one Proxmox /cluster/resources read). 404 when the vDC has no such VNet. ${IPAM_NOTE} ${VDC_NOTE}`,
+    responseSchemaRef: "VdcVnetIpamResponse",
+  }),
+  ipamEntry({
+    id: "vdc-vnet-ipam-next-free",
+    file: `${VNETS_FILE}/[pveName]/ipam/next-free`,
+    pattern: `${VNETS}/{pveName}/ipam/next-free`,
+    summary: "Next free address of a vDC network",
+    description: `The lowest free address of the VNet {pveName}, skipping the gateway, the IPAM allocations and the addresses the guests of the vDC pool already use (read from Proxmox, cached 60 seconds per subnet), with a suggested MAC address; nothing is reserved by this call. A full subnet answers 409. ${IPAM_NOTE} ${VDC_NOTE}`,
+    responseSchemaRef: "VdcVnetNextFreeResponse",
+  }),
   nodeNetworkEntry({
     id: "node-network-list",
     method: "GET",

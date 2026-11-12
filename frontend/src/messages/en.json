@@ -4339,7 +4339,12 @@
           "nodes": "Nodes and cluster",
           "automation": "Automation",
           "alerts": "Alerts",
-          "reports": "Reports"
+          "reports": "Reports",
+          "tenants": "Tenants",
+          "vdcs": "vDCs and EVPN zones",
+          "ipam": "IPAM",
+          "rbac": "Roles and assignments",
+          "users": "Users"
         },
         "subScopes": {
           "vmsPower": "Power",
@@ -4366,8 +4371,8 @@
         "confirm": "Confirm",
         "writeWarning": "Write scopes let the token create, change and delete real resources.",
         "scopeNotGrantable": "Your own permissions do not allow granting this scope for the selected tenant and connections.",
-        "scopesLoading": "Checking which write scopes you can grant...",
-        "grantableError": "Could not check which write scopes you can grant. Close and reopen the dialog to try again.",
+        "scopesLoading": "Checking which scopes you can grant...",
+        "grantableError": "Could not check which scopes you can grant. Close and reopen the dialog to try again.",
         "writeRateLimit": "Writes per minute",
         "writeRateLimitHelp": "Write requests this token may send per minute, counted apart from reads."
       },

@@ -1,32 +1,36 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth/config"
+import { getActingSession } from "@/lib/auth/actingUser"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { listVdcs, createVdc } from "@/lib/vdc"
 import { mapCreateVdcError } from "@/lib/vdc/httpErrors"
 import { audit } from "@/lib/audit"
 import { requireProviderTenant } from "@/lib/tenant"
+import type { Principal } from "@/lib/auth/principal"
+import { filterToTokenPerimeter } from "@/lib/api-tokens/scope"
 import { normalizeIdList } from "@/lib/templates/catalogGrants"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // GET /api/v1/admin/vdcs — list all vDCs (optionally filtered by ?tenantId=xxx)
-export async function GET(req: NextRequest) {
+async function handleGet(req: NextRequest, ctx: { principal?: Principal }) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS_VIEW)
     if (denied) return denied
 
     const tenantId = req.nextUrl.searchParams.get("tenantId") || undefined
-    const vdcs = await listVdcs(tenantId)
+    const vdcs = await filterToTokenPerimeter(await listVdcs(tenantId), ctx?.principal, v => [v.connectionId])
 
     return NextResponse.json({ data: vdcs })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("admin-vdcs-list", handleGet)
 
 // POST /api/v1/admin/vdcs — create a vDC
 async function handlePost(req: NextRequest) {
@@ -36,7 +40,7 @@ async function handlePost(req: NextRequest) {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
     if (denied) return denied
 
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
     const body = await req.json()
 
     // Validate required fields

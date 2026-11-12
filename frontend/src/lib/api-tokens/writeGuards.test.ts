@@ -456,6 +456,56 @@ describe('runTokenEntryGuards', () => {
       expect(creatorMock.mock.calls[0][0].creatorUserId).toBeNull()
     })
 
+    // Issue #1360: an admin read scope is creator-checked on each call too.
+    describe('reads through an admin read scope', () => {
+      const adminRead = (scopes: string[], requiredScopes = ['vdcs:read']): [AllowlistEntry, Principal] => [
+        getEntry({ id: 'test-admin-read', requiredScopes, connectionSegment: undefined }),
+        { ...principal, scopes, permissions: expandScopes(scopes) },
+      ]
+
+      it('403 naming the admin read scope when the creator no longer holds it', async () => {
+        setForwarded('GET')
+        creatorMock.mockResolvedValue(false)
+        const [e, p] = adminRead(['vdcs:read'])
+        const res = await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})
+        expect(res?.status).toBe(403)
+        expect(await res?.json()).toEqual({ error: 'Token creator no longer holds this right', scope: 'vdcs:read' })
+        expect(creatorMock).toHaveBeenCalledWith(expect.objectContaining({ tokenId: 'tok-1' }), 'vdcs:read')
+      })
+
+      it('passes when the creator still holds it', async () => {
+        setForwarded('GET')
+        const [e, p] = adminRead(['users:read'], ['users:read'])
+        expect(await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})).toBeNull()
+        expect(creatorMock).toHaveBeenCalledWith(expect.anything(), 'users:read')
+      })
+
+      it('checks the scope the token carries, not the first one the entry lists', async () => {
+        setForwarded('GET')
+        const [e, p] = adminRead(['vdcs:read'], ['ipam:read', 'vdcs:read', 'network:write'])
+        await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})
+        expect(creatorMock).toHaveBeenCalledTimes(1)
+        expect(creatorMock).toHaveBeenCalledWith(expect.anything(), 'vdcs:read')
+      })
+
+      it('checks every admin read scope the token carries: one opening the route never shields another', async () => {
+        setForwarded('GET')
+        creatorMock.mockImplementation(async (_t: unknown, scope: string) => scope !== 'ipam:read')
+        const [e, p] = adminRead(['nodes:read', 'ipam:read'], ['nodes:read', 'network:write', 'vdcs:read', 'ipam:read'])
+        const res = await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})
+        expect(res?.status).toBe(403)
+        expect(await res?.json()).toEqual({ error: 'Token creator no longer holds this right', scope: 'ipam:read' })
+      })
+
+      it('leaves an older read scope (nodes:read) and a write scope on a read entry to their historical rule', async () => {
+        setForwarded('GET')
+        creatorMock.mockResolvedValue(false)
+        const [e, p] = adminRead(['nodes:read', 'network:write'], ['nodes:read', 'network:write', 'vdcs:read', 'ipam:read'])
+        expect(await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})).toBeNull()
+        expect(creatorMock).not.toHaveBeenCalled()
+      })
+    })
+
     describe('secondary permissions the token holds (Ruling 35)', () => {
       const creatorToken = { tokenId: 'tok-1', tenantId: 'tenant-x', creatorUserId: 'user-1', connectionIds: ['conn-a'] }
       const withScopes = (...scopes: string[]): Principal => ({ ...principal, scopes, permissions: expandScopes(scopes) })

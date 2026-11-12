@@ -1144,10 +1144,15 @@ export default function NodeUpdateDialog({
                     {t('updates.repoParseErrorsDescription')}
                   </Typography>
                 )}
+                {repoIssues.some(i => i.kind === 'unreadable') && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    {t('updates.repoUnreadableDescription')}
+                  </Typography>
+                )}
                 {repoIssues.map((issue, i) => (
                   <Typography key={i} variant="caption" sx={{ display: 'block' }}>
                     &bull;{' '}
-                    {issue.kind === 'parse'
+                    {issue.kind !== 'enterprise'
                       ? issue.detail
                       : issue.component
                         ? t('updates.repoEnterpriseComponent', { component: issue.component })

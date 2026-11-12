@@ -1,6 +1,6 @@
 // PURE data modules: imported by BOTH the proxy (D7) and
 // principal.ts (D8). NO DB access, ever.
-import type { AllowlistEntry } from "./types"
+import type { AllowlistEntry, ApiTag } from "./types"
 
 // ── Multi-tenant layer, read only (issue #1360) ─────────────────────────────
 const PROVIDER_NOTE = "Provider tenant only: another tenant's token gets 403."
@@ -13,38 +13,31 @@ function getEntry({ file, ...entry }: Entry): AllowlistEntry {
   return { ...entry, method: "GET", routeFile: `src/app/api/v1/${file}/route.ts` }
 }
 
-export const TENANT_ENTRIES: AllowlistEntry[] = [
-  getEntry({
-    id: "tenants-list",
-    file: "tenants",
-    pattern: "/api/v1/tenants",
-    requiredScopes: ["tenants:read"],
-    tag: "Tenants",
-    summary: "Tenants",
-    description: `Every tenant with its operating model, VMID range and settings. Needs admin.tenants.view (scope tenants:read). ${PROVIDER_NOTE}`,
-    responseSchemaRef: "TenantListResponse",
-  }),
-  getEntry({
-    id: "tenant-get",
-    file: "tenants/[id]",
-    pattern: "/api/v1/tenants/{id}",
-    requiredScopes: ["tenants:read"],
-    tag: "Tenants",
-    summary: "Tenant",
-    description: `The tenant {id}; 404 when it does not exist. Needs admin.tenants.view (scope tenants:read). ${PROVIDER_NOTE}`,
-    responseSchemaRef: "TenantResponse",
-  }),
-  getEntry({
-    id: "tenant-users-list",
-    file: "tenants/[id]/users",
-    pattern: "/api/v1/tenants/{id}/users",
-    requiredScopes: ["tenants:read"],
-    tag: "Tenants",
-    summary: "Members of a tenant",
-    description: `The users who belong to the tenant {id}. Needs admin.tenants.view (scope tenants:read). ${PROVIDER_NOTE}`,
-    responseSchemaRef: "TenantUsersResponse",
-  }),
-]
+/** A GET route answering one read scope: [id, file, summary, response schema, description]. */
+type ScopedRoute = [id: string, file: string, summary: string, responseSchemaRef: string, description: string]
+
+/** The routes share `scope` and `tag`; the pattern follows the file (`[id]` becomes `{id}`). */
+function scopedEntries(scope: string, tag: ApiTag, routes: ScopedRoute[]): AllowlistEntry[] {
+  return routes.map(([id, file, summary, responseSchemaRef, description]) => getEntry({
+    id,
+    file,
+    pattern: `/api/v1/${file.replaceAll(/\[(\w+)\]/g, "{$1}")}`,
+    requiredScopes: [scope],
+    tag,
+    summary,
+    description,
+    responseSchemaRef,
+  }))
+}
+
+export const TENANT_ENTRIES: AllowlistEntry[] = scopedEntries("tenants:read", "Tenants", [
+  ["tenants-list", "tenants", "Tenants", "TenantListResponse",
+    `Every tenant with its operating model, VMID range and settings. Needs admin.tenants.view (scope tenants:read). ${PROVIDER_NOTE}`],
+  ["tenant-get", "tenants/[id]", "Tenant", "TenantResponse",
+    `The tenant {id}; 404 when it does not exist. Needs admin.tenants.view (scope tenants:read). ${PROVIDER_NOTE}`],
+  ["tenant-users-list", "tenants/[id]/users", "Members of a tenant", "TenantUsersResponse",
+    `The users who belong to the tenant {id}. Needs admin.tenants.view (scope tenants:read). ${PROVIDER_NOTE}`],
+])
 
 export const VDC_ENTRIES: AllowlistEntry[] = [
   getEntry({
@@ -162,74 +155,22 @@ const RBAC_NOTE = "Needs admin.rbac.view (scope rbac:read). Scoped to the token'
 const USERS_NOTE = "Needs admin.users.view (scope users:read). The provider tenant lists every user, another tenant its own members; provider operators stay hidden from a token."
 
 export const ACCESS_ENTRIES: AllowlistEntry[] = [
-  getEntry({
-    id: "rbac-roles-list",
-    file: "rbac/roles",
-    pattern: "/api/v1/rbac/roles",
-    requiredScopes: ["rbac:read"],
-    tag: "RBAC",
-    summary: "Roles",
-    description: `The system roles, the tenant's custom roles and, outside the provider tenant, the catalogue roles published to it, each with its permissions and audience. ${RBAC_NOTE}`,
-    responseSchemaRef: "RbacRoleListResponse",
-  }),
-  getEntry({
-    id: "rbac-role-get",
-    file: "rbac/roles/[id]",
-    pattern: "/api/v1/rbac/roles/{id}",
-    requiredScopes: ["rbac:read"],
-    tag: "RBAC",
-    summary: "Role",
-    description: `The role {id} with its permissions; 404 when the token's tenant cannot see it. ${RBAC_NOTE}`,
-    responseSchemaRef: "RbacRoleResponse",
-  }),
-  getEntry({
-    id: "rbac-permissions-list",
-    file: "rbac/permissions",
-    pattern: "/api/v1/rbac/permissions",
-    requiredScopes: ["rbac:read"],
-    tag: "RBAC",
-    summary: "Permissions",
-    description: "Every permission a role can carry, flat and grouped by category. Needs admin.rbac.view (scope rbac:read).",
-    responseSchemaRef: "RbacPermissionListResponse",
-  }),
-  getEntry({
-    id: "rbac-assignments-list",
-    file: "rbac/assignments",
-    pattern: "/api/v1/rbac/assignments",
-    requiredScopes: ["rbac:read"],
-    tag: "RBAC",
-    summary: "Role assignments",
-    description: `Who holds which role, on which scope, until when. ${RBAC_NOTE}`,
-    responseSchemaRef: "RbacAssignmentListResponse",
-  }),
-  getEntry({
-    id: "rbac-assignment-get",
-    file: "rbac/assignments/[id]",
-    pattern: "/api/v1/rbac/assignments/{id}",
-    requiredScopes: ["rbac:read"],
-    tag: "RBAC",
-    summary: "Role assignment",
-    description: `The assignment {id}; 404 when the token's tenant cannot see it. ${RBAC_NOTE}`,
-    responseSchemaRef: "RbacAssignmentResponse",
-  }),
-  getEntry({
-    id: "users-list",
-    file: "users",
-    pattern: "/api/v1/users",
-    requiredScopes: ["users:read"],
-    tag: "Users",
-    summary: "Users",
-    description: `The users with their authentication source, state and tenant memberships. ${USERS_NOTE}`,
-    responseSchemaRef: "UserListResponse",
-  }),
-  getEntry({
-    id: "user-get",
-    file: "users/[id]",
-    pattern: "/api/v1/users/{id}",
-    requiredScopes: ["users:read"],
-    tag: "Users",
-    summary: "User",
-    description: `The user {id}; 404 when the token's tenant cannot see it. ${USERS_NOTE}`,
-    responseSchemaRef: "UserResponse",
-  }),
+  ...scopedEntries("rbac:read", "RBAC", [
+    ["rbac-roles-list", "rbac/roles", "Roles", "RbacRoleListResponse",
+      `The system roles, the tenant's custom roles and, outside the provider tenant, the catalogue roles published to it, each with its permissions and audience. ${RBAC_NOTE}`],
+    ["rbac-role-get", "rbac/roles/[id]", "Role", "RbacRoleResponse",
+      `The role {id} with its permissions; 404 when the token's tenant cannot see it. ${RBAC_NOTE}`],
+    ["rbac-permissions-list", "rbac/permissions", "Permissions", "RbacPermissionListResponse",
+      "Every permission a role can carry, flat and grouped by category. Needs admin.rbac.view (scope rbac:read)."],
+    ["rbac-assignments-list", "rbac/assignments", "Role assignments", "RbacAssignmentListResponse",
+      `Who holds which role, on which scope, until when. ${RBAC_NOTE}`],
+    ["rbac-assignment-get", "rbac/assignments/[id]", "Role assignment", "RbacAssignmentResponse",
+      `The assignment {id}; 404 when the token's tenant cannot see it. ${RBAC_NOTE}`],
+  ]),
+  ...scopedEntries("users:read", "Users", [
+    ["users-list", "users", "Users", "UserListResponse",
+      `The users with their authentication source, state and tenant memberships. ${USERS_NOTE}`],
+    ["user-get", "users/[id]", "User", "UserResponse",
+      `The user {id}; 404 when the token's tenant cannot see it. ${USERS_NOTE}`],
+  ]),
 ]

@@ -80,7 +80,7 @@ export async function filterToTokenPerimeter<T>(
   principal: { kind: string; connectionIds: string[] | null } | null | undefined,
   connectionsOf: (item: T) => Array<string | null | undefined>,
 ): Promise<T[]> {
-  if (!principal || principal.kind !== "token") return items
+  if (principal?.kind !== "token") return items
   const visible = await resolveVisibleConnectionIds(principal)
   return items.filter(item => connectionsOf(item).every(id => typeof id === "string" && visible.has(id)))
 }

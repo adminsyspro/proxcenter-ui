@@ -7,9 +7,9 @@
 import { NextResponse } from "next/server"
 
 import { getCurrentTenantId } from "@/lib/tenant"
-import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { PERMISSIONS } from "@/lib/rbac"
 import type { Principal } from "@/lib/auth/principal"
-import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
+import { checkVnetReadForCaller } from "@/lib/vdc/vnetPermission"
 import { listAllocationsForSubnet } from "@/lib/vdc/ipam"
 import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
@@ -32,11 +32,7 @@ async function handleGet(req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: "Missing params" }, { status: 400 })
     }
 
-    // A token (the only caller the guard hands a principal) also needs the
-    // vDC inside its tenant and its connection perimeter.
-    const denied = ctx.principal
-      ? await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_VIEW)
-      : await checkPermission(PERMISSIONS.SDN_VNET_VIEW)
+    const denied = await checkVnetReadForCaller(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_VIEW)
     if (denied) return denied
 
     // `?targetVdcId=` (provider only, equal to the path vDC): preview the IP

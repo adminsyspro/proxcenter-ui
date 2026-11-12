@@ -13,7 +13,7 @@ const { checkPermissionMock, getCurrentTenantIdMock, resolveScopeTenantMock, vdc
 // paths: routeGuard.test.ts, tenancyTokenScope.test.ts).
 vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
 vi.mock('@/lib/rbac', () => ({ checkPermission: (...a: any[]) => checkPermissionMock(...a), PERMISSIONS: { SDN_VNET_VIEW: 'sdn.vnet.view' } }))
-vi.mock('@/lib/vdc/vnetPermission', () => ({ checkVnetPermission: vi.fn() }))
+vi.mock('@/lib/vdc/vnetPermission', () => ({ checkVnetReadForCaller: (_p: unknown, _id: string, perm: string) => checkPermissionMock(perm) }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: (...a: any[]) => getCurrentTenantIdMock(...a) }))
 vi.mock('@/lib/vdc/providerTarget', () => ({ resolveScopeTenant: (...a: any[]) => resolveScopeTenantMock(...a) }))
 vi.mock('@/lib/db/prisma', () => ({ prisma: { vdcVnet: { findFirst: (...a: any[]) => vdcVnetFindFirstMock(...a) } } }))

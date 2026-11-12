@@ -42,10 +42,9 @@ export interface VddkPreflightResult {
 const HINTS: Record<string, string> = {
   "nbdkit": "apt install nbdkit",
   "nbd-client": "apt install nbd-client",
-  // nbdkit-plugin-vddk lives in Debian non-free, which a stock PVE node doesn't
-  // enable — so it's an admin prerequisite, not something "Prepare node(s)"
-  // installs. Enable contrib/non-free in the node's apt sources, then install.
-  "vddk-plugin": "nbdkit-plugin-vddk is in Debian non-free; enable contrib/non-free in the node's apt sources, then: apt install nbdkit-plugin-vddk",
+  // nbdkit-plugin-vddk is in Debian contrib, which the Proxmox VE 9 installer
+  // enables; "Prepare this node" adds contrib on a node that lacks it.
+  "vddk-plugin": "nbdkit-plugin-vddk is in Debian contrib; enable contrib in the node's apt sources, then: apt install nbdkit-plugin-vddk",
 }
 
 /**

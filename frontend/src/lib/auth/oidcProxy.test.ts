@@ -4,6 +4,8 @@ import https from "node:https"
 import { ProxyAgent } from "undici"
 import { describe, expect, it, vi, beforeEach } from "vitest"
 
+import { OidcUrlRefused } from "./oidcUrlGuard"
+
 import {
   bypassesProxy,
   checkProxyUrl,
@@ -459,5 +461,71 @@ describe("resolveOidcProxy with a non-http environment proxy", () => {
     expect(resolveOidcProxy(null, "https:", { HTTPS_PROXY: "socks5://proxy.corp:1080" })).toBeNull()
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("not a valid http(s) URL"))
     warn.mockRestore()
+  })
+})
+
+describe("strict connections of a self-service tenant (issue #1289)", () => {
+  beforeEach(() => clearOidcProxyAgents())
+
+  it("gives openid-client an agent that checks every resolved address, instead of a plain direct one", () => {
+    const agent = oidcOpenidAgent(null, "https://idp.acme.example", {}, { strict: true })
+    expect(agent).toBeInstanceOf(https.Agent)
+    expect((agent as any).options.lookup).toBeTypeOf("function")
+  })
+
+  it("keeps the historical direct agent when not strict", () => {
+    expect(oidcOpenidAgent(null, "https://idp.acme.example", {}, { strict: false })).toBe(false)
+  })
+
+  it("gives fetch a dispatcher that checks every resolved address", () => {
+    const dispatcher = oidcFetchDispatcher(null, "https://idp.acme.example/.well-known/openid-configuration", {}, { strict: true })
+    expect(dispatcher).toBeDefined()
+    expect(dispatcher).not.toBeInstanceOf(ProxyAgent)
+  })
+})
+
+describe("a checked connection never goes through a proxy (issue #1289)", () => {
+  beforeEach(() => clearOidcProxyAgents())
+  const DISCOVERY = "https://idp.acme.example/.well-known/openid-configuration"
+
+  it.each([
+    ["a saved proxy", { proxyUrl: "http://proxy.corp:3128" }, {}],
+    ["the environment's proxy", null, { HTTPS_PROXY: "http://proxy.corp:3128" }],
+  ])("refuses %s, which would resolve the host out of reach of the checks", (_label, settings, env) => {
+    expect(() => oidcOpenidAgent(settings as any, "https://idp.acme.example/token", env, { strict: true })).toThrow(OidcUrlRefused)
+    expect(() => oidcFetchDispatcher(settings as any, DISCOVERY, env, { strict: true })).toThrow(OidcUrlRefused)
+  })
+
+  it("goes direct, checked, to a host the bypass list exempts", () => {
+    const env = { HTTPS_PROXY: "http://proxy.corp:3128", NO_PROXY: "idp.acme.example" }
+    const agent = oidcOpenidAgent(null, "https://idp.acme.example/token", env, { strict: true })
+    expect((agent as any).options.lookup).toBeTypeOf("function")
+    expect(oidcFetchDispatcher(null, DISCOVERY, env, { strict: true })).not.toBeInstanceOf(ProxyAgent)
+  })
+
+  it("keeps the proxy of a connection that is not checked", () => {
+    expect(oidcFetchDispatcher({ proxyUrl: "http://proxy.corp:3128" } as any, DISCOVERY, {}, { strict: false })).toBeInstanceOf(ProxyAgent)
+  })
+})
+
+describe("strict connections refuse internal IP literals at connect time (issue #1289)", () => {
+  beforeEach(() => clearOidcProxyAgents())
+
+  // A discovery document served from a public host may name a token or
+  // userinfo endpoint by an internal IP literal, which never goes through DNS.
+  it("refuses a socket to a loopback literal through the openid-client agent", async () => {
+    const agent = oidcOpenidAgent(null, "https://idp.acme.example", {}, { strict: true }) as https.Agent
+    const err = await new Promise<any>(resolve => {
+      const req = https.get({ host: "127.0.0.1", port: 9, path: "/", agent }, () => resolve(null))
+      req.on("error", resolve)
+    })
+    expect(err?.name).toBe("OidcUrlRefused")
+  })
+
+  it("refuses a fetch to a private literal through the strict dispatcher", async () => {
+    const dispatcher = oidcFetchDispatcher(null, "https://idp.acme.example", {}, { strict: true })
+    const err = await fetch("https://10.255.255.1:8443/", { dispatcher, signal: AbortSignal.timeout(3000) } as any).catch(e => e)
+    const chain = [err, err?.cause].map(e => e?.name)
+    expect(chain).toContain("OidcUrlRefused")
   })
 })

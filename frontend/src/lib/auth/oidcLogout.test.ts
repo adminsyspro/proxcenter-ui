@@ -128,3 +128,18 @@ describe('discoverEndSessionEndpoint through the SSO outbound proxy (roadmap#78)
     vi.unstubAllEnvs()
   })
 })
+
+describe("discoverEndSessionEndpoint for a self-service tenant (issue #1289)", () => {
+  it("reads the discovery document through the strict dispatcher and never follows a redirect", async () => {
+    clearEndSessionCache()
+    let init: any = null
+    const fetchImpl = (async (_url: string, i: any) => {
+      init = i
+      return new Response(JSON.stringify({ end_session_endpoint: "https://idp.acme.example/logout" }), { status: 200 })
+    }) as unknown as typeof fetch
+
+    await discoverEndSessionEndpoint("https://idp.acme.example/realms/a", fetchImpl, null, { strict: true })
+    expect(init.dispatcher).toBeDefined()
+    expect(init.redirect).toBe("error")
+  })
+})

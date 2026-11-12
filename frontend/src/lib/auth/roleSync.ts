@@ -283,9 +283,15 @@ export async function syncProviderGrants(
     idPrefix: string
     newId: () => string
     membership: MembershipPort
+    /** Tenant the default role is seeded in: the provider tenant unless the IdP is a tenant's own (issue #1289). */
+    homeTenantId?: string
+    /** Role written instead of one that no longer exists. A tenant IdP must never fall back to a provider role. */
+    fallbackRoleId?: string
   },
 ): Promise<void> {
   const { userId, grants, defaultRoleId, now, idPrefix, newId, membership } = params
+  const homeTenantId = params.homeTenantId ?? "default"
+  const fallbackRoleId = params.fallbackRoleId ?? "role_viewer"
 
   if (!grants) {
     // Any role, in any tenant, counts as "this user already has one".
@@ -303,9 +309,9 @@ export async function syncProviderGrants(
       data: {
         id: newId(),
         userId,
-        roleId: defaultExists ? defaultRoleId : "role_viewer",
+        roleId: defaultExists ? defaultRoleId : fallbackRoleId,
         scopeType: "inherit",
-        tenantId: "default",
+        tenantId: homeTenantId,
         grantedById: null,
         grantedAt: now,
       },

@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server"
 
 import { SENSITIVE_NIC_PERMISSIONS } from './nicPermissions'
+import { PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from './roleIds'
 import { isRoleAvailableInTenant } from './rolePublication'
 
 /**
@@ -254,6 +255,7 @@ const GLOBAL_SCOPE_PERMISSIONS: ReadonlySet<string> = new Set([
   "admin.compliance",
   "admin.tenants",
   "admin.apitokens",
+  "admin.identity",
 ])
 
 /**
@@ -299,38 +301,7 @@ export async function isUserSuperAdmin(userId: string): Promise<boolean> {
   return !!row
 }
 
-/**
- * Role IDs that must stay hidden from non-super-admin callers and may not be
- * assigned by anyone other than a super admin. Both grant wildcard permissions
- * (see seed in prisma/seed.ts); exposing either to a tenant admin lets them
- * escalate to full cluster access.
- */
-export const PROTECTED_ROLE_IDS = ["role_super_admin", "role_provider_admin"] as const
-
-/**
- * Roles meant for the provider tenant (or single-tenant Community installs)
- * and that grant `automation.view` (DRS / Site Recovery / Network Security /
- * Flows / Resources). Assigning them inside a non-default tenant unlocks
- * orchestration pages that Tenant Admin explicitly omits — see seed.ts where
- * role_tenant_admin's permission list comments why `automation.*` is dropped.
- *
- * Enforcement is twofold:
- *  - server-side: POST/PATCH /api/v1/rbac/assignments refuse to bind any of
- *    these to a tenantId other than `default` (see DEFAULT_TENANT_ID).
- *  - client-side: /security/rbac filters them out of the role dropdown when
- *    the target tenant isn't `default`.
- *
- * role_vm_user has no automation perms but stays here because it belongs to
- * the same legacy "global" role family — tenant operators should use the
- * tenant_* taxonomy (role_tenant_admin / role_tenant_operator /
- * role_tenant_viewer) which is the supported surface for vDC tenants.
- */
-export const PROVIDER_ONLY_ROLE_IDS = [
-  "role_operator",
-  "role_vm_admin",
-  "role_viewer",
-  "role_vm_user",
-] as const
+export { PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS }
 
 /**
  * Check if a user holds any protected role (super_admin or provider_admin).
@@ -620,6 +591,8 @@ export const PERMISSIONS = {
   ADMIN_COMPLIANCE: "admin.compliance",
   ADMIN_TENANTS: "admin.tenants",
   ADMIN_APITOKENS: "admin.apitokens",
+  // A tenant manages its own identity provider (issue #1289).
+  ADMIN_IDENTITY: "admin.identity",
 
   // SDN / VNet
   SDN_VNET_VIEW: "sdn.vnet.view",

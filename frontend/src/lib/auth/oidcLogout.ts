@@ -55,6 +55,7 @@ export async function discoverEndSessionEndpoint(
   issuerUrl: string | null | undefined,
   fetchImpl: typeof fetch = fetch,
   proxy: OidcProxySettings | null = null,
+  opts: { strict?: boolean } = {},
 ): Promise<string | null> {
   const discoveryUrl = buildDiscoveryUrl(issuerUrl)
   if (!discoveryUrl) return null
@@ -65,10 +66,13 @@ export async function discoverEndSessionEndpoint(
   let endSession: string | null = null
   try {
     // Through the SSO outbound proxy when one is set (roadmap#78).
-    const dispatcher = oidcFetchDispatcher(proxy, discoveryUrl)
+    // A self-service tenant's issuer only reaches public addresses, and its
+    // answer is never followed to another host (issue #1289).
+    const dispatcher = oidcFetchDispatcher(proxy, discoveryUrl, process.env, { strict: opts.strict === true })
     const res = await fetchImpl(discoveryUrl, {
       signal: AbortSignal.timeout(5000),
       headers: { Accept: "application/json" },
+      ...(opts.strict ? { redirect: "error" } : {}),
       ...(dispatcher ? { dispatcher } : {}),
     } as RequestInit)
     if (res.ok) {

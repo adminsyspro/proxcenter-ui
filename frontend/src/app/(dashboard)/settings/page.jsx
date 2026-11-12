@@ -43,6 +43,7 @@ import { DataGrid } from '@mui/x-data-grid'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
 import { useLicense, Features } from '@/contexts/LicenseContext'
+import { isSettingsTabVisible } from '@/lib/settings/tabGating'
 import { useRBAC } from '@/contexts/RBACContext'
 import EmptyState from '@/components/EmptyState'
 import { CountryFlag } from '@/components/ui/CountryFlag'
@@ -104,7 +105,12 @@ const LdapConfigTab = dynamic(() => import('@/components/settings/LdapConfigTab'
   loading: tabLoading
 })
 
-const OidcConfigTab = dynamic(() => import('@/components/settings/OidcConfigTab'), {
+const OidcConfigTab = dynamic(() => import('@/components/settings/oidc/OidcSettingsTab'), {
+  ssr: false,
+  loading: tabLoading
+})
+
+const TenantIdentityTab = dynamic(() => import('@/components/settings/oidc/TenantIdentityTab'), {
   ssr: false,
   loading: tabLoading
 })
@@ -2521,7 +2527,7 @@ export default function SettingsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { hasFeature, loading: licenseLoading } = useLicense()
-  const { isAdmin: isSuperAdmin } = useRBAC()
+  const { isAdmin: isSuperAdmin, hasPermission } = useRBAC()
   const { data: session } = useSession()
   const currentTenantId = session?.user?.tenantId || 'default'
   const isProviderTenant = currentTenantId === 'default'
@@ -2554,6 +2560,7 @@ export default function SettingsPage() {
     { name: 'guest-file-restore', group: 'infrastructure', label: t('guestFileRestore.tabLabel'), icon: 'ri-folder-transfer-line', component: GuestFileRestoreTab, providerOnly: true },
     { name: 'ldap', group: 'access', label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP, providerOnly: true },
     { name: 'oidc', group: 'access', label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC, providerOnly: true },
+    { name: 'identity', group: 'access', label: t('oidc.tenantConnections.tenantTabLabel'), icon: 'ri-shield-user-line', component: TenantIdentityTab, requiredFeature: Features.OIDC, customerTenantPermission: 'admin.identity' },
     { name: 'api', group: 'access', label: t('settings.apiTokens.tabLabel'), icon: 'ri-code-box-line', component: ApiTokensTab, providerOnly: true },
     { name: 'tls', group: 'access', label: t('settings.tls.tabLabel'), icon: 'ri-lock-line', component: TlsTab, providerOnly: true },
     { name: 'alert-thresholds', group: 'monitoring', label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab, providerOnly: true },
@@ -2584,12 +2591,9 @@ export default function SettingsPage() {
   // they can actually use, no greyed-out chips. While the license is still
   // loading we keep gated tabs visible to avoid a visible→hidden flicker
   // once the response lands.
-  const tabs = allTabs.filter(tab => {
-    if (tab.providerOnly && !(isSuperAdmin && isProviderTenant)) return false
-    if (tab.superAdminOnly && !isSuperAdmin) return false
-    if (!licenseLoading && tab.requiredFeature && !hasFeature(tab.requiredFeature)) return false
-    return true
-  })
+  const tabs = allTabs.filter(tab =>
+    isSettingsTabVisible(tab, { isSuperAdmin, isProviderTenant, licenseLoading, hasFeature, hasPermission })
+  )
 
   const tabNames = tabs.map(tab => tab.name)
 

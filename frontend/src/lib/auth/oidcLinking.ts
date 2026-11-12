@@ -1,7 +1,13 @@
 import { prisma } from "@/lib/db/prisma"
 import { PROTECTED_SSO_ROLE_IDS } from "./groupMapping"
 
-export type OidcLinkRefusal = "oidc_sub_mismatch" | "email_not_verified"
+export type OidcLinkRefusal =
+  | "oidc_sub_mismatch"
+  | "email_not_verified"
+  // Tenant IdPs (issue #1289): the address belongs to an account the tenant IdP
+  // does not own, or to a domain the connection does not accept.
+  | "email_in_use"
+  | "email_domain_not_allowed"
 
 /** Error code put in /login?error= when a sign-in is refused here. */
 export const OIDC_LINK_REFUSED = "OidcLinkRefused"
@@ -60,4 +66,43 @@ export async function holdsProtectedRole(userId: string, now: Date = new Date())
   })
 
   return grant !== null
+}
+
+/**
+ * Record why an OIDC identity was refused (server log + `login_failed` audit
+ * row). The user only sees a generic refusal on the login page. `connection`
+ * is "default" for the provider IdP, the tenant id for a tenant's own.
+ */
+export async function auditOidcLinkRefusal(email: string, reason: OidcLinkRefusal, connection: string): Promise<void> {
+  console.warn(`[oidc] sign-in refused for "${email}" (connection ${connection}): ${reason}`)
+  try {
+    const { audit } = await import("@/lib/audit")
+    await audit({
+      action: "login_failed",
+      category: "auth",
+      userEmail: email,
+      details: { reason, provider: "oidc", connection },
+      status: "failure",
+      errorMessage: reason,
+    })
+  } catch (e) {
+    console.error("[oidc] cannot audit the refused sign-in:", e)
+  }
+}
+
+/** Record a link made although the IdP does not vouch for the address. */
+export async function auditOidcUnverifiedLink(email: string, connection: string): Promise<void> {
+  console.warn(`[oidc] "${email}" linked to an existing account without a verified e-mail`)
+  try {
+    const { audit } = await import("@/lib/audit")
+    await audit({
+      action: "login",
+      category: "auth",
+      userEmail: email,
+      details: { reason: "email_not_verified", provider: "oidc", linked: true, connection },
+      status: "warning",
+    })
+  } catch (e) {
+    console.error("[oidc] cannot audit the unverified link:", e)
+  }
 }

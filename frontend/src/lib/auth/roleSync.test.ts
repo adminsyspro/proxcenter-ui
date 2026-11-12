@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 
-import { syncProviderRoleAssignment } from './roleSync'
+import { syncProviderGrants, syncProviderRoleAssignment } from './roleSync'
 
 const NOW = new Date('2026-09-14T10:00:00Z')
 
@@ -127,5 +127,36 @@ describe('syncProviderRoleAssignment — no role resolved', () => {
     await syncProviderRoleAssignment(db, params({ resolvedRoleId: null }))
 
     expect(db.rbacUserRole.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('syncProviderGrants — tenant IdP home tenant (issue #1289)', () => {
+  const membership = { add: vi.fn(async () => {}), remove: vi.fn(async () => {}) }
+
+  function grantsDb(knownRoles: string[]) {
+    const db = makeDb([])
+    db.rbacRole.findUnique = vi.fn(async ({ where }: any) => (knownRoles.includes(where.id) ? { id: where.id } : null))
+    db.rbacUserRole.findMany = vi.fn(async () => [])
+    return db
+  }
+
+  it('seeds the default role in the home tenant, not the provider tenant', async () => {
+    const db = grantsDb(['role_tenant_viewer'])
+    await syncProviderGrants(db, {
+      userId: 'u1', grants: null, defaultRoleId: 'role_tenant_viewer', now: NOW, idPrefix: 'oidc_', newId: () => 'oidc_new',
+      membership, homeTenantId: 't-acme', fallbackRoleId: 'role_tenant_viewer',
+    })
+    expect(db.rbacUserRole.create).toHaveBeenCalledWith({ data: expect.objectContaining({ roleId: 'role_tenant_viewer', tenantId: 't-acme' }) })
+  })
+
+  it('falls back to the given role, never role_viewer, when a granted role no longer exists', async () => {
+    const db = grantsDb([])
+    await syncProviderGrants(db, {
+      userId: 'u1',
+      grants: [{ tenantId: 't-acme', roleId: 'role_gone', scopeType: 'inherit', scopeTarget: null }],
+      defaultRoleId: 'role_tenant_viewer', now: NOW, idPrefix: 'oidc_', newId: () => 'oidc_new',
+      membership, homeTenantId: 't-acme', fallbackRoleId: 'role_tenant_viewer',
+    })
+    expect(db.rbacUserRole.create).toHaveBeenCalledWith({ data: expect.objectContaining({ roleId: 'role_tenant_viewer', tenantId: 't-acme' }) })
   })
 })

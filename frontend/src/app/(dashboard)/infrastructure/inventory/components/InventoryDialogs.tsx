@@ -715,7 +715,8 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
             }}
           >{`for f in /etc/apt/sources.list.d/*.sources; do grep -q "enterprise.proxmox.com" "$f" || continue; sed -i "/^Enabled:/d" "$f"; echo "Enabled: false" >> "$f"; done
 sed -i "s|^deb https://enterprise.proxmox.com|# &|" /etc/apt/sources.list.d/*.list 2>/dev/null
-printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\nComponents: pve-no-subscription\\nSigned-By: /usr/share/keyrings/proxmox-archive-keyring.gpg\\n' "$(. /etc/os-release && echo $VERSION_CODENAME)" > /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
+printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\nComponents: pve-no-subscription\\nSigned-By: /usr/share/keyrings/proxmox-archive-keyring.gpg\\n' "$(. /etc/os-release && echo $VERSION_CODENAME)" > /etc/apt/sources.list.d/pve-no-subscription.sources
+chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
         </>
       )}
       <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mb: 0.5 }}>
@@ -1254,8 +1255,8 @@ printf 'Types: deb\\nURIs: http://download.proxmox.com/debian/pve\\nSuites: %s\\
                   testId: 'mig-warm-prepare',
                 })
               : undefined,
-            // OpenVDDK provisioning (roadmap#177) installs apt packages, adds a
-            // Debian non-free source and writes under /usr/lib: confirm first.
+            // OpenVDDK provisioning (roadmap#177) installs apt packages, may add
+            // the Debian contrib source and writes under /usr/lib: confirm first.
             below: canPrepare ? renderWarmSetupStep(pf.libdir) : undefined,
           })}
           {conversionChecked && conversionMissing.length === 0 && prereqRow({

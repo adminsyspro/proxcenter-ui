@@ -59,7 +59,7 @@ describe("buildOpenVddkInstallScript: runtime steps", () => {
     const lines = script().split("\n")
     const updates = lines.filter((l) => l.trim().startsWith("apt-get update"))
     expect(updates).toHaveLength(2)
-    for (const line of updates) expect(line).toBe("apt-get update || true")
+    for (const line of updates) expect(line.trim()).toBe("apt-get update || true")
   })
 
   it("still fails loudly when a package is genuinely unavailable", () => {
@@ -69,13 +69,47 @@ describe("buildOpenVddkInstallScript: runtime steps", () => {
     for (const line of installs) expect(line).not.toContain("|| true")
   })
 
-  it("enables Debian non-free (codename from os-release) and installs the vddk plugin", () => {
+  it("adds Debian contrib only when apt has no candidate for the vddk plugin, then installs it", () => {
     const s = script()
     expect(s).toContain(". /etc/os-release")
     expect(s).toContain(
-      'echo "deb http://deb.debian.org/debian ${VERSION_CODENAME} contrib non-free non-free-firmware" > /etc/apt/sources.list.d/proxcenter-nonfree.list',
+      `VDDK_CANDIDATE="$(apt-cache policy nbdkit-plugin-vddk 2>/dev/null | sed -n 's/^ *Candidate: //p')" || true`,
+    )
+    expect(s).toContain('if [ -z "$VDDK_CANDIDATE" ] || [ "$VDDK_CANDIDATE" = "(none)" ]; then')
+    expect(s).toContain(
+      '  echo "deb http://deb.debian.org/debian ${VERSION_CODENAME} contrib" > /etc/apt/sources.list.d/proxcenter-contrib.list',
     )
     expect(s).toContain("apt-get install -y nbdkit-plugin-vddk")
+    // The plugin is in contrib: non-free was never needed (#1366).
+    expect(s).not.toContain("non-free")
+  })
+
+  // #1366: under umask 027 a plain redirection writes 0640, which pveproxy
+  // (www-data) cannot read, and every rolling update preflight then fails.
+  it("gives every file it writes an explicit 0644 mode instead of trusting the umask", () => {
+    const lines = script().split("\n")
+    const writes = lines.filter((l) => / > \/etc\//.test(l))
+    expect(writes.length).toBeGreaterThan(0)
+    for (const w of writes) {
+      const target = w.split(" > ")[1].trim()
+      expect(lines.some((l) => l.includes("chmod 0644") && l.includes(target)), `${target} gets chmod 0644`).toBe(true)
+    }
+  })
+
+  it("repairs the mode of the list earlier releases wrote, without removing it", () => {
+    const s = script()
+    expect(s).toContain(
+      "if [ -f /etc/apt/sources.list.d/proxcenter-nonfree.list ]; then chmod 0644 /etc/apt/sources.list.d/proxcenter-nonfree.list; fi",
+    )
+    expect(s).not.toMatch(/rm [^\n]*proxcenter-nonfree/)
+  })
+
+  it("checks the candidate after the first apt-get update, so the answer is fresh", () => {
+    const lines = script().split("\n")
+    const firstUpdate = lines.indexOf("apt-get update || true")
+    const probe = lines.findIndex((l) => l.startsWith("VDDK_CANDIDATE="))
+    expect(firstUpdate).toBeGreaterThanOrEqual(0)
+    expect(probe).toBeGreaterThan(firstUpdate)
   })
 
   it("loads the nbd module now and at boot with max_part=0", () => {

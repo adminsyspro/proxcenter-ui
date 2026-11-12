@@ -56,6 +56,7 @@ import { alpha } from '@mui/material/styles'
 import NumericTextField from '@/components/ui/NumericTextField'
 import NodeSshEndpointsEditor, { type NodeSshValue } from '@/components/ssh/NodeSshEndpointsEditor'
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
+import { preflightRepoIssueKind, REPO_ISSUE_DESCRIPTION_KEY, type RepoIssueKind } from '@/lib/proxmox/aptRepositories'
 
 // RemixIcon replacements for @mui/icons-material
 const CheckCircleIcon = (props: any) => <i className="ri-checkbox-circle-fill" style={{ fontSize: props?.sx?.fontSize || 20, color: paletteColor(props?.sx?.color), ...props?.style }} />
@@ -240,6 +241,7 @@ interface PreflightResult {
   findings?: PreflightFinding[]
   repo_issues: Array<{
     node: string
+    kind?: RepoIssueKind
     message: string
   }>
   cluster_health: {
@@ -1105,9 +1107,13 @@ export default function RollingUpdateWizard({
                     <i className="ri-archive-line" style={{ fontSize: 18, marginRight: 8, verticalAlign: 'text-bottom' }} />
                     {t('updates.repoIssuesTitle', { count: preflightResult.repo_issues.length })}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    {t('updates.repoIssuesDescription')}
-                  </Typography>
+                  {(Object.keys(REPO_ISSUE_DESCRIPTION_KEY) as RepoIssueKind[])
+                    .filter(kind => preflightResult.repo_issues.some(issue => preflightRepoIssueKind(issue) === kind))
+                    .map(kind => (
+                      <Typography key={kind} variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                        {t(REPO_ISSUE_DESCRIPTION_KEY[kind])}
+                      </Typography>
+                    ))}
                   <List dense>
                     {preflightResult.repo_issues.map((issue, i) => (
                       <ListItem key={i}>

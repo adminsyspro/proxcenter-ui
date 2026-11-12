@@ -6,8 +6,11 @@ import {
   isRepoEnabled,
   isSubscriptionActive,
   loadNodeRepoIssues,
+  preflightRepoIssueKind,
   readRepoErrors,
   readStandardRepos,
+  REPO_ISSUE_DESCRIPTION_KEY,
+  repoErrorKind,
 } from './aptRepositories'
 
 /**
@@ -412,5 +415,55 @@ describe('loadNodeRepoIssues', () => {
 
     expect(calls[0].url).toBe('/api/v1/connections/conn-1/nodes/pve%201/apt/repositories')
     expect(calls[1].url).toBe('/api/v1/connections/conn-1/nodes/pve%201/subscription')
+  })
+})
+
+/**
+ * Issue #1366, measured on pve3-dr (PVE 9, 2026-11-12): a list written 0640
+ * under umask 027. pveproxy serves the APT API as www-data and fails on it,
+ * while root reads it fine. It used to be reported like a renamed .BAK file.
+ */
+describe('unreadable repository files (#1366)', () => {
+  const payload = {
+    'standard-repos': [{ handle: 'no-subscription', status: 1 }],
+    errors: [{ path: '/etc/apt/sources.list.d/proxcenter-nonfree.list', error: 'Permission denied (os error 13)' }],
+  }
+
+  it('tells a permission error from a parse error', () => {
+    expect(repoErrorKind('Permission denied (os error 13)')).toBe('unreadable')
+    expect(repoErrorKind('permission denied')).toBe('unreadable')
+    expect(repoErrorKind('invalid extension')).toBe('parse')
+    expect(repoErrorKind(undefined)).toBe('parse')
+  })
+
+  it('reports the unreadable file with its path', () => {
+    expect(computeRepoIssues(payload)).toEqual([
+      { kind: 'unreadable', detail: '/etc/apt/sources.list.d/proxcenter-nonfree.list: Permission denied (os error 13)' },
+    ])
+  })
+
+  it('takes the kind the orchestrator sends', () => {
+    expect(preflightRepoIssueKind({ kind: 'unreadable', message: 'whatever' })).toBe('unreadable')
+    expect(preflightRepoIssueKind({ kind: 'parse', message: 'whatever' })).toBe('parse')
+    expect(preflightRepoIssueKind({ kind: 'enterprise', message: 'Repository error: x' })).toBe('enterprise')
+  })
+
+  it('infers the kind from the message of an orchestrator that predates it', () => {
+    expect(
+      preflightRepoIssueKind({ message: 'Repository error: /etc/apt/sources.list.d/x.list: Permission denied (os error 13)' })
+    ).toBe('unreadable')
+    expect(preflightRepoIssueKind({ message: 'Repository error: /etc/apt/sources.list.d/x.sources.BAK: invalid extension' })).toBe('parse')
+    expect(
+      preflightRepoIssueKind({ message: 'PVE Enterprise repository is enabled without a no-subscription alternative' })
+    ).toBe('enterprise')
+    expect(preflightRepoIssueKind({ kind: 'unknown-future-kind' })).toBe('enterprise')
+  })
+
+  it('has one explanation per kind', () => {
+    expect(REPO_ISSUE_DESCRIPTION_KEY).toEqual({
+      enterprise: 'updates.repoIssuesDescription',
+      unreadable: 'updates.repoUnreadableDescription',
+      parse: 'updates.repoParseErrorsDescription',
+    })
   })
 })

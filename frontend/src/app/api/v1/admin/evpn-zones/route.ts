@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { getActingSession } from "@/lib/auth/actingUser"
 import { audit } from "@/lib/audit"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -29,7 +29,7 @@ export const GET = withPublicApiGuard("evpn-zones-list", handleGet)
 
 // POST /api/v1/admin/evpn-zones
 // Declares a zone on its clusters: created, or adopted where Proxmox runs it.
-async function handlePost(req: NextRequest) {
+async function handlePost(req: Request) {
   const denied = await evpnGate()
   if (denied) return denied
   try {
@@ -70,4 +70,4 @@ async function handlePost(req: NextRequest) {
   }
 }
 
-export const POST = withAudit({ category: "sdn", resourceType: "evpn_zone" }, handlePost)
+export const POST = withAudit({ category: "sdn", resourceType: "evpn_zone" }, withPublicApiGuard("evpn-zone-create", handlePost))

@@ -145,6 +145,17 @@ describe('POST /api/v1/settings/api-tokens', () => {
     expect(await prismaTest.apiToken.findFirst({ where: { name: validBody.name } })).toBeNull()
   })
 
+  it('rejects vdcs:write on a token restricted to connections (issue #1360): its writes reach every connection', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: { ...validBody, scopes: ['vdcs:write'], connectionIds: ['conn-a'] } })
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toEqual({
+      error: 'vdcs:write reaches every connection: it needs a token not restricted to connections',
+      scope: 'vdcs:write',
+    })
+    expect(await prismaTest.apiToken.findFirst({ where: { name: validBody.name } })).toBeNull()
+  })
+
   it('rejects a target tenant that does not exist, with the same body as a disabled one', async () => {
     const { POST } = await import('./route')
     const res = await callRoute(POST, { body: { ...validBody, tenantId: 'no-such-tenant' } })

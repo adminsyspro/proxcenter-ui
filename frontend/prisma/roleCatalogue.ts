@@ -97,6 +97,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   { id: "admin.rbac.view", name: "admin.rbac.view", category: "admin", description: "View roles, permissions and role assignments (implied by admin.rbac)" },
   { id: "admin.settings.view", name: "admin.settings.view", category: "admin", description: "View provider settings: vDCs, EVPN zones, storage policies (implied by admin.settings)" },
   { id: "admin.tenants.view", name: "admin.tenants.view", category: "admin", description: "View tenants and their members (implied by admin.tenants)" },
+  { id: "admin.settings.vdcs", name: "admin.settings.vdcs", category: "admin", description: "Manage vDCs, their GPU quota, storage policies and shared EVPN zones (implied by admin.settings)", isDangerous: true },
 
   // SDN / VNet
   { id: "sdn.vnet.view", name: "sdn.vnet.view", category: "sdn", description: "List and view VNets in own vDCs" },

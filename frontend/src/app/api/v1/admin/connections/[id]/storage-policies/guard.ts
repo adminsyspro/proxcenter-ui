@@ -13,9 +13,9 @@ import { requireProviderTenant, DEFAULT_TENANT_ID } from "@/lib/tenant"
 // claim, or the token's tenant) and, for a session, its membership of the
 // provider tenant (#1184). The principal's tenant is checked again here so
 // this sensitive surface never depends on how that helper evolves.
-// `permission`: admin.settings to change a policy, admin.settings.view to
-// list them (issue #1360).
-export async function storagePolicyProviderGuard(permission: string = PERMISSIONS.ADMIN_SETTINGS): Promise<Response | null> {
+// `permission`: admin.settings.vdcs to change a policy, admin.settings.view
+// to list them; admin.settings implies both (issue #1360).
+export async function storagePolicyProviderGuard(permission: string = PERMISSIONS.ADMIN_SETTINGS_VDCS): Promise<Response | null> {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const result = await getPrincipal()

@@ -284,6 +284,14 @@ describe('updateEvpnZone', () => {
     await expect(updateEvpnZone(zone.id, { vniStart: 8090, vniEnd: 8095 })).rejects.toThrow('overlaps the range 8001-8099 of EVPN zone "Other"')
     expect((await updateEvpnZone(zone.id, { description: '' })).description).toBeNull()
   })
+
+  it('reads no cluster when the range sent back is the one already set (issue #1360)', async () => {
+    const { zone } = await createEvpnZone(input(), null)
+    pveFetchMock.mockClear()
+    const updated = await updateEvpnZone(zone.id, { name: 'Same range', vniStart: zone.vniStart, vniEnd: zone.vniEnd })
+    expect(updated).toMatchObject({ name: 'Same range', vniStart: zone.vniStart, vniEnd: zone.vniEnd })
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
 })
 
 describe('status and resync', () => {

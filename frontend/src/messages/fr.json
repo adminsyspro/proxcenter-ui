@@ -4363,6 +4363,7 @@
         "subScopesLabel": "Scopes d'écriture : {domain}",
         "readOnlyDomain": "Domaine en lecture seule",
         "domainNotGrantable": "Vos propres permissions ne permettent d'accorder aucun scope d'écriture de ce domaine pour le tenant et les connexions sélectionnés.",
+        "fleetOnlyScope": "La gestion des vDC touche tous les clusters : elle demande un jeton non restreint à des connexions.",
         "tenant": "Tenant",
         "connections": "Connexions",
         "connectionsAll": "Toutes les connexions du tenant",

@@ -16,6 +16,13 @@ export const runtime = "nodejs"
 
 type RouteContext = { params: Promise<{ id: string }> | { id: string }; principal?: Principal }
 
+/** The vDC, or null when it is missing or on a connection outside a token's perimeter. */
+async function findVisibleVdc(id: string, principal: Principal | undefined) {
+  const vdc = await getVdcById(id)
+  const [visible] = vdc ? await filterToTokenPerimeter([vdc], principal, v => [v.connectionId]) : []
+  return visible ?? null
+}
+
 // GET /api/v1/admin/vdcs/[id] — get vDC detail
 async function handleGet(_req: Request, ctx: RouteContext) {
   try {
@@ -29,9 +36,8 @@ async function handleGet(_req: Request, ctx: RouteContext) {
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS_VIEW)
     if (denied) return denied
 
-    const vdc = await getVdcById(id)
     // A vDC on a connection outside a token's perimeter does not exist for it.
-    const [visible] = vdc ? await filterToTokenPerimeter([vdc], ctx.principal, v => [v.connectionId]) : []
+    const visible = await findVisibleVdc(id, ctx.principal)
     if (!visible) {
       return NextResponse.json({ error: "vDC not found" }, { status: 404 })
     }
@@ -54,8 +60,11 @@ async function handlePut(req: Request, ctx: RouteContext) {
 
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS_VDCS)
     if (denied) return denied
+    if (!(await findVisibleVdc(id, ctx.principal))) {
+      return NextResponse.json({ error: "vDC not found" }, { status: 404 })
+    }
 
     const body = await req.json()
 
@@ -123,12 +132,11 @@ async function handleDelete(_req: Request, ctx: RouteContext) {
 
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS_VDCS)
     if (denied) return denied
 
-
     // Get vDC name before deletion for audit log
-    const existing = await getVdcById(id)
+    const existing = await findVisibleVdc(id, ctx.principal)
     if (!existing) {
       return NextResponse.json({ error: "vDC not found" }, { status: 404 })
     }
@@ -173,5 +181,5 @@ async function handleDelete(_req: Request, ctx: RouteContext) {
   }
 }
 
-export const PUT = withAudit({ category: "admin", resourceType: "vdc", resourceParam: "id" }, handlePut)
-export const DELETE = withAudit({ category: "admin", resourceType: "vdc", resourceParam: "id" }, handleDelete)
+export const PUT = withAudit({ category: "admin", resourceType: "vdc", resourceParam: "id" }, withPublicApiGuard("admin-vdc-update", handlePut))
+export const DELETE = withAudit({ category: "admin", resourceType: "vdc", resourceParam: "id" }, withPublicApiGuard("admin-vdc-delete", handleDelete))

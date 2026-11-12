@@ -56,7 +56,7 @@ const TENANT_MEMBER = {
 }
 
 // ── vDCs ─────────────────────────────────────────────────────────────────────
-const QUOTA = {
+export const QUOTA = {
   type: ["object", "null"],
   description: "Null: no quota. A null limit is unlimited.",
   properties: {
@@ -83,7 +83,7 @@ const USAGE = {
     lastSyncedAt: NULLABLE_DATE,
   },
 }
-const VDC = {
+export const VDC = {
   type: "object",
   additionalProperties: true,
   properties: {
@@ -130,7 +130,7 @@ const EVPN_MEMBER = {
     adopted: { type: "boolean", description: "The zone already ran on the cluster when it was declared" },
   },
 }
-const EVPN_ZONE = {
+export const EVPN_ZONE = {
   type: "object",
   properties: {
     id: { type: "string" },
@@ -167,7 +167,7 @@ const EVPN_ZONE_WITH_STATUS = {
     },
   },
 }
-const STORAGE_POLICY = {
+export const STORAGE_POLICY = {
   type: "object",
   properties: {
     id: { type: "string" },

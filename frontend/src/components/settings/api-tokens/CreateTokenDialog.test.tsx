@@ -378,6 +378,24 @@ describe('CreateTokenDialog scope picker', () => {
     await waitFor(() => expect(grantableCalls().some(url => url.includes('connectionIds=conn-a'))).toBe(true))
   })
 
+  it('refuses vDC Write once connections are selected, saying it reaches every cluster (issue #1360)', async () => {
+    grantableFor = () => [...READ_GRANTABLE, ...WRITE_SCOPE_IDS]
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+    expect(levelButton(dialog, 'vdcs', 'write')).toBeEnabled()
+    await userEvent.click(levelButton(dialog, 'vdcs', 'write'))
+
+    fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[2])
+    await userEvent.click(await screen.findByRole('option', { name: 'Provider PVE' }))
+    // The multiple select keeps its menu open, hiding the dialog from queries.
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(levelButton(dialog, 'vdcs', 'write')).toBeDisabled())
+    // The row falls back to Read: vdcs:write is dropped with the perimeter.
+    expect(levelButton(dialog, 'vdcs', 'read')).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.hover(levelButton(dialog, 'vdcs', 'write').parentElement as HTMLElement)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(dialogT.fleetOnlyScope)
+  })
+
   it('presets a 90-day expiry when a domain goes to Write, and keeps it when back to Read', async () => {
     const dialog = await openDialog()
     const expiration = within(dialog).getAllByRole('combobox')[0]

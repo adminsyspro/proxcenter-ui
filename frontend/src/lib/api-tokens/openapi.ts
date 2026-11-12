@@ -27,6 +27,9 @@ function forbiddenResponse(entry: AllowlistEntry) {
   if (entry.connectionSegment || entry.vmKeySegment || entry.connectionField) {
     examples.perimeter = { error: "Connection not in token scope", connection: "conn-1" }
   }
+  if (entry.perimeter === "fleet") {
+    examples.fleet = { error: "This operation reaches every connection: it needs a token not restricted to connections" }
+  }
   if (entry.clusterObject) {
     examples.clusterObject = { error: "Cluster-level object not available to a vDC tenant token" }
   }

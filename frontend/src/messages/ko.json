@@ -4363,6 +4363,7 @@
         "subScopesLabel": "{domain} 쓰기 스코프",
         "readOnlyDomain": "읽기 전용 영역",
         "domainNotGrantable": "본인의 권한으로는 선택한 테넌트와 연결에 대해 이 영역의 쓰기 스코프를 부여할 수 없습니다.",
+        "fleetOnlyScope": "vDC 관리는 모든 클러스터에 영향을 줍니다. 연결로 제한되지 않은 토큰이 필요합니다.",
         "tenant": "테넌트",
         "connections": "연결",
         "connectionsAll": "테넌트의 모든 연결",

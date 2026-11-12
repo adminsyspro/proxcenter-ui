@@ -5,6 +5,8 @@ import crypto from 'crypto'
 
 import { prisma } from '@/lib/db/prisma'
 import { pveFetch } from '@/lib/proxmox/client'
+import { waitForTaskStopped } from '@/lib/proxmox/tasks'
+import { parseUpid } from '@/lib/proxmox/upid'
 
 import { parseZonePeers } from './transport'
 import type { SdnVnet } from './types'
@@ -165,12 +167,56 @@ export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
 // PVE SDN: apply pending changes
 // ---------------------------------------------------------------------------
 
+// One apply at a time per cluster (issue #1360, measured on the lab): applies
+// started together run their `ifreload -a` over each other on every node, and
+// an overlapped reload fails (exit code 89) while the cluster task still
+// reports OK, so a node can keep its previous network configuration. A caller
+// arriving while an apply runs shares the next one, which starts after it and
+// therefore covers every change written meanwhile: a burst of N writes costs
+// at most two applies in a row.
+const APPLY_POLL_MS = 1_500
+const APPLY_TIMEOUT_MS = 120_000
+type ApplySlot = { running?: Promise<void>; next?: Promise<void> }
+const applySlots = new Map<string, ApplySlot>()
+
+async function applyAndWait(conn: any): Promise<void> {
+  const upid = await pveFetch<unknown>(conn, '/cluster/sdn', { method: 'PUT' })
+  const task = parseUpid(upid)
+  if (!task) return
+  const end = await waitForTaskStopped(conn, task.node, task.upid, { timeoutMs: APPLY_TIMEOUT_MS, intervalMs: APPLY_POLL_MS })
+  if (end.stopped && end.exitstatus !== 'OK') console.warn(`[sdn] apply ${task.upid} ended with ${end.exitstatus}`)
+  if (!end.stopped) console.warn(`[sdn] apply ${task.upid} still running after ${APPLY_TIMEOUT_MS / 1000}s`)
+}
+
+function startApply(key: string, slot: ApplySlot, conn: any): Promise<void> {
+  const run: Promise<void> = applyAndWait(conn).finally(() => {
+    if (slot.running === run) slot.running = undefined
+    if (slot.running === undefined && slot.next === undefined) applySlots.delete(key)
+  })
+  slot.running = run
+  return run
+}
+
 /**
- * Applies pending SDN changes: triggers ifreload on every node.
- * Should be called once at the end of a batch of SDN mutations.
+ * Applies pending SDN changes (ifreload on every node) and resolves once the
+ * reload has ended. Should be called once at the end of a batch of SDN
+ * mutations; concurrent callers on one cluster are coalesced (see above).
  */
-export async function applySdn(conn: any): Promise<void> {
-  await pveFetch(conn, '/cluster/sdn', { method: 'PUT' })
+export function applySdn(conn: any): Promise<void> {
+  const key = String(conn?.baseUrl ?? conn?.id ?? '')
+  let slot = applySlots.get(key)
+  if (!slot) {
+    slot = {}
+    applySlots.set(key, slot)
+  }
+  const owner = slot
+  const running = owner.running
+  if (running === undefined) return startApply(key, owner, conn)
+  owner.next ??= running.catch(() => undefined).then(() => {
+    owner.next = undefined
+    return startApply(key, owner, conn)
+  })
+  return owner.next
 }
 
 // ---------------------------------------------------------------------------

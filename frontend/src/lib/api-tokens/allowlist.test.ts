@@ -251,6 +251,20 @@ describe('shared canonical matcher', () => {
       'rbac-assignment-get': '/api/v1/rbac/assignments/a1',
       'users-list': '/api/v1/users',
       'user-get': '/api/v1/users/u1',
+      'admin-vdc-create': '/api/v1/admin/vdcs',
+      'admin-vdc-update': '/api/v1/admin/vdcs/vdc-1',
+      'admin-vdc-delete': '/api/v1/admin/vdcs/vdc-1',
+      'vdc-gpu-quota-get': '/api/v1/vdcs/vdc-1/gpu/quota',
+      'vdc-gpu-quota-update': '/api/v1/vdcs/vdc-1/gpu/quota',
+      'storage-policy-create': '/api/v1/admin/connections/c1/storage-policies',
+      'storage-policy-update': '/api/v1/admin/connections/c1/storage-policies/p1',
+      'storage-policy-delete': '/api/v1/admin/connections/c1/storage-policies/p1',
+      'evpn-zone-create': '/api/v1/admin/evpn-zones',
+      'evpn-zone-update': '/api/v1/admin/evpn-zones/z1',
+      'evpn-zone-delete': '/api/v1/admin/evpn-zones/z1',
+      'evpn-zone-member-add': '/api/v1/admin/evpn-zones/z1/members',
+      'evpn-zone-member-remove': '/api/v1/admin/evpn-zones/z1/members',
+      'vdc-evpn-network-update': '/api/v1/vdcs/vdc-1/evpn-networks/n1',
     }
     for (const entry of PUBLIC_API_ALLOWLIST) {
       const path = samplePathById[entry.id]

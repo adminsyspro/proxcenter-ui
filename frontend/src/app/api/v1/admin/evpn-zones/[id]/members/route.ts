@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { audit } from "@/lib/audit"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { addEvpnZoneMember, removeEvpnZoneMember, resyncEvpnZoneMember } from "@/lib/vdc/evpnZones"
 import { evpnFail, evpnGate } from "@/lib/vdc/evpnRouteGate"
 
@@ -20,7 +21,7 @@ async function gate(ctx: RouteContext): Promise<{ id: string } | Response> {
 
 // POST /api/v1/admin/evpn-zones/[id]/members
 // Extends the zone to one more cluster.
-async function handlePost(req: NextRequest, ctx: RouteContext) {
+async function handlePost(req: Request, ctx: RouteContext) {
   const g = await gate(ctx)
   if (g instanceof Response) return g
   try {
@@ -58,11 +59,11 @@ async function handlePut(req: NextRequest, ctx: RouteContext) {
 
 // DELETE /api/v1/admin/evpn-zones/[id]/members?connectionId=xxx
 // Detaches one cluster.
-async function handleDelete(req: NextRequest, ctx: RouteContext) {
+async function handleDelete(req: Request, ctx: RouteContext) {
   const g = await gate(ctx)
   if (g instanceof Response) return g
   try {
-    const connectionId = req.nextUrl.searchParams.get("connectionId") || ""
+    const connectionId = new URL(req.url).searchParams.get("connectionId") || ""
     if (!connectionId) return NextResponse.json({ error: "connectionId is required" }, { status: 400 })
     const result = await removeEvpnZoneMember(g.id, connectionId)
     await audit({
@@ -80,6 +81,6 @@ async function handleDelete(req: NextRequest, ctx: RouteContext) {
   }
 }
 
-export const POST = withAudit({ category: "sdn", resourceType: "evpn_zone", resourceParam: "id" }, handlePost)
+export const POST = withAudit({ category: "sdn", resourceType: "evpn_zone", resourceParam: "id" }, withPublicApiGuard("evpn-zone-member-add", handlePost))
 export const PUT = withAudit({ category: "sdn", resourceType: "evpn_zone", resourceParam: "id" }, handlePut)
-export const DELETE = withAudit({ category: "sdn", resourceType: "evpn_zone", resourceParam: "id" }, handleDelete)
+export const DELETE = withAudit({ category: "sdn", resourceType: "evpn_zone", resourceParam: "id" }, withPublicApiGuard("evpn-zone-member-remove", handleDelete))

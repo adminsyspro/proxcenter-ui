@@ -684,9 +684,14 @@ export async function updateEvpnZone(id: string, input: UpdateEvpnZoneInput): Pr
   if (input.description !== undefined) data.description = input.description ? String(input.description).trim() || null : null
   if (input.vniStart !== undefined || input.vniEnd !== undefined) {
     const { vniStart, vniEnd } = normalizeRange(input.vniStart ?? row.vniStart, input.vniEnd ?? row.vniEnd)
-    await assertVniSpaceFree({ zoneName: row.zoneName, vrfVxlan: row.vrfVxlan, vniStart, vniEnd }, id)
-    data.vniStart = vniStart
-    data.vniEnd = vniEnd
+    // The VNI scan reads every connection: only a range that moves needs it.
+    // An unchanged range, sent back whole by an infrastructure-as-code client
+    // on every update (issue #1360), was checked when it was set.
+    if (vniStart !== row.vniStart || vniEnd !== row.vniEnd) {
+      await assertVniSpaceFree({ zoneName: row.zoneName, vrfVxlan: row.vrfVxlan, vniStart, vniEnd }, id)
+      data.vniStart = vniStart
+      data.vniEnd = vniEnd
+    }
   }
   await prisma.sdnEvpnZone.update({ where: { id }, data })
   return getEvpnZone(id)

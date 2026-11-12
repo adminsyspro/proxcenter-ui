@@ -4,6 +4,7 @@ import { callRoute } from '../../../../../../../__tests__/setup/route-test'
 
 const m = vi.hoisted(() => ({
   access: vi.fn(),
+  perimeter: vi.fn(),
   getVdc: vi.fn(),
   load: vi.fn(),
   list: vi.fn(),
@@ -12,7 +13,9 @@ const m = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/audit/withAudit', () => ({ withAudit: (_spec: unknown, handler: unknown) => handler }))
-vi.mock('@/lib/gpu/guard', () => ({ requireGpuSettings: () => m.access() }))
+vi.mock('@/lib/gpu/quotaGuard', () => ({ requireGpuQuotaAccess: async (...a: unknown[]) => (await m.access(...a)).denied }))
+vi.mock('@/lib/api-tokens/routeGuard', () => ({ withPublicApiGuard: (_id: string, handler: unknown) => handler }))
+vi.mock('@/lib/api-tokens/scope', () => ({ filterToTokenPerimeter: (...a: unknown[]) => m.perimeter(...a) }))
 vi.mock('@/lib/vdc', () => ({ getVdcById: (...a: unknown[]) => m.getVdc(...a) }))
 vi.mock('@/lib/gpu/vdcContext', () => ({ loadVdcGpuContext: (...a: unknown[]) => m.load(...a) }))
 vi.mock('@/lib/gpu/vdcLock', () => ({ withVdcLock: (...a: unknown[]) => m.lock(...a) }))
@@ -46,6 +49,7 @@ const body = (r: { json: () => Promise<unknown> }) => r.json() as Promise<any>
 beforeEach(() => {
   vi.clearAllMocks()
   m.access.mockResolvedValue({ denied: null, userId: 'u1' })
+  m.perimeter.mockReset().mockImplementation(async (items: unknown[]) => items)
   m.getVdc.mockResolvedValue(vdc)
   m.lock.mockImplementation(async (_id: string, fn: () => Promise<unknown>) => fn())
   m.list.mockResolvedValue([entry])
@@ -181,5 +185,22 @@ describe('PUT /api/v1/vdcs/{id}/gpu/quota', () => {
     expect(res.status).toBe(200)
     expect(m.replace).toHaveBeenCalledWith('vdc-1', [])
     expect((await body(res)).data.entries).toEqual([])
+  })
+})
+
+describe('GPU quota for API tokens (issue #1360)', () => {
+  it('reads with admin.settings.view and replaces with admin.settings.vdcs', async () => {
+    await callRoute(GET, { params })
+    expect(m.access).toHaveBeenLastCalledWith('admin.settings.view')
+    await callRoute(PUT, { params, method: 'PUT', body: { entries: [line] } })
+    expect(m.access).toHaveBeenLastCalledWith('admin.settings.vdcs')
+  })
+
+  it('answers 404 for a vDC outside the token perimeter, before any read or write', async () => {
+    m.perimeter.mockResolvedValue([])
+    expect((await callRoute(GET, { params })).status).toBe(404)
+    expect((await callRoute(PUT, { params, method: 'PUT', body: { entries: [line] } })).status).toBe(404)
+    expect(m.load).not.toHaveBeenCalled()
+    expect(m.replace).not.toHaveBeenCalled()
   })
 })

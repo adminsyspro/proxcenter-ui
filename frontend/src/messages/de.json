@@ -4352,6 +4352,7 @@
         "subScopesLabel": "Schreib-Scopes: {domain}",
         "readOnlyDomain": "Bereich nur lesbar",
         "domainNotGrantable": "Ihre eigenen Berechtigungen erlauben es nicht, einen Schreib-Scope dieses Bereichs für den gewählten Mandanten und die gewählten Verbindungen zu vergeben.",
+        "fleetOnlyScope": "Die vDC-Verwaltung betrifft alle Cluster: Sie erfordert ein Token, das nicht auf Verbindungen beschränkt ist.",
         "tenant": "Mandant",
         "connections": "Verbindungen",
         "connectionsAll": "Alle Verbindungen des Mandanten",

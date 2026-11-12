@@ -3,24 +3,31 @@
 //        the vDC's cluster can offer and what its card models add up to
 //   PUT  { entries } replaces the whole contingent
 //
-// Provider settings (#672), default tenant, gpu_management, admin.settings.
+// Provider settings (#672), default tenant, gpu_management, admin.settings.vdcs
+// (admin.settings.view to read). Open to API tokens (issue #1360): scope
+// vdcs:read or vdcs:write, and a vDC on a connection outside the token's
+// perimeter answers 404 like a missing one.
 // A line lowered under what the vDC holds is kept and flagged overCommitted:
 // nothing is detached, new attaches are refused until the usage falls.
 import { NextResponse } from 'next/server'
 
+import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
+import { filterToTokenPerimeter } from '@/lib/api-tokens/scope'
 import { withAudit } from '@/lib/audit/withAudit'
-import { requireGpuSettings } from '@/lib/gpu/guard'
+import type { Principal } from '@/lib/auth/principal'
 import { gpuCode } from '@/lib/gpu/metrics'
+import { requireGpuQuotaAccess } from '@/lib/gpu/quotaGuard'
 import { loadVdcGpuContext, type VdcRef } from '@/lib/gpu/vdcContext'
 import { listVdcGpuEntries, parseEntries, replaceVdcGpuEntries } from '@/lib/gpu/vdcEntries'
 import { withVdcLock } from '@/lib/gpu/vdcLock'
 import { quotaCapacity, quotaOffers, type GpuModelCapacity, type GpuOffer, type VdcGpuEntry } from '@/lib/gpu/vdcQuota'
+import { PERMISSIONS } from '@/lib/rbac'
 import { getVdcById } from '@/lib/vdc'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-type Ctx = { params: Promise<{ id: string }> }
+type Ctx = { params: Promise<{ id: string }>; principal?: Principal }
 
 type QuotaView = {
   entries: Array<VdcGpuEntry & { held: number; overCommitted: boolean }>
@@ -53,24 +60,26 @@ async function quotaView(vdc: VdcRef, stored: () => Promise<VdcGpuEntry[]>): Pro
   }
 }
 
-async function loadVdc(id: string): Promise<VdcRef | null> {
-  const vdc = await getVdcById(id)
+/** The vDC, or null when it is missing or outside the token's perimeter. */
+async function loadVdc(id: string, principal: Principal | undefined): Promise<VdcRef | null> {
+  const found = await getVdcById(id)
+  const [vdc] = found ? await filterToTokenPerimeter([found], principal, v => [v.connectionId]) : []
   if (!vdc) return null
   return { id: vdc.id, tenantId: vdc.tenantId, connectionId: vdc.connectionId, pvePoolName: vdc.pvePoolName, enabled: vdc.enabled }
 }
 
-export async function GET(_req: Request, ctx: Ctx) {
-  const access = await requireGpuSettings()
-  if (access.denied) return access.denied
-  const vdc = await loadVdc((await ctx.params).id)
+async function handleGet(_req: Request, ctx: Ctx) {
+  const denied = await requireGpuQuotaAccess(PERMISSIONS.ADMIN_SETTINGS_VIEW)
+  if (denied) return denied
+  const vdc = await loadVdc((await ctx.params).id, ctx.principal)
   if (!vdc) return gpuCode('not_found', 404)
   return NextResponse.json({ data: await quotaView(vdc, () => listVdcGpuEntries(vdc.id)) })
 }
 
 async function handlePut(req: Request, ctx: Ctx) {
-  const access = await requireGpuSettings()
-  if (access.denied) return access.denied
-  const vdc = await loadVdc((await ctx.params).id)
+  const denied = await requireGpuQuotaAccess(PERMISSIONS.ADMIN_SETTINGS_VDCS)
+  if (denied) return denied
+  const vdc = await loadVdc((await ctx.params).id, ctx.principal)
   if (!vdc) return gpuCode('not_found', 404)
 
   const raw = await req.json().catch(() => null)
@@ -84,4 +93,5 @@ async function handlePut(req: Request, ctx: Ctx) {
   return NextResponse.json({ data: view })
 }
 
-export const PUT = withAudit({ category: 'settings', resourceType: 'vdc', resourceParam: 'id' }, handlePut)
+export const GET = withPublicApiGuard("vdc-gpu-quota-get", handleGet)
+export const PUT = withAudit({ category: 'settings', resourceType: 'vdc', resourceParam: 'id' }, withPublicApiGuard("vdc-gpu-quota-update", handlePut))

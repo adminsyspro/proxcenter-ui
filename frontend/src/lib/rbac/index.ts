@@ -604,6 +604,9 @@ export const PERMISSIONS = {
   ADMIN_RBAC_VIEW: "admin.rbac.view",
   ADMIN_SETTINGS_VIEW: "admin.settings.view",
   ADMIN_TENANTS_VIEW: "admin.tenants.view",
+  // Child of admin.settings that the vdcs:write API scope maps (issue #1360):
+  // the vDC lifecycle, GPU quota, storage policies and shared EVPN zones.
+  ADMIN_SETTINGS_VDCS: "admin.settings.vdcs",
   ADMIN_AUDIT: "admin.audit",
   ADMIN_COMPLIANCE: "admin.compliance",
   ADMIN_TENANTS: "admin.tenants",

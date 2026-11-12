@@ -4363,6 +4363,7 @@
         "subScopesLabel": "{domain} write scopes",
         "readOnlyDomain": "Read only domain",
         "domainNotGrantable": "Your own permissions do not allow granting any write scope of this domain for the selected tenant and connections.",
+        "fleetOnlyScope": "Managing vDCs reaches every cluster: it needs a token not restricted to connections.",
         "tenant": "Tenant",
         "connections": "Connections",
         "connectionsAll": "All connections of the tenant",

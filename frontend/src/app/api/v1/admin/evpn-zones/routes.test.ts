@@ -20,6 +20,10 @@ const { requireProviderTenantMock, checkPermissionMock, auditMock, zones, collis
   collisions: { auditVniCollisions: vi.fn(), renumberVnet: vi.fn() },
 }))
 
+// API token guard: pass-through, these tests drive the session path (token
+// paths: routeGuard.test.ts, tenancyTokenScope.test.ts).
+vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
+vi.mock("@/lib/auth/actingUser", async () => (await import("@/__tests__/fixtures/actingUserFromNextAuth")).actingUserFromNextAuth())
 vi.mock('@/lib/tenant', () => ({ requireProviderTenant: (...a: unknown[]) => requireProviderTenantMock(...a) }))
 vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: unknown[]) => checkPermissionMock(...a),
@@ -72,7 +76,7 @@ beforeEach(() => {
 describe('gate', () => {
   it('every route is refused outside the provider tenant and without the settings permission', async () => {
     const calls = [
-      () => root.GET(),
+      () => root.GET(new Request("http://t/api/v1/admin/evpn-zones")),
       () => callRoute(root.POST as any, { method: 'POST', body: BODY }),
       () => discover.GET(nextReq('http://test/x?connectionIds=c1')),
       () => collisionsRoute.GET(),
@@ -96,10 +100,10 @@ describe('gate', () => {
 
 describe('/evpn-zones', () => {
   it('lists the zones', async () => {
-    const res = await root.GET()
+    const res = await root.GET(new Request("http://t/api/v1/admin/evpn-zones"))
     expect(await res.json()).toEqual({ data: [ZONE] })
     zones.listEvpnZones.mockRejectedValueOnce(new Error('boom'))
-    expect((await root.GET()).status).toBe(500)
+    expect((await root.GET(new Request("http://t/api/v1/admin/evpn-zones"))).status).toBe(500)
   })
 
   it('declares a zone, audits what it created, and returns 201 with the apply errors', async () => {

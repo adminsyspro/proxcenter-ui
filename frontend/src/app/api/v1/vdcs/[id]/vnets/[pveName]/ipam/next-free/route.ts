@@ -7,7 +7,9 @@
 import { NextResponse } from "next/server"
 
 import { getCurrentTenantId } from "@/lib/tenant"
-import { checkPermission } from "@/lib/rbac"
+import { PERMISSIONS } from "@/lib/rbac"
+import type { Principal } from "@/lib/auth/principal"
+import { checkVnetReadForCaller } from "@/lib/vdc/vnetPermission"
 import { listAllocationsForSubnet } from "@/lib/vdc/ipam"
 import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
@@ -15,12 +17,13 @@ import { parseCidr, ipToInt, intToIp } from "@/lib/vdc/network"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { prisma } from "@/lib/db/prisma"
 import { resolveScopeTenant } from "@/lib/vdc/providerTarget"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
-type RouteContext = { params: Promise<{ id: string; pveName: string }> | { id: string; pveName: string } }
+type RouteContext = { params: Promise<{ id: string; pveName: string }> | { id: string; pveName: string }; principal?: Principal }
 
-export async function GET(req: Request, ctx: RouteContext) {
+async function handleGet(req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
@@ -29,13 +32,13 @@ export async function GET(req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: "Missing params" }, { status: 400 })
     }
 
-    const denied = await checkPermission("sdn.vnet.view")
+    const denied = await checkVnetReadForCaller(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_VIEW)
     if (denied) return denied
 
     // `?targetVdcId=` (provider only, equal to the path vDC): preview the IP
     // a provider deploying into that tenant vDC will reserve (roadmap#65).
     const scopeTenant = await resolveScopeTenant(req, null, getCurrentTenantId)
-    if (!scopeTenant.ok) return scopeTenant.response
+    if (scopeTenant.response) return scopeTenant.response
     if (scopeTenant.target && scopeTenant.target.vdcId !== vdcId) {
       return NextResponse.json({ error: "VNet not found" }, { status: 404 })
     }
@@ -125,3 +128,5 @@ export async function GET(req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vdc-vnet-ipam-next-free", handleGet)

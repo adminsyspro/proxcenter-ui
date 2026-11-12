@@ -9,6 +9,8 @@ import {
   WRITE_SCOPE_IDS,
   DESTRUCTIVE_SCOPE_IDS,
   isWriteScope,
+  isCreatorCheckedScope,
+  CREATOR_CHECKED_READ_SCOPE_IDS,
   expandScopes,
 } from './scopes'
 import { ALL_PERMISSIONS } from '../../../prisma/roleCatalogue'
@@ -22,15 +24,35 @@ describe('scope to permission resolver (spec section 7)', () => {
     expect(SCOPE_DEFINITIONS['automation:read']).toEqual(['automation.view'])
     expect(SCOPE_DEFINITIONS['alerts:read']).toEqual(['alerts.view', 'events.view'])
     expect(SCOPE_DEFINITIONS['reports:read']).toEqual(['reports.view'])
-    expect(READ_SCOPE_IDS).toHaveLength(7)
+    expect(SCOPE_DEFINITIONS['tenants:read']).toEqual(['admin.tenants.view'])
+    expect(SCOPE_DEFINITIONS['vdcs:read']).toEqual(['admin.settings.view', 'vm.view', 'sdn.vnet.view'])
+    expect(SCOPE_DEFINITIONS['ipam:read']).toEqual(['sdn.vnet.view'])
+    expect(SCOPE_DEFINITIONS['rbac:read']).toEqual(['admin.rbac.view'])
+    expect(SCOPE_DEFINITIONS['users:read']).toEqual(['admin.users.view'])
+    expect(READ_SCOPE_IDS).toHaveLength(12)
     expect(Object.keys(READ_SCOPE_DEFINITIONS)).toEqual(READ_SCOPE_IDS)
   })
 
-  it('offers 20 scopes: 7 read and 13 write', () => {
-    expect(ALL_SCOPE_IDS).toHaveLength(20)
+  it('offers 25 scopes: 12 read and 13 write', () => {
+    expect(ALL_SCOPE_IDS).toHaveLength(25)
     expect(WRITE_SCOPE_IDS).toHaveLength(13)
     expect(ALL_SCOPE_IDS).toEqual([...READ_SCOPE_IDS, ...WRITE_SCOPE_IDS])
     expect(Object.keys(SCOPE_DEFINITIONS)).toEqual(ALL_SCOPE_IDS)
+  })
+
+  // Issue #1360: the admin reads are creator-checked like a write scope, and
+  // map only the read-only children of the admin rights.
+  it('checks the creator of exactly the admin read scopes, and of every write scope', () => {
+    expect(CREATOR_CHECKED_READ_SCOPE_IDS).toEqual(['tenants:read', 'vdcs:read', 'ipam:read', 'rbac:read', 'users:read'])
+    for (const id of CREATOR_CHECKED_READ_SCOPE_IDS) expect(isCreatorCheckedScope(id), id).toBe(true)
+    for (const id of WRITE_SCOPE_IDS) expect(isCreatorCheckedScope(id), id).toBe(true)
+    for (const id of ['vms:read', 'nodes:read', 'reports:read']) expect(isCreatorCheckedScope(id), id).toBe(false)
+    expect(isCreatorCheckedScope('nope:read')).toBe(false)
+    for (const id of CREATOR_CHECKED_READ_SCOPE_IDS) {
+      for (const key of SCOPE_DEFINITIONS[id]) {
+        if (key.startsWith('admin.')) expect(key, `${id} maps ${key}`).toMatch(/^admin\.[a-z]+\.view$/)
+      }
+    }
   })
 
   it('does not offer compliance:read (#632)', () => {

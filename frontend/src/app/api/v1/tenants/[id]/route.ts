@@ -6,17 +6,17 @@ import { parseVmidRangeInput, findVmidRangeConflict } from "@/lib/tenant/vmidRan
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { syncServiceDeskForNewTenant } from "@/lib/rbac/serviceDesk"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth/config"
+import { getActingSession } from "@/lib/auth/actingUser"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 // GET /api/v1/tenants/:id
-export async function GET(_req: NextRequest, ctx: Ctx) {
+async function handleGet(_req: Request, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
-  const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+  const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS_VIEW)
   if (denied) return denied
 
   const { id } = await ctx.params
@@ -44,6 +44,8 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   })
 }
 
+export const GET = withPublicApiGuard("tenant-get", handleGet)
+
 // PUT /api/v1/tenants/:id
 async function handlePut(req: NextRequest, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
@@ -53,7 +55,7 @@ async function handlePut(req: NextRequest, ctx: Ctx) {
 
   const { id } = await ctx.params
   const body = await req.json()
-  const session = await getServerSession(authOptions)
+  const session = await getActingSession()
 
   if (body.slug && !/^[a-z0-9-]+$/.test(body.slug)) {
     return NextResponse.json({ error: "slug must contain only lowercase letters, numbers, and hyphens" }, { status: 400 })
@@ -115,7 +117,7 @@ async function handleDelete(_req: NextRequest, ctx: Ctx) {
   if (denied) return denied
 
   const { id } = await ctx.params
-  const session = await getServerSession(authOptions)
+  const session = await getActingSession()
 
   if (id === DEFAULT_TENANT_ID) {
     return NextResponse.json({ error: "Cannot delete the default tenant" }, { status: 400 })

@@ -2,22 +2,21 @@ export const dynamic = "force-dynamic"
 // src/app/api/v1/rbac/roles/route.ts
 import { NextRequest, NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
 import { Prisma } from "@prisma/client"
 import { nanoid } from "nanoid"
 
-import { authOptions } from "@/lib/auth/config"
+import { authorizeAdminRead, getActingSession } from "@/lib/auth/actingUser"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { isUserSuperAdmin, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { validateRoleDefaultScopes } from "@/lib/rbac/scope-validation"
 import { parsePublicationInput, publicationFields, tenantCatalogueFilter } from "@/lib/rbac/rolePublication"
 import { findUnknownTenant, refuseOverCeiling } from "@/lib/rbac/catalogueGuards"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 /**
  * Normalize a client-supplied widget_overrides payload into the shape we
@@ -44,21 +43,18 @@ function normalizeWidgetOverrides(raw: unknown): { hidden: string[] } | null | u
 }
 
 // GET /api/v1/rbac/roles - Liste tous les rôles
-export async function GET(req: NextRequest) {
+async function handleGet(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const reader = await authorizeAdminRead(PERMISSIONS.ADMIN_RBAC_VIEW)
+    if (reader.denied) return reader.denied
 
     // Hide protected (wildcard) roles from non-super-admin callers so a tenant
     // admin with admin.rbac can't assign themselves or others full cluster
     // access.
-    const callerIsSuperAdmin = await isUserSuperAdmin(session.user.id)
+    const callerIsSuperAdmin = reader.isSuperAdmin
     const tenantId = await getCurrentTenantId()
 
     // Tenant scoping: callers see system/global roles (tenant_id IS NULL) plus
@@ -159,13 +155,15 @@ return NextResponse.json(
   }
 }
 
+export const GET = withPublicApiGuard("rbac-roles-list", handleGet)
+
 // POST /api/v1/rbac/roles - Créer un nouveau rôle
 async function handlePost(req: NextRequest) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
 
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

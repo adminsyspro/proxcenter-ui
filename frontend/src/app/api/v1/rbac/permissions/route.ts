@@ -1,24 +1,21 @@
 export const dynamic = "force-dynamic"
 // src/app/api/v1/rbac/permissions/route.ts
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
-import { authOptions } from "@/lib/auth/config"
+import { authorizeAdminRead } from "@/lib/auth/actingUser"
+import { PERMISSIONS } from "@/lib/rbac"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { prisma } from "@/lib/db/prisma"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 // GET /api/v1/rbac/permissions - Liste toutes les permissions disponibles
-export async function GET(req: NextRequest) {
+async function handleGet(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const reader = await authorizeAdminRead(PERMISSIONS.ADMIN_RBAC_VIEW)
+    if (reader.denied) return reader.denied
 
     // Récupérer toutes les permissions groupées par catégorie
     const rows = await prisma.rbacPermission.findMany({
@@ -66,3 +63,5 @@ return NextResponse.json(
     )
   }
 }
+
+export const GET = withPublicApiGuard("rbac-permissions-list", handleGet)

@@ -17,6 +17,9 @@ const {
   getCurrentTenantIdMock: vi.fn(),
 }))
 
+// API token guard: pass-through, these tests drive the session path (token
+// paths: routeGuard.test.ts, tenancyTokenScope.test.ts).
+vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   getRBACContext: getRBACContextMock,

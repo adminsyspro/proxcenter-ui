@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server"
 
 import { getCurrentTenantId } from "@/lib/tenant"
-import { checkPermission } from "@/lib/rbac"
+import { PERMISSIONS } from "@/lib/rbac"
+import type { Principal } from "@/lib/auth/principal"
+import { checkVnetReadForCaller } from "@/lib/vdc/vnetPermission"
 import { prisma } from "@/lib/db/prisma"
 import { listAllocationsForSubnet } from "@/lib/vdc/ipam"
 import { parseCidr } from "@/lib/vdc/network"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -16,9 +19,9 @@ export const runtime = "nodejs"
 // usage summary so the panel can show "X / Y allocated" without a second
 // round-trip. Tenant-scoped (the JOIN on tenant_id keeps tenants from
 // peeking at other vDCs).
-type RouteContext = { params: Promise<{ id: string; pveName: string }> | { id: string; pveName: string } }
+type RouteContext = { params: Promise<{ id: string; pveName: string }> | { id: string; pveName: string }; principal?: Principal }
 
-export async function GET(_req: Request, ctx: RouteContext) {
+async function handleGet(_req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
     const vdcId = (params as any)?.id
@@ -27,7 +30,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: "Missing params" }, { status: 400 })
     }
 
-    const denied = await checkPermission("sdn.vnet.view")
+    const denied = await checkVnetReadForCaller(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_VIEW)
     if (denied) return denied
 
     const tenantId = await getCurrentTenantId()
@@ -129,3 +132,5 @@ export async function GET(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vdc-vnet-ipam", handleGet)

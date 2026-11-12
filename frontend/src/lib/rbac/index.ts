@@ -259,6 +259,17 @@ const GLOBAL_SCOPE_PERMISSIONS: ReadonlySet<string> = new Set([
 ])
 
 /**
+ * Whether a resource-less check of `permission` needs a `global` grant: the
+ * tenant-wide admin permissions above and their read-only children
+ * (`admin.users.view`, ...), which are no less tenant-wide for being reads.
+ */
+export function isGlobalScopePermission(permission: string): boolean {
+  if (GLOBAL_SCOPE_PERMISSIONS.has(permission)) return true
+  const parent = permission.split(".").slice(0, 2).join(".")
+  return parent !== permission && GLOBAL_SCOPE_PERMISSIONS.has(parent)
+}
+
+/**
  * Sync predicate over preloaded grants. Equivalent to one `hasPermission`
  * check but with zero DB calls — meant to be invoked in a tight loop after
  * a single `loadUserGrants` call.
@@ -274,7 +285,7 @@ export function checkGrants(
   // A resource-less check of a tenant-wide admin permission demands a global
   // grant: a narrow scope must never stand in for "across the whole tenant".
   const requireGlobalGrant =
-    !resourceType && !resourceId && GLOBAL_SCOPE_PERMISSIONS.has(permission)
+    !resourceType && !resourceId && isGlobalScopePermission(permission)
   for (const g of grants.byScope) {
     if (!grantsPermission(g.permissions, permission)) continue
     if (requireGlobalGrant) {
@@ -587,6 +598,12 @@ export const PERMISSIONS = {
   ADMIN_USERS: "admin.users",
   ADMIN_RBAC: "admin.rbac",
   ADMIN_SETTINGS: "admin.settings",
+  // Read-only children of the admin rights (issue #1360): implied by their
+  // parent, grantable on their own, and the only keys an API read scope maps.
+  ADMIN_USERS_VIEW: "admin.users.view",
+  ADMIN_RBAC_VIEW: "admin.rbac.view",
+  ADMIN_SETTINGS_VIEW: "admin.settings.view",
+  ADMIN_TENANTS_VIEW: "admin.tenants.view",
   ADMIN_AUDIT: "admin.audit",
   ADMIN_COMPLIANCE: "admin.compliance",
   ADMIN_TENANTS: "admin.tenants",
@@ -746,6 +763,9 @@ export async function holdsBroadPermission(
   if (grants.superAdmin) return true
   const holding = grants.byScope.filter(g => grantsPermission(g.permissions, permission))
   if (holding.some(g => g.scopeType === "global")) return true
+  // A tenant-wide admin right is never made broad by connection grants: a
+  // token perimeter does not narrow a list of users, roles or tenants.
+  if (isGlobalScopePermission(permission)) return false
   if (!connectionIds || connectionIds.length === 0) return false
   return connectionIds.every(id =>
     holding.some(g => g.scopeType === "connection" && g.scopeTarget === id),

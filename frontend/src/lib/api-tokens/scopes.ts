@@ -24,7 +24,23 @@ export const READ_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
   "automation:read": ["automation.view"],
   "alerts:read": ["alerts.view", "events.view"],
   "reports:read": ["reports.view"],
+  // Multi-tenant layer (issue #1360). The admin reads map the read-only
+  // children of the admin rights, never the admin rights themselves.
+  "tenants:read": ["admin.tenants.view"],
+  "vdcs:read": ["admin.settings.view", "vm.view", "sdn.vnet.view"],
+  "ipam:read": ["sdn.vnet.view"],
+  "rbac:read": ["admin.rbac.view"],
+  "users:read": ["admin.users.view"],
 }
+
+/**
+ * Read scopes whose creator must hold every key, at creation and on each
+ * call, exactly like a write scope: they read administration data (users,
+ * roles, tenants, provider settings, vDC networks) that holding
+ * admin.apitokens alone does not show. The older read scopes keep their
+ * historical rule.
+ */
+export const CREATOR_CHECKED_READ_SCOPE_IDS: readonly string[] = ["tenants:read", "vdcs:read", "ipam:read", "rbac:read", "users:read"]
 
 export const WRITE_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
   "vms:power": ["vm.view", "connection.view", "vm.start", "vm.stop", "vm.restart", "vm.suspend"],
@@ -82,6 +98,11 @@ export const DESTRUCTIVE_SCOPE_IDS: readonly string[] = ["vms:delete", "backups:
 
 export function isWriteScope(id: string): boolean {
   return Object.hasOwn(WRITE_SCOPE_DEFINITIONS, id)
+}
+
+/** Scopes the creator must hold: every write scope and the admin read scopes. */
+export function isCreatorCheckedScope(id: string): boolean {
+  return isWriteScope(id) || CREATOR_CHECKED_READ_SCOPE_IDS.includes(id)
 }
 
 /** Unknown scopes contribute nothing (fail-closed). */

@@ -8,6 +8,7 @@ import { MONITORING_RESPONSE_SCHEMAS } from "./monitoring"
 import { NETWORK_REQUEST_SCHEMAS, NETWORK_RESPONSE_SCHEMAS } from "./network"
 import { POOLS_REQUEST_SCHEMAS, POOLS_RESPONSE_SCHEMAS } from "./pools"
 import { STORAGE_REQUEST_SCHEMAS, STORAGE_RESPONSE_SCHEMAS } from "./storage"
+import { TENANCY_RESPONSE_SCHEMAS } from "./tenancy"
 import { VM_REQUEST_SCHEMAS, VM_RESPONSE_SCHEMAS } from "./vms"
 
 // Request body schemas, keyed by AllowlistEntry.requestSchemaRef. Naming
@@ -31,4 +32,5 @@ export const RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
   ...POOLS_RESPONSE_SCHEMAS,
   ...NETWORK_RESPONSE_SCHEMAS,
   ...FIREWALL_RESPONSE_SCHEMAS,
+  ...TENANCY_RESPONSE_SCHEMAS,
 }

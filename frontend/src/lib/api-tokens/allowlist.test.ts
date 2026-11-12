@@ -33,7 +33,10 @@ describe('PUBLIC_API_ALLOWLIST data', () => {
     expect(byId['public-health'].requiredScopes).toEqual([])
     for (const entry of PUBLIC_API_ALLOWLIST) {
       expect(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).toContain(entry.method)
-      expect(['Monitoring', 'VMs', 'Snapshots', 'Backups', 'Storage', 'HA', 'Pools', 'Network', 'Firewall', 'Tasks']).toContain(entry.tag)
+      expect([
+        'Monitoring', 'VMs', 'Snapshots', 'Backups', 'Storage', 'HA', 'Pools', 'Network', 'Firewall', 'Tasks',
+        'Tenants', 'vDCs', 'RBAC', 'Users',
+      ]).toContain(entry.tag)
       expect(entry.routeFile).toMatch(/^src\/app\/api\/v1\/.+\/route\.ts$/)
       expect(entry.summary.length).toBeGreaterThan(0)
       expect(entry.responseSchemaRef.length).toBeGreaterThan(0)
@@ -54,6 +57,12 @@ describe('shared canonical matcher', () => {
     expect(m.ok).toBe(true)
     expect(m.entryId).toBe('pbs-backups')
     expect(m.params).toEqual({ id: 'conn-42' })
+  })
+
+  it('leaves the static EVPN siblings Next serves before /evpn-zones/{id} unmatched (issue #1360)', () => {
+    expect(matchPublicApiPath('/api/v1/admin/evpn-zones/z1', 'GET').entryId).toBe('evpn-zone-get')
+    expect(matchPublicApiPath('/api/v1/admin/evpn-zones/collisions', 'GET').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/admin/evpn-zones/discover', 'GET').ok).toBe(false)
   })
 
   it('never matches by prefix', () => {
@@ -221,6 +230,27 @@ describe('shared canonical matcher', () => {
       'fw-vm-rule-update': '/api/v1/firewall/vms/c1/pve1/qemu/100/rules/0',
       'fw-vm-rule-delete': '/api/v1/firewall/vms/c1/pve1/qemu/100/rules/0',
       'fw-vm-nic-firewall-update': '/api/v1/firewall/vms/c1/pve1/qemu/100/nic-firewall',
+      'vdc-vnet-ipam': '/api/v1/vdcs/vdc-1/vnets/web/ipam',
+      'vdc-vnet-ipam-next-free': '/api/v1/vdcs/vdc-1/vnets/web/ipam/next-free',
+      'tenants-list': '/api/v1/tenants',
+      'tenant-get': '/api/v1/tenants/t1',
+      'tenant-users-list': '/api/v1/tenants/t1/users',
+      'vdcs-list': '/api/v1/vdcs',
+      'admin-vdcs-list': '/api/v1/admin/vdcs',
+      'admin-vdc-get': '/api/v1/admin/vdcs/vdc-1',
+      'vdc-evpn-networks': '/api/v1/vdcs/vdc-1/evpn-networks',
+      'evpn-zones-list': '/api/v1/admin/evpn-zones',
+      'evpn-zone-get': '/api/v1/admin/evpn-zones/z1',
+      'storage-policies-list': '/api/v1/admin/connections/c1/storage-policies',
+      'vdc-moves-list': '/api/v1/vdc/moves',
+      'vdc-move-get': '/api/v1/vdc/moves/m1',
+      'rbac-roles-list': '/api/v1/rbac/roles',
+      'rbac-role-get': '/api/v1/rbac/roles/role_operator',
+      'rbac-permissions-list': '/api/v1/rbac/permissions',
+      'rbac-assignments-list': '/api/v1/rbac/assignments',
+      'rbac-assignment-get': '/api/v1/rbac/assignments/a1',
+      'users-list': '/api/v1/users',
+      'user-get': '/api/v1/users/u1',
     }
     for (const entry of PUBLIC_API_ALLOWLIST) {
       const path = samplePathById[entry.id]

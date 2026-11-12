@@ -14,6 +14,7 @@ import { checkTenantGuestsScope } from "@/lib/vdc/guestScope"
 import { isWriteEntry, type AllowlistEntry, type BodyOrQueryField, type GuestScopeSpec } from "./allowlist"
 import { creatorStillHolds, creatorStillHoldsPermission } from "./creatorCheck"
 import { resolveVisibleConnectionIds } from "./scope"
+import { isCreatorCheckedScope, isWriteScope } from "./scopes"
 import { extractTokenPrefix } from "./tokenCrypto"
 
 const NOT_IN_SCOPE = "Connection not in token scope"
@@ -240,11 +241,14 @@ async function evaluateGuards(
     }
   }
 
-  // (6) Writes: the creator must still hold the rights of the entry's scope,
-  //     and every secondary permission the handler may check that the token
-  //     holds (a creator stripped of vm.delete must not keep it through a
-  //     vms:delete token). A failing check (DB error) is a deny, never a pass.
-  if (isWriteEntry(entry)) {
+  // (6) Writes, and reads through an admin read scope (users, roles,
+  //     tenants, provider settings): the creator must still hold the rights
+  //     of the entry's scope, and every secondary permission the handler may
+  //     check that the token holds (a creator stripped of vm.delete must not
+  //     keep it through a vms:delete token). A failing check (DB error) is a
+  //     deny, never a pass.
+  const checkedScopes = creatorCheckedScopesOf(entry, principal)
+  if (checkedScopes.length > 0) {
     const token = {
       tokenId: principal.tokenId ?? "",
       tenantId: principal.tenantId,
@@ -259,9 +263,10 @@ async function evaluateGuards(
         return false
       }
     }
-    const scope = entry.requiredScopes[0]
-    if (!(await verdict(() => creatorStillHolds(token, scope)))) {
-      return deny({ status: 403, body: { error: CREATOR_LOST, scope } })
+    for (const scope of checkedScopes) {
+      if (!(await verdict(() => creatorStillHolds(token, scope)))) {
+        return deny({ status: 403, body: { error: CREATOR_LOST, scope } })
+      }
     }
     for (const permission of entry.secondaryPermissions ?? []) {
       if (!principal.permissions || !grantsPermission(principal.permissions, permission)) continue
@@ -272,6 +277,21 @@ async function evaluateGuards(
   }
 
   return null
+}
+
+/**
+ * The scopes whose creator rights the call relies on. A write entry names
+ * exactly one scope. A read entry accepts any of its scopes, and the token
+ * may carry several of them, each bringing permissions the handler checks:
+ * every admin read scope (CREATOR_CHECKED_READ_SCOPE_IDS) the token carries
+ * among them is checked, so a scope that only opens the route (nodes:read)
+ * never shields another that supplies the right (ipam:read). Write scopes on
+ * a read entry keep their historical rule (task-status polls with any).
+ */
+function creatorCheckedScopesOf(entry: AllowlistEntry, principal: Principal): string[] {
+  if (isWriteEntry(entry)) return entry.requiredScopes.slice(0, 1)
+  return entry.requiredScopes.filter(scope =>
+    principal.scopes?.includes(scope) && isCreatorCheckedScope(scope) && !isWriteScope(scope))
 }
 
 const isUpid = (value: unknown): value is string => typeof value === "string" && value.startsWith("UPID:")

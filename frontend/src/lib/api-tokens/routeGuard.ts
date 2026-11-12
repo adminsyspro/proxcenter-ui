@@ -16,6 +16,9 @@ export type GuardedRouteContext = {
 
 type GuardedHandler<C extends GuardedRouteContext> = (req: Request, ctx: C) => Promise<Response>
 
+/** The wrapped export: `ctx` may be absent (a static route), the guard then hands the handler `{}`. */
+type GuardedExport<C extends GuardedRouteContext> = (req: Request, ctx?: C) => Promise<Response>
+
 /**
  * Generic over the handler context so a wrapped export keeps the exact
  * `{ params }` type Next checks route handlers against.
@@ -23,7 +26,7 @@ type GuardedHandler<C extends GuardedRouteContext> = (req: Request, ctx: C) => P
 export function withPublicApiGuard<C extends GuardedRouteContext = GuardedRouteContext>(
   entryId: string,
   handler: GuardedHandler<C>,
-): GuardedHandler<C & GuardedRouteContext> {
+): GuardedExport<C & GuardedRouteContext> {
   return async (req, ctx) => {
     const result = await getPrincipal({ recordUsage: true })
     if (!result.ok) {

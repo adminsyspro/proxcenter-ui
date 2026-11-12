@@ -15,6 +15,9 @@ const h = vi.hoisted(() => ({
   auditMock: vi.fn(),
 }))
 
+// API token guard: pass-through, these tests drive the session path (token
+// paths: routeGuard.test.ts, tenancyTokenScope.test.ts).
+vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-a' }))
 vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { SDN_VNET_VIEW: 'sdn.vnet.view', SDN_VNET_CREATE: 'sdn.vnet.create', SDN_VNET_EDIT: 'sdn.vnet.edit', SDN_VNET_DELETE: 'sdn.vnet.delete' },

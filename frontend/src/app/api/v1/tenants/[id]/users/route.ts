@@ -5,23 +5,25 @@ import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
 import { DEFAULT_TENANT_ID, getTenantUsers, addUserToTenant, removeUserFromTenant, TenantMembershipError, requireProviderTenant } from "@/lib/tenant"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth/config"
+import { getActingSession } from "@/lib/auth/actingUser"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 // GET /api/v1/tenants/:id/users
-export async function GET(_req: NextRequest, ctx: Ctx) {
+async function handleGet(_req: Request, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
-  const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+  const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS_VIEW)
   if (denied) return denied
 
   const { id } = await ctx.params
   const users = await getTenantUsers(id)
   return NextResponse.json({ data: users })
 }
+
+export const GET = withPublicApiGuard("tenant-users-list", handleGet)
 
 // POST /api/v1/tenants/:id/users — add user to tenant
 async function handlePost(req: NextRequest, ctx: Ctx) {
@@ -32,7 +34,7 @@ async function handlePost(req: NextRequest, ctx: Ctx) {
 
   const { id } = await ctx.params
   const body = await req.json()
-  const session = await getServerSession(authOptions)
+  const session = await getActingSession()
 
   if (!body.userId) {
     return NextResponse.json({ error: "userId is required" }, { status: 400 })
@@ -100,7 +102,7 @@ async function handleDelete(req: NextRequest, ctx: Ctx) {
 
   const { id } = await ctx.params
   const body = await req.json()
-  const session = await getServerSession(authOptions)
+  const session = await getActingSession()
 
   if (!body.userId) {
     return NextResponse.json({ error: "userId is required" }, { status: 400 })

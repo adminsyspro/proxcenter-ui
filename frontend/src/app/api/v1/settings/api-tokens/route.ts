@@ -7,7 +7,7 @@ import { getCurrentTenantId, userHasAccessToTenant } from "@/lib/tenant"
 import { requireFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { generateApiToken } from "@/lib/api-tokens/tokenCrypto"
-import { ALL_SCOPE_IDS, isWriteScope } from "@/lib/api-tokens/scopes"
+import { ALL_SCOPE_IDS, isCreatorCheckedScope } from "@/lib/api-tokens/scopes"
 import { firstUngrantableScope } from "@/lib/api-tokens/grantable"
 import { audit } from "@/lib/audit"
 
@@ -104,7 +104,7 @@ async function handlePost(req: Request) {
     try {
       ungrantable = ctx.userId
         ? await firstUngrantableScope(ctx.userId, tenantId, scopes as string[], connectionIds)
-        : (scopes as string[]).find(isWriteScope)
+        : (scopes as string[]).find(isCreatorCheckedScope)
     } catch (e: any) {
       // Fail closed; the lookup error stays in the logs.
       console.error("[api-tokens] held-rights lookup failed:", e?.message ?? e)

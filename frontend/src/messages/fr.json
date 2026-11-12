@@ -4339,7 +4339,12 @@
           "nodes": "Nœuds et cluster",
           "automation": "Automatisation",
           "alerts": "Alertes",
-          "reports": "Rapports"
+          "reports": "Rapports",
+          "tenants": "Tenants",
+          "vdcs": "vDC et zones EVPN",
+          "ipam": "IPAM",
+          "rbac": "Rôles et attributions",
+          "users": "Utilisateurs"
         },
         "subScopes": {
           "vmsPower": "Alimentation",
@@ -4366,8 +4371,8 @@
         "confirm": "Confirmer",
         "writeWarning": "Les scopes d'écriture permettent de créer, modifier et supprimer des ressources réelles.",
         "scopeNotGrantable": "Vos propres permissions ne permettent pas d'accorder ce scope pour le tenant et les connexions sélectionnés.",
-        "scopesLoading": "Vérification des scopes d'écriture que vous pouvez accorder...",
-        "grantableError": "Impossible de vérifier les scopes d'écriture que vous pouvez accorder. Fermez puis rouvrez la fenêtre pour réessayer.",
+        "scopesLoading": "Vérification des scopes que vous pouvez accorder...",
+        "grantableError": "Impossible de vérifier les scopes que vous pouvez accorder. Fermez puis rouvrez la fenêtre pour réessayer.",
         "writeRateLimit": "Écritures par minute",
         "writeRateLimitHelp": "Requêtes d'écriture autorisées par minute pour ce jeton, comptées à part des lectures."
       },

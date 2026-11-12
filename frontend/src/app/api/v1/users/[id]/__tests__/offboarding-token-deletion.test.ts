@@ -54,6 +54,10 @@ const {
   revokeAllSessionsMock: vi.fn<() => Promise<number>>(),
 }))
 
+// API token guard: pass-through, these tests drive the session path (token
+// paths: routeGuard.test.ts, tenancyTokenScope.test.ts).
+vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
+vi.mock("@/lib/auth/actingUser", async () => (await import("@/__tests__/fixtures/actingUserFromNextAuth")).actingUserFromNextAuth())
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/auth/password', () => ({ hashPassword: hashPasswordMock }))

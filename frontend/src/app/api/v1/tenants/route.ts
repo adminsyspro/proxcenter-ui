@@ -5,20 +5,22 @@ import { listTenants, createTenant, requireProviderTenant } from "@/lib/tenant"
 import { parseVmidRangeInput, findVmidRangeConflict } from "@/lib/tenant/vmidRange"
 import { audit } from "@/lib/audit"
 import { syncServiceDeskForNewTenant } from "@/lib/rbac/serviceDesk"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth/config"
+import { getActingSession } from "@/lib/auth/actingUser"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
-// GET /api/v1/tenants — list all tenants (admin only)
-export async function GET() {
+// GET /api/v1/tenants — list all tenants (admin only; API tokens: tenants:read)
+async function handleGet() {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
-  const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+  const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS_VIEW)
   if (denied) return denied
 
   const tenants = await listTenants()
   return NextResponse.json({ data: tenants })
 }
+
+export const GET = withPublicApiGuard("tenants-list", handleGet)
 
 // POST /api/v1/tenants — create a new tenant
 async function handlePost(req: NextRequest) {
@@ -27,7 +29,7 @@ async function handlePost(req: NextRequest) {
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
   if (denied) return denied
 
-  const session = await getServerSession(authOptions)
+  const session = await getActingSession()
   const body = await req.json()
 
   if (!body.name || !body.slug) {

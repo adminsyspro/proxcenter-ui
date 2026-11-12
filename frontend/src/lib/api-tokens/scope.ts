@@ -69,3 +69,18 @@ export async function restrictToTokenScope<T extends { id: string }>(
   const visible = await resolveVisibleConnectionIds(principal)
   return connections.filter(c => visible.has(c.id))
 }
+
+/**
+ * Keep the items whose every connection sits inside a token's perimeter
+ * (issue #1360: vDCs, moves, EVPN zones). A no-op for a session caller and
+ * for the absence of a principal, like restrictToTokenScope.
+ */
+export async function filterToTokenPerimeter<T>(
+  items: T[],
+  principal: { kind: string; connectionIds: string[] | null } | null | undefined,
+  connectionsOf: (item: T) => Array<string | null | undefined>,
+): Promise<T[]> {
+  if (principal?.kind !== "token") return items
+  const visible = await resolveVisibleConnectionIds(principal)
+  return items.filter(item => connectionsOf(item).every(id => typeof id === "string" && visible.has(id)))
+}

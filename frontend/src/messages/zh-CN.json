@@ -4339,7 +4339,12 @@
           "nodes": "节点和集群",
           "automation": "自动化",
           "alerts": "告警",
-          "reports": "报告"
+          "reports": "报告",
+          "tenants": "租户",
+          "vdcs": "vDC 和 EVPN 区域",
+          "ipam": "IPAM",
+          "rbac": "角色和分配",
+          "users": "用户"
         },
         "subScopes": {
           "vmsPower": "电源",
@@ -4366,8 +4371,8 @@
         "confirm": "确认",
         "writeWarning": "写入范围允许令牌创建、修改和删除真实资源。",
         "scopeNotGrantable": "您自身的权限不允许为所选租户和连接授予此范围。",
-        "scopesLoading": "正在检查您可以授予的写入范围...",
-        "grantableError": "无法检查您可以授予的写入范围。请关闭并重新打开对话框后重试。",
+        "scopesLoading": "正在检查您可以授予的范围...",
+        "grantableError": "无法检查您可以授予的范围。请关闭并重新打开对话框后重试。",
         "writeRateLimit": "每分钟写入次数",
         "writeRateLimitHelp": "此令牌每分钟可发送的写入请求数,与读取分开计数。"
       },

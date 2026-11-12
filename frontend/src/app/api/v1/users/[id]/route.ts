@@ -1,9 +1,7 @@
 // src/app/api/v1/users/[id]/route.ts
 import { NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
-import { authOptions } from "@/lib/auth/config"
+import { getActingSession } from "@/lib/auth/actingUser"
 import { prisma } from "@/lib/db/prisma"
 import { hashPassword } from "@/lib/auth/password"
 import { safeLog } from "@/lib/log/sanitize"
@@ -15,18 +13,19 @@ import { denyIfTargetIsProtectedAndCallerIsNot, findUserInTenant } from "@/lib/r
 import { nanoid } from "nanoid"
 import { DEFAULT_TENANT_ID, addUserToTenant, removeUserFromTenant, TenantMembershipError, getCurrentTenantId } from "@/lib/tenant"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // GET /api/v1/users/[id] - Récupérer un utilisateur
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGet(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    // RBAC: Check admin.users permission
-    const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
+    // RBAC: admin.users.view, implied by admin.users (API tokens: users:read)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_USERS_VIEW)
     if (denied) return denied
 
     const { id } = await params
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
     const superAdminBlock = await denyIfTargetIsProtectedAndCallerIsNot(id, session?.user?.id)
     if (superAdminBlock) return superAdminBlock
 
@@ -66,10 +65,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
 }
 
+export const GET = withPublicApiGuard("user-get", handleGet)
+
 // PATCH /api/v1/users/[id] - Modifier un utilisateur
 async function handlePatch(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
     const { id } = await params
     const body = await req.json()
     const { name, enabled, password, tenantIds, roleId, deleteApiTokens, localLoginAllowed } = body
@@ -486,7 +487,7 @@ async function handleDelete(req: Request, { params }: { params: Promise<{ id: st
     const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
     if (denied) return denied
 
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
     const { id } = await params
     const superAdminBlock = await denyIfTargetIsProtectedAndCallerIsNot(id, session?.user?.id)
     if (superAdminBlock) return superAdminBlock

@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { denyMigrationEnds } from "@/lib/migration/authorize"
+import { authorizeMigrationNode } from "@/lib/migration/authorize"
 import { requireFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { provisionWarmNode } from "@/lib/migration/warm/vddk-provision"
 import { safeLog } from "@/lib/log/sanitize"
 import { withAudit } from "@/lib/audit/withAudit"
+import { assertNodeName } from "@/lib/ssh/validate"
+import { getCurrentTenantId } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
@@ -16,8 +18,9 @@ export const runtime = "nodejs"
  * the target Proxmox node, then return the post-provision preflight verdict,
  * the same shape the dialog's warm-check already consumes. OpenVDDK is the
  * public kit, pinned and checksum-verified on the node (roadmap#177). Sibling
- * of /api/v1/migrations/preflight and gated the same way, plus the
- * vmware_migration feature (warm VMware migration is an Enterprise capability).
+ * of /api/v1/migrations/preflight and gated by the same authorizeMigrationNode
+ * (tenant, then vm.migrate on the node), plus the vmware_migration feature
+ * (warm VMware migration is an Enterprise capability).
  */
 async function handlePost(req: Request) {
   const denied = await checkPermission(PERMISSIONS.VM_MIGRATE)
@@ -46,8 +49,14 @@ async function handlePost(req: Request) {
       { status: 400 }
     )
   }
-  const deniedEnds = await denyMigrationEnds(undefined, targetConnectionId, [targetNode])
-  if (deniedEnds) return deniedEnds
+  // The node name picks the host the install script runs on as root.
+  try {
+    assertNodeName(targetNode)
+  } catch {
+    return NextResponse.json({ error: "Invalid node name" }, { status: 400 })
+  }
+  const deniedNode = await authorizeMigrationNode({ tenantId: await getCurrentTenantId(), targetConnectionId, targetNode })
+  if (deniedNode) return deniedNode
 
   try {
     const result = await provisionWarmNode(targetConnectionId, targetNode, vddkLibdir)

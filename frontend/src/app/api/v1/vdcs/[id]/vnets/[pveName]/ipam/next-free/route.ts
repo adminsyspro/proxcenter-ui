@@ -42,7 +42,7 @@ async function handleGet(req: Request, ctx: RouteContext) {
     // `?targetVdcId=` (provider only, equal to the path vDC): preview the IP
     // a provider deploying into that tenant vDC will reserve (roadmap#65).
     const scopeTenant = await resolveScopeTenant(req, null, getCurrentTenantId)
-    if (!scopeTenant.ok) return scopeTenant.response
+    if (scopeTenant.response) return scopeTenant.response
     if (scopeTenant.target && scopeTenant.target.vdcId !== vdcId) {
       return NextResponse.json({ error: "VNet not found" }, { status: 404 })
     }

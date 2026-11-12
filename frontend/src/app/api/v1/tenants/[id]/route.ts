@@ -13,7 +13,7 @@ import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 type Ctx = { params: Promise<{ id: string }> }
 
 // GET /api/v1/tenants/:id
-async function handleGet(_req: NextRequest, ctx: Ctx) {
+async function handleGet(_req: Request, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS_VIEW)

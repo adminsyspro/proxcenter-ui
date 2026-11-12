@@ -52,7 +52,7 @@ async function denyIfAssignmentTouchesProtected(
 }
 
 // GET /api/v1/rbac/assignments/[id] - Détails d'une assignation
-async function handleGet(req: NextRequest, context: RouteContext) {
+async function handleGet(req: Request, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 

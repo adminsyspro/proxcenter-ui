@@ -26,7 +26,7 @@ async function handleGet(req: Request, ctx: { principal?: Principal }) {
     // `?targetVdcId=` (provider only): that tenant vDC alone, with its quota
     // and usage, for a provider deploying into it (roadmap#65).
     const scopeTenant = await resolveScopeTenant(req, null, getCurrentTenantId)
-    if (!scopeTenant.ok) return scopeTenant.response
+    if (scopeTenant.response) return scopeTenant.response
     const target = scopeTenant.target
     if (target) {
       const pick = async () => (await listVdcs(target.tenantId)).filter(v => v.id === target.vdcId)

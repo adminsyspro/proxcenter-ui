@@ -43,7 +43,7 @@ function normalizeWidgetOverrides(raw: unknown): { hidden: string[] } | null | u
 }
 
 // GET /api/v1/rbac/roles - Liste tous les rôles
-async function handleGet(req: NextRequest) {
+async function handleGet(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 

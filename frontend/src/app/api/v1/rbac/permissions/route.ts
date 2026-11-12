@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic"
 // src/app/api/v1/rbac/permissions/route.ts
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 
 import { authorizeAdminRead } from "@/lib/auth/actingUser"
 import { PERMISSIONS } from "@/lib/rbac"
@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db/prisma"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 // GET /api/v1/rbac/permissions - Liste toutes les permissions disponibles
-async function handleGet(req: NextRequest) {
+async function handleGet(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 

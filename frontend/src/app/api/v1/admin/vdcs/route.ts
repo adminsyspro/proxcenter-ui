@@ -14,14 +14,14 @@ import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 export const runtime = "nodejs"
 
 // GET /api/v1/admin/vdcs — list all vDCs (optionally filtered by ?tenantId=xxx)
-async function handleGet(req: NextRequest, ctx: { principal?: Principal }) {
+async function handleGet(req: Request, ctx: { principal?: Principal }) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
     const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS_VIEW)
     if (denied) return denied
 
-    const tenantId = req.nextUrl.searchParams.get("tenantId") || undefined
+    const tenantId = new URL(req.url).searchParams.get("tenantId") || undefined
     const vdcs = await filterToTokenPerimeter(await listVdcs(tenantId), ctx?.principal, v => [v.connectionId])
 
     return NextResponse.json({ data: vdcs })

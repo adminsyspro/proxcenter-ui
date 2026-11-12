@@ -17,7 +17,7 @@ import { withAudit } from "@/lib/audit/withAudit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 // GET /api/v1/rbac/assignments - Liste toutes les assignations
-async function handleGet(req: NextRequest) {
+async function handleGet(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 

@@ -62,9 +62,8 @@ beforeEach(() => {
   createVdcMock.mockResolvedValue({ id: 'vdc-new', name: 'ACME — Paris' })
 })
 
-// The GET handler reads req.nextUrl (NextRequest); callRoute builds a plain
-// Request, so stub the one property the handler touches.
-const nextReq = (url: string) => ({ nextUrl: new URL(url) }) as any
+// The GET handler reads the query string from req.url.
+const nextReq = (url: string) => new Request(url)
 
 describe('GET /api/v1/admin/vdcs', () => {
   it('is provider-gated', async () => {

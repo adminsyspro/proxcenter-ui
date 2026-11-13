@@ -1,5 +1,9 @@
 import { defineConfig } from "prisma/config"
 
+// Relative import on purpose: the runner image loads this file outside the
+// Next bundle, where the @/ alias does not exist.
+import { migrationDatabaseUrl } from "./src/lib/db/connectionConfig"
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
@@ -10,6 +14,8 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env.DATABASE_URL!,
+    // Every CLI command (migrate deploy at container start included) goes
+    // through the schema engine, which needs its own TLS form of the URL.
+    url: migrationDatabaseUrl(process.env.DATABASE_URL)!,
   },
 })

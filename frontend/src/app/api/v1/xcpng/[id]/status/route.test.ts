@@ -102,6 +102,19 @@ describe("GET /api/v1/xcpng/[id]/status", () => {
     expect(source.close).toHaveBeenCalledTimes(1)
   })
 
+  it("names XenServer when the pool master says so (roadmap#60)", async () => {
+    h.connectionFindUnique.mockResolvedValueOnce({ id: "conn-1", baseUrl: "https://pool.test", type: "xcpng", subType: "xapi" })
+    h.openXcpngSource.mockResolvedValueOnce(fakeSource({
+      kind: "xapi",
+      displayUrl: "https://pool.test",
+      listHosts: vi.fn(async () => [{ name_label: "xs", address: "10.42.0.185", version: "8.4.0", brand: "XenServer" }]),
+    }))
+
+    const res = await callRoute(GET, { params: { id: "conn-1" } })
+
+    expect(((await readJson(res)) as { data: { version: string } }).data.version).toBe("XenServer 8.4.0")
+  })
+
   it("returns 404 when the connection does not exist", async () => {
     h.connectionFindUnique.mockResolvedValueOnce(null)
 

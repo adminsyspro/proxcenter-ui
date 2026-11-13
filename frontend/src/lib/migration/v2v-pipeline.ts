@@ -27,7 +27,7 @@ import { releaseVmids } from "./vmid-reservation"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { assertAbsPath } from "@/lib/ssh/validate"
-import { authorizedKeysDeployCommand, authorizedKeysRevokeCommand, curlConfigQuoted, esxiKeyLoginProbeCommand, parseBackgroundPid, sshpassEsxiCommand } from "./remote-commands"
+import { authorizedKeysDeployCommand, authorizedKeysRevokeCommand, curlConfigQuoted, esxiKeyLoginProbeCommand, parseBackgroundPid, sshpassEsxiCommand, esxiPasswordStdin } from "./remote-commands"
 import { HyperVClient } from "@/lib/hyperv/client"
 import { resolveHypervDiskPaths } from "./hyperv-disks"
 import { applySourceSizing, hypervSourceSizing, nutanixSourceSizing, type SourceSizing } from "./source-sizing"
@@ -35,12 +35,13 @@ import { ntfsCompressionPluginCheckCommand, ntfsCompressionPluginInstallScript }
 import { resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 import { parseV2vLine, calculateOverallProgress } from "./v2v-progress"
 import { parseV2vXml, buildPveCreateParams } from "./v2vConfigMapper"
-import { describeOverrides, buildNetValue, resolveNicTarget, applyHardwareOverrides, planDiskTargets, planStorages, describeDiskPlan, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from "./target-overrides"
+import { describeOverrides, diskDriveOptions, buildNetValue, resolveNicTarget, targetNicMac, applyHardwareOverrides, planDiskTargets, planStorages, describeDiskPlan, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping, type MigrationNetworkMapEntry, type MigrationDiskOptions } from "./target-overrides"
 import { planV2vImports, v2vDiskSlot } from "./v2v-disk-targets"
 import type { V2vVmConfig } from "./v2vConfigMapper"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { convertDisksToQcow2 } from "./qcow2-convert"
+import { startMigratedVm } from "./start-migrated-vm"
 import { runVcenterNfcExport } from "./nfc-export"
 import { resolveNfcConcurrency, serializeByKey } from "./nfc-progress"
 // SOAP session, inventory, snapshot and power calls for the vCenter path. The
@@ -54,6 +55,7 @@ import {
   soapLogout,
   soapGetVmConfig,
   parseVmConfig,
+  soapNameDistributedNics,
   soapCreateSnapshot,
   soapRemoveSnapshot,
   SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS,
@@ -72,6 +74,7 @@ import { resolveIntegritySettings } from "./integrity-target"
 import { tpmstate0Param, vtpmPreflightWarning, vtpmCreatedLine } from "./vtpm"
 import { efiDiskValue } from "./configMapper"
 import { el10InspectionWarning } from "./el10-check"
+import { esxiHostKeyFailure, esxiHostKeyProbeCommand, esxiStrictSshConfigLines, esxiStrictSshOptions, knownHostsNames, loadEsxiHostTrust, stageEsxiKnownHosts } from "./esxi-host-trust"
 import { windowsOnlineDisksCommand, windowsOnlineDisksFailed, windowsOnlineDisksScheduled } from "./windows-online-disks"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
@@ -109,6 +112,12 @@ export interface V2vMigrationConfig {
   hardware?: MigrationHardwareOverrides
   /** Per-source-NIC target bridge, VLAN tag and model (#317); unmapped NICs use networkBridge. */
   nics?: MigrationNicMapping[]
+  /** Bulk network table (ui#1333): source port group to target bridge. */
+  networkMap?: MigrationNetworkMapEntry[]
+  /** "regenerate": Proxmox assigns every NIC without its own MAC choice a new MAC (ui#1330). */
+  macPolicy?: "regenerate"
+  /** Profile of the target disks (ui#1331); absent options take the defaults. */
+  diskOptions?: MigrationDiskOptions
   /** Per-source-disk target storage or exclusion (#317, lot 2); unmapped disks use targetStorage. */
   disks?: MigrationDiskMapping[]
   /** vCenter datacenter name (libvirt vpx URI: vpx://VC/{datacenter}/...). Required for vcenter source. */
@@ -1034,7 +1043,7 @@ export async function runV2vMigrationPipeline(
   // ESXi host (because the connection was configured with password auth only),
   // we record the pubkey + ESXi auth details so cleanup can sed it out of the
   // remote authorized_keys files and not leave the key persisted after the job.
-  let esxiTempKeyBootstrap: { pubKey: string; esxiHost: string; esxiUser: string; esxiPort: number; esxiPass: string } | null = null
+  let esxiTempKeyBootstrap: { pubKey: string; esxiHost: string; esxiUser: string; esxiPort: number; esxiPass: string; knownHostsFile: string } | null = null
   // When we had to seed /root/.ssh/known_hosts for libssh (used by nbdkit-ssh, which
   // ignores $HOME and reads the system user's homedir via getpwuid), record the host
   // so cleanup removes our entry via ssh-keygen -R and doesn't leave trust pinned.
@@ -1043,6 +1052,68 @@ export async function runV2vMigrationPipeline(
   // authenticate without relying on /root/.ssh/id_* (which we don't want to clobber).
   // We record the sock + pid paths for cleanup; virt-v2v gets SSH_AUTH_SOCK via env.
   let esxiSshAgent: { sockPath: string; pidPath: string } | null = null
+
+  // Undo what the esxi-direct preparation left on the node and the ESXi host:
+  // the one-shot key in ESXi's authorized_keys, the per-job HOME (private key,
+  // ssh config, known_hosts), the ssh-agent and the host key lines libssh read.
+  // Runs at the end of a successful run and on failure; each part runs once.
+  // Returns what could not be cleaned.
+  async function cleanupEsxiDirectAccess(nodeIp: Parameters<typeof executeSSH>[1], timeoutMs: number): Promise<string[]> {
+    const failed: string[] = []
+    // If we bootstrapped a one-shot ESXi key (password-auth source), remove the
+    // corresponding line from ESXi's authorized_keys before we nuke the home dir —
+    // otherwise the key stays accepted on ESXi forever. We try both default
+    // locations since the deploy step also tried both.
+    if (esxiTempKeyBootstrap) {
+      const bootstrap = esxiTempKeyBootstrap
+      esxiTempKeyBootstrap = null
+      const { pubKey, esxiHost: ehost, esxiUser: euser, esxiPort: eport, esxiPass, knownHostsFile } = bootstrap
+      // sed pattern: match on the first 40 chars of the base64 body, which is unique
+      // enough to not collide with other keys but short enough to escape safely.
+      const pubFingerprint = pubKey.split(/\s+/)[1]?.substring(0, 40) || ""
+      if (pubFingerprint) {
+        const esxiSshOpts = `${esxiStrictSshOptions(knownHostsFile)} -o LogLevel=ERROR -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
+        const revokeCmd = sshpassEsxiCommand(esxiSshOpts, eport, euser, ehost, authorizedKeysRevokeCommand(euser, pubFingerprint, "REVOKED"))
+        const revokeResult = await executeSSH(config.targetConnectionId, nodeIp, revokeCmd, timeoutMs, { stdin: esxiPasswordStdin(esxiPass) })
+        if (!revokeResult.output?.includes("REVOKED")) {
+          failed.push(`esxi-authorized-keys revoke: ${revokeResult.error || revokeResult.output?.substring(0, 150) || "unknown"}`)
+        }
+      }
+    }
+    // esxi-direct staged its SSH key under a per-job HOME; remove it whether we
+    // took that branch or not — rm -rf on a non-existent path succeeds silently.
+    const esxiHomeDir = `${tempBase}/v2v-home-${jobId}`
+    const rmHome = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(esxiHomeDir)}`, timeoutMs)
+    if (!rmHome.success) failed.push(`${esxiHomeDir}: ${rmHome.error || "unknown"}`)
+    // Kill the per-job ssh-agent and remove its socket/pidfile. Each step is a
+    // single-prefix executeSSH call (cat ', kill , rm -f 'v2v-agent-...') so it
+    // matches the orchestrator SSH allowlist without needing a shell wrapper.
+    if (esxiSshAgent) {
+      const agent = esxiSshAgent
+      esxiSshAgent = null
+      const readPid = await executeSSH(config.targetConnectionId, nodeIp, `cat ${shellEscape(agent.pidPath)}`, timeoutMs)
+      const rawPid = readPid.output?.trim() || ""
+      if (/^\d+$/.test(rawPid)) {
+        const killRes = await executeSSH(config.targetConnectionId, nodeIp, `kill ${rawPid}`, timeoutMs)
+        if (!killRes.success) failed.push(`kill ssh-agent ${rawPid}: ${killRes.error || killRes.output?.substring(0, 150) || "unknown"}`)
+      }
+      const rmSock = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(agent.sockPath)} ${shellEscape(agent.pidPath)}`, timeoutMs)
+      if (!rmSock.success) failed.push(`ssh-agent files: ${rmSock.error || rmSock.output?.substring(0, 150) || "unknown"}`)
+    }
+    // If we seeded /root/.ssh/known_hosts for libssh, strip the entries we added,
+    // one single-prefix ssh-keygen -R call per name (the allowlist prefers them
+    // over `;`-chained ones).
+    if (esxiKnownHostsSeeded) {
+      const seeded = esxiKnownHostsSeeded
+      esxiKnownHostsSeeded = null
+      for (const name of knownHostsNames(seeded.esxiHost, seeded.esxiPort)) {
+        await executeSSH(config.targetConnectionId, nodeIp,
+          `ssh-keygen -R ${shellEscape(name)} -f /root/.ssh/known_hosts`, timeoutMs).catch(() => {})
+      }
+    }
+
+    return failed
+  }
   // NFC transport state (used when source = vCenter and any disk is on vSAN).
   // We open a long-lived SOAP session for the duration of the NFC export and
   // logout in cleanup; the downloaded disks must also be removed in both
@@ -1449,11 +1520,22 @@ export async function runV2vMigrationPipeline(
       const sshDir = `${homeDir}/.ssh`
       const keyPath = `${sshDir}/id_rsa`
       const configPath = `${sshDir}/config`
+      // The ESXi host keys confirmed in ProxCenter, read before anything is
+      // staged: an unconfirmed host stops the job before a secret moves.
+      const perJobKnownHosts = `${sshDir}/known_hosts`
+      const esxiTrust = await loadEsxiHostTrust(host, esxiSshPort, perJobKnownHosts)
 
       // mkdir + chmod the per-job .ssh directory
       const mkResult = await executeSSH(config.targetConnectionId, nodeIp,
         `mkdir -p ${shellEscape(sshDir)} && chmod 700 ${shellEscape(sshDir)}`)
       if (!mkResult.success) throw new Error(`Failed to create ssh dir: ${mkResult.error || mkResult.output}`)
+      const khStage = stageEsxiKnownHosts(esxiTrust)
+      const khWrite = await executeSSH(config.targetConnectionId, nodeIp, khStage.command, 30_000, { stdin: khStage.stdin })
+      if (!khWrite.success) throw new Error(`Failed to write the ESXi host keys: ${khWrite.error || khWrite.output}`)
+      const khProbe = await executeSSH(config.targetConnectionId, nodeIp, esxiHostKeyProbeCommand(perJobKnownHosts, username, host, esxiSshPort))
+      const khRefusal = esxiHostKeyFailure(esxiTrust.endpoint, khProbe.output, khProbe.error)
+      if (khRefusal) throw new Error(khRefusal)
+      await appendLog(jobId, `ESXi host key checked against ProxCenter: ${esxiTrust.keyTypes.join(", ")} of ${esxiTrust.endpoint}`, "info")
 
       if (hasStoredKey) {
         // Path A: admin configured a private key → use it as-is.
@@ -1479,18 +1561,20 @@ export async function runV2vMigrationPipeline(
         if (!pubKey) throw new Error("Failed to read generated public key")
 
         const esxiPass = decryptSecret(sourceConn.sshPassEnc!)
-        const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=15 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
+        const esxiSshOpts = `${esxiStrictSshOptions(perJobKnownHosts)} -o LogLevel=ERROR -o ConnectTimeout=15 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
 
         // ESXi keeps per-user authorized_keys under /etc/ssh/keys-<user>/ by default.
         // Some setups (nested ESXi, lab images) drop that dir and use ~/.ssh instead —
         // try both so we don't fail on non-default layouts. The login and the remote
         // command are escaped for both shells (the user and host come from the record).
-        const deployCmd = sshpassEsxiCommand(esxiPass, esxiSshOpts, esxiSshPort, username, host, authorizedKeysDeployCommand(username, pubKey, "etc"))
-        const deployResult = await executeSSH(config.targetConnectionId, nodeIp, deployCmd)
+        const deployCmd = sshpassEsxiCommand(esxiSshOpts, esxiSshPort, username, host, authorizedKeysDeployCommand(username, pubKey, "etc"))
+        const deployResult = await executeSSH(config.targetConnectionId, nodeIp, deployCmd, undefined, { stdin: esxiPasswordStdin(esxiPass) })
         let deployed = !!deployResult.output?.includes("DEPLOYED")
+        const deployRefusal = esxiHostKeyFailure(esxiTrust.endpoint, deployResult.output, deployResult.error)
+        if (deployRefusal) throw new Error(deployRefusal)
         if (!deployed) {
-          const deployCmd2 = sshpassEsxiCommand(esxiPass, esxiSshOpts, esxiSshPort, username, host, authorizedKeysDeployCommand(username, pubKey, "home"))
-          const deployResult2 = await executeSSH(config.targetConnectionId, nodeIp, deployCmd2)
+          const deployCmd2 = sshpassEsxiCommand(esxiSshOpts, esxiSshPort, username, host, authorizedKeysDeployCommand(username, pubKey, "home"))
+          const deployResult2 = await executeSSH(config.targetConnectionId, nodeIp, deployCmd2, undefined, { stdin: esxiPasswordStdin(esxiPass) })
           deployed = !!deployResult2.output?.includes("DEPLOYED")
         }
         if (!deployed) {
@@ -1499,22 +1583,23 @@ export async function runV2vMigrationPipeline(
 
         // Verify the new key actually logs in before we hand off to virt-v2v.
         const verifyResult = await executeSSH(config.targetConnectionId, nodeIp,
-          esxiKeyLoginProbeCommand(keyPath, "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PubkeyAcceptedAlgorithms=+ssh-rsa,ssh-ed25519", esxiSshPort, username, host))
+          esxiKeyLoginProbeCommand(keyPath, `${esxiStrictSshOptions(perJobKnownHosts)} -o BatchMode=yes -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PubkeyAcceptedAlgorithms=+ssh-rsa,ssh-ed25519`, esxiSshPort, username, host))
         if (!verifyResult.output?.includes("KEYOK")) {
+          const probeRefusal = esxiHostKeyFailure(esxiTrust.endpoint, verifyResult.output, verifyResult.error)
+          if (probeRefusal) throw new Error(probeRefusal)
           throw new Error(`Deployed temp SSH key did not authenticate: ${verifyResult.output?.substring(0, 200) || verifyResult.error}`)
         }
         // Record what we pushed so cleanup can remove it from ESXi authorized_keys.
-        esxiTempKeyBootstrap = { pubKey, esxiHost: host, esxiUser: username, esxiPort: esxiSshPort, esxiPass }
+        esxiTempKeyBootstrap = { pubKey, esxiHost: host, esxiUser: username, esxiPort: esxiSshPort, esxiPass, knownHostsFile: perJobKnownHosts }
         await appendLog(jobId, "Temp SSH key deployed and verified on ESXi", "success")
       }
 
-      // Permissive ssh config so the system `ssh` (used by virt-v2v for -i vmx)
-      // auto-picks the key, skips host key prompt, and negotiates ESXi-compatible
-      // algorithms (older ESXi requires ssh-rsa / DH-group14-sha1).
+      // ssh config so the system `ssh` (used by virt-v2v for -i vmx) picks the
+      // key, checks the ESXi host key against the confirmed one, and negotiates
+      // ESXi-compatible algorithms (older ESXi requires ssh-rsa / DH-group14-sha1).
       const sshConfig = [
         `Host *`,
-        `    StrictHostKeyChecking no`,
-        `    UserKnownHostsFile /dev/null`,
+        ...esxiStrictSshConfigLines(perJobKnownHosts),
         `    IdentityFile ${keyPath}`,
         `    IdentitiesOnly yes`,
         `    LogLevel ERROR`,
@@ -1529,27 +1614,20 @@ export async function runV2vMigrationPipeline(
 
       // virt-v2v reads the VMDK disks through `nbdkit ssh` which uses libssh, NOT the
       // system `ssh` binary. libssh ignores $HOME and resolves the user's homedir via
-      // getpwuid(), so it always looks at /root/.ssh/known_hosts on the PVE node. If
-      // the file is missing or doesn't contain the ESXi host key, nbdkit fails with
-      // "the host key is unknown". We append the ESXi key there via ssh-keyscan, and
-      // cleanup removes exactly that entry at job end (no persistent trust pinning).
-      //
-      // We still write a per-job known_hosts inside $HOME for the system ssh used by
-      // virt-v2v's vmx-read step — belt + suspenders.
+      // getpwuid(), so it always looks at /root/.ssh/known_hosts on the PVE node and
+      // fails with "the host key is unknown" without an entry. The confirmed keys
+      // are appended there (after dropping any older entry of the host, which would
+      // read as a changed key), and cleanup removes them at job end.
       // Each step below is kept as a single-prefix executeSSH call so each command
       // matches a prefix in the orchestrator SSH allowlist (ssh_allowlist.go). Long
       // `;`-chained one-liners get 403'd when the first non-matching prefix hits.
-      const perJobKnownHosts = `${sshDir}/known_hosts`
-      const keyscanPerJob = await executeSSH(config.targetConnectionId, nodeIp,
-        `ssh-keyscan -T 10 -p ${esxiSshPort} ${shellEscape(host)} > ${shellEscape(perJobKnownHosts)} && chmod 600 ${shellEscape(perJobKnownHosts)}`)
-      if (!keyscanPerJob.success) {
-        throw new Error(`Failed to fetch ESXi host key via ssh-keyscan: ${keyscanPerJob.error || keyscanPerJob.output?.substring(0, 200)}`)
-      }
-
-      // Seed /root/.ssh/known_hosts with the same data for libssh/nbdkit.
       await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p /root/.ssh && chmod 700 /root/.ssh`)
+      for (const name of knownHostsNames(host, esxiSshPort)) {
+        await executeSSH(config.targetConnectionId, nodeIp,
+          `ssh-keygen -R ${shellEscape(name)} -f /root/.ssh/known_hosts`).catch(() => undefined)
+      }
       const seedRoot = await executeSSH(config.targetConnectionId, nodeIp,
-        `ssh-keyscan -T 10 -p ${esxiSshPort} ${shellEscape(host)} >> /root/.ssh/known_hosts && chmod 600 /root/.ssh/known_hosts`)
+        `umask 077; cat >> /root/.ssh/known_hosts`, 30_000, { stdin: khStage.stdin })
       if (!seedRoot.success) {
         throw new Error(`Failed to seed /root/.ssh/known_hosts: ${seedRoot.error || seedRoot.output?.substring(0, 200)}. Required for nbdkit (virt-v2v's SSH disk transport) to verify the remote host.`)
       }
@@ -1774,6 +1852,8 @@ export async function runV2vMigrationPipeline(
 
       const vmConfigXml = await soapGetVmConfig(vmwareSession, config.sourceVmId)
       sourceVmwareConfig = parseVmConfig(vmConfigXml)
+      // Port group names of distributed-switch NICs, for the bulk network table (ui#1333).
+      await soapNameDistributedNics(vmwareSession, sourceVmwareConfig.nics)
       const datastoreNames = sourceVmwareConfig.disks.map(d => d.datastoreName).filter(Boolean)
       await appendLog(
         jobId,
@@ -2457,7 +2537,7 @@ export async function runV2vMigrationPipeline(
 
     // Build PVE creation params
     let createParams: Record<string, any>
-    const overrides = { hardware: config.hardware, nics: config.nics }
+    const overrides = { hardware: config.hardware, nics: config.nics, networkMap: config.networkMap, macPolicy: config.macPolicy }
 
     if (vmConfig) {
       // Override name from source VM (virt-v2v may use disk filename as name in -i disk mode)
@@ -2515,6 +2595,7 @@ export async function runV2vMigrationPipeline(
           vmConfig.nics = sourceVmwareConfig.nics.map(n => ({
             model: "virtio",
             mac: n.macAddress || undefined,
+            network: n.network || undefined,
           }))
         }
       } else if (sourceSizing) {
@@ -2541,7 +2622,7 @@ export async function runV2vMigrationPipeline(
         machine: "q35",
         boot: "order=scsi0",
         agent: "enabled=0",
-        net0: buildNetValue(fallbackNic.model ?? "virtio", fallbackNic.bridge, undefined, fallbackNic.vlanTag),
+        net0: buildNetValue(fallbackNic.model ?? "virtio", fallbackNic.bridge, targetNicMac(undefined, fallbackNic), fallbackNic.vlanTag),
       }, overrides.hardware)
     }
     const overridesLine = describeOverrides(overrides)
@@ -2720,6 +2801,13 @@ export async function runV2vMigrationPipeline(
     const useWinSataBoot = isWindowsVm && !useVirtioBlk
     const bus = { winSataBoot: useWinSataBoot, virtioBlk: useVirtioBlk }
 
+    // Drive options of one imported disk (ui#1331): the operator's choice for
+    // that disk, else the job profile, else discard on a thin storage and
+    // iothread where the bus supports it.
+    const diskDriveOpts = (disk: { options?: MigrationDiskOptions }, slot: string, storageType: string): string => diskDriveOptions({
+      slot, storageType, scsihw: createParams.scsihw, profile: config.diskOptions, disk: disk.options,
+    })
+
     for (const disk of importPlan.imports) {
       const diskFile = disk.file
       const diskPath = `${outputDir}/${diskFile}`
@@ -2785,7 +2873,7 @@ export async function runV2vMigrationPipeline(
           format: "qcow2",
           sourceFormat: stagedFormat,
           slot: diskSlot,
-          driveOpts: ",discard=on",
+          driveOpts: diskDriveOpts(disk, diskSlot, target.type),
           diskLabel,
           taken: adoptedVolumes,
           onLog: (m, level) => appendLog(jobId, m, level),
@@ -2878,7 +2966,7 @@ export async function runV2vMigrationPipeline(
 
         // Attach disk via PVE API
         const attachBody = new URLSearchParams({
-          [diskSlot]: volumeId,
+          [diskSlot]: `${volumeId}${diskDriveOpts(disk, diskSlot, target.type)}`,
         })
         try {
           await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
@@ -2905,6 +2993,10 @@ export async function runV2vMigrationPipeline(
     // ── PHASE 7: Finish ──
     await appendLog(jobId, "Cleaning up temporary files...")
     await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(outputDir)}`).catch(() => {})
+    if (config.sourceType === "esxi-direct") {
+      const left = await cleanupEsxiDirectAccess(nodeIp, 120_000)
+      if (left.length > 0) await appendLog(jobId, `ESXi access cleanup incomplete: ${left.join("; ")}`, "warn")
+    }
     if (directWriteDir) {
       // Direct-write mode (#292): the rm above removed the staging dir on the
       // target storage; the temp dir (NFC downloads, synthesized XML) is a
@@ -2920,12 +3012,7 @@ export async function runV2vMigrationPipeline(
 
     if (config.startAfterMigration) {
       await appendLog(jobId, "Starting VM on Proxmox...")
-      await pveFetch<any>(
-        pveConn,
-        `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/start`,
-        { method: "POST" }
-      )
-      await appendLog(jobId, "VM started", "success")
+      await startMigratedVm({ conn: pveConn, node: config.targetNode, vmid: targetVmid!, log: (m, l) => appendLog(jobId, m, l), startedMessage: "VM started" })
     }
 
     // Optional qcow2 conversion (#595): after the disks are attached and after
@@ -3047,52 +3134,7 @@ export async function runV2vMigrationPipeline(
       }
       const rmPw = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(pwFile)}`, CLEANUP_TIMEOUT_MS)
       if (!rmPw.success) failedCleanups.push(`${pwFile}: ${rmPw.error || "unknown"}`)
-      // If we bootstrapped a one-shot ESXi key (password-auth source), remove the
-      // corresponding line from ESXi's authorized_keys before we nuke the home dir —
-      // otherwise the key stays accepted on ESXi forever. We try both default
-      // locations since the deploy step also tried both.
-      if (esxiTempKeyBootstrap) {
-        const { pubKey, esxiHost: ehost, esxiUser: euser, esxiPort: eport, esxiPass } = esxiTempKeyBootstrap
-        // sed pattern: match on the first 40 chars of the base64 body, which is unique
-        // enough to not collide with other keys but short enough to escape safely.
-        const pubFingerprint = pubKey.split(/\s+/)[1]?.substring(0, 40) || ""
-        if (pubFingerprint) {
-          const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
-          const revokeCmd = sshpassEsxiCommand(esxiPass, esxiSshOpts, eport, euser, ehost, authorizedKeysRevokeCommand(euser, pubFingerprint, "REVOKED"))
-          const revokeResult = await executeSSH(config.targetConnectionId, nodeIp, revokeCmd, CLEANUP_TIMEOUT_MS)
-          if (!revokeResult.output?.includes("REVOKED")) {
-            failedCleanups.push(`esxi-authorized-keys revoke: ${revokeResult.error || revokeResult.output?.substring(0, 150) || "unknown"}`)
-          }
-        }
-      }
-      // esxi-direct staged its SSH key under a per-job HOME; remove it whether we
-      // took that branch or not — rm -rf on a non-existent path succeeds silently.
-      const esxiHomeDir = `${tempBase}/v2v-home-${jobId}`
-      const rmHome = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(esxiHomeDir)}`, CLEANUP_TIMEOUT_MS)
-      if (!rmHome.success) failedCleanups.push(`${esxiHomeDir}: ${rmHome.error || "unknown"}`)
-      // Kill the per-job ssh-agent and remove its socket/pidfile. Each step is a
-      // single-prefix executeSSH call (cat ', kill , rm -f 'v2v-agent-...') so it
-      // matches the orchestrator SSH allowlist without needing a shell wrapper.
-      if (esxiSshAgent) {
-        const readPid = await executeSSH(config.targetConnectionId, nodeIp, `cat ${shellEscape(esxiSshAgent.pidPath)}`, CLEANUP_TIMEOUT_MS)
-        const rawPid = readPid.output?.trim() || ""
-        if (/^\d+$/.test(rawPid)) {
-          const killRes = await executeSSH(config.targetConnectionId, nodeIp, `kill ${rawPid}`, CLEANUP_TIMEOUT_MS)
-          if (!killRes.success) failedCleanups.push(`kill ssh-agent ${rawPid}: ${killRes.error || killRes.output?.substring(0, 150) || "unknown"}`)
-        }
-        const rmSock = await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(esxiSshAgent.sockPath)} ${shellEscape(esxiSshAgent.pidPath)}`, CLEANUP_TIMEOUT_MS)
-        if (!rmSock.success) failedCleanups.push(`ssh-agent files: ${rmSock.error || rmSock.output?.substring(0, 150) || "unknown"}`)
-      }
-      // If we seeded /root/.ssh/known_hosts for libssh, strip the entries we added.
-      // Two separate calls because ssh-keygen -R only removes one host form per run
-      // and the allowlist prefers simple single-prefix commands over `;`-chained ones.
-      if (esxiKnownHostsSeeded) {
-        const hostBracket = `[${esxiKnownHostsSeeded.esxiHost}]:${esxiKnownHostsSeeded.esxiPort}`
-        await executeSSH(config.targetConnectionId, nodeIp,
-          `ssh-keygen -R ${shellEscape(hostBracket)} -f /root/.ssh/known_hosts`, CLEANUP_TIMEOUT_MS).catch(() => {})
-        await executeSSH(config.targetConnectionId, nodeIp,
-          `ssh-keygen -R ${shellEscape(esxiKnownHostsSeeded.esxiHost)} -f /root/.ssh/known_hosts`, CLEANUP_TIMEOUT_MS).catch(() => {})
-      }
+      failedCleanups.push(...await cleanupEsxiDirectAccess(nodeIp, CLEANUP_TIMEOUT_MS))
       const nutanixDownloadDir = `${tempBase}/nutanix-${jobId}`
       const rmNut = await executeSSH(config.targetConnectionId, nodeIp, `rm -rf ${shellEscape(nutanixDownloadDir)}`, CLEANUP_TIMEOUT_MS)
       if (!rmNut.success) failedCleanups.push(`${nutanixDownloadDir}: ${rmNut.error || "unknown"}`)

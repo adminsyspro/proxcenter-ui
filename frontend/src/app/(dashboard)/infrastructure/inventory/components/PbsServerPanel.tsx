@@ -10,6 +10,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import RestoreTagsSwitch from '@/components/backup/RestoreTagsSwitch'
 import { checkRestoredTagsOmitted, restoredTagsCheckMessage } from '@/lib/backups/restoreTags'
+import { gpuContingentMessage } from '@/lib/gpu/contingentErrors'
 import RestoreToGuestDialog from '@/components/backups/RestoreToGuestDialog'
 import { isRestorableItemPath } from '@/lib/guestFileRestore/paths'
 
@@ -266,7 +267,7 @@ const PbsServerPanel = React.forwardRef<PbsServerPanelHandle, PbsServerPanelProp
         }
       )
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
+      if (!res.ok) throw new Error(gpuContingentMessage(t, json) || json.error || `HTTP ${res.status}`)
 
       if (json.data) {
         const restoredType = pbsRestoreDialog.storageType === 'lxc' ? 'lxc' : 'qemu'

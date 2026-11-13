@@ -7,6 +7,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/config'
 import { getSetting, setSetting } from '@/lib/db/settings'
 import { isTileTemplate, normalizeBasemapSettings, type BasemapSettings } from '@/lib/map/basemap'
+import { MAX_ATTRIBUTION_LENGTH } from '@/lib/map/attribution'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -57,6 +58,12 @@ async function handlePut(request: Request) {
       return NextResponse.json({ error: 'Expected an object of basemap settings' }, { status: 400 })
     }
 
+    if (typeof body.attribution === 'string' && body.attribution.length > MAX_ATTRIBUTION_LENGTH) {
+      return NextResponse.json({ error: `The attribution is limited to ${MAX_ATTRIBUTION_LENGTH} characters` }, { status: 400 })
+    }
+
+    // The attribution is drawn as HTML by Leaflet: normalizeBasemapSettings
+    // keeps its http(s) links and stores any other markup as text (roadmap#229).
     const settings: BasemapSettings = normalizeBasemapSettings(body)
 
     // Refuse a custom provider that cannot draw: without the three

@@ -214,8 +214,16 @@ async function handleDelete(req: Request) {
     // Non-provider: the orchestrator's clearAll(connection) has no tenant
     // concept — on a shared cluster it would wipe the neighbours' alerts
     // too. Clear only the alerts this caller can actually see, one by one.
+    // A provider caller whose alerts.manage is scoped to a node or a VM
+    // resolves the alerts it sees, one by one: the fleet- or connection-wide
+    // clear needs an unrestricted grant (roadmap#223).
     if (tenantId !== DEFAULT_TENANT_ID) {
       const cleared = await clearVisibleTenantAlerts(connectionId)
+
+      return NextResponse.json({ cleared })
+    }
+    if ((await getCurrentRbacInfraScope(PERMISSIONS.ALERTS_MANAGE)) !== null) {
+      const cleared = await clearVisibleTenantAlerts(connectionId, 'resolve')
 
       return NextResponse.json({ cleared })
     }

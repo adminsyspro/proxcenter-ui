@@ -1,115 +1,73 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildInstallCommand, buildSudoersTemplate, SETUP_BASH, type AllowlistCategoryShape } from './sudoersTemplate'
+import { FRONTEND_SUDO_RULES, type SudoRule } from '@/lib/ssh/sudo'
 
-const cmd = (prefix: string, executablePath?: string): AllowlistCategoryShape['commands'][number] => ({
-  prefix,
-  executablePath,
-  category: 'x',
-  description: '',
-  usedBy: ''
-})
+import { buildInstallCommand, buildProfileSudoersTemplate, profileRules, SETUP_BASH } from './sudoersTemplate'
 
-const categories: AllowlistCategoryShape[] = [
-  {
-    id: 'node-management',
-    label: 'Node management',
-    description: '',
-    commands: [
-      cmd('ha-manager crm-command node-maintenance', '/usr/sbin/ha-manager'),
-      cmd('apt-get ', '/usr/bin/apt-get'),
-      cmd('ha-manager status', '/usr/sbin/ha-manager')
-    ]
-  },
-  {
-    id: 'network-flows',
-    label: 'Network flows',
-    description: '',
-    commands: [cmd('for br in $(ovs-vsctl list-br)'), cmd('ovs-vsctl ', '/usr/bin/ovs-vsctl')]
-  }
+const orchestratorRules: SudoRule[] = [
+  { id: 'apt-update', profile: 'node-ops', path: '/usr/bin/apt-get', args: '^update -qq$', usedBy: '' },
+  { id: 'reboot', profile: 'node-ops', path: '/usr/sbin/reboot', args: '', usedBy: '' },
+  { id: 'ha', profile: 'node-ops', path: '/usr/sbin/ha-manager', args: '^crm-command node-maintenance (enable|disable) [A-Za-z0-9][A-Za-z0-9.-]*$', usedBy: '' },
+  { id: 'sr-zfs', profile: 'site-recovery', path: '/usr/sbin/zfs', args: '^snapshot [a-z/]+@[a-z0-9:-]+$', usedBy: '' },
 ]
+const rules = [...orchestratorRules, ...FRONTEND_SUDO_RULES]
 
-describe('buildSudoersTemplate', () => {
-  it('emits one NOPASSWD rule per category with unique, sorted executable paths', () => {
-    const { body } = buildSudoersTemplate(categories)
+describe('buildProfileSudoersTemplate', () => {
+  it('writes one Cmnd_Alias per restricted profile and a rule granting it', () => {
+    const body = buildProfileSudoersTemplate(rules, ['node-ops', 'site-recovery'])
+
     expect(body).toContain('Defaults:proxcenter !requiretty')
-    expect(body).toContain('# Node management\nproxcenter ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/sbin/ha-manager')
-    expect(body).toContain('# Network flows\nproxcenter ALL=(ALL) NOPASSWD: /usr/bin/ovs-vsctl')
+    // debconf evaluates DEBIAN_FRONTEND as code: never kept from the caller.
+    expect(body).not.toMatch(/env_keep/)
+    expect(body).toContain('Cmnd_Alias PXC_NODE_OPS = /usr/bin/apt-get ^update -qq$, \\\n')
+    expect(body).toContain('proxcenter ALL=(root) NOPASSWD: PXC_NODE_OPS')
+    expect(body).toContain('proxcenter ALL=(root) NOPASSWD: PXC_SITE_RECOVERY')
+    expect(body).not.toContain('NOPASSWD: ALL')
+    expect(body).not.toContain('/bin/sh')
   })
 
-  it('counts shell-wrapped prefixes and adds the scoped /bin/sh rule only when there are some', () => {
-    const withShell = buildSudoersTemplate(categories)
-    expect(withShell.shellWrappedCount).toBe(1)
-    expect(withShell.body).toContain('proxcenter ALL=(ALL) NOPASSWD: /bin/sh -c *')
-
-    const withoutShell = buildSudoersTemplate([categories[0]])
-    expect(withoutShell.shellWrappedCount).toBe(0)
-    expect(withoutShell.body).not.toContain('/bin/sh -c *')
+  it('pins a program taking no argument with the empty-argument form', () => {
+    expect(buildProfileSudoersTemplate(rules, ['node-ops'])).toContain('/usr/sbin/reboot ""')
   })
 
-  it('skips a category whose commands are all shell-wrapped', () => {
-    const { body } = buildSudoersTemplate([
-      { id: 'only-shell', label: 'Only shell', description: '', commands: [cmd('for x in y')] }
-    ])
-    expect(body).not.toContain('# Only shell')
+  it('escapes the sudoers separators of an expression but keeps its backslashes', () => {
+    const body = buildProfileSudoersTemplate(rules, ['site-recovery'])
+
+    expect(body).toContain('/usr/sbin/zfs ^snapshot [a-z/]+@[a-z0-9\\:-]+$')
+    const nodeOps = buildProfileSudoersTemplate(rules, ['node-ops'])
+
+    expect(nodeOps).toContain('Dpkg\\:\\:Options\\:\\:\\=--force-confdef')
+    expect(nodeOps).toContain('/tmp/pxc-screen-[0-9]+\\.ppm$')
   })
 
-  it('documents the rolling update requirement as a commented NOPASSWD: ALL line, never an active one', () => {
-    const { body } = buildSudoersTemplate(categories)
-    const lines = body.split('\n')
-    expect(lines).toContain('# proxcenter ALL=(ALL) NOPASSWD: ALL')
-    expect(lines).not.toContain('proxcenter ALL=(ALL) NOPASSWD: ALL')
-    expect(body).toContain('Rolling updates are run by the orchestrator')
-    expect(body).toContain('sudo -n sh -c')
-    // The commented rule is the last line: a customer pasting the template
-    // sees it right where they would add their own rules.
-    expect(lines.at(-1)).toBe('# proxcenter ALL=(ALL) NOPASSWD: ALL')
+  it('grants everything for the migrations profile, and says it is equivalent to root', () => {
+    const body = buildProfileSudoersTemplate(rules, ['migrations'])
+
+    expect(body).toContain('proxcenter ALL=(ALL) NOPASSWD: ALL')
+    expect(body).toContain('equivalent to root')
+    expect(body).not.toContain('Cmnd_Alias')
   })
 
-  it('sanitises newlines in category labels so a label cannot inject a sudoers rule', () => {
-    const { body } = buildSudoersTemplate([
-      {
-        id: 'evil',
-        label: 'Evil\nproxcenter ALL=(ALL) NOPASSWD: ALL',
-        description: '',
-        commands: [cmd('ls', '/bin/ls')]
-      }
-    ])
-    expect(body.split('\n')).not.toContain('proxcenter ALL=(ALL) NOPASSWD: ALL')
-    expect(body).toContain('# Evil proxcenter ALL=(ALL) NOPASSWD: ALL')
+  it('lists a rule shared by both sides once', () => {
+    const dup = [...rules, { ...orchestratorRules[0], id: 'dup' }]
+
+    expect(profileRules(dup, 'node-ops').filter(r => r.args === '^update -qq$')).toHaveLength(1)
   })
 })
 
 describe('buildInstallCommand', () => {
-  it('writes the body through a quoted heredoc, locks the mode and validates with visudo', () => {
-    const out = buildInstallCommand('BODY')
-    expect(out.startsWith("cat > /etc/sudoers.d/proxcenter <<'EOF'\nBODY\nEOF\n")).toBe(true)
-    expect(out).toContain('chmod 440 /etc/sudoers.d/proxcenter')
-    expect(out.endsWith('visudo -c -f /etc/sudoers.d/proxcenter')).toBe(true)
+  it('wraps the body in a heredoc, fixes the mode and validates it', () => {
+    const cmd = buildInstallCommand('X')
+
+    expect(cmd).toContain("cat > /etc/sudoers.d/proxcenter <<'EOF'\nX\nEOF")
+    expect(cmd).toContain('chmod 440 /etc/sudoers.d/proxcenter')
+    expect(cmd).toContain('visudo -c -f /etc/sudoers.d/proxcenter')
   })
 })
 
 describe('SETUP_BASH', () => {
-  const lines = SETUP_BASH.split('\n')
-  const indexOf = (start: string) => lines.findIndex(l => l.startsWith(start))
-
-  it('installs sudo, which a stock PVE node does not ship', () => {
-    expect(lines).toContain('apt install -y sudo')
-  })
-
-  it('gives the system user /home/proxcenter as home, not /nonexistent', () => {
-    expect(lines).toContain('adduser --system --home /home/proxcenter --shell /bin/bash --group proxcenter')
-  })
-
-  it('repairs the home of an existing user before the key is written', () => {
-    const repair = indexOf('usermod -d /home/proxcenter proxcenter')
-
-    expect(repair).toBeGreaterThan(indexOf('adduser '))
-    expect(repair).toBeLessThan(indexOf('mkdir -p /home/proxcenter/.ssh'))
-  })
-
-  it('adds the openvswitch group only on nodes where it exists', () => {
-    expect(lines).toContain('getent group openvswitch >/dev/null && usermod -aG openvswitch proxcenter')
-    expect(lines).not.toContain('usermod -aG openvswitch proxcenter')
+  it('creates the account with a home directory and no longer touches the openvswitch group', () => {
+    expect(SETUP_BASH).toContain('adduser --system --home /home/proxcenter')
+    expect(SETUP_BASH).not.toContain('openvswitch')
   })
 })

@@ -14,7 +14,8 @@ wget -q -O /dev/null --timeout=3 http://127.0.0.1:3000/api/health || exit 1
 # 2. Orchestrator up
 wget -q -O /dev/null --timeout=3 http://127.0.0.1:8080/api/v1/health || exit 1
 
-# 3. Patroni running on this node
-wget -q -O /dev/null --timeout=3 http://${NODE_IP}:8008/health || exit 1
+# 3. Patroni running on this node. Its REST API answers over HTTPS with the
+#    node certificate, verified against the cluster CA (never skip the check).
+curl -fsS -o /dev/null --max-time 3 --cacert /etc/keepalived/tls/ca.crt https://${NODE_IP}:8008/health || exit 1
 
 exit 0

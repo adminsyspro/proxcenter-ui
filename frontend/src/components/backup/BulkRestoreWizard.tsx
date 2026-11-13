@@ -56,6 +56,7 @@ import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { useRBAC } from '@/contexts/RBACContext'
 import RestoreTagsSwitch from '@/components/backup/RestoreTagsSwitch'
 import { checkRestoredTagsOmitted, restoredTagsCheckMessage } from '@/lib/backups/restoreTags'
+import { gpuContingentMessage } from '@/lib/gpu/contingentErrors'
 import StorageTypeIcon from '@/components/storage/StorageTypeIcon'
 import { resolveSelectedRowIds } from '@/utils/gridSelection'
 import {
@@ -500,7 +501,7 @@ export default function BulkRestoreWizard({
       )
       const j = await r.json().catch(() => ({}))
       if (!r.ok) {
-        setJob(key, { status: 'failed', error: j?.error || `HTTP ${r.status}`, endedAt: Date.now() })
+        setJob(key, { status: 'failed', error: gpuContingentMessage(t, j) || j?.error || `HTTP ${r.status}`, endedAt: Date.now() })
         return
       }
       const upid = typeof j?.data === 'string' ? j.data : undefined
@@ -510,7 +511,7 @@ export default function BulkRestoreWizard({
     } catch (e: any) {
       setJob(key, { status: 'failed', error: e?.message || 'restore failed', endedAt: Date.now() })
     }
-  }, [plan.entries, pbsId, restoreOptions, connectionId, node, setJob])
+  }, [plan.entries, pbsId, restoreOptions, connectionId, node, setJob, t])
 
   useEffect(() => {
     if (!running) return

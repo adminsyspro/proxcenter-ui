@@ -7,6 +7,7 @@ import { SCOPE_DEFINITIONS } from "./scopes"
 // Same order as the ApiTag union.
 const API_TAGS: ApiTag[] = [
   "Monitoring", "VMs", "Snapshots", "Backups", "Storage", "HA", "Pools", "Network", "Firewall", "Tasks",
+  "Tenants", "vDCs", "RBAC", "Users",
 ]
 
 const REFUSAL_METHODS: HttpMethod[] = ["POST", "DELETE", "PUT", "PATCH", "GET"]
@@ -25,6 +26,9 @@ function forbiddenResponse(entry: AllowlistEntry) {
   const examples: Record<string, Record<string, unknown>> = { scope: scopeBody }
   if (entry.connectionSegment || entry.vmKeySegment || entry.connectionField) {
     examples.perimeter = { error: "Connection not in token scope", connection: "conn-1" }
+  }
+  if (entry.perimeter === "fleet") {
+    examples.fleet = { error: "This operation reaches every connection: it needs a token not restricted to connections" }
   }
   if (entry.clusterObject) {
     examples.clusterObject = { error: "Cluster-level object not available to a vDC tenant token" }

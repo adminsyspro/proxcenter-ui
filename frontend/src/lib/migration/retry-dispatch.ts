@@ -11,6 +11,7 @@
  */
 
 import type { V2vMigrationConfig } from "./v2v-pipeline"
+import { jobTargetOptions } from "@/lib/migration/target-overrides"
 
 export type RetryEngine = "warm-vmware" | "warm-xcpng" | "v2v" | "xcpng-cold" | "vmware"
 
@@ -86,6 +87,7 @@ export function v2vConfigFromJobConfig(
     ...(config.hardware && typeof config.hardware === "object" && { hardware: config.hardware }),
     ...(Array.isArray(config.nics) && config.nics.length > 0 && { nics: config.nics }),
     ...(Array.isArray(config.disks) && config.disks.length > 0 && { disks: config.disks }),
+    ...jobTargetOptions(config),
   }
 }
 

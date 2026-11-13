@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { asRoot, resolveSudo } from "@/lib/ssh/sudo"
 
 import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -71,7 +72,7 @@ async function postHandler(
 
     // Get node IP and execute unlock via SSH
     const nodeIp = await resolveNodeSshEndpoint(conn, node)
-    const unlockCmd = type === 'qemu' ? `qm unlock ${safeVmid}` : `pct unlock ${safeVmid}`
+    const unlockCmd = asRoot(type === 'qemu' ? `qm unlock ${safeVmid}` : `pct unlock ${safeVmid}`)
     const sshResult = await executeSSH(id, nodeIp, unlockCmd)
 
     if (sshResult.success) {
@@ -91,7 +92,7 @@ async function postHandler(
       return NextResponse.json({
         error: 'The unlock command could not be run on the node',
         lockType,
-        hint: `Run manually on PVE node: ${unlockCmd}`
+        hint: `Run manually on PVE node: ${resolveSudo(unlockCmd, false)}`
       }, { status: 500 })
     }
 

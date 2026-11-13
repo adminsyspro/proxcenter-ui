@@ -22,12 +22,18 @@ const {
   roleFindUniqueMock: vi.fn(),
 }))
 
+// API token guard: pass-through, these tests drive the session path (token
+// paths: routeGuard.test.ts, tenancyTokenScope.test.ts).
+vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
+vi.mock("@/lib/auth/actingUser", async () => (await import("@/__tests__/fixtures/actingUserFromNextAuth")).actingUserFromNextAuth())
 vi.mock('next-auth', () => ({ getServerSession: getServerSessionMock }))
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/demo/demo-api', () => ({ demoResponse: () => null }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'default', DEFAULT_TENANT_ID: 'default' }))
 vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
+vi.mock('@/lib/rbac/assignmentReadAccess', () => ({ canReadRoleAssignments: async () => true }))
 vi.mock('@/lib/rbac', () => ({
+  PERMISSIONS: { ADMIN_RBAC_VIEW: 'admin.rbac.view' },
   hasPermission: hasPermissionMock,
   isUserSuperAdmin: isSuperAdminMock,
   isUserProtected: isProtectedMock,

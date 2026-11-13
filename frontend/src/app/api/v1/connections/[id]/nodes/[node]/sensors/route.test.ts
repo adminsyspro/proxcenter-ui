@@ -85,7 +85,7 @@ describe('GET .../nodes/[node]/sensors', () => {
     expect(command).toContain('/sys/class/hwmon/')
     expect(command).not.toContain('pve')
     // A sysfs read: still answers on a cluster outside the license (roadmap#58).
-    expect(execOpts).toEqual({ readOnly: true })
+    expect(execOpts).toEqual({ readOnly: true, asAccount: true })
   })
 
   it('reports unavailable rather than failing when SSH is off', async () => {

@@ -16,6 +16,14 @@ vi.mock("@/lib/auth/requireEnterprise", () => ({
 vi.mock("@/lib/migration/warm/vddk-provision", () => ({
   provisionWarmNode: vi.fn(async () => ({ ok: true, missing: [] })),
 }))
+// roadmap#224: the preflight's tenant gate (a vDC tenant never, an MSP only
+// on its own connections), the real canMigrateConnections on a mocked scope.
+const tenant = vi.hoisted(() => ({ id: "default", infra: { kind: "provider" } as any }))
+vi.mock("@/lib/tenant", () => ({ getCurrentTenantId: vi.fn(async () => tenant.id) }))
+vi.mock("@/lib/tenant/infraScope", async (orig) => ({
+  ...(await orig<typeof import("@/lib/tenant/infraScope")>()),
+  getTenantInfrastructureScope: vi.fn(async () => tenant.infra),
+}))
 // POST is wrapped by withAudit() (#1105); the real audit() would reach Prisma
 // and the syslog forwarder.
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => "audit-id") }))
@@ -37,6 +45,8 @@ beforeEach(() => {
   mockPermission.mockResolvedValue(null)
   mockFeature.mockResolvedValue(null)
   mockProvision.mockResolvedValue({ ok: true, missing: [] })
+  tenant.id = "default"
+  tenant.infra = { kind: "provider" }
 })
 
 describe("POST /api/v1/migrations/warm-node-setup", () => {
@@ -99,5 +109,51 @@ describe("POST /api/v1/migrations/warm-node-setup", () => {
     expect(res.status).toBe(500)
     const json = await readJson<{ error: string }>(res)
     expect(json?.error).toContain("GHCR refused")
+  })
+
+  describe("tenant gate (roadmap#224)", () => {
+    const vdc = { kind: "iaas", vdcScope: { connectionIds: new Set(["c1"]), nodesByConnection: new Map([["c1", new Set(["pve1"])]]) } }
+
+    it("answers a vDC tenant 404 as the preflight does, and never touches the node", async () => {
+      tenant.id = "tenant-vdc"
+      tenant.infra = vdc
+      const res = await callRoute(POST, { body: { targetConnectionId: "c1", targetNode: "pve1" } })
+      expect(res.status).toBe(404)
+      expect(await readJson(res)).toEqual({ error: "Connection not found" })
+      expect(mockProvision).not.toHaveBeenCalled()
+      // Refused before any check on the node, so nothing is learnt about it.
+      expect(mockPermission).not.toHaveBeenCalledWith("vm.migrate", "node", "c1:pve1")
+    })
+
+    it("answers an MSP 404 on a connection it does not own", async () => {
+      tenant.id = "tenant-msp"
+      tenant.infra = { kind: "msp", connectionIds: new Set(["own"]) }
+      const res = await callRoute(POST, { body: { targetConnectionId: "c1", targetNode: "pve1" } })
+      expect(res.status).toBe(404)
+      expect(mockProvision).not.toHaveBeenCalled()
+    })
+
+    it("lets an MSP prepare a node of its own connection", async () => {
+      tenant.id = "tenant-msp"
+      tenant.infra = { kind: "msp", connectionIds: new Set(["own"]) }
+      const res = await callRoute(POST, { body: { targetConnectionId: "own", targetNode: "pve1" } })
+      expect(res.status).toBe(200)
+      expect(mockProvision).toHaveBeenCalledWith("own", "pve1", undefined)
+      expect(mockPermission).toHaveBeenCalledWith("vm.migrate", "node", "own:pve1")
+    })
+
+    it("refuses a node name PVE could not carry with 400, before the tenant gate and the node", async () => {
+      const res = await callRoute(POST, { body: { targetConnectionId: "c1", targetNode: "pve1;reboot" } })
+      expect(res.status).toBe(400)
+      expect(await readJson(res)).toEqual({ error: "Invalid node name" })
+      expect(mockProvision).not.toHaveBeenCalled()
+    })
+
+    it("refuses a target node outside the caller's vm.migrate grants", async () => {
+      mockPermission.mockImplementation(async (_p: string, type?: string) => type === "node" ? NextResponse.json({ error: "Forbidden" }, { status: 403 }) : null)
+      const res = await callRoute(POST, { body: { targetConnectionId: "c1", targetNode: "pve1" } })
+      expect(res.status).toBe(403)
+      expect(mockProvision).not.toHaveBeenCalled()
+    })
   })
 })

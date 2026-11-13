@@ -1,38 +1,21 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { callRoute, readJson, deniedPermissionResponse } from '@/__tests__/setup/route-test'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { checkPermissionMock, orchestratorFetchMock, forgetHostKeyMock } = vi.hoisted(() => ({
+import { callRoute, deniedPermissionResponse, readJson } from '@/__tests__/setup/route-test'
+
+const { checkPermissionMock, forgetHostKeyMock, hostKeyScopeMock } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn<(...a: any[]) => Promise<Response | null>>(),
-  orchestratorFetchMock: vi.fn<(...a: any[]) => Promise<any>>(),
   forgetHostKeyMock: vi.fn<(host: string) => Promise<number>>(),
+  hostKeyScopeMock: vi.fn<(...a: any[]) => Promise<{ all: boolean; hosts: Set<string> }>>(),
 }))
-
-// parseOrchestratorError stays REAL: telling "the orchestrator answered 404"
-// apart from "the orchestrator never answered" is exactly what decides between
-// a 404 and a 200 with orchestratorUnavailable, so the parser must be the one
-// production uses.
-vi.mock('@/lib/orchestrator', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/orchestrator')>('@/lib/orchestrator')
-  return {
-    ...actual,
-    orchestratorFetch: (...args: unknown[]) => orchestratorFetchMock(...args),
-  }
-})
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: (...args: unknown[]) => checkPermissionMock(...args),
-  PERMISSIONS: {
-    CONNECTION_VIEW: 'connection.view',
-    CONNECTION_MANAGE: 'connection.manage',
-  },
+  PERMISSIONS: { CONNECTION_VIEW: 'connection.view', CONNECTION_MANAGE: 'connection.manage' },
 }))
 
 vi.mock('@/lib/ssh/host-key-store', () => ({
   forgetHostKey: (host: string) => forgetHostKeyMock(host),
-}))
-
-const { hostKeyScopeMock } = vi.hoisted(() => ({
-  hostKeyScopeMock: vi.fn<(...a: any[]) => Promise<{ all: boolean; hosts: Set<string> }>>(),
+  listHostKeys: vi.fn(),
 }))
 
 // Which hosts a caller reaches is hostKeyAccess.test.ts's business; here the
@@ -44,17 +27,6 @@ vi.mock('@/lib/ssh/hostKeyAccess', () => ({
 
 import { DELETE } from './route'
 
-/** The error shape orchestratorFetch throws on a non-OK upstream response. */
-function orchestratorHttpError(status: number, body: string): Error {
-  return new Error(`Orchestrator ${status}: ${body}`)
-}
-
-function unreachableError(): Error {
-  const err: any = new Error('Orchestrator unavailable')
-  err.code = 'ORCHESTRATOR_UNAVAILABLE'
-  return err
-}
-
 function call(host: string) {
   return callRoute(DELETE as Parameters<typeof callRoute>[0], { method: 'DELETE', params: { host } })
 }
@@ -62,181 +34,51 @@ function call(host: string) {
 beforeEach(() => {
   hostKeyScopeMock.mockReset().mockResolvedValue({ all: true, hosts: new Set() })
   checkPermissionMock.mockReset().mockResolvedValue(null)
-  orchestratorFetchMock.mockReset().mockResolvedValue({ status: 'forgotten', host: '10.42.0.101' })
-  forgetHostKeyMock.mockReset().mockResolvedValue(0)
+  forgetHostKeyMock.mockReset().mockResolvedValue(2)
 })
 
 describe('DELETE /api/v1/ssh/host-keys/[host]', () => {
-  it('clears both stores and reports what each one removed', async () => {
-    forgetHostKeyMock.mockResolvedValue(2)
-
-    const res = await call('10.42.0.101')
-
+  it('forgets every key of a bare host, lower-cased', async () => {
+    const res = await call('PVE1.Lab')
     expect(res.status).toBe(200)
-    expect(await readJson(res)).toEqual({
-      status: 'forgotten',
-      host: '10.42.0.101',
-      cleared: { orchestrator: true, frontendRows: 2 },
-      orchestratorUnavailable: false,
-    })
-    expect(orchestratorFetchMock).toHaveBeenCalledWith('/ssh/host-keys/10.42.0.101', { method: 'DELETE' })
-    expect(forgetHostKeyMock).toHaveBeenCalledWith('10.42.0.101')
+    expect(await readJson(res)).toEqual({ status: 'forgotten', host: 'pve1.lab', removed: 2 })
+    expect(forgetHostKeyMock).toHaveBeenCalledWith('pve1.lab')
   })
 
-  it('checks connection.manage, not connection.view', async () => {
-    await call('10.42.0.101')
-
-    expect(checkPermissionMock).toHaveBeenCalledWith('connection.manage')
+  it('forgets one endpoint given as host:port, scoped on its bare host', async () => {
+    hostKeyScopeMock.mockResolvedValue({ all: false, hosts: new Set(['10.0.0.1']) })
+    const res = await call('10.0.0.1:2222')
+    expect(res.status).toBe(200)
+    expect(forgetHostKeyMock).toHaveBeenCalledWith('10.0.0.1:2222')
   })
 
-  it('returns the denied response and clears nothing when the permission check fails', async () => {
+  it('answers 404 when nothing was stored for the host', async () => {
+    forgetHostKeyMock.mockResolvedValue(0)
+    expect((await call('10.0.0.9')).status).toBe(404)
+  })
+
+  it('answers 404 and forgets nothing outside the caller scope', async () => {
+    hostKeyScopeMock.mockResolvedValue({ all: false, hosts: new Set(['10.0.0.1']) })
+    expect((await call('10.0.0.2')).status).toBe(404)
+    expect(forgetHostKeyMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects a host with a slash or a space', async () => {
+    expect((await call('a/b')).status).toBe(400)
+    expect((await call('a b')).status).toBe(400)
+    expect(forgetHostKeyMock).not.toHaveBeenCalled()
+  })
+
+  it('returns the denied response without touching the registry', async () => {
     checkPermissionMock.mockResolvedValue(deniedPermissionResponse())
-
-    const res = await call('10.42.0.101')
-
-    expect(res.status).toBe(403)
-    expect(orchestratorFetchMock).not.toHaveBeenCalled()
+    expect((await call('10.0.0.1')).status).toBe(403)
     expect(forgetHostKeyMock).not.toHaveBeenCalled()
   })
 
-  it('still clears the frontend store when the orchestrator held no pin', async () => {
-    orchestratorFetchMock.mockRejectedValue(
-      orchestratorHttpError(404, '{"error":"no pinned host key for 10.42.0.101"}')
-    )
-    forgetHostKeyMock.mockResolvedValue(1)
-
-    const res = await call('10.42.0.101')
-
-    expect(res.status).toBe(200)
-    expect(await readJson(res)).toEqual({
-      status: 'forgotten',
-      host: '10.42.0.101',
-      cleared: { orchestrator: false, frontendRows: 1 },
-      orchestratorUnavailable: false,
-    })
-    expect(forgetHostKeyMock).toHaveBeenCalledWith('10.42.0.101')
-  })
-
-  it('still clears the orchestrator when the frontend store held no pin', async () => {
-    forgetHostKeyMock.mockResolvedValue(0)
-
-    const res = await call('10.42.0.101')
-
-    expect(res.status).toBe(200)
-    expect(await readJson<any>(res)).toMatchObject({ cleared: { orchestrator: true, frontendRows: 0 } })
-  })
-
-  it('returns 404 only when the orchestrator answered and BOTH stores held nothing', async () => {
-    orchestratorFetchMock.mockRejectedValue(
-      orchestratorHttpError(404, '{"error":"no pinned host key for 10.42.0.101"}')
-    )
-    forgetHostKeyMock.mockResolvedValue(0)
-
-    const res = await call('10.42.0.101')
-
-    expect(res.status).toBe(404)
-    expect(await readJson(res)).toEqual({ error: 'no pinned host key for 10.42.0.101' })
-    // The frontend store is still asked, so a stale row can never survive a 404.
-    expect(forgetHostKeyMock).toHaveBeenCalledWith('10.42.0.101')
-  })
-
-  it('never 404s when the orchestrator was unreachable, even with no frontend row', async () => {
-    orchestratorFetchMock.mockRejectedValue(unreachableError())
-    forgetHostKeyMock.mockResolvedValue(0)
-
-    const res = await call('10.42.0.101')
-
-    expect(res.status).toBe(200)
-    expect(await readJson(res)).toEqual({
-      status: 'forgotten',
-      host: '10.42.0.101',
-      cleared: { orchestrator: false, frontendRows: 0 },
-      orchestratorUnavailable: true,
-    })
-    expect(forgetHostKeyMock).toHaveBeenCalledWith('10.42.0.101')
-  })
-
-  it('treats an orchestrator 503 (no host-key store) as unavailable rather than a clean clear', async () => {
-    orchestratorFetchMock.mockRejectedValue(
-      orchestratorHttpError(503, '{"error":"host key store unavailable"}')
-    )
-    forgetHostKeyMock.mockResolvedValue(1)
-
-    const res = await call('10.42.0.101')
-
-    expect(res.status).toBe(200)
-    expect(await readJson<any>(res)).toMatchObject({
-      cleared: { orchestrator: false, frontendRows: 1 },
-      orchestratorUnavailable: true,
-    })
-  })
-
-  it.each([
-    ['a colon', '10.42.0.101:22'],
-    ['a slash', '10.42.0.101/22'],
-    ['a space', 'pve 1'],
-    ['nothing', '   '],
-  ])('rejects a host containing %s with 400 and touches neither store', async (_label, host) => {
-    const res = await call(host)
-
-    expect(res.status).toBe(400)
-    expect(orchestratorFetchMock).not.toHaveBeenCalled()
-    expect(forgetHostKeyMock).not.toHaveBeenCalled()
-  })
-
-  it('rejects a host that is not a string at all with 400', async () => {
-    const res = await callRoute(DELETE as Parameters<typeof callRoute>[0], { method: 'DELETE', params: { host: 22 as any } })
-
-    expect(res.status).toBe(400)
-    expect(forgetHostKeyMock).not.toHaveBeenCalled()
-  })
-
-  it('answers 500 with the reason when the frontend store itself fails', async () => {
+  it('answers 500 when the registry fails', async () => {
     forgetHostKeyMock.mockRejectedValue(new Error('db down'))
-
-    const res = await call('10.42.0.101')
-
-    expect(res.status).toBe(500)
-    expect(await readJson(res)).toEqual({ error: 'db down' })
-  })
-
-  it('falls back to a generic message when that failure carries none', async () => {
-    forgetHostKeyMock.mockRejectedValue({})
-
-    const res = await call('10.42.0.101')
-
-    expect(res.status).toBe(500)
-    expect(await readJson(res)).toEqual({ error: 'Failed to forget SSH host key' })
-  })
-
-  it('lower-cases the host before clearing either store', async () => {
-    const res = await call('PVE-Node1.Lab')
-
-    expect(res.status).toBe(200)
-    expect(await readJson<any>(res)).toMatchObject({ host: 'pve-node1.lab' })
-    expect(orchestratorFetchMock).toHaveBeenCalledWith('/ssh/host-keys/pve-node1.lab', { method: 'DELETE' })
-    expect(forgetHostKeyMock).toHaveBeenCalledWith('pve-node1.lab')
-  })
-
-  // roadmap#184: a pin is forgotten only for a host of a connection the caller manages.
-  it('answers 404 and clears nothing for a host outside the caller connections', async () => {
-    hostKeyScopeMock.mockResolvedValue({ all: false, hosts: new Set(['10.42.0.111']) })
-
-    const res = await call('10.42.0.101')
-
-    expect(res.status).toBe(404)
-    expect(orchestratorFetchMock).not.toHaveBeenCalled()
-    expect(forgetHostKeyMock).not.toHaveBeenCalled()
-    expect(hostKeyScopeMock).toHaveBeenCalledWith('connection.manage')
-  })
-
-  it('still clears the pin of a host of a managed connection', async () => {
-    hostKeyScopeMock.mockResolvedValue({ all: false, hosts: new Set(['10.42.0.111']) })
-    forgetHostKeyMock.mockResolvedValue(1)
-
-    const res = await call('10.42.0.111')
-
-    expect(res.status).toBe(200)
-    expect(forgetHostKeyMock).toHaveBeenCalledWith('10.42.0.111')
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await call('10.0.0.1')).status).toBe(500)
+    error.mockRestore()
   })
 })

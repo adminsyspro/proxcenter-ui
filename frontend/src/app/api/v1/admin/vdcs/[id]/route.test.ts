@@ -9,7 +9,7 @@ import { callRoute } from '@/__tests__/setup/route-test'
 
 const {
   requireProviderTenantMock, checkPermissionMock, getVdcByIdMock, updateVdcMock,
-  deleteVdcMock, auditMock, listBindingsForVdcMock, unbindFromVdcMock,
+  deleteVdcMock, auditMock, listBindingsForVdcMock, unbindFromVdcMock, perimeterMock,
 } = vi.hoisted(() => ({
   requireProviderTenantMock: vi.fn(),
   checkPermissionMock: vi.fn(),
@@ -19,6 +19,7 @@ const {
   auditMock: vi.fn(),
   listBindingsForVdcMock: vi.fn(),
   unbindFromVdcMock: vi.fn(),
+  perimeterMock: vi.fn(),
 }))
 
 vi.mock('@/lib/tenant', () => ({
@@ -27,7 +28,7 @@ vi.mock('@/lib/tenant', () => ({
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: unknown[]) => checkPermissionMock(...a),
-  PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings' },
+  PERMISSIONS: { ADMIN_SETTINGS: 'admin.settings', ADMIN_SETTINGS_VIEW: 'admin.settings.view', ADMIN_SETTINGS_VDCS: 'admin.settings.vdcs' },
 }))
 
 vi.mock('@/lib/vdc', () => ({
@@ -51,13 +52,17 @@ vi.mock('next-auth', () => ({
 }))
 
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
+vi.mock('@/lib/api-tokens/routeGuard', () => ({ withPublicApiGuard: (_id: string, handler: unknown) => handler }))
+vi.mock('@/lib/api-tokens/scope', () => ({ filterToTokenPerimeter: (...a: unknown[]) => perimeterMock(...a) }))
 
-import { PUT } from './route'
+import { DELETE, PUT } from './route'
 
 beforeEach(() => {
   vi.clearAllMocks()
   requireProviderTenantMock.mockResolvedValue(null)
   checkPermissionMock.mockResolvedValue(null)
+  perimeterMock.mockReset().mockImplementation(async (items: unknown[]) => items)
+  getVdcByIdMock.mockResolvedValue({ id: 'vdc-1', name: 'ACME', slug: 'acme', tenantId: 't1', connectionId: 'c1' })
   updateVdcMock.mockResolvedValue({ id: 'vdc-1', name: 'ACME' })
   listBindingsForVdcMock.mockResolvedValue([])
 })
@@ -183,5 +188,25 @@ describe('PUT /api/v1/admin/vdcs/[id]: ISO library validation errors are 400 (#8
       method: 'PUT', params: { id: 'vdc-1' }, body: { isoLibraries: ['bad id'] },
     })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('vDC writes for API tokens (issue #1360)', () => {
+  it('checks admin.settings.vdcs on update and delete', async () => {
+    await callRoute(PUT as Parameters<typeof callRoute>[0], { method: 'PUT', params: { id: 'vdc-1' }, body: { name: 'ACME' } })
+    expect(checkPermissionMock).toHaveBeenLastCalledWith('admin.settings.vdcs')
+    await callRoute(DELETE as Parameters<typeof callRoute>[0], { method: 'DELETE', params: { id: 'vdc-1' } })
+    expect(checkPermissionMock).toHaveBeenLastCalledWith('admin.settings.vdcs')
+  })
+
+  it('answers 404 without writing when the vDC is missing or outside the token perimeter', async () => {
+    perimeterMock.mockResolvedValue([])
+    const put = await callRoute(PUT as Parameters<typeof callRoute>[0], { method: 'PUT', params: { id: 'vdc-1' }, body: { name: 'X' } })
+    const del = await callRoute(DELETE as Parameters<typeof callRoute>[0], { method: 'DELETE', params: { id: 'vdc-1' } })
+    expect(put.status).toBe(404)
+    expect(del.status).toBe(404)
+    expect(updateVdcMock).not.toHaveBeenCalled()
+    expect(deleteVdcMock).not.toHaveBeenCalled()
+    expect(unbindFromVdcMock).not.toHaveBeenCalled()
   })
 })

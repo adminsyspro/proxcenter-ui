@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
 import { getCurrentTenantId, verifyConnectionOwnership } from '@/lib/tenant'
-import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { getInventoryFromCache } from '@/lib/cache/inventoryCache'
@@ -112,6 +112,12 @@ function netReader(connectionId: string, conn: () => Promise<any>) {
 
 async function getHandler(req: NextRequest, ctx: RouteContext) {
   try {
+    // A vDC tenant sees its own guests only: a connection-wide count is not for
+    // it. It gets the 404 of every provider infrastructure route
+    // (lib/tenant/iaasGuard), before any ownership or permission lookup.
+    const iaasDenied = await denyIaasTenant()
+    if (iaasDenied) return iaasDenied
+
     const { connectionId } = await ctx.params
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
     if (ownershipDenied) return ownershipDenied
@@ -119,12 +125,7 @@ async function getHandler(req: NextRequest, ctx: RouteContext) {
     const denied = await checkPermission(PERMISSIONS.NODE_VIEW, 'connection', connectionId)
     if (denied) return denied
 
-    // A vDC tenant sees its own guests only: a connection-wide count is not for it.
     const tenantId = await getCurrentTenantId()
-    const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
-    if (infra.kind === 'iaas') {
-      return NextResponse.json({ error: 'Firewall coverage is not available to a vDC tenant' }, { status: 403 })
-    }
 
     let connData: Promise<any> | null = null
     const conn = () => (connData ??= getConnectionById(connectionId))

@@ -7,7 +7,7 @@ import { getCurrentTenantId, userHasAccessToTenant } from "@/lib/tenant"
 import { requireFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { generateApiToken } from "@/lib/api-tokens/tokenCrypto"
-import { ALL_SCOPE_IDS, isWriteScope } from "@/lib/api-tokens/scopes"
+import { ALL_SCOPE_IDS, FLEET_SCOPE_IDS, isCreatorCheckedScope } from "@/lib/api-tokens/scopes"
 import { firstUngrantableScope } from "@/lib/api-tokens/grantable"
 import { audit } from "@/lib/audit"
 
@@ -71,6 +71,13 @@ async function handlePost(req: Request) {
     }
     connectionIds = body.connectionIds
   }
+  const fleetScope = connectionIds === null ? undefined : (scopes as string[]).find(s => FLEET_SCOPE_IDS.includes(s))
+  if (fleetScope) {
+    return NextResponse.json(
+      { error: `${fleetScope} reaches every connection: it needs a token not restricted to connections`, scope: fleetScope },
+      { status: 400 },
+    )
+  }
 
   const tenantId = typeof body?.tenantId === "string" && body.tenantId ? body.tenantId : await getCurrentTenantId()
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, enabled: true } })
@@ -104,7 +111,7 @@ async function handlePost(req: Request) {
     try {
       ungrantable = ctx.userId
         ? await firstUngrantableScope(ctx.userId, tenantId, scopes as string[], connectionIds)
-        : (scopes as string[]).find(isWriteScope)
+        : (scopes as string[]).find(isCreatorCheckedScope)
     } catch (e: any) {
       // Fail closed; the lookup error stays in the logs.
       console.error("[api-tokens] held-rights lookup failed:", e?.message ?? e)

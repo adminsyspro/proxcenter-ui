@@ -5,8 +5,41 @@ import { generateFingerprint } from '@/lib/alerts/fingerprint'
 import { createAlertSchema, patchAlertsSchema } from '@/lib/schemas'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withAudit } from '@/lib/audit/withAudit'
+import { sessionAcknowledger } from '@/lib/alerts/acknowledgedBy'
+import { LOCAL_ALERT_ENTITY_SELECT, localAlertFilter, refuseRestrictedAlertWrite, visibleLocalAlertIds } from '@/lib/alerts/localAlertScope'
 
 export const runtime = 'nodejs'
+
+const LIST_ORDER = [
+  { status: 'asc' as const }, // active en premier
+  { severity: 'asc' as const }, // crit avant warn
+  { lastSeenAt: 'desc' as const },
+]
+
+/** How many rows a scoped caller's list and counts are read from, newest first. */
+const SCOPED_READ_CAP = 5000
+
+type StatusCount = { status: string; severity: string; _count: number }
+
+/** The groupBy counts of a list of rows, for a caller whose rows are filtered in memory. */
+function countRows(rows: { status: string; severity: string }[]): StatusCount[] {
+  const counts = new Map<string, StatusCount>()
+  for (const r of rows) {
+    const key = `${r.status}|${r.severity}`
+    const c = counts.get(key) ?? { status: r.status, severity: r.severity, _count: 0 }
+    c._count += 1
+    counts.set(key, c)
+  }
+  return [...counts.values()]
+}
+
+/** The purge window: a whole number of days, 1 to 36500; absent = 30. */
+function parseOlderThanDays(raw: string | null): number | null {
+  if (raw === null) return 30
+  if (!/^\d{1,5}$/.test(raw)) return null
+  const days = Number(raw)
+  return days >= 1 && days <= 36500 ? days : null
+}
 
 /**
  * GET /api/v1/alerts
@@ -38,21 +71,21 @@ export async function GET(req: Request) {
       where.source = source
     }
 
-    const alerts = await prisma.alert.findMany({
-      where,
-      orderBy: [
-        { status: 'asc' }, // active en premier
-        { severity: 'asc' }, // crit avant warn
-        { lastSeenAt: 'desc' }
-      ],
-      take: limit
-    })
-
-    // Stats
-    const stats = await prisma.alert.groupBy({
-      by: ['status', 'severity'],
-      _count: true
-    })
+    // The table carries no RBAC or vDC scope: a restricted caller lists and
+    // counts the rows of its own inventory only (roadmap#223).
+    const visible = await localAlertFilter(PERMISSIONS.ALERTS_VIEW)
+    let alerts
+    let stats: StatusCount[]
+    if (visible) {
+      const rows = (await prisma.alert.findMany({ orderBy: { lastSeenAt: 'desc' }, take: SCOPED_READ_CAP })).filter(visible)
+      rows.sort((a, b) => a.status.localeCompare(b.status) || a.severity.localeCompare(b.severity) ||
+        b.lastSeenAt.getTime() - a.lastSeenAt.getTime())
+      alerts = rows.filter(a => Object.entries(where).every(([k, v]) => (a as Record<string, unknown>)[k] === v)).slice(0, limit)
+      stats = countRows(rows)
+    } else {
+      alerts = await prisma.alert.findMany({ where, orderBy: LIST_ORDER, take: limit })
+      stats = await prisma.alert.groupBy({ by: ['status', 'severity'], _count: true }) as unknown as StatusCount[]
+    }
 
     const statsSummary = {
       total: alerts.length,
@@ -117,6 +150,10 @@ async function handlePost(req: Request) {
     // without a check of its own (#699).
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (permError) return permError
+    // An upsert by fingerprint reactivates any row of the table: a caller
+    // nothing restricts only (roadmap#223).
+    const restricted = await refuseRestrictedAlertWrite()
+    if (restricted) return restricted
 
     const rawBody = await req.json()
     const parseResult = createAlertSchema.safeParse(rawBody)
@@ -193,13 +230,21 @@ async function handlePatch(req: Request) {
 
     const { ids, action, userId } = parseResult.data
 
+    // Only the rows the caller sees (roadmap#223).
+    const targetIds = await visibleLocalAlertIds(ids, PERMISSIONS.ALERTS_MANAGE,
+      list => prisma.alert.findMany({ where: { id: { in: list } }, select: LOCAL_ALERT_ENTITY_SELECT }))
+    if (targetIds.length === 0) {
+      return NextResponse.json({ data: { updated: 0, action } })
+    }
+
     let updateData: any = {}
 
     if (action === 'acknowledge') {
       updateData = {
         status: 'acknowledged',
         acknowledgedAt: new Date(),
-        acknowledgedBy: userId || 'unknown'
+        // The session's user, whatever the body names (roadmap#223).
+        acknowledgedBy: await sessionAcknowledger(userId)
       }
     } else if (action === 'resolve') {
       updateData = {
@@ -216,7 +261,7 @@ async function handlePatch(req: Request) {
     }
 
     const result = await prisma.alert.updateMany({
-      where: { id: { in: ids } },
+      where: { id: { in: targetIds } },
       data: updateData
     })
 
@@ -244,22 +289,31 @@ async function handleDelete(req: Request) {
     if (permError) return permError
 
     const { searchParams } = new URL(req.url)
-    const olderThanDays = Number.parseInt(searchParams.get('olderThanDays') || '30')
+    // A negative or zero window put the cutoff in the future and purged every
+    // resolved alert (roadmap#223).
+    const olderThanDays = parseOlderThanDays(searchParams.get('olderThanDays'))
+    if (olderThanDays === null) {
+      return NextResponse.json({ error: 'olderThanDays must be a whole number of days, from 1 to 36500' }, { status: 400 })
+    }
 
     const cutoffDate = new Date()
 
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays)
 
-    const result = await prisma.alert.deleteMany({
-      where: {
-        status: 'resolved',
-        resolvedAt: { lt: cutoffDate }
-      }
-    })
+    const where = { status: 'resolved', resolvedAt: { lt: cutoffDate } }
+    // Only the rows the caller sees (roadmap#223).
+    const visible = await localAlertFilter(PERMISSIONS.ALERTS_MANAGE)
+    let deleted: number
+    if (visible) {
+      const ids = (await prisma.alert.findMany({ where, select: LOCAL_ALERT_ENTITY_SELECT })).filter(visible).map(r => r.id)
+      deleted = ids.length === 0 ? 0 : (await prisma.alert.deleteMany({ where: { id: { in: ids } } })).count
+    } else {
+      deleted = (await prisma.alert.deleteMany({ where })).count
+    }
 
     return NextResponse.json({ 
       data: { 
-        deleted: result.count,
+        deleted,
         message: `Deleted alerts resolved before ${cutoffDate.toISOString()}` 
       } 
     })

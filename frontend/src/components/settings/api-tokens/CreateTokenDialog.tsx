@@ -9,10 +9,10 @@ import {
 import { useTheme } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 
+import TokenSecretReveal from './TokenSecretReveal'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 import NumericTextField from '@/components/ui/NumericTextField'
-import { ALL_SCOPE_IDS, DESTRUCTIVE_SCOPE_IDS, isWriteScope } from '@/lib/api-tokens/scopes'
-import { copyToClipboard } from '@/lib/clipboard'
+import { ALL_SCOPE_IDS, DESTRUCTIVE_SCOPE_IDS, FLEET_SCOPE_IDS, isCreatorCheckedScope, isWriteScope } from '@/lib/api-tokens/scopes'
 import { selectableTenants, sortTenantsProviderFirst } from '@/lib/storage/tenantFacets'
 
 type Props = {
@@ -66,6 +66,12 @@ export const SCOPE_DOMAINS: readonly ScopeDomain[] = [
   { id: 'automation', icon: 'ri-robot-line', read: 'automation:read', write: [] },
   { id: 'alerts', icon: 'ri-alarm-warning-line', read: 'alerts:read', write: [] },
   { id: 'reports', icon: 'ri-file-list-3-line', read: 'reports:read', write: [] },
+  // Multi-tenant layer (issue #1360).
+  { id: 'tenants', icon: 'ri-building-line', read: 'tenants:read', write: ['tenants:write'] },
+  { id: 'vdcs', icon: 'ri-cloud-line', read: 'vdcs:read', write: ['vdcs:write'] },
+  { id: 'ipam', icon: 'ri-router-line', read: 'ipam:read', write: [] },
+  { id: 'rbac', icon: 'ri-lock-2-line', read: 'rbac:read', write: ['rbac:write'] },
+  { id: 'users', icon: 'ri-user-line', read: 'users:read', write: ['users:write'] },
 ]
 
 // Short toggle labels (dialog.subScopes.*) of the write sub-scopes,
@@ -144,7 +150,6 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [secret, setSecret] = useState('')
-  const [copied, setCopied] = useState(false)
 
   // Tenant + connection plumbing (fix round 1, finding 1). A missing
   // tenantId on the request defaults to the ambient tenant server-side,
@@ -220,7 +225,6 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     setTenantId('')
     setError('')
     setSecret('')
-    setCopied(false)
   }
 
   function expiresInDays(): number | null {
@@ -274,9 +278,10 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
         // Network failure: list stays null, the write scopes stay disabled.
       }
       if (!active) return
-      const allowed = list ?? []
+      // A perimeter never carries a fleet-wide scope, whatever the answer says.
+      const allowed = (list ?? []).filter(scope => !perimeterKey || !FLEET_SCOPE_IDS.includes(scope))
       setGrantableResult({ key: grantableKey, list })
-      setScopes(prev => prev.filter(scope => !isWriteScope(scope) || allowed.includes(scope)))
+      setScopes(prev => prev.filter(scope => !isCreatorCheckedScope(scope) || allowed.includes(scope)))
     })()
 
     return () => {
@@ -288,9 +293,17 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   // write scope disabled: the UI fails closed, the creation route stays the
   // judge either way.
   function writeScopeBlocker(scope: string): string {
+    if (perimeterKey && FLEET_SCOPE_IDS.includes(scope)) return t('dialog.fleetOnlyScope')
     if (grantableResult?.key !== grantableKey) return t('dialog.scopesLoading')
     if (!grantableResult.list) return t('dialog.grantableError')
     return grantableResult.list.includes(scope) ? '' : t('dialog.scopeNotGrantable')
+  }
+
+  // Read on a domain whose read scope reads administration data (users,
+  // roles, tenants, provider settings): the creator must hold it, like a
+  // write scope. Every other read scope is always grantable.
+  function domainReadBlocker(domain: ScopeDomain): string {
+    return isCreatorCheckedScope(domain.read) ? writeScopeBlocker(domain.read) : ''
   }
 
   // Write on a whole domain: unavailable on a read only domain, while the
@@ -298,6 +311,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   // scopes is grantable.
   function domainWriteBlocker(domain: ScopeDomain): string {
     if (domain.write.length === 0) return t('dialog.readOnlyDomain')
+    if (perimeterKey && domain.write.every(scope => FLEET_SCOPE_IDS.includes(scope))) return t('dialog.fleetOnlyScope')
     if (grantableResult?.key !== grantableKey) return t('dialog.scopesLoading')
     if (!grantableResult.list) return t('dialog.grantableError')
     return domain.write.some(scope => grantableResult.list.includes(scope)) ? '' : t('dialog.domainNotGrantable')
@@ -333,9 +347,10 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   }
 
   const hasWriteScope = scopes.some(isWriteScope)
-  // A write scope checked against an answer that is not (yet) a success for
-  // the current tenant and perimeter: the request would likely be refused.
-  const writeCheckPending = hasWriteScope && (grantableResult?.key !== grantableKey || !grantableResult.list)
+  // A scope the creator must hold (any write scope, an admin read scope)
+  // checked against an answer that is not (yet) a success for the current
+  // tenant and perimeter: the request would likely be refused.
+  const writeCheckPending = scopes.some(isCreatorCheckedScope) && (grantableResult?.key !== grantableKey || !grantableResult.list)
 
   async function handleCreate() {
     setSaving(true)
@@ -379,20 +394,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
       <DialogTitle>{secret ? t('reveal.title') : t('dialog.title')}</DialogTitle>
       <DialogContent>
         {secret ? (
-          <Stack spacing={2}>
-            <Alert severity='warning'>{t('reveal.warning')}</Alert>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: 'action.hover', borderRadius: 1, p: 1.5 }}>
-              <Typography sx={{ fontFamily: 'monospace', wordBreak: 'break-all', flex: 1 }}>{secret}</Typography>
-              <Tooltip title={copied ? t('reveal.copied') : t('reveal.copy')} slotProps={tooltipSlotProps}>
-                <IconButton
-                  aria-label={t('reveal.copy')}
-                  onClick={async () => setCopied(await copyToClipboard(secret))}
-                >
-                  <i className='ri-file-copy-line' />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          </Stack>
+          <TokenSecretReveal secret={secret} />
         ) : (
           <Stack spacing={2} sx={{ mt: 1 }}>
             {error && <Alert severity='error'>{error}</Alert>}
@@ -426,6 +428,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
                     label={t(`dialog.domains.${domain.id}`)}
                     level={accessLevelOf(domain, scopes)}
                     scopes={scopes}
+                    readBlocker={domainReadBlocker(domain)}
                     writeBlocker={domainWriteBlocker(domain)}
                     subScopeBlocker={writeScopeBlocker}
                     onLevel={level => setDomainLevel(domain, level)}
@@ -539,6 +542,7 @@ type ScopeDomainRowProps = {
   label: string
   level: AccessLevel
   scopes: string[]
+  readBlocker: string
   writeBlocker: string
   subScopeBlocker: (scope: string) => string
   onLevel: (level: AccessLevel) => void
@@ -549,7 +553,7 @@ type ScopeDomainRowProps = {
 // when the domain has several write scopes, a wrap row of toggles to pick
 // them. The raw scope ids sit in tooltips, to match the API reference.
 function ScopeDomainRow({
-  domain, label, level, scopes, writeBlocker, subScopeBlocker, onLevel, onToggleSubScope,
+  domain, label, level, scopes, readBlocker, writeBlocker, subScopeBlocker, onLevel, onToggleSubScope,
 }: ScopeDomainRowProps) {
   const t = useTranslations('settings.apiTokens')
   const labelId = `api-token-domain-${domain.id}`
@@ -578,7 +582,11 @@ function ScopeDomainRow({
           sx={{ flexShrink: 0, '& .MuiToggleButton-root': { typography: 'body2', py: 1, px: 3, textTransform: 'none' } }}
         >
           <ToggleButton value='none'>{t('dialog.access.none')}</ToggleButton>
-          <ToggleButton value='read' color='primary'>{t('dialog.access.read')}</ToggleButton>
+          <Tooltip title={readBlocker} slotProps={tooltipSlotProps}>
+            <Box component='span' sx={{ display: 'inline-flex' }}>
+              <ToggleButton value='read' color='primary' disabled={!!readBlocker}>{t('dialog.access.read')}</ToggleButton>
+            </Box>
+          </Tooltip>
           {/* The span carries the tooltip: a disabled button fires no pointer events. */}
           <Tooltip title={writeBlocker} slotProps={tooltipSlotProps}>
             <Box component='span' sx={{ display: 'inline-flex' }}>

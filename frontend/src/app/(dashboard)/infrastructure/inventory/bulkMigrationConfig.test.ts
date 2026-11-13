@@ -27,6 +27,17 @@ describe("clampBulkConcurrency", () => {
   it("has a sequential default", () => {
     expect(BULK_MIG_CONCURRENCY_DEFAULT).toBe(1)
   })
+
+  it("clamps to the target cluster's limit when one is given (ui#1332)", () => {
+    expect(clampBulkConcurrency(12, 8)).toBe(8)
+    expect(clampBulkConcurrency(3, 8)).toBe(3)
+    expect(clampBulkConcurrency(0, 8)).toBe(BULK_MIG_CONCURRENCY_MIN)
+  })
+
+  it("allows up to 20 at most, the highest limit an operator can set", () => {
+    expect(BULK_MIG_CONCURRENCY_MAX).toBe(20)
+    expect(clampBulkConcurrency(15)).toBe(15)
+  })
 })
 
 describe("bulkTempBytesRequired", () => {

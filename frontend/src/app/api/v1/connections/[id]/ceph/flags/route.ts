@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { asRoot } from "@/lib/ssh/sudo"
 import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -78,7 +79,7 @@ async function setHostFlag(id: string, conn: any, flag: string, host: unknown, v
   const endpoint = await resolveNodeSshEndpoint(conn, viaNode)
   const command = groupFlagCommand(flag, safeHost, value)
   console.log(`[ceph/flags] executing via SSH on ${safeLog(formatSshEndpoint(endpoint))}: ${safeLog(command)}`)
-  const result = await executeSSH(id, endpoint, command)
+  const result = await executeSSH(id, endpoint, asRoot(command))
   if (!result.success) {
     return NextResponse.json({ error: result.error, hint: `Run manually on a PVE node: ${command}` }, { status: 500 })
   }

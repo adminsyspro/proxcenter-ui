@@ -5,6 +5,8 @@ import crypto from 'crypto'
 
 import { prisma } from '@/lib/db/prisma'
 import { pveFetch } from '@/lib/proxmox/client'
+import { waitForTaskStopped } from '@/lib/proxmox/tasks'
+import { parseUpid } from '@/lib/proxmox/upid'
 
 import { parseZonePeers } from './transport'
 import type { SdnVnet } from './types'
@@ -165,12 +167,56 @@ export async function allocateVni(vdcId: string, conn?: any): Promise<number> {
 // PVE SDN: apply pending changes
 // ---------------------------------------------------------------------------
 
+// One apply at a time per cluster (issue #1360, measured on the lab): applies
+// started together run their `ifreload -a` over each other on every node, and
+// an overlapped reload fails (exit code 89) while the cluster task still
+// reports OK, so a node can keep its previous network configuration. A caller
+// arriving while an apply runs shares the next one, which starts after it and
+// therefore covers every change written meanwhile: a burst of N writes costs
+// at most two applies in a row.
+const APPLY_POLL_MS = 1_500
+const APPLY_TIMEOUT_MS = 120_000
+type ApplySlot = { running?: Promise<void>; next?: Promise<void> }
+const applySlots = new Map<string, ApplySlot>()
+
+async function applyAndWait(conn: any): Promise<void> {
+  const upid = await pveFetch<unknown>(conn, '/cluster/sdn', { method: 'PUT' })
+  const task = parseUpid(upid)
+  if (!task) return
+  const end = await waitForTaskStopped(conn, task.node, task.upid, { timeoutMs: APPLY_TIMEOUT_MS, intervalMs: APPLY_POLL_MS })
+  if (end.stopped && end.exitstatus !== 'OK') console.warn(`[sdn] apply ${task.upid} ended with ${end.exitstatus}`)
+  if (!end.stopped) console.warn(`[sdn] apply ${task.upid} still running after ${APPLY_TIMEOUT_MS / 1000}s`)
+}
+
+function startApply(key: string, slot: ApplySlot, conn: any): Promise<void> {
+  const run: Promise<void> = applyAndWait(conn).finally(() => {
+    if (slot.running === run) slot.running = undefined
+    if (slot.running === undefined && slot.next === undefined) applySlots.delete(key)
+  })
+  slot.running = run
+  return run
+}
+
 /**
- * Applies pending SDN changes: triggers ifreload on every node.
- * Should be called once at the end of a batch of SDN mutations.
+ * Applies pending SDN changes (ifreload on every node) and resolves once the
+ * reload has ended. Should be called once at the end of a batch of SDN
+ * mutations; concurrent callers on one cluster are coalesced (see above).
  */
-export async function applySdn(conn: any): Promise<void> {
-  await pveFetch(conn, '/cluster/sdn', { method: 'PUT' })
+export function applySdn(conn: any): Promise<void> {
+  const key = String(conn?.baseUrl ?? conn?.id ?? '')
+  let slot = applySlots.get(key)
+  if (!slot) {
+    slot = {}
+    applySlots.set(key, slot)
+  }
+  const owner = slot
+  const running = owner.running
+  if (running === undefined) return startApply(key, owner, conn)
+  owner.next ??= running.catch(() => undefined).then(() => {
+    owner.next = undefined
+    return startApply(key, owner, conn)
+  })
+  return owner.next
 }
 
 // ---------------------------------------------------------------------------
@@ -468,32 +514,40 @@ export async function listVnetsPve(conn: any): Promise<SdnVnet[]> {
 // Count NIC attachments for a VNet (used before delete)
 // ---------------------------------------------------------------------------
 
+/** Guest configs read at once when counting the NICs of a VNet. */
+const ATTACHMENT_SCAN_CONCURRENCY = 5
+
 /**
  * Returns the number of NICs across all VMs/CTs that reference `pveName` as bridge.
  * Best-effort: skips VMs whose config fails to fetch.
+ *
+ * One list call plus one config read per guest of the cluster. The reads go
+ * five at a time: a network shared between clusters (#1334) is checked on
+ * each of them before it is removed, and one after the other that wait
+ * added up. Five plain GETs at once stay far below what a cluster serves.
  */
 export async function countVnetAttachments(conn: any, pveName: string): Promise<number> {
-  const resources = await pveFetch<any[]>(conn, '/cluster/resources?type=vm')
+  const resources = (await pveFetch<any[]>(conn, '/cluster/resources?type=vm') || [])
+    .filter((res: any) => res.vmid && res.node && res.type)
   let count = 0
+  let next = 0
 
-  for (const res of resources || []) {
-    const vmid = res.vmid
-    const node = res.node
-    const type = res.type
-    if (!vmid || !node || !type) continue
-
-    try {
-      const config = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/${type}/${vmid}/config`)
-      for (const key of Object.keys(config)) {
-        if (!/^net\d+$/.test(key)) continue
-        const val = String(config[key] || '')
-        const m = val.match(/bridge=([^,]+)/)
-        if (m && m[1] === pveName) count++
+  const worker = async () => {
+    while (next < resources.length) {
+      const res = resources[next++]
+      try {
+        const config = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(res.node)}/${res.type}/${res.vmid}/config`)
+        for (const key of Object.keys(config)) {
+          if (!/^net\d+$/.test(key)) continue
+          const m = String(config[key] || '').match(/bridge=([^,]+)/)
+          if (m && m[1] === pveName) count++
+        }
+      } catch {
+        // Skip VMs whose config fails
       }
-    } catch {
-      // Skip VMs whose config fails
     }
   }
+  await Promise.all(Array.from({ length: Math.min(ATTACHMENT_SCAN_CONCURRENCY, resources.length) }, worker))
 
   return count
 }

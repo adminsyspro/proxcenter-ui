@@ -13,6 +13,22 @@ import { actorHeaders } from './actor'
 
 const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
 
+/**
+ * Server identity only, no actor: for a read the orchestrator does not audit
+ * and whose answer is cached for every caller (the license status). Never
+ * resolves the principal, so it is safe to call while one is being resolved
+ * (roadmap#208).
+ */
+export function orchestratorServiceHeaders(
+  extra: Record<string, string> = {}
+): Record<string, string> {
+  const headers: Record<string, string> = { ...extra }
+  if (ORCHESTRATOR_API_KEY) {
+    headers['X-API-Key'] = ORCHESTRATOR_API_KEY
+  }
+  return headers
+}
+
 export async function orchestratorHeaders(
   extra: Record<string, string> = {}
 ): Promise<Record<string, string>> {

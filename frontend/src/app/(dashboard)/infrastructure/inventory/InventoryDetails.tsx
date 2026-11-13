@@ -121,7 +121,8 @@ import StorageDashboard from './StorageDashboard'
 import NetworkDashboard from './NetworkDashboard'
 import BackupDashboard from './BackupDashboard'
 import MigrationDashboard from './MigrationDashboard'
-import { ViewMode, AllVmItem, HostItem, PoolItem, TagItem, NodeIcon, ClusterIcon, StatusIcon } from './InventoryTree'
+import { ViewMode, AllVmItem, HostItem, PoolItem, PoolActions, TagItem, NodeIcon, ClusterIcon, StatusIcon } from './InventoryTree'
+import { isVdcPool } from './components/poolMembers'
 import NetworkDetailPanel from './components/NetworkDetailPanel'
 import TenantVnetDetailPanel from './TenantVnetDetailPanel'
 import TagManager from './components/TagManager'
@@ -148,6 +149,7 @@ import ExpandableChart from './components/ExpandableChart'
 import StorageContentGroup from './components/StorageContentGroup'
 import PbsServerPanel, { type PbsServerPanelHandle } from './components/PbsServerPanel'
 import InventoryDialogs, { type NodeActionFailedVm } from './components/InventoryDialogs'
+import MoveVdcDialog from '@/components/vdc/MoveVdcDialog'
 import ExternalHypervisorDashboard from './components/ExternalHypervisorDashboard'
 import { useDetailData } from './hooks/useDetailData'
 import { useLiveVmStatus } from './hooks/useLiveVmStatus'
@@ -188,6 +190,7 @@ export default function InventoryDetails({
   inventoryLoaded = false,
   hosts = [],
   pools = [],
+  poolActions = null,
   tags = [],
   pbsServers = [],
   showIpSnap = false,
@@ -218,6 +221,8 @@ export default function InventoryDetails({
   inventoryLoaded?: boolean  // the first inventory stream has ended (an empty allVms is then really empty)
   hosts?: HostItem[]
   pools?: PoolItem[]
+  /** Create a pool or edit a pool's members, from the Pools view (roadmap#200). */
+  poolActions?: PoolActions | null
   tags?: TagItem[]
   pbsServers?: import('./InventoryTree').TreePbsServer[]
   showIpSnap?: boolean
@@ -287,6 +292,7 @@ export default function InventoryDetails({
   const { currentTenant, loading: tenantLoading, isFullClusterView } = useTenant()
   const { hasPermission } = useRBAC()
   const canCreate = hasPermission('vm.create')
+  const canManagePools = hasPermission('connection.manage')
   // connectionId → vDC name (tenant IaaS): powers the vDC chip and the vDC
   // column. Bijective per the DB unique (tenant_id, connection_id).
   const { vdcs: myVdcs } = useMyVdcs()
@@ -310,6 +316,10 @@ export default function InventoryDetails({
   // allows them, next to the template catalogue that stays its main path.
   const tenantBlankVm = !tenantLoading && !allowLxc && blankVmVdcs(myVdcs, ctxCookie).length > 0
   const allowBlankVm = allowLxc || tenantBlankVm
+  // #1335: move a VM to another vDC of its tenant. A vDC tenant needs two
+  // vDCs; the provider sees it on a guest of a vDC pool (the server checks
+  // the tenant has another vDC and answers in the dialog otherwise).
+  const [moveVdcOpen, setMoveVdcOpen] = useState(false)
   const router = useRouter()
   const { trackTask } = useTaskTracker()
   const { addTask: addPCTask, updateTask: updatePCTask, registerOnRestore, unregisterOnRestore } = useProxCenterTasks()
@@ -792,6 +802,23 @@ export default function InventoryDetails({
   }, [editOptionDialog])
 
   // Handler pour sauvegarder une option VM
+  // The guest's resource pool is an inventory fact (/cluster/resources), not
+  // part of its config: read it from the inventory row (roadmap#200).
+  const guestPool = useMemo(() => {
+    if (selection?.type !== 'vm') return null
+    const { connId, type, vmid } = parseVmId(selection.id)
+
+    return allVms.find((vm: any) => vm.connId === connId && vm.type === type && String(vm.vmid) === String(vmid))?.pool || null
+  }, [selection, allVms])
+
+  const canMoveVdc = useMemo(() => {
+    if (tenantLoading || selection?.type !== 'vm' || !hasPermission('vm.move_vdc')) return false
+    if (parseVmId(selection.id).type !== 'qemu') return false
+    if (!isFullClusterView) return vdcNameByConn.size >= 2
+
+    return typeof guestPool === 'string' && guestPool.startsWith('vdc-')
+  }, [tenantLoading, selection, hasPermission, isFullClusterView, vdcNameByConn, guestPool])
+
   const handleSaveOption = useCallback(async () => {
     if (!editOptionDialog || !selection || selection.type !== 'vm') return
     
@@ -2973,6 +3000,8 @@ return vm?.isCluster ?? false
           <NetworkDashboard
             connectionIds={[...new Set(clusterStorages.map(cs => cs.connId))]}
             connectionNames={Object.fromEntries(clusterStorages.map(cs => [cs.connId, cs.connName]))}
+            hosts={hosts}
+            onSelect={onSelect}
           />
         </Box>
       ) : selection?.type === 'net-conn' || selection?.type === 'net-node' || selection?.type === 'net-vlan' || selection?.type === 'net-bridge' ? (
@@ -3072,6 +3101,19 @@ return vm?.isCluster ?? false
               description: p.comment,
               vms: p.vms
             }))}
+            headerAction={poolActions && canManagePools ? (
+              <MuiTooltip title={t('inventory.createPool')}>
+                <IconButton size="small" color="primary" aria-label={t('inventory.createPool')} onClick={poolActions.create}>
+                  <i className="ri-add-line" style={{ fontSize: 18 }} />
+                </IconButton>
+              </MuiTooltip>
+            ) : null}
+            groupAction={poolActions && canManagePools ? {
+              icon: 'ri-folder-user-line',
+              label: t('inventory.poolMembersMenu'),
+              show: key => !isVdcPool(key) && key !== `(${t('common.none')})`,
+              onClick: poolActions.members,
+            } : undefined}
             allVms={displayVms}
             onVmClick={handleVmClick}
             onVmAction={handleTableVmAction}
@@ -3411,6 +3453,8 @@ return vm?.isCluster ?? false
                         isLocked={vmLock.locked}
                         lockType={vmLock.lockType}
                         canMigrate={!tenantLoading && isFullClusterView}
+                        canMoveVdc={canMoveVdc}
+                        onMoveVdc={() => setMoveVdcOpen(true)}
                         onStart={onStart}
                         onShutdown={onShutdown}
                         onStop={onStop}
@@ -3850,7 +3894,7 @@ return vm?.isCluster ?? false
                 selectedDisk, setSelectedDisk, setEditDiskInitialTab, editDiskInitialTab, handleDetachDisk, setSelectedNetwork, setSelectedPveStorage, setShowCreateSnapshot, setTasksLoaded,
                 setTf, onRrdRangeChange, onRrdWindowSelect, rrdWindow, rrdMeta, setVmNotes, showCreateSnapshot, snapshotActionBusy, snapshotFeatureAvailable, snapshotRowTasks, snapshots,
                 snapshotsError, snapshotsLoading, snapshotTaskBusy, sourceCephAvailable, tags,
-                refreshData, tasks, tasksError, tasksLoading, tf, vmNotes}}
+                refreshData, tasks, tasksError, tasksLoading, tf, vmNotes, guestPool, onRefresh}}
             />
           )}
 
@@ -4826,6 +4870,21 @@ return vm?.isCluster ?? false
 
         </Stack>
       ) : null}
+
+      {moveVdcOpen && selection?.type === 'vm' && (() => {
+        const { connId, node, vmid } = parseVmId(selection.id)
+
+        return (
+          <MoveVdcDialog
+            open={moveVdcOpen}
+            onClose={() => setMoveVdcOpen(false)}
+            connId={connId}
+            node={node}
+            vmid={vmid}
+            onMoved={() => onBack?.()}
+          />
+        )
+      })()}
 
       <InventoryDialogs
         selection={selection}

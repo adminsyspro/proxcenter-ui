@@ -1,21 +1,23 @@
 export const dynamic = "force-dynamic"
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { updateTenant, deleteTenant, DEFAULT_TENANT_ID, requireProviderTenant } from "@/lib/tenant"
+import { tenantWriteFailure } from "@/lib/tenant/writeFailure"
 import { parseVmidRangeInput, findVmidRangeConflict } from "@/lib/tenant/vmidRange"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth/config"
+import { syncServiceDeskForNewTenant } from "@/lib/rbac/serviceDesk"
+import { getActingSession } from "@/lib/auth/actingUser"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 type Ctx = { params: Promise<{ id: string }> }
 
 // GET /api/v1/tenants/:id
-export async function GET(_req: NextRequest, ctx: Ctx) {
+async function handleGet(_req: Request, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
-  const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+  const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS_VIEW)
   if (denied) return denied
 
   const { id } = await ctx.params
@@ -43,8 +45,10 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   })
 }
 
+export const GET = withPublicApiGuard("tenant-get", handleGet)
+
 // PUT /api/v1/tenants/:id
-async function handlePut(req: NextRequest, ctx: Ctx) {
+async function handlePut(req: Request, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
@@ -52,7 +56,7 @@ async function handlePut(req: NextRequest, ctx: Ctx) {
 
   const { id } = await ctx.params
   const body = await req.json()
-  const session = await getServerSession(authOptions)
+  const session = await getActingSession()
 
   if (body.slug && !/^[a-z0-9-]+$/.test(body.slug)) {
     return NextResponse.json({ error: "slug must contain only lowercase letters, numbers, and hyphens" }, { status: 400 })
@@ -85,6 +89,8 @@ async function handlePut(req: NextRequest, ctx: Ctx) {
   try {
     const tenant = await updateTenant(id, body)
     if (!tenant) return NextResponse.json({ error: "Tenant not found" }, { status: 404 })
+    // A re-enabled tenant is reached again by the service-desk roles published to all tenants (ui#1336).
+    if (body.enabled === true) await syncServiceDeskForNewTenant()
 
     await audit({
       action: "tenant.update",
@@ -99,23 +105,33 @@ async function handlePut(req: NextRequest, ctx: Ctx) {
     })
 
     return NextResponse.json({ data: tenant })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+  } catch (e) {
+    return tenantWriteFailure(e, "update")
   }
 }
 
 // DELETE /api/v1/tenants/:id
-async function handleDelete(_req: NextRequest, ctx: Ctx) {
+async function handleDelete(_req: Request, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
   if (denied) return denied
 
   const { id } = await ctx.params
-  const session = await getServerSession(authOptions)
+  const session = await getActingSession()
 
   if (id === DEFAULT_TENANT_ID) {
     return NextResponse.json({ error: "Cannot delete the default tenant" }, { status: 400 })
+  }
+
+  // The vDCs keep their tenant (foreign key): refused before anything is
+  // revoked, instead of failing half-way through the delete.
+  const vdcCount = await prisma.vdc.count({ where: { tenantId: id } })
+  if (vdcCount > 0) {
+    return NextResponse.json(
+      { error: `This tenant still has ${vdcCount} vDC(s). Delete them first.`, code: "TENANT_HAS_VDCS" },
+      { status: 409 }
+    )
   }
 
   const ok = await deleteTenant(id)
@@ -134,5 +150,5 @@ async function handleDelete(_req: NextRequest, ctx: Ctx) {
   return NextResponse.json({ success: true })
 }
 
-export const PUT = withAudit({ category: "admin", resourceType: "tenant", resourceParam: "id" }, handlePut)
-export const DELETE = withAudit({ category: "admin", resourceType: "tenant", resourceParam: "id" }, handleDelete)
+export const PUT = withAudit({ category: "admin", resourceType: "tenant", resourceParam: "id" }, withPublicApiGuard("tenant-update", handlePut))
+export const DELETE = withAudit({ category: "admin", resourceType: "tenant", resourceParam: "id" }, withPublicApiGuard("tenant-delete", handleDelete))

@@ -11,7 +11,7 @@ vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: getCurrentTenantIdMock }))
 vi.mock('@/lib/db/prisma', () => ({ prisma: { vdc: { findUnique: vdcFindUniqueMock } } }))
 vi.mock('@/lib/api-tokens/scope', () => ({ resolveVisibleConnectionIds: vi.fn() }))
 
-import { checkVnetPermission } from './vnetPermission'
+import { checkVnetPermission, checkVnetReadForCaller } from './vnetPermission'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -38,5 +38,26 @@ describe('checkVnetPermission for sessions', () => {
       where: { id: 'vdc-b' },
       select: { tenantId: true, connectionId: true },
     })
+  })
+})
+
+describe('checkVnetReadForCaller', () => {
+  it('keeps the plain permission check for a session, without looking up the vDC', async () => {
+    const denied = new Response(null, { status: 403 })
+    checkPermissionMock.mockResolvedValue(denied)
+
+    await expect(checkVnetReadForCaller(undefined, 'vdc-a', 'sdn.vnet.view')).resolves.toBe(denied)
+    expect(checkPermissionMock).toHaveBeenCalledWith('sdn.vnet.view')
+    expect(vdcFindUniqueMock).not.toHaveBeenCalled()
+  })
+
+  it('judges a token on its tenant: another tenant vDC answers 404', async () => {
+    vdcFindUniqueMock.mockResolvedValue({ tenantId: 'tenant-b', connectionId: 'conn-1' })
+    const token = { kind: 'token', tenantId: 'tenant-a', connectionIds: null } as never
+
+    const response = await checkVnetReadForCaller(token, 'vdc-b', 'sdn.vnet.view')
+
+    expect(response?.status).toBe(404)
+    expect(checkPermissionMock).not.toHaveBeenCalled()
   })
 })

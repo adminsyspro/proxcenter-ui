@@ -58,6 +58,7 @@ import { checkPermission } from '@/lib/rbac'
 import { executeSSH } from '@/lib/ssh/exec'
 import { getNodeIp } from '@/lib/ssh/node-ip'
 import { PveLicenseExcludedError } from '@/lib/license/exclusions'
+import { asRoot } from '@/lib/ssh/sudo'
 
 const getConnectionByIdMock = getConnectionById as any
 const pveFetchMock = pveFetch as any
@@ -86,7 +87,7 @@ describe('POST .../unlock — happy path', () => {
     expect(res.status).toBe(200)
     const body = await readJson<any>(res)
     expect(body.data.unlocked).toBe(true)
-    expect(executeSSHMock).toHaveBeenCalledWith(CONN_ID, expect.objectContaining({ host: NODE_IP }), 'qm unlock 100')
+    expect(executeSSHMock).toHaveBeenCalledWith(CONN_ID, expect.objectContaining({ host: NODE_IP }), asRoot('qm unlock 100'))
   })
 
   it('uses `pct unlock` for LXC containers', async () => {
@@ -95,7 +96,7 @@ describe('POST .../unlock — happy path', () => {
       params: { ...baseParams, type: 'lxc' },
     })
     expect(res.status).toBe(200)
-    expect(executeSSHMock).toHaveBeenCalledWith(CONN_ID, expect.objectContaining({ host: NODE_IP }), 'pct unlock 100')
+    expect(executeSSHMock).toHaveBeenCalledWith(CONN_ID, expect.objectContaining({ host: NODE_IP }), asRoot('pct unlock 100'))
   })
 
   it('rejects a vmid with leading zeros (grammar) with 400', async () => {

@@ -18,10 +18,14 @@ import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import { clearRestoredTags } from "@/lib/backups/restoreTagsCleanup"
 import { resolveCtRestoreStorage } from "@/lib/backups/ctRestoreStorage"
 import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
+import { pbsIdentityOf, samePbsServer } from "@/lib/guestFileRestore/pbsPveStorages"
 import type { Principal } from "@/lib/auth/principal"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { resolveVisibleConnectionIds } from "@/lib/api-tokens/scope"
 import { withAudit } from "@/lib/audit/withAudit"
+import { archiveGpuConfig, contingentRefusal, restoreContingentCheck } from "@/lib/gpu/vdcGuard"
+import { holdVdcLock } from "@/lib/gpu/vdcLock"
+import { releaseWhenTaskStops, reserveVdcGpus } from "@/lib/gpu/vdcPending"
 
 export const runtime = "nodejs"
 
@@ -31,6 +35,10 @@ async function handler(
   req: Request,
   ctx: { params: Promise<{ id: string; node: string }>; principal?: Principal }
 ) {
+  // GPUs of the restored VM (#672): the vDC lock is held from the contingent
+  // check until PVE accepted the restore, then they stay reserved until the
+  // VM sits in its pool.
+  let releaseGpuLock: (() => void) | null = null
   try {
     const { id, node } = await ctx.params
 
@@ -76,6 +84,7 @@ async function handler(
     const isTenant = tenantId !== DEFAULT_TENANT_ID
     let allowedStorages: Set<string> | null = null
     let writableStorages: Set<string> | null = null
+    let vdcTenant = false
     if (infra.kind === 'iaas') {
       // Verify the target node is in the tenant's vDC. resolveVdcForTenant
       // throws NODE_NOT_AUTHORIZED when the node is outside the allow list;
@@ -93,6 +102,7 @@ async function handler(
       if (!vdcInfo) {
         return NextResponse.json({ error: 'No vDC on this connection — restore not allowed' }, { status: 403 })
       }
+      vdcTenant = true
       const scope = infra.vdcScope
       if (!scope) {
         // Cannot happen for a non-default tenant after the v1.4.0 scope
@@ -194,23 +204,22 @@ async function handler(
           }
         }
       }
-      // Look up the PBS connection to know which `server` PVE storages
-      // need to advertise. We compare lower-cased hostnames so an IP vs
-      // FQDN mismatch (e.g. `pbs.lab` vs `10.0.0.5`) doesn't break the
-      // join — both sides are normalised the same way.
+      // Look up the PBS connection to know which server the PVE storage
+      // must reach. `server` is compared as written (no DNS), so a storage
+      // declared by FQDN and a connection declared by IP only meet through
+      // the certificate fingerprint both sides pin (ui#1308).
       const pbsConn = await prisma.connection.findUnique({
         where: { id: pbsId },
-        select: { baseUrl: true },
+        select: { baseUrl: true, fingerprint: true },
       })
       if (!pbsConn?.baseUrl) {
         return NextResponse.json({ error: "PBS connection not found" }, { status: 404 })
       }
-      const pbsHost = (() => {
-        try { return new URL(pbsConn.baseUrl).hostname.toLowerCase() } catch { return '' }
-      })()
+      const pbsIdentity = pbsIdentityOf({ baseUrl: pbsConn.baseUrl, fingerprint: pbsConn.fingerprint })
 
       // List PVE storages on the target node and pick the one whose pbs-
       // type config points at the same server + datastore (and namespace).
+      // Its ID is free: it never has to equal the datastore name.
       const nodeStorages = await pveFetch<any[]>(
         conn,
         `/nodes/${encodeURIComponent(node)}/storage?content=backup`
@@ -227,10 +236,9 @@ async function handler(
         if (!storageName) continue
         try {
           const cfg = await pveFetch<any>(conn, `/storage/${encodeURIComponent(storageName)}`)
-          const cfgServer = String(cfg?.server || '').toLowerCase()
           const cfgDatastore = String(cfg?.datastore || '')
           const cfgNamespace = String(cfg?.namespace || '').trim()
-          const sameHost = !!cfgServer && (cfgServer === pbsHost || cfgServer === pbsConn.baseUrl.toLowerCase())
+          const sameHost = samePbsServer(cfg ?? {}, pbsIdentity)
           const sameDs = cfgDatastore === datastore
           const sameNs = cfgNamespace === wantedNs
           if (sameHost && sameDs && sameNs) {
@@ -241,7 +249,7 @@ async function handler(
       }
       if (!matchedStorage) {
         return NextResponse.json({
-          error: `No PVE storage on node "${node}" maps to PBS datastore "${datastore}"${wantedNs ? ` (ns: ${wantedNs})` : ''}. Configure one before restoring.`,
+          error: `No PBS storage on node "${node}" reaches this backup server with datastore "${datastore}"${wantedNs ? ` and namespace "${wantedNs}"` : ''}. The storage ID can be any name, but its server (address or certificate fingerprint), datastore and namespace must match.`,
         }, { status: 409 })
       }
       // backupPath comes from /guests/{vmid}/backups already shaped as
@@ -295,6 +303,45 @@ async function handler(
         { error: allowedStorages.has(targetStorage) ? readOnlyLibraryError(targetStorage) : `Target storage "${targetStorage}" is not authorised for this tenant.` },
         { status: 403 },
       )
+    }
+
+    // Resolve the tenant's vDC pool eagerly (cookies are gone after the
+    // response is sent and `after()` runs). qmrestore/vzrestore land VMs
+    // outside any pool, and without this placement the restored VM is invisible
+    // in the tenant's vDC scope (vDC membership is keyed on PVE pool).
+    let targetVdc: { id: string; pvePoolName: string } | null = null
+    try {
+      if (isTenant) {
+        targetVdc = await prisma.vdc.findFirst({
+          where: {
+            tenantId,
+            connectionId: id,
+            enabled: true,
+            nodes: { some: { nodeName: node } },
+          },
+          select: { id: true, pvePoolName: true },
+        })
+      }
+    } catch (err: any) {
+      console.error(`[restore-pool] failed to resolve target pool: ${safeLog(err?.message ?? err)}`)
+    }
+    const targetPool = targetVdc?.pvePoolName ?? null
+
+    // GPUs (#672): the VM a vDC tenant restores holds the GPUs of the backed-up
+    // config, drawn on the contingent of the vDC whose pool receives it; a
+    // forced restore gives back the GPUs of the VM it overwrites. A config that
+    // cannot be read, or no vDC pool to receive the VM, cannot be checked.
+    let gpuDemand: Awaited<ReturnType<typeof restoreContingentCheck>> | null = null
+    if (vdcTenant && type !== 'lxc') {
+      const unavailable = { ok: false as const, code: 'gpu_check_unavailable' as const }
+      const hostpci = await archiveGpuConfig(conn, node, archive)
+      if (!hostpci) return contingentRefusal(unavailable)
+      if (Object.keys(hostpci).length > 0) {
+        if (!targetVdc) return contingentRefusal(unavailable)
+        releaseGpuLock = await holdVdcLock(targetVdc.id)
+        gpuDemand = await restoreContingentCheck(targetVdc.id, id, targetVdc.pvePoolName, node, hostpci, force ? String(vmid) : null)
+        if (gpuDemand.ok === false) return contingentRefusal(gpuDemand)
+      }
     }
 
     // PVE has no /qmrestore or /vzrestore REST endpoint — those are CLI
@@ -357,6 +404,13 @@ async function handler(
       }
     )
 
+    // Released once the task is seen stopped, never on a lost poll or a timeout.
+    const releaseGpuReservation = targetVdc && gpuDemand?.ok && gpuDemand.demand.length > 0
+      ? reserveVdcGpus(targetVdc.id, String(vmid), gpuDemand.demand)
+      : null
+    releaseGpuLock?.()
+    releaseGpuLock = null
+
     // roadmap#192: the restored guest shows on the next reload (locked while
     // the task runs), not after the inventory TTL.
     await refreshCachedGuests(id, conn, { type: endpoint, vmid })
@@ -374,32 +428,10 @@ async function handler(
     // across vmids. The Restore UI defaults unique=1 for that clone case
     // but lets the user turn it off, so the sync runs best-effort and any
     // collision surfaces in the server logs.
-    // Resolve the tenant's vDC pool eagerly (cookies are gone after the
-    // response is sent and `after()` runs). qmrestore/vzrestore land VMs
-    // outside any pool — without this placement the restored VM is invisible
-    // in the tenant's vDC scope (vDC membership is keyed on PVE pool).
-    let targetPool: string | null = null
-    try {
-      if (isTenant) {
-        const row = await prisma.vdc.findFirst({
-          where: {
-            tenantId,
-            connectionId: id,
-            enabled: true,
-            nodes: { some: { nodeName: node } },
-          },
-          select: { pvePoolName: true },
-        })
-        targetPool = row?.pvePoolName ?? null
-      }
-    } catch (err: any) {
-      console.error(`[restore-pool] failed to resolve target pool: ${safeLog(err?.message ?? err)}`)
-    }
-
     if (result) {
       const upid = String(result)
       const numericVmid = Number(vmid)
-      after(async () => {
+      const followUp = async () => {
         let taskError: unknown = null
         try {
           await waitForTask(conn, node, upid)
@@ -496,6 +528,14 @@ async function handler(
           // allocations. The restored VM stays, data loss > drift.
           try { await releaseAllocationsForVm(id, numericVmid) } catch { /* tolerate */ }
         }
+      }
+      // The GPUs stay reserved until the VM sits in its pool, or the task is seen failed.
+      after(async () => {
+        try {
+          await followUp()
+        } finally {
+          if (releaseGpuReservation) await releaseWhenTaskStops(conn, upid, node, releaseGpuReservation)
+        }
       })
     }
 
@@ -516,6 +556,8 @@ async function handler(
   } catch (e: any) {
     console.error('Error restoring backup:', e)
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  } finally {
+    releaseGpuLock?.()
   }
 }
 

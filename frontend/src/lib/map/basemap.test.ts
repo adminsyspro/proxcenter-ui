@@ -33,6 +33,16 @@ describe('basemap settings normalisation', () => {
     })
   })
 
+  it('keeps the attribution links and shows any other markup as text (roadmap#229)', () => {
+    expect(
+      normalizeBasemapSettings({
+        provider: 'custom',
+        lightUrl: 'https://tiles.lan/{z}/{x}/{y}.png',
+        attribution: '&copy; <a href="https://tiles.lan">Tiles</a> <img src="x">',
+      }).attribution,
+    ).toBe('&copy; <a href="https://tiles.lan">Tiles</a> &lt;img src="x">')
+  })
+
   it('treats an unknown provider as OSM rather than trusting the row', () => {
     expect(normalizeBasemapSettings({ provider: 'carto' }).provider).toBe('osm')
   })

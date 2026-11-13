@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 
 import { withAudit } from '@/lib/audit/withAudit'
 import { incidentViewResponse, refuseInvisibleAlert } from '@/lib/incidents/alertVisibility'
-import { requireIncidentAccess } from '@/lib/incidents/guard'
+import { requireIncidentWrite } from '@/lib/incidents/guard'
 import { detachAlert, incidentErrorResponse } from '@/lib/incidents/orchestrator'
 import { PERMISSIONS } from '@/lib/rbac'
 
@@ -13,10 +13,10 @@ export const dynamic = 'force-dynamic'
 
 async function handleDelete(_request: Request, ctx: { params: Promise<{ id: string; alertId: string }> }) {
   try {
-    const access = await requireIncidentAccess('write')
+    const { id, alertId } = await ctx.params
+    const access = await requireIncidentWrite(id)
     if (access.denied) return access.denied
 
-    const { id, alertId } = await ctx.params
     const refused = await refuseInvisibleAlert(alertId, PERMISSIONS.ALERTS_MANAGE)
     if (refused) return refused
 

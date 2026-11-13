@@ -15,7 +15,7 @@ import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { extractTaskVmid } from '@/lib/tasks/scope'
 
 import { findDeepLinkedVm, hasDeepLinkSelection } from './deepLink'
-import InventoryTree, { InventorySelection, ViewMode, AllVmItem, HostItem, PoolItem, TagItem, TreePbsServer, TreeClusterStorage } from './InventoryTree'
+import InventoryTree, { InventorySelection, ViewMode, AllVmItem, HostItem, PoolItem, PoolActions, TagItem, TreePbsServer, TreeClusterStorage } from './InventoryTree'
 import InventoryDetails from './InventoryDetails'
 import { InventoryLoadedContext } from './inventoryLoadedContext'
 
@@ -72,6 +72,8 @@ export default function InventoryPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('tree')
   const [hosts, setHosts] = useState<HostItem[]>([])
   const [pools, setPools] = useState<PoolItem[]>([])
+  // Pool dialogs live in the tree; the Pools view of the details panel reaches them here.
+  const [poolActions, setPoolActions] = useState<PoolActions | null>(null)
   const [tags, setTags] = useState<TagItem[]>([])
   const [pbsServers, setPbsServers] = useState<TreePbsServer[]>([])
   const [clusterStorages, setClusterStorages] = useState<TreeClusterStorage[]>([])
@@ -626,6 +628,7 @@ return () => setPageInfo('', '', '')
                 selected={selection}
                 onSelect={(sel) => setSelection(sel)}
                 onRefreshRef={handleRefreshRef}
+                onPoolActions={setPoolActions}
                 onOptimisticVmStatusRef={handleOptimisticRef}
                 onOptimisticVmTagsRef={(fn) => { treeOptimisticVmTagsRef.current = fn }}
                 viewMode={viewMode}
@@ -717,6 +720,7 @@ return () => setPageInfo('', '', '')
             inventoryLoaded={inventoryLoaded}
             hosts={hosts}
             pools={pools}
+            poolActions={poolActions}
             tags={tags}
             pbsServers={pbsServers}
             showIpSnap={ipSnapLoaded}

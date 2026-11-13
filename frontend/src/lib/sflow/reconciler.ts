@@ -41,6 +41,13 @@ export async function saveDesiredSFlowConfig(tenantId: string, config: SFlowDesi
   })
 }
 
+/** The configuration the last successful Configure run of a tenant saved, if usable. */
+export async function readDesiredSFlowConfig(tenantId: string): Promise<SFlowDesiredConfig | null> {
+  const setting = await prisma.setting.findUnique({ where: { key_tenantId: { key: SFLOW_DESIRED_CONFIG_KEY, tenantId } } })
+
+  return setting && isUsableConfig(setting.value) ? setting.value : null
+}
+
 function isUsableConfig(value: unknown): value is SFlowDesiredConfig {
   if (!value || typeof value !== "object") return false
   const c = value as Partial<SFlowDesiredConfig>

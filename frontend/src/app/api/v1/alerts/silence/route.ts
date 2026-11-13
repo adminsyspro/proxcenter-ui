@@ -4,6 +4,7 @@ import { getSessionPrisma, getCurrentTenantId } from '@/lib/tenant'
 import { silenceAlertSchema } from '@/lib/schemas'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withAudit } from '@/lib/audit/withAudit'
+import { refuseInvisibleSilence } from '@/lib/alerts/silenceScope'
 
 export const runtime = 'nodejs'
 
@@ -57,6 +58,9 @@ async function handlePost(req: Request) {
     }
 
     const { fingerprint, duration, reason } = parseResult.data
+    // A scoped caller silences only an alert it sees (roadmap#223).
+    const invisible = await refuseInvisibleSilence(fingerprint)
+    if (invisible) return invisible
     const tenantId = await getCurrentTenantId()
     const now = new Date()
     const durationMs = DURATION_MS[duration]

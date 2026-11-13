@@ -7,6 +7,7 @@ import { buildOrchestratorSshOverrides } from "@/lib/ssh/node-endpoint-core"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { withAudit } from "@/lib/audit/withAudit"
+import { publicRollingUpdates } from "@/lib/rollingUpdate/publicRollingUpdate"
 
 export const runtime = "nodejs"
 
@@ -60,10 +61,10 @@ export async function GET(req: Request) {
       const filtered = items.filter((ru: any) =>
         ru.connection_id ? perimeterConnectionIds.has(ru.connection_id) : infra.kind === "provider"
       )
-      return NextResponse.json({ data: filtered })
+      return NextResponse.json({ data: publicRollingUpdates(filtered) })
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ data: publicRollingUpdates(data) })
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error getting rolling updates:", error)
@@ -192,7 +193,7 @@ async function handlePost(req: Request) {
       )
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json({ data: publicRollingUpdates(data) })
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error("Error starting rolling update:", error)

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { openXcpngSource } from "@/lib/xcpng/source"
+import { xenGuestOs } from "@/lib/xcpng/guest-os"
 
 export const runtime = "nodejs"
 
@@ -55,8 +56,11 @@ export async function GET(
     const cpuCount = vm.CPUs?.number || vm.CPUs?.max || Number(vm.VCPUs_at_startup) || Number(vm.VCPUs_max) || 0
     const memoryBytes = vm.memory?.size || vm.memory?.dynamic?.[1] || Number(vm.memory_static_max) || 0
     const memoryMB = memoryBytes ? Math.round(memoryBytes / (1024 * 1024)) : 0
-    const osVersion = vm.os_version?.name || vm.os_version?.distro
-      || vm._guest?.os_version?.name || vm._guest?.os_version?.distro || ''
+    // XO answers os_version / other / viridian, XAPI os_version through the guest metrics and other_config / platform.
+    const osVersion = xenGuestOs({
+      osVersion: vm.os_version?.name || vm.os_version?.distro ? vm.os_version : vm._guest?.os_version,
+      otherConfig: vm.other_config || vm.other, referenceLabel: vm.reference_label, viridian: vm.platform?.viridian ?? vm.viridian,
+    })
 
     // Parse VIFs (network interfaces)
     const networks = (vm.VIFs || []).map((vifRef: string, idx: number) => ({

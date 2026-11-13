@@ -24,6 +24,9 @@ vi.mock('@/lib/rbac', () => ({
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: (...a: any[]) => connMock(...a) }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: (...a: any[]) => pveFetchMock(...a) }))
 
+import { AGENT_MUTE_MS, resetGuestAgentMutes } from '@/lib/proxmox/guestAgentCall'
+import { resetDaemonSlots } from '@/lib/proxmox/daemonSlots'
+
 import { GET } from './route'
 
 type Responses = Record<string, unknown>
@@ -47,10 +50,23 @@ async function data(res: Response) {
   return ((await readJson(res)) as any).data
 }
 
+/** The agent commands asked so far, in order. */
+function agentCalls(): string[] {
+  return pveFetchMock.mock.calls
+    .map(c => String(c[1]))
+    .filter(path => path.includes('/agent/'))
+    .map(path => path.slice(path.lastIndexOf('/') + 1))
+}
+
+/** What PVE answers, after about three seconds, when the box is ticked and no agent runs. */
+const AGENT_SILENT = { '/agent/network-get-interfaces': new Error('500 QEMU guest agent is not running') }
+
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   connMock.mockReset().mockResolvedValue({ id: 'c1' })
   pveFetchMock.mockReset()
+  resetGuestAgentMutes()
+  resetDaemonSlots()
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 
@@ -100,7 +116,7 @@ describe('GET guests/[type]/[node]/[vmid]/guest', () => {
   it('reports a Windows guest and falls back to non-virtual filesystems without disk entries', async () => {
     pve({
       '/status/current': { status: 'running' },
-      '/agent/network-get-interfaces': new Error('500 QEMU guest agent is not running'),
+      '/agent/network-get-interfaces': { result: [{ name: 'Ethernet', 'ip-addresses': [{ 'ip-address-type': 'ipv6', 'ip-address': 'fe80::2' }] }] },
       '/agent/get-osinfo': { id: 'mswindows', name: 'Microsoft Windows', version: '10' },
       '/agent/get-fsinfo': { result: [{ type: 'xfs', 'total-bytes': 20 }, { type: 'proc', 'total-bytes': 5 }, { 'total-bytes': -1 }] },
     })
@@ -131,6 +147,96 @@ describe('GET guests/[type]/[node]/[vmid]/guest', () => {
     const body = await data(await call())
     expect(body.osInfo).toEqual({ type: 'other', name: 'Plan9', version: null, kernel: null })
     expect(body.diskUsage).toBeUndefined()
+  })
+
+  it('asks the agent one thing first, and the rest once it has answered', async () => {
+    let othersAskedBeforeTheAnswer = false
+    let answered = false
+    pveFetchMock.mockImplementation(async (_conn: unknown, path: string) => {
+      if (path.endsWith('/status/current')) return { status: 'running', uptime: 3600 }
+      if (path.endsWith('/agent/network-get-interfaces')) {
+        await new Promise(resolve => setTimeout(resolve, 20))
+        answered = true
+        return {}
+      }
+      if (!answered) othersAskedBeforeTheAnswer = true
+      return path.endsWith('/agent/get-osinfo') ? { name: 'Debian' } : { result: [] }
+    })
+    await call()
+    expect(othersAskedBeforeTheAnswer).toBe(false)
+    expect(agentCalls()[0]).toBe('network-get-interfaces')
+    expect(agentCalls().slice(1).sort()).toEqual(['get-fsinfo', 'get-osinfo'])
+  })
+
+  // Each call to an agent that is not there holds a pvedaemon worker of the
+  // node for about three seconds, and a node has three of them.
+  it('sends a single call to an agent that does not answer', async () => {
+    pve({ ...AGENT_SILENT, '/status/current': { status: 'running', uptime: 3600, pid: 7 } })
+    const res = await call()
+    expect(res.status).toBe(200)
+    expect(await data(res)).toEqual({ status: 'running', uptime: 3600, pid: 7 })
+    expect(agentCalls()).toEqual(['network-get-interfaces'])
+  })
+
+  it('leaves alone, at the next selections, an agent that did not answer', async () => {
+    pve({ ...AGENT_SILENT, '/status/current': { status: 'running', uptime: 3600 } })
+    await call()
+    await call()
+    const res = await call()
+    expect(await data(res)).toEqual({ status: 'running', uptime: 3600 })
+    expect(agentCalls()).toEqual(['network-get-interfaces'])
+  })
+
+  it('asks the agent again once it has been left alone long enough', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      pve({ ...AGENT_SILENT, '/status/current': { status: 'running', uptime: 3600 } })
+      await call()
+      vi.setSystemTime(Date.now() + AGENT_MUTE_MS + 1000)
+      pve({
+        '/status/current': { status: 'running', uptime: 4300 },
+        '/agent/network-get-interfaces': { result: [{ name: 'eth0', 'ip-addresses': [{ 'ip-address-type': 'ipv4', 'ip-address': '10.0.0.9' }] }] },
+        '/agent/get-osinfo': { result: {} },
+        '/agent/get-fsinfo': { result: [] },
+      })
+      expect((await data(await call())).ip).toBe('10.0.0.9')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // The agent of a guest that has just booted is not up yet: one early
+  // selection must not hide its address for ten minutes.
+  it('keeps asking the agent of a guest that has just started', async () => {
+    pve({ ...AGENT_SILENT, '/status/current': { status: 'running', uptime: 20 } })
+    await call()
+    await call()
+    expect(agentCalls()).toEqual(['network-get-interfaces', 'network-get-interfaces'])
+  })
+
+  it('does not take a command the agent lacks for an agent that is gone', async () => {
+    pve({
+      '/status/current': { status: 'running', uptime: 3600 },
+      '/agent/network-get-interfaces': { result: [] },
+      '/agent/get-osinfo': { name: 'Appliance OS' },
+      '/agent/get-fsinfo': new Error('500 command guest-get-fsinfo has been disabled'),
+    })
+    await call()
+    const body = await data(await call())
+    expect(body.osInfo).toEqual({ type: 'other', name: 'Appliance OS', version: null, kernel: null })
+    expect(agentCalls().filter(c => c === 'get-osinfo')).toHaveLength(2)
+  })
+
+  it('gives no address, and the rest all the same, when the interfaces do not have the expected shape', async () => {
+    pve({
+      '/status/current': { status: 'running', uptime: 3600 },
+      '/agent/network-get-interfaces': { result: [{ name: 'eth0', 'ip-addresses': 'none' }] },
+      '/agent/get-osinfo': { name: 'Debian' },
+      '/agent/get-fsinfo': { result: [] },
+    })
+    const body = await data(await call())
+    expect(body.ip).toBeUndefined()
+    expect(body.osInfo).toEqual({ type: 'linux', name: 'Debian', version: null, kernel: null })
   })
 
   it('skips the agent calls for a stopped QEMU guest and survives a status error', async () => {

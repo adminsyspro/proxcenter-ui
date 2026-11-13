@@ -8,6 +8,7 @@ import type { AllVmItem, HostItem } from '../InventoryTree'
 import { parseVmId, fetchDetails, resolveVmPowerAction } from '../helpers'
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
 import { bulkPowerMessage, bulkPowerSeverity, readPerNodePreference, runBulkGuestPower, type BulkPowerAction } from '@/lib/inventory/bulkGuestPower'
+import { gpuContingentMessage } from '@/lib/gpu/contingentErrors'
 import {
   startTrackedMigration,
   type MigrateGuestRef,
@@ -305,7 +306,7 @@ export function useVmActions({
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
 
-      throw new Error(err?.error || `HTTP ${res.status}`)
+      throw new Error(gpuContingentMessage(t, err) || err?.error || `HTTP ${res.status}`)
     }
 
     const json = await res.json()
@@ -428,7 +429,7 @@ export function useVmActions({
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
 
-      throw new Error(err?.error || `HTTP ${res.status}`)
+      throw new Error(gpuContingentMessage(t, err) || err?.error || `HTTP ${res.status}`)
     }
 
     const json = await res.json()

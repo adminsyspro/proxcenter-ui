@@ -6,6 +6,8 @@ const h = vi.hoisted(() => ({
   granted: new Set<string>(),
   checkPermission: vi.fn(),
   infraScope: vi.fn(),
+  tenantScope: vi.fn(),
+  canMigrate: vi.fn(),
 }))
 
 vi.mock('@/lib/rbac', () => ({
@@ -14,12 +16,12 @@ vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { VM_MIGRATE: 'vm.migrate', CONNECTION_MANAGE: 'connection.manage' },
 }))
 vi.mock('@/lib/tenant/infraScope', () => ({
-  getTenantInfrastructureScope: async () => ({ kind: 'provider' }),
-  canMigrateConnections: () => true,
+  getTenantInfrastructureScope: (...a: unknown[]) => h.tenantScope(...a),
+  canMigrateConnections: (...a: unknown[]) => h.canMigrate(...a),
 }))
 vi.mock('@/lib/rbac/nicPermissions', () => ({ sensitiveNicPermissions: () => [] }))
 
-import { authorizeMigrationTarget, denyMigrationEnds, mayMigrateBetweenClusters, migrateScope, scopedJobWhere } from './authorize'
+import { authorizeMigrationNode, authorizeMigrationTarget, denyMigrationEnds, mayMigrateBetweenClusters, migrateScope, scopedJobWhere } from './authorize'
 import type { RbacInfraScope } from '@/lib/rbac/infraScope'
 
 const scope = (over: Partial<RbacInfraScope> = {}): RbacInfraScope => ({
@@ -35,6 +37,8 @@ beforeEach(() => {
   h.checkPermission.mockReset().mockImplementation(async (_perm: string, type: string, id: string) =>
     h.granted.has(`${type}:${id}`) ? null : new Response(null, { status: 403 }))
   h.infraScope.mockReset().mockResolvedValue(null)
+  h.tenantScope.mockReset().mockResolvedValue({ kind: 'provider' })
+  h.canMigrate.mockReset().mockReturnValue(true)
 })
 
 describe('denyMigrationEnds', () => {
@@ -68,6 +72,39 @@ describe('authorizeMigrationTarget', () => {
 
   it('accepts a granted target node', async () => {
     expect(await authorizeMigrationTarget({ tenantId: 'default', sourceConnectionId: 'vc', targetConnectionId: 'prod', targetNode: 'pve2', networkBridge: 'vmbr0' })).toBeNull()
+  })
+})
+
+describe('authorizeMigrationNode', () => {
+  // roadmap#224: the routes that run commands on a target node for a
+  // migration (preflight, "Prepare this node") share one gate.
+  it('lets a tenant that may migrate to the cluster through, with vm.migrate on the node', async () => {
+    expect(await authorizeMigrationNode({ tenantId: 'default', targetConnectionId: 'prod', targetNode: 'pve2' })).toBeNull()
+    expect(h.tenantScope).toHaveBeenCalledWith('default')
+    expect(h.canMigrate).toHaveBeenCalledWith({ kind: 'provider' }, 'prod')
+    expect(h.checkPermission).toHaveBeenCalledWith('vm.migrate', 'node', 'prod:pve2')
+  })
+
+  it('answers 404 to a tenant that may not migrate to the cluster, before any permission check', async () => {
+    h.tenantScope.mockResolvedValue({ kind: 'iaas' })
+    h.canMigrate.mockReturnValue(false)
+
+    const res = await authorizeMigrationNode({ tenantId: 'vdc-tenant', targetConnectionId: 'prod', targetNode: 'pve2' })
+
+    expect(res?.status).toBe(404)
+    expect(await res?.json()).toEqual({ error: 'Connection not found' })
+    expect(h.tenantScope).toHaveBeenCalledWith('vdc-tenant')
+    expect(h.checkPermission).not.toHaveBeenCalled()
+  })
+
+  it('weighs the source connection too when one is given', async () => {
+    expect(await authorizeMigrationNode({ tenantId: 'default', sourceConnectionId: 'vc', targetConnectionId: 'prod', targetNode: 'pve2' })).toBeNull()
+    expect(h.canMigrate).toHaveBeenCalledWith({ kind: 'provider' }, 'prod', 'vc')
+    expect(h.checkPermission).toHaveBeenCalledWith('vm.migrate', 'connection', 'vc')
+  })
+
+  it('refuses a target node outside the vm.migrate grants', async () => {
+    expect((await authorizeMigrationNode({ tenantId: 'default', targetConnectionId: 'prod', targetNode: 'pve1' }))?.status).toBe(403)
   })
 })
 

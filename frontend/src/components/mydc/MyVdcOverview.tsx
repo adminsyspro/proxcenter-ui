@@ -9,6 +9,7 @@ import { alpha, useTheme } from '@mui/material/styles'
 import QuotaDonut from './QuotaDonut'
 import MyVmsMetricsCharts from './MyVmsMetricsCharts'
 import MyGreenCard from './MyGreenCard'
+import MyGpuCard from './MyGpuCard'
 import MyDatacentersMapCard from './MyDatacentersMapCard'
 import { DEFAULT_TRANSPORT, vniPolicyFor } from '@/lib/vdc/transport'
 import VdcUsageHistoryChart from '@/components/vdc/VdcUsageHistoryChart'
@@ -218,6 +219,10 @@ export default function MyVdcOverview({ vdc, onRefresh, refreshing = false }: Pr
           )}
         </Box>
       </Paper>
+
+      {/* GPU contingent and the VMs that use it; renders nothing when the vDC
+          has no GPU contingent or the license lacks the feature. */}
+      <MyGpuCard vdcId={vdc.id} />
 
       {/* Network model: the L3 edge responsibility and the VNI policy of the
           transport, so the tenant knows what to bring before its first guest

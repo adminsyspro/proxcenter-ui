@@ -3,13 +3,15 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
-import { verifyConnectionOwnership } from '@/lib/tenant'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { orchestratorPath } from '@/lib/orchestrator/path'
+import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import { firewallParamRefusal, firewallResourceType, invalidResourceType } from '@/lib/firewall/pathParams'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { withAudit } from '@/lib/audit/withAudit'
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 // GET /api/v1/firewall/nodes/[connectionId]/[node] - Get node options or rules
 async function getHandler(
@@ -18,19 +20,19 @@ async function getHandler(
 ) {
   try {
     const { connectionId, node } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_VIEW, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_VIEW)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ node })
+    if (malformed) return malformed
 
     const { searchParams } = new URL(request.url)
-    const type = searchParams.get('type') || 'options'
+    const type = firewallResourceType(searchParams.get('type'))
+    if (!type) return invalidResourceType()
 
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/nodes',
-      () => orchestrator.get(`/firewall/nodes/${connectionId}/${node}/${type}`),
+      () => orchestrator.get(orchestratorPath`/firewall/nodes/${connectionId}/${node}/${type}`),
       async () => {
         const conn = await getConnectionById(connectionId)
 
@@ -58,18 +60,17 @@ async function putHandler(
 ) {
   try {
     const { connectionId, node } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ node })
+    if (malformed) return malformed
 
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/nodes',
-      () => orchestrator.put(`/firewall/nodes/${connectionId}/${node}/options`, body),
+      () => orchestrator.put(orchestratorPath`/firewall/nodes/${connectionId}/${node}/options`, body),
       async () => pveDirect.updateNodeOptions(await getConnectionById(connectionId), node, body),
     )
 
@@ -91,18 +92,17 @@ async function postHandler(
 ) {
   try {
     const { connectionId, node } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ node })
+    if (malformed) return malformed
 
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/nodes',
-      () => orchestrator.post(`/firewall/nodes/${connectionId}/${node}/rules`, body),
+      () => orchestrator.post(orchestratorPath`/firewall/nodes/${connectionId}/${node}/rules`, body),
       async () => pveDirect.addNodeRule(await getConnectionById(connectionId), node, body),
     )
 

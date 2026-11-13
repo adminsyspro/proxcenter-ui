@@ -1,32 +1,36 @@
 export const dynamic = "force-dynamic"
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { listTenants, createTenant, requireProviderTenant } from "@/lib/tenant"
+import { tenantWriteFailure } from "@/lib/tenant/writeFailure"
 import { parseVmidRangeInput, findVmidRangeConflict } from "@/lib/tenant/vmidRange"
 import { audit } from "@/lib/audit"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth/config"
+import { syncServiceDeskForNewTenant } from "@/lib/rbac/serviceDesk"
+import { getActingSession } from "@/lib/auth/actingUser"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
-// GET /api/v1/tenants — list all tenants (admin only)
-export async function GET() {
+// GET /api/v1/tenants — list all tenants (admin only; API tokens: tenants:read)
+async function handleGet() {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
-  const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
+  const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS_VIEW)
   if (denied) return denied
 
   const tenants = await listTenants()
   return NextResponse.json({ data: tenants })
 }
 
+export const GET = withPublicApiGuard("tenants-list", handleGet)
+
 // POST /api/v1/tenants — create a new tenant
-async function handlePost(req: NextRequest) {
+async function handlePost(req: Request) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
   if (denied) return denied
 
-  const session = await getServerSession(authOptions)
+  const session = await getActingSession()
   const body = await req.json()
 
   if (!body.name || !body.slug) {
@@ -72,6 +76,9 @@ async function handlePost(req: NextRequest) {
       vmidRangeEnd: vmidRange?.end ?? null,
     })
 
+    // Service-desk roles published to all tenants reach the new one (ui#1336).
+    await syncServiceDeskForNewTenant()
+
     await audit({
       action: "tenant.create",
       category: "admin",
@@ -84,12 +91,9 @@ async function handlePost(req: NextRequest) {
     })
 
     return NextResponse.json({ data: tenant }, { status: 201 })
-  } catch (e: any) {
-    if (e.message?.includes("UNIQUE constraint")) {
-      return NextResponse.json({ error: "A tenant with this slug already exists" }, { status: 409 })
-    }
-    return NextResponse.json({ error: e.message }, { status: 500 })
+  } catch (e) {
+    return tenantWriteFailure(e, "create")
   }
 }
 
-export const POST = withAudit({ category: "admin", resourceType: "tenant" }, handlePost)
+export const POST = withAudit({ category: "admin", resourceType: "tenant" }, withPublicApiGuard("tenant-create", handlePost))

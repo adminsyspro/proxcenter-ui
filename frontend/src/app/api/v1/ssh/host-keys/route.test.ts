@@ -1,254 +1,76 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { callRoute, readJson, deniedPermissionResponse } from '@/__tests__/setup/route-test'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { checkPermissionMock, orchestratorFetchMock, listPinnedHostKeysMock } = vi.hoisted(() => ({
+import { callRoute, deniedPermissionResponse, readJson } from '@/__tests__/setup/route-test'
+
+const { checkPermissionMock, listHostKeysMock, hostKeyScopeMock } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn<(...a: any[]) => Promise<Response | null>>(),
-  orchestratorFetchMock: vi.fn<(...a: any[]) => Promise<any>>(),
-  listPinnedHostKeysMock: vi.fn<() => Promise<any[]>>(),
-}))
-
-vi.mock('@/lib/orchestrator', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/orchestrator')>('@/lib/orchestrator')
-  return {
-    ...actual,
-    orchestratorFetch: (...args: unknown[]) => orchestratorFetchMock(...args),
-  }
-})
-
-vi.mock('@/lib/rbac', () => ({
-  checkPermission: (...args: unknown[]) => checkPermissionMock(...args),
-  PERMISSIONS: {
-    CONNECTION_VIEW: 'connection.view',
-    CONNECTION_MANAGE: 'connection.manage',
-  },
-}))
-
-vi.mock('@/lib/ssh/host-key-store', () => ({
-  listPinnedHostKeys: () => listPinnedHostKeysMock(),
-}))
-
-const { hostKeyScopeMock } = vi.hoisted(() => ({
+  listHostKeysMock: vi.fn<() => Promise<any[]>>(),
   hostKeyScopeMock: vi.fn<(...a: any[]) => Promise<{ all: boolean; hosts: Set<string> }>>(),
 }))
 
-// Which hosts a caller reaches is hostKeyAccess.test.ts's business; here the
-// route only has to ask it and honour the answer.
+vi.mock('@/lib/rbac', () => ({
+  checkPermission: (...args: unknown[]) => checkPermissionMock(...args),
+  PERMISSIONS: { CONNECTION_VIEW: 'connection.view', CONNECTION_MANAGE: 'connection.manage' },
+}))
+
+vi.mock('@/lib/ssh/host-key-store', () => ({ listHostKeys: () => listHostKeysMock() }))
+
 vi.mock('@/lib/ssh/hostKeyAccess', () => ({
   hostKeyScope: (...a: unknown[]) => hostKeyScopeMock(...a),
   hostKeyInScope: (scope: { all: boolean; hosts: Set<string> }, host: string) => scope.all || scope.hosts.has(host),
 }))
 
-import { GET } from './route'
+import { bareHost, GET } from './route'
 
-/** Frontend store row shape: host carries ":port", timestamps are Dates. */
-function frontendRow(host: string, keyType: string, firstSeen: string) {
-  return {
-    host,
-    keyType,
-    firstSeenAt: new Date(firstSeen),
-    lastUsedAt: new Date(firstSeen),
-  }
+const KEYS = [
+  { host: '10.0.0.1:22', keyType: 'ssh-ed25519', origin: 'confirmed' },
+  { host: '10.0.0.2:2222', keyType: 'ssh-ed25519', origin: 'pending' },
+  { host: 'fe80::1:22', keyType: 'ssh-ed25519', origin: 'automatic' },
+  { host: '10.0.0.3', keyType: 'ecdsa-sha2-nistp256', origin: 'automatic', legacy: true },
+]
+
+function call() {
+  return callRoute(GET as Parameters<typeof callRoute>[0], { method: 'GET' })
 }
 
 beforeEach(() => {
-  hostKeyScopeMock.mockReset().mockResolvedValue({ all: true, hosts: new Set() })
   checkPermissionMock.mockReset().mockResolvedValue(null)
-  orchestratorFetchMock.mockReset().mockResolvedValue({ hosts: [] })
-  listPinnedHostKeysMock.mockReset().mockResolvedValue([])
+  hostKeyScopeMock.mockReset().mockResolvedValue({ all: true, hosts: new Set() })
+  listHostKeysMock.mockReset().mockResolvedValue(KEYS)
+})
+
+describe('bareHost', () => {
+  it('strips the port of a registry row and keeps a legacy row whole', () => {
+    expect(bareHost('10.0.0.1:22')).toBe('10.0.0.1')
+    expect(bareHost('FE80::1:2222')).toBe('fe80::1')
+    expect(bareHost('10.0.0.3')).toBe('10.0.0.3')
+    expect(bareHost('pve1.lab:ssh')).toBe('pve1.lab:ssh')
+  })
 })
 
 describe('GET /api/v1/ssh/host-keys', () => {
-  it('merges both stores on the bare host, keeping the differing key types', async () => {
-    orchestratorFetchMock.mockResolvedValue({
-      hosts: [{ host: '10.42.0.101', key_type: 'ecdsa-sha2-nistp256', pinned_at: '2026-09-02T16:54:00Z' }],
-    })
-    listPinnedHostKeysMock.mockResolvedValue([
-      frontendRow('10.42.0.101:22', 'ssh-ed25519', '2026-09-03T10:00:00Z'),
-    ])
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-
+  it('lists the whole registry for a caller who reaches every host', async () => {
+    const res = await call()
     expect(res.status).toBe(200)
-    expect(await readJson(res)).toEqual({
-      hosts: [
-        {
-          host: '10.42.0.101',
-          keyTypes: ['ecdsa-sha2-nistp256', 'ssh-ed25519'],
-          pinnedAt: '2026-09-02T16:54:00.000Z',
-          sources: ['frontend', 'orchestrator'],
-        },
-      ],
-      orchestratorUnavailable: false,
-    })
-    expect(orchestratorFetchMock).toHaveBeenCalledWith('/ssh/host-keys')
+    expect(await readJson(res)).toEqual({ keys: KEYS })
   })
 
-  it('reports the earliest pin when the frontend saw the host first', async () => {
-    orchestratorFetchMock.mockResolvedValue({
-      hosts: [{ host: '10.42.0.101', key_type: 'ecdsa-sha2-nistp256', pinned_at: '2026-09-10T08:00:00Z' }],
-    })
-    listPinnedHostKeysMock.mockResolvedValue([
-      frontendRow('10.42.0.101:22', 'ssh-ed25519', '2026-08-01T07:30:00Z'),
-    ])
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-    const body = await readJson<any>(res)
-
-    expect(body.hosts[0].pinnedAt).toBe('2026-08-01T07:30:00.000Z')
-  })
-
-  it('de-duplicates a key type both stores agree on, and folds every port of one host into one row', async () => {
-    orchestratorFetchMock.mockResolvedValue({
-      hosts: [{ host: '10.42.0.101', key_type: 'ssh-ed25519', pinned_at: '2026-09-02T16:54:00Z' }],
-    })
-    listPinnedHostKeysMock.mockResolvedValue([
-      frontendRow('10.42.0.101:22', 'ssh-ed25519', '2026-09-03T10:00:00Z'),
-      frontendRow('10.42.0.101:2222', 'ssh-rsa', '2026-09-04T10:00:00Z'),
-    ])
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-    const body = await readJson<any>(res)
-
-    expect(body.hosts).toHaveLength(1)
-    expect(body.hosts[0].keyTypes).toEqual(['ssh-ed25519', 'ssh-rsa'])
-  })
-
-  it('sorts rows by host, keeps a store-only host, and leaves a port-less legacy row untouched', async () => {
-    orchestratorFetchMock.mockResolvedValue({
-      hosts: [{ host: 'pve-z', key_type: 'ecdsa-sha2-nistp256', pinned_at: '2026-09-02T16:54:00Z' }],
-    })
-    listPinnedHostKeysMock.mockResolvedValue([
-      frontendRow('pve-legacy', 'ssh-rsa', '2026-01-01T00:00:00Z'),
-      frontendRow('pve-a:22', 'ssh-ed25519', '2026-02-01T00:00:00Z'),
-    ])
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-    const body = await readJson<any>(res)
-
-    expect(body.hosts.map((h: any) => h.host)).toEqual(['pve-a', 'pve-legacy', 'pve-z'])
-    expect(body.hosts[1]).toEqual({
-      host: 'pve-legacy',
-      keyTypes: ['ssh-rsa'],
-      pinnedAt: '2026-01-01T00:00:00.000Z',
-      sources: ['frontend'],
-    })
-    expect(body.hosts[2].sources).toEqual(['orchestrator'])
-  })
-
-  it('still lists the frontend pins with orchestratorUnavailable when the orchestrator is down', async () => {
-    const err: any = new Error('Orchestrator unavailable')
-    err.code = 'ORCHESTRATOR_UNAVAILABLE'
-    orchestratorFetchMock.mockRejectedValue(err)
-    listPinnedHostKeysMock.mockResolvedValue([
-      frontendRow('10.42.0.101:22', 'ssh-ed25519', '2026-09-03T10:00:00Z'),
-    ])
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-
-    expect(res.status).toBe(200)
-    expect(await readJson(res)).toEqual({
-      hosts: [
-        {
-          host: '10.42.0.101',
-          keyTypes: ['ssh-ed25519'],
-          pinnedAt: '2026-09-03T10:00:00.000Z',
-          sources: ['frontend'],
-        },
-      ],
-      orchestratorUnavailable: true,
-    })
+  it('lists only the hosts of the connections the caller may view', async () => {
+    hostKeyScopeMock.mockResolvedValue({ all: false, hosts: new Set(['10.0.0.2', 'fe80::1']) })
+    const body = await readJson<{ keys: { host: string }[] }>(await call())
+    expect(body!.keys.map(k => k.host)).toEqual(['10.0.0.2:2222', 'fe80::1:22'])
   })
 
   it('returns the denied response and reads nothing when the permission check fails', async () => {
     checkPermissionMock.mockResolvedValue(deniedPermissionResponse())
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-
-    expect(res.status).toBe(403)
-    expect(orchestratorFetchMock).not.toHaveBeenCalled()
-    expect(listPinnedHostKeysMock).not.toHaveBeenCalled()
+    expect((await call()).status).toBe(403)
+    expect(listHostKeysMock).not.toHaveBeenCalled()
   })
 
-  it('treats an orchestrator answer with no hosts key as simply empty, not as a failure', async () => {
-    orchestratorFetchMock.mockResolvedValue({})
-    listPinnedHostKeysMock.mockResolvedValue([frontendRow('10.42.0.101:22', 'ssh-ed25519', '2026-09-03T10:00:00Z')])
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-    const body = await readJson<any>(res)
-
-    expect(body.orchestratorUnavailable).toBe(false)
-    expect(body.hosts).toEqual([
-      { host: '10.42.0.101', keyTypes: ['ssh-ed25519'], pinnedAt: '2026-09-03T10:00:00.000Z', sources: ['frontend'] },
-    ])
-  })
-
-  // Rows arriving without a host, without a key type or without a usable pin
-  // date are the shapes a store can legitimately hold: skipping the first two
-  // and still listing the host is what keeps one bad row from hiding a pin.
-  it('skips hostless rows, lists a host whose key type is missing and empties an unparseable pin date', async () => {
-    orchestratorFetchMock.mockResolvedValue({
-      hosts: [
-        { key_type: 'ssh-rsa', pinned_at: '2026-09-02T16:54:00Z' },
-        { host: '10.42.0.101', key_type: '', pinned_at: null },
-        { host: '   ', key_type: 'ssh-rsa', pinned_at: '2026-09-02T16:54:00Z' },
-      ],
-    })
-    listPinnedHostKeysMock.mockResolvedValue([
-      { host: '', keyType: 'ssh-rsa', firstSeenAt: new Date('2026-09-03T10:00:00Z'), lastUsedAt: new Date() },
-    ])
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-    const body = await readJson<any>(res)
-
-    expect(body.hosts).toEqual([
-      { host: '10.42.0.101', keyTypes: [], pinnedAt: '', sources: ['orchestrator'] },
-    ])
-  })
-
-  it('degrades and logs when the orchestrator fails for any reason other than being unreachable', async () => {
-    orchestratorFetchMock.mockRejectedValue(new Error('Orchestrator 500: boom'))
-    listPinnedHostKeysMock.mockResolvedValue([frontendRow('10.42.0.101:22', 'ssh-ed25519', '2026-09-03T10:00:00Z')])
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-    const body = await readJson<any>(res)
-
-    expect(res.status).toBe(200)
-    expect(body.orchestratorUnavailable).toBe(true)
-    expect(body.hosts[0].sources).toEqual(['frontend'])
-  })
-
-  it('falls back to a generic message when the failure carries none', async () => {
-    listPinnedHostKeysMock.mockRejectedValue({})
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-
-    expect(res.status).toBe(500)
-    expect(await readJson(res)).toEqual({ error: 'Failed to list SSH host keys' })
-  })
-
-  it('returns 500 when the frontend store itself fails', async () => {
-    listPinnedHostKeysMock.mockRejectedValue(new Error('db down'))
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-
-    expect(res.status).toBe(500)
-    expect(await readJson(res)).toEqual({ error: 'db down' })
-  })
-
-  // roadmap#184: both stores are installation-wide.
-  it('lists only the hosts of the connections the caller may view', async () => {
-    hostKeyScopeMock.mockResolvedValue({ all: false, hosts: new Set(['10.42.0.111']) })
-    orchestratorFetchMock.mockResolvedValue({
-      hosts: [
-        { host: '10.42.0.101', key_type: 'ecdsa-sha2-nistp256', pinned_at: '2026-09-02T16:54:00Z' },
-        { host: '10.42.0.111', key_type: 'ecdsa-sha2-nistp256', pinned_at: '2026-09-02T16:54:00Z' },
-      ],
-    })
-    listPinnedHostKeysMock.mockResolvedValue([frontendRow('10.42.0.101:22', 'ssh-ed25519', '2026-09-03T10:00:00Z')])
-
-    const res = await callRoute(GET as Parameters<typeof callRoute>[0])
-
-    expect((await readJson<any>(res)).hosts.map((h: any) => h.host)).toEqual(['10.42.0.111'])
-    expect(hostKeyScopeMock).toHaveBeenCalledWith('connection.view')
+  it('answers 500 when the registry fails', async () => {
+    listHostKeysMock.mockRejectedValue(new Error('db down'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await call()).status).toBe(500)
+    error.mockRestore()
   })
 })

@@ -1,6 +1,7 @@
 // Menu data with translation support
 // Pass the t function from useTranslations() to get translated labels
 // requiredFeature: feature ID from license that is required to access this menu item
+// requires.notVdcTenant: hidden for a vDC tenant (neither the provider nor an MSP tenant)
 export const menuData = (t = (key) => key) => [
   {
     label: t('navigation.dashboard'),
@@ -38,6 +39,15 @@ export const menuData = (t = (key) => key) => [
         // node names we hide everywhere else in those views, even though such
         // roles legitimately keep vm.view to see and start/stop their guests.
         requires: { isProviderTenant: true, infraScope: true }
+      },
+      {
+        label: t('navigation.gpu'),
+        icon: 'ri-cpu-line',
+        href: '/infrastructure/gpu',
+        permissions: ['vm.view', 'node.view'],
+        // Provider and MSP tenants only: a vDC tenant has no GPU page (lib/gpu/guard.ts).
+        requiredFeature: 'gpu_management',
+        requires: { notVdcTenant: true }
       },
       {
         label: t('navigation.storage'),
@@ -165,8 +175,9 @@ export const menuData = (t = (key) => key) => [
         label: t('navigation.reports'),
         icon: 'ri-file-chart-line',
         href: '/operations/reports',
-        // Permissions removed to expose the page in vDC tenant menus for
-        // scoping evaluation. API still enforces REPORTS_VIEW at runtime.
+        // Every tenant system role carries reports.view, so vDC tenant menus
+        // keep the entry; a custom role without it no longer lands on a 403 page.
+        permissions: ['reports.view'],
         requiredFeature: 'reports'
       }
     ]

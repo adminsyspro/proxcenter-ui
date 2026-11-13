@@ -33,7 +33,7 @@ describe('sourceHardware / initial state', () => {
     expect(initialHardwareState(source)).toEqual({ cores: '2', sockets: '2', memoryMB: '4096' })
     expect(initialHardwareState(null)).toEqual({ cores: '', sockets: '', memoryMB: '' })
     expect(initialNicState(source, 'vmbr0', '')).toEqual([
-      { bridge: 'vmbr0', vlanTag: '', model: '' }, { bridge: 'vmbr0', vlanTag: '', model: '' },
+      { bridge: 'vmbr0', vlanTag: '', model: '', macMode: 'keep' as const, mac: '' }, { bridge: 'vmbr0', vlanTag: '', model: '', macMode: 'keep' as const, mac: '' },
     ])
     expect(initialNicState(null, 'vmbr0', '')).toEqual([])
   })
@@ -54,9 +54,9 @@ describe('validation', () => {
   })
 
   it('blocks the launch on a bad field or a NIC without a bridge', () => {
-    expect(reviewIsValid(hw, [{ bridge: 'vmbr0', vlanTag: '', model: '' }])).toBe(true)
-    expect(reviewIsValid(hw, [{ bridge: '', vlanTag: '', model: '' }])).toBe(false)
-    expect(reviewIsValid(hw, [{ bridge: 'vmbr0', vlanTag: '9999', model: '' }])).toBe(false)
+    expect(reviewIsValid(hw, [{ bridge: 'vmbr0', vlanTag: '', model: '', macMode: 'keep' as const, mac: '' }])).toBe(true)
+    expect(reviewIsValid(hw, [{ bridge: '', vlanTag: '', model: '', macMode: 'keep' as const, mac: '' }])).toBe(false)
+    expect(reviewIsValid(hw, [{ bridge: 'vmbr0', vlanTag: '9999', model: '', macMode: 'keep' as const, mac: '' }])).toBe(false)
     expect(reviewIsValid({ ...hw, cores: '200' }, [])).toBe(false)
   })
 })
@@ -69,7 +69,7 @@ describe('payload', () => {
   })
 
   it('maps every NIC by position, with the tag only when the operator may set one', () => {
-    const nics = [{ bridge: 'vmbr0', vlanTag: '42', model: '' }, { bridge: 'vf95117a', vlanTag: '', model: 'e1000' }]
+    const nics = [{ bridge: 'vmbr0', vlanTag: '42', model: '', macMode: 'keep' as const, mac: '' }, { bridge: 'vf95117a', vlanTag: '', model: 'e1000', macMode: 'keep' as const, mac: '' }]
     expect(buildNicsPayload(nics, true)).toEqual([{ index: 0, bridge: 'vmbr0', vlanTag: 42 }, { index: 1, bridge: 'vf95117a', model: 'e1000' }])
     expect(buildNicsPayload(nics, false)).toEqual([{ index: 0, bridge: 'vmbr0' }, { index: 1, bridge: 'vf95117a', model: 'e1000' }])
     expect(buildNicsPayload([], true)).toBeUndefined()
@@ -109,7 +109,7 @@ describe('disks (lot 2)', () => {
     expect(disksValid([row('a'), row('', true)])).toBe(true)
     expect(disksValid([row('a'), row('')])).toBe(false)
     expect(disksValid([row('', true)])).toBe(false)
-    const nics = [{ bridge: 'vmbr0', vlanTag: '', model: '' }]
+    const nics = [{ bridge: 'vmbr0', vlanTag: '', model: '', macMode: 'keep' as const, mac: '' }]
     expect(reviewIsValid(hw, nics, [row('a'), row('b')])).toBe(true)
     expect(reviewIsValid(hw, nics, [row('a'), row(' ')])).toBe(false)
     expect(reviewIsValid(hw, nics)).toBe(true)

@@ -27,6 +27,8 @@ export const GenerateVerticalMenu = ({ menuData }) => {
   const { hasVdc, loading: vdcLoading } = useMyVdcs()
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isProviderTenant = currentTenant?.id === 'default'
+  // A vDC tenant: neither the provider nor an MSP running its own clusters.
+  const isVdcTenant = !!currentTenant && !isProviderTenant && currentTenant.operatingModel !== 'msp'
   const infraScoped = hasInfraScope(scopeTypes, isAdmin)
 
   // Fonction pour vérifier si un item doit être affiché (RBAC)
@@ -35,6 +37,7 @@ export const GenerateVerticalMenu = ({ menuData }) => {
     if (item.requires?.hasVdc === true && !hasVdc) return false
     if (item.requires?.hasVdc === false && hasVdc) return false
     if (item.requires?.isProviderTenant === true && !isProviderTenant) return false
+    if (item.requires?.notVdcTenant === true && isVdcTenant) return false
     if (item.requires?.infraScope === true && !infraScoped) return false
     if (!item.permissions || item.permissions.length === 0) return true
 
@@ -149,6 +152,8 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
   const { hasVdc, loading: vdcLoading } = useMyVdcs()
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isProviderTenant = currentTenant?.id === 'default'
+  // A vDC tenant: neither the provider nor an MSP running its own clusters.
+  const isVdcTenant = !!currentTenant && !isProviderTenant && currentTenant.operatingModel !== 'msp'
   const infraScoped = hasInfraScope(scopeTypes, isAdmin)
 
   const canView = (item) => {
@@ -156,6 +161,7 @@ export const GenerateHorizontalMenu = ({ menuData }) => {
     if (item.requires?.hasVdc === true && !hasVdc) return false
     if (item.requires?.hasVdc === false && hasVdc) return false
     if (item.requires?.isProviderTenant === true && !isProviderTenant) return false
+    if (item.requires?.notVdcTenant === true && isVdcTenant) return false
     if (item.requires?.infraScope === true && !infraScoped) return false
     if (!item.permissions || item.permissions.length === 0) return true
 

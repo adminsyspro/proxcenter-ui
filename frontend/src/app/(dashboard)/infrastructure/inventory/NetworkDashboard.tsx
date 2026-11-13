@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { bridgeLabel } from '@/lib/proxmox/hostVlanMap'
 import {
   Box,
@@ -23,23 +24,60 @@ import {
 import { Bar, BarChart, Cell, Tooltip, XAxis, YAxis } from 'recharts'
 import ChartContainer from '@/components/ChartContainer'
 import VnetsSection from './VnetsSection'
+import AttachedGuestsList, { onActivateKey } from './components/AttachedGuestsList'
+import { buildNetworkSummary, type AttachedGuest, type VlanEntry, type VmNetData } from './networkSummary'
+import type { HostItem } from './InventoryTree'
+import type { InventorySelection } from './types'
+import { NodeGlyph } from '@/components/ui/glyphs'
 import { useTenant } from '@/contexts/TenantContext'
 import { fetchConnectionsNetworks, type HostBridgeItem, type HostVlanItem, type SdnVnetItem } from '@/lib/proxmox/fetchConnectionsNetworks'
-import { sdnSegmentLabel, type SdnVnet } from '@/lib/proxmox/sdnVnetMap'
-
-type VmNetData = {
-  vmid: string
-  name: string
-  node: string
-  type: string
-  status: string
-  connId?: string
-  nets: Array<{ name: string; bridge?: string; tag?: number; model?: string; macaddr?: string; firewall?: boolean }>
-}
+import { sdnSegmentLabel } from '@/lib/proxmox/sdnVnetMap'
 
 type Props = {
   connectionIds: string[]
   connectionNames: Record<string, string>
+  /** Inventory hosts, for the status dot of each node. */
+  hosts?: HostItem[]
+  /** Opens a guest of the lists in the inventory. */
+  onSelect?: (sel: InventorySelection) => void
+}
+
+type NodeStatusOf = (connId: string, node: string) => string | undefined
+
+/** Which rows of a list are expanded, by key. */
+function useExpanded() {
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  const toggle = useCallback((key: string) => {
+    setOpen(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+  return { isOpen: (key: string) => open.has(key), toggle }
+}
+
+/** Chevron at the head of a row whose guests unfold below it; blank when there is nothing to unfold. */
+function RowChevron({ open, visible }: Readonly<{ open: boolean; visible: boolean }>) {
+  return (
+    <Box component='span' sx={{ width: 16, display: 'inline-flex', flexShrink: 0, justifyContent: 'center' }}>
+      {visible && <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 16, opacity: 0.6 }} />}
+    </Box>
+  )
+}
+
+/** Props of a row that unfolds its guests: clickable and keyboard-operable when it has any. */
+function expandableRowProps(expandable: boolean, open: boolean, toggle: () => void, label: string) {
+  if (!expandable) return {}
+  return {
+    role: 'button',
+    tabIndex: 0,
+    'aria-expanded': open,
+    'aria-label': label,
+    onClick: toggle,
+    onKeyDown: onActivateKey(toggle),
+  }
 }
 
 /** Provider-only KPI counter. Tenants get the donut variant below. */
@@ -152,25 +190,15 @@ function NetworkKpi({
   )
 }
 
-type VlanEntry = {
-  vlan: number
-  vmCount: number
-  bridges: string[]
-  vms: Array<{ vmid: string; name: string; node: string; status: string; bridge: string }>
-}
-
-function VlanVmsList({ vlans, aliases }: { vlans: VlanEntry[]; aliases?: Record<string, string> }) {
+function VlanVmsList({ vlans, aliases, nodeStatus, onOpen }: Readonly<{
+  vlans: VlanEntry[]
+  aliases?: Record<string, string>
+  nodeStatus: NodeStatusOf
+  onOpen: (guest: AttachedGuest) => void
+}>) {
   const theme = useTheme()
-  const [expanded, setExpanded] = useState<Set<number>>(new Set())
-
-  const toggle = (vlan: number) => {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      if (next.has(vlan)) next.delete(vlan)
-      else next.add(vlan)
-      return next
-    })
-  }
+  const t = useTranslations('inventory.networkGuests')
+  const { isOpen, toggle } = useExpanded()
 
   return (
     <Card variant="outlined" sx={{ mb: 3, borderRadius: 2, border: `1px solid ${alpha(theme.palette.divider, 0.8)}` }}>
@@ -182,22 +210,24 @@ function VlanVmsList({ vlans, aliases }: { vlans: VlanEntry[]; aliases?: Record<
         </Typography>
         <Stack spacing={0}>
           {vlans.map((v) => {
-            const isOpen = expanded.has(v.vlan)
+            const key = String(v.vlan)
+            const open = isOpen(key)
+            const expandable = v.guests.length > 0
             return (
               <Box key={v.vlan}>
                 <Box
-                  onClick={() => toggle(v.vlan)}
+                  {...expandableRowProps(expandable, open, () => toggle(key), t('toggle', { name: `VLAN ${v.vlan}` }))}
                   sx={{
-                    display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: 0.75,
-                    cursor: 'pointer', borderRadius: 1,
-                    '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.5) },
+                    display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: 0.75, borderRadius: 1,
+                    cursor: expandable ? 'pointer' : 'default',
+                    '&:hover, &:focus-visible': expandable ? { bgcolor: alpha(theme.palette.action.hover, 0.5), outline: 'none' } : undefined,
                   }}
                 >
-                  <i className={isOpen ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 16, opacity: 0.5 }} />
+                  <RowChevron open={open} visible={expandable} />
                   <Chip
                     label={`VLAN ${v.vlan}`}
                     size="small"
-                    sx={{ height: 22, fontSize: 11, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', bgcolor: alpha(theme.palette.primary.main, 0.1), color: theme.palette.primary.main }}
+                    sx={{ height: 22, fontSize: 11, fontWeight: 700, bgcolor: alpha(theme.palette.primary.main, 0.1), color: theme.palette.primary.main }}
                   />
                   <Typography variant="caption" sx={{ opacity: 0.5 }}>
                     {v.bridges.map(br => bridgeLabel(aliases, br)).join(', ')}
@@ -209,45 +239,8 @@ function VlanVmsList({ vlans, aliases }: { vlans: VlanEntry[]; aliases?: Record<
                     sx={{ height: 20, fontSize: 11, fontWeight: 600, bgcolor: alpha(theme.palette.text.primary, 0.06) }}
                   />
                 </Box>
-                <Collapse in={isOpen}>
-                  <TableContainer sx={{ pl: 4.5 }}>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell sx={{ fontWeight: 700, fontSize: 11, opacity: 0.55, py: 0.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}` }}>VM</TableCell>
-                          <TableCell sx={{ fontWeight: 700, fontSize: 11, opacity: 0.55, py: 0.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}` }}>Node</TableCell>
-                          <TableCell sx={{ fontWeight: 700, fontSize: 11, opacity: 0.55, py: 0.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}` }}>Bridge</TableCell>
-                          <TableCell sx={{ fontWeight: 700, fontSize: 11, opacity: 0.55, py: 0.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}` }}>Status</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {v.vms.map((vm, i) => (
-                          <TableRow key={`${vm.vmid}-${i}`} sx={{ '&:last-child td': { border: 0 } }}>
-                            <TableCell sx={{ py: 0.5, fontSize: 12 }}>
-                              <Stack direction="row" alignItems="center" spacing={0.75}>
-                                <i className="ri-computer-line" style={{ fontSize: 13, opacity: 0.5 }} />
-                                <Typography variant="body2" sx={{ fontSize: 12, fontWeight: 600 }}>{vm.name || vm.vmid}</Typography>
-                                <Typography variant="caption" sx={{ opacity: 0.4, fontFamily: 'JetBrains Mono, monospace', fontSize: 10 }}>{vm.vmid}</Typography>
-                              </Stack>
-                            </TableCell>
-                            <TableCell sx={{ py: 0.5, fontSize: 12 }}>
-                              <Stack direction="row" alignItems="center" spacing={0.5}>
-                                <i className="ri-server-line" style={{ fontSize: 12, opacity: 0.4 }} />
-                                <span>{vm.node}</span>
-                              </Stack>
-                            </TableCell>
-                            <TableCell sx={{ py: 0.5, fontSize: 12, opacity: 0.7 }}>{bridgeLabel(aliases, vm.bridge)}</TableCell>
-                            <TableCell sx={{ py: 0.5 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: vm.status === 'running' ? '#4caf50' : '#9e9e9e' }} />
-                                <Typography variant="caption" sx={{ fontSize: 11 }}>{vm.status}</Typography>
-                              </Box>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
+                <Collapse in={open} unmountOnExit>
+                  <AttachedGuestsList guests={v.guests} nodeStatus={nodeStatus} onOpen={onOpen} showBridge aliases={aliases} testId={`vlan-guests-${v.vlan}`} />
                 </Collapse>
               </Box>
             )
@@ -268,9 +261,19 @@ type VnetSummary = {
   subnetGateway: string | null
 }
 
-export default function NetworkDashboard({ connectionIds, connectionNames }: Props) {
+export default function NetworkDashboard({ connectionIds, connectionNames, hosts, onSelect }: Props) {
   const theme = useTheme()
+  const t = useTranslations('inventory.networkGuests')
   const isDark = theme.palette.mode === 'dark'
+  const dotBorder = theme.palette.background.paper
+  const vnetRows = useExpanded()
+  const bridgeRows = useExpanded()
+  const nodeStatusByKey = useMemo(
+    () => new Map((hosts ?? []).map(h => [`${h.connId}:${h.node}`, h.status])),
+    [hosts],
+  )
+  const nodeStatus = useCallback<NodeStatusOf>((connId, node) => nodeStatusByKey.get(`${connId}:${node}`), [nodeStatusByKey])
+  const openGuest = useCallback((guest: AttachedGuest) => onSelect?.({ type: 'vm', id: guest.key }), [onSelect])
   const { currentTenant, isFullClusterView } = useTenant()
   // Provider tenant (and MSP) keeps the legacy bridge-centric dashboard;
   // non-provider vDC tenants get the VNet/IPAM-focused KPIs and skip the
@@ -355,106 +358,10 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
   // tenant view can keep rendering the donut KPIs (zeroed) and the VNets
   // section below. Returning null here used to hide the whole dashboard
   // (and its "create VNet" entry point) for any vDC without VMs.
-  const summary = useMemo(() => {
-    const bridgeMap = new Map<string, { bridge: string; node: string; connName: string; type: string; vmCount: number }>()
-    const vlanMap = new Map<number, { vlan: number; vmCount: number; bridges: Set<string>; vms: Array<{ vmid: string; name: string; node: string; status: string; bridge: string }> }>()
-    const sdnByConnVnet = new Map<string, Map<string, SdnVnet>>()
-    for (const v of sdnVnets) {
-      const cid = v.connId || ''
-      if (!sdnByConnVnet.has(cid)) sdnByConnVnet.set(cid, new Map())
-      sdnByConnVnet.get(cid)!.set(v.vnet, v)
-    }
-    const vnetMap = new Map<string, { vnet: SdnVnet; vmCount: number }>() // key: connId + ' ' + vnetId
-    let totalVmsWithNetwork = 0
-
-    // Seed bridgeMap and vlanMap from host bridges so bridges/VLANs appear
-    // even when no VMs are attached. The VM loop below increments vmCount on
-    // top of these seeded entries (0 → N). Only populated for provider scope
-    // (tenant view receives bridges: []).
-    for (const b of hostBridges) {
-      const key = `${b.connId}:${b.node}:${b.iface}`
-      if (!bridgeMap.has(key)) {
-        bridgeMap.set(key, {
-          bridge: b.iface,
-          node: b.node,
-          connName: connectionNames[b.connId] || b.connId,
-          type: b.type === 'OVSBridge' ? 'ovs_bridge' : 'bridge',
-          vmCount: 0,
-        })
-      }
-      if (b.tag != null) {
-        const existing = vlanMap.get(b.tag)
-        if (existing) {
-          existing.bridges.add(b.iface)
-        } else {
-          vlanMap.set(b.tag, { vlan: b.tag, vmCount: 0, bridges: new Set([b.iface]), vms: [] })
-        }
-      }
-    }
-
-    // Seed vlanMap from host VLAN sub-interfaces so VLANs with no attached VM
-    // still appear — including VLAN-aware-bridge layouts where the bridge tag
-    // does not fold to a single VLAN (issue #542).
-    for (const v of hostVlans) {
-      if (!vlanMap.has(v.tag)) {
-        vlanMap.set(v.tag, { vlan: v.tag, vmCount: 0, bridges: new Set(), vms: [] })
-      }
-    }
-
-    for (const vm of networkData) {
-      if (vm.nets.length > 0) totalVmsWithNetwork++
-      const vnetsForConn = sdnByConnVnet.get(vm.connId || '')
-      for (const net of vm.nets) {
-        const vnet = net.bridge ? vnetsForConn?.get(net.bridge) : undefined
-        if (vnet) {
-          const key = `${vm.connId || ''} ${vnet.vnet}`
-          const existing = vnetMap.get(key)
-          if (existing) existing.vmCount++
-          else vnetMap.set(key, { vnet, vmCount: 1 })
-          continue // a vnet-backed nic is neither a plain bridge nor a VLAN bucket
-        }
-        if (net.bridge) {
-          const key = `${vm.connId}:${vm.node}:${net.bridge}`
-          const existing = bridgeMap.get(key)
-          if (existing) {
-            existing.vmCount++
-          } else {
-            bridgeMap.set(key, {
-              bridge: net.bridge,
-              node: vm.node,
-              connName: connectionNames[vm.connId || ''] || vm.connId || '',
-              type: net.bridge.startsWith('ovs') ? 'ovs_bridge' : 'bridge',
-              vmCount: 1,
-            })
-          }
-        }
-        if (net.tag != null) {
-          const existing = vlanMap.get(net.tag)
-          if (existing) {
-            existing.vmCount++
-            if (net.bridge) existing.bridges.add(net.bridge)
-            existing.vms.push({ vmid: vm.vmid, name: vm.name, node: vm.node, status: vm.status, bridge: net.bridge || '' })
-          } else {
-            vlanMap.set(net.tag, {
-              vlan: net.tag, vmCount: 1,
-              bridges: new Set(net.bridge ? [net.bridge] : []),
-              vms: [{ vmid: vm.vmid, name: vm.name, node: vm.node, status: vm.status, bridge: net.bridge || '' }],
-            })
-          }
-        }
-      }
-    }
-
-    return {
-      totalBridges: bridgeMap.size,
-      totalVlans: vlanMap.size,
-      totalVnets: vnetMap.size,
-      totalVmsWithNetwork,
-      vlanBreakdown: [...vlanMap.values()].map(v => ({ ...v, bridges: [...v.bridges] })).sort((a, b) => b.vmCount - a.vmCount),
-      bridgeBreakdown: [...bridgeMap.values()],
-      vnetBreakdown: [...vnetMap.entries()].map(([key, v]) => ({ ...v, key })).sort((a, b) => b.vmCount - a.vmCount),
-    }
-  }, [networkData, connectionNames, hostBridges, hostVlans, sdnVnets])
+  const summary = useMemo(
+    () => buildNetworkSummary({ networkData, hostBridges, hostVlans, sdnVnets, connectionNames }),
+    [networkData, connectionNames, hostBridges, hostVlans, sdnVnets],
+  )
 
   // Flat map of vnet id → alias across all connections (vnet ids are globally unique within a cluster)
   const flatAliases = useMemo(
@@ -579,10 +486,11 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
 
       {/* VMs by VLAN */}
       {summary.vlanBreakdown.length > 0 && (
-        <VlanVmsList vlans={summary.vlanBreakdown} aliases={flatAliases} />
+        <VlanVmsList vlans={summary.vlanBreakdown} aliases={flatAliases} nodeStatus={nodeStatus} onOpen={openGuest} />
       )}
 
-      {/* SDN VNets with attached VMs */}
+      {/* SDN VNets with attached VMs. A row unfolds the guests on the VNet,
+          across every node of its cluster (issue #1290). */}
       {summary.vnetBreakdown.length > 0 && (
         <Card variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>
           <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
@@ -599,18 +507,44 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
                     <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>VNet</TableCell>
                     <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Zone</TableCell>
                     <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Segment</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>VMs</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, fontSize: 12 }}>VMs</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {summary.vnetBreakdown.map(({ vnet, vmCount, key }) => (
-                    <TableRow key={key}>
-                      <TableCell><Typography variant="body2" sx={{ fontSize: 12 }}>{vnet.alias || vnet.vnet}</Typography></TableCell>
-                      <TableCell><Typography variant="body2" sx={{ fontSize: 12, opacity: 0.7 }}>{vnet.zone || '—'}{vnet.zoneType ? ` (${vnet.zoneType})` : ''}</Typography></TableCell>
-                      <TableCell><Typography variant="body2" sx={{ fontSize: 12, opacity: 0.7 }}>{sdnSegmentLabel(vnet) || '—'}</Typography></TableCell>
-                      <TableCell><Typography variant="body2" sx={{ fontSize: 12 }}>{vmCount}</Typography></TableCell>
-                    </TableRow>
-                  ))}
+                  {summary.vnetBreakdown.map(({ vnet, vmCount, key, guests }) => {
+                    const open = vnetRows.isOpen(key)
+                    const name = vnet.alias || vnet.vnet
+                    return (
+                      <Fragment key={key}>
+                        <TableRow
+                          hover
+                          data-testid="vnet-row"
+                          {...expandableRowProps(guests.length > 0, open, () => vnetRows.toggle(key), t('toggle', { name }))}
+                          sx={{ cursor: 'pointer', '& > td': open ? { borderBottom: 0 } : undefined }}
+                        >
+                          <TableCell>
+                            <Stack direction="row" alignItems="center" spacing={0.75}>
+                              <RowChevron open={open} visible={guests.length > 0} />
+                              <i className="ri-git-branch-line" style={{ fontSize: 14, color: theme.palette.primary.main, opacity: 0.7 }} />
+                              <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{name}</Typography>
+                            </Stack>
+                          </TableCell>
+                          <TableCell><Typography variant="body2" sx={{ fontSize: 12, opacity: 0.7 }}>{vnet.zone || '—'}{vnet.zoneType ? ` (${vnet.zoneType})` : ''}</Typography></TableCell>
+                          <TableCell><Typography variant="body2" sx={{ fontSize: 12, opacity: 0.7 }}>{sdnSegmentLabel(vnet) || '—'}</Typography></TableCell>
+                          <TableCell align="right">
+                            <Chip label={vmCount} size="small" sx={{ height: 20, minWidth: 28, fontSize: 11, fontWeight: 700, bgcolor: alpha(theme.palette.primary.main, 0.1), color: theme.palette.primary.main }} />
+                          </TableCell>
+                        </TableRow>
+                        {open && (
+                          <TableRow>
+                            <TableCell colSpan={4} sx={{ p: 0 }}>
+                              <AttachedGuestsList guests={guests} nodeStatus={nodeStatus} onOpen={openGuest} testId={`vnet-guests-${key}`} />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -620,7 +554,7 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
 
       {/* Bridge Table — provider/MSP only. vDC tenants don't see / can't act
           on physical bridges; for them the VNets list below is the equivalent
-          actionable view. */}
+          actionable view. A row with guests unfolds them. */}
       {isFullClusterView && (
         <Card variant="outlined" sx={{ borderRadius: 2, border: `1px solid ${alpha(theme.palette.divider, 0.8)}` }}>
           <CardContent sx={{ pb: '16px !important' }}>
@@ -647,43 +581,62 @@ export default function NetworkDashboard({ connectionIds, connectionNames }: Pro
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {summary.bridgeBreakdown.map((bridge, idx) => {
+                    {summary.bridgeBreakdown.map((bridge) => {
                       const typeColor = getBridgeTypeColor(bridge.type)
+                      const expandable = bridge.guests.length > 0
+                      const open = bridgeRows.isOpen(bridge.key)
+                      const name = bridgeLabel(flatAliases, bridge.bridge)
                       return (
-                        <TableRow
-                          key={`${bridge.connName}-${bridge.node}-${bridge.bridge}-${idx}`}
-                          sx={{ '&:last-child td': { border: 0 }, '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.5) } }}
-                        >
-                          <TableCell sx={{ py: 1 }}>
-                            <Stack direction="row" alignItems="center" spacing={1}>
-                              <i className="ri-share-line" style={{ fontSize: 14, color: theme.palette.primary.main, opacity: 0.7 }} />
-                              <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{bridgeLabel(flatAliases, bridge.bridge)}</Typography>
-                            </Stack>
-                          </TableCell>
-                          <TableCell sx={{ py: 1 }}>
-                            <Stack direction="row" alignItems="center" spacing={0.75}>
-                              <i className="ri-server-line" style={{ fontSize: 13, opacity: 0.5 }} />
-                              <Typography variant="body2" sx={{ fontSize: 12 }}>{bridge.node}</Typography>
-                            </Stack>
-                          </TableCell>
-                          <TableCell sx={{ py: 1 }}>
-                            <Typography variant="body2" sx={{ fontSize: 12, opacity: 0.75 }}>{bridge.connName}</Typography>
-                          </TableCell>
-                          <TableCell sx={{ py: 1 }}>
-                            <Chip
-                              label={bridge.type}
-                              size="small"
-                              sx={{ height: 20, fontSize: 11, fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', bgcolor: alpha(typeColor, 0.15), color: typeColor, border: `1px solid ${alpha(typeColor, 0.3)}` }}
-                            />
-                          </TableCell>
-                          <TableCell align="right" sx={{ py: 1 }}>
-                            {bridge.vmCount > 0 ? (
-                              <Chip label={bridge.vmCount} size="small" sx={{ height: 20, minWidth: 28, fontSize: 11, fontWeight: 700, bgcolor: alpha(theme.palette.primary.main, 0.1), color: theme.palette.primary.main }} />
-                            ) : (
-                              <Typography variant="caption" sx={{ opacity: 0.4 }}>—</Typography>
-                            )}
-                          </TableCell>
-                        </TableRow>
+                        <Fragment key={bridge.key}>
+                          <TableRow
+                            data-testid="bridge-row"
+                            {...expandableRowProps(expandable, open, () => bridgeRows.toggle(bridge.key), t('toggle', { name: `${name} (${bridge.node})` }))}
+                            sx={{
+                              cursor: expandable ? 'pointer' : 'default',
+                              '&:last-child td': { border: 0 },
+                              '& > td': open ? { borderBottom: 0 } : undefined,
+                              '&:hover': { bgcolor: alpha(theme.palette.action.hover, 0.5) },
+                            }}
+                          >
+                            <TableCell sx={{ py: 1 }}>
+                              <Stack direction="row" alignItems="center" spacing={0.75}>
+                                <RowChevron open={open} visible={expandable} />
+                                <i className="ri-share-line" style={{ fontSize: 14, color: theme.palette.primary.main, opacity: 0.7 }} />
+                                <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{name}</Typography>
+                              </Stack>
+                            </TableCell>
+                            <TableCell sx={{ py: 1 }}>
+                              <Stack direction="row" alignItems="center" spacing={0.75}>
+                                <NodeGlyph status={nodeStatus(bridge.connId, bridge.node)} dark={isDark} dotBorder={dotBorder} />
+                                <Typography variant="body2" sx={{ fontSize: 12 }}>{bridge.node}</Typography>
+                              </Stack>
+                            </TableCell>
+                            <TableCell sx={{ py: 1 }}>
+                              <Typography variant="body2" sx={{ fontSize: 12, opacity: 0.75 }}>{bridge.connName}</Typography>
+                            </TableCell>
+                            <TableCell sx={{ py: 1 }}>
+                              <Chip
+                                label={bridge.type}
+                                size="small"
+                                sx={{ height: 20, fontSize: 11, fontWeight: 600, bgcolor: alpha(typeColor, 0.15), color: typeColor, border: `1px solid ${alpha(typeColor, 0.3)}` }}
+                              />
+                            </TableCell>
+                            <TableCell align="right" sx={{ py: 1 }}>
+                              {bridge.vmCount > 0 ? (
+                                <Chip label={bridge.vmCount} size="small" sx={{ height: 20, minWidth: 28, fontSize: 11, fontWeight: 700, bgcolor: alpha(theme.palette.primary.main, 0.1), color: theme.palette.primary.main }} />
+                              ) : (
+                                <Typography variant="caption" sx={{ opacity: 0.4 }}>—</Typography>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                          {open && (
+                            <TableRow>
+                              <TableCell colSpan={5} sx={{ p: 0 }}>
+                                <AttachedGuestsList guests={bridge.guests} nodeStatus={nodeStatus} onOpen={openGuest} testId={`bridge-guests-${bridge.key}`} />
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
                       )
                     })}
                   </TableBody>

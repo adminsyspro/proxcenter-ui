@@ -6,6 +6,7 @@
  * one copy each is how two code paths silently drift apart.
  */
 import { isIP } from "node:net"
+import { asRoot } from "@/lib/ssh/sudo"
 
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import type { SshTarget } from "@/lib/ssh/node-endpoint-core"
@@ -77,9 +78,9 @@ export function buildSFlowConfigureCommand(cfg: SFlowDesiredConfig, agentAddress
   const host = shellEscape(collectorHost(cfg.collectorTarget))
 
   return (
-    `for br in $(ovs-vsctl list-br); do ` +
-    `ovs-vsctl -- --id=@s create sflow target=${quotedTarget}${agent} header=128 ` +
-    `sampling=${cfg.samplingRate} polling=${cfg.pollingInterval} -- set Bridge $br sflow=@s ` +
+    `for br in $(${asRoot("ovs-vsctl list-br")}); do ` +
+    asRoot(`ovs-vsctl -- --id=@s create sflow target=${quotedTarget}${agent} header=128 ` +
+    `sampling=${cfg.samplingRate} polling=${cfg.pollingInterval} -- set Bridge $br sflow=@s`) + ` ` +
     `&& echo "SFLOW_OK:$br" || echo "SFLOW_FAILED:$br"; done; ` +
     `addr=$(getent ahosts ${host} | awk 'NR==1{print $1}'); ` +
     `if [ -z "$addr" ]; then echo "SFLOW_UNRESOLVED"; ` +
@@ -88,7 +89,7 @@ export function buildSFlowConfigureCommand(cfg: SFlowDesiredConfig, agentAddress
 }
 
 /** Command that reports whether a node currently has any sFlow collector set. */
-export const SFLOW_PROBE_COMMAND = `ovs-vsctl list sflow 2>/dev/null | grep -c targets || true`
+export const SFLOW_PROBE_COMMAND = `${asRoot("ovs-vsctl list sflow")} 2>/dev/null | grep -c targets || true`
 
 /** false when the node could not resolve the collector, true when it routed to it, null when it said neither. */
 function collectorVerdict(output: string, routed: boolean): boolean | null {

@@ -12,20 +12,27 @@
  * sequential: vCenter NFC throughput and node I/O contention make blind
  * parallelism slower overall, and the operator who sizes a wave knows what the
  * source hosts and the target nodes can take.
+ *
+ * The highest value the dialog offers is the target cluster's limit
+ * (ui#1332, lib/migration/migration-limits), set on its connection in Settings
+ * up to BULK_MIG_CONCURRENCY_MAX; the scheduler also holds each start to the
+ * per-node and per-source-host limits.
  */
 export const BULK_MIG_CONCURRENCY_DEFAULT = 1
 export const BULK_MIG_CONCURRENCY_MIN = 1
-export const BULK_MIG_CONCURRENCY_MAX = 5
+export const BULK_MIG_CONCURRENCY_MAX = 20
 
 /**
  * Normalise a concurrency value coming from the dialog state: anything that is
- * not a finite number lands on the default, and the result is clamped to the
- * allowed range. Never returns 0, so a batch always has at least one slot.
+ * not a finite number lands on the default, and the result is clamped to
+ * 1..`max` (the target cluster's limit when known). Never returns 0, so a
+ * batch always has at least one slot.
  */
-export function clampBulkConcurrency(value: unknown): number {
+export function clampBulkConcurrency(value: unknown, max: number = BULK_MIG_CONCURRENCY_MAX): number {
   const n = typeof value === "number" ? value : Number(value)
   if (!Number.isFinite(n)) return BULK_MIG_CONCURRENCY_DEFAULT
-  return Math.min(BULK_MIG_CONCURRENCY_MAX, Math.max(BULK_MIG_CONCURRENCY_MIN, Math.round(n)))
+  const ceiling = Math.max(BULK_MIG_CONCURRENCY_MIN, Math.min(BULK_MIG_CONCURRENCY_MAX, max))
+  return Math.min(ceiling, Math.max(BULK_MIG_CONCURRENCY_MIN, Math.round(n)))
 }
 
 /**

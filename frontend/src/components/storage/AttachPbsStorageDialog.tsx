@@ -4,6 +4,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 
 import { useTranslations } from 'next-intl'
 
+import type { ClusterStorageType } from '@/lib/storage/clusterStorageTypes'
+import { pbsIdentityOf, samePbsServer } from '@/lib/guestFileRestore/pbsPveStorages'
+
+import ClusterStorageDialog, { ADD_STORAGE_TYPES } from './ClusterStorageDialog'
 import {
   Alert,
   Box,
@@ -27,13 +31,10 @@ import {
 } from '@mui/material'
 
 /**
- * Storage types this dialog can attach. Only `pbs` today; the select exists so
- * adding NFS, CIFS or the rest is a matter of adding an entry and its fields,
- * not of moving the entry point (issue #890).
+ * The Add dialog's types: PBS here, every other one in ClusterStorageDialog,
+ * which this dialog hands over to when another type is picked (roadmap#202).
  */
-const STORAGE_TYPES = [
-  { value: 'pbs', labelKey: 'storage.attachPbs.typePbs', icon: 'ri-hard-drive-2-fill' },
-] as const
+const PBS_ICON = 'ri-hard-drive-2-fill'
 
 /** Glyphe d'un datastore, celui de l'arbre d'inventaire. */
 const DATASTORE_ICON = 'ri-database-2-line'
@@ -63,16 +64,6 @@ type AttachPbsStorageDialogProps = {
   onAttached: () => void
 }
 
-function bareHost(baseUrl: string): string {
-  let host = baseUrl.replace(/^https?:\/\//, '')
-  const slash = host.indexOf('/')
-  if (slash !== -1) host = host.slice(0, slash)
-  const colon = host.lastIndexOf(':')
-  if (colon !== -1 && /^\d+$/.test(host.slice(colon + 1))) host = host.slice(0, colon)
-
-  return host
-}
-
 /** PVE storage ids start with a letter, so a datastore named `2024` cannot pass through as-is. */
 function suggestStorageName(datastore: string): string {
   const core = datastore.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -90,7 +81,7 @@ export default function AttachPbsStorageDialog({
 
   const clusterId = cluster.id
 
-  const [storageType, setStorageType] = useState<string>(STORAGE_TYPES[0].value)
+  const [storageType, setStorageType] = useState<string>('pbs')
   const [source, setSource] = useState('')
   const [datastore, setDatastore] = useState('')
   const [namespace, setNamespace] = useState('')
@@ -102,7 +93,7 @@ export default function AttachPbsStorageDialog({
   /** Backup server whose datastore listing has landed, so loading is derived. */
   const [loadedSource, setLoadedSource] = useState<string | null>(null)
   const [clusterNodes, setClusterNodes] = useState<string[]>([])
-  const [attached, setAttached] = useState<Array<{ storage: string; type: string; server: string | null; datastore: string | null }>>([])
+  const [attached, setAttached] = useState<Array<{ storage: string; type: string; server: string | null; datastore: string | null; fingerprint: string | null }>>([])
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -149,6 +140,7 @@ export default function AttachPbsStorageDialog({
             type: s.type,
             server: s.server ?? null,
             datastore: s.datastore ?? null,
+            fingerprint: s.fingerprint ?? null,
           })),
         )
       })
@@ -190,13 +182,13 @@ export default function AttachPbsStorageDialog({
   const duplicate = useMemo(() => {
     if (!datastore || !selectedPbs) return null
 
-    // Two backup servers can hold a datastore of the same name, so the host
-    // has to match too. It is compared on the bare host, which is what PVE
-    // stores in `server`.
-    const host = bareHost(String(selectedPbs.baseUrl ?? ''))
+    // Two backup servers can hold a datastore of the same name, so the server
+    // has to match too: by the bare host PVE stores in `server`, or by the
+    // pinned certificate when one side names it by FQDN and the other by IP.
+    const identity = pbsIdentityOf({ baseUrl: String(selectedPbs.baseUrl ?? ''), fingerprint: selectedPbs.fingerprint })
 
     return attached.find(a => (
-      a.type === 'pbs' && a.datastore === datastore && (!host || !a.server || a.server === host)
+      a.type === 'pbs' && a.datastore === datastore && (!identity.host || !a.server || samePbsServer(a, identity))
     )) ?? null
   }, [attached, datastore, selectedPbs])
 
@@ -245,6 +237,19 @@ export default function AttachPbsStorageDialog({
     }
   }
 
+  if (storageType !== 'pbs') {
+    return (
+      <ClusterStorageDialog
+        cluster={cluster}
+        mode='create'
+        initialType={storageType as ClusterStorageType}
+        onTypeChange={setStorageType}
+        onClose={onClose}
+        onSaved={onAttached}
+      />
+    )
+  }
+
   return (
     <Dialog open={open} onClose={submitting ? undefined : onClose} maxWidth='sm' fullWidth>
       <DialogTitle>{t('storage.attachPbs.title')}</DialogTitle>
@@ -259,9 +264,9 @@ export default function AttachPbsStorageDialog({
               value={storageType}
               onChange={e => setStorageType(String(e.target.value))}
             >
-              {STORAGE_TYPES.map(type => (
+              {ADD_STORAGE_TYPES.map(type => (
                 <MenuItem key={type.value} value={type.value}>
-                  <OptionRow icon={type.icon}>{t(type.labelKey as any)}</OptionRow>
+                  <OptionRow icon={type.icon}>{t(`storage.clusterStorage.types.${type.value}` as any)}</OptionRow>
                 </MenuItem>
               ))}
             </Select>
@@ -289,7 +294,7 @@ export default function AttachPbsStorageDialog({
               >
                 {pbsConnections.map(c => (
                   <MenuItem key={c.id} value={c.id}>
-                    <OptionRow icon={STORAGE_TYPES[0].icon}>{c.name}</OptionRow>
+                    <OptionRow icon={PBS_ICON}>{c.name}</OptionRow>
                   </MenuItem>
                 ))}
               </Select>

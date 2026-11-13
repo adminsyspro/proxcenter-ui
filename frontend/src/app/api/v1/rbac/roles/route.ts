@@ -2,19 +2,21 @@ export const dynamic = "force-dynamic"
 // src/app/api/v1/rbac/roles/route.ts
 import { NextRequest, NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
 import { Prisma } from "@prisma/client"
 import { nanoid } from "nanoid"
 
-import { authOptions } from "@/lib/auth/config"
+import { authorizeAdminRead, getActingSession } from "@/lib/auth/actingUser"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { isUserSuperAdmin, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { validateRoleDefaultScopes } from "@/lib/rbac/scope-validation"
+import { parsePublicationInput, publicationFields, tenantCatalogueFilter } from "@/lib/rbac/rolePublication"
+import { findUnknownTenant, refuseOverCeiling } from "@/lib/rbac/catalogueGuards"
+import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 /**
  * Normalize a client-supplied widget_overrides payload into the shape we
@@ -41,30 +43,31 @@ function normalizeWidgetOverrides(raw: unknown): { hidden: string[] } | null | u
 }
 
 // GET /api/v1/rbac/roles - Liste tous les rôles
-export async function GET(req: NextRequest) {
+async function handleGet(req: Request) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const reader = await authorizeAdminRead(PERMISSIONS.ADMIN_RBAC_VIEW)
+    if (reader.denied) return reader.denied
 
     // Hide protected (wildcard) roles from non-super-admin callers so a tenant
     // admin with admin.rbac can't assign themselves or others full cluster
     // access.
-    const callerIsSuperAdmin = await isUserSuperAdmin(session.user.id)
+    const callerIsSuperAdmin = reader.isSuperAdmin
     const tenantId = await getCurrentTenantId()
 
     // Tenant scoping: callers see system/global roles (tenant_id IS NULL) plus
     // the custom roles owned by their current tenant. Without this filter a
     // role created from tenant A would leak into tenant B's admin UI.
+    // A customer tenant also sees the catalogue roles published to it with the
+    // "tenant" audience (ui#1336); service-desk roles stay a provider matter.
+    const providerView = tenantId === DEFAULT_TENANT_ID
     const tenantScopeFilter = {
       OR: [
         { tenantId: null },
         { tenantId },
+        ...(providerView ? [] : [tenantCatalogueFilter(tenantId)]),
       ],
     }
     const protectedFilter = callerIsSuperAdmin ? {} : { id: { notIn: [...PROTECTED_ROLE_IDS] } }
@@ -80,6 +83,9 @@ export async function GET(req: NextRequest) {
         widgetOverrides: true,
         defaultScopes: true,
         tenantId: true,
+        audience: true,
+        publishAll: true,
+        publications: { select: { tenantId: true } },
         createdAt: true,
         updatedAt: true,
         permissions: {
@@ -98,6 +104,20 @@ export async function GET(req: NextRequest) {
       orderBy: [{ isSystem: "desc" }, { name: "asc" }],
     })
 
+    // A published role is held across tenants: the provider sees its total.
+    const crossTenantCounts = new Map<string, number>()
+    if (providerView) {
+      const publishedIds = roles.filter(r => r.audience && r.audience !== "provider").map(r => r.id)
+      if (publishedIds.length > 0) {
+        const counts = await prisma.rbacUserRole.groupBy({
+          by: ["roleId"],
+          where: { roleId: { in: publishedIds } },
+          _count: { _all: true },
+        })
+        for (const c of counts) crossTenantCounts.set(c.roleId, c._count._all)
+      }
+    }
+
     const rolesWithDetails = roles.map(role => ({
       id: role.id,
       name: role.name,
@@ -107,6 +127,7 @@ export async function GET(req: NextRequest) {
       widget_overrides: role.widgetOverrides ?? null,
       default_scopes: role.defaultScopes ?? null,
       tenant_id: role.tenantId,
+      ...publicationFields(role, providerView),
       created_at: role.createdAt.toISOString(),
       updated_at: role.updatedAt.toISOString(),
       permissions: role.permissions.map(rp => ({
@@ -116,7 +137,7 @@ export async function GET(req: NextRequest) {
         description: rp.permission.description,
         is_dangerous: rp.permission.isDangerous,
       })),
-      user_count: role._count.userRoles,
+      user_count: crossTenantCounts.get(role.id) ?? role._count.userRoles,
     }))
 
     return NextResponse.json({
@@ -134,13 +155,15 @@ return NextResponse.json(
   }
 }
 
+export const GET = withPublicApiGuard("rbac-roles-list", handleGet)
+
 // POST /api/v1/rbac/roles - Créer un nouveau rôle
 async function handlePost(req: NextRequest) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
 
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -172,6 +195,13 @@ async function handlePost(req: NextRequest) {
       defaultScopes = check.scopes.length ? check.scopes : undefined
     }
 
+    // Catalogue audience and publication (ui#1336).
+    const publication = parsePublicationInput(body)
+    if (!publication.ok) {
+      return NextResponse.json({ error: publication.error }, { status: 400 })
+    }
+    const { audience, publishAll, tenantIds: publishedTenantIds } = publication.value!
+
     const trimmedName = name.trim()
     const now = new Date()
     const id = `role_${nanoid(12)}`
@@ -192,6 +222,19 @@ async function handlePost(req: NextRequest) {
 
     const permIds: string[] = Array.isArray(permissions) ? permissions.filter((p: any) => typeof p === "string") : []
 
+    if (audience !== null) {
+      // One definition for every tenant: catalogue roles live in the provider tenant.
+      if (ownerTenantId !== DEFAULT_TENANT_ID) {
+        return NextResponse.json({ error: "Catalogue roles are created from the provider tenant" }, { status: 400 })
+      }
+      const refusal = await refuseOverCeiling(audience, permIds, session.user, trimmedName)
+      if (refusal) return refusal
+      const unknownTenant = await findUnknownTenant(publishedTenantIds)
+      if (unknownTenant) {
+        return NextResponse.json({ error: `Unknown tenant: ${unknownTenant}` }, { status: 400 })
+      }
+    }
+
     // Créer le rôle + ses permissions atomiquement
     await prisma.$transaction([
       prisma.rbacRole.create({
@@ -209,10 +252,20 @@ async function handlePost(req: NextRequest) {
             normalizedOverrides,
           defaultScopes: defaultScopes ?? undefined,
           tenantId: ownerTenantId,
+          audience,
+          publishAll,
           createdAt: now,
           updatedAt: now,
         },
       }),
+      ...(publishedTenantIds.length > 0
+        ? [
+            prisma.rbacRolePublication.createMany({
+              data: publishedTenantIds.map(tenantId => ({ roleId: id, tenantId })),
+              skipDuplicates: true,
+            }),
+          ]
+        : []),
       ...(permIds.length > 0
         ? [
             prisma.rbacRolePermission.createMany({
@@ -232,7 +285,10 @@ async function handlePost(req: NextRequest) {
       resourceType: "rbac_role",
       resourceId: id,
       resourceName: trimmedName,
-      details: { permissions: permIds.length },
+      details: {
+        permissions: permIds.length,
+        ...(audience ? { audience, publish_all: publishAll, published_tenants: publishedTenantIds } : {}),
+      },
       status: "success"
     })
 
@@ -241,6 +297,7 @@ async function handlePost(req: NextRequest) {
       where: { id },
       include: {
         permissions: { include: { permission: true } },
+        publications: { select: { tenantId: true } },
       },
     })
 
@@ -258,6 +315,7 @@ async function handlePost(req: NextRequest) {
         widget_overrides: newRole.widgetOverrides ?? null,
         default_scopes: newRole.defaultScopes ?? null,
         tenant_id: newRole.tenantId,
+        ...publicationFields(newRole, true),
         created_at: newRole.createdAt.toISOString(),
         updated_at: newRole.updatedAt.toISOString(),
         permissions: newRole.permissions.map(rp => ({

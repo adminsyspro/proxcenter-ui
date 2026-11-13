@@ -24,6 +24,7 @@ import {
 
 import { formatBytes } from '@/utils/format'
 import { humanizePveError } from '@/app/(dashboard)/infrastructure/inventory/helpers'
+import { gpuContingentMessage } from '@/lib/gpu/contingentErrors'
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { pciMappingValue, usbMappingValue } from './utils'
@@ -204,7 +205,7 @@ export function AddOtherHardwareDialog({
       await onSave(config)
       onClose()
     } catch (e: any) {
-      const message = humanizePveError(e) || 'Failed to add hardware'
+      const message = gpuContingentMessage(t, e) || humanizePveError(e) || 'Failed to add hardware'
       setError(/only root/i.test(message) ? `${message} ${t('hardware.rootOnlyErrorHint')}` : message)
     } finally {
       setSaving(false)

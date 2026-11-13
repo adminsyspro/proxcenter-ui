@@ -29,6 +29,11 @@ interface VdcOption {
   transport?: TransportOption | null
   /** `platform` (#904): the provider operates the L3 edge, so every network declares its subnet. */
   edgeModel?: string | null
+  /** Shared EVPN zone the vDC is attached to (#1334): a network created there
+   *  reaches the tenant's other vDCs attached to the same zone. */
+  evpnZoneId?: string | null
+  /** False when the vDC has no VXLAN zone of its own: shared networks only. */
+  hasOwnZone?: boolean
 }
 
 interface Props {
@@ -67,7 +72,10 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   const [dnsServers, setDnsServers] = useState('')        // comma-separated
   // VLAN branch (issue #646). VXLAN stays the default everywhere: a tenant
   // whose vDC carries no VLAN pool never sees any of this.
-  const [netType, setNetType] = useState<'vxlan' | 'vlan'>('vxlan')
+  const [netType, setNetType] = useState<'vxlan' | 'vlan' | 'evpn'>('vxlan')
+  // Shared network (#1334): the vDCs left out of it. Empty = present on every
+  // vDC attached to the zone, which is the default.
+  const [excludedVdcIds, setExcludedVdcIds] = useState<string[]>([])
   const [bridgeChoice, setBridgeChoice] = useState('')
   const [vlanTag, setVlanTag] = useState('')              // '' = auto-allocate
   const [externalAddressing, setExternalAddressing] = useState(false)
@@ -85,7 +93,7 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   // selection into the POST.
   const resetVlanForm = useCallback(() => {
     setNetType('vxlan'); setBridgeChoice(''); setVlanTag(''); setExternalAddressing(false)
-    setWithSubnet(true); setVni('')
+    setWithSubnet(true); setVni(''); setExcludedVdcIds([])
   }, [])
 
   useEffect(() => {
@@ -95,6 +103,39 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   }, [open, initialVdc, resetVlanForm])
 
   const selectedVdc = vdcs.find(v => v.id === vdcId)
+  // Shared zone (#1334): offered when the vDC is attached to one. A vDC with
+  // no VXLAN zone of its own has nothing else to offer on the overlay side.
+  const evpnAvailable = !!selectedVdc?.evpnZoneId
+  const ownZone = selectedVdc?.hasOwnZone !== false
+  const effectiveType: 'vxlan' | 'vlan' | 'evpn' = netType === 'vxlan' && evpnAvailable && !ownZone ? 'evpn' : netType
+  // The vDCs the network can reach are asked to the server: the list this
+  // dialog receives may be narrowed to the vDC or the cluster being browsed.
+  const [sharedTargets, setSharedTargets] = useState<{ vdcId: string; vdcs: Array<{ id: string; name: string }> } | null>(null)
+  useEffect(() => {
+    if (!open || !evpnAvailable || !vdcId) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/v1/vdcs/${encodeURIComponent(vdcId)}/evpn-networks`)
+        const json = await res.json()
+        if (!cancelled && res.ok && Array.isArray(json?.data?.vdcs)) setSharedTargets({ vdcId, vdcs: json.data.vdcs })
+      } catch { /* the vDC itself stays offered */ }
+    })()
+    return () => { cancelled = true }
+  }, [open, evpnAvailable, vdcId])
+  const sharedVdcs = useMemo(() => {
+    if (!evpnAvailable || !selectedVdc) return []
+    const known = sharedTargets?.vdcId === vdcId ? sharedTargets.vdcs : []
+    const list = known.some(v => v.id === vdcId) ? known : [{ id: vdcId, name: selectedVdc.name }, ...known]
+    return list.map(v => ({ id: v.id, name: v.name, edgeModel: vdcs.find(x => x.id === v.id)?.edgeModel ?? null }))
+  }, [evpnAvailable, selectedVdc, sharedTargets, vdcId, vdcs])
+  // The vDC the network is created from always carries it.
+  const presentVdcIds = sharedVdcs.filter(v => v.id === vdcId || !excludedVdcIds.includes(v.id)).map(v => v.id)
+  const togglePresence = (id: string) =>
+    setExcludedVdcIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
+  const others = sharedVdcs.filter(v => v.id !== vdcId)
+  const allPresent = others.every(v => !excludedVdcIds.includes(v.id))
+  const nonePresent = others.every(v => excludedVdcIds.includes(v.id))
   const vlanPools = useMemo(() => selectedVdc?.vlanPools ?? [], [selectedVdc])
   const hasVlanPools = vlanPools.length > 0
   const bridges = useMemo(() => [...new Set(vlanPools.map(p => p.bridge))], [vlanPools])
@@ -130,12 +171,15 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   // How the VLAN tag / VNI gets picked. A shared range already reads in the
   // VNI field helper, so no caption repeats it.
   let allocationCaption: string | null = t('myVdc.vnetVniAutoAllocated')
-  if (netType === 'vlan') allocationCaption = t('myVdc.vnetVlanAutoAllocated')
+  if (effectiveType === 'evpn') allocationCaption = t('myVdc.vnetSharedAllocated')
+  else if (netType === 'vlan') allocationCaption = t('myVdc.vnetVlanAutoAllocated')
   else if (vniPolicy.sharing === 'dedicated') allocationCaption = t('myVdc.vnetVniDedicatedTransport')
   else if (vniPolicy.range) allocationCaption = null
 
   // A platform-provided edge (#904) needs the subnet to serve it.
-  const platformEdge = selectedVdc?.edgeModel === 'platform'
+  const platformEdge = effectiveType === 'evpn'
+    ? sharedVdcs.some(v => presentVdcIds.includes(v.id) && v.edgeModel === 'platform')
+    : selectedVdc?.edgeModel === 'platform'
   const subnetOn = withSubnet || platformEdge
   let ipConfigCaption = subnetOn ? t('myVdc.vnetIpConfigHelp') : t('myVdc.vnetL2OnlyHelp')
   if (platformEdge) ipConfigCaption = t('myVdc.vnetIpConfigRequiredPlatform')
@@ -158,7 +202,7 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
   const nameValid = displayName === '' || NAME_REGEX.test(displayName)
   const subnetValid = !subnetOn || (cidrValid && !!gateway && gatewayValid)
   const canSubmit = !!vdcId && !!displayName && nameValid && subnetValid && !saving
-    && (netType === 'vxlan' ? vniValid : (!!bridge && tagValid))
+    && (effectiveType === 'evpn' || (netType === 'vxlan' ? vniValid : (!!bridge && tagValid)))
 
   const handleSubmit = async () => {
     if (!vdcId) {
@@ -189,7 +233,8 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
           description: description || undefined,
           firewall,
           subnet,
-          ...(netType === 'vxlan' && vni !== '' ? { vni: Number(vni) } : {}),
+          ...(effectiveType === 'vxlan' && vni !== '' ? { vni: Number(vni) } : {}),
+          ...(effectiveType === 'evpn' ? { type: 'evpn', vdcIds: presentVdcIds } : {}),
           ...(netType === 'vlan' ? {
             type: 'vlan',
             bridge,
@@ -251,24 +296,67 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
             control={<Switch checked={firewall} onChange={(e) => setFirewall(e.target.checked)} />}
             label={t('myVdc.vnetFirewallToggle')}
           />
-          {hasVlanPools && (
+          {(hasVlanPools || (evpnAvailable && ownZone)) && (
             <TextField
               select
               label={t('myVdc.vnetType')}
-              value={netType}
+              value={effectiveType}
               onChange={(e) => {
-                const next = e.target.value as 'vxlan' | 'vlan'
+                const next = e.target.value as 'vxlan' | 'vlan' | 'evpn'
                 // Back to VXLAN drops the bridge, the tag AND the external
                 // addressing flag: none of them mean anything on an overlay.
                 if (next === 'vxlan') resetVlanForm()
                 else setNetType(next)
               }}
-              helperText={t('myVdc.vnetTypeHelp')}
+              helperText={evpnAvailable ? t('myVdc.vnetTypeHelpShared') : t('myVdc.vnetTypeHelp')}
               fullWidth
             >
-              <MenuItem value="vxlan">{t('myVdc.vnetTypeVxlan')}</MenuItem>
-              <MenuItem value="vlan">{t('myVdc.vnetTypeVlan')}</MenuItem>
+              {ownZone && <MenuItem value="vxlan">{t('myVdc.vnetTypeVxlan')}</MenuItem>}
+              {evpnAvailable && <MenuItem value="evpn">{t('myVdc.vnetTypeShared')}</MenuItem>}
+              {hasVlanPools && <MenuItem value="vlan">{t('myVdc.vnetTypeVlan')}</MenuItem>}
             </TextField>
+          )}
+          {effectiveType === 'evpn' && (
+            <Stack spacing={0.5}>
+              <Stack direction="row" alignItems="center">
+                <Typography variant="subtitle2" sx={{ flex: 1 }}>{t('myVdc.vnetSharedPresence')}</Typography>
+                {others.length > 1 && (
+                  <FormControlLabel
+                    sx={{ mr: 0 }}
+                    labelPlacement="start"
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={allPresent}
+                        indeterminate={!allPresent && !nonePresent}
+                        onChange={() => setExcludedVdcIds(allPresent ? others.map(v => v.id) : [])}
+                      />
+                    }
+                    label={<Typography variant="body2">{t('common.all')}</Typography>}
+                  />
+                )}
+              </Stack>
+              {sharedVdcs.map((v) => (
+                <FormControlLabel
+                  key={v.id}
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={presentVdcIds.includes(v.id)}
+                      disabled={v.id === vdcId || saving}
+                      onChange={() => togglePresence(v.id)}
+                    />
+                  }
+                  label={
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                      <i className="ri-cloud-line" style={{ opacity: 0.7 }} />
+                      <Typography variant="body2">{v.name}</Typography>
+                    </Stack>
+                  }
+                />
+              ))}
+              <Typography variant="caption" color="text.secondary">{t('myVdc.vnetSharedPresenceHelp')}</Typography>
+            </Stack>
           )}
           {netType === 'vlan' && (
             <>
@@ -294,7 +382,7 @@ export default function VnetCreateDialog({ open, vdcs, defaultVdcId, onClose, on
               />
             </>
           )}
-          {netType === 'vxlan' && vniPolicy.tenantChoice && (
+          {effectiveType === 'vxlan' && vniPolicy.tenantChoice && (
             <TextField
               label={t('myVdc.vnetVni')}
               value={vni}

@@ -12,6 +12,7 @@ import { prisma } from '@/lib/db/prisma'
 import { DEFAULT_TENANT_ID } from '@/lib/tenant'
 
 import { gatewayValidForCidr, parseCidr } from './network'
+import { evpnReservations, inEvpnRange } from './evpnReservations'
 import { listVnetsPve, VNI_BASE } from './sdn'
 import { VNI_MAX, ZONE_MTU_MAX, ZONE_MTU_MIN } from './transport'
 
@@ -84,7 +85,7 @@ export interface UpdateTenantNetworkInput {
 // Validation
 // ---------------------------------------------------------------------------
 
-function normalizeName(raw: unknown): string {
+export function normalizeName(raw: unknown): string {
   const name = String(raw ?? '').trim()
   if (!TENANT_NETWORK_NAME_REGEX.test(name)) {
     throw new Error(`${ERR} invalid name "${name}" (1-20 chars, lowercase letters / digits / dashes, must start with a letter).`)
@@ -119,7 +120,7 @@ function splitDns(csv: string | null | undefined): string[] {
   return csv ? csv.split(',').map(s => s.trim()).filter(Boolean) : []
 }
 
-function normalizeSubnet(raw: CreateTenantNetworkInput['subnet'] | undefined): { cidr: string; gateway: string; dnsServers: string | null } {
+export function normalizeSubnet(raw: CreateTenantNetworkInput['subnet'] | undefined): { cidr: string; gateway: string; dnsServers: string | null } {
   const cidr = String(raw?.cidr ?? '').trim()
   const gateway = String(raw?.gateway ?? '').trim()
   if (!cidr || !gateway) throw new Error(`${ERR} a subnet (CIDR and gateway) is required, it is the one IPAM pool of the whole network.`)
@@ -149,24 +150,23 @@ async function connectionFor(connectionId: string): Promise<any> {
 }
 
 /**
- * Every VNI a stretched network of this tenant must avoid, with who holds
- * it: every other tenant network (the reservation is global, so a cluster
- * joining later never finds its VNI taken), the VXLAN VNets ProxCenter
- * created on the tenant's clusters, and the live `/cluster/sdn/vnets` tag
- * set of those clusters, which also carries legacy zones and manual work.
+ * Every VNI a stretched network must avoid, with who holds it: every other
+ * tenant network, the VXLAN VNets ProxCenter created and the live
+ * `/cluster/sdn/vnets` tag set, which also carries legacy zones and manual
+ * work. The scope is every Proxmox cluster, not the tenant's own: an EVPN
+ * controller peering two clusters bridges equal VNIs, so a cluster the tenant
+ * has no vDC on still holds VNIs this network must not reuse.
  * The live read is best effort: an unreachable cluster does not block an
  * allocation, the PVE 400 at member creation stays the backstop.
  */
-async function takenVnis(clusterIds: string[]): Promise<Map<number, string>> {
+async function takenVnis(): Promise<Map<number, string>> {
   const taken = new Map<number, string>()
 
   const networks = await prisma.tenantNetwork.findMany({ select: { vni: true, name: true } })
   for (const n of networks) taken.set(n.vni, `tenant network "${n.name}"`)
 
-  if (clusterIds.length === 0) return taken
-
   const vnets = await prisma.vdcVnet.findMany({
-    where: { type: 'vxlan', vdc: { connectionId: { in: clusterIds } } },
+    where: { type: 'vxlan' },
     select: { tag: true, displayName: true, pveName: true, vdc: { select: { name: true } } },
   })
   for (const v of vnets) {
@@ -174,40 +174,52 @@ async function takenVnis(clusterIds: string[]): Promise<Map<number, string>> {
   }
 
   const connections = await prisma.connection.findMany({
-    where: { id: { in: clusterIds } },
+    where: { type: 'pve' },
     select: { id: true, name: true },
   })
-  for (const c of connections) {
+  const live = await Promise.all(connections.map(async c => {
     try {
-      const conn = await connectionFor(c.id)
-      for (const v of await listVnetsPve(conn)) {
-        if (Number.isFinite(v.tag) && !taken.has(v.tag)) taken.set(v.tag, `a VNet of cluster "${c.name}"`)
-      }
+      return { name: c.name, vnets: await listVnetsPve(await connectionFor(c.id)) }
     } catch {
       // Best effort, see above.
+      return { name: c.name, vnets: [] }
     }
+  }))
+  for (const cluster of live) {
+    for (const v of cluster.vnets) {
+      if (Number.isFinite(v.tag) && !taken.has(v.tag)) taken.set(v.tag, `a VNet of cluster "${cluster.name}"`)
+    }
+  }
+  for (const vrf of (await evpnReservations()).vrfVnis) {
+    if (!taken.has(vrf.vni)) taken.set(vrf.vni, `the VRF of EVPN zone "${vrf.zoneName}"`)
   }
   return taken
 }
 
 /**
  * Picks the VNI of a new network of the tenant: the requested one when it
- * is free everywhere the tenant has a vDC, otherwise the next number above
+ * is free on every cluster, otherwise the next number above
  * everything taken, never below the historical VNI floor so a VLAN-only
  * fleet does not drag the allocation into the VLAN tag range.
  */
-export async function allocateTenantVni(tenantId: string, requested: number | null): Promise<number> {
-  const taken = await takenVnis(await tenantClusterIds(tenantId))
+export async function allocateTenantVni(requested: number | null): Promise<number> {
+  const taken = await takenVnis()
+  // The ranges of the EVPN zones are theirs on every cluster (#1334).
+  const evpn = await evpnReservations()
 
   if (requested !== null) {
     const holder = taken.get(requested)
     if (holder) throw new Error(`${ERR} VNI ${requested} is already used by ${holder}.`)
+    const zone = evpn.ranges.find(r => requested >= r.start && requested <= r.end)
+    if (zone) throw new Error(`${ERR} VNI ${requested} is already reserved for EVPN zone "${zone.zoneName}" (${zone.start}-${zone.end}).`)
     return requested
   }
 
+  // A VNet inside an EVPN range must not drag the allocation above that range.
   let max = VNI_BASE - 1
-  for (const vni of taken.keys()) if (vni > max) max = vni
-  const next = max + 1
+  for (const vni of taken.keys()) if (vni > max && !inEvpnRange(vni, evpn)) max = vni
+  let next = max + 1
+  while (next <= VNI_MAX && (taken.has(next) || inEvpnRange(next, evpn))) next++
   if (next > VNI_MAX) throw new Error(`${ERR} no free VNI left below ${VNI_MAX}.`)
   return next
 }
@@ -301,9 +313,13 @@ async function rowToNetwork(row: any): Promise<TenantNetwork> {
 // CRUD
 // ---------------------------------------------------------------------------
 
+/**
+ * The stretched networks the provider manages. The networks a tenant created
+ * in a shared EVPN zone (#1334) are its own and are left out.
+ */
 export async function listTenantNetworks(tenantId?: string): Promise<TenantNetwork[]> {
   const rows = await prisma.tenantNetwork.findMany({
-    where: tenantId ? { tenantId } : undefined,
+    where: { evpnZoneId: null, ...(tenantId ? { tenantId } : {}) },
     include: NETWORK_INCLUDE,
     orderBy: [{ tenantId: 'asc' }, { name: 'asc' }],
   })
@@ -334,7 +350,7 @@ export async function createTenantNetwork(input: CreateTenantNetworkInput, creat
   // Allocation and naming look at the same clusters: those of the tenant's
   // vDCs, because any of them may join later.
   const clusterIds = await tenantClusterIds(input.tenantId)
-  const vni = await allocateTenantVni(input.tenantId, requestedVni)
+  const vni = await allocateTenantVni(requestedVni)
   const id = randomUUID()
   const pveName = await generateTenantNetworkPveName(id, clusterIds)
   const now = new Date()

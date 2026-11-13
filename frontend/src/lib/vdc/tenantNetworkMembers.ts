@@ -48,6 +48,7 @@ const MEMBER_VDC_SELECT = {
   ...VDC_TRANSPORT_SELECT,
   tenantId: true,
   enabled: true,
+  evpnZoneId: true,
 } as const
 
 async function loadNetwork(networkId: string) {
@@ -55,6 +56,7 @@ async function loadNetwork(networkId: string) {
     where: { id: networkId },
     include: {
       subnet: true,
+      evpnZone: { select: { id: true, zoneName: true } },
       members: { select: { vdcId: true, vdc: { select: { connectionId: true } } } },
     },
   })
@@ -80,6 +82,14 @@ async function pickMemberPveName(network: { id: string; pveName: string }, conne
   throw new Error(`${ERR} cannot find a free PVE VNet id on this cluster for "${network.pveName}".`)
 }
 
+/** Guests still plugged on the local VNet of a member: it cannot go. */
+export class AttachedNicsError extends Error {
+  constructor(message: string, public readonly count: number) {
+    super(message)
+    this.name = 'AttachedNicsError'
+  }
+}
+
 const mtuText = (mtu: number | null | undefined) => (mtu === null || mtu === undefined ? 'the Proxmox default' : String(mtu))
 
 /**
@@ -89,15 +99,21 @@ const mtuText = (mtu: number | null | undefined) => (mtu === null || mtu === und
  */
 export async function addMember(networkId: string, vdcId: string): Promise<AddMemberResult> {
   const network = await loadNetwork(networkId)
-  if (!network.subnet) throw new Error(`${ERR} "${network.name}" has no subnet yet, define it before adding a vDC.`)
+  // A network of a shared EVPN zone (#1334) lives in that zone, not in the
+  // vDC's own, and may be pure L2: the tenant then brings its addressing.
+  const evpnZone = network.evpnZone
+  if (!network.subnet && !evpnZone) throw new Error(`${ERR} "${network.name}" has no subnet yet, define it before adding a vDC.`)
 
   const vdc = await prisma.vdc.findUnique({ where: { id: vdcId }, select: MEMBER_VDC_SELECT })
   if (!vdc) throw new Error(`vDC not found: ${vdcId}`)
   if (vdc.tenantId !== network.tenantId) throw new Error(`${ERR} vDC "${vdc.name}" belongs to another tenant.`)
   if (vdc.enabled === false) throw new Error(`${ERR} vDC "${vdc.name}" is disabled.`)
-  if (!vdc.sdnZoneName) {
+  if (evpnZone) {
+    if (vdc.evpnZoneId !== evpnZone.id) throw new Error(`${ERR} vDC "${vdc.name}" is not attached to the shared zone of "${network.name}".`)
+  } else if (!vdc.sdnZoneName) {
     throw new Error(`${ERR} vDC "${vdc.name}" has no VXLAN zone, a VLAN-only vDC cannot carry a stretched network.`)
   }
+  const zoneName = evpnZone ? evpnZone.zoneName : vdc.sdnZoneName!
   if (network.members.some(m => m.vdcId === vdcId)) throw new Error(`${ERR} vDC "${vdc.name}" already carries "${network.name}".`)
   if (network.members.some(m => m.vdc.connectionId === vdc.connectionId)) {
     throw new Error(`${ERR} another vDC on the same cluster already carries "${network.name}"; a VNI exists once per cluster.`)
@@ -106,7 +122,7 @@ export async function addMember(networkId: string, vdcId: string): Promise<AddMe
   // every member must carry the network's, or frames get fragmented on one
   // side only.
   const transport = transportFromRow(vdc)
-  if ((transport.mtu ?? null) !== (network.mtu ?? null)) {
+  if (!evpnZone && (transport.mtu ?? null) !== (network.mtu ?? null)) {
     throw new Error(
       `${ERR} the zone MTU of vDC "${vdc.name}" (${mtuText(transport.mtu)}) differs from the network MTU (${mtuText(network.mtu)}). Align them first.`,
     )
@@ -119,7 +135,7 @@ export async function addMember(networkId: string, vdcId: string): Promise<AddMe
   const conn = await connectionOf(vdc.connectionId)
   const pveName = await pickMemberPveName(network, vdc.connectionId, conn)
 
-  await createVnetPve(conn, { pveName, zoneName: vdc.sdnZoneName, tag: network.vni, alias: network.name })
+  await createVnetPve(conn, { pveName, zoneName, tag: network.vni, alias: network.name })
 
   const vnetId = randomUUID()
   const now = new Date()
@@ -131,11 +147,11 @@ export async function addMember(networkId: string, vdcId: string): Promise<AddMe
           vdcId,
           pveName,
           displayName: network.name,
-          description: network.description ?? `Tenant network "${network.name}"`,
+          description: network.description ?? (evpnZone ? null : `Tenant network "${network.name}"`),
           tag: network.vni,
           type: 'vxlan',
           bridge: null,
-          zoneName: vdc.sdnZoneName,
+          zoneName,
           firewall: true,
           createdBy: network.createdBy ?? null,
           createdAt: now,
@@ -144,17 +160,19 @@ export async function addMember(networkId: string, vdcId: string): Promise<AddMe
       // Mirror of the canonical subnet: same addressing for every reader
       // that expects one subnet per VNet; allocations go to the canonical
       // row through resolveSubnetForBridge.
-      await tx.vdcSubnet.create({
-        data: {
-          id: randomUUID(),
-          vnetId,
-          cidr: network.subnet!.cidr,
-          gateway: network.subnet!.gateway,
-          dnsServers: network.subnet!.dnsServers,
-          ipamEnabled: network.subnet!.ipamEnabled,
-          createdAt: now,
-        },
-      })
+      if (network.subnet) {
+        await tx.vdcSubnet.create({
+          data: {
+            id: randomUUID(),
+            vnetId,
+            cidr: network.subnet.cidr,
+            gateway: network.subnet.gateway,
+            dnsServers: network.subnet.dnsServers,
+            ipamEnabled: network.subnet.ipamEnabled,
+            createdAt: now,
+          },
+        })
+      }
       await tx.tenantNetworkMember.create({
         data: { id: randomUUID(), tenantNetworkId: networkId, vdcId, vnetId, createdAt: now },
       })
@@ -198,8 +216,9 @@ export async function removeMember(networkId: string, vdcId: string): Promise<{ 
   const conn = await connectionOf(member.vdc.connectionId)
   const attached = await countVnetAttachments(conn, member.vnet.pveName)
   if (attached > 0) {
-    throw new Error(
+    throw new AttachedNicsError(
       `${ERR} ${attached} guest NIC(s) still use "${member.tenantNetwork.name}" on vDC "${member.vdc.name}". Detach them first.`,
+      attached,
     )
   }
 
@@ -221,8 +240,9 @@ export async function removeMember(networkId: string, vdcId: string): Promise<{ 
  * is reported and does not stop the others.
  */
 export async function syncNetworkZones(networkId: string): Promise<ZoneSyncResult[]> {
+  // A network of a shared EVPN zone (#1334) has no static peers to exchange.
   const members = await prisma.tenantNetworkMember.findMany({
-    where: { tenantNetworkId: networkId },
+    where: { tenantNetworkId: networkId, tenantNetwork: { evpnZoneId: null } },
     select: { vdc: { select: VDC_TRANSPORT_SELECT } },
     orderBy: { createdAt: 'asc' },
   })

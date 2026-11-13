@@ -96,13 +96,13 @@ describe('the perimeter of the caller on the incident views', () => {
   it('POST [id]/alerts is a 404 for an invisible alert, nothing attached', async () => {
     const res = await callRoute(postAlert as any, { params: { id: 'i1' }, body: { alert_id: 'hidden1' } })
     expect(res.status).toBe(404)
-    expect(m.orchestrator).not.toHaveBeenCalled()
+    expect(m.orchestrator.mock.calls.filter(c => (c[1] as { method?: string } | undefined)?.method)).toEqual([])
   })
 
   it('DELETE [id]/alerts/[alertId] is a 404 for an invisible alert, nothing detached', async () => {
     const res = await callRoute(deleteAlert as any, { method: 'DELETE', params: { id: 'i1', alertId: 'hidden1' } })
     expect(res.status).toBe(404)
-    expect(m.orchestrator).not.toHaveBeenCalled()
+    expect(m.orchestrator.mock.calls.filter(c => (c[1] as { method?: string } | undefined)?.method)).toEqual([])
     expect((await callRoute(deleteAlert as any, { method: 'DELETE', params: { id: 'i1', alertId: 'a1' } })).status).toBe(200)
   })
 

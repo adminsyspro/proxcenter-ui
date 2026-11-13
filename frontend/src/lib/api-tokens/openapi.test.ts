@@ -113,6 +113,7 @@ describe('buildOpenApiDocument', () => {
       expect(mdoc.paths[post.pattern].get.tags).toEqual(['Snapshots'])
       expect(wdoc.tags.map((t: any) => t.name)).toEqual([
         'Monitoring', 'VMs', 'Snapshots', 'Backups', 'Storage', 'HA', 'Pools', 'Network', 'Firewall', 'Tasks',
+        'Tenants', 'vDCs', 'RBAC', 'Users',
       ])
     })
 

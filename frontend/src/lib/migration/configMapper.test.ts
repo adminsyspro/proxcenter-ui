@@ -376,3 +376,25 @@ describe("mapEsxiToPveConfig: a Windows without the VirtIO drivers (#1173)", () 
     expect(withoutVirtioChoices({ nics: [{ index: 0, bridge: "vmbr0", model: "vmxnet3" }] }, []).overrides.nics?.[0].model).toBe("vmxnet3")
   })
 })
+
+describe("mapEsxiToPveConfig: MAC choice and bulk network table (ui#1330, ui#1333)", () => {
+  const two = makeConfig({ nics: [
+    { label: "Network adapter 1", type: "Vmxnet3", macAddress: "00:50:56:aa:bb:01", network: "LAN" },
+    { label: "Network adapter 2", type: "Vmxnet3", macAddress: "00:50:56:aa:bb:02", network: "DMZ" },
+  ] })
+
+  it("puts each NIC on the bridge its source network maps to, the others on the default", () => {
+    const p = mapEsxiToPveConfig(two, 100, "local-lvm", "vmbr0", undefined, undefined, { networkMap: [{ source: "DMZ", bridge: "vnetdmz", vlanTag: 30 }] })
+    expect(p.nets.net0).toBe("virtio,bridge=vmbr0,macaddr=00:50:56:aa:bb:01")
+    expect(p.nets.net1).toBe("virtio,bridge=vnetdmz,macaddr=00:50:56:aa:bb:02,tag=30")
+  })
+
+  it("lets Proxmox assign every MAC under macPolicy regenerate, a custom MAC winning", () => {
+    const p = mapEsxiToPveConfig(two, 100, "local-lvm", "vmbr0", undefined, undefined, {
+      macPolicy: "regenerate",
+      nics: [{ index: 1, bridge: "vmbr0", macMode: "custom", mac: "BC:24:11:00:00:09" }],
+    })
+    expect(p.nets.net0).toBe("virtio,bridge=vmbr0")
+    expect(p.nets.net1).toBe("virtio,bridge=vmbr0,macaddr=BC:24:11:00:00:09")
+  })
+})

@@ -40,6 +40,14 @@ vi.mock("ssh2", async () => {
   }
   return { Client }
 })
+// The ESXi host key is confirmed in ProxCenter (the SSH test of the connection).
+const esxiTrust = vi.hoisted(() => ({
+  value: { lines: ["10.0.0.5 ecdsa-sha2-nistp256 AAAAtest"], keyTypes: ["ecdsa-sha2-nistp256"], sha256Hex: ["ab"] },
+}))
+vi.mock("@/lib/ssh/host-key-store", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/lib/ssh/host-key-store")>()
+  return { ...actual, trustedKnownHosts: vi.fn(async () => esxiTrust.value) }
+})
 vi.mock("@/lib/ssh/exec", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/ssh/exec")>()
   return { ...actual, executeSSH: vi.fn() } // keep the real shellEscape
@@ -274,6 +282,65 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+describe("runMigrationPipeline ESXi host key", () => {
+  it("checks the ESXi host key against the confirmed one in every SSH and SSHFS call, staged before the secret", { timeout: 20000 }, async () => {
+    const jobId = "hk-sshfs"
+    await runPipelineToEnd(jobId, makeConfig())
+
+    expect(prisma.row.status).toBe("completed")
+    const knownHosts = `/tmp/proxcenter-mig-${jobId}-esxi.known_hosts`
+    const calls = vi.mocked(executeSSH).mock.calls
+    const stageKh = calls.findIndex(c => String(c[2]) === `umask 077; cat > '${knownHosts}'`)
+    const stageSecret = calls.findIndex(c => String(c[2]).includes(`-esxi.secret`) && String(c[2]).startsWith("umask 077; cat >"))
+    expect(stageKh).toBeGreaterThanOrEqual(0)
+    expect((calls[stageKh][4] as any).stdin).toBe("10.0.0.5 ecdsa-sha2-nistp256 AAAAtest\n")
+    expect(stageSecret).toBeGreaterThan(stageKh)
+
+    const commands = sshCommands()
+    const reachesEsxi = (c: string) => c.includes("sshfs -o") || c.includes("sshpass -e ssh") || c.includes("exec ssh ")
+    const esxiCalls = commands.filter(reachesEsxi)
+    expect(esxiCalls.length).toBeGreaterThan(0)
+    for (const c of esxiCalls) {
+      expect(c).toContain(`StrictHostKeyChecking=yes`)
+      expect(c).toContain(`UserKnownHostsFile=${knownHosts}`)
+    }
+    expect(commands.some(c => c.includes("StrictHostKeyChecking=no") || c.includes("UserKnownHostsFile=/dev/null"))).toBe(false)
+    expect(commands).toContain(`rm -f '${knownHosts}'`)
+  })
+
+  it("stops before any ESXi credential is staged when another host answers for the ESXi", { timeout: 20000 }, async () => {
+    vi.mocked(executeSSH).mockImplementation(((...a: any[]) => String(a[2]).startsWith("ssh -i /dev/null ")
+      ? Promise.resolve({ success: false, error: "Exit code 255", output: "Host key verification failed." })
+      : (sshRouter as any)(...a)) as any)
+    await runPipelineToEnd("hk-impostor", makeConfig())
+
+    expect(prisma.row.status).toBe("failed")
+    expect(messages().join("\n")).toMatch(/10\.42\.0\.21:22 presented an SSH host key that is not the one confirmed/)
+    const commands = sshCommands()
+    const probe = commands.find(c => c.startsWith("ssh -i /dev/null ")) || ""
+    expect(probe).toContain("StrictHostKeyChecking=yes")
+    expect(probe).toContain("BatchMode=yes")
+    expect(commands.some(c => c.includes("-esxi.secret") || c.includes("sshfs -o") || c.includes("sshpass -e ssh"))).toBe(false)
+    expect(vi.mocked(executeSSH).mock.calls.some(c => (c[4] as any)?.stdin === "esxipw")).toBe(false)
+  })
+
+  it("stops before any ESXi credential is staged when no key is confirmed", { timeout: 20000 }, async () => {
+    const saved = esxiTrust.value
+    esxiTrust.value = { lines: [], keyTypes: [], sha256Hex: [] }
+    try {
+      await runPipelineToEnd("hk-none", makeConfig())
+    } finally {
+      esxiTrust.value = saved
+    }
+
+    expect(prisma.row.status).toBe("failed")
+    expect(String(prisma.row.error ?? messages().join("\n"))).toMatch(/SSH host key of the ESXi host 10\.42\.0\.21:22 is not confirmed/)
+    const commands = sshCommands()
+    expect(commands.some(c => c.includes("-esxi.secret") || c.includes("sshfs -o") || c.includes("sshpass -e ssh"))).toBe(false)
+    expect(vi.mocked(executeSSH).mock.calls.some(c => (c[4] as any)?.stdin === "esxipw")).toBe(false)
+  })
+})
+
 describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
   it("SSHFS: streams disk 1 raw to the block default and converts disk 2 to qcow2 on the file-based ISO", { timeout: 20000 }, async () => {
     const jobId = "pd-sshfs-mixed"
@@ -306,8 +373,8 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     expect(logs).toContain('Adding disk to storage "ISO"...')
     expect(commands.some(c => c.startsWith("qm disk import "))).toBe(false)
     // attached on their own storage, discard only on the file volume
-    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0`)
-    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on`)
+    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0,discard=on,iothread=1`)
+    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on,iothread=1`)
     // the integrity check targets each disk's own copy
     const verified = vi.mocked(verifyDiskIntegrity).mock.calls.map(c => c[0])
     expect(verified).toHaveLength(2)
@@ -338,8 +405,8 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     expect(messages()).toContain("[Disk 2/2] Converting to qcow2 format...")
     const adopt = commands.find(c => c.includes("echo ADOPT_OK")) || ""
     expect(adopt).toContain(`mv -n '${tmp1}.qcow2' '/var/lib/vz/images/${VMID}/vm-${VMID}-disk-1.qcow2'`)
-    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0`)
-    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on`)
+    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0,discard=on,iothread=1`)
+    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on,iothread=1`)
   })
 
   it("live: clones both disks on ESXi, streams disk 1 to the block volume and converts disk 2 on ISO after the power-off", { timeout: 20000 }, async () => {
@@ -367,8 +434,8 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     const logs = messages()
     expect(logs).toContain("Attaching pre-streamed volumes to VM...")
     expect(logs).toContain("Converting and importing disks to Proxmox...")
-    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0`)
-    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on`)
+    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0,discard=on,iothread=1`)
+    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on,iothread=1`)
     // live mode never verifies (the clone is gone): the converted disk says so,
     // the SSH-dd block stream has no check point at all
     expect(verifyDiskIntegrity).not.toHaveBeenCalled()
@@ -390,7 +457,7 @@ describe("runMigrationPipeline per-disk target storage (#317 lot 2)", () => {
     const commands = sshCommands()
     expect(commands.filter(c => c.startsWith("pvesm alloc "))).toHaveLength(1)
     expect(commands.some(c => c.includes("web-01_1-flat.vmdk"))).toBe(false)
-    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0`)
+    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0,discard=on,iothread=1`)
     expect(slotValue("scsi1")).toBeUndefined()
   })
 
@@ -447,8 +514,8 @@ describe("runMigrationPipeline without per-disk choices (unchanged behaviour)", 
     ])
     expect(commands.some(c => c.startsWith("mkdir -p \"/var/lib/vz/images/"))).toBe(false)
     expect(logs.some(m => m.startsWith("Temp directory:"))).toBe(false)
-    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0`)
-    expect(slotValue("scsi1")).toBe(`local-lvm:vm-${VMID}-disk-1`)
+    expect(slotValue("scsi0")).toBe(`local-lvm:vm-${VMID}-disk-0,discard=on,iothread=1`)
+    expect(slotValue("scsi1")).toBe(`local-lvm:vm-${VMID}-disk-1,discard=on,iothread=1`)
   })
 
   it("file-based default: every disk is converted into one images dir and adopted with discard", { timeout: 20000 }, async () => {
@@ -466,7 +533,7 @@ describe("runMigrationPipeline without per-disk choices (unchanged behaviour)", 
     expect(commands.some(c => c.includes(`-O qcow2 '/tmp/proxcenter-sshfs-${jobId}/web-01/web-01-flat.vmdk' '${dir}/proxcenter-mig-${jobId}-disk0.qcow2'`))).toBe(true)
     expect(commands.some(c => c.includes(`-O qcow2 '/tmp/proxcenter-sshfs-${jobId}/web-01/web-01_1-flat.vmdk' '${dir}/proxcenter-mig-${jobId}-disk1.qcow2'`))).toBe(true)
     expect(logs.filter(m => m === 'Adding disk to storage "ISO"...')).toHaveLength(2)
-    expect(slotValue("scsi0")).toBe(`ISO:${VMID}/vm-${VMID}-disk-0.qcow2,discard=on`)
-    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on`)
+    expect(slotValue("scsi0")).toBe(`ISO:${VMID}/vm-${VMID}-disk-0.qcow2,discard=on,iothread=1`)
+    expect(slotValue("scsi1")).toBe(`ISO:${VMID}/vm-${VMID}-disk-1.qcow2,discard=on,iothread=1`)
   })
 })

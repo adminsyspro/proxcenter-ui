@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
-import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
+import { renderWithProviders, screen, fireEvent } from '@/__tests__/setup/renderWithProviders'
 import VnetsSection from './VnetsSection'
 
 vi.mock('@/contexts/TenantContext', () => ({
@@ -22,6 +22,7 @@ vi.mock('@/contexts/TenantContext', () => ({
 vi.mock('@/components/mydc/VnetCreateDialog', () => ({ default: () => null }))
 vi.mock('@/components/mydc/VnetEditDialog', () => ({ default: () => null }))
 vi.mock('@/components/mydc/VnetDeleteDialog', () => ({ default: () => null }))
+vi.mock('@/components/mydc/VnetPresenceDialog', () => ({ default: (p: any) => <div data-testid="presence">{p.networkId}:{p.vdcId}</div> }))
 vi.mock('./TenantVnetDetailPanel', () => ({ default: () => null }))
 
 const VDCS = [
@@ -89,5 +90,38 @@ describe('VnetsSection — vDC context', () => {
     expect(await screen.findByText('web-gra4')).toBeTruthy()
     expect(screen.getByText('web-sbg')).toBeTruthy()
     expect(screen.getByText('Virtual Datacenter')).toBeTruthy()
+  })
+})
+
+// A network the tenant created in a shared EVPN zone is its own (#1334); a
+// stretched network the provider created stays read-only (#901).
+describe('VnetsSection — shared and stretched networks', () => {
+  it('lets the tenant edit, delete and place its shared network, and locks a provider one', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: any) => {
+      const url = String(input)
+      if (url.endsWith('/api/v1/vdcs')) return jsonRes({ data: [VDCS[0]] })
+      if (url.includes('/api/v1/vdcs/v1/vnets')) {
+        return jsonRes({ data: [
+          { ...VNET('vnet-s', 'mine'), tenantNetwork: { id: 'n1', name: 'mine', shared: true } },
+          { ...VNET('vnet-p', 'theirs'), tenantNetwork: { id: 'n2', name: 'theirs' } },
+        ] })
+      }
+      return jsonRes({ data: [] })
+    }))
+    renderWithProviders(<VnetsSection connectionIds={[]} />)
+
+    // Each name shows twice: in the summary above the table and in its row.
+    const rowOf = (name: string) => screen.getAllByText(name).map(e => e.closest('tr')).find(Boolean)!
+    await screen.findAllByText('mine')
+    const mine = rowOf('mine')
+    const theirs = rowOf('theirs')
+    expect(mine.textContent).toContain('Shared')
+    expect(theirs.textContent).toContain('Stretched')
+    const enabled = (row: Element) => [...row.querySelectorAll('button')].filter(b => !(b as HTMLButtonElement).disabled).length
+    expect(enabled(mine)).toBe(3)
+    expect(enabled(theirs)).toBe(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose the vDCs carrying this network' }))
+    expect(screen.getByTestId('presence').textContent).toBe('n1:v1')
   })
 })

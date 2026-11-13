@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server'
 import { withAudit } from '@/lib/audit/withAudit'
 import { codeResponse } from '@/lib/availability/orchestrator'
 import { incidentViewResponse, refuseInvisibleAlert } from '@/lib/incidents/alertVisibility'
-import { requireIncidentAccess } from '@/lib/incidents/guard'
+import { requireIncidentWrite } from '@/lib/incidents/guard'
 import { attachAlert, incidentErrorResponse } from '@/lib/incidents/orchestrator'
 import { parseAttachBody, readJson } from '@/lib/incidents/validate'
 import { PERMISSIONS } from '@/lib/rbac'
@@ -18,7 +18,8 @@ export const dynamic = 'force-dynamic'
 
 async function handlePost(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const access = await requireIncidentAccess('write')
+    const { id } = await ctx.params
+    const access = await requireIncidentWrite(id)
     if (access.denied) return access.denied
 
     const parsed = parseAttachBody(await readJson(request))
@@ -27,7 +28,6 @@ async function handlePost(request: Request, ctx: { params: Promise<{ id: string 
     const refused = await refuseInvisibleAlert(parsed.value.alert_id, PERMISSIONS.ALERTS_MANAGE)
     if (refused) return refused
 
-    const { id } = await ctx.params
     const view = await attachAlert(id, { alert_id: parsed.value.alert_id, by: access.userName })
     return await incidentViewResponse(view, PERMISSIONS.ALERTS_MANAGE)
   } catch (e) {

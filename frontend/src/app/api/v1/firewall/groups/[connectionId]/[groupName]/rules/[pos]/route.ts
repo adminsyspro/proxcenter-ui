@@ -3,13 +3,15 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
-import { verifyConnectionOwnership } from '@/lib/tenant'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { firewallParamRefusal } from '@/lib/firewall/pathParams'
+import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from '@/lib/audit/withAudit'
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 // PUT /api/v1/firewall/groups/[connectionId]/[groupName]/rules/[pos] - Update rule
 async function putHandler(
@@ -18,11 +20,10 @@ async function putHandler(
 ) {
   try {
     const { connectionId, groupName, pos } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ group: groupName, pos })
+    if (malformed) return malformed
 
     const body = await request.json()
 
@@ -31,7 +32,7 @@ async function putHandler(
     // Community has no orchestrator: update the rule straight on PVE (#616).
     await orchestratorOrPve(
       'firewall/groups/rules',
-      () => orchestrator.put(`/firewall/groups/${connectionId}/${groupName}/rules/${pos}`, body),
+      () => orchestrator.put(orchestratorPath`/firewall/groups/${connectionId}/${groupName}/rules/${pos}`, body),
       async () => pveDirect.updateSecurityGroupRule(await getConnectionById(connectionId), groupName, pos, body),
     )
 
@@ -53,17 +54,16 @@ async function deleteHandler(
 ) {
   try {
     const { connectionId, groupName, pos } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ group: groupName, pos })
+    if (malformed) return malformed
 
     const orchestrator = getOrchestratorClient()
 
     await orchestratorOrPve(
       'firewall/groups/rules',
-      () => orchestrator.delete(`/firewall/groups/${connectionId}/${groupName}/rules/${pos}`),
+      () => orchestrator.delete(orchestratorPath`/firewall/groups/${connectionId}/${groupName}/rules/${pos}`),
       async () => pveDirect.deleteSecurityGroupRule(await getConnectionById(connectionId), groupName, pos),
     )
 

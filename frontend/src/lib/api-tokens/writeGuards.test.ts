@@ -104,6 +104,28 @@ describe('runTokenEntryGuards', () => {
     expect(auditMock).not.toHaveBeenCalled()
   })
 
+  describe('(1c) fleet-wide operations (issue #1360, lot 2)', () => {
+    const fleet = () => entry({ connectionSegment: undefined, perimeter: 'fleet', requiredScopes: ['vdcs:write'] })
+
+    it('403 for a token restricted to connections, journaled, before any perimeter lookup', async () => {
+      const res = await runTokenEntryGuards(fleet(), principal, post({}), {})
+      expect(res?.status).toBe(403)
+      expect(await res?.json()).toEqual({ error: 'This operation reaches every connection: it needs a token not restricted to connections' })
+      expect(deniedAudit()).toMatchObject({ action: 'apitoken.denied' })
+      expect(resolveVisibleMock).not.toHaveBeenCalled()
+    })
+
+    it('403 for an empty connection list too: only null means every connection', async () => {
+      const res = await runTokenEntryGuards(fleet(), { ...principal, connectionIds: [] }, post({}), {})
+      expect(res?.status).toBe(403)
+    })
+
+    it('passes for a token over every connection, then runs the creator check', async () => {
+      expect(await runTokenEntryGuards(fleet(), { ...principal, connectionIds: null }, post({}), {})).toBeNull()
+      expect(creatorMock).toHaveBeenCalledWith(expect.anything(), 'vdcs:write')
+    })
+  })
+
   describe('(1) forwarded method', () => {
     it('401 when x-pxc-method differs from the request method', async () => {
       setForwarded('GET')
@@ -454,6 +476,65 @@ describe('runTokenEntryGuards', () => {
       const orphan = { ...principal, creatorUserId: null }
       await runTokenEntryGuards(entry(), orphan, post({}), { id: 'conn-a' })
       expect(creatorMock.mock.calls[0][0].creatorUserId).toBeNull()
+    })
+
+    // Issue #1360: an admin read scope is creator-checked on each call too.
+    describe('reads through an admin read scope', () => {
+      const adminRead = (scopes: string[], requiredScopes = ['vdcs:read']): [AllowlistEntry, Principal] => [
+        getEntry({ id: 'test-admin-read', requiredScopes, connectionSegment: undefined }),
+        { ...principal, scopes, permissions: expandScopes(scopes) },
+      ]
+
+      it('403 naming the admin read scope when the creator no longer holds it', async () => {
+        setForwarded('GET')
+        creatorMock.mockResolvedValue(false)
+        const [e, p] = adminRead(['vdcs:read'])
+        const res = await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})
+        expect(res?.status).toBe(403)
+        expect(await res?.json()).toEqual({ error: 'Token creator no longer holds this right', scope: 'vdcs:read' })
+        expect(creatorMock).toHaveBeenCalledWith(expect.objectContaining({ tokenId: 'tok-1' }), 'vdcs:read')
+      })
+
+      it('passes when the creator still holds it', async () => {
+        setForwarded('GET')
+        const [e, p] = adminRead(['users:read'], ['users:read'])
+        expect(await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})).toBeNull()
+        expect(creatorMock).toHaveBeenCalledWith(expect.anything(), 'users:read')
+      })
+
+      it('checks the scope the token carries, not the first one the entry lists', async () => {
+        setForwarded('GET')
+        const [e, p] = adminRead(['vdcs:read'], ['ipam:read', 'vdcs:read', 'network:write'])
+        await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})
+        expect(creatorMock).toHaveBeenCalledTimes(1)
+        expect(creatorMock).toHaveBeenCalledWith(expect.anything(), 'vdcs:read')
+      })
+
+      it('checks every admin read scope the token carries: one opening the route never shields another', async () => {
+        setForwarded('GET')
+        creatorMock.mockImplementation(async (_t: unknown, scope: string) => scope !== 'ipam:read')
+        const [e, p] = adminRead(['nodes:read', 'ipam:read'], ['nodes:read', 'network:write', 'vdcs:read', 'ipam:read'])
+        const res = await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})
+        expect(res?.status).toBe(403)
+        expect(await res?.json()).toEqual({ error: 'Token creator no longer holds this right', scope: 'ipam:read' })
+      })
+
+      it('leaves an older read scope (nodes:read) and a write scope on a read entry to their historical rule', async () => {
+        setForwarded('GET')
+        creatorMock.mockResolvedValue(false)
+        const [e, p] = adminRead(['nodes:read', 'network:write'], ['nodes:read', 'network:write', 'vdcs:read', 'ipam:read'])
+        expect(await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})).toBeNull()
+        expect(creatorMock).not.toHaveBeenCalled()
+      })
+
+      it('checks vdcs:write on a read entry too: it reads back administration data (lot 2)', async () => {
+        setForwarded('GET')
+        creatorMock.mockResolvedValue(false)
+        const [e, p] = adminRead(['vdcs:write'], ['vdcs:read', 'vdcs:write'])
+        const res = await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})
+        expect(res?.status).toBe(403)
+        expect(await res?.json()).toEqual({ error: 'Token creator no longer holds this right', scope: 'vdcs:write' })
+      })
     })
 
     describe('secondary permissions the token holds (Ruling 35)', () => {

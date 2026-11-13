@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getSession, signIn } from 'next-auth/react'
+import { getCsrfToken, getSession, signIn } from 'next-auth/react'
 import { useTranslations } from 'next-intl'
 import {
   Box,
@@ -19,6 +19,9 @@ import LoginShell from '@components/login/LoginShell'
 import { useBranding } from '@/contexts/BrandingContext'
 import { safeCallbackUrl } from '@/lib/auth/safeCallbackUrl'
 import { droppedSessionHttpsAddress } from '@/lib/auth/insecureLogin'
+import { providersEndpoint, ssoProviderId, startSso } from '@/components/login/loginProviders'
+
+const ssoDeps = { signIn, getCsrfToken, fetch: (...args) => fetch(...args), navigate: url => window.location.assign(url) }
 
 // signIn() reports success even when the browser refused the Secure session
 // cookie of an https install opened over plain HTTP; the page would then bounce
@@ -26,7 +29,8 @@ import { droppedSessionHttpsAddress } from '@/lib/auth/insecureLogin'
 const droppedSessionAddress = () =>
   droppedSessionHttpsAddress(window.isSecureContext, window.location, () => getSession())
 
-export default function LoginPage({ forceLocal = false }) {
+/** @param {{ mode?: string, forceLocal?: boolean, tenantSlug?: string | null }} props */
+export default function LoginPage({ forceLocal = false, tenantSlug = null }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   // Only a path inside this application is ever navigated to after sign-in.
@@ -43,6 +47,8 @@ export default function LoginPage({ forceLocal = false }) {
   const [ldapEnabled, setLdapEnabled] = useState(false)
   const [oidcEnabled, setOidcEnabled] = useState(false)
   const [oidcProviderName, setOidcProviderName] = useState('SSO')
+  // NextAuth id the SSO button starts: "oidc", or a tenant IdP's own on /login/<slug>.
+  const [oidcProviderId, setOidcProviderId] = useState('oidc')
   // SSO-only login behavior (from /api/v1/auth/providers).
   const [showLocalLogin, setShowLocalLogin] = useState(true)
   const [forceSsoRedirect, setForceSsoRedirect] = useState(false)
@@ -78,12 +84,13 @@ export default function LoginPage({ forceLocal = false }) {
   }, [router])
 
   useEffect(() => {
-    fetch('/api/v1/auth/providers')
+    fetch(providersEndpoint(tenantSlug))
       .then(res => res.json())
       .then(data => {
         setLdapEnabled(data.ldapEnabled || false)
         setOidcEnabled(data.oidcEnabled || false)
         setOidcProviderName(data.oidcProviderName || 'SSO')
+        setOidcProviderId(ssoProviderId(data))
         setShowLocalLogin(data.showLocalLogin !== false)
         setForceSsoRedirect(data.forceSsoRedirect || false)
       })
@@ -91,7 +98,7 @@ export default function LoginPage({ forceLocal = false }) {
       // Always mark providers as resolved (even on failure) so the form falls
       // back to visible rather than spinning forever — never lock the admin out.
       .finally(() => setProvidersLoaded(true))
-  }, [])
+  }, [tenantSlug])
 
   // A refused OIDC account link comes back as a code; any other error is shown as received.
   useEffect(() => {
@@ -113,9 +120,9 @@ export default function LoginPage({ forceLocal = false }) {
       !redirectingSso
     ) {
       setRedirectingSso(true)
-      signIn('oidc', { callbackUrl })
+      void startSso(oidcProviderId, callbackUrl, ssoDeps)
     }
-  }, [providersLoaded, oidcEnabled, forceSsoRedirect, forceLocal, errorParam, redirectingSso, callbackUrl])
+  }, [providersLoaded, oidcEnabled, forceSsoRedirect, forceLocal, errorParam, redirectingSso, callbackUrl, oidcProviderId])
 
   const handleLogin = useCallback(async () => {
     setLoading(true)
@@ -193,8 +200,8 @@ export default function LoginPage({ forceLocal = false }) {
   }, [])
 
   const handleSso = useCallback(() => {
-    signIn('oidc', { callbackUrl })
-  }, [callbackUrl])
+    void startSso(oidcProviderId, callbackUrl, ssoDeps)
+  }, [callbackUrl, oidcProviderId])
 
   // Hold the full-screen spinner until setup + providers are known, and while
   // an SSO auto-redirect is in flight, so the local form never flashes.

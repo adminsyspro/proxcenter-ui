@@ -4,6 +4,9 @@ import { checkPermission, getAccessibleResources, getRBACContext, PERMISSIONS } 
 import { filterVisibleVdcs, type VdcVisibilityGrant } from '@/lib/rbac/vdcVisibility'
 import { listVdcs, refreshVdcUsage } from '@/lib/vdc'
 import { resolveScopeTenant } from '@/lib/vdc/providerTarget'
+import type { Principal } from '@/lib/auth/principal'
+import { filterToTokenPerimeter } from '@/lib/api-tokens/scope'
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = 'nodejs'
 
@@ -15,7 +18,7 @@ const USAGE_FRESHNESS_MS = 15_000
 // GET /api/v1/vdcs — list the current tenant's vDCs with quotas and usage.
 // Refreshes each vDC's usage against PVE when the cached row is stale or
 // empty so the client-side quota check matches server-side enforcement.
-export async function GET(req: Request) {
+async function handleGet(req: Request, ctx: { principal?: Principal }) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
@@ -23,7 +26,7 @@ export async function GET(req: Request) {
     // `?targetVdcId=` (provider only): that tenant vDC alone, with its quota
     // and usage, for a provider deploying into it (roadmap#65).
     const scopeTenant = await resolveScopeTenant(req, null, getCurrentTenantId)
-    if (!scopeTenant.ok) return scopeTenant.response
+    if (scopeTenant.response) return scopeTenant.response
     const target = scopeTenant.target
     if (target) {
       const pick = async () => (await listVdcs(target.tenantId)).filter(v => v.id === target.vdcId)
@@ -55,7 +58,10 @@ export async function GET(req: Request) {
       visibilityGrants = null
     }
 
-    let vdcs = filterVisibleVdcs(await listVdcs(tenantId), visibilityGrants)
+    // A token restricted to some connections only sees the vDCs on them.
+    const listForCaller = async () =>
+      filterToTokenPerimeter(filterVisibleVdcs(await listVdcs(tenantId), visibilityGrants), ctx?.principal, v => [v.connectionId])
+    let vdcs = await listForCaller()
 
     const now = Date.now()
     const stale = vdcs.filter((v) => {
@@ -67,7 +73,7 @@ export async function GET(req: Request) {
 
     if (stale.length > 0) {
       await Promise.allSettled(stale.map((v) => refreshVdcUsage(v.id)))
-      vdcs = filterVisibleVdcs(await listVdcs(tenantId), visibilityGrants)
+      vdcs = await listForCaller()
     }
 
     return NextResponse.json({ data: vdcs })
@@ -75,3 +81,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vdcs-list", handleGet)

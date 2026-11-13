@@ -7,6 +7,7 @@ import { listVnetsForTenant, createVnetForTenant } from "@/lib/vdc/vnets"
 import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
 import { PERMISSIONS } from "@/lib/rbac"
 import { VniError } from "@/lib/vdc/vniPolicy"
+import { mapTenantNetworkError } from "@/lib/vdc/httpErrors"
 import { getSubnetUsage } from "@/lib/vdc/ipam"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -94,7 +95,10 @@ async function postHandler(req: Request, ctx: RouteContext) {
     // transport policy and answers with the right status.
     const vni = body?.vni === undefined || body?.vni === null || body?.vni === '' ? null : body.vni
 
-    const type = body?.type === 'vlan' ? 'vlan' as const : 'vxlan' as const
+    // 'evpn' = a network of the shared zone the vDC is attached to (#1334),
+    // present on the vDCs listed in `vdcIds` (all the attached ones by default).
+    const type = body?.type === 'vlan' ? 'vlan' as const : body?.type === 'evpn' ? 'evpn' as const : 'vxlan' as const
+    const vdcIds = Array.isArray(body?.vdcIds) ? body.vdcIds.filter((x: unknown) => typeof x === 'string').slice(0, 200) : undefined
     const bridge = typeof body?.bridge === 'string' ? body.bridge.trim() : ''
     if (type === 'vlan' && !bridge) {
       return NextResponse.json({ error: 'bridge is required for a VLAN network' }, { status: 400 })
@@ -113,10 +117,28 @@ async function postHandler(req: Request, ctx: RouteContext) {
     const createdBy = principal?.userId ?? null
     const tenantId = await getCurrentTenantId()
 
+    // A shared-zone network is created on several vDCs at once (#1334): the
+    // caller must hold the right on each of them, not only on the one in the
+    // URL. An API token reaches the clusters of its own perimeter and no other.
+    if (type === 'evpn') {
+      const { evpnContextForVdc } = await import("@/lib/vdc/evpnNetworks")
+      let targets: string[]
+      try {
+        targets = vdcIds ?? (await evpnContextForVdc(vdcId, tenantId)).vdcs.map(v => v.id)
+      } catch {
+        return NextResponse.json({ error: "vDC not found" }, { status: 404 })
+      }
+      for (const target of targets) {
+        if (target === vdcId) continue
+        const refused = await checkVnetPermission(ctx.principal, target, PERMISSIONS.SDN_VNET_CREATE)
+        if (refused) return refused
+      }
+    }
+
     try {
       const vnet = await createVnetForTenant({
         vdcId, tenantId, displayName, description, firewall, subnet, vni, createdBy,
-        type, bridge: bridge || undefined, vlanTag, externalAddressing,
+        type, bridge: bridge || undefined, vlanTag, externalAddressing, vdcIds,
       })
       return NextResponse.json({ data: vnet }, { status: 201 })
     } catch (err: any) {
@@ -127,6 +149,11 @@ async function postHandler(req: Request, ctx: RouteContext) {
         return NextResponse.json({ error: msg }, { status: 400 })
       }
       if (msg.includes("Quota exceeded")) return NextResponse.json({ error: msg }, { status: 409 })
+      // Shared-zone network (#1334): the membership module's own refusals.
+      if (msg.startsWith('Tenant network:')) {
+        const mapped = mapTenantNetworkError(err)
+        return NextResponse.json({ error: mapped.message }, { status: mapped.status })
+      }
       if (msg.includes("Invalid VNet name")) return NextResponse.json({ error: msg }, { status: 400 })
       if (msg.includes('has no VLAN pool')) return NextResponse.json({ error: msg }, { status: 400 })
       if (msg.includes('outside the vDC pools')) return NextResponse.json({ error: msg }, { status: 400 })

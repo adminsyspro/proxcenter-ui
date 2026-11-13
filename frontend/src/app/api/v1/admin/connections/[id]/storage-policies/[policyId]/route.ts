@@ -23,6 +23,7 @@ import { audit } from "@/lib/audit"
 
 import { storagePolicyProviderGuard } from "../guard"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -101,5 +102,5 @@ async function handleDelete(_req: Request, ctx: RouteContext) {
   }
 }
 
-export const PUT = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "policyId" }, handlePut)
-export const DELETE = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "policyId" }, handleDelete)
+export const PUT = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "policyId" }, withPublicApiGuard("storage-policy-update", handlePut))
+export const DELETE = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "policyId" }, withPublicApiGuard("storage-policy-delete", handleDelete))

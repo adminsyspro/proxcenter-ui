@@ -31,6 +31,9 @@ vi.mock("@/lib/vdc/vnets", () => ({
   listVnetsForTenant: h.listVnetsForTenant,
 }))
 vi.mock("@/lib/vdc/ipam", () => ({ getSubnetUsage: h.getSubnetUsage }))
+vi.mock("@/lib/vdc/evpnNetworks", () => ({
+  evpnContextForVdc: vi.fn(async () => ({ available: true, vdcs: [{ id: "vdc-1", name: "A" }, { id: "vdc-2", name: "B" }], networks: [] })),
+}))
 // The tenant check of vnetPermission.ts: the vDC belongs to the caller's tenant.
 vi.mock("@/lib/db/prisma", () => ({
   prisma: { vdc: { findUnique: async () => ({ tenantId: "tenant-a", connectionId: "c1" }) } },
@@ -137,5 +140,32 @@ describe("POST /api/v1/vdcs/[id]/vnets", () => {
       h.createVnetForTenant.mockRejectedValueOnce(new Error("vni applies to VXLAN networks only"))
       expect((await post({ displayName: "l2", type: "vlan", bridge: "vmbr0", vni: 5 })).status).toBe(400)
     })
+  })
+})
+
+// Shared-zone network (#1334): one creation reaches several vDCs.
+describe("POST /api/v1/vdcs/[id]/vnets, type evpn", () => {
+  it("forwards the type and the chosen vDCs, after checking the create right on each of them", async () => {
+    const res = await post({ displayName: "backbone", type: "evpn", subnet: null, vdcIds: ["vdc-1", "vdc-2", 3] })
+    expect(res.status).toBe(201)
+    expect(h.createVnetForTenant).toHaveBeenCalledWith(expect.objectContaining({ type: "evpn", vdcIds: ["vdc-1", "vdc-2"], subnet: null }))
+    // Session caller: one resource-less check per vDC touched (URL vDC + the other one).
+    expect(h.checkPermission).toHaveBeenCalledTimes(2)
+  })
+
+  it("checks every attached vDC when none is listed, and stops on a refusal before creating anything", async () => {
+    h.checkPermission.mockResolvedValueOnce(null).mockResolvedValueOnce(new Response(JSON.stringify({ error: "denied" }), { status: 403 }) as any)
+    const res = await post({ displayName: "backbone", type: "evpn", subnet: null })
+    expect(res.status).toBe(403)
+    expect(h.createVnetForTenant).not.toHaveBeenCalled()
+  })
+
+  it("maps the refusals of the shared-zone module", async () => {
+    h.createVnetForTenant.mockRejectedValueOnce(new Error("Tenant network: a selected vDC is not attached to the shared zone."))
+    expect((await post({ displayName: "backbone", type: "evpn", vdcIds: ["vdc-9"] })).status).toBe(400)
+    h.createVnetForTenant.mockRejectedValueOnce(new Error('Quota exceeded on vDC "B": max_vnets=2, current=2'))
+    expect((await post({ displayName: "backbone", type: "evpn" })).status).toBe(409)
+    h.createVnetForTenant.mockRejectedValueOnce(new VniError("No free VNI left in the shared zone. Ask your provider to extend it.", 409))
+    expect((await post({ displayName: "backbone", type: "evpn" })).status).toBe(409)
   })
 })

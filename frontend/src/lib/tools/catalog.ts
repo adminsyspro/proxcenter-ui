@@ -15,6 +15,7 @@ import { listAlertsTool } from '@/lib/tools/alerts'
 import { getDrsStatusTool, getSiteRecoveryTool } from '@/lib/tools/automation'
 import { getBackupCoverageTool } from '@/lib/tools/backups'
 import { getCapacityTool } from '@/lib/tools/capacity'
+import { getGpusTool } from '@/lib/tools/gpus'
 import { getCephStatusTool, listCephOsdsTool } from '@/lib/tools/ceph'
 import { forecastCapacityTool, simulateMigrationTool } from '@/lib/tools/forecast'
 import { getGuestHardwareTool, rankGuestHardwareTool } from '@/lib/tools/guests'
@@ -54,6 +55,8 @@ export const TOOL_CATALOG: CatalogTool[] = [
   getCephStatusTool,
   listCephOsdsTool,
   getHostMaintenanceTool,
+  // GPU report of the page (cached 60 s per connection) and the last load round.
+  getGpusTool,
   // History reads, budgeted per question and cached.
   getMetricsHistoryTool,
   forecastCapacityTool,

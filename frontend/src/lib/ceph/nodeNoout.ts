@@ -8,6 +8,7 @@
  */
 
 import { assertNodeName } from "@/lib/ssh/validate"
+import { asRoot } from "@/lib/ssh/sudo"
 
 export interface NodeOsd {
   id: number
@@ -210,7 +211,7 @@ export function summarizeCephHealth(health: unknown): CephHealthSummary {
 /** `ceph osd ok-to-stop` for a set of OSDs; its exit code is swallowed on purpose. */
 export function okToStopCommand(osdIds: number[]): string {
   const ids = osdIds.filter(id => Number.isInteger(id) && id >= 0).map(String)
-  return `ceph osd ok-to-stop ${ids.join(" ")} -f json 2>/dev/null; true`
+  return `${asRoot(`ceph osd ok-to-stop ${ids.join(" ")} -f json`)} 2>/dev/null; true`
 }
 
 /**

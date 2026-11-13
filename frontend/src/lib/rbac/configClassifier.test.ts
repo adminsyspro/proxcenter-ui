@@ -83,7 +83,7 @@ describe('classifyConfigKey', () => {
     for (const k of ['virtio3', 'unused0', 'hostpci1', 'usb2', 'efidisk0', 'tpmstate0', 'serial0', 'audio0']) {
       expect(classifyConfigKey(k, 'x')).toBe('vm.config.hardware')
     }
-    for (const k of ['name', 'description', 'tags', 'onboot', 'agent', 'ostype']) expect(classifyConfigKey(k, 'x')).toBe('vm.config')
+    for (const k of ['name', 'description', 'tags', 'onboot', 'agent', 'ostype', 'startdate', 'vmstatestorage']) expect(classifyConfigKey(k, 'x')).toBe('vm.config')
   })
 })
 

@@ -4,8 +4,9 @@ import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
-import { getCurrentTenantId } from "@/lib/tenant"
+import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
+import { getAllowedNetworksForTenant, validateNetAgainstScope } from "@/lib/vdc/vnets"
 import { waitForTask } from "@/lib/proxmox/tasks"
 import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import type { DriveQosCaps } from "@/lib/vdc/drives"
@@ -71,6 +72,35 @@ async function postHandler(
 
     const scopeDenied = await guardSessionGuest({ connectionId: connId, conn, type, node, vmid })
     if (scopeDenied) return scopeDenied
+
+    // A rollback restores the guest's NICs verbatim. If the vDC's network
+    // allocation changed since the snapshot (a VLAN pool revoked, perhaps
+    // reassigned to another tenant), rolling back would put the guest back on a
+    // network it may no longer use — potentially a neighbour's VLAN. Validate
+    // the snapshot's NICs against the CURRENT allow-list and refuse a rollback
+    // that would reintroduce a revoked network.
+    const rollbackTenantId = await getCurrentTenantId()
+    if (rollbackTenantId !== DEFAULT_TENANT_ID) {
+      const allowedNetworks = await getAllowedNetworksForTenant(rollbackTenantId, connId)
+      if (allowedNetworks !== null) {
+        let snapConfig: Record<string, unknown> = {}
+        try {
+          snapConfig = await pveFetch<Record<string, unknown>>(conn, snapshotPath(key, snapname, 'config'))
+        } catch {
+          return NextResponse.json({ error: 'Unable to verify the snapshot network scope' }, { status: 503 })
+        }
+        for (const [field, value] of Object.entries(snapConfig ?? {})) {
+          if (!/^net\d+$/.test(field)) continue
+          const verdict = validateNetAgainstScope(String(value ?? ''), allowedNetworks)
+          if (verdict.ok === false) {
+            return NextResponse.json(
+              { error: `Rollback refused: snapshot interface ${field} is no longer authorised for this vDC (${verdict.error})` },
+              { status: 403 },
+            )
+          }
+        }
+      }
+    }
 
     // Storage-tier QoS policies (Finding I1): a snapshot taken before a
     // storage policy existed re-applies its own drive lines verbatim on

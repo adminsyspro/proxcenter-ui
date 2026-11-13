@@ -20,6 +20,7 @@ import { PrismaPg } from "@prisma/adapter-pg"
 // pure-data module so unit tests can import them without running this seed
 // (main() executes at module load). esbuild --bundle inlines it into seed.js.
 import { ALL_PERMISSIONS, ROLES } from "./roleCatalogue"
+import { buildPoolConfig } from "../src/lib/db/connectionConfig"
 
 // Prisma 7 requires a driver adapter; @prisma/adapter-pg wraps node-postgres.
 // DATABASE_URL is read explicitly so the seed fails fast on misconfig instead
@@ -44,7 +45,7 @@ function extractSchema(url: string): string | undefined {
 
 const _schema = extractSchema(databaseUrl)
 const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString: databaseUrl }, _schema ? { schema: _schema } : {}),
+  adapter: new PrismaPg(buildPoolConfig(databaseUrl), _schema ? { schema: _schema } : {}),
 })
 
 async function seedTenant() {

@@ -3,23 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const verifyConnectionOwnershipMock = vi.fn<(id: string) => Promise<Response | null>>()
-const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
-const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
+const denyIaasTenantMock = vi.fn<() => Promise<Response | null>>()
 const relayMock = vi.fn<(...args: any[]) => Promise<Response>>()
 const auditMock = vi.fn<(...args: any[]) => Promise<string>>()
 
 vi.mock('@/lib/tenant', () => ({
   verifyConnectionOwnership: verifyConnectionOwnershipMock,
-  getCurrentTenantId: getCurrentTenantIdMock,
 }))
 vi.mock('@/lib/rbac', () => ({
   checkPermission: checkPermissionMock,
   PERMISSIONS: { NODE_VIEW: 'node.view', NODE_MANAGE: 'node.manage' },
 }))
-vi.mock('@/lib/tenant/infraScope', () => ({
-  getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
-}))
+vi.mock('@/lib/tenant/iaasGuard', () => ({ denyIaasTenant: denyIaasTenantMock }))
 vi.mock('@/lib/audit', () => ({ audit: auditMock }))
 vi.mock('@/lib/orchestrator/client', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/orchestrator/client')>()),
@@ -36,9 +32,8 @@ const ctx = (path: string[]) => ({ params: { connectionId: 'c1', path } as any }
 beforeEach(() => {
   vi.clearAllMocks()
   verifyConnectionOwnershipMock.mockResolvedValue(null)
-  getCurrentTenantIdMock.mockResolvedValue('default')
   checkPermissionMock.mockResolvedValue(null)
-  getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+  denyIaasTenantMock.mockResolvedValue(null)
   relayMock.mockResolvedValue(upstream(200, { ok: true }))
   auditMock.mockResolvedValue('row-1')
 })
@@ -86,22 +81,25 @@ describe('microseg proxy route', () => {
     expect(relayMock).not.toHaveBeenCalled()
   })
 
-  it('refuses a vDC tenant principal with 403 on a read and on a write', async () => {
-    getCurrentTenantIdMock.mockResolvedValue('tenant-vdc')
-    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'iaas', vdcScope: {} })
+  it('hands back the vDC tenant refusal before the route lookup, any check or audit', async () => {
+    denyIaasTenantMock.mockImplementation(async () => new Response('{"error":"Not found"}', { status: 404 }))
     const { GET, POST } = await import('./route')
 
     const read = await callRoute(GET as any, ctx(['policy']))
     const write = await callRoute(POST as any, { ...ctx(['apply']), body: { version: 1 } })
+    const unknown = await callRoute(GET as any, ctx(['no-such-route']))
 
-    expect(read.status).toBe(403)
-    expect(write.status).toBe(403)
-    expect(getTenantInfrastructureScopeMock).toHaveBeenCalledWith('tenant-vdc', { ignoreVdcContext: true })
+    for (const res of [read, write, unknown]) {
+      expect(res.status).toBe(404)
+      expect(await readJson(res)).toEqual({ error: 'Not found' })
+    }
+    expect(verifyConnectionOwnershipMock).not.toHaveBeenCalled()
+    expect(checkPermissionMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
     expect(relayMock).not.toHaveBeenCalled()
   })
 
-  it('lets a provider and an MSP tenant through', async () => {
-    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'msp', connectionIds: new Set(['c1']) })
+  it('lets a caller the vDC guard passes through', async () => {
     const { GET } = await import('./route')
     const res = await callRoute(GET as any, ctx(['policy']))
 
@@ -280,26 +278,25 @@ describe('microseg proxy route', () => {
     expect(signal.aborted).toBe(true)
   })
 
-  it('answers 401 UNAUTHORIZED for a dead or invalid API token', async () => {
-    getCurrentTenantIdMock.mockRejectedValue(new Error('Invalid or expired API token'))
+  it('answers 401 UNAUTHORIZED when the token dies on the way to the orchestrator', async () => {
+    relayMock.mockRejectedValue(new Error('Invalid or expired API token'))
     const { GET } = await import('./route')
     const res = await callRoute(GET as any, ctx(['status']))
 
     expect(res.status).toBe(401)
     expect(await readJson<any>(res)).toMatchObject({ code: 'UNAUTHORIZED' })
-    expect(relayMock).not.toHaveBeenCalled()
   })
 
   it('answers 403 when the session tenant is not available', async () => {
     const err = new Error('Tenant not available for this session')
 
     err.name = 'TenantAccessError'
-    getCurrentTenantIdMock.mockRejectedValue(err)
+    relayMock.mockRejectedValue(err)
     const { GET } = await import('./route')
     const res = await callRoute(GET as any, ctx(['status']))
 
     expect(res.status).toBe(403)
-    expect(relayMock).not.toHaveBeenCalled()
+    expect(await readJson<any>(res)).toMatchObject({ code: 'FORBIDDEN' })
   })
 
   it('keeps the plain method exports, audited inline rather than through withAudit', async () => {
@@ -417,7 +414,7 @@ describe('microseg proxy route audit', () => {
     const big = 'x'.repeat(1024 * 1024 + 1)
 
     await callRoute(POST as any, { ...ctx(['members']), body: big, headers: { 'content-length': String(big.length) } })
-    getCurrentTenantIdMock.mockRejectedValueOnce(new Error('Invalid or expired API token'))
+    denyIaasTenantMock.mockResolvedValueOnce(new Response('{"error":"Not authenticated"}', { status: 401 }))
     await callRoute(POST as any, { ...ctx(['members']), body: { version: 1, add: [] } })
 
     expect(auditMock.mock.calls.map(c => [c[0].status, c[0].details.status])).toEqual([

@@ -28,6 +28,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   { id: "vm.backup", name: "vm.backup", category: "vm", description: "Backup/Restore a VM" },
   { id: "vm.clone", name: "vm.clone", category: "vm", description: "Clone a VM" },
   { id: "vm.migrate", name: "vm.migrate", category: "vm", description: "Migrate a VM", isDangerous: true },
+  { id: "vm.move_vdc", name: "vm.move_vdc", category: "vm", description: "Move a VM to another vDC of the same tenant", isDangerous: true },
   { id: "vm.config", name: "vm.config", category: "vm", description: "Modify VM configuration (excludes explicit tenant MAC and VLAN rights)", isDangerous: true },
   { id: "vm.config.media", name: "vm.config.media", category: "vm", description: "Change CD/DVD media or eject" },
   { id: "vm.config.nic.link", name: "vm.config.nic.link", category: "vm", description: "Toggle NIC link state (up/down)" },
@@ -91,6 +92,12 @@ export const ALL_PERMISSIONS: Permission[] = [
   { id: "admin.compliance", name: "admin.compliance", category: "admin", description: "Manage compliance and security policies", isDangerous: true },
   { id: "admin.tenants", name: "admin.tenants", category: "admin", description: "Manage tenants (multi-tenancy)", isDangerous: true },
   { id: "admin.apitokens", name: "admin.apitokens", category: "admin", description: "Manage API tokens (create, revoke)", isDangerous: true },
+  { id: "admin.identity", name: "admin.identity", category: "admin", description: "Manage the tenant's own identity provider, when the provider allows it", isDangerous: true },
+  { id: "admin.users.view", name: "admin.users.view", category: "admin", description: "View users and their tenant memberships (implied by admin.users)" },
+  { id: "admin.rbac.view", name: "admin.rbac.view", category: "admin", description: "View roles, permissions and role assignments (implied by admin.rbac)" },
+  { id: "admin.settings.view", name: "admin.settings.view", category: "admin", description: "View provider settings: vDCs, EVPN zones, storage policies (implied by admin.settings)" },
+  { id: "admin.tenants.view", name: "admin.tenants.view", category: "admin", description: "View tenants and their members (implied by admin.tenants)" },
+  { id: "admin.settings.vdcs", name: "admin.settings.vdcs", category: "admin", description: "Manage vDCs, their GPU quota, storage policies and shared EVPN zones (implied by admin.settings)", isDangerous: true },
 
   // SDN / VNet
   { id: "sdn.vnet.view", name: "sdn.vnet.view", category: "sdn", description: "List and view VNets in own vDCs" },
@@ -193,6 +200,8 @@ export const ROLES: RoleSeed[] = [
       // network security, flows, resources) are provider-only.
       "vm.view", "vm.console", "vm.start", "vm.stop", "vm.restart", "vm.suspend",
       "vm.snapshot", "vm.backup", "vm.clone", "vm.migrate", "vm.config", "vm.delete", "vm.create",
+      // #1335: move a VM between the tenant's own vDCs, quotas checked on the target.
+      "vm.move_vdc",
       "node.view", "connection.view",
       // issue #920: the vDC ISO library is the tenant's own, guarded to its
       // storages by guardTenantStorageWrite.
@@ -200,6 +209,8 @@ export const ROLES: RoleSeed[] = [
       "backup.view", "backup.restore", "backup.delete",
       "backup.job.view", "backup.job.create", "backup.job.edit", "backup.job.delete", "backup.job.run",
       "admin.users", "admin.rbac", "admin.settings", "admin.audit",
+      // issue #1289: only effective once the provider opens self-service.
+      "admin.identity",
       "alerts.view", "alerts.manage",
       "events.view", "tasks.view",
       "reports.view",

@@ -21,6 +21,7 @@ import {
 import VnetCreateDialog from '@/components/mydc/VnetCreateDialog'
 import VnetEditDialog from '@/components/mydc/VnetEditDialog'
 import VnetDeleteDialog from '@/components/mydc/VnetDeleteDialog'
+import VnetPresenceDialog from '@/components/mydc/VnetPresenceDialog'
 import TenantVnetDetailPanel from './TenantVnetDetailPanel'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { useTenant } from '@/contexts/TenantContext'
@@ -39,6 +40,9 @@ interface Vdc {
    *  provider-set and forwarded to the create dialog. */
   transport?: { sharing?: string; vniRangeStart?: number | null; vniRangeEnd?: number | null } | null
   edgeModel?: string | null
+  /** Shared EVPN zone the vDC is attached to (#1334), and its own VXLAN zone if any. */
+  evpnZoneId?: string | null
+  sdnZoneName?: string | null
 }
 
 interface SubnetView {
@@ -69,8 +73,9 @@ interface VnetRow {
   /** IPAM allocation counts (used / usable). Always returned by the API. */
   ipamUsage: IpamUsage
   /** Set when a stretched tenant network created the VNet (#901): the
-   *  provider manages it, the tenant only consumes it. */
-  tenantNetwork?: { id: string; name: string } | null
+   *  provider manages it, the tenant only consumes it. `shared` marks a
+   *  network the tenant created itself in a shared zone (#1334): its own. */
+  tenantNetwork?: { id: string; name: string; shared?: boolean } | null
 }
 
 interface Props {
@@ -94,6 +99,7 @@ export default function VnetsSection({ connectionIds }: Props) {
   const [createOpen, setCreateOpen] = useState(false)
   const [editVnet, setEditVnet] = useState<{ row: VnetRow } | null>(null)
   const [deleteVnet, setDeleteVnet] = useState<{ row: VnetRow } | null>(null)
+  const [presenceVnet, setPresenceVnet] = useState<{ row: VnetRow } | null>(null)
   // Detail modal: opened by clicking a row. Reuses TenantVnetDetailPanel
   // so we don't duplicate the IPAM table / VM lookup / edit flow.
   const [detailVnet, setDetailVnet] = useState<{ row: VnetRow } | null>(null)
@@ -272,16 +278,16 @@ export default function VnetsSection({ connectionIds }: Props) {
                       <TableCell sx={{ py: 1 }}>
                         <Stack direction="row" spacing={1} alignItems="center">
                           <Tooltip title={`PVE ID: ${r.pveName} · vDC: ${r.vdcName}${r.tag ? ` · ${r.type === 'vlan' ? 'VLAN' : 'VNI'} ${r.tag}` : ''}`} arrow placement="top">
-                            <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12 }}>{r.displayName}</Typography>
+                            <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12, whiteSpace: 'nowrap' }}>{r.displayName}</Typography>
                           </Tooltip>
                           {r.tenantNetwork && (
-                            <Tooltip title={t('myVdc.vnetStretchedTooltip', { network: r.tenantNetwork.name })} arrow placement="top">
+                            <Tooltip title={t(r.tenantNetwork.shared ? 'myVdc.vnetSharedTooltip' : 'myVdc.vnetStretchedTooltip', { network: r.tenantNetwork.name })} arrow placement="top">
                               <Chip
                                 size="small"
                                 color="primary"
                                 variant="outlined"
-                                icon={<i className="ri-links-line" style={{ fontSize: 13 }} />}
-                                label={t('myVdc.vnetStretched')}
+                                icon={<i className={r.tenantNetwork.shared ? 'ri-share-line' : 'ri-links-line'} style={{ fontSize: 13 }} />}
+                                label={t(r.tenantNetwork.shared ? 'myVdc.vnetShared' : 'myVdc.vnetStretched')}
                                 sx={{ height: 20, fontSize: 11 }}
                               />
                             </Tooltip>
@@ -342,11 +348,22 @@ export default function VnetsSection({ connectionIds }: Props) {
                         />
                       </TableCell>
                       <TableCell align="right" sx={{ py: 0.5 }}>
-                        <Tooltip title={r.tenantNetwork ? t('myVdc.vnetStretchedManaged') : ''} arrow placement="left">
+                        <Tooltip title={r.tenantNetwork && !r.tenantNetwork.shared ? t('myVdc.vnetStretchedManaged') : ''} arrow placement="left">
                           <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                            {r.tenantNetwork?.shared && (
+                              <Tooltip title={t('myVdc.vnetSharedManage')} arrow placement="top">
+                                <IconButton
+                                  size="small"
+                                  aria-label={t('myVdc.vnetSharedManage')}
+                                  onClick={(e) => { e.stopPropagation(); setPresenceVnet({ row: r }) }}
+                                >
+                                  <i className="ri-checkbox-multiple-line" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
                             <IconButton
                               size="small"
-                              disabled={!!r.tenantNetwork}
+                              disabled={!!r.tenantNetwork && !r.tenantNetwork.shared}
                               onClick={(e) => { e.stopPropagation(); setEditVnet({ row: r }) }}
                             >
                               <i className="ri-pencil-line" />
@@ -354,7 +371,7 @@ export default function VnetsSection({ connectionIds }: Props) {
                             <IconButton
                               size="small"
                               color="error"
-                              disabled={!!r.tenantNetwork}
+                              disabled={!!r.tenantNetwork && !r.tenantNetwork.shared}
                               onClick={(e) => { e.stopPropagation(); setDeleteVnet({ row: r }) }}
                             >
                               <i className="ri-delete-bin-line" />
@@ -374,7 +391,10 @@ export default function VnetsSection({ connectionIds }: Props) {
 
       <VnetCreateDialog
         open={createOpen}
-        vdcs={vdcs.map(v => ({ id: v.id, name: v.name, vlanPools: v.vlanPools ?? [], transport: v.transport ?? null, edgeModel: v.edgeModel ?? null }))}
+        vdcs={vdcs.map(v => ({
+          id: v.id, name: v.name, vlanPools: v.vlanPools ?? [], transport: v.transport ?? null, edgeModel: v.edgeModel ?? null,
+          evpnZoneId: v.evpnZoneId ?? null, hasOwnZone: !!v.sdnZoneName,
+        }))}
         onClose={() => setCreateOpen(false)}
         onCreated={() => { setCreateOpen(false); void reload(); notifyTreeChanged() }}
       />
@@ -384,6 +404,15 @@ export default function VnetsSection({ connectionIds }: Props) {
           vdcId={editVnet.row.vdcId}
           onClose={() => setEditVnet(null)}
           onSaved={() => { setEditVnet(null); void reload(); notifyTreeChanged() }}
+        />
+      )}
+      {presenceVnet?.row.tenantNetwork && (
+        <VnetPresenceDialog
+          vdcId={presenceVnet.row.vdcId}
+          networkId={presenceVnet.row.tenantNetwork.id}
+          networkName={presenceVnet.row.displayName}
+          onClose={() => setPresenceVnet(null)}
+          onSaved={() => { setPresenceVnet(null); void reload(); notifyTreeChanged() }}
         />
       )}
       {deleteVnet && (

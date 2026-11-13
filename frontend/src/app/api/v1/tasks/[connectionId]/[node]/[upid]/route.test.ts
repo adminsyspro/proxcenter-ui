@@ -70,6 +70,7 @@ import { prisma } from '@/lib/db/prisma'
 import { executeSSH } from '@/lib/ssh/exec'
 import { getNodeIp } from '@/lib/ssh/node-ip'
 import { formatBytes as formatSize } from '@/utils/format'
+import { asRoot } from '@/lib/ssh/sudo'
 
 const checkPermissionMock = checkPermission as any
 const getConnectionByIdMock = getConnectionById as any
@@ -157,7 +158,7 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid] — source-VM cleanup (
     const res = await GET(req, { params })
 
     expect(res.status).toBe(200)
-    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', expect.objectContaining({ host: '10.0.0.2' }), 'qm unlock 100')
+    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', expect.objectContaining({ host: '10.0.0.2' }), asRoot('qm unlock 100'))
     expect(sawSourceVmDelete()).toBe(false)
   })
 
@@ -260,7 +261,7 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid] — source-VM cleanup (
     const res = await GET(req, { params })
 
     expect(res.status).toBe(200)
-    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', expect.objectContaining({ host: '10.0.0.2' }), 'qm unlock 100')
+    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', expect.objectContaining({ host: '10.0.0.2' }), asRoot('qm unlock 100'))
     expect(sawSourceVmDelete()).toBe(false)
   })
 })
@@ -804,7 +805,7 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC per
   it('a token with vms:migrate releases it, as a session does', async () => {
     configResult = { name: 'vm100', lock: 'migrate' }
     expect((await tokenGet(UPID, { ...token, scopes: ['vms:migrate'] })).status).toBe(200)
-    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', expect.objectContaining({ host: '10.0.0.2' }), 'qm unlock 100')
+    expect(executeSSHMock).toHaveBeenCalledWith('conn-1', expect.objectContaining({ host: '10.0.0.2' }), asRoot('qm unlock 100'))
   })
 })
 

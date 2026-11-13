@@ -145,6 +145,17 @@ describe('POST /api/v1/settings/api-tokens', () => {
     expect(await prismaTest.apiToken.findFirst({ where: { name: validBody.name } })).toBeNull()
   })
 
+  it('rejects vdcs:write on a token restricted to connections (issue #1360): its writes reach every connection', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: { ...validBody, scopes: ['vdcs:write'], connectionIds: ['conn-a'] } })
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toEqual({
+      error: 'vdcs:write reaches every connection: it needs a token not restricted to connections',
+      scope: 'vdcs:write',
+    })
+    expect(await prismaTest.apiToken.findFirst({ where: { name: validBody.name } })).toBeNull()
+  })
+
   it('rejects a target tenant that does not exist, with the same body as a disabled one', async () => {
     const { POST } = await import('./route')
     const res = await callRoute(POST, { body: { ...validBody, tenantId: 'no-such-tenant' } })
@@ -465,5 +476,120 @@ describe('DELETE /api/v1/settings/api-tokens/{id}', () => {
     expect(await readJson<any>(res)).toEqual({ error: 'Internal server error' })
     // Rolled back with the audit insert: the credential is still there.
     expect(await prismaTest.apiToken.findUnique({ where: { id } })).not.toBeNull()
+  })
+})
+
+describe('POST /api/v1/settings/api-tokens/{id}/rotate', () => {
+  const rotate = async (id: string) => {
+    const { POST } = await import('./[id]/rotate/route')
+    return callRoute(POST, { method: 'POST', params: { id } })
+  }
+
+  it('replaces the secret and the prefix, keeps everything else, and makes the caller the creator', async () => {
+    const expiresAt = new Date(Date.now() + 86_400_000)
+    const { id, secret, prefix } = await seedApiToken({ scopes: ['vms:read', 'vms:power'], connectionIds: ['c1'], expiresAt, rateLimitPerMin: 42 })
+    const before = await prismaTest.apiToken.findUnique({ where: { id } })
+
+    const res = await rotate(id)
+    expect(res.status).toBe(200)
+    const body = await readJson<any>(res)
+    expect(body.data.secret).toMatch(/^pxc_/)
+    expect(body.data.secret).not.toBe(secret)
+    expect(body.data.token.tokenPrefix).toBe(body.data.secret.slice(0, 12))
+    expect(body.data.token.tokenHash).toBeUndefined()
+
+    const after = await prismaTest.apiToken.findUnique({ where: { id } })
+    expect(after!.tokenPrefix).not.toBe(prefix)
+    expect(after!.tokenHash).not.toBe(before!.tokenHash)
+    expect(after).toMatchObject({
+      name: before!.name, tenantId: 'default', scopes: ['vms:read', 'vms:power'], connectionIds: ['c1'],
+      rateLimitPerMin: 42, createdByUserId: 'admin-1', createdByEmail: 'admin-1@test.local',
+    })
+    expect(after!.expiresAt?.getTime()).toBe(expiresAt.getTime())
+    expect(JSON.stringify(after)).not.toContain(body.data.secret)
+    expect(auditMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'apitoken.rotate', resourceId: id, details: { previousPrefix: prefix, tokenPrefix: after!.tokenPrefix } }),
+      expect.anything(),
+    )
+  })
+
+  it('is refused without admin.apitokens, and without the licence option', async () => {
+    const { id, prefix } = await seedApiToken()
+    checkPermissionMock.mockResolvedValue(new Response(JSON.stringify({ error: 'nope' }), { status: 403 }))
+    expect((await rotate(id)).status).toBe(403)
+    checkPermissionMock.mockResolvedValue(null)
+    requireFeatureMock.mockResolvedValue(new Response(JSON.stringify({ error: 'licence' }), { status: 402 }))
+    expect((await rotate(id)).status).toBe(402)
+    expect((await prismaTest.apiToken.findUnique({ where: { id } }))!.tokenPrefix).toBe(prefix)
+  })
+
+  it('404 on an unknown token and on a token of another tenant for a non-admin', async () => {
+    expect((await rotate('nope')).status).toBe(404)
+    getRBACContextMock.mockResolvedValue({ userId: 'admin-1', isAdmin: false, tenantId: 'default' })
+    const now = new Date()
+    await prismaTest.tenant.create({ data: { id: 't2', slug: 't2', name: 'T2', operatingModel: 'msp', createdAt: now, updatedAt: now } })
+    const { id, prefix } = await seedApiToken({ tenantId: 't2' })
+    expect((await rotate(id)).status).toBe(404)
+    expect((await prismaTest.apiToken.findUnique({ where: { id } }))!.tokenPrefix).toBe(prefix)
+  })
+
+  it('refuses a legacy revoked token', async () => {
+    const { id, prefix } = await seedApiToken({ revokedAt: new Date() })
+    expect((await rotate(id)).status).toBe(409)
+    expect((await prismaTest.apiToken.findUnique({ where: { id } }))!.tokenPrefix).toBe(prefix)
+  })
+
+  describe('anti-escalation', () => {
+    const asUser = (userId: string | undefined = 'admin-1') => getRBACContextMock.mockResolvedValue({ userId, isAdmin: false, tenantId: 'default' })
+
+    it('refuses a token carrying a scope the caller does not hold, naming it, and changes nothing', async () => {
+      asUser()
+      holdsMock.mockImplementation(async (_u, _t, key) => key === 'vm.view')
+      const { id, prefix } = await seedApiToken({ scopes: ['vms:read', 'vms:power'] })
+      const res = await rotate(id)
+      expect(res.status).toBe(403)
+      expect(await readJson<any>(res)).toEqual({ error: 'You cannot rotate a token carrying a scope you do not hold', scope: 'vms:power' })
+      expect((await prismaTest.apiToken.findUnique({ where: { id } }))!.tokenPrefix).toBe(prefix)
+      expect(auditMock).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'apitoken.rotate' }), expect.anything())
+    })
+
+    it('checks the held rights against the tenant and the connections of the token', async () => {
+      asUser()
+      const { id } = await seedApiToken({ scopes: ['vms:power'], connectionIds: ['c9'] })
+      expect((await rotate(id)).status).toBe(200)
+      expect(holdsMock).toHaveBeenCalledWith('admin-1', 'default', expect.any(String), ['c9'])
+    })
+
+    it('a held-rights lookup that fails is a 503, and nothing changes', async () => {
+      asUser()
+      holdsMock.mockRejectedValue(new Error('db down: secret details'))
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const { id, prefix } = await seedApiToken({ scopes: ['vms:power'] })
+      const res = await rotate(id)
+      expect(res.status).toBe(503)
+      expect(await readJson<any>(res)).toEqual({ error: 'Unable to verify the scopes you can grant' })
+      expect((await prismaTest.apiToken.findUnique({ where: { id } }))!.tokenPrefix).toBe(prefix)
+      errSpy.mockRestore()
+    })
+
+    it('fails closed for a non-admin without a user id, but lets read-only scopes through with no creator', async () => {
+      getRBACContextMock.mockResolvedValue({ isAdmin: false, tenantId: 'default' })
+      const write = await seedApiToken({ scopes: ['vms:power'] })
+      expect((await rotate(write.id)).status).toBe(403)
+      const read = await seedApiToken({ scopes: ['vms:read'], createdByUserId: 'admin-1' })
+      expect((await rotate(read.id)).status).toBe(200)
+      expect((await prismaTest.apiToken.findUnique({ where: { id: read.id } }))!.createdByUserId).toBeNull()
+    })
+  })
+
+  it('answers a generic 500 and keeps the old secret when the journal row cannot be written', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    auditMock.mockRejectedValue(new Error('audit store down at /srv/app'))
+    const { id, prefix } = await seedApiToken()
+    const res = await rotate(id)
+    expect(res.status).toBe(500)
+    expect(await readJson<any>(res)).toEqual({ error: 'Internal server error' })
+    expect((await prismaTest.apiToken.findUnique({ where: { id } }))!.tokenPrefix).toBe(prefix)
+    errSpy.mockRestore()
   })
 })

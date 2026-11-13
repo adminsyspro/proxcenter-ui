@@ -2,7 +2,7 @@
 // Dialog pour ajouter/modifier une connexion PVE/PBS avec support SSH
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { useTheme } from '@mui/material/styles'
 
@@ -47,13 +47,16 @@ import NumericTextField from '@/components/ui/NumericTextField'
 import { useTenant } from '@/contexts/TenantContext'
 import { useCopyToClipboard } from '@/lib/clipboard'
 import { isPartialIPv4Cidr, isValidCidr } from '@/lib/net/cidr'
-import { isHostKeyMismatch } from './hostKeyMismatch'
+import type { SshHostKeyRefusal } from './hostKeyRefusal'
 import NodeSshEndpointsEditor from '@/components/ssh/NodeSshEndpointsEditor'
 import { formatSshEndpoint } from '@/lib/ssh/node-endpoint-core'
+import type { SudoCheck } from '@/lib/ssh/sudo'
+import SudoCheckLines, { NotDeployedLine, profilesAbsentEverywhere, uniformSudoCheck } from './SudoCheckLines'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { isZeroRateLimitValid, ZERO_RATE_LIMIT_MAX_MBPS } from '@/lib/migration/warm/zero-rate'
 import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
 import { DEFAULT_INTEGRITY_SETTINGS, INTEGRITY_REGION_COUNT_MAX, INTEGRITY_REGION_SIZE_MIB_MAX, estimateIntegritySecondsPerDisk, integritySettingsFromConnection } from '@/lib/migration/integrity-settings'
+import { MIGRATION_LIMIT_MAX, MIGRATION_PARALLEL_DEFAULT, MIGRATION_PER_NODE_DEFAULT, MIGRATION_PER_SOURCE_HOST_DEFAULT } from '@/lib/migration/migration-limits'
 
 export type ConnectionFormData = {
   name: string
@@ -92,6 +95,10 @@ export type ConnectionFormData = {
   integrityCheckEnabled: boolean
   integrityRegionCount: number
   integrityRegionSizeMiB: number
+  /** Bulk migration limits (ui#1332): cluster and per node on a PVE target, per ESXi host on a VMware source. */
+  migrationMaxParallel: number
+  migrationMaxPerNode: number
+  migrationMaxPerSourceHost: number
   // Provider-only, create mode: own the connection by an MSP tenant ('' = pool)
   ownerTenantId: string
 }
@@ -145,6 +152,9 @@ const defaultFormData: ConnectionFormData = {
   integrityCheckEnabled: DEFAULT_INTEGRITY_SETTINGS.enabled,
   integrityRegionCount: DEFAULT_INTEGRITY_SETTINGS.regionCount,
   integrityRegionSizeMiB: DEFAULT_INTEGRITY_SETTINGS.regionSizeMiB,
+  migrationMaxParallel: MIGRATION_PARALLEL_DEFAULT,
+  migrationMaxPerNode: MIGRATION_PER_NODE_DEFAULT,
+  migrationMaxPerSourceHost: MIGRATION_PER_SOURCE_HOST_DEFAULT,
   ownerTenantId: '',
 }
 
@@ -240,18 +250,31 @@ export default function ConnectionDialog({
       host?: string
       port?: number
       address_source?: 'override' | 'proxmox'
+      // Set for a non-root account with sudo: what its sudoers file allows.
+      sudoCheck?: SudoCheck
+      // The host key the node presented, when it was refused (not confirmed yet, or changed).
+      host_key?: SshHostKeyRefusal
     }[]
+    // The orchestrator could not list its rules: only the frontend's were checked.
+    sudoRulesPartial?: boolean
+    // sudo switched on for root, which never uses it: nothing was checked.
+    sudoSkipped?: 'root'
     error?: string
   } | null>(null)
 
-  // Re-trust: drop the pinned SSH host key of one node, then re-run the test.
-  // `retrustingHost` doubles as the "one at a time" lock -- the row spinner and
-  // the guard in handleRetrustHost read the same value, so a double click (or a
-  // click on a second row while the first is in flight) cannot fire two DELETEs.
-  const [retrustingHost, setRetrustingHost] = useState<string | null>(null)
-  const [retrustFeedback, setRetrustFeedback] = useState<
-    Record<string, { error?: string; orchestratorUnavailable?: boolean }>
-  >({})
+  // Nodes that all answered the sudoers check alike are summed up in one line,
+  // and a profile no node holds is a choice rather than a fault.
+  const sudoUniform = useMemo(() => uniformSudoCheck(sshTestResult?.nodes ?? []), [sshTestResult])
+  const sudoAbsentEverywhere = useMemo(
+    () => profilesAbsentEverywhere((sshTestResult?.nodes ?? []).flatMap(n => (n.sudoCheck ? [n.sudoCheck] : []))),
+    [sshTestResult],
+  )
+
+  // Trust: confirm the host key one node presented, then re-run the test.
+  // `trustingEndpoint` doubles as the "one at a time" lock, so a double click
+  // cannot fire two confirmations.
+  const [trustingEndpoint, setTrustingEndpoint] = useState<string | null>(null)
+  const [trustErrors, setTrustErrors] = useState<Record<string, string>>({})
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -283,6 +306,9 @@ export default function ConnectionDialog({
             const i = integritySettingsFromConnection(initialData as any)
             return { integrityCheckEnabled: i.enabled, integrityRegionCount: i.regionCount, integrityRegionSizeMiB: i.regionSizeMiB }
           })(),
+          migrationMaxParallel: (initialData as any).migrationMaxParallel ?? MIGRATION_PARALLEL_DEFAULT,
+          migrationMaxPerNode: (initialData as any).migrationMaxPerNode ?? MIGRATION_PER_NODE_DEFAULT,
+          migrationMaxPerSourceHost: (initialData as any).migrationMaxPerSourceHost ?? MIGRATION_PER_SOURCE_HOST_DEFAULT,
           subType: editSubType,
           // External hypervisors keep "user:password" encrypted; the list payload
           // hands the user back as apiUser (never the password). Without it the
@@ -441,6 +467,7 @@ export default function ConnectionDialog({
       sshPort: form.sshPort,
       sshUser: form.sshUser,
       sshAuthMethod: form.sshAuthMethod,
+      sshUseSudo: form.sshUseSudo,
     }
 
     if (form.sshKey.trim()) payload.sshKey = form.sshKey
@@ -468,48 +495,40 @@ export default function ConnectionDialog({
     }
   }
 
-  // Forget the pinned host key of a single node and immediately re-run the SSH
-  // test, so the row the operator clicked turns green on its own instead of
-  // asking them to press "Test SSH connection" again. The route takes the bare
-  // host, which is exactly what the row carries (no port).
-  const handleRetrustHost = async (host: string) => {
-    if (retrustingHost) return
+  // Trust the host key a node presented, by its fingerprint, then re-run the
+  // test so the row turns green on its own. A key that changed in between is
+  // refused by the route, so the operator never trusts a key they did not see.
+  const handleTrustHostKey = async (hostKey: SshHostKeyRefusal) => {
+    if (trustingEndpoint) return
 
-    setRetrustingHost(host)
-    setRetrustFeedback(prev => {
+    setTrustingEndpoint(hostKey.endpoint)
+    setTrustErrors(prev => {
       const next = { ...prev }
-      delete next[host]
+
+      delete next[hostKey.endpoint]
+
       return next
     })
 
     try {
-      const res = await fetch(`/api/v1/ssh/host-keys/${encodeURIComponent(host)}`, {
-        method: 'DELETE',
+      const res = await fetch('/api/v1/ssh/host-keys/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host: hostKey.endpoint, fingerprint: hostKey.fingerprint }),
       })
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        setRetrustFeedback(prev => ({
-          ...prev,
-          [host]: { error: json?.error || `HTTP ${res.status}` },
-        }))
-        return
-      }
+        setTrustErrors(prev => ({ ...prev, [hostKey.endpoint]: json?.error || `HTTP ${res.status}` }))
 
-      // The pin is gone frontend-side but the orchestrator kept its own: say so,
-      // otherwise the next failure looks like the button did nothing.
-      if (json?.orchestratorUnavailable) {
-        setRetrustFeedback(prev => ({ ...prev, [host]: { orchestratorUnavailable: true } }))
+        return
       }
 
       await handleTestSSH()
     } catch (e: any) {
-      setRetrustFeedback(prev => ({
-        ...prev,
-        [host]: { error: e?.message || String(e) },
-      }))
+      setTrustErrors(prev => ({ ...prev, [hostKey.endpoint]: e?.message || String(e) }))
     } finally {
-      setRetrustingHost(null)
+      setTrustingEndpoint(null)
     }
   }
 
@@ -648,7 +667,9 @@ export default function ConnectionDialog({
   // section always had (PVE and standalone ESXi only).
  // Migration settings of a target cluster: Enterprise, PVE, and only once a
   // source hypervisor exists to migrate from.
-  const showMigrationsTab = type === 'pve' && migrationAvailable && migrationSourcesConfigured
+  // A VMware source gets the tab too, for its per-host limit of bulk
+  // migrations (ui#1332).
+  const showMigrationsTab = migrationAvailable && ((type === 'pve' && migrationSourcesConfigured) || isVmware)
   const showSshTab = !isPbs && !isXcpng && !isHyperv && !isNutanix && !(isVmware && form.subType === 'vcenter')
   const visibleTabs: { id: ConnectionTabId; label: string; icon: string }[] = [
     { id: 'general', label: t('settings.connectionTabGeneral'), icon: 'ri-settings-3-line' },
@@ -1380,6 +1401,11 @@ export default function ConnectionDialog({
               }
               sx={{ mt: 1, ml: 0 }}
             />
+            {form.sshUseSudo && (form.sshUser || 'root').trim() === 'root' && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 1 }}>
+                {t('settings.sshSudoCheck.rootNoEffect')}
+              </Typography>
+            )}
 
             {/* Per-node SSH address and port (PVE): needs the saved connection's nodes */}
             {type === 'pve' && form.sshEnabled && (
@@ -1418,20 +1444,29 @@ export default function ConnectionDialog({
                           ? t('settings.sshTestSuccess')
                           : (sshTestResult.error || t('settings.sshTestFailed'))}
                       </Typography>
+                      {sshTestResult.sudoSkipped === 'root' && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                          {t('settings.sshSudoCheck.rootSkipped')}
+                        </Typography>
+                      )}
+                      {sudoUniform ? (
+                        <SudoCheckLines check={sudoUniform} user={form.sshUser || 'root'} absentEverywhere={sudoAbsentEverywhere} summaryCount={sshTestResult.nodes?.filter(n => n.status === 'ok').length} />
+                      ) : (
+                        <NotDeployedLine profiles={sudoAbsentEverywhere} />
+                      )}
                       {/* Always render the per-node breakdown when present, even when the
                           overall test failed. In a cluster a single unreachable or
                           misconfigured node fails the whole test; the user needs to see
                           WHICH node failed and why instead of a bare "SSH test failed"
                           (issue #492). */}
                       {sshTestResult.nodes?.map(node => {
-                        // Only a pinned-key mismatch is curable from here. Every
-                        // other failure (auth, timeout, unreachable) survives
-                        // dropping the pin, and offering the button anyway would
-                        // teach the operator to clear pins on any red row.
-                        const canRetrust = node.status !== 'ok' && isHostKeyMismatch(node.error)
+                        // Only a refused host key is curable from here: the row
+                        // carries the key the node presented, to trust by its
+                        // fingerprint. Auth, timeout and network failures are not.
+                        const hostKey = node.status !== 'ok' ? node.host_key : undefined
                         const host = node.host || node.ip
-                        const feedback = retrustFeedback[host]
-                        const busy = retrustingHost === host
+                        const trustError = hostKey ? trustErrors[hostKey.endpoint] : undefined
+                        const busy = !!hostKey && trustingEndpoint === hostKey.endpoint
                         const target = node.port ? formatSshEndpoint({ host, port: node.port }) : host
                         const sourceKey = node.address_source && SSH_ADDRESS_SOURCE_KEYS[node.address_source]
                         const source = sourceKey ? t(sourceKey) : null
@@ -1444,46 +1479,57 @@ export default function ConnectionDialog({
                               <Typography variant="body2">
                                 {node.node} ({source ? `${target}, ${source}` : target})
                               </Typography>
-                              {node.error && (
+                              {node.error && !hostKey && (
                                 <Typography variant="caption" color="error">
                                   - {node.error}
                                 </Typography>
                               )}
-                              {canRetrust && (
-                                <Tooltip title={t('settings.sshRetrustHostHelper')}>
+                              {hostKey && (
+                                <Typography variant="caption" color={hostKey.state === 'mismatch' ? 'error' : 'warning.main'}>
+                                  - {t(hostKey.state === 'mismatch' ? 'settings.sshHostKeyChanged' : 'settings.sshHostKeyUnconfirmed')}
+                                </Typography>
+                              )}
+                              {hostKey && (
+                                <Tooltip title={t('settings.sshTrustHostKeyHelper')}>
                                   <span>
                                     <Button
                                       size="small"
                                       variant="outlined"
                                       color="warning"
-                                      onClick={() => handleRetrustHost(host)}
-                                      disabled={retrustingHost !== null || testingSSH}
+                                      onClick={() => handleTrustHostKey(hostKey)}
+                                      disabled={trustingEndpoint !== null || testingSSH}
                                       startIcon={busy
                                         ? <CircularProgress size={14} />
                                         : <i className="ri-shield-keyhole-line" />}
                                       sx={{ py: 0, minHeight: 26 }}
                                     >
-                                      {t('settings.sshRetrustHost')}
+                                      {t(hostKey.state === 'mismatch' ? 'settings.sshTrustNewHostKey' : 'settings.sshTrustHostKey')}
                                     </Button>
                                   </span>
                                 </Tooltip>
                               )}
                             </Box>
-                            {/* Two stacked MUI captions sit side by side unless
-                                each one is told to be a block. */}
-                            {feedback?.error && (
-                              <Typography variant="caption" color="error" sx={{ display: 'block', ml: 3 }}>
-                                {t('settings.sshRetrustFailed', { error: feedback.error })}
+                            {node.sudoCheck && !sudoUniform && <SudoCheckLines check={node.sudoCheck} user={form.sshUser || 'root'} absentEverywhere={sudoAbsentEverywhere} showNotDeployed={false} />}
+                            {hostKey && (
+                              <Typography variant="caption" sx={{ display: 'block', ml: 3 }}>
+                                {t('settings.sshHostKeyFingerprint', { keyType: hostKey.key_type, fingerprint: hostKey.fingerprint })}
                               </Typography>
                             )}
-                            {feedback?.orchestratorUnavailable && (
-                              <Typography variant="caption" color="warning.main" sx={{ display: 'block', ml: 3 }}>
-                                {t('settings.sshRetrustOrchestratorUnavailable')}
+                            {/* Two stacked MUI captions sit side by side unless
+                                each one is told to be a block. */}
+                            {trustError && (
+                              <Typography variant="caption" color="error" sx={{ display: 'block', ml: 3 }}>
+                                {t('settings.sshTrustFailed', { error: trustError })}
                               </Typography>
                             )}
                           </Box>
                         )
                       })}
+                      {sshTestResult.sudoRulesPartial && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                          {t('settings.sshSudoCheck.rulesPartial')}
+                        </Typography>
+                      )}
                     </Alert>
                   </Box>
                 )}
@@ -1542,6 +1588,40 @@ export default function ConnectionDialog({
         <Box role="tabpanel" hidden={currentTab !== 'migrations'} sx={{ pt: 1 }}>
         {showMigrationsTab && (
           <>
+            {/* Bulk migration limits (ui#1332): how many migrations run at once
+                into this cluster and into one of its nodes, or out of one ESXi
+                host of this source. */}
+            <SectionTitle icon="ri-stack-line" title={t('settings.migrationLimits')} optional={t('common.optional')} info={t(isVmware ? 'settings.migrationLimitsSourceInfo' : 'settings.migrationLimitsTargetInfo')} />
+            <Box sx={{ mt: 1, mb: 1 }}>
+              {(isVmware
+                ? [['migrationMaxPerSourceHost', t('settings.migrationMaxPerSourceHost')]] as const
+                : [['migrationMaxParallel', t('settings.migrationMaxParallel')], ['migrationMaxPerNode', t('settings.migrationMaxPerNode')]] as const
+              ).map(([field, label]) => (
+                <Box key={field} sx={{ mb: 1 }}>
+                  <Typography variant="body2">
+                    {label} <Box component="span" sx={{ fontWeight: 600 }} data-testid={`connection-${field}-value`}>{form[field]}</Box>
+                  </Typography>
+                  <Slider
+                    sx={{ mx: 4, width: 'calc(100% - 64px)' }}
+                    value={form[field]}
+                    min={1}
+                    max={MIGRATION_LIMIT_MAX}
+                    step={1}
+                    marks={[1, 5, 10, 15, 20].map(v => ({ value: v, label: `${v}` }))}
+                    onChange={(_e, v) => handleChange(field, v as number)}
+                    slotProps={{ input: { 'aria-label': label, 'data-testid': `connection-${field}` } as any }}
+                  />
+                </Box>
+              ))}
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                {t(isVmware ? 'settings.migrationLimitsSourceCaption' : 'settings.migrationLimitsTargetCaption')}
+              </Typography>
+            </Box>
+          </>
+        )}
+        {showMigrationsTab && type === 'pve' && (
+          <>
+            <Divider sx={{ my: 2.5 }} />
             {/* Section: warm migrations INTO this cluster (roadmap#45, Enterprise).
                 The zeroing cap protects the array behind this cluster's thick
                 storage, whatever the source hypervisor: it belongs to the target. */}

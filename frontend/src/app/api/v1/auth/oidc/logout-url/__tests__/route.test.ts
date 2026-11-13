@@ -9,11 +9,17 @@ import { callRoute, readJson } from "@/__tests__/setup/route-test"
 
 const getTokenMock = vi.fn()
 const getOidcConfigMock = vi.fn()
+const connectionIdOfUserMock = vi.fn()
+const loginPathMock = vi.fn()
 const discoverMock = vi.fn()
 const sessionIdTokenMock = vi.fn()
 
 vi.mock("next-auth/jwt", () => ({ getToken: getTokenMock }))
-vi.mock("@/lib/auth/oidc", () => ({ getOidcConfig: getOidcConfigMock }))
+vi.mock("@/lib/auth/oidcConnections", () => ({
+  getOidcConnection: getOidcConfigMock,
+  connectionIdOfUser: connectionIdOfUserMock,
+  loginPathOfConnection: loginPathMock,
+}))
 vi.mock("@/lib/auth/sessions", () => ({ sessionIdToken: sessionIdTokenMock }))
 vi.mock("@/lib/auth/oidcLogout", async () => {
   const actual = await vi.importActual<typeof import("@/lib/auth/oidcLogout")>("@/lib/auth/oidcLogout")
@@ -28,7 +34,9 @@ const call = async () => {
 beforeEach(() => {
   vi.clearAllMocks()
   process.env.NEXTAUTH_URL = "https://pxc.example.com"
-  getTokenMock.mockResolvedValue({ authProvider: "oidc", sid: "sid1" })
+  getTokenMock.mockResolvedValue({ authProvider: "oidc", sid: "sid1", id: "u1" })
+  connectionIdOfUserMock.mockResolvedValue("default")
+  loginPathMock.mockResolvedValue("/login")
   sessionIdTokenMock.mockResolvedValue("the.row.token")
   getOidcConfigMock.mockResolvedValue({
     enabled: true,
@@ -119,5 +127,30 @@ describe("GET /api/v1/auth/oidc/logout-url", () => {
     delete process.env.NEXTAUTH_URL
     const url = new URL((await call()).url)
     expect(url.searchParams.get("post_logout_redirect_uri")).toBe("http://test.local/login")
+  })
+})
+
+describe("GET /api/v1/auth/oidc/logout-url for a tenant IdP user (issue #1289)", () => {
+  it("ends the session at the IdP the user signed in with", async () => {
+    connectionIdOfUserMock.mockResolvedValue("t-acme")
+    getOidcConfigMock.mockImplementation(async (id: string) =>
+      id === "t-acme"
+        ? { enabled: true, issuerUrl: "https://acme-idp.example.com", clientId: "acme-client" }
+        : { enabled: true, issuerUrl: "https://idp.example.com", clientId: "proxcenter" },
+    )
+    discoverMock.mockImplementation(async (issuer: string) => `${issuer}/logout`)
+
+    const url = new URL((await call()).url)
+    expect(connectionIdOfUserMock).toHaveBeenCalledWith("u1")
+    expect(url.origin + url.pathname).toBe("https://acme-idp.example.com/logout")
+    expect(getOidcConfigMock).toHaveBeenCalledWith("t-acme")
+  })
+
+  it("brings a tenant user back to the tenant's own login page", async () => {
+    connectionIdOfUserMock.mockResolvedValue("t-acme")
+    loginPathMock.mockResolvedValue("/login/acme")
+    const url = new URL((await call()).url)
+    expect(loginPathMock).toHaveBeenCalledWith("t-acme")
+    expect(url.searchParams.get("post_logout_redirect_uri")).toBe("https://pxc.example.com/login/acme")
   })
 })

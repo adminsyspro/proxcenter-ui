@@ -1,4 +1,4 @@
-import type { MigrationDiskMapping, MigrationHardwareOverrides, MigrationNicMapping } from "../target-overrides"
+import type { MigrationDiskMapping, MigrationHardwareOverrides, MigrationNicMapping, MigrationNetworkMapEntry, MigrationDiskOptions } from "../target-overrides"
 
 export type WarmStatus =
   | "pending" | "planning" | "enabling_cbt" | "preparing_disks" | "full_copy" | "delta_sync"
@@ -40,6 +40,12 @@ export interface WarmMigrationConfig {
   hardware?: MigrationHardwareOverrides
   /** Per-source-NIC target bridge, VLAN tag and model (#317); unmapped NICs use networkBridge. */
   nics?: MigrationNicMapping[]
+  /** Bulk network table (ui#1333): source port group to target bridge. */
+  networkMap?: MigrationNetworkMapEntry[]
+  /** "regenerate": Proxmox assigns every NIC without its own MAC choice a new MAC (ui#1330). */
+  macPolicy?: "regenerate"
+  /** Profile of the target disks (ui#1331); absent options take the defaults. */
+  diskOptions?: MigrationDiskOptions
   /** Per-source-disk target storage or exclusion (#317, lot 2); unmapped disks use targetStorage. */
   disks?: MigrationDiskMapping[]
   targetVmid?: number

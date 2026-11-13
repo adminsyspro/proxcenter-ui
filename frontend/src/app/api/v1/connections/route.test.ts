@@ -359,6 +359,22 @@ describe('POST /api/v1/connections - PVE path', () => {
     expect(res.status).toBe(400)
   })
 
+  it('stores the migration limits of a PVE connection on Enterprise only (ui#1332)', async () => {
+    pveFetchMock.mockResolvedValue({})
+    const POST = await importPOST()
+
+    let res = await callRoute(POST, { body: { ...basePveBody, migrationMaxParallel: 10, migrationMaxPerNode: 3, migrationMaxPerSourceHost: 6 } })
+    expect(res.status).toBe(201)
+    expect(connectionCreateMock.mock.calls[0][0].data).toMatchObject({ migrationMaxParallel: 10, migrationMaxPerNode: 3 })
+    expect(connectionCreateMock.mock.calls[0][0].data).not.toHaveProperty('migrationMaxPerSourceHost')
+    expect(connectionCreateMock.mock.calls[0][0].select).toEqual(expect.objectContaining({ migrationMaxParallel: true, migrationMaxPerNode: true }))
+
+    hasServerFeatureMock.mockResolvedValue(false)
+    res = await callRoute(POST, { body: { ...basePveBody, migrationMaxParallel: 10 } })
+    expect(res.status).toBe(201)
+    expect(connectionCreateMock.mock.calls[1][0].data).not.toHaveProperty('migrationMaxParallel')
+  })
+
   it('stores a null replication network when SSH is disabled, even if a value is sent', async () => {
     pveFetchMock
       .mockResolvedValueOnce({})

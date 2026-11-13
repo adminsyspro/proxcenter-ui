@@ -21,6 +21,7 @@ import { demoCephCrush, demoCephExporterFailures, demoCephExporterNodes, demoCep
 import { demoDrainPlan } from './hostDrainDemo'
 import mockDataJson from './mock-data.json'
 import { domainMock, resolveDomainMock } from './mocks'
+import { demoGpuExtraResources, demoGpuGuestConfig } from './mocks/gpu'
 import { microsegGuestOverlay } from './mocks/microseg'
 import cloudImagesJson from '@/data/cloudImages.json'
 
@@ -36,6 +37,10 @@ type MockDataMap = Record<string, any>
 // ---------------------------------------------------------------------------
 
 const MOCK_DATA: MockDataMap = mockDataJson as MockDataMap
+
+// The Acme Production VMs of the GPU demo (#672) live in its vDC pool on
+// pve-node-03: listed once with the rest of the production inventory.
+;((MOCK_DATA['/api/v1/connections/demo-pve-cluster-001/resources'] as any)?.data as any[] | undefined)?.push(...demoGpuExtraResources())
 
 // ---------------------------------------------------------------------------
 // Known demo identifiers
@@ -790,6 +795,8 @@ function buildDemoGuestConfig(vmid: number, node: string, type: string): any {
     smbios1: `uuid=00000000-0000-4000-9000-${String(vmid).padStart(12, '0')}`,
     numa: 0, onboot: 1, protection: 0, tags: (g?.tags || []).join(';'),
     node, digest: `demo${vmid}`,
+    // The GPU or vGPU of the GPU demo (#672), with the same SMBIOS UUID.
+    ...demoGpuGuestConfig(vmid),
   }
 }
 
@@ -1792,6 +1799,7 @@ export const EXTRA_MOCKS: MockDataMap = {
         'cve_scanning',
         'change_tracking',
         'sla_monitoring',
+        'gpu_management',
       ],
       options: ['control_plane_ha'],
     },

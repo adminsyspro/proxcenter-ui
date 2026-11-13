@@ -102,7 +102,7 @@ export async function collectHardeningData(opts: CollectHardeningDataOptions): P
           const nodeIp = await resolveNodeSshEndpoint(conn, n.node)
           // The audit only reads (lsmod, sysctl -n, findmnt, dpkg -l, sshd -T...):
           // a cluster outside the license is still assessed (roadmap#58).
-          const result = await executeSSH(connectionId, nodeIp, sshCommand, undefined, { readOnly: true })
+          const result = await executeSSH(connectionId, nodeIp, sshCommand, undefined, { readOnly: true, asAccount: true })
           if (result.success && result.output) {
             sshNodes.push({
               node: n.node,

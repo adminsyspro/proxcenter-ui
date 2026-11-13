@@ -3,7 +3,8 @@
  */
 
 import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
-import { applyHardwareOverrides, buildNetValue, resolveNicTarget, type MigrationTargetOverrides } from "./target-overrides"
+import { decodeXmlText } from "@/lib/vmware/soap"
+import { applyHardwareOverrides, buildNetValue, resolveNicTarget, targetNicMac, type MigrationTargetOverrides } from "./target-overrides"
 
 export interface V2vVmConfig {
   name: string
@@ -14,7 +15,8 @@ export interface V2vVmConfig {
   ostype: string // l26, win10, win11, etc.
   machine: string // q35
   scsihw: string // virtio-scsi-single
-  nics: { model: string; mac?: string }[]
+  /** Source adapters in order; `network` is the vSphere port group name, used by the bulk network table (ui#1333). */
+  nics: { model: string; mac?: string; network?: string }[]
   disks: { file: string; format: string; device: string }[]
   /** Set from the vCenter source config: the guest had a vTPM (roadmap#1). */
   hasVtpm?: boolean
@@ -201,11 +203,16 @@ export function parseV2vXml(xmlString: string): V2vVmConfig {
     const block = ifMatch[0]
     const modelMatch = block.match(/<model\s+type\s*=\s*["']([^"']+)["']/)
     const macMatch = block.match(/<mac\s+address\s*=\s*["']([^"']+)["']/)
+    // virt-v2v keeps the source network name (the vSphere port group) on
+    // `<source network=... />` or `<source bridge=... />`: the bulk network
+    // table (ui#1333) maps it.
+    const sourceMatch = block.match(/<source\s+(?:network|bridge)\s*=\s*["']([^"']+)["']/)
     const model = modelMatch ? modelMatch[1] : 'virtio'
-    const nic: { model: string; mac?: string } = { model }
+    const nic: V2vVmConfig['nics'][number] = { model }
     if (macMatch) {
       nic.mac = macMatch[1]
     }
+    if (sourceMatch) nic.network = decodeXmlText(sourceMatch[1])
     nics.push(nic)
   }
 
@@ -279,14 +286,14 @@ export function buildPveCreateParams(
 
   // Network interfaces
   config.nics.forEach((nic, i) => {
-    const target = resolveNicTarget(i, overrides?.nics, { bridge: networkBridge, vlanTag })
-    params[`net${i}`] = buildNetValue(target.model ?? nic.model, target.bridge, nic.mac, target.vlanTag)
+    const target = resolveNicTarget(i, overrides?.nics, { bridge: networkBridge, vlanTag }, { name: nic.network, map: overrides?.networkMap })
+    params[`net${i}`] = buildNetValue(target.model ?? nic.model, target.bridge, targetNicMac(nic.mac, target, overrides?.macPolicy), target.vlanTag)
   })
 
   // If no NICs were found, add a default virtio NIC
   if (config.nics.length === 0) {
     const target = resolveNicTarget(0, overrides?.nics, { bridge: networkBridge, vlanTag })
-    params.net0 = buildNetValue(target.model ?? 'virtio', target.bridge, undefined, target.vlanTag)
+    params.net0 = buildNetValue(target.model ?? 'virtio', target.bridge, targetNicMac(undefined, target), target.vlanTag)
   }
 
   return params

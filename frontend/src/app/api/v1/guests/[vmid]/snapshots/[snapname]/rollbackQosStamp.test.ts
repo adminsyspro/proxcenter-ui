@@ -44,10 +44,18 @@ vi.mock('@/lib/rbac', () => ({
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
-vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: () => getCurrentTenantIdMock() }))
+vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: () => getCurrentTenantIdMock(), DEFAULT_TENANT_ID: 'default' }))
 vi.mock('@/lib/tenant/infraScope', () => ({
   getTenantInfrastructureScope: (...a: any[]) => getTenantInfrastructureScopeMock(...a),
 }))
+const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/vdc/vnets', async (io) => {
+  const actual = await io<typeof import('@/lib/vdc/vnets')>()
+  return {
+    getAllowedNetworksForTenant: (...a: any[]) => getAllowedNetworksForTenantMock(...a),
+    validateNetAgainstScope: actual.validateNetAgainstScope,
+  }
+})
 vi.mock('@/lib/proxmox/tasks', () => ({ waitForTask: (...a: any[]) => waitForTaskMock(...a) }))
 vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
 
@@ -77,6 +85,7 @@ beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   getCurrentTenantIdMock.mockReset().mockResolvedValue('tenant-x')
+  getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
   getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: 'provider' })
   waitForTaskMock.mockReset().mockResolvedValue(undefined)
   pveFetchMock.mockReset().mockImplementation(async (_conn, _path: string, opts?: any) => {
@@ -155,5 +164,33 @@ describe('POST rollback: post-rollback QoS restamp (Finding I1)', () => {
     const res = await callRoute(POST, { method: 'POST', params: baseParams })
     expect(res.status).toBe(200)
     expect(h.afterCbs.length).toBe(0)
+  })
+})
+
+describe('rollback network scope (revoked VLAN reintroduction)', () => {
+  const allowed = () => new Map([['vmbr0', { kind: 'shared' as const, vlanRanges: [{ start: 400, end: 410 }] }]])
+
+  it('refuses a rollback whose snapshot NIC uses a VLAN outside the current pool', async () => {
+    getAllowedNetworksForTenantMock.mockResolvedValue(allowed())
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:rollback'
+      if (String(path).endsWith('/config')) return { net1: 'virtio,bridge=vmbr0,tag=300' }
+      return {}
+    })
+    const res = await callRoute(await loadPost(), { params: baseParams, body: {} })
+    expect(res.status).toBe(403)
+    // PVE rollback (the POST) must never be reached.
+    expect(pveFetchMock.mock.calls.some(c => c[2]?.method === 'POST')).toBe(false)
+  })
+
+  it('allows a rollback whose snapshot NICs are all in the current pool', async () => {
+    getAllowedNetworksForTenantMock.mockResolvedValue(allowed())
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:rollback'
+      if (String(path).endsWith('/config')) return { net0: 'virtio,bridge=vmbr0,tag=405' }
+      return {}
+    })
+    const res = await callRoute(await loadPost(), { params: baseParams, body: {} })
+    expect(res.status).toBe(200)
   })
 })

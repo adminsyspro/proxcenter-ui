@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 const {
   settingUpsertMock,
   settingFindManyMock,
+  settingFindUniqueMock,
   connectionFindManyMock,
   executeSSHMock,
   applySFlowOnNodeMock,
@@ -11,6 +12,7 @@ const {
 } = vi.hoisted(() => ({
   settingUpsertMock: vi.fn(),
   settingFindManyMock: vi.fn(),
+  settingFindUniqueMock: vi.fn(),
   connectionFindManyMock: vi.fn(),
   executeSSHMock: vi.fn(),
   applySFlowOnNodeMock: vi.fn(),
@@ -27,6 +29,7 @@ vi.mock("@/lib/db/prisma", () => ({
     setting: {
       upsert: settingUpsertMock,
       findMany: settingFindManyMock,
+      findUnique: settingFindUniqueMock,
     },
     connection: {
       findMany: connectionFindManyMock,
@@ -356,5 +359,22 @@ describe("startSFlowReconciler", () => {
     expect(() => stop()).not.toThrow()
     await vi.advanceTimersByTimeAsync(5000)
     expect(reconcile).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("readDesiredSFlowConfig", () => {
+  it("returns the tenant's saved configuration, null when absent or unusable", async () => {
+    const { readDesiredSFlowConfig } = await import("./reconciler")
+    const saved = { collectorTarget: "10.42.0.250:6343", samplingRate: 512, pollingInterval: 30 }
+
+    settingFindUniqueMock.mockResolvedValueOnce({ value: saved })
+    await expect(readDesiredSFlowConfig("tenant-a")).resolves.toEqual(saved)
+    expect(settingFindUniqueMock).toHaveBeenLastCalledWith({ where: { key_tenantId: { key: "sflow.desiredConfig", tenantId: "tenant-a" } } })
+
+    settingFindUniqueMock.mockResolvedValueOnce(null)
+    await expect(readDesiredSFlowConfig("tenant-a")).resolves.toBeNull()
+
+    settingFindUniqueMock.mockResolvedValueOnce({ value: { collectorTarget: "", samplingRate: 512, pollingInterval: 30 } })
+    await expect(readDesiredSFlowConfig("tenant-a")).resolves.toBeNull()
   })
 })

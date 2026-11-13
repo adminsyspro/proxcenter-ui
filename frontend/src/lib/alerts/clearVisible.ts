@@ -18,8 +18,13 @@ import { getCurrentTenantId, getTenantConnectionIds } from "@/lib/tenant"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { getCurrentRbacInfraScope, PERMISSIONS } from "@/lib/rbac"
 
-/** Returns the number of alerts actually cleared. */
-export async function clearVisibleTenantAlerts(connectionId?: string): Promise<number> {
+/**
+ * Returns the number of alerts actually cleared. `mode`: a tenant deletes its
+ * visible alerts (as before); a provider caller whose alerts.manage is scoped
+ * resolves them, as the provider's own clear does (roadmap#223). In resolve
+ * mode an alert the orchestrator refuses is skipped, not fatal.
+ */
+export async function clearVisibleTenantAlerts(connectionId?: string, mode: "delete" | "resolve" = "delete"): Promise<number> {
   const tenantId = await getCurrentTenantId()
   const tenantConnectionIds = await getTenantConnectionIds()
   const infra = await getTenantInfrastructureScope(tenantId)
@@ -43,9 +48,23 @@ export async function clearVisibleTenantAlerts(connectionId?: string): Promise<n
   const visible = await Promise.all(all.map((a: any) => isAlertVisibleToTenant(a, ctx)))
   const targets = all.filter((_: any, i: number) => visible[i])
 
-  for (const alert of targets) {
-    await alertsApi.deleteAlert(String(alert.id))
+  if (mode === "delete") {
+    for (const alert of targets) {
+      await alertsApi.deleteAlert(String(alert.id))
+    }
+
+    return targets.length
   }
 
-  return targets.length
+  let resolved = 0
+  for (const alert of targets) {
+    try {
+      await alertsApi.resolve(String(alert.id))
+      resolved++
+    } catch (e) {
+      console.warn(`[alerts/clear] alert ${String(alert.id)} not resolved:`, (e as Error)?.message)
+    }
+  }
+
+  return resolved
 }

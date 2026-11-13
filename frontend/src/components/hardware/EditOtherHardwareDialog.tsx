@@ -27,6 +27,7 @@ import {
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { humanizePveError } from '@/app/(dashboard)/infrastructure/inventory/helpers'
+import { gpuContingentMessage } from '@/lib/gpu/contingentErrors'
 
 import { parsePropertyString, isRawPassthrough, usbMappingValue, pciMappingValue, type MappingKind } from './utils'
 import { ResourceMappingSelect, useResourceMappings } from './ResourceMappingSelect'
@@ -176,7 +177,7 @@ export function EditOtherHardwareDialog({
       await onSave({ [hardware.id]: value })
       onClose()
     } catch (e: any) {
-      const message = humanizePveError(e) || t('errors.updateError')
+      const message = gpuContingentMessage(t, e) || humanizePveError(e) || t('errors.updateError')
       setError(/only root/i.test(message) ? `${message} ${t('hardware.rootOnlyErrorHint')}` : message)
     } finally {
       setSaving(false)

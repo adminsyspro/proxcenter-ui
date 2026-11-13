@@ -6,6 +6,9 @@ import { useTranslations } from 'next-intl'
 
 import MappingOrderButtons from './MappingOrderButtons'
 import { moveMappingRow } from '@/lib/settings/mappingOrder'
+import { ALL_PUBLISHED_TENANTS } from '@/lib/auth/groupMapping'
+import { isRoleAvailableInTenant } from '@/lib/rbac/rolePublication'
+import { toPublishable } from '@/components/rbac/catalogueClient'
 
 import {
   Accordion,
@@ -18,6 +21,10 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   FormControlLabel,
   IconButton,
@@ -35,8 +42,49 @@ import {
 // the columns stop lining up from one row to the next.
 const SCOPE_FIELD_WIDTH = 170
 
-export default function OidcConfigTab() {
+// System roles that never go to a customer tenant (lib/rbac PROTECTED_ROLE_IDS
+// + PROVIDER_ONLY_ROLE_IDS; the server refuses them in a tenant mapping).
+const PROVIDER_ONLY_ROLES = new Set(['role_super_admin', 'role_provider_admin', 'role_operator', 'role_vm_admin', 'role_viewer', 'role_vm_user'])
+
+/** Whether a role can be the target of a mapping row in `tenantId` (ui#1336). */
+export function roleStandsInMappingTenant(role, tenantId) {
+  if (tenantId === ALL_PUBLISHED_TENANTS) return role.audience === 'service_desk' || role.audience === 'tenant'
+  if (tenantId !== 'default' && PROVIDER_ONLY_ROLES.has(role.id)) return false
+  return isRoleAvailableInTenant(toPublishable(role), tenantId)
+}
+
+/**
+ * OIDC connection form. `provider` mode edits the provider IdP (the historical
+ * single configuration); `tenant` mode edits one tenant's own IdP (issue #1289):
+ * mapping locked to that tenant, tenant roles only, allowed domains instead of
+ * the e-mail linking switches, which a tenant IdP never uses.
+ *
+ * @param {{
+ *   mode?: 'provider' | 'tenant',
+ *   apiBase?: string,
+ *   testUrl?: string,
+ *   showProxy?: boolean,
+ *   title?: string | null,
+ *   onBack?: (() => void) | null,
+ *   onDeleted?: (() => void) | null,
+ *   canDelegate?: boolean,
+ *   domainsLocked?: boolean,
+ * }} props
+ */
+export default function OidcConnectionForm({
+  mode = 'provider',
+  apiBase = '/api/v1/auth/oidc',
+  testUrl = '/api/v1/auth/oidc/test',
+  showProxy = true,
+  title = null,
+  onBack = null,
+  onDeleted = null,
+  canDelegate = false,
+  domainsLocked = false,
+}) {
   const t = useTranslations()
+  const isTenant = mode === 'tenant'
+  const defaultRoleId = isTenant ? 'role_tenant_viewer' : 'role_viewer'
 
   const [config, setConfig] = useState({
     enabled: false,
@@ -52,9 +100,11 @@ export default function OidcConfigTab() {
     claim_name: 'name',
     claim_groups: 'groups',
     auto_provision: true,
-    default_role: 'role_viewer',
+    default_role: defaultRoleId,
     show_local_login: true,
     force_sso_redirect: false,
+    require_verified_email: true,
+    idp_verifies_email: false,
     group_role_mapping: '[]',
     group_mapping_strategy: 'first_match',
     proxy_url: '',
@@ -84,6 +134,12 @@ export default function OidcConfigTab() {
   // Served by the route: it is the origin the server itself uses towards the
   // IdP, which is what the admin has to register.
   const [appOrigin, setAppOrigin] = useState('')
+  // Tenant mode: the URLs served by the route (callback of oidc-<tenant>, /login/<slug>).
+  const [tenantUrls, setTenantUrls] = useState({ callback: '', login: '' })
+  const [allowedDomains, setAllowedDomains] = useState('')
+  const [configured, setConfigured] = useState(true)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     loadConfig()
@@ -93,7 +149,7 @@ export default function OidcConfigTab() {
     try {
       setLoading(true)
       setError('')
-      const res = await fetch('/api/v1/auth/oidc')
+      const res = await fetch(apiBase)
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
@@ -112,8 +168,11 @@ export default function OidcConfigTab() {
           ...data.data,
           client_secret: '',
           proxy_password: '',
-          default_role: normalizeRole(data.data.default_role) || 'role_viewer',
+          default_role: normalizeRole(data.data.default_role) || defaultRoleId,
         }))
+        setTenantUrls({ callback: data.data.callback_url || '', login: data.data.login_url || '' })
+        setAllowedDomains((data.data.allowed_domains || []).join(', '))
+        setConfigured(data.data.configured !== false)
         setHasClientSecret(data.data.hasClientSecret || false)
         setHasProxyPassword(data.data.hasProxyPassword || false)
         setEnvProxy(data.data.env_proxy || null)
@@ -144,6 +203,11 @@ export default function OidcConfigTab() {
         } catch {
           setGroupMappings([])
         }
+      }
+      // A tenant connection serves its own role list: tenant roles only.
+      if (Array.isArray(data.data?.roles)) {
+        setAvailableRoles(data.data.roles)
+        return
       }
       // Fetch available RBAC roles
       try {
@@ -179,13 +243,14 @@ export default function OidcConfigTab() {
         mapping.push({ group: key, tenant: tenant || 'default', vdc: vdc || '', role })
       })
 
-      const res = await fetch('/api/v1/auth/oidc', {
+      const res = await fetch(apiBase, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...config,
           group_role_mapping: JSON.stringify(mapping),
           group_mapping_strategy: config.group_mapping_strategy || 'first_match',
+          ...(isTenant ? { allowed_domains: allowedDomains } : {}),
         }),
       })
 
@@ -197,6 +262,7 @@ export default function OidcConfigTab() {
       }
 
       setSuccess(t('oidc.saveSuccess'))
+      setConfigured(true)
 
       if (config.client_secret) {
         setHasClientSecret(true)
@@ -224,7 +290,7 @@ export default function OidcConfigTab() {
     setTestResult(null)
 
     try {
-      const res = await fetch('/api/v1/auth/oidc/test', {
+      const res = await fetch(testUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // The proxy as typed, so it can be tried before it is saved.
@@ -279,7 +345,8 @@ export default function OidcConfigTab() {
   }
 
   const addGroupMapping = () => {
-    setGroupMappings([...groupMappings, { group: '', tenant: 'default', vdc: '', role: 'role_viewer' }])
+    const tenant = isTenant ? tenants[0]?.id || '' : 'default'
+    setGroupMappings([...groupMappings, { group: '', tenant, vdc: '', role: defaultRoleId }])
   }
 
   const removeGroupMapping = (index) => {
@@ -307,7 +374,30 @@ export default function OidcConfigTab() {
 
   // Nothing to choose on a single-tenant install with no vDC: keep the mapping
   // rows at their historical two fields rather than showing two inert pickers.
+  // A tenant connection maps into its own tenant only: no tenant picker, the
+  // vDC picker when the tenant has vDCs.
   const showScopePickers = tenants.length > 1 || vdcs.length > 0
+  const showTenantPicker = showScopePickers && !isTenant
+  const showVdcPicker = isTenant ? vdcs.length > 0 : showScopePickers
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    setError('')
+    try {
+      const res = await fetch(apiBase, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || t('oidc.tenantConnections.deleteError'))
+        return
+      }
+      setConfirmDelete(false)
+      onDeleted?.()
+    } catch {
+      setError(t('oidc.tenantConnections.deleteError'))
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -321,8 +411,18 @@ export default function OidcConfigTab() {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
       {/* Header */}
       <Box>
+        {(onBack || title) && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            {onBack && (
+              <IconButton size='small' onClick={onBack} aria-label={t('oidc.tenantConnections.back')}>
+                <i className='ri-arrow-left-line' />
+              </IconButton>
+            )}
+            {title && <Typography variant='subtitle1' fontWeight={700}>{title}</Typography>}
+          </Box>
+        )}
         <Typography variant='body2' sx={{ opacity: 0.7, mb: 1 }}>
-          {t('oidc.description')}
+          {isTenant ? t('oidc.tenantConnections.formDescription') : t('oidc.description')}
         </Typography>
         <Alert severity='info' icon={<i className='ri-shield-keyhole-line' />}>
           {t('oidc.securityInfo')}
@@ -381,6 +481,54 @@ export default function OidcConfigTab() {
               </Box>
             }
           />
+          {/* Provider only: let this tenant's admins manage the connection
+              themselves (issue #1289). Off by default. */}
+          {canDelegate && (
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={!!config.self_service}
+                  onChange={e => setConfig({ ...config, self_service: e.target.checked })}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant='body1' fontWeight={600}>
+                    {t('oidc.tenantConnections.selfService')}
+                  </Typography>
+                  <Typography variant='body2' sx={{ opacity: 0.6 }}>
+                    {t('oidc.tenantConnections.selfServiceDesc')}
+                  </Typography>
+                </Box>
+              }
+              sx={{ mt: 2, display: 'flex' }}
+            />
+          )}
+          {/* Provider only: vouch for the addresses of an IdP it hosts itself.
+              Off, they are checked at every sign-in; always checked while the
+              tenant manages its IdP. */}
+          {canDelegate && (
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={!config.self_service && !!config.trusted_endpoints}
+                  disabled={!!config.self_service}
+                  onChange={e => setConfig({ ...config, trusted_endpoints: e.target.checked })}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant='body1' fontWeight={600}>
+                    {t('oidc.tenantConnections.trustedEndpoints')}
+                  </Typography>
+                  <Typography variant='body2' sx={{ opacity: 0.6 }}>
+                    {t('oidc.tenantConnections.trustedEndpointsDesc')}
+                  </Typography>
+                </Box>
+              }
+              sx={{ mt: 2, display: 'flex' }}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -465,11 +613,16 @@ export default function OidcConfigTab() {
               {t('oidc.registerUrlsTitle')}
             </Typography>
             <Typography variant='body2' sx={{ mb: 0.5 }}>
-              {t('oidc.registerCallbackUrl')} : {appOrigin}/api/auth/callback/oidc
+              {t('oidc.registerCallbackUrl')} : {isTenant ? tenantUrls.callback : `${appOrigin}/api/auth/callback/oidc`}
             </Typography>
             <Typography variant='body2'>
-              {t('oidc.registerPostLogoutUrl')} : {appOrigin}/login
+              {t('oidc.registerPostLogoutUrl')} : {isTenant ? tenantUrls.login : `${appOrigin}/login`}
             </Typography>
+            {isTenant && (
+              <Typography variant='body2' sx={{ mt: 0.5 }}>
+                {t('oidc.tenantConnections.loginUrl')} : {tenantUrls.login}
+              </Typography>
+            )}
             <Typography variant='caption' sx={{ display: 'block', mt: 1, opacity: 0.75 }}>
               {t('oidc.registerPostLogoutHelp')}
             </Typography>
@@ -575,6 +728,7 @@ export default function OidcConfigTab() {
       </Accordion>
 
       {/* Outbound proxy towards the IdP (collapsed unless one is set) */}
+      {showProxy && (
       <Accordion variant='outlined' disabled={!config.enabled} defaultExpanded={!!config.proxy_url}>
         <AccordionSummary expandIcon={<i className='ri-arrow-down-s-line' />}>
           <Typography variant='subtitle1' fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -639,6 +793,7 @@ export default function OidcConfigTab() {
           </Box>
         </AccordionDetails>
       </Accordion>
+      )}
 
       {/* Claim Mapping */}
       <Card variant='outlined'>
@@ -706,8 +861,67 @@ export default function OidcConfigTab() {
                 </Typography>
               </Box>
             }
-            sx={{ mb: 2 }}
+            sx={{ mb: 2, display: 'flex' }}
           />
+
+          {/* A tenant IdP never links an existing account by e-mail, so the
+              linking switches have no meaning there: it filters by domain. */}
+          {isTenant ? (
+            <TextField
+              fullWidth
+              label={t('oidc.tenantConnections.allowedDomains')}
+              value={allowedDomains}
+              onChange={e => setAllowedDomains(e.target.value)}
+              placeholder='acme.example, acme.fr'
+              disabled={!config.enabled || domainsLocked}
+              helperText={domainsLocked ? t('oidc.tenantConnections.allowedDomainsLocked') : t('oidc.tenantConnections.allowedDomainsHelper')}
+              sx={{ mb: 3 }}
+            />
+          ) : (
+            <>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.require_verified_email}
+                onChange={e => setConfig({ ...config, require_verified_email: e.target.checked })}
+                disabled={!config.enabled}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant='body1' fontWeight={600}>
+                  {t('oidc.requireVerifiedEmail')}
+                </Typography>
+                <Typography variant='body2' sx={{ opacity: 0.6 }}>
+                  {t('oidc.requireVerifiedEmailDesc')}
+                </Typography>
+              </Box>
+            }
+            sx={{ mb: 2, display: 'flex' }}
+          />
+
+              <FormControlLabel
+            control={
+              <Switch
+                checked={config.idp_verifies_email}
+                onChange={e => setConfig({ ...config, idp_verifies_email: e.target.checked })}
+                disabled={!config.enabled}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant='body1' fontWeight={600}>
+                  {t('oidc.idpVerifiesEmail')}
+                </Typography>
+                <Typography variant='body2' sx={{ opacity: 0.6 }}>
+                  {t('oidc.idpVerifiesEmailDesc')}
+                </Typography>
+              </Box>
+            }
+            sx={{ mb: 3, display: 'flex' }}
+          />
+            </>
+          )}
 
           <FormControl fullWidth sx={{ mb: 3 }} disabled={!config.enabled}>
             <InputLabel>{t('oidc.defaultRole')}</InputLabel>
@@ -751,12 +965,17 @@ export default function OidcConfigTab() {
           </FormControl>
 
           {groupMappings.map((mapping, index) => {
-            const rowTenant = mapping.tenant || 'default'
+            const rowTenant = mapping.tenant || (isTenant ? tenants[0]?.id : 'default')
             const tenantVdcs = vdcs.filter(v => v.tenantId === rowTenant)
             // A mapping written before a tenant or vDC was deleted keeps its id
             // as an option, so the Select stays controlled and the stale value
             // is visible instead of silently blanking on load.
-            const tenantMissing = rowTenant && !tenants.some(x => x.id === rowTenant)
+            const allPublished = rowTenant === ALL_PUBLISHED_TENANTS
+            const tenantMissing = rowTenant && !allPublished && !tenants.some(x => x.id === rowTenant)
+            // Only the roles that stand in the row's tenant (ui#1336): the
+            // server refuses the others. The current value stays listed so the
+            // Select remains controlled.
+            const rowRoles = availableRoles.filter(role => role.id === mapping.role || roleStandsInMappingTenant(role, rowTenant))
             const vdcMissing = mapping.vdc && !tenantVdcs.some(v => v.id === mapping.vdc)
 
             return (
@@ -778,8 +997,7 @@ export default function OidcConfigTab() {
                   sx={{ flex: '1 1 200px', minWidth: 200 }}
                   placeholder='admins, devops, viewers...'
                 />
-                {showScopePickers && (
-                  <>
+                {showTenantPicker && (
                     <FormControl size='small' sx={{ width: SCOPE_FIELD_WIDTH }} disabled={!config.enabled}>
                       <InputLabel>{t('oidc.tenant')}</InputLabel>
                       <Select
@@ -788,12 +1006,15 @@ export default function OidcConfigTab() {
                         onChange={e => updateGroupMapping(index, 'tenant', e.target.value)}
                       >
                         {tenantMissing && <MenuItem value={rowTenant}>{rowTenant}</MenuItem>}
+                        <MenuItem value={ALL_PUBLISHED_TENANTS}>{t('oidc.allPublishedTenants')}</MenuItem>
                         {tenants.map(tenant => (
                           <MenuItem key={tenant.id} value={tenant.id}>{tenant.name}</MenuItem>
                         ))}
                       </Select>
                     </FormControl>
-                    <FormControl size='small' sx={{ width: SCOPE_FIELD_WIDTH }} disabled={!config.enabled}>
+                )}
+                {showVdcPicker && (
+                    <FormControl size='small' sx={{ width: SCOPE_FIELD_WIDTH }} disabled={!config.enabled || allPublished}>
                       <InputLabel shrink>{t('oidc.vdc')}</InputLabel>
                       <Select
                         value={mapping.vdc || ''}
@@ -809,7 +1030,6 @@ export default function OidcConfigTab() {
                         ))}
                       </Select>
                     </FormControl>
-                  </>
                 )}
                 <FormControl size='small' sx={{ width: SCOPE_FIELD_WIDTH }} disabled={!config.enabled}>
                   <InputLabel>{t('oidc.role')}</InputLabel>
@@ -818,7 +1038,7 @@ export default function OidcConfigTab() {
                     label={t('oidc.role')}
                     onChange={e => updateGroupMapping(index, 'role', e.target.value)}
                   >
-                    {availableRoles.map(role => (
+                    {rowRoles.map(role => (
                       <MenuItem key={role.id} value={role.id}>{role.is_system ? t(`rbac.roles.${role.id}`) : role.name}</MenuItem>
                     ))}
                   </Select>
@@ -916,9 +1136,35 @@ export default function OidcConfigTab() {
             >
               {t('oidc.reset')}
             </Button>
+
+            {isTenant && onDeleted && configured && (
+              <Button
+                variant='outlined'
+                color='error'
+                onClick={() => setConfirmDelete(true)}
+                disabled={saving || testing || deleting}
+                startIcon={<i className='ri-delete-bin-line' />}
+                sx={{ ml: 'auto' }}
+              >
+                {t('oidc.tenantConnections.delete')}
+              </Button>
+            )}
           </Box>
         </CardContent>
       </Card>
+
+      <Dialog open={confirmDelete} onClose={() => !deleting && setConfirmDelete(false)} maxWidth='xs' fullWidth>
+        <DialogTitle>{t('oidc.tenantConnections.deleteTitle')}</DialogTitle>
+        <DialogContent>
+          <Typography variant='body2'>{t('oidc.tenantConnections.deleteConfirm')}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDelete(false)} disabled={deleting}>{t('common.cancel')}</Button>
+          <Button color='error' variant='contained' onClick={handleDelete} disabled={deleting}>
+            {deleting ? <CircularProgress size={16} /> : t('oidc.tenantConnections.delete')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

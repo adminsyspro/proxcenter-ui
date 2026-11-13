@@ -3,7 +3,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import userEvent from '@testing-library/user-event'
 
 import { renderWithProviders } from '@/__tests__/setup/renderWithProviders'
-import { DESTRUCTIVE_SCOPE_IDS, READ_SCOPE_IDS, WRITE_SCOPE_IDS } from '@/lib/api-tokens/scopes'
+import { DESTRUCTIVE_SCOPE_IDS, isCreatorCheckedScope, READ_SCOPE_IDS, WRITE_SCOPE_IDS } from '@/lib/api-tokens/scopes'
 import en from '@/messages/en.json'
 import CreateTokenDialog, { SCOPE_DOMAINS, SUB_SCOPE_LABEL_KEYS, filterToVisibleConnectionIds } from './CreateTokenDialog'
 
@@ -321,10 +321,25 @@ describe('CreateTokenDialog scope picker', () => {
     await waitFor(() => expect(grantableCalls().length).toBeGreaterThan(0))
     for (const domain of SCOPE_DOMAINS) {
       expect(levelButton(dialog, domain.id, 'write'), domain.id).toBeDisabled()
-      expect(levelButton(dialog, domain.id, 'read'), domain.id).toBeEnabled()
+      // An admin read scope (issue #1360) is held to the same check: closed too.
+      if (isCreatorCheckedScope(domain.read)) expect(levelButton(dialog, domain.id, 'read'), domain.id).toBeDisabled()
+      else expect(levelButton(dialog, domain.id, 'read'), domain.id).toBeEnabled()
     }
     await userEvent.hover(levelButton(dialog, 'vms', 'write').parentElement as HTMLElement)
     expect(await screen.findByRole('tooltip')).toHaveTextContent(dialogT.grantableError)
+  })
+
+  it('opens an admin read (users, roles, tenants, vDCs) only when the creator may grant it (issue #1360)', async () => {
+    grantableFor = () => [...READ_SCOPE_IDS.filter(id => !isCreatorCheckedScope(id) || id === 'users:read'), 'vms:power']
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+    expect(levelButton(dialog, 'users', 'read')).toBeEnabled()
+    expect(levelButton(dialog, 'rbac', 'read')).toBeDisabled()
+    expect(levelButton(dialog, 'ipam', 'read')).toBeDisabled()
+    expect(levelButton(dialog, 'vms', 'read')).toBeEnabled()
+    expect(levelButton(dialog, 'users', 'write')).toBeDisabled()
+    await userEvent.hover(levelButton(dialog, 'rbac', 'read').parentElement as HTMLElement)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(dialogT.scopeNotGrantable)
   })
 
   it('keeps every Write button disabled while the grantable answer is pending', async () => {
@@ -361,6 +376,24 @@ describe('CreateTokenDialog scope picker', () => {
     fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[2])
     await userEvent.click(await screen.findByRole('option', { name: 'Tenant A PVE' }))
     await waitFor(() => expect(grantableCalls().some(url => url.includes('connectionIds=conn-a'))).toBe(true))
+  })
+
+  it('refuses vDC Write once connections are selected, saying it reaches every cluster (issue #1360)', async () => {
+    grantableFor = () => [...READ_GRANTABLE, ...WRITE_SCOPE_IDS]
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+    expect(levelButton(dialog, 'vdcs', 'write')).toBeEnabled()
+    await userEvent.click(levelButton(dialog, 'vdcs', 'write'))
+
+    fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[2])
+    await userEvent.click(await screen.findByRole('option', { name: 'Provider PVE' }))
+    // The multiple select keeps its menu open, hiding the dialog from queries.
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(levelButton(dialog, 'vdcs', 'write')).toBeDisabled())
+    // The row falls back to Read: vdcs:write is dropped with the perimeter.
+    expect(levelButton(dialog, 'vdcs', 'read')).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.hover(levelButton(dialog, 'vdcs', 'write').parentElement as HTMLElement)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(dialogT.fleetOnlyScope)
   })
 
   it('presets a 90-day expiry when a domain goes to Write, and keeps it when back to Read', async () => {

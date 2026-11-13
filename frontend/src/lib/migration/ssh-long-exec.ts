@@ -8,6 +8,7 @@
  */
 import { decryptSecret } from "@/lib/crypto/secret"
 import { buildConnectConfig } from "@/lib/ssh/exec"
+import { hostKeyAlgorithms } from "@/lib/ssh/host-key-store"
 import { resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 export interface LongSshResult {
@@ -71,6 +72,7 @@ export async function executeSSHWithTimeout(
 
   const finalCommand = connection.sshUseSudo ? `sudo ${command}` : command
   const host = sshTargetHost(target)
+  const algorithms = await hostKeyAlgorithms(host, port)
 
   return new Promise((resolve) => {
     const conn = new Client()
@@ -104,7 +106,7 @@ export async function executeSSHWithTimeout(
 
     // Same keepalive and host-key policy as every other ssh2 session of the
     // app; a pinned key that no longer matches surfaces its own message.
-    const connectConfig = buildConnectConfig({ host, port, user, key, password, passphrase, onMismatch: m => { mismatch = m } })
+    const connectConfig = buildConnectConfig({ host, port, user, key, password, passphrase, hostKeyAlgorithms: algorithms, onRefusal: (_r, m) => { mismatch = m } })
     conn.connect(connectConfig as Parameters<typeof conn.connect>[0])
   })
 }

@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server'
 
 import { withAudit } from '@/lib/audit/withAudit'
 import { codeResponse } from '@/lib/availability/orchestrator'
-import { requireIncidentAccess } from '@/lib/incidents/guard'
+import { requireIncidentWrite } from '@/lib/incidents/guard'
 import { addComment, incidentErrorResponse } from '@/lib/incidents/orchestrator'
 import { parseCommentBody, readJson } from '@/lib/incidents/validate'
 
@@ -16,13 +16,13 @@ export const dynamic = 'force-dynamic'
 
 async function handlePost(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const access = await requireIncidentAccess('write')
+    const { id } = await ctx.params
+    const access = await requireIncidentWrite(id)
     if (access.denied) return access.denied
 
     const parsed = parseCommentBody(await readJson(request))
     if (parsed.ok === false) return codeResponse(parsed.code, 400)
 
-    const { id } = await ctx.params
     const comment = await addComment(id, { ...parsed.value, author_id: access.userId, author_name: access.userName })
     return NextResponse.json(comment, { status: 201 })
   } catch (e) {

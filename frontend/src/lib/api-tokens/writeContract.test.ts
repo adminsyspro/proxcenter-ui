@@ -42,7 +42,7 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
     'gfr-probe', 'gfr-job-create', 'gfr-job-cancel',
   ],
   storage: [
-    'storage-attach-pbs', 'storage-detach', 'storage-content-delete', 'storage-download-url', 'aplinfo-download',
+    'storage-attach-pbs', 'storage-detach', 'storage-update', 'storage-scan', 'storage-content-delete', 'storage-download-url', 'aplinfo-download',
   ],
   ha: [
     'ha-resource-upsert', 'ha-resource-delete', 'ha-group-create', 'ha-group-update', 'ha-group-delete',
@@ -51,8 +51,18 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
   pools: ['pool-create', 'pool-update', 'pool-delete'],
   network: [
     'node-network-create', 'node-network-apply', 'node-network-revert', 'node-iface-update', 'node-iface-delete',
-    'sdn-apply', 'vdc-vnet-create', 'vdc-vnet-update', 'vdc-vnet-delete',
+    'sdn-apply', 'vdc-vnet-create', 'vdc-vnet-update', 'vdc-vnet-delete', 'vdc-evpn-network-update',
   ],
+  // Provider administration (issue #1360, lot 2): scope vdcs:write, fleet perimeter.
+  vdcs: [
+    'admin-vdc-create', 'admin-vdc-update', 'admin-vdc-delete', 'vdc-gpu-quota-update',
+    'storage-policy-create', 'storage-policy-update', 'storage-policy-delete',
+    'evpn-zone-create', 'evpn-zone-update', 'evpn-zone-delete', 'evpn-zone-member-add', 'evpn-zone-member-remove',
+  ],
+  // Tenants, users and role assignments (issue #1360, lot 3): one scope per admin right, fleet perimeter.
+  tenants: ['tenant-create', 'tenant-update', 'tenant-delete', 'tenant-user-add', 'tenant-user-remove'],
+  users: ['user-create', 'user-update', 'user-delete'],
+  rbac: ['rbac-assignment-create', 'rbac-assignment-update', 'rbac-assignment-delete'],
   firewall: [
     'fw-alias-create', 'fw-alias-update', 'fw-alias-delete',
     'fw-cluster-options-update', 'fw-cluster-rule-add', 'fw-cluster-rule-create', 'fw-cluster-rule-update', 'fw-cluster-rule-delete',
@@ -67,6 +77,11 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
 const HANDLER_PERIMETER_IDS = [
   'gfr-probe', 'gfr-job-create', 'gfr-job-cancel',
   'vdc-vnets-list', 'vdc-vnet-create', 'vdc-vnet-get', 'vdc-vnet-update', 'vdc-vnet-delete',
+  // Multi-tenant reads (issue #1360): the handler filters on the token perimeter.
+  'vdc-vnet-ipam', 'vdc-vnet-ipam-next-free', 'vdcs-list', 'admin-vdcs-list', 'admin-vdc-get',
+  'vdc-evpn-networks', 'evpn-zones-list', 'evpn-zone-get', 'vdc-moves-list', 'vdc-move-get',
+  // Lot 2: the GPU quota read, and the EVPN network update judged per vDC.
+  'vdc-gpu-quota-get', 'vdc-evpn-network-update',
 ]
 
 /** GET handlers of a file opened in write that stay closed (spec: consoles only). */
@@ -132,7 +147,7 @@ describe('write contract: declared entries', () => {
   it.each(writeEntries.map(e => [e.id, e] as const))('(b, c) %s needs one write scope and declares its perimeter', (_id, entry) => {
     expect(entry.requiredScopes).toHaveLength(1)
     expect(isWriteScope(entry.requiredScopes[0])).toBe(true)
-    expect(!!(entry.connectionSegment || entry.vmKeySegment || entry.connectionField || entry.perimeter === 'handler')).toBe(true)
+    expect(!!(entry.connectionSegment || entry.vmKeySegment || entry.connectionField || entry.perimeter === 'handler' || entry.perimeter === 'fleet')).toBe(true)
   })
 
   it('(c) perimeter "handler" is reserved to HANDLER_PERIMETER_IDS', () => {
@@ -305,8 +320,8 @@ describe('write contract: a read-only token is refused every write (getPrincipal
     await seedDefaultTenant()
   })
 
-  it('(e) a token with the 7 read scopes gets 403 on each write entry', async () => {
-    expect(READ_SCOPE_IDS).toHaveLength(7)
+  it('(e) a token with the 12 read scopes gets 403 on each write entry', async () => {
+    expect(READ_SCOPE_IDS).toHaveLength(12)
     const { secret } = await seedApiToken({ scopes: [...READ_SCOPE_IDS] })
     for (const entry of writeEntries) {
       const sample = samplePath(entry)

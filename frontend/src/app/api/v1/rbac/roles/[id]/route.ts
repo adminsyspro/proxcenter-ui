@@ -2,18 +2,28 @@ export const dynamic = "force-dynamic"
 // src/app/api/v1/rbac/roles/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
 import { Prisma } from "@prisma/client"
 
-import { authOptions } from "@/lib/auth/config"
+import { authorizeAdminRead, getActingSession } from "@/lib/auth/actingUser"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { isUserSuperAdmin, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { validateRoleDefaultScopes } from "@/lib/rbac/scope-validation"
+import { canReadRoleAssignments } from "@/lib/rbac/assignmentReadAccess"
+import { findUnknownTenant, refuseOverCeiling } from "@/lib/rbac/catalogueGuards"
+import {
+  isRoleAssignableInTenant,
+  parsePublicationInput,
+  publicationFields,
+  PUBLISHED_AUDIENCES,
+  type RoleAudience,
+} from "@/lib/rbac/rolePublication"
+import { assignmentsRevokedByPublication, isServiceDeskRowId, syncServiceDeskForRole } from "@/lib/rbac/serviceDesk"
+import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 /** See POST /api/v1/rbac/roles — same shape, same dedup rules. */
 function normalizeWidgetOverrides(raw: unknown): { hidden: string[] } | null | undefined {
@@ -56,19 +66,16 @@ function isRoleReachableFromTenant(role: { tenantId: string | null }, currentTen
 }
 
 // GET /api/v1/rbac/roles/[id] - Détails d'un rôle
-export async function GET(req: NextRequest, context: RouteContext) {
+async function handleGet(req: Request, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const reader = await authorizeAdminRead(PERMISSIONS.ADMIN_RBAC_VIEW)
+    if (reader.denied) return reader.denied
 
     const { id } = await context.params
-    const superAdminBlock = await denyIfProtectedRoleAndCallerIsNot(id, session.user.id)
+    const superAdminBlock = await denyIfProtectedRoleAndCallerIsNot(id, reader.userId)
     if (superAdminBlock) return superAdminBlock
 
     const tenantId = await getCurrentTenantId()
@@ -76,6 +83,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const role = await prisma.rbacRole.findUnique({
       where: { id },
       include: {
+        publications: { select: { tenantId: true } },
         permissions: {
           include: { permission: true },
           orderBy: [{ permission: { category: "asc" } }, { permission: { name: "asc" } }],
@@ -91,9 +99,15 @@ export async function GET(req: NextRequest, context: RouteContext) {
       },
     })
 
-    if (!role || !isRoleReachableFromTenant(role, tenantId)) {
+    // A customer tenant also reads the catalogue roles offered to it (ui#1336).
+    const offeredToTenant = !!role && tenantId !== DEFAULT_TENANT_ID && role.audience === "tenant" && isRoleAssignableInTenant(role, tenantId)
+    if (!role || (!isRoleReachableFromTenant(role, tenantId) && !offeredToTenant)) {
       return NextResponse.json({ error: "Role not found" }, { status: 404 })
     }
+
+    // The role's holders only with admin.users or admin.rbac (or their
+    // .view), roadmap#223; a token reached this line through admin.rbac.view.
+    const holders = !reader.userId || (await canReadRoleAssignments(reader.userId, tenantId)) ? role.userRoles : []
 
     return NextResponse.json({
       data: {
@@ -105,6 +119,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
         widget_overrides: role.widgetOverrides ?? null,
         default_scopes: role.defaultScopes ?? null,
         tenant_id: role.tenantId,
+        ...publicationFields(role, tenantId === DEFAULT_TENANT_ID),
         created_at: role.createdAt.toISOString(),
         updated_at: role.updatedAt.toISOString(),
         permissions: role.permissions.map(rp => ({
@@ -114,7 +129,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
           description: rp.permission.description,
           is_dangerous: rp.permission.isDangerous,
         })),
-        users: role.userRoles.map(ur => ({
+        users: holders.map(ur => ({
           assignment_id: ur.id,
           scope_type: ur.scopeType,
           scope_target: ur.scopeTarget,
@@ -138,13 +153,15 @@ return NextResponse.json(
   }
 }
 
+export const GET = withPublicApiGuard("rbac-role-get", handleGet)
+
 // PATCH /api/v1/rbac/roles/[id] - Modifier un rôle
 async function handlePatch(req: NextRequest, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
 
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -161,7 +178,13 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     const superAdminBlock = await denyIfProtectedRoleAndCallerIsNot(id, session.user.id)
     if (superAdminBlock) return superAdminBlock
 
-    const role = await prisma.rbacRole.findUnique({ where: { id } })
+    const role = await prisma.rbacRole.findUnique({
+      where: { id },
+      include: {
+        publications: { select: { tenantId: true } },
+        permissions: { select: { permissionId: true } },
+      },
+    })
     const callerTenantId = await getCurrentTenantId()
 
     if (!role || !isRoleReachableFromTenant(role, callerTenantId)) {
@@ -170,6 +193,73 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
 
     const body = await req.json()
     const { name, description, color, permissions, widget_overrides, default_scopes } = body
+
+    // Catalogue audience and publication (ui#1336). Absent fields keep the
+    // role's current publication.
+    const touchesPublication = body.audience !== undefined || body.publish_all !== undefined || body.published_tenants !== undefined
+    if (touchesPublication && (role.isSystem || role.tenantId !== DEFAULT_TENANT_ID)) {
+      return NextResponse.json({ error: "Only a custom role of the provider tenant can be published" }, { status: 400 })
+    }
+    if (touchesPublication && body.audience === null && role.audience !== null) {
+      return NextResponse.json({ error: "A catalogue role cannot go back to a single-tenant role" }, { status: 400 })
+    }
+    // Absent publication fields keep the current ones, unless the role leaves
+    // the published audiences (a legacy role's grandfathered SSO tenants do not
+    // follow it into the provider audience).
+    const targetAudience = body.audience === undefined ? role.audience : body.audience
+    const keepsPublication = (PUBLISHED_AUDIENCES as readonly unknown[]).includes(targetAudience)
+    const publication = parsePublicationInput({
+      audience: targetAudience,
+      publish_all: body.publish_all ?? (keepsPublication ? role.publishAll : false),
+      published_tenants: body.published_tenants ?? (keepsPublication ? (role.publications ?? []).map(p => p.tenantId) : []),
+    })
+    if (touchesPublication && !publication.ok) {
+      return NextResponse.json({ error: publication.error }, { status: 400 })
+    }
+    const nextPublication = publication.ok ? publication.value : null
+    if (touchesPublication && nextPublication) {
+      if (role.audience === "service_desk" && nextPublication.audience !== "service_desk") {
+        const held = await prisma.rbacServiceDeskAssignment.count({ where: { roleId: id } })
+        if (held > 0) {
+          return NextResponse.json({ error: `This role has ${held} service desk assignment(s). Remove them first.` }, { status: 400 })
+        }
+      }
+      const unknownTenant = await findUnknownTenant(nextPublication.tenantIds)
+      if (unknownTenant) {
+        return NextResponse.json({ error: `Unknown tenant: ${unknownTenant}` }, { status: 400 })
+      }
+    }
+
+    // The ceiling applies to the permissions the role will carry, whichever
+    // of the two changes.
+    const resultingAudience: RoleAudience | null = touchesPublication && nextPublication ? nextPublication.audience : (role.audience as RoleAudience | null)
+    const resultingPerms: string[] = Array.isArray(permissions)
+      ? permissions.filter((p: any) => typeof p === "string")
+      : (role.permissions ?? []).map(p => p.permissionId)
+    if (!role.isSystem && (touchesPublication || Array.isArray(permissions))) {
+      const refusal = await refuseOverCeiling(resultingAudience, resultingPerms, session.user, name || role.name)
+      if (refusal) return refusal
+    }
+
+    // Tenants leaving the publication lose the assignments made there: the
+    // caller sees them first and confirms (issue: "shows the assignments that
+    // would be revoked and asks for confirmation").
+    let revoked: { tenantId: string; tenantName: string; count: number }[] = []
+    if (touchesPublication && nextPublication && nextPublication.audience !== null) {
+      const published = (PUBLISHED_AUDIENCES as readonly string[]).includes(nextPublication.audience)
+      const kept: Set<string> | "all" = published && nextPublication.publishAll ? "all" : new Set(published ? nextPublication.tenantIds : [])
+      revoked = await assignmentsRevokedByPublication(id, kept)
+      if (revoked.length > 0 && body.confirm_revoke !== true) {
+        return NextResponse.json(
+          {
+            error: "Changing the publication revokes assignments in these tenants",
+            code: "REVOKE_CONFIRMATION_REQUIRED",
+            revoked: revoked.map(r => ({ tenant_id: r.tenantId, tenant_name: r.tenantName, count: r.count })),
+          },
+          { status: 409 },
+        )
+      }
+    }
     const now = new Date()
     const normalizedOverrides = normalizeWidgetOverrides(widget_overrides)
 
@@ -225,9 +315,15 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       color?: string
       widgetOverrides?: any
       defaultScopes?: any
+      audience?: string | null
+      publishAll?: boolean
       updatedAt: Date
     } = {
       updatedAt: now,
+    }
+    if (touchesPublication && nextPublication) {
+      updateData.audience = nextPublication.audience
+      updateData.publishAll = nextPublication.publishAll
     }
     if (name !== undefined) updateData.name = name
     if (description !== undefined) updateData.description = description
@@ -258,7 +354,53 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
           })
         }
       }
+
+      if (touchesPublication && nextPublication) {
+        await tx.rbacRolePublication.deleteMany({ where: { roleId: id } })
+        if (nextPublication.tenantIds.length > 0) {
+          await tx.rbacRolePublication.createMany({
+            data: nextPublication.tenantIds.map(tenantId => ({ roleId: id, tenantId })),
+            skipDuplicates: true,
+          })
+        }
+        // The confirmed revocations: ordinary rows of the tenants that left.
+        // Service-desk rows follow in syncServiceDeskForRole below.
+        const lostTenants = revoked.map(r => r.tenantId)
+        if (lostTenants.length > 0) {
+          const rows = await tx.rbacUserRole.findMany({
+            where: { roleId: id, tenantId: { in: lostTenants } },
+            select: { id: true },
+          })
+          const ordinary = rows.map(r => r.id).filter(rowId => !isServiceDeskRowId(rowId))
+          if (ordinary.length > 0) await tx.rbacUserRole.deleteMany({ where: { id: { in: ordinary } } })
+        }
+      }
     })
+
+    if (touchesPublication) {
+      const sync = await syncServiceDeskForRole(id)
+      const before = new Set((role.publications ?? []).map(p => p.tenantId))
+      const after = new Set(nextPublication?.tenantIds ?? [])
+      await audit({
+        action: "rbac_role_publication_changed",
+        category: "security",
+        userId: session.user.id,
+        userEmail: session.user.email,
+        resourceType: "rbac_role",
+        resourceId: id,
+        resourceName: name || role.name,
+        details: {
+          audience: nextPublication?.audience ?? null,
+          publish_all: nextPublication?.publishAll ?? false,
+          tenants_added: [...after].filter(t => !before.has(t)),
+          tenants_removed: [...before].filter(t => !after.has(t)),
+          revoked: revoked.map(r => ({ tenant_id: r.tenantId, count: r.count })),
+          service_desk_added: sync.added,
+          service_desk_removed: sync.removed,
+        },
+        status: "success",
+      })
+    }
 
     // Audit
     await audit({
@@ -276,7 +418,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     // Retourner le rôle mis à jour
     const updated = await prisma.rbacRole.findUnique({
       where: { id },
-      include: { permissions: { include: { permission: true } } },
+      include: { permissions: { include: { permission: true } }, publications: { select: { tenantId: true } } },
     })
 
     if (!updated) {
@@ -293,6 +435,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
         widget_overrides: updated.widgetOverrides ?? null,
         default_scopes: updated.defaultScopes ?? null,
         tenant_id: updated.tenantId,
+        ...publicationFields(updated, true),
         created_at: updated.createdAt.toISOString(),
         updated_at: updated.updatedAt.toISOString(),
         permissions: updated.permissions.map(rp => ({
@@ -321,7 +464,7 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
 
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -351,7 +494,9 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
 
     // Vérifier si des utilisateurs utilisent ce rôle (tous tenants confondus,
     // car la suppression est globale).
-    const userCount = await prisma.rbacUserRole.count({ where: { roleId: id } })
+    const userCount =
+      (await prisma.rbacUserRole.count({ where: { roleId: id } })) +
+      (await prisma.rbacServiceDeskAssignment.count({ where: { roleId: id } }))
 
     if (userCount > 0) {
       return NextResponse.json({

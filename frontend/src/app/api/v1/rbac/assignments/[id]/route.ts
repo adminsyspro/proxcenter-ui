@@ -1,11 +1,11 @@
 export const dynamic = "force-dynamic"
 // src/app/api/v1/rbac/assignments/[id]/route.ts
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 
-import { authorizeAdminRead, getActingSession } from "@/lib/auth/actingUser"
+import { authorizeAdminRead, authorizeAdminWrite, ownRolesError } from "@/lib/auth/actingUser"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { hasPermission, isUserSuperAdmin, isUserProtected, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { isUserSuperAdmin, isUserProtected, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
 import { canReadRoleAssignments } from "@/lib/rbac/assignmentReadAccess"
 import { isServiceDeskManaged } from "@/lib/rbac/serviceDesk"
@@ -119,22 +119,17 @@ return NextResponse.json(
 export const GET = withPublicApiGuard("rbac-assignment-get", handleGet)
 
 // DELETE /api/v1/rbac/assignments/[id] - Supprimer une assignation
-async function handleDelete(req: NextRequest, context: RouteContext) {
+async function handleDelete(req: Request, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getActingSession()
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    // A session needs admin.rbac in its tenant; a token needs it from its
+    // rbac:write scope and never acts as a super admin.
+    const writer = await authorizeAdminWrite("admin.rbac")
+    if (writer.denied) return writer.denied
 
     const tenantId = await getCurrentTenantId()
-
-    if (!(await hasPermission({ userId: session.user.id, permission: "admin.rbac", tenantId }))) {
-      return NextResponse.json({ error: "Admin rights required" }, { status: 403 })
-    }
 
     const { id } = await context.params
 
@@ -162,16 +157,13 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
 
     const superAdminBlock = await denyIfAssignmentTouchesProtected(
       { roleId: assignment.roleId, userId: assignment.userId },
-      session.user.id,
+      writer.userId,
     )
     if (superAdminBlock) return superAdminBlock
 
     // Prevent self-lockout: nobody may revoke their own role.
-    if (assignment.userId === session.user.id) {
-      return NextResponse.json(
-        { error: "You cannot revoke your own roles" },
-        { status: 400 }
-      )
+    if (assignment.userId === writer.selfUserId) {
+      return NextResponse.json({ error: ownRolesError(writer, "revoke") }, { status: 400 })
     }
 
     // Supprimer l'assignation
@@ -181,8 +173,8 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
     await audit({
       action: "rbac_role_revoked",
       category: "security",
-      userId: session.user.id,
-      userEmail: session.user.email,
+      userId: writer.userId,
+      userEmail: writer.userEmail,
       resourceType: "user",
       resourceId: assignment.userId,
       resourceName: assignment.user.email,
@@ -208,22 +200,17 @@ return NextResponse.json(
 }
 
 // PATCH /api/v1/rbac/assignments/[id] - Modifier une assignation
-async function handlePatch(req: NextRequest, context: RouteContext) {
+async function handlePatch(req: Request, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getActingSession()
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    // A session needs admin.rbac in its tenant; a token needs it from its
+    // rbac:write scope and never acts as a super admin.
+    const writer = await authorizeAdminWrite("admin.rbac")
+    if (writer.denied) return writer.denied
 
     const tenantId = await getCurrentTenantId()
-
-    if (!(await hasPermission({ userId: session.user.id, permission: "admin.rbac", tenantId }))) {
-      return NextResponse.json({ error: "Admin rights required" }, { status: 403 })
-    }
 
     const { id } = await context.params
     const body = await req.json()
@@ -253,24 +240,21 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
 
     const superAdminBlock = await denyIfAssignmentTouchesProtected(
       { roleId: assignment.roleId, userId: assignment.userId },
-      session.user.id,
+      writer.userId,
     )
     if (superAdminBlock) return superAdminBlock
 
     // Prevent self-escalation: nobody may change their own role assignment.
-    if (assignment.userId === session.user.id) {
-      return NextResponse.json(
-        { error: "You cannot change your own roles" },
-        { status: 400 }
-      )
+    if (assignment.userId === writer.selfUserId) {
+      return NextResponse.json({ error: ownRolesError(writer, "change") }, { status: 400 })
     }
 
     // A new role obeys the rules of every grant (lib/rbac/assignmentGuards.ts),
     // evaluated in the tenant of the assignment being changed.
-    const callerIsSuperAdmin = await isUserSuperAdmin(session.user.id)
+    const callerIsSuperAdmin = writer.userId ? await isUserSuperAdmin(writer.userId) : false
     if (role_id !== undefined) {
       const guard = await guardRoleAssignment({
-        callerUserId: session.user.id,
+        callerUserId: writer.userId ?? "",
         roleId: role_id,
         targetTenantId: assignment.tenantId,
       })
@@ -343,8 +327,8 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     await audit({
       action: "rbac_assignment_updated",
       category: "security",
-      userId: session.user.id,
-      userEmail: session.user.email,
+      userId: writer.userId,
+      userEmail: writer.userEmail,
       resourceType: "user",
       resourceId: assignment.userId,
       resourceName: assignment.user.email,
@@ -387,5 +371,5 @@ return NextResponse.json(
   }
 }
 
-export const DELETE = withAudit({ category: "security", resourceType: "assignment", resourceParam: "id" }, handleDelete)
-export const PATCH = withAudit({ category: "security", resourceType: "assignment", resourceParam: "id" }, handlePatch)
+export const DELETE = withAudit({ category: "security", resourceType: "assignment", resourceParam: "id" }, withPublicApiGuard("rbac-assignment-delete", handleDelete))
+export const PATCH = withAudit({ category: "security", resourceType: "assignment", resourceParam: "id" }, withPublicApiGuard("rbac-assignment-update", handlePatch))

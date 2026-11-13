@@ -9,10 +9,10 @@ import {
 import { useTheme } from '@mui/material/styles'
 import { useTranslations } from 'next-intl'
 
+import TokenSecretReveal from './TokenSecretReveal'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { ALL_SCOPE_IDS, DESTRUCTIVE_SCOPE_IDS, FLEET_SCOPE_IDS, isCreatorCheckedScope, isWriteScope } from '@/lib/api-tokens/scopes'
-import { copyToClipboard } from '@/lib/clipboard'
 import { selectableTenants, sortTenantsProviderFirst } from '@/lib/storage/tenantFacets'
 
 type Props = {
@@ -66,12 +66,12 @@ export const SCOPE_DOMAINS: readonly ScopeDomain[] = [
   { id: 'automation', icon: 'ri-robot-line', read: 'automation:read', write: [] },
   { id: 'alerts', icon: 'ri-alarm-warning-line', read: 'alerts:read', write: [] },
   { id: 'reports', icon: 'ri-file-list-3-line', read: 'reports:read', write: [] },
-  // Multi-tenant layer (issue #1360), read only for now.
-  { id: 'tenants', icon: 'ri-building-line', read: 'tenants:read', write: [] },
+  // Multi-tenant layer (issue #1360).
+  { id: 'tenants', icon: 'ri-building-line', read: 'tenants:read', write: ['tenants:write'] },
   { id: 'vdcs', icon: 'ri-cloud-line', read: 'vdcs:read', write: ['vdcs:write'] },
   { id: 'ipam', icon: 'ri-router-line', read: 'ipam:read', write: [] },
-  { id: 'rbac', icon: 'ri-lock-2-line', read: 'rbac:read', write: [] },
-  { id: 'users', icon: 'ri-user-line', read: 'users:read', write: [] },
+  { id: 'rbac', icon: 'ri-lock-2-line', read: 'rbac:read', write: ['rbac:write'] },
+  { id: 'users', icon: 'ri-user-line', read: 'users:read', write: ['users:write'] },
 ]
 
 // Short toggle labels (dialog.subScopes.*) of the write sub-scopes,
@@ -150,7 +150,6 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [secret, setSecret] = useState('')
-  const [copied, setCopied] = useState(false)
 
   // Tenant + connection plumbing (fix round 1, finding 1). A missing
   // tenantId on the request defaults to the ambient tenant server-side,
@@ -226,7 +225,6 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     setTenantId('')
     setError('')
     setSecret('')
-    setCopied(false)
   }
 
   function expiresInDays(): number | null {
@@ -396,20 +394,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
       <DialogTitle>{secret ? t('reveal.title') : t('dialog.title')}</DialogTitle>
       <DialogContent>
         {secret ? (
-          <Stack spacing={2}>
-            <Alert severity='warning'>{t('reveal.warning')}</Alert>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: 'action.hover', borderRadius: 1, p: 1.5 }}>
-              <Typography sx={{ fontFamily: 'monospace', wordBreak: 'break-all', flex: 1 }}>{secret}</Typography>
-              <Tooltip title={copied ? t('reveal.copied') : t('reveal.copy')} slotProps={tooltipSlotProps}>
-                <IconButton
-                  aria-label={t('reveal.copy')}
-                  onClick={async () => setCopied(await copyToClipboard(secret))}
-                >
-                  <i className='ri-file-copy-line' />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          </Stack>
+          <TokenSecretReveal secret={secret} />
         ) : (
           <Stack spacing={2} sx={{ mt: 1 }}>
             {error && <Alert severity='error'>{error}</Alert>}

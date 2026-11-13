@@ -16,6 +16,14 @@ async function superAdmin(userId: string): Promise<boolean> {
   return typeof rbac.isUserSuperAdmin === "function" ? !!(await rbac.isUserSuperAdmin(userId)) : false
 }
 
+/** The session rule of authorizeAdminWrite, on the test file's own `@/lib/rbac` and `@/lib/tenant` mocks. */
+async function holdsInSessionTenant(userId: string, permission: string): Promise<boolean> {
+  const rbac = (await import("@/lib/rbac")) as unknown as { hasPermission?: (input: unknown) => Promise<boolean> }
+  const tenant = (await import("@/lib/tenant")) as unknown as { getCurrentTenantId?: () => Promise<string> }
+  const tenantId = typeof tenant.getCurrentTenantId === "function" ? await tenant.getCurrentTenantId() : "default"
+  return typeof rbac.hasPermission === "function" ? !!(await rbac.hasPermission({ userId, permission, tenantId })) : false
+}
+
 export function actingUserFromNextAuth() {
   const getActingUser = async () => {
     const user = (await readSession())?.user
@@ -32,6 +40,20 @@ export function actingUserFromNextAuth() {
       if (!user) return { denied: Response.json({ error: "Unauthorized" }, { status: 401 }), isSuperAdmin: false }
       return { denied: null, userId: user.id, isSuperAdmin: await superAdmin(user.id) }
     },
+    authorizeAdminWrite: async (permission: string) => {
+      const user = await getActingUser()
+      if (!user) return { denied: Response.json({ error: "Unauthorized" }, { status: 401 }), selfUserId: null, isToken: false }
+      const allowed = await holdsInSessionTenant(user.id, permission)
+      return {
+        denied: allowed ? null : Response.json({ error: "Admin rights required" }, { status: 403 }),
+        userId: user.id,
+        userEmail: user.email,
+        selfUserId: user.id,
+        isToken: false,
+      }
+    },
+    ownRolesError: (_writer: unknown, verb: string) => `You cannot ${verb} your own roles`,
+    getTokenCaller: async () => null,
   }
 }
 

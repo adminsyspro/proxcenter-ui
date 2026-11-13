@@ -14,6 +14,7 @@ import { DARK_TILE_FILTER, MAP_UNAVAILABLE_OFFLINE, resolveBasemap } from '@/lib
 import { countryFlagUrl } from '@/lib/utils/countries'
 import { CountryFlag } from '@/components/ui/CountryFlag'
 import { useLicense } from '@/contexts/LicenseContext'
+import { escapeHtml } from '@/lib/compliance/report/escapeHtml'
 
 export interface DcEntryNode {
   name: string
@@ -68,8 +69,8 @@ function buildPinHtml(dc: DcEntry): string {
             background: ${color};
             box-shadow: 0 0 6px ${color};
           "></span>
-          ${flagUrl ? `<img src="${flagUrl}" alt="" style="width: 16px; height: auto; border-radius: 2px; vertical-align: middle;" />` : ''}
-          ${dc.name}
+          ${flagUrl ? `<img src="${escapeHtml(flagUrl)}" alt="" style="width: 16px; height: auto; border-radius: 2px; vertical-align: middle;" />` : ''}
+          ${escapeHtml(dc.name)}
         </div>
         <div style="opacity: 0.8; font-size: 10px;">
           ${dc.runningVmCount}/${dc.vmCount} VM${dc.vmCount > 1 ? 's' : ''} running

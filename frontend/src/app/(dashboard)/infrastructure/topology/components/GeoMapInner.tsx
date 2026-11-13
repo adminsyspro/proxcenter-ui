@@ -12,6 +12,7 @@ import 'leaflet/dist/leaflet.css'
 import { useBasemapSettings } from '@/hooks/useBasemapSettings'
 import { DARK_TILE_FILTER, MAP_UNAVAILABLE_OFFLINE, resolveBasemap } from '@/lib/map/basemap'
 import { useLicense } from '@/contexts/LicenseContext'
+import { escapeHtml } from '@/lib/compliance/report/escapeHtml'
 
 import type { InventoryCluster } from '../types'
 
@@ -81,12 +82,14 @@ function createSingleConnectionHtml(conn: InventoryCluster) {
   const cpuColor = getUsageColor(stats.cpuPct)
   const ramColor = getUsageColor(stats.ramPct)
 
-  const name = conn.name.length > 18 ? conn.name.slice(0, 17) + '…' : conn.name
+  // Free text set on the connection (roadmap#229): cut, then escaped for the
+  // divIcon HTML.
+  const name = escapeHtml(conn.name.length > 18 ? conn.name.slice(0, 17) + '…' : conn.name)
   const location = conn.locationLabel
-    ? (conn.locationLabel.length > 22 ? conn.locationLabel.slice(0, 21) + '…' : conn.locationLabel)
+    ? escapeHtml(conn.locationLabel.length > 22 ? conn.locationLabel.slice(0, 21) + '…' : conn.locationLabel)
     : ''
 
-  return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;" data-conn-id="${conn.id}">
+  return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;" data-conn-id="${escapeHtml(conn.id)}">
     <div style="
       width:9px;height:9px;flex-shrink:0;
       background:${color};
